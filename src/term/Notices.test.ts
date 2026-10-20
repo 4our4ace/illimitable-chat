@@ -2,8 +2,8 @@
 // ============
 // `bun test Notices.test.ts`. The terminal's notices, one list with one
 // clock: a note goes by itself once its time is up, said again it shows
-// once, a third pushes the oldest out (a held one stays), Esc takes the
-// notes (a toast stays its time), the view's notes
+// once, a third pushes the oldest out (a held one stays; while work runs,
+// a second does), Esc takes the notes (a toast stays its time), the view's notes
 // come in as notes, and a pipe gets each note once.
 
 import { afterAll, expect, test } from "bun:test";
@@ -18,7 +18,7 @@ const { term_note, term_toast, term_unnote, term_shown } = await import("./Notic
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
 // a terminal with no screen: a paint always due, so none is asked for
-const term = (tty = true) => ({ notices: [], expire: undefined, due: true, v: { notes: [] as string[] }, scr: { tty } }) as any;
+const term = (tty = true) => ({ notices: [], expire: undefined, due: true, v: { notes: [] as string[], busy: false, agents: [] }, scr: { tty } }) as any;
 
 test("a note goes once its time is up; said again, it shows once", async () => {
   const t = term();
@@ -31,7 +31,7 @@ test("a note goes once its time is up; said again, it shows once", async () => {
   clearTimeout(t.expire);
 });
 
-test("a third note pushes the oldest out; a held one stays", () => {
+test("a third note pushes the oldest out, a second while work runs; a held one stays", () => {
   const t = term();
   ["one", "two", "three"].forEach((text) => term_note(t, text));
   expect(term_shown(t).notes).toEqual(["two", "three"]);
@@ -39,6 +39,10 @@ test("a third note pushes the oldest out; a held one stays", () => {
   term_note(t, "the login's code", 60000);
   ["one", "two"].forEach((text) => term_note(t, text));
   expect(term_shown(t).notes).toEqual(["the login's code", "two"]);
+  term_unnote(t);
+  t.v.busy = true;
+  ["one", "two"].forEach((text) => term_note(t, text));
+  expect(term_shown(t).notes).toEqual(["two"]);
   clearTimeout(t.expire);
 });
 

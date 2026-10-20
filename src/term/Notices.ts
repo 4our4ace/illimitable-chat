@@ -3,14 +3,18 @@
 // Everything the terminal tells the person for a while, one list with one
 // clock: a toast (one line at the chat's right end, in the theme's blue:
 // a copy, Ctrl+C's quit hint; a new one takes the last one's place) or a
-// note (over the input: what a command did, what was refused). Every one
-// goes by itself once its time is up: a toast's TOAST, a note's as long
-// as reading it takes (NOTE_MIN, NOTE_CHAR a character, NOTE_MAX at
-// most), or what its caller asks (the login's code, while it waits); a
-// note said again only lives longer. Esc and a message sent take the
-// notes away sooner. The view's own (View.ts notes) come in as notes. A
-// pipe prints each note as it comes.
+// note (in the rule over the input: what a command did, what was
+// refused). Every one goes by itself once its time is up: a toast's
+// TOAST, a note's NOTE (a long one's as long as reading it takes:
+// NOTE_CHAR a character past NOTE_READ, NOTE_MAX at most), or what its
+// caller asks (the login's code, while it waits: held, so no other note
+// pushes it out). NOTES notes at most, one while work runs (its status
+// has the rule): one more pushes the oldest out; a note said again only
+// lives longer. Esc and a message sent take the notes away sooner. The
+// view's own (View.ts notes) come in as notes. A pipe prints each note
+// as it comes.
 
+import * as View from "../ui/View.ts";
 import { term_draw } from "./Frame.ts";
 import type { Term } from "./Term.ts";
 
@@ -38,19 +42,18 @@ const NOTES            = 2;
 // =======
 
 // a notice told, for ms (none: as its kind lasts); the one it is, to let
-// it go sooner (term_unnotify). A note past NOTES pushes out the oldest
-// not held
+// it go sooner (term_unnotify). A note past NOTES (one while work runs)
+// pushes out the oldest not held
 export function term_notify(t: Term, text: string, toast: boolean, ms?: number): Notice {
   const until = Date.now() + (ms ?? (toast ? TOAST : Math.min(NOTE_MAX, NOTE + Math.max(0, text.length - NOTE_READ) * NOTE_CHAR)));
   const same  = (n: Notice) => (toast ? n.toast : !n.toast && n.text === text);
   const was   = t.notices.find(same);
   const notice = { text, toast, until: Math.max(until, was !== undefined && !toast ? was.until : 0), held: ms !== undefined };
   t.notices = [...t.notices.filter((n) => !same(n)), notice];
+  const most  = View.view_running(t.v) ? 1 : NOTES;
   const notes = t.notices.filter((n) => !n.toast);
-  const out   = notes.find((n) => !n.held && n !== notice);
-  if (notes.length > NOTES && out !== undefined) {
-    t.notices = t.notices.filter((n) => n !== out);
-  }
+  const out   = notes.filter((n) => !n.held && n !== notice).slice(0, Math.max(0, notes.length - most));
+  t.notices = t.notices.filter((n) => !out.includes(n));
   term_due(t);
   term_draw(t);
   return notice;

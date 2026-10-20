@@ -90,10 +90,11 @@ export function term_draw(t: Term): void {
 // goes there, as Ctrl+End does), at its right end a toast; a rule (what
 // runs, while it does), the input, a rule (offline), the pages, the agent
 // and the pick. The notes, however the chat is scrolled, end over the
-// input: the newest in the rule (unless work runs), the one before it,
-// faded, in the row above (unless the jump is there or the toast leaves
-// it no room); only what is left over takes rows from the chat. A pipe
-// gets the notes as text
+// input: the newest in the rule, the one before it, faded, in the row
+// above (unless the jump is there or the toast leaves it no room); while
+// work runs (its status has the rule), the newest alone, in the row
+// above. Only what is left over takes rows from the chat. A pipe gets
+// the notes as text
 export function term_paint(t: Term): void {
   t.due   = false;
   const said = term_shown(t);
@@ -112,8 +113,9 @@ export function term_paint(t: Term): void {
   const off   = !View.view_typing(t.v);
   const hint  = off ? OFF : "Message " + (t.v.agent ?? View.MAIN) + " · Tab agents · /help";
   const input = Screen.screen_input(t.scr, iw, Math.max(1, Math.floor(h / 3)), hint, off);
-  const notes = term_notes(said.notes, iw - 2 * NOTE_IN);
-  const ruled = View.view_doing(t.v) === null ? notes.pop() : undefined;
+  const idle  = View.view_doing(t.v) === null;
+  const notes = term_notes(idle ? said.notes : said.notes.slice(-1), iw - 2 * NOTE_IN);
+  const ruled = idle ? notes.pop() : undefined;
   const last  = notes.at(-1);
   const roomy = last !== undefined && !(t.pane === null && t.scroll > 0) && NOTE_IN + Paint.line_width(last) + 1 + Paint.text_width(said.toast) <= left + cw;
   const lead  = roomy ? [Paint.Run(" ".repeat(NOTE_IN)), ...notes.pop()!] : [];
