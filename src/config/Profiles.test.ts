@@ -8,7 +8,8 @@
 // a JSON file. An export: no login, lock or log, its config stripped; an
 // import: a new profile only, its config's commands dropped, its MCP
 // servers off; an archive with a path out of its folder, or a link, is
-// refused before anything is unpacked.
+// refused before anything is unpacked. The chat folder a file is in, any
+// profile's, through a link too.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -208,4 +209,22 @@ test("a profile renamed, deleted (the one used last following), or made with ano
   fs.mkdirSync(root + "/chat");
   expect(() => Profiles.profile_move_chat(root, root + "/profiles/work")).toThrow("profile work has a chat already");
   fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("the chat folder a file is in: the root's, another profile's, through a link, not made yet; none for settings or outside", () => {
+  const root = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-chat-");
+  const out  = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-chat-out-");
+  fs.mkdirSync(root + "/profiles/work/chat/main", { recursive: true });
+  fs.mkdirSync(root + "/chat", { recursive: true });
+  fs.symlinkSync(root + "/profiles/work/chat", out + "/sneaky");
+  const real = fs.realpathSync(root);
+  expect(Profiles.profile_chat(root, root + "/chat/main/day.jsonl")).toBe(real + "/chat");
+  expect(Profiles.profile_chat(root, root + "/chat")).toBe(real + "/chat");
+  expect(Profiles.profile_chat(root, root + "/profiles/work/chat/main/new.jsonl")).toBe(real + "/profiles/work/chat");
+  expect(Profiles.profile_chat(root, root + "/profiles/home/chat/x")).toBe(real + "/profiles/home/chat");
+  expect(Profiles.profile_chat(root, out + "/sneaky/main/day.jsonl")).toBe(real + "/profiles/work/chat");
+  expect(Profiles.profile_chat(root, root + "/profiles/work/../work/chat")).toBe(real + "/profiles/work/chat");
+  expect([root + "/config.json", root + "/profiles/work/agents/a.md", root + "/chatter", out + "/chat/x"].map((f) => Profiles.profile_chat(root, f))).toEqual([null, null, null, null]);
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(out, { recursive: true, force: true });
 });

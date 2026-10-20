@@ -106,6 +106,23 @@ export function profile_dir(root: string, name: string): string {
   return name === DEFAULT ? root : root + "/profiles/" + name;
 }
 
+// the chat folder a file is in, any profile's (the root's chat/, each
+// profiles/<name>/chat/), its links resolved as far as it exists; null:
+// none
+export function profile_chat(root: string, file: string): string | null {
+  const real = (p: string): string => {
+    try {
+      return fs.realpathSync(p);
+    } catch {
+      return path.dirname(p) === p ? p : path.join(real(path.dirname(p)), path.basename(p));
+    }
+  };
+  const base = real(path.resolve(root));
+  const rel  = path.relative(base, real(path.resolve(file))).split(path.sep);
+  const deep = rel[0] === "chat" ? 1 : rel[0] === "profiles" && rel[2] === "chat" ? 3 : 0;
+  return deep === 0 ? null : path.join(base, ...rel.slice(0, deep));
+}
+
 // the profiles: the default, then the others by name
 export function profile_list(root: string): string[] {
   const dir  = root + "/profiles";
