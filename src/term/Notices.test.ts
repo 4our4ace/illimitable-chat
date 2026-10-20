@@ -2,7 +2,8 @@
 // ============
 // `bun test Notices.test.ts`. The terminal's notices, one list with one
 // clock: a note goes by itself once its time is up, said again it shows
-// once, Esc takes the notes (a toast stays its time), the view's notes
+// once, a third pushes the oldest out (a held one stays), Esc takes the
+// notes (a toast stays its time), the view's notes
 // come in as notes, and a pipe gets each note once.
 
 import { afterAll, expect, test } from "bun:test";
@@ -27,6 +28,17 @@ test("a note goes once its time is up; said again, it shows once", async () => {
   expect(term_shown(t).notes).toEqual(["gpt-6.1-sol has no fast.", "stays a while"]);
   await Bun.sleep(80);
   expect(term_shown(t).notes).toEqual(["stays a while"]);
+  clearTimeout(t.expire);
+});
+
+test("a third note pushes the oldest out; a held one stays", () => {
+  const t = term();
+  ["one", "two", "three"].forEach((text) => term_note(t, text));
+  expect(term_shown(t).notes).toEqual(["two", "three"]);
+  term_unnote(t);
+  term_note(t, "the login's code", 60000);
+  ["one", "two"].forEach((text) => term_note(t, text));
+  expect(term_shown(t).notes).toEqual(["the login's code", "two"]);
   clearTimeout(t.expire);
 });
 

@@ -18,31 +18,39 @@ import type { Term } from "./Term.ts";
 // =====
 
 // a notice: what it says, whether a toast (else a note), when it goes
-// (ms since 1970)
-export type Notice = { text: string; toast: boolean; until: number };
+// (ms since 1970), whether held (its caller's own time: no note pushes it
+// out)
+export type Notice = { text: string; toast: boolean; until: number; held: boolean };
 
 // Constants
 // =========
 
-// how long a toast shows; a note at least, a character more, at most
-// (ms); the notes kept, the newest
+// how long a toast shows; a note, the characters read in that time, a
+// character more, a note at most (ms); the notes kept, the newest
 export const TOAST     = 2500;
-const NOTE_MIN         = 4000;
+const NOTE             = 3000;
+const NOTE_READ        = 60;
 const NOTE_CHAR        = 50;
-const NOTE_MAX         = 20000;
-const NOTES            = 6;
+const NOTE_MAX         = 8000;
+const NOTES            = 2;
 
 // Notices
 // =======
 
 // a notice told, for ms (none: as its kind lasts); the one it is, to let
-// it go sooner (term_unnotify)
+// it go sooner (term_unnotify). A note past NOTES pushes out the oldest
+// not held
 export function term_notify(t: Term, text: string, toast: boolean, ms?: number): Notice {
-  const until = Date.now() + (ms ?? (toast ? TOAST : Math.min(NOTE_MAX, NOTE_MIN + text.length * NOTE_CHAR)));
+  const until = Date.now() + (ms ?? (toast ? TOAST : Math.min(NOTE_MAX, NOTE + Math.max(0, text.length - NOTE_READ) * NOTE_CHAR)));
   const same  = (n: Notice) => (toast ? n.toast : !n.toast && n.text === text);
   const was   = t.notices.find(same);
-  const notice = { text, toast, until: Math.max(until, was !== undefined && !toast ? was.until : 0) };
+  const notice = { text, toast, until: Math.max(until, was !== undefined && !toast ? was.until : 0), held: ms !== undefined };
   t.notices = [...t.notices.filter((n) => !same(n)), notice];
+  const notes = t.notices.filter((n) => !n.toast);
+  const out   = notes.find((n) => !n.held && n !== notice);
+  if (notes.length > NOTES && out !== undefined) {
+    t.notices = t.notices.filter((n) => n !== out);
+  }
   term_due(t);
   term_draw(t);
   return notice;
@@ -90,9 +98,9 @@ function term_due(t: Term): void {
   }
 }
 
-// what a paint shows: the view's notes taken in, the newest NOTES notes
-// (oldest first; a pipe gets them once, here, and keeps none), the toast
-// ("": none)
+// what a paint shows: the view's notes taken in, the notes (oldest
+// first; a pipe gets them once, here, and keeps none), the toast ("":
+// none)
 export function term_shown(t: Term): { notes: string[]; toast: string } {
   t.v.notes.splice(0).forEach((text) => term_note(t, text));
   const notes = t.notices.filter((n) => !n.toast).map((n) => n.text);
@@ -101,5 +109,5 @@ export function term_shown(t: Term): { notes: string[]; toast: string } {
     term_due(t);
     return { notes, toast: "" };
   }
-  return { notes: notes.slice(-NOTES), toast: t.notices.find((n) => n.toast)?.text ?? "" };
+  return { notes, toast: t.notices.find((n) => n.toast)?.text ?? "" };
 }
