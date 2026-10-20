@@ -167,7 +167,6 @@ export function term_paint(t: Term): void {
   const cursor = { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
   const with_ = sides.map((_, k) => k).filter((k) => rows[1 + k].length > 1 && !(box?.wide && 1 + k >= top));
   t.ruled = { row: 2 + tall + above.length, w: iw, at: cursor, rows, side: box === null ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
-  t.scr.blink = idle;
   Screen.screen_paint(t.scr, rows, cursor);
 }
 
