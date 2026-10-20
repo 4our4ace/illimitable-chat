@@ -48,6 +48,7 @@ Keys
 | Key                  | Does                                  |
 | -------------------- | ------------------------------------- |
 | Enter / Esc          | send / interrupt                      |
+| Tab                  | take the suggested reply              |
 | `/`                  | command list                          |
 | Shift+Tab            | switch primary agent                  |
 | Ctrl+O               | show tool calls and thinking          |
@@ -113,6 +114,7 @@ Config
 | `rules`      |                                   | a file added to every system prompt              |
 | `after`      |                                   | a shell command run after each turn              |
 | `side`       | `right`                           | side panel: `left`, `off`; `side_width` `25%`    |
+| `suggest`    | `on`                              | a suggested reply after each turn; `off`         |
 | `jobs`       | `8`                               | summaries built at once                          |
 | `login`, `theme`, `mcp` | in `~/.illi/`          | other file locations                             |
 

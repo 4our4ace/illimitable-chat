@@ -16,7 +16,9 @@
 // own chat and settings; /profile switches by letting all go, as a quit
 // does, and running illi again, in place, in the one chosen
 // (ProfileCommands.ts). From a pipe, each line is a message, and each
-// message the chat logs prints as text.
+// message the chat logs prints as text. As a turn ends, the reply the
+// chat suggests shows in the empty input, dim (Chat.suggest; none from a
+// pipe): Tab takes it, typing dismisses it (Keys.ts).
 //
 // This file: the terminal's state (Term), its link to the chat, and
 // what every part shares (notes, toasts, quitting).
@@ -68,7 +70,7 @@ import * as View from "../ui/View.ts";
 // painted, sel: the text chosen in one (null: none), hover: the button
 // under the pointer as last painted, drift: a drag's scrolling past an
 // area's edge; sug: the commands suggested as a /word is typed (null:
-// closed)
+// closed); dropped: the suggested reply typing dismissed ("": none)
 export type Term = {
   v       : View.View;
   scr     : Screen.Screen;
@@ -104,6 +106,7 @@ export type Term = {
   hover   : (() => string) | undefined;
   drift   : { d: number; timer: Timer } | undefined;
   sug     : Sug | null;
+  dropped : string;
 };
 
 // the chat as last painted: its lines, its blocks in them, the screen
@@ -197,7 +200,10 @@ function term_new(chat: Chat): Term {
     hover   : undefined,
     drift   : undefined,
     sug     : null,
+    dropped : "",
   };
+  // the chat suggests replies to a screen that shows them, never a pipe
+  chat.suggest.on = t.scr.tty && config.SUGGEST;
   term_primaries(t);
   Reply.reply_buttons(t.scr.tty);
   t.scr.grab  = (key) => term_grab(t, key);
@@ -266,6 +272,7 @@ function term_hear(t: Term, msg: View.Server): void {
     term_send(t, out);
   }
   t.ver += msg.$ === "delta" || msg.$ === "live" ? 0 : 1;
+  t.dropped = t.v.suggest === "" ? "" : t.dropped;
   term_went(t, was);
   term_subs(t);
   if (t.v.agent !== agent) {
