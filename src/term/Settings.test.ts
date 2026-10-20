@@ -5,9 +5,9 @@
 // and Enter step one through its values, kept in config.json at once and
 // read anew; Delete puts its default back; Enter on a pick opens the
 // model picker, its choice the setting's; on one typed in, /set in the
-// input. /set checks a value first: its shape, a rules file there, the
-// picks still offered. A pick set while Illi's own agent is the main one
-// is the chat's at once. /side changes its settings as /set does. Each
+// input. /set checks a value first: its shape and the picks still
+// offered (a file named needn't be there). A pick set while Illi's own
+// agent is the main one is the chat's at once. /side changes its settings as /set does. Each
 // setting is in the README and the customize-illi skill.
 
 import { afterAll, expect, test } from "bun:test";
@@ -110,7 +110,9 @@ test("Enter on one typed in puts /set in the input; /set checks the value, then 
   run(t, "/set", "after default");
   expect(config.AFTER).toBe("");
   run(t, "/set", "rules /no/such/file");
-  expect(note(t)).toBe("No file /no/such/file for the rules.");
+  expect(config.RULES).toBe("/no/such/file");
+  run(t, "/set", "rules default");
+  expect(config.RULES).toBe(DIR + "/RULES.md");
   run(t, "/set", "jobs none");
   expect(note(t)).toBe("jobs takes a number, 1 or more.");
   run(t, "/set", "contexts {\"sonnet-5.5\": 100000}");

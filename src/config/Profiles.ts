@@ -15,8 +15,8 @@
 // each entry a file or a folder, inside it, checked before a byte is
 // unpacked; once unpacked, its config's keys that run a command or name a
 // file here (after, rules, login, mcp, theme) dropped, its MCP servers
-// off till the person turns them on. Its agents, commands, skills and
-// chat are the profile's at once.
+// off till the person turns them on. Its agents, commands, skills,
+// RULES.md and chat are the profile's at once.
 
 import * as fs from "node:fs";
 import * as os from "node:os";

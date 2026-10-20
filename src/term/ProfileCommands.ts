@@ -157,7 +157,7 @@ async function term_profile_import(t: Term, arg: string): Promise<void> {
       ...(got.servers === 0 ? [] : [got.servers + " MCP server" + (got.servers === 1 ? "" : "s") + ", now \"disabled\": true in its mcp.json"]),
     ];
     t.profs = Profiles.profile_list(config.ROOT);
-    term_note(t, "Imported profile " + name + " into " + term_home(Profiles.profile_dir(config.ROOT, name!)) + "." + (off.length === 0 ? "" : " Left off, as the archive is untrusted: " + off.join("; ") + ".") + " Its agents, commands, skills and chat came as they were, at work as soon as you switch to it: look at them first. /profile " + name + " switches to it.");
+    term_note(t, "Imported profile " + name + " into " + term_home(Profiles.profile_dir(config.ROOT, name!)) + "." + (off.length === 0 ? "" : " Left off, as the archive is untrusted: " + off.join("; ") + ".") + " Its agents, commands, skills, RULES.md and chat came as they were, at work as soon as you switch to it: look at them first. /profile " + name + " switches to it.");
   } catch (err: any) {
     term_note(t, "Not imported. " + err.message);
   }

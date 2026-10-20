@@ -2,7 +2,7 @@
 // =====================
 // `bun test ProfileCommands.test.ts`. /profile export never writes over
 // a file there; /profile import says what it left off and that the
-// profile's agents, commands, skills and chat came with it.
+// profile's agents, commands, skills, RULES.md and chat came with it.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -39,6 +39,6 @@ test("/profile export won't write over a file there", async () => {
 test("/profile import says what came with the profile", async () => {
   const t = term();
   await term_profile(t, "import " + TMP + "/out.tar.gz home");
-  expect(note(t)).toContain("Its agents, commands, skills and chat came as they were");
+  expect(note(t)).toContain("Its agents, commands, skills, RULES.md and chat came as they were");
   expect(fs.existsSync(DIR + "/profiles/home/config.json")).toBe(true);
 });
