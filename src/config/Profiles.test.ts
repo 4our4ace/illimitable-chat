@@ -183,8 +183,8 @@ test("Config.ts on a profile: its folder, its config over the root's, the root's
   put(ROOT + "/profiles/copy/config.json", JSON.stringify({ side: "off" }));
   const config = await import("./Config.ts");
   expect([config.ROOT, config.PROFILE, config.DIR]).toEqual([ROOT, "copy", ROOT + "/profiles/copy"]);
-  expect(config.config_get("side", "right")).toBe("off");
-  expect(config.config_get("vendors", "chatgpt")).toBe(process.env.ILLI_VENDORS ?? "chatgpt,claude-api");
+  expect(config.config_value("side")).toBe("off");
+  expect(config.config_value("vendors")).toBe(process.env.ILLI_VENDORS ?? "chatgpt,claude-api");
   expect(config.OWN_LOGIN).toBe(ROOT + "/login.json");
   expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
   expect(config.config_env().ANTHROPIC_API_KEY).toBe("test-key");
