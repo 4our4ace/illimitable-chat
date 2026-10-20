@@ -4,11 +4,12 @@
 // off. Reasoning keeps all turns (else a message sent mid-run drops it
 // and misses the cache); the speed is a service tier ("priority" is
 // fast). A marked block is an explicit breakpoint; the end is cached
-// implicitly only if marked. A server_error is busy; failed, incomplete
-// or refused fails. Silent while it reasons, it is dead after 20 min.
+// implicitly only if marked (AskAI.tail). A server_error is busy;
+// failed, incomplete or refused fails. Silent while it reasons, it is
+// dead after 20 min.
 // Voice: TRANSCRIBER writes a recording out, and says its seconds.
 
-import type { Ask, Img } from "./AskAI.ts";
+import { AskAI, type Ask, type Img } from "./AskAI.ts";
 import { Agent, type Emit, type Entry, type Item, type Step, type Tool, type Use, type Wire } from "./Agent.ts";
 import { Price, type Usage } from "./Price.ts";
 import * as config from "../config/Config.ts";
@@ -43,7 +44,7 @@ export namespace OpenAI {
       defs.push({ type: "web_search" });
     }
     const system = { role: "developer", content: [{ type: "input_text", text: ask.system }] };
-    const cache = ask.blocks[ask.blocks.length - 1]?.mark ? undefined : { mode: "explicit" };
+    const cache = AskAI.tail(ask) ? undefined : { mode: "explicit" };
     return {
       model                : ask.model,
       stream               : true,

@@ -3,15 +3,15 @@
 // The wire of claude-api (Agent.ts): the Messages API, streamed, with
 // adaptive thinking summarized and fast as `speed`. Outputs go back
 // whole, items of one role joined. A marked block gets cache_control, a
-// marked end the top-level one too (which Anthropic counts apart: a
-// request takes four in all), and so does the system prompt: what every
-// call shares (tools, system) stays cached whatever its view does, so a
-// view written anew writes only itself. A stream builds blocks from
-// pieces; tool_use and end_turn end a step, pause_turn asks again, an
-// error event is busy. It pings while the model thinks, so 5 silent
+// marked end (AskAI.tail) the top-level one too (which Anthropic counts
+// apart: a request takes four in all), and so does the system prompt:
+// what every call shares (tools, system) stays cached whatever its view
+// does, so a view written anew writes only itself. A stream builds blocks
+// from pieces; tool_use and end_turn end a step, pause_turn asks again,
+// an error event is busy. It pings while the model thinks, so 5 silent
 // minutes mean it is dead.
 
-import type { Ask, Img } from "./AskAI.ts";
+import { AskAI, type Ask, type Img } from "./AskAI.ts";
 import { Agent, type Emit, type Entry, type Item, type Step, type Tool, type Use, type Wire } from "./Agent.ts";
 import { Price, type Usage } from "./Price.ts";
 
@@ -69,7 +69,7 @@ export namespace Anthropic {
         messages.push(msg);
       }
     }
-    const cache = ask.blocks[ask.blocks.length - 1]?.mark ? MARK : undefined;
+    const cache = AskAI.tail(ask) ? MARK : undefined;
     return {
       model         : ask.model,
       max_tokens    : max,

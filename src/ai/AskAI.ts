@@ -25,9 +25,11 @@
 // user's calls of its prefix would wait on.
 //
 // The input each caller's last request read is kept (AskAI.held), so its
-// view shows how much context it holds.
+// view shows how much context it holds; a turn's last request is kept
+// whole, with its answer (AskAI.last), for a call to go on from it (a
+// suggested reply: Chat.suggest) on the same prefix, so on the cache.
 
-import { Agent } from "./Agent.ts";
+import { Agent, type Item, type Tool } from "./Agent.ts";
 import { stream_lines } from "../tools/Clip.ts";
 import { Machine } from "../tools/Machine.ts";
 import type { Pick } from "./Pick.ts";
@@ -85,7 +87,12 @@ export type Bill = (cost: Cost, cap: number) => Promise<Grant | string>;
 // compaction's input
 export type Pay = (kind: Served, what: string, bytes?: number) => Bill;
 
-// searches: the most web searches it runs (0: no web tools)
+// searches: the most web searches it runs (0: no web tools); keep: its
+// last request is kept whole (AskAI.last: a turn's); from: the request it
+// goes on from, its blocks after that one's items and answer, naming its
+// tools but running none: one step, unanswered if it calls one (a
+// suggested reply's: Chat.suggest); max: the most tokens it writes, its
+// thinking's too (none: the model's cap)
 export type Ask = Pick & {
   system    : string;
   blocks    : Block[];
@@ -95,7 +102,14 @@ export type Ask = Pick & {
   bill?     : Bill;
   patient?  : boolean;
   yields?   : string;
+  keep?     : boolean;
+  from?     : Last;
+  max?      : number;
 };
+
+// a request kept whole (Ask.keep): what it asked, the items it sent with
+// the answer they got (Agent.loop), the tools it named
+export type Last = { ask: Ask; items: Item[]; tools: Tool[] };
 
 // a prefix cached: until when; while its leader's response has not
 // begun, what its waiters wait on
@@ -156,6 +170,10 @@ const CACHE = new Map<string, Cached>();
 // tools URL its calls name (Ask.server: a chat's main agent's, an
 // agent's): what it holds in context, for its view (Tools.state)
 const HELD = new Map<string, number>();
+
+// the last request of each caller that keeps it (Ask.keep: a chat's main
+// agent), whole, by its tools URL
+const LAST = new Map<string, Last>();
 
 // AskAI
 // =====
@@ -229,6 +247,26 @@ export namespace AskAI {
   // the input a caller's last request read; null: none yet
   export function held(server: string): number | null {
     return HELD.get(server) ?? null;
+  }
+
+  // a caller's request, kept whole with its answer (Ask.keep; its tools
+  // URL "": none, kept for no one)
+  export function keep(last: Last): void {
+    if (last.ask.server !== "") {
+      LAST.set(last.ask.server, last);
+    }
+  }
+
+  // the last request a caller kept, with its answer; null: none yet
+  export function last(server: string): Last | null {
+    return LAST.get(server) ?? null;
+  }
+
+  // whether a call's end is cached: its last block is marked; one that
+  // goes on from another's request (Ask.from), as that one's was
+  export function tail(ask: Ask): boolean {
+    const own = ask.from?.ask ?? ask;
+    return own.blocks[own.blocks.length - 1]?.mark === true;
   }
 
   // Cache
