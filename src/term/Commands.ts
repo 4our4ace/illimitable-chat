@@ -1,0 +1,404 @@
+// Commands
+// ========
+// All a person can do here, by group (COMMANDS, /help), and the commands
+// themselves: a /word typed runs one, and, as it's typed, the commands it
+// matches show over the input (suggested); the picker (/agent, /profile),
+// the panes over the chat (/help, /agents, /mcp), the pick, the login,
+// the pages, the blocks, the memory's exports.
+
+import { term_clip, term_image } from "./Attach.ts";
+import { Chat } from "../chat/Chat.ts";
+import { ChatGPT } from "../ai/ChatGPT.ts";
+import * as config from "../config/Config.ts";
+import { Custom, type Command, type Profile, type Skill } from "../config/Custom.ts";
+import { term_redraw } from "./Frame.ts";
+import { term_clear, term_cycle, term_enter, term_esc, term_next, term_page, term_shots, term_verbose } from "./Keys.ts";
+import { Mcp, type Server } from "../tools/Mcp.ts";
+import { Memory } from "../chat/Memory.ts";
+import * as Paint from "../ui/Paint.ts";
+import { type Move, Pick } from "../ai/Pick.ts";
+import { term_profile } from "./ProfileCommands.ts";
+import * as Screen from "../ui/Screen.ts";
+import { term_side_set } from "./Side.ts";
+import { term_act, term_idle, term_note, term_quit, term_send, type Cmd, type Sug, type Term } from "./Term.ts";
+import * as View from "../ui/View.ts";
+
+// the pick's moves by Shift and an arrow
+const ARROWS: Record<string, Move> = { "Shift+Left": "prev", "Shift+Right": "next", "Shift+Up": "up", "Shift+Down": "down" };
+
+// all a person can do here, by group (the editing keys are Screen's);
+// with `custom`, the user's commands and skills too (read anew: never at
+// each key; a command wins a skill's name)
+function term_groups(v: View.View, custom = false): [group: string, cmds: Cmd[]][] {
+  const cmds   = custom ? Custom.commands(process.cwd()) : [];
+  const skills = custom ? Custom.skills(process.cwd()).filter((s) => !cmds.some((c) => c.name === s.name)) : [];
+  const yours  = [
+    ...cmds.map((c): Cmd => ["/" + c.name + " [...]", "", c.description || "your command (" + c.file + ")", (t, a) => term_custom(t, c, a)]),
+    ...skills.map((s): Cmd => ["/" + s.name + " [...]", "", "skill: " + (s.description || s.dir), (t, a) => term_skill(t, s, a)]),
+  ];
+  return [
+    ["Chat", [
+      ["",                  "Enter",                   "send; on an empty input, interrupt Illi",        term_enter],
+      ["",                  "Esc",                     "close a list; else clear the notes and interrupt Illi's turn (agents go on)", term_esc],
+      ["",                  "Ctrl+C, Ctrl+D",          "clear; on an empty input, interrupt (Ctrl+C again: quit), quit", term_clear],
+      ["/goal <message>",   "",                        "send a message as the goal: at each turn's end, Illi asks itself if it is met, and goes on till it is", (t, a) => term_act(t, { $: "Send", text: "/goal " + a })],
+      ["/halt",             "",                        "drop the goal; the turn running ends as it would", (t) => term_act(t, { $: "Send", text: "/halt" })],
+      ["/clear",            "",                        "a fresh session for a new topic: the chat so far folds into Illi's memory tree (summaries Illi can zoom into), so no call sends it whole", (t) => term_act(t, { $: "Send", text: "/clear" })],
+      ["/image <path>",     "",                        "attach an image: its token goes in the input, the image with it as it's sent (or paste or drop its file)", term_image],
+      ["",                  "Alt+V, Ctrl+V",           "attach the clipboard's image (the terminal's own paste brings text alone)", term_clip],
+      ["/open #id",         "",                        "open block #id and keep it open (or click it)",  (t, a) => term_block(t, a, true)],
+      ["/close #id",        "",                        "close block #id and keep it closed (or click its top edge)", (t, a) => term_block(t, a, false)],
+      ["/fold",             "Ctrl+F",                  "the chat in the fewest blocks; again: unfold (Ctrl+F eaten? type /fold)", term_fold],
+      ["",                  "Ctrl+Y",                  "copy Illi's last reply (a drag copies the text it goes over, anywhere; a double click, a word, a path or a link; three, a line; dragged on, more of them)", term_copy],
+      ["",                  "Ctrl+O",                  "show the work between replies (tool calls, results, thinking, agents' reports), or hide it again; a click on one run shows that one", term_verbose],
+      ["/export",           "",                        "save the memory as ./illi-memory.json",          term_export],
+      ["/tree",             "",                        "the whole memory tree as a page, ./illi-tree.html", term_tree],
+      ["",                  "Ctrl+L",                  "draw the screen anew",                           term_redraw],
+      ["",                  "Ctrl+Z",                  "suspend; fg brings it back",                     (t) => Screen.screen_suspend(t.scr)],
+      ["/quit",             "",                        "leave: what runs stops, and goes on at the next start", term_quit],
+      ["/help",             "",                        "this list",                                      term_help],
+    ]],
+    ["Scroll", [
+      ["",                  "PgUp, PgDn",              "a page up, down (or the wheel); at the end, the chat follows what comes", term_page],
+      ["",                  "Ctrl+Home, Ctrl+End",     "the chat's top, its end",                        term_page],
+    ]],
+    ["Pick", [
+      ["",                  "Shift+Left, Shift+Right", "the model before, the next",                     (t, k) => term_move(t, ARROWS[k])],
+      ["",                  "Shift+Up, Shift+Down",    "more effort, less",                              (t, k) => term_move(t, ARROWS[k])],
+      ["",                  "Shift+Tab",               "fast on, off (the next speed), typing or not",   (t) => term_move(t, "speed")],
+      ["/model [name]",     "",                        "the models to pick from; with a name, that one", (t, a) => term_pick(t, "model", a)],
+      ["/effort [level]",   "",                        "the efforts; with one, that one",                (t, a) => term_pick(t, "effort", a)],
+      ["/speed [speed]",    "",                        "the speeds; with one, that one",                 (t, a) => term_pick(t, "speed", a)],
+    ]],
+    ["Agents", [
+      ["",                  "Tab",                     "Illi runs as the next primary agent (or click one at the side)", term_next],
+      ["/agent [name]",     "",                        "the primary agent named (illi: Illi's own); none: pick from a list", term_agent_set],
+      ["/agents",           "",                        "your agents, commands and skills, and where their files go", term_agents],
+      ["/mcp",              "",                        "your MCP servers: each one's tools, or why it failed", term_mcp],
+      ["/side [where|width]", "",                      "the side panel: right, left or off; or its width, in columns (40) or of the screen (30%)", term_side_set],
+      ["/login",            "",                        "sign in to ChatGPT (Plus or Pro) with a code, no opencode needed; Illi keeps and renews its own login", term_login],
+      ["/logout",           "",                        "remove Illi's own ChatGPT login (opencode's, if any, is used again)", term_logout],
+      ["",                  "Ctrl+PgDn, Ctrl+PgUp",    "the next page, the one before: Illi's, each subagent's at work", term_cycle],
+      ["/tab [name]",       "",                        "the pages; with a name, that one",               term_tab],
+      ["/stop [name]",      "",                        "stop all work, agents too; or that agent",       term_stop],
+    ]],
+    ["Profiles", [
+      ["/profile [name]",   "",                        "switch to the profile named (each its own chat, settings, agents and MCP servers; the login is shared); none: pick from a list", term_profile],
+      ["/profile new <name> [--copy]", "",             "make a profile and switch to it: empty, or with this one's settings, agents, commands and skills (never its chat)", term_profile],
+      ["/profile export [name] [file]", "",            "this profile (or that one) as one archive, ./illi-profile-<name>.tar.gz: no login, no lock, its config's secrets left out", term_profile],
+      ["/profile import <file> [name]", "",            "an archive as a new profile, named by its file (or as given); untrusted: its MCP servers come disabled, its config's commands out", term_profile],
+    ]],
+    ...(yours.length === 0 ? [] : [["Yours", yours] as [string, Cmd[]]]),
+  ];
+}
+
+export function term_commands(v: View.View, custom = false): Cmd[] {
+  return term_groups(v, custom).flatMap(([, cmds]) => cmds);
+}
+
+// a command typed (`/name arg`): runs it (pending while it works on);
+// false if the text is none
+export function term_command(t: Term, text: string): boolean {
+  const word = text.trim().split(/\s+/)[0];
+  const cmd = word.startsWith("/") ? term_commands(t.v, true).find(([use]) => use !== "" && use.split(" ")[0] === word) : undefined;
+  const run = cmd?.[3](t, text.trim().slice(word.length).trim());
+  if (run instanceof Promise) {
+    t.pending += 1;
+    run.finally(() => {
+      t.pending -= 1;
+      term_idle(t);
+    });
+  }
+  return cmd !== undefined;
+}
+
+// the commands suggested, kept to the input: opened (all of them read)
+// as it becomes a /word, matched again as the word changes (the best
+// lit), closed as it is none; null while closed or closed by Esc
+export function term_suggest(t: Term): Sug | null {
+  const word = Screen.ed_slash(t.scr.ed);
+  if (word === null) {
+    t.sug = null;
+    return null;
+  }
+  t.sug ??= { cmds: term_commands(t.v, true).filter(([use]) => use !== ""), word: "", found: [], at: 0, top: 0, tall: 1, off: null };
+  const sug = t.sug;
+  if (sug.word !== word) {
+    const names = sug.cmds.map(([use]) => use.split(" ")[0].slice(1));
+    Object.assign(sug, { word, found: Screen.ed_rank(word.slice(1), names), at: 0, top: 0, off: null });
+  }
+  return sug.off === word ? null : sug;
+}
+
+// a key to the commands suggested (true: taken): Up and Down move round
+// them, Tab fills the one lit in, Enter takes it; Esc closes them till
+// the word changes. None matching, they take Esc alone
+export function term_suggest_key(t: Term, sug: Sug, key: string): boolean {
+  const n    = sug.found.length;
+  const move = ({ Up: -1, Down: 1 } as Record<string, number>)[key];
+  if (key === "Esc") {
+    sug.off = sug.word;
+  } else if (n > 0 && move !== undefined) {
+    sug.at  = (sug.at + move + n) % n;
+    sug.top = Math.max(Math.min(sug.top, sug.at), sug.at - sug.tall + 1);
+  } else if (n > 0 && (key === "Tab" || key === "Enter")) {
+    term_suggested(t, sug.cmds[sug.found[sug.at].k][0], key === "Enter");
+  } else {
+    return false;
+  }
+  return true;
+}
+
+// a command suggested (as /help shows how it's typed), taken: run
+// (Enter, a click), unless it needs an argument (<path>, #id: not
+// [name]); else filled in, a space after it. Its words before the first
+// argument go whole (/profile new)
+export function term_suggested(t: Term, use: string, run: boolean): void {
+  const name = use.split(/ (?=[<[#])/)[0];
+  const need = /^ +[^ []/.test(use.slice(name.length));
+  Screen.ed_set(t.scr.ed, run && !need ? name : name + " ");
+  t.scr.typed = true;
+  if (run && !need) {
+    term_enter(t);
+  }
+}
+
+// a pane over the chat, its lines made for the width shown
+function term_pane(t: Term, title: string, make: (w: number) => Paint.Line[]): void {
+  t.pane   = { title, make, w: 0, lines: [], scroll: 0 };
+  t.choose = null;
+}
+
+// the commands and keys by group, in two columns, then the editing keys
+function term_help(t: Term): void {
+  const groups = term_groups(t.v, true);
+  term_pane(t, "Help", (w) => {
+    const how   = (c: Cmd) => [c[0], c[1]].filter((x) => x !== "").join(", ");
+    const left  = Math.max(...groups.flatMap(([, cmds]) => cmds).map((c) => Paint.text_width(how(c)))) + 2;
+    const right = Math.max(20, w - left);
+    const row   = (c: Cmd) => Paint.runs_wrap([Paint.Run(c[2])], right, false).map((l, k) => [Paint.Run((k === 0 ? how(c) : "").padEnd(left)), ...l]);
+    const bold  = { ...Paint.INK, b: true };
+    const group = ([name, cmds]: [string, Cmd[]]) => [[Paint.Run(name, bold)], ...cmds.flatMap(row), []];
+    const edit  = Paint.runs_wrap([Paint.Run(Screen.EDITING)], w, false);
+    return [...groups.flatMap(group), [Paint.Run("Editing", bold)], ...edit];
+  });
+}
+
+// the user's command: its message sent, with the images its words name
+function term_custom(t: Term, cmd: Command, arg: string): void {
+  if (term_act(t, { $: "Send", text: Custom.expand(cmd, arg), images: term_shots(t, arg) }).length > 0) {
+    t.notes = [];
+  }
+}
+
+// the user's skill: Illi told to use it, for the words after its name
+function term_skill(t: Term, skill: Skill, arg: string): void {
+  term_custom(t, { name: skill.name, description: "", body: "Use your skill " + skill.name + (arg === "" ? "." : ": $ARGUMENTS"), file: skill.dir }, arg);
+}
+
+// the user's MCP servers: each one's tools, or how it is; the file
+export function term_mcp(t: Term): void {
+  const { servers, trouble, file } = Mcp.status();
+  const server = (s: Server) => "- **" + s.name + "**: " + (s.state === "ready" ? s.own.size + " tools: " + [...s.own.values()].join(", ") : s.state === "starting" ? "starting…" : "failed: " + s.why);
+  const text = [
+    servers.length === 0 ? "No MCP servers." : "MCP servers (their tools are named mcp__<server>__<tool>):", ...servers.map(server),
+    ...(trouble === "" ? [] : ["", "The file won't read: " + trouble]),
+    "", "They are in " + file + ", as Claude Code's mcpServers; the README shows its shape. A change there applies at illi's next start.",
+  ];
+  const rows = View.entry_rows(null, "illi", text.join("\n"));
+  term_pane(t, "MCP", (w) => Paint.rows_lines(rows, w));
+}
+
+// the user's agents, primary (the main one marked) and subagents, their
+// commands and skills, and the dirs of all
+function term_agents(t: Term): void {
+  const cwd   = process.cwd();
+  const agent = (a: Profile) => "- **" + a.name + "**" + (a.name === t.v.agent ? " (main)" : "") + (a.description === "" ? "" : ": " + a.description) + [a.model, a.effort].filter(Boolean).map((x) => " · " + x).join("") + (a.tools === null ? "" : " · tools: " + a.tools.join(", "));
+  const cmd   = (c: Command) => "- **/" + c.name + "**" + (c.description === "" ? "" : ": " + c.description);
+  const list  = (title: string, xs: string[]) => ["", title + (xs.length === 0 ? ": none yet." : ":"), ...xs];
+  t.agents    = Custom.primaries(cwd);
+  const text  = [
+    "Main agent: " + (t.v.agent ?? "Illi's own") + ". Tab runs Illi as the next primary agent; so does a click at the side, and /agent <name>.",
+    ...list("Primary agents (Illi runs as them)", t.agents.map(agent)),
+    ...list("Subagents (only an agent spawns them)", Custom.subagents(cwd).map(agent)),
+    ...list("Commands", Custom.commands(cwd).map(cmd)),
+    ...list("Skills (the agent loads one when a task matches; /name asks for it)", Custom.skills(cwd).map((s) => "- **" + s.name + "**" + (s.description === "" ? "" : ": " + s.description))),
+    "", "An agent is a markdown file in " + Custom.dirs(cwd, "agents").join(" or ") + " (the project's wins); its mode is primary, subagent, or all (both, the default). A command is one in " + Custom.dirs(cwd, "commands").join(" or ") + ", a skill a folder with a SKILL.md in " + Custom.dirs(cwd, "skills").join(" or ") + ". The README shows their shape.",
+  ];
+  const rows = View.entry_rows(null, "illi", text.join("\n"));
+  term_pane(t, "Agents", (w) => Paint.rows_lines(rows, w));
+}
+
+// the main agent: the primary agent named (illi: Illi's own); none opens
+// the picker, at the main agent
+function term_agent_set(t: Term, arg: string): void {
+  if (arg !== "") {
+    return term_main(t, arg.toLowerCase() === "illi" ? null : arg);
+  }
+  t.agents    = Custom.primaries(process.cwd());
+  const names = [null, ...t.agents.map((a) => a.name)];
+  const about = names.map((name, k) => (k === 0 ? "Illi's own, on " + Pick.label(config.PICK) : t.agents[k - 1].description));
+  term_chooser(t, "Agent", names.map((name) => name ?? View.MAIN), about, names.indexOf(t.v.agent), (k) => term_choose(t, names[k]));
+}
+
+// the picker opened over the pane, at the option marked as now
+export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void): void {
+  t.choose = { title, names, about, here, at: Math.max(0, here), pick };
+  t.pane   = null;
+}
+
+// the picker's choice: the picker closed, the main agent that one
+export function term_choose(t: Term, name: string | null): void {
+  t.choose = null;
+  if (name !== t.v.agent) {
+    term_main(t, name);
+  }
+}
+
+export function term_main(t: Term, name: string | null): void {
+  term_send(t, { $: "main", name });
+}
+
+// /login: ChatGPT's device login: its page and code said (the code
+// copied), the login kept as Illi's own once the person gives it; again,
+// a new code (the last one let go)
+async function term_login(t: Term): Promise<void> {
+  t.login?.abort();
+  const stop = new AbortController();
+  t.login = stop;
+  try {
+    const { url, code, done } = await ChatGPT.device(stop.signal);
+    Screen.screen_copy(code);
+    term_note(t, "Sign in to ChatGPT: open " + url + " and enter the code " + code + " (copied; it is good for 15 minutes). Illi waits for it.");
+    await done;
+    term_note(t, "Signed in to ChatGPT. Illi keeps its own login in " + config.OWN_LOGIN + " and renews it there.");
+    term_models(t);
+  } catch (err: any) {
+    if (!stop.signal.aborted) {
+      term_note(t, "Login: " + err.message);
+    }
+  } finally {
+    t.login = t.login === stop ? null : t.login;
+  }
+}
+
+// the models ChatGPT lists, learned (ChatGPT.ts models; signed in): a
+// new one offered, each one's window known; the chat tells its views
+export function term_models(t: Term): void {
+  if (config.OFFER.vendors.includes("chatgpt") && ChatGPT.signed()) {
+    void ChatGPT.models().then((fresh) => fresh !== null && Chat.change(t.chat));
+  }
+}
+
+// /logout: Illi's own login removed
+function term_logout(t: Term): void {
+  t.login?.abort();
+  const gone = ChatGPT.logout();
+  const left = ChatGPT.signed() ? " Illi runs on opencode's login now." : " /login signs in again.";
+  term_note(t, (gone ? "Signed out: Illi's own ChatGPT login is removed." : "Illi has no login of its own.") + left);
+}
+
+// stops all that runs, or the agent named
+function term_stop(t: Term, arg: string): void {
+  const name = term_agent(t, arg);
+  if (arg !== "" && !t.v.agents.includes(name)) {
+    term_note(t, "No agent " + arg + " at work.");
+    return;
+  }
+  term_send(t, arg === "" ? { $: "stop" } : { $: "stop", name });
+}
+
+// an agent at work whose name starts with arg, else arg
+function term_agent(t: Term, arg: string): string {
+  return t.v.agents.find((a) => a.toLowerCase().startsWith(arg.toLowerCase())) ?? arg;
+}
+
+// the person's choice for block #id or #id+n (its name, View.block_name),
+// open or closed, whatever it shows now: it holds until Fold all; the
+// chat scrolls to it
+function term_block(t: Term, arg: string, open: boolean): void {
+  const name = /^#?(\d+)(?:\+(\d+))?$/.exec(arg);
+  const id   = Number(name?.[1]);
+  const n    = Number(name?.[2] ?? 1);
+  if (name === null || block_row(View.view_body(t.v), id, n) === undefined) {
+    term_note(t, arg === "" ? "Which block? " + (open ? "/open" : "/close") + " #id, as each block shows it." : "No block " + arg + " here.");
+    return;
+  }
+  term_act(t, { $: open ? "Open" : "Shut", id, n });
+  t.find = [id, n];
+}
+
+// the row of block #id+n, among rows or inside their boxes
+function block_row(rows: View.Row[], id: number, n: number): View.Row | undefined {
+  for (const r of rows) {
+    if ((r.$ === "Sum" || r.$ === "Box") && r.id === id && r.n === n) {
+      return r;
+    }
+    const inner = r.$ === "Box" ? block_row(r.rows, id, n) : undefined;
+    if (inner !== undefined) {
+      return inner;
+    }
+  }
+  return undefined;
+}
+
+// folds all (shown when the tops come), or unfolds
+function term_fold(t: Term): void {
+  if (t.v.page === null) {
+    term_act(t, { $: "Fold", on: t.v.fold === null });
+    t.scroll = 0;
+  }
+}
+
+// shows an agent's chat, by the start of its name, or Illi's; no
+// name lists the pages
+function term_tab(t: Term, arg: string): void {
+  const main = arg.toLowerCase() === View.MAIN.toLowerCase();
+  if (arg === "") {
+    return term_note(t, "Pages: " + View.view_tabs(t.v).map((tab) => tab.text).join("  "));
+  }
+  term_act(t, { $: "Goto", name: main ? null : term_agent(t, arg) });
+}
+
+// moves the pick one step (a key)
+function term_move(t: Term, move: Move): void {
+  term_act(t, { $: "Move", move });
+}
+
+// a part of the pick: to the value given, or, none, the values it may
+// take, the pick's marked
+function term_pick(t: Term, move: Move, arg: string): void {
+  const knob = View.view_pick(t.v).find((k) => k.move === move);
+  if (arg !== "" || knob === undefined || t.v.pick === null) {
+    term_act(t, { $: "Move", move, to: arg });
+    return;
+  }
+  const parts = [...new Set(Pick.options(t.v.pick, move, t.v).map(([part]) => part))];
+  const list  = parts.map((part) => (part === knob.text ? part + " (now)" : part));
+  term_note(t, move[0].toUpperCase() + move.slice(1) + "s: " + list.join(", ") + ". Pick one with /" + move + " <" + move + ">.");
+}
+
+// Illi's last reply on the page shown, to the terminal's clipboard
+function term_copy(t: Term): void {
+  const log  = t.v.page === null ? [...t.v.whole].sort((a, b) => a[0] - b[0]).map(([, e]) => e) : t.v.page.log ?? [];
+  const last = log.filter((e) => e.kind === "illi").at(-1);
+  if (last === undefined) {
+    return term_note(t, "No reply to copy yet.");
+  }
+  Screen.screen_copy(last.text);
+  term_note(t, "Copied the last reply (" + last.text.length + " characters).");
+}
+
+// the memory, as JSON
+async function term_export(t: Term): Promise<void> {
+  const file = process.cwd() + "/illi-memory.json";
+  await Bun.write(file, [...Memory.dump(t.chat.mem, {})].join(""));
+  term_note(t, "Your memory is in " + file + ".");
+}
+
+// the memory tree, as a page
+async function term_tree(t: Term): Promise<void> {
+  const file = process.cwd() + "/illi-tree.html";
+  await Bun.write(file, [...Memory.page(t.chat.mem)].join(""));
+  term_note(t, "The memory tree is in " + file + ".");
+}

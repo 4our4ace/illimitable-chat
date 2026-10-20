@@ -1,0 +1,191 @@
+// Profiles test
+// =============
+// `bun test Profiles.test.ts`. Which profile runs: the one asked, else
+// the one used last, else the default (the root itself); a folder that
+// is a profile's is that one, in its root. Config.ts on a profile: its
+// folder as DIR, its config.json over the root's, the root's login, the
+// keys put back for a switch. Names a profile takes. Secrets left out of
+// a JSON file. An export: no login, lock or log, its config stripped; an
+// import: a new profile only, its config's commands dropped, its MCP
+// servers off; an archive with a path out of its folder, or a link, is
+// refused before anything is unpacked.
+
+import { expect, test } from "bun:test";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as Profiles from "./Profiles.ts";
+
+const ROOT = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-");
+const TMP  = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-tmp-");
+
+function put(file: string, text: string): void {
+  fs.mkdirSync(file.slice(0, file.lastIndexOf("/")), { recursive: true });
+  fs.writeFileSync(file, text);
+}
+
+// a tar run here; its listing
+function tar(args: string[], cwd = TMP): string {
+  const run = Bun.spawnSync(["tar", ...args], { cwd });
+  expect(run.exitCode).toBe(0);
+  return run.stdout.toString();
+}
+
+put(ROOT + "/config.json", JSON.stringify({ side: "left", vendors: "chatgpt,claude-api", anthropic_api_key: "sk-ant-0123456789abcdefghij", login: "./other-login.json" }));
+put(ROOT + "/login.json", JSON.stringify({ openai: { access: "secret-access", refresh: "secret-refresh" } }));
+put(ROOT + "/other-login.json", "{}");
+put(ROOT + "/lock", "");
+put(ROOT + "/illi.log", "log\n");
+put(ROOT + "/chat/main/2026-10-20.jsonl", '{"text":"hello from default"}\n');
+put(ROOT + "/agents/helper.md", "---\ndescription: Helps\n---\nHelp.");
+put(ROOT + "/mcp.json", JSON.stringify({ mcpServers: {
+  github : { command: "npx", args: ["server-github", "--key", "ghp_0123456789abcdefABCDEF"], env: { GITHUB_TOKEN: "${GITHUB_TOKEN}", OTHER_TOKEN: "literal-token-value", PLAIN: "x" } },
+  docs   : { type: "http", url: "https://example.com/mcp", headers: { Authorization: "Bearer abcdefghijklmnop" } },
+  off    : { command: "off", disabled: true },
+} }));
+
+test("the default runs first: the root itself", () => {
+  expect(Profiles.profile_pick(ROOT)).toEqual({ root: ROOT, name: "default", dir: ROOT });
+  expect(Profiles.profile_pick(ROOT + "/")).toEqual({ root: ROOT, name: "default", dir: ROOT });
+  expect(Profiles.profile_list(ROOT)).toEqual(["default"]);
+});
+
+test("a new profile: named well, never twice; --copy takes the settings, never the chat", () => {
+  expect(Profiles.profile_why(ROOT, "Work")).toContain("lowercase");
+  expect(Profiles.profile_why(ROOT, "-x")).toContain("lowercase");
+  expect(Profiles.profile_why(ROOT, "a/b")).toContain("lowercase");
+  expect(Profiles.profile_why(ROOT, "default")).toContain("taken");
+  expect(Profiles.profile_why(ROOT, "new")).toContain("taken");
+  expect(Profiles.profile_why(ROOT, "work")).toBeNull();
+  Profiles.profile_new(ROOT, "work", null);
+  Profiles.profile_new(ROOT, "copy", ROOT);
+  expect(Profiles.profile_why(ROOT, "work")).toContain("already");
+  expect(fs.readdirSync(ROOT + "/profiles/work")).toEqual([]);
+  expect(fs.readdirSync(ROOT + "/profiles/copy").sort()).toEqual(["agents", "config.json", "mcp.json"]);
+  fs.mkdirSync(ROOT + "/profiles/.import-x");
+  fs.mkdirSync(ROOT + "/profiles/Bad");
+  expect(Profiles.profile_list(ROOT)).toEqual(["default", "copy", "work"]);
+});
+
+test("the one asked, else the one used last (if still there), else the default", () => {
+  expect(Profiles.profile_pick(ROOT, "work")).toEqual({ root: ROOT, name: "work", dir: ROOT + "/profiles/work" });
+  expect(Profiles.profile_pick(ROOT, "default").dir).toBe(ROOT);
+  expect(() => Profiles.profile_pick(ROOT, "gone")).toThrow("no profile");
+  expect(() => Profiles.profile_pick(ROOT, "../x")).toThrow("no profile");
+  Profiles.profile_keep(ROOT, "work");
+  expect(fs.readFileSync(ROOT + "/profile", "utf8")).toBe("work\n");
+  expect(Profiles.profile_pick(ROOT).name).toBe("work");
+  expect(Profiles.profile_pick(ROOT, "copy").name).toBe("copy");
+  Profiles.profile_keep(ROOT, "gone");
+  expect(Profiles.profile_pick(ROOT).name).toBe("default");
+  fs.writeFileSync(ROOT + "/profile", "../../etc\n");
+  expect(Profiles.profile_pick(ROOT).name).toBe("default");
+  Profiles.profile_keep(ROOT, "default");
+});
+
+test("a folder that is a profile's is that one, in its root; one only named so is a root", () => {
+  expect(Profiles.profile_pick(ROOT + "/profiles/work")).toEqual({ root: ROOT, name: "work", dir: ROOT + "/profiles/work" });
+  expect(Profiles.profile_pick(ROOT + "/profiles/work", "copy").name).toBe("copy");
+  const bare = TMP + "/home/profiles/illi";
+  fs.mkdirSync(bare, { recursive: true });
+  expect(Profiles.profile_pick(bare)).toEqual({ root: bare, name: "default", dir: bare });
+});
+
+test("an archive's file names its profile", () => {
+  expect(Profiles.profile_named("/x/illi-profile-work.tar.gz")).toBe("work");
+  expect(Profiles.profile_named("Backup.tgz")).toBe("backup");
+  expect(Profiles.profile_named("my stuff.tar.gz")).toBeNull();
+  expect(Profiles.profile_named("illi-profile-default.tar.gz")).toBeNull();
+});
+
+test("secrets left out: under a key that names one, unless a ${VAR}; shaped as a key anywhere", () => {
+  const mcp = JSON.parse(fs.readFileSync(ROOT + "/mcp.json", "utf8"));
+  const [kept, cut] = Profiles.profile_strip(mcp) as [any, number];
+  expect(cut).toBe(3);
+  expect(kept.mcpServers.github.args).toEqual(["server-github", "--key"]);
+  expect(kept.mcpServers.github.env).toEqual({ GITHUB_TOKEN: "${GITHUB_TOKEN}", PLAIN: "x" });
+  expect(kept.mcpServers.docs.headers).toEqual({});
+  expect(kept.mcpServers.docs.url).toBe("https://example.com/mcp");
+  const [conf, n] = Profiles.profile_strip({ side: "left", openai_api_key: "abc", nested: { password: "p", list: [1, "eyJhbGciOiJIUzI1.eyJzdWIiOiIxMjM0.sig"] } }) as [any, number];
+  expect(conf).toEqual({ side: "left", nested: { list: [1] } });
+  expect(n).toBe(3);
+});
+
+test("an archive's paths: inside its folder, files and folders only", () => {
+  for (const ok of ["config.json", "./chat/main/a.jsonl", "chat/", "./", "a..b/c"]) {
+    expect(Profiles.profile_inside(ok)).toBe(true);
+  }
+  for (const bad of ["", "/etc/passwd", "../x", "chat/../../x", "a/..", "a\\b", "a\nb", "x\x1b[2J"]) {
+    expect(Profiles.profile_inside(bad)).toBe(false);
+  }
+  expect(Profiles.profile_unsafe(["chat/", "chat/a"], ["d", "-"])).toBeNull();
+  expect(Profiles.profile_unsafe([], [])).toContain("no profile");
+  expect(Profiles.profile_unsafe(["a"], ["-", "-"])).toContain("no profile");
+  expect(Profiles.profile_unsafe(["chat/", "../../x"], ["d", "-"])).toContain("outside");
+  expect(Profiles.profile_unsafe(["chat", "chat/x"], ["l", "-"])).toContain("link");
+  expect(Profiles.profile_unsafe(["a", "b"], ["-", "h"])).toContain("link");
+});
+
+test("an export: the folder but the login, the lock, the log, the other profiles; secrets left out", async () => {
+  const file = TMP + "/illi-profile-default.tar.gz";
+  const cut  = await Profiles.profile_export(ROOT, "default", file);
+  expect(cut).toBe(4);
+  const names = tar(["-tzf", file]).split("\n").filter((l) => l !== "").sort();
+  expect(names).toEqual(["./agents/", "./agents/helper.md", "./chat/", "./chat/main/", "./chat/main/2026-10-20.jsonl", "./config.json", "./mcp.json"]);
+  fs.mkdirSync(TMP + "/out");
+  tar(["-xzf", file, "-C", TMP + "/out"]);
+  expect(JSON.parse(fs.readFileSync(TMP + "/out/config.json", "utf8"))).toEqual({ side: "left", vendors: "chatgpt,claude-api" });
+  expect(fs.readFileSync(TMP + "/out/mcp.json", "utf8")).not.toContain("literal-token-value");
+  const work = TMP + "/illi-profile-work.tar.gz";
+  expect(await Profiles.profile_export(ROOT, "work", work)).toBe(0);
+  expect(tar(["-tzf", work]).trim()).toBe("./config.json");
+});
+
+test("an import: a new profile, its config's commands and files dropped, its MCP servers off", async () => {
+  const other = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-other-");
+  const file  = TMP + "/illi-profile-default.tar.gz";
+  put(TMP + "/evil/config.json", JSON.stringify({ side: "right", after: "curl evil", rules: "~/.ssh/id_rsa", login: "./mine.json", mcp: "/elsewhere.json" }));
+  put(TMP + "/evil/login.json", "{}");
+  put(TMP + "/evil/chat/main/x.jsonl", "{}\n");
+  tar(["-czf", TMP + "/evil.tar.gz", "-C", TMP + "/evil", "."]);
+  const got = await Profiles.profile_import(other, file, "home");
+  expect(got).toEqual({ keys: [], servers: 2 });
+  const mcp = JSON.parse(fs.readFileSync(other + "/profiles/home/mcp.json", "utf8"));
+  expect(Object.values<any>(mcp.mcpServers).every((d) => d.disabled === true)).toBe(true);
+  expect(fs.readFileSync(other + "/profiles/home/chat/main/2026-10-20.jsonl", "utf8")).toContain("hello from default");
+  await expect(Profiles.profile_import(other, file, "home")).rejects.toThrow("already");
+  const evil = await Profiles.profile_import(other, TMP + "/evil.tar.gz", "evil");
+  expect(evil.keys.sort()).toEqual(["after", "login", "mcp", "rules"]);
+  expect(JSON.parse(fs.readFileSync(other + "/profiles/evil/config.json", "utf8"))).toEqual({ side: "right" });
+  expect(fs.existsSync(other + "/profiles/evil/login.json")).toBe(false);
+  expect(Profiles.profile_list(other)).toEqual(["default", "evil", "home"]);
+  expect(fs.readdirSync(other + "/profiles").filter((p) => p.startsWith("."))).toEqual([]);
+});
+
+test("an archive with a path out of its folder, or a link, unpacks nothing", async () => {
+  const other = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-bad-");
+  put(TMP + "/bad/a/x.txt", "x");
+  put(TMP + "/target.txt", "outside");
+  tar(["-czPf", TMP + "/up.tar.gz", "bad/a/../../target.txt"]);
+  tar(["-czPf", TMP + "/abs.tar.gz", TMP + "/target.txt"]);
+  fs.symlinkSync(TMP + "/target.txt", TMP + "/bad/link");
+  tar(["-czf", TMP + "/link.tar.gz", "-C", TMP + "/bad", "."]);
+  await expect(Profiles.profile_import(other, TMP + "/up.tar.gz", "up")).rejects.toThrow("outside");
+  await expect(Profiles.profile_import(other, TMP + "/abs.tar.gz", "abs")).rejects.toThrow("outside");
+  await expect(Profiles.profile_import(other, TMP + "/link.tar.gz", "link")).rejects.toThrow("link");
+  expect(fs.existsSync(other + "/profiles") ? fs.readdirSync(other + "/profiles") : []).toEqual([]);
+  expect(fs.readFileSync(TMP + "/target.txt", "utf8")).toBe("outside");
+});
+
+test("Config.ts on a profile: its folder, its config over the root's, the root's login, the keys put back", async () => {
+  process.env.ILLI_DIR = ROOT;
+  process.env.ILLI_PROFILE = "copy";
+  process.env.ANTHROPIC_API_KEY = "test-key";
+  put(ROOT + "/profiles/copy/config.json", JSON.stringify({ side: "off" }));
+  const config = await import("./Config.ts");
+  expect([config.ROOT, config.PROFILE, config.DIR]).toEqual([ROOT, "copy", ROOT + "/profiles/copy"]);
+  expect(config.config_get("side", "right")).toBe("off");
+  expect(config.config_get("vendors", "chatgpt")).toBe(process.env.ILLI_VENDORS ?? "chatgpt,claude-api");
+  expect(config.OWN_LOGIN).toBe(ROOT + "/login.json");
+  expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
+  expect(config.config_env().ANTHROPIC_API_KEY).toBe("test-key");
+});
