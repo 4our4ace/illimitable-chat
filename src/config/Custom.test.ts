@@ -159,14 +159,28 @@ test("spawn's agent runs a subagent as it, and names the user's agents", async (
 });
 
 test("a skill: its folder's SKILL.md, the project's over theirs; listed and loaded by the skill tool", async () => {
-  expect(Custom.skills(CWD).map((k) => [k.name, k.description])).toEqual([["Deploy", "Ships it"], ["pdf", "Fills PDF forms. Use for any .pdf."]]);
+  expect(Custom.skills(CWD).map((k) => [k.name, k.description]).slice(1)).toEqual([["Deploy", "Ships it"], ["pdf", "Fills PDF forms. Use for any .pdf."]]);
   const skill = Tools.list(chat.tools, "main").find((t) => t.name === "skill")!;
   expect(skill.info).toContain("- pdf: Fills PDF forms. Use for any .pdf.");
-  expect(JSON.stringify(skill.schema)).toContain('"enum":["Deploy","pdf"]');
+  expect(JSON.stringify(skill.schema)).toContain('"enum":["customize-illi","Deploy","pdf"]');
   const out = await Tools.call(chat.tools, "main", "skill", { name: "PDF" }, new AbortController().signal);
   expect(out.text).toBe("Skill pdf: its SKILL.md's instructions, whole, below; its folder: " + DIR + "/skills/pdf\n\nRun scripts/fill.py on it.\n\nIts files, in its folder: scripts/fill.py.");
   expect((await Tools.call(chat.tools, "main", "skill", { name: "nope" }, new AbortController().signal)).fail).toBe(true);
   expect(Chat.main(chat, "reviewer")).toEqual({});
   expect(Tools.list(chat.tools, "main").map((t) => t.name)).toEqual(["zoom", "read"]);
   expect(Chat.main(chat, null)).toEqual({});
+});
+
+test("Illi's own skill, customize-illi: listed first, loaded with its folders named; the user's of its name takes its place", async () => {
+  const own = Custom.skills(CWD)[0];
+  expect([own.name, own.dir]).toEqual(["customize-illi", ""]);
+  expect(own.description).toStartWith("Customize Illi itself");
+  const out = await Tools.call(chat.tools, "main", "skill", { name: "customize-illi" }, new AbortController().signal);
+  expect(out.text).toStartWith("Skill customize-illi: its instructions, whole, below (built into Illi)\n\n");
+  expect(out.text).toContain("- Illi's folder: " + DIR + "\n");
+  expect(out.text).toContain("- This project's: " + CWD + "/.illi (");
+  expect(out.text).not.toContain("{{");
+  put(DIR + "/skills/customize-illi/SKILL.md", "---\ndescription: mine\n---\nMine.");
+  expect(Custom.skill(CWD, "customize-illi")).toMatchObject({ description: "mine", body: "Mine.", dir: DIR + "/skills/customize-illi" });
+  fs.rmSync(DIR + "/skills/customize-illi", { recursive: true });
 });

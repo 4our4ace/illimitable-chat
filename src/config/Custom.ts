@@ -22,7 +22,9 @@
 // A skill (skills/<name>/SKILL.md, as Claude Code's) is instructions for
 // a kind of task, loaded when one comes (Tools.ts skill): its front
 // matter says when (description), its body how; its folder may hold
-// files the body names.
+// files the body names. Illi comes with some of its own (BUILT_IN, in
+// the binary), the user's or a project's over them by name: one,
+// customize-illi, teaches it all this, so it can customize itself.
 //
 //     ---
 //     description: Reviews a change for bugs, reading only
@@ -37,6 +39,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { EFFORTS, Pick, type Offer } from "../ai/Pick.ts";
 import * as config from "./Config.ts";
+import CUSTOMIZE from "../skills/customize-illi/SKILL.md" with { type: "text" };
 
 // Types
 // =====
@@ -63,7 +66,7 @@ export type Profile = {
 export type Command = { name: string; description: string; body: string; file: string };
 
 // a skill: its name (its folder's), when to use it, its instructions, its
-// folder
+// folder ("": one built into Illi)
 export type Skill = { name: string; description: string; body: string; dir: string };
 
 // Constants
@@ -73,6 +76,11 @@ export type Skill = { name: string; description: string; body: string; dir: stri
 const NAME = /^[a-z0-9][a-z0-9_-]*$/i;
 
 const MODES: Mode[] = ["primary", "subagent", "all"];
+
+// the skills Illi comes with: SKILL.md files, named in their front
+// matter; {{illi}}, {{root}} and {{project}} in one are Illi's folder,
+// its root's and the project's .illi
+const BUILT_IN = [CUSTOMIZE];
 
 // Custom
 // ======
@@ -120,6 +128,10 @@ export namespace Custom {
   // over theirs
   export function skills(cwd: string): Skill[] {
     const out = new Map<string, Skill>();
+    for (const { head, body } of BUILT_IN.map(Custom.parse)) {
+      const filled = body.replaceAll("{{illi}}", config.DIR).replaceAll("{{root}}", config.ROOT).replaceAll("{{project}}", path.join(cwd, ".illi"));
+      out.set(head.name.toLowerCase(), { name: head.name, description: head.description ?? "", body: filled, dir: "" });
+    }
     for (const dir of Custom.dirs(cwd, "skills")) {
       const names = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => NAME.test(f)).sort() : [];
       for (const name of names.filter((n) => fs.existsSync(path.join(dir, n, "SKILL.md")))) {
@@ -171,7 +183,12 @@ export namespace Custom {
   // of > or | is the indented lines under it, as YAML's: folded into one,
   // or kept) and body
   export function read(file: string): { head: Record<string, string>; body: string } {
-    const text = fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n");
+    return Custom.parse(fs.readFileSync(file, "utf8"));
+  }
+
+  // a file's text, as read does
+  export function parse(file: string): { head: Record<string, string>; body: string } {
+    const text = file.replace(/\r\n/g, "\n");
     const match = /^---\n([\s\S]*?)\n---\n?/.exec(text);
     const lines = match === null ? [] : match[1].split("\n");
     const head: Record<string, string> = {};

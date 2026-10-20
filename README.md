@@ -64,7 +64,8 @@ Customize
 ---------
 
 All in `~/.illi/`, or a project's `.illi/` (which wins by name).
-`examples/` has samples.
+`examples/` has samples. Or ask Illi: it comes with a skill,
+`customize-illi`, and writes these files itself.
 
 - `agents/*.md`: agents. `mode: primary` ones are switched to with Tab;
   `subagent` ones are spawned by Illi. Each gets a color of its own;
