@@ -7,7 +7,8 @@
 // the ask; no breakpoint more, so the turn's cache serves it) and shows
 // it till a message; none after a failed turn, a stop, a tool call in its
 // answer, from a pipe (off); five in a row unused stop them, one used
-// starts the count anew.
+// starts the count anew; an answer of nothing, thanks or praise, or in
+// Illi's voice, is none.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -200,4 +201,13 @@ test("five in a row unused stop them; one used starts the count anew", async () 
   expect(chat.suggest.unused).toBe(5);
   expect(suggests()).toHaveLength(n);
   expect(chat.suggest.text).toBe("");
+});
+
+test("an answer of nothing, or one that's no message of theirs, shows none", () => {
+  for (const none of ["", "nothing", "(nothing)", "None.", "No suggestion", "Thanks!", "Looks good", "Let me run the tests", "I'll commit it", "\"Here's the diff\""]) {
+    expect(Chat.line(none)).toBe("");
+  }
+  expect(Chat.line("\"Commit it\"")).toBe("Commit it");
+  expect(Chat.line("great, now push it")).toBe("great, now push it");
+  expect(Chat.line("Nothing else, push it")).toBe("Nothing else, push it");
 });

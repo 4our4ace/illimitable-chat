@@ -107,14 +107,22 @@ const HELLO      = "Hi, I'm Illi, short for Illimitable: one chat that never end
 const HELLO_LINE = "illi: hello: Illi (Illimitable), one endless chat in a memory tree; works in the folder illi starts in; /help for commands.";
 
 // a suggested reply (Chat.suggest): what the model is asked after the
-// turn's last request and its answer; the most tokens it writes, its
-// thinking's too (a line is some 20; gpt-6-luna at high effort thought
-// 30 to 120 more); how many in a row going unused stop them till illi
-// starts again; twice the words it's asked for, past which one is none
-const SUGGEST     = "Suggest the user's next message to Illi: what they'd most likely type next, in their own voice, at most 12 words. If there's no clear next step, answer with nothing. Output only the message.";
+// turn's last request and its answer, none its answer unless the next
+// step is plain; the most tokens it writes, its thinking's too (a line is
+// some 20; gpt-6-luna at high effort thought 30 to 120 more); how many in
+// a row going unused stop them till illi starts again; twice the words
+// it's asked for, past which one is none; answers that are none (one that
+// says so, thanks or praise, Illi's own voice)
+const SUGGEST     = [
+  "Suggest the user's next message to Illi: what they'd type next, not what Illi thinks they should do. They should think: I was about to type that.",
+  "2 to 12 words, in their own voice and style, and specific: \"run the tests\", not \"continue\". Illi offered choices: the one they'd pick. Illi asked to go on: \"yes\". The work is done and the next step plain: that step, like \"commit it\".",
+  "Never thanks or praise, a question, Illi's voice (\"Let me\", \"I'll\"), an idea they didn't ask for, or more than one sentence.",
+  "After an error or a misunderstanding, or when the next step isn't plain from what they said, answer with nothing: none beats a wrong guess. Output only the message, or nothing.",
+].join("\n");
 const SUGGEST_MAX = 256;
 const UNUSED      = 5;
 const WORDS       = 24;
+const NONE        = /^\W*(nothing|none|no suggestion|silence|n\/a|thanks|thank you|looks good|lgtm|great|perfect|nice|awesome)\W*$|^(let me|i'll|i will|i've|here's|here is)\b/i;
 
 // Globals
 // =======
@@ -464,10 +472,10 @@ export namespace Chat {
   }
 
   // a suggested reply as shown: its first line, out of any quotes round
-  // it; none if it says nothing (or "nothing"), or runs past WORDS words
+  // it; none if it says nothing (or is NONE), or runs past WORDS words
   export function line(text: string): string {
     const line = text.trim().split("\n")[0].trim().replace(/^["“'‘](.*)["”'’]$/, "$1").trim();
-    return /^\W*nothing\W*$/i.test(line) || line.split(/\s+/).length > WORDS ? "" : line;
+    return NONE.test(line) || line.split(/\s+/).length > WORDS ? "" : line;
   }
 
   // the suggested reply goes, and the one being asked (a turn begins)
