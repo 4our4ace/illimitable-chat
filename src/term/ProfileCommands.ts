@@ -109,8 +109,8 @@ function term_profile_new(t: Term, arg: string): void | Promise<void> {
 }
 
 // /profile export [name] [file]: a profile (this one, or the one named)
-// as one archive, at file (a folder: in it) or ./illi-profile-<name>.tar.gz;
-// this one's chat flushed first
+// as one archive, at file (a folder: in it) or ./illi-profile-<name>.tar.gz,
+// never over a file there; this one's chat flushed first
 async function term_profile_export(t: Term, arg: string): Promise<void> {
   const first = arg.split(/\s+/)[0].toLowerCase();
   t.profs     = Profiles.profile_list(config.ROOT);
@@ -121,6 +121,9 @@ async function term_profile_export(t: Term, arg: string): Promise<void> {
   const file  = given === "" ? path.resolve(named) : fs.existsSync(given) && fs.statSync(given).isDirectory() ? path.join(given, named) : given;
   if (name !== first && Profiles.NAME.test(first) && !/[./]/.test(arg)) {
     return term_note(t, "No profile " + first + ". Profiles: " + t.profs.join(", ") + "; a file to write to has a . or a / in it.");
+  }
+  if (fs.existsSync(file)) {
+    return term_note(t, "Not exported: " + term_home(file) + " is there already. Move it away, or name another file.");
   }
   try {
     if (name === config.PROFILE) {
@@ -134,7 +137,7 @@ async function term_profile_export(t: Term, arg: string): Promise<void> {
 }
 
 // /profile import <file> [name]: an archive in as a new profile, named as
-// given or by its file; what it left out said
+// given or by its file; what it left out said, and what came with it
 async function term_profile_import(t: Term, arg: string): Promise<void> {
   const last  = arg.split(/\s+/).at(-1) ?? "";
   const whole = term_file(arg);
@@ -154,7 +157,7 @@ async function term_profile_import(t: Term, arg: string): Promise<void> {
       ...(got.servers === 0 ? [] : [got.servers + " MCP server" + (got.servers === 1 ? "" : "s") + ", now \"disabled\": true in its mcp.json"]),
     ];
     t.profs = Profiles.profile_list(config.ROOT);
-    term_note(t, "Imported profile " + name + " into " + term_home(Profiles.profile_dir(config.ROOT, name!)) + "." + (off.length === 0 ? "" : " Left off, as the archive is untrusted: " + off.join("; ") + ". Look, then turn on what you trust.") + " /profile " + name + " switches to it.");
+    term_note(t, "Imported profile " + name + " into " + term_home(Profiles.profile_dir(config.ROOT, name!)) + "." + (off.length === 0 ? "" : " Left off, as the archive is untrusted: " + off.join("; ") + ".") + " Its agents, commands, skills and chat came as they were, at work as soon as you switch to it: look at them first. /profile " + name + " switches to it.");
   } catch (err: any) {
     term_note(t, "Not imported. " + err.message);
   }

@@ -285,8 +285,8 @@ export function term_main(t: Term, name: string | null): void {
 }
 
 // /login: ChatGPT's device login: its page and code said (the code
-// copied), the login kept as Illi's own once the person gives it; again,
-// a new code (the last one let go)
+// copied), the login kept once the person gives it (in the file `login`
+// names, else as Illi's own); again, a new code (the last one let go)
 async function term_login(t: Term): Promise<void> {
   t.login?.abort();
   const stop = new AbortController();
@@ -297,7 +297,7 @@ async function term_login(t: Term): Promise<void> {
     Screen.screen_copy(code);
     asked = term_notify(t, "Sign in to ChatGPT: open " + url + " and enter the code " + code + " (copied; it is good for 15 minutes). Illi waits for it.", false, LOGIN);
     await done;
-    term_note(t, "Signed in to ChatGPT. Illi keeps its own login in " + config.OWN_LOGIN + " and renews it there.");
+    term_note(t, "Signed in to ChatGPT. Illi keeps the login in " + ChatGPT.own() + (config.LOGIN_SET === null ? "" : " (the file `login` names)") + " and renews it there.");
     term_models(t);
   } catch (err: any) {
     if (!stop.signal.aborted) {
@@ -319,9 +319,12 @@ export function term_models(t: Term): void {
   }
 }
 
-// /logout: Illi's own login removed
+// /logout: Illi's own login removed; a file `login` names is left
 function term_logout(t: Term): void {
   t.login?.abort();
+  if (config.LOGIN_SET !== null) {
+    return term_note(t, "Illi runs on the login in " + config.LOGIN_SET + ", which `login` names: /logout leaves it. /set login default goes back to Illi's own (or opencode's) at the next start.");
+  }
   const gone = ChatGPT.logout();
   const left = ChatGPT.signed() ? " Illi runs on opencode's login now." : " /login signs in again.";
   term_note(t, (gone ? "Signed out: Illi's own ChatGPT login is removed." : "Illi has no login of its own.") + left);

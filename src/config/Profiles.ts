@@ -7,13 +7,16 @@
 // the default; Config.ts takes its folder as DIR. What stays the root's,
 // shared, is Config.ts's to say (the ChatGPT login; its config.json under
 // each profile's). A profile goes out as one archive (tar.gz, by the
-// system's tar): its folder but the login, the lock, the log (and, the
-// default's, the other profiles), its config.json and mcp.json with their
-// secrets left out. One comes in only as a new profile, its archive taken
-// as untrusted: each entry a file or a folder, inside it, checked before
-// a byte is unpacked; once unpacked, its config's keys that run a command
-// or name a file here dropped, its MCP servers off till the person turns
-// them on.
+// system's tar): its folder but the login (a login file its config names
+// too, wherever in it), the lock, the log (and, the default's, the other
+// profiles), its config.json and mcp.json with their secrets left out;
+// the rest (its chat, agents, commands, skills, theme, rules) as it is.
+// One comes in only as a new profile, its archive taken as untrusted:
+// each entry a file or a folder, inside it, checked before a byte is
+// unpacked; once unpacked, its config's keys that run a command or name a
+// file here (after, rules, login, mcp, theme) dropped, its MCP servers
+// off till the person turns them on. Its agents, commands, skills and
+// chat are the profile's at once.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -54,10 +57,10 @@ const SETTINGS = ["config.json", "mcp.json", "theme.json", "agents", "commands",
 // the files that go out with their secrets left out, as JSON; config.json's
 // keys left out of an export (a file here), and dropped from an import (a
 // command run, or a file here read: the rules sent to the model, another
-// login, other servers)
+// login, other servers, another theme)
 const CLEANED = ["config.json", "mcp.json"];
 const LOCAL   = ["login"];
-const UNSAFE  = ["after", "rules", "login", "mcp"];
+const UNSAFE  = ["after", "rules", "login", "mcp", "theme"];
 
 // a key that names a secret, and a value shaped as a known key or token
 const SECRET_KEY   = /key|token|secret|passw(or)?d|auth|credential|cookie|bearer/i;
@@ -79,7 +82,7 @@ export function profile_pick(dir: string, asked?: string): Picked {
   const last  = profile_last(root);
   const name  = asked !== undefined && asked !== "" ? asked : owned ? is[2] : last;
   if (name !== DEFAULT && (!NAME.test(name) || !fs.existsSync(profile_dir(root, name)))) {
-    throw new Error("config: no profile " + JSON.stringify(name) + " in " + root + " (/profile new " + (NAME.test(name) ? name : "<name>") + " makes one)");
+    throw new Error("config: no profile " + JSON.stringify(name) + " in " + root + ": start illi without ILLI_PROFILE, then /profile new " + (NAME.test(name) ? name : "<name>") + " makes it.");
   }
   return { root, name, dir: profile_dir(root, name) };
 }
@@ -191,13 +194,15 @@ function profile_omit(x: any, keys: string[]): [any, string[]] {
 // --------
 
 // a profile's archive, at file (absolute): its folder but what is never
-// a profile's to give (OWN, ROOTED), and a login file its config names in
-// it; config.json and mcp.json with their secrets left out; how many
+// a profile's to give (OWN, ROOTED), and a login file its config names
+// anywhere in it (a relative path from the folder, as Config.ts takes
+// it); config.json and mcp.json with their secrets left out; how many
 export async function profile_export(root: string, name: string, file: string): Promise<number> {
   const dir   = profile_dir(root, name);
   const tmp   = fs.mkdtempSync(path.join(os.tmpdir(), "illi-export-"));
   const conf  = profile_json(dir + "/config.json");
-  const login = typeof conf?.login === "string" ? path.relative(dir, path.resolve(dir, conf.login.replace(/^~(?=\/)/, os.homedir()))) : "";
+  const login = typeof conf?.login === "string" && conf.login !== "" ? path.relative(dir, path.resolve(dir, conf.login.replace(/^~(?=\/)/, os.homedir()))) : "";
+  const local = login !== "" && profile_inside(login) ? ["--exclude=./" + login] : [];
   const skip  = [...OWN, ...CLEANED, ...(name === DEFAULT ? ROOTED : []), login];
   let cut = 0;
   try {
@@ -212,7 +217,7 @@ export async function profile_export(root: string, name: string, file: string): 
     }
     const parts = fs.readdirSync(dir).filter((p) => !skip.includes(p)).map((p) => "./" + p);
     const clean = fs.readdirSync(tmp).map((p) => "./" + p);
-    await profile_tar(["-czhf", file, "-C", dir, ...parts, "-C", tmp, ...clean]);
+    await profile_tar(["-czhf", file, ...local, "-C", dir, ...parts, "-C", tmp, ...clean]);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
@@ -274,7 +279,7 @@ export function profile_unsafe(names: string[], types: string[]): string | null 
   if (out !== undefined) {
     return "The archive holds a path outside its folder: " + JSON.stringify(out) + ". Nothing was unpacked.";
   }
-  const odd = names.find((n, k) => types[k] !== "-" && types[k] !== "d");
+  const odd = names.find((_, k) => types[k] !== "-" && types[k] !== "d");
   return odd === undefined ? null : "The archive holds a link or a special file: " + JSON.stringify(odd) + ". Nothing was unpacked.";
 }
 
