@@ -565,11 +565,11 @@ export function rule_text(text: string, w: number): Line {
 // the last line, w wide: the profile running (tabs_profile), a tab for
 // the chat (named as the agent Illi runs as) and each agent at work (or
 // the shown alone: all false, the side lists them), each mark in its
-// agent's color (Illi's own: the brand's; else among: the agents told
-// apart, Draw.draw_agent), the shown bold, then the pick (cut at the
-// end); with agents, the keys that move along them, if they fit
-export function tabs_line(v: View.View, w: number, all = true, among: string[] = []): Line {
-  const tabs  = View.view_tabs(v).filter((tab) => all || tab.here).map((tab) => [Run(tab.mark, { ...INK, c: tab.agent === View.MAIN ? Draw.draw_brand() : Draw.draw_agent(tab.agent, among) }), Run(tab.text.slice(tab.mark.length), tab.here ? { ...INK, b: true } : DIM)]);
+// agent's color (Illi's own: the brand's; else Draw.draw_agent), the
+// shown bold, then the pick (cut at the end); with agents, the keys that
+// move along them, if they fit
+export function tabs_line(v: View.View, w: number, all = true): Line {
+  const tabs  = View.view_tabs(v).filter((tab) => all || tab.here).map((tab) => [Run(tab.mark, { ...INK, c: tab.agent === View.MAIN ? Draw.draw_brand() : Draw.draw_agent(tab.agent) }), Run(tab.text.slice(tab.mark.length), tab.here ? { ...INK, b: true } : DIM)]);
   const knobs = View.view_pick(v).map((knob) => knob.text);
   const line  = [...tabs_profile(), ...tabs.flatMap((r, k) => (k === 0 ? r : [Run("  "), ...r])), ...(knobs.length === 0 ? [] : [Run(" · " + knobs.join(" · "), DIM)])];
   const hint  = [Run("  · Ctrl+PgDn to cycle", DIM)];

@@ -28,6 +28,7 @@ import { ChatGPT } from "../ai/ChatGPT.ts";
 import { term_models } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
+import * as Draw from "../ui/Draw.ts";
 import { term_draw, term_paint, term_print, term_resize } from "./Frame.ts";
 import { term_enter, term_grab, term_press } from "./Keys.ts";
 import { Machine } from "../tools/Machine.ts";
@@ -179,7 +180,7 @@ function term_new(chat: Chat): Term {
     body    : null,
     find    : null,
     pane    : null,
-    agents  : Custom.primaries(process.cwd()),
+    agents  : [],
     choose  : null,
     profs   : Profiles.profile_list(config.ROOT),
     hits    : [],
@@ -197,6 +198,7 @@ function term_new(chat: Chat): Term {
     drift   : undefined,
     sug     : null,
   };
+  term_primaries(t);
   Reply.reply_buttons(t.scr.tty);
   t.scr.grab  = (key) => term_grab(t, key);
   t.scr.paste = (text) => term_paste(t, text);
@@ -218,6 +220,14 @@ function term_new(chat: Chat): Term {
   }
   setInterval(() => term_draw(t), CLOCK).unref();
   return t;
+}
+
+// the user's agents read again: the primary ones kept (t.agents), each
+// new one given its color (Draw.draw_agents)
+export function term_primaries(t: Term): void {
+  const all = Custom.agents(process.cwd());
+  t.agents  = Custom.primaries(process.cwd(), all);
+  Draw.draw_agents(all.map((a) => a.name));
 }
 
 // connects to the chat, by View's link; a pipe's text starts with the AI
@@ -259,7 +269,7 @@ function term_hear(t: Term, msg: View.Server): void {
   term_went(t, was);
   term_subs(t);
   if (t.v.agent !== agent) {
-    t.agents = Custom.primaries(process.cwd());
+    term_primaries(t);
   }
   if (!t.scr.tty && msg.$ === "entry" && msg.agent === undefined && msg.id !== undefined) {
     term_print(t, View.entry_rows(msg.id, msg.kind, msg.text, msg.images));

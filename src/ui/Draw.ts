@@ -15,7 +15,14 @@
 // ink, its series told apart by shades (▓▒░). Each drawing is made once
 // per width and palette. A reply's colors are the same palette's
 // (draw_theme).
+//
+// An agent's mark has a color of its own, made for it (draw_agent): Illi's
+// is the brand's; each other agent, the first time it's seen, takes the
+// free hue farthest from the brand's and the others', and keeps it in a
+// file (SLOTS), so it's the same in every run.
 
+import * as fs from "node:fs";
+import * as config from "../config/Config.ts";
 import { drawPele, pelePalette, type PelePalette } from "../../vendor/cellsmith/pele.ts";
 import { CANVAS, PRESETS } from "../../vendor/cellsmith/presets.ts";
 import { renderMermaidAscii } from "../../vendor/cellsmith/vendor/mermaid-text.js";
@@ -48,18 +55,21 @@ const KEPT = 64;
 
 // Illimitable's color, Illi's: the aqua its wordmark ends in (the
 // README's header); on a dark background, on a light one (the same hue,
-// deeper), and the terminal's own, untold
-const BRAND = { dark: "#81f8fb", light: "#0c9297", own: "6" };
+// deeper), and the terminal's own, untold; its hue (OKLCH)
+const BRAND     = { dark: "#81f8fb", light: "#0c9297", own: "6" };
+const BRAND_HUE = 198;
 
-// the other agents' colors, hues told apart at a glance, round the wheel,
-// none near the brand's (by the background, as BRAND's); how many steps
-// apart two agents' are kept, while there's room
-const AGENT = {
-  dark : ["#f87171", "#fb923c", "#facc15", "#4ade80", "#60a5fa", "#a78bfa", "#f472b6"],
-  light: ["#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#2563eb", "#7c3aed", "#db2777"],
-  own  : ["1", "3", "2", "4", "5"],
-};
-const AGENT_APART = 2;
+// the other agents' colors, made: HUES hues round the wheel (OKLCH), a
+// step apart from the brand's, then a ring of deeper ones between them,
+// each ring's lightness and chroma by the background (RING); none within
+// NEAR (degrees) of the brand's. Untold, the terminal's own colors, by
+// their hues (its cyan is the brand's). Each agent's slot (ring, hue) is
+// kept in SLOTS
+const HUES  = 12;
+const RING  = { dark: [[0.78, 0.15], [0.66, 0.15]], light: [[0.56, 0.15], [0.44, 0.13]] };
+const NEAR  = 30;
+const OWN   = [["1", 29], ["3", 110], ["2", 142], ["4", 264], ["5", 328]] as const;
+const SLOTS = config.DIR + "/agent-colors.json";
 
 // a flowchart that runs sideways, which the box art may stand up
 const SIDEWAYS = /^(\s*(?:flowchart|graph)[ \t]+)(LR|RL)\b/;
@@ -81,6 +91,13 @@ let pele: ReturnType<typeof loadPele> | null = null;
 
 const DRAWN = new Map<string, Cell[][] | null>();
 const LIT   = new Map<string, Token[][] | null>();
+
+// each agent's slot, by its name (in small letters), as kept (SLOTS); a
+// passing one's (a subagent of no file of its own), held for the run;
+// each slot's color, by the background
+let slots: Record<string, number> | null = null;
+const PASSING = new Map<string, number>();
+const HUED    = new Map<string, string>();
 
 // the terminal's background, as told: the palette made anew
 export function draw_canvas(hex: string): void {
@@ -135,23 +152,100 @@ export function draw_brand(): string {
   return BRAND[draw_tone()];
 }
 
-// an agent's color: one of AGENT's by its name's hash, if it's
-// AGENT_APART from those the agents before it took (among, in order),
-// else the one farthest from them (the nearest its hash's of those), so
-// each stands apart from the others and an agent's stays its own; a name
-// not among them: its hash's
-export function draw_agent(name: string, among: string[]): string {
-  const hues = AGENT[draw_tone()];
-  const n    = hues.length;
-  const hash = (x: string) => [...x.toLowerCase()].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0, 2166136261) % n;
-  const took = new Map<string, number>();
-  for (const x of among) {
-    const used = [...took.values()];
-    const far  = (k: number) => Math.min(n, ...used.map((u) => Math.min(Math.abs(k - u), n - Math.abs(k - u))));
-    const own  = hash(x);
-    took.set(x.toLowerCase(), far(own) >= AGENT_APART ? own : Array.from({ length: n }, (_, i) => (own + i) % n).reduce((a, b) => (far(b) > far(a) ? b : a)));
+// the user's agents, as read: each new one given a slot (draw_slot) and
+// kept, the file read anew first (another illi may have added some); a
+// folder that can't be written: the slots hold for this run
+export function draw_agents(names: string[]): void {
+  const kept = draw_slots();
+  let added  = false;
+  for (const name of names.map((n) => n.toLowerCase())) {
+    if (!(name in kept)) {
+      kept[name] = draw_slot(name, Object.values(kept));
+      added = true;
+    }
   }
-  return hues[took.get(name.toLowerCase()) ?? hash(name)];
+  slots = kept;
+  if (added) {
+    try {
+      fs.writeFileSync(SLOTS, JSON.stringify(kept, null, 2) + "\n");
+    } catch {}
+  }
+}
+
+// an agent's color: its slot's (draw_hue); one not kept (a passing
+// subagent) takes the slot it would be given now, for the run
+export function draw_agent(name: string): string {
+  slots ??= draw_slots();
+  const key = name.toLowerCase();
+  if (!(key in slots) && !PASSING.has(key)) {
+    PASSING.set(key, draw_slot(key, [...Object.values(slots), ...PASSING.values()]));
+  }
+  return draw_hue(slots[key] ?? PASSING.get(key)!);
+}
+
+// the slots kept (SLOTS), by name; none, or not read: none
+function draw_slots(): Record<string, number> {
+  try {
+    const kept = JSON.parse(fs.readFileSync(SLOTS, "utf8"));
+    return Object.fromEntries(Object.entries(kept).filter(([, s]) => Number.isInteger(s) && (s as number) >= 0 && (s as number) < 2 * HUES)) as Record<string, number>;
+  } catch {
+    return {};
+  }
+}
+
+// a new agent's slot, given those taken: of those not NEAR the brand's,
+// the least shared, the first ring before the second, the farthest from
+// the brand's hue and the others' in its ring, then the nearest the hue
+// its name's hash points at (so the colors look picked at random)
+function draw_slot(name: string, taken: number[]): number {
+  const want  = [...name].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0, 2166136261) % 360;
+  const ring  = (s: number) => Math.floor(s / HUES);
+  const far   = (s: number) => Math.min(draw_apart(draw_turn(s), 0), ...taken.filter((u) => u !== s && ring(u) === ring(s)).map((u) => draw_apart(draw_turn(s), draw_turn(u))));
+  const rank  = (s: number) => [taken.filter((u) => u === s).length, ring(s), -far(s), draw_apart(draw_turn(s), want)];
+  const ahead = (a: number[], b: number[]) => {
+    const k = a.findIndex((x, i) => x !== b[i]);
+    return k >= 0 && a[k] < b[k];
+  };
+  const open  = Array.from({ length: 2 * HUES }, (_, s) => s).filter((s) => draw_apart(draw_turn(s), 0) > NEAR);
+  return open.reduce((a, b) => (ahead(rank(b), rank(a)) ? b : a));
+}
+
+// a slot's hue, turned from the brand's (degrees): its step round the
+// wheel, the second ring's half a step on
+function draw_turn(s: number): number {
+  return ((s % HUES) + (s >= HUES ? 0.5 : 0)) * (360 / HUES);
+}
+
+// how far apart two hues are, round the wheel (degrees)
+function draw_apart(a: number, b: number): number {
+  const d = Math.abs(a - b) % 360;
+  return Math.min(d, 360 - d);
+}
+
+// a slot's color, by the background: OKLCH, its ring's lightness and
+// chroma, its hue turned from the brand's; untold, the terminal's own
+// color nearest that hue
+function draw_hue(s: number): string {
+  const tone = draw_tone();
+  const hue  = (BRAND_HUE + draw_turn(s)) % 360;
+  if (tone === "own") {
+    return OWN.reduce((a, b) => (draw_apart(b[1], hue) < draw_apart(a[1], hue) ? b : a))[0];
+  }
+  const [l, c] = RING[tone][s >= HUES ? 1 : 0];
+  return draw_kept(HUED, tone + s, () => draw_oklch(l, c, hue));
+}
+
+// an OKLCH color as #rrggbb, its chroma lessened till sRGB holds it
+function draw_oklch(l: number, c: number, h: number): string {
+  for (; ; c -= 0.005) {
+    const [a, b] = [c * Math.cos((h * Math.PI) / 180), c * Math.sin((h * Math.PI) / 180)];
+    const [x, y, z] = [l + 0.3963377774 * a + 0.2158037573 * b, l - 0.1055613458 * a - 0.0638541728 * b, l - 0.0894841775 * a - 1.291485548 * b].map((v) => v ** 3);
+    const rgb = [4.0767416621 * x - 3.3077115913 * y + 0.2309699292 * z, -1.2684380046 * x + 2.6097574011 * y - 0.3413193965 * z, -0.0041960863 * x - 0.7034186147 * y + 1.707614701 * z];
+    if (c <= 0 || rgb.every((v) => v >= -1e-4 && v <= 1 + 1e-4)) {
+      const srgb = (v: number) => (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055);
+      return "#" + rgb.map((v) => Math.round(srgb(Math.min(1, Math.max(0, v))) * 255).toString(16).padStart(2, "0")).join("");
+    }
+  }
 }
 
 // the colors to draw in: the palette's on a dark background or a light

@@ -12,7 +12,7 @@ import { term_note, term_toast, term_unnote } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_copied, term_hover, term_mouse, term_selected, term_under } from "./Select.ts";
-import { term_act, term_quit, type Term } from "./Term.ts";
+import { term_act, term_primaries, term_quit, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
 // the keys that leave text chosen (any other lets it go)
@@ -181,7 +181,7 @@ export function term_clear(t: Term, key: string): void {
 // Tab: Illi runs as the next primary agent that can run (Illi's own
 // among them), after the one asked for last if not answered yet
 export function term_next(t: Term): void {
-  t.agents    = Custom.primaries(process.cwd());
+  term_primaries(t);
   const names = [null, ...t.agents.filter((a) => typeof Chat.own(a) !== "string").map((a) => a.name)];
   const asked = t.v.out.flatMap((p) => (p.msg.$ === "main" ? [p.msg.name] : []));
   const now   = asked.length > 0 ? asked[asked.length - 1] : t.v.agent;

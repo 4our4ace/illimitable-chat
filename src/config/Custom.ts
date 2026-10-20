@@ -97,9 +97,10 @@ export namespace Custom {
     return [...Custom.files(cwd, "agents")].map(([name, file]) => Custom.profile(name, file));
   }
 
-  // the agents Illi may run as (Tab, /agent), and those an agent may spawn
-  export function primaries(cwd: string): Profile[] {
-    return Custom.agents(cwd).filter((a) => a.mode !== "subagent");
+  // the agents Illi may run as (Tab, /agent), of all (as read, if they
+  // were), and those an agent may spawn
+  export function primaries(cwd: string, all = Custom.agents(cwd)): Profile[] {
+    return all.filter((a) => a.mode !== "subagent");
   }
 
   export function subagents(cwd: string): Profile[] {
