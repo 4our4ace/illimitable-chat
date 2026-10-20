@@ -278,7 +278,7 @@ function term_agent_set(t: Term, arg: string): void {
   }
   term_primaries(t);
   const names = [null, ...t.agents.map((a) => a.name)];
-  const about = names.map((name, k) => (k === 0 ? "Illi's own, on " + Pick.label(config.PICK) : t.agents[k - 1].description));
+  const about = names.map((_, k) => (k === 0 ? "Illi's own, on " + Pick.label(config.PICK) : t.agents[k - 1].description));
   term_chooser(t, "Agent", names.map((name) => agent_name(name ?? View.MAIN)), about, names.indexOf(t.v.agent), (k) => term_choose(t, names[k]));
 }
 

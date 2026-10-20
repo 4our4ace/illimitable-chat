@@ -99,8 +99,8 @@ export let SIDE       = "";
 export let SIDE_WIDTH = "";
 
 // Illi's own pick (a new chat's, and the chat's again after an agent);
-// what every compaction runs on, a chat's and an import's alike,
-// whatever the chat's pick; what subagents run on (null: the chat's pick)
+// what every compaction runs on, whatever the chat's pick; what
+// subagents run on (null: the chat's pick)
 export let PICK!     : Pick;
 export let COMPACTOR!: Pick;
 export let AGENTS    : Pick | null = null;
@@ -340,6 +340,14 @@ function config_key(name: string): string {
 // a comma-separated list's items
 function config_list(text: string): string[] {
   return text.split(",").map((x) => x.trim());
+}
+
+// what a key comes back to with config.json's own entry taken out
+// (/set key default, Delete in /settings): in a profile, the root's
+// config.json's, else its default
+export function config_default(key: Key): string {
+  const root = PATH === ROOT + "/config.json" ? undefined : config_file(ROOT + "/config.json")[key];
+  return root === undefined ? SETTINGS[key].def : typeof root === "string" ? root : JSON.stringify(root);
 }
 
 // the root's config.json, the profile's over it, key by key
