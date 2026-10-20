@@ -47,12 +47,16 @@ const SETTLE = 30;
 // an infinity sign traced for ever, in braille (a cell 2 dots wide and 4
 // high, so 4 cells hold a ∞ 8 by 4): its path, round its left loop and
 // its right, crossing in the middle; a trail of TRAIL dots runs along it,
-// a dot each TRACE (ms), the cell holding its head in the accent, the
-// rest fainter. Each subagent at work in the side gets the same in one
-// cell: a trail of ORBIT_TRAIL round its edge, a dot each 2 TRACE. One
-// clock draws them all, waking only as they change (term_wake)
+// a dot each TRACE (ms). A cell takes one color: the cell holding the
+// head is in the accent, each other fades by its newest dot's age, so the
+// tail dies away; where the path crosses itself, a dot more than CROSS
+// older than its cell's newest is left out. Each subagent at work in the
+// side gets the same in one cell: a trail of ORBIT_TRAIL round its edge,
+// a dot each 2 TRACE. One clock draws them all, waking only as they
+// change (term_wake)
 const INFINITY: [number, number][] = [[3, 2], [2, 3], [1, 3], [0, 2], [0, 1], [1, 0], [2, 0], [3, 1], [4, 2], [5, 3], [6, 3], [7, 2], [7, 1], [6, 0], [5, 0], [4, 1]];
-const TRAIL       = 5;
+const TRAIL       = 8;
+const CROSS       = 3;
 const TRACE       = 125;
 const ORBIT: [number, number][] = [[0, 0], [1, 0], [1, 1], [1, 2], [1, 3], [0, 3], [0, 2], [0, 1]];
 const ORBIT_TRAIL = 3;
@@ -294,18 +298,24 @@ export function term_spinner(ms: number): string {
 }
 
 // the ∞ ms into its work, in its 4 cells: the trail's TRAIL dots on
-// INFINITY, its head a dot each TRACE; the cell holding the head in the
-// accent, the rest half faded (toward the background, if told; else dim)
+// INFINITY, newest first, its head a dot each TRACE; a dot CROSS older
+// than its cell's newest left out. Each cell in the accent faded by its
+// newest dot's age, a TRAIL-th a step (toward the background, if told;
+// else dim from half the trail on)
 function term_trace(ms: number, c: string, canvas: string | undefined): Paint.Line {
   const head  = Math.floor(ms / TRACE) % INFINITY.length;
   const cells = [0, 0, 0, 0];
-  for (let k = 0; k < TRAIL; k++) {
-    const [x, y] = INFINITY[(head - k + INFINITY.length) % INFINITY.length];
-    cells[x >> 1] |= DOT[x & 1][y];
+  const young: number[] = [];
+  for (let age = 0; age < TRAIL; age++) {
+    const [x, y] = INFINITY[(head - age + INFINITY.length) % INFINITY.length];
+    young[x >> 1] ??= age;
+    if (age - young[x >> 1] <= CROSS) {
+      cells[x >> 1] |= DOT[x & 1][y];
+    }
   }
-  const lit  = INFINITY[head][0] >> 1;
-  const fade = c.startsWith("#") && canvas !== undefined ? { ...Paint.INK, c: term_mix(c, canvas, 0.5) } : { ...Paint.INK, c, d: true };
-  return cells.map((bits, i) => Paint.Run(bits === 0 ? " " : String.fromCharCode(0x2800 + bits), i === lit ? { ...Paint.INK, c } : fade));
+  const hex = c.startsWith("#") && canvas !== undefined;
+  return cells.map((bits, i) => bits === 0 ? Paint.Run(" ")
+    : Paint.Run(String.fromCharCode(0x2800 + bits), hex ? { ...Paint.INK, c: term_mix(c, canvas!, young[i] / TRAIL) } : { ...Paint.INK, c, d: young[i] >= TRAIL / 2 }));
 }
 
 // a color f of the way to another (#rrggbb)
