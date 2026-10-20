@@ -68,7 +68,8 @@ export type Match = { k: number; at: number[] };
 // Term.ts last looked; what takes keys first (true: it took the key),
 // where keys go, what takes a paste (none: typed); the terminal's
 // background (#rrggbb) once told, and whether it is awaited; whether it
-// was left (screen_leave: it paints no more)
+// was left (screen_leave: it paints no more); whether the cursor blinks
+// (Illi waits), and its look as last written
 export type Screen = {
   tty    : boolean;
   kitty  : boolean;
@@ -86,6 +87,8 @@ export type Screen = {
   canvas?: string;
   asked? : boolean;
   left?  : boolean;
+  blink? : boolean;
+  styled?: string;
 };
 
 // Constants
@@ -112,12 +115,19 @@ const CLEAR    = "\x1b[2J";
 const HIDE     = "\x1b[?25l";
 const SHOW     = "\x1b[?25h";
 
+// the cursor's look: a block, as terminals draw it, blinking while Illi
+// waits (scr.blink), else steady (as opencode's: its own default); the
+// terminal's own again
+const BLINK  = "\x1b[1 q";
+const STEADY = "\x1b[2 q";
+const PLAIN  = "\x1b[0 q";
+
 // the alternate screen, bracketed paste, the mouse's clicks, wheel and
 // every move as SGR reports, kitty's keys at flag 1 (popped before
 // pushed: each screen keeps its own flags), the flags asked (a kitty
 // terminal answers CSI ? flags u); off, in turn
 const MODES_ON  = "\x1b[?1049h\x1b[?2004h\x1b[?1000h\x1b[?1003h\x1b[?1006h\x1b[<u\x1b[>1u\x1b[?u";
-const MODES_OFF = "\x1b[<u\x1b[?1006l\x1b[?1003l\x1b[?1000l\x1b[?2004l\x1b[?1049l" + SHOW;
+const MODES_OFF = "\x1b[<u\x1b[?1006l\x1b[?1003l\x1b[?1000l\x1b[?2004l\x1b[?1049l" + SHOW + PLAIN;
 
 // the background asked; its answer (OSC 11 ; rgb:r/g/b, ended by BEL or
 // ST) and one cut by a read's end; how long it is awaited (ms): a bare
@@ -221,7 +231,13 @@ export function screen_paint(scr: Screen, rows: Piece[][], at: Spot): void {
   const fresh = scr.shown.length === 0;
   const out   = text.map((x, k) => (fresh || scr.shown[k] !== x ? "\x1b[" + (k + 1) + ";1H" + x : "")).join("");
   scr.shown = text;
-  process.stdout.write(SYNC_ON + HIDE + (fresh ? CLEAR : "") + out + "\x1b[" + (at.row + 1) + ";" + (at.col + 1) + "H" + SHOW + SYNC_OFF);
+  process.stdout.write(SYNC_ON + HIDE + (fresh ? CLEAR : "") + out + "\x1b[" + (at.row + 1) + ";" + (at.col + 1) + "H" + SHOW + screen_style(scr) + SYNC_OFF);
+}
+
+// the cursor's look, if it's to change (blinking while Illi waits)
+function screen_style(scr: Screen): string {
+  const style = scr.blink ? BLINK : STEADY;
+  return style === scr.styled ? "" : (scr.styled = style);
 }
 
 // row k written again alone, if it changed, the others as last written
@@ -232,7 +248,7 @@ export function screen_row(scr: Screen, k: number, row: Piece[], at: Spot): void
     return;
   }
   scr.shown[k] = x;
-  process.stdout.write(SYNC_ON + HIDE + "\x1b[" + (k + 1) + ";1H" + x + "\x1b[" + (at.row + 1) + ";" + (at.col + 1) + "H" + SHOW + SYNC_OFF);
+  process.stdout.write(SYNC_ON + HIDE + "\x1b[" + (k + 1) + ";1H" + x + "\x1b[" + (at.row + 1) + ";" + (at.col + 1) + "H" + SHOW + screen_style(scr) + SYNC_OFF);
 }
 
 // a row as written: cleared, then each piece at its column, cut to its
@@ -241,10 +257,11 @@ function screen_row_text(row: Piece[]): string {
   return "\x1b[2K" + row.map((p) => "\x1b[" + (p.col + 1) + "G" + Paint.line_ansi(Paint.runs_wrap(p.line, p.w, true)[0])).join("");
 }
 
-// the next paint clears the screen and writes every row (a new size,
-// Ctrl+L, back from a suspend)
+// the next paint clears the screen and writes every row, and the
+// cursor's look (a new size, Ctrl+L, back from a suspend)
 export function screen_wipe(scr: Screen): void {
-  scr.shown = [];
+  scr.shown  = [];
+  scr.styled = undefined;
 }
 
 // a pipe's lines, as text
