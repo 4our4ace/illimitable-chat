@@ -58,7 +58,7 @@ const SETTLE = 30;
 const INFINITY: [number, number][] = [[3, 2], [2, 3], [1, 3], [0, 2], [0, 1], [1, 0], [2, 0], [3, 1], [4, 2], [5, 3], [6, 3], [7, 2], [7, 1], [6, 0], [5, 0], [4, 1]];
 const TRAIL       = 8;
 const CROSS       = 3;
-const TRACE       = 125;
+const TRACE       = 80;
 const ORBIT: [number, number][] = [[0, 0], [1, 0], [1, 1], [1, 2], [1, 3], [0, 3], [0, 2], [0, 1]];
 const ORBIT_TRAIL = 3;
 

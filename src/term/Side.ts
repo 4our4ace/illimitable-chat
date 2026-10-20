@@ -2,7 +2,7 @@
 // ====
 // The side panel, on a wide screen: the primary agents, the subagents of
 // this run, the profiles, a ChatGPT plan's use, the chat's (the context,
-// the memory), the MCP servers, a hint for the keys and Illi's to-do list; /side
+// the memory), the MCP servers, a hint for the keys or Illi's to-do list; /side
 // places it.
 
 import { term_choose, term_mcp } from "./Commands.ts";
@@ -38,9 +38,9 @@ export const CLOCK   = 60000;
 // the side, w wide and tall: Illi and the primary agents (a click makes
 // one the main agent), the pages (a click shows one), a ChatGPT plan's
 // use, the chat's (its context, the memory), the MCP servers (a click:
-// /mcp); at its foot a faint hint for the keys (HINT), if it fits, then
-// Illi's to-do list, which, longer than the room, drops the hint, then
-// pushes the rest up (its head stays)
+// /mcp); at its foot Illi's to-do list, which, longer than the room,
+// pushes the rest up (its head stays); with none, a faint hint for the
+// keys (HINT), if it fits
 export function term_side(t: Term, w: number, tall: number): Item[] {
   const bold  = { ...Paint.INK, b: true };
   const head  = (text: string, run: (() => void) | null = null): Item => [[Paint.Run(text, bold)], run];
@@ -59,12 +59,10 @@ export function term_side(t: Term, w: number, tall: number): Item[] {
   const fill  = (n: number) => Array.from({ length: n }, (): Item => [[], null]);
   const plan  = term_side_plan(t, w);
   const top   = [head("Agents"), ...mains, gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...term_side_profiles(t), ...(plan.length === 0 ? [] : [...plan, gap]), head("Chat"), ...term_side_use(t, w), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp])];
-  const foot  = todo.length === 0 ? keys : [...keys, gap, ...todo];
+  const foot  = todo.length === 0 ? keys : todo;
   const room  = tall - top.length - foot.length;
-  const rest  = tall - top.length - todo.length;
   const items = room > 0 ? [...top, ...fill(room), ...foot]
     : todo.length === 0 ? top
-    : rest > 0 ? [...top, ...fill(rest), ...todo]
     : todo.length < tall ? [...top, gap, ...todo].slice(-tall)
     : todo;
   return items.slice(0, tall).map(([line, run]) => [Paint.runs_wrap(line, w, true)[0], run]);
