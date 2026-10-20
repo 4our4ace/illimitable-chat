@@ -4,9 +4,10 @@
 // off. Reasoning keeps all turns (else a message sent mid-run drops it
 // and misses the cache); the speed is a service tier ("priority" is
 // fast). A marked block is an explicit breakpoint; the end is cached
-// implicitly only if marked (AskAI.tail). A server_error is busy;
-// failed, incomplete or refused fails. Silent while it reasons, it is
-// dead after 20 min.
+// implicitly only if marked (AskAI.tail). A failure its input caused
+// (INPUT), incomplete or refused fails; any other failure (a server
+// error, a rate limit) is busy. Silent while it reasons, it is dead
+// after 20 min.
 
 import { AskAI, type Ask, type Img } from "./AskAI.ts";
 import { Agent, type Emit, type Entry, type Item, type Step, type Tool, type Use, type Wire } from "./Agent.ts";
@@ -24,6 +25,10 @@ type State = { res: any; error: any; use: Usage };
 const TIERS: Record<string, string> = { slow: "default", fast: "fast", ultrafast: "ultrafast" };
 
 const MARK = { mode: "explicit" };
+
+// the codes of a failed response (or an error event) its input caused:
+// asked again, it fails alike
+const INPUT = /^(invalid_prompt|invalid_image|context_length_exceeded)/;
 
 // OpenAI
 // ======
@@ -155,7 +160,7 @@ export namespace OpenAI {
     const refusals = out.flatMap((o) => (o.type === "message" ? o.content : [])).filter((c: any) => c.type === "refusal");
     const step: Step = { out, uses, entries: out.flatMap(OpenAI.entries), stop: "done", why: "", note };
     if (res.status === "failed") {
-      return { ...step, stop: res.error?.code === "server_error" ? "busy" : "fail", why: res.error?.message ?? "failed" };
+      return { ...step, stop: INPUT.test(String(res.error?.code ?? "")) ? "fail" : "busy", why: res.error?.message ?? "failed" };
     }
     if (res.status === "incomplete") {
       return { ...step, stop: "fail", why: "incomplete: " + res.incomplete_details?.reason };
