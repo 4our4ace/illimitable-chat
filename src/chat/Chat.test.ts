@@ -4,7 +4,8 @@
 // for: a view over the pipe sends a message and hears the reply; a /model
 // while the turn's call runs picks the next call's (the wait names the
 // model the running one asked); one process at a time holds the chat. A
-// goal check and a message sent mid-run fit the chat's model.
+// goal check and a message sent mid-run fit the chat's model. A main
+// agent switch is a note of its own.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -141,4 +142,13 @@ test("a goal check and a message sent mid-run hold no more than the chat's model
     Chat.cap = cap;
     Object.assign(chat, { busy: false, call: null, wait: [] });
   }
+});
+
+test("a main agent switch is noted as an entry of its own, never glued to the message after it", () => {
+  const mem = chat.mem;
+  Object.assign(chat, { switched: true, was: { agent: null, pick: "x" } });
+  const msg = Chat.push(chat, null, "user", "hello");
+  expect(Memory.say(mem, msg.id, msg.end).text).toBe("hello");
+  expect(Memory.message(mem, msg.id - 1)!.text).toStartWith("Main agent: ");
+  expect(Memory.recent(mem, msg.id - 1, msg.id).map((b) => b.text).join("")).toContain("|note: Main agent: ");
 });

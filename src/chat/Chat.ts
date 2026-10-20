@@ -481,8 +481,8 @@ export namespace Chat {
   }
 
   // to the chat (in pages), or an agent's log; each told to every view. A
-  // main agent switch not noted yet is noted first, so the message after
-  // it carries it to the agent
+  // main agent switch not noted yet is noted first, an entry of its own
+  // just before the message (the turn gets it among the recent ones)
   export function push(chat: Chat, agent: Agent | null, kind: Kind, text: string, images: string[] = []): Msg {
     if (agent !== null) {
       const id = Memory.agent_push(chat.mem, agent.name, kind, text);
@@ -497,7 +497,7 @@ export namespace Chat {
     for (const { i, kind, text, date, images } of roots) {
       Chat.all(chat, { $: "entry", id: i, kind, text, date, images });
     }
-    return { id: roots[0].i, end: chat.mem.count };
+    return { id: roots[note.length].i, end: chat.mem.count };
   }
 
   // a message the call took was logged as it came
