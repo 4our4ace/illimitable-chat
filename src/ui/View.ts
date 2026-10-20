@@ -390,11 +390,11 @@ export function view_act(v: View, act: Act): Client[] {
       // message
       const word   = /^\/[a-z]+(?=\s|$)/i.exec(text)?.[0];
       const goal   = word === "/goal" ? text.slice(word.length).trim() : null;
-      if (!view_typing(v)) {
-        return [];
-      }
       if (text === "" && images.length === 0) {
         return v.busy ? [{ $: "stop", name: TURN }] : [];
+      }
+      if (!view_typing(v)) {
+        return [];
       }
       if (word === "/halt") {
         return [{ $: "goal", text: null }];
