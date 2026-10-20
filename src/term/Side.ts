@@ -2,7 +2,7 @@
 // ====
 // The side panel, on a wide screen: the primary agents, the subagents of
 // this run, the profiles, a ChatGPT plan's use, the chat's (the context,
-// the memory), the MCP servers, the keys and Illi's to-do list; /side
+// the memory), the MCP servers, a hint for the keys and Illi's to-do list; /side
 // places it.
 
 import { term_choose, term_mcp } from "./Commands.ts";
@@ -23,8 +23,8 @@ const SIDE  = 20;
 const ROOM  = 60;
 const WIDE  = 100;
 
-// the side's keys
-const KEYS: [string, string][] = [["Tab", "agents"], ["Ctrl+PgDn", "pages"], ["PgUp", "scroll"], ["Ctrl+Y", "copy reply"], ["/help", "all keys"]];
+// the side's hint at its foot, faint
+const HINT = "/help for all keys";
 
 // the side's: the width of its labels (Context, 5h, Week, Memory); its
 // bars' widest, every one alike; the to-do items a folded list shows;
@@ -36,9 +36,10 @@ export const CLOCK   = 60000;
 
 // the side, w wide and tall: Illi and the primary agents (a click makes
 // one the main agent), the pages (a click shows one), a ChatGPT plan's
-// use, the chat's (its context, the memory), the MCP servers (a click: /mcp); at its foot the keys,
-// if they fit, then Illi's to-do list, which, longer than the room, drops
-// the keys, then pushes the rest up (its head stays)
+// use, the chat's (its context, the memory), the MCP servers (a click:
+// /mcp); at its foot a faint hint for the keys (HINT), if it fits, then
+// Illi's to-do list, which, longer than the room, drops the hint, then
+// pushes the rest up (its head stays)
 export function term_side(t: Term, w: number, tall: number): Item[] {
   const bold  = { ...Paint.INK, b: true };
   const head  = (text: string, run: (() => void) | null = null): Item => [[Paint.Run(text, bold)], run];
@@ -52,7 +53,7 @@ export function term_side(t: Term, w: number, tall: number): Item[] {
   const subs  = term_side_subs(t);
   const mcp   = term_side_mcp(t);
   const todo  = term_side_todo(t, w);
-  const keys  = KEYS.map(([key, text]): Item => [[Paint.Run(key.padEnd(11)), Paint.Run(text, Paint.DIM)], null]);
+  const keys  = [[[Paint.Run(HINT, Paint.DIM)], null] as Item];
   const gap   = [[], null] as Item;
   const fill  = (n: number) => Array.from({ length: n }, (): Item => [[], null]);
   const plan  = term_side_plan(t, w);
