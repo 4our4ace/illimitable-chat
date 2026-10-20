@@ -32,6 +32,7 @@ import { term_draw, term_paint, term_print, term_resize } from "./Frame.ts";
 import { term_enter, term_grab, term_press } from "./Keys.ts";
 import { Machine } from "../tools/Machine.ts";
 import { Mcp } from "../tools/Mcp.ts";
+import { term_note, type Notice } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import * as Profiles from "../config/Profiles.ts";
 import * as Reply from "../ui/Reply.ts";
@@ -43,16 +44,15 @@ import * as View from "../ui/View.ts";
 // due: a paint; settle: a new size's; imgs: the images attached, by
 // their tokens' numbers (kept: a message sent again from the history
 // names them still); quit: when Ctrl+C was last pressed on an empty
-// input (ms); notes: over the
-// input till a message is sent; scroll: lines up from the chat's end (0:
-// following it); seen: the chat as last painted; ver: a count of the
-// changes to the chat's rows (a stream's aside), body: its lines as laid
+// input (ms); notices: the notes and the toast said for a while, expire:
+// the clock that lets them go (Notices.ts); scroll: lines up from the
+// chat's end (0: following it); seen: the chat as last painted; ver: a
+// count of the changes to the chat's rows (a stream's aside), body: its
+// lines as laid
 // out at one; find: a block to scroll to; pane: a text over the chat
 // (/help, /agents); agents: the user's primary agents, as last read; choose: the
 // picker (null: closed); profs: the profiles, as last read; hits: what a
 // click on the screen does;
-// toast: said over the input for a moment (a copy, Ctrl+C's quit hint),
-// untoast: its end;
 // since: when the work running began, spin: the spinner's clock; subs:
 // the subagents of this run, whether at work (false: done, till the
 // person's next message); side: where the side panel shows and how wide
@@ -73,7 +73,8 @@ export type Term = {
   settle  : Timer | undefined;
   imgs    : Map<number, Blob>;
   quit    : number;
-  notes   : string[];
+  notices : Notice[];
+  expire  : Timer | undefined;
   scroll  : number;
   seen    : Seen;
   ver     : number;
@@ -84,8 +85,6 @@ export type Term = {
   choose  : Chooser | null;
   profs   : string[];
   hits    : Hit[];
-  toast   : string;
-  untoast : Timer | undefined;
   since   : number;
   spin    : Timer | undefined;
   subs    : Map<string, boolean>;
@@ -153,9 +152,6 @@ export type Cmd = [use: string, keys: string, text: string, run: (t: Term, arg: 
 // where the agent's log lines go on a terminal
 const LOG = config.DIR + "/illi.log";
 
-// how long a toast shows (ms)
-export const TOAST = 2500;
-
 function term_new(chat: Chat): Term {
   const t: Term = {
     v       : View.view_new(),
@@ -167,7 +163,8 @@ function term_new(chat: Chat): Term {
     settle  : undefined,
     imgs    : new Map(),
     quit    : 0,
-    notes   : [],
+    notices : [],
+    expire  : undefined,
     scroll  : 0,
     seen    : { total: 0, marks: [], row: 0, first: 0, tall: 1, col: 0, end: 0 },
     ver     : 0,
@@ -178,8 +175,6 @@ function term_new(chat: Chat): Term {
     choose  : null,
     profs   : Profiles.profile_list(config.ROOT),
     hits    : [],
-    toast   : "",
-    untoast : undefined,
     since   : 0,
     spin    : undefined,
     subs    : new Map(),
@@ -335,16 +330,6 @@ export function term_idle(t: Term): void {
   }
 }
 
-// a text said over the input for ms, in place of the one said before
-export function term_toast(t: Term, text: string, ms: number): void {
-  t.toast = text;
-  clearTimeout(t.untoast);
-  t.untoast = setTimeout(() => {
-    t.toast = "";
-    term_draw(t);
-  }, ms);
-}
-
 // quits, its work cut (the next start resumes it), once all painted is
 // out (a write's callback comes after those before it), with exitCode
 export function term_quit(t: Term): void {
@@ -357,12 +342,6 @@ export function term_quit(t: Term): void {
 function term_bye(t: Term): void {
   t.v.ws?.close(View.QUIT);
   process.exit(0);
-}
-
-// a note over the input, till the next message sent (or Esc)
-export function term_note(t: Term, text: string): void {
-  t.notes.push(text);
-  term_draw(t);
 }
 
 // the chat opened in the working folder (its lock taken: one illi a

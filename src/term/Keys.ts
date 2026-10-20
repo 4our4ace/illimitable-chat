@@ -8,10 +8,11 @@ import { Chat } from "../chat/Chat.ts";
 import { term_command, term_commands, term_main, term_suggest, term_suggest_key } from "./Commands.ts";
 import { Custom } from "../config/Custom.ts";
 import { term_draw } from "./Frame.ts";
+import { term_note, term_toast, term_unnote } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_copied, term_hover, term_mouse, term_selected, term_under } from "./Select.ts";
-import { term_act, term_note, term_quit, term_toast, type Term } from "./Term.ts";
+import { term_act, term_quit, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
 // the keys that leave text chosen (any other lets it go)
@@ -144,7 +145,7 @@ export function term_enter(t: Term): void {
   if (!View.view_typing(t.v)) {
     term_note(t, "Messages go to Illi: Tab or /tab goes back.");
   } else if (term_act(t, { $: "Send", text, images: term_shots(t, text) }).length > 0) {
-    t.notes  = [];
+    term_unnote(t);
     t.scroll = 0;
     return;
   }
@@ -158,7 +159,7 @@ export function term_shots(t: Term, text: string): Blob[] {
 
 // Esc: the notes cleared, Illi's turn interrupted
 export function term_esc(t: Term): void {
-  t.notes = [];
+  term_unnote(t);
   term_act(t, { $: "Send", text: "" });
 }
 

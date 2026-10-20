@@ -15,13 +15,18 @@ import { term_redraw } from "./Frame.ts";
 import { term_clear, term_cycle, term_enter, term_esc, term_next, term_page, term_shots, term_verbose } from "./Keys.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
 import { Memory } from "../chat/Memory.ts";
+import { term_note, term_notify, term_unnote, term_unnotify, type Notice } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { type Move, Pick } from "../ai/Pick.ts";
 import { term_profile } from "./ProfileCommands.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_side_set } from "./Side.ts";
-import { term_act, term_idle, term_note, term_quit, term_send, type Cmd, type Sug, type Term } from "./Term.ts";
+import { term_act, term_idle, term_quit, term_send, type Cmd, type Sug, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
+
+// how long the login's code shows: as long as it is good (ms), or till
+// the login ends
+const LOGIN = 15 * 60000;
 
 // the pick's moves by Shift and an arrow
 const ARROWS: Record<string, Move> = { "Shift+Left": "prev", "Shift+Right": "next", "Shift+Up": "up", "Shift+Down": "down" };
@@ -188,7 +193,7 @@ function term_help(t: Term): void {
 // the user's command: its message sent, with the images its words name
 function term_custom(t: Term, cmd: Command, arg: string): void {
   if (term_act(t, { $: "Send", text: Custom.expand(cmd, arg), images: term_shots(t, arg) }).length > 0) {
-    t.notes = [];
+    term_unnote(t);
   }
 }
 
@@ -267,10 +272,11 @@ async function term_login(t: Term): Promise<void> {
   t.login?.abort();
   const stop = new AbortController();
   t.login = stop;
+  let asked: Notice | null = null;
   try {
     const { url, code, done } = await ChatGPT.device(stop.signal);
     Screen.screen_copy(code);
-    term_note(t, "Sign in to ChatGPT: open " + url + " and enter the code " + code + " (copied; it is good for 15 minutes). Illi waits for it.");
+    asked = term_notify(t, "Sign in to ChatGPT: open " + url + " and enter the code " + code + " (copied; it is good for 15 minutes). Illi waits for it.", false, LOGIN);
     await done;
     term_note(t, "Signed in to ChatGPT. Illi keeps its own login in " + config.OWN_LOGIN + " and renews it there.");
     term_models(t);
@@ -280,6 +286,9 @@ async function term_login(t: Term): Promise<void> {
     }
   } finally {
     t.login = t.login === stop ? null : t.login;
+    if (asked !== null) {
+      term_unnotify(t, asked);
+    }
   }
 }
 

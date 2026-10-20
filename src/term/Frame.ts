@@ -10,6 +10,7 @@ import * as os from "node:os";
 import { term_suggest, term_suggested } from "./Commands.ts";
 import * as Draw from "../ui/Draw.ts";
 import * as Paint from "../ui/Paint.ts";
+import { term_shown } from "./Notices.ts";
 import { term_profile_pick } from "./ProfileCommands.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_area, term_under } from "./Select.ts";
@@ -33,9 +34,6 @@ const FRAME = 16;
 
 // a size held this long is settled: a drag's sizes come faster (ms)
 const SETTLE = 30;
-
-// the notes kept under the chat
-const NOTES = 6;
 
 // the merge over the input, a row a step: dots land one by one and
 // neighbors fuse in pairs (· • ●), as the memory's lines do; the ticks
@@ -92,13 +90,11 @@ export function term_draw(t: Term): void {
 // gets the notes as text
 export function term_paint(t: Term): void {
   t.due   = false;
-  t.notes = t.notes.concat(t.v.notes.splice(0));
+  const said = term_shown(t);
   if (!t.scr.tty) {
-    term_print(t, t.notes.map(View.Cap));
-    t.notes = [];
+    term_print(t, said.notes.map(View.Cap));
     return;
   }
-  t.notes = t.notes.slice(-NOTES);
   t.hits  = [];
   t.areas = [];
   const { w, h } = Screen.screen_size();
@@ -110,7 +106,7 @@ export function term_paint(t: Term): void {
   const off   = !View.view_typing(t.v);
   const hint  = off ? OFF : "Message " + (t.v.agent ?? View.MAIN) + " · Tab agents · /help";
   const input = Screen.screen_input(t.scr, iw, Math.max(1, Math.floor(h / 3)), hint, off);
-  const notes = Paint.rows_lines(t.notes.map(View.Cap), iw).slice(-Math.floor(h / 4));
+  const notes = Paint.rows_lines(said.notes.map(View.Cap), iw).slice(-Math.floor(h / 4));
   const tall  = Math.max(1, h - 5 - input.lines.length - notes.length);
   const sug   = term_suggest(t);
   if (sug !== null) {
@@ -123,7 +119,7 @@ export function term_paint(t: Term): void {
   const sided = term_area(t, { key: "side", lines: sides.map((s) => s[0]), first: 0, row: 1, col: left > 0 ? 1 : at + 2, w: sw, tall: sides.length });
   const blue  = { ...Paint.INK, c: Draw.draw_theme().link ?? "4" };
   const jump  = t.pane === null && t.scroll > 0 ? [Paint.Run(" ".repeat(left)), Paint.Run("↓ ", { ...blue, b: true }), Paint.Run("Jump to Bottom · Ctrl+End", blue)] : [];
-  const toast = [...jump, Paint.Run(" ".repeat(Math.max(1, left + cw - Paint.line_width(jump) - Paint.text_width(t.toast)))), Paint.Run(t.toast, blue)];
+  const toast = [...jump, Paint.Run(" ".repeat(Math.max(1, left + cw - Paint.line_width(jump) - Paint.text_width(said.toast)))), Paint.Run(said.toast, blue)];
   const under = !t.v.up ? "offline" : "";
   const lines = [...notes, toast, term_rule(t, iw), ...input.lines, Paint.rule_text(under, iw), Paint.tabs_line(t.v, iw, side === 0)];
   const foot  = term_area(t, { key: "foot", lines, first: 0, row: 1 + tall, col: MARGIN, w: iw, tall: lines.length });

@@ -10,9 +10,10 @@
 import * as Draw from "../ui/Draw.ts";
 import { term_draw, term_mix } from "./Frame.ts";
 import { term_click } from "./Keys.ts";
+import { term_toast } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import * as Screen from "../ui/Screen.ts";
-import { TOAST, term_toast, type Area, type Cell, type Ink, type Sel, type Term } from "./Term.ts";
+import type { Area, Cell, Ink, Sel, Term } from "./Term.ts";
 
 // a drag past a chat's edge scrolls it a line each DRIFT ms; text chosen
 // shows on a fill SELECT of the way from the background to the accent; a
@@ -237,6 +238,6 @@ function term_marked(t: Term, area: Area, k: number): Paint.Line {
 export function term_copied(t: Term, text: string): void {
   if (text.trim() !== "") {
     Screen.screen_copy(text);
-    term_toast(t, "Copied " + text.length + " characters", TOAST);
+    term_toast(t, "Copied " + text.length + " characters");
   }
 }
