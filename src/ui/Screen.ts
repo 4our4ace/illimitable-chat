@@ -31,7 +31,8 @@ import * as Theme from "./Theme.ts";
 // the input: its text, cursor, the messages sent before, the one Up and
 // Down are at (hist.length: the new one), the new one meanwhile, whether
 // Left or Right moved the cursor, the width its rows wrap at; the long
-// pastes by their token's number, the last number given
+// pastes by their token's number, the last number given; its rows as
+// last laid out, and for what text and width (ed_layout)
 type Ed = {
   text  : string;
   pos   : number;
@@ -42,6 +43,7 @@ type Ed = {
   w     : number;
   pastes: Map<number, string>;
   n     : number;
+  laid? : { text: string; w: number; rows: string[]; places: Place[] };
 };
 
 // where the cursor shows: a row, a column
@@ -503,34 +505,53 @@ function ed_token(text: string, pos: number, d: number): number {
   return hit === undefined ? 0 : hit[0].length;
 }
 
-// the rows' texts, wrapped at ed.w columns (a character at a time); each
-// place of the cursor (before each character, and the end); the cursor's
+// the rows' texts, wrapped at ed.w columns (ed_wrap); each place of the
+// cursor; the cursor's. Laid out anew only as the text or the width
+// changes: a key that moves the cursor, and the paint after any key,
+// take the last
 function ed_layout(ed: Ed): { rows: string[]; places: Place[]; at: number } {
+  if (ed.laid?.text !== ed.text || ed.laid.w !== ed.w) {
+    ed.laid = { text: ed.text, w: ed.w, ...ed_wrap(ed.text, ed.w) };
+  }
+  const { rows, places } = ed.laid;
+  return { rows, places, at: places.findIndex((p) => p.pos >= ed.pos) };
+}
+
+// a text's rows, wrapped at w columns (a character at a time), and each
+// place of the cursor (before each character, and the end); each
+// character cleaned and measured once
+function ed_wrap(text: string, w: number): { rows: string[]; places: Place[] } {
   const rows = [""];
   const places: Place[] = [];
+  const sized = new Map<string, [string, number]>();
   let col = 0;
   let pos = 0;
-  for (const g of Paint.text_graphemes(ed.text)) {
-    const x = g === "\n" ? "" : Paint.text_clean(g);
-    if (g !== "\n" && col + Paint.text_width(x) > ed.w) {
+  for (const g of Paint.text_graphemes(text)) {
+    let shown = sized.get(g);
+    if (shown === undefined) {
+      const x = g === "\n" ? "" : Paint.text_clean(g);
+      sized.set(g, (shown = [x, Paint.text_width(x)]));
+    }
+    const [x, cw] = shown;
+    if (g !== "\n" && col + cw > w) {
       rows.push("");
       col = 0;
     }
     places.push({ pos, row: rows.length - 1, col });
     pos += g.length;
     rows[rows.length - 1] += x;
-    col += Paint.text_width(x);
+    col += cw;
     if (g === "\n") {
       rows.push("");
       col = 0;
     }
   }
-  if (col >= ed.w) {
+  if (col >= w) {
     rows.push("");
     col = 0;
   }
   places.push({ pos, row: rows.length - 1, col });
-  return { rows, places, at: places.findIndex((p) => p.pos >= ed.pos) };
+  return { rows, places };
 }
 
 // text typed or pasted, at the cursor
