@@ -4,7 +4,7 @@
 // (chat/): the folder of the profile running (Profiles.ts), the ROOT
 // itself ($ILLI_DIR, default ~/.illi) for the default. A profile's
 // config.json goes over the root's, key by key; the ChatGPT login is the
-// root's, shared. Each key of config.json (README, DEFAULTS) may be set
+// root's, shared. Each key of config.json (SETTINGS) may be set
 // as ILLI_<KEY> instead; a path may start with "~/". /settings changes
 // them (config_set), some at once, the rest at the next start. The API
 // keys are read from the environment and removed from it, so no program
@@ -30,26 +30,37 @@ export const DIR     = PICKED.dir;
 const PATH = DIR + "/config.json";
 let FILE: Record<string, unknown> = config_files();
 
-// each key's value while config.json and the environment set none
-// ("": none; models: all offered; agents: the chat's pick)
-export const DEFAULTS: Record<string, string> = {
-  vendors    : "chatgpt",
-  pick       : "chatgpt:gpt-6.1-sol:medium:slow",
-  compactor  : "chatgpt:gpt-6-luna:medium:slow",
-  agents     : "",
-  models     : "",
-  context    : "auto",
-  contexts   : "",
-  rules      : "",
-  after      : "",
-  side       : "right",
-  side_width : "25%",
-  suggest    : "on",
-  jobs       : "8",
-  login      : "",
-  theme      : DIR + "/theme.json",
-  mcp        : DIR + "/mcp.json",
-};
+// a setting: its default ("": none); how /settings changes it (the
+// values it steps through; "pick": in the model picker; "text": typed
+// in); whether a change applies at once (read again by config_live, or
+// by the terminal: Settings.ts) or at the next start; what it is, short
+// (the picker shows it by the value); what holds while it's none; the
+// shape its value takes (config_check), if any; whether it's a path
+export type Setting = { def: string; values: string[] | "pick" | "text"; now: boolean; what: string; none?: string; shape?: [RegExp, string]; path?: boolean };
+
+// every setting, in the order /settings lists them: a key read here
+// (config_get) must be one, and one is all /settings, /set and
+// config_check need; the README and the customize-illi skill say each
+const TABLE = {
+  pick       : { def: "chatgpt:gpt-6.1-sol:medium:slow", values: "pick", now: true, what: "Illi's own default model" },
+  agents     : { def: "", values: "pick", now: true, what: "what subagents run on", none: "the chat's pick" },
+  compactor  : { def: "chatgpt:gpt-6-luna:medium:slow", values: "pick", now: true, what: "what writes the summaries" },
+  suggest    : { def: "on", values: ["on", "off"], now: true, what: "suggested replies (Tab)", shape: [/^(on|off|true|false|0|1)$/i, "on or off"] },
+  side       : { def: "right", values: ["right", "left", "off"], now: true, what: "where the side panel shows", shape: [/^(right|left|off)$/, "right, left or off"] },
+  side_width : { def: "25%", values: ["20%", "25%", "30%", "35%", "40%"], now: true, what: "the side panel's width", shape: [/^\d+(\.\d+)?%?$/, "columns (40) or a share of the screen (30%)"] },
+  context    : { def: "auto", values: ["auto", "50%", "60%", "70%", "80%", "90%"], now: true, what: "tokens of chat a turn sends", shape: [/^(auto|\d+|\d+(\.\d+)?%)$/, "auto, tokens (350000) or a share of the window (60%)"] },
+  contexts   : { def: "", values: "text", now: true, what: "context by model, as JSON" },
+  rules      : { def: "", values: "text", now: true, what: "a file added to the prompt", path: true },
+  after      : { def: "", values: "text", now: true, what: "a command after each turn" },
+  vendors    : { def: "chatgpt", values: "text", now: false, what: "where models come from" },
+  models     : { def: "", values: "text", now: false, what: "the models offered", none: "all" },
+  jobs       : { def: "8", values: ["2", "4", "8", "16", "32"], now: false, what: "summaries built at once", shape: [/^[1-9]\d*$/, "a number, 1 or more"] },
+  theme      : { def: DIR + "/theme.json", values: "text", now: false, what: "the theme file", path: true },
+  mcp        : { def: DIR + "/mcp.json", values: "text", now: false, what: "the MCP servers' file", path: true },
+  login      : { def: "", values: "text", now: false, what: "the ChatGPT login file", none: "Illi's own", path: true },
+} satisfies Record<string, Setting>;
+export type Key = keyof typeof TABLE;
+export const SETTINGS: Record<Key, Setting> = TABLE;
 
 // the models the vendors listed last (ChatGPT.ts models), learned before
 // the offer is made: a new one is offered (unless `models` names those
@@ -125,19 +136,25 @@ export const KEYS: Record<string, string> = Object.fromEntries(Object.entries(VA
 // Config
 // ======
 
-export function config_get(key: string, def: string): string {
+export function config_get(key: Key, def: string): string {
   return process.env["ILLI_" + key.toUpperCase()] ?? (FILE[key] as string | undefined) ?? def;
 }
 
-// a key's value, its default (DEFAULTS) if none is set
-export function config_value(key: string): string {
-  return config_get(key, DEFAULTS[key] ?? "");
+// a key's value, its default if none is set
+export function config_value(key: Key): string {
+  return config_get(key, SETTINGS[key].def);
 }
 
 // the variable that sets a key over config.json, if it's set; else null
-export function config_env_set(key: string): string | null {
+export function config_env_set(key: Key): string | null {
   const name = "ILLI_" + key.toUpperCase();
   return process.env[name] === undefined ? null : name;
+}
+
+// the pick a setting names (a "pick" one's), as offered; none: null
+export function config_pick(key: Key): Pick | null {
+  const text = config_value(key);
+  return text === "" ? null : config_run(key, text);
 }
 
 // the settings config_set may change while illi runs, read again
@@ -181,7 +198,7 @@ function config_models(): void {
 // file's other keys kept; what changes while illi runs (config_live) is
 // read again, the rest at the next start. One that won't do (config_check)
 // throws, the file untouched
-export function config_set(key: string, value: unknown): void {
+export function config_set(key: Key, value: unknown): void {
   const why = config_check(key, value);
   if (why !== null) {
     throw new Error(why);
@@ -202,34 +219,28 @@ export function config_set(key: string, value: unknown): void {
 // are: its shape; the picks offered still (a vendor or a model taken out
 // may leave one that won't start)
 export function config_check(key: string, value: unknown): string | null {
-  const text = value === null ? DEFAULTS[key] ?? "" : typeof value === "string" ? value.trim() : "";
-  const get  = (k: string) => (k === key ? text : config_value(k));
-  const SHAPES: Record<string, [RegExp, string]> = {
-    suggest    : [/^(on|off|true|false|0|1)$/i, "on or off"],
-    side       : [/^(right|left|off)$/, "right, left or off"],
-    side_width : [/^\d+(\.\d+)?%?$/, "columns (40) or a share of the screen (30%)"],
-    context    : [/^(auto|\d+|\d+(\.\d+)?%)$/, "auto, tokens (350000) or a share of the window (60%)"],
-    jobs       : [/^[1-9]\d*$/, "a number, 1 or more"],
-  };
-  if (!(key in DEFAULTS)) {
-    return "No setting " + key + ". The settings: " + Object.keys(DEFAULTS).join(", ") + ".";
+  if (!(key in SETTINGS)) {
+    return "No setting " + key + ". The settings: " + Object.keys(SETTINGS).join(", ") + ".";
   }
+  const shape = SETTINGS[key as Key].shape;
+  const text  = value === null ? SETTINGS[key as Key].def : typeof value === "string" ? value.trim() : "";
+  const get   = (k: Key) => (k === key ? text : config_value(k));
   if (key === "contexts") {
-    const bad = value !== null && (typeof value !== "object" || Array.isArray(value) || Object.values(value).some((v) => !SHAPES.context[0].test(String(v))));
+    const bad = value !== null && (typeof value !== "object" || Array.isArray(value) || Object.values(value).some((v) => !SETTINGS.context.shape![0].test(String(v))));
     return bad ? "contexts takes each model's context, like {\"gpt-6.1-sol\": 350000}." : null;
   }
   if (typeof value !== "string" && value !== null) {
     return key + " takes text.";
   }
-  if (key in SHAPES && !SHAPES[key][0].test(text)) {
-    return key + " takes " + SHAPES[key][1] + ".";
+  if (shape !== undefined && !shape[0].test(text)) {
+    return key + " takes " + shape[1] + ".";
   }
   if (key === "rules" && text !== "" && !fs.existsSync(config_path(text))) {
     return "No file " + text + " for the rules.";
   }
   try {
     const offer = { vendors: config_vendors(get("vendors")), models: key === "models" ? config_list(text || LABELS.join()) : OFFER.models };
-    for (const k of ["pick", "compactor", "agents"].filter((k) => get(k) !== "")) {
+    for (const k of (["pick", "compactor", "agents"] as const).filter((k) => get(k) !== "")) {
       config_run(k, get(k), offer);
     }
   } catch (err: any) {
