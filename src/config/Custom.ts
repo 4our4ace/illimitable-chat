@@ -6,9 +6,9 @@
 // Each is read anew at each use, so an edit applies at the next call.
 //
 // An agent (agents/<name>.md) is, by its mode (as opencode's), a
-// primary agent (primary: Illi runs as it, by Tab or /agent, named in the
-// view), a subagent (subagent: only an agent spawns it, as spawn's
-// `agent`), or both (all, the default). Its front matter also says what
+// primary agent (primary: Illi runs as it, by Shift+Tab or /agent, named
+// in the view), a subagent (subagent: only an agent spawns it, as
+// spawn's `agent`), or both (all, the default). Its front matter also says what
 // it does (description), runs on (model: a label or
 // vendor:model:effort:speed; effort), may use (tools, by name; none:
 // all its role has) and the color of its mark (color: #rrggbb; none: one
@@ -108,7 +108,7 @@ export namespace Custom {
     return [...Custom.files(cwd, "agents")].map(([name, file]) => Custom.profile(name, file));
   }
 
-  // the agents Illi may run as (Tab, /agent), of all (as read, if they
+  // the agents Illi may run as (Shift+Tab, /agent), of all (as read, if they
   // were), and those an agent may spawn
   export function primaries(cwd: string, all = Custom.agents(cwd)): Profile[] {
     return all.filter((a) => a.mode !== "subagent");

@@ -53,7 +53,7 @@ color: "#e0af68"
 You review code changes. ...
 ```
 
-- mode: primary (Illi runs as it: Tab, /agent), subagent (an agent spawns
+- mode: primary (Illi runs as it: Shift+Tab, /agent), subagent (an agent spawns
   it, as spawn's agent), or all (both, the default)
 - model: a model's name, or vendor:model:effort:speed; effort: low,
   medium, high, xhigh or max
@@ -132,5 +132,5 @@ palette's over it; glyph, tool, ansi and syntax entries too.
 - Say when it applies: agents, commands, skills and the rules file's text
   at the next message; config.json, theme.json and mcp.json once illi
   starts again (Ctrl+D, then illi: the chat goes on where it was).
-- Then tell the user how to use it: /<name>, Tab, or that the skill loads
+- Then tell the user how to use it: /<name>, Shift+Tab, or that the skill loads
   when a task matches.

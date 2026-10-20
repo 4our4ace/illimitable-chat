@@ -72,13 +72,12 @@ function term_groups(v: View.View, custom = false): [group: string, cmds: Cmd[]]
     ["Pick", [
       ["",                  "Shift+Left, Shift+Right", "the model before, the next",                     (t, k) => term_move(t, ARROWS[k])],
       ["",                  "Shift+Up, Shift+Down",    "more effort, less",                              (t, k) => term_move(t, ARROWS[k])],
-      ["",                  "Shift+Tab",               "fast on, off (the next speed), typing or not",   (t) => term_move(t, "speed")],
       ["/model [name]",     "",                        "the models to pick from; with a name, that one", (t, a) => term_pick(t, "model", a)],
       ["/effort [level]",   "",                        "the efforts; with one, that one",                (t, a) => term_pick(t, "effort", a)],
       ["/speed [speed]",    "",                        "the speeds; with one, that one",                 (t, a) => term_pick(t, "speed", a)],
     ]],
     ["Agents", [
-      ["",                  "Tab",                     "Illi runs as the next primary agent (or click one at the side)", term_next],
+      ["",                  "Shift+Tab",               "Illi runs as the next primary agent (or click one at the side)", term_next],
       ["/agent [name]",     "",                        "the primary agent named (illi: Illi's own); none: pick from a list", term_agent_set],
       ["/agents",           "",                        "your agents, commands and skills, and where their files go", term_agents],
       ["/mcp",              "",                        "your MCP servers: each one's tools, or why it failed", term_mcp],
@@ -225,7 +224,7 @@ function term_agents(t: Term): void {
   const list  = (title: string, xs: string[]) => ["", title + (xs.length === 0 ? ": none yet." : ":"), ...xs];
   term_primaries(t);
   const text  = [
-    "Main agent: " + (t.v.agent === null ? "Illi's own" : agent_name(t.v.agent)) + ". Tab runs Illi as the next primary agent; so does a click at the side, and /agent <name>.",
+    "Main agent: " + (t.v.agent === null ? "Illi's own" : agent_name(t.v.agent)) + ". Shift+Tab runs Illi as the next primary agent; so does a click at the side, and /agent <name>.",
     ...list("Primary agents (Illi runs as them)", t.agents.map(agent)),
     ...list("Subagents (only an agent spawns them)", Custom.subagents(cwd).map(agent)),
     ...list("Commands", Custom.commands(cwd).map(cmd)),
