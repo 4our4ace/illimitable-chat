@@ -5,10 +5,10 @@
 // call starts as the one before did, and past the call's size moves on
 // till they fill half (the oldest fold into the view); kept on disk. The
 // recent messages come in blocks, one marked in place of the view's. An
-// older chat's act lines still read. /compact counts a user's message of
-// many pages once. An agent spawned as the user's is
-// named after it; a freed name is used again, each log its own; one
-// named main, the chat's own caller, is refused.
+// older chat's act lines still read; old days are gzipped daily. /compact
+// counts a user's message of many pages once. An agent spawned as the
+// user's is named after it; a freed name is used again, each log its own;
+// one named main, the chat's own caller, is refused.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -86,6 +86,18 @@ test("an older chat's lines naming acts read as any other, the acts ignored", ()
   expect(again.count).toBe(4);
   expect(Memory.message(again, 2)!.text).toBe("said with an act");
   expect(Memory.message(again, 3)!.text).toBe("after");
+});
+
+test("old days are gzipped daily while the chat is open", () => {
+  const every = setInterval;
+  const set: Array<[() => void, number]> = [];
+  globalThis.setInterval = ((go: () => void, ms: number) => (set.push([go, ms]), every(go, 2 ** 30))) as any;
+  try {
+    chat("daily", 1);
+  } finally {
+    globalThis.setInterval = every;
+  }
+  expect(set.map(([, ms]) => ms)).toEqual([864e5]);
 });
 
 test("the screen folds with the cut as it moves on by itself, and stays behind a cut moved for it", () => {

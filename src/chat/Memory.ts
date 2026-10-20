@@ -154,7 +154,8 @@ const DAY   = 864e5;
 const FDS   = 8;
 
 // a day's file this many days old is gzipped (pack), the chat's start
-// PACK_WAIT ms behind; the gzipped files read lately kept unpacked
+// PACK_WAIT ms behind, then each DAY while it is open; the gzipped files
+// read lately kept unpacked
 const PACK      = 30;
 const PACK_WAIT = 10000;
 const UNPACKED  = 4;
@@ -234,7 +235,10 @@ export namespace Memory {
     Memory.roots(mem.count).flatMap((part) => Memory.todo(mem, part)).forEach((part) => Memory.ready(mem, part, true));
     Memory.fit(mem);
     Memory.save(mem);
-    setTimeout(() => void Memory.pack(mem).catch((err) => console.error("memory: packing old days failed: " + err.message)), PACK_WAIT).unref();
+    const pack = () => void Memory.pack(mem).catch((err) => console.error("memory: packing old days failed: " + err.message));
+    const daily = setInterval(() => (mem.done ? clearInterval(daily) : pack()), DAY);
+    setTimeout(pack, PACK_WAIT).unref();
+    daily.unref();
     return mem;
   }
 
