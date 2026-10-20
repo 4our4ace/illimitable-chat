@@ -1,0 +1,137 @@
+![Illimitable: one chat that never ends](assets/header.webp)
+
+A terminal AI agent with one chat that never ends. Illi (short for
+Illimitable) folds old messages into a memory tree it can zoom back
+into, so it forgets nothing.
+
+Written mostly by AI agents: expect bugs.
+
+Install
+-------
+
+    curl -fsSL https://raw.githubusercontent.com/4our4ace/illimitable-chat/main/install.sh | bash
+
+Then run `illi` in any project folder. `illi upgrade` updates it. Linux
+and macOS; on Windows, use WSL.
+
+From source, with [Bun](https://bun.sh):
+
+    git clone https://github.com/4our4ace/illimitable-chat
+    bun illimitable-chat/src/main.ts
+
+Sign in with `/login` (ChatGPT Plus or Pro). An existing
+[opencode](https://opencode.ai) login works too, or API keys (`vendors`
+below).
+
+How it works
+------------
+
+- **Memory tree.** Each message is summarized into one line, and lines
+  merge in pairs into a binary tree. A turn sends the latest messages
+  whole, up to `context`; older ones go as lines, coarser with age.
+- **Zoom.** Illi can open any line back down to the original messages.
+  `/clear` starts a fresh topic that still remembers.
+- **Cheap to run.** A smaller model writes the summaries in the
+  background, and the view only grows at its end, so calls hit the
+  prompt cache.
+- **Tools.** Shell, file edits, subagents, a to-do list, MCP servers.
+  `/goal <message>` keeps it working until the goal is met.
+- **Drawn replies.** Mermaid diagrams, highlighted code and boxed tables,
+  the way [cellsmith](https://github.com/4our4ace/cellsmith) draws them
+  in Claude Code.
+
+Keys
+----
+
+| Key                  | Does                                  |
+| -------------------- | ------------------------------------- |
+| Enter / Esc          | send / interrupt                      |
+| `/`                  | command list                          |
+| Tab                  | switch primary agent                  |
+| Ctrl+O               | show tool calls and thinking          |
+| Drag, double-click   | copy text                             |
+| Ctrl+Y               | copy the last reply                   |
+| Alt+V                | paste an image                        |
+| PgUp/PgDn, Ctrl+End  | scroll, jump to the bottom            |
+| Ctrl+D               | quit (the next start resumes)         |
+
+`/help` lists everything. From a pipe, each line is a message:
+`echo "what changed?" | illi`.
+
+Customize
+---------
+
+All in `~/.illi/`, or a project's `.illi/` (which wins by name).
+`examples/` has samples.
+
+- `agents/*.md`: agents. `mode: primary` ones are switched to with Tab;
+  `subagent` ones are spawned by Illi.
+- `commands/*.md`: `/name` sends the file, `$ARGUMENTS` filled in.
+- `skills/<name>/SKILL.md`: skills, in Claude Code's format.
+- `mcp.json`: MCP servers, in Claude Code's `mcpServers` shape. Only
+  yours is read, never a project's.
+- `theme.json`: colors and palette (`"palette": "nord"`, `mono`, `auto`).
+
+An agent:
+
+    ---
+    description: Reviews a change for bugs; never edits
+    mode: subagent
+    model: gpt-6.1-sol
+    effort: high
+    tools: zoom, shell, read
+    ---
+    You review code changes. ...
+
+Profiles
+--------
+
+Separate chats and settings, e.g. work and home: `/profile new work`,
+`/profile work`, `/profile export`, `/profile import <file>`. Profiles
+share the login, the API keys and the default's config.json. Exports
+leave out the login and secrets; imports are treated as untrusted.
+
+Config
+------
+
+`~/.illi/config.json`, or `ILLI_<KEY>` variables. All optional.
+
+| Key          | Default                           | What                                             |
+| ------------ | --------------------------------- | ------------------------------------------------ |
+| `vendors`    | `chatgpt`                         | also `claude-api`, `openai-api` (API keys)       |
+| `pick`       | `chatgpt:gpt-6.1-sol:medium:slow` | vendor:model:effort:speed                        |
+| `compactor`  | `chatgpt:gpt-6-luna:medium:slow`  | writes the summaries                             |
+| `agents`     | the pick                          | what subagents run on                            |
+| `models`     | all                               | models offered                                   |
+| `context`    | `auto`                            | tokens a turn sends: `auto` (70% of the window, at most 400k), a number, or `"60%"` |
+| `contexts`   |                                   | per model: `{ "gpt-6.1-sol": 350000 }`           |
+| `rules`      |                                   | a file added to every system prompt              |
+| `after`      |                                   | a shell command run after each turn              |
+| `side`       | `right`                           | side panel: `left`, `off`; `side_width` `25%`    |
+| `jobs`       | `8`                               | summaries built at once                          |
+| `login`, `theme`, `mcp` | in `~/.illi/`          | other file locations                             |
+
+API keys come from `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`. The chat is
+in `~/.illi/chat`: back it up.
+
+Code
+----
+
+    src/main.ts    the illi command
+    src/term/      the terminal app: keys, selection, commands, side panel
+    src/ui/        the chat's view, markdown, replies, diagrams, the screen
+    src/chat/      the chat, its memory tree (Memory.ts), the disk
+    src/ai/        model vendors, the agent loop, picks, prices
+    src/tools/     shell and files, MCP servers, the prompts
+    src/config/    settings, profiles, your agents, commands and skills
+    test/          tests across modules; each module's own sit beside it
+    vendor/        cellsmith's markdown parser and diagram engine
+
+Each file starts with a comment on its design. `bun run test` runs the
+tests, `bun run check` the type check (after `bun install`).
+
+License
+-------
+
+Apache 2.0: LICENSE and NOTICE. `vendor/cellsmith/` and the libraries it
+bundles are MIT, licenses inside.

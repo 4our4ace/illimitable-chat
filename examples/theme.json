@@ -1,0 +1,5 @@
+{
+  "ansi": { "block": "8", "you": "5" },
+  "glyph": { "input": "❯ ", "here": "◆", "tab": "◇" },
+  "tool": { "shell": "$" }
+}

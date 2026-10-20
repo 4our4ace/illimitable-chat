@@ -1,0 +1,309 @@
+// Profiles
+// ========
+// illi's profiles, each its own chat and settings. The root ($ILLI_DIR,
+// default ~/.illi) is the default profile's folder, and holds each other
+// one's: <root>/profiles/<name>. illi opens the one asked
+// ($ILLI_PROFILE), else the one used last (<root>/profile, a line), else
+// the default; Config.ts takes its folder as DIR. What stays the root's,
+// shared, is Config.ts's to say (the ChatGPT login; its config.json under
+// each profile's). A profile goes out as one archive (tar.gz, by the
+// system's tar): its folder but the login, the lock, the log (and, the
+// default's, the other profiles), its config.json and mcp.json with their
+// secrets left out. One comes in only as a new profile, its archive taken
+// as untrusted: each entry a file or a folder, inside it, checked before
+// a byte is unpacked; once unpacked, its config's keys that run a command
+// or name a file here dropped, its MCP servers off till the person turns
+// them on.
+
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+
+// Types
+// =====
+
+// the profile running: the root, its name, its folder
+export type Picked = { root: string; name: string; dir: string };
+
+// what an import left out as untrusted: config.json's keys, the MCP
+// servers turned off
+export type Imported = { keys: string[]; servers: number };
+
+// Constants
+// =========
+
+// the default profile's name; a profile's name; names a profile can't
+// take (the default's, /profile's own words)
+export const DEFAULT = "default";
+export const NAME    = /^[a-z0-9][a-z0-9_-]*$/;
+const TAKEN          = [DEFAULT, "new", "export", "import"];
+
+// a folder that is a profile's: <root>/profiles/<name>
+const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
+
+// what a profile's folder holds that is never a profile's to give: the
+// login (the root's, shared), the lock, the log; the default's folder
+// also holds the others, and which was used last
+const OWN    = ["login.json", "lock", "illi.log"];
+const ROOTED = ["profiles", "profile"];
+
+// what /profile new --copy takes from the profile running: its settings,
+// agents, commands and skills (never its chat)
+const SETTINGS = ["config.json", "mcp.json", "theme.json", "agents", "commands", "skills"];
+
+// the files that go out with their secrets left out, as JSON; config.json's
+// keys left out of an export (a file here), and dropped from an import (a
+// command run, or a file here read: the rules sent to the model, another
+// login, other servers)
+const CLEANED = ["config.json", "mcp.json"];
+const LOCAL   = ["login"];
+const UNSAFE  = ["after", "rules", "login", "mcp"];
+
+// a key that names a secret, and a value shaped as a known key or token
+const SECRET_KEY   = /key|token|secret|passw(or)?d|auth|credential|cookie|bearer/i;
+const SECRET_VALUE = /\b(sk-|sk_|ghp_|gho_|ghu_|ghs_|github_pat_|glpat-|xox[abprs]-|AKIA|AIza)[A-Za-z0-9_-]{12,}|\beyJ[\w-]{8,}\.[\w-]{8,}\./;
+
+// Profiles
+// ========
+
+// the profile running, for $ILLI_DIR (dir) and $ILLI_PROFILE (asked): a
+// dir that is a profile's own folder (<root>/profiles/<name>, its root
+// illi's) is that profile, in that root; else the one asked, else the one
+// used last (if it's still there), else the default. One asked must be
+// there
+export function profile_pick(dir: string, asked?: string): Picked {
+  const bare  = dir.replace(/(.)\/+$/, "$1");
+  const is    = FOLDER.exec(bare);
+  const owned = is !== null && profile_rooted(is[1]);
+  const root  = owned ? is[1] : bare;
+  const last  = profile_last(root);
+  const name  = asked !== undefined && asked !== "" ? asked : owned ? is[2] : last;
+  if (name !== DEFAULT && (!NAME.test(name) || !fs.existsSync(profile_dir(root, name)))) {
+    throw new Error("config: no profile " + JSON.stringify(name) + " in " + root + " (/profile new " + (NAME.test(name) ? name : "<name>") + " makes one)");
+  }
+  return { root, name, dir: profile_dir(root, name) };
+}
+
+// whether a folder is illi's root: it holds a chat, a config, the login
+// or the profile used last
+function profile_rooted(root: string): boolean {
+  return ["chat", "config.json", "login.json", "profile"].some((part) => fs.existsSync(root + "/" + part));
+}
+
+// the profile used last, if it's still there; else the default
+function profile_last(root: string): string {
+  const name = fs.existsSync(root + "/profile") ? fs.readFileSync(root + "/profile", "utf8").trim() : DEFAULT;
+  return NAME.test(name) && fs.existsSync(profile_dir(root, name)) ? name : DEFAULT;
+}
+
+// a profile's folder: the root itself for the default
+export function profile_dir(root: string, name: string): string {
+  return name === DEFAULT ? root : root + "/profiles/" + name;
+}
+
+// the profiles: the default, then the others by name
+export function profile_list(root: string): string[] {
+  const dir  = root + "/profiles";
+  const all  = fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }) : [];
+  const more = all.filter((e) => e.isDirectory() && NAME.test(e.name) && !TAKEN.includes(e.name)).map((e) => e.name);
+  return [DEFAULT, ...more.sort()];
+}
+
+// the profile used last, kept for the next start
+export function profile_keep(root: string, name: string): void {
+  fs.mkdirSync(root, { recursive: true });
+  fs.writeFileSync(root + "/profile", name + "\n");
+}
+
+// why a name can't be a new profile's (null: it can)
+export function profile_why(root: string, name: string): string | null {
+  if (!NAME.test(name)) {
+    return "A profile's name is lowercase letters, digits, - and _, from a letter or digit: " + JSON.stringify(name) + " isn't one.";
+  }
+  if (TAKEN.includes(name)) {
+    return name + " can't name a profile (" + TAKEN.join(", ") + " are taken).";
+  }
+  return fs.existsSync(profile_dir(root, name)) ? "There's a profile " + name + " already." : null;
+}
+
+// a new profile's folder: empty, or with copies of another's settings,
+// agents, commands and skills (from: its folder)
+export function profile_new(root: string, name: string, from: string | null): void {
+  const dir = profile_dir(root, name);
+  fs.mkdirSync(root + "/profiles", { recursive: true });
+  fs.mkdirSync(dir);
+  for (const part of from === null ? [] : SETTINGS) {
+    if (fs.existsSync(from + "/" + part)) {
+      fs.cpSync(from + "/" + part, dir + "/" + part, { recursive: true });
+    }
+  }
+}
+
+// the profile an archive's file names (illi-profile-<name>.tar.gz), else
+// its own name, .tar.gz or .tgz dropped; null: no profile's name
+export function profile_named(file: string): string | null {
+  const name = path.basename(file).replace(/\.(tar\.gz|tgz)$/i, "").replace(/^illi-profile-/, "").toLowerCase();
+  return NAME.test(name) && !TAKEN.includes(name) ? name : null;
+}
+
+// Secrets
+// -------
+
+// a JSON value, its secrets left out: a string under a key that names one
+// (unless it only names a variable, ${VAR}), and any string shaped as a
+// known key or token; how many it left out
+export function profile_strip(value: unknown): [unknown, number] {
+  let cut = 0;
+  const strip = (x: unknown, key: string): unknown => {
+    if (typeof x === "string" && ((SECRET_KEY.test(key) && !x.includes("${")) || SECRET_VALUE.test(x))) {
+      cut += 1;
+      return undefined;
+    }
+    if (Array.isArray(x)) {
+      return x.map((y) => strip(y, key)).filter((y) => y !== undefined);
+    }
+    if (typeof x === "object" && x !== null) {
+      return Object.fromEntries(Object.entries(x).map(([k, y]) => [k, strip(y, k)]).filter(([, y]) => y !== undefined));
+    }
+    return x;
+  };
+  const kept = strip(value, "");
+  return [kept, cut];
+}
+
+// a file's JSON (undefined: no file, or no JSON)
+function profile_json(file: string): any {
+  try {
+    return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// an object without some keys; the keys it had of them
+function profile_omit(x: any, keys: string[]): [any, string[]] {
+  const plain = typeof x === "object" && x !== null && !Array.isArray(x);
+  const had   = plain ? keys.filter((k) => k in x) : [];
+  return [plain ? Object.fromEntries(Object.entries(x).filter(([k]) => !keys.includes(k))) : {}, had];
+}
+
+// Archives
+// --------
+
+// a profile's archive, at file (absolute): its folder but what is never
+// a profile's to give (OWN, ROOTED), and a login file its config names in
+// it; config.json and mcp.json with their secrets left out; how many
+export async function profile_export(root: string, name: string, file: string): Promise<number> {
+  const dir   = profile_dir(root, name);
+  const tmp   = fs.mkdtempSync(path.join(os.tmpdir(), "illi-export-"));
+  const conf  = profile_json(dir + "/config.json");
+  const login = typeof conf?.login === "string" ? path.relative(dir, path.resolve(dir, conf.login.replace(/^~(?=\/)/, os.homedir()))) : "";
+  const skip  = [...OWN, ...CLEANED, ...(name === DEFAULT ? ROOTED : []), login];
+  let cut = 0;
+  try {
+    for (const part of CLEANED) {
+      const json = profile_json(dir + "/" + part);
+      if (json === undefined && part !== "config.json") {
+        continue;
+      }
+      const [kept, n] = profile_strip(part === "config.json" ? profile_omit(json ?? {}, LOCAL)[0] : json);
+      cut += n;
+      fs.writeFileSync(tmp + "/" + part, JSON.stringify(kept, null, 2) + "\n");
+    }
+    const parts = fs.readdirSync(dir).filter((p) => !skip.includes(p)).map((p) => "./" + p);
+    const clean = fs.readdirSync(tmp).map((p) => "./" + p);
+    await profile_tar(["-czhf", file, "-C", dir, ...parts, "-C", tmp, ...clean]);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+  return cut;
+}
+
+// an archive (file: absolute) unpacked as new profile `name`: its entries
+// listed and checked first, unpacked aside, checked again on disk (files
+// and folders only, none linked), what is never a profile's taken out,
+// then moved in place; config.json's UNSAFE keys dropped, its MCP servers
+// turned off (said back: Imported)
+export async function profile_import(root: string, file: string, name: string): Promise<Imported> {
+  const names = (await profile_tar(["-tzf", file])).split("\n").filter((l) => l !== "");
+  const types = (await profile_tar(["-tvzf", file])).split("\n").filter((l) => l !== "").map((l) => l[0]);
+  const why   = profile_unsafe(names, types);
+  if (why !== null) {
+    throw new Error(why);
+  }
+  fs.mkdirSync(root + "/profiles", { recursive: true });
+  const tmp = fs.mkdtempSync(root + "/profiles/.import-");
+  try {
+    await profile_tar(["-xzf", file, "--no-same-owner", "-C", tmp]);
+    profile_walk(tmp, "");
+    for (const part of [...OWN, ...ROOTED]) {
+      fs.rmSync(tmp + "/" + part, { recursive: true, force: true });
+    }
+    const conf = profile_json(tmp + "/config.json");
+    const [kept, keys] = profile_omit(conf, UNSAFE);
+    if (fs.existsSync(tmp + "/config.json")) {
+      fs.writeFileSync(tmp + "/config.json", JSON.stringify(kept, null, 2) + "\n");
+    }
+    const mcp  = profile_json(tmp + "/mcp.json");
+    const defs = typeof mcp?.mcpServers === "object" && mcp.mcpServers !== null ? Object.values<any>(mcp.mcpServers).filter((d) => typeof d === "object" && d !== null) : [];
+    const on   = defs.filter((d) => d.disabled !== true);
+    on.forEach((d) => (d.disabled = true));
+    if (on.length > 0) {
+      fs.writeFileSync(tmp + "/mcp.json", JSON.stringify(mcp, null, 2) + "\n");
+    }
+    const why = profile_why(root, name);
+    if (why !== null) {
+      throw new Error(why);
+    }
+    fs.renameSync(tmp, profile_dir(root, name));
+    return { keys, servers: on.length };
+  } catch (err) {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    throw err;
+  }
+}
+
+// why an archive's listing won't unpack as a profile (null: it will):
+// each entry a file (-) or a folder (d), never a link or a device, and
+// its path inside the profile's folder
+export function profile_unsafe(names: string[], types: string[]): string | null {
+  if (names.length === 0 || names.length !== types.length) {
+    return "The archive lists no profile.";
+  }
+  const out = names.find((n) => !profile_inside(n));
+  if (out !== undefined) {
+    return "The archive holds a path outside its folder: " + JSON.stringify(out) + ". Nothing was unpacked.";
+  }
+  const odd = names.find((n, k) => types[k] !== "-" && types[k] !== "d");
+  return odd === undefined ? null : "The archive holds a link or a special file: " + JSON.stringify(odd) + ". Nothing was unpacked.";
+}
+
+// whether an archive's path stays inside its folder: relative, no `..`,
+// no backslash or control character
+export function profile_inside(name: string): boolean {
+  return name !== "" && !name.startsWith("/") && !/[\\\x00-\x1f\x7f]/.test(name) && !name.split("/").includes("..");
+}
+
+// a folder unpacked holds files and folders only, none a hard link (one
+// to a file outside would be that file); else it throws
+function profile_walk(dir: string, rel: string): void {
+  for (const e of fs.readdirSync(dir + rel)) {
+    const at = rel + "/" + e;
+    const st = fs.lstatSync(dir + at);
+    if (st.isDirectory()) {
+      profile_walk(dir, at);
+    } else if (!st.isFile() || st.nlink > 1) {
+      throw new Error("The archive held a link or a special file: " + JSON.stringify(at.slice(1)) + ". Nothing was kept.");
+    }
+  }
+}
+
+// tar run, on its args: what it printed; failed, why (its last word)
+async function profile_tar(args: string[]): Promise<string> {
+  const proc = Bun.spawn(["tar", ...args], { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+  const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+  if (code !== 0) {
+    throw new Error("tar: " + (err.trim().split("\n").at(-1) || "exited " + code));
+  }
+  return out;
+}

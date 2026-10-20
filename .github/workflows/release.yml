@@ -1,0 +1,49 @@
+# A tag v* builds illi as one file for each system and releases them,
+# which install.sh downloads (the latest) and `illi upgrade` runs again.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - { runner: ubuntu-latest, target: linux-x64 }
+          - { runner: ubuntu-latest, target: linux-arm64 }
+          - { runner: macos-latest,  target: darwin-x64 }
+          - { runner: macos-latest,  target: darwin-arm64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun build --compile --minify --target=bun-${{ matrix.target }} src/main.ts --outfile illi-${{ matrix.target }}
+      # macOS runs only signed binaries: signed ad hoc
+      - if: runner.os == 'macOS'
+        run: codesign --force --sign - illi-${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: illi-${{ matrix.target }}
+          path: illi-${{ matrix.target }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+      - run: sha256sum illi-* > SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            illi-*
+            SHA256SUMS
+          generate_release_notes: true
