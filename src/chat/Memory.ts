@@ -12,11 +12,8 @@
 // own view (`seen`) up to the node's `ctx`; a line too long is asked
 // anew (build). The call asks till it is answered (AskAI patient: an
 // outage only delays a node, never harms it); answered with no line (a
-// refusal: its input's doing), its node is its source clipped. Every
-// node builds so, an imported one too; the import's are a side of their
-// own (`side`: the chat's turns don't wait on them). An import's side is
-// held as its user says (`hold`; a pause cuts its calls): its nodes wait,
-// with no call, till it goes on. Of each side, JOBS build at once, in the order the messages came. A try cut
+// refusal: its input's doing), its node is its source clipped. JOBS
+// build at once, in the order the messages came. A try cut
 // after a line keeps the best one. A chat
 // moving to another process (a deploy) takes its summaries along, their
 // calls going on where they began (give, take): none is cut or asked
@@ -27,8 +24,8 @@
 // siblings whose parent is built and most due (oldest since its last message,
 // to the view's end, in halves: detail fades with age) down to half, so a view
 // changes only at its end between batches. Two, each on its own: the chat's
-// (turns'), to the last message, and the compactions', to the first not built
-// of the sides that build. A call gets one in BLOCK-line blocks, the last whole
+// (turns'), to the last message, and the compactions', to the first not built.
+// A call gets one in BLOCK-line blocks, the last whole
 // one marked for the cache (AskAI.ts); few lines, as those past it are read
 // anew (a compaction's view ends at its node, then its task, both unmarked).
 //
@@ -50,7 +47,7 @@
 
 import * as fs from "node:fs";
 import * as zlib from "node:zlib";
-import { AskAI, type Ask, type Block, type Call, type Img, type Kind, type Say, type Served } from "../ai/AskAI.ts";
+import { AskAI, type Ask, type Block, type Call, type Img, type Kind, type Say } from "../ai/AskAI.ts";
 import { clip_page, clip_pages } from "../tools/Clip.ts";
 import * as config from "../config/Config.ts";
 import { Disk } from "./Disk.ts";
@@ -61,13 +58,13 @@ import { image_kind } from "../ui/View.ts";
 // Types
 // =====
 
-// a message (a page): its index, kind, text, size, date, images, whether
-// imported, its node (if written with it), whether it is logged as one
-// with the next, the act it records
+// a message (a page): its index, kind, text, size, date, images, its
+// node (if written with it), whether it is logged as one with the next,
+// the act it records
 type Root = Msg & { i: number; size: number; date: string };
 
 // a message to log: a Root but its index and size; no date: now
-export type Msg = { kind: Kind; text: string; date?: string; images?: string[]; imported?: boolean; line?: string; more?: boolean; act?: string };
+export type Msg = { kind: Kind; text: string; date?: string; images?: string[]; line?: string; more?: boolean; act?: string };
 
 // node (l,i), as a line of a view
 type Part = { l: number; i: number };
@@ -75,9 +72,6 @@ type Part = { l: number; i: number };
 // a view: its lines, the bytes of those built, a batch under way, the
 // bytes past which it merges to half
 type View = { parts: Part[]; size: number; batch: boolean; high: number };
-
-// a summary running: its node, what it serves
-type Sum = Part & { kind: Served };
 
 // a summary running as its chat moved (Memory.give): its node, its call's id
 export type Given = [number, number, string];
@@ -112,13 +106,12 @@ type Saved = Kept & { seen?: Kept; main: End; tree: End; pick: object | null; go
 // built and of those above them, by slot; agents: their logs' lengths,
 // logs: each name's log as now (a name freed takes a new one: agent_new);
 // view: the chat's view; seen: the compactions'; ready: the nodes not
-// built whose halves are, by side and level, in order; ends: how far
-// each log is indexed; busy: nodes building, by slot, with their side;
-// sides: the side by the last message of nodes not built; calls: those
-// building's calls; hold: why each side is held (null: it builds);
-// wait: checks run as the views change; share: what
-// compactions share with the chat's turns; made, acted: told of each
-// node built, of each act indexed
+// built whose halves are, by level, in order; ends: how far each log is
+// indexed; busy: nodes building, by slot; calls: those building's calls;
+// hold: no summary starts (a test's chat, which no model answers);
+// wait: checks run as the views change; share: what compactions share
+// with the chat's turns; made, acted: told of each node built, of each
+// act indexed
 export type Memory = {
   dir    : string;
   fds    : Map<string, number>;
@@ -138,12 +131,11 @@ export type Memory = {
   logs   : Map<string, string>;
   view   : View;
   seen   : View;
-  ready  : number[][][];
+  ready  : number[][];
   ends   : Record<Stream, End>;
-  busy   : Map<number, number>;
-  sides  : Map<number, number>;
-  calls  : Map<Call, Sum>;
-  hold   : Array<string | null>;
+  busy   : Set<number>;
+  calls  : Map<Call, Part>;
+  hold   : boolean;
   done   : boolean;
   wait   : Set<() => void>;
   share  : () => Share;
@@ -228,9 +220,9 @@ export namespace Memory {
 
   export function load(dir: string, share: Memory["share"], acted: Memory["acted"] = () => {}): Memory {
     const mem: Memory = {
-      dir, fds: new Map(), unpacked: new Map(), count: 0, open: 0, pick: null, goal: null, agent: null, work: [], cut: 0, show: 0, top: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), logs: new Map(), ready: [[], []], ends: { main: [0, 0], tree: [0, 0] },
+      dir, fds: new Map(), unpacked: new Map(), count: 0, open: 0, pick: null, goal: null, agent: null, work: [], cut: 0, show: 0, top: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), logs: new Map(), ready: [], ends: { main: [0, 0], tree: [0, 0] },
       view: { parts: [], size: 0, batch: false, high: LINES }, seen: { parts: [], size: 0, batch: false, high: SEEN },
-      busy: new Map(), sides: new Map(), calls: new Map(), hold: [null, "paused"], done: false, wait: new Set(), share, acted,
+      busy: new Set(), calls: new Map(), hold: false, done: false, wait: new Set(), share, acted,
     };
     const saved = Memory.saved(dir);
     mem.pick = saved?.pick ?? null;
@@ -514,12 +506,10 @@ export namespace Memory {
     return root;
   }
 
-  // a message as models read it, tagged by its author: an imported chat's
-  // AI (its say and calls) is "ai", not Illi
+  // a message as models read it, tagged by its kind
   export function show(root: Root): string {
     const pics = (root.images ?? []).map((name) => "\n[image docs/images/" + name + "]");
-    const who  = root.imported && (root.kind === "illi" || root.kind === "tool") ? "ai" : root.kind;
-    return who + ": " + root.text + pics.join("");
+    return root.kind + ": " + root.text + pics.join("");
   }
 
   // message i, from its file; null: none
@@ -778,15 +768,14 @@ export namespace Memory {
     return l === 0 ? i : (i + 1) * 2 ** l;
   }
 
-  // the message of the view's (k+1)th line not built of a side (0: the
-  // chat's, 1: an import's), else the count
-  export function first(mem: Memory, k = 0, side = 0): number {
-    return (mem.ready[side][0] ?? [])[k] ?? mem.count;
+  // the message of the view's (k+1)th line not built, else the count
+  export function first(mem: Memory, k = 0): number {
+    return (mem.ready[0] ?? [])[k] ?? mem.count;
   }
 
   // a node ready (on), or no more (built)
   export function ready(mem: Memory, { l, i }: Part, on: boolean): void {
-    const queue = (mem.ready[Memory.side(mem, l, i)][l] ??= []);
+    const queue = (mem.ready[l] ??= []);
     let [a, z] = [0, queue.length];
     while (a < z) {
       const m = (a + z) >> 1;
@@ -795,14 +784,6 @@ export namespace Memory {
     if (on !== (queue[a] === i)) {
       queue.splice(a, on ? 0 : 1, ...(on ? [i] : []));
     }
-  }
-
-  // node (l,i)'s side: 1 if its last message is imported, else 0
-  export function side(mem: Memory, l: number, i: number): number {
-    const last = (i + 1) * 2 ** l - 1;
-    const side = mem.sides.get(last) ?? (Memory.message(mem, last)?.imported === true ? 1 : 0);
-    mem.sides.set(last, side);
-    return side;
   }
 
   // the nodes to build; those whose source fits take no call: built at
@@ -818,41 +799,34 @@ export namespace Memory {
     }
   }
 
-  // of each side not held, the nodes ready up to its JOBS-th line not
-  // built, in the order the messages came (`ctx`; at a tie, a merge
-  // first), while JOBS run. The jobs started; the nodes
-  // whose source fits
+  // unless held, the nodes ready up to the JOBS-th line not built, in
+  // the order the messages came (`ctx`; at a tie, a merge first), while
+  // JOBS run. The jobs started; the nodes whose source fits
   export function starts(mem: Memory): Array<Part & { text: string }> {
     const free: Array<Part & { text: string }> = [];
-    for (const side of [0, 1].filter((side) => mem.hold[side] === null)) {
-      const end = Memory.first(mem, JOBS - 1, side);
-      const next: Part[] = [];
-      mem.ready[side].forEach((queue, l) => {
-        for (let k = 0; k < queue.length && Memory.ctx(l, queue[k]) <= end; k++) {
-          next.push({ l, i: queue[k] });
-        }
-      });
-      next.sort((a, b) => Memory.ctx(a.l, a.i) - Memory.ctx(b.l, b.i) || b.l - a.l);
-      for (const { l, i } of next) {
-        if (mem.done || Memory.running(mem, side) >= JOBS) {
-          break;
-        }
-        const text = mem.busy.has(Memory.slot(l, i)) ? null : Memory.source(mem, l, i);
-        if (text !== null && Memory.bytes(text) <= NODE) {
-          free.push({ l, i, text });
-        } else if (text !== null) {
-          Memory.job(mem, l, i, text);
-        }
+    if (mem.hold) {
+      return free;
+    }
+    const end = Memory.first(mem, JOBS - 1);
+    const next: Part[] = [];
+    mem.ready.forEach((queue, l) => {
+      for (let k = 0; k < queue.length && Memory.ctx(l, queue[k]) <= end; k++) {
+        next.push({ l, i: queue[k] });
+      }
+    });
+    next.sort((a, b) => Memory.ctx(a.l, a.i) - Memory.ctx(b.l, b.i) || b.l - a.l);
+    for (const { l, i } of next) {
+      if (mem.done || mem.busy.size >= JOBS) {
+        break;
+      }
+      const text = mem.busy.has(Memory.slot(l, i)) ? null : Memory.source(mem, l, i);
+      if (text !== null && Memory.bytes(text) <= NODE) {
+        free.push({ l, i, text });
+      } else if (text !== null) {
+        Memory.job(mem, l, i, text);
       }
     }
     return free;
-  }
-
-  // an import held by its user, at once: its calls out cut; their nodes
-  // build as it goes on
-  export function pause(mem: Memory): void {
-    mem.hold[1] = "paused";
-    mem.calls.forEach((sum, call) => sum.kind === "import" && call.stop());
   }
 
   // the nodes under `part` not built whose sources are: only nodes not
@@ -866,16 +840,11 @@ export namespace Memory {
     return [...here, ...halves.flatMap((half) => Memory.todo(mem, half))];
   }
 
-  // how many nodes of a side build
-  export function running(mem: Memory, side: number): number {
-    return [...mem.busy.values()].filter((n) => n === side).length;
-  }
-
-  // a node cut (its side held, or the chat ended: Memory.stop) builds as
-  // it goes on; call: one running for it already (Memory.take)
+  // a node cut (the chat ended: Memory.stop) builds at the next start;
+  // call: one running for it already (Memory.take)
   export function job(mem: Memory, l: number, i: number, text: string, call: Call | null = null): void {
     const key = Memory.slot(l, i);
-    mem.busy.set(key, Memory.side(mem, l, i));
+    mem.busy.add(key);
     Memory.build(mem, l, i, text, call).finally(() => {
       mem.busy.delete(key);
       Memory.pump(mem);
@@ -921,10 +890,10 @@ export namespace Memory {
   // thoughts; one after a line too long adds only its size and where the
   // limit cuts it (`over`): never more than the first and that note. No
   // line (a refusal: its input's doing): its source clipped; a try cut
-  // (a pause, a stop) throws, unless a line came
+  // (a stop) throws, unless a line came
   export async function build(mem: Memory, l: number, i: number, text: string, call: Call | null): Promise<void> {
     const task = { text: Memory.task(l, i) + text + "\n</input>", mark: false };
-    const upto = Math.min(Memory.ctx(l, i), Memory.first(mem, 0, Memory.side(mem, l, i)));
+    const upto = Math.min(Memory.ctx(l, i), Memory.first(mem));
     const blocks = [...Memory.view(mem, upto, mem.seen.parts), task];
     const lines: string[] = [];
     let end = await Memory.compact(mem, l, i, call ?? Memory.ask(mem, l, i, text, blocks));
@@ -947,18 +916,12 @@ export namespace Memory {
     Memory.store(mem, [{ l, i, text: line }]);
   }
 
-  // what node (l,i)'s summary serves: an import, or the chat
-  export function served(mem: Memory, l: number, i: number): Served {
-    return Memory.side(mem, l, i) === 1 ? "import" : "compactor";
-  }
-
   // nodes built: logged in one write, kept
   export function store(mem: Memory, parts: Array<Part & { text: string }>): void {
     Memory.log(mem, "tree", parts.map(({ l, i, text }) => ({ l, i, text, size: Memory.bytes(text) })));
     for (const { l, i, text } of parts) {
       Memory.ready(mem, { l, i }, false);
       mem.nodes.set(Memory.slot(l, i), text);
-      mem.sides.delete((i + 1) * 2 ** l - 1);
       [mem.view, mem.seen].forEach((view) => (view.size += l === 0 && i < Memory.end(view) ? Memory.bytes(text) : 0));
     }
     for (const { l, i } of parts) {
@@ -972,12 +935,12 @@ export namespace Memory {
 
   // a call of node (l,i)'s summary, on the compactor
   export function ask(mem: Memory, l: number, i: number, text: string, blocks: Block[]): Call {
-    return AskAI.ask({ ...mem.share(), ...Pick.ask(config.COMPACTOR), blocks, patient: true, yields: Memory.served(mem, l, i) === "import" ? mem.dir : undefined }, () => {});
+    return AskAI.ask({ ...mem.share(), ...Pick.ask(config.COMPACTOR), blocks, patient: true }, () => {});
   }
 
   // a summary's try: its call's end, the call held in `calls` till then
   export function compact(mem: Memory, l: number, i: number, call: Call): Call["done"] {
-    mem.calls.set(call, { l, i, kind: Memory.served(mem, l, i) });
+    mem.calls.set(call, { l, i });
     return call.done.finally(() => mem.calls.delete(call));
   }
 
@@ -1017,16 +980,15 @@ ${Memory.cut(line)}| ← LIMIT`;
   // each view to its end; a batch starts as a view passes `high`, or goes
   // on at a message (`next`) if a missing parent stopped it; between
   // messages, only a whole batch, to half or, as parents not built keep
-  // it over (an import's lag JOBS calls a level), by `high`: each change
+  // it over (the compactions' lag JOBS calls a level), by `high`: each change
   // makes every call after write the view anew. The chat's merges only
   // its lines before the cut (those after are a turn's whole messages). A
   // node merged away no view holds, nor one under it, is let go
   export function fit(mem: Memory, next = false): void {
     const gone: Part[] = [];
     let changed = false;
-    const sides = [0, 1].filter((side) => mem.hold[side] === null).map((side) => Memory.first(mem, 0, side));
     Memory.reach(mem, mem.view, mem.count);
-    Memory.reach(mem, mem.seen, Math.min(mem.count, ...sides));
+    Memory.reach(mem, mem.seen, mem.hold ? mem.count : Memory.first(mem));
     for (const view of [mem.view, mem.seen]) {
       const [parts, batch] = [view.parts.length, view.batch];
       const k    = view === mem.view ? Memory.cover(view, mem.cut) : view.parts.length;
@@ -1050,8 +1012,8 @@ ${Memory.cut(line)}| ← LIMIT`;
     mem.wait.forEach((check) => check());
   }
 
-  // a view to message `end`: its lines from it dropped (an import going on
-  // again), the messages to it appended
+  // a view to message `end`: its lines from it dropped (the compactions',
+  // as loaded, past the first not built), the messages to it appended
   export function reach(mem: Memory, view: View, end: number): void {
     for (const part of view.parts.splice(Memory.cover(view, end))) {
       view.size -= Memory.size(mem, part);
@@ -1146,8 +1108,7 @@ ${Memory.cut(line)}| ← LIMIT`;
     return { parts: view.filter((part) => part !== null), size, gone };
   }
 
-  // once the chat's messages before `end` are built (not an import's):
-  // null; else "Stopped." (signal aborted)
+  // once the chat's messages before `end` are built: null; else "Stopped." (signal aborted)
   export function settle(mem: Memory, end: number, signal: AbortSignal): Promise<string | null> {
     return new Promise((resolve) => {
       const check = () => {

@@ -19,10 +19,10 @@ const { Memory } = await import("./Memory.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
-// a chat whose summaries never build (its side held): no call is made
+// a chat whose summaries never build (held): no call is made
 function chat(name: string, n: number) {
   const mem = Memory.load(DIR + "/" + name, () => ({}) as any);
-  mem.hold[0] = "held for the test";
+  mem.hold = true;
   Memory.push(mem, Array.from({ length: n }, (_, k) => ({ kind: "user" as const, text: "message " + k + " " + "x".repeat(80) })));
   return mem;
 }
@@ -65,7 +65,7 @@ test("a month-old day's file is gzipped: its lines read the same, open, from an 
   expect(texts(mem, 12)).toEqual(kept);
   fs.rmSync(DIR + "/pack/main.index");
   const again = Memory.load(DIR + "/pack", () => ({}) as any);
-  again.hold[0] = "held for the test";
+  again.hold = true;
   expect(again.count).toBe(12);
   expect(texts(again, 12)).toEqual(kept);
   Memory.push(again, [{ kind: "user", text: "after" }]);
