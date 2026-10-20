@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Illimitable's installer: `illi`, one file, into ~/.local/bin (or
-# $ILLI_INSTALL). The latest release's binary for this system; with none
-# yet, built from the source with Bun (installed first if missing). Run
-# again (or `illi upgrade`), it replaces the one there.
+# $ILLI_INSTALL). The latest release's binary for this system, checked
+# against the release's SHA256SUMS; with none for it (or ILLI_SOURCE=1),
+# built from the source with Bun (installed first if missing). A download
+# that fails (offline, a rate limit) stops it. Run again (or `illi
+# upgrade`), it replaces the one there.
 #
 #   curl -fsSL https://raw.githubusercontent.com/4our4ace/illimitable-chat/main/install.sh | bash
 
@@ -28,10 +30,47 @@ esac
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-if curl -fsSL "https://github.com/$REPO/releases/latest/download/illi-$os-$arch" -o "$tmp/illi" 2>/dev/null; then
+asset="illi-$os-$arch"
+release="https://github.com/$REPO/releases/latest/download"
+
+# a release's file into $tmp; prints its HTTP status (404: none), fails
+# when GitHub can't be reached
+fetch() {
+  curl -sSL --retry 2 -o "$tmp/$1" -w '%{http_code}' "$release/$1" || die "can't download $1 from GitHub (offline?): try again later"
+}
+
+# a file's SHA-256
+sha() {
+  if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | awk '{print $1}'
+}
+
+build=""
+if [ -n "${ILLI_SOURCE:-}" ]; then
+  build="ILLI_SOURCE is set"
+else
+  code="$(fetch "$asset")"
+  case "$code" in
+    200) ;;
+    404) build="no release for $os-$arch yet" ;;
+    *)   die "GitHub won't give $asset now (HTTP $code): try again later" ;;
+  esac
+fi
+
+if [ -z "$build" ]; then
+  code="$(fetch SHA256SUMS)"
+  case "$code" in
+    200)
+      want="$(awk -v f="$asset" '$2 == f || $2 == "*" f {print $1}' "$tmp/SHA256SUMS")"
+      [ -n "$want" ] || die "the release's SHA256SUMS lists no $asset"
+      [ "$(sha "$tmp/$asset")" = "$want" ] || die "$asset doesn't match the release's SHA256SUMS: not installed"
+      ;;
+    404) say "The release has no SHA256SUMS: $asset is unchecked." ;;
+    *)   die "GitHub won't give SHA256SUMS now (HTTP $code): try again later" ;;
+  esac
+  mv "$tmp/$asset" "$tmp/illi"
   say "Downloaded the latest release of Illimitable."
 else
-  say "No release for $os-$arch yet: building Illimitable from its source."
+  say "Building Illimitable from its source ($build)."
   command -v git >/dev/null || die "git is needed to build from the source"
   if ! command -v bun >/dev/null; then
     say "Installing Bun first (bun.sh)."
