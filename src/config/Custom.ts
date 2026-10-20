@@ -10,9 +10,10 @@
 // view), a subagent (subagent: only an agent spawns it, as spawn's
 // `agent`), or both (all, the default). Its front matter also says what
 // it does (description), runs on (model: a label or
-// vendor:model:effort:speed; effort) and may use (tools, by name; none:
-// all its role has); its body is its instructions, added to the system
-// prompt of its calls.
+// vendor:model:effort:speed; effort), may use (tools, by name; none:
+// all its role has) and the color of its mark (color: #rrggbb; none: one
+// made for it); its body is its instructions, added to the system prompt
+// of its calls.
 //
 // A command (commands/<name>.md) is a message typed as /name: its body,
 // $ARGUMENTS in it the words after the name (none there: they go after
@@ -44,7 +45,8 @@ import * as config from "./Config.ts";
 export type Mode = "primary" | "subagent" | "all";
 
 // an agent: its name (its file's), what it does, what it may be, runs on
-// and may use (null: as its role has), its instructions, its file
+// and may use (null: as its role has), its mark's color (#rrggbb; null:
+// one made for it), its instructions, its file
 export type Profile = {
   name        : string;
   description : string;
@@ -52,6 +54,7 @@ export type Profile = {
   model       : string | null;
   effort      : string | null;
   tools       : string[] | null;
+  color       : string | null;
   body        : string;
   file        : string;
 };
@@ -158,6 +161,7 @@ export namespace Custom {
       model       : head.model || null,
       effort      : head.effort || null,
       tools       : list === undefined ? null : list,
+      color       : /^#[0-9a-f]{6}$/i.test(head.color ?? "") ? head.color : null,
       body,
       file,
     };

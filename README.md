@@ -67,8 +67,8 @@ All in `~/.illi/`, or a project's `.illi/` (which wins by name).
 `examples/` has samples.
 
 - `agents/*.md`: agents. `mode: primary` ones are switched to with Tab;
-  `subagent` ones are spawned by Illi. Each gets a color of its own the
-  first time it's seen, kept in `agent-colors.json`.
+  `subagent` ones are spawned by Illi. Each gets a color of its own;
+  `color: "#rrggbb"` picks one.
 - `commands/*.md`: `/name` sends the file, `$ARGUMENTS` filled in.
 - `skills/<name>/SKILL.md`: skills, in Claude Code's format.
 - `mcp.json`: MCP servers, in Claude Code's `mcpServers` shape. Only
@@ -83,6 +83,7 @@ An agent:
     model: gpt-6.1-sol
     effort: high
     tools: zoom, shell, read
+    color: "#e0af68"
     ---
     You review code changes. ...
 
