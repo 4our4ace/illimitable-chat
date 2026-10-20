@@ -5,10 +5,14 @@
 // signed with its API key or, chatgpt's, a login's token it renews (one
 // the vendor refused, renewed, is asked again); a response's headers are
 // its wire's to read (chatgpt's plan limits), and the input each caller's
-// last request read is kept (AskAI.held: the context the view shows).
+// last request read is kept (AskAI.held: the context the view shows), a
+// turn's whole, with its answer (AskAI.last).
 // Each step sends every item and streams one output; tool calls run in
 // order, a message sent mid-run follows the next results, and the call
-// ends at a step with no tools and nothing sent. A request goes again,
+// ends at a step with no tools and nothing sent. A call that goes on from
+// another's request (AskAI.ts `from`: a suggested reply) sends that one's
+// items and answer before its own, naming its tools but running none: it
+// takes one step, unanswered if it calls a tool. A request goes again,
 // TRIES times at most, after its retry-after or a doubling wait, for a
 // passing reason (`busy`: no connection, a retry status, a stream error,
 // cut short or silent for the wire's `idle`), dropping what it streamed.
@@ -183,9 +187,9 @@ export namespace Agent {
     if (!key) {
       throw new Error("no API key: set " + wire.key.toUpperCase() + "_API_KEY");
     }
-    const tools = await Agent.server(run);
+    const tools = ask.from?.tools ?? (await Agent.server(run));
     const parts = ask.blocks.filter((b) => b.text !== "");
-    const items: Item[] = [{ $: "User", parts, imgs: ask.imgs ?? [] }];
+    const items: Item[] = [...(ask.from?.items ?? []), { $: "User", parts, imgs: ask.imgs ?? [] }];
     while (!signal.aborted) {
       const step = await Agent.step(wire, run, key, (max) => wire.body(ask, items, tools, max), items);
       for (const entry of step.entries) {
@@ -196,7 +200,14 @@ export namespace Agent {
         end.stop = step.stop;
         return;
       }
+      if (ask.from !== undefined && (step.stop !== "done" || step.entries.some((e) => e.kind === "tool"))) {
+        end.text = "it called a tool";
+        return;
+      }
       items.push({ $: "Turn", out: step.out });
+      if (ask.keep) {
+        AskAI.keep({ ask, items: [...items], tools });
+      }
       end.note = step.note || end.note;
       if (step.stop === "again") {
         continue;
@@ -346,12 +357,13 @@ export namespace Agent {
     return cost(write, async () => cost((await count()) ?? write, null));
   }
 
-  // one request, sent once its payer let it through (Bill), then single
-  // flight (AskAI.wait); then, if paid, read to the end of its stream
-  // whether the call stops or not, and billed: its response, if any, and
-  // step
+  // one request, writing its call's max tokens at most (Ask.max; none:
+  // MAX), sent once its payer let it through (Bill), then single flight
+  // (AskAI.wait); then, if paid, read to the end of its stream whether the
+  // call stops or not, and billed: its response, if any, and step
   export async function request<S>(wire: Wire<S>, run: Run, key: string, make: (max: number) => unknown, cost: Cost, seen: Entry[]): Promise<{ res: Response | null; step: Step }> {
-    const grant = run.ask.bill ? await run.ask.bill(cost, MAX) : FREE;
+    const cap = Math.min(MAX, run.ask.max ?? MAX);
+    const grant = run.ask.bill ? await run.ask.bill(cost, cap) : { ...FREE, max: cap };
     if (typeof grant === "string") {
       return { res: null, step: Agent.fail(grant, []) };
     }

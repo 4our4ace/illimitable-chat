@@ -65,7 +65,8 @@ export type Todo = { text: string; status: "pending" | "active" | "done" };
 
 // agents: those at work; agent: the main agent (null: Illi's own);
 // vendors and models: those offered; use: what its calls use; todo:
-// Illi's to-do list
+// Illi's to-do list; suggest: the user's likely next message, asked as
+// the last turn ended (Chat.suggest; "": none)
 export type State = {
   busy    : boolean;
   wait    : Wait;
@@ -76,6 +77,7 @@ export type State = {
   models  : string[];
   use     : Use;
   todo    : Todo[];
+  suggest : string;
 };
 
 // fold: the tops shown (null: not folded); nodes and whole: the summaries
@@ -282,6 +284,7 @@ export function view_new(): View {
     models    : LABELS,
     use       : { tokens: null, limits: [] },
     todo      : [],
+    suggest   : "",
     parts     : [],
     turn      : Infinity,
     fold      : null,

@@ -10,7 +10,9 @@
 // takes it between tool calls if it goes whole beside its view, else the
 // next call does, on the chat's pick (Pick.ts), as its main agent (a
 // primary agent of the user's, Custom.ts: Shift+Tab, /agent; none: Illi's own). A quit cuts what runs;
-// the next start resumes it (Chat.resume), told so.
+// the next start resumes it (Chat.resume), told so. A turn that ends
+// answered asks for the user's likely next message, on the cache
+// (Chat.suggest), shown till a message or the next turn.
 
 import * as fs from "node:fs";
 import * as net from "node:net";
@@ -40,6 +42,12 @@ type Eye = { parts: Part[]; from: number };
 // a goal check (Chat.check): its call, the goal it asks of
 type Check = { call: Call; goal: string };
 
+// a suggested reply (Chat.suggest): whether one is asked (a screen shows
+// it: Term.ts, config.SUGGEST), whether the turn's last call was answered
+// (one is asked as the turn ends), the one shown ("": none), its call
+// running, how many in a row went unused
+type Suggest = { on: boolean; due: boolean; text: string; call: Call | null; unused: number };
+
 // a chat: posts: acts being taken, its start till what it resumed runs,
 // and the command after a turn; model: what the turn's call runs on, as
 // picked when it began (a /model since picks the next call's); asked: a
@@ -49,7 +57,8 @@ type Check = { call: Call; goal: string };
 // held: the posts logging, one after another, and the logging held
 // meanwhile (null: none); switched: a main agent switch not noted in the
 // chat yet, was: the agent and pick noted before it; picks: what each
-// main agent ran on when left, if not its own (by name, "": Illi's)
+// main agent ran on when left, if not its own (by name, "": Illi's);
+// suggest: the suggested reply
 export type Chat = {
   mem   : Memory;
   tools : Tools;
@@ -75,6 +84,7 @@ export type Chat = {
   switched: boolean;
   was   : { agent: string | null; pick: string } | null;
   picks : Map<string, Pick>;
+  suggest: Suggest;
 };
 
 // Constants
@@ -95,6 +105,16 @@ const GOAL_NO    = "The goal isn't satisfied yet: keep working.";
 // call summarizes it
 const HELLO      = "Hi, I'm Illi, short for Illimitable: one chat that never ends, kept in a memory tree, recent days in more detail. I work in the folder you start illi in. Ask me anything, for days, weeks, years; /help lists the commands.";
 const HELLO_LINE = "illi: hello: Illi (Illimitable), one endless chat in a memory tree; works in the folder illi starts in; /help for commands.";
+
+// a suggested reply (Chat.suggest): what the model is asked after the
+// turn's last request and its answer; the most tokens it writes, its
+// thinking's too (a line is some 20; gpt-6-luna at high effort thought
+// 30 to 120 more); how many in a row going unused stop them till illi
+// starts again; twice the words it's asked for, past which one is none
+const SUGGEST     = "Suggest the user's next message to Illi: what they'd most likely type next, in their own voice, at most 12 words. If there's no clear next step, answer with nothing. Output only the message.";
+const SUGGEST_MAX = 256;
+const UNUSED      = 5;
+const WORDS       = 24;
 
 // Globals
 // =======
@@ -163,6 +183,7 @@ export namespace Chat {
       mem, tools, pick, socks: new Set(), busy: false, posts: 1, call: null, model: "", check: null, asked: false, open: 0, sent: [], wait: [],
       halt: new AbortController(), live: [], calls: {}, eye: { parts: [], from: 0 }, after: Promise.resolve(), ending: null,
       writes: Promise.resolve(), held: null, switched: false, was: null, picks: new Map(),
+      suggest: { on: false, due: false, text: "", call: null, unused: 0 },
     };
     // a saved pick not offered gave way: told once
     const saved = mem.pick === null ? null : Pick.label(mem.pick as Pick);
@@ -217,6 +238,7 @@ export namespace Chat {
   // the next start resumes it
   export function close(chat: Chat): void {
     Chat.stop(chat, null);
+    Chat.unsuggest(chat);
     Memory.stop(chat.mem);
   }
 
@@ -234,6 +256,7 @@ export namespace Chat {
       at += size;
     }
     const text = body.subarray(at).toString("utf8");
+    Chat.used(chat, text);
     await Chat.writing(chat, async () => Chat.take(chat, Chat.push(chat, null, "user", text, images, false, id)));
     return {};
   }
@@ -280,14 +303,18 @@ export namespace Chat {
     }
   }
 
+  // a turn: its calls, one after another while messages wait; one that
+  // ends answered asks for a suggested reply
   export async function turn(chat: Chat): Promise<void> {
     chat.busy = true;
+    Chat.unsuggest(chat);
     try {
       let go = true;
       while (go && chat.wait.length > 0) {
         go = await Chat.call(chat);
       }
     } catch (err: any) {
+      chat.suggest.due = false;
       Chat.failed(chat, String(err?.message ?? err));
     } finally {
       const why: string | null = chat.halt.signal.aborted ? chat.halt.signal.reason : null;
@@ -301,6 +328,9 @@ export namespace Chat {
       Chat.live(chat, null, []);
       Chat.after(chat);
       Chat.change(chat);
+      if (why === null && chat.suggest.due) {
+        Chat.suggest(chat);
+      }
     }
   }
 
@@ -320,6 +350,7 @@ export namespace Chat {
   export async function call(chat: Chat): Promise<boolean> {
     const mem = chat.mem;
     const halt = (chat.halt = new AbortController());
+    chat.suggest.due = false;
     Chat.change(chat);
     let from = -1;
     while (from !== Chat.from(chat)) {
@@ -342,7 +373,7 @@ export namespace Chat {
     chat.socks.forEach((sock) => Chat.show(chat, sock));
     const bill = mem.pay?.("chat", String(msgs[0].id));
     const blocks = [...view, Tools.here(chat.tools), Tools.at_work(chat.tools), { text: HEAD + text, mark: true }];
-    const ask = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server, blocks, imgs, bill };
+    const ask = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server, blocks, imgs, bill, keep: true };
     chat.model = chat.pick.model;
     chat.asked = true;
     chat.open = 0;
@@ -358,6 +389,7 @@ export namespace Chat {
     Chat.unanswered(chat, null);
     Chat.live(chat, null, []);
     chat.wait.unshift(...chat.sent.slice(chat.sent.length - end.left.length));
+    chat.suggest.due = end.ok && !halt.signal.aborted;
     if (!end.ok && !halt.signal.aborted) {
       Chat.failed(chat, end.text);
     }
@@ -405,6 +437,53 @@ export namespace Chat {
       await Chat.writing(chat, async () => Chat.take(chat, Chat.push(chat, null, "user", GOAL_NO)));
     }
     return !halt.signal.aborted;
+  }
+
+  // the user's likely next message, asked as a turn ends answered (not
+  // from a pipe, nor once UNUSED in a row went unused): after the turn's
+  // last request and its answer (AskAI.last), SUGGEST, on what it ran on,
+  // with its system prompt and tools, so all before SUGGEST is read from
+  // the cache. Its line is shown till a message or the next turn; a tool
+  // call, a failure or nothing back shows none. Paid as the chat's calls
+  export function suggest(chat: Chat): void {
+    const s = chat.suggest;
+    const last = AskAI.last(Tools.at(chat.tools, "main"));
+    if (!s.on || s.unused >= UNUSED || last === null) {
+      return;
+    }
+    const blocks = [{ text: SUGGEST, mark: false }];
+    const ask = { ...last.ask, blocks, imgs: [], server: "", keep: false, from: last, max: SUGGEST_MAX, bill: chat.mem.pay?.("chat", "suggest") };
+    const call = (s.call = AskAI.ask(ask, () => {}));
+    call.done.then((end) => {
+      if (s.call === call) {
+        s.call = null;
+        s.text = end.ok ? Chat.line(end.text) : "";
+        Chat.change(chat);
+      }
+    });
+  }
+
+  // a suggested reply as shown: its first line, out of any quotes round
+  // it; none if it says nothing (or "nothing"), or runs past WORDS words
+  export function line(text: string): string {
+    const line = text.trim().split("\n")[0].trim().replace(/^["“'‘](.*)["”'’]$/, "$1").trim();
+    return /^\W*nothing\W*$/i.test(line) || line.split(/\s+/).length > WORDS ? "" : line;
+  }
+
+  // the suggested reply goes, and the one being asked (a turn begins)
+  export function unsuggest(chat: Chat): void {
+    chat.suggest.call?.stop();
+    chat.suggest.call = null;
+    chat.suggest.text = "";
+  }
+
+  // a message sent while a suggested reply shows: it used it (it starts
+  // with it), so the count of those unused starts anew; else one more
+  export function used(chat: Chat, text: string): void {
+    const s = chat.suggest;
+    if (s.text !== "") {
+      s.unused = text.trim().startsWith(s.text) ? 0 : s.unused + 1;
+    }
   }
 
   // a failed turn's why, as a note
@@ -637,7 +716,7 @@ export namespace Chat {
     const agents = Tools.working(chat.tools).map((a) => a.name);
     const tools  = Tools.state(chat.tools);
     const fill   = { used: Math.round(Memory.fill(chat.mem) / 4), cap: Chat.cap(chat), window: Pick.window(chat.pick) ?? config.GUESS };
-    return { $: "state", busy: chat.busy, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, ...tools, use: { ...tools.use, fill } };
+    return { $: "state", busy: chat.busy, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, ...tools, use: { ...tools.use, fill }, suggest: chat.suggest.text };
   }
 
   export function waits(chat: Chat): Wait {
