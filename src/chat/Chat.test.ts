@@ -26,7 +26,7 @@ const View = await import("../ui/View.ts");
 // the model: answers `reply` to a call that sees the user's message, after
 // `hold` resolves
 let hold: Promise<void> = Promise.resolve();
-AskAI.ask = (ask, on) => {
+AskAI.ask = (_, on) => {
   const [call, feed] = AskAI.tie(on, () => {}, () => {});
   hold.then(() => {
     feed.on({ $: "Entry", kind: "illi", text: "hello back" });

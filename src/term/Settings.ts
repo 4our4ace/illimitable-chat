@@ -68,7 +68,8 @@ export function term_set(t: Term, arg: string): void {
     return term_note(t, "No setting " + word + ". The settings: " + KEYS.join(", ") + "; /settings lists them.");
   }
   if (text === "") {
-    const { what, def } = config.SETTINGS[key];
+    const { what } = config.SETTINGS[key];
+    const def      = config.config_default(key);
     return term_note(t, key + ": " + setting_shown(key) + ". " + what[0].toUpperCase() + what.slice(1) + ". /set " + key + " <value> changes it; /set " + key + " default puts back " + (def === "" ? "none" : def) + ".");
   }
   let value: unknown = text === "default" ? null : text;
