@@ -209,9 +209,9 @@ function ink_ansi(was: Ink | null, s: Ink): string {
 }
 
 // a palette color as the SGR that sets it (at 38: the text, 48: the
-// fill; "": none), its basic code (30-37/90-97 or 40-47/100-107); a
-// #rrggbb as true color
-function color_sgr(at: number, c: string): string {
+// fill; "": none), its basic code (30-37/90-97 or 40-47/100-107), past 15
+// the 256 colors' (38;5;n); a #rrggbb as true color; any other none
+export function color_sgr(at: number, c: string): string {
   if (c === "") {
     return "";
   }
@@ -219,7 +219,10 @@ function color_sgr(at: number, c: string): string {
     return ";" + at + ";2;" + [1, 3, 5].map((k) => parseInt(c.slice(k, k + 2), 16)).join(";");
   }
   const i = Number(c);
-  return ";" + (at - 8 + (i < 8 ? i : 60 + i - 8));
+  if (!Number.isInteger(i) || i < 0 || i > 255) {
+    return "";
+  }
+  return i < 16 ? ";" + (at - 8 + (i < 8 ? i : 60 + i - 8)) : ";" + at + ";5;" + i;
 }
 
 // lines on a fill iw columns wide inside, a column of it each side, a
@@ -458,12 +461,13 @@ function item_lines(spans: Md.Span[], mark: string, w: number, ink: Ink): Line[]
   return rows.map((l, k) => [Run(k === 0 ? mark : " ".repeat(mw), ink), ...l]);
 }
 
-// code: its label (a key, a language) over its lines, on a fill (a
-// message's) or in a frame (a call's, already on a fill)
+// code: its label (a key, a language: cleaned, cut at the width) over
+// its lines, on a fill (a message's) or in a frame (a call's, already on
+// a fill)
 function code_lines(label: string, text: string, w: number, ink: Ink, fill: boolean): Line[] {
   const code = { ...INK, d: ink.d };
   const iw   = fill ? w - 2 : w - 4;
-  const head = label === "" ? [] : [[Run(label, { ...ink, d: true })]];
+  const head = label === "" ? [] : [runs_wrap([Run(text_clean(label), { ...ink, d: true })], Math.max(1, w), true)[0]];
   const rows = (fill ? Draw.draw_code(label, text) : null) ?? text.split("\n").map((x) => [{ text: x, kind: "" }]);
   const body = rows.flatMap((l) => runs_wrap(l.map((t) => Run(text_clean(t.text), token_ink(t.kind, code))), iw, true));
   return [...head, ...(fill ? fill_lines(body, iw) : frame_lines(body, iw, code, []))];

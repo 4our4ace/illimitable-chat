@@ -336,6 +336,15 @@ test("a word of several runs (code, bold) is kept whole at a wrap", () => {
   expect(text(Paint.runs_wrap([Paint.Run("a xxxxxxxxxxxxxxxxx yy")], 8, false))).toEqual(["a xxxxxx", "xxxxxxxx", "xxx yy"]);
 });
 
+test("a code block's label is cleaned and cut at the width, a reply's and a call's", () => {
+  const reply = Reply.reply_lines("```ab\x1b]52;c;eA==\x07" + "x".repeat(40) + "\ncode\n```", 20);
+  const call  = Paint.rows_lines(View.entry_rows(1, "tool", 'run {"\\u001b]52;c;eA==\\u0007' + "k".repeat(40) + '": "a b c d e f g h i j k l m n o p q r s t u v w x y z a b c", "b": 1}'), 20);
+  for (const lines of [reply, call]) {
+    expect(lines.flat().some((r) => /[\x00-\x1f]/.test(r.x))).toBe(false);
+    expect(Math.max(...lines.map(Paint.line_width))).toBeLessThanOrEqual(20);
+  }
+});
+
 test("a frame never passes its width, however long its title", () => {
   const diff = "--- a/" + "dir/".repeat(30) + "f.ts\n+++ b/" + "dir/".repeat(30) + "f.ts\n@@ -1,1 +1,1 @@\n-x\n+y";
   const rows = View.entry_rows(1, "echo", diff);
