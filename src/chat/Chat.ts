@@ -51,7 +51,8 @@ type Suggest = { on: boolean; due: boolean; text: string; call: Call | null; unu
 // a chat: model: what the turn's call runs on, as picked when it began
 // (a /model since picks the next call's); asked: a request out, nothing
 // back; open: tool calls without results; sent, wait: messages given and
-// waiting; after: the commands run after turns (config.AFTER); writes,
+// waiting; next: those sent as a stopped turn winds down, a new turn's;
+// after: the commands run after turns (config.AFTER); writes,
 // held: the posts logging, one after another, and the logging held
 // meanwhile (null: none); switched: a main agent switch not noted in the
 // chat yet, was: the agent and pick noted before it; picks: what each
@@ -69,6 +70,7 @@ export type Chat = {
   open  : number;
   sent  : Msg[];
   wait  : Msg[];
+  next  : Msg[];
   halt  : AbortController;
   live  : Live[];
   calls : Record<string, string>; // its tool calls awaiting their results, by id (Chat.on)
@@ -183,7 +185,7 @@ export namespace Chat {
     }, cwd);
     const pick = Pick.load(mem.pick, config.OFFER, config.PICK);
     const chat: Chat = {
-      mem, tools, pick, socks: new Set(), busy: false, call: null, model: "", asked: false, open: 0, sent: [], wait: [],
+      mem, tools, pick, socks: new Set(), busy: false, call: null, model: "", asked: false, open: 0, sent: [], wait: [], next: [],
       halt: new AbortController(), live: [], calls: {}, eye: { parts: [], from: 0 }, after: Promise.resolve(),
       writes: Promise.resolve(), held: null, switched: false, was: null, picks: new Map(),
       suggest: { on: false, due: false, text: "", call: null, unused: 0 },
@@ -274,10 +276,15 @@ export namespace Chat {
 
   // a message logged: to the running call if it goes whole in what the
   // chat's model takes (Chat.cap: its pages, and a page alone, as the
-  // last always goes whole), else to the next
+  // last always goes whole), else to the next; while a stopped turn
+  // winds down, to a new turn after it
   export function take(chat: Chat, msg: Msg): void {
     const mem  = chat.mem;
     const high = Chat.cap(chat) * 4;
+    if (chat.busy && chat.halt.signal.aborted) {
+      chat.next.push(msg);
+      return;
+    }
     if (chat.call !== null && Memory.whole(mem, msg.id, high) === msg.id && Memory.message(mem, msg.id)!.size <= high) {
       chat.sent.push(msg);
       chat.call.send(Memory.say(mem, msg.id, msg.end));
@@ -290,7 +297,8 @@ export namespace Chat {
   }
 
   // a turn: its calls, one after another while messages wait; one that
-  // ends answered asks for a suggested reply
+  // ends answered asks for a suggested reply. The messages sent as a
+  // stopped one wound down start a new one
   export async function turn(chat: Chat): Promise<void> {
     chat.busy = true;
     Chat.unsuggest(chat);
@@ -309,12 +317,14 @@ export namespace Chat {
       }
       chat.call = null;
       chat.sent = [];
-      chat.wait = [];
+      chat.wait = chat.next.splice(0);
       chat.busy = false;
       Chat.live(chat, null, []);
       Chat.after(chat);
       Chat.change(chat);
-      if (why === null && chat.suggest.due) {
+      if (chat.wait.length > 0) {
+        void Chat.turn(chat);
+      } else if (why === null && chat.suggest.due) {
         Chat.suggest(chat);
       }
     }
