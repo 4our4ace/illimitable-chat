@@ -12,7 +12,9 @@ Install
     curl -fsSL https://raw.githubusercontent.com/4our4ace/illimitable-chat/main/install.sh | bash
 
 Then run `illi` in any project folder. `illi upgrade` updates it. Linux
-and macOS; on Windows, use WSL.
+and macOS; on Windows, use WSL. The installer checks the release against
+its SHA256SUMS; with no release for your system (or `ILLI_SOURCE=1`) it
+builds from the source.
 
 From source, with [Bun](https://bun.sh):
 
@@ -96,16 +98,27 @@ Profiles
 
 Separate chats and settings, e.g. work and home: `/profile new work`,
 `/profile work`, `/profile export`, `/profile import <file>`. Profiles
-share the login, the API keys and the default's config.json. Exports
-leave out the login and secrets; imports are treated as untrusted.
+share the login, the API keys and the default's config.json.
+
+An export leaves out the login (and a login file its config names inside
+the profile's folder), the lock and the log, and strips config.json and
+mcp.json of secrets (by key name, or shaped like a known key or token).
+The rest of the folder goes as it is: the chat, agents, commands,
+skills, theme.json and any rules file there. An import is treated as
+untrusted: its config's `after`, `rules`, `login`, `mcp` and `theme` are
+dropped and its MCP servers turned off, but its agents, commands, skills
+and chat come in as they are, at work once you switch to it.
 
 Config
 ------
 
 `~/.illi/config.json`, or `ILLI_<KEY>` variables. All optional.
 `/settings` changes them from inside Illi (`/set <key> <value>` too);
-most apply at once, `vendors`, `models`, `jobs` and the files at the next
-start. A key set by a variable stays as the variable says.
+most apply at once; `vendors`, `models`, `jobs`, `theme`,
+`mcp` and `login` at the next start. A key set by a variable stays as the
+variable says. A relative path is taken from the folder of the
+config.json that names it (a variable's: the working folder). A value
+that won't do stops illi at the start, saying which.
 
 | Key          | Default                           | What                                             |
 | ------------ | --------------------------------- | ------------------------------------------------ |
@@ -121,7 +134,8 @@ start. A key set by a variable stays as the variable says.
 | `side`       | `right`                           | side panel: `left`, `off`; `side_width` `25%`    |
 | `suggest`    | `on`                              | a suggested reply after each turn; `off`         |
 | `jobs`       | `8`                               | summaries built at once                          |
-| `login`, `theme`, `mcp` | in `~/.illi/`          | other file locations                             |
+| `theme`, `mcp` | the profile's folder            | the theme's and the MCP servers' files           |
+| `login`      | `~/.illi/login.json`, opencode's  | the ChatGPT login file, which `/login` writes    |
 
 API keys come from `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`. The chat is
 in `~/.illi/chat`, every message kept; days over a month old are gzipped.

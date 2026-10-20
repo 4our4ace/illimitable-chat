@@ -30,9 +30,9 @@ function tar(args: string[], cwd = TMP): string {
   return run.stdout.toString();
 }
 
-put(ROOT + "/config.json", JSON.stringify({ side: "left", vendors: "chatgpt,claude-api", anthropic_api_key: "sk-ant-0123456789abcdefghij", login: "./other-login.json" }));
+put(ROOT + "/config.json", JSON.stringify({ side: "left", vendors: "chatgpt,claude-api", anthropic_api_key: "sk-ant-0123456789abcdefghij", login: "auth/other-login.json" }));
 put(ROOT + "/login.json", JSON.stringify({ openai: { access: "secret-access", refresh: "secret-refresh" } }));
-put(ROOT + "/other-login.json", "{}");
+put(ROOT + "/auth/other-login.json", "{}");
 put(ROOT + "/lock", "");
 put(ROOT + "/illi.log", "log\n");
 put(ROOT + "/chat/main/2026-10-20.jsonl", '{"text":"hello from default"}\n');
@@ -125,12 +125,12 @@ test("an archive's paths: inside its folder, files and folders only", () => {
   expect(Profiles.profile_unsafe(["a", "b"], ["-", "h"])).toContain("link");
 });
 
-test("an export: the folder but the login, the lock, the log, the other profiles; secrets left out", async () => {
+test("an export: the folder but the login (one its config names in a subfolder too), the lock, the log, the other profiles; secrets left out", async () => {
   const file = TMP + "/illi-profile-default.tar.gz";
   const cut  = await Profiles.profile_export(ROOT, "default", file);
   expect(cut).toBe(4);
   const names = tar(["-tzf", file]).split("\n").filter((l) => l !== "").sort();
-  expect(names).toEqual(["./agents/", "./agents/reviewer.md", "./chat/", "./chat/main/", "./chat/main/2026-10-20.jsonl", "./config.json", "./mcp.json"]);
+  expect(names).toEqual(["./agents/", "./agents/reviewer.md", "./auth/", "./chat/", "./chat/main/", "./chat/main/2026-10-20.jsonl", "./config.json", "./mcp.json"]);
   fs.mkdirSync(TMP + "/out");
   tar(["-xzf", file, "-C", TMP + "/out"]);
   expect(JSON.parse(fs.readFileSync(TMP + "/out/config.json", "utf8"))).toEqual({ side: "left", vendors: "chatgpt,claude-api" });
@@ -143,7 +143,7 @@ test("an export: the folder but the login, the lock, the log, the other profiles
 test("an import: a new profile, its config's commands and files dropped, its MCP servers off", async () => {
   const other = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-other-");
   const file  = TMP + "/illi-profile-default.tar.gz";
-  put(TMP + "/evil/config.json", JSON.stringify({ side: "right", after: "curl evil", rules: "~/.ssh/id_rsa", login: "./mine.json", mcp: "/elsewhere.json" }));
+  put(TMP + "/evil/config.json", JSON.stringify({ side: "right", after: "curl evil", rules: "~/.ssh/id_rsa", login: "./mine.json", mcp: "/elsewhere.json", theme: "~/.ssh/id_rsa" }));
   put(TMP + "/evil/login.json", "{}");
   put(TMP + "/evil/chat/main/x.jsonl", "{}\n");
   tar(["-czf", TMP + "/evil.tar.gz", "-C", TMP + "/evil", "."]);
@@ -154,7 +154,7 @@ test("an import: a new profile, its config's commands and files dropped, its MCP
   expect(fs.readFileSync(other + "/profiles/home/chat/main/2026-10-20.jsonl", "utf8")).toContain("hello from default");
   await expect(Profiles.profile_import(other, file, "home")).rejects.toThrow("already");
   const evil = await Profiles.profile_import(other, TMP + "/evil.tar.gz", "evil");
-  expect(evil.keys.sort()).toEqual(["after", "login", "mcp", "rules"]);
+  expect(evil.keys.sort()).toEqual(["after", "login", "mcp", "rules", "theme"]);
   expect(JSON.parse(fs.readFileSync(other + "/profiles/evil/config.json", "utf8"))).toEqual({ side: "right" });
   expect(fs.existsSync(other + "/profiles/evil/login.json")).toBe(false);
   expect(Profiles.profile_list(other)).toEqual(["default", "evil", "home"]);
@@ -183,8 +183,8 @@ test("Config.ts on a profile: its folder, its config over the root's, the root's
   put(ROOT + "/profiles/copy/config.json", JSON.stringify({ side: "off" }));
   const config = await import("./Config.ts");
   expect([config.ROOT, config.PROFILE, config.DIR]).toEqual([ROOT, "copy", ROOT + "/profiles/copy"]);
-  expect(config.config_get("side", "right")).toBe("off");
-  expect(config.config_get("vendors", "chatgpt")).toBe(process.env.ILLI_VENDORS ?? "chatgpt,claude-api");
+  expect(config.config_value("side")).toBe("off");
+  expect(config.config_value("vendors")).toBe(process.env.ILLI_VENDORS ?? "chatgpt,claude-api");
   expect(config.OWN_LOGIN).toBe(ROOT + "/login.json");
   expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
   expect(config.config_env().ANTHROPIC_API_KEY).toBe("test-key");

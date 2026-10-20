@@ -153,10 +153,6 @@ export namespace Custom {
     });
   }
 
-  export function command(cwd: string, name: string): Command | null {
-    return Custom.commands(cwd).find((c) => c.name === name) ?? null;
-  }
-
   // a command's message, given the words after its name
   export function expand(cmd: Command, args: string): string {
     return cmd.body.includes("$ARGUMENTS") ? cmd.body.replaceAll("$ARGUMENTS", args) : (cmd.body + (args === "" ? "" : "\n\n" + args));
