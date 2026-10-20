@@ -16,8 +16,7 @@ Each message has a kind:
 - tool: Illi's tool calls
 - echo: tool results
 - work: an agent's report, starting "[Name]"
-- ai: another AI's replies and tool calls, from an imported chat; not yours
-- note: memories from before this chat
+- note: Illi's own notices (a stop, a goal met, a new session, a restart)
 
 The summaries form a binary tree: each message is compressed into a line (a
 short message is its own line), then adjacent lines are merged in pairs, again

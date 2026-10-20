@@ -23,7 +23,7 @@
 
 import * as fs from "node:fs";
 import * as os from "node:os";
-import { AskAI, type Ask, type Bill, type Block, type Call, type Event, type Kind, type Pay } from "../ai/AskAI.ts";
+import { AskAI, type Ask, type Block, type Call, type Event, type Kind } from "../ai/AskAI.ts";
 import type { Out } from "../ai/Agent.ts";
 import { report_text } from "../ui/Call.ts";
 import { ChatGPT } from "../ai/ChatGPT.ts";
@@ -32,7 +32,7 @@ import * as config from "../config/Config.ts";
 import { Custom, type Skill } from "../config/Custom.ts";
 import { INT, STR, TOOLS, Machine, spec, type Spec } from "./Machine.ts";
 import { Mcp } from "./Mcp.ts";
-import { Memory } from "../chat/Memory.ts";
+import { MAIN, Memory } from "../chat/Memory.ts";
 import PROMPT from "./prompt.txt" with { type: "text" };
 import { EFFORTS, Pick } from "../ai/Pick.ts";
 import type { Live, State, Todo } from "../ui/View.ts";
@@ -72,8 +72,8 @@ type Hooks = {
   main   : () => string | null;
 };
 
-// the tools: their secret and URL, the working dir, what pays the calls
-// (none: free), the master's to-do list (none: not read yet)
+// the tools: their secret and URL, the working dir, the master's to-do
+// list (none: not read yet)
 export type Tools = {
   mem    : Memory;
   agents : Map<string, Agent>;
@@ -81,7 +81,6 @@ export type Tools = {
   url    : string;
   cwd    : string;
   hooks  : Hooks;
-  pay?   : Pay;
   todo?  : Todo[];
 };
 
@@ -119,8 +118,8 @@ const VIEW_DOC = `The view: the whole chat between Illi and the user, oldest fir
 
 A summary tags each item with its kind: user (the user's words), illi
 (Illi's replies), tool (Illi's tool calls), echo (their results), note
-(memories from before this chat), or work (the report of an agent,
-starting "[Name]"). A short message is its own line, word for word. Recent lines
+(Illi's own notices: a stop, a goal met, a new session, a restart), or
+work (the report of an agent, starting "[Name]"). A short message is its own line, word for word. Recent lines
 cover one message each; the older the messages, the more a line covers.
 A message not summarized yet shows as "(not summarized yet: zoom it)".
 No message appears in full, not even the last ones. A text too long for
@@ -208,11 +207,6 @@ export namespace Tools {
     return "http://127.0.0.1:" + HTTP.port + "/";
   }
 
-  export function close(tools: Tools): void {
-    Tools.stop(tools, null);
-    CHATS.delete(tools.key);
-  }
-
   export function at(tools: Tools, who: string): string {
     return tools.url + who;
   }
@@ -259,7 +253,7 @@ export namespace Tools {
   export async function fetch(req: Request): Promise<Response> {
     const [, key, who, ...rest] = new URL(req.url).pathname.split("/");
     const tools = CHATS.get(key);
-    const caller = who === "main" || tools?.agents.has(who);
+    const caller = who === MAIN || tools?.agents.has(who);
     const msg = await req.json().catch(() => ({}));
     if (tools === undefined || rest.length > 0 || !caller) {
       return new Response(null, { status: 404 });
@@ -306,7 +300,7 @@ export namespace Tools {
   // a caller's tools, as its agent allows
   export function list(tools: Tools, who: string): Spec[] {
     const user = [...skill_tools(tools.cwd), ...Mcp.tools()];
-    if (who === "main") {
+    if (who === MAIN) {
       return Custom.allow(Custom.agent(tools.cwd, tools.hooks.main()), [...OWN, ...boss(tools.cwd), ...TOOLS, ...user]);
     }
     return Custom.allow(Custom.agent(tools.cwd, tools.agents.get(who)?.role.agent ?? null), [...OWN, ...TOOLS, ...user]);
@@ -409,8 +403,11 @@ export namespace Tools {
     return name;
   }
 
-  // one not loaded is taken back from its log, idle
+  // one not loaded is taken back from its log, idle; none is MAIN
   export function agent(tools: Tools, name: string): Agent | null {
+    if (name === MAIN) {
+      return null;
+    }
     const log = tools.agents.has(name) ? null : Memory.agent(tools.mem, name);
     const note = log !== null && log.length > 0 && log[0].kind === "note" ? log[0].text : "";
     const sub = SUB_RE.exec(note);
@@ -441,11 +438,6 @@ export namespace Tools {
     tools.hooks.report(agent, report_text(agent.name, agent.log ?? agent.name, agent.replies.join("\n\n")), agent.stop);
   }
 
-  // what pays an agent's calls
-  export function bill(tools: Tools, agent: Agent): Bill | undefined {
-    return tools.pay?.("agent", agent.name);
-  }
-
   // a call of an agent: on its user's agent's model, else config.AGENTS,
   // else the chat's pick (an agent's model not offered gives way to them)
   export function ask(tools: Tools, agent: Agent): Ask {
@@ -458,7 +450,7 @@ export namespace Tools {
     const system = Tools.system(SUB + Custom.section(profile));
     const blocks = [...agent.view, Tools.here(tools), log];
     const effort = agent.role.effort ?? run.effort;
-    return { ...run, effort, system, blocks, searches: SEARCHES, server, bill: Tools.bill(tools, agent) };
+    return { ...run, effort, system, blocks, searches: SEARCHES, server };
   }
 
   // a string: why there is none (Memory.settle)

@@ -3,8 +3,8 @@
 // The agent: one chat that never ends (Memory.ts), at config.DIR/chat, run
 // in this process, and its views (View.ts), each fed by an in-process pipe
 // shaped as the socket a remote view would use (Chat.link): the chat's
-// events one way, the person's acts the other, each act done once
-// (Chat.apply). One process at a time holds the chat (Chat.lock).
+// events one way, the person's acts the other (Chat.apply), each
+// answered once what it logged is on disk. One process at a time holds the chat (Chat.lock).
 //
 // One turn at a time. A message is logged as it arrives; the running call
 // takes it between tool calls if it goes whole beside its view, else the
@@ -16,7 +16,7 @@
 
 import * as fs from "node:fs";
 import * as net from "node:net";
-import { AskAI, type Call, type Event, type Kind } from "../ai/AskAI.ts";
+import { AskAI, type Call, type Event, type Kind, type Say } from "../ai/AskAI.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
 import { Memory, type Share } from "./Memory.ts";
@@ -48,12 +48,11 @@ type Check = { call: Call; goal: string };
 // running, how many in a row went unused
 type Suggest = { on: boolean; due: boolean; text: string; call: Call | null; unused: number };
 
-// a chat: posts: acts being taken, its start till what it resumed runs,
-// and the command after a turn; model: what the turn's call runs on, as
-// picked when it began (a /model since picks the next call's); asked: a
-// request out, nothing back; open: tool calls without results; check: the
-// turn's goal check running (Chat.check); sent, wait: messages given and
-// waiting; ending: what to do once at rest (all: nothing runs); writes,
+// a chat: model: what the turn's call runs on, as picked when it began
+// (a /model since picks the next call's); asked: a request out, nothing
+// back; open: tool calls without results; sent, wait: messages given and
+// waiting; next: those sent as a stopped turn winds down, a new turn's;
+// after: the commands run after turns (config.AFTER); writes,
 // held: the posts logging, one after another, and the logging held
 // meanwhile (null: none); switched: a main agent switch not noted in the
 // chat yet, was: the agent and pick noted before it; picks: what each
@@ -65,20 +64,18 @@ export type Chat = {
   pick  : Pick;
   socks : Set<Sock>;
   busy  : boolean;
-  posts : number;
   call  : Call | null;
   model : string;
-  check : Check | null;
   asked : boolean;
   open  : number;
   sent  : Msg[];
   wait  : Msg[];
+  next  : Msg[];
   halt  : AbortController;
   live  : Live[];
   calls : Record<string, string>; // its tool calls awaiting their results, by id (Chat.on)
   eye   : Eye;
   after : Promise<void>;
-  ending: { all: boolean; then: () => void } | null;
   writes: Promise<unknown>;
   held  : Array<() => void> | null;
   switched: boolean;
@@ -188,8 +185,8 @@ export namespace Chat {
     }, cwd);
     const pick = Pick.load(mem.pick, config.OFFER, config.PICK);
     const chat: Chat = {
-      mem, tools, pick, socks: new Set(), busy: false, posts: 1, call: null, model: "", check: null, asked: false, open: 0, sent: [], wait: [],
-      halt: new AbortController(), live: [], calls: {}, eye: { parts: [], from: 0 }, after: Promise.resolve(), ending: null,
+      mem, tools, pick, socks: new Set(), busy: false, call: null, model: "", asked: false, open: 0, sent: [], wait: [], next: [],
+      halt: new AbortController(), live: [], calls: {}, eye: { parts: [], from: 0 }, after: Promise.resolve(),
       writes: Promise.resolve(), held: null, switched: false, was: null, picks: new Map(),
       suggest: { on: false, due: false, text: "", call: null, unused: 0 },
     };
@@ -205,13 +202,9 @@ export namespace Chat {
     }
     chat.eye = Chat.eye(mem, Math.min(mem.show, Chat.from(chat)));
     mem.made = (l, i) => Chat.made(chat, l, i);
-    mem.wait.add(() => Chat.free(chat));
     const work = mem.work;
     Memory.pump(mem);
-    Chat.resume(chat, work).finally(() => {
-      chat.posts -= 1;
-      Chat.change(chat);
-    }).catch((err) => console.error("illi: resume: " + (err?.message ?? err)));
+    Chat.resume(chat, work).finally(() => Chat.change(chat)).catch((err) => console.error("illi: resume: " + (err?.message ?? err)));
     return chat;
   }
 
@@ -228,20 +221,6 @@ export namespace Chat {
     return Tools.system(MASTER + Custom.section(Custom.agent(chat.tools.cwd, chat.mem.agent)));
   }
 
-  // at rest (nothing runs): one ending does what it waited for
-  export function free(chat: Chat): void {
-    const ending = chat.ending;
-    if (ending !== null && chat.posts === 0 && (!ending.all || Chat.idle(chat))) {
-      chat.ending = null;
-      ending.then();
-    }
-  }
-
-  // no turn, post, agent or summary runs
-  export function idle(chat: Chat): boolean {
-    return !chat.busy && chat.posts === 0 && Tools.working(chat.tools).length === 0 && chat.mem.busy.size === 0;
-  }
-
   // stops all at once, as a quit does: what ran stays saved (mem.work), so
   // the next start resumes it
   export function close(chat: Chat): void {
@@ -252,7 +231,7 @@ export namespace Chat {
 
   // a message (its body: its images, sizes given, then its text), logged
   // and taken
-  export async function say(chat: Chat, id: string, sizes: number[], body: Buffer): Promise<Answer> {
+  export async function say(chat: Chat, sizes: number[], body: Buffer): Promise<Answer> {
     const images: string[] = [];
     let at = 0;
     for (const size of sizes) {
@@ -265,12 +244,12 @@ export namespace Chat {
     }
     const text = body.subarray(at).toString("utf8");
     Chat.used(chat, text);
-    await Chat.writing(chat, async () => Chat.take(chat, Chat.push(chat, null, "user", text, images, false, id)));
+    await Chat.writing(chat, async () => Chat.take(chat, Chat.push(chat, null, "user", text, images)));
     return {};
   }
 
   // a post's logging, after the chat's earlier ones, holding its other
-  // logging (Chat.hold) till it ends, so a long post's pages stay together
+  // logging (Chat.hold) till it ends
   export function writing<T>(chat: Chat, write: () => Promise<T>): Promise<T> {
     const run = chat.writes.then(async () => {
       chat.held = [];
@@ -279,7 +258,6 @@ export namespace Chat {
       } finally {
         const held = chat.held ?? [];
         chat.held = null;
-        chat.mem.open = 0;
         held.forEach((step) => step());
       }
     });
@@ -296,11 +274,18 @@ export namespace Chat {
     }
   }
 
-  // a message logged: to the running call if whole beside its view, else
-  // to the next
+  // a message logged: to the running call if it goes whole in what the
+  // chat's model takes (Chat.cap: its pages, and a page alone, as the
+  // last always goes whole), else to the next; while a stopped turn
+  // winds down, to a new turn after it
   export function take(chat: Chat, msg: Msg): void {
-    const mem = chat.mem;
-    if (chat.call !== null && Memory.whole(mem, msg.id) === msg.id) {
+    const mem  = chat.mem;
+    const high = Chat.cap(chat) * 4;
+    if (chat.busy && chat.halt.signal.aborted) {
+      chat.next.push(msg);
+      return;
+    }
+    if (chat.call !== null && Memory.whole(mem, msg.id, high) === msg.id && Memory.message(mem, msg.id)!.size <= high) {
       chat.sent.push(msg);
       chat.call.send(Memory.say(mem, msg.id, msg.end));
       return;
@@ -312,7 +297,8 @@ export namespace Chat {
   }
 
   // a turn: its calls, one after another while messages wait; one that
-  // ends answered asks for a suggested reply
+  // ends answered asks for a suggested reply. The messages sent as a
+  // stopped one wound down start a new one
   export async function turn(chat: Chat): Promise<void> {
     chat.busy = true;
     Chat.unsuggest(chat);
@@ -331,12 +317,14 @@ export namespace Chat {
       }
       chat.call = null;
       chat.sent = [];
-      chat.wait = [];
+      chat.wait = chat.next.splice(0);
       chat.busy = false;
       Chat.live(chat, null, []);
       Chat.after(chat);
       Chat.change(chat);
-      if (why === null && chat.suggest.due) {
+      if (chat.wait.length > 0) {
+        void Chat.turn(chat);
+      } else if (why === null && chat.suggest.due) {
         Chat.suggest(chat);
       }
     }
@@ -354,7 +342,9 @@ export namespace Chat {
     return config.config_context(chat.pick.model, Pick.window(chat.pick));
   }
 
-  // false: the turn ends
+  // false: the turn ends. Its new text: all logged from the first message
+  // waiting, each waiting one as sent, any other entry between (a stop's
+  // note, a stopped agent's report) tagged with its kind
   export async function call(chat: Chat): Promise<boolean> {
     const mem = chat.mem;
     const halt = (chat.halt = new AbortController());
@@ -372,16 +362,20 @@ export namespace Chat {
       }
     }
     const msgs = (chat.sent = chat.wait.splice(0));
-    const says = msgs.filter((m) => m.end > from).map((m) => Memory.say(mem, Math.max(m.id, from), m.end));
+    const says: Say[] = [];
+    for (let i = Math.max(msgs[0].id, from); i < mem.count; ) {
+      const msg = msgs.find((m) => i >= m.id && i < m.end);
+      says.push(msg === undefined ? { text: Memory.show(Memory.message(mem, i)!), imgs: [] } : Memory.say(mem, i, msg.end));
+      i = msg === undefined ? i + 1 : msg.end;
+    }
     const view = Memory.chat(mem, from, msgs[0].id);
     const text = says.map((say) => say.text).join("\n\n");
     const imgs = says.flatMap((say) => say.imgs);
     const server = Tools.at(chat.tools, "main");
     chat.eye = Chat.eye(mem, mem.show);
     chat.socks.forEach((sock) => Chat.show(chat, sock));
-    const bill = mem.pay?.("chat", String(msgs[0].id));
     const blocks = [...view, Tools.here(chat.tools), Tools.at_work(chat.tools), { text: HEAD + text, mark: true }];
-    const ask = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server, blocks, imgs, bill, keep: true };
+    const ask = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server, blocks, imgs, keep: true };
     chat.model = chat.pick.model;
     chat.asked = true;
     chat.open = 0;
@@ -412,29 +406,29 @@ export namespace Chat {
   }
 
   // the user's goal (/goal), asked of the chat's model, without tools, on
-  // the chat as it is now
+  // the chat as it is now, as much of it whole as a turn gets (Chat.from)
   export function check(chat: Chat, goal: string): Check {
     const mem  = chat.mem;
-    const at   = Memory.whole(mem, 0);
+    const at   = Chat.from(chat);
     const tail = Array.from({ length: mem.count - at }, (_, k) => at + k).map((i) => {
       const msg = Memory.message(mem, i)!;
       return Memory.line({ l: 0, i }, msg.kind + ": " + msg.text) + "\n";
     });
     const blocks = [...Memory.view(mem, at), { text: tail.join("") + GOAL_ASK + goal, mark: true }];
-    return { call: AskAI.ask({ ...Chat.share(chat), system: GOAL, blocks, bill: mem.pay?.("chat", "goal") }, () => {}), goal };
+    return { call: AskAI.ask({ ...Chat.share(chat), system: GOAL, blocks }, () => {}), goal };
   }
 
   // a goal check's answer, as the turn's call's is: unmet (any answer but
   // yes), the user's nudge goes to the turn as their message; met, the
-  // goal ends. A check that fails, a stop, a message or a /halt meanwhile
-  // end it with no nudge, so the turn ends; false: it ends
+  // goal ends; failed, noted, the goal kept. A stop or a /halt meanwhile
+  // end it with no nudge, so the turn ends; a message meanwhile drops its
+  // answer, the turn going on with that message. false: the turn ends
   export async function checked(chat: Chat, check: Check, halt: AbortController): Promise<boolean> {
-    const { call, goal } = (chat.check = check);
+    const { call, goal } = check;
     halt.signal.addEventListener("abort", () => call.stop(), { once: true });
     const end = await call.done;
     const mem = chat.mem;
     const on = !halt.signal.aborted && mem.goal === goal && chat.wait.length === 0;
-    chat.check = null;
     if (on && !end.ok) {
       Chat.note(chat, "No goal check: " + end.text.replace(/\.$/, "") + ". The goal stays; /halt drops it.");
     } else if (on && /^\W*yes\b/i.test(end.text)) {
@@ -452,7 +446,7 @@ export namespace Chat {
   // last request and its answer (AskAI.last), SUGGEST, on what it ran on,
   // with its system prompt and tools, so all before SUGGEST is read from
   // the cache. Its line is shown till a message or the next turn; a tool
-  // call, a failure or nothing back shows none. Paid as the chat's calls
+  // call, a failure or nothing back shows none
   export function suggest(chat: Chat): void {
     const s = chat.suggest;
     const last = AskAI.last(Tools.at(chat.tools, "main"));
@@ -460,7 +454,7 @@ export namespace Chat {
       return;
     }
     const blocks = [{ text: SUGGEST, mark: false }];
-    const ask = { ...last.ask, blocks, imgs: [], server: "", keep: false, from: last, max: SUGGEST_MAX, bill: chat.mem.pay?.("chat", "suggest") };
+    const ask = { ...last.ask, blocks, imgs: [], server: "", keep: false, from: last, max: SUGGEST_MAX };
     const call = (s.call = AskAI.ask(ask, () => {}));
     call.done.then((end) => {
       if (s.call === call) {
@@ -505,23 +499,23 @@ export namespace Chat {
   }
 
   // to the chat (in pages), or an agent's log; each told to every view. A
-  // main agent switch not noted yet is noted first, so the message after
-  // it carries it to the agent
-  export function push(chat: Chat, agent: Agent | null, kind: Kind, text: string, images: string[] = [], more = false, act?: string): Msg {
+  // main agent switch not noted yet is noted first, an entry of its own
+  // just before the message (the turn gets it among the recent ones)
+  export function push(chat: Chat, agent: Agent | null, kind: Kind, text: string, images: string[] = []): Msg {
     if (agent !== null) {
       const id = Memory.agent_push(chat.mem, agent.name, kind, text);
       Chat.all(chat, { $: "entry", agent: agent.name, id, kind, text });
       return { id, end: id + 1 };
     }
-    const note = chat.switched && chat.mem.open === 0 ? [{ kind: "note" as Kind, text: Chat.switch_note(chat) }] : [];
+    const note = chat.switched ? [{ kind: "note" as Kind, text: Chat.switch_note(chat) }] : [];
     if (note.length > 0) {
       [chat.switched, chat.was] = [false, null];
     }
-    const roots = Memory.push(chat.mem, [...note, { kind, text, images, more, act }]);
+    const roots = Memory.push(chat.mem, [...note, { kind, text, images }]);
     for (const { i, kind, text, date, images } of roots) {
       Chat.all(chat, { $: "entry", id: i, kind, text, date, images });
     }
-    return { id: roots[0].i, end: chat.mem.count };
+    return { id: roots[note.length].i, end: chat.mem.count };
   }
 
   // a message the call took was logged as it came
@@ -589,19 +583,15 @@ export namespace Chat {
     Chat.all(chat, { $: "live", agent: agent?.name, live });
   }
 
-  // an agent's report, once it ends: a turn of its own, unless stopped.
-  // It is taken as a post is, so the chat never rests between logging it
-  // and its turn
+  // an agent's report, once it ends: a turn of its own, unless stopped
   export function report(chat: Chat, agent: Agent, text: string, stopped: boolean): void {
     Chat.unanswered(chat, agent);
     Chat.live(chat, agent, []);
     Chat.hold(chat, () => {
-      chat.posts += 1;
       const msg = Chat.push(chat, null, "work", text);
       if (!stopped) {
         Chat.take(chat, msg);
       }
-      chat.posts -= 1;
       Chat.change(chat);
     });
   }
@@ -611,17 +601,13 @@ export namespace Chat {
     if (!config.AFTER) {
       return;
     }
-    chat.posts += 1;
     chat.after = chat.after.then(async () => {
       const proc = Bun.spawn(["/bin/sh", "-c", config.AFTER], { cwd: chat.tools.cwd, stdout: "ignore", stderr: "pipe" });
       const err = await new Response(proc.stderr).text();
       if ((await proc.exited) !== 0) {
         Chat.all(chat, { $: "note", text: "after: " + err.trim() });
       }
-    }).catch((err) => Chat.all(chat, { $: "note", text: "after: " + (err?.message ?? err) })).finally(() => {
-      chat.posts -= 1;
-      Chat.free(chat);
-    });
+    }).catch((err) => Chat.all(chat, { $: "note", text: "after: " + (err?.message ?? err) }));
   }
 
   // the work a quit cut goes on, told so: each agent, and Illi's turn by a
@@ -743,7 +729,6 @@ export namespace Chat {
       Memory.save(chat.mem);
     }
     Chat.all(chat, Chat.state(chat));
-    Chat.free(chat);
   }
 
   // a view joins on the chat as it is now
@@ -756,21 +741,17 @@ export namespace Chat {
 
   export function leave(chat: Chat, sock: Sock): void {
     chat.socks.delete(sock);
-    Chat.free(chat);
   }
 
   // a view's message answered (ack): a read at once, else as Chat.apply
   // does it; one that fails is answered its error
   export async function answer(chat: Chat, sock: Sock, data: string): Promise<void> {
-    chat.posts += 1;
     let msg: any = null;
     const out = await Promise.try(() => {
       msg = JSON.parse(data);
       return Chat.ask(chat, sock, msg) ?? Chat.apply(chat, msg);
     }).catch(Chat.fail);
-    chat.posts -= 1;
     Chat.send(sock, { $: "ack", id: msg?.id, ...out });
-    Chat.free(chat);
   }
 
   // what a message or act that threw answers
@@ -810,15 +791,15 @@ export namespace Chat {
 
   // an act changes the chat, answered once what it logged is on disk
   export async function apply(chat: Chat, msg: any): Promise<Answer> {
-    const out = await Chat.act(chat, String(msg.id), msg);
+    const out = await Chat.act(chat, msg);
     await Disk.synced();
     return out;
   }
 
-  export async function act(chat: Chat, id: string, msg: any): Promise<Answer> {
+  export async function act(chat: Chat, msg: any): Promise<Answer> {
     switch (msg.$) {
       case "say": {
-        return Chat.say(chat, id, String(msg.sizes ?? "").split(",").filter(Boolean).map(Number), msg.body);
+        return Chat.say(chat, String(msg.sizes ?? "").split(",").filter(Boolean).map(Number), msg.body);
       }
       case "stop": {
         const name = msg.name === undefined ? null : String(msg.name);
@@ -876,8 +857,8 @@ export namespace Chat {
   // so far folds into the view's lines (each a zoom away) and the next
   // turn sends none whole; noted for the agent (the note itself whole);
   // the screen starts anew from the note (the memory's `top`: what came
-  // before is only the memory's, a zoom away for the agent). Not while a
-  // turn runs
+  // before is only the memory's, a zoom away for the agent); the views
+  // told the context it now holds. Not while a turn runs
   export function clear(chat: Chat): Answer {
     const mem = chat.mem;
     if (chat.busy) {
@@ -892,6 +873,7 @@ export namespace Chat {
     Chat.note(chat, "New session: the user cleared the chat for a new topic. Everything before this note is in the view's lines; zoom into them when the user refers to it.");
     chat.eye = Chat.eye(mem, mem.cut);
     chat.socks.forEach((sock) => Chat.show(chat, sock));
+    Chat.change(chat);
     return {};
   }
 

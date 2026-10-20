@@ -48,7 +48,7 @@ const config = await import("./Config.ts");
 const asks: any[] = [];
 AskAI.ask = (ask, on) => {
   asks.push(ask);
-  const [call, feed] = AskAI.tie(on, ask.bill, () => {}, () => {});
+  const [call, feed] = AskAI.tie(on, () => {}, () => {});
   queueMicrotask(() => feed.end({ ok: true, text: "done", left: [] }));
   return call;
 };
@@ -125,7 +125,7 @@ test("an agent only passed through is never noted; each keeps its pick", async (
   expect(chat.mem.agent).toBe("planner");
   expect(Chat.main(chat, "reviewer")).toEqual({});
   expect(chat.switched).toBe(false);
-  await Chat.act(chat, "low", { $: "pick", to: { vendor: "chatgpt", model: "gpt-6-luna", effort: "low", speed: "slow" } });
+  await Chat.act(chat, { $: "pick", to: { vendor: "chatgpt", model: "gpt-6-luna", effort: "low", speed: "slow" } });
   expect(Chat.main(chat, null)).toEqual({});
   expect(chat.pick).toEqual(config.PICK);
   expect(Chat.main(chat, "reviewer")).toEqual({});
