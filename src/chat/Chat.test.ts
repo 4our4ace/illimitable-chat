@@ -3,7 +3,8 @@
 // `bun test Chat.test.ts`. The chat in this process, the model stood in
 // for: a view over the pipe sends a message and hears the reply; a /model
 // while the turn's call runs picks the next call's (the wait names the
-// model the running one asked); one process at a time holds the chat.
+// model the running one asked); one process at a time holds the chat. A
+// goal check and a message sent mid-run fit the chat's model.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -113,4 +114,31 @@ test("/clear: the agent gets the chat so far as lines, and the screen starts ane
   expect(chat.eye.from).toBe(before);
   expect(Memory.message(mem, before)!.kind).toBe("note");
   expect(Memory.load(mem.dir, () => ({}) as any).top).toBe(before);
+});
+
+test("a goal check and a message sent mid-run hold no more than the chat's model takes", () => {
+  const mem = chat.mem;
+  const cap = Chat.cap;
+  Chat.cap = () => 2000;
+  try {
+    for (let k = 0; k < 40; k++) {
+      Memory.push(mem, [{ kind: "user", text: "long " + k + " " + "z".repeat(600) }]);
+    }
+    let asked: any = null;
+    const ask = AskAI.ask;
+    AskAI.ask = (a, on) => ((asked = a), ask(a, on));
+    Chat.check(chat, "the goal");
+    AskAI.ask = ask;
+    const whole = asked.blocks.at(-1).text;
+    expect(whole).toContain("the goal");
+    expect(whole.length).toBeLessThan(2000 * 4);
+    const sent: any[] = [];
+    Object.assign(chat, { busy: true, call: { send: (say: any) => sent.push(say), stop: () => {}, done: new Promise(() => {}) } });
+    Chat.take(chat, Chat.push(chat, null, "user", "big " + "w".repeat(9000)));
+    expect(sent).toEqual([]);
+    expect(chat.wait).toHaveLength(1);
+  } finally {
+    Chat.cap = cap;
+    Object.assign(chat, { busy: false, call: null, wait: [] });
+  }
 });

@@ -272,11 +272,13 @@ export namespace Chat {
     }
   }
 
-  // a message logged: to the running call if whole beside its view, else
-  // to the next
+  // a message logged: to the running call if it goes whole in what the
+  // chat's model takes (Chat.cap: its pages, and a page alone, as the
+  // last always goes whole), else to the next
   export function take(chat: Chat, msg: Msg): void {
-    const mem = chat.mem;
-    if (chat.call !== null && Memory.whole(mem, msg.id) === msg.id) {
+    const mem  = chat.mem;
+    const high = Chat.cap(chat) * 4;
+    if (chat.call !== null && Memory.whole(mem, msg.id, high) === msg.id && Memory.message(mem, msg.id)!.size <= high) {
       chat.sent.push(msg);
       chat.call.send(Memory.say(mem, msg.id, msg.end));
       return;
@@ -387,10 +389,10 @@ export namespace Chat {
   }
 
   // the user's goal (/goal), asked of the chat's model, without tools, on
-  // the chat as it is now
+  // the chat as it is now, as much of it whole as a turn gets (Chat.from)
   export function check(chat: Chat, goal: string): Check {
     const mem  = chat.mem;
-    const at   = Memory.whole(mem, 0);
+    const at   = Chat.from(chat);
     const tail = Array.from({ length: mem.count - at }, (_, k) => at + k).map((i) => {
       const msg = Memory.message(mem, i)!;
       return Memory.line({ l: 0, i }, msg.kind + ": " + msg.text) + "\n";
