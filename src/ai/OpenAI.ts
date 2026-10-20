@@ -7,12 +7,10 @@
 // implicitly only if marked (AskAI.tail). A server_error is busy;
 // failed, incomplete or refused fails. Silent while it reasons, it is
 // dead after 20 min.
-// Voice: TRANSCRIBER writes a recording out, and says its seconds.
 
 import { AskAI, type Ask, type Img } from "./AskAI.ts";
 import { Agent, type Emit, type Entry, type Item, type Step, type Tool, type Use, type Wire } from "./Agent.ts";
 import { Price, type Usage } from "./Price.ts";
-import * as config from "../config/Config.ts";
 
 // Types
 // =====
@@ -26,8 +24,6 @@ type State = { res: any; error: any; use: Usage };
 const TIERS: Record<string, string> = { slow: "default", fast: "fast", ultrafast: "ultrafast" };
 
 const MARK = { mode: "explicit" };
-
-export const TRANSCRIBER = "gpt-transcribe";
 
 // OpenAI
 // ======
@@ -195,23 +191,6 @@ export namespace OpenAI {
       }
     }
     return [];
-  }
-
-  // a recording's words and seconds
-  export async function transcribe(audio: Blob): Promise<{ text: string; seconds: number }> {
-    if (!config.KEYS.openai) {
-      throw new Error("Voice needs an OpenAI key");
-    }
-    const form = new FormData();
-    form.append("model", TRANSCRIBER);
-    form.append("file", audio, "voice." + audio.type.split(/[/;]/)[1]);
-    const init = { method: "POST", headers: { authorization: "Bearer " + config.KEYS.openai }, body: form };
-    const res = await fetch("https://api.openai.com/v1/audio/transcriptions", init);
-    const out = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      throw new Error("Transcription failed: " + (out.error?.message ?? "HTTP " + res.status));
-    }
-    return { text: out.text, seconds: out.usage.seconds };
   }
 
   export const wire: Wire<State> = {
