@@ -201,6 +201,9 @@ const IMAGES = "/docs/images/";
 
 const AGENTS = "/docs/agent/";
 
+// an agent's name: a letter, then letters, digits, _ and -
+const AGENT = /^[A-Za-z][A-Za-z0-9_-]*$/;
+
 // a compaction's task, before its <input>: one message to compress
 // (level 0), or two lines to merge
 const LEAF = `Compaction: compress message {id} into one line of at most ${NODE} bytes
@@ -1327,25 +1330,33 @@ h4 { margin: .8em 0 .2em; color: #888; font-weight: normal; } pre { margin: 0; w
   // Agents
   // ------
 
-  // read whole; a name is letters and hyphens, never a path
+  // read whole; a name is a letter, then letters, digits, _ and -, never
+  // a path
   export function agent(mem: Memory, name: string): Root[] | null {
     const file = mem.dir + AGENTS + name + ".jsonl";
-    return /^[A-Za-z-]+$/.test(name) && fs.existsSync(file) ? Memory.file(file) : null;
+    return AGENT.test(name) && fs.existsSync(file) ? Memory.file(file) : null;
   }
 
-  export function agent_new(mem: Memory): string {
-    const name = names.name_random();
+  // a new agent's name, its log made: its user's agent's name (own), the
+  // first one so named; the next ones numbered past the highest, own-2
+  // on; none (or not a name): a random one (Names.ts)
+  export function agent_new(mem: Memory, own: string | null = null): string {
     fs.mkdirSync(mem.dir + AGENTS, { recursive: true });
-    try {
-      fs.writeFileSync(mem.dir + AGENTS + name + ".jsonl", "", { flag: "wx" });
-    } catch (err: any) {
-      if (err.code === "EEXIST") {
-        return Memory.agent_new(mem);
+    const base = own !== null && AGENT.test(own) ? own : null;
+    const same = new RegExp("^" + base + "(?:-(\\d+))?\\.jsonl$");
+    const ns   = base === null ? [] : fs.readdirSync(mem.dir + AGENTS).map((f) => same.exec(f)).filter((m) => m !== null).map((m) => Number(m[1] ?? 1));
+    for (let n = Math.max(0, ...ns) + 1; ; n++) {
+      const name = base === null ? names.name_random() : n === 1 ? base : base + "-" + n;
+      try {
+        fs.writeFileSync(mem.dir + AGENTS + name + ".jsonl", "", { flag: "wx" });
+        mem.agents.set(name, 0);
+        return name;
+      } catch (err: any) {
+        if (err.code !== "EEXIST") {
+          throw err;
+        }
       }
-      throw err;
     }
-    mem.agents.set(name, 0);
-    return name;
   }
 
   // its length read once, then counted (mem.agents)

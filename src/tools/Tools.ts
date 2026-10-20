@@ -6,9 +6,11 @@
 // shell, read, write and edit run here, on the user's computer, in the
 // working dir: where illi was started (each call's message names it). A
 // request dropped (its call stopped) stops its job.
-// An agent (a subagent) has a name and a log; each call gets its context
-// and its whole log, so a told agent goes on even after a restart; its
-// replies reach the chat as one "[Name]" message. One spawned as a user's
+// An agent (a subagent) has a name and a log (one spawned as a user's
+// subagent: that agent's name, numbered from the second on, as
+// reviewer-2; else a random one); each call gets its context and its
+// whole log, so a told agent goes on even after a restart; its replies
+// reach the chat as one "[Name]" message. One spawned as a user's
 // subagent (Custom.ts) runs on its model, with its instructions and
 // tools; so does the master, given a primary agent (Tab, /agent).
 // Beside these, the user's: their skills (one tool, skill, listing them)
@@ -386,7 +388,7 @@ export namespace Tools {
   }
 
   export function start(tools: Tools, role: Agent["role"], task: string, view: Block[]): string {
-    const name = Memory.agent_new(tools.mem);
+    const name = Memory.agent_new(tools.mem, role.agent);
     const agent = { name, role, call: null, live: [], calls: {}, stop: false, view, replies: [] };
     tools.agents.set(name, agent);
     tools.hooks.push(agent, "note", SUB_NOTE + (role.agent === null ? "" : " " + role.agent) + (role.effort === null ? "" : SUB_AT + role.effort));
