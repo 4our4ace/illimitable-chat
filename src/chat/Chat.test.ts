@@ -23,7 +23,7 @@ const View = await import("../ui/View.ts");
 // `hold` resolves
 let hold: Promise<void> = Promise.resolve();
 AskAI.ask = (ask, on) => {
-  const [call, feed] = AskAI.tie(on, ask.bill, () => {}, () => {});
+  const [call, feed] = AskAI.tie(on, () => {}, () => {});
   hold.then(() => {
     feed.on({ $: "Entry", kind: "illi", text: "hello back" });
     feed.end({ ok: true, text: "hello back", left: [] });

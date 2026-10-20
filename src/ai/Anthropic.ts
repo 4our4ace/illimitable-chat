@@ -35,7 +35,6 @@ type State = {
 const MARK  = { type: "ephemeral" };
 const WEB   = { type: "web_search_20260318", name: "web_search" };
 const FAST  = "fast-mode-2026-02-01";
-const COUNT = "https://api.anthropic.com/v1/messages/count_tokens";
 
 // Anthropic
 // =========
@@ -82,15 +81,6 @@ export namespace Anthropic {
       speed         : ask.speed === "fast" ? "fast" : undefined,
       messages,
     };
-  }
-
-  // a body's input tokens, as the API counts them (free): the body less
-  // what only a message sent takes; null: not told within 10 s
-  export async function count(key: string, ask: Ask, body: any): Promise<number | null> {
-    const { max_tokens, stream, ...rest } = body;
-    const init = { method: "POST", headers: Anthropic.headers(key, ask), body: JSON.stringify(rest), signal: AbortSignal.timeout(10e3) };
-    const out = await fetch(COUNT, init).then((res) => res.json()).catch(() => null);
-    return typeof out?.input_tokens === "number" ? out.input_tokens : null;
   }
 
   export function message(item: Item): { role: string; content: any[] } {
@@ -304,7 +294,6 @@ export namespace Anthropic {
     url     : "https://api.anthropic.com/v1/messages",
     headers : Anthropic.headers,
     body    : Anthropic.body,
-    count   : Anthropic.count,
     start   : () => ({ blocks: [], json: [], stop: "", why: null, use: Price.usage("slow"), error: null }),
     read    : Anthropic.read,
     begun   : (ev) => ev.type === "message_start",

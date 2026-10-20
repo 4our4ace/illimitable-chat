@@ -379,9 +379,8 @@ export namespace Chat {
     const server = Tools.at(chat.tools, "main");
     chat.eye = Chat.eye(mem, mem.show);
     chat.socks.forEach((sock) => Chat.show(chat, sock));
-    const bill = mem.pay?.("chat", String(msgs[0].id));
     const blocks = [...view, Tools.here(chat.tools), Tools.at_work(chat.tools), { text: HEAD + text, mark: true }];
-    const ask = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server, blocks, imgs, bill, keep: true };
+    const ask = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server, blocks, imgs, keep: true };
     chat.model = chat.pick.model;
     chat.asked = true;
     chat.open = 0;
@@ -421,7 +420,7 @@ export namespace Chat {
       return Memory.line({ l: 0, i }, msg.kind + ": " + msg.text) + "\n";
     });
     const blocks = [...Memory.view(mem, at), { text: tail.join("") + GOAL_ASK + goal, mark: true }];
-    return { call: AskAI.ask({ ...Chat.share(chat), system: GOAL, blocks, bill: mem.pay?.("chat", "goal") }, () => {}), goal };
+    return { call: AskAI.ask({ ...Chat.share(chat), system: GOAL, blocks }, () => {}), goal };
   }
 
   // a goal check's answer, as the turn's call's is: unmet (any answer but
@@ -452,7 +451,7 @@ export namespace Chat {
   // last request and its answer (AskAI.last), SUGGEST, on what it ran on,
   // with its system prompt and tools, so all before SUGGEST is read from
   // the cache. Its line is shown till a message or the next turn; a tool
-  // call, a failure or nothing back shows none. Paid as the chat's calls
+  // call, a failure or nothing back shows none
   export function suggest(chat: Chat): void {
     const s = chat.suggest;
     const last = AskAI.last(Tools.at(chat.tools, "main"));
@@ -460,7 +459,7 @@ export namespace Chat {
       return;
     }
     const blocks = [{ text: SUGGEST, mark: false }];
-    const ask = { ...last.ask, blocks, imgs: [], server: "", keep: false, from: last, max: SUGGEST_MAX, bill: chat.mem.pay?.("chat", "suggest") };
+    const ask = { ...last.ask, blocks, imgs: [], server: "", keep: false, from: last, max: SUGGEST_MAX };
     const call = (s.call = AskAI.ask(ask, () => {}));
     call.done.then((end) => {
       if (s.call === call) {
