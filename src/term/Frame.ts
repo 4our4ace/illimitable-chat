@@ -25,6 +25,9 @@ const HERE = process.cwd().startsWith(os.homedir()) ? "~" + process.cwd().slice(
 // the margin left and right of the chat and the input
 const MARGIN = 2;
 
+// a note's indent: its text starts where the rule's does
+const NOTE_IN = 3;
+
 // a pipe's lines' width
 const PIPE = 76;
 
@@ -82,11 +85,14 @@ export function term_draw(t: Term): void {
 
 // the screen, top to bottom: the head; the chat (or a pane; over its
 // foot, as a /word is typed, the commands it matches, else the picker),
-// the side beside it on a wide screen; the notes, however the chat is
-// scrolled; a row in the theme's blue (its links'): at the chat's left,
-// scrolled up, a jump to its end (a click goes there, as Ctrl+End
-// does), at its right end a toast; a rule (what runs, while it does), the
-// input, a rule (offline), the pages, the agent and the pick. A pipe
+// the side beside it on a wide screen; a row in the theme's blue (its
+// links'): at the chat's left, scrolled up, a jump to its end (a click
+// goes there, as Ctrl+End does), at its right end a toast; a rule (what
+// runs, while it does), the input, a rule (offline), the pages, the agent
+// and the pick. The notes, however the chat is scrolled, end over the
+// input: the newest in the rule (unless work runs), the one before it,
+// faded, in the row above (unless the jump is there or the toast leaves
+// it no room); only what is left over takes rows from the chat. A pipe
 // gets the notes as text
 export function term_paint(t: Term): void {
   t.due   = false;
@@ -106,8 +112,13 @@ export function term_paint(t: Term): void {
   const off   = !View.view_typing(t.v);
   const hint  = off ? OFF : "Message " + (t.v.agent ?? View.MAIN) + " · Tab agents · /help";
   const input = Screen.screen_input(t.scr, iw, Math.max(1, Math.floor(h / 3)), hint, off);
-  const notes = Paint.rows_lines(said.notes.map(View.Cap), iw).slice(-Math.floor(h / 4));
-  const tall  = Math.max(1, h - 5 - input.lines.length - notes.length);
+  const notes = term_notes(said.notes, iw - 2 * NOTE_IN);
+  const ruled = View.view_doing(t.v) === null ? notes.pop() : undefined;
+  const last  = notes.at(-1);
+  const roomy = last !== undefined && !(t.pane === null && t.scroll > 0) && NOTE_IN + Paint.line_width(last) + 1 + Paint.text_width(said.toast) <= left + cw;
+  const lead  = roomy ? [Paint.Run(" ".repeat(NOTE_IN)), ...notes.pop()!] : [];
+  const above = notes.slice(-Math.floor(h / 4)).map((l) => [Paint.Run(" ".repeat(NOTE_IN)), ...l]);
+  const tall  = Math.max(1, h - 5 - input.lines.length - above.length);
   const sug   = term_suggest(t);
   if (sug !== null) {
     sug.tall = Math.min(Math.max(1, sug.found.length), SUGGEST, Math.max(1, tall - 2));
@@ -118,10 +129,11 @@ export function term_paint(t: Term): void {
   const sides = side === 0 ? [] : term_side(t, sw, tall);
   const sided = term_area(t, { key: "side", lines: sides.map((s) => s[0]), first: 0, row: 1, col: left > 0 ? 1 : at + 2, w: sw, tall: sides.length });
   const blue  = { ...Paint.INK, c: Draw.draw_theme().link ?? "4" };
-  const jump  = t.pane === null && t.scroll > 0 ? [Paint.Run(" ".repeat(left)), Paint.Run("↓ ", { ...blue, b: true }), Paint.Run("Jump to Bottom · Ctrl+End", blue)] : [];
-  const toast = [...jump, Paint.Run(" ".repeat(Math.max(1, left + cw - Paint.line_width(jump) - Paint.text_width(said.toast)))), Paint.Run(said.toast, blue)];
+  const jump  = t.pane === null && t.scroll > 0 && !roomy ? [Paint.Run(" ".repeat(left)), Paint.Run("↓ ", { ...blue, b: true }), Paint.Run("Jump to Bottom · Ctrl+End", blue)] : [];
+  const start = roomy ? lead : jump;
+  const toast = [...start, Paint.Run(" ".repeat(Math.max(1, left + cw - Paint.line_width(start) - Paint.text_width(said.toast)))), Paint.Run(said.toast, blue)];
   const under = !t.v.up ? "offline" : "";
-  const lines = [...notes, toast, term_rule(t, iw), ...input.lines, Paint.rule_text(under, iw), Paint.tabs_line(t.v, iw, side === 0)];
+  const lines = [...above, toast, term_rule(t, iw, ruled), ...input.lines, Paint.rule_text(under, iw), Paint.tabs_line(t.v, iw, side === 0)];
   const foot  = term_area(t, { key: "foot", lines, first: 0, row: 1 + tall, col: MARGIN, w: iw, tall: lines.length });
   const head  = term_area(t, { key: "head", lines: [term_head(t, full)], first: 0, row: 0, col: 0, w: full, tall: 1 });
   const rows: Screen.Piece[][] = [[{ col: 0, w: full, line: head[0] }]];
@@ -131,20 +143,26 @@ export function term_paint(t: Term): void {
     term_hit(t, 1 + k, at, at + side, sides[k]?.[1] ?? null);
   }
   rows.push(...foot.map((line) => [{ col: MARGIN, w: iw, line }]));
-  term_hit(t, 1 + tall + notes.length, MARGIN + left, MARGIN + Paint.line_width(jump), jump.length === 0 ? null : () => (t.scroll = 0));
+  term_hit(t, 1 + tall + above.length, MARGIN + left, MARGIN + Paint.line_width(jump), jump.length === 0 ? null : () => (t.scroll = 0));
   t.hover = t.sel?.held ? undefined : term_under(t, t.scr.point);
   term_tabs(t, h - 1, side === 0);
-  Screen.screen_paint(t.scr, rows, { row: 3 + tall + notes.length + input.at.row, col: MARGIN + input.at.col });
+  Screen.screen_paint(t.scr, rows, { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col });
+}
+
+// the notes' lines, oldest first, w wide: the newest in the ink, the
+// ones before it faded
+function term_notes(notes: string[], w: number): Paint.Line[] {
+  return notes.flatMap((text, k) => Paint.runs_wrap([Paint.Run(Paint.text_clean(text), { ...(k === notes.length - 1 ? Paint.INK : Paint.DIM), i: true })], w, false));
 }
 
 // the rule over the input; while work runs, at its left: the merge,
 // what runs (bold, in the accent), how long it has run, what it is at,
-// how to stop it, cut to the width
-function term_rule(t: Term, w: number): Paint.Line {
+// how to stop it, cut to the width; else a note's line, if one is given
+function term_rule(t: Term, w: number, note?: Paint.Line): Paint.Line {
   const doing = View.view_doing(t.v);
   term_spin(t, doing !== null);
   if (doing === null) {
-    return Paint.rule_text("", w);
+    return note === undefined ? Paint.rule_text("", w) : [Paint.Run("─".repeat(NOTE_IN - 1) + " ", Paint.DIM), ...note, Paint.Run(" " + "─".repeat(Math.max(0, w - NOTE_IN - 1 - Paint.line_width(note))), Paint.DIM)];
   }
   const now  = Date.now();
   const c    = Draw.draw_theme().accent ?? "5";
