@@ -445,8 +445,9 @@ function term_paned(pane: Pane, w: number, tall: number): [Paint.Line[], number]
 // the picker, framed, w wide, room lines at most: its search first, if
 // it has one (the cursor in it: at); each option shown (Illi's own and
 // each of the user's primary agents; each profile; each model; each
-// setting), what it is, the one now marked (none: no marks), the one lit
-// bold, the characters the search matched bold in the accent: as many as
+// setting), what it is, the one now marked (none: no marks; one that
+// makes something new, "+ ...", has its "+" in the mark's place), the one
+// lit bold, the characters the search matched bold in the accent: as many as
 // fit from the first in view (moved to keep the lit one in it), the box
 // as tall as all of them would be (blank past those shown; none: a note
 // says so). Its foot says what the lit one takes besides; a click on one
@@ -455,7 +456,8 @@ function term_picker(t: Term, w: number, room: number): { items: Item[]; at?: Sc
   const c     = t.choose!;
   const bold  = { ...Paint.INK, b: true };
   const lit   = { ...bold, c: Draw.draw_theme().accent ?? "5" };
-  const wide  = Math.max(...c.names.map((name) => Paint.text_width(name)));
+  const act   = (name: string) => c.here >= 0 && name.startsWith("+ ");
+  const wide  = Math.max(...c.names.map((name) => Paint.text_width(name) - (act(name) ? 2 : 0)));
   const find  = c.find === null ? [] : [[Paint.Run(GLYPH.find, Paint.DIM), c.find === "" ? Paint.Run("type to search", Paint.DIM) : Paint.Run(c.find)]];
   const rows  = Math.max(1, Math.min(c.names.length, room - 2 - find.length));
   const pick  = (k: number) => {
@@ -467,9 +469,9 @@ function term_picker(t: Term, w: number, room: number): { items: Item[]; at?: Sc
     const here = i === c.at;
     const head = [
       Paint.Run(here ? "› " : "  ", bold),
-      ...(c.here < 0 ? [] : [Paint.Run((m.k === c.here ? GLYPH.here : GLYPH.tab) + " ", Paint.DIM)]),
+      ...(c.here < 0 || act(name) ? [] : [Paint.Run((m.k === c.here ? GLYPH.here : GLYPH.tab) + " ", Paint.DIM)]),
       ...[...name].map((ch, j) => Paint.Run(ch, m.at.includes(j) ? lit : here ? bold : Paint.INK)),
-      Paint.Run(" ".repeat(wide - Paint.text_width(name) + 2)),
+      Paint.Run(" ".repeat(wide - Paint.text_width(name) + (act(name) ? 4 : 2))),
     ];
     const about = term_about(Paint.text_clean(c.about[m.k]), w - 4 - Paint.line_width(head));
     return [[...head, Paint.Run(about, Paint.DIM)], () => pick(m.k)];

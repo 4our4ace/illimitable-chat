@@ -189,3 +189,24 @@ test("Config.ts on a profile: its folder, its config over the root's, the root's
   expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
   expect(config.config_env().ANTHROPIC_API_KEY).toBe("test-key");
 });
+
+test("a profile renamed, deleted (the one used last following), or made with another's chat moved in", () => {
+  const root = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-moves-");
+  Profiles.profile_new(root, "a", null);
+  Profiles.profile_keep(root, "a");
+  Profiles.profile_rename(root, "a", "b");
+  expect([fs.existsSync(root + "/profiles/a"), fs.existsSync(root + "/profiles/b")]).toEqual([false, true]);
+  expect(fs.readFileSync(root + "/profile", "utf8").trim()).toBe("b");
+  Profiles.profile_delete(root, "b");
+  expect(fs.existsSync(root + "/profiles/b")).toBe(false);
+  expect(fs.readFileSync(root + "/profile", "utf8").trim()).toBe("default");
+  fs.mkdirSync(root + "/chat/main", { recursive: true });
+  fs.writeFileSync(root + "/chat/main/day.jsonl", "{}\n");
+  Profiles.profile_new(root, "work", null);
+  Profiles.profile_move_chat(root, root + "/profiles/work");
+  expect([fs.existsSync(root + "/chat"), fs.readFileSync(root + "/profiles/work/chat/main/day.jsonl", "utf8")]).toEqual([false, "{}\n"]);
+  fs.mkdirSync(root + "/chat");
+  expect(() => Profiles.profile_move_chat(root, root + "/profiles/work")).toThrow("profile work has a chat already");
+  expect(Profiles.profile_why(root, "rename")).toMatch(/can't name a profile/);
+  fs.rmSync(root, { recursive: true, force: true });
+});

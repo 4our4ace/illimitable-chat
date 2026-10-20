@@ -125,9 +125,13 @@ An agent:
 Profiles
 --------
 
-Separate chats and settings, e.g. work and home: `/profile new work`,
-`/profile work`, `/profile export`, `/profile import <file>`. Profiles
-share the login, the API keys and the default's config.json.
+Separate chats and settings, e.g. work and home. `/profile` lists them
+(the side panel too) and makes a new one; `/profile new work` asks what
+comes along: nothing, this profile's setup, this chat (moved, so the
+default starts fresh), or both. `/profile work` switches,
+`/profile rename`, `/profile delete`, `/profile export`, `/profile import
+<file>`. Profiles share the login, the API keys and the default's
+config.json.
 
 An export leaves out the login (and a login file its config names inside
 the profile's folder), the lock and the log, and strips config.json and

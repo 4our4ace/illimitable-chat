@@ -95,8 +95,10 @@ function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/stop [name]",      "",                        "stop all work, agents too; or that agent",       term_stop],
     ]],
     ["Profiles", [
-      ["/profile [name]",   "",                        "switch to the profile named (each its own chat, settings, agents and MCP servers; the login is shared); none: pick from a list", term_profile],
-      ["/profile new <name> [--copy]", "",             "make a profile and switch to it: empty, or with this one's settings, agents, commands and skills (never its chat)", term_profile],
+      ["/profile [name]",   "",                        "switch to the profile named (each its own chat, settings, agents and MCP servers; the login is shared); none: pick from a list, or make one there", term_profile],
+      ["/profile new <name> [--copy] [--move]", "",    "make a profile and switch to it: empty, with this one's settings, agents, commands and skills (--copy), with this chat moved into it (--move, this one starts empty), or both; neither: a list asks", term_profile],
+      ["/profile rename [name] <new>", "",             "rename this profile, or the one named (the default keeps its name)", term_profile],
+      ["/profile delete <name>", "",                   "delete a profile and all it holds, once you say so (not the default, nor the one you're in)", term_profile],
       ["/profile export [name] [file]", "",            "this profile (or that one) as one archive, ./illi-profile-<name>.tar.gz: no login, no lock, its config's secrets left out", term_profile],
       ["/profile import <file> [name]", "",            "an archive as a new profile, named by its file (or as given); untrusted: its MCP servers come disabled, its config's commands out", term_profile],
     ]],
