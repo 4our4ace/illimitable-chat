@@ -95,12 +95,7 @@ function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/stop [name]",      "",                        "stop all work, agents too; or that agent",       term_stop],
     ]],
     ["Profiles", [
-      ["/profile [name]",   "",                        "switch to the profile named (each its own chat, settings, agents and MCP servers; the login is shared); none: pick from a list, or make one there", term_profile],
-      ["/profile new <name> [--copy] [--move]", "",    "make a profile and switch to it: empty, with this one's settings, agents, commands and skills (--copy), with this chat moved into it (--move, this one starts empty), or both; neither: a list asks", term_profile],
-      ["/profile rename [name] <new>", "",             "rename this profile, or the one named (the default keeps its name)", term_profile],
-      ["/profile delete <name>", "",                   "delete a profile and all it holds, once you say so (not the default, nor the one you're in)", term_profile],
-      ["/profile export [name] [file]", "",            "this profile (or that one) as one archive, ./illi-profile-<name>.tar.gz: no login, no lock, its config's secrets left out", term_profile],
-      ["/profile import <file> [name]", "",            "an archive as a new profile, named by its file (or as given); untrusted: its MCP servers come disabled, its config's commands out", term_profile],
+      ["/profile [name]",   "",                        "switch to the profile named (each its own chat, settings, agents and MCP servers; the login is shared); none: the list, where one is also made, renamed (Ctrl+R), exported (Ctrl+E), imported or deleted (Del)", term_profile],
     ]],
     ...(yours.length === 0 ? [] : [["Yours", yours] as [string, Cmd[]]]),
   ];
@@ -166,7 +161,7 @@ export function term_suggest_key(t: Term, sug: Sug, key: string): boolean {
 // a command suggested (as /help shows how it's typed), taken: run
 // (Enter, a click), unless it needs an argument (<path>, #id: not
 // [name]); else filled in, a space after it. Its words before the first
-// argument go whole (/profile new)
+// argument go whole
 export function term_suggested(t: Term, use: string, run: boolean): void {
   const name = use.split(/ (?=[<[#])/)[0];
   const need = /^ +[^ []/.test(use.slice(name.length));
@@ -289,7 +284,15 @@ function term_agent_set(t: Term, arg: string): void {
 // takes and what the foot says of it (the model picker's)
 export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"] } = {}): void {
   const shown = Screen.ed_rank("", names);
-  t.choose = { title, names, about, here, pick, find: more.find ? "" : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => "") };
+  t.choose = { title, names, about, here, pick, find: more.find ? "" : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null };
+  t.pane   = null;
+}
+
+// a line asked for in the picker's box (Chooser ask): its title, the hint
+// while it is empty, what it starts as, what the foot says, what Enter
+// does with it (a reason: the box stays, saying it)
+export function term_ask(t: Term, title: string, hint: string, start: string, foot: string, done: (text: string) => string | null): void {
+  t.choose = { title, names: [], about: [], here: -1, pick: () => {}, find: start, shown: [], at: 0, top: 0, keys: () => false, foot: () => foot, ask: { hint, done } };
   t.pane   = null;
 }
 

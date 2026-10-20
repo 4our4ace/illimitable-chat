@@ -69,5 +69,5 @@ test("a setting that won't do stops illi at the start, one line on why", () => {
   }
   const none = start({ ILLI_PROFILE: "nope" });
   expect(none.code).toBe(1);
-  expect(none.err).toMatch(/^illi: config: no profile "nope" in .*: start illi without ILLI_PROFILE, then \/profile new nope makes it\.\n$/);
+  expect(none.err).toMatch(/^illi: config: no profile "nope" in .*: start illi without ILLI_PROFILE, then \/profile makes it\.\n$/);
 });

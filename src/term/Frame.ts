@@ -451,15 +451,20 @@ function term_paned(pane: Pane, w: number, tall: number): [Paint.Line[], number]
 // fit from the first in view (moved to keep the lit one in it), the box
 // as tall as all of them would be (blank past those shown; none: a note
 // says so). Its foot says what the lit one takes besides; a click on one
-// picks it
+// picks it. A line asked for (Chooser ask) is its one line, as the input
+// shows a message typed, its hint while empty; a search or a line too
+// long shows its end
 function term_picker(t: Term, w: number, room: number): { items: Item[]; at?: Screen.Spot } {
   const c     = t.choose!;
   const bold  = { ...Paint.INK, b: true };
   const lit   = { ...bold, c: Draw.draw_theme().accent ?? "5" };
   const act   = (name: string) => c.here >= 0 && name.startsWith("+ ");
   const wide  = Math.max(...c.names.map((name) => Paint.text_width(name) - (act(name) ? 2 : 0)));
-  const find  = c.find === null ? [] : [[Paint.Run(GLYPH.find, Paint.DIM), c.find === "" ? Paint.Run("type to search", Paint.DIM) : Paint.Run(c.find)]];
-  const rows  = Math.max(1, Math.min(c.names.length, room - 2 - find.length));
+  const glyph = c.ask === null ? GLYPH.find : GLYPH.input;
+  const fits  = w - 5 - Paint.text_width(glyph);
+  const typed = c.find === null || Paint.text_width(c.find) <= fits ? c.find ?? "" : "…" + Paint.text_graphemes(c.find).slice(1 - fits).join("");
+  const find  = c.find === null ? [] : [[Paint.Run(glyph, Paint.DIM), typed === "" ? Paint.Run(c.ask?.hint ?? "type to search", Paint.DIM) : Paint.Run(typed)]];
+  const rows  = c.ask !== null ? 0 : Math.max(1, Math.min(c.names.length, room - 2 - find.length));
   const pick  = (k: number) => {
     t.choose = null;
     c.pick(k);
@@ -478,13 +483,13 @@ function term_picker(t: Term, w: number, room: number): { items: Item[]; at?: Sc
   };
   c.top       = Math.max(0, Math.min(c.top, c.at), c.at - rows + 1);
   const none  = [[Paint.Run("  Nothing matches " + Paint.text_clean(c.find ?? ""), Paint.DIM)], null] as Item;
-  const shown = c.shown.length === 0 ? [none] : c.shown.slice(c.top, c.top + rows).map((m, i) => item(m, c.top + i));
+  const shown = c.ask !== null ? [] : c.shown.length === 0 ? [none] : c.shown.slice(c.top, c.top + rows).map((m, i) => item(m, c.top + i));
   const items = [...find.map((l): Item => [l, null]), ...shown, ...Array.from({ length: rows - shown.length }, (): Item => [[], null])];
-  const title = [Paint.Run(" " + c.title + " · ↑↓ Enter · Esc ", { ...Paint.DIM, b: true })];
-  const said  = c.shown.length === 0 ? "" : c.foot(c.shown[c.at].k);
+  const title = [Paint.Run(" " + c.title + (c.ask === null ? " · ↑↓ Enter · Esc " : " · Enter · Esc "), { ...Paint.DIM, b: true })];
+  const said  = c.ask !== null ? c.foot(-1) : c.shown.length === 0 ? "" : c.foot(c.shown[c.at].k);
   const foot  = said === "" ? [] : [Paint.Run(" " + said + " ", { ...Paint.DIM, b: true })];
   const lines = Paint.frame(items.map(([l]) => Paint.runs_wrap(l, w - 4, true)[0]), w, title, foot);
-  const at    = c.find === null ? undefined : { row: 1, col: Math.min(w - 3, 2 + Paint.text_width(GLYPH.find) + Paint.text_width(c.find)) };
+  const at    = c.find === null ? undefined : { row: 1, col: Math.min(w - 3, 2 + Paint.text_width(glyph) + Paint.text_width(typed)) };
   return { items: lines.map((l, k) => [l, items[k - 1]?.[1] ?? null]), at };
 }
 

@@ -125,13 +125,15 @@ An agent:
 Profiles
 --------
 
-Separate chats and settings, e.g. work and home. `/profile` lists them
-(the side panel too) and makes a new one; `/profile new work` asks what
-comes along: nothing, this profile's setup, this chat (moved, so the
-default starts fresh), or both. `/profile work` switches,
-`/profile rename`, `/profile delete`, `/profile export`, `/profile import
-<file>`. Profiles share the login, the API keys and the default's
-config.json.
+Separate chats and settings, e.g. work and home, each in its own folder:
+the default in `~/.illi`, the others in `~/.illi/profiles/<name>`.
+`/profile` opens the list (the side panel shows them too), and all of it
+happens there: Enter switches, Ctrl+R renames, Ctrl+E exports to
+`./illi-profile-<name>.tar.gz`, Del deletes. "+ new profile" asks a name,
+then what comes along: nothing, this profile's setup, this chat (moved,
+so this profile starts fresh), or both. "+ import a profile" asks for an
+archive. `/profile work` switches straight away. Profiles share the
+login, the API keys and the default's config.json.
 
 An export leaves out the login (and a login file its config names inside
 the profile's folder), the lock and the log, and strips config.json and

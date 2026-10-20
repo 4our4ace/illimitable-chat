@@ -148,7 +148,10 @@ type Hit = { row: number; col: number; to: number; run: () => void };
 // (Screen.ed_rank), best first, at: the one lit among them, top: the
 // first in view; keys: what else the lit option k takes (true: taken; the
 // model picker's effort and speed, a setting's steps), foot: what the
-// box's foot says of it ("": nothing)
+// box's foot says of it ("": nothing); ask: a line asked for instead of
+// options (a profile's name, a file): typed in `find`, its hint shown
+// while it is empty, given by Enter to `done`, whose answer null closes
+// the box (what it opened stays) and a reason keeps it open, in the foot
 export type Chooser = {
   title : string;
   names : string[];
@@ -161,6 +164,7 @@ export type Chooser = {
   top   : number;
   keys  : (k: number, key: string) => boolean;
   foot  : (k: number) => string;
+  ask   : { hint: string; done: (text: string) => string | null } | null;
 };
 
 // a line drawn and what a click on it does (null: nothing)
