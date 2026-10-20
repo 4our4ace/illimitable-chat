@@ -78,6 +78,9 @@ const SUGGEST   = 10;
 const SUGGESTED = "Commands · ↑↓ · Tab fills in · Enter runs · Esc";
 const PICKER_W  = 72;
 
+// the least of a picker's option's next column shown cut (term_about)
+const CUT       = 8;
+
 // a new size: every row written again, once the size settles
 export function term_resize(t: Term): void {
   clearTimeout(t.settle);
@@ -441,12 +444,13 @@ function term_paned(pane: Pane, w: number, tall: number): [Paint.Line[], number]
 
 // the picker, framed, w wide, room lines at most: its search first, if
 // it has one (the cursor in it: at); each option shown (Illi's own and
-// each of the user's primary agents; each profile; each model), what it
-// is, the one now marked, the one lit bold, the characters the search
-// matched bold in the accent: as many as fit from the first in view
-// (moved to keep the lit one in it), the box as tall as all of them
-// would be (blank past those shown; none: a note says so). Its foot says
-// what the lit one takes besides; a click on one picks it
+// each of the user's primary agents; each profile; each model; each
+// setting), what it is, the one now marked (none: no marks), the one lit
+// bold, the characters the search matched bold in the accent: as many as
+// fit from the first in view (moved to keep the lit one in it), the box
+// as tall as all of them would be (blank past those shown; none: a note
+// says so). Its foot says what the lit one takes besides; a click on one
+// picks it
 function term_picker(t: Term, w: number, room: number): { items: Item[]; at?: Screen.Spot } {
   const c     = t.choose!;
   const bold  = { ...Paint.INK, b: true };
@@ -463,7 +467,7 @@ function term_picker(t: Term, w: number, room: number): { items: Item[]; at?: Sc
     const here = i === c.at;
     const head = [
       Paint.Run(here ? "› " : "  ", bold),
-      Paint.Run((m.k === c.here ? GLYPH.here : GLYPH.tab) + " ", Paint.DIM),
+      ...(c.here < 0 ? [] : [Paint.Run((m.k === c.here ? GLYPH.here : GLYPH.tab) + " ", Paint.DIM)]),
       ...[...name].map((ch, j) => Paint.Run(ch, m.at.includes(j) ? lit : here ? bold : Paint.INK)),
       Paint.Run(" ".repeat(wide - Paint.text_width(name) + 2)),
     ];
@@ -483,14 +487,16 @@ function term_picker(t: Term, w: number, room: number): { items: Item[]; at?: Sc
 }
 
 // what a picker's option is, as fits in w columns: whole, else its
-// columns (two spaces or more apart) up to the last that fits whole; not
-// even the first: cut, an ellipsis at its end
+// columns (two spaces or more apart) up to the last that fits whole, and
+// as much of the next as fits, an ellipsis at its end, if more than CUT
+// of it would show; not even the first: cut so
 function term_about(text: string, w: number): string {
   if (Paint.text_width(text) <= w) {
     return text;
   }
-  const end = [...text.matchAll(/ {2,}/g)].map((m) => m.index).reverse().find((e) => Paint.text_width(text.slice(0, e)) <= w);
-  return end !== undefined ? text.slice(0, end) : w < 2 ? "" : Paint.line_cut([Paint.Run(text)], 0, w - 1)[1].map((r) => r.x).join("") + "…";
+  const end  = [...text.matchAll(/ {2,}/g)].map((m) => m.index + m[0].length).reverse().find((e) => Paint.text_width(text.slice(0, e)) <= w);
+  const cut  = end === undefined || w - Paint.text_width(text.slice(0, end)) > CUT;
+  return cut ? (w < 2 ? "" : Paint.line_cut([Paint.Run(text)], 0, w - 1)[1].map((r) => r.x).join("") + "…") : text.slice(0, end).trimEnd();
 }
 
 // the commands suggested, framed as the picker is, fw wide, room lines

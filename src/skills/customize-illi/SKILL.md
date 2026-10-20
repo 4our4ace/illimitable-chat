@@ -93,7 +93,12 @@ one:
   after each turn
 - side: right, left or off; side_width: "25%" or columns; jobs: summaries
   built at once
+- suggest: on or off, a suggested reply after each turn
 - theme, mcp, login: where those files are, if not in Illi's folder
+
+The user can change any of these with /settings, or /set <key> <value>,
+most at once. What you write to the file applies at the next start: for a
+single setting, point the user to /settings instead.
 
 API keys come only from ANTHROPIC_API_KEY and OPENAI_API_KEY in the
 environment.
