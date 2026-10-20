@@ -52,6 +52,7 @@ Keys
 | `/`                  | command list                          |
 | Shift+Tab            | switch primary agent                  |
 | `/model`             | pick the model, its effort and speed  |
+| `/settings`          | change any setting below              |
 | Ctrl+O               | show tool calls and thinking          |
 | Drag, double-click   | copy text                             |
 | Ctrl+Y               | copy the last reply                   |
@@ -102,6 +103,9 @@ Config
 ------
 
 `~/.illi/config.json`, or `ILLI_<KEY>` variables. All optional.
+`/settings` changes them from inside Illi (`/set <key> <value>` too);
+most apply at once, `vendors`, `models`, `jobs` and the files at the next
+start. A key set by a variable stays as the variable says.
 
 | Key          | Default                           | What                                             |
 | ------------ | --------------------------------- | ------------------------------------------------ |

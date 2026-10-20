@@ -3,8 +3,8 @@
 // All a person can do here, by group (COMMANDS, /help), and the commands
 // themselves: a /word typed runs one, and, as it's typed, the commands it
 // matches show over the input (suggested); the picker (/agent, /profile,
-// /model), the panes over the chat (/help, /agents, /mcp), the pick, the
-// login, the pages, the blocks, the memory's exports.
+// /model, /settings), the panes over the chat (/help, /agents, /mcp), the
+// pick, the login, the pages, the blocks, the memory's exports.
 
 import type { Vendor } from "../ai/AskAI.ts";
 import { term_clip, term_image } from "./Attach.ts";
@@ -21,6 +21,7 @@ import * as Paint from "../ui/Paint.ts";
 import { type Model, type Move, Pick } from "../ai/Pick.ts";
 import { term_profile } from "./ProfileCommands.ts";
 import * as Screen from "../ui/Screen.ts";
+import { term_set, term_settings } from "./Settings.ts";
 import { term_side_set, term_tokens } from "./Side.ts";
 import { term_act, term_idle, term_primaries, term_quit, term_send, type Chooser, type Cmd, type Sug, type Term } from "./Term.ts";
 import { agent_name } from "../ui/Theme.ts";
@@ -84,6 +85,8 @@ function term_groups(v: View.View, custom = false): [group: string, cmds: Cmd[]]
       ["/agents",           "",                        "your agents, commands and skills, and where their files go", term_agents],
       ["/mcp",              "",                        "your MCP servers: each one's tools, or why it failed", term_mcp],
       ["/side [where|width]", "",                      "the side panel: right, left or off; or its width, in columns (40) or of the screen (30%)", term_side_set],
+      ["/settings",         "",                        "all the settings, each one's value: type to search, Left and Right (or Enter) change it, Enter on a model or a file changes that, Delete puts its default back", (t) => term_settings(t)],
+      ["/set <key> [value]", "",                       "a setting changed (default: its default back); with no value, what it is", term_set],
       ["/login",            "",                        "sign in to ChatGPT (Plus or Pro) with a code, no opencode needed; Illi keeps and renews its own login", term_login],
       ["/logout",           "",                        "remove Illi's own ChatGPT login (opencode's, if any, is used again)", term_logout],
       ["",                  "Ctrl+PgDn, Ctrl+PgUp",    "the next page, the one before: Illi's, each subagent's at work", term_cycle],
@@ -405,9 +408,11 @@ function term_model(t: Term, arg: string): void {
 // its effort by Left and Right (stopping at the ends), its speed by Tab
 // (round its speeds: one alone stays), the foot saying both; Enter, or a
 // click, sets the three as one pick. The effort and speed asked go along
-// as another model is lit (one lacking the speed takes its fastest below)
-function term_model_pick(t: Term, rows: Array<[Vendor, Model]>): void {
-  let want    = View.view_asked(t.v)!;
+// as another model is lit (one lacking the speed takes its fastest below).
+// From another pick than the chat's, the choice goes to `done` (a
+// setting's: Settings.ts)
+export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "Model", from = View.view_asked(t.v)!, done = (p: Pick): unknown => term_act(t, { $: "Pick", to: p })): void {
+  let want    = from;
   const many  = t.v.vendors.length > 1;
   const vw    = Math.max(...rows.map(([vendor]) => vendor.length));
   const about = rows.map(([vendor, m]) => [many ? vendor.padEnd(vw) : "", m.window === undefined ? "" : term_tokens(m.window) + " context"].filter((x) => x !== "").join("  "));
@@ -431,7 +436,7 @@ function term_model_pick(t: Term, rows: Array<[Vendor, Model]>): void {
     const speed   = speeds < 2 ? "no fast" : "Tab " + (p.speed === "slow" ? "fast off" : p.speed + " on");
     return "effort " + (e > 0 ? "◂ " : "") + p.effort + (e < efforts.length - 1 ? " ▸" : "") + " · " + speed;
   };
-  term_chooser(t, "Model", rows.map(([, m]) => m.label), about, here, (k) => term_act(t, { $: "Pick", to: pick(k) }), { find: true, keys, foot });
+  term_chooser(t, title, rows.map(([, m]) => m.label), about, here, (k) => done(pick(k)), { find: true, keys, foot });
 }
 
 // a part of the pick: to the value given, or, none, the values it may
