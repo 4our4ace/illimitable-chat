@@ -420,8 +420,9 @@ export namespace Chat {
 
   // a goal check's answer, as the turn's call's is: unmet (any answer but
   // yes), the user's nudge goes to the turn as their message; met, the
-  // goal ends. A check that fails, a stop, a message or a /halt meanwhile
-  // end it with no nudge, so the turn ends; false: it ends
+  // goal ends; failed, noted, the goal kept. A stop or a /halt meanwhile
+  // end it with no nudge, so the turn ends; a message meanwhile drops its
+  // answer, the turn going on with that message. false: the turn ends
   export async function checked(chat: Chat, check: Check, halt: AbortController): Promise<boolean> {
     const { call, goal } = check;
     halt.signal.addEventListener("abort", () => call.stop(), { once: true });

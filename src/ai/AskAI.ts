@@ -31,7 +31,8 @@ import type { Pick } from "./Pick.ts";
 
 // the user's, an agent's report ("[Name]\n...", a user turn to the
 // model), a thought (shown, never logged), a reply, a tool call, its
-// result, a note from before the chat (imported)
+// result, a note of Illi's own (a stop, a goal met, a new session, a
+// main agent switch, a restart)
 export type Kind = "user" | "work" | "mind" | "illi" | "tool" | "echo" | "note";
 
 export type Vendor = "claude-api" | "openai-api" | "chatgpt";
