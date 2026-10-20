@@ -16,7 +16,7 @@ import * as Screen from "../ui/Screen.ts";
 import { term_area, term_under } from "./Select.ts";
 import { term_side, term_side_width } from "./Side.ts";
 import { term_act, type Area, type Item, type Pane, type Sug, type Term } from "./Term.ts";
-import { GLYPH } from "../ui/Theme.ts";
+import { agent_name, GLYPH } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
 
 // the folder illi works in, as the head shows it
@@ -353,7 +353,7 @@ function term_hit(t: Term, row: number, col: number, to: number, run: (() => voi
 // title, else what works
 function term_head(t: Term, w: number): Paint.Line {
   const bold  = { ...Paint.INK, b: true };
-  const page  = t.v.page === null ? [] : [Paint.Run(" › " + t.v.page.name, bold)];
+  const page  = t.v.page === null ? [] : [Paint.Run(" › " + agent_name(t.v.page.name), bold)];
   const left  = [Paint.Run(" " + View.NAME, bold), ...page, Paint.Run("  " + HERE, Paint.DIM)];
   const work  = t.v.agents.length === 0 ? "" : t.v.agents.length + " at work";
   const right = t.pane !== null ? t.pane.title + " · Esc closes" : work;

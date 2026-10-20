@@ -20,7 +20,7 @@
 // shows as its replies alone, framed and named by its agent.
 
 import type * as Md from "./Md.ts";
-import { GLYPH } from "./Theme.ts";
+import { agent_name, GLYPH } from "./Theme.ts";
 
 // Types
 // =====
@@ -50,7 +50,7 @@ const READS = new Map<string, (x: Input) => Shown>([
   ["zoom",     (x) => ({ head: msg_show(x.id, x.n) + (x.at === undefined ? "" : " from char " + x.at), blocks: [] })],
   ["date",     (x) => ({ head: msg_show(x.id, 1), blocks: [] })],
   ["spawn",    (x) => ({ head: tasks_show(x.tasks, x.agent, x.effort), blocks: (Array.isArray(x.tasks) ? x.tasks : []).flatMap(text_block) })],
-  ["tell",     (x) => ({ head: String(x.name ?? ""), blocks: text_block(x.message) })],
+  ["tell",     (x) => ({ head: agent_name(String(x.name ?? "")), blocks: text_block(x.message) })],
   ["computer", (x) => ({ head: "", blocks: text_block(x.task) })],
   ["todo",     (x) => todo_shown(x.items)],
 ]);
@@ -143,7 +143,7 @@ function msg_show(id: unknown, n: unknown): string {
 // if named
 function tasks_show(tasks: unknown, agent: unknown, effort: unknown): string {
   const n = Array.isArray(tasks) ? tasks.length : 0;
-  const who = typeof agent === "string" && agent !== "" ? " " + agent : n === 1 ? " agent" : " agents";
+  const who = typeof agent === "string" && agent !== "" ? " " + agent_name(agent) : n === 1 ? " agent" : " agents";
   return n + who + (typeof effort === "string" ? " · " + effort : "");
 }
 

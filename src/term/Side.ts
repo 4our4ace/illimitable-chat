@@ -14,7 +14,7 @@ import { term_note } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_profile_go } from "./ProfileCommands.ts";
 import { term_act, type Item, type Term } from "./Term.ts";
-import { GLYPH } from "../ui/Theme.ts";
+import { agent_name, GLYPH } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
 
 // the side's narrowest, its line included; the narrowest chat beside it;
@@ -46,7 +46,7 @@ export function term_side(t: Term, w: number, tall: number): Item[] {
   const item  = (here: boolean, text: string, run: () => void): Item => [[Paint.Run((here ? GLYPH.here : GLYPH.tab) + " " + text, here ? Paint.INK : Paint.DIM)], run];
   const about = (k: number) => (k === 0 ? "Illi's own" : t.agents[k - 1].description);
   const mains = [null, ...t.agents.map((a) => a.name)].map((name, k): Item => {
-    const [line, run] = item(name === t.v.agent, name ?? View.MAIN, () => term_choose(t, name));
+    const [line, run] = item(name === t.v.agent, agent_name(name ?? View.MAIN), () => term_choose(t, name));
     const room = w - Paint.line_width(line) - 2;
     return [room >= 12 && about(k) !== "" ? [...line, Paint.Run("  " + about(k), Paint.DIM)] : line, run];
   });
@@ -246,7 +246,7 @@ function term_side_subs(t: Term): Item[] {
   const names = shown === null || t.subs.has(shown) ? [...t.subs] : [...t.subs, [shown, t.v.agents.includes(shown)] as [string, boolean]];
   const back  = shown === null ? [] : [[[Paint.Run("‹ " + View.MAIN, Paint.DIM)], () => term_act(t, { $: "Goto", name: null })] as Item];
   const subs  = names.map(([name, working]): Item => [
-    [Paint.Run((working ? spin : "✓") + " ", working ? { ...Paint.INK, c, b: true } : { ...Paint.INK, c: "2" }), Paint.Run(name, name === shown ? { ...Paint.INK, b: true } : working ? Paint.INK : Paint.DIM)],
+    [Paint.Run((working ? spin : "✓") + " ", working ? { ...Paint.INK, c, b: true } : { ...Paint.INK, c: "2" }), Paint.Run(agent_name(name), name === shown ? { ...Paint.INK, b: true } : working ? Paint.INK : Paint.DIM)],
     () => term_act(t, { $: "Goto", name }),
   ]);
   return [...back, ...subs];

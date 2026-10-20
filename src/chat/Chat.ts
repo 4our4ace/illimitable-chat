@@ -20,6 +20,7 @@ import { Disk } from "./Disk.ts";
 import { Memory, type Share } from "./Memory.ts";
 import { Pick } from "../ai/Pick.ts";
 import { MASTER, SEARCHES, Tools, type Agent, type Live } from "../tools/Tools.ts";
+import { agent_name } from "../ui/Theme.ts";
 import { IMAGES, live_push, PING, SUMMARIES, TICK, TURN, type Answer, type Link, type Part, type Server as Out, type Wait } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
 
@@ -879,7 +880,7 @@ export namespace Chat {
 
   // the note of the main agent now, as a switch to it
   export function switch_note(chat: Chat): string {
-    const who = chat.mem.agent === null ? "Illi's own" : chat.mem.agent;
+    const who = chat.mem.agent === null ? "Illi's own" : agent_name(chat.mem.agent);
     return "Main agent: " + who + ", on " + Pick.label(chat.pick) + ".";
   }
 
