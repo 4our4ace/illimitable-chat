@@ -10,6 +10,7 @@ import { expect, test } from "bun:test";
 import * as Paint from "./Paint.ts";
 import * as Reply from "./Reply.ts";
 import * as Screen from "./Screen.ts";
+import * as Theme from "./Theme.ts";
 import * as View from "./View.ts";
 
 function fresh(tty: boolean, ed: Screen.Screen["ed"], on: (k: string) => unknown): Screen.Screen {
@@ -106,6 +107,57 @@ test("kitty's keys never leak into the text, whatever their reads", () => {
     expect(text).toBe("hello!?\n");
     expect(keys).toEqual(["V", "Esc"]);
   });
+});
+
+test("kitty's keypad types its characters; its arrows and the rest of the pad are keys", () => {
+  const { scr, keys } = screen();
+  Screen.screen_feed(scr, "\x1b[57400u\x1b[57409u\x1b[57399u\x1b[57413u\x1b[57415u\x1b[57410u");
+  expect(scr.ed.text).toBe("1.0+=/");
+  Screen.screen_feed(scr, "\x1b[57417u\x1b[57420u\x1b[57421u\x1b[57426u\x1b[57400;5u");
+  expect(keys).toEqual(["PgUp", "Ctrl+1"]);
+  expect(scr.ed.text).toBe("1.0+=");
+});
+
+test("the wheel turned sideways scrolls nothing", () => {
+  const { scr, keys } = screen();
+  Screen.screen_feed(scr, "\x1b[<66;5;5M\x1b[<67;5;5M\x1b[<64;5;5M\x1b[<65;5;5M");
+  expect(keys).toEqual(["WheelUp", "WheelDown"]);
+});
+
+test("a legacy Alt+[ or Alt+Shift+O, alone, is a key after a moment, never the start of the next", async () => {
+  const keys: string[] = [];
+  const scr = fresh(true, Screen.ed_new(), (k) => k !== "" && keys.push(k));
+  Screen.screen_feed(scr, "\x1b[");
+  await Bun.sleep(80);
+  Screen.screen_feed(scr, "\x1bO");
+  await Bun.sleep(80);
+  Screen.screen_feed(scr, "a");
+  expect(keys).toEqual(["Alt+[", "Alt+O"]);
+  expect(scr.ed.text).toBe("a");
+});
+
+test("a word move goes over a decomposed letter whole", () => {
+  const ed = Screen.ed_new();
+  Screen.ed_type(ed, "cafe\u0301 noir");
+  ed.pos = 0;
+  Screen.ed_key(ed, "Alt+F");
+  expect(ed.text.slice(0, ed.pos)).toBe("cafe\u0301");
+});
+
+test("the input's cursor and wrap follow the prompt's own width; its hint is cleaned", () => {
+  const { scr } = screen();
+  const was = Theme.GLYPH.input;
+  Theme.GLYPH.input = "❯❯❯ ";
+  try {
+    Screen.ed_type(scr.ed, "hello");
+    expect(Screen.screen_input(scr, 20, 3, "", false).at).toEqual({ row: 0, col: 9 });
+    expect(scr.ed.w).toBe(16);
+  } finally {
+    Theme.GLYPH.input = was;
+  }
+  const empty = screen();
+  const hint  = Screen.screen_input(empty.scr, 40, 3, "go\x1b]52;c;eA==\x07 on", false).lines[0][1].x;
+  expect(hint).toBe("go]52;c;eA== on");
 });
 
 test("a pipe's last line, without a newline, waits in the input for the end", () => {

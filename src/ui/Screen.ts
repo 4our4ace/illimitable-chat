@@ -165,6 +165,16 @@ const KEYS: Record<string, string> = {
   32    : "Space",
   127   : "Backspace",
   57414 : "Enter",
+  57417 : "Left",
+  57418 : "Right",
+  57419 : "Up",
+  57420 : "Down",
+  57421 : "PgUp",
+  57422 : "PgDn",
+  57423 : "Home",
+  57424 : "End",
+  57425 : "Insert",
+  57426 : "Delete",
   A     : "Up",
   B     : "Down",
   C     : "Right",
@@ -181,17 +191,31 @@ const KEYS: Record<string, string> = {
   "8~"  : "End",
 };
 
-// a word's character
-const WORD = /[\p{L}\p{N}_]/u;
+// kitty's keypad keys that type a character, by code: KP_0 to KP_9, the
+// decimal point, /, *, -, +, = and the separator (KP_ENTER is Enter, the
+// arrows and the rest of the pad KEYS')
+const KEYPAD: Record<number, string> = { 57409: ".", 57410: "/", 57411: "*", 57412: "-", 57413: "+", 57415: "=", 57416: "," };
+for (let k = 0; k < 10; k++) {
+  KEYPAD[57399 + k] = String(k);
+}
+
+// a legacy Alt+[ or Alt+Shift+O, read alone: a sequence's start (CSI,
+// SS3) till no more comes for this long (ms)
+const ALONE = 50;
+
+// a word's character (a mark too: a letter decomposed is one word)
+const WORD = /[\p{L}\p{M}\p{N}_]/u;
 
 // modifiers, as bits of (mods - 1)
 const MODS: [number, string][] = [[4, "Ctrl+"], [2, "Alt+"], [1, "Shift+"]];
 
-// a mouse report's button: the wheel's bit, its down bit, a move's bit
-// (with no button down: NONE); the modifiers' bits (ignored); how soon
-// a press again in the same place counts twice (ms)
-const WHEEL = 64;
-const DOWN  = 1;
+// a mouse report's button: the wheel's bit, its down bit, its sideways
+// bit (66, 67), a move's bit (with no button down: NONE); the modifiers'
+// bits (ignored); how soon a press again in the same place counts twice
+// (ms)
+const WHEEL    = 64;
+const DOWN     = 1;
+const SIDEWAYS = 2;
 const DRAG  = 32;
 const NONE  = 3;
 const SHIFT = 4 | 8 | 16;
@@ -291,7 +315,20 @@ export function screen_feed(scr: Screen, data: string): void {
     data = data.slice(n);
   }
   scr.rest = data;
+  if (/^\x1b[O[]$/.test(data)) {
+    setTimeout(() => screen_alone(scr, data), ALONE).unref?.();
+  }
   if (!moved) {
+    scr.on("");
+  }
+}
+
+// a sequence's start left unread (screen_feed) still alone after ALONE:
+// a legacy Alt+[ or Alt+Shift+O
+function screen_alone(scr: Screen, rest: string): void {
+  if (scr.rest === rest) {
+    scr.rest = "";
+    screen_press(scr, "Alt+" + rest[1]);
     scr.on("");
   }
 }
@@ -324,7 +361,12 @@ function screen_key(scr: Screen, data: string): number {
     return seq[0].length;
   }
   if (seq !== null) {
-    screen_press(scr, seq_name(seq[1] ?? "", seq[2]));
+    const key = seq_name(seq[1] ?? "", seq[2]);
+    if (seq[2] === "u" && key === KEYPAD[Number((seq[1] ?? "").split(/[;:]/)[0])]) {
+      screen_text(scr, key);
+    } else {
+      screen_press(scr, key);
+    }
     return seq[0].length;
   }
   if (code === 27 && data.length > 1 && data[1] !== "\x1b") {
@@ -334,14 +376,19 @@ function screen_key(scr: Screen, data: string): number {
     return 1 + ch.length;
   }
   if (text !== null) {
-    if (scr.type?.(text[0]) !== true) {
-      ed_type(scr.ed, text[0]);
-      scr.typed = true;
-    }
+    screen_text(scr, text[0]);
     return text[0].length;
   }
   screen_press(scr, KEYS[code] ?? "Ctrl+" + String.fromCharCode(code + 64));
   return 1;
+}
+
+// text typed: to what takes it first, else the input
+function screen_text(scr: Screen, text: string): void {
+  if (scr.type?.(text) !== true) {
+    ed_type(scr.ed, text);
+    scr.typed = true;
+  }
 }
 
 // a key: to what grabs keys first; an editing key edits the input; any
@@ -358,7 +405,7 @@ function screen_press(scr: Screen, key: string): void {
 }
 
 // a mouse report (its params, whether pressed): the wheel as WheelUp or
-// WheelDown; the left button as Press (where: scr.click, how many times
+// WheelDown (turned sideways: nothing); the left button as Press (where: scr.click, how many times
 // there: scr.clicks), Drag and Release, the pointer moving with none
 // down as Move (each where: scr.point); the other buttons do nothing
 function screen_mouse(scr: Screen, params: string, down: boolean): void {
@@ -367,7 +414,9 @@ function screen_mouse(scr: Screen, params: string, down: boolean): void {
   const at     = { row: row - 1, col: col - 1 };
   const now    = Date.now();
   if (button & WHEEL) {
-    screen_press(scr, button & DOWN ? "WheelDown" : "WheelUp");
+    if (!(button & SIDEWAYS)) {
+      screen_press(scr, button & DOWN ? "WheelDown" : "WheelUp");
+    }
   } else if (button === DRAG || button === (DRAG | NONE)) {
     scr.point = at;
     scr.on(button === DRAG ? "Drag" : "Move");
@@ -452,7 +501,7 @@ function seq_name(params: string, end: string): string {
   const [a = 1, b = 1, c = 1] = params.split(";").map((p) => Number(p.split(":")[0]) || 1);
   const code = end === "u" ? a : end === "~" && a === 27 ? c : null;
   const name = end === "~" ? a + "~" : end;
-  const key  = code === null ? KEYS[name] ?? name : KEYS[code] ?? String.fromCodePoint(code).toUpperCase();
+  const key  = code === null ? KEYS[name] ?? name : KEYS[code] ?? KEYPAD[code] ?? String.fromCodePoint(code).toUpperCase();
   const mods = MODS.filter(([bit]) => (b - 1) & bit).map(([, m]) => m);
   return mods.join("") + key;
 }
@@ -466,13 +515,14 @@ export function screen_input(scr: Screen, w: number, max: number, hint: string, 
   const pad  = Paint.Run(" ".repeat(Paint.text_width(Theme.GLYPH.input)));
   const ink  = off ? Paint.DIM : Paint.INK;
   const ed   = scr.ed;
-  ed.w = w - 2;
+  const mw   = Paint.text_width(Theme.GLYPH.input);
+  ed.w = w - mw;
   const { rows, places, at } = ed_layout(ed);
   const spot = places[at];
   const top  = Math.max(0, spot.row - Math.max(1, max) + 1);
   const seen = rows.slice(top, top + Math.max(1, max));
-  const text = ed.text === "" ? [[mark, Paint.Run(hint, Paint.DIM)]] : seen.map((x, k) => [top + k === 0 ? mark : pad, ...input_runs(x, ink)]);
-  return { lines: text, at: { row: spot.row - top, col: spot.col + 2 } };
+  const text = ed.text === "" ? [[mark, Paint.Run(Paint.text_clean(hint), Paint.DIM)]] : seen.map((x, k) => [top + k === 0 ? mark : pad, ...input_runs(x, ink)]);
+  return { lines: text, at: { row: spot.row - top, col: spot.col + mw } };
 }
 
 // a row of the input: its tokens in the palette's cyan, the rest in ink
