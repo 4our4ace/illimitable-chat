@@ -13,7 +13,7 @@ import { ChatGPT } from "../ai/ChatGPT.ts";
 import * as config from "../config/Config.ts";
 import { Custom, type Command, type Profile, type Skill } from "../config/Custom.ts";
 import { term_redraw } from "./Frame.ts";
-import { term_clear, term_cycle, term_enter, term_esc, term_next, term_page, term_shots, term_take, term_verbose } from "./Keys.ts";
+import { term_away, term_clear, term_cycle, term_enter, term_esc, term_next, term_page, term_shots, term_take, term_verbose } from "./Keys.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
 import { Memory } from "../chat/Memory.ts";
 import { term_note, term_notify, term_unnote, term_unnotify, type Notice } from "./Notices.ts";
@@ -41,8 +41,8 @@ function term_groups(v: View.View, custom = false): [group: string, cmds: Cmd[]]
   const cmds   = custom ? Custom.commands(process.cwd()) : [];
   const skills = custom ? Custom.skills(process.cwd()).filter((s) => !cmds.some((c) => c.name === s.name)) : [];
   const yours  = [
-    ...cmds.map((c): Cmd => ["/" + c.name + " [...]", "", c.description || "your command (" + c.file + ")", (t, a) => term_custom(t, c, a)]),
-    ...skills.map((s): Cmd => ["/" + s.name + " [...]", "", "skill: " + (s.description || s.dir), (t, a) => term_skill(t, s, a)]),
+    ...cmds.map((c): Cmd => ["/" + c.name + " [...]", "", c.description || "your command (" + c.file + ")", (t, a) => term_custom(t, c, a, "/" + c.name)]),
+    ...skills.map((s): Cmd => ["/" + s.name + " [...]", "", "skill: " + (s.description || s.dir), (t, a) => term_skill(t, s, a, "/" + s.name)]),
   ];
   return [
     ["Chat", [
@@ -50,10 +50,10 @@ function term_groups(v: View.View, custom = false): [group: string, cmds: Cmd[]]
       ["",                  "Esc",                     "close a list; else clear the notes and interrupt Illi's turn (agents go on)", term_esc],
       ["",                  "Ctrl+C, Ctrl+D",          "clear; on an empty input, interrupt (Ctrl+C again: quit), quit", term_clear],
       ["",                  "Tab",                     "take the suggested reply",                       term_take],
-      ["/goal <message>",   "",                        "send a message as the goal: at each turn's end, Illi asks itself if it is met, and goes on till it is", (t, a) => term_act(t, { $: "Send", text: "/goal " + a })],
-      ["/halt",             "",                        "drop the goal; the turn running ends as it would", (t) => term_act(t, { $: "Send", text: "/halt" })],
-      ["/clear",            "",                        "a fresh session for a new topic: the screen starts empty, and Illi gets the chat so far only as its memory tree's summaries (each a zoom away, so it still remembers)", (t) => term_act(t, { $: "Send", text: "/clear" })],
-      ["/compact",          "",                        "fold all but the last two exchanges into Illi's memory tree, so each turn sends less; unlike /clear, the screen still shows them all", (t) => term_act(t, { $: "Send", text: "/compact" })],
+      ["/goal <message>",   "",                        "send a message as the goal: at each turn's end, Illi asks itself if it is met, and goes on till it is", (t, a) => term_say(t, "/goal " + a)],
+      ["/halt",             "",                        "drop the goal; the turn running ends as it would", (t) => term_say(t, "/halt")],
+      ["/clear",            "",                        "a fresh session for a new topic: the screen starts empty, and Illi gets the chat so far only as its memory tree's summaries (each a zoom away, so it still remembers)", (t) => term_say(t, "/clear")],
+      ["/compact",          "",                        "fold all but the last two exchanges into Illi's memory tree, so each turn sends less; unlike /clear, the screen still shows them all", (t) => term_say(t, "/compact")],
       ["/image <path>",     "",                        "attach an image: its token goes in the input, the image with it as it's sent (or paste or drop its file)", term_image],
       ["",                  "Alt+V, Ctrl+V",           "attach the clipboard's image (the terminal's own paste brings text alone)", term_clip],
       ["/open #id",         "",                        "open block #id and keep it open (or click it)",  (t, a) => term_block(t, a, true)],
@@ -195,16 +195,29 @@ function term_help(t: Term): void {
   });
 }
 
-// the user's command: its message sent, with the images its words name
-function term_custom(t: Term, cmd: Command, arg: string): void {
+// a command of the chat's (/goal, /halt, /clear, /compact) sent as typed;
+// from an agent's page, not sent, the input has it back (term_away)
+function term_say(t: Term, text: string): void {
+  if (!term_away(t, text.trim())) {
+    term_act(t, { $: "Send", text });
+  }
+}
+
+// the user's command (typed as `word`): its message sent, with the images
+// its words name; from an agent's page, not sent (term_away)
+function term_custom(t: Term, cmd: Command, arg: string, word: string): void {
+  if (term_away(t, (word + " " + arg).trim())) {
+    return;
+  }
   if (term_act(t, { $: "Send", text: Custom.expand(cmd, arg), images: term_shots(t, arg) }).length > 0) {
     term_unnote(t);
   }
 }
 
-// the user's skill: Illi told to use it, for the words after its name
-function term_skill(t: Term, skill: Skill, arg: string): void {
-  term_custom(t, { name: skill.name, description: "", body: "Use your skill " + skill.name + (arg === "" ? "." : ": $ARGUMENTS"), file: skill.dir }, arg);
+// the user's skill (typed as `word`): Illi told to use it, for the words
+// after its name
+function term_skill(t: Term, skill: Skill, arg: string, word: string): void {
+  term_custom(t, { name: skill.name, description: "", body: "Use your skill " + skill.name + (arg === "" ? "." : ": $ARGUMENTS"), file: skill.dir }, arg, word);
 }
 
 // the user's MCP servers: each one's tools, or how it is; the file

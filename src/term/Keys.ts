@@ -164,22 +164,36 @@ export function term_page(t: Term, key: string): void {
 
 // Enter: runs a command, or sends the input, its pastes' text in place
 // of their tokens and the images it names (the chat shown from its end,
-// the notes gone); text not sent stays (it was lost: an unknown /word)
+// the notes gone); empty, it interrupts Illi's turn, on any page; text
+// not sent stays (it was lost: an unknown /word)
 export function term_enter(t: Term): void {
   const typed = Screen.ed_take(t.scr.ed);
   const text  = Screen.ed_expand(t.scr.ed, typed);
   t.pane = null;
-  if (term_command(t, text)) {
+  if (term_command(t, text) || (text.trim() !== "" && term_away(t, text, typed))) {
     return;
   }
-  if (!View.view_typing(t.v)) {
-    term_note(t, "Messages go to Illi: Ctrl+PgUp or /tab illi goes back.");
-  } else if (term_act(t, { $: "Send", text, images: term_shots(t, text) }).length > 0) {
+  if (term_act(t, { $: "Send", text, images: term_shots(t, text) }).length > 0) {
     term_unnote(t);
     t.scroll = 0;
     return;
   }
   Screen.ed_type(t.scr.ed, typed);
+}
+
+// a message for Illi (or /goal, /halt, /clear, /compact, the user's
+// commands and skills) sent from an agent's page: not sent, a note says
+// where messages go, and the input has it back as typed (its tokens: a
+// paste's text found in the history; none: text); true if so
+export function term_away(t: Term, text: string, typed?: string): boolean {
+  if (View.view_typing(t.v)) {
+    return false;
+  }
+  term_note(t, "Messages go to Illi: Ctrl+PgUp or /tab illi goes back.");
+  if (t.scr.ed.text === "") {
+    Screen.ed_type(t.scr.ed, typed ?? t.scr.ed.hist.findLast((h) => Screen.ed_expand(t.scr.ed, h) === text) ?? text);
+  }
+  return true;
 }
 
 // the images a text names by their tokens, each once
