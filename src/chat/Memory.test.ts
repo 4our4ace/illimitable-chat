@@ -69,3 +69,17 @@ test("a month-old day's file is gzipped: its lines read the same, open, from an 
   Memory.push(again, [{ kind: "user", text: "after" }]);
   expect(texts(again, 13)).toEqual([...kept, "after"]);
 });
+
+test("the screen folds with the cut as it moves on by itself, and stays behind a cut moved for it", () => {
+  const mem  = chat("show", 40);
+  const high = 20 * size(mem, 0, 1);
+  mem.cut    = Memory.kept(mem, Infinity);
+  expect(mem.cut).toBe(38);
+  expect(mem.show).toBe(0);
+  expect(Memory.cutoff(mem, 1e9)).toBe(38);
+  expect(mem.show).toBe(0);
+  Memory.push(mem, Array.from({ length: 40 }, (_, k) => ({ kind: "illi" as const, text: "reply " + k + " " + "y".repeat(78) })));
+  const cut = Memory.cutoff(mem, high);
+  expect(cut).toBeGreaterThan(38);
+  expect(mem.show).toBe(cut);
+});

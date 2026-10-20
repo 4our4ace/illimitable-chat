@@ -30,7 +30,9 @@ How it works
   merge in pairs into a binary tree. A turn sends the latest messages
   whole, up to `context`; older ones go as lines, coarser with age.
 - **Zoom.** Illi can open any line back down to the original messages.
-  `/clear` starts a fresh topic that still remembers.
+  `/compact` folds all but the last two exchanges, so turns get smaller
+  (the screen keeps showing them); `/clear` starts a fresh topic that
+  still remembers.
 - **Cheap to run.** A smaller model writes the summaries in the
   background, and the view only grows at its end, so calls hit the
   prompt cache.

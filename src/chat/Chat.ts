@@ -173,7 +173,7 @@ export namespace Chat {
     if (mem.count === 0) {
       Memory.push(mem, [{ kind: "illi", text: HELLO, line: HELLO_LINE }]);
     }
-    chat.eye = Chat.eye(mem, Chat.from(chat));
+    chat.eye = Chat.eye(mem, Math.min(mem.show, Chat.from(chat)));
     mem.made = (l, i) => Chat.made(chat, l, i);
     mem.wait.add(() => Chat.free(chat));
     const work = mem.work;
@@ -337,7 +337,7 @@ export namespace Chat {
     const text = says.map((say) => say.text).join("\n\n");
     const imgs = says.flatMap((say) => say.imgs);
     const server = Tools.at(chat.tools, "main");
-    chat.eye = Chat.eye(mem, from);
+    chat.eye = Chat.eye(mem, mem.show);
     chat.socks.forEach((sock) => Chat.show(chat, sock));
     const bill = mem.pay?.("chat", String(msgs[0].id));
     const blocks = [...view, Tools.here(chat.tools), Tools.at_work(chat.tools), { text: HEAD + text, mark: true }];
@@ -764,6 +764,9 @@ export namespace Chat {
       case "clear": {
         return Chat.clear(chat);
       }
+      case "compact": {
+        return Chat.compact(chat);
+      }
       case "main": {
         return Chat.main(chat, msg.name == null ? null : String(msg.name));
       }
@@ -794,12 +797,39 @@ export namespace Chat {
     if (mem.cut === mem.count) {
       return {};
     }
-    mem.cut = mem.count;
+    mem.cut = mem.show = mem.count;
     Memory.fit(mem);
     Memory.save(mem);
     Chat.note(chat, "New session: the user cleared the chat for a new topic. Everything before this note is in the view's lines; zoom into them when the user refers to it.");
     chat.eye = Chat.eye(mem, mem.cut);
     chat.socks.forEach((sock) => Chat.show(chat, sock));
+    return {};
+  }
+
+  // the chat compacted (/compact): the cut moved on to Memory.kept, so
+  // all but the last exchanges fold into the view's lines (each a zoom
+  // away) and each turn sends less; the screen still shows them whole
+  // (the memory's `show` stays). Noted for the agent; not while a turn
+  // runs. A call holds Chat.cap tokens, 4 bytes each: the exchanges kept
+  // get a quarter at most
+  export function compact(chat: Chat): Answer {
+    const mem = chat.mem;
+    if (chat.busy) {
+      return { error: "Illi is at work: /compact once it's done (Esc stops it)" };
+    }
+    const from = Memory.kept(mem, Chat.cap(chat));
+    if (from <= mem.cut) {
+      return { error: "Nothing to compact: Illi gets only the latest messages whole already." };
+    }
+    const folded = from - mem.cut;
+    mem.cut = from;
+    Memory.fit(mem);
+    Memory.save(mem);
+    const n = (k: number, what: string) => k + " " + what + (k === 1 ? "" : "s");
+    Chat.note(chat, "Compacted: the user folded " + n(folded, "older message") + " into the view's lines; the latest " + n(mem.count - from, "message") + " still go whole. Zoom into the lines when you need what they hold.");
+    chat.eye = Chat.eye(mem, mem.show);
+    chat.socks.forEach((sock) => Chat.show(chat, sock));
+    Chat.change(chat);
     return {};
   }
 

@@ -79,3 +79,26 @@ test("one process at a time holds the chat", async () => {
   const out = await new Response(proc.stdout).text();
   expect(out).toContain("already open");
 });
+
+test("/compact folds all but the last two exchanges for the agent, the screen still showing them; again, nothing to fold", async () => {
+  await until(() => !chat.busy);
+  const mem = chat.mem;
+  const say = (kind: "user" | "illi" | "tool" | "echo", text: string) => Memory.push(mem, [{ kind, text }]);
+  for (let k = 0; k < 4; k++) {
+    say("user", "question " + k);
+    say("tool", "shell {\"command\":\"ls\"}");
+    say("echo", "a.txt b.txt");
+    say("illi", "answer " + k);
+  }
+  const second = mem.count - 8;
+  const shown = mem.show;
+  expect(View.view_act(View.view_new(), { $: "Send", text: "/compact" })).toEqual([{ $: "compact" }]);
+  expect(Chat.compact(chat)).toEqual({});
+  expect(mem.cut).toBe(second);
+  expect(Memory.message(mem, second)!.text).toBe("question 2");
+  expect(mem.show).toBe(shown);
+  expect(chat.eye.from).toBe(shown);
+  expect(Memory.message(mem, mem.count - 1)!.kind).toBe("note");
+  expect(Chat.compact(chat).error).toContain("Nothing to compact");
+  expect(Memory.load(mem.dir, () => ({}) as any).show).toBe(shown);
+});
