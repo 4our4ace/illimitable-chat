@@ -138,3 +138,22 @@ License
 
 Apache 2.0: LICENSE and NOTICE. `vendor/cellsmith/` and the libraries it
 bundles are MIT, licenses inside.
+
+Roadmap
+-------
+
+Planned, roughly in this order. Until then, Illi runs what it decides
+to, as you: use it where you'd let it.
+
+- **Permissions.** Rules for what Illi may run or change without asking
+  (allow, ask, deny), and a prompt for the rest: once, always in this
+  project, always, or no with a reason Illi reads. Secrets such as
+  `~/.ssh` hidden, `.git` and shell rc files protected, the mode on the
+  bottom line, and subagents' requests in the same queue, named.
+- **Sandbox.** Shell commands in a bubblewrap sandbox: only the project
+  and `/tmp` writable, secrets hidden, network off. Illi asks before
+  anything leaves it, so work inside it needs no prompts.
+- **Project trust.** A project's own `.illi` agents, commands and skills
+  load only once you trust the folder.
+- **An AI reviewer.** Optionally, a small model approves routine requests
+  to leave the sandbox, so you're asked less.
