@@ -6,7 +6,8 @@
 // read anew; Delete puts its default back; Enter on a pick opens the
 // model picker, its choice the setting's; on one typed in, /set in the
 // input. /set checks a value first: its shape, a rules file there, the
-// picks still offered.
+// picks still offered. Each setting is in the README and the
+// customize-illi skill.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -125,4 +126,14 @@ test("a vendor or a model taken out that a pick runs on won't do", () => {
   expect(config.config_check("vendors", "chatgpt")).toMatch(/^pick is no vendor:model:effort:speed offered here/);
   expect(config.config_check("models", "opus-5.5")).toMatch(/^pick is no vendor:model:effort:speed offered here/);
   expect(config.config_check("models", "sonnet-5.5, haiku-5.5")).toBeNull();
+});
+
+test("each setting is said where a person or Illi reads of it: the README's Config, the customize-illi skill", () => {
+  const readme = fs.readFileSync(import.meta.dir + "/../../README.md", "utf8");
+  const config_part = readme.slice(readme.indexOf("\nConfig\n"), readme.indexOf("\nCode\n"));
+  const skill = fs.readFileSync(import.meta.dir + "/../skills/customize-illi/SKILL.md", "utf8");
+  for (const key of Object.keys(config.SETTINGS)) {
+    expect([key, config_part.includes("`" + key + "`")]).toEqual([key, true]);
+    expect([key, new RegExp("\\b" + key + "\\b").test(skill)]).toEqual([key, true]);
+  }
 });
