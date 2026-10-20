@@ -60,8 +60,10 @@ const READS = new Map<string, (x: Input) => Shown>([
 
 export type Report = { name: string; text: string };
 
-export function report_text(name: string, text: string): string {
-  return "[" + name + "]\n" + text + "\n\nFull chat: zoom(\"" + name + "\")";
+// an agent's report: its name, what it said, how to open its whole chat
+// (by its log: the name may go on to another agent)
+export function report_text(name: string, log: string, text: string): string {
+  return "[" + name + "]\n" + text + "\n\nFull chat: zoom(\"" + log + "\")";
 }
 
 export function report_read(text: string): Report | null {

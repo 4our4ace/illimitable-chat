@@ -112,7 +112,8 @@ type Saved = Kept & { seen?: Kept; main: End; tree: End; pick: object | null; go
 // /clear's: older ones are only the memory's), tail: the bytes of those
 // from the cut, as last counted (Memory.fill); nodes: the
 // texts of the views' nodes
-// built and of those above them, by slot; agents: their logs' lengths;
+// built and of those above them, by slot; agents: their logs' lengths,
+// logs: each name's log as now (a name freed takes a new one: agent_new);
 // view: the chat's view; seen: the compactions'; ready: the nodes not
 // built whose halves are, by side and level, in order; ends: how far
 // each log is indexed; busy: nodes building, by slot, with their side;
@@ -137,6 +138,7 @@ export type Memory = {
   tail   : { cut: number; count: number; bytes: number };
   nodes  : Map<number, string>;
   agents : Map<string, number>;
+  logs   : Map<string, string>;
   view   : View;
   seen   : View;
   ready  : number[][][];
@@ -201,8 +203,11 @@ const IMAGES = "/docs/images/";
 
 const AGENTS = "/docs/agent/";
 
-// an agent's name: a letter, then letters, digits, _ and -
+// an agent's name: a letter, then letters, digits, _ and -; its log's,
+// the name and a tag (one name, freed, is used again: each log its own),
+// the tag and the name back from a file
 const AGENT = /^[A-Za-z][A-Za-z0-9_-]*$/;
+const LOG   = /^([A-Za-z][A-Za-z0-9_-]*)(?:\.([0-9a-z]+))?$/;
 
 // a compaction's task, before its <input>: one message to compress
 // (level 0), or two lines to merge
@@ -227,7 +232,7 @@ export namespace Memory {
 
   export function load(dir: string, share: Memory["share"], acted: Memory["acted"] = () => {}): Memory {
     const mem: Memory = {
-      dir, fds: new Map(), unpacked: new Map(), count: 0, open: 0, pick: null, goal: null, agent: null, work: [], cut: 0, show: 0, top: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), ready: [[], []], ends: { main: [0, 0], tree: [0, 0] },
+      dir, fds: new Map(), unpacked: new Map(), count: 0, open: 0, pick: null, goal: null, agent: null, work: [], cut: 0, show: 0, top: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), logs: new Map(), ready: [[], []], ends: { main: [0, 0], tree: [0, 0] },
       view: { parts: [], size: 0, batch: false, high: LINES }, seen: { parts: [], size: 0, batch: false, high: SEEN },
       busy: new Map(), sides: new Map(), calls: new Map(), hold: [null, "paused"], done: false, wait: new Set(), share, acted,
     };
@@ -597,6 +602,16 @@ export namespace Memory {
       Memory.save(mem);
     }
     return mem.cut;
+  }
+
+  // the run, as a number: the latest message the user sent (-1: none)
+  export function run(mem: Memory): number {
+    for (let i = mem.count - 1; i >= 0; i--) {
+      if (Memory.message(mem, i)!.kind === "user") {
+        return i;
+      }
+    }
+    return -1;
   }
 
   // where /compact has the chat go whole from (its rule of thumb): the
@@ -1330,31 +1345,55 @@ h4 { margin: .8em 0 .2em; color: #888; font-weight: normal; } pre { margin: 0; w
   // Agents
   // ------
 
-  // read whole; a name is a letter, then letters, digits, _ and -, never
-  // a path
+  // read whole, by name (its log as now) or by log (a name and its tag,
+  // as a report names it: that one, though the name went on to another);
+  // never a path
   export function agent(mem: Memory, name: string): Root[] | null {
-    const file = mem.dir + AGENTS + name + ".jsonl";
-    return AGENT.test(name) && fs.existsSync(file) ? Memory.file(file) : null;
+    const log  = LOG.test(name) ? (name.includes(".") ? name : Memory.agent_log(mem, name)) : null;
+    const file = mem.dir + AGENTS + log + ".jsonl";
+    return log !== null && fs.existsSync(file) ? Memory.file(file) : null;
   }
 
-  // a new agent's name, its log made: its user's agent's name (own), the
-  // first one so named; the next ones numbered past the highest, own-2
-  // on; none (or not a name): a random one (Names.ts)
-  export function agent_new(mem: Memory, own: string | null = null): string {
+  // a name's log as now: the one it last took (kept), else on disk the
+  // newest so named (an old one, untagged, first); none: null
+  export function agent_log(mem: Memory, name: string): string | null {
+    const known = mem.logs.get(name);
+    if (known !== undefined || !AGENT.test(name)) {
+      return known ?? null;
+    }
+    const files = fs.existsSync(mem.dir + AGENTS) ? fs.readdirSync(mem.dir + AGENTS) : [];
+    const tags  = files.map((f) => LOG.exec(f.replace(/\.jsonl$/, ""))).filter((m) => m !== null && m[1] === name).map((m) => m![2] ?? "");
+    const tag   = tags.sort((a, b) => a.length - b.length || (a < b ? -1 : 1)).at(-1);
+    const log   = tag === undefined ? null : tag === "" ? name : name + "." + tag;
+    if (log !== null) {
+      mem.logs.set(name, log);
+    }
+    return log;
+  }
+
+  // a new agent's name, its log made: its user's agent's name (own), else
+  // numbered past those taken (own-2 on); none (or not a name): a random
+  // one (Names.ts) not taken. A name is taken while its agent is (taken
+  // tells: at work, or of this run); one freed is used again, with a log
+  // of its own (the name and a tag: the time)
+  export function agent_new(mem: Memory, own: string | null, taken: (name: string) => boolean): string {
     fs.mkdirSync(mem.dir + AGENTS, { recursive: true });
     const base = own !== null && AGENT.test(own) ? own : null;
-    const same = new RegExp("^" + base + "(?:-(\\d+))?\\.jsonl$");
-    const ns   = base === null ? [] : fs.readdirSync(mem.dir + AGENTS).map((f) => same.exec(f)).filter((m) => m !== null).map((m) => Number(m[1] ?? 1));
-    for (let n = Math.max(0, ...ns) + 1; ; n++) {
+    for (let n = 1; ; n++) {
       const name = base === null ? names.name_random() : n === 1 ? base : base + "-" + n;
-      try {
-        fs.writeFileSync(mem.dir + AGENTS + name + ".jsonl", "", { flag: "wx" });
-        mem.agents.set(name, 0);
-        return name;
-      } catch (err: any) {
-        if (err.code !== "EEXIST") {
+      for (let k = 0; !taken(name); k++) {
+        const log = name + "." + (Date.now() * 100 + k).toString(36);
+        try {
+          fs.writeFileSync(mem.dir + AGENTS + log + ".jsonl", "", { flag: "wx" });
+        } catch (err: any) {
+          if (err.code === "EEXIST") {
+            continue;
+          }
           throw err;
         }
+        mem.logs.set(name, log);
+        mem.agents.set(name, 0);
+        return name;
       }
     }
   }
@@ -1363,7 +1402,7 @@ h4 { margin: .8em 0 .2em; color: #888; font-weight: normal; } pre { margin: 0; w
   export function agent_push(mem: Memory, name: string, kind: Kind, text: string): number {
     const n = mem.agents.get(name) ?? Memory.agent(mem, name)?.length ?? 0;
     const root = Memory.root(n, { kind, text });
-    Memory.append(mem.dir + AGENTS + name + ".jsonl", [JSON.stringify(root)]);
+    Memory.append(mem.dir + AGENTS + (Memory.agent_log(mem, name) ?? name) + ".jsonl", [JSON.stringify(root)]);
     mem.agents.set(name, n + 1);
     return root.i;
   }

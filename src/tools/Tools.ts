@@ -7,8 +7,9 @@
 // working dir: where illi was started (each call's message names it). A
 // request dropped (its call stopped) stops its job.
 // An agent (a subagent) has a name and a log (one spawned as a user's
-// subagent: that agent's name, numbered from the second on, as
-// reviewer-2; else a random one); each call gets its context and its
+// subagent: that agent's name, numbered while another so named is at
+// work or of this run, as reviewer-2; else a random one; a name freed
+// is used again, each log its own); each call gets its context and its
 // whole log, so a told agent goes on even after a restart; its replies
 // reach the chat as one "[Name]" message. One spawned as a user's
 // subagent (Custom.ts) runs on its model, with its instructions and
@@ -42,9 +43,13 @@ export type { Live };
 // =====
 
 // at work, the view its calls get and its replies so far; its role: its
-// effort if spawned with one, the user's agent it runs as (null: none)
+// effort if spawned with one, the user's agent it runs as (null: none);
+// the run it was spawned in (Memory.run; -1: taken back from its log),
+// its log (Memory.agent_log: the name may go on to another agent)
 export type Agent = {
   name    : string;
+  run     : number;
+  log?    : string;
   role    : { $: "sub"; effort: string | null; agent: string | null };
   call    : Call | null;
   live    : Live[];
@@ -388,8 +393,12 @@ export namespace Tools {
   }
 
   export function start(tools: Tools, role: Agent["role"], task: string, view: Block[]): string {
-    const name = Memory.agent_new(tools.mem, role.agent);
-    const agent = { name, role, call: null, live: [], calls: {}, stop: false, view, replies: [] };
+    const run = Memory.run(tools.mem);
+    const name = Memory.agent_new(tools.mem, role.agent, (name) => {
+      const was = tools.agents.get(name);
+      return was !== undefined && (was.call !== null || was.run === run);
+    });
+    const agent = { name, run, log: Memory.agent_log(tools.mem, name) ?? name, role, call: null, live: [], calls: {}, stop: false, view, replies: [] };
     tools.agents.set(name, agent);
     tools.hooks.push(agent, "note", SUB_NOTE + (role.agent === null ? "" : " " + role.agent) + (role.effort === null ? "" : SUB_AT + role.effort));
     tools.hooks.push(agent, "user", task);
@@ -404,7 +413,7 @@ export namespace Tools {
     const sub = SUB_RE.exec(note);
     if (sub !== null) {
       const role = { $: "sub" as const, effort: sub[2] ?? null, agent: sub[1] ?? null };
-      tools.agents.set(name, { name, role, call: null, live: [], calls: {}, stop: false, view: [], replies: [] });
+      tools.agents.set(name, { name, run: -1, log: Memory.agent_log(tools.mem, name) ?? name, role, call: null, live: [], calls: {}, stop: false, view: [], replies: [] });
     }
     return tools.agents.get(name) ?? null;
   }
@@ -426,7 +435,7 @@ export namespace Tools {
       agent.call = null;
       agent.replies.push("failed: " + String(err?.message ?? err));
     }
-    tools.hooks.report(agent, report_text(agent.name, agent.replies.join("\n\n")), agent.stop);
+    tools.hooks.report(agent, report_text(agent.name, agent.log ?? agent.name, agent.replies.join("\n\n")), agent.stop);
   }
 
   // what pays an agent's calls
