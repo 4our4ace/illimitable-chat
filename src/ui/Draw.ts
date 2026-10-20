@@ -16,13 +16,10 @@
 // per width and palette. A reply's colors are the same palette's
 // (draw_theme).
 //
-// An agent's mark has a color of its own, made for it (draw_agent): Illi's
-// is the brand's; each other agent, the first time it's seen, takes the
-// free hue farthest from the brand's and the others', and keeps it in a
-// file (SLOTS), so it's the same in every run.
+// An agent's mark has a color of its own (draw_agent): Illi's is the
+// brand's; another's, the one its file pins, else one made for it as the
+// agents are read, from its name and theirs, so it holds while they do.
 
-import * as fs from "node:fs";
-import * as config from "../config/Config.ts";
 import { drawPele, pelePalette, type PelePalette } from "../../vendor/cellsmith/pele.ts";
 import { CANVAS, PRESETS } from "../../vendor/cellsmith/presets.ts";
 import { renderMermaidAscii } from "../../vendor/cellsmith/vendor/mermaid-text.js";
@@ -63,13 +60,11 @@ const BRAND_HUE = 198;
 // step apart from the brand's, then a ring of deeper ones between them,
 // each ring's lightness and chroma by the background (RING); none within
 // NEAR (degrees) of the brand's. Untold, the terminal's own colors, by
-// their hues (its cyan is the brand's). Each agent's slot (ring, hue) is
-// kept in SLOTS
-const HUES  = 12;
-const RING  = { dark: [[0.78, 0.15], [0.66, 0.15]], light: [[0.56, 0.15], [0.44, 0.13]] };
-const NEAR  = 30;
-const OWN   = [["1", 29], ["3", 110], ["2", 142], ["4", 264], ["5", 328]] as const;
-const SLOTS = config.DIR + "/agent-colors.json";
+// their hues (its cyan is the brand's)
+const HUES = 12;
+const RING = { dark: [[0.78, 0.15], [0.66, 0.15]], light: [[0.56, 0.15], [0.44, 0.13]] };
+const NEAR = 30;
+const OWN  = [["1", 29], ["3", 110], ["2", 142], ["4", 264], ["5", 328]] as const;
 
 // a flowchart that runs sideways, which the box art may stand up
 const SIDEWAYS = /^(\s*(?:flowchart|graph)[ \t]+)(LR|RL)\b/;
@@ -92,10 +87,11 @@ let pele: ReturnType<typeof loadPele> | null = null;
 const DRAWN = new Map<string, Cell[][] | null>();
 const LIT   = new Map<string, Token[][] | null>();
 
-// each agent's slot, by its name (in small letters), as kept (SLOTS); a
-// passing one's (a subagent of no file of its own), held for the run;
-// each slot's color, by the background
-let slots: Record<string, number> | null = null;
+// each of the user's agents' slot (a ring and hue), or the color its
+// file pins, by its name in small letters (draw_agents); a passing
+// agent's slot (a subagent of no file of its own), held for the run; each
+// slot's color, by the background
+let slots = new Map<string, number | string>();
 const PASSING = new Map<string, number>();
 const HUED    = new Map<string, string>();
 
@@ -152,62 +148,45 @@ export function draw_brand(): string {
   return BRAND[draw_tone()];
 }
 
-// the user's agents, as read: each new one given a slot (draw_slot) and
-// kept, the file read anew first (another illi may have added some); a
-// folder that can't be written: the slots hold for this run
-export function draw_agents(names: string[]): void {
-  const kept = draw_slots();
-  let added  = false;
-  for (const name of names.map((n) => n.toLowerCase())) {
-    if (!(name in kept)) {
-      kept[name] = draw_slot(name, Object.values(kept));
-      added = true;
-    }
+// the user's agents, as read, given their colors, in the order of their
+// names: the one a file pins, else a slot (draw_slot). An agent's holds
+// while they do; one coming or going may move the agents after it that
+// want its slot
+export function draw_agents(agents: { name: string; color: string | null }[]): void {
+  const named = new Map(agents.map((a) => [a.name.toLowerCase(), a.color]));
+  const took  = new Map<string, number | string>();
+  for (const name of [...named.keys()].sort()) {
+    took.set(name, named.get(name) ?? draw_slot(name, [...took.values()].filter((s) => typeof s === "number")));
   }
-  slots = kept;
-  if (added) {
-    try {
-      fs.writeFileSync(SLOTS, JSON.stringify(kept, null, 2) + "\n");
-    } catch {}
-  }
+  slots = took;
 }
 
-// an agent's color: its slot's (draw_hue); one not kept (a passing
-// subagent) takes the slot it would be given now, for the run
+// an agent's color: the one its file pins, else its slot's (draw_hue);
+// one not read (a passing subagent) takes the slot it would be given
+// now, for the run
 export function draw_agent(name: string): string {
-  slots ??= draw_slots();
   const key = name.toLowerCase();
-  if (!(key in slots) && !PASSING.has(key)) {
-    PASSING.set(key, draw_slot(key, [...Object.values(slots), ...PASSING.values()]));
+  const own = slots.get(key);
+  if (typeof own === "string") {
+    return own;
   }
-  return draw_hue(slots[key] ?? PASSING.get(key)!);
+  if (own === undefined && !PASSING.has(key)) {
+    PASSING.set(key, draw_slot(key, [...[...slots.values()].filter((s) => typeof s === "number"), ...PASSING.values()]));
+  }
+  return draw_hue(own ?? PASSING.get(key)!);
 }
 
-// the slots kept (SLOTS), by name; none, or not read: none
-function draw_slots(): Record<string, number> {
-  try {
-    const kept = JSON.parse(fs.readFileSync(SLOTS, "utf8"));
-    return Object.fromEntries(Object.entries(kept).filter(([, s]) => Number.isInteger(s) && (s as number) >= 0 && (s as number) < 2 * HUES)) as Record<string, number>;
-  } catch {
-    return {};
-  }
-}
-
-// a new agent's slot, given those taken: of those not NEAR the brand's,
-// the least shared, the first ring before the second, the farthest from
-// the brand's hue and the others' in its ring, then the nearest the hue
-// its name's hash points at (so the colors look picked at random)
+// an agent's slot, given those taken: the first free in its own order of
+// them (those not NEAR the brand's): the first ring's every other hue
+// first (with the brand's, 60° apart), then those between, then the
+// second ring; within each, as its name shuffles them (each slot by the
+// hash of the two), so the colors look picked at random. All taken: its
+// first
 function draw_slot(name: string, taken: number[]): number {
-  const want  = [...name].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0, 2166136261) % 360;
-  const ring  = (s: number) => Math.floor(s / HUES);
-  const far   = (s: number) => Math.min(draw_apart(draw_turn(s), 0), ...taken.filter((u) => u !== s && ring(u) === ring(s)).map((u) => draw_apart(draw_turn(s), draw_turn(u))));
-  const rank  = (s: number) => [taken.filter((u) => u === s).length, ring(s), -far(s), draw_apart(draw_turn(s), want)];
-  const ahead = (a: number[], b: number[]) => {
-    const k = a.findIndex((x, i) => x !== b[i]);
-    return k >= 0 && a[k] < b[k];
-  };
-  const open  = Array.from({ length: 2 * HUES }, (_, s) => s).filter((s) => draw_apart(draw_turn(s), 0) > NEAR);
-  return open.reduce((a, b) => (ahead(rank(b), rank(a)) ? b : a));
+  const hash = (x: string) => [...x].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0, 2166136261);
+  const tier = (s: number) => (s >= HUES ? 2 : s % 2);
+  const mine = Array.from({ length: 2 * HUES }, (_, s) => s).filter((s) => draw_apart(draw_turn(s), 0) > NEAR).sort((a, b) => tier(a) - tier(b) || hash(name + "/" + a) - hash(name + "/" + b));
+  return mine.find((s) => !taken.includes(s)) ?? mine[0];
 }
 
 // a slot's hue, turned from the brand's (degrees): its step round the

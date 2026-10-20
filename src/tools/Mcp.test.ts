@@ -128,7 +128,7 @@ test("a server that dies or is no program fails, told why; one disabled never st
 });
 
 test("an agent allows a server's tools by its name", () => {
-  const profile = { name: "x", description: "", mode: "all", model: null, effort: null, tools: ["read", "mcp__web"], body: "", file: "" } as const;
+  const profile = { name: "x", description: "", mode: "all", model: null, effort: null, tools: ["read", "mcp__web"], color: null, body: "", file: "" } as const;
   expect(Custom.allow({ ...profile, tools: ["read", "mcp__web"] }, Mcp.tools()).map((t) => t.name)).toEqual(["mcp__web__add"]);
   expect(Custom.allow({ ...profile, tools: ["mcp"] }, Mcp.tools())).toHaveLength(4);
 });

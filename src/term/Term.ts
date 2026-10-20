@@ -227,7 +227,7 @@ function term_new(chat: Chat): Term {
 export function term_primaries(t: Term): void {
   const all = Custom.agents(process.cwd());
   t.agents  = Custom.primaries(process.cwd(), all);
-  Draw.draw_agents(all.map((a) => a.name));
+  Draw.draw_agents(all);
 }
 
 // connects to the chat, by View's link; a pipe's text starts with the AI
