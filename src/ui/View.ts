@@ -17,7 +17,7 @@ import type { Kind, Vendor } from "../ai/AskAI.ts";
 import * as Call from "./Call.ts";
 import * as Md from "./Md.ts";
 import { LABELS, type Move, Pick } from "../ai/Pick.ts";
-import { GLYPH, WHO } from "./Theme.ts";
+import { agent_name, GLYPH, WHO } from "./Theme.ts";
 
 // Types
 // =====
@@ -579,7 +579,7 @@ export function view_tabs(v: View): Tab[] {
   return [null, ...names].map((name) => {
     const here = name === at;
     const mark = here ? GLYPH.here : GLYPH.tab;
-    return { name, here, mark, text: mark + " " + (name ?? v.agent ?? MAIN), agent: name?.replace(/-\d+$/, "") ?? v.agent ?? MAIN };
+    return { name, here, mark, text: mark + " " + agent_name(name ?? v.agent ?? MAIN), agent: name?.replace(/-\d+$/, "") ?? v.agent ?? MAIN };
   });
 }
 
@@ -608,9 +608,9 @@ export function view_doing(v: View): Doing | null {
   }
   const last   = v.live[v.live.length - 1];
   const call   = last?.kind === "tool" ? Call.call_parse(last.text) : null;
-  const agents = v.agents.length === 0 ? "" : v.agents.length === 1 ? v.agents[0] + " at work" : v.agents.length + " agents at work";
+  const agents = v.agents.length === 0 ? "" : v.agents.length === 1 ? agent_name(v.agents[0]) + " at work" : v.agents.length + " agents at work";
   if (!v.busy) {
-    return { verb: "Waiting on " + (v.agents.length === 1 ? v.agents[0] : v.agents.length + " agents"), what: "", stop: false };
+    return { verb: "Waiting on " + (v.agents.length === 1 ? agent_name(v.agents[0]) : v.agents.length + " agents"), what: "", stop: false };
   }
   const [verb, what] =
     call !== null ? [("Running " + call.name).trim(), call.head.split("\n")[0].trim()]
@@ -841,7 +841,7 @@ function sum_rows(id: number, n: number, node: Node = { text: WAIT, to: "" }, ki
 
 // an agent's page, its log (once it comes) from message `from` on
 export function page_rows(v: View, page: Page, from = 0): Row[] {
-  const head = Cap(page.name + (v.agents.includes(page.name) ? " · at work" : " · done"));
+  const head = Cap(agent_name(page.name) + (v.agents.includes(page.name) ? " · at work" : " · done"));
   return [head, ...(page.log ?? []).slice(from).flatMap((e) => whole_rows(null, e))];
 }
 
@@ -893,7 +893,7 @@ export function entry_rows(id: number | null, kind: Kind, text: string, images: 
   const call = kind === "tool" ? Call.call_parse(text) : null;
   const report = kind === "work" ? Call.report_read(text) : null;
   const body = call === null ? entry_body(kind, report?.text ?? text) : [];
-  const who = report?.name ?? WHO[kind] ?? "";
+  const who = report === null ? WHO[kind] ?? "" : agent_name(report.name);
   return call === null && body.length === 0 && images.length === 0 ? [] : [{ $: "Msg", id, kind, who, text, body, call, images }];
 }
 

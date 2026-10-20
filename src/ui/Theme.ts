@@ -156,6 +156,12 @@ export const REPLY: Record<string, string> = {
 // index ("0"-"15")
 export const COLORS: Record<string, string> = Object.fromEntries(Object.entries(OWN.colors ?? {}).filter(([, c]) => /^(#[0-9a-f]{6}|\d{1,2})$/i.test(c)));
 
+// an agent's name as shown: its first letter a capital (reviewer-2:
+// Reviewer-2); typed, and in the model's tools, as it is
+export function agent_name(name: string): string {
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
 export function tool_glyph(name: string): string {
   return TOOL[name] ?? TOOL_ANY;
 }

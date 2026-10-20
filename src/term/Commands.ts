@@ -22,6 +22,7 @@ import { term_profile } from "./ProfileCommands.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_side_set } from "./Side.ts";
 import { term_act, term_idle, term_quit, term_send, type Cmd, type Sug, type Term } from "./Term.ts";
+import { agent_name } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
 
 // how long the login's code shows: as long as it is good (ms), or till
@@ -219,12 +220,12 @@ export function term_mcp(t: Term): void {
 // commands and skills, and the dirs of all
 function term_agents(t: Term): void {
   const cwd   = process.cwd();
-  const agent = (a: Profile) => "- **" + a.name + "**" + (a.name === t.v.agent ? " (main)" : "") + (a.description === "" ? "" : ": " + a.description) + [a.model, a.effort].filter(Boolean).map((x) => " · " + x).join("") + (a.tools === null ? "" : " · tools: " + a.tools.join(", "));
+  const agent = (a: Profile) => "- **" + agent_name(a.name) + "**" + (a.name === t.v.agent ? " (main)" : "") + (a.description === "" ? "" : ": " + a.description) + [a.model, a.effort].filter(Boolean).map((x) => " · " + x).join("") + (a.tools === null ? "" : " · tools: " + a.tools.join(", "));
   const cmd   = (c: Command) => "- **/" + c.name + "**" + (c.description === "" ? "" : ": " + c.description);
   const list  = (title: string, xs: string[]) => ["", title + (xs.length === 0 ? ": none yet." : ":"), ...xs];
   t.agents    = Custom.primaries(cwd);
   const text  = [
-    "Main agent: " + (t.v.agent ?? "Illi's own") + ". Tab runs Illi as the next primary agent; so does a click at the side, and /agent <name>.",
+    "Main agent: " + (t.v.agent === null ? "Illi's own" : agent_name(t.v.agent)) + ". Tab runs Illi as the next primary agent; so does a click at the side, and /agent <name>.",
     ...list("Primary agents (Illi runs as them)", t.agents.map(agent)),
     ...list("Subagents (only an agent spawns them)", Custom.subagents(cwd).map(agent)),
     ...list("Commands", Custom.commands(cwd).map(cmd)),
@@ -244,7 +245,7 @@ function term_agent_set(t: Term, arg: string): void {
   t.agents    = Custom.primaries(process.cwd());
   const names = [null, ...t.agents.map((a) => a.name)];
   const about = names.map((name, k) => (k === 0 ? "Illi's own, on " + Pick.label(config.PICK) : t.agents[k - 1].description));
-  term_chooser(t, "Agent", names.map((name) => name ?? View.MAIN), about, names.indexOf(t.v.agent), (k) => term_choose(t, names[k]));
+  term_chooser(t, "Agent", names.map((name) => agent_name(name ?? View.MAIN)), about, names.indexOf(t.v.agent), (k) => term_choose(t, names[k]));
 }
 
 // the picker opened over the pane, at the option marked as now
