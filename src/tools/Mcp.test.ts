@@ -4,7 +4,8 @@
 // in pages, its env's ${VAR}, a call's text and images, a failure, a call
 // stopped and cancelled at it), a URL's (its session, an answer in an
 // event stream), one that dies, one that is no program, one disabled;
-// their tools beside Illi's, and an agent's allowing them by server.
+// their tools beside Illi's, named apart, and an agent's allowing them by
+// server.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -17,13 +18,15 @@ process.env.ILLI_DIR = DIR;
 process.env.MCP_TEST_TOKEN = "t0k";
 
 // a stdio server: echo (text and an image), fail.me, slow (answers
-// never; its cancel written down); its tools in two pages
+// never; its cancel written down), fail_me (named as fail.me is); its
+// tools in two pages
 fs.writeFileSync(DIR + "/fake.ts", `
 const fs = require("node:fs");
 const tools = [
   { name: "echo", description: "Echo it", inputSchema: { $schema: "http://json-schema.org/draft-07/schema#", type: "object", properties: { text: { type: "string" } } } },
   { name: "fail.me", description: "Fails" },
   { name: "slow", description: "Waits" },
+  { name: "fail_me", description: "Underscored" },
 ];
 const send = (m) => process.stdout.write(JSON.stringify({ jsonrpc: "2.0", ...m }) + "\\n");
 let buf = "";
@@ -36,6 +39,7 @@ process.stdin.on("data", (d) => {
     if (m.method === "tools/list") send({ id: m.id, result: m.params.cursor ? { tools: tools.slice(1) } : { tools: tools.slice(0, 1), nextCursor: "2" } });
     if (m.method === "tools/call" && m.params.name === "echo") send({ id: m.id, result: { content: [{ type: "text", text: "echo: " + m.params.arguments.text + " in " + process.cwd() + " with " + process.env.TOKEN }, { type: "image", data: "aGk=", mimeType: "image/png" }] } });
     if (m.method === "tools/call" && m.params.name === "fail.me") send({ id: m.id, result: { content: [{ type: "text", text: "bad" }], isError: true } });
+    if (m.method === "tools/call" && m.params.name === "fail_me") send({ id: m.id, result: { content: [{ type: "text", text: "underscored" }] } });
     if (m.method === "notifications/cancelled") fs.writeFileSync(process.env.CANCELLED, String(m.params.requestId));
   }
 });
@@ -87,7 +91,7 @@ const tools = { mem: null as any, agents: new Map(), key: "k", url: "", cwd: CWD
 
 test("each server's tools, named by it, in pages, beside Illi's", async () => {
   await Mcp.settle();
-  expect(Mcp.tools().map((t) => t.name)).toEqual(["mcp__fake__echo", "mcp__fake__fail_me", "mcp__fake__slow", "mcp__web__add"]);
+  expect(Mcp.tools().map((t) => t.name)).toEqual(["mcp__fake__echo", "mcp__fake__fail_me", "mcp__fake__slow", "mcp__fake__fail_me_2", "mcp__web__add"]);
   expect(Mcp.tools()[0]).toMatchObject({ info: "(fake) Echo it", schema: { type: "object", properties: { text: { type: "string" } } } });
   expect(JSON.stringify(Mcp.tools())).not.toContain("$schema");
   const names = Tools.list(tools, "main").map((t) => t.name);
@@ -100,6 +104,15 @@ test("a call: its text and images, run in the working dir with its env; a failur
   expect(out).toEqual({ text: "echo: hi in " + fs.realpathSync(CWD) + " with t0k", fail: false, imgs: [{ type: "image/png", data: "aGk=" }] });
   expect(await Mcp.call("mcp__fake__fail_me", {}, new AbortController().signal)).toMatchObject({ text: "bad", fail: true });
   expect(await Mcp.call("mcp__fake__gone", {}, new AbortController().signal)).toMatchObject({ fail: true });
+});
+
+test("names alike after sanitising or cutting are numbered, and each called at its own tool", async () => {
+  expect(await Mcp.call("mcp__fake__fail_me_2", {}, new AbortController().signal)).toMatchObject({ text: "underscored", fail: false });
+  const taken = new Set(["mcp__my_srv__get", "mcp__my_srv__get_2"]);
+  expect(Mcp.name("my.srv", "get", taken)).toBe("mcp__my_srv__get_3");
+  const long = Mcp.name("s", "x".repeat(80));
+  expect(long).toHaveLength(64);
+  expect(Mcp.name("s", "x".repeat(90), new Set([long]))).toBe(long.slice(0, 62) + "_2");
 });
 
 test("a call stopped is cancelled at its server", async () => {
@@ -130,5 +143,5 @@ test("a server that dies or is no program fails, told why; one disabled never st
 test("an agent allows a server's tools by its name", () => {
   const profile = { name: "x", description: "", mode: "all", model: null, effort: null, tools: ["read", "mcp__web"], color: null, body: "", file: "" } as const;
   expect(Custom.allow({ ...profile, tools: ["read", "mcp__web"] }, Mcp.tools()).map((t) => t.name)).toEqual(["mcp__web__add"]);
-  expect(Custom.allow({ ...profile, tools: ["mcp"] }, Mcp.tools())).toHaveLength(4);
+  expect(Custom.allow({ ...profile, tools: ["mcp"] }, Mcp.tools())).toHaveLength(5);
 });
