@@ -4,11 +4,12 @@
 // fenced code, headings, rules, quotes, lists, tables,
 // paragraphs; inline code, links, bold, italics, and agent names
 // (`[FireAnt]`, linked to its chat). `md_plain` reads text as it is:
-// paragraphs, lines, names, an image as its token, and a long paste
-// (sent marked, paste_mark) whole, as pasted. `md_output` reads a tool's result
-// as a file's lines: a read's as its lines, a unified diff (Machine.ts
-// writes them, git too) as its file and hunks, any other text as lines
-// named "result", so every result looks as a read does. Tokens hold
+// its lines, blank ones kept, names, an image as its token, and a long
+// paste (sent marked, paste_mark) whole, as pasted. `md_output` reads a
+// tool's result as a file's lines: a read's as its lines, a unified diff
+// (Machine.ts writes them, git too) as its file and hunks, any other text
+// as lines named "result" (a command's exit and time in that name), so
+// every result looks as a read does. Tokens hold
 // raw text; each emitter escapes it. A block is read by its first line
 // and runs while the next pass its test. A span is the first mark at its
 // point.
@@ -71,6 +72,7 @@ const BAR   = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
 const NEW   = /^\+\+\+ (.*)$/;
 const READ  = /^\[(lines (\d+)-\d+ of \d+[^\]]*)\]$/;
 const HUNK  = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+const EXIT  = /^\((exit -?\d+|stopped|killed by \w+) in (\d+(?:\.\d+)?) s\)$/;
 
 // Constructors
 // ============
@@ -132,18 +134,24 @@ export function md_flat(s: string): string {
   return span_parse(s).map((span) => span.x).join("");
 }
 
-// a message as typed: its paragraphs, each line's names and tokens read
-// (plain_line); a marked paste's lines as they are, between
+// a message as typed: one line per line, its blank lines kept (those at
+// its ends dropped), each line's names and tokens read (plain_line); a
+// marked paste's lines as they are, between
 export function md_plain(s: string): Block[] {
   const text  = s.replace(/\r/g, "");
-  const paras = (x: string, line: (l: string) => Span[]): Block[] => x.split(/\n(?:[ \t]*\n)+/).filter((p) => p.trim() !== "").map((p) => ({ $: "Para", x: p.split("\n").map(line) }));
+  const typed = (x: string): Block[] => {
+    const lines = x.split("\n");
+    const from  = lines.findIndex((l) => l.trim() !== "");
+    const upto  = lines.findLastIndex((l) => l.trim() !== "");
+    return from < 0 ? [] : [{ $: "Para", x: lines.slice(from, upto + 1).map((l) => (l.trim() === "" ? [] : plain_line(l))) }];
+  };
   const out: Block[] = [];
   let at = 0;
   for (const m of text.matchAll(PASTE)) {
-    out.push(...paras(text.slice(at, m.index), plain_line), ...paras(m[2], (l) => (l === "" ? [] : [Text(l)])));
+    out.push(...typed(text.slice(at, m.index)), { $: "Para", x: m[2].split("\n").map((l) => (l === "" ? [] : [Text(l)])) });
     at = (m.index ?? 0) + m[0].length;
   }
-  return [...out, ...paras(text.slice(at).replace(at > 0 ? /^[ \t]+/ : /^$/, ""), plain_line)];
+  return [...out, ...typed(text.slice(at).replace(at > 0 ? /^[ \t]+/ : /^$/, ""))];
 }
 
 function plain_line(s: string): Span[] {
@@ -166,13 +174,28 @@ export function paste_label(n: number | string, x: string): string {
 }
 
 // a tool's result: a read's lines a File, each unified diff in it a
-// Diff, the text around them a File named "result" (none if blank)
+// Diff, the text around them a File named "result" (none if blank); a
+// command's exit and time, its last line (Machine.ts), in the last
+// result's name, never a numbered line (no output: a result of its own)
 export function md_output(s: string): Block[] {
-  const lines = s.replace(/\r/g, "").split("\n");
-  const read  = READ.exec(lines[lines.length - 1]);
+  const all   = s.replace(/\r/g, "").split("\n");
+  const read  = READ.exec(all[all.length - 1]);
   if (read !== null) {
-    return [{ $: "File", k: read[1], n: Number(read[2]), x: lines.slice(0, -1) }];
+    return [{ $: "File", k: read[1], n: Number(read[2]), x: all.slice(0, -1) }];
   }
+  const exit  = EXIT.exec(all[all.length - 1]);
+  const lines = exit === null ? all : all.slice(0, -1);
+  const out   = output_parts(lines);
+  const last  = out[out.length - 1];
+  if (exit === null) {
+    return out;
+  }
+  const name = "result · " + exit[1] + " · " + exit[2] + " s";
+  return last?.$ === "File" && last.k === "result" ? [...out.slice(0, -1), { ...last, k: name }] : [...out, { $: "File", k: name, n: 1, x: [] }];
+}
+
+// a result's lines: each unified diff in them, the text around them
+function output_parts(lines: string[]): Block[] {
   const out: Block[] = [];
   let [i, at] = [0, 0];
   while (i < lines.length) {
