@@ -43,21 +43,30 @@ const FRAME = 16;
 // a size held this long is settled: a drag's sizes come faster (ms)
 const SETTLE = 30;
 
-// the merge over the input, a row a step: dots land one by one and
-// neighbors fuse in pairs (· • ●), as the memory's lines do; the ticks
-// of a step; how often it paints (ms): a step is a quarter second, a
-// tick a frame at 30 a second
-const MERGE = [
-  "·      ",
-  "· ·    ",
-  " •     ",
-  " •  ·  ",
-  " •  · ·",
-  " •   • ",
-  "  • •  ",
-  "   ●   ",
-  "   ●   ",
+// the merge over the input, as the memory's lines merge: four dots land
+// one by one, each pair steps together and fuses where its dots meet
+// (· · into •), the two step toward each other and fuse (●), which
+// holds, fades and the next begins; each frame and how long it shows
+// (ms), quicker as the dots close in. A dot is in one place at a time: a
+// step or a fusion is instant, only a dot landing fades in (MERGE_IN)
+// and the last one out (MERGE_OUT)
+const MERGE: [string, number][] = [
+  ["·      ", 150],
+  ["· ·    ", 150],
+  ["· · ·  ", 150],
+  ["· · · ·", 320],
+  [" •   • ", 260],
+  ["  • •  ", 150],
+  ["   ●   ", 700],
+  ["       ", 200],
 ];
+const MERGE_IN  = 140;
+const MERGE_OUT = 350;
+const MERGE_ALL = MERGE.reduce((n, [, ms]) => n + ms, 0);
+
+// how often the merge paints, and its ticks a step (the side's spinners
+// step with it, and a whole paint comes once a step): 30 frames a
+// second, a step about a quarter second
 export const STEP  = 7;
 export const TICK  = 33;
 
@@ -197,7 +206,7 @@ function term_rule(t: Term, w: number, note?: Paint.Line): Paint.Line {
   }
   const now  = Date.now();
   const c    = Draw.draw_theme().accent ?? "5";
-  const head = [Paint.Run(RULE_HEAD, Paint.DIM), ...term_merge((now - t.since) / TICK, c, t.scr.canvas), Paint.Run(" "), Paint.Run(doing.verb, { ...Paint.INK, c, b: true })];
+  const head = [Paint.Run(RULE_HEAD, Paint.DIM), ...term_merge(now - t.since, c, t.scr.canvas), Paint.Run(" "), Paint.Run(doing.verb, { ...Paint.INK, c, b: true })];
   const tail = [term_elapsed(now - t.since), doing.what, doing.stop ? "Esc to interrupt" : ""].filter((x) => x !== "").join(" · ");
   const room = w - Paint.line_width(head) - 6;
   const said = Paint.text_width(tail) <= room ? tail : room < 2 ? "" : Paint.runs_wrap([Paint.Run(tail)], room - 1, true)[0].map((r) => r.x).join("") + "…";
@@ -232,25 +241,30 @@ function term_tick(t: Term): void {
     return term_paint(t);
   }
   const c = Draw.draw_theme().accent ?? "5";
-  Screen.screen_cells(t.scr, r.row, MARGIN + RULE_HEAD.length, term_merge((Date.now() - t.since) / TICK, c, t.scr.canvas), r.at);
+  Screen.screen_cells(t.scr, r.row, MARGIN + RULE_HEAD.length, term_merge(Date.now() - t.since, c, t.scr.canvas), r.at);
 }
 
-// the merge at frame f (a fraction, from the clock): its step's row of
-// MERGE, in the accent (the last dot left, ●, bold); a cell that
-// changes in a step fades its old dot out and its new one in, eased
-// (toward the background, if told; else dim); the last step fades out
-function term_merge(f: number, c: string, canvas: string | undefined): Paint.Line {
-  const at   = f / STEP % MERGE.length;
-  const step = Math.floor(at);
-  const u    = at - step;
-  const was  = step === 0 ? " ".repeat(MERGE[0].length) : MERGE[step - 1];
-  const last = step === MERGE.length - 1;
-  return [...MERGE[step]].map((now, k) => {
-    const old   = was[k];
-    const moved = old !== now;
-    const x     = moved && u < 0.5 && old !== " " ? old : now;
-    const fade  = last ? term_ease(u) : !moved ? 0 : old === " " ? 1 - term_ease(u) : u < 0.5 ? term_ease(u * 2) : 1 - term_ease(u * 2 - 1);
-    if (fade <= 0.01 || x === " ") {
+// the merge ms into its work: the frame of MERGE it is at, in the
+// accent (●, the last dot, bold); a dot landing in it (a frame with more
+// dots than the one before) fades in over MERGE_IN, the one before an
+// empty frame out over its last MERGE_OUT, eased (toward the background,
+// if told; else dim)
+function term_merge(ms: number, c: string, canvas: string | undefined): Paint.Line {
+  let at = ms % MERGE_ALL;
+  let k  = 0;
+  while (at >= MERGE[k][1]) {
+    at -= MERGE[k][1];
+    k++;
+  }
+  const [now, long] = MERGE[k];
+  const was  = MERGE.at(k - 1)![0];
+  const next = MERGE[(k + 1) % MERGE.length][0];
+  const dots = (row: string) => row.replaceAll(" ", "").length;
+  const out  = next.trim() === "" ? term_ease(Math.max(0, at - (long - MERGE_OUT)) / MERGE_OUT) : 0;
+  const land = dots(now) > dots(was) ? 1 - term_ease(Math.min(1, at / MERGE_IN)) : 0;
+  return [...now].map((x, i) => {
+    const fade = x === " " ? 0 : Math.max(out, was[i] === " " ? land : 0);
+    if (fade <= 0.01) {
       return Paint.Run(x, { ...Paint.INK, c, b: x === "●" });
     }
     return Paint.Run(x, c.startsWith("#") && canvas !== undefined ? { ...Paint.INK, c: term_mix(c, canvas, fade), b: x === "●" } : { ...Paint.INK, c, d: fade > 0.2 });
