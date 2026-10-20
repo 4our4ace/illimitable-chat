@@ -4,7 +4,7 @@
 // searches the models as you type (Backspace too), sets the lit one's
 // effort by Left and Right and its speed by Tab, and sends all three as
 // one pick by Enter (Esc: none); /agent's and /profile's take no typing,
-// and Tab moves in them.
+// and Tab moves in them. /help fits a narrow pane.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -16,6 +16,7 @@ process.env.ILLI_DIR = DIR;
 
 const { term_chooser, term_commands } = await import("./Commands.ts");
 const { term_grab, term_type } = await import("./Keys.ts");
+const Paint = await import("../ui/Paint.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
 
@@ -108,4 +109,17 @@ test("a picker without a search takes no typing; Tab moves in it", () => {
   term_grab(t, "Tab");
   term_grab(t, "Enter");
   expect(picked).toEqual([1]);
+});
+
+test("/help fits a narrow pane: how each is typed on its own line, what it does under it", () => {
+  const t = term();
+  term_commands(t.v).find(([use]) => use === "/help")![3](t, "");
+  for (const w of [30, 44, 100]) {
+    const lines = t.pane.make(w);
+    expect(Math.max(...lines.map(Paint.line_width))).toBeLessThanOrEqual(w);
+    expect(lines.map((l: any) => l.map((r: any) => r.x).join("")).join("\n")).toContain("this list");
+  }
+  const narrow = t.pane.make(30).map((l: any) => l.map((r: any) => r.x).join("").trimEnd());
+  expect(narrow).toContain("/help");
+  expect(narrow).toContain("  this list");
 });
