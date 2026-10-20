@@ -471,10 +471,10 @@ export namespace Tools {
   // -----
 
   // what the views show of the tools (Chat.state): what the master's
-  // calls use (the input its last request read, the plan's limits), its
-  // to-do list
+  // calls use (the input its last request read, the plan's limits and
+  // name), its to-do list
   export function state(tools: Tools): { use: State["use"]; todo: Todo[] } {
-    return { use: { tokens: AskAI.held(Tools.at(tools, "main")), limits: ChatGPT.limits() }, todo: Tools.todo(tools) };
+    return { use: { tokens: AskAI.held(Tools.at(tools, "main")), limits: ChatGPT.limits(), plan: ChatGPT.tier() }, todo: Tools.todo(tools) };
   }
 
   // the master's to-do list: as last set, else as its file keeps it
