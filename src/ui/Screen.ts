@@ -19,7 +19,8 @@
 // each erased whole, a paste's text put back in its place as it's sent
 // (ed_expand). A lone /word is a command being typed, matched to the
 // commands' names (ed_slash, ed_rank: Term.ts lists them under the
-// input). A list open (grab) takes keys before the input does.
+// input). A list open (grab) takes keys before the input does, and a
+// list searched (type) the text typed.
 
 import * as Md from "./Md.ts";
 import * as Paint from "./Paint.ts";
@@ -66,7 +67,8 @@ export type Match = { k: number; at: number[] };
 // pressed, how many times there in a row (2: a double click, 3: a triple)
 // and when, where the pointer is; whether the input was typed in since
 // Term.ts last looked; what takes keys first (true: it took the key),
-// where keys go, what takes a paste (none: typed); the terminal's
+// where keys go, what takes text typed first (true: it took it; none:
+// the input), what takes a paste (none: typed); the terminal's
 // background (#rrggbb) once told, and whether it is awaited; whether it
 // was left (screen_leave: it paints no more); whether the cursor blinks
 // (Illi waits), and its look as last written
@@ -83,6 +85,7 @@ export type Screen = {
   typed  : boolean;
   grab   : ((key: string) => boolean) | null;
   on     : (key: string) => void;
+  type?  : (text: string) => boolean;
   paste? : (text: string) => void;
   canvas?: string;
   asked? : boolean;
@@ -331,8 +334,10 @@ function screen_key(scr: Screen, data: string): number {
     return 1 + ch.length;
   }
   if (text !== null) {
-    ed_type(scr.ed, text[0]);
-    scr.typed = true;
+    if (scr.type?.(text[0]) !== true) {
+      ed_type(scr.ed, text[0]);
+      scr.typed = true;
+    }
     return text[0].length;
   }
   screen_press(scr, KEYS[code] ?? "Ctrl+" + String.fromCharCode(code + 64));

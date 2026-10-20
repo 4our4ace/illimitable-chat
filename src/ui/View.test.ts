@@ -3,6 +3,7 @@
 // `bun test View.test.ts`. What a view draws of the server's messages.
 
 import { expect, test } from "bun:test";
+import type { Pick } from "../ai/Pick.ts";
 import * as View from "./View.ts";
 
 const tail = (v: View.View) => View.view_tail(v).map((row) => (row.$ === "Cap" ? row.text : row.$));
@@ -65,4 +66,22 @@ test("each run of work is one line saying what was done", () => {
   expect(View.view_tail(v, false).map((r) => (r.$ === "Msg" ? r.kind : r.$))).toEqual(["illi"]);
   v.verbose = true;
   expect(View.view_tail(v, false).map((r) => (r.$ === "Msg" ? r.kind : r.$))).toEqual(["mind", "illi"]);
+});
+
+// the model picker's pick: model, effort and speed sent as one change,
+// one note saying it (the vendor named once there are more); the pick
+// already, nothing; one not offered, a note why
+test("a pick set whole is one change and one note", () => {
+  const v    = View.view_new();
+  const pick: Pick = { vendor: "claude-api", model: "sonnet-5.5", effort: "medium", speed: "slow" };
+  View.view_hear(v, { $: "state", ...v, vendors: ["claude-api"], pick });
+  expect(View.view_act(v, { $: "Pick", to: pick })).toEqual([]);
+  const to: Pick = { vendor: "claude-api", model: "opus-5.5", effort: "high", speed: "fast" };
+  expect(View.view_act(v, { $: "Pick", to })).toEqual([{ $: "pick", to }]);
+  expect(v.notes).toEqual(["Now on opus-5.5, high effort, fast."]);
+  View.view_hear(v, { $: "state", ...v, vendors: ["claude-api", "openai-api"] });
+  View.view_act(v, { $: "Pick", to: { ...to, effort: "low", speed: "slow" } });
+  expect(v.notes.at(-1)).toBe("Now on opus-5.5 (claude-api), low effort.");
+  expect(View.view_act(v, { $: "Pick", to: { ...to, speed: "ultrafast" } })).toEqual([]);
+  expect(v.notes.at(-1)).toBe("No pick claude-api:opus-5.5:high:ultrafast here.");
 });
