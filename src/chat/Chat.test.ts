@@ -110,7 +110,12 @@ test("/compact folds all but the last two exchanges for the agent, the screen st
 test("/clear: the agent gets the chat so far as lines, and the screen starts anew from its note, also after a restart", async () => {
   const mem = chat.mem;
   const before = mem.count;
+  const told: any[] = [];
+  const sock = { data: { seen: new Set<string>() }, send: (text: string) => told.push(JSON.parse(text)), close: () => {} };
+  chat.socks.add(sock);
   expect(Chat.clear(chat)).toEqual({});
+  chat.socks.delete(sock);
+  expect(told.filter((m) => m.$ === "state").at(-1)?.use.fill.used).toBe(Math.round(Memory.fill(mem) / 4));
   expect(mem.cut).toBe(before);
   expect(mem.top).toBe(before);
   expect(chat.eye.parts).toEqual([]);

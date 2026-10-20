@@ -856,8 +856,8 @@ export namespace Chat {
   // so far folds into the view's lines (each a zoom away) and the next
   // turn sends none whole; noted for the agent (the note itself whole);
   // the screen starts anew from the note (the memory's `top`: what came
-  // before is only the memory's, a zoom away for the agent). Not while a
-  // turn runs
+  // before is only the memory's, a zoom away for the agent); the views
+  // told the context it now holds. Not while a turn runs
   export function clear(chat: Chat): Answer {
     const mem = chat.mem;
     if (chat.busy) {
@@ -872,6 +872,7 @@ export namespace Chat {
     Chat.note(chat, "New session: the user cleared the chat for a new topic. Everything before this note is in the view's lines; zoom into them when the user refers to it.");
     chat.eye = Chat.eye(mem, mem.cut);
     chat.socks.forEach((sock) => Chat.show(chat, sock));
+    Chat.change(chat);
     return {};
   }
 
