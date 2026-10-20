@@ -61,17 +61,19 @@ test("a long paste is one token, erased whole, its text put back as sent; a shor
   expect(Screen.ed_expand(ed, "[Pasted text #9 +3 lines]")).toBe("[Pasted text #9 +3 lines]");
 });
 
-test("a message sent shows each paste as its token; its history, read again, too", () => {
+test("a message sent shows each paste whole, as pasted; its history, read again, its token", () => {
   const ed   = Screen.ed_new();
-  const long = Array.from({ length: 8 }, (_, k) => "row " + k).join("\n") + "\n";
+  const long = Array.from({ length: 8 }, (_, k) => "row " + k + (k === 3 ? " [FireAnt]" : "")).join("\n") + "\n";
   Screen.ed_paste(ed, long);
   Screen.ed_type(ed, " fix [Image #4]");
   const sent  = Screen.ed_expand(ed, ed.text);
-  const shown = Paint.rows_lines(View.entry_rows(1, "user", sent), 60).map((l) => l.map((r) => r.x).join(""));
-  expect(shown.join("\n")).toContain("[Pasted text #1 +8 lines] fix [Image #4]");
-  expect(shown.join("\n")).not.toContain("row 3");
+  const shown = Paint.rows_lines(View.entry_rows(1, "user", sent), 60).map((l) => l.map((r) => r.x).join("").replace(/^\s*│|│\s*$/g, "").trim());
+  expect(shown.join("\n")).toContain("row 0\n");
+  expect(shown.join("\n")).toContain("row 3 [FireAnt]\n");
+  expect(shown.join("\n")).not.toContain("[Pasted text");
+  expect(shown).toContain("fix [Image #4]");
   const chips = Paint.rows_lines(View.entry_rows(1, "user", sent), 60).flat().filter((r) => r.s.c === "6").map((r) => r.x);
-  expect(chips).toEqual(["[Pasted text #1 +8 lines]", "[Image #4]"]);
+  expect(chips).toEqual(["[Image #4]"]);
   const later = Screen.ed_new();
   Screen.ed_history(later, ["hi", sent]);
   expect(later.hist).toEqual(["hi", "[Pasted text #1 +8 lines] fix [Image #4]"]);
