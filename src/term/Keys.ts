@@ -38,7 +38,7 @@ export function term_press(t: Term, key: string): void {
   if (t.scr.ed.text !== "") {
     t.dropped = t.v.suggest;
   }
-  const cmd    = term_commands(t.v).find((c) => c[1] !== "" && c[1].split(", ").includes(key));
+  const cmd    = term_commands().find((c) => c[1] !== "" && c[1].split(", ").includes(key));
   const chosen = key === "Ctrl+C" && t.sel?.moved === true && !t.sel.held ? term_selected(t) : null;
   if (t.scr.typed || !KEEP.includes(key)) {
     t.sel = null;
@@ -90,7 +90,8 @@ export function term_grab(t: Term, key: string): boolean {
 // a key to the picker (true: taken): the lit option's own first (the
 // model picker's effort and speed); then Up and Down (or Tab) move round
 // the options shown, Enter picks the lit one (none matching the search:
-// nothing), Esc closes, and Backspace takes a character off the search
+// nothing), Esc and Ctrl+C close (Ctrl+C neither interrupts nor quits
+// here), and Backspace takes a character off the search
 function term_choose_key(t: Term, c: Chooser, key: string): boolean {
   const n    = c.shown.length;
   const lit  = c.shown[c.at]?.k;
@@ -105,7 +106,7 @@ function term_choose_key(t: Term, c: Chooser, key: string): boolean {
   } else if (key === "Enter" && lit !== undefined) {
     t.choose = null;
     c.pick(lit);
-  } else if (key === "Esc") {
+  } else if (key === "Esc" || key === "Ctrl+C") {
     t.choose = null;
   } else if (key !== "Enter") {
     return false;
@@ -164,22 +165,36 @@ export function term_page(t: Term, key: string): void {
 
 // Enter: runs a command, or sends the input, its pastes' text in place
 // of their tokens and the images it names (the chat shown from its end,
-// the notes gone); text not sent stays (it was lost: an unknown /word)
+// the notes gone); empty, it interrupts Illi's turn, on any page; text
+// not sent stays (it was lost: an unknown /word)
 export function term_enter(t: Term): void {
   const typed = Screen.ed_take(t.scr.ed);
   const text  = Screen.ed_expand(t.scr.ed, typed);
   t.pane = null;
-  if (term_command(t, text)) {
+  if (term_command(t, text) || (text.trim() !== "" && term_away(t, text, typed))) {
     return;
   }
-  if (!View.view_typing(t.v)) {
-    term_note(t, "Messages go to Illi: Ctrl+PgUp or /tab illi goes back.");
-  } else if (term_act(t, { $: "Send", text, images: term_shots(t, text) }).length > 0) {
+  if (term_act(t, { $: "Send", text, images: term_shots(t, text) }).length > 0) {
     term_unnote(t);
     t.scroll = 0;
     return;
   }
   Screen.ed_type(t.scr.ed, typed);
+}
+
+// a message for Illi (or /goal, /halt, /clear, /compact, the user's
+// commands and skills) sent from an agent's page: not sent, a note says
+// where messages go, and the input has it back as typed (its tokens: a
+// paste's text found in the history; none: text); true if so
+export function term_away(t: Term, text: string, typed?: string): boolean {
+  if (View.view_typing(t.v)) {
+    return false;
+  }
+  term_note(t, "Messages go to Illi: Ctrl+PgUp or /tab illi goes back.");
+  if (t.scr.ed.text === "") {
+    Screen.ed_type(t.scr.ed, typed ?? t.scr.ed.hist.findLast((h) => Screen.ed_expand(t.scr.ed, h) === text) ?? text);
+  }
+  return true;
 }
 
 // the images a text names by their tokens, each once
@@ -226,13 +241,14 @@ export function term_clear(t: Term, key: string): void {
 }
 
 // Shift+Tab: Illi runs as the next primary agent that can run (Illi's own
-// among them), after the one asked for last if not answered yet
+// among them), after the one asked for last if not answered yet; one that
+// can't run any more goes back to Illi's own
 export function term_next(t: Term): void {
   term_primaries(t);
   const names = [null, ...t.agents.filter((a) => typeof Chat.own(a) !== "string").map((a) => a.name)];
   const asked = t.v.out.flatMap((p) => (p.msg.$ === "main" ? [p.msg.name] : []));
   const now   = asked.length > 0 ? asked[asked.length - 1] : t.v.agent;
-  if (names.length === 1) {
+  if (names.length === 1 && now === null) {
     return term_note(t, "No primary agents yet: an agent file with mode: primary (or none) in " + Custom.dirs(process.cwd(), "agents").join(" or ") + ". /agents shows yours.");
   }
   term_main(t, names[(names.indexOf(now) + 1) % names.length]);

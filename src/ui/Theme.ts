@@ -19,7 +19,8 @@
 // cellsmith palette (PALETTE) over the terminal's own background, or, the
 // background untold, the terminal's palette (REPLY). The user's theme
 // (config.THEME, a JSON file) may set any entry of ANSI, GLYPH, TOOL and
-// SYNTAX, the PALETTE, and any of its colors (COLORS):
+// SYNTAX, the PALETTE, and any of its colors (COLORS); a color that won't
+// do is left out, a glyph's control characters too (theme_check):
 //
 //     { "ansi": { "block": "7", "ink": "0" }, "glyph": { "input": "❯ " },
 //       "tool": { "shell": "$" }, "syntax": { "keyword": "4" },
@@ -154,8 +155,8 @@ export const REPLY: Record<string, string> = {
 };
 
 // the user's colors over the palette's, by slot: #rrggbb, or a palette
-// index ("0"-"15")
-export const COLORS: Record<string, string> = Object.fromEntries(Object.entries(OWN.colors ?? {}).filter(([, c]) => /^(#[0-9a-f]{6}|\d{1,2})$/i.test(c)));
+// index ("0"-"255")
+export const COLORS: Record<string, string> = theme_entries(OWN.colors, theme_color);
 
 // an agent's name as shown: its first letter a capital (reviewer-2:
 // Reviewer-2); typed, and in the model's tools, as it is
@@ -167,15 +168,50 @@ export function tool_glyph(name: string): string {
   return TOOL[name] ?? TOOL_ANY;
 }
 
-// the user's theme file, read once; one that won't parse is said once
+// the user's theme file, read once, each entry checked (theme_check);
+// one that won't parse is said once
 function theme_read(): { ansi?: Record<string, string>; glyph?: Record<string, string>; tool?: Record<string, string>; syntax?: Record<string, string>; palette?: string; diagrams?: string; colors?: Record<string, string> } {
   if (!fs.existsSync(config.THEME)) {
     return {};
   }
   try {
-    return JSON.parse(fs.readFileSync(config.THEME, "utf8"));
+    return theme_check(JSON.parse(fs.readFileSync(config.THEME, "utf8")));
   } catch (err: any) {
     console.error("illi: theme " + config.THEME + ": " + err.message);
     return {};
   }
+}
+
+// a theme's entries that will do: colors a palette index ("0"-"255") or
+// #rrggbb ("": the terminal's own, for ANSI's), glyphs and tools' emoji
+// text without control characters (an imported profile's theme could
+// otherwise send the terminal escapes); any other left out
+export function theme_check(own: any): ReturnType<typeof theme_read> {
+  const text  = (x: unknown) => (typeof x === "string" ? x.replace(/[\x00-\x1f\x7f-\x9f]/g, "") : null);
+  const name  = (x: unknown) => (typeof x === "string" ? x : undefined);
+  const color = (x: unknown) => (x === "" ? "" : theme_color(x));
+  return {
+    ansi     : theme_entries(own?.ansi, color),
+    glyph    : theme_entries(own?.glyph, text),
+    tool     : theme_entries(own?.tool, text),
+    syntax   : theme_entries(own?.syntax, theme_color),
+    palette  : name(own?.palette),
+    diagrams : name(own?.diagrams),
+    colors   : own?.colors,
+  };
+}
+
+// a color as a theme gives it: a palette index (0-255) or #rrggbb; null:
+// neither
+function theme_color(x: unknown): string | null {
+  return typeof x === "string" && (/^#[0-9a-f]{6}$/i.test(x) || (/^\d{1,3}$/.test(x) && Number(x) <= 255)) ? x : null;
+}
+
+// an object's entries as f takes them, those it refuses (null) left out
+function theme_entries(xs: unknown, f: (x: unknown) => string | null): Record<string, string> {
+  const all = typeof xs === "object" && xs !== null ? Object.entries(xs) : [];
+  return Object.fromEntries(all.flatMap(([k, x]) => {
+    const y = f(x);
+    return y === null ? [] : [[k, y]];
+  }));
 }

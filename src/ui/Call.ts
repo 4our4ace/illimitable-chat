@@ -2,13 +2,12 @@
 // ====
 // A tool call as people read it. Logged as its tool's name, a space and its
 // input's JSON (`zoom {"id":6243,"n":1}`; an MCP client's prefix,
-// `mcp__illi__`, dropped), it shows on its device (its `device` field) as its
-// emoji (Theme.TOOL), its name in bold and a head, as its tool reads (READS): a
-// command as itself; a file tool its path, read's lines after it, write's
-// content in a block, edit's files (the diff comes in its result); zoom and
-// date the message (`#6243`, a line `#6243+8`, an agent by name); spawn its
-// tasks, tell and computer their name and text in blocks; todo how far its
-// list is, its items in a block, each marked. Any other call, or an
+// `mcp__illi__`, dropped), it shows as its emoji (Theme.TOOL), its name in
+// bold and a head, as its tool reads (READS): a command as itself; a file
+// tool its path, read's lines after it, edit's files (the diff comes in its
+// result); zoom and date the message (`#6243`, a line `#6243+8`, an agent by
+// name); spawn its tasks, tell its agent's name and its text in blocks; todo
+// how far its list is, its items in a block, each marked. Any other call, or an
 // edit whose edits are no list, shows its name and short values as arguments
 // (`web_search "bend"`; short: JSON within SHORT chars, and a string without
 // spaces or escapes), over a code block for each other value, keyed by its name
@@ -26,8 +25,8 @@ import { agent_name, GLYPH } from "./Theme.ts";
 // =====
 
 // name: the bare tool name ("": no call), shown bold; head: the rest of
-// its line (a command's lines); device: where it runs ("": none named)
-export type Call = { name: string; head: string; device: string; blocks: Md.Code[] };
+// its line (a command's lines)
+export type Call = { name: string; head: string; blocks: Md.Code[] };
 
 type Input = Record<string, unknown>;
 
@@ -51,7 +50,6 @@ const READS = new Map<string, (x: Input) => Shown>([
   ["date",     (x) => ({ head: msg_show(x.id, 1), blocks: [] })],
   ["spawn",    (x) => ({ head: tasks_show(x.tasks, x.agent, x.effort), blocks: (Array.isArray(x.tasks) ? x.tasks : []).flatMap(text_block) })],
   ["tell",     (x) => ({ head: agent_name(String(x.name ?? "")), blocks: text_block(x.message) })],
-  ["computer", (x) => ({ head: "", blocks: text_block(x.task) })],
   ["todo",     (x) => todo_shown(x.items)],
 ]);
 
@@ -78,25 +76,17 @@ export function call_parse(text: string): Call {
   const m     = CALL.exec(text);
   const input = m === null ? null : input_parse(m[2]);
   if (m === null || input === null) {
-    return { name: "", head: text, device: "", blocks: [] };
+    return { name: "", head: text, blocks: [] };
   }
   const name = m[1].replace(MCP, "");
-  const { device, ...rest } = input;
-  const shown = (READS.get(name) ?? input_shown)(rest);
-  return { name, device: typeof device === "string" ? device : "", ...shown };
+  return { name, ...(READS.get(name) ?? input_shown)(input) };
 }
 
 // the call on one line, after its name: its head, then each block,
-// spaces folded, then its device
+// spaces folded
 export function call_line(c: Call): string {
   const blocks = c.blocks.map((b) => (b.k === "" ? "" : b.k + ": ") + b.x);
-  const where  = c.device === "" ? [] : ["· " + c.device];
-  return [c.head, ...blocks, ...where].join(" ").replace(/\s+/g, " ").trim();
-}
-
-// the call as it shows, for Copy: its name and head, then each block
-export function call_text(c: Call): string {
-  return [(c.name + " " + c.head).trim(), ...c.blocks.map((b) => b.x)].join("\n");
+  return [c.head, ...blocks].join(" ").replace(/\s+/g, " ").trim();
 }
 
 // any tool's input: its short values as arguments, the rest in blocks

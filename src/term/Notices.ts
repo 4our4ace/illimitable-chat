@@ -31,7 +31,7 @@ export type Notice = { text: string; toast: boolean; until: number; held: boolea
 
 // how long a toast shows; a note, the characters read in that time, a
 // character more, a note at most (ms); the notes kept, the newest
-export const TOAST     = 2500;
+const TOAST            = 2500;
 const NOTE             = 3000;
 const NOTE_READ        = 60;
 const NOTE_CHAR        = 50;

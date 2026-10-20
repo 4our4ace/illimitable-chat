@@ -66,8 +66,8 @@ const FAINT = ["codeComment", "quote", "rule", "tableRule"];
 // an alert's color by its kind: the terminal's own, in any palette
 const ALERT: Record<string, string> = { note: "4", tip: "2", important: "5", warning: "3", caution: "1" };
 
-// the longest rule; the room between a code's label and its button, and
-// between figures side by side; the widest a table's art is copied
+// the longest rule; the room between figures side by side; the widest a
+// table's art is copied
 const RULE = 80;
 const GAP  = 4;
 const ART  = 100;
@@ -198,10 +198,12 @@ function list_lines(pal: Pal, items: Item[], w: number): Line[] {
 
 // code: its header (`── lang · [ ⧉ copy ]`; too narrow, the button on a
 // line of its own) over its lines, two columns in, its tokens in the
-// palette's code colors (an unlabeled block's as a shell's)
+// palette's code colors (an unlabeled block's as a shell's); its label
+// cleaned, cut at the width
 function code_lines(pal: Pal, lang: string, lines: string[], w: number): Line[] {
   const text  = lines.join("\n");
-  const label = Paint.Run("── " + (lang === "" ? "code" : lang), tone(pal, "codeComment"));
+  const name  = Paint.runs_wrap([Paint.Run("── " + Paint.text_clean(lang === "" ? "code" : lang))], Math.max(1, w), true)[0];
+  const label = Paint.Run(name.map((r) => r.x).join(""), tone(pal, "codeComment"));
   const code  = { ...Paint.INK, c: pal.codeText ?? "" };
   const toks  = Draw.draw_code(lang === "" ? "sh" : lang, text) ?? lines.map((x) => [{ text: x, kind: "" }]);
   const rows  = toks.flatMap((l) => Paint.runs_wrap(l.map((t) => Paint.Run(Paint.text_clean(t.text), token_ink(pal, t.kind, code))), Math.max(1, w - 2), true));

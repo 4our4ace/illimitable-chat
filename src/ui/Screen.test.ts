@@ -2,12 +2,15 @@
 // end anywhere (a reader held up lets the terminal's writes split at any
 // byte), and no text typed or pasted may slow a key down; the mouse's
 // reports. A paint writes only the rows that changed. Then the lines
-// Paint lays out: a link is never cut, a frame never passes its width,
-// each block's lines are marked.
+// Paint lays out: a link wider than a line breaks at its edge, its pieces
+// each opening it whole; a word of several runs is kept whole; a frame
+// never passes its width; each block's lines are marked.
 
 import { expect, test } from "bun:test";
 import * as Paint from "./Paint.ts";
+import * as Reply from "./Reply.ts";
 import * as Screen from "./Screen.ts";
+import * as Theme from "./Theme.ts";
 import * as View from "./View.ts";
 
 function fresh(tty: boolean, ed: Screen.Screen["ed"], on: (k: string) => unknown): Screen.Screen {
@@ -104,6 +107,57 @@ test("kitty's keys never leak into the text, whatever their reads", () => {
     expect(text).toBe("hello!?\n");
     expect(keys).toEqual(["V", "Esc"]);
   });
+});
+
+test("kitty's keypad types its characters; its arrows and the rest of the pad are keys", () => {
+  const { scr, keys } = screen();
+  Screen.screen_feed(scr, "\x1b[57400u\x1b[57409u\x1b[57399u\x1b[57413u\x1b[57415u\x1b[57410u");
+  expect(scr.ed.text).toBe("1.0+=/");
+  Screen.screen_feed(scr, "\x1b[57417u\x1b[57420u\x1b[57421u\x1b[57426u\x1b[57400;5u");
+  expect(keys).toEqual(["PgUp", "Ctrl+1"]);
+  expect(scr.ed.text).toBe("1.0+=");
+});
+
+test("the wheel turned sideways scrolls nothing", () => {
+  const { scr, keys } = screen();
+  Screen.screen_feed(scr, "\x1b[<66;5;5M\x1b[<67;5;5M\x1b[<64;5;5M\x1b[<65;5;5M");
+  expect(keys).toEqual(["WheelUp", "WheelDown"]);
+});
+
+test("a legacy Alt+[ or Alt+Shift+O, alone, is a key after a moment, never the start of the next", async () => {
+  const keys: string[] = [];
+  const scr = fresh(true, Screen.ed_new(), (k) => k !== "" && keys.push(k));
+  Screen.screen_feed(scr, "\x1b[");
+  await Bun.sleep(80);
+  Screen.screen_feed(scr, "\x1bO");
+  await Bun.sleep(80);
+  Screen.screen_feed(scr, "a");
+  expect(keys).toEqual(["Alt+[", "Alt+O"]);
+  expect(scr.ed.text).toBe("a");
+});
+
+test("a word move goes over a decomposed letter whole", () => {
+  const ed = Screen.ed_new();
+  Screen.ed_type(ed, "cafe\u0301 noir");
+  ed.pos = 0;
+  Screen.ed_key(ed, "Alt+F");
+  expect(ed.text.slice(0, ed.pos)).toBe("cafe\u0301");
+});
+
+test("the input's cursor and wrap follow the prompt's own width; its hint is cleaned", () => {
+  const { scr } = screen();
+  const was = Theme.GLYPH.input;
+  Theme.GLYPH.input = "❯❯❯ ";
+  try {
+    Screen.ed_type(scr.ed, "hello");
+    expect(Screen.screen_input(scr, 20, 3, "", false).at).toEqual({ row: 0, col: 9 });
+    expect(scr.ed.w).toBe(16);
+  } finally {
+    Theme.GLYPH.input = was;
+  }
+  const empty = screen();
+  const hint  = Screen.screen_input(empty.scr, 40, 3, "go\x1b]52;c;eA==\x07 on", false).lines[0][1].x;
+  expect(hint).toBe("go]52;c;eA== on");
 });
 
 test("a pipe's last line, without a newline, waits in the input for the end", () => {
@@ -266,9 +320,29 @@ test("words: Ctrl+W, Alt+B, Alt+F", () => {
   expect(ed.pos).toBe(9);
 });
 
-test("a link is never cut", () => {
-  const url = "https://x.co/" + "x".repeat(99);
-  expect(Paint.runs_wrap([Paint.Run("Pay: " + url)], 76, false).map((l) => l.map((r) => r.x).join(""))).toEqual(["Pay: ", url]);
+test("a link wider than a line breaks at its edge, never past it; each piece opens it whole", () => {
+  const url   = "https://x.co/" + "x".repeat(99);
+  const lines = Paint.runs_wrap([Paint.Run("Pay: "), Paint.Run(url, { ...Paint.INK, u: true, k: url })], 76, false);
+  expect(lines.map((l) => l.map((r) => r.x).join(""))).toEqual([("Pay: " + url).slice(0, 76), ("Pay: " + url).slice(76)]);
+  expect(lines.flat().filter((r) => r.x !== "Pay: ").every((r) => r.s.k === url)).toBe(true);
+  const rows = Paint.rows_lines(View.entry_rows(1, "user", "See https://example.com/" + "a".repeat(60) + " now"), 40);
+  expect(rows.every((l) => Paint.line_width(l) <= 40)).toBe(true);
+});
+
+test("a word of several runs (code, bold) is kept whole at a wrap", () => {
+  const text = (lines: Paint.Line[]) => lines.map((l) => l.map((r) => r.x).join("").trimEnd());
+  expect(text(Reply.reply_lines("I changed `src/ai/ChatGPT.ts`, `Login.test.ts` and `Term.ts`.", 27))).toEqual(["I changed", "src/ai/ChatGPT.ts,", "Login.test.ts and Term.ts."]);
+  expect(text(Reply.reply_lines("a **bold**ness", 8))).toEqual(["a", "boldness"]);
+  expect(text(Paint.runs_wrap([Paint.Run("a xxxxxxxxxxxxxxxxx yy")], 8, false))).toEqual(["a xxxxxx", "xxxxxxxx", "xxx yy"]);
+});
+
+test("a code block's label is cleaned and cut at the width, a reply's and a call's", () => {
+  const reply = Reply.reply_lines("```ab\x1b]52;c;eA==\x07" + "x".repeat(40) + "\ncode\n```", 20);
+  const call  = Paint.rows_lines(View.entry_rows(1, "tool", 'run {"\\u001b]52;c;eA==\\u0007' + "k".repeat(40) + '": "a b c d e f g h i j k l m n o p q r s t u v w x y z a b c", "b": 1}'), 20);
+  for (const lines of [reply, call]) {
+    expect(lines.flat().some((r) => /[\x00-\x1f]/.test(r.x))).toBe(false);
+    expect(Math.max(...lines.map(Paint.line_width))).toBeLessThanOrEqual(20);
+  }
 });
 
 test("a frame never passes its width, however long its title", () => {
