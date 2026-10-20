@@ -1,10 +1,12 @@
 // ChatGPT
 // =======
 // The wire of chatgpt (Agent.ts): OpenAI.ts's Responses API on the Codex
-// backend, paid by a ChatGPT plan. Its login (ChatGPT.file) is Illi's own
-// (config.OWN_LOGIN), made by /login with Codex's device login (a code
-// the person enters at OpenAI's page; `device`), or else opencode's
-// (`opencode auth login`, ChatGPT Plus/Pro); both are in opencode's shape.
+// backend, paid by a ChatGPT plan. Its login (ChatGPT.file) is the file
+// `login` names, else Illi's own (config.OWN_LOGIN), or else opencode's
+// (`opencode auth login`, ChatGPT Plus/Pro); /login makes one with
+// Codex's device login (a code the person enters at OpenAI's page;
+// `device`), kept in the file `login` names, else as Illi's own
+// (ChatGPT.own). All are in opencode's shape.
 // The backend
 // takes no cache breakpoints; a prefix is cached for the session a
 // request names (its header and prompt_cache_key): the hash of its model
@@ -152,6 +154,11 @@ export namespace ChatGPT {
     return config.LOGIN_SET ?? (fs.existsSync(config.OWN_LOGIN) || !fs.existsSync(config.OPENCODE_LOGIN) ? config.OWN_LOGIN : config.OPENCODE_LOGIN);
   }
 
+  // the file /login keeps its login in: the one config names, else Illi's own
+  export function own(): string {
+    return config.LOGIN_SET ?? config.OWN_LOGIN;
+  }
+
   // whether a login is there to run on
   export function signed(): boolean {
     try {
@@ -164,7 +171,7 @@ export namespace ChatGPT {
 
   // Codex's device login: a code the person enters at OpenAI's page (url),
   // and the login it grants (done: polled for till then, at most DEVICE;
-  // stop ends it), kept as Illi's own
+  // stop ends it), kept in ChatGPT.own
   export async function device(stop: AbortSignal): Promise<{ url: string; code: string; done: Promise<void> }> {
     const res = await fetch(AUTH + "/api/accounts/deviceauth/usercode", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ client_id: CLIENT }), signal: stop });
     if (!res.ok) {
@@ -178,7 +185,8 @@ export namespace ChatGPT {
 
   // a device login's grant, asked for every `every` ms till the person
   // gives it (403 or 404: not yet), changed for tokens (its PKCE pair came
-  // with it), kept as Illi's own login and used from the next request on
+  // with it), kept in ChatGPT.own (its other entries kept) and used from
+  // the next request on
   export async function granted(id: string, code: string, every: number, stop: AbortSignal): Promise<void> {
     const json = { "content-type": "application/json" };
     for (const until = Date.now() + DEVICE; Date.now() < until; ) {
@@ -199,8 +207,9 @@ export namespace ChatGPT {
       if (!tokens.ok) {
         throw new Error("ChatGPT's device login got no tokens (HTTP " + tokens.status + ")");
       }
-      const own = fs.existsSync(config.OWN_LOGIN) ? JSON.parse(fs.readFileSync(config.OWN_LOGIN, "utf8")) : {};
-      ChatGPT.keep(config.OWN_LOGIN, own, {}, await tokens.json(), null);
+      const file = ChatGPT.own();
+      const kept = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+      ChatGPT.keep(file, kept, {}, await tokens.json(), null);
       held = null;
       return;
     }
@@ -208,9 +217,9 @@ export namespace ChatGPT {
   }
 
   // Illi's own login removed (opencode's, if there, is used again); false:
-  // there was none
+  // there was none, or `login` names the file in use (never removed here)
   export function logout(): boolean {
-    if (!fs.existsSync(config.OWN_LOGIN)) {
+    if (config.LOGIN_SET !== null || !fs.existsSync(config.OWN_LOGIN)) {
       return false;
     }
     fs.rmSync(config.OWN_LOGIN);
