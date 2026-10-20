@@ -4,8 +4,8 @@
 // fenced code, headings, rules, quotes, lists, tables,
 // paragraphs; inline code, links, bold, italics, and agent names
 // (`[FireAnt]`, linked to its chat). `md_plain` reads text as it is:
-// paragraphs, lines, names, and a long paste (sent marked, paste_mark)
-// or an image as its token. `md_output` reads a tool's result
+// paragraphs, lines, names, an image as its token, and a long paste
+// (sent marked, paste_mark) whole, as pasted. `md_output` reads a tool's result
 // as a file's lines: a read's as its lines, a unified diff (Machine.ts
 // writes them, git too) as its file and hunks, any other text as lines
 // named "result", so every result looks as a read does. Tokens hold
@@ -132,10 +132,18 @@ export function md_flat(s: string): string {
   return span_parse(s).map((span) => span.x).join("");
 }
 
+// a message as typed: its paragraphs, each line's names and tokens read
+// (plain_line); a marked paste's lines as they are, between
 export function md_plain(s: string): Block[] {
-  const paras = s.replace(/\r/g, "").replace(PASTE, (_, n: string, x: string) => paste_label(n, x)).split(/\n(?:[ \t]*\n)+/);
-  const kept = paras.filter((p) => p.trim() !== "");
-  return kept.map((p) => ({ $: "Para", x: p.split("\n").map(plain_line) }));
+  const text  = s.replace(/\r/g, "");
+  const paras = (x: string, line: (l: string) => Span[]): Block[] => x.split(/\n(?:[ \t]*\n)+/).filter((p) => p.trim() !== "").map((p) => ({ $: "Para", x: p.split("\n").map(line) }));
+  const out: Block[] = [];
+  let at = 0;
+  for (const m of text.matchAll(PASTE)) {
+    out.push(...paras(text.slice(at, m.index), plain_line), ...paras(m[2], (l) => (l === "" ? [] : [Text(l)])));
+    at = (m.index ?? 0) + m[0].length;
+  }
+  return [...out, ...paras(text.slice(at).replace(at > 0 ? /^[ \t]+/ : /^$/, ""), plain_line)];
 }
 
 function plain_line(s: string): Span[] {
@@ -143,8 +151,8 @@ function plain_line(s: string): Span[] {
 }
 
 // a long paste as sent: its text marked (its token's number), so the
-// user's message shows its token, and the model sees where it starts and
-// ends
+// model sees where it starts and ends, and the history puts its token
+// back (Screen.ts); the user's message shows it whole (md_plain)
 export function paste_mark(n: number, x: string): string {
   return '<pasted n="' + n + '">\n' + x.replace(/\n$/, "") + "\n</pasted>";
 }
