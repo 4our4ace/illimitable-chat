@@ -2,10 +2,11 @@
 // ========
 // All a person can do here, by group (COMMANDS, /help), and the commands
 // themselves: a /word typed runs one, and, as it's typed, the commands it
-// matches show over the input (suggested); the picker (/agent, /profile),
-// the panes over the chat (/help, /agents, /mcp), the pick, the login,
-// the pages, the blocks, the memory's exports.
+// matches show over the input (suggested); the picker (/agent, /profile,
+// /model), the panes over the chat (/help, /agents, /mcp), the pick, the
+// login, the pages, the blocks, the memory's exports.
 
+import type { Vendor } from "../ai/AskAI.ts";
 import { term_clip, term_image } from "./Attach.ts";
 import { Chat } from "../chat/Chat.ts";
 import { ChatGPT } from "../ai/ChatGPT.ts";
@@ -17,11 +18,11 @@ import { Mcp, type Server } from "../tools/Mcp.ts";
 import { Memory } from "../chat/Memory.ts";
 import { term_note, term_notify, term_unnote, term_unnotify, type Notice } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
-import { type Move, Pick } from "../ai/Pick.ts";
+import { type Model, type Move, Pick } from "../ai/Pick.ts";
 import { term_profile } from "./ProfileCommands.ts";
 import * as Screen from "../ui/Screen.ts";
-import { term_side_set } from "./Side.ts";
-import { term_act, term_idle, term_primaries, term_quit, term_send, type Cmd, type Sug, type Term } from "./Term.ts";
+import { term_side_set, term_tokens } from "./Side.ts";
+import { term_act, term_idle, term_primaries, term_quit, term_send, type Chooser, type Cmd, type Sug, type Term } from "./Term.ts";
 import { agent_name } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
 
@@ -72,7 +73,7 @@ function term_groups(v: View.View, custom = false): [group: string, cmds: Cmd[]]
     ["Pick", [
       ["",                  "Shift+Left, Shift+Right", "the model before, the next",                     (t, k) => term_move(t, ARROWS[k])],
       ["",                  "Shift+Up, Shift+Down",    "more effort, less",                              (t, k) => term_move(t, ARROWS[k])],
-      ["/model [name]",     "",                        "the models to pick from; with a name, that one", (t, a) => term_pick(t, "model", a)],
+      ["/model [name]",     "",                        "pick the model, its effort and speed at once: type to search, Up and Down a model, Left and Right its effort, Tab fast, Enter; with a name, that model", term_model],
       ["/effort [level]",   "",                        "the efforts; with one, that one",                (t, a) => term_pick(t, "effort", a)],
       ["/speed [speed]",    "",                        "the speeds; with one, that one",                 (t, a) => term_pick(t, "speed", a)],
     ]],
@@ -247,10 +248,24 @@ function term_agent_set(t: Term, arg: string): void {
   term_chooser(t, "Agent", names.map((name) => agent_name(name ?? View.MAIN)), about, names.indexOf(t.v.agent), (k) => term_choose(t, names[k]));
 }
 
-// the picker opened over the pane, at the option marked as now
-export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void): void {
-  t.choose = { title, names, about, here, at: Math.max(0, here), pick };
+// the picker opened over the pane, at the option marked as now; with
+// `more`, a search (typing ranks the names), what else the lit option
+// takes and what the foot says of it (the model picker's)
+export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"] } = {}): void {
+  const shown = Screen.ed_rank("", names);
+  t.choose = { title, names, about, here, pick, find: more.find ? "" : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => "") };
   t.pane   = null;
+}
+
+// the picker's search changed: the options it matches, the best lit;
+// emptied, all, the one lit before still lit (none: the one marked as
+// now)
+export function term_chooser_find(c: Chooser, find: string): void {
+  const was = c.shown[c.at]?.k ?? c.here;
+  c.find  = find;
+  c.shown = Screen.ed_rank(find, c.names);
+  c.at    = find === "" ? Math.max(0, c.shown.findIndex((m) => m.k === was)) : 0;
+  c.top   = 0;
 }
 
 // the picker's choice: the picker closed, the main agent that one
@@ -373,6 +388,49 @@ function term_tab(t: Term, arg: string): void {
 // moves the pick one step (a key)
 function term_move(t: Term, move: Move): void {
   term_act(t, { $: "Move", move });
+}
+
+// /model: the model named, else the model picker
+function term_model(t: Term, arg: string): void {
+  const rows = Pick.models(t.v.vendors, t.v.models);
+  if (arg !== "" || t.v.pick === null || rows.length === 0) {
+    return term_pick(t, "model", arg);
+  }
+  term_model_pick(t, rows);
+}
+
+// the model picker: each model offered (its vendor too, if more than one
+// is; its window, if known), the pick's marked and lit; the one lit takes
+// its effort by Left and Right (stopping at the ends), its speed by Tab
+// (round its speeds: one alone stays), the foot saying both; Enter, or a
+// click, sets the three as one pick. The effort and speed asked go along
+// as another model is lit (one lacking the speed takes its fastest below)
+function term_model_pick(t: Term, rows: Array<[Vendor, Model]>): void {
+  let want    = View.view_asked(t.v)!;
+  const many  = t.v.vendors.length > 1;
+  const vw    = Math.max(...rows.map(([vendor]) => vendor.length));
+  const about = rows.map(([vendor, m]) => [many ? vendor.padEnd(vw) : "", m.window === undefined ? "" : term_tokens(m.window) + " context"].filter((x) => x !== "").join("  "));
+  const here  = rows.findIndex(([vendor, m]) => vendor === want.vendor && m.label === want.model);
+  const pick  = (k: number) => Pick.on(want, rows[k][0], rows[k][1]);
+  const keys  = (k: number, key: string) => {
+    const move = ({ Left: "down", Right: "up", Tab: "speed" } as Record<string, Move>)[key];
+    if (move === undefined) {
+      return false;
+    }
+    const p  = pick(k);
+    const to = Pick.move(p, move, t.v) ?? p;
+    want = { ...want, effort: to.effort, speed: move === "speed" && Pick.options(p, "speed", t.v).length > 1 ? to.speed : want.speed };
+    return true;
+  };
+  const foot  = (k: number) => {
+    const p       = pick(k);
+    const efforts = Pick.options(p, "effort", t.v).map(([effort]) => effort);
+    const e       = efforts.indexOf(p.effort);
+    const speeds  = Pick.options(p, "speed", t.v).length;
+    const speed   = speeds < 2 ? "no fast" : "Tab " + (p.speed === "slow" ? "fast off" : p.speed + " on");
+    return "effort " + (e > 0 ? "◂ " : "") + p.effort + (e < efforts.length - 1 ? " ▸" : "") + " · " + speed;
+  };
+  term_chooser(t, "Model", rows.map(([, m]) => m.label), about, here, (k) => term_act(t, { $: "Pick", to: pick(k) }), { find: true, keys, foot });
 }
 
 // a part of the pick: to the value given, or, none, the values it may

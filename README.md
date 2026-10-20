@@ -50,6 +50,7 @@ Keys
 | Enter / Esc          | send / interrupt                      |
 | `/`                  | command list                          |
 | Shift+Tab            | switch primary agent                  |
+| `/model`             | pick the model, its effort and speed  |
 | Ctrl+O               | show tool calls and thinking          |
 | Drag, double-click   | copy text                             |
 | Ctrl+Y               | copy the last reply                   |
@@ -104,7 +105,7 @@ Config
 | Key          | Default                           | What                                             |
 | ------------ | --------------------------------- | ------------------------------------------------ |
 | `vendors`    | `chatgpt`                         | also `claude-api`, `openai-api` (API keys)       |
-| `pick`       | `chatgpt:gpt-6.1-sol:medium:slow` | vendor:model:effort:speed                        |
+| `pick`       | `chatgpt:gpt-6.1-sol:medium:slow` | vendor:model:effort:speed (`/model` per chat)    |
 | `compactor`  | `chatgpt:gpt-6-luna:medium:slow`  | writes the summaries                             |
 | `agents`     | the pick                          | what subagents run on                            |
 | `models`     | all                               | models offered                                   |
