@@ -106,7 +106,7 @@ export namespace Custom {
     return Custom.agents(cwd).filter((a) => a.mode !== "primary");
   }
 
-  // an agent by name, in any case (Helper.md is helper too)
+  // an agent by name, in any case (Reviewer.md is reviewer too)
   export function agent(cwd: string, name: string | null): Profile | null {
     const found = [...Custom.files(cwd, "agents")].find(([own]) => own.toLowerCase() === name?.toLowerCase());
     return found === undefined ? null : Custom.profile(...found);

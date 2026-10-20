@@ -36,7 +36,7 @@ put(ROOT + "/other-login.json", "{}");
 put(ROOT + "/lock", "");
 put(ROOT + "/illi.log", "log\n");
 put(ROOT + "/chat/main/2026-10-20.jsonl", '{"text":"hello from default"}\n');
-put(ROOT + "/agents/helper.md", "---\ndescription: Helps\n---\nHelp.");
+put(ROOT + "/agents/reviewer.md", "---\ndescription: Reviews\n---\nReview.");
 put(ROOT + "/mcp.json", JSON.stringify({ mcpServers: {
   github : { command: "npx", args: ["server-github", "--key", "ghp_0123456789abcdefABCDEF"], env: { GITHUB_TOKEN: "${GITHUB_TOKEN}", OTHER_TOKEN: "literal-token-value", PLAIN: "x" } },
   docs   : { type: "http", url: "https://example.com/mcp", headers: { Authorization: "Bearer abcdefghijklmnop" } },
@@ -130,7 +130,7 @@ test("an export: the folder but the login, the lock, the log, the other profiles
   const cut  = await Profiles.profile_export(ROOT, "default", file);
   expect(cut).toBe(4);
   const names = tar(["-tzf", file]).split("\n").filter((l) => l !== "").sort();
-  expect(names).toEqual(["./agents/", "./agents/helper.md", "./chat/", "./chat/main/", "./chat/main/2026-10-20.jsonl", "./config.json", "./mcp.json"]);
+  expect(names).toEqual(["./agents/", "./agents/reviewer.md", "./chat/", "./chat/main/", "./chat/main/2026-10-20.jsonl", "./config.json", "./mcp.json"]);
   fs.mkdirSync(TMP + "/out");
   tar(["-xzf", file, "-C", TMP + "/out"]);
   expect(JSON.parse(fs.readFileSync(TMP + "/out/config.json", "utf8"))).toEqual({ side: "left", vendors: "chatgpt,claude-api" });
