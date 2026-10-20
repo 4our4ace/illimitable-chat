@@ -6,8 +6,9 @@
 // read anew; Delete puts its default back; Enter on a pick opens the
 // model picker, its choice the setting's; on one typed in, /set in the
 // input. /set checks a value first: its shape, a rules file there, the
-// picks still offered. Each setting is in the README and the
-// customize-illi skill.
+// picks still offered. A pick set while Illi's own agent is the main one
+// is the chat's at once. /side changes its settings as /set does. Each
+// setting is in the README and the customize-illi skill.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -120,6 +121,46 @@ test("Enter on one typed in puts /set in the input; /set checks the value, then 
   expect(note(t)).toMatch(/^No setting nope\./);
   run(t, "/set", "side");
   expect(note(t)).toBe("side: right. Where the side panel shows. /set side <value> changes it; /set side default puts back right.");
+});
+
+test("the pick set while Illi's own agent is the main one is the chat's at once; under another agent, only kept", () => {
+  const pick = process.env.ILLI_PICK;
+  delete process.env.ILLI_PICK;
+  try {
+    const t = term();
+    run(t, "/set", "pick claude-api:haiku-5.5:high:slow");
+    expect(t.v.out.map((p: any) => p.msg.$ === "pick" && p.msg.to)).toEqual([{ vendor: "claude-api", model: "haiku-5.5", effort: "high", speed: "slow" }]);
+    const other = term();
+    other.v.agent = "reviewer";
+    run(other, "/set", "pick claude-api:opus-5.5:high:slow");
+    expect([file().pick, other.v.out]).toEqual(["claude-api:opus-5.5:high:slow", []]);
+    run(other, "/set", "pick default");
+  } finally {
+    process.env.ILLI_PICK = pick;
+  }
+});
+
+test("/side changes its settings as /set does: not over a variable, nor into a config.json that won't read", () => {
+  const t = term();
+  run(t, "/side", "left");
+  expect([file().side, t.side.place]).toEqual(["left", "left"]);
+  process.env.ILLI_SIDE = "right";
+  try {
+    run(t, "/side", "off");
+    expect(note(t)).toBe("side is set by ILLI_SIDE, over config.json: unset it to change it here.");
+    expect(file().side).toBe("left");
+  } finally {
+    delete process.env.ILLI_SIDE;
+  }
+  const kept = fs.readFileSync(DIR + "/config.json", "utf8");
+  fs.writeFileSync(DIR + "/config.json", "{ nope");
+  try {
+    expect(() => run(t, "/side", "40")).not.toThrow();
+    expect(note(t)).not.toMatch(/^The side panel/);
+  } finally {
+    fs.writeFileSync(DIR + "/config.json", kept);
+  }
+  run(t, "/side", "right");
 });
 
 test("a vendor or a model taken out that a pick runs on won't do", () => {
