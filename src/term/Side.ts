@@ -191,7 +191,7 @@ function term_side_todo(t: Term, w: number): Item[] {
 }
 
 // a count of tokens, as a person says it: 812, 4.2k, 41k, 1.2M
-function term_tokens(n: number): string {
+export function term_tokens(n: number): string {
   return n < 1000 ? String(n) : n < 10000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : n < 1e6 ? Math.round(n / 1000) + "k" : (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
 }
 
