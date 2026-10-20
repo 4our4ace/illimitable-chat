@@ -86,7 +86,7 @@ export const TOOL_ANY = "🔧";
 export const GLYPH = {
   tab     : "◯",  // a chat's tab
   here    : "●",  // the tab of the chat shown
-  input   : "> ", // each line of the message typed
+  input   : "> ", // before the message typed (its other lines indented as far)
   open    : "▾",  // an open block's bar
   pending : "☐",  // a to-do item not begun
   active  : "◐",  // the one at work
