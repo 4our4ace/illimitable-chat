@@ -180,14 +180,18 @@ function term_pane(t: Term, title: string, make: (w: number) => Paint.Line[]): v
   t.choose = null;
 }
 
-// the commands and keys by group, in two columns, then the editing keys
+// the commands and keys by group, in two columns (too narrow for 20
+// columns of what one does: how it's typed on a line of its own, what it
+// does under it, indented), then the editing keys
 function term_help(t: Term): void {
   const groups = term_groups(t.v, true);
   term_pane(t, "Help", (w) => {
     const how   = (c: Cmd) => [c[0], c[1]].filter((x) => x !== "").join(", ");
     const left  = Math.max(...groups.flatMap(([, cmds]) => cmds).map((c) => Paint.text_width(how(c)))) + 2;
-    const right = Math.max(20, w - left);
-    const row   = (c: Cmd) => Paint.runs_wrap([Paint.Run(c[2])], right, false).map((l, k) => [Paint.Run((k === 0 ? how(c) : "").padEnd(left)), ...l]);
+    const right = w - left;
+    const wrap  = (c: Cmd) => Paint.runs_wrap([Paint.Run(c[2])], right, false).map((l, k) => [Paint.Run((k === 0 ? how(c) : "").padEnd(left)), ...l]);
+    const under = (c: Cmd) => [...Paint.runs_wrap([Paint.Run(how(c))], w, false), ...Paint.runs_wrap([Paint.Run(c[2])], w - 2, false).map((l) => [Paint.Run("  "), ...l])];
+    const row   = (c: Cmd) => (right < 20 ? under(c) : wrap(c));
     const bold  = { ...Paint.INK, b: true };
     const group = ([name, cmds]: [string, Cmd[]]) => [[Paint.Run(name, bold)], ...cmds.flatMap(row), []];
     const edit  = Paint.runs_wrap([Paint.Run(Screen.EDITING)], w, false);
@@ -265,7 +269,7 @@ function term_agent_set(t: Term, arg: string): void {
   term_chooser(t, "Agent", names.map((name) => agent_name(name ?? View.MAIN)), about, names.indexOf(t.v.agent), (k) => term_choose(t, names[k]));
 }
 
-// the picker opened over the pane, at the option marked as now; with
+// the picker opened (closing the pane), at the option marked as now; with
 // `more`, a search (typing ranks the names), what else the lit option
 // takes and what the foot says of it (the model picker's)
 export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"] } = {}): void {
