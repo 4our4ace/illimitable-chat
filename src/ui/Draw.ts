@@ -46,6 +46,14 @@ const CODE    = 100000;
 // the drawings and highlights kept
 const KEPT = 64;
 
+// the agents' colors, hues told apart at a glance, round the wheel: on a
+// dark background, on a light one, and the terminal's own, untold; how
+// many steps apart two agents' are kept, while there's room
+const AGENT_DARK  = ["#f87171", "#fb923c", "#facc15", "#4ade80", "#2dd4bf", "#60a5fa", "#a78bfa", "#f472b6"];
+const AGENT_LIGHT = ["#dc2626", "#ea580c", "#ca8a04", "#16a34a", "#0d9488", "#2563eb", "#7c3aed", "#db2777"];
+const AGENT_OWN   = ["1", "3", "2", "6", "4", "5"];
+const AGENT_APART = 2;
+
 // a flowchart that runs sideways, which the box art may stand up
 const SIDEWAYS = /^(\s*(?:flowchart|graph)[ \t]+)(LR|RL)\b/;
 
@@ -113,6 +121,25 @@ function draw_name(): keyof typeof PRESETS {
 export function draw_theme(): Record<string, string> {
   const name = draw_name();
   return { ...(name === "mono" && !(Theme.PALETTE in PRESETS) ? Theme.REPLY : (PRESETS[name] as Record<string, string>)), ...Theme.COLORS };
+}
+
+// an agent's color: one of AGENT_*'s by its name's hash, if it's
+// AGENT_APART from those the agents before it took (among, in order),
+// else the one farthest from them (the nearest its hash's of those), so
+// each stands apart from the others and an agent's stays its own; a name
+// not among them: its hash's
+export function draw_agent(name: string, among: string[]): string {
+  const hues = !draw_theme().accent?.startsWith("#") ? AGENT_OWN : draw_dark(canvas ?? CANVAS[draw_name()]) ? AGENT_DARK : AGENT_LIGHT;
+  const n    = hues.length;
+  const hash = (x: string) => [...x.toLowerCase()].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0, 2166136261) % n;
+  const took = new Map<string, number>();
+  for (const x of among) {
+    const used = [...took.values()];
+    const far  = (k: number) => Math.min(n, ...used.map((u) => Math.min(Math.abs(k - u), n - Math.abs(k - u))));
+    const own  = hash(x);
+    took.set(x.toLowerCase(), far(own) >= AGENT_APART ? own : Array.from({ length: n }, (_, i) => (own + i) % n).reduce((a, b) => (far(b) > far(a) ? b : a)));
+  }
+  return hues[took.get(name.toLowerCase()) ?? hash(name)];
 }
 
 // whether a background is dark: its luminance under half

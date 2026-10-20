@@ -147,7 +147,7 @@ export function term_paint(t: Term): void {
   const blue  = { ...Paint.INK, c: Draw.draw_theme().link ?? "4" };
   const toast = box !== null ? [] : [...lead, Paint.Run(" ".repeat(Math.max(1, left + cw - Paint.line_width(lead) - Paint.text_width(said.toast)))), Paint.Run(said.toast, blue)];
   const under = !t.v.up ? "offline" : "";
-  const lines = [...above, toast, term_rule(t, iw, ruled), ...input.lines, Paint.rule_text(under, iw), Paint.tabs_line(t.v, iw, side === 0)];
+  const lines = [...above, toast, term_rule(t, iw, ruled), ...input.lines, Paint.rule_text(under, iw), Paint.tabs_line(t.v, iw, side === 0, [View.MAIN, ...t.agents.map((a) => a.name)])];
   const foot  = term_area(t, { key: "foot", lines, first: 0, row: 1 + tall, col: MARGIN, w: iw, tall: lines.length });
   const head  = term_area(t, { key: "head", lines: [term_head(t, full)], first: 0, row: 0, col: 0, w: full, tall: 1 });
   const rows: Screen.Piece[][] = [[{ col: 0, w: full, line: head[0] }]];
