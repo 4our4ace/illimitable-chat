@@ -4,7 +4,8 @@
 // it whole, the view's lines before it; it holds while they fit, so each
 // call starts as the one before did, and past the call's size moves on
 // till they fill half (the oldest fold into the view); kept on disk. The
-// recent messages come in blocks, one marked in place of the view's.
+// recent messages come in blocks, one marked in place of the view's. An
+// agent spawned as the user's is named after it.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -82,4 +83,13 @@ test("the screen folds with the cut as it moves on by itself, and stays behind a
   const cut = Memory.cutoff(mem, high);
   expect(cut).toBeGreaterThan(38);
   expect(mem.show).toBe(cut);
+});
+
+test("an agent spawned as the user's is named after it, numbered from the second on; a plain one gets a random name", () => {
+  const mem = chat("agents", 1);
+  expect([1, 2, 3].map(() => Memory.agent_new(mem, "reviewer"))).toEqual(["reviewer", "reviewer-2", "reviewer-3"]);
+  expect(Memory.agent_new(Memory.load(DIR + "/agents", () => ({}) as any), "reviewer")).toBe("reviewer-4");
+  expect(Memory.agent_new(mem, "1st/../x")).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
+  expect(Memory.agent_new(mem)).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
+  expect(Memory.agent(mem, "reviewer-2")).toEqual([]);
 });
