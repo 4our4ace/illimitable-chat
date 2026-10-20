@@ -79,7 +79,7 @@ export function profile_pick(dir: string, asked?: string): Picked {
   const last  = profile_last(root);
   const name  = asked !== undefined && asked !== "" ? asked : owned ? is[2] : last;
   if (name !== DEFAULT && (!NAME.test(name) || !fs.existsSync(profile_dir(root, name)))) {
-    throw new Error("config: no profile " + JSON.stringify(name) + " in " + root + " (/profile new " + (NAME.test(name) ? name : "<name>") + " makes one)");
+    throw new Error("config: no profile " + JSON.stringify(name) + " in " + root + ": start illi without ILLI_PROFILE, then /profile new " + (NAME.test(name) ? name : "<name>") + " makes it.");
   }
   return { root, name, dir: profile_dir(root, name) };
 }

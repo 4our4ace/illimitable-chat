@@ -5,14 +5,19 @@
 // itself ($ILLI_DIR, default ~/.illi) for the default. A profile's
 // config.json goes over the root's, key by key; the ChatGPT login is the
 // root's, shared. Each key of config.json (SETTINGS) may be set
-// as ILLI_<KEY> instead; a path may start with "~/". /settings changes
-// them (config_set), some at once, the rest at the next start. The API
+// as ILLI_<KEY> instead; a path may start with "~/", and a relative one
+// is taken from the folder of the config.json that names it (a
+// variable's: the working folder). Each key set is checked at the start
+// (config_check), so one that won't do stops illi with a word on why.
+// /settings changes them (config_set), some at once, the rest at the
+// next start. The API
 // keys are read from the environment and removed from it, so no program
 // an agent runs inherits them (config_env puts them back for a profile's
 // switch).
 
 import * as fs from "node:fs";
 import * as os from "node:os";
+import * as path from "node:path";
 import type { Vendor } from "../ai/AskAI.ts";
 import { LABELS, VENDORS, Pick, type Offer } from "../ai/Pick.ts";
 import { profile_pick } from "./Profiles.ts";
@@ -39,7 +44,7 @@ let FILE: Record<string, unknown> = config_files();
 export type Setting = { def: string; values: string[] | "pick" | "text"; now: boolean; what: string; none?: string; shape?: [RegExp, string]; path?: boolean };
 
 // every setting, in the order /settings lists them: a key read here
-// (config_get) must be one, and one is all /settings, /set and
+// (config_value) must be one, and one is all /settings, /set and
 // config_check need; the README and the customize-illi skill say each
 const TABLE = {
   pick       : { def: "chatgpt:gpt-6.1-sol:medium:slow", values: "pick", now: true, what: "Illi's own default model" },
@@ -74,15 +79,15 @@ export const OFFER: Offer = {
   models  : config_list(config_value("models") || LABELS.join()),
 };
 
-// the settings read anew as config_set changes one (Live): the user's
-// rules file (a system prompt's), a shell command after each turn, the
-// model picks; the rest are read once
+// the settings read anew as config_set changes one (config_live): the
+// user's rules file (a system prompt's), a shell command after each turn,
+// the model picks; the rest are read once
 export let RULES      = "";
 export let AFTER      = "";
-export const THEME    = config_path(config_value("theme"));
 
-// the user's MCP servers (Mcp.ts)
-export const MCP      = config_path(config_value("mcp"));
+// the theme's file (Theme.ts) and the user's MCP servers (Mcp.ts)
+export const THEME    = config_place("theme");
+export const MCP      = config_place("mcp");
 
 // a suggested reply after each turn, Tab taking it (Chat.suggest): on,
 // unless off (or false, 0)
@@ -112,6 +117,7 @@ const FULL      = 0.9;
 export const GUESS      = 128000;
 let CONTEXT_SET         = "";
 let CONTEXTS: Record<string, unknown> = {};
+config_start();
 config_live();
 export const CONTEXT    = Number(CONTEXT_SET) > 0 ? Number(CONTEXT_SET) : AUTO_MOST;
 
@@ -122,7 +128,7 @@ export const JOBS       = Number(config_value("jobs"));
 // the ChatGPT login chatgpt runs on (ChatGPT.ts): the file `login` names,
 // else Illi's own (/login makes it; the root's, so every profile's) or,
 // while there is none, opencode's (`opencode auth login`)
-export const LOGIN_SET      = config_value("login") === "" ? null : config_path(config_value("login"));
+export const LOGIN_SET      = config_value("login") === "" ? null : config_place("login");
 export const OWN_LOGIN      = ROOT + "/login.json";
 export const OPENCODE_LOGIN = config_path((process.env.XDG_DATA_HOME ?? "~/.local/share") + "/opencode/auth.json");
 
@@ -136,13 +142,9 @@ export const KEYS: Record<string, string> = Object.fromEntries(Object.entries(VA
 // Config
 // ======
 
-export function config_get(key: Key, def: string): string {
-  return process.env["ILLI_" + key.toUpperCase()] ?? (FILE[key] as string | undefined) ?? def;
-}
-
 // a key's value, its default if none is set
 export function config_value(key: Key): string {
-  return config_get(key, SETTINGS[key].def);
+  return process.env["ILLI_" + key.toUpperCase()] ?? (FILE[key] as string | undefined) ?? SETTINGS[key].def;
 }
 
 // the variable that sets a key over config.json, if it's set; else null
@@ -157,20 +159,46 @@ export function config_pick(key: Key): Pick | null {
   return text === "" ? null : config_run(key, text);
 }
 
-// the settings config_set may change while illi runs, read again
+// each key set (in a config.json or a variable) checked as /set checks
+// one; one that won't do throws, saying where it's set
+function config_start(): void {
+  for (const key of Object.keys(SETTINGS) as Key[]) {
+    const raw = process.env["ILLI_" + key.toUpperCase()] ?? FILE[key];
+    const why = raw === undefined ? null : config_check(key, raw, config_base(key));
+    if (why !== null) {
+      throw new Error("config: " + why + " (" + (config_env_set(key) ?? "config.json") + ")");
+    }
+  }
+}
+
+// the settings config_set may change while illi runs, read again: all
+// read first, then all kept, so one that won't read leaves them as they
+// were
 function config_live(): void {
   const agents = config_value("agents");
-  const own    = FILE.contexts;
-  RULES       = config_path(config_value("rules"));
+  const picks  = [config_run("pick", config_value("pick")), config_run("compactor", config_value("compactor")), agents === "" ? null : config_run("agents", agents)] as const;
+  const own    = config_contexts(config_value("contexts"));
+  RULES       = config_place("rules");
   AFTER       = config_value("after");
   SUGGEST     = !["off", "false", "0"].includes(String(config_value("suggest")).trim().toLowerCase());
   SIDE        = config_value("side");
   SIDE_WIDTH  = config_value("side_width");
-  PICK        = config_run("pick", config_value("pick"));
-  COMPACTOR   = config_run("compactor", config_value("compactor"));
-  AGENTS      = agents === "" ? null : config_run("agents", agents);
+  PICK        = picks[0];
+  COMPACTOR   = picks[1];
+  AGENTS      = picks[2];
   CONTEXT_SET = String(config_value("context")).trim();
-  CONTEXTS    = (typeof own === "object" && own !== null ? own : {}) as Record<string, unknown>;
+  CONTEXTS    = own ?? {};
+}
+
+// `contexts` as an object (a variable's, or text, parsed as JSON); none:
+// {}; null: not one
+function config_contexts(value: unknown): Record<string, unknown> | null {
+  try {
+    const got = typeof value === "string" ? (value.trim() === "" ? {} : JSON.parse(value)) : value ?? {};
+    return typeof got === "object" && got !== null && !Array.isArray(got) ? got : null;
+  } catch {
+    return null;
+  }
 }
 
 // the tokens of the chat a turn sends on a model (CONTEXT's rules), its
@@ -216,50 +244,82 @@ export function config_set(key: Key, value: unknown): void {
 }
 
 // why a key can't take a value (null: it can), the other keys as they
-// are: its shape; the picks offered still (a vendor or a model taken out
-// may leave one that won't start)
-export function config_check(key: string, value: unknown): string | null {
+// are: its shape (a number or a yes taken as its text); a rules file
+// there (a relative path taken from base); the picks offered both by
+// this illi (read anew at once) and at the next start (a vendor or a
+// model taken out may leave one that won't start; one added is offered
+// only then)
+export function config_check(key: string, value: unknown, base = DIR): string | null {
   if (!(key in SETTINGS)) {
     return "No setting " + key + ". The settings: " + Object.keys(SETTINGS).join(", ") + ".";
   }
   const shape = SETTINGS[key as Key].shape;
-  const text  = value === null ? SETTINGS[key as Key].def : typeof value === "string" ? value.trim() : "";
+  const plain = typeof value === "number" || typeof value === "boolean" ? String(value) : value;
+  const text  = plain === null ? SETTINGS[key as Key].def : typeof plain === "string" ? plain.trim() : "";
   const get   = (k: Key) => (k === key ? text : config_value(k));
   if (key === "contexts") {
-    const bad = value !== null && (typeof value !== "object" || Array.isArray(value) || Object.values(value).some((v) => !SETTINGS.context.shape![0].test(String(v))));
+    const got = value === null ? {} : config_contexts(value);
+    const bad = got === null || Object.values(got).some((v) => !SETTINGS.context.shape![0].test(String(v)));
     return bad ? "contexts takes each model's context, like {\"gpt-6.1-sol\": 350000}." : null;
   }
-  if (typeof value !== "string" && value !== null) {
+  if (typeof plain !== "string" && plain !== null) {
     return key + " takes text.";
   }
   if (shape !== undefined && !shape[0].test(text)) {
     return key + " takes " + shape[1] + ".";
   }
-  if (key === "rules" && text !== "" && !fs.existsSync(config_path(text))) {
+  if (key === "rules" && text !== "" && !fs.existsSync(config_path(text, base))) {
     return "No file " + text + " for the rules.";
   }
+  const later = { vendors: OFFER.vendors, models: OFFER.models };
   try {
-    const offer = { vendors: config_vendors(get("vendors")), models: key === "models" ? config_list(text || LABELS.join()) : OFFER.models };
+    later.vendors = config_vendors(get("vendors"));
+    later.models  = key === "models" ? config_list(text || LABELS.join()) : OFFER.models;
     for (const k of (["pick", "compactor", "agents"] as const).filter((k) => get(k) !== "")) {
-      config_run(k, get(k), offer);
+      config_run(k, get(k), later);
     }
   } catch (err: any) {
     return err.message.replace(/^config: /, "");
   }
+  for (const k of (["pick", "compactor", "agents"] as const).filter((k) => get(k) !== "")) {
+    if (Pick.read(config_split(get(k)), OFFER) === null) {
+      return k + " " + get(k) + " is offered from the next start (vendors and models change then): set it once illi starts again.";
+    }
+  }
   return null;
 }
 
-function config_path(path: string): string {
-  return path.startsWith("~/") ? os.homedir() + path.slice(1) : path;
+// a path a setting names, "~/" the home folder, a relative one taken from
+// base (none: kept as it is)
+function config_path(text: string, base?: string): string {
+  const home = text.startsWith("~/") ? os.homedir() + text.slice(1) : text;
+  return base === undefined || home === "" ? home : path.resolve(base, home);
+}
+
+// the path a key names, from the folder of the config.json that sets it
+function config_place(key: Key): string {
+  return config_path(config_value(key), config_base(key));
+}
+
+// the folder a key's relative path is taken from: the working folder for
+// a variable's, else that of the config.json that sets it (the profile's,
+// or the root's under it)
+function config_base(key: Key): string {
+  return config_env_set(key) !== null ? process.cwd() : key in config_file(PATH) ? DIR : ROOT;
 }
 
 function config_run(key: string, text: string, offer = OFFER): Pick {
-  const [vendor, model, effort, speed] = text.split(":");
-  const pick = Pick.read({ vendor, model, effort, speed }, offer);
+  const pick = Pick.read(config_split(text), offer);
   if (pick === null) {
     throw new Error("config: " + key + " is no vendor:model:effort:speed offered here: " + text);
   }
   return pick;
+}
+
+// a pick's text, in its parts
+function config_split(text: string): { vendor: string; model: string; effort: string; speed: string } {
+  const [vendor, model, effort, speed] = text.split(":");
+  return { vendor, model, effort, speed };
 }
 
 function config_vendors(text: string): Vendor[] {
