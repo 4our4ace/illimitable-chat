@@ -207,11 +207,6 @@ export namespace Tools {
     return "http://127.0.0.1:" + HTTP.port + "/";
   }
 
-  export function close(tools: Tools): void {
-    Tools.stop(tools, null);
-    CHATS.delete(tools.key);
-  }
-
   export function at(tools: Tools, who: string): string {
     return tools.url + who;
   }

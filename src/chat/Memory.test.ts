@@ -5,6 +5,7 @@
 // call starts as the one before did, and past the call's size moves on
 // till they fill half (the oldest fold into the view); kept on disk. The
 // recent messages come in blocks, one marked in place of the view's. An
+// older chat's act lines still read. An
 // agent spawned as the user's is named after it; a freed name is used
 // again, each log its own.
 
@@ -70,6 +71,20 @@ test("a month-old day's file is gzipped: its lines read the same, open, from an 
   expect(texts(again, 12)).toEqual(kept);
   Memory.push(again, [{ kind: "user", text: "after" }]);
   expect(texts(again, 13)).toEqual([...kept, "after"]);
+});
+
+test("an older chat's lines naming acts read as any other, the acts ignored", () => {
+  const mem  = chat("acts", 2);
+  const day  = fs.readdirSync(DIR + "/acts/main")[0];
+  const date = new Date().toISOString();
+  const old  = [{ i: 2, kind: "user", text: "said with an act", size: 22, date, act: "a1" }, { act: "a2", ans: { ok: true } }, { i: 3, kind: "illi", text: "after", size: 11, date }];
+  fs.appendFileSync(DIR + "/acts/main/" + day, old.map((r) => JSON.stringify(r) + "\n").join(""));
+  fs.rmSync(DIR + "/acts/main.index");
+  const again = Memory.load(DIR + "/acts", () => ({}) as any);
+  again.hold = true;
+  expect(again.count).toBe(4);
+  expect(Memory.message(again, 2)!.text).toBe("said with an act");
+  expect(Memory.message(again, 3)!.text).toBe("after");
 });
 
 test("the screen folds with the cut as it moves on by itself, and stays behind a cut moved for it", () => {
