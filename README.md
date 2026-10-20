@@ -6,6 +6,25 @@ into, so it forgets nothing.
 
 Written mostly by AI agents: expect bugs.
 
+Why Illi
+--------
+
+Most coding agents work in sessions: each starts empty, and once it fills
+up it is squashed into a summary and the details are gone. Illi has no
+sessions.
+
+- **One chat, forever.** Every message stays on disk, for days, weeks,
+  years. You never start over or explain things again.
+- **Nothing is forgotten.** Old messages fold into a tree of summary
+  lines, coarser with age, and Illi can zoom any line back down to the
+  exact words.
+- **Built for the prompt cache.** The memory only changes at its end, so
+  nearly every call is a cache hit: a long chat stays fast and cheap.
+- **Your ChatGPT plan, or your keys.** ChatGPT Plus or Pro, or Anthropic
+  and OpenAI API keys, all in Illi's own loop: no SDKs, no dependencies.
+- **Crash-proof.** A message is on disk before Illi answers. Quit or
+  crash mid-turn, and the next start goes on where it was.
+
 Install
 -------
 
@@ -28,16 +47,22 @@ below).
 How it works
 ------------
 
+```mermaid
+flowchart TD
+  A["line: messages 1-4"] --> B["line: 1-2"] & C["line: 3-4"]
+  B --> m1["message 1"] & m2["message 2"]
+  C --> m3["message 3"] & m4["message 4"]
+```
+
 - **Memory tree.** Each message is summarized into one line, and lines
-  merge in pairs into a binary tree. A turn sends the latest messages
-  whole, up to `context`; older ones go as lines, coarser with age.
+  merge in pairs into a binary tree, written in the background by a
+  smaller model. A turn sends the latest messages whole, up to
+  `context`; older ones go as lines, merged as they age.
 - **Zoom.** Illi can open any line back down to the original messages.
   `/compact` folds all but the last two exchanges, so turns get smaller
   (the screen keeps showing them); `/clear` empties the screen for a
-  fresh topic, and Illi still remembers it all.
-- **Cheap to run.** A smaller model writes the summaries in the
-  background, and the view only grows at its end, so calls hit the
-  prompt cache.
+  fresh topic, and Illi still remembers it all. `/tree` shows yours as
+  a web page.
 - **Tools.** Shell, file edits, subagents, a to-do list, MCP servers.
   `/goal <message>` keeps it working until the goal is met.
 - **Drawn replies.** Mermaid diagrams, highlighted code and boxed tables,
