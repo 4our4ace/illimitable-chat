@@ -4,9 +4,12 @@
 // default ~/.illi) is the default profile's folder, and holds each other
 // one's: <root>/profiles/<name>. illi opens the one asked
 // ($ILLI_PROFILE), else the one used last (<root>/profile, a line), else
-// the default; Config.ts takes its folder as DIR. What stays the root's,
-// shared, is Config.ts's to say (the ChatGPT login; its config.json under
-// each profile's). A profile goes out as one archive (tar.gz, by the
+// the default; Config.ts takes its folder as DIR. A profile is made
+// empty or with another's setup (profile_new), and may take that one's
+// chat along (profile_move_chat); any but the default may be renamed or
+// deleted. What stays the root's, shared, is Config.ts's to say (the
+// ChatGPT login; its config.json under each profile's). A profile goes
+// out as one archive (tar.gz, by the
 // system's tar): its folder but the login (a login file its config names
 // too, wherever in it), the lock, the log (and, the default's, the other
 // profiles), its config.json and mcp.json with their secrets left out;
@@ -39,7 +42,7 @@ export type Imported = { keys: string[]; servers: number };
 // take (the default's, /profile's own words)
 export const DEFAULT = "default";
 export const NAME    = /^[a-z0-9][a-z0-9_-]*$/;
-const TAKEN          = [DEFAULT, "new", "export", "import"];
+const TAKEN          = [DEFAULT, "new", "export", "import", "rename", "delete"];
 
 // a folder that is a profile's: <root>/profiles/<name>
 const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
@@ -140,6 +143,41 @@ export function profile_new(root: string, name: string, from: string | null): vo
       fs.cpSync(from + "/" + part, dir + "/" + part, { recursive: true });
     }
   }
+}
+
+// a profile renamed (never the default: its folder is the root), and the
+// one used last with it
+export function profile_rename(root: string, from: string, to: string): void {
+  fs.renameSync(profile_dir(root, from), profile_dir(root, to));
+  if (profile_used(root) === from) {
+    profile_keep(root, to);
+  }
+}
+
+// a profile gone, its folder and all in it (never the default); the one
+// used last, if it was, the default again
+export function profile_delete(root: string, name: string): void {
+  fs.rmSync(profile_dir(root, name), { recursive: true, force: true });
+  if (profile_used(root) === name) {
+    profile_keep(root, DEFAULT);
+  }
+}
+
+// a profile's chat moved into a new one's folder (from, to: their
+// folders), as it's made; the first starts with an empty chat. One there
+// already is never written over
+export function profile_move_chat(from: string, to: string): void {
+  if (fs.existsSync(to + "/chat")) {
+    throw new Error("profile " + path.basename(to) + " has a chat already");
+  }
+  if (fs.existsSync(from + "/chat")) {
+    fs.renameSync(from + "/chat", to + "/chat");
+  }
+}
+
+// the name kept as the one used last ("": none)
+function profile_used(root: string): string {
+  return fs.existsSync(root + "/profile") ? fs.readFileSync(root + "/profile", "utf8").trim() : "";
 }
 
 // the profile an archive's file names (illi-profile-<name>.tar.gz), else
