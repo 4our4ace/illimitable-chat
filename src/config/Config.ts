@@ -47,6 +47,10 @@ export const THEME      = config_path(config_get("theme", DIR + "/theme.json"));
 export const MCP        = config_path(config_get("mcp", DIR + "/mcp.json"));
 export const AFTER      = config_get("after", "");
 
+// a suggested reply after each turn, Tab taking it (Chat.suggest): on,
+// unless off (or false, 0)
+export const SUGGEST    = !["off", "false", "0"].includes(String(config_get("suggest", "on")).trim().toLowerCase());
+
 // the side panel (Term.ts): where it shows ("right", "left", "off"), how
 // wide (columns, or a share of the screen: "25%")
 export const SIDE       = config_get("side", "right");
