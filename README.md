@@ -112,7 +112,8 @@ Config
 | `login`, `theme`, `mcp` | in `~/.illi/`          | other file locations                             |
 
 API keys come from `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`. The chat is
-in `~/.illi/chat`: back it up.
+in `~/.illi/chat`, every message kept; days over a month old are gzipped.
+Back it up.
 
 Code
 ----

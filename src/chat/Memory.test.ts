@@ -53,3 +53,19 @@ test("a turn's chat: the messages from the cut whole, in blocks, the last whole 
   expect(blocks.find((b) => b.mark)!.text).toContain("5|user");
   expect(Memory.chat(mem, 9, 9).filter((b) => b.mark).length).toBeLessThanOrEqual(1);
 });
+
+test("a month-old day's file is gzipped: its lines read the same, open, from an index made anew, and written to again", async () => {
+  const mem   = chat("pack", 12);
+  const texts = (m: any, n: number) => Array.from({ length: n }, (_, k) => Memory.message(m, k)!.text);
+  const kept  = texts(mem, 12);
+  expect(await Memory.pack(mem, Date.now() + 40 * 864e5)).toBeGreaterThan(0);
+  expect(fs.readdirSync(DIR + "/pack/main").every((f) => f.endsWith(".jsonl.gz"))).toBe(true);
+  expect(texts(mem, 12)).toEqual(kept);
+  fs.rmSync(DIR + "/pack/main.index");
+  const again = Memory.load(DIR + "/pack", () => ({}) as any);
+  again.hold[0] = "held for the test";
+  expect(again.count).toBe(12);
+  expect(texts(again, 12)).toEqual(kept);
+  Memory.push(again, [{ kind: "user", text: "after" }]);
+  expect(texts(again, 13)).toEqual([...kept, "after"]);
+});

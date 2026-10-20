@@ -36,8 +36,10 @@
 // anew (a compaction's view ends at its node, then its task, both unmarked).
 //
 // Files: main/ (messages) and tree/ (nodes), JSON lines in a file per
-// day, flushed (Disk.ts); main.index and tree.index give each line's
-// place by slot; view.json keeps the view, the chat's pick and goal,
+// day, flushed (Disk.ts); a day's file PACK days old is gzipped in its
+// place (.jsonl.gz: pack), and read whole, unpacked, as a line of it is;
+// main.index and tree.index give each line's place by slot (its bytes in
+// the file unpacked); view.json keeps the view, the chat's pick and goal,
 // written over. main/ is also the act log: an act recorded (Chat.act)
 // is done once its record is, a line naming it (`act`; its answer
 // `ans`; an older one's `pick` is in view.json too): the last page of
@@ -50,6 +52,7 @@
 // hash; an agent's log in docs/agent/<Name>.jsonl.
 
 import * as fs from "node:fs";
+import * as zlib from "node:zlib";
 import { AskAI, type Ask, type Bill, type Block, type Call, type Img, type Kind, type Pay, type Say, type Served } from "../ai/AskAI.ts";
 import { clip_page, clip_pages } from "../tools/Clip.ts";
 import * as config from "../config/Config.ts";
@@ -97,7 +100,8 @@ type Kept = { parts: Array<[number, number]>; batch: boolean };
 // view.json: the chat's view, the compactions' (none: the chat's)
 type Saved = Kept & { seen?: Kept; main: End; tree: End; pick: object | null; goal?: string | null; work?: string[]; agent?: string | null; cut?: number };
 
-// fds: files read lately, open, oldest first; count: the pages logged
+// fds: files read lately, open, oldest first; unpacked: the gzipped
+// day files read lately, unpacked, oldest first; count: the pages logged
 // whole; open: those after, not whole yet; pick: the chat's, as last set;
 // goal: the user's (/goal; null: none), till met or halted (Chat.ts);
 // agent: the main agent's profile (Custom.ts; null: Illi's own); work:
@@ -117,6 +121,7 @@ type Saved = Kept & { seen?: Kept; main: End; tree: End; pick: object | null; go
 export type Memory = {
   dir    : string;
   fds    : Map<string, number>;
+  unpacked: Map<string, Buffer>;
   count  : number;
   open   : number;
   pick   : object | null;
@@ -166,6 +171,12 @@ const DAY   = 864e5;
 // read lately (mostly its last days), so a chat however old holds a few
 const FDS   = 8;
 
+// a day's file this many days old is gzipped (pack), the chat's start
+// PACK_WAIT ms behind; the gzipped files read lately kept unpacked
+const PACK      = 30;
+const PACK_WAIT = 10000;
+const UNPACKED  = 4;
+
 // Anthropic takes 32 MB a request, 20 images at full size: 20 of IMAGE
 // bytes, in base64; PIXELS, the most decoded: a larger image goes as is
 const PICS   = 20;
@@ -208,7 +219,7 @@ export namespace Memory {
 
   export function load(dir: string, share: Memory["share"], acted: Memory["acted"] = () => {}): Memory {
     const mem: Memory = {
-      dir, fds: new Map(), count: 0, open: 0, pick: null, goal: null, agent: null, work: [], cut: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), ready: [[], []], ends: { main: [0, 0], tree: [0, 0] },
+      dir, fds: new Map(), unpacked: new Map(), count: 0, open: 0, pick: null, goal: null, agent: null, work: [], cut: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), ready: [[], []], ends: { main: [0, 0], tree: [0, 0] },
       view: { parts: [], size: 0, batch: false, high: LINES }, seen: { parts: [], size: 0, batch: false, high: SEEN },
       busy: new Map(), sides: new Map(), calls: new Map(), hold: [null, "paused"], done: false, wait: new Set(), share, acted,
     };
@@ -229,6 +240,7 @@ export namespace Memory {
     Memory.roots(mem.count).flatMap((part) => Memory.todo(mem, part)).forEach((part) => Memory.ready(mem, part, true));
     Memory.fit(mem);
     Memory.save(mem);
+    setTimeout(() => void Memory.pack(mem).catch((err) => console.error("memory: packing old days failed: " + err.message)), PACK_WAIT).unref();
     return mem;
   }
 
@@ -265,7 +277,8 @@ export namespace Memory {
     let end: End = fs.existsSync(file) ? from : [0, 0];
     fs.mkdirSync(mem.dir + "/" + stream, { recursive: true });
     const fd = fs.openSync(file, end[0] === 0 ? "w+" : "r+");
-    const days = fs.readdirSync(mem.dir + "/" + stream).map((f) => Date.parse(f.slice(0, 10)) / DAY);
+    const names = fs.readdirSync(mem.dir + "/" + stream).filter((f) => /^\d{4}-\d{2}-\d{2}\.jsonl(\.gz)?$/.test(f));
+    const days = [...new Set(names.map((f) => Date.parse(f.slice(0, 10)) / DAY))];
     try {
       for (const day of days.filter((day) => day >= end[0]).sort((a, b) => a - b)) {
         end = [day, Memory.scan(mem, stream, day, day === end[0] ? end[1] : 0, fd)];
@@ -276,11 +289,12 @@ export namespace Memory {
     return end;
   }
 
-  // indexes, into fd, the lines of a day's file from byte `at`; answers
-  // the file's end. A line a crash cut short is skipped
+  // indexes, into fd, the lines of a day's file from byte `at` (gzipped:
+  // of it unpacked); answers the file's end. A line a crash cut short is
+  // skipped (a file gzipped has none)
   export function scan(mem: Memory, stream: Stream, day: number, at: number, fd: number): number {
     const file = Memory.path(mem, stream, day);
-    const data = Memory.slice(file, at, fs.statSync(file).size - at);
+    const data = fs.existsSync(file) ? Memory.slice(file, at, fs.statSync(file).size - at) : Memory.unpacked(mem, file).subarray(at);
     let k = 0;
     for (let nl = data.indexOf(10); nl >= 0; nl = data.indexOf(10, k)) {
       const rec = Memory.parse(data.subarray(k, nl).toString("utf8"), file);
@@ -324,8 +338,65 @@ export namespace Memory {
     if (day === 0) {
       return null;
     }
-    const line = Memory.pread(Memory.fd(mem, Memory.path(mem, stream, day)), rec.readDoubleLE(0), rec.readUInt32LE(12));
+    const line = Memory.bytes_at(mem, Memory.path(mem, stream, day), rec.readDoubleLE(0), rec.readUInt32LE(12));
     return JSON.parse(line.toString("utf8"));
+  }
+
+  // n bytes of a day's file from byte `at`: of the file, or, gzipped, of
+  // it unpacked
+  export function bytes_at(mem: Memory, file: string, at: number, n: number): Buffer {
+    if (mem.fds.has(file) || fs.existsSync(file)) {
+      return Memory.pread(Memory.fd(mem, file), at, n);
+    }
+    return Memory.unpacked(mem, file).subarray(at, at + n);
+  }
+
+  // a gzipped day's file unpacked, kept (the UNPACKED read last)
+  export function unpacked(mem: Memory, file: string): Buffer {
+    const data = mem.unpacked.get(file) ?? zlib.gunzipSync(fs.readFileSync(file + ".gz"));
+    mem.unpacked.delete(file);
+    mem.unpacked.set(file, data);
+    for (const old of mem.unpacked.keys()) {
+      if (mem.unpacked.size <= UNPACKED) {
+        break;
+      }
+      mem.unpacked.delete(old);
+    }
+    return data;
+  }
+
+  // each day's file PACK days old or more gzipped in its place, one at a
+  // time, while the chat is open: the archive written, checked against the
+  // file and flushed before the file goes (a crash between leaves both,
+  // the file read first, packed again next time); answers how many
+  export async function pack(mem: Memory, now = Date.now()): Promise<number> {
+    const today = Date.parse(new Date(now).toLocaleDateString("sv-SE")) / DAY;
+    let n = 0;
+    for (const stream of ["main", "tree"] as Stream[]) {
+      const names = fs.readdirSync(mem.dir + "/" + stream).filter((f) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(f)).sort();
+      for (const name of names.filter((f) => Date.parse(f.slice(0, 10)) / DAY <= today - PACK)) {
+        const file = mem.dir + "/" + stream + "/" + name;
+        const data = await fs.promises.readFile(file);
+        if (mem.done || (data.length > 0 && data[data.length - 1] !== 10)) {
+          continue;
+        }
+        const gz = await new Promise<Buffer>((ok, fail) => zlib.gzip(data, (err, out) => (err ? fail(err) : ok(out))));
+        if (!zlib.gunzipSync(gz).equals(data)) {
+          throw new Error(file + " won't gzip back to itself");
+        }
+        await fs.promises.writeFile(file + ".gz.new", gz);
+        await fs.promises.rename(file + ".gz.new", file + ".gz");
+        await Disk.wrote(file + ".gz");
+        const fd = mem.fds.get(file);
+        if (fd !== undefined) {
+          fs.closeSync(fd);
+          mem.fds.delete(file);
+        }
+        await fs.promises.unlink(file);
+        n += 1;
+      }
+    }
+    return n;
   }
 
   // a file of the chat to read, kept open (the FDS read last) while the
@@ -388,7 +459,13 @@ export namespace Memory {
   export function log(mem: Memory, stream: Stream, recs: object[]): void {
     const day = Date.parse(new Date().toLocaleDateString("sv-SE")) / DAY;
     const lines = recs.map((rec) => JSON.stringify(rec));
-    let at = Memory.append(Memory.path(mem, stream, day), lines);
+    const file = Memory.path(mem, stream, day);
+    // a day gzipped written to again (the clock set back): unpacked first,
+    // the file read before the archive
+    if (!fs.existsSync(file) && fs.existsSync(file + ".gz")) {
+      fs.writeFileSync(file, Memory.unpacked(mem, file));
+    }
+    let at = Memory.append(file, lines);
     const fd = fs.openSync(mem.dir + "/" + stream + ".index", "r+");
     try {
       for (const [k, line] of lines.entries()) {
