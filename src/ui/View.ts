@@ -643,14 +643,16 @@ function view_learn(v: View, pack: Pack): void {
   }
 }
 
-// a message: on its agent's page, in Illi's chat, or, a thought (not
-// logged), after the last message
+// a message: on its agent's page (its log's first: a new agent so named,
+// the page starts anew), in Illi's chat, or, a thought (not logged),
+// after the last message
 function view_entry(v: View, msg: Server & { $: "entry" }): void {
   const { $, agent, id, ...entry } = msg;
   const last = v.parts[v.parts.length - 1];
   if (agent !== undefined) {
     const log = v.pages.get(agent)?.log;
     if (Array.isArray(log)) {
+      log.splice(0, id === 0 ? log.length : 0);
       log.push(entry);
     }
   } else if (id !== undefined) {

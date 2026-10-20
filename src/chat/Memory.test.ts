@@ -5,7 +5,8 @@
 // call starts as the one before did, and past the call's size moves on
 // till they fill half (the oldest fold into the view); kept on disk. The
 // recent messages come in blocks, one marked in place of the view's. An
-// agent spawned as the user's is named after it.
+// agent spawned as the user's is named after it; a freed name is used
+// again, each log its own.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -85,11 +86,25 @@ test("the screen folds with the cut as it moves on by itself, and stays behind a
   expect(mem.show).toBe(cut);
 });
 
-test("an agent spawned as the user's is named after it, numbered from the second on; a plain one gets a random name", () => {
-  const mem = chat("agents", 1);
-  expect([1, 2, 3].map(() => Memory.agent_new(mem, "reviewer"))).toEqual(["reviewer", "reviewer-2", "reviewer-3"]);
-  expect(Memory.agent_new(Memory.load(DIR + "/agents", () => ({}) as any), "reviewer")).toBe("reviewer-4");
-  expect(Memory.agent_new(mem, "1st/../x")).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
-  expect(Memory.agent_new(mem)).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
-  expect(Memory.agent(mem, "reviewer-2")).toEqual([]);
+test("an agent spawned as the user's is named after it, numbered while one so named is taken; a freed name is used again, each log its own", () => {
+  const mem   = chat("agents", 1);
+  const taken = new Set<string>();
+  const spawn = (own: string | null) => {
+    const name = Memory.agent_new(mem, own, (n) => taken.has(n));
+    taken.add(name);
+    return name;
+  };
+  expect([1, 2, 3].map(() => spawn("reviewer"))).toEqual(["reviewer", "reviewer-2", "reviewer-3"]);
+  Memory.agent_push(mem, "reviewer", "note", "the first");
+  const first = Memory.agent_log(mem, "reviewer")!;
+  taken.clear();
+  expect(spawn("reviewer")).toBe("reviewer");
+  Memory.agent_push(mem, "reviewer", "note", "the second");
+  expect(Memory.agent_log(mem, "reviewer")).not.toBe(first);
+  expect(Memory.agent(mem, "reviewer")!.map((r) => r.text)).toEqual(["the second"]);
+  expect(Memory.agent(mem, first)!.map((r) => r.text)).toEqual(["the first"]);
+  expect(Memory.agent(Memory.load(DIR + "/agents", () => ({}) as any), "reviewer")!.map((r) => r.text)).toEqual(["the second"]);
+  expect(spawn("1st/../x")).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
+  expect(spawn(null)).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
+  expect(Memory.agent(mem, "../reviewer")).toBeNull();
 });
