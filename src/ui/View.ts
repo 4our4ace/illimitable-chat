@@ -173,7 +173,11 @@ export type Row =
   | { $: "Msg"; id: number | null; kind: Kind; who: string; text: string; body: Md.Block[]; call: Call.Call | null; images: string[] } // a message whole: 0x (who: its speaker or "↳ result", named on its block; call: a tool call's, drawn as Call.ts reads it)
   | { $: "Cap"; text: string }                                                                  // a line about the page
 
-export type Tab = { name: string | null; here: boolean; text: string };
+// a tab: its page (null: the chat), whether it's shown, its mark, its
+// text (the mark, then the agent Illi runs as, or the page's agent's
+// name) and the agent whose color its mark takes (a subagent's own: its
+// name, unnumbered)
+export type Tab = { name: string | null; here: boolean; mark: string; text: string; agent: string };
 
 // hint: what the knob's value means (a tooltip; the site's note when it
 // changes)
@@ -574,8 +578,8 @@ export function view_tabs(v: View): Tab[] {
   const names = at === null || v.agents.includes(at) ? v.agents : [...v.agents, at];
   return [null, ...names].map((name) => {
     const here = name === at;
-    const text = (here ? GLYPH.here : GLYPH.tab) + " " + (name ?? MAIN);
-    return { name, here, text };
+    const mark = here ? GLYPH.here : GLYPH.tab;
+    return { name, here, mark, text: mark + " " + (name ?? v.agent ?? MAIN), agent: name?.replace(/-\d+$/, "") ?? v.agent ?? MAIN };
   });
 }
 
