@@ -135,6 +135,17 @@ test("a pasted box in the history keeps each key fast", () => {
   expect(performance.now() - t0).toBeLessThan(500);
 });
 
+test("the input: the mark on its first row alone, the rest indented; as tall as its rows, shrinking as they go", () => {
+  const { scr } = screen();
+  const rows = () => Screen.screen_input(scr, 80, 10, "hint", false).lines.map((l) => l.map((r) => r.x).join(""));
+  Screen.ed_type(scr.ed, "first\nsecond");
+  expect(rows()).toEqual(["> first", "  second"]);
+  for (let k = 0; k < "\nsecond".length; k++) {
+    Screen.ed_key(scr.ed, "Backspace");
+  }
+  expect(rows()).toEqual(["> first"]);
+});
+
 test("the mouse: the wheel, the left button pressed, dragged, let go, the pointer moved, never typed, whatever the reads", () => {
   splits("\x1b[<64;10;5M\x1b[<65;10;5M\x1b[<0;12;7M\x1b[<32;13;7M\x1b[<0;13;7m\x1b[<35;20;3M\x1b[<2;1;1M", (text, keys) => {
     expect(keys).toEqual(["WheelUp", "WheelDown", "Press", "Drag", "Release", "Move"]);

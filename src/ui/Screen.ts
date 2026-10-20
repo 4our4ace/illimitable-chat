@@ -40,7 +40,6 @@ type Ed = {
   draft : string;
   moved : boolean;
   w     : number;
-  tall  : number; // the rows it held since taken: it shrinks only on Enter, so the chat over it doesn't jump at each key
   pastes: Map<number, string>;
   n     : number;
 };
@@ -91,7 +90,7 @@ export type Screen = {
 // =========
 
 // the editing keys, as /help lists them
-export const EDITING = "Arrows, Home, End, Ctrl+A, E, U, K, W, Alt+B, F, D, as in a shell; Shift+Enter or Ctrl+J, a new line; Up and Down past the ends, the messages sent. A / first lists the commands that match as you type, under the input: Up and Down choose, Tab fills one in, Enter runs it (or fills it in, if it needs an argument), Esc closes the list.";
+export const EDITING = "Arrows, Home, End, Ctrl+A, E, U, K, W, Alt+B, F, D, as in a shell; Shift+Enter or Ctrl+J, a new line; Up and Down past the ends, the messages sent. A / first lists the commands that match as you type, in a box over the input: Up and Down choose, Tab fills one in, Enter runs it (or fills it in, if it needs an argument), Esc closes the list.";
 
 const PASTE_ON  = "\x1b[200~";
 const PASTE_OFF = "\x1b[201~";
@@ -418,10 +417,12 @@ function seq_name(params: string, end: string): string {
 }
 
 // the input's rows in w columns, at most max of them (the cursor's and
-// those before it), a hint when empty, grey when off; and where the
-// cursor shows
+// those before it), as many as it holds; its first row after the mark,
+// the rest indented as far; a hint when empty, grey when off; and where
+// the cursor shows
 export function screen_input(scr: Screen, w: number, max: number, hint: string, off: boolean): { lines: Paint.Line[]; at: Spot } {
   const mark = Paint.Run(Theme.GLYPH.input, Paint.DIM);
+  const pad  = Paint.Run(" ".repeat(Paint.text_width(Theme.GLYPH.input)));
   const ink  = off ? Paint.DIM : Paint.INK;
   const ed   = scr.ed;
   ed.w = w - 2;
@@ -429,9 +430,7 @@ export function screen_input(scr: Screen, w: number, max: number, hint: string, 
   const spot = places[at];
   const top  = Math.max(0, spot.row - Math.max(1, max) + 1);
   const seen = rows.slice(top, top + Math.max(1, max));
-  const text = ed.text === "" ? [[mark, Paint.Run(hint, Paint.DIM)]] : seen.map((x) => [mark, ...input_runs(x, ink)]);
-  ed.tall    = Math.min(Math.max(ed.tall, text.length), Math.max(1, max));
-  text.push(...Array.from({ length: ed.tall - text.length }, () => [Paint.Run("")]));
+  const text = ed.text === "" ? [[mark, Paint.Run(hint, Paint.DIM)]] : seen.map((x, k) => [top + k === 0 ? mark : pad, ...input_runs(x, ink)]);
   return { lines: text, at: { row: spot.row - top, col: spot.col + 2 } };
 }
 
@@ -444,7 +443,7 @@ function input_runs(row: string, ink: Paint.Run["s"]): Paint.Line {
 // ==
 
 export function ed_new(): Ed {
-  return { text: "", pos: 0, hist: [], at: 0, draft: "", moved: false, w: 80, tall: 1, pastes: new Map(), n: 0 };
+  return { text: "", pos: 0, hist: [], at: 0, draft: "", moved: false, w: 80, pastes: new Map(), n: 0 };
 }
 
 // a paste: a long one kept, its token typed; a short one typed
@@ -643,6 +642,6 @@ export function ed_take(ed: Ed): string {
   if (text.trim() !== "" && text !== ed.hist[ed.hist.length - 1]) {
     ed.hist.push(text);
   }
-  Object.assign(ed, { text: "", pos: 0, at: ed.hist.length, draft: "", moved: false, tall: 1 });
+  Object.assign(ed, { text: "", pos: 0, at: ed.hist.length, draft: "", moved: false });
   return text;
 }
