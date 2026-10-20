@@ -786,9 +786,10 @@ export namespace Chat {
 
   // a fresh session (/clear): the cut at the chat's end, so every message
   // so far folds into the view's lines (each a zoom away) and the next
-  // turn sends none whole; noted for the agent (the note itself whole),
-  // and each view shows the chat as the next turn will see it. Not while
-  // a turn runs
+  // turn sends none whole; noted for the agent (the note itself whole);
+  // the screen starts anew from the note (the memory's `top`: what came
+  // before is only the memory's, a zoom away for the agent). Not while a
+  // turn runs
   export function clear(chat: Chat): Answer {
     const mem = chat.mem;
     if (chat.busy) {
@@ -797,7 +798,7 @@ export namespace Chat {
     if (mem.cut === mem.count) {
       return {};
     }
-    mem.cut = mem.show = mem.count;
+    mem.cut = mem.show = mem.top = mem.count;
     Memory.fit(mem);
     Memory.save(mem);
     Chat.note(chat, "New session: the user cleared the chat for a new topic. Everything before this note is in the view's lines; zoom into them when the user refers to it.");
@@ -882,9 +883,12 @@ export namespace Chat {
     return "Main agent: " + who + ", on " + Pick.label(chat.pick) + ".";
   }
 
+  // what the screen shows: the view's lines before `from` (none of before
+  // the last /clear's top), then each message from it whole
   export function eye(mem: Memory, from: number): Eye {
-    const parts = Memory.before(mem.view.parts, from).map((part): Part => [Memory.span(part)[0], 2 ** part.l]);
-    return { parts, from };
+    const start = Math.max(from, mem.top);
+    const parts = Memory.before(mem.view.parts, start).filter((part) => Memory.span(part)[1] >= mem.top).map((part): Part => [Memory.span(part)[0], 2 ** part.l]);
+    return { parts, from: start };
   }
 
   // what the agent saw: the eye's parts, then each message after them

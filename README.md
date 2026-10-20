@@ -31,8 +31,8 @@ How it works
   whole, up to `context`; older ones go as lines, coarser with age.
 - **Zoom.** Illi can open any line back down to the original messages.
   `/compact` folds all but the last two exchanges, so turns get smaller
-  (the screen keeps showing them); `/clear` starts a fresh topic that
-  still remembers.
+  (the screen keeps showing them); `/clear` empties the screen for a
+  fresh topic, and Illi still remembers it all.
 - **Cheap to run.** A smaller model writes the summaries in the
   background, and the view only grows at its end, so calls hit the
   prompt cache.

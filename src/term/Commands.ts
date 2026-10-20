@@ -43,7 +43,7 @@ function term_groups(v: View.View, custom = false): [group: string, cmds: Cmd[]]
       ["",                  "Ctrl+C, Ctrl+D",          "clear; on an empty input, interrupt (Ctrl+C again: quit), quit", term_clear],
       ["/goal <message>",   "",                        "send a message as the goal: at each turn's end, Illi asks itself if it is met, and goes on till it is", (t, a) => term_act(t, { $: "Send", text: "/goal " + a })],
       ["/halt",             "",                        "drop the goal; the turn running ends as it would", (t) => term_act(t, { $: "Send", text: "/halt" })],
-      ["/clear",            "",                        "a fresh session for a new topic: the chat so far folds into Illi's memory tree (summaries Illi can zoom into), so no call sends it whole", (t) => term_act(t, { $: "Send", text: "/clear" })],
+      ["/clear",            "",                        "a fresh session for a new topic: the screen starts empty, and Illi gets the chat so far only as its memory tree's summaries (each a zoom away, so it still remembers)", (t) => term_act(t, { $: "Send", text: "/clear" })],
       ["/compact",          "",                        "fold all but the last two exchanges into Illi's memory tree, so each turn sends less; unlike /clear, the screen still shows them all", (t) => term_act(t, { $: "Send", text: "/compact" })],
       ["/image <path>",     "",                        "attach an image: its token goes in the input, the image with it as it's sent (or paste or drop its file)", term_image],
       ["",                  "Alt+V, Ctrl+V",           "attach the clipboard's image (the terminal's own paste brings text alone)", term_clip],
