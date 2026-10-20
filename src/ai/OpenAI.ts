@@ -220,7 +220,6 @@ export namespace OpenAI {
     url     : "https://api.openai.com/v1/responses",
     headers : (key) => ({ authorization: "Bearer " + key, "content-type": "application/json" }),
     body    : OpenAI.body,
-    count   : async () => null,
     start   : (ask) => ({ res: null, error: null, use: Price.usage(ask.speed) }),
     read    : OpenAI.read,
     begun   : (ev) => ev.type === "response.output_item.added",

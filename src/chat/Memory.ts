@@ -14,12 +14,9 @@
 // outage only delays a node, never harms it); answered with no line (a
 // refusal: its input's doing), its node is its source clipped. Every
 // node builds so, an imported one too; the import's are a side of their
-// own (`side`: the chat's turns don't wait on them). A side is held as
-// the user's credit says (its payer refusing a call holds it), an
-// import's also as its user does (`hold`; a pause cuts
-// its calls): its nodes wait, with no call, till it goes on, and a turn
-// needing the chat's is told why (settle), never left waiting. Of each
-// side, JOBS build at once, in the order the messages came. A try cut
+// own (`side`: the chat's turns don't wait on them). An import's side is
+// held as its user says (`hold`; a pause cuts its calls): its nodes wait,
+// with no call, till it goes on. Of each side, JOBS build at once, in the order the messages came. A try cut
 // after a line keeps the best one. A chat
 // moving to another process (a deploy) takes its summaries along, their
 // calls going on where they began (give, take): none is cut or asked
@@ -53,7 +50,7 @@
 
 import * as fs from "node:fs";
 import * as zlib from "node:zlib";
-import { AskAI, type Ask, type Bill, type Block, type Call, type Img, type Kind, type Pay, type Say, type Served } from "../ai/AskAI.ts";
+import { AskAI, type Ask, type Block, type Call, type Img, type Kind, type Say, type Served } from "../ai/AskAI.ts";
 import { clip_page, clip_pages } from "../tools/Clip.ts";
 import * as config from "../config/Config.ts";
 import { Disk } from "./Disk.ts";
@@ -120,8 +117,8 @@ type Saved = Kept & { seen?: Kept; main: End; tree: End; pick: object | null; go
 // sides: the side by the last message of nodes not built; calls: those
 // building's calls; hold: why each side is held (null: it builds);
 // wait: checks run as the views change; share: what
-// compactions share with the chat's turns; pay: what pays them (none:
-// free); made, acted: told of each node built, of each act indexed
+// compactions share with the chat's turns; made, acted: told of each
+// node built, of each act indexed
 export type Memory = {
   dir    : string;
   fds    : Map<string, number>;
@@ -150,7 +147,6 @@ export type Memory = {
   done   : boolean;
   wait   : Set<() => void>;
   share  : () => Share;
-  pay?   : Pay;
   made?  : (l: number, i: number) => void;
   acted  : (id: string, ans: object) => void;
 };
@@ -911,11 +907,11 @@ export namespace Memory {
   }
 
   // the summaries a chat moved here was running (Memory.give) build here
-  // as their calls end there: `far` makes the call of an id, paid here
-  export function take(mem: Memory, given: Given[], far: (id: string, bill?: Bill) => Call): void {
+  // as their calls end there: `far` makes the call of an id
+  export function take(mem: Memory, given: Given[], far: (id: string) => Call): void {
     for (const [l, i, id] of given) {
       const text = Memory.source(mem, l, i)!;
-      Memory.job(mem, l, i, text, far(id, Memory.bill(mem, l, i, text)));
+      Memory.job(mem, l, i, text, far(id));
     }
   }
 
@@ -925,7 +921,7 @@ export namespace Memory {
   // thoughts; one after a line too long adds only its size and where the
   // limit cuts it (`over`): never more than the first and that note. No
   // line (a refusal: its input's doing): its source clipped; a try cut
-  // (a pause, a stop) or refused by its payer throws, unless a line came
+  // (a pause, a stop) throws, unless a line came
   export async function build(mem: Memory, l: number, i: number, text: string, call: Call | null): Promise<void> {
     const task = { text: Memory.task(l, i) + text + "\n</input>", mark: false };
     const upto = Math.min(Memory.ctx(l, i), Memory.first(mem, 0, Memory.side(mem, l, i)));
@@ -956,11 +952,6 @@ export namespace Memory {
     return Memory.side(mem, l, i) === 1 ? "import" : "compactor";
   }
 
-  // what pays node (l,i)'s summary (none: free)
-  export function bill(mem: Memory, l: number, i: number, text: string): Bill | undefined {
-    return mem.pay?.(Memory.served(mem, l, i), Memory.ref({ l, i }), Memory.bytes(text));
-  }
-
   // nodes built: logged in one write, kept
   export function store(mem: Memory, parts: Array<Part & { text: string }>): void {
     Memory.log(mem, "tree", parts.map(({ l, i, text }) => ({ l, i, text, size: Memory.bytes(text) })));
@@ -981,8 +972,7 @@ export namespace Memory {
 
   // a call of node (l,i)'s summary, on the compactor
   export function ask(mem: Memory, l: number, i: number, text: string, blocks: Block[]): Call {
-    const bill = Memory.bill(mem, l, i, text);
-    return AskAI.ask({ ...mem.share(), ...Pick.ask(config.COMPACTOR), blocks, bill, patient: true, yields: Memory.served(mem, l, i) === "import" ? mem.dir : undefined }, () => {});
+    return AskAI.ask({ ...mem.share(), ...Pick.ask(config.COMPACTOR), blocks, patient: true, yields: Memory.served(mem, l, i) === "import" ? mem.dir : undefined }, () => {});
   }
 
   // a summary's try: its call's end, the call held in `calls` till then
@@ -1157,14 +1147,12 @@ ${Memory.cut(line)}| ← LIMIT`;
   }
 
   // once the chat's messages before `end` are built (not an import's):
-  // null; else why they won't be: "Stopped." (signal aborted), or why
-  // their side is held (no credit for them), so no
-  // turn or agent waits on summaries no call is building
+  // null; else "Stopped." (signal aborted)
   export function settle(mem: Memory, end: number, signal: AbortSignal): Promise<string | null> {
     return new Promise((resolve) => {
       const check = () => {
         const built = Memory.first(mem) >= end;
-        const why = signal.aborted ? "Stopped." : built ? null : mem.hold[0];
+        const why = signal.aborted ? "Stopped." : null;
         if (built || why !== null) {
           mem.wait.delete(check);
           signal.removeEventListener("abort", check);

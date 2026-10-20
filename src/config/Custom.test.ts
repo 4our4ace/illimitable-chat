@@ -48,7 +48,7 @@ const config = await import("./Config.ts");
 const asks: any[] = [];
 AskAI.ask = (ask, on) => {
   asks.push(ask);
-  const [call, feed] = AskAI.tie(on, ask.bill, () => {}, () => {});
+  const [call, feed] = AskAI.tie(on, () => {}, () => {});
   queueMicrotask(() => feed.end({ ok: true, text: "done", left: [] }));
   return call;
 };

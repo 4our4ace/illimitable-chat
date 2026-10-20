@@ -387,7 +387,6 @@ export namespace ChatGPT {
     heard   : (res) => ChatGPT.hear(res.headers),
     headers : (token, ask) => ChatGPT.headers(token, ask),
     body    : (...args) => ChatGPT.body(...args),
-    count   : async () => null,
     start   : (ask) => ({ res: null, error: null, use: Price.usage(ask.speed), items: [] }),
     read    : (st, ev, on) => ChatGPT.read(st, ev, on),
     begun   : (ev) => ev.type === "response.output_item.added",
