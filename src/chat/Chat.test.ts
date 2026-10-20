@@ -5,7 +5,8 @@
 // while the turn's call runs picks the next call's (the wait names the
 // model the running one asked); one process at a time holds the chat. A
 // goal check and a message sent mid-run fit the chat's model. A main
-// agent switch is a note of its own.
+// agent switch is a note of its own. A message sent as a stopped turn
+// winds down is answered.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -151,4 +152,26 @@ test("a main agent switch is noted as an entry of its own, never glued to the me
   expect(Memory.say(mem, msg.id, msg.end).text).toBe("hello");
   expect(Memory.message(mem, msg.id - 1)!.text).toStartWith("Main agent: ");
   expect(Memory.recent(mem, msg.id - 1, msg.id).map((b) => b.text).join("")).toContain("|note: Main agent: ");
+});
+
+test("a message sent as a stopped turn winds down gets a turn of its own", async () => {
+  await until(() => !chat.busy);
+  const asked: string[] = [];
+  const ask = AskAI.ask;
+  AskAI.ask = (a, on) => (asked.push(a.blocks.at(-1)!.text), ask(a, on));
+  let go = () => {};
+  hold = new Promise((ok) => (go = ok));
+  try {
+    Chat.take(chat, Chat.push(chat, null, "user", "first"));
+    await until(() => chat.call !== null);
+    Chat.interrupt(chat, "Stopped by the user: Illi.");
+    Chat.take(chat, Chat.push(chat, null, "user", "after the stop"));
+    go();
+    await until(() => asked.length === 2 && !chat.busy);
+  } finally {
+    AskAI.ask = ask;
+    hold = Promise.resolve();
+  }
+  expect(asked[1]).toContain("after the stop");
+  expect(asked[1]).not.toContain("first");
 });
