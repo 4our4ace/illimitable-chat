@@ -150,8 +150,8 @@ export namespace Agent {
   export async function loop<S>(wire: Wire<S>, run: Run): Promise<void> {
     const { ask, on, end } = run;
     const signal = run.abort.signal;
-    const key = wire.auth ? await wire.auth.token() : config.KEYS[wire.key];
-    if (!key) {
+    const key = wire.auth ? "" : config.KEYS[wire.key];
+    if (!wire.auth && !key) {
       throw new Error("no API key: set " + wire.key.toUpperCase() + "_API_KEY");
     }
     const tools = ask.from?.tools ?? (await Agent.server(run));
@@ -273,18 +273,26 @@ export namespace Agent {
   }
 
   // one request, writing its call's max tokens at most (Ask.max; none:
-  // MAX), sent once single flight lets it (AskAI.wait): its response, if
-  // any, and step
+  // MAX), signed (a login's token, renewed if need be: one that won't
+  // renew ends the call, saying why, never asked again as busy), then
+  // sent once single flight lets it (AskAI.wait): its response, if any,
+  // and step
   export async function request<S>(wire: Wire<S>, run: Run, key: string, make: (max: number) => unknown, seen: Entry[]): Promise<{ res: Response | null; step: Step }> {
+    let token = key;
+    try {
+      token = wire.auth ? await wire.auth.token() : key;
+    } catch (err: any) {
+      return { res: null, step: Agent.fail(String(err?.message ?? err), [], "down") };
+    }
     const flight = await AskAI.wait(run.ask);
     if (run.abort.signal.aborted) {
       flight.end();
       return { res: null, step: Agent.fail("stopped", []) };
     }
-    return Agent.send(wire, run, key, make(Math.min(MAX, run.ask.max ?? MAX)), flight, seen);
+    return Agent.send(wire, run, token, make(Math.min(MAX, run.ask.max ?? MAX)), flight, seen);
   }
 
-  export async function send<S>(wire: Wire<S>, run: Run, key: string, body: unknown, flight: Flight, seen: Entry[]): Promise<{ res: Response | null; step: Step }> {
+  export async function send<S>(wire: Wire<S>, run: Run, token: string, body: unknown, flight: Flight, seen: Entry[]): Promise<{ res: Response | null; step: Step }> {
     const idle = new AbortController();
     const timer = setTimeout(() => idle.abort(new Error("no word from the API in " + wire.idle / 1e3 + " s")), wire.idle);
     const st = wire.start(run.ask);
@@ -292,7 +300,6 @@ export namespace Agent {
     let res: Response | null = null;
     let step: Step;
     try {
-      const token = wire.auth ? await wire.auth.token() : key;
       res = await fetch(wire.url, {
         method  : "POST",
         headers : wire.headers(token, run.ask),

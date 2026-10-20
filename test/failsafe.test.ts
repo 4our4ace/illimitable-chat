@@ -5,10 +5,10 @@
 // (HTTP 400, "credit balance is too low"), then back: none is clipped, and
 // the tree completes once credit is back; the one summary the model
 // refuses is clipped (its input's doing); a turn in the outage says the
-// vendor's why (the key is the user's own).
-// A model with no price known runs. A rate limit's retries say BUSY, the
-// vendor's words logged once, and so does its end past the tries. Timers
-// run 1000 times fast.
+// vendor's why (the key is the user's own). A model with no price known
+// runs. A rate limit's retries say BUSY, the vendor's words logged once,
+// and so does its end past the tries. A login that won't renew ends the
+// call at once, saying why. Timers run 1000 times fast.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -22,6 +22,8 @@ process.env.ILLI_DIR = DIR;
 const config = await import("../src/config/Config.ts");
 config.KEYS.anthropic = "test";
 
+const { Agent } = await import("../src/ai/Agent.ts");
+const { Anthropic } = await import("../src/ai/Anthropic.ts");
 const { AskAI } = await import("../src/ai/AskAI.ts");
 const { Memory } = await import("../src/chat/Memory.ts");
 const { MASTER } = await import("../src/tools/Tools.ts");
@@ -156,4 +158,18 @@ test("a vendor busy past the tries ends the call saying BUSY", () => fast(async 
   const turn = await AskAI.ask({ ...SHARE, blocks: [{ text: "hi", mark: true }] }, () => {}).done;
   limited = 0;
   expect(turn).toMatchObject({ ok: false, stop: "down", text: BUSY });
+}));
+
+test("a login that won't renew ends the call saying why, never asked again", () => fast(async () => {
+  const why = "ChatGPT login renewal failed (HTTP 401): sign in again with /login";
+  let asked = 0;
+  const token = async () => {
+    asked += 1;
+    throw new Error(why);
+  };
+  const wire = { ...Anthropic.wire, auth: { token, spoil: () => {} } };
+  const run: any = { ask: { ...SHARE, blocks: [{ text: "hi", mark: true }] }, on: () => {}, sent: [], abort: new AbortController(), end: AskAI.end("") };
+  await Agent.loop(wire, run);
+  expect(run.end).toMatchObject({ ok: false, stop: "down", text: why });
+  expect(asked).toBe(1);
 }));
