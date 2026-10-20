@@ -16,7 +16,7 @@ import * as config from "../config/Config.ts";
 import { term_note } from "./Notices.ts";
 import { Pick } from "../ai/Pick.ts";
 import * as Screen from "../ui/Screen.ts";
-import type { Term } from "./Term.ts";
+import { term_act, type Term } from "./Term.ts";
 
 // the widest a value shows in the picker, so what it is fits beside it
 const WIDE = 24;
@@ -109,9 +109,10 @@ function setting_open(t: Term, key: config.Key): void {
 
 // a setting to a value (null: its default), in config.json, and what
 // the terminal holds of it anew (the side panel, whether replies are
-// suggested); true if set. One a variable sets, or that won't do, isn't:
-// a note says why
-function setting_set(t: Term, key: config.Key, value: unknown): boolean {
+// suggested; the pick, the chat's too while Illi's own agent is the main
+// one); true if set. One a variable sets, or that won't do, isn't: a
+// note says why
+export function setting_set(t: Term, key: config.Key, value: unknown): boolean {
   const env = config.config_env_set(key);
   if (env !== null) {
     term_note(t, key + " is set by " + env + ", over config.json: unset it to change it here.");
@@ -128,6 +129,9 @@ function setting_set(t: Term, key: config.Key, value: unknown): boolean {
     t.chat.suggest.on = t.scr.tty && config.SUGGEST;
     Chat.unsuggest(t.chat);
     Chat.change(t.chat);
+  }
+  if (key === "pick" && t.v.agent === null) {
+    term_act(t, { $: "Pick", to: config.PICK });
   }
   return true;
 }
