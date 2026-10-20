@@ -53,7 +53,10 @@ import * as View from "../ui/View.ts";
 // (/help, /agents); agents: the user's primary agents, as last read; choose: the
 // picker (null: closed); profs: the profiles, as last read; hits: what a
 // click on the screen does;
-// since: when the work running began, spin: the spinner's clock; subs:
+// since: when the work running began, spin: the spinner's clock,
+// ruled: the rule over the input as last painted (its row, the cursor,
+// the side's spinner step then), for the spinner's ticks to write its
+// merge alone (null: none yet); subs:
 // the subagents of this run, whether at work (false: done, till the
 // person's next message); side: where the side panel shows and how wide
 // (config.SIDE, SIDE_WIDTH; /side); todo: whether Illi's to-do list shows
@@ -87,6 +90,7 @@ export type Term = {
   hits    : Hit[];
   since   : number;
   spin    : Timer | undefined;
+  ruled   : { row: number; at: Screen.Spot; beat: number } | null;
   subs    : Map<string, boolean>;
   side    : { place: string; width: string };
   todo    : boolean;
@@ -141,8 +145,9 @@ export type Item = [Paint.Line, (() => void) | null];
 // the commands suggested as a `/word` is typed, as in Claude Code: all
 // of them (the user's too, read as the list opened: never at each key),
 // the word they're matched to, those it matches (best first), the one
-// lit, the first shown; the rows it shows (as many as match, up to
-// SUGGEST); the word Esc closed it at (null: none)
+// lit, the first shown; how many fit as last shown (their descriptions
+// wrapped, up to Frame.ts SUGGEST lines); the word Esc closed it at
+// (null: none)
 export type Sug = { cmds: Cmd[]; word: string; found: Screen.Match[]; at: number; top: number; tall: number; off: string | null };
 
 // a line of /help: how it is typed ("": keys only), its keys, what it
@@ -177,6 +182,7 @@ function term_new(chat: Chat): Term {
     hits    : [],
     since   : 0,
     spin    : undefined,
+    ruled   : null,
     subs    : new Map(),
     side    : { place: config.SIDE, width: config.SIDE_WIDTH },
     todo    : false,

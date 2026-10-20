@@ -215,11 +215,30 @@ export function screen_paint(scr: Screen, rows: Piece[][], at: Spot): void {
   if (scr.left) {
     return;
   }
-  const text  = rows.map((row) => "\x1b[2K" + row.map((p) => "\x1b[" + (p.col + 1) + "G" + Paint.line_ansi(Paint.runs_wrap(p.line, p.w, true)[0])).join(""));
+  const text  = rows.map(screen_row_text);
   const fresh = scr.shown.length === 0;
   const out   = text.map((x, k) => (fresh || scr.shown[k] !== x ? "\x1b[" + (k + 1) + ";1H" + x : "")).join("");
   scr.shown = text;
   process.stdout.write(SYNC_ON + HIDE + (fresh ? CLEAR : "") + out + "\x1b[" + (at.row + 1) + ";" + (at.col + 1) + "H" + SHOW + SYNC_OFF);
+}
+
+// a few cells of row k, from column col, written over what is there (a
+// spinner's frame, between paints): cleared, then the line; the row as
+// last written forgotten, so the next paint writes it whole. None written
+// yet: nothing
+export function screen_cells(scr: Screen, k: number, col: number, line: Paint.Line, at: Spot): void {
+  if (scr.left || scr.shown.length <= k) {
+    return;
+  }
+  scr.shown[k] = "";
+  const here = "\x1b[" + (k + 1) + ";" + (col + 1) + "H";
+  process.stdout.write(SYNC_ON + HIDE + here + " ".repeat(Paint.line_width(line)) + here + Paint.line_ansi(line) + "\x1b[" + (at.row + 1) + ";" + (at.col + 1) + "H" + SHOW + SYNC_OFF);
+}
+
+// a row as written: cleared, then each piece at its column, cut to its
+// width (a later piece over an earlier one)
+function screen_row_text(row: Piece[]): string {
+  return "\x1b[2K" + row.map((p) => "\x1b[" + (p.col + 1) + "G" + Paint.line_ansi(Paint.runs_wrap(p.line, p.w, true)[0])).join("");
 }
 
 // the next paint clears the screen and writes every row (a new size,
