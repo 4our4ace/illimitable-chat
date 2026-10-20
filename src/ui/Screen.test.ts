@@ -2,11 +2,13 @@
 // end anywhere (a reader held up lets the terminal's writes split at any
 // byte), and no text typed or pasted may slow a key down; the mouse's
 // reports. A paint writes only the rows that changed. Then the lines
-// Paint lays out: a link is never cut, a frame never passes its width,
-// each block's lines are marked.
+// Paint lays out: a link wider than a line breaks at its edge, its pieces
+// each opening it whole; a word of several runs is kept whole; a frame
+// never passes its width; each block's lines are marked.
 
 import { expect, test } from "bun:test";
 import * as Paint from "./Paint.ts";
+import * as Reply from "./Reply.ts";
 import * as Screen from "./Screen.ts";
 import * as View from "./View.ts";
 
@@ -266,9 +268,20 @@ test("words: Ctrl+W, Alt+B, Alt+F", () => {
   expect(ed.pos).toBe(9);
 });
 
-test("a link is never cut", () => {
-  const url = "https://x.co/" + "x".repeat(99);
-  expect(Paint.runs_wrap([Paint.Run("Pay: " + url)], 76, false).map((l) => l.map((r) => r.x).join(""))).toEqual(["Pay: ", url]);
+test("a link wider than a line breaks at its edge, never past it; each piece opens it whole", () => {
+  const url   = "https://x.co/" + "x".repeat(99);
+  const lines = Paint.runs_wrap([Paint.Run("Pay: "), Paint.Run(url, { ...Paint.INK, u: true, k: url })], 76, false);
+  expect(lines.map((l) => l.map((r) => r.x).join(""))).toEqual([("Pay: " + url).slice(0, 76), ("Pay: " + url).slice(76)]);
+  expect(lines.flat().filter((r) => r.x !== "Pay: ").every((r) => r.s.k === url)).toBe(true);
+  const rows = Paint.rows_lines(View.entry_rows(1, "user", "See https://example.com/" + "a".repeat(60) + " now"), 40);
+  expect(rows.every((l) => Paint.line_width(l) <= 40)).toBe(true);
+});
+
+test("a word of several runs (code, bold) is kept whole at a wrap", () => {
+  const text = (lines: Paint.Line[]) => lines.map((l) => l.map((r) => r.x).join("").trimEnd());
+  expect(text(Reply.reply_lines("I changed `src/ai/ChatGPT.ts`, `Login.test.ts` and `Term.ts`.", 27))).toEqual(["I changed", "src/ai/ChatGPT.ts,", "Login.test.ts and Term.ts."]);
+  expect(text(Reply.reply_lines("a **bold**ness", 8))).toEqual(["a", "boldness"]);
+  expect(text(Paint.runs_wrap([Paint.Run("a xxxxxxxxxxxxxxxxx yy")], 8, false))).toEqual(["a xxxxxx", "xxxxxxxx", "xxx yy"]);
 });
 
 test("a frame never passes its width, however long its title", () => {
