@@ -10,9 +10,10 @@ import * as config from "../config/Config.ts";
 import * as Draw from "../ui/Draw.ts";
 import { STEP, TICK } from "./Frame.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
+import { term_note } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_profile_go } from "./ProfileCommands.ts";
-import { term_act, term_note, type Item, type Term } from "./Term.ts";
+import { term_act, type Item, type Term } from "./Term.ts";
 import { GLYPH } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
 

@@ -13,10 +13,11 @@ import * as config from "../config/Config.ts";
 import { Disk } from "../chat/Disk.ts";
 import { Machine } from "../tools/Machine.ts";
 import { Mcp } from "../tools/Mcp.ts";
+import { term_note } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import * as Profiles from "../config/Profiles.ts";
 import * as Screen from "../ui/Screen.ts";
-import { term_note, type Term } from "./Term.ts";
+import type { Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
 // how long a profile's switch waits for the MCP servers to end (ms)

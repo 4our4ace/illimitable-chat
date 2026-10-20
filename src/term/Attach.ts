@@ -8,8 +8,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { term_draw } from "./Frame.ts";
+import { term_note } from "./Notices.ts";
 import * as Screen from "../ui/Screen.ts";
-import { term_note, type Term } from "./Term.ts";
+import type { Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
 // the largest image file attached (bytes)
