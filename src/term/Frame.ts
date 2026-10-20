@@ -46,29 +46,29 @@ const SETTLE = 30;
 // the merge over the input, as the memory's lines merge: four dots land
 // one by one, each pair steps together and fuses where its dots meet
 // (· · into •), the two step toward each other and fuse (●), which
-// holds, fades and the next begins; each frame and how long it shows
-// (ms), quicker as the dots close in. A dot is in one place at a time: a
-// step or a fusion is instant, only a dot landing fades in (MERGE_IN)
-// and the last one out (MERGE_OUT)
-const MERGE: [string, number][] = [
-  ["·      ", 150],
-  ["· ·    ", 150],
-  ["· · ·  ", 150],
-  ["· · · ·", 320],
-  [" •   • ", 260],
-  ["  • •  ", 150],
-  ["   ●   ", 700],
-  ["       ", 200],
+// holds, fades and the next begins; each frame, how long it shows (ms),
+// quicker as the dots close in, and the same story in one cell for each
+// subagent at work in the side (· ∶ ∴ ∷, ∶, •). A dot is in one place at
+// a time: a step or a fusion is instant; a dot landing shows faded for
+// MERGE_IN first, and the last one fades in two steps over MERGE_OUT. One
+// clock draws them all, waking only as they change (term_wake)
+const MERGE: [string, number, string][] = [
+  ["·      ", 150, "·"],
+  ["· ·    ", 150, "∶"],
+  ["· · ·  ", 150, "∴"],
+  ["· · · ·", 320, "∷"],
+  [" •   • ", 260, "∶"],
+  ["  • •  ", 150, "∶"],
+  ["   ●   ", 700, "•"],
+  ["       ", 200, " "],
 ];
-const MERGE_IN  = 140;
-const MERGE_OUT = 350;
+const MERGE_IN  = 80;
+const MERGE_OUT = 300;
 const MERGE_ALL = MERGE.reduce((n, [, ms]) => n + ms, 0);
 
-// how often the merge paints, and its ticks a step (the side's spinners
-// step with it, and a whole paint comes once a step): 30 frames a
-// second, a step about a quarter second
-export const STEP  = 7;
-export const TICK  = 33;
+// how late the work's clock may show its second, to wake with the merge
+// instead (ms)
+const CLOCK_LATE = 400;
 
 // the rule's start, before the merge while work runs
 const RULE_HEAD = "── ";
@@ -159,7 +159,7 @@ export function term_paint(t: Term): void {
   const head  = term_area(t, { key: "head", lines: [term_head(t, full)], first: 0, row: 0, col: 0, w: full, tall: 1 });
   const rows: Screen.Piece[][] = [[{ col: 0, w: full, line: head[0] }]];
   for (let k = 0; k < tall; k++) {
-    const by = sides[k] === undefined || (box?.wide && 1 + k >= top) ? [] : [{ col: at, w: side, line: left > 0 ? [Paint.Run(" "), ...sided[k], Paint.Run(" ".repeat(Math.max(0, sw - Paint.line_width(sided[k]))) + " │", Paint.DIM)] : [Paint.Run("│ ", Paint.DIM), ...sided[k]] }];
+    const by = sides[k] === undefined || (box?.wide && 1 + k >= top) ? [] : [{ col: at, w: side, line: term_side_line(sided[k], sw, left > 0) }];
     rows.push([{ col: left + MARGIN, w: cw, line: shown[k] }, ...by]);
     term_hit(t, 1 + k, at, at + side, by.length === 0 ? null : sides[k]?.[1] ?? null);
   }
@@ -172,8 +172,15 @@ export function term_paint(t: Term): void {
   t.hover = t.sel?.held ? undefined : term_under(t, t.scr.point);
   term_tabs(t, h - 1, side === 0);
   const cursor = { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
-  t.ruled = { row: 2 + tall + above.length, at: cursor, beat: Math.floor(Date.now() / (STEP * TICK)) };
+  const with_ = sides.map((_, k) => k).filter((k) => rows[1 + k].length > 1 && !(box?.wide && 1 + k >= top));
+  t.ruled = { row: 2 + tall + above.length, w: iw, at: cursor, rows, side: box === null ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
   Screen.screen_paint(t.scr, rows, cursor);
+}
+
+// a line of the side, w wide, with its edge toward the chat: the side
+// on the left, its line at its right; else at its left
+function term_side_line(line: Paint.Line, w: number, left: boolean): Paint.Line {
+  return left ? [Paint.Run(" "), ...line, Paint.Run(" ".repeat(Math.max(0, w - Paint.line_width(line))) + " │", Paint.DIM)] : [Paint.Run("│ ", Paint.DIM), ...line];
 }
 
 // the notes' lines, oldest first, w wide: the newest in the ink, the
@@ -195,16 +202,23 @@ function term_jump(t: Term, rows: Screen.Piece[][], tall: number, col: number, w
   term_hit(t, row, at, at + bw, () => (t.scroll = 0));
 }
 
-// the rule over the input; while work runs, at its left: the merge,
-// what runs (bold, in the accent), how long it has run, what it is at,
-// how to stop it, cut to the width; else a note's line, if one is given
+// the rule over the input; while work runs: what runs (term_working),
+// kept for the clock to write again alone; else a note's line, if one
+// is given
 function term_rule(t: Term, w: number, note?: Paint.Line): Paint.Line {
   const doing = View.view_doing(t.v);
   term_spin(t, doing !== null);
   if (doing === null) {
     return note === undefined ? Paint.rule_text("", w) : [Paint.Run("─".repeat(NOTE_IN - 1) + " ", Paint.DIM), ...note, Paint.Run(" " + "─".repeat(Math.max(0, w - NOTE_IN - 1 - Paint.line_width(note))), Paint.DIM)];
   }
-  const now  = Date.now();
+  t.doing = doing;
+  return term_working(t, doing, w, Date.now());
+}
+
+// the rule while work runs, w wide, at a time: the merge, what runs
+// (bold, in the accent), how long it has run, what it is at, how to stop
+// it, cut to the width
+function term_working(t: Term, doing: View.Doing, w: number, now: number): Paint.Line {
   const c    = Draw.draw_theme().accent ?? "5";
   const head = [Paint.Run(RULE_HEAD, Paint.DIM), ...term_merge(now - t.since, c, t.scr.canvas), Paint.Run(" "), Paint.Run(doing.verb, { ...Paint.INK, c, b: true })];
   const tail = [term_elapsed(now - t.since), doing.what, doing.stop ? "Esc to interrupt" : ""].filter((x) => x !== "").join(" · ");
@@ -215,53 +229,115 @@ function term_rule(t: Term, w: number, note?: Paint.Line): Paint.Line {
 }
 
 // the merge's clock: it starts as work does (when kept), stops as it
-// ends; each tick of it paints at once (no frame's wait, which would
-// make the ticks uneven)
+// ends; it wakes only when the rule would look different (term_wake)
 function term_spin(t: Term, on: boolean): void {
   if (on && t.spin === undefined) {
     t.since = Date.now();
-    t.spin  = setInterval(() => term_tick(t), TICK);
+    term_wake(t);
   } else if (!on && t.spin !== undefined) {
-    clearInterval(t.spin);
+    clearTimeout(t.spin);
     t.spin = undefined;
   }
 }
 
-// a tick of the merge: its cells alone written again, where the rule
-// was last painted (the rest of it, its clock too, changes far less
-// often than the merge does); all of it once a step has passed (the
-// side's spinners step with it), work ended or text is chosen (its look
-// may cover the rule); nothing while a paint is due
+// the clock set for the next change: the merge's next frame or fade
+// step, else the work's next second, unless the merge changes within
+// CLOCK_LATE of it anyway (the second shows with it). Nothing between: a
+// frame that holds costs nothing; the side's spinners change with the
+// merge's frames
+function term_wake(t: Term): void {
+  const ms   = Date.now() - t.since;
+  const next = term_merge_wait(ms);
+  const sec  = 1000 - (ms % 1000);
+  t.spin = setTimeout(() => {
+    term_tick(t);
+    if (t.spin !== undefined) {
+      term_wake(t);
+    }
+  }, (sec < next && next - sec >= CLOCK_LATE ? sec : next) + 1);
+}
+
+// a wake of the clock: the rule written again alone, where it was last
+// painted, from what ran then; with agents at work and their spinner
+// changed, the side's rows too (term_side_again). No paint, no layout of
+// the chat; a whole paint only once work ended or with text chosen (its
+// look may cover them); nothing while a paint is due
 function term_tick(t: Term): void {
   const r = t.ruled;
   if (t.due) {
     return;
   }
-  if (r === null || t.sel !== null || !View.view_running(t.v) || Math.floor(Date.now() / (STEP * TICK)) !== r.beat) {
+  if (r === null || t.doing === null || t.sel !== null || !View.view_running(t.v)) {
     return term_paint(t);
   }
-  const c = Draw.draw_theme().accent ?? "5";
-  Screen.screen_cells(t.scr, r.row, MARGIN + RULE_HEAD.length, term_merge(Date.now() - t.since, c, t.scr.canvas), r.at);
+  const now = Date.now();
+  Screen.screen_row(t.scr, r.row, [{ col: MARGIN, w: r.w, line: term_working(t, t.doing, r.w, now) }], r.at);
+  const spin = term_spinner(now - t.since);
+  if (t.v.agents.length > 0 && spin !== r.spin) {
+    r.spin = spin;
+    term_side_again(t);
+  }
 }
 
-// the merge ms into its work: the frame of MERGE it is at, in the
-// accent (●, the last dot, bold); a dot landing in it (a frame with more
-// dots than the one before) fades in over MERGE_IN, the one before an
-// empty frame out over its last MERGE_OUT, eased (toward the background,
-// if told; else dim)
-function term_merge(ms: number, c: string, canvas: string | undefined): Paint.Line {
+// the side's rows written again alone, beside the chat's as last painted
+// (each written only if it changed); a box over them: a whole paint
+function term_side_again(t: Term): void {
+  const r = t.ruled!;
+  if (r.side === null) {
+    return term_paint(t);
+  }
+  const { at, w, sw, left, tall } = r.side;
+  const sides = term_side(t, sw, tall);
+  for (const k of r.side.with) {
+    if (sides[k] !== undefined) {
+      r.rows[1 + k][1] = { col: at, w, line: term_side_line(sides[k][0], sw, left) };
+      Screen.screen_row(t.scr, 1 + k, r.rows[1 + k], r.at);
+    }
+  }
+}
+
+// where the merge is, ms into its work: its frame's index in MERGE, how
+// far into it (ms), whether a dot lands in it (more dots than the frame
+// before) and whether it fades out (an empty frame next)
+function term_merge_at(ms: number): { k: number; at: number; lands: boolean; ends: boolean } {
   let at = ms % MERGE_ALL;
   let k  = 0;
   while (at >= MERGE[k][1]) {
     at -= MERGE[k][1];
     k++;
   }
+  const dots = (row: string) => row.replaceAll(" ", "").length;
+  return { k, at, lands: dots(MERGE[k][0]) > dots(MERGE.at(k - 1)![0]), ends: MERGE[(k + 1) % MERGE.length][0].trim() === "" };
+}
+
+// how long till the merge looks different, ms into its work: a landing
+// dot's full look, the last one's fade steps, else its next frame
+function term_merge_wait(ms: number): number {
+  const { k, at, lands, ends } = term_merge_at(ms);
+  const long = MERGE[k][1];
+  const from = long - MERGE_OUT;
+  return lands && at < MERGE_IN ? MERGE_IN - at
+    : ends && at < from ? from - at
+    : ends && at < from + MERGE_OUT / 2 ? from + MERGE_OUT / 2 - at
+    : long - at;
+}
+
+// a subagent's spinner, ms into the work: the merge's frame in one cell
+export function term_spinner(ms: number): string {
+  return MERGE[term_merge_at(ms).k][2];
+}
+
+// the merge ms into its work: the frame of MERGE it is at, in the
+// accent (●, the last dot, bold); a dot landing in it half faded for
+// MERGE_IN, the one before an empty frame faded half, then most, over
+// its last MERGE_OUT (toward the background, if told; else dim)
+function term_merge(ms: number, c: string, canvas: string | undefined): Paint.Line {
+  const { k, at, lands, ends } = term_merge_at(ms);
   const [now, long] = MERGE[k];
   const was  = MERGE.at(k - 1)![0];
-  const next = MERGE[(k + 1) % MERGE.length][0];
-  const dots = (row: string) => row.replaceAll(" ", "").length;
-  const out  = next.trim() === "" ? term_ease(Math.max(0, at - (long - MERGE_OUT)) / MERGE_OUT) : 0;
-  const land = dots(now) > dots(was) ? 1 - term_ease(Math.min(1, at / MERGE_IN)) : 0;
+  const from = long - MERGE_OUT;
+  const out  = !ends || at < from ? 0 : at < from + MERGE_OUT / 2 ? 0.45 : 0.8;
+  const land = lands && at < MERGE_IN ? 0.5 : 0;
   return [...now].map((x, i) => {
     const fade = x === " " ? 0 : Math.max(out, was[i] === " " ? land : 0);
     if (fade <= 0.01) {
@@ -269,11 +345,6 @@ function term_merge(ms: number, c: string, canvas: string | undefined): Paint.Li
     }
     return Paint.Run(x, c.startsWith("#") && canvas !== undefined ? { ...Paint.INK, c: term_mix(c, canvas, fade), b: x === "●" } : { ...Paint.INK, c, d: fade > 0.2 });
   });
-}
-
-// a ramp eased: slow at its ends, quick between (0 to 1)
-function term_ease(u: number): number {
-  return u * u * (3 - 2 * u);
 }
 
 // a color f of the way to another (#rrggbb)

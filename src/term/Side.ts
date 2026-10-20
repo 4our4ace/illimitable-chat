@@ -8,7 +8,7 @@
 import { term_choose, term_mcp } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import * as Draw from "../ui/Draw.ts";
-import { STEP, TICK } from "./Frame.ts";
+import { term_spinner } from "./Frame.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
 import { term_note } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
@@ -22,10 +22,6 @@ import * as View from "../ui/View.ts";
 const SIDE  = 20;
 const ROOM  = 60;
 const WIDE  = 100;
-
-// a subagent's spinner: the merge (Frame.ts MERGE) in one cell, four
-// dots, two, one
-const PULSE = ["∷", "∶", "•"];
 
 // the side's keys
 const KEYS: [string, string][] = [["Tab", "agents"], ["Ctrl+PgDn", "pages"], ["PgUp", "scroll"], ["Ctrl+Y", "copy reply"], ["/help", "all keys"]];
@@ -245,7 +241,7 @@ export function term_side_set(t: Term, arg: string): void {
 function term_side_subs(t: Term): Item[] {
   const shown = t.v.page?.name ?? null;
   const c     = Draw.draw_theme().accent ?? "5";
-  const spin  = PULSE[Math.floor(Date.now() / (STEP * TICK)) % PULSE.length];
+  const spin  = term_spinner(Date.now() - t.since);
   const names = shown === null || t.subs.has(shown) ? [...t.subs] : [...t.subs, [shown, t.v.agents.includes(shown)] as [string, boolean]];
   const back  = shown === null ? [] : [[[Paint.Run("‹ " + View.MAIN, Paint.DIM)], () => term_act(t, { $: "Goto", name: null })] as Item];
   const subs  = names.map(([name, working]): Item => [
