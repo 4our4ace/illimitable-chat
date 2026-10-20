@@ -90,7 +90,8 @@ export function term_grab(t: Term, key: string): boolean {
 // a key to the picker (true: taken): the lit option's own first (the
 // model picker's effort and speed); then Up and Down (or Tab) move round
 // the options shown, Enter picks the lit one (none matching the search:
-// nothing), Esc closes, and Backspace takes a character off the search
+// nothing), Esc and Ctrl+C close (Ctrl+C neither interrupts nor quits
+// here), and Backspace takes a character off the search
 function term_choose_key(t: Term, c: Chooser, key: string): boolean {
   const n    = c.shown.length;
   const lit  = c.shown[c.at]?.k;
@@ -105,7 +106,7 @@ function term_choose_key(t: Term, c: Chooser, key: string): boolean {
   } else if (key === "Enter" && lit !== undefined) {
     t.choose = null;
     c.pick(lit);
-  } else if (key === "Esc") {
+  } else if (key === "Esc" || key === "Ctrl+C") {
     t.choose = null;
   } else if (key !== "Enter") {
     return false;
@@ -240,13 +241,14 @@ export function term_clear(t: Term, key: string): void {
 }
 
 // Shift+Tab: Illi runs as the next primary agent that can run (Illi's own
-// among them), after the one asked for last if not answered yet
+// among them), after the one asked for last if not answered yet; one that
+// can't run any more goes back to Illi's own
 export function term_next(t: Term): void {
   term_primaries(t);
   const names = [null, ...t.agents.filter((a) => typeof Chat.own(a) !== "string").map((a) => a.name)];
   const asked = t.v.out.flatMap((p) => (p.msg.$ === "main" ? [p.msg.name] : []));
   const now   = asked.length > 0 ? asked[asked.length - 1] : t.v.agent;
-  if (names.length === 1) {
+  if (names.length === 1 && now === null) {
     return term_note(t, "No primary agents yet: an agent file with mode: primary (or none) in " + Custom.dirs(process.cwd(), "agents").join(" or ") + ". /agents shows yours.");
   }
   term_main(t, names[(names.indexOf(now) + 1) % names.length]);
