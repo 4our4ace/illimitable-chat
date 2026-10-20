@@ -160,7 +160,7 @@ const SPAWN = "Start one subagent per task, in parallel, and return their names 
 const EFFORT = { type: "string", enum: EFFORTS, description: "How hard they think. Leave it out to use their agent's effort (or, with none, yours); set it only to override that." };
 const TELL: Spec = spec("tell", "Send a message to a subagent, by name. One at work reads it between its tool calls, and its report answers it; an idle one goes on from its chat, and its reply reaches you as a message \"[Name] reply\".", { name: STR, message: STR }, ["name", "message"]);
 
-const SKILL = "Load one of the user's skills: their instructions for a kind of task, and the folder of any files it comes with. When a task matches a skill's description below, load it before starting and follow it.";
+const SKILL = "Load a skill, the user's or Illi's own: instructions for a kind of task, and the folder of any files it comes with. When a task matches a skill's description below, load it before starting and follow it.";
 
 // the master's to-do list, which the user sees beside the chat: its
 // tool, its items' states, its file in the chat's folder
@@ -227,8 +227,11 @@ export namespace Tools {
   }
 
   // a skill loaded: its folder, its instructions, the other files in its
-  // folder (at most FILES), to read as it says
+  // folder (at most FILES), to read as it says; one built in, none
   export function skill(skill: Skill): string {
+    if (skill.dir === "") {
+      return "Skill " + skill.name + ": its instructions, whole, below (built into Illi)\n\n" + skill.body;
+    }
     const all   = (fs.readdirSync(skill.dir, { recursive: true }) as string[]).filter((f) => f !== "SKILL.md" && fs.statSync(skill.dir + "/" + f).isFile()).sort();
     const files = all.length === 0 ? "" : "\n\nIts files, in its folder: " + all.slice(0, FILES).join(", ") + (all.length > FILES ? ", and " + (all.length - FILES) + " more." : ".");
     return "Skill " + skill.name + ": its SKILL.md's instructions, whole, below; its folder: " + skill.dir + "\n\n" + skill.body + files;
@@ -345,7 +348,7 @@ export namespace Tools {
       case "skill": {
         const skill = Custom.skill(tools.cwd, String(args.name));
         const names = Custom.skills(tools.cwd).map((s) => s.name).join(", ") || "none";
-        return skill === null ? { text: "No skill " + args.name + "; the user's: " + names + ".", fail: true } : { text: Tools.skill(skill), fail: false };
+        return skill === null ? { text: "No skill " + args.name + "; the skills: " + names + ".", fail: true } : { text: Tools.skill(skill), fail: false };
       }
       case "todo": {
         const list = Tools.todo_check(args.items);
