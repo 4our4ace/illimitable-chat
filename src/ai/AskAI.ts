@@ -9,8 +9,7 @@
 // key's credit is gone; our setup failing), till one is answered or we
 // stop it: an outage only delays it, and no summary is made of a failure
 // that isn't its input's (Memory.ts). A call's events and end go to its
-// sink, which moves with its chat to another process: the call runs on
-// where it started.
+// sink.
 //
 // Cache: a marked block ends a prefix the vendor caches. Single flight
 // (AskAI.wait), as a request is sent: one whose prefix no call cached
@@ -101,9 +100,8 @@ export type Try = {
 // where a call's events and end go
 export type Sink = { on: (ev: Event) => void; end: (end: End) => void };
 
-// a call: its done is its first sink's end; `move` sends what comes
-// after to another (its chat moved to another process)
-export type Call = Try & { move: (to: Sink) => void };
+// a call: its done is its sink's end
+export type Call = Try;
 
 // Constants
 // =========
@@ -166,13 +164,11 @@ export namespace AskAI {
     return out;
   }
 
-  // a call fed by `feed` (its tries, or another process),
-  // which passes all to the call's sink: first `on` and done
+  // a call fed by its sink (its tries), which passes all to `on` and
+  // its done
   export function tie(on: Sink["on"], send: Try["send"], stop: Try["stop"]): [Call, Sink] {
     const { promise, resolve } = Promise.withResolvers<End>();
-    let to: Sink = { on, end: resolve };
-    const feed: Sink = { on: (ev) => to.on(ev), end: (end) => to.end(end) };
-    return [{ send, stop, done: promise, move: (sink) => (to = sink) }, feed];
+    return [{ send, stop, done: promise }, { on, end: resolve }];
   }
 
   // one try; a vendor that throws gives a failed one

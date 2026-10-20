@@ -13,11 +13,8 @@
 // anew (build). The call asks till it is answered (AskAI patient: an
 // outage only delays a node, never harms it); answered with no line (a
 // refusal: its input's doing), its node is its source clipped. JOBS
-// build at once, in the order the messages came. A try cut
-// after a line keeps the best one. A chat
-// moving to another process (a deploy) takes its summaries along, their
-// calls going on where they began (give, take): none is cut or asked
-// again.
+// build at once, in the order the messages came. A try cut after a line
+// keeps the best one.
 //
 // A view lists nodes covering the chat to its end, oldest first; each message
 // it reaches appends its node. Past `high` bytes, a batch merges the adjacent
@@ -72,9 +69,6 @@ type Part = { l: number; i: number };
 // a view: its lines, the bytes of those built, a batch under way, the
 // bytes past which it merges to half
 type View = { parts: Part[]; size: number; batch: boolean; high: number };
-
-// a summary running as its chat moved (Memory.give): its node, its call's id
-export type Given = [number, number, string];
 
 // what a compaction shares with the chat's turns: all but the blocks
 export type Share = Omit<Ask, "blocks">;
@@ -840,12 +834,11 @@ export namespace Memory {
     return [...here, ...halves.flatMap((half) => Memory.todo(mem, half))];
   }
 
-  // a node cut (the chat ended: Memory.stop) builds at the next start;
-  // call: one running for it already (Memory.take)
-  export function job(mem: Memory, l: number, i: number, text: string, call: Call | null = null): void {
+  // a node cut (the chat ended: Memory.stop) builds at the next start
+  export function job(mem: Memory, l: number, i: number, text: string): void {
     const key = Memory.slot(l, i);
     mem.busy.add(key);
-    Memory.build(mem, l, i, text, call).finally(() => {
+    Memory.build(mem, l, i, text).finally(() => {
       mem.busy.delete(key);
       Memory.pump(mem);
       Memory.fit(mem);
@@ -854,49 +847,27 @@ export namespace Memory {
     });
   }
 
-  // no node starts again (the chat moves: Memory.give)
-  export function halt(mem: Memory): void {
-    mem.done = true;
-  }
-
-  // nor runs: those running are cut
+  // no node starts again, nor runs: those running are cut
   export function stop(mem: Memory): void {
-    Memory.halt(mem);
+    mem.done = true;
     mem.calls.forEach((_, call) => call.stop());
     mem.fds.forEach((fd) => fs.closeSync(fd));
     mem.fds.clear();
   }
 
-  // the summaries running, as the chat moves to another process: each node and its call, which runs on here as `far` moves
-  // it (its id); none is cut, nor asked again there
-  export function give(mem: Memory, far: (call: Call) => string): Given[] {
-    const given = [...mem.calls].map(([call, { l, i }]): Given => [l, i, far(call)]);
-    mem.calls.clear();
-    return given;
-  }
-
-  // the summaries a chat moved here was running (Memory.give) build here
-  // as their calls end there: `far` makes the call of an id
-  export function take(mem: Memory, given: Given[], far: (id: string) => Call): void {
-    for (const [l, i, id] of given) {
-      const text = Memory.source(mem, l, i)!;
-      Memory.job(mem, l, i, text, far(id));
-    }
-  }
-
   // node (l,i)'s summary: its view to the node and its task, asked till
-  // a line fits, TRIES lines at most (fewer if the chat moves), the
-  // shortest kept. Each try sends those blocks, never a try's words or
-  // thoughts; one after a line too long adds only its size and where the
-  // limit cuts it (`over`): never more than the first and that note. No
-  // line (a refusal: its input's doing): its source clipped; a try cut
-  // (a stop) throws, unless a line came
-  export async function build(mem: Memory, l: number, i: number, text: string, call: Call | null): Promise<void> {
+  // a line fits, TRIES lines at most, the shortest kept. Each try sends
+  // those blocks, never a try's words or thoughts; one after a line too
+  // long adds only its size and where the limit cuts it (`over`): never
+  // more than the first and that note. No line (a refusal: its input's
+  // doing): its source clipped; a try cut (a stop) throws, unless a line
+  // came
+  export async function build(mem: Memory, l: number, i: number, text: string): Promise<void> {
     const task = { text: Memory.task(l, i) + text + "\n</input>", mark: false };
     const upto = Math.min(Memory.ctx(l, i), Memory.first(mem));
     const blocks = [...Memory.view(mem, upto, mem.seen.parts), task];
     const lines: string[] = [];
-    let end = await Memory.compact(mem, l, i, call ?? Memory.ask(mem, l, i, text, blocks));
+    let end = await Memory.compact(mem, l, i, Memory.ask(mem, l, i, text, blocks));
     while (end.ok && end.text.trim() !== "") {
       const line = end.text.trim();
       lines.push(line);
