@@ -20,6 +20,7 @@ import { term_note, term_notify, term_unnote, term_unnotify, type Notice } from 
 import * as Paint from "../ui/Paint.ts";
 import { type Model, type Move, Pick } from "../ai/Pick.ts";
 import { term_profile } from "./ProfileCommands.ts";
+import * as Reply from "../ui/Reply.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_set, term_settings } from "./Settings.ts";
 import { term_side_set, term_tokens } from "./Side.ts";
@@ -37,7 +38,7 @@ const ARROWS: Record<string, Move> = { "Shift+Left": "prev", "Shift+Right": "nex
 // all a person can do here, by group (the editing keys are Screen's);
 // with `custom`, the user's commands and skills too (read anew: never at
 // each key; a command wins a skill's name)
-function term_groups(v: View.View, custom = false): [group: string, cmds: Cmd[]][] {
+function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
   const cmds   = custom ? Custom.commands(process.cwd()) : [];
   const skills = custom ? Custom.skills(process.cwd()).filter((s) => !cmds.some((c) => c.name === s.name)) : [];
   const yours  = [
@@ -103,15 +104,15 @@ function term_groups(v: View.View, custom = false): [group: string, cmds: Cmd[]]
   ];
 }
 
-export function term_commands(v: View.View, custom = false): Cmd[] {
-  return term_groups(v, custom).flatMap(([, cmds]) => cmds);
+export function term_commands(custom = false): Cmd[] {
+  return term_groups(custom).flatMap(([, cmds]) => cmds);
 }
 
 // a command typed (`/name arg`): runs it (pending while it works on);
 // false if the text is none
 export function term_command(t: Term, text: string): boolean {
   const word = text.trim().split(/\s+/)[0];
-  const cmd = word.startsWith("/") ? term_commands(t.v, true).find(([use]) => use !== "" && use.split(" ")[0] === word) : undefined;
+  const cmd = word.startsWith("/") ? term_commands(true).find(([use]) => use !== "" && use.split(" ")[0] === word) : undefined;
   const run = cmd?.[3](t, text.trim().slice(word.length).trim());
   if (run instanceof Promise) {
     t.pending += 1;
@@ -132,7 +133,7 @@ export function term_suggest(t: Term): Sug | null {
     t.sug = null;
     return null;
   }
-  t.sug ??= { cmds: term_commands(t.v, true).filter(([use]) => use !== ""), word: "", found: [], at: 0, top: 0, tall: 1, off: null };
+  t.sug ??= { cmds: term_commands(true).filter(([use]) => use !== ""), word: "", found: [], at: 0, top: 0, tall: 1, off: null };
   const sug = t.sug;
   if (sug.word !== word) {
     const names = sug.cmds.map(([use]) => use.split(" ")[0].slice(1));
@@ -180,11 +181,25 @@ function term_pane(t: Term, title: string, make: (w: number) => Paint.Line[]): v
   t.choose = null;
 }
 
+// a pane of markdown, drawn as Illi's words are but without a reply's
+// copy buttons (a pane is no reply)
+function term_pane_text(t: Term, title: string, text: string): void {
+  const rows = View.entry_rows(null, "illi", text);
+  term_pane(t, title, (w) => {
+    Reply.reply_buttons(false);
+    try {
+      return Paint.rows_lines(rows, w);
+    } finally {
+      Reply.reply_buttons(t.scr.tty);
+    }
+  });
+}
+
 // the commands and keys by group, in two columns (too narrow for 20
 // columns of what one does: how it's typed on a line of its own, what it
 // does under it, indented), then the editing keys
 function term_help(t: Term): void {
-  const groups = term_groups(t.v, true);
+  const groups = term_groups(true);
   term_pane(t, "Help", (w) => {
     const how   = (c: Cmd) => [c[0], c[1]].filter((x) => x !== "").join(", ");
     const left  = Math.max(...groups.flatMap(([, cmds]) => cmds).map((c) => Paint.text_width(how(c)))) + 2;
@@ -233,8 +248,7 @@ export function term_mcp(t: Term): void {
     ...(trouble === "" ? [] : ["", "The file won't read: " + trouble]),
     "", "They are in " + file + ", as Claude Code's mcpServers; the README shows its shape. A change there applies at illi's next start.",
   ];
-  const rows = View.entry_rows(null, "illi", text.join("\n"));
-  term_pane(t, "MCP", (w) => Paint.rows_lines(rows, w));
+  term_pane_text(t, "MCP", text.join("\n"));
 }
 
 // the user's agents, primary (the main one marked) and subagents, their
@@ -253,8 +267,7 @@ function term_agents(t: Term): void {
     ...list("Skills (the agent loads one when a task matches; /name asks for it)", Custom.skills(cwd).map((s) => "- **" + s.name + "**" + (s.description === "" ? "" : ": " + s.description))),
     "", "An agent is a markdown file in " + Custom.dirs(cwd, "agents").join(" or ") + " (the project's wins); its mode is primary, subagent, or all (both, the default). A command is one in " + Custom.dirs(cwd, "commands").join(" or ") + ", a skill a folder with a SKILL.md in " + Custom.dirs(cwd, "skills").join(" or ") + ". The README shows their shape.",
   ];
-  const rows = View.entry_rows(null, "illi", text.join("\n"));
-  term_pane(t, "Agents", (w) => Paint.rows_lines(rows, w));
+  term_pane_text(t, "Agents", text.join("\n"));
 }
 
 // the main agent: the primary agent named (illi: Illi's own); none opens

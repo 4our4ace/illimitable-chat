@@ -38,7 +38,7 @@ export function term_press(t: Term, key: string): void {
   if (t.scr.ed.text !== "") {
     t.dropped = t.v.suggest;
   }
-  const cmd    = term_commands(t.v).find((c) => c[1] !== "" && c[1].split(", ").includes(key));
+  const cmd    = term_commands().find((c) => c[1] !== "" && c[1].split(", ").includes(key));
   const chosen = key === "Ctrl+C" && t.sel?.moved === true && !t.sel.held ? term_selected(t) : null;
   if (t.scr.typed || !KEEP.includes(key)) {
     t.sel = null;
