@@ -77,9 +77,10 @@ test("an agent's mode: primary, a subagent, or both", () => {
 });
 
 test("a command's arguments go where it says, else after it", () => {
-  expect(Custom.expand(Custom.command(CWD, "review")!, "the diff")).toBe("Review the diff now.");
-  expect(Custom.expand(Custom.command(CWD, "plain")!, "fast")).toBe("Do the thing.\n\nfast");
-  expect(Custom.expand(Custom.command(CWD, "plain")!, "")).toBe("Do the thing.");
+  const command = (name: string) => Custom.commands(CWD).find((c) => c.name === name)!;
+  expect(Custom.expand(command("review"), "the diff")).toBe("Review the diff now.");
+  expect(Custom.expand(command("plain"), "fast")).toBe("Do the thing.\n\nfast");
+  expect(Custom.expand(command("plain"), "")).toBe("Do the thing.");
 });
 
 test("an agent's model: a label, a whole pick, or why not", () => {
