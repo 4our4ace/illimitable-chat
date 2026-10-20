@@ -5,7 +5,8 @@
 // call starts as the one before did, and past the call's size moves on
 // till they fill half (the oldest fold into the view); kept on disk. The
 // recent messages come in blocks, one marked in place of the view's. An
-// older chat's act lines still read. An agent spawned as the user's is
+// older chat's act lines still read. /compact counts a user's message of
+// many pages once. An agent spawned as the user's is
 // named after it; a freed name is used again, each log its own; one
 // named main, the chat's own caller, is refused.
 
@@ -99,6 +100,15 @@ test("the screen folds with the cut as it moves on by itself, and stays behind a
   const cut = Memory.cutoff(mem, high);
   expect(cut).toBeGreaterThan(38);
   expect(mem.show).toBe(cut);
+});
+
+test("/compact keeps a user's message of many pages whole, counting it once", () => {
+  const mem = chat("pages", 4);
+  Memory.push(mem, [{ kind: "user", text: "big ".repeat(20000) }, { kind: "illi", text: "read it" }]);
+  const first = mem.count - 4;
+  expect(Memory.message(mem, first)!.more).toBe(true);
+  expect(Memory.kept(mem, Infinity)).toBe(3);
+  expect(Memory.message(mem, first - 1)!.text).toStartWith("message 3");
 });
 
 test("an agent spawned as the user's is named after it, numbered while one so named is taken; a freed name is used again, each log its own; main is refused", () => {

@@ -586,11 +586,14 @@ export namespace Memory {
   // where /compact has the chat go whole from (its rule of thumb): the
   // user's second-to-last message, the last two exchanges with their tool
   // steps; past `most` bytes, the user's last; past it too, the latest
-  // messages that fit
+  // messages that fit. A user's message is counted from its first page
   export function kept(mem: Memory, most: number): number {
     const users: number[] = [];
     for (let i = mem.count - 1; i >= mem.cut && users.length < 2; i--) {
       if (Memory.message(mem, i)!.kind === "user") {
+        while (i > 0 && Memory.message(mem, i - 1)!.more) {
+          i -= 1;
+        }
         users.unshift(i);
       }
     }
