@@ -297,7 +297,7 @@ export namespace Memory {
     for (let nl = data.indexOf(10); nl >= 0; nl = data.indexOf(10, k)) {
       const rec = Memory.parse(data.subarray(k, nl).toString("utf8"), file);
       if (rec !== null) {
-        Memory.place(mem, fd, stream, rec, day, at + k, nl - k);
+        Memory.place(fd, stream, rec, day, at + k, nl - k);
       }
       k = nl + 1;
     }
@@ -315,7 +315,7 @@ export namespace Memory {
 
   // a record's line, in its log's index (an old act's line of its own
   // has none)
-  export function place(mem: Memory, fd: number, stream: Stream, rec: any, day: number, at: number, length: number): void {
+  export function place(fd: number, stream: Stream, rec: any, day: number, at: number, length: number): void {
     const buf = Buffer.alloc(SLOT);
     if (rec.i === undefined) {
       return;
@@ -464,7 +464,7 @@ export namespace Memory {
     const fd = fs.openSync(mem.dir + "/" + stream + ".index", "r+");
     try {
       for (const [k, line] of lines.entries()) {
-        Memory.place(mem, fd, stream, recs[k], day, at, Memory.bytes(line));
+        Memory.place(fd, stream, recs[k], day, at, Memory.bytes(line));
         at += Memory.bytes(line) + 1;
       }
     } finally {
@@ -863,7 +863,7 @@ export namespace Memory {
     const upto = Math.min(Memory.ctx(l, i), Memory.first(mem));
     const blocks = [...Memory.view(mem, upto, mem.seen.parts), task];
     const lines: string[] = [];
-    let end = await Memory.compact(mem, l, i, Memory.ask(mem, l, i, text, blocks));
+    let end = await Memory.compact(mem, l, i, Memory.ask(mem, blocks));
     while (end.ok && end.text.trim() !== "") {
       const line = end.text.trim();
       lines.push(line);
@@ -871,7 +871,7 @@ export namespace Memory {
         break;
       }
       const note = { text: Memory.over(line), mark: false };
-      end = await Memory.compact(mem, l, i, Memory.ask(mem, l, i, text, [...blocks, note]));
+      end = await Memory.compact(mem, l, i, Memory.ask(mem, [...blocks, note]));
     }
     if (lines.length === 0 && !end.ok && end.stop !== "fail") {
       throw new Error(end.text);
@@ -900,8 +900,8 @@ export namespace Memory {
     parts.forEach(({ l, i }) => mem.made?.(l, i));
   }
 
-  // a call of node (l,i)'s summary, on the compactor
-  export function ask(mem: Memory, l: number, i: number, text: string, blocks: Block[]): Call {
+  // a call of a summary, its blocks, on the compactor
+  export function ask(mem: Memory, blocks: Block[]): Call {
     return AskAI.ask({ ...mem.share(), ...Pick.ask(config.COMPACTOR), blocks, patient: true }, () => {});
   }
 

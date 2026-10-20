@@ -75,7 +75,7 @@ test("a month-old day's file is gzipped: its lines read the same, open, from an 
 });
 
 test("an older chat's lines naming acts read as any other, the acts ignored", () => {
-  const mem  = chat("acts", 2);
+  chat("acts", 2);
   const day  = fs.readdirSync(DIR + "/acts/main")[0];
   const date = new Date().toISOString();
   const old  = [{ i: 2, kind: "user", text: "said with an act", size: 22, date, act: "a1" }, { act: "a2", ans: { ok: true } }, { i: 3, kind: "illi", text: "after", size: 11, date }];
