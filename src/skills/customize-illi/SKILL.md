@@ -94,7 +94,10 @@ one:
 - side: right, left or off; side_width: "25%" or columns; jobs: summaries
   built at once
 - suggest: on or off, a suggested reply after each turn
-- theme, mcp, login: where those files are, if not in Illi's folder
+- theme, mcp: where those files are, if not in Illi's folder; login: the
+  ChatGPT login file, if not {{root}}/login.json (the shared one /login
+  makes) or else opencode's
+- a relative path is taken from the folder of the config.json naming it
 
 The user can change any of these with /settings, or /set <key> <value>,
 most at once. What you write to the file applies at the next start: for a
