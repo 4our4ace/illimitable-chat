@@ -133,7 +133,9 @@ happens there: Enter switches, Ctrl+R renames, Ctrl+E exports to
 then what comes along: nothing, this profile's setup, this chat (moved,
 so this profile starts fresh), or both. "+ import a profile" asks for an
 archive. `/profile work` switches straight away. Profiles share the
-login, the API keys and the default's config.json.
+login, the API keys and the default's config.json. Illi's memory is the
+running profile's chat alone: its read, write and edit tools refuse every
+chat folder, and its prompt keeps the shell out of other profiles' too.
 
 An export leaves out the login (and a login file its config names inside
 the profile's folder), the lock and the log, and strips config.json and

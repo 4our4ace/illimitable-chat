@@ -6,12 +6,17 @@
 // shell's group (SHELLS), and any process marked ILLI_RUN that left it.
 // A file changed (write over one, edit) answers as a unified diff (Diff),
 // which the view draws as one (Md.ts). Config.ts took the API keys out of
-// the environment the shells inherit.
+// the environment the shells inherit. No read, write or edit reaches into
+// a chat's folder, any profile's (CHAT): Illi's own memory is zoomed, and
+// another profile's chat is never its to touch. The shell isn't held so
+// (the prompt asks it); a sandbox would be.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Out } from "../ai/Agent.ts";
 import { CAP, clip, clip_end } from "./Clip.ts";
+import * as config from "../config/Config.ts";
+import { profile_chat } from "../config/Profiles.ts";
 
 // Types
 // =====
@@ -49,6 +54,9 @@ const SHELLS = new Set<Bun.Subprocess>();
 // the lines kept around each change in a diff
 const CONTEXT = 3;
 
+// a read, write or edit refused in a chat's folder (# : the folder)
+const CHAT = "# holds a chat, Illi's memory (this profile's or another's): no file tool reads or changes it. Your own memory is reached with zoom; another profile's chat isn't yours.";
+
 export const STR = { type: "string" };
 export const INT = { type: "integer" };
 
@@ -80,6 +88,11 @@ export namespace Machine {
     const cwd = job.cwd;
     const input = job.input;
     const file = path.resolve(cwd, String(input.path));
+    const each = job.name === "edit" ? (Array.isArray(input.edits) ? input.edits : []).map((e: any) => path.resolve(cwd, String(e?.path))) : job.name === "read" || job.name === "write" ? [file] : [];
+    const chat = each.map((f: string) => profile_chat(config.ROOT, f)).find((c: string | null) => c !== null);
+    if (chat !== undefined) {
+      return { text: CHAT.replace("#", chat), fail: true };
+    }
     try {
       fs.mkdirSync(cwd, { recursive: true });
       switch (job.name) {
