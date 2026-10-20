@@ -55,9 +55,10 @@ export type Limit = { window: number; used: number; reset: number };
 export type Fill = { used: number; cap: number; window: number };
 
 // what the main agent's calls use: the input its last request read,
-// cached tokens too (null: none yet); the plan's limits (none: not told);
+// cached tokens too (null: none yet); the plan's limits (none: not told)
+// and its name (plus, pro…; none: not known);
 // how full the chat is (null: not told yet)
-export type Use = { tokens: number | null; limits: Limit[]; fill?: Fill | null };
+export type Use = { tokens: number | null; limits: Limit[]; plan?: string; fill?: Fill | null };
 
 // an item of Illi's to-do list (Tools.ts todo): what to do, how it stands
 export type Todo = { text: string; status: "pending" | "active" | "done" };

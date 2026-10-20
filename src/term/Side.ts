@@ -1,9 +1,9 @@
 // Side
 // ====
 // The side panel, on a wide screen: the primary agents, the subagents of
-// this run, the profiles, what the calls use (the context, a ChatGPT
-// plan's limits, the memory), the MCP servers, the keys and Illi's to-do
-// list; /side places it.
+// this run, the profiles, a ChatGPT plan's use, the chat's (the context,
+// the memory), the MCP servers, the keys and Illi's to-do list; /side
+// places it.
 
 import { term_choose, term_mcp } from "./Commands.ts";
 import * as config from "../config/Config.ts";
@@ -30,16 +30,17 @@ const PULSE = ["∷", "∶", "•"];
 // the side's keys
 const KEYS: [string, string][] = [["Tab", "agents"], ["Ctrl+PgDn", "pages"], ["PgUp", "scroll"], ["Ctrl+Y", "copy reply"], ["/help", "all keys"]];
 
-// the side's: the width of its labels (Context, 5h, Week, Memory); the
-// to-do items a folded list shows; how often its clocks (a plan window's
-// reset) move (ms)
+// the side's: the width of its labels (Context, 5h, Week, Memory); its
+// bars' widest, every one alike; the to-do items a folded list shows;
+// how often its clocks (a plan window's reset) move (ms)
 const LABEL   = 9;
+const BAR     = 24;
 const FOLDED  = 3;
 export const CLOCK   = 60000;
 
 // the side, w wide and tall: Illi and the primary agents (a click makes
-// one the main agent), the pages (a click shows one), what the calls use
-// and the memory, the MCP servers (a click: /mcp); at its foot the keys,
+// one the main agent), the pages (a click shows one), a ChatGPT plan's
+// use, the chat's (its context, the memory), the MCP servers (a click: /mcp); at its foot the keys,
 // if they fit, then Illi's to-do list, which, longer than the room, drops
 // the keys, then pushes the rest up (its head stays)
 export function term_side(t: Term, w: number, tall: number): Item[] {
@@ -58,7 +59,8 @@ export function term_side(t: Term, w: number, tall: number): Item[] {
   const keys  = KEYS.map(([key, text]): Item => [[Paint.Run(key.padEnd(11)), Paint.Run(text, Paint.DIM)], null]);
   const gap   = [[], null] as Item;
   const fill  = (n: number) => Array.from({ length: n }, (): Item => [[], null]);
-  const top   = [head("Agents"), ...mains, gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...term_side_profiles(t), head("Usage"), ...term_side_use(t, w), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp])];
+  const plan  = term_side_plan(t, w);
+  const top   = [head("Agents"), ...mains, gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...term_side_profiles(t), ...(plan.length === 0 ? [] : [...plan, gap]), head("Chat"), ...term_side_use(t, w), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp])];
   const foot  = todo.length === 0 ? keys : [...keys, gap, ...todo];
   const room  = tall - top.length - foot.length;
   const rest  = tall - top.length - todo.length;
@@ -70,37 +72,74 @@ export function term_side(t: Term, w: number, tall: number): Item[] {
   return items.slice(0, tall).map(([line, run]) => [Paint.runs_wrap(line, w, true)[0], run]);
 }
 
+// a ChatGPT plan's use, w wide (another vendor: nothing): its head, the
+// plan named (ChatGPT Pro), then each of its windows, a label a line:
+// the share used and when it starts anew, a bar under it (in the theme's
+// blue, as term_bar colors it); none told yet, a line says when it will
+// be. What won't fit says less
+function term_side_plan(t: Term, w: number): Item[] {
+  if (t.v.pick?.vendor !== "chatgpt") {
+    return [];
+  }
+  const tier  = t.v.use.plan ?? "";
+  const name  = tier === "" ? [] : [Paint.Run(" · ChatGPT " + tier[0].toUpperCase() + tier.slice(1), Paint.DIM)];
+  const head  = [[Paint.Run("Usage", { ...Paint.INK, b: true }), ...name], null] as Item;
+  const blue  = Draw.draw_theme().link ?? "4";
+  const shown = t.v.use.limits.flatMap((l) => {
+    const left  = l.reset - Date.now();
+    const share = left > 0 ? l.used / 100 : 0;
+    const used  = term_pct(share, blue);
+    return [term_row(w, term_window(l.window), [used, Paint.Run(left > 0 ? " · resets " + term_left(left) : " · reset", Paint.DIM)], [used]), term_bar(share, w, blue)];
+  });
+  return [head, ...(shown.length > 0 ? shown : [[[Paint.Run("told with the first reply", Paint.DIM)], null] as Item])];
+}
+
 // what the calls use, w wide, a label a line: how full the chat a turn
 // sends is, of the most it holds before its oldest messages fold into the
-// tree (summarized), the share (in the accent; yellow past 70%, red past
-// 90%) in a bar under it, then where it folds and its model's window; on
-// a ChatGPT plan, the share of each of its windows used, and when it
-// starts anew; the memory's size. What won't fit says less
+// tree (summarized), the share, a bar under it (in the accent, as
+// term_bar colors it), then where it folds and its model's window; the
+// memory's size. What won't fit says less
 function term_side_use(t: Term, w: number): Item[] {
   const c      = Draw.draw_theme().accent ?? "5";
-  const pick   = t.v.pick;
   const fill   = t.v.use.fill ?? null;
   const window = fill?.cap;
   const tokens = fill?.used ?? null;
   const share  = tokens === null || window === undefined ? null : tokens / window;
-  const row    = (label: string, ...says: Paint.Line[]): Item => [[Paint.Run(label.padEnd(LABEL), Paint.DIM), ...(says.find((l) => LABEL + Paint.line_width(l) <= w) ?? says[says.length - 1])], null];
-  const pct    = (f: number) => Paint.Run(Math.round(f * 100) + "%", { ...Paint.INK, c: f >= 0.9 ? "1" : f >= 0.7 ? "3" : c });
   const read   = Paint.Run(tokens === null ? "–" : term_tokens(tokens), tokens === null ? Paint.DIM : Paint.INK);
   const of     = window === undefined ? [] : [Paint.Run(" / " + term_tokens(window), Paint.DIM)];
-  const part   = share === null ? [] : [Paint.Run("  "), pct(share)];
-  const full   = share === null ? 0 : Math.max(tokens! > 0 ? 1 : 0, Math.min(w, Math.round(share * w)));
-  const bar    = window === undefined ? [] : [[[Paint.Run("━".repeat(full), { ...Paint.INK, c }), Paint.Run("━".repeat(w - full), Paint.DIM)], null] as Item];
+  const part   = share === null ? [] : [Paint.Run(" · ", Paint.DIM), term_pct(share, c)];
+  const bar    = share === null ? [] : [term_bar(tokens! > 0 ? Math.max(share, 1e-9) : 0, w, c)];
   const says   = fill === null ? [] : ["auto-summary at " + term_tokens(fill.cap) + " · window " + term_tokens(fill.window), "auto-summary at " + term_tokens(fill.cap), "at " + term_tokens(fill.cap)];
   const folds  = says.length === 0 ? [] : [[[Paint.Run(says.find((x) => Paint.text_width(x) <= w) ?? says[says.length - 1], Paint.DIM)], null] as Item];
-  const plan   = pick?.vendor !== "chatgpt" ? [] : t.v.use.limits.map((l) => {
-    const left = l.reset - Date.now();
-    const used = pct(left > 0 ? l.used / 100 : 0);
-    return row(term_window(l.window), [used, Paint.Run(left > 0 ? " · resets " + term_left(left) : " · reset", Paint.DIM)], [used]);
-  });
   const n      = Paint.Run(View.view_count(t.v) + " messages");
   const blocks = t.v.parts.length;
-  const memory = row("Memory", [n, Paint.Run(" · " + blocks + " blocks in view", Paint.DIM)], [n, Paint.Run(" · " + blocks + " blocks", Paint.DIM)], [n]);
-  return [row("Context", [read, ...of, ...part], [read, ...part]), ...bar, ...folds, ...plan, memory];
+  const memory = term_row(w, "Memory", [n, Paint.Run(" · " + blocks + " blocks in view", Paint.DIM)], [n, Paint.Run(" · " + blocks + " blocks", Paint.DIM)], [n]);
+  return [term_row(w, "Context", [read, ...of, ...part], [read, ...part]), ...bar, ...folds, memory];
+}
+
+// a label (dim, LABEL wide) and the first of says that fits w after it
+// (else the last)
+function term_row(w: number, label: string, ...says: Paint.Line[]): Item {
+  return [[Paint.Run(label.padEnd(LABEL), Paint.DIM), ...(says.find((l) => LABEL + Paint.line_width(l) <= w) ?? says[says.length - 1])], null];
+}
+
+// a share as a percentage, in c (yellow past 70%, red past 90%)
+function term_pct(f: number, c: string): Paint.Run {
+  return Paint.Run(Math.round(f * 100) + "%", { ...Paint.INK, c: term_level(f, c) });
+}
+
+// a share's color: c, yellow past 70%, red past 90%
+function term_level(f: number, c: string): string {
+  return f >= 0.9 ? "1" : f >= 0.7 ? "3" : c;
+}
+
+// a bar, every one on the side alike: BAR wide (w less two at most),
+// thick, share f of it filled (a cell at least, if any) in its color
+// (term_level), the rest dim
+function term_bar(f: number, w: number, c: string): Item {
+  const bw   = Math.max(1, Math.min(BAR, w - 2));
+  const full = Math.max(f > 0 ? 1 : 0, Math.min(bw, Math.round(f * bw)));
+  return [[Paint.Run("█".repeat(full), { ...Paint.INK, c: term_level(f, c) }), Paint.Run("█".repeat(bw - full), Paint.DIM)], null];
 }
 
 // the user's MCP servers, a line each, their names aligned: ● ready

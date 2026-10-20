@@ -359,6 +359,13 @@ export namespace ChatGPT {
     return plan;
   }
 
+  // the plan the login in use is on, as its token says: plus, pro… ("":
+  // none in use, or not told)
+  export function tier(): string {
+    const type = held === null ? "" : ChatGPT.claims(held.access).chatgpt_plan_type;
+    return typeof type === "string" ? type : "";
+  }
+
   // one stream event (OpenAI.read); the last, if its response lists no
   // output, gets the items that streamed
   export function read(st: State, ev: any, on: Parameters<typeof OpenAI.read>[2]): boolean {
