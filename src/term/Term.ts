@@ -30,7 +30,7 @@ import * as config from "../config/Config.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import * as Draw from "../ui/Draw.ts";
 import { term_draw, term_paint, term_print, term_resize } from "./Frame.ts";
-import { term_enter, term_grab, term_press } from "./Keys.ts";
+import { term_enter, term_grab, term_press, term_type } from "./Keys.ts";
 import { Machine } from "../tools/Machine.ts";
 import { Mcp } from "../tools/Mcp.ts";
 import { term_note, type Notice } from "./Notices.ts";
@@ -138,10 +138,26 @@ export type Pane = { title: string; make: (w: number) => Paint.Line[]; w: number
 // a place on the screen (a row, its columns from, to) and its click
 type Hit = { row: number; col: number; to: number; run: () => void };
 
-// the picker over the chat's foot (/agent, /profile): its title, its
-// options' names and what each is, the one marked as now (-1: none), the
-// choice, what picking option k does
-type Chooser = { title: string; names: string[]; about: string[]; here: number; at: number; pick: (k: number) => void };
+// the picker over the chat's foot (/agent, /profile, /model): its title,
+// its options' names and what each is, the one marked as now (-1: none),
+// what picking option k does; find: the search typed (null: none, typing
+// goes to the input), shown: the options it matches (Screen.ed_rank),
+// best first, at: the one lit among them, top: the first in view; keys:
+// what else the lit option k takes (true: taken; the model picker's
+// effort and speed), foot: what the box's foot says of it ("": nothing)
+export type Chooser = {
+  title : string;
+  names : string[];
+  about : string[];
+  here  : number;
+  pick  : (k: number) => void;
+  find  : string | null;
+  shown : Screen.Match[];
+  at    : number;
+  top   : number;
+  keys  : (k: number, key: string) => boolean;
+  foot  : (k: number) => string;
+};
 
 // a line drawn and what a click on it does (null: nothing)
 export type Item = [Paint.Line, (() => void) | null];
@@ -201,6 +217,7 @@ function term_new(chat: Chat): Term {
   term_primaries(t);
   Reply.reply_buttons(t.scr.tty);
   t.scr.grab  = (key) => term_grab(t, key);
+  t.scr.type  = (text) => term_type(t, text);
   t.scr.paste = (text) => term_paste(t, text);
   process.stdin.on("end", () => {
     if (!t.scr.tty && t.scr.ed.text.trim() !== "") {

@@ -160,6 +160,7 @@ export type Link = {
 export type Act =
   | ({ $: "Send" } & Sent)                      // Enter: a message, or, empty, interrupt
   | { $: "Move"; move: Move; to?: string }      // the pick moves (to: to that value)
+  | { $: "Pick"; to: Pick }                     // the pick set whole (the /model picker)
   | { $: "Open"; id: number; n: number }        // a click on a block
   | { $: "Shut"; id: number; n: number }        // a click on an open block's bar
   | { $: "Fold"; on: boolean }                  // fold all, unfold all
@@ -415,8 +416,7 @@ export function view_act(v: View, act: Act): Client[] {
       return goal === null ? [say] : [{ $: "goal", text: goal }, say];
     }
     case "Move": {
-      // from the last pick asked for and not acked, else the chat's
-      const from = v.out.flatMap((p) => (p.msg.$ === "pick" ? [p.msg.to] : [])).at(-1) ?? v.pick;
+      const from = view_asked(v);
       if (from === null) {
         return [];
       }
@@ -430,6 +430,22 @@ export function view_act(v: View, act: Act): Client[] {
         v.notes.push("No " + [act.move, act.to].join(" ").trim() + "; one of: " + [...new Set(parts)].join(", ") + ".");
         return [];
       }
+      return [{ $: "pick", to }];
+    }
+    case "Pick": {
+      // model, effort and speed as one change, one note saying it; none
+      // if it is the pick already
+      const from = view_asked(v);
+      const to   = Pick.read(act.to, v);
+      if (to === null) {
+        v.notes.push("No pick " + Pick.label(act.to) + " here.");
+        return [];
+      }
+      if (from !== null && Pick.label(from) === Pick.label(to)) {
+        return [];
+      }
+      const vendor = v.vendors.length > 1 ? " (" + to.vendor + ")" : "";
+      v.notes.push("Now on " + to.model + vendor + ", " + to.effort + " effort" + (to.speed === "slow" ? "" : ", " + to.speed) + ".");
       return [{ $: "pick", to }];
     }
     case "Open": {
@@ -620,6 +636,12 @@ export function view_doing(v: View): Doing | null {
     : v.wait !== "" ? ["Waiting for " + v.wait, ""]
     : ["Working", ""];
   return { verb, what: [what, agents].filter((x) => x !== "").join(" · "), stop: true };
+}
+
+// the pick as last asked for and not acked yet, else the chat's (null:
+// none told yet)
+export function view_asked(v: View): Pick | null {
+  return v.out.flatMap((p) => (p.msg.$ === "pick" ? [p.msg.to] : [])).at(-1) ?? v.pick;
 }
 
 export function view_pick(v: View): Knob[] {

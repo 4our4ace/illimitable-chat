@@ -87,6 +87,7 @@ export const GLYPH = {
   tab     : "◯",  // a chat's tab
   here    : "●",  // the tab of the chat shown
   input   : "> ", // before the message typed (its other lines indented as far)
+  find    : "⌕ ", // before a list's search (the model picker's)
   open    : "▾",  // an open block's bar
   pending : "☐",  // a to-do item not begun
   active  : "◐",  // the one at work

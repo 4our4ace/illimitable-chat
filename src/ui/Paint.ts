@@ -215,13 +215,15 @@ function fill_lines(body: Line[], iw: number): Line[] {
   return [edge("▄"), ...mid, edge("▀")];
 }
 
-// lines in a frame iw columns wide inside, a title in its top edge, cut
-// at the edge's end
-function frame_lines(body: Line[], iw: number, edge: Ink, title: Line): Line[] {
+// lines in a frame iw columns wide inside, a title in its top edge and
+// a foot in its bottom one (none: a plain edge), each cut at the edge's
+// end
+function frame_lines(body: Line[], iw: number, edge: Ink, title: Line, foot: Line = []): Line[] {
   const head = runs_wrap(title, iw + 1, true)[0];
+  const tail = runs_wrap(foot, iw + 1, true)[0];
   const bar  = "─".repeat(Math.max(0, iw + 1 - line_width(head)));
   const top  = [Run("╭─", edge), ...head, Run(bar + "╮", edge)];
-  const end  = [Run("╰" + "─".repeat(Math.max(0, iw + 2)) + "╯", edge)];
+  const end  = foot.length === 0 ? [Run("╰" + "─".repeat(Math.max(0, iw + 2)) + "╯", edge)] : [Run("╰─", edge), ...tail, Run("─".repeat(Math.max(0, iw + 1 - line_width(tail))) + "╯", edge)];
   const pad  = (l: Line) => Run(" ".repeat(Math.max(0, iw - line_width(l))));
   const mid  = body.map((l) => [Run("│ ", edge), ...l, pad(l), Run(" │", edge)]);
   return [top, ...mid, end];
@@ -301,9 +303,10 @@ function box_lines(row: View.Row & { $: "Box" }, w: number, marks: Mark[], at: n
   return frame_lines(rows_lines(row.rows, w - 4, marks, at + 1), w - 4, DIM, bar);
 }
 
-// lines framed w columns wide, dim, a title on the top edge (Term's lists)
-export function frame(body: Line[], w: number, title: Line): Line[] {
-  return frame_lines(body, w - 4, DIM, title);
+// lines framed w columns wide, dim, a title on the top edge, a foot on
+// the bottom one (Term's lists)
+export function frame(body: Line[], w: number, title: Line, foot: Line = []): Line[] {
+  return frame_lines(body, w - 4, DIM, title, foot);
 }
 
 // the names of a message's images, a dim line each

@@ -2,17 +2,18 @@
 // ====
 // A key, as Screen.ts reads it: the mouse's (Select.ts), the wheel, the
 // keys of COMMANDS (Commands.ts), and what the lists and panes over the
-// chat take first; Enter, Esc, Ctrl+C and Ctrl+D, Shift+Tab and the pages.
+// chat take first (a picker searched, the text typed too); Enter, Esc,
+// Ctrl+C and Ctrl+D, Shift+Tab and the pages.
 
 import { Chat } from "../chat/Chat.ts";
-import { term_command, term_commands, term_main, term_suggest, term_suggest_key } from "./Commands.ts";
+import { term_chooser_find, term_command, term_commands, term_main, term_suggest, term_suggest_key } from "./Commands.ts";
 import { Custom } from "../config/Custom.ts";
 import { term_draw } from "./Frame.ts";
 import { term_note, term_toast, term_unnote } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_copied, term_hover, term_mouse, term_selected, term_under } from "./Select.ts";
-import { term_act, term_primaries, term_quit, type Term } from "./Term.ts";
+import { term_act, term_primaries, term_quit, type Chooser, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
 // the keys that leave text chosen (any other lets it go)
@@ -56,27 +57,16 @@ export function term_press(t: Term, key: string): void {
 
 // a key while the commands suggested show, the picker or a pane is open:
 // theirs first (true: taken). The commands move by Up and Down, fill one
-// in by Tab, run it by Enter; the picker moves by the arrows (or Tab),
-// picks by Enter; a pane scrolls by the arrows, the pages and the wheel;
-// Esc closes any, and so does Enter a pane, the input empty
+// in by Tab, run it by Enter; the picker as term_choose_key; a pane
+// scrolls by the arrows, the pages and the wheel; Esc closes any, and so
+// does Enter a pane, the input empty
 export function term_grab(t: Term, key: string): boolean {
   const sug = term_suggest(t);
   if (sug !== null && term_suggest_key(t, sug, key)) {
     return true;
   }
-  const pick = t.choose;
-  if (pick !== null) {
-    const n    = pick.names.length;
-    const move = ({ Up: -1, "Shift+Tab": -1, Down: 1, Tab: 1 } as Record<string, number>)[key];
-    if (move !== undefined) {
-      pick.at = (pick.at + move + n) % n;
-    } else if (key === "Enter") {
-      t.choose = null;
-      pick.pick(pick.at);
-    } else if (key === "Esc") {
-      t.choose = null;
-    }
-    return move !== undefined || key === "Enter" || key === "Esc";
+  if (t.choose !== null) {
+    return term_choose_key(t, t.choose, key);
   }
   if (t.pane === null) {
     return false;
@@ -91,6 +81,42 @@ export function term_grab(t: Term, key: string): boolean {
     t.pane = null;
   }
   return move !== undefined || shut;
+}
+
+// a key to the picker (true: taken): the lit option's own first (the
+// model picker's effort and speed); then Up and Down (or Tab) move round
+// the options shown, Enter picks the lit one (none matching the search:
+// nothing), Esc closes, and Backspace takes a character off the search
+function term_choose_key(t: Term, c: Chooser, key: string): boolean {
+  const n    = c.shown.length;
+  const lit  = c.shown[c.at]?.k;
+  const move = ({ Up: -1, "Shift+Tab": -1, Down: 1, Tab: 1 } as Record<string, number>)[key];
+  if (lit !== undefined && c.keys(lit, key)) {
+    return true;
+  }
+  if (key === "Backspace" && c.find !== null) {
+    term_chooser_find(c, Paint.text_graphemes(c.find).slice(0, -1).join(""));
+  } else if (move !== undefined) {
+    c.at = n === 0 ? 0 : (c.at + move + n) % n;
+  } else if (key === "Enter" && lit !== undefined) {
+    t.choose = null;
+    c.pick(lit);
+  } else if (key === "Esc") {
+    t.choose = null;
+  } else if (key !== "Enter") {
+    return false;
+  }
+  return true;
+}
+
+// text typed while the picker searches: to its search, not the input
+export function term_type(t: Term, text: string): boolean {
+  const c = t.choose;
+  if (c === null || c.find === null) {
+    return false;
+  }
+  term_chooser_find(c, c.find + text);
+  return true;
 }
 
 // a click: what was drawn there does its own (the side, the picker, the
