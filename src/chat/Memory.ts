@@ -184,6 +184,10 @@ const AGENTS = "/docs/agent/";
 const AGENT = /^[A-Za-z][A-Za-z0-9_-]*$/;
 const LOG   = /^([A-Za-z][A-Za-z0-9_-]*)(?:\.([0-9a-z]+))?$/;
 
+// the caller name of the chat's own agent (its tools URL's: Tools.ts),
+// never an agent's
+export const MAIN = "main";
+
 // a compaction's task, before its <input>: one message to compress
 // (level 0), or two lines to merge
 const LEAF = `Compaction: compress message {id} into one line of at most ${NODE} bytes
@@ -1280,8 +1284,12 @@ h4 { margin: .8em 0 .2em; color: #888; font-weight: normal; } pre { margin: 0; w
   // numbered past those taken (own-2 on); none (or not a name): a random
   // one (Names.ts) not taken. A name is taken while its agent is (taken
   // tells: at work, or of this run); one freed is used again, with a log
-  // of its own (the name and a tag: the time)
+  // of its own (the name and a tag: the time). A user's agent named MAIN
+  // is refused: its calls would pass for the chat's own
   export function agent_new(mem: Memory, own: string | null, taken: (name: string) => boolean): string {
+    if (own === MAIN) {
+      throw new Error("No agent can be named " + MAIN + ": that name is Illi's own. Rename the agent's file (" + MAIN + ".md) to spawn it.");
+    }
     fs.mkdirSync(mem.dir + AGENTS, { recursive: true });
     const base = own !== null && AGENT.test(own) ? own : null;
     for (let n = 1; ; n++) {

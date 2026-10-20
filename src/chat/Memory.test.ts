@@ -5,9 +5,9 @@
 // call starts as the one before did, and past the call's size moves on
 // till they fill half (the oldest fold into the view); kept on disk. The
 // recent messages come in blocks, one marked in place of the view's. An
-// older chat's act lines still read. An
-// agent spawned as the user's is named after it; a freed name is used
-// again, each log its own.
+// older chat's act lines still read. An agent spawned as the user's is
+// named after it; a freed name is used again, each log its own; one
+// named main, the chat's own caller, is refused.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -101,7 +101,7 @@ test("the screen folds with the cut as it moves on by itself, and stays behind a
   expect(mem.show).toBe(cut);
 });
 
-test("an agent spawned as the user's is named after it, numbered while one so named is taken; a freed name is used again, each log its own", () => {
+test("an agent spawned as the user's is named after it, numbered while one so named is taken; a freed name is used again, each log its own; main is refused", () => {
   const mem   = chat("agents", 1);
   const taken = new Set<string>();
   const spawn = (own: string | null) => {
@@ -122,4 +122,6 @@ test("an agent spawned as the user's is named after it, numbered while one so na
   expect(spawn("1st/../x")).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
   expect(spawn(null)).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
   expect(Memory.agent(mem, "../reviewer")).toBeNull();
+  expect(() => spawn("main")).toThrow("Rename the agent's file (main.md)");
+  expect(spawn("Main")).toBe("Main");
 });

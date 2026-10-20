@@ -32,7 +32,7 @@ import * as config from "../config/Config.ts";
 import { Custom, type Skill } from "../config/Custom.ts";
 import { INT, STR, TOOLS, Machine, spec, type Spec } from "./Machine.ts";
 import { Mcp } from "./Mcp.ts";
-import { Memory } from "../chat/Memory.ts";
+import { MAIN, Memory } from "../chat/Memory.ts";
 import PROMPT from "./prompt.txt" with { type: "text" };
 import { EFFORTS, Pick } from "../ai/Pick.ts";
 import type { Live, State, Todo } from "../ui/View.ts";
@@ -253,7 +253,7 @@ export namespace Tools {
   export async function fetch(req: Request): Promise<Response> {
     const [, key, who, ...rest] = new URL(req.url).pathname.split("/");
     const tools = CHATS.get(key);
-    const caller = who === "main" || tools?.agents.has(who);
+    const caller = who === MAIN || tools?.agents.has(who);
     const msg = await req.json().catch(() => ({}));
     if (tools === undefined || rest.length > 0 || !caller) {
       return new Response(null, { status: 404 });
@@ -300,7 +300,7 @@ export namespace Tools {
   // a caller's tools, as its agent allows
   export function list(tools: Tools, who: string): Spec[] {
     const user = [...skill_tools(tools.cwd), ...Mcp.tools()];
-    if (who === "main") {
+    if (who === MAIN) {
       return Custom.allow(Custom.agent(tools.cwd, tools.hooks.main()), [...OWN, ...boss(tools.cwd), ...TOOLS, ...user]);
     }
     return Custom.allow(Custom.agent(tools.cwd, tools.agents.get(who)?.role.agent ?? null), [...OWN, ...TOOLS, ...user]);
@@ -403,8 +403,11 @@ export namespace Tools {
     return name;
   }
 
-  // one not loaded is taken back from its log, idle
+  // one not loaded is taken back from its log, idle; none is MAIN
   export function agent(tools: Tools, name: string): Agent | null {
+    if (name === MAIN) {
+      return null;
+    }
     const log = tools.agents.has(name) ? null : Memory.agent(tools.mem, name);
     const note = log !== null && log.length > 0 && log[0].kind === "note" ? log[0].text : "";
     const sub = SUB_RE.exec(note);
