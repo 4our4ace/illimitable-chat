@@ -4,7 +4,8 @@
 // searches the models as you type (Backspace too), sets the lit one's
 // effort by Left and Right and its speed by Tab, and sends all three as
 // one pick by Enter (Esc: none); /agent's and /profile's take no typing,
-// and Tab moves in them. /help fits a narrow pane.
+// and Tab moves in them. /help fits a narrow pane; /agents' lists have
+// no copy buttons (a pane is no reply).
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -31,7 +32,7 @@ const term = () => {
 };
 
 // /model typed with no name
-const model = (t: any) => term_commands(t.v).find(([use]) => use.startsWith("/model "))![3](t, "");
+const model = (t: any) => term_commands().find(([use]) => use.startsWith("/model "))![3](t, "");
 
 // the names shown, the lit one, what the foot says of it
 const shown = (t: any) => t.choose.shown.map((m: Match) => t.choose.names[m.k]);
@@ -113,7 +114,7 @@ test("a picker without a search takes no typing; Tab moves in it", () => {
 
 test("/help fits a narrow pane: how each is typed on its own line, what it does under it", () => {
   const t = term();
-  term_commands(t.v).find(([use]) => use === "/help")![3](t, "");
+  term_commands().find(([use]) => use === "/help")![3](t, "");
   for (const w of [30, 44, 100]) {
     const lines = t.pane.make(w);
     expect(Math.max(...lines.map(Paint.line_width))).toBeLessThanOrEqual(w);
@@ -122,4 +123,11 @@ test("/help fits a narrow pane: how each is typed on its own line, what it does 
   const narrow = t.pane.make(30).map((l: any) => l.map((r: any) => r.x).join("").trimEnd());
   expect(narrow).toContain("/help");
   expect(narrow).toContain("  this list");
+});
+
+test("/agents' pane has no copy buttons: a pane is no reply", () => {
+  const t = term();
+  t.agents = [];
+  term_commands().find(([use]) => use === "/agents")![3](t, "");
+  expect(t.pane.make(80).flat().filter((r: any) => r.copy !== undefined)).toEqual([]);
 });

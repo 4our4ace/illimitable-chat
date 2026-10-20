@@ -41,7 +41,7 @@ const term = () => {
 };
 
 // a command typed, by its name
-const run = (t: any, name: string, arg = "") => term_commands(t.v).find(([use]) => use.split(" ")[0] === name)![3](t, arg);
+const run = (t: any, name: string, arg = "") => term_commands().find(([use]) => use.split(" ")[0] === name)![3](t, arg);
 
 // the lit option, what the picker says of it, what the foot says, the
 // last note, config.json as kept
