@@ -3,8 +3,8 @@
 // The screen painted, a frame at most each FRAME ms: the head; the chat
 // (or a pane; over its foot the commands suggested, else the picker), the
 // side beside it (Side.ts); the notes, the toast and the jump to the end;
-// the rule (what runs, the merge), the input, the pages, the pick. A pipe
-// gets text.
+// the rule (what runs, the ∞ traced), the input, the pages, the pick. A
+// pipe gets text.
 
 import * as os from "node:os";
 import { term_suggest, term_suggested } from "./Commands.ts";
@@ -43,34 +43,24 @@ const FRAME = 16;
 // a size held this long is settled: a drag's sizes come faster (ms)
 const SETTLE = 30;
 
-// the merge over the input, as the memory's lines merge: four dots land
-// one by one, each pair steps together and fuses where its dots meet
-// (· · into •), the two step toward each other and fuse (●), which
-// holds, fades and the next begins; each frame, how long it shows (ms),
-// quicker as the dots close in, and the same story in one cell for each
-// subagent at work in the side (· ∶ ∴ ∷, ∶, •). A dot is in one place at
-// a time: a step or a fusion is instant; a dot landing shows faded for
-// MERGE_IN first, and the last one fades in two steps over MERGE_OUT. One
+// the mark over the input while work runs, as Illimitable has no end:
+// an infinity sign traced for ever, in braille (a cell 2 dots wide and 4
+// high, so 4 cells hold a ∞ 8 by 4): its path, round its left loop and
+// its right, crossing in the middle; a trail of TRAIL dots runs along it,
+// a dot each TRACE (ms), the cell holding its head in the accent, the
+// rest fainter. Each subagent at work in the side gets the same in one
+// cell: a trail of ORBIT_TRAIL round its edge, a dot each 2 TRACE. One
 // clock draws them all, waking only as they change (term_wake)
-const MERGE: [string, number, string][] = [
-  ["·      ", 150, "·"],
-  ["· ·    ", 150, "∶"],
-  ["· · ·  ", 150, "∴"],
-  ["· · · ·", 320, "∷"],
-  [" •   • ", 260, "∶"],
-  ["  • •  ", 150, "∶"],
-  ["   ●   ", 700, "•"],
-  ["       ", 200, " "],
-];
-const MERGE_IN  = 80;
-const MERGE_OUT = 300;
-const MERGE_ALL = MERGE.reduce((n, [, ms]) => n + ms, 0);
+const INFINITY: [number, number][] = [[3, 2], [2, 3], [1, 3], [0, 2], [0, 1], [1, 0], [2, 0], [3, 1], [4, 2], [5, 3], [6, 3], [7, 2], [7, 1], [6, 0], [5, 0], [4, 1]];
+const TRAIL       = 5;
+const TRACE       = 125;
+const ORBIT: [number, number][] = [[0, 0], [1, 0], [1, 1], [1, 2], [1, 3], [0, 3], [0, 2], [0, 1]];
+const ORBIT_TRAIL = 3;
 
-// how late the work's clock may show its second, to wake with the merge
-// instead (ms)
-const CLOCK_LATE = 400;
+// a braille dot's bit, by its column (0, 1) and row (0 to 3)
+const DOT = [[0x01, 0x02, 0x04, 0x40], [0x08, 0x10, 0x20, 0x80]];
 
-// the rule's start, before the merge while work runs
+// the rule's start, before the trace while work runs
 const RULE_HEAD = "── ";
 
 // the input's hint on an agent's page
@@ -215,12 +205,12 @@ function term_rule(t: Term, w: number, note?: Paint.Line): Paint.Line {
   return term_working(t, doing, w, Date.now());
 }
 
-// the rule while work runs, w wide, at a time: the merge, what runs
+// the rule while work runs, w wide, at a time: the ∞ traced, what runs
 // (bold, in the accent), how long it has run, what it is at, how to stop
 // it, cut to the width
 function term_working(t: Term, doing: View.Doing, w: number, now: number): Paint.Line {
   const c    = Draw.draw_theme().accent ?? "5";
-  const head = [Paint.Run(RULE_HEAD, Paint.DIM), ...term_merge(now - t.since, c, t.scr.canvas), Paint.Run(" "), Paint.Run(doing.verb, { ...Paint.INK, c, b: true })];
+  const head = [Paint.Run(RULE_HEAD, Paint.DIM), ...term_trace(now - t.since, c, t.scr.canvas), Paint.Run(" "), Paint.Run(doing.verb, { ...Paint.INK, c, b: true })];
   const tail = [term_elapsed(now - t.since), doing.what, doing.stop ? "Esc to interrupt" : ""].filter((x) => x !== "").join(" · ");
   const room = w - Paint.line_width(head) - 6;
   const said = Paint.text_width(tail) <= room ? tail : room < 2 ? "" : Paint.runs_wrap([Paint.Run(tail)], room - 1, true)[0].map((r) => r.x).join("") + "…";
@@ -228,7 +218,7 @@ function term_working(t: Term, doing: View.Doing, w: number, now: number): Paint
   return [...head, Paint.Run(" · " + said + " ", Paint.DIM), Paint.Run("─".repeat(Math.max(0, w - used)), Paint.DIM)];
 }
 
-// the merge's clock: it starts as work does (when kept), stops as it
+// the trace's clock: it starts as work does (when kept), stops as it
 // ends; it wakes only when the rule would look different (term_wake)
 function term_spin(t: Term, on: boolean): void {
   if (on && t.spin === undefined) {
@@ -240,21 +230,16 @@ function term_spin(t: Term, on: boolean): void {
   }
 }
 
-// the clock set for the next change: the merge's next frame or fade
-// step, else the work's next second, unless the merge changes within
-// CLOCK_LATE of it anyway (the second shows with it). Nothing between: a
-// frame that holds costs nothing; the side's spinners change with the
-// merge's frames
+// the clock set for the trace's next dot; the work's second shows with
+// it, at most TRACE late. Nothing between: the side's spinners change
+// with every other dot
 function term_wake(t: Term): void {
-  const ms   = Date.now() - t.since;
-  const next = term_merge_wait(ms);
-  const sec  = 1000 - (ms % 1000);
   t.spin = setTimeout(() => {
     term_tick(t);
     if (t.spin !== undefined) {
       term_wake(t);
     }
-  }, (sec < next && next - sec >= CLOCK_LATE ? sec : next) + 1);
+  }, TRACE - ((Date.now() - t.since) % TRACE) + 1);
 }
 
 // a wake of the clock: the rule written again alone, where it was last
@@ -296,55 +281,31 @@ function term_side_again(t: Term): void {
   }
 }
 
-// where the merge is, ms into its work: its frame's index in MERGE, how
-// far into it (ms), whether a dot lands in it (more dots than the frame
-// before) and whether it fades out (an empty frame next)
-function term_merge_at(ms: number): { k: number; at: number; lands: boolean; ends: boolean } {
-  let at = ms % MERGE_ALL;
-  let k  = 0;
-  while (at >= MERGE[k][1]) {
-    at -= MERGE[k][1];
-    k++;
-  }
-  const dots = (row: string) => row.replaceAll(" ", "").length;
-  return { k, at, lands: dots(MERGE[k][0]) > dots(MERGE.at(k - 1)![0]), ends: MERGE[(k + 1) % MERGE.length][0].trim() === "" };
-}
-
-// how long till the merge looks different, ms into its work: a landing
-// dot's full look, the last one's fade steps, else its next frame
-function term_merge_wait(ms: number): number {
-  const { k, at, lands, ends } = term_merge_at(ms);
-  const long = MERGE[k][1];
-  const from = long - MERGE_OUT;
-  return lands && at < MERGE_IN ? MERGE_IN - at
-    : ends && at < from ? from - at
-    : ends && at < from + MERGE_OUT / 2 ? from + MERGE_OUT / 2 - at
-    : long - at;
-}
-
-// a subagent's spinner, ms into the work: the merge's frame in one cell
+// a subagent's spinner, ms into the work: ORBIT_TRAIL dots round one
+// braille cell, a dot each 2 TRACE
 export function term_spinner(ms: number): string {
-  return MERGE[term_merge_at(ms).k][2];
+  const head = Math.floor(ms / (2 * TRACE)) % ORBIT.length;
+  let bits = 0;
+  for (let k = 0; k < ORBIT_TRAIL; k++) {
+    const [x, y] = ORBIT[(head - k + ORBIT.length) % ORBIT.length];
+    bits |= DOT[x][y];
+  }
+  return String.fromCharCode(0x2800 + bits);
 }
 
-// the merge ms into its work: the frame of MERGE it is at, in the
-// accent (●, the last dot, bold); a dot landing in it half faded for
-// MERGE_IN, the one before an empty frame faded half, then most, over
-// its last MERGE_OUT (toward the background, if told; else dim)
-function term_merge(ms: number, c: string, canvas: string | undefined): Paint.Line {
-  const { k, at, lands, ends } = term_merge_at(ms);
-  const [now, long] = MERGE[k];
-  const was  = MERGE.at(k - 1)![0];
-  const from = long - MERGE_OUT;
-  const out  = !ends || at < from ? 0 : at < from + MERGE_OUT / 2 ? 0.45 : 0.8;
-  const land = lands && at < MERGE_IN ? 0.5 : 0;
-  return [...now].map((x, i) => {
-    const fade = x === " " ? 0 : Math.max(out, was[i] === " " ? land : 0);
-    if (fade <= 0.01) {
-      return Paint.Run(x, { ...Paint.INK, c, b: x === "●" });
-    }
-    return Paint.Run(x, c.startsWith("#") && canvas !== undefined ? { ...Paint.INK, c: term_mix(c, canvas, fade), b: x === "●" } : { ...Paint.INK, c, d: fade > 0.2 });
-  });
+// the ∞ ms into its work, in its 4 cells: the trail's TRAIL dots on
+// INFINITY, its head a dot each TRACE; the cell holding the head in the
+// accent, the rest half faded (toward the background, if told; else dim)
+function term_trace(ms: number, c: string, canvas: string | undefined): Paint.Line {
+  const head  = Math.floor(ms / TRACE) % INFINITY.length;
+  const cells = [0, 0, 0, 0];
+  for (let k = 0; k < TRAIL; k++) {
+    const [x, y] = INFINITY[(head - k + INFINITY.length) % INFINITY.length];
+    cells[x >> 1] |= DOT[x & 1][y];
+  }
+  const lit  = INFINITY[head][0] >> 1;
+  const fade = c.startsWith("#") && canvas !== undefined ? { ...Paint.INK, c: term_mix(c, canvas, 0.5) } : { ...Paint.INK, c, d: true };
+  return cells.map((bits, i) => Paint.Run(bits === 0 ? " " : String.fromCharCode(0x2800 + bits), i === lit ? { ...Paint.INK, c } : fade));
 }
 
 // a color f of the way to another (#rrggbb)
