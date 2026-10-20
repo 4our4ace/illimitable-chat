@@ -13,6 +13,7 @@ import { Mcp, type Server } from "../tools/Mcp.ts";
 import { term_note } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_profile_go } from "./ProfileCommands.ts";
+import { setting_set } from "./Settings.ts";
 import { term_act, type Item, type Term } from "./Term.ts";
 import { agent_name, GLYPH } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
@@ -221,17 +222,16 @@ export function term_side_width(t: Term, w: number): number {
 }
 
 // /side: where the side panel shows (right, left, off) or how wide (40,
-// 30%), kept in config.json; none: says how it is
+// 30%), kept in config.json (as /set does it: not over a variable, nor
+// into a config.json that won't read); none: says how it is
 export function term_side_set(t: Term, arg: string): void {
   const how = arg.trim().toLowerCase();
-  if (["right", "left", "off"].includes(how)) {
-    t.side.place = how;
-    config.config_set("side", how);
-  } else if (/^\d+(?:\.\d+)?%?$/.test(how)) {
-    t.side.width = how;
-    config.config_set("side_width", how);
-  } else if (how !== "") {
+  const key = ["right", "left", "off"].includes(how) ? "side" : /^\d+(?:\.\d+)?%?$/.test(how) ? "side_width" : null;
+  if (key === null && how !== "") {
     return term_note(t, "/side takes right, left or off, or a width: columns (40) or a share of the screen (30%).");
+  }
+  if (key !== null && !setting_set(t, key, how)) {
+    return;
   }
   term_note(t, "The side panel: " + t.side.place + ", " + t.side.width + " wide" + (how === "" ? " (/side right, left, off, or a width like 40 or 30%)." : "; kept in config.json."));
 }

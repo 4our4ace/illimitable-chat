@@ -7,7 +7,7 @@
 // filled (Theme.FILLED), half blocks rounding the fill's top and
 // bottom: a block, its level in a gutter, its summary and its first
 // message's id (`#6840`, for /open); a tool call, its emoji and verb
-// bold, its device dimmed; its result its own fill. The user's words
+// bold; its result its own fill. The user's words
 // framed, unnamed; an agent's report framed, its name on the top edge
 // (Theme.FRAMED); Illi's words bare, drawn as cellsmith draws a reply
 // (Reply.ts: its code, diagrams, tables, headings, lists and quotes, and
@@ -104,21 +104,25 @@ export function text_graphemes(s: string): string[] {
 // ====
 
 // runs into lines of w columns: prose breaks between words (the space at a
-// break dropped), code (hard) and a word wider than a line at any character; a
-// link never (the terminal wraps it: indented pieces can't be clicked or
-// copied). A run that fits in the rest of its line goes whole, unless it would
-// start a line that a break began.
+// break dropped), a word made of several runs (`code`, **bold**) kept
+// whole; code (hard) and a word wider than a line, a link's too, at any
+// character (a link's pieces keep its url, so each opens it whole). A run
+// that fits in the rest of its line goes whole, unless it would start a
+// line that a break began.
 export function runs_wrap(runs: Line, w: number, hard: boolean): Line[] {
   const out: Line[] = [[]];
   let col = 0;
   for (const r of runs) {
     const whole  = col + text_width(r.x) <= w && (col > 0 || out.length === 1);
-    const pieces = whole ? [r.x] : hard ? text_graphemes(r.x) : r.x.split(/(\s+)/).flatMap((p) => (text_width(p) <= w || /^https?:\/\//.test(p) ? [p] : text_graphemes(p)));
+    const words  = whole ? [r.x] : hard ? [] : r.x.split(/(\s+)/).filter((p) => p !== "");
+    const broken = hard && !whole ? text_graphemes(r.x) : words.flatMap((p) => (text_width(p) <= w ? [] : text_graphemes(p)));
+    const pieces = hard && !whole ? broken : words.flatMap((p) => (text_width(p) <= w ? [p] : text_graphemes(p)));
     for (const p of pieces) {
       const pw = text_width(p);
       if (col > 0 && col + pw > w) {
-        out.push([]);
-        col = 0;
+        const word = hard || broken.length > 0 || !/^\S/.test(p) ? [] : line_word(out[out.length - 1], w - pw);
+        out.push(word);
+        col = line_width(word);
       }
       if (!(!hard && /^\s+$/.test(p) && col === 0 && out.length > 1)) {
         out[out.length - 1].push(Run(p, r.s));
@@ -127,6 +131,24 @@ export function runs_wrap(runs: Line, w: number, hard: boolean): Line[] {
     }
   }
   return out;
+}
+
+// the word a line ends in, taken off it to start the next line with
+// (back to its last space), if it is no wider than room; none (the line
+// ends in a space, or is all one word, or it's too wide): nothing taken
+function line_word(l: Line, room: number): Line {
+  for (let k = l.length - 1; k >= 0; k--) {
+    const tail = /\S*$/.exec(l[k].x)![0];
+    if (tail.length < l[k].x.length) {
+      const word = [...(tail === "" ? [] : [Run(tail, l[k].s)]), ...l.slice(k + 1)];
+      if (line_width(word) > room) {
+        return [];
+      }
+      l.splice(k, l.length - k, Run(l[k].x.slice(0, l[k].x.length - tail.length), l[k].s));
+      return word;
+    }
+  }
+  return [];
 }
 
 export function line_width(l: Line): number {
@@ -164,7 +186,7 @@ export function line_mark(l: Line, from: number, to: number, f: (s: Ink) => Ink)
 
 // a line as ANSI: an ink's codes only where the ink changes (a link open
 // over all its runs), back to the plain ink at its end; its end's spaces
-// dropped unless filled
+// dropped unless filled or reversed
 export function line_ansi(l: Line): string {
   let out = "";
   let was: Ink | null = null;
@@ -172,7 +194,7 @@ export function line_ansi(l: Line): string {
     out += ink_ansi(was, r.s) + r.x;
     was = r.s;
   }
-  return (was?.g ? out : out.trimEnd()) + ink_ansi(was, INK);
+  return (was?.g || was?.v ? out : out.trimEnd()) + ink_ansi(was, INK);
 }
 
 // the codes that change ink was (null: a line's start) to s
@@ -187,9 +209,9 @@ function ink_ansi(was: Ink | null, s: Ink): string {
 }
 
 // a palette color as the SGR that sets it (at 38: the text, 48: the
-// fill; "": none), its basic code (30-37/90-97 or 40-47/100-107); a
-// #rrggbb as true color
-function color_sgr(at: number, c: string): string {
+// fill; "": none), its basic code (30-37/90-97 or 40-47/100-107), past 15
+// the 256 colors' (38;5;n); a #rrggbb as true color; any other none
+export function color_sgr(at: number, c: string): string {
   if (c === "") {
     return "";
   }
@@ -197,7 +219,10 @@ function color_sgr(at: number, c: string): string {
     return ";" + at + ";2;" + [1, 3, 5].map((k) => parseInt(c.slice(k, k + 2), 16)).join(";");
   }
   const i = Number(c);
-  return ";" + (at - 8 + (i < 8 ? i : 60 + i - 8));
+  if (!Number.isInteger(i) || i < 0 || i > 255) {
+    return "";
+  }
+  return i < 16 ? ";" + (at - 8 + (i < 8 ? i : 60 + i - 8)) : ";" + at + ";5;" + i;
 }
 
 // lines on a fill iw columns wide inside, a column of it each side, a
@@ -315,6 +340,8 @@ function images_lines(row: View.Row): Line[] {
   return names.map((name) => [Run("  [image " + name + "]", DIM)]);
 }
 
+// a row's own lines (an open block's and a run of work's are made by
+// rows_lines, around their rows')
 function row_lines(row: View.Row, w: number): Line[] {
   switch (row.$) {
     case "Sum": {
@@ -322,11 +349,9 @@ function row_lines(row: View.Row, w: number): Line[] {
       const text = row.call === null ? row.text : Call.call_line(row.call);
       return fill_lines(sum_lines(row.id, row.n, head, text, w - 2), w - 2);
     }
-    case "Box": {
-      return box_lines(row, w, [], 0);
-    }
+    case "Box":
     case "Act": {
-      return act_lines(row, w, [], 0);
+      return [];
     }
     case "Msg": {
       return row.call !== null ? fill_lines(call_lines(row.call, w - 2), w - 2) : row.kind === "illi" ? Reply.reply_lines(row.text, w) : msg_lines(row.kind, row.who, row.body, w);
@@ -374,16 +399,13 @@ function msg_lines(kind: Kind, who: string, body: Md.Block[], w: number): Line[]
 }
 
 // a tool call: its glyph and verb, its head after them if it fits on
-// that line, else under it (a command's lines), its device dimmed at the
-// line's right end; over its blocks
+// that line, else under it (a command's lines); over its blocks
 function call_lines(c: Call.Call, w: number): Line[] {
   const verb  = verb_runs(c);
-  const where = c.device === "" ? [] : [Run(c.device, DIM)];
-  const one   = !c.head.includes("\n") && line_width(verb) + text_width(c.head) + 2 + line_width(where) <= w;
+  const one   = !c.head.includes("\n") && line_width(verb) + text_width(c.head) <= w;
   const top   = one ? [...verb, Run(text_clean(c.head))] : verb;
-  const gap   = Run(" ".repeat(Math.max(1, w - line_width(top) - line_width(where))));
   const heads = one || c.head === "" ? [] : c.head.split("\n").flatMap((l) => runs_wrap([Run(text_clean(l))], w, true));
-  return [[...top, gap, ...where], ...heads, ...c.blocks.flatMap((b) => code_lines(b.k, b.x, w, DIM, false))];
+  return [top, ...heads, ...c.blocks.flatMap((b) => code_lines(b.k, b.x, w, DIM, false))];
 }
 
 // a call's emoji and name, bold
@@ -439,12 +461,13 @@ function item_lines(spans: Md.Span[], mark: string, w: number, ink: Ink): Line[]
   return rows.map((l, k) => [Run(k === 0 ? mark : " ".repeat(mw), ink), ...l]);
 }
 
-// code: its label (a key, a language) over its lines, on a fill (a
-// message's) or in a frame (a call's, already on a fill)
+// code: its label (a key, a language: cleaned, cut at the width) over
+// its lines, on a fill (a message's) or in a frame (a call's, already on
+// a fill)
 function code_lines(label: string, text: string, w: number, ink: Ink, fill: boolean): Line[] {
   const code = { ...INK, d: ink.d };
   const iw   = fill ? w - 2 : w - 4;
-  const head = label === "" ? [] : [[Run(label, { ...ink, d: true })]];
+  const head = label === "" ? [] : [runs_wrap([Run(text_clean(label), { ...ink, d: true })], Math.max(1, w), true)[0]];
   const rows = (fill ? Draw.draw_code(label, text) : null) ?? text.split("\n").map((x) => [{ text: x, kind: "" }]);
   const body = rows.flatMap((l) => runs_wrap(l.map((t) => Run(text_clean(t.text), token_ink(t.kind, code))), iw, true));
   return [...head, ...(fill ? fill_lines(body, iw) : frame_lines(body, iw, code, []))];

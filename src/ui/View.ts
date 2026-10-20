@@ -173,7 +173,7 @@ export type Row =
   | { $: "Sum"; id: number; n: number; text: string; call: Call.Call | null; kind: Kind | null }  // a block: nx, its summary (call: a tool call's, word for word; kind: its message's, of one known)
   | { $: "Box"; id: number; n: number; text: string; rows: Row[] }                              // a block open: its bar
   | { $: "Act"; id: number; text: string; open: boolean; rows: Row[] }                         // a run of work (ACTIVITY), from message id: what was done, its rows if open
-  | { $: "Msg"; id: number | null; kind: Kind; who: string; text: string; body: Md.Block[]; call: Call.Call | null; images: string[] } // a message whole: 0x (who: its speaker or "↳ result", named on its block; call: a tool call's, drawn as Call.ts reads it)
+  | { $: "Msg"; id: number | null; kind: Kind; who: string; text: string; body: Md.Block[]; call: Call.Call | null; images: string[] } // a message whole: 0x (who: its speaker or "↳ result", named on its block; body: its blocks, none for Illi's (drawn from its text); call: a tool call's, drawn as Call.ts reads it)
   | { $: "Cap"; text: string }                                                                  // a line about the page
 
 // a tab: its page (null: the chat), whether it's shown, its mark, its
@@ -390,11 +390,11 @@ export function view_act(v: View, act: Act): Client[] {
       // message
       const word   = /^\/[a-z]+(?=\s|$)/i.exec(text)?.[0];
       const goal   = word === "/goal" ? text.slice(word.length).trim() : null;
-      if (!view_typing(v)) {
-        return [];
-      }
       if (text === "" && images.length === 0) {
         return v.busy ? [{ $: "stop", name: TURN }] : [];
+      }
+      if (!view_typing(v)) {
+        return [];
       }
       if (word === "/halt") {
         return [{ $: "goal", text: null }];
@@ -600,13 +600,6 @@ export function view_tabs(v: View): Tab[] {
     const mark = here ? GLYPH.here : GLYPH.tab;
     return { name, here, mark, text: mark + " " + agent_name(name ?? v.agent ?? MAIN), agent: name?.replace(/-\d+$/, "") ?? v.agent ?? MAIN };
   });
-}
-
-export function view_fold(v: View): string | null {
-  if (v.page !== null) {
-    return null;
-  }
-  return v.fold === null ? "fold all" : "unfold all";
 }
 
 export function view_typing(v: View): boolean {
@@ -914,12 +907,16 @@ export function image_kind(head: Uint8Array): string | null {
 // Entry
 // =====
 
+// a message's row (none: nothing to show); Illi's reply is drawn from its
+// text (Reply.ts), so only whether it has any is asked, never its blocks
+// (a reply streaming would be parsed at every paint)
 export function entry_rows(id: number | null, kind: Kind, text: string, images: string[] = []): Row[] {
   const call = kind === "tool" ? Call.call_parse(text) : null;
   const report = kind === "work" ? Call.report_read(text) : null;
-  const body = call === null ? entry_body(kind, report?.text ?? text) : [];
+  const body = call === null && kind !== "illi" ? entry_body(kind, report?.text ?? text) : [];
   const who = report === null ? WHO[kind] ?? "" : agent_name(report.name);
-  return call === null && body.length === 0 && images.length === 0 ? [] : [{ $: "Msg", id, kind, who, text, body, call, images }];
+  const none = kind === "illi" ? text.trim() === "" : call === null && body.length === 0;
+  return none && images.length === 0 ? [] : [{ $: "Msg", id, kind, who, text, body, call, images }];
 }
 
 function entry_body(kind: Kind, text: string): Md.Block[] {
