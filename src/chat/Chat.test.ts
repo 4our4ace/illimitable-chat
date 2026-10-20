@@ -6,7 +6,8 @@
 // model the running one asked); one process at a time holds the chat. A
 // goal check and a message sent mid-run fit the chat's model. A main
 // agent switch is a note of its own. A message sent as a stopped turn
-// winds down is answered.
+// winds down is answered, and what was logged between waiting messages
+// reaches the turn.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -174,4 +175,22 @@ test("a message sent as a stopped turn winds down gets a turn of its own", async
   }
   expect(asked[1]).toContain("after the stop");
   expect(asked[1]).not.toContain("first");
+});
+
+test("a turn's new text holds what was logged between its waiting messages, tagged", async () => {
+  await until(() => !chat.busy);
+  let asked = "";
+  const ask = AskAI.ask;
+  AskAI.ask = (a, on) => ((asked = a.blocks.at(-1)!.text), ask(a, on));
+  try {
+    const one = Chat.push(chat, null, "user", "one");
+    Chat.push(chat, null, "note", "Stopped by the user: Illi.");
+    const two = Chat.push(chat, null, "user", "two");
+    Object.assign(chat, { busy: true, wait: [one, two] });
+    await Chat.call(chat);
+  } finally {
+    AskAI.ask = ask;
+    Object.assign(chat, { busy: false, wait: [], sent: [] });
+  }
+  expect(asked).toEndWith("one\n\nnote: Stopped by the user: Illi.\n\ntwo");
 });

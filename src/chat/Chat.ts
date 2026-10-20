@@ -16,7 +16,7 @@
 
 import * as fs from "node:fs";
 import * as net from "node:net";
-import { AskAI, type Call, type Event, type Kind } from "../ai/AskAI.ts";
+import { AskAI, type Call, type Event, type Kind, type Say } from "../ai/AskAI.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
 import { Memory, type Share } from "./Memory.ts";
@@ -342,7 +342,9 @@ export namespace Chat {
     return config.config_context(chat.pick.model, Pick.window(chat.pick));
   }
 
-  // false: the turn ends
+  // false: the turn ends. Its new text: all logged from the first message
+  // waiting, each waiting one as sent, any other entry between (a stop's
+  // note, a stopped agent's report) tagged with its kind
   export async function call(chat: Chat): Promise<boolean> {
     const mem = chat.mem;
     const halt = (chat.halt = new AbortController());
@@ -360,7 +362,12 @@ export namespace Chat {
       }
     }
     const msgs = (chat.sent = chat.wait.splice(0));
-    const says = msgs.filter((m) => m.end > from).map((m) => Memory.say(mem, Math.max(m.id, from), m.end));
+    const says: Say[] = [];
+    for (let i = Math.max(msgs[0].id, from); i < mem.count; ) {
+      const msg = msgs.find((m) => i >= m.id && i < m.end);
+      says.push(msg === undefined ? { text: Memory.show(Memory.message(mem, i)!), imgs: [] } : Memory.say(mem, i, msg.end));
+      i = msg === undefined ? i + 1 : msg.end;
+    }
     const view = Memory.chat(mem, from, msgs[0].id);
     const text = says.map((say) => say.text).join("\n\n");
     const imgs = says.flatMap((say) => say.imgs);
