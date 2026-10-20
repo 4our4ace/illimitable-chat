@@ -37,13 +37,15 @@ last (ILLI_PROFILE names one). In the chat, /help lists every command and
 key.`;
 
 // `illi upgrade`: one file, the installer run again into its folder (the
-// file replaced as a whole, so the one running goes on); from a git
-// clone, a pull; the exit code
+// file replaced as a whole, so the one running goes on; a failed download
+// fails it; the API keys kept from it); from a git clone, a pull; the
+// exit code
 async function main_upgrade(): Promise<number> {
   const run = (cmd: string[], env = process.env) => Bun.spawn(cmd, { env, stdio: ["inherit", "inherit", "inherit"] }).exited;
   console.log("illi " + VERSION + ": upgrading");
   if (COMPILED) {
-    return run(["bash", "-c", "curl -fsSL " + INSTALLER + " | bash"], { ...process.env, ILLI_INSTALL: path.dirname(process.execPath) });
+    const { ANTHROPIC_API_KEY, OPENAI_API_KEY, ...env } = process.env;
+    return run(["bash", "-c", "set -o pipefail; curl -fsSL " + INSTALLER + " | bash"], { ...env, ILLI_INSTALL: path.dirname(process.execPath) });
   }
   const clone = path.dirname(import.meta.dir);
   if (fs.existsSync(path.join(clone, ".git"))) {
