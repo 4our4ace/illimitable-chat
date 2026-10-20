@@ -12,7 +12,7 @@ import { ChatGPT } from "../ai/ChatGPT.ts";
 import * as config from "../config/Config.ts";
 import { Custom, type Command, type Profile, type Skill } from "../config/Custom.ts";
 import { term_redraw } from "./Frame.ts";
-import { term_clear, term_cycle, term_enter, term_esc, term_next, term_page, term_shots, term_verbose } from "./Keys.ts";
+import { term_clear, term_cycle, term_enter, term_esc, term_next, term_page, term_shots, term_take, term_verbose } from "./Keys.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
 import { Memory } from "../chat/Memory.ts";
 import { term_note, term_notify, term_unnote, term_unnotify, type Notice } from "./Notices.ts";
@@ -47,6 +47,7 @@ function term_groups(v: View.View, custom = false): [group: string, cmds: Cmd[]]
       ["",                  "Enter",                   "send; on an empty input, interrupt Illi",        term_enter],
       ["",                  "Esc",                     "close a list; else clear the notes and interrupt Illi's turn (agents go on)", term_esc],
       ["",                  "Ctrl+C, Ctrl+D",          "clear; on an empty input, interrupt (Ctrl+C again: quit), quit", term_clear],
+      ["",                  "Tab",                     "take the suggested reply",                       term_take],
       ["/goal <message>",   "",                        "send a message as the goal: at each turn's end, Illi asks itself if it is met, and goes on till it is", (t, a) => term_act(t, { $: "Send", text: "/goal " + a })],
       ["/halt",             "",                        "drop the goal; the turn running ends as it would", (t) => term_act(t, { $: "Send", text: "/halt" })],
       ["/clear",            "",                        "a fresh session for a new topic: the screen starts empty, and Illi gets the chat so far only as its memory tree's summaries (each a zoom away, so it still remembers)", (t) => term_act(t, { $: "Send", text: "/clear" })],

@@ -2,7 +2,8 @@
 // ====
 // A key, as Screen.ts reads it: the mouse's (Select.ts), the wheel, the
 // keys of COMMANDS (Commands.ts), and what the lists and panes over the
-// chat take first; Enter, Esc, Ctrl+C and Ctrl+D, Shift+Tab and the pages.
+// chat take first; Enter, Esc, Ctrl+C and Ctrl+D, Tab (the suggested
+// reply), Shift+Tab and the pages.
 
 import { Chat } from "../chat/Chat.ts";
 import { term_command, term_commands, term_main, term_suggest, term_suggest_key } from "./Commands.ts";
@@ -27,11 +28,15 @@ const WHEEL = 3;
 // a key ("": the input may have changed): the mouse, the wheel, the
 // terminal's background told (the chat laid out anew: diagrams draw over
 // it), or its line of COMMANDS. Text chosen is let go at a key not KEEP's
-// or at typing; Ctrl+C copies it again instead
+// or at typing; Ctrl+C copies it again instead. Text in the input
+// dismisses the suggested reply
 export function term_press(t: Term, key: string): void {
   if (key === "Move") {
     term_hover(t);
     return;
+  }
+  if (t.scr.ed.text !== "") {
+    t.dropped = t.v.suggest;
   }
   const cmd    = term_commands(t.v).find((c) => c[1] !== "" && c[1].split(", ").includes(key));
   const chosen = key === "Ctrl+C" && t.sel?.moved === true && !t.sel.held ? term_selected(t) : null;
@@ -155,6 +160,23 @@ export function term_enter(t: Term): void {
 // the images a text names by their tokens, each once
 export function term_shots(t: Term, text: string): Blob[] {
   return [...new Set(Screen.ed_images(text))].flatMap((n) => t.imgs.get(n) ?? []);
+}
+
+// the suggested reply the input shows, dim: the chat's, while the input
+// is empty on Illi's page and nothing typed dismissed it; "": none
+export function term_hint(t: Term): string {
+  const shown = t.v.suggest !== "" && t.v.suggest !== t.dropped && t.scr.ed.text === "" && View.view_typing(t.v);
+  return shown ? t.v.suggest : "";
+}
+
+// Tab: the suggested reply shown, put in the input (not sent: Enter sends
+// it); none shown, nothing
+export function term_take(t: Term): void {
+  const hint = term_hint(t);
+  if (hint !== "") {
+    Screen.ed_set(t.scr.ed, hint);
+    t.scr.typed = true;
+  }
 }
 
 // Esc: the notes cleared, Illi's turn interrupted
