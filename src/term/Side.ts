@@ -12,7 +12,7 @@ import { term_spinner } from "./Frame.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
 import { term_note } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
-import { term_profile_go, term_profile_name } from "./ProfileCommands.ts";
+import { term_profile_go } from "./ProfileCommands.ts";
 import { setting_set } from "./Settings.ts";
 import { term_act, type Item, type Term } from "./Term.ts";
 import { agent_name, GLYPH } from "../ui/Theme.ts";
@@ -253,13 +253,11 @@ function term_side_subs(t: Term): Item[] {
 }
 
 // the side's profiles: a head, each profile (the one running marked), a
-// new one's row, a gap; a click on another switches to it, on the new
-// row asks its name
+// gap; a click on another switches to it
 function term_side_profiles(t: Term): Item[] {
   const items = t.profs.map((name): Item => {
     const here = name === config.PROFILE;
     return [[Paint.Run((here ? GLYPH.here : GLYPH.tab) + " " + name, here ? Paint.INK : Paint.DIM)], here ? null : () => void term_profile_go(t, name)];
   });
-  const more: Item = [[Paint.Run("+ new", Paint.DIM)], () => term_profile_name(t)];
-  return [[[Paint.Run("Profiles", { ...Paint.INK, b: true })], null], ...items, more, [[], null]];
+  return [[[Paint.Run("Profiles", { ...Paint.INK, b: true })], null], ...items, [[], null]];
 }

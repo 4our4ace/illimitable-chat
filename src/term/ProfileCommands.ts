@@ -67,7 +67,7 @@ export function term_profile_pick(t: Term): void {
 }
 
 // a new profile's name asked for: `/profile new ` in the input
-export function term_profile_name(t: Term): void {
+function term_profile_name(t: Term): void {
   Screen.ed_set(t.scr.ed, "/profile new ");
   t.scr.typed = true;
 }
