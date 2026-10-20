@@ -102,3 +102,15 @@ test("/compact folds all but the last two exchanges for the agent, the screen st
   expect(Chat.compact(chat).error).toContain("Nothing to compact");
   expect(Memory.load(mem.dir, () => ({}) as any).show).toBe(shown);
 });
+
+test("/clear: the agent gets the chat so far as lines, and the screen starts anew from its note, also after a restart", async () => {
+  const mem = chat.mem;
+  const before = mem.count;
+  expect(Chat.clear(chat)).toEqual({});
+  expect(mem.cut).toBe(before);
+  expect(mem.top).toBe(before);
+  expect(chat.eye.parts).toEqual([]);
+  expect(chat.eye.from).toBe(before);
+  expect(Memory.message(mem, before)!.kind).toBe("note");
+  expect(Memory.load(mem.dir, () => ({}) as any).top).toBe(before);
+});
