@@ -186,7 +186,7 @@ export function line_mark(l: Line, from: number, to: number, f: (s: Ink) => Ink)
 
 // a line as ANSI: an ink's codes only where the ink changes (a link open
 // over all its runs), back to the plain ink at its end; its end's spaces
-// dropped unless filled
+// dropped unless filled or reversed
 export function line_ansi(l: Line): string {
   let out = "";
   let was: Ink | null = null;
@@ -194,7 +194,7 @@ export function line_ansi(l: Line): string {
     out += ink_ansi(was, r.s) + r.x;
     was = r.s;
   }
-  return (was?.g ? out : out.trimEnd()) + ink_ansi(was, INK);
+  return (was?.g || was?.v ? out : out.trimEnd()) + ink_ansi(was, INK);
 }
 
 // the codes that change ink was (null: a line's start) to s

@@ -4,8 +4,10 @@
 // chat, a pane, the side, the head, the foot) chooses the text it goes
 // over and copies it as it's let go; a double click a word (a path, a
 // link), three a line, dragged on, more of them; past a chat's edge, it
-// scrolls. A reply's button under the pointer lights, and a click copies
-// what it holds.
+// scrolls. Empty space is chosen too, as in Claude Code: past a line's
+// text and on a blank line, the choice lights to its end (or the area's
+// width); what's copied drops each line's end spaces. A reply's button
+// under the pointer lights, and a click copies what it holds.
 
 import * as Draw from "../ui/Draw.ts";
 import { term_draw, term_mix } from "./Frame.ts";
@@ -207,8 +209,9 @@ export function term_area(t: Term, area: Area): Paint.Line[] {
   return Array.from({ length: area.tall }, (_, k) => term_marked(t, area, k));
 }
 
-// an area's row k: the text chosen in it on the chosen fill (else
-// reversed), the button under the pointer lit, as Claude Code lights one:
+// an area's row k: the cells chosen in it on the chosen fill (else
+// reversed), past its text too (to the choice's end, at most the area's
+// width), the button under the pointer lit, as Claude Code lights one:
 // in the background's color on a fill near the text's (else reversed)
 function term_marked(t: Term, area: Area, k: number): Paint.Line {
   const n      = area.first + k;
@@ -219,7 +222,9 @@ function term_marked(t: Term, area: Area, k: number): Paint.Line {
   const hex    = (...cs: (string | undefined)[]) => canvas.startsWith("#") && cs.every((c) => c?.startsWith("#"));
   let line     = area.lines[n] ?? [];
   if (span !== null) {
-    const c = theme.accent;
+    const c    = theme.accent;
+    const room = Math.min(span[1], area.w) - Paint.line_width(line);
+    line = room > 0 ? [...line, Paint.Run(" ".repeat(room))] : line;
     line = Paint.line_mark(line, span[0], span[1], hex(c) ? (s) => ({ ...s, g: term_mix(canvas, c!, SELECT), v: false }) : (s) => ({ ...s, v: !s.v }));
   }
   const copy = t.sel?.held || p.row !== area.row + k ? undefined : term_button(line, p.col - area.col);
