@@ -4,7 +4,8 @@
 // for OpenAI's auth server: opencode's is used while Illi has none; the
 // device login gives a code and page, is polled till the person gives it,
 // changes its grant for tokens (its PKCE pair) and keeps them as Illi's
-// own, which is used from then on; logout lets it go.
+// own, which is used from then on; logout lets it go. A renewal writes
+// back to the file it read, whatever a /login did meanwhile.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -78,4 +79,22 @@ test("logout lets Illi's own login go: opencode's is used again", async () => {
   expect(ChatGPT.file()).toBe(config.OPENCODE_LOGIN);
   expect(await ChatGPT.token()).toBe("opencode-access");
   expect(ChatGPT.logout()).toBe(false);
+});
+
+test("a renewal writes back to the file it read, though a /login made Illi's own meanwhile", async () => {
+  fs.writeFileSync(config.OPENCODE_LOGIN, JSON.stringify({ openai: { type: "oauth", access: "old-access", refresh: "r", expires: 0 }, other: { kept: true } }));
+  const fresh = JSON.stringify({ openai: { type: "oauth", access: "fresh-access", refresh: "fresh-refresh", expires: Date.now() + 3600e3 } });
+  const stand = globalThis.fetch;
+  globalThis.fetch = (async (url: string, init: any) => {
+    fs.writeFileSync(config.OWN_LOGIN, fresh);
+    return stand(url, init);
+  }) as typeof fetch;
+  try {
+    expect((await ChatGPT.renew()).access).toBe("own-access");
+  } finally {
+    globalThis.fetch = stand;
+  }
+  expect(fs.readFileSync(config.OWN_LOGIN, "utf8")).toBe(fresh);
+  expect(JSON.parse(fs.readFileSync(config.OPENCODE_LOGIN, "utf8"))).toMatchObject({ openai: { access: "own-access" }, other: { kept: true } });
+  ChatGPT.logout();
 });

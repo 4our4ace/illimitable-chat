@@ -104,14 +104,16 @@ export namespace ChatGPT {
   }
 
   // the login on disk, renewed under its lock if it nears its end (another
-  // tool may have renewed it meanwhile), and written back
+  // tool may have renewed it meanwhile), and written back to the file it
+  // was read from (looked up once: a /login meanwhile may change which)
   export async function renew(): Promise<Login> {
-    const disk = ChatGPT.login(ChatGPT.entry().entry);
+    const file = ChatGPT.file();
+    const disk = ChatGPT.login(ChatGPT.entry(file).entry);
     if (ChatGPT.good(disk)) {
       return disk;
     }
-    return ChatGPT.locked(async () => {
-      const { data, entry } = ChatGPT.entry();
+    return ChatGPT.locked(file, async () => {
+      const { data, entry } = ChatGPT.entry(file);
       const now = ChatGPT.login(entry);
       if (ChatGPT.good(now)) {
         return now;
@@ -122,7 +124,7 @@ export namespace ChatGPT {
         throw new Error("ChatGPT login renewal failed (HTTP " + res.status + "): sign in again with /login");
       }
       const got: any = await res.json();
-      return ChatGPT.keep(ChatGPT.file(), data, entry, got, now);
+      return ChatGPT.keep(file, data, entry, got, now);
     });
   }
 
@@ -217,8 +219,7 @@ export namespace ChatGPT {
   }
 
   // the login file, and its entry for OpenAI
-  export function entry(): { data: any; entry: any } {
-    const file = ChatGPT.file();
+  export function entry(file = ChatGPT.file()): { data: any; entry: any } {
     if (!fs.existsSync(file)) {
       throw new Error(NO_LOGIN);
     }
@@ -247,9 +248,9 @@ export namespace ChatGPT {
 
   // fn, holding the lock opencode's other tools take on the login file
   // (flock on <file>.lock); with no flock here, without it
-  export async function locked<T>(fn: () => Promise<T>): Promise<T> {
+  export async function locked<T>(file: string, fn: () => Promise<T>): Promise<T> {
     const flock = ChatGPT.flock();
-    const lock = ChatGPT.file() + ".lock";
+    const lock = file + ".lock";
     const fd = fs.openSync(lock, "w");
     try {
       const until = Date.now() + LOCKED;
