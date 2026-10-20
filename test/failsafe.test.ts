@@ -4,9 +4,11 @@
 // Memory, AskAI and Agent loop against a fake Anthropic out of credit
 // (HTTP 400, "credit balance is too low"), then back: none is clipped, and
 // the tree completes once credit is back; the one summary the model
-// refuses is clipped (its input's doing); a turn in the outage says BUSY.
-// A model with no price known runs. A rate limit's retries say BUSY too,
-// the vendor's words logged once. Timers run 1000 times fast.
+// refuses is clipped (its input's doing); a turn in the outage says the
+// vendor's why (the key is the user's own).
+// A model with no price known runs. A rate limit's retries say BUSY, the
+// vendor's words logged once, and so does its end past the tries. Timers
+// run 1000 times fast.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -126,7 +128,7 @@ test("an outage delays summaries, never clips them; a refusal clips", () => fast
   expect(logged.some((line) => line.includes(BROKE.slice(0, 40)))).toBe(true);
 
   const turn = await AskAI.ask({ ...SHARE, blocks: [{ text: "hi", mark: true }] }, () => {}).done;
-  expect(turn).toMatchObject({ ok: false, stop: "down", text: BUSY });
+  expect(turn).toMatchObject({ ok: false, stop: "down", text: "HTTP 400: " + BROKE });
 
   broke = false;
   await completes(mem);
@@ -147,4 +149,11 @@ test("a rate limit's retries say BUSY; the vendor's words go to the log", () => 
   expect(turn.ok).toBe(true);
   expect(minds).toEqual(["The AI service is busy: asking again in 1 s.", "The AI service is busy: asking again in 1 s."]);
   expect(logged).toEqual([SHARE.model + ": HTTP 429: " + LIMIT + ": its requests ask again", SHARE.model + ": none asks again"]);
+}));
+
+test("a vendor busy past the tries ends the call saying BUSY", () => fast(async () => {
+  limited = 99;
+  const turn = await AskAI.ask({ ...SHARE, blocks: [{ text: "hi", mark: true }] }, () => {}).done;
+  limited = 0;
+  expect(turn).toMatchObject({ ok: false, stop: "down", text: BUSY });
 }));
