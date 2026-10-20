@@ -66,8 +66,8 @@ const FAINT = ["codeComment", "quote", "rule", "tableRule"];
 // an alert's color by its kind: the terminal's own, in any palette
 const ALERT: Record<string, string> = { note: "4", tip: "2", important: "5", warning: "3", caution: "1" };
 
-// the longest rule; the room between a code's label and its button, and
-// between figures side by side; the widest a table's art is copied
+// the longest rule; the room between figures side by side; the widest a
+// table's art is copied
 const RULE = 80;
 const GAP  = 4;
 const ART  = 100;

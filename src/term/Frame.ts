@@ -207,10 +207,10 @@ function term_jump(t: Term, rows: Screen.Piece[][], tall: number, col: number, w
 function term_rule(t: Term, w: number, note?: Paint.Line): Paint.Line {
   const doing = View.view_doing(t.v);
   term_spin(t, doing !== null);
+  t.doing = doing;
   if (doing === null) {
     return note === undefined ? Paint.rule_text("", w) : [Paint.Run("─".repeat(NOTE_IN - 1) + " ", Paint.DIM), ...note, Paint.Run(" " + "─".repeat(Math.max(0, w - NOTE_IN - 1 - Paint.line_width(note))), Paint.DIM)];
   }
-  t.doing = doing;
   return term_working(t, doing, w, Date.now());
 }
 

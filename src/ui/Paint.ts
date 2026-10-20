@@ -7,7 +7,7 @@
 // filled (Theme.FILLED), half blocks rounding the fill's top and
 // bottom: a block, its level in a gutter, its summary and its first
 // message's id (`#6840`, for /open); a tool call, its emoji and verb
-// bold, its device dimmed; its result its own fill. The user's words
+// bold; its result its own fill. The user's words
 // framed, unnamed; an agent's report framed, its name on the top edge
 // (Theme.FRAMED); Illi's words bare, drawn as cellsmith draws a reply
 // (Reply.ts: its code, diagrams, tables, headings, lists and quotes, and
@@ -315,6 +315,8 @@ function images_lines(row: View.Row): Line[] {
   return names.map((name) => [Run("  [image " + name + "]", DIM)]);
 }
 
+// a row's own lines (an open block's and a run of work's are made by
+// rows_lines, around their rows')
 function row_lines(row: View.Row, w: number): Line[] {
   switch (row.$) {
     case "Sum": {
@@ -322,11 +324,9 @@ function row_lines(row: View.Row, w: number): Line[] {
       const text = row.call === null ? row.text : Call.call_line(row.call);
       return fill_lines(sum_lines(row.id, row.n, head, text, w - 2), w - 2);
     }
-    case "Box": {
-      return box_lines(row, w, [], 0);
-    }
+    case "Box":
     case "Act": {
-      return act_lines(row, w, [], 0);
+      return [];
     }
     case "Msg": {
       return row.call !== null ? fill_lines(call_lines(row.call, w - 2), w - 2) : row.kind === "illi" ? Reply.reply_lines(row.text, w) : msg_lines(row.kind, row.who, row.body, w);
@@ -374,16 +374,13 @@ function msg_lines(kind: Kind, who: string, body: Md.Block[], w: number): Line[]
 }
 
 // a tool call: its glyph and verb, its head after them if it fits on
-// that line, else under it (a command's lines), its device dimmed at the
-// line's right end; over its blocks
+// that line, else under it (a command's lines); over its blocks
 function call_lines(c: Call.Call, w: number): Line[] {
   const verb  = verb_runs(c);
-  const where = c.device === "" ? [] : [Run(c.device, DIM)];
-  const one   = !c.head.includes("\n") && line_width(verb) + text_width(c.head) + 2 + line_width(where) <= w;
+  const one   = !c.head.includes("\n") && line_width(verb) + text_width(c.head) <= w;
   const top   = one ? [...verb, Run(text_clean(c.head))] : verb;
-  const gap   = Run(" ".repeat(Math.max(1, w - line_width(top) - line_width(where))));
   const heads = one || c.head === "" ? [] : c.head.split("\n").flatMap((l) => runs_wrap([Run(text_clean(l))], w, true));
-  return [[...top, gap, ...where], ...heads, ...c.blocks.flatMap((b) => code_lines(b.k, b.x, w, DIM, false))];
+  return [top, ...heads, ...c.blocks.flatMap((b) => code_lines(b.k, b.x, w, DIM, false))];
 }
 
 // a call's emoji and name, bold

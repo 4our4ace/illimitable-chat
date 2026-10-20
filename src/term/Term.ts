@@ -141,13 +141,14 @@ export type Pane = { title: string; make: (w: number) => Paint.Line[]; w: number
 // a place on the screen (a row, its columns from, to) and its click
 type Hit = { row: number; col: number; to: number; run: () => void };
 
-// the picker over the chat's foot (/agent, /profile, /model): its title,
-// its options' names and what each is, the one marked as now (-1: none),
-// what picking option k does; find: the search typed (null: none, typing
-// goes to the input), shown: the options it matches (Screen.ed_rank),
-// best first, at: the one lit among them, top: the first in view; keys:
-// what else the lit option k takes (true: taken; the model picker's
-// effort and speed), foot: what the box's foot says of it ("": nothing)
+// the picker over the chat's foot (/agent, /profile, /model, /settings):
+// its title, its options' names and what each is, the one marked as now
+// (-1: none), what picking option k does; find: the search typed (null:
+// none, typing goes to the input), shown: the options it matches
+// (Screen.ed_rank), best first, at: the one lit among them, top: the
+// first in view; keys: what else the lit option k takes (true: taken; the
+// model picker's effort and speed, a setting's steps), foot: what the
+// box's foot says of it ("": nothing)
 export type Chooser = {
   title : string;
   names : string[];
