@@ -8,7 +8,6 @@
 // file. A process crash loses nothing; a machine's, about the last
 // flush. An act is answered, and a charge sent, only once flushed.
 
-import { Database } from "bun:sqlite";
 import * as fs from "node:fs";
 import type { FileSink } from "bun";
 import * as config from "../config/Config.ts";
@@ -35,14 +34,6 @@ let SHELL: Shell | null = null;
 // ====
 
 export namespace Disk {
-
-  // a db the processes share, each waiting its turn to write (the wait
-  // set first: the switch to WAL locks too)
-  export function db(file: string): Database {
-    const db = new Database(file, { create: true });
-    db.exec("pragma busy_timeout = 10000; pragma journal_mode = wal; pragma synchronous = normal;");
-    return db;
-  }
 
   // a file written: flushed soon; answers once it is
   export function wrote(file: string): Promise<void> {

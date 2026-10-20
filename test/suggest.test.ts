@@ -104,7 +104,7 @@ const chat = Chat.open(CWD);
 chat.suggest.on = true;
 
 // a message the user sends, as a view's would
-const say = (text: string) => Chat.say(chat, crypto.randomUUID(), [], Buffer.from(text));
+const say = (text: string) => Chat.say(chat, [], Buffer.from(text));
 
 // the suggested replies asked so far
 const suggests = () => asked.filter((a) => a.kind === "suggest");

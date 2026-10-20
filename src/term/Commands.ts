@@ -466,7 +466,7 @@ function term_copy(t: Term): void {
 // the memory, as JSON
 async function term_export(t: Term): Promise<void> {
   const file = process.cwd() + "/illi-memory.json";
-  await Bun.write(file, [...Memory.dump(t.chat.mem, {})].join(""));
+  await Bun.write(file, [...Memory.dump(t.chat.mem)].join(""));
   term_note(t, "Your memory is in " + file + ".");
 }
 

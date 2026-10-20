@@ -31,13 +31,10 @@
 // place (.jsonl.gz: pack), and read whole, unpacked, as a line of it is;
 // main.index and tree.index give each line's place by slot (its bytes in
 // the file unpacked); view.json keeps the view, the chat's pick and goal,
-// written over. main/ is also the act log: an act recorded (Chat.act)
-// is done once its record is, a line naming it (`act`; its answer
-// `ans`; an older one's `pick` is in view.json too): the last page of
-// what it logs, or a line of its own. Each record indexed (as logged, or
-// as a load indexes what a crash left) goes to `acted`, the server's
-// store of acts done. Pages `more` after the last that isn't are not in
-// the chat.
+// written over. A message's pages are logged in one write; pages `more`
+// after the last that isn't (a crash cut the write) are not in the chat.
+// Older chats' lines may name an act (`act`, `ans`, or a line of its own
+// with no index): read as any other, the act ignored.
 // Memory holds only the view's nodes and those built above them; any
 // other line is read by its index. Images are in docs/images/ by their
 // hash; an agent's log in docs/agent/<Name>.jsonl.
@@ -56,12 +53,11 @@ import { image_kind } from "../ui/View.ts";
 // =====
 
 // a message (a page): its index, kind, text, size, date, images, its
-// node (if written with it), whether it is logged as one with the next,
-// the act it records
+// node (if written with it), whether it is logged as one with the next
 type Root = Msg & { i: number; size: number; date: string };
 
 // a message to log: a Root but its index and size; no date: now
-export type Msg = { kind: Kind; text: string; date?: string; images?: string[]; line?: string; more?: boolean; act?: string };
+export type Msg = { kind: Kind; text: string; date?: string; images?: string[]; line?: string; more?: boolean };
 
 // node (l,i), as a line of a view
 type Part = { l: number; i: number };
@@ -87,7 +83,7 @@ type Saved = Kept & { seen?: Kept; main: End; tree: End; pick: object | null; go
 
 // fds: files read lately, open, oldest first; unpacked: the gzipped
 // day files read lately, unpacked, oldest first; count: the pages logged
-// whole; open: those after, not whole yet; pick: the chat's, as last set;
+// whole; pick: the chat's, as last set;
 // goal: the user's (/goal; null: none), till met or halted (Chat.ts);
 // agent: the main agent's profile (Custom.ts; null: Illi's own); work:
 // what ran, as last saved; cut: the first message a turn's call gets
@@ -104,14 +100,12 @@ type Saved = Kept & { seen?: Kept; main: End; tree: End; pick: object | null; go
 // indexed; busy: nodes building, by slot; calls: those building's calls;
 // hold: no summary starts (a test's chat, which no model answers);
 // wait: checks run as the views change; share: what compactions share
-// with the chat's turns; made, acted: told of each node built, of each
-// act indexed
+// with the chat's turns; made: told of each node built
 export type Memory = {
   dir    : string;
   fds    : Map<string, number>;
   unpacked: Map<string, Buffer>;
   count  : number;
-  open   : number;
   pick   : object | null;
   goal   : string | null;
   agent  : string | null;
@@ -134,7 +128,6 @@ export type Memory = {
   wait   : Set<() => void>;
   share  : () => Share;
   made?  : (l: number, i: number) => void;
-  acted  : (id: string, ans: object) => void;
 };
 
 // Constants
@@ -212,11 +205,11 @@ of them from there too.
 
 export namespace Memory {
 
-  export function load(dir: string, share: Memory["share"], acted: Memory["acted"] = () => {}): Memory {
+  export function load(dir: string, share: Memory["share"]): Memory {
     const mem: Memory = {
-      dir, fds: new Map(), unpacked: new Map(), count: 0, open: 0, pick: null, goal: null, agent: null, work: [], cut: 0, show: 0, top: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), logs: new Map(), ready: [], ends: { main: [0, 0], tree: [0, 0] },
+      dir, fds: new Map(), unpacked: new Map(), count: 0, pick: null, goal: null, agent: null, work: [], cut: 0, show: 0, top: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), logs: new Map(), ready: [], ends: { main: [0, 0], tree: [0, 0] },
       view: { parts: [], size: 0, batch: false, high: LINES }, seen: { parts: [], size: 0, batch: false, high: SEEN },
-      busy: new Set(), calls: new Map(), hold: false, done: false, wait: new Set(), share, acted,
+      busy: new Set(), calls: new Map(), hold: false, done: false, wait: new Set(), share,
     };
     const saved = Memory.saved(dir);
     mem.pick = saved?.pick ?? null;
@@ -312,13 +305,10 @@ export namespace Memory {
     return (2 * i + 1) * 2 ** l - 1;
   }
 
-  // a record's line, in its log's index (an act's of its own has none),
-  // and the act it records
+  // a record's line, in its log's index (an old act's line of its own
+  // has none)
   export function place(mem: Memory, fd: number, stream: Stream, rec: any, day: number, at: number, length: number): void {
     const buf = Buffer.alloc(SLOT);
-    if (rec.act !== undefined) {
-      mem.acted(rec.act, rec.ans ?? {});
-    }
     if (rec.i === undefined) {
       return;
     }
@@ -511,23 +501,19 @@ export namespace Memory {
     return Number.isInteger(i) && i >= 0 && i < mem.count ? Memory.read(mem, "main", i) : null;
   }
 
-  // the pages logged; those `more` stay open, past the count, till one
-  // that isn't
+  // the messages' pages logged, in one write
   export function push(mem: Memory, msgs: Msg[]): Root[] {
-    const roots = msgs.flatMap(Memory.pages).map((msg, k) => Memory.root(mem.count + mem.open + k, msg));
-    const done = roots.findLastIndex((root) => !root.more) + 1;
-    const ids = Array.from({ length: done === 0 ? 0 : mem.open + done }, (_, k) => mem.count + k);
+    const roots = msgs.flatMap(Memory.pages).map((msg, k) => Memory.root(mem.count + k, msg));
     Memory.log(mem, "main", roots);
-    mem.open += roots.length - ids.length;
-    mem.count += ids.length;
-    ids.forEach((i) => Memory.ready(mem, { l: 0, i }, true));
+    mem.count += roots.length;
+    roots.forEach(({ i }) => Memory.ready(mem, { l: 0, i }, true));
     Memory.fit(mem, true);
     Memory.pump(mem);
     return roots;
   }
 
   // its text and images on the last pages (a call takes them whole), its
-  // line on the first, its act's record on the last
+  // line on the first
   export function pages(msg: Msg): Msg[] {
     const texts = clip_pages(msg.text);
     const pics = msg.images ?? [];
@@ -535,9 +521,8 @@ export namespace Memory {
     return Array.from({ length: n }, (_, k) => {
       const end = Math.max(0, pics.length - (n - 1 - k) * PICS);
       const images = pics.slice(Math.max(0, end - PICS), end);
-      const more = k < n - 1 || msg.more === true ? true : undefined;
-      const act = k === n - 1 ? msg.act : undefined;
-      return { ...msg, text: texts[k - n + texts.length] ?? "", images, line: k === 0 ? msg.line : undefined, more, act };
+      const more = k < n - 1 ? true : undefined;
+      return { ...msg, text: texts[k - n + texts.length] ?? "", images, line: k === 0 ? msg.line : undefined, more };
     });
   }
 
@@ -1180,12 +1165,12 @@ ${Memory.cut(line)}| ← LIMIT`;
     }
   }
 
-  // /export: the account, the messages, the summaries, the agents' logs,
-  // then every image, each its base64, read a PIECE at a time
-  export function* dump(mem: Memory, account: object): Generator<string> {
+  // /export: the messages, the summaries, the agents' logs, then every
+  // image, each its base64, read a PIECE at a time
+  export function* dump(mem: Memory): Generator<string> {
     const ls = (sub: string) => (fs.existsSync(mem.dir + sub) ? fs.readdirSync(mem.dir + sub).sort() : []);
     let sep = "\n";
-    yield '{"account": ' + JSON.stringify(account) + ',\n"messages": [';
+    yield '{"messages": [';
     for (let i = 0; i < mem.count; i++) {
       const { kind, text, date, images, more } = Memory.message(mem, i)!;
       yield (i === 0 ? "\n" : ",\n") + JSON.stringify({ id: i, kind, text, date, images, more });

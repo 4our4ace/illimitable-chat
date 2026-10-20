@@ -65,7 +65,7 @@ test("a turn's wait names the model it runs on, not one picked since", async () 
   const model = chat.pick.model;
   expect(Chat.waits(chat)).toBe(model);
   const other = Pick.options(chat.pick, "model", config.OFFER).map(([, p]) => p).find((p) => p.model !== model)!;
-  expect(await Chat.act(chat, "pick", { $: "pick", to: other })).toEqual({});
+  expect(await Chat.act(chat, { $: "pick", to: other })).toEqual({});
   expect(chat.pick.model).toBe(other.model);
   expect(Chat.waits(chat)).toBe(model);
   go();
