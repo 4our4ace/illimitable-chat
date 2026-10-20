@@ -134,6 +134,7 @@ export type Client =
   | { $: "stop"; name?: string } // all work, or the agent named, or TURN
   | { $: "goal"; text: string | null } // the goal set (/goal), or none (/halt)
   | { $: "clear" } // a fresh session: the chat so far folds into the view (/clear)
+  | { $: "compact" } // all but the last exchanges fold into the view, still shown (/compact)
   | { $: "pick"; to: Pick }
   | { $: "main"; name: string | null } // the main agent (/agent), or Illi's own
   | { $: "zoom"; part: Part }
@@ -376,7 +377,8 @@ export function view_act(v: View, act: Act): Client[] {
       const images = act.images ?? [];
       // a `/word` reaching here is no command (the terminal ran its
       // own), but /goal (a message, sent as typed, set as the goal),
-      // /halt and /clear: it errs, never goes to the AI as a message
+      // /halt, /clear and /compact: it errs, never goes to the AI as a
+      // message
       const word   = /^\/[a-z]+(?=\s|$)/i.exec(text)?.[0];
       const goal   = word === "/goal" ? text.slice(word.length).trim() : null;
       if (!view_typing(v)) {
@@ -390,6 +392,9 @@ export function view_act(v: View, act: Act): Client[] {
       }
       if (word === "/clear") {
         return [{ $: "clear" }];
+      }
+      if (word === "/compact") {
+        return [{ $: "compact" }];
       }
       if (goal === "") {
         v.notes.push("/goal needs one: /goal <message>.");

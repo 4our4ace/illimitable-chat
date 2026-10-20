@@ -98,7 +98,7 @@ type End = [number, number];
 type Kept = { parts: Array<[number, number]>; batch: boolean };
 
 // view.json: the chat's view, the compactions' (none: the chat's)
-type Saved = Kept & { seen?: Kept; main: End; tree: End; pick: object | null; goal?: string | null; work?: string[]; agent?: string | null; cut?: number };
+type Saved = Kept & { seen?: Kept; main: End; tree: End; pick: object | null; goal?: string | null; work?: string[]; agent?: string | null; cut?: number; show?: number };
 
 // fds: files read lately, open, oldest first; unpacked: the gzipped
 // day files read lately, unpacked, oldest first; count: the pages logged
@@ -106,8 +106,10 @@ type Saved = Kept & { seen?: Kept; main: End; tree: End; pick: object | null; go
 // goal: the user's (/goal; null: none), till met or halted (Chat.ts);
 // agent: the main agent's profile (Custom.ts; null: Illi's own); work:
 // what ran, as last saved; cut: the first message a turn's call gets
-// whole (Memory.cutoff; those before, as the view's lines), tail: the
-// bytes of those from it, as last counted (Memory.fill); nodes: the
+// whole (Memory.cutoff; those before, as the view's lines), show: the
+// first the screen shows whole (at the cut, or behind it, as /compact
+// leaves it: Memory.kept), tail: the bytes of those from the cut, as
+// last counted (Memory.fill); nodes: the
 // texts of the views' nodes
 // built and of those above them, by slot; agents: their logs' lengths;
 // view: the chat's view; seen: the compactions'; ready: the nodes not
@@ -129,6 +131,7 @@ export type Memory = {
   agent  : string | null;
   work   : string[];
   cut    : number;
+  show   : number;
   tail   : { cut: number; count: number; bytes: number };
   nodes  : Map<number, string>;
   agents : Map<string, number>;
@@ -219,7 +222,7 @@ export namespace Memory {
 
   export function load(dir: string, share: Memory["share"], acted: Memory["acted"] = () => {}): Memory {
     const mem: Memory = {
-      dir, fds: new Map(), unpacked: new Map(), count: 0, open: 0, pick: null, goal: null, agent: null, work: [], cut: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), ready: [[], []], ends: { main: [0, 0], tree: [0, 0] },
+      dir, fds: new Map(), unpacked: new Map(), count: 0, open: 0, pick: null, goal: null, agent: null, work: [], cut: 0, show: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), ready: [[], []], ends: { main: [0, 0], tree: [0, 0] },
       view: { parts: [], size: 0, batch: false, high: LINES }, seen: { parts: [], size: 0, batch: false, high: SEEN },
       busy: new Map(), sides: new Map(), calls: new Map(), hold: [null, "paused"], done: false, wait: new Set(), share, acted,
     };
@@ -229,6 +232,7 @@ export namespace Memory {
     mem.agent = saved?.agent ?? null;
     mem.work = saved?.work ?? [];
     mem.cut = saved?.cut ?? 0;
+    mem.show = Math.min(saved?.show ?? mem.cut, mem.cut);
     mem.ends.main = Memory.index(mem, "main", saved?.main ?? [0, 0]);
     mem.ends.tree = Memory.index(mem, "tree", saved?.tree ?? [0, 0]);
     mem.count = fs.statSync(dir + "/main.index").size / SLOT;
@@ -265,7 +269,7 @@ export namespace Memory {
   export function save(mem: Memory): void {
     const file = mem.dir + "/view.json";
     const [chat, seen] = [mem.view, mem.seen].map((view): Kept => ({ parts: view.parts.map((part) => [part.l, part.i]), batch: view.batch }));
-    fs.writeFileSync(file + ".new", JSON.stringify({ ...chat, seen, pick: mem.pick, goal: mem.goal, agent: mem.agent, work: mem.work, cut: mem.cut, ...mem.ends }));
+    fs.writeFileSync(file + ".new", JSON.stringify({ ...chat, seen, pick: mem.pick, goal: mem.goal, agent: mem.agent, work: mem.work, cut: mem.cut, show: mem.show, ...mem.ends }));
     fs.renameSync(file + ".new", file);
     Disk.wrote(file);
   }
@@ -568,7 +572,8 @@ export namespace Memory {
   // view a batch at a time, as Claude Code compacts, yet each one stays a
   // zoom away. Never inside one of the view's lines (moved back to its
   // start). The view merges past half of `high` (a model's smaller window
-  // makes it smaller); the messages get at least a quarter
+  // makes it smaller); the messages get at least a quarter. The screen
+  // folds with it (show)
   export function cutoff(mem: Memory, high: number): number {
     const was  = mem.cut;
     const room = () => Math.max(high / 4, high - Memory.before(mem.view.parts, mem.cut).reduce((n, part) => n + Memory.size(mem, part), 0));
@@ -577,14 +582,29 @@ export namespace Memory {
       Memory.fit(mem);
     }
     if (Memory.whole(mem, mem.cut, room(), Infinity) !== mem.cut) {
-      mem.cut = Memory.whole(mem, mem.cut, room() / 2, Infinity);
+      mem.cut = mem.show = Memory.whole(mem, mem.cut, room() / 2, Infinity);
     }
     const part = mem.view.parts[Memory.cover(mem.view, mem.cut)];
     mem.cut = part === undefined ? mem.cut : Math.min(mem.cut, Memory.span(part)[0]);
+    mem.show = Math.min(mem.show, mem.cut);
     if (mem.cut !== was) {
       Memory.save(mem);
     }
     return mem.cut;
+  }
+
+  // where /compact has the chat go whole from (its rule of thumb): the
+  // user's second-to-last message, the last two exchanges with their tool
+  // steps; past `most` bytes, the user's last; past it too, the latest
+  // messages that fit
+  export function kept(mem: Memory, most: number): number {
+    const users: number[] = [];
+    for (let i = mem.count - 1; i >= mem.cut && users.length < 2; i--) {
+      if (Memory.message(mem, i)!.kind === "user") {
+        users.unshift(i);
+      }
+    }
+    return users.find((from) => Memory.whole(mem, from, most, Infinity) === from) ?? Memory.whole(mem, mem.cut, most, Infinity);
   }
 
   // the bytes of the chat the next turn sends (none of its new messages
