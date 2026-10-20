@@ -23,6 +23,7 @@
 
 import * as fs from "node:fs";
 import * as os from "node:os";
+import * as path from "node:path";
 import { AskAI, type Ask, type Block, type Call, type Event, type Kind } from "../ai/AskAI.ts";
 import type { Out } from "../ai/Agent.ts";
 import { report_text } from "../ui/Call.ts";
@@ -172,6 +173,23 @@ const TODO_FILE = "/todo.json";
 // the most of a skill's files named when it loads
 const FILES = 50;
 
+// the most bytes of a rules file sent (a longer one cut, saying so), and
+// a project's rules files, in each folder the first there
+const RULES_MOST = 40000;
+const PROJECT    = ["AGENTS.md", "CLAUDE.md"];
+
+// a rules file's text, cut past RULES_MOST bytes (saying so); null if it
+// can't be read (none there, a folder): a missing file is no rules
+function rules_read(file: string): string | null {
+  try {
+    const all  = fs.readFileSync(file);
+    const text = all.subarray(0, RULES_MOST).toString("utf8").trim();
+    return all.length > RULES_MOST ? text + "\n(cut here: only its first " + RULES_MOST / 1000 + " KB are read)" : text;
+  } catch {
+    return null;
+  }
+}
+
 // the skill tool, listing the user's skills (none: no tool)
 function skill_tools(cwd: string): Spec[] {
   const skills = Custom.skills(cwd);
@@ -211,8 +229,10 @@ export namespace Tools {
     return tools.url + who;
   }
 
-  export function system(head: string): string {
-    return head + "\n\n" + Tools.rules();
+  // a call's system prompt: its instructions, then the user's rules
+  // (Tools.rules) for a call working in cwd
+  export function system(head: string, cwd: string): string {
+    return head + "\n\n" + Tools.rules(cwd);
   }
 
   // the working dir and the computer it is on
@@ -242,8 +262,44 @@ export namespace Tools {
     return { text: "Agents at work now: " + (names.length === 0 ? "none." : names.join(", ") + ".") + "\n" + todo + "\n", mark: false };
   }
 
-  export function rules(): string {
-    return config.RULES ? fs.readFileSync(config.RULES, "utf8") : "";
+  // the user's rules: theirs for every project (config.RULES, RULES.md in
+  // illi's folder; named even while there is none, so Illi knows where it
+  // goes), then the project's (Tools.project), each whole up to RULES_MOST
+  export function rules(cwd: string): string {
+    const own  = rules_read(config.RULES);
+    const top  = Tools.top(cwd);
+    const each = Tools.project(cwd).flatMap((file) => {
+      const text = rules_read(file);
+      return text === null ? [] : ["This project's, in " + path.relative(top, file) + ":\n\n" + text];
+    });
+    return ["# The user's rules", "For every project, in " + config.RULES + ":\n\n" + (own || "(none yet)"), ...each].join("\n\n");
+  }
+
+  // a project's rules files: from its top (Tools.top) down to cwd, in
+  // each folder the first of PROJECT there
+  export function project(cwd: string): string[] {
+    const top  = Tools.top(cwd);
+    const dirs: string[] = [];
+    for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
+      dirs.unshift(dir);
+      if (dir === top || dir === path.dirname(dir)) {
+        break;
+      }
+    }
+    return dirs.flatMap((dir) => PROJECT.map((name) => path.join(dir, name)).filter((file) => fs.existsSync(file)).slice(0, 1));
+  }
+
+  // a project's top: the nearest folder up from cwd holding .git, else
+  // cwd itself
+  export function top(cwd: string): string {
+    for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
+      if (fs.existsSync(path.join(dir, ".git"))) {
+        return dir;
+      }
+      if (dir === path.dirname(dir)) {
+        return path.resolve(cwd);
+      }
+    }
   }
 
   // MCP
@@ -447,7 +503,7 @@ export namespace Tools {
     const base = config.AGENTS ?? tools.hooks.pick();
     const own = profile === null ? base : Custom.pick(profile, base, config.OFFER);
     const run = Pick.ask(typeof own === "string" ? base : own);
-    const system = Tools.system(SUB + Custom.section(profile));
+    const system = Tools.system(SUB + Custom.section(profile), tools.cwd);
     const blocks = [...agent.view, Tools.here(tools), log];
     const effort = agent.role.effort ?? run.effort;
     return { ...run, effort, system, blocks, searches: SEARCHES, server };

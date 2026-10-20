@@ -212,13 +212,13 @@ export namespace Chat {
   // prompt. A summary gets no tools: one it called, ours or the API's
   // own (web search brings code execution), sent its whole input again
   export function share(chat: Chat): Share {
-    const system = Tools.system(MASTER);
+    const system = Tools.system(MASTER, chat.tools.cwd);
     return { ...Pick.ask(chat.pick), system, searches: 0, server: "" };
   }
 
   // a turn's system prompt: Illi's, with its main agent's instructions
   export function system(chat: Chat): string {
-    return Tools.system(MASTER + Custom.section(Custom.agent(chat.tools.cwd, chat.mem.agent)));
+    return Tools.system(MASTER + Custom.section(Custom.agent(chat.tools.cwd, chat.mem.agent)), chat.tools.cwd);
   }
 
   // stops all at once, as a quit does: what ran stays saved (mem.work), so

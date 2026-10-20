@@ -55,7 +55,7 @@ const TABLE = {
   side_width : { def: "25%", values: ["20%", "25%", "30%", "35%", "40%"], now: true, what: "the side panel's width", shape: [/^\d+(\.\d+)?%?$/, "columns (40) or a share of the screen (30%)"] },
   context    : { def: "auto", values: ["auto", "50%", "60%", "70%", "80%", "90%"], now: true, what: "tokens of chat a turn sends", shape: [/^(auto|\d+|\d+(\.\d+)?%)$/, "auto, tokens (350000) or a share of the window (60%)"] },
   contexts   : { def: "", values: "text", now: true, what: "context by model, as JSON" },
-  rules      : { def: "", values: "text", now: true, what: "a file added to the prompt", path: true },
+  rules      : { def: DIR + "/RULES.md", values: "text", now: true, what: "your rules, every project", path: true },
   after      : { def: "", values: "text", now: true, what: "a command after each turn" },
   vendors    : { def: "chatgpt", values: "text", now: false, what: "where models come from" },
   models     : { def: "", values: "text", now: false, what: "the models offered", none: "all" },
@@ -164,7 +164,7 @@ export function config_pick(key: Key): Pick | null {
 function config_start(): void {
   for (const key of Object.keys(SETTINGS) as Key[]) {
     const raw = process.env["ILLI_" + key.toUpperCase()] ?? FILE[key];
-    const why = raw === undefined ? null : config_check(key, raw, config_base(key));
+    const why = raw === undefined ? null : config_check(key, raw);
     if (why !== null) {
       throw new Error("config: " + why + " (" + (config_env_set(key) ?? "config.json") + ")");
     }
@@ -244,12 +244,11 @@ export function config_set(key: Key, value: unknown): void {
 }
 
 // why a key can't take a value (null: it can), the other keys as they
-// are: its shape (a number or a yes taken as its text); a rules file
-// there (a relative path taken from base); the picks offered both by
-// this illi (read anew at once) and at the next start (a vendor or a
-// model taken out may leave one that won't start; one added is offered
-// only then)
-export function config_check(key: string, value: unknown, base = DIR): string | null {
+// are: its shape (a number or a yes taken as its text); the picks
+// offered both by this illi (read anew at once) and at the next start (a
+// vendor or a model taken out may leave one that won't start; one added
+// is offered only then). A file named needn't be there: none is none
+export function config_check(key: string, value: unknown): string | null {
   if (!(key in SETTINGS)) {
     return "No setting " + key + ". The settings: " + Object.keys(SETTINGS).join(", ") + ".";
   }
@@ -267,9 +266,6 @@ export function config_check(key: string, value: unknown, base = DIR): string | 
   }
   if (shape !== undefined && !shape[0].test(text)) {
     return key + " takes " + shape[1] + ".";
-  }
-  if (key === "rules" && text !== "" && !fs.existsSync(config_path(text, base))) {
-    return "No file " + text + " for the rules.";
   }
   const later = { vendors: OFFER.vendors, models: OFFER.models };
   try {

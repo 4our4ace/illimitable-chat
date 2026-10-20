@@ -89,8 +89,8 @@ one:
   writes its memory's summaries; agents: what subagents run on
 - models: the models offered; context: the tokens a turn sends ("auto", a
   number, or a share like "60%"); contexts: per model
-- rules: a file added to every system prompt; after: a shell command run
-  after each turn
+- rules: the rules file, RULES.md in Illi's folder unless set; after: a
+  shell command run after each turn
 - side: right, left or off; side_width: "25%" or columns; jobs: summaries
   built at once
 - suggest: on or off, a suggested reply after each turn
@@ -106,13 +106,18 @@ single setting, point the user to /settings instead.
 API keys come only from ANTHROPIC_API_KEY and OPENAI_API_KEY in the
 environment.
 
-## Rules: the file `rules` names
+## Rules: RULES.md, and a project's AGENTS.md
 
-Its text goes into every system prompt, Illi's and its agents': who the
-user is, how they want work done, Illi's tone. To start one, write it
-(for example {{illi}}/rules.md) and set "rules" in config.json to its
-path.
+{{illi}}/RULES.md (or the file the "rules" setting names) goes into every
+system prompt, Illi's and its agents', for every project: who the user is,
+how they want work done, Illi's tone. Change it only when the user asks
+(never on your own): then write it for them as short lines (create it if
+it isn't there), keep it tidy, and say what you changed. A missing file is
+just no rules.
 
+A project's own AGENTS.md (else CLAUDE.md) is read too, in each folder from
+the repo's top down to where illi started. Change those only when the user
+asks: they belong to the project.
 ## Theme: theme.json
 
 ```json

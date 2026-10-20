@@ -80,6 +80,10 @@ All in `~/.illi/`, or a project's `.illi/` (which wins by name).
 - `mcp.json`: MCP servers, in Claude Code's `mcpServers` shape. Only
   yours is read, never a project's.
 - `theme.json`: colors and palette (`"palette": "nord"`, `mono`, `auto`).
+- `RULES.md`: your rules for every project, in every prompt. Illi writes
+  it when you ask ("add that to my rules"), never on its own. A
+  project's own `AGENTS.md` (else `CLAUDE.md`) is read too, from the
+  repo's top down to the folder you start in.
 
 An agent:
 
@@ -104,10 +108,10 @@ An export leaves out the login (and a login file its config names inside
 the profile's folder), the lock and the log, and strips config.json and
 mcp.json of secrets (by key name, or shaped like a known key or token).
 The rest of the folder goes as it is: the chat, agents, commands,
-skills, theme.json and any rules file there. An import is treated as
-untrusted: its config's `after`, `rules`, `login`, `mcp` and `theme` are
-dropped and its MCP servers turned off, but its agents, commands, skills
-and chat come in as they are, at work once you switch to it.
+skills, theme.json and RULES.md. An import is treated as untrusted: its
+config's `after`, `rules`, `login`, `mcp` and `theme` are dropped and its
+MCP servers turned off, but its agents, commands, skills, RULES.md and
+chat come in as they are, at work once you switch to it.
 
 Config
 ------
@@ -129,7 +133,7 @@ that won't do stops illi at the start, saying which.
 | `models`     | all                               | models offered                                   |
 | `context`    | `auto`                            | tokens a turn sends: `auto` (70% of the window, at most 400k), a number, or `"60%"` |
 | `contexts`   |                                   | per model: `{ "gpt-6.1-sol": 350000 }`           |
-| `rules`      |                                   | a file added to every system prompt              |
+| `rules`      | `RULES.md` in the profile's folder | your rules for every project (none: no rules)   |
 | `after`      |                                   | a shell command run after each turn              |
 | `side`       | `right`                           | side panel: `left`, `off`; `side_width` `25%`    |
 | `suggest`    | `on`                              | a suggested reply after each turn; `off`         |
