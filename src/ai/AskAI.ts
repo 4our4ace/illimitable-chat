@@ -8,18 +8,14 @@
 // try nothing answered (the vendor down or refusing it, as when the API
 // key's credit is gone; our setup failing), till one is answered or we
 // stop it: an outage only delays it, and no summary is made of a failure
-// that isn't its input's (Memory.ts). A call that yields (an import's
-// summary, naming its import) sends nothing while one that doesn't waits
-// on its busy model, nor while another of its import's does (Agent.ts). A
-// call's events and end go to its sink, which moves with its chat to
-// another process: the call runs on where it started.
+// that isn't its input's (Memory.ts). A call's events and end go to its
+// sink, which moves with its chat to another process: the call runs on
+// where it started.
 //
 // Cache: a marked block ends a prefix the vendor caches. Single flight
 // (AskAI.wait), as a request is sent: one whose prefix no call cached
 // within TTL leads; one whose prefix a leader is writing waits until the
-// leader's response begins (only then can it read the entry). So a leader
-// is always a request being sent, never one yielding (Agent.ts), which
-// every call of its prefix would wait on.
+// leader's response begins (only then can it read the entry).
 //
 // The input each caller's last request read is kept (AskAI.held), so its
 // view shows how much context it holds; a turn's last request is kept
@@ -50,10 +46,6 @@ export type Say = { text: string; imgs: Img[] };
 // a text block of a call's message; `mark`: a cache entry ends after it
 export type Block = { text: string; mark: boolean };
 
-// what a call serves: the chat's turn, a summary (the chat's, an
-// import's), a recording, an agent, a computer-use agent
-export type Served = "chat" | "compactor" | "import" | "voice" | "agent" | "computer";
-
 // searches: the most web searches it runs (0: no web tools); keep: its
 // last request is kept whole (AskAI.last: a turn's); from: the request it
 // goes on from, its blocks after that one's items and answer, naming its
@@ -67,7 +59,6 @@ export type Ask = Pick & {
   searches  : number;
   server    : string;
   patient?  : boolean;
-  yields?   : string;
   keep?     : boolean;
   from?     : Last;
   max?      : number;
@@ -119,7 +110,7 @@ export type Call = Try & { move: (to: Sink) => void };
 
 // how long a patient call waits to ask again: short enough that summaries
 // go on within a minute of an outage's end, long enough not to flood the
-// vendor meanwhile (its JOBS a side per chat each asking once a minute)
+// vendor meanwhile (a chat's JOBS each asking once a minute)
 const AGAIN = 60e3;
 
 // how long a vendor keeps a cache entry unused, in ms

@@ -5,9 +5,8 @@
 // (HTTP 400, "credit balance is too low"), then back: none is clipped, and
 // the tree completes once credit is back; the one summary the model
 // refuses is clipped (its input's doing); a turn in the outage says BUSY.
-// A model with no price known runs. A request leads single flight only
-// as it is sent. A rate limit's retries say BUSY too, the vendor's words
-// logged once; imports share it alike. Timers run 1000 times fast.
+// A model with no price known runs. A rate limit's retries say BUSY too,
+// the vendor's words logged once. Timers run 1000 times fast.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -21,7 +20,6 @@ process.env.ILLI_DIR = DIR;
 const config = await import("../src/config/Config.ts");
 config.KEYS.anthropic = "test";
 
-const { Agent } = await import("../src/ai/Agent.ts");
 const { AskAI } = await import("../src/ai/AskAI.ts");
 const { Memory } = await import("../src/chat/Memory.ts");
 const { MASTER } = await import("../src/tools/Tools.ts");
@@ -141,29 +139,6 @@ test("a model with no price known runs", () => fast(async () => {
   expect(turn).toMatchObject({ ok: true, text: "line for hi" });
 }));
 
-// two calls of one prefix (as every new chat's first summaries share),
-// the first held before it is sent, yielding (an import's, its model
-// busy: Agent.ts). It leads no single flight, so the second goes at once
-test("a request leads single flight only as it is sent", () => fast(async () => {
-  const room = Agent.room(SHARE.model);
-  const asked: string[] = [];
-  const vend = globalThis.fetch;
-  globalThis.fetch = ((url: string, init: any) => (asked.push(JSON.parse(init.body).messages[0].content.at(-1).text), vend(url, init))) as any;
-  const holds = { yields: { yields: DIR } };
-  for (const [why, hold] of Object.entries(holds)) {
-    const blocks = (who: string) => [{ text: "<chat>\n" + why + "\n", mark: true }, { text: "</chat>\n", mark: false }, { text: who + " " + why, mark: false }];
-    room.busy = why === "yields" ? 1 : 0;
-    const held = AskAI.ask({ ...SHARE, blocks: blocks("held"), ...hold }, () => {});
-    await sleep(20);
-    const free = AskAI.ask({ ...SHARE, blocks: blocks("free") }, () => {}).done;
-    expect(await Promise.race([free, sleep(300).then(() => "still waiting")])).toMatchObject({ ok: true });
-    room.busy = 0;
-    room.wait.splice(0).forEach((ok) => ok());
-    expect(await held.done).toMatchObject({ ok: true });
-  }
-  expect(asked).toEqual(["free yields", "held yields"]);
-}));
-
 test("a rate limit's retries say BUSY; the vendor's words go to the log", () => fast(async () => {
   limited = 2;
   const minds: string[] = [];
@@ -172,22 +147,4 @@ test("a rate limit's retries say BUSY; the vendor's words go to the log", () => 
   expect(turn.ok).toBe(true);
   expect(minds).toEqual(["The AI service is busy: asking again in 1 s.", "The AI service is busy: asking again in 1 s."]);
   expect(logged).toEqual([SHARE.model + ": HTTP 429: " + LIMIT + ": its requests ask again", SHARE.model + ": none asks again"]);
-}));
-
-// two imports at a rate-limited model, one running 4 requests, the other
-// 1: each asks again by one request at a time, its others waiting on it,
-// so past the first refusals both get the same tries at the limit
-test("imports share a busy model alike", () => fast(async () => {
-  limited = 9;
-  const refusals: string[] = [];
-  globalThis.fetch = ((url: string, init: any) => {
-    const who = JSON.parse(init.body).messages[0].content.at(-1).text;
-    refusals.push(...(limited > 0 ? [who[0]] : []));
-    return vendor(url, init);
-  }) as any;
-  const ask = (who: string) => AskAI.ask({ ...SHARE, blocks: [{ text: who, mark: false }], yields: who[0] }, () => {}).done;
-  const ends = await Promise.all(["a0", "a1", "a2", "a3", "b0"].map(ask));
-  expect(ends.map((end) => end.ok)).toEqual([true, true, true, true, true]);
-  expect(refusals.slice(5).sort()).toEqual(["a", "a", "b", "b"]);
-  expect(logged.filter((line) => line.includes(LIMIT))).toHaveLength(1);
 }));

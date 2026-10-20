@@ -16,14 +16,6 @@
 // TRIES times at most, after its retry-after or a doubling wait, for a
 // passing reason (`busy`: no connection, a retry status, a stream error,
 // cut short or silent for the wire's `idle`), dropping what it streamed.
-// A request that yields
-// (an import's summary, AskAI.ts) sends nothing while one that doesn't
-// (a turn's, a chat's summary, which a turn waits on) waits on its busy
-// model: the room a busy vendor has goes to the chats first, and many
-// imports never starve every chat of the summaries its next turn needs.
-// An import asks a busy model again by one request at a time, the rest
-// waiting on it, so imports share what room is left alike, however many
-// requests each runs.
 // A busy model is logged as its first request asks again and as its
 // last is done, never each try (a storm logged ~600 lines a second).
 // A call ends answered
@@ -67,13 +59,6 @@ type Run = {
 };
 
 export type Back = { id: string; out: Out };
-
-// a room at a busy model, a model's or an import's (AskAI.ts `yields`):
-// the requests asking again that hold it (a model's: those that don't
-// yield; an import's: the one asking for all its requests), and those
-// waiting till none does; a model's counts all its requests asking
-// again too, logged as they go from none to some and back
-type Room = { busy: number; asking: number; wait: Array<() => void> };
 
 export type Item =
   | { $: "User"; parts: Block[]; imgs: Img[] } // user text, images
@@ -126,8 +111,9 @@ export const TRIES = 8;
 // what a call the vendor never answered says
 const BUSY  = "the AI service is busy or unavailable right now";
 
-// the rooms held or waited on, by model, or model and import (Agent.step)
-const ROOMS = new Map<string, Room>();
+// the requests asking a busy model again, by model, logged as they go
+// from none to some and back (Agent.step)
+const ASKING = new Map<string, number>();
 
 // Agent
 // =====
@@ -228,18 +214,13 @@ export namespace Agent {
   }
 
   // make: the request's body, writing `max` tokens at most. Asking again,
-  // it holds its room (Room): its model's, or its import's, which one
-  // request holds at a time while the rest wait on it, so each import
-  // has one request at a busy model however many it runs, and imports
-  // share its room alike
+  // it counts among its model's requests asking again (ASKING)
   export async function step<S>(wire: Wire<S>, run: Run, key: string, make: (max: number) => unknown): Promise<Step> {
     const signal = run.abort.signal;
     const model = run.ask.model;
-    const own = run.ask.yields === undefined ? model : model + " " + run.ask.yields;
     let asking = false;
     try {
       for (let k = 1; !signal.aborted; k++) {
-        await Agent.yielded(run, own, asking);
         const seen: Entry[] = [];
         const sent = Agent.request(wire, run, key, make, seen);
         const stopped = new Promise<null>((done) => signal.addEventListener("abort", () => done(null), { once: true }));
@@ -254,11 +235,8 @@ export namespace Agent {
         if (step.stop !== "busy" || k >= TRIES) {
           return step.stop === "busy" ? { ...step, stop: "down" } : step;
         }
-        if (!asking && own !== model && (ROOMS.get(own)?.busy ?? 0) > 0) {
-          continue;
-        }
         if (!asking) {
-          Agent.hold(model, own, step.why);
+          Agent.hold(model, step.why);
           asking = true;
         }
         const after = Number(res?.headers.get("retry-after") ?? "");
@@ -269,56 +247,28 @@ export namespace Agent {
       return Agent.fail("stopped", []);
     } finally {
       if (asking) {
-        Agent.free(model, own);
+        Agent.free(model);
       }
     }
   }
 
-  export function room(key: string): Room {
-    const room = ROOMS.get(key) ?? { busy: 0, asking: 0, wait: [] };
-    ROOMS.set(key, room);
-    return room;
-  }
-
-  // a request asks `model` again, holding `own`, its model's room or its
-  // import's; the model's first says why
-  export function hold(model: string, own: string, why: string): void {
-    if (Agent.room(model).asking++ === 0) {
+  // a request asks `model` again; the first says why
+  export function hold(model: string, why: string): void {
+    const n = ASKING.get(model) ?? 0;
+    if (n === 0) {
       console.error(model + ": " + why.slice(0, 300) + ": its requests ask again");
     }
-    Agent.room(own).busy += 1;
+    ASKING.set(model, n + 1);
   }
 
-  // ... and lets go of it, answered or not: the last frees those waiting
-  export function free(model: string, own: string): void {
-    const room = Agent.room(own);
-    room.busy -= 1;
-    if (room.busy === 0) {
-      room.wait.splice(0).forEach((ok) => ok());
-    }
-    if (--Agent.room(model).asking === 0) {
+  // ... and is done, answered or not; the last says so
+  export function free(model: string): void {
+    const n = (ASKING.get(model) ?? 1) - 1;
+    if (n === 0) {
+      ASKING.delete(model);
       console.error(model + ": none asks again");
-    }
-    for (const key of [own, model]) {
-      if (ROOMS.get(key)?.busy === 0 && ROOMS.get(key)?.asking === 0) {
-        ROOMS.delete(key);
-      }
-    }
-  }
-
-  // a request that yields waits while a request that doesn't holds its
-  // model's room, and while another holds its import's
-  export async function yielded(run: Run, own: string, asking: boolean): Promise<void> {
-    const keys = run.ask.yields === undefined ? [] : asking ? [run.ask.model] : [run.ask.model, own];
-    for (;;) {
-      const room = keys.map((key) => ROOMS.get(key)).find((room) => (room?.busy ?? 0) > 0);
-      if (room === undefined || run.abort.signal.aborted) {
-        return;
-      }
-      await new Promise<void>((ok) => {
-        room.wait.push(ok);
-        run.abort.signal.addEventListener("abort", () => ok(), { once: true });
-      });
+    } else {
+      ASKING.set(model, n);
     }
   }
 
