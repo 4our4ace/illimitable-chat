@@ -554,14 +554,17 @@ function term_suggestions(t: Term, sug: Sug, fw: number, room: number): Item[] {
 }
 
 // the pages' line at screen row `row` (all of them, or the one shown
-// alone: the side lists them), after the profile's name (a click opens
-// the profiles): a click on a page shows it
+// alone: the side lists them), then the profile's name, if shown: a click
+// on a page shows it, on the name opens the profiles
 function term_tabs(t: Term, row: number, all: boolean): void {
-  let col = MARGIN + Paint.line_width(Paint.tabs_profile());
-  term_hit(t, row, MARGIN, col, col === MARGIN ? null : () => term_profile_pick(t));
+  let col = MARGIN;
   for (const tab of View.view_tabs(t.v).filter((tab) => all || tab.here)) {
     const tw = Paint.text_width(tab.text);
     term_hit(t, row, col, col + tw, () => term_act(t, { $: "Goto", name: tab.name }));
     col += tw + 2;
+  }
+  const pw = Paint.line_width(Paint.tabs_profile(all));
+  if (pw > 0) {
+    term_hit(t, row, col + 1, col - 2 + pw, () => term_profile_pick(t));
   }
 }
