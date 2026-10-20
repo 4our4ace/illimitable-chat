@@ -49,12 +49,12 @@ test("the default runs first: the root itself", () => {
   expect(Profiles.profile_list(ROOT)).toEqual(["default"]);
 });
 
-test("a new profile: named well, never twice; --copy takes the settings, never the chat", () => {
-  expect(Profiles.profile_why(ROOT, "Work")).toContain("lowercase");
-  expect(Profiles.profile_why(ROOT, "-x")).toContain("lowercase");
-  expect(Profiles.profile_why(ROOT, "a/b")).toContain("lowercase");
-  expect(Profiles.profile_why(ROOT, "default")).toContain("taken");
-  expect(Profiles.profile_why(ROOT, "new")).toContain("taken");
+test("a new profile: named well, never twice, never default (new is a name like any); a copy takes the settings, never the chat", () => {
+  expect(Profiles.profile_why(ROOT, "Work")).toContain("Only a-z");
+  expect(Profiles.profile_why(ROOT, "-x")).toContain("Only a-z");
+  expect(Profiles.profile_why(ROOT, "a/b")).toContain("Only a-z");
+  expect(Profiles.profile_why(ROOT, "default")).toContain("Illi's own folder");
+  expect(Profiles.profile_why(ROOT, "new")).toBeNull();
   expect(Profiles.profile_why(ROOT, "work")).toBeNull();
   Profiles.profile_new(ROOT, "work", null);
   Profiles.profile_new(ROOT, "copy", ROOT);
@@ -207,6 +207,5 @@ test("a profile renamed, deleted (the one used last following), or made with ano
   expect([fs.existsSync(root + "/chat"), fs.readFileSync(root + "/profiles/work/chat/main/day.jsonl", "utf8")]).toEqual([false, "{}\n"]);
   fs.mkdirSync(root + "/chat");
   expect(() => Profiles.profile_move_chat(root, root + "/profiles/work")).toThrow("profile work has a chat already");
-  expect(Profiles.profile_why(root, "rename")).toMatch(/can't name a profile/);
   fs.rmSync(root, { recursive: true, force: true });
 });

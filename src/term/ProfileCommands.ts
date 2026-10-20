@@ -1,16 +1,18 @@
 // Profile commands
 // ================
-// /profile: the profiles' picker (a new one made from it too), a switch
-// (all this illi holds let go, and illi run again in its place, in the
-// profile chosen), a new one (empty, with this one's setup, with this
-// chat moved into it, or both), a rename, a delete (asked first), an
-// export and an import (Profiles.ts does the files).
+// /profile: the profiles' picker, where all a profile takes is done: Enter
+// switches (all this illi holds let go, and illi run again in its place,
+// in the profile chosen), Ctrl+R renames, Ctrl+E exports, Delete deletes
+// (asked first); its last rows make a new one (named, then empty, with
+// this one's setup, with this chat moved into it, or both) and bring one
+// in from an archive. /profile <name> switches at once. Profiles.ts does
+// the files.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { term_file, term_home, term_path } from "./Attach.ts";
+import { term_file, term_home } from "./Attach.ts";
 import { Chat } from "../chat/Chat.ts";
-import { term_chooser } from "./Commands.ts";
+import { term_ask, term_chooser } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Disk } from "../chat/Disk.ts";
 import { Machine } from "../tools/Machine.ts";
@@ -25,51 +27,55 @@ import * as View from "../ui/View.ts";
 // how long a profile's switch waits for the MCP servers to end (ms)
 const LEAVE = 2000;
 
-// the picker's row that makes a new profile
-const NEW = "+ new profile";
+// the picker's rows that make a new profile, and bring one in
+const NEW    = "+ new profile";
+const IMPORT = "+ import a profile";
 
-// /profile: none opens the profiles' picker; new, rename, delete, export
-// and import do theirs; else the profile named is switched to
+// what a name asked for may be
+const NAMED = "lowercase letters, digits, - and _";
+
+// /profile: none opens the profiles' picker; a name switches to it
 export function term_profile(t: Term, arg: string): void | Promise<void> {
-  const verb = arg.split(/\s+/)[0].toLowerCase();
-  const rest = arg.slice(verb.length).trim();
-  const VERBS: Record<string, (t: Term, rest: string) => void | Promise<void>> = {
-    new    : term_profile_new,
-    rename : term_profile_rename,
-    delete : term_profile_delete,
-    export : term_profile_export,
-    import : term_profile_import,
-  };
-  if (arg === "") {
-    return term_profile_pick(t);
-  }
-  return VERBS[verb] !== undefined ? VERBS[verb](t, rest) : term_profile_go(t, arg.toLowerCase());
+  return arg === "" ? term_profile_pick(t) : term_profile_go(t, arg.toLowerCase());
 }
 
 // the profiles' picker, at the one running: each one and its folder (its
-// end, if long), then a new one's row; Enter switches (on the new row:
-// `/profile new ` in the input, to name it), Delete deletes the lit one
-// (asked first)
+// end, if long), then the rows that make one and bring one in. On a
+// profile, Enter switches, Ctrl+R renames, Ctrl+E exports, Delete
+// deletes (asked first); on the others, Enter asks a name or a file
 export function term_profile_pick(t: Term): void {
   t.profs     = Profiles.profile_list(config.ROOT);
   const names = t.profs;
   const where = names.map((p) => term_home(Profiles.profile_dir(config.ROOT, p))).map((d) => (d.length <= 40 ? d : "…" + d.slice(-39)));
+  const acts: Record<string, (t: Term, name: string) => unknown> = { "Ctrl+R": term_profile_rename, "Ctrl+E": term_profile_export, Delete: term_profile_delete };
   const keys  = (k: number, key: string) => {
-    if (key !== "Delete" || k >= names.length) {
+    if (acts[key] === undefined || k >= names.length) {
       return false;
     }
-    term_profile_delete(t, names[k]);
+    void acts[key](t, names[k]);
     return true;
   };
-  const foot  = (k: number) => (k < names.length ? "Enter switch · Del delete" : "Enter name it");
-  const pick  = (k: number) => (k < names.length ? void term_profile_go(t, names[k]) : term_profile_name(t));
-  term_chooser(t, "Profile", [...names, NEW], [...where, "its own chat and settings"], names.indexOf(config.PROFILE), pick, { keys, foot });
+  const foot  = (k: number) => (k < names.length ? "Enter switch · Ctrl+R rename · Ctrl+E export · Del delete" : k === names.length ? "Enter name it" : "Enter give its file");
+  const pick  = (k: number) => (k < names.length ? void term_profile_go(t, names[k]) : k === names.length ? term_profile_name(t) : term_profile_file(t));
+  const about = [...where, "its own chat and settings", "from an archive Ctrl+E made"];
+  term_chooser(t, "Profile", [...names, NEW, IMPORT], about, names.indexOf(config.PROFILE), pick, { keys, foot });
 }
 
-// a new profile's name asked for: `/profile new ` in the input
+// why a name typed won't do for a new profile (null: it will)
+function term_profile_why(name: string): string | null {
+  return name === "" ? "Type its name first." : Profiles.profile_why(config.ROOT, name);
+}
+
+// a new profile's name asked for, then what comes along
 function term_profile_name(t: Term): void {
-  Screen.ed_set(t.scr.ed, "/profile new ");
-  t.scr.typed = true;
+  term_ask(t, "New profile", "its name", "", NAMED, (text) => {
+    const name = text.toLowerCase();
+    const why  = term_profile_why(name);
+    if (why === null) {
+      term_profile_new(t, name);
+    }
+    return why;
+  });
 }
 
 // a switch to profile `name`, only while Illi rests (a switch would cut
@@ -80,7 +86,7 @@ export async function term_profile_go(t: Term, name: string): Promise<void> {
     return term_note(t, "This is profile " + name + ".");
   }
   if (!t.profs.includes(name)) {
-    return term_note(t, "No profile " + Paint.text_clean(name) + ". Profiles: " + t.profs.join(", ") + "; /profile new <name> makes one.");
+    return term_note(t, "No profile " + Paint.text_clean(name) + ". Profiles: " + t.profs.join(", ") + "; /profile makes one.");
   }
   if (term_profile_busy(t, "switch to " + name)) {
     return;
@@ -142,22 +148,10 @@ async function term_leave(t: Term): Promise<void> {
   await Screen.screen_leave(t.scr);
 }
 
-// /profile new <name> [--copy] [--move]: the profile made, then
-// switched to; --copy: with this one's settings, agents, commands and
-// skills; --move: this chat moved into it (this one starts with an empty
-// chat). Neither given, a picker asks what comes along
-function term_profile_new(t: Term, arg: string): void | Promise<void> {
-  const words = arg.split(/\s+/).filter((w) => w !== "");
-  const flags = words.filter((w) => w.startsWith("--"));
-  const name  = words.find((w) => !w.startsWith("--"))?.toLowerCase() ?? "";
-  const bad   = flags.find((f) => f !== "--copy" && f !== "--move");
-  const why   = name === "" ? "Name it: /profile new <name>." : bad !== undefined ? "/profile new takes --copy and --move, not " + Paint.text_clean(bad) + "." : Profiles.profile_why(config.ROOT, name);
-  if (why !== null) {
-    return term_note(t, why);
-  }
-  if (flags.length > 0) {
-    return term_profile_make(t, name, flags.includes("--copy"), flags.includes("--move"));
-  }
+// what comes along to new profile `name`, asked in a picker: nothing,
+// this one's settings, agents, commands and skills, this chat (moved:
+// this one starts with an empty chat), or both
+function term_profile_new(t: Term, name: string): void {
   const here = config.PROFILE;
   const rows: Array<[string, string, boolean, boolean]> = [
     ["Empty",           "a fresh chat and settings",                        false, false],
@@ -179,42 +173,36 @@ async function term_profile_make(t: Term, name: string, copy: boolean, move: boo
   return term_restart(t, name, move ? () => Profiles.profile_move_chat(config.DIR, dir) : undefined);
 }
 
-// /profile rename [name] <new>: a profile (this one, or the one named)
-// renamed; never the default (its folder is the root). This one's is
-// done as illi runs again under its new name
-function term_profile_rename(t: Term, arg: string): void | Promise<void> {
-  const words = arg.split(/\s+/).filter((w) => w !== "").map((w) => w.toLowerCase());
-  const [from, to] = words.length === 2 ? words : [config.PROFILE, words[0] ?? ""];
-  t.profs = Profiles.profile_list(config.ROOT);
-  const why =
-    words.length === 0 || words.length > 2 ? "/profile rename <new> renames this one; /profile rename <name> <new>, another." :
-    !t.profs.includes(from) ? "No profile " + Paint.text_clean(from) + ". Profiles: " + t.profs.join(", ") + "." :
-    from === Profiles.DEFAULT ? "The default profile is Illi's own folder (" + term_home(config.ROOT) + ") and keeps its name." :
-    Profiles.profile_why(config.ROOT, to);
-  if (why !== null) {
-    return term_note(t, why);
+// a profile renamed, its new name asked for (starting as its old);
+// never the default (its folder is the root). This one's is done as illi
+// runs again under its new name
+function term_profile_rename(t: Term, from: string): void {
+  if (from === Profiles.DEFAULT) {
+    return term_note(t, "The default profile is Illi's own folder (" + term_home(config.ROOT) + ") and keeps its name.");
   }
-  if (from !== config.PROFILE) {
-    Profiles.profile_rename(config.ROOT, from, to);
-    t.profs = Profiles.profile_list(config.ROOT);
-    return term_note(t, "Renamed profile " + from + " to " + to + ".");
-  }
-  if (term_profile_busy(t, "rename it")) {
-    return;
-  }
-  return term_restart(t, to, () => Profiles.profile_rename(config.ROOT, from, to));
+  term_ask(t, "Rename profile " + from, "its new name", from, NAMED, (text) => {
+    const to  = text.toLowerCase();
+    const why = term_profile_why(to);
+    if (to === from || why !== null) {
+      return to === from ? null : why;
+    }
+    if (from !== config.PROFILE) {
+      Profiles.profile_rename(config.ROOT, from, to);
+      t.profs = Profiles.profile_list(config.ROOT);
+      term_note(t, "Renamed profile " + from + " to " + to + ".");
+    } else if (!term_profile_busy(t, "rename it")) {
+      void term_restart(t, to, () => Profiles.profile_rename(config.ROOT, from, to));
+    }
+    return null;
+  });
 }
 
-// /profile delete <name>: a profile and all it holds gone, once the
-// person says so in a picker; never the default, nor the one running
-export function term_profile_delete(t: Term, arg: string): void {
-  const name = arg.trim().toLowerCase();
-  t.profs = Profiles.profile_list(config.ROOT);
+// a profile and all it holds gone, once the person says so in a picker;
+// never the default, nor the one running
+export function term_profile_delete(t: Term, name: string): void {
   const why =
-    name === "" ? "Which one? /profile delete <name>." :
-    !t.profs.includes(name) ? "No profile " + Paint.text_clean(name) + ". Profiles: " + t.profs.join(", ") + "." :
     name === Profiles.DEFAULT ? "The default profile is Illi's own folder (" + term_home(config.ROOT) + ") and can't be deleted." :
-    name === config.PROFILE ? "This is profile " + name + ": switch to another first (/profile)." :
+    name === config.PROFILE ? "This is profile " + name + ": switch to another first." :
     null;
   if (why !== null) {
     return term_note(t, why);
@@ -225,60 +213,65 @@ export function term_profile_delete(t: Term, arg: string): void {
     term_note(t, "Deleted profile " + name + ".");
   };
   const about = ["", "its chat and setup, gone for good"];
-  const foot  = () => "/profile export " + name + " keeps a copy first";
+  const foot  = () => "Ctrl+E in /profile exports a copy first";
   term_chooser(t, "Delete profile " + name + "?", ["Keep it", "Delete it"], about, -1, (k) => (k === 1 ? gone() : term_note(t, "Kept profile " + name + ".")), { foot });
 }
 
-// /profile export [name] [file]: a profile (this one, or the one named)
-// as one archive, at file (a folder: in it) or ./illi-profile-<name>.tar.gz,
-// never over a file there; this one's chat flushed first
-async function term_profile_export(t: Term, arg: string): Promise<void> {
-  const first = arg.split(/\s+/)[0].toLowerCase();
-  t.profs     = Profiles.profile_list(config.ROOT);
-  const name  = t.profs.includes(first) ? first : config.PROFILE;
-  const typed = name === first ? arg.slice(first.length).trim() : arg;
-  const named = "illi-profile-" + name + ".tar.gz";
-  const given = term_path(typed);
-  const file  = given === "" ? path.resolve(named) : fs.existsSync(given) && fs.statSync(given).isDirectory() ? path.join(given, named) : given;
-  if (name !== first && Profiles.NAME.test(first) && !/[./]/.test(arg)) {
-    return term_note(t, "No profile " + first + ". Profiles: " + t.profs.join(", ") + "; a file to write to has a . or a / in it.");
-  }
+// a profile as one archive, ./illi-profile-<name>.tar.gz, never over a
+// file there; this one's chat flushed first
+async function term_profile_export(t: Term, name: string): Promise<void> {
+  const file = path.resolve("illi-profile-" + name + ".tar.gz");
   if (fs.existsSync(file)) {
-    return term_note(t, "Not exported: " + term_home(file) + " is there already. Move it away, or name another file.");
+    return term_note(t, "Not exported: " + term_home(file) + " is there already. Move it away first.");
   }
   try {
     if (name === config.PROFILE) {
       await Disk.synced();
     }
     const cut = await Profiles.profile_export(config.ROOT, name, file);
-    term_note(t, "Profile " + name + " is in " + term_home(file) + ": its chat and settings, no login or lock" + (cut === 0 ? "." : "; " + cut + " secret" + (cut === 1 ? "" : "s") + " left out of its config.") + " /profile import brings it in.");
+    term_note(t, "Profile " + name + " is in " + term_home(file) + ": its chat and settings, no login or lock" + (cut === 0 ? "." : "; " + cut + " secret" + (cut === 1 ? "" : "s") + " left out of its config.") + " \"" + IMPORT + "\" in /profile brings it in.");
   } catch (err: any) {
     term_note(t, "Not exported. " + err.message);
   }
 }
 
-// /profile import <file> [name]: an archive in as a new profile, named as
-// given or by its file; what it left out said, and what came with it
-async function term_profile_import(t: Term, arg: string): Promise<void> {
-  const last  = arg.split(/\s+/).at(-1) ?? "";
-  const whole = term_file(arg);
-  const file  = whole ?? term_file(arg.slice(0, arg.length - last.length).trim());
-  const name  = whole !== null ? Profiles.profile_named(whole) : last.toLowerCase();
-  if (file === null) {
-    return term_note(t, arg === "" ? "Which archive? /profile import <file> [name]." : "No file " + Paint.text_clean(arg) + ".");
-  }
-  const why = name === null ? "" : Profiles.profile_why(config.ROOT, name);
-  if (why !== null) {
-    return term_note(t, (why + (whole === null ? "" : " Name it: /profile import " + arg + " <name>.")).trim());
-  }
+// an archive's path asked for, then it is brought in, named by its file
+// (illi-profile-<name>.tar.gz), else as asked
+function term_profile_file(t: Term): void {
+  term_ask(t, "Import a profile", "the archive's path", "", "an archive Ctrl+E made in /profile", (text) => {
+    const file = term_file(text);
+    if (file === null) {
+      return text === "" ? "Type its path first." : "No such file.";
+    }
+    const name = Profiles.profile_named(file);
+    const why  = name === null ? "" : term_profile_why(name);
+    if (why === null) {
+      void term_profile_import(t, file, name!);
+      return null;
+    }
+    term_ask(t, "Name the imported profile", "its name", name ?? "", why === "" ? NAMED : why, (text) => {
+      const named = text.toLowerCase();
+      const no    = term_profile_why(named);
+      if (no === null) {
+        void term_profile_import(t, file, named);
+      }
+      return no;
+    });
+    return null;
+  });
+}
+
+// an archive in as profile `name`; what it left out said, and what came
+// with it
+async function term_profile_import(t: Term, file: string, name: string): Promise<void> {
   try {
-    const got = await Profiles.profile_import(config.ROOT, file, name!);
+    const got = await Profiles.profile_import(config.ROOT, file, name);
     const off = [
       ...(got.keys.length === 0 ? [] : ["its config's " + got.keys.join(", ") + " (they run a command or read a file here)"]),
       ...(got.servers === 0 ? [] : [got.servers + " MCP server" + (got.servers === 1 ? "" : "s") + ", now \"disabled\": true in its mcp.json"]),
     ];
     t.profs = Profiles.profile_list(config.ROOT);
-    term_note(t, "Imported profile " + name + " into " + term_home(Profiles.profile_dir(config.ROOT, name!)) + "." + (off.length === 0 ? "" : " Left off, as the archive is untrusted: " + off.join("; ") + ".") + " Its agents, commands, skills, RULES.md and chat came as they were, at work as soon as you switch to it: look at them first. /profile " + name + " switches to it.");
+    term_note(t, "Imported profile " + name + " into " + term_home(Profiles.profile_dir(config.ROOT, name)) + "." + (off.length === 0 ? "" : " Left off, as the archive is untrusted: " + off.join("; ") + ".") + " Its agents, commands, skills, RULES.md and chat came as they were, at work as soon as you switch to it: look at them first. /profile switches to it.");
   } catch (err: any) {
     term_note(t, "Not imported. " + err.message);
   }

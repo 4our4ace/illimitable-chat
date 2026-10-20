@@ -38,11 +38,10 @@ export type Imported = { keys: string[]; servers: number };
 // Constants
 // =========
 
-// the default profile's name; a profile's name; names a profile can't
-// take (the default's, /profile's own words)
+// the default profile's name (no other profile takes it); a profile's
+// name
 export const DEFAULT = "default";
 export const NAME    = /^[a-z0-9][a-z0-9_-]*$/;
-const TAKEN          = [DEFAULT, "new", "export", "import", "rename", "delete"];
 
 // a folder that is a profile's: <root>/profiles/<name>
 const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
@@ -53,8 +52,8 @@ const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
 const OWN    = ["login.json", "lock", "illi.log"];
 const ROOTED = ["profiles", "profile"];
 
-// what /profile new --copy takes from the profile running: its settings,
-// agents, commands and skills (never its chat)
+// what a new profile copies of the one running, when asked: its
+// settings, agents, commands and skills (never its chat)
 const SETTINGS = ["config.json", "mcp.json", "theme.json", "agents", "commands", "skills"];
 
 // the files that go out with their secrets left out, as JSON; config.json's
@@ -85,7 +84,7 @@ export function profile_pick(dir: string, asked?: string): Picked {
   const last  = profile_last(root);
   const name  = asked !== undefined && asked !== "" ? asked : owned ? is[2] : last;
   if (name !== DEFAULT && (!NAME.test(name) || !fs.existsSync(profile_dir(root, name)))) {
-    throw new Error("config: no profile " + JSON.stringify(name) + " in " + root + ": start illi without ILLI_PROFILE, then /profile new " + (NAME.test(name) ? name : "<name>") + " makes it.");
+    throw new Error("config: no profile " + JSON.stringify(name) + " in " + root + ": start illi without ILLI_PROFILE, then /profile makes it.");
   }
   return { root, name, dir: profile_dir(root, name) };
 }
@@ -111,7 +110,7 @@ export function profile_dir(root: string, name: string): string {
 export function profile_list(root: string): string[] {
   const dir  = root + "/profiles";
   const all  = fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }) : [];
-  const more = all.filter((e) => e.isDirectory() && NAME.test(e.name) && !TAKEN.includes(e.name)).map((e) => e.name);
+  const more = all.filter((e) => e.isDirectory() && NAME.test(e.name) && e.name !== DEFAULT).map((e) => e.name);
   return [DEFAULT, ...more.sort()];
 }
 
@@ -124,10 +123,10 @@ export function profile_keep(root: string, name: string): void {
 // why a name can't be a new profile's (null: it can)
 export function profile_why(root: string, name: string): string | null {
   if (!NAME.test(name)) {
-    return "A profile's name is lowercase letters, digits, - and _, from a letter or digit: " + JSON.stringify(name) + " isn't one.";
+    return "Only a-z, 0-9, - and _, starting with a letter or digit.";
   }
-  if (TAKEN.includes(name)) {
-    return name + " can't name a profile (" + TAKEN.join(", ") + " are taken).";
+  if (name === DEFAULT) {
+    return DEFAULT + " names Illi's own folder: pick another name.";
   }
   return fs.existsSync(profile_dir(root, name)) ? "There's a profile " + name + " already." : null;
 }
@@ -184,7 +183,7 @@ function profile_used(root: string): string {
 // its own name, .tar.gz or .tgz dropped; null: no profile's name
 export function profile_named(file: string): string | null {
   const name = path.basename(file).replace(/\.(tar\.gz|tgz)$/i, "").replace(/^illi-profile-/, "").toLowerCase();
-  return NAME.test(name) && !TAKEN.includes(name) ? name : null;
+  return NAME.test(name) && name !== DEFAULT ? name : null;
 }
 
 // Secrets

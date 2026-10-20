@@ -90,13 +90,23 @@ export function term_grab(t: Term, key: string): boolean {
 // a key to the picker (true: taken): the lit option's own first (the
 // model picker's effort and speed); then Up and Down (or Tab) move round
 // the options shown, Enter picks the lit one (none matching the search:
-// nothing), Esc and Ctrl+C close (Ctrl+C neither interrupts nor quits
+// nothing; a line asked for: given, the box kept with a reason if it
+// won't do), Esc and Ctrl+C close (Ctrl+C neither interrupts nor quits
 // here), and Backspace takes a character off the search
 function term_choose_key(t: Term, c: Chooser, key: string): boolean {
   const n    = c.shown.length;
   const lit  = c.shown[c.at]?.k;
   const move = ({ Up: -1, "Shift+Tab": -1, Down: 1, Tab: 1 } as Record<string, number>)[key];
   if (lit !== undefined && c.keys(lit, key)) {
+    return true;
+  }
+  if (key === "Enter" && c.ask !== null) {
+    t.choose  = null;
+    const why = c.ask.done((c.find ?? "").trim());
+    if (why !== null) {
+      t.choose = c;
+      c.foot   = () => why;
+    }
     return true;
   }
   if (key === "Backspace" && c.find !== null) {
