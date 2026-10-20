@@ -18,14 +18,14 @@
 // cut short or silent for the wire's `idle`), dropping what it streamed.
 // A busy model is logged as its first request asks again and as its
 // last is done, never each try (a storm logged ~600 lines a second).
-// A call ends answered
-// (`fail`: the model's answer failed, a refusal or a stop reason: its
-// input's doing) or not: `down`, the vendor's (a refusal of the request,
-// as when the API key's credit is gone, or busy past TRIES); `lost`,
-// ours (a stop), saying why. A vendor's why (`busy`, `down`) goes to the
-// log; the user reads only that the AI service is busy, as the call's
-// end, each retry's thought and where a call is cut (a vendor's errors
-// speak of the server's account, not the user's). A stop ends the call
+// A call ends answered (`fail`: the model's answer failed, a refusal or
+// a stop reason: its input's doing) or not: `down`, the vendor's (a
+// refusal of the request, as when the API key is wrong or its credit
+// gone, or busy past TRIES); `lost`, ours (a stop), saying why. A
+// vendor's why goes to the log; a refusal's is the call's end too (the
+// keys are the user's own, so is what to do about it), while a busy
+// vendor's reads only that the AI service is busy, as the call's end,
+// each retry's thought and where a call is cut. A stop ends the call
 // and cuts its request at once. A request takes its place in single
 // flight (AskAI.wait) as it is sent.
 
@@ -163,7 +163,7 @@ export namespace Agent {
         on({ $: "Entry", ...entry });
       }
       if (step.stop === "down" || step.stop === "lost" || step.stop === "fail") {
-        end.text ||= step.stop === "down" ? BUSY : step.why;
+        end.text ||= step.why;
         end.stop = step.stop;
         return;
       }
@@ -233,7 +233,7 @@ export namespace Agent {
           console.error(model + ": " + step.why.slice(0, 300));
         }
         if (step.stop !== "busy" || k >= TRIES) {
-          return step.stop === "busy" ? { ...step, stop: "down" } : step;
+          return step.stop === "busy" ? { ...step, stop: "down", why: BUSY } : step;
         }
         if (!asking) {
           Agent.hold(model, step.why);
