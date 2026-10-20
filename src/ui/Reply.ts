@@ -196,9 +196,9 @@ function list_lines(pal: Pal, items: Item[], w: number): Line[] {
   });
 }
 
-// code: its header (`── lang`, its button GAP or more to the right) over
-// its lines, two columns in, its tokens in the palette's code colors (an
-// unlabeled block's as a shell's)
+// code: its header (`── lang · [ ⧉ copy ]`; too narrow, the button on a
+// line of its own) over its lines, two columns in, its tokens in the
+// palette's code colors (an unlabeled block's as a shell's)
 function code_lines(pal: Pal, lang: string, lines: string[], w: number): Line[] {
   const text  = lines.join("\n");
   const label = Paint.Run("── " + (lang === "" ? "code" : lang), tone(pal, "codeComment"));
@@ -209,10 +209,9 @@ function code_lines(pal: Pal, lang: string, lines: string[], w: number): Line[] 
   if (!buttons) {
     return [[label], ...body];
   }
-  const btn = button_line(pal, [["⧉ copy", () => text]]);
-  const lw  = Paint.text_width(label.x);
-  const bw  = Math.max(lw + GAP + Paint.line_width(btn), lines_width(body));
-  return [...(bw <= w ? [[label, Paint.Run(" ".repeat(bw - lw - Paint.line_width(btn))), ...btn]] : [[label], line_right(btn, w)]), ...body];
+  const btn  = button_line(pal, [["⧉ copy", () => text]]);
+  const head = [label, Paint.Run(" · ", tone(pal, "codeComment")), ...btn];
+  return [...(Paint.line_width(head) <= w ? [head] : [[label], line_right(btn, w)]), ...body];
 }
 
 // a code token's ink: its slot's color (a comment's italic, dim if the

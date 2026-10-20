@@ -20,7 +20,7 @@ const FLOW  = "```mermaid\nflowchart TD\n  A[Start] --> B[Go]\n```";
 
 test("code: its header and copy button over its lines, two in, unfilled", () => {
   const lines = Reply.reply_lines(CODE, 60);
-  expect(text(lines)).toEqual(["Run it:", "", "── bash           [ ⧉ copy ]", "  grep -n 'x' ~/a.log # look", "", " ".repeat(44) + "[ ⧉ copy reply ]"]);
+  expect(text(lines)).toEqual(["Run it:", "", "── bash · [ ⧉ copy ]", "  grep -n 'x' ~/a.log # look", "", " ".repeat(44) + "[ ⧉ copy reply ]"]);
   expect(lines.flat().every((r) => r.s.g === "")).toBe(true);
   expect(button(lines, "⧉ copy")).toBe("grep -n 'x' ~/a.log # look");
   expect(button(lines, "⧉ copy reply")).toBe(CODE);
