@@ -54,9 +54,11 @@ import * as View from "../ui/View.ts";
 // picker (null: closed); profs: the profiles, as last read; hits: what a
 // click on the screen does;
 // since: when the work running began, spin: the spinner's clock,
-// ruled: the rule over the input as last painted (its row, the cursor,
-// the side's spinner step then), for the spinner's ticks to write its
-// merge alone (null: none yet); subs:
+// ruled: the screen as last painted, for the clock to write the rule and
+// the side's rows again alone (null: none yet): the rule's row and width,
+// the cursor, the rows, the side (where, how wide, its rows; null: a box
+// over it), the subagents' spinner then; doing: what ran then (null:
+// nothing); subs:
 // the subagents of this run, whether at work (false: done, till the
 // person's next message); side: where the side panel shows and how wide
 // (config.SIDE, SIDE_WIDTH; /side); todo: whether Illi's to-do list shows
@@ -90,7 +92,8 @@ export type Term = {
   hits    : Hit[];
   since   : number;
   spin    : Timer | undefined;
-  ruled   : { row: number; at: Screen.Spot; beat: number } | null;
+  ruled   : { row: number; w: number; at: Screen.Spot; rows: Screen.Piece[][]; side: { at: number; w: number; sw: number; left: boolean; tall: number; with: number[] } | null; spin: string } | null;
+  doing   : View.Doing | null;
   subs    : Map<string, boolean>;
   side    : { place: string; width: string };
   todo    : boolean;
@@ -183,6 +186,7 @@ function term_new(chat: Chat): Term {
     since   : 0,
     spin    : undefined,
     ruled   : null,
+    doing   : null,
     subs    : new Map(),
     side    : { place: config.SIDE, width: config.SIDE_WIDTH },
     todo    : false,
