@@ -3,7 +3,11 @@
 // `bun test Chat.test.ts`. The chat in this process, the model stood in
 // for: a view over the pipe sends a message and hears the reply; a /model
 // while the turn's call runs picks the next call's (the wait names the
-// model the running one asked); one process at a time holds the chat.
+// model the running one asked); one process at a time holds the chat. A
+// goal check and a message sent mid-run fit the chat's model. A main
+// agent switch is a note of its own. A message sent as a stopped turn
+// winds down is answered, and what was logged between waiting messages
+// reaches the turn.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -23,7 +27,7 @@ const View = await import("../ui/View.ts");
 // `hold` resolves
 let hold: Promise<void> = Promise.resolve();
 AskAI.ask = (ask, on) => {
-  const [call, feed] = AskAI.tie(on, ask.bill, () => {}, () => {});
+  const [call, feed] = AskAI.tie(on, () => {}, () => {});
   hold.then(() => {
     feed.on({ $: "Entry", kind: "illi", text: "hello back" });
     feed.end({ ok: true, text: "hello back", left: [] });
@@ -65,7 +69,7 @@ test("a turn's wait names the model it runs on, not one picked since", async () 
   const model = chat.pick.model;
   expect(Chat.waits(chat)).toBe(model);
   const other = Pick.options(chat.pick, "model", config.OFFER).map(([, p]) => p).find((p) => p.model !== model)!;
-  expect(await Chat.act(chat, "pick", { $: "pick", to: other })).toEqual({});
+  expect(await Chat.act(chat, { $: "pick", to: other })).toEqual({});
   expect(chat.pick.model).toBe(other.model);
   expect(Chat.waits(chat)).toBe(model);
   go();
@@ -106,11 +110,92 @@ test("/compact folds all but the last two exchanges for the agent, the screen st
 test("/clear: the agent gets the chat so far as lines, and the screen starts anew from its note, also after a restart", async () => {
   const mem = chat.mem;
   const before = mem.count;
+  const told: any[] = [];
+  const sock = { data: { seen: new Set<string>() }, send: (text: string) => told.push(JSON.parse(text)), close: () => {} };
+  chat.socks.add(sock);
   expect(Chat.clear(chat)).toEqual({});
+  chat.socks.delete(sock);
+  expect(told.filter((m) => m.$ === "state").at(-1)?.use.fill.used).toBe(Math.round(Memory.fill(mem) / 4));
   expect(mem.cut).toBe(before);
   expect(mem.top).toBe(before);
   expect(chat.eye.parts).toEqual([]);
   expect(chat.eye.from).toBe(before);
   expect(Memory.message(mem, before)!.kind).toBe("note");
   expect(Memory.load(mem.dir, () => ({}) as any).top).toBe(before);
+});
+
+test("a goal check and a message sent mid-run hold no more than the chat's model takes", () => {
+  const mem = chat.mem;
+  const cap = Chat.cap;
+  Chat.cap = () => 2000;
+  try {
+    for (let k = 0; k < 40; k++) {
+      Memory.push(mem, [{ kind: "user", text: "long " + k + " " + "z".repeat(600) }]);
+    }
+    let asked: any = null;
+    const ask = AskAI.ask;
+    AskAI.ask = (a, on) => ((asked = a), ask(a, on));
+    Chat.check(chat, "the goal");
+    AskAI.ask = ask;
+    const whole = asked.blocks.at(-1).text;
+    expect(whole).toContain("the goal");
+    expect(whole.length).toBeLessThan(2000 * 4);
+    const sent: any[] = [];
+    Object.assign(chat, { busy: true, call: { send: (say: any) => sent.push(say), stop: () => {}, done: new Promise(() => {}) } });
+    Chat.take(chat, Chat.push(chat, null, "user", "big " + "w".repeat(9000)));
+    expect(sent).toEqual([]);
+    expect(chat.wait).toHaveLength(1);
+  } finally {
+    Chat.cap = cap;
+    Object.assign(chat, { busy: false, call: null, wait: [] });
+  }
+});
+
+test("a main agent switch is noted as an entry of its own, never glued to the message after it", () => {
+  const mem = chat.mem;
+  Object.assign(chat, { switched: true, was: { agent: null, pick: "x" } });
+  const msg = Chat.push(chat, null, "user", "hello");
+  expect(Memory.say(mem, msg.id, msg.end).text).toBe("hello");
+  expect(Memory.message(mem, msg.id - 1)!.text).toStartWith("Main agent: ");
+  expect(Memory.recent(mem, msg.id - 1, msg.id).map((b) => b.text).join("")).toContain("|note: Main agent: ");
+});
+
+test("a message sent as a stopped turn winds down gets a turn of its own", async () => {
+  await until(() => !chat.busy);
+  const asked: string[] = [];
+  const ask = AskAI.ask;
+  AskAI.ask = (a, on) => (asked.push(a.blocks.at(-1)!.text), ask(a, on));
+  let go = () => {};
+  hold = new Promise((ok) => (go = ok));
+  try {
+    Chat.take(chat, Chat.push(chat, null, "user", "first"));
+    await until(() => chat.call !== null);
+    Chat.interrupt(chat, "Stopped by the user: Illi.");
+    Chat.take(chat, Chat.push(chat, null, "user", "after the stop"));
+    go();
+    await until(() => asked.length === 2 && !chat.busy);
+  } finally {
+    AskAI.ask = ask;
+    hold = Promise.resolve();
+  }
+  expect(asked[1]).toContain("after the stop");
+  expect(asked[1]).not.toContain("first");
+});
+
+test("a turn's new text holds what was logged between its waiting messages, tagged", async () => {
+  await until(() => !chat.busy);
+  let asked = "";
+  const ask = AskAI.ask;
+  AskAI.ask = (a, on) => ((asked = a.blocks.at(-1)!.text), ask(a, on));
+  try {
+    const one = Chat.push(chat, null, "user", "one");
+    Chat.push(chat, null, "note", "Stopped by the user: Illi.");
+    const two = Chat.push(chat, null, "user", "two");
+    Object.assign(chat, { busy: true, wait: [one, two] });
+    await Chat.call(chat);
+  } finally {
+    AskAI.ask = ask;
+    Object.assign(chat, { busy: false, wait: [], sent: [] });
+  }
+  expect(asked).toEndWith("one\n\nnote: Stopped by the user: Illi.\n\ntwo");
 });

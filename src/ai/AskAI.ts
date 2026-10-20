@@ -6,23 +6,15 @@
 // holds those never taken. Every vendor is an API run in our loop
 // (Agent.ts). A patient call (a summary's) asks again, AGAIN after each
 // try nothing answered (the vendor down or refusing it, as when the API
-// key's credit is gone; our setup failing), till
-// one is answered or we end it (a stop; its payer's refusal: its node
-// then waits for the user's credit, with no call: Memory.ts `hold`): an
-// outage only delays it, and no summary is made of a failure that isn't
-// its input's (Memory.ts). A call that yields (an import's summary,
-// naming its import) sends nothing while one that doesn't waits on its
-// busy model, nor while another of its import's does (Agent.ts). A
-// call's events, payments and end go to its sink, which moves with its
-// chat to another process: the call runs on where it started.
+// key's credit is gone; our setup failing), till one is answered or we
+// stop it: an outage only delays it, and no summary is made of a failure
+// that isn't its input's (Memory.ts). A call's events and end go to its
+// sink.
 //
 // Cache: a marked block ends a prefix the vendor caches. Single flight
-// (AskAI.wait), as a request is sent, once its payer let it through: one
-// whose prefix no call cached within TTL leads; one whose prefix a leader
-// is writing waits until the leader's response begins (only then can it
-// read the entry). So a leader is always a request being sent, never one
-// waiting for its user's credit or yielding (Agent.ts), which every
-// user's calls of its prefix would wait on.
+// (AskAI.wait), as a request is sent: one whose prefix no call cached
+// within TTL leads; one whose prefix a leader is writing waits until the
+// leader's response begins (only then can it read the entry).
 //
 // The input each caller's last request read is kept (AskAI.held), so its
 // view shows how much context it holds; a turn's last request is kept
@@ -33,14 +25,14 @@ import { Agent, type Item, type Tool } from "./Agent.ts";
 import { stream_lines } from "../tools/Clip.ts";
 import { Machine } from "../tools/Machine.ts";
 import type { Pick } from "./Pick.ts";
-import type { Usage } from "./Price.ts";
 
 // Types
 // =====
 
 // the user's, an agent's report ("[Name]\n...", a user turn to the
 // model), a thought (shown, never logged), a reply, a tool call, its
-// result, a note from before the chat (imported)
+// result, a note of Illi's own (a stop, a goal met, a new session, a
+// main agent switch, a restart)
 export type Kind = "user" | "work" | "mind" | "illi" | "tool" | "echo" | "note";
 
 export type Vendor = "claude-api" | "openai-api" | "chatgpt";
@@ -54,39 +46,6 @@ export type Say = { text: string; imgs: Img[] };
 // a text block of a call's message; `mark`: a cache entry ends after it
 export type Block = { text: string; mark: boolean };
 
-// what a paid call serves: the chat's turn, a summary (the chat's, an
-// import's), a recording, an agent, a computer-use agent
-export type Served = "chat" | "compactor" | "import" | "voice" | "agent" | "computer";
-
-// a paid request let through: the most tokens it may write, why it
-// failed should it write them all (null: the model's cap, no failure),
-// and what ends it, billing what it used (null: nothing) and letting go
-// of its booking
-export type Grant = { max: number; cut: string | null; end: (used: Used | null) => void };
-
-// what a request ran on and used
-export type Used = { run: Pick; use: Usage };
-
-// a paid request's costs (micro-USD): its input's, each byte of its text a
-// token (Agent.worst), and an output token's, priced at that input's size;
-// exact: both at its tokens as the API counts them (null: they are)
-export type Cost = { input: number; token: number; exact: (() => Promise<Cost>) | null };
-
-// a paid call's payer, the gate every paid request passes right before
-// it is sent. Given its costs and the model's most tokens out (cap), it
-// books the input (exact, once the credit can't pay cap tokens past its
-// bytes) and as many tokens out, up to cap, as the credit less what
-// running requests booked pays for, waiting while they hold what a few
-// need; why not: the credit alone can't pay a few tokens out. So any
-// credit runs any model, a debt is at most what one estimate missed, and
-// a reply that wrote all it was let ends, saying why
-export type Bill = (cost: Cost, cap: number) => Promise<Grant | string>;
-
-// the bill of a call serving `what`: a zoom target (a message "id", a
-// summary "id+n", an agent's name), or "" (a recording); bytes: a
-// compaction's input
-export type Pay = (kind: Served, what: string, bytes?: number) => Bill;
-
 // searches: the most web searches it runs (0: no web tools); keep: its
 // last request is kept whole (AskAI.last: a turn's); from: the request it
 // goes on from, its blocks after that one's items and answer, naming its
@@ -99,9 +58,7 @@ export type Ask = Pick & {
   imgs?     : Img[];
   searches  : number;
   server    : string;
-  bill?     : Bill;
   patient?  : boolean;
-  yields?   : string;
   keep?     : boolean;
   from?     : Last;
   max?      : number;
@@ -124,8 +81,8 @@ export type Event =
 
 // stop: who ended a call that failed (Agent.ts): the model (`fail`: it
 // answered, so the failure is its input's doing, a refusal or a stop
-// reason; asked again, it fails alike), we (`lost`: a stop, its payer's
-// refusal or cut), the vendor (`down`), or none (our setup threw)
+// reason; asked again, it fails alike), we (`lost`: a stop), the vendor
+// (`down`), or none (our setup threw)
 export type End = {
   ok    : boolean;
   text  : string;
@@ -141,19 +98,18 @@ export type Try = {
   done : Promise<End>;
 };
 
-// where a call's events, payments and end go
-export type Sink = { on: (ev: Event) => void; bill?: Bill; end: (end: End) => void };
+// where a call's events and end go
+export type Sink = { on: (ev: Event) => void; end: (end: End) => void };
 
-// a call: its done is its first sink's end; `move` sends what comes
-// after to another (its chat moved to another process)
-export type Call = Try & { move: (to: Sink) => void };
+// a call: its done is its sink's end
+export type Call = Try;
 
 // Constants
 // =========
 
 // how long a patient call waits to ask again: short enough that summaries
 // go on within a minute of an outage's end, long enough not to flood the
-// vendor meanwhile (its JOBS a side per chat each asking once a minute)
+// vendor meanwhile (a chat's JOBS each asking once a minute)
 const AGAIN = 60e3;
 
 // how long a vendor keeps a cache entry unused, in ms
@@ -188,9 +144,8 @@ export namespace AskAI {
       halt.abort();
       call.stop();
     };
-    const [out, feed] = AskAI.tie(on, ask.bill, send, stop);
-    const tie = { ...ask, bill: feed.bill };
-    let call = AskAI.start(tie, feed.on);
+    const [out, feed] = AskAI.tie(on, send, stop);
+    let call = AskAI.start(ask, feed.on);
     const run = async (): Promise<End> => {
       let end = await call.done;
       for (;;) {
@@ -201,7 +156,7 @@ export namespace AskAI {
         if (halt.signal.aborted || !wait) {
           return end;
         }
-        call = AskAI.start(tie, feed.on);
+        call = AskAI.start(ask, feed.on);
         end.left.forEach(send);
         end = await call.done;
       }
@@ -210,14 +165,11 @@ export namespace AskAI {
     return out;
   }
 
-  // a call fed by `feed` (its tries, or another process),
-  // which passes all to the call's sink: first `on`, `bill` and done
-  export function tie(on: Sink["on"], bill: Bill | undefined, send: Try["send"], stop: Try["stop"]): [Call, Sink] {
+  // a call fed by its sink (its tries), which passes all to `on` and
+  // its done
+  export function tie(on: Sink["on"], send: Try["send"], stop: Try["stop"]): [Call, Sink] {
     const { promise, resolve } = Promise.withResolvers<End>();
-    let to: Sink = { on, bill, end: resolve };
-    const pay: Bill = (cost, cap) => to.bill!(cost, cap);
-    const feed: Sink = { on: (ev) => to.on(ev), bill: bill && pay, end: (end) => to.end(end) };
-    return [{ send, stop, done: promise, move: (sink) => (to = sink) }, feed];
+    return [{ send, stop, done: promise }, { on, end: resolve }];
   }
 
   // one try; a vendor that throws gives a failed one

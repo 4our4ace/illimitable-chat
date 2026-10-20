@@ -5,8 +5,10 @@
 // call starts as the one before did, and past the call's size moves on
 // till they fill half (the oldest fold into the view); kept on disk. The
 // recent messages come in blocks, one marked in place of the view's. An
-// agent spawned as the user's is named after it; a freed name is used
-// again, each log its own.
+// older chat's act lines still read; old days are gzipped daily. /compact
+// counts a user's message of many pages once. An agent spawned as the
+// user's is named after it; a freed name is used again, each log its own;
+// one named main, the chat's own caller, is refused.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -19,10 +21,10 @@ const { Memory } = await import("./Memory.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
-// a chat whose summaries never build (its side held): no call is made
+// a chat whose summaries never build (held): no call is made
 function chat(name: string, n: number) {
   const mem = Memory.load(DIR + "/" + name, () => ({}) as any);
-  mem.hold[0] = "held for the test";
+  mem.hold = true;
   Memory.push(mem, Array.from({ length: n }, (_, k) => ({ kind: "user" as const, text: "message " + k + " " + "x".repeat(80) })));
   return mem;
 }
@@ -65,11 +67,37 @@ test("a month-old day's file is gzipped: its lines read the same, open, from an 
   expect(texts(mem, 12)).toEqual(kept);
   fs.rmSync(DIR + "/pack/main.index");
   const again = Memory.load(DIR + "/pack", () => ({}) as any);
-  again.hold[0] = "held for the test";
+  again.hold = true;
   expect(again.count).toBe(12);
   expect(texts(again, 12)).toEqual(kept);
   Memory.push(again, [{ kind: "user", text: "after" }]);
   expect(texts(again, 13)).toEqual([...kept, "after"]);
+});
+
+test("an older chat's lines naming acts read as any other, the acts ignored", () => {
+  chat("acts", 2);
+  const day  = fs.readdirSync(DIR + "/acts/main")[0];
+  const date = new Date().toISOString();
+  const old  = [{ i: 2, kind: "user", text: "said with an act", size: 22, date, act: "a1" }, { act: "a2", ans: { ok: true } }, { i: 3, kind: "illi", text: "after", size: 11, date }];
+  fs.appendFileSync(DIR + "/acts/main/" + day, old.map((r) => JSON.stringify(r) + "\n").join(""));
+  fs.rmSync(DIR + "/acts/main.index");
+  const again = Memory.load(DIR + "/acts", () => ({}) as any);
+  again.hold = true;
+  expect(again.count).toBe(4);
+  expect(Memory.message(again, 2)!.text).toBe("said with an act");
+  expect(Memory.message(again, 3)!.text).toBe("after");
+});
+
+test("old days are gzipped daily while the chat is open", () => {
+  const every = setInterval;
+  const set: Array<[() => void, number]> = [];
+  globalThis.setInterval = ((go: () => void, ms: number) => (set.push([go, ms]), every(go, 2 ** 30))) as any;
+  try {
+    chat("daily", 1);
+  } finally {
+    globalThis.setInterval = every;
+  }
+  expect(set.map(([, ms]) => ms)).toEqual([864e5]);
 });
 
 test("the screen folds with the cut as it moves on by itself, and stays behind a cut moved for it", () => {
@@ -86,7 +114,16 @@ test("the screen folds with the cut as it moves on by itself, and stays behind a
   expect(mem.show).toBe(cut);
 });
 
-test("an agent spawned as the user's is named after it, numbered while one so named is taken; a freed name is used again, each log its own", () => {
+test("/compact keeps a user's message of many pages whole, counting it once", () => {
+  const mem = chat("pages", 4);
+  Memory.push(mem, [{ kind: "user", text: "big ".repeat(20000) }, { kind: "illi", text: "read it" }]);
+  const first = mem.count - 4;
+  expect(Memory.message(mem, first)!.more).toBe(true);
+  expect(Memory.kept(mem, Infinity)).toBe(3);
+  expect(Memory.message(mem, first - 1)!.text).toStartWith("message 3");
+});
+
+test("an agent spawned as the user's is named after it, numbered while one so named is taken; a freed name is used again, each log its own; main is refused", () => {
   const mem   = chat("agents", 1);
   const taken = new Set<string>();
   const spawn = (own: string | null) => {
@@ -107,4 +144,6 @@ test("an agent spawned as the user's is named after it, numbered while one so na
   expect(spawn("1st/../x")).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
   expect(spawn(null)).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
   expect(Memory.agent(mem, "../reviewer")).toBeNull();
+  expect(() => spawn("main")).toThrow("Rename the agent's file (main.md)");
+  expect(spawn("Main")).toBe("Main");
 });

@@ -1,0 +1,36 @@
+// OpenAI test
+// ===========
+// `bun test OpenAI.test.ts`. A failed response, or an error event, its
+// input caused fails (asked again, it fails alike); any other, a rate
+// limit as a server error, is busy, so it is asked again.
+
+import { expect, test } from "bun:test";
+import * as fs from "node:fs";
+import * as os from "node:os";
+
+process.env.ILLI_DIR = fs.mkdtempSync(os.tmpdir() + "/illi-openai-");
+
+const { OpenAI } = await import("./OpenAI.ts");
+
+const ASK: any = { speed: "slow" };
+
+// the step of a stream that ended in a failed response with this code
+function failed(code: string): string {
+  const st = { res: { status: "failed", error: { code, message: code }, output: [] }, error: null, use: {} as any };
+  return OpenAI.step(st, ASK).stop;
+}
+
+test("a failure its input caused fails; a rate limit or server error is busy", () => {
+  expect(failed("rate_limit_exceeded")).toBe("busy");
+  expect(failed("server_error")).toBe("busy");
+  expect(failed("vector_store_timeout")).toBe("busy");
+  expect(failed("invalid_prompt")).toBe("fail");
+  expect(failed("invalid_image_format")).toBe("fail");
+  expect(failed("context_length_exceeded")).toBe("fail");
+});
+
+test("an error event is read alike", () => {
+  const event = (code: string) => OpenAI.step({ res: null, error: { type: "error", code, message: code }, use: {} as any }, ASK).stop;
+  expect(event("rate_limit_exceeded")).toBe("busy");
+  expect(event("context_length_exceeded")).toBe("fail");
+});

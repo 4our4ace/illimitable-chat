@@ -1,7 +1,9 @@
 // Mcp
 // ===
 // The user's MCP servers, their tools beside Illi's own (Tools.ts), each
-// named mcp__<server>__<tool>. The servers are in config.MCP
+// named mcp__<server>__<tool> as the vendors take it, numbered if two
+// come out alike (get.user and get_user: mcp__s__get_user_2), and called
+// by that name at its server. The servers are in config.MCP
 // (~/.illi/mcp.json), in the shape Claude Code's and Claude Desktop's
 // take, so an entry copies over. A server is a command (stdio: a JSON-RPC
 // message a line, each way) or a URL (Streamable HTTP: a POST each
@@ -136,7 +138,8 @@ export namespace Mcp {
     }
   }
 
-  // a server's tools, all its pages, named as Illi names them
+  // a server's tools, all its pages, named as Illi names them, apart from
+  // the other servers' tools and each other
   export async function list(server: Server): Promise<void> {
     const got: any[] = [];
     let cursor: string | undefined;
@@ -146,8 +149,10 @@ export namespace Mcp {
       cursor = page?.nextCursor;
     } while (cursor !== undefined && cursor !== null);
     const own = new Map<string, string>();
+    const taken = new Set([...SERVERS.values()].filter((s) => s !== server).flatMap((s) => [...s.own.keys()]));
     server.tools = got.map((t) => {
-      const name = Mcp.name(server.name, String(t.name));
+      const name = Mcp.name(server.name, String(t.name), taken);
+      taken.add(name);
       own.set(name, String(t.name));
       return { name, info: "(" + server.name + ") " + (t.description ?? t.title ?? ""), schema: Mcp.schema(t.inputSchema) };
     });
@@ -155,9 +160,15 @@ export namespace Mcp {
     told();
   }
 
-  // a tool's name for the vendors: mcp__server__tool, what they take only
-  export function name(server: string, tool: string): string {
-    return ("mcp__" + server.replace(NAMED, "_") + "__" + tool.replace(NAMED, "_")).slice(0, LONGEST);
+  // a tool's name for the vendors: mcp__server__tool, what they take
+  // only, LONGEST at most; one taken already numbered (_2, _3...)
+  export function name(server: string, tool: string, taken: Set<string> = new Set()): string {
+    const base = ("mcp__" + server.replace(NAMED, "_") + "__" + tool.replace(NAMED, "_")).slice(0, LONGEST);
+    let name = base;
+    for (let n = 2; taken.has(name); n++) {
+      name = base.slice(0, LONGEST - String(n).length - 1) + "_" + n;
+    }
+    return name;
   }
 
   // a tool's input schema as the vendors take it: an object, no $schema
