@@ -118,8 +118,8 @@ const VIEW_DOC = `The view: the whole chat between Illi and the user, oldest fir
 
 A summary tags each item with its kind: user (the user's words), illi
 (Illi's replies), tool (Illi's tool calls), echo (their results), note
-(memories from before this chat), or work (the report of an agent,
-starting "[Name]"). A short message is its own line, word for word. Recent lines
+(Illi's own notices: a stop, a goal met, a new session, a restart), or
+work (the report of an agent, starting "[Name]"). A short message is its own line, word for word. Recent lines
 cover one message each; the older the messages, the more a line covers.
 A message not summarized yet shows as "(not summarized yet: zoom it)".
 No message appears in full, not even the last ones. A text too long for

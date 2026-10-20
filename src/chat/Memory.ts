@@ -22,9 +22,9 @@
 // to the view's end, in halves: detail fades with age) down to half, so a view
 // changes only at its end between batches. Two, each on its own: the chat's
 // (turns'), to the last message, and the compactions', to the first not built.
-// A call gets one in BLOCK-line blocks, the last whole
-// one marked for the cache (AskAI.ts); few lines, as those past it are read
-// anew (a compaction's view ends at its node, then its task, both unmarked).
+// A call gets one in BLOCK-line blocks, the last whole one marked for the cache
+// (AskAI.ts); few lines, as those past it are read anew (a compaction's view
+// ends at its node, then its task, both unmarked).
 //
 // Files: main/ (messages) and tree/ (nodes), JSON lines in a file per
 // day, flushed (Disk.ts); a day's file PACK days old is gzipped in its
