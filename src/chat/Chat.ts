@@ -9,7 +9,7 @@
 // One turn at a time. A message is logged as it arrives; the running call
 // takes it between tool calls if it goes whole beside its view, else the
 // next call does, on the chat's pick (Pick.ts), as its main agent (a
-// primary agent of the user's, Custom.ts: Tab, /agent; none: Illi's own). A quit cuts what runs;
+// primary agent of the user's, Custom.ts: Shift+Tab, /agent; none: Illi's own). A quit cuts what runs;
 // the next start resumes it (Chat.resume), told so.
 
 import * as fs from "node:fs";
@@ -839,7 +839,7 @@ export namespace Chat {
   // Illi's own (null); on what it ran on when last left, if not its own,
   // else on its own (its file's model, or the configured pick). Noted in
   // the chat before the next message, so the agent knows who it was when,
-  // and an agent only passed through (a Tab) is never noted
+  // and an agent only passed through (a Shift+Tab) is never noted
   export function main(chat: Chat, name: string | null): Answer {
     const cwd = chat.tools.cwd;
     const profile = Custom.agent(cwd, name);

@@ -2,7 +2,7 @@
 // ====
 // A key, as Screen.ts reads it: the mouse's (Select.ts), the wheel, the
 // keys of COMMANDS (Commands.ts), and what the lists and panes over the
-// chat take first; Enter, Esc, Ctrl+C and Ctrl+D, Tab and the pages.
+// chat take first; Enter, Esc, Ctrl+C and Ctrl+D, Shift+Tab and the pages.
 
 import { Chat } from "../chat/Chat.ts";
 import { term_command, term_commands, term_main, term_suggest, term_suggest_key } from "./Commands.ts";
@@ -143,7 +143,7 @@ export function term_enter(t: Term): void {
     return;
   }
   if (!View.view_typing(t.v)) {
-    term_note(t, "Messages go to Illi: Tab or /tab goes back.");
+    term_note(t, "Messages go to Illi: Ctrl+PgUp or /tab illi goes back.");
   } else if (term_act(t, { $: "Send", text, images: term_shots(t, text) }).length > 0) {
     term_unnote(t);
     t.scroll = 0;
@@ -178,7 +178,7 @@ export function term_clear(t: Term, key: string): void {
   }
 }
 
-// Tab: Illi runs as the next primary agent that can run (Illi's own
+// Shift+Tab: Illi runs as the next primary agent that can run (Illi's own
 // among them), after the one asked for last if not answered yet
 export function term_next(t: Term): void {
   term_primaries(t);

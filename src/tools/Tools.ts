@@ -13,7 +13,7 @@
 // whole log, so a told agent goes on even after a restart; its replies
 // reach the chat as one "[Name]" message. One spawned as a user's
 // subagent (Custom.ts) runs on its model, with its instructions and
-// tools; so does the master, given a primary agent (Tab, /agent).
+// tools; so does the master, given a primary agent (Shift+Tab, /agent).
 // Beside these, the user's: their skills (one tool, skill, listing them)
 // and their MCP servers' tools (Mcp.ts), for the master and agents alike;
 // a listing waits for the servers still starting. The master keeps a
