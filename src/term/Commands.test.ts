@@ -112,7 +112,7 @@ test("Esc closes the model picker, the pick as it was", () => {
 test("a picker without a search takes no typing; Tab moves in it", () => {
   const t = term();
   const picked: number[] = [];
-  term_chooser(t, "Agent", ["illi", "Reviewer"], ["illi's own", "reviews"], 0, (k) => picked.push(k));
+  term_chooser(t, "Agent", ["illi", "reviewer"], ["illi's own", "reviews"], 0, (k) => picked.push(k));
   expect(term_type(t, "r")).toBe(false);
   term_grab(t, "Tab");
   term_grab(t, "Enter");

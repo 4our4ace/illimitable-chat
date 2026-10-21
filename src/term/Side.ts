@@ -2,7 +2,7 @@
 // ====
 // The side panel, on a wide screen: the primary agents, the subagents of
 // this run, the profiles, a ChatGPT plan's use, the chat's (the context,
-// the memory), the MCP servers, a hint for the keys or Illi's to-do list; /side
+// the memory), the MCP servers, a hint for the keys or illi's to-do list; /side
 // places it.
 
 import { term_choose, term_mcp } from "./Commands.ts";
@@ -16,7 +16,7 @@ import { term_profile_go, term_profile_pick } from "./ProfileCommands.ts";
 import * as Screen from "../ui/Screen.ts";
 import { setting_set } from "./Settings.ts";
 import { term_act, type Item, type Term } from "./Term.ts";
-import { agent_name, GLYPH } from "../ui/Theme.ts";
+import { GLYPH } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
 
 // the side's narrowest, its line included; the narrowest chat beside it;
@@ -36,10 +36,10 @@ const BAR     = 24;
 const FOLDED  = 3;
 export const CLOCK   = 60000;
 
-// the side, w wide and tall: Illi and the primary agents (a click makes
+// the side, w wide and tall: illi and the primary agents (a click makes
 // one the main agent), the tabs (a click shows one), the profiles (a
 // click on the head: /profile), a ChatGPT plan's use, the chat's (its
-// context, the memory), the MCP servers (a click: /mcp); at its foot Illi's to-do list, which, longer than the room,
+// context, the memory), the MCP servers (a click: /mcp); at its foot illi's to-do list, which, longer than the room,
 // pushes the rest up (its head stays); with none, a faint hint for the
 // keys (HINT), if it fits
 export function term_side(t: Term, w: number, tall: number): Item[] {
@@ -48,7 +48,7 @@ export function term_side(t: Term, w: number, tall: number): Item[] {
   const item  = (here: boolean, text: string, run: () => void): Item => [[Paint.Run((here ? GLYPH.here : GLYPH.tab) + " " + text, here ? Paint.INK : Paint.DIM)], run];
   const about = (k: number) => (k === 0 ? "" : t.agents[k - 1].description);
   const mains = [null, ...t.agents.map((a) => a.name)].map((name, k): Item => {
-    const [line, run] = item(name === t.v.agent, agent_name(name ?? View.MAIN), () => term_choose(t, name));
+    const [line, run] = item(name === t.v.agent, name ?? View.MAIN, () => term_choose(t, name));
     const room = w - Paint.line_width(line) - 2;
     return [room >= 12 && about(k) !== "" ? [...line, Paint.Run("  " + about(k), Paint.DIM)] : line, run];
   });
@@ -160,7 +160,7 @@ function term_side_mcp(t: Term): Item[] {
   return [...servers.map(line), ...file].map((l): Item => [l, () => term_mcp(t)]);
 }
 
-// Illi's to-do list, w wide (none: nothing): its head (how many done; a
+// illi's to-do list, w wide (none: nothing): its head (how many done; a
 // click shows the list whole, or folded), each item marked by how it
 // stands, wrapped under its mark: the active one bold in the accent,
 // those done dim, struck through. Folded: the active one (else the next)
@@ -249,9 +249,9 @@ function term_side_subs(t: Term): Item[] {
   const c     = Draw.draw_theme().accent ?? "5";
   const spin  = term_spinner(Date.now() - t.since);
   const names = shown === null || t.subs.has(shown) ? [...t.subs] : [...t.subs, [shown, t.v.agents.includes(shown)] as [string, boolean]];
-  const back  = shown === null ? [] : [[[Paint.Run("‹ " + agent_name(t.v.agent ?? View.MAIN), Paint.DIM)], () => term_act(t, { $: "Goto", name: null })] as Item];
+  const back  = shown === null ? [] : [[[Paint.Run("‹ " + (t.v.agent ?? View.MAIN), Paint.DIM)], () => term_act(t, { $: "Goto", name: null })] as Item];
   const subs  = names.map(([name, working]): Item => [
-    [Paint.Run((working ? spin : "✓") + " ", working ? { ...Paint.INK, c, b: true } : { ...Paint.INK, c: "2" }), Paint.Run(agent_name(name), name === shown ? { ...Paint.INK, b: true } : working ? Paint.INK : Paint.DIM)],
+    [Paint.Run((working ? spin : "✓") + " ", working ? { ...Paint.INK, c, b: true } : { ...Paint.INK, c: "2" }), Paint.Run(name, name === shown ? { ...Paint.INK, b: true } : working ? Paint.INK : Paint.DIM)],
     () => term_act(t, { $: "Goto", name }),
   ]);
   return [...back, ...subs];

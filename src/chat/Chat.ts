@@ -9,7 +9,7 @@
 // One turn at a time. A message is logged as it arrives; the running call
 // takes it between tool calls if it goes whole beside its view, else the
 // next call does, on the chat's pick (Pick.ts), as its main agent (a
-// primary agent of the user's, Custom.ts: Shift+Tab, /agent; none: Illi's own). A quit cuts what runs;
+// primary agent of the user's, Custom.ts: Shift+Tab, /agent; none: illi's own). A quit cuts what runs;
 // the next start resumes it (Chat.resume), told so. A turn that ends
 // answered asks for the user's likely next message, on the cache
 // (Chat.suggest), shown till a message or the next turn.
@@ -22,7 +22,6 @@ import { Disk } from "./Disk.ts";
 import { Memory, type Share } from "./Memory.ts";
 import { Pick } from "../ai/Pick.ts";
 import { MASTER, SEARCHES, Tools, type Agent, type Live } from "../tools/Tools.ts";
-import { agent_name } from "../ui/Theme.ts";
 import { IMAGES, live_push, PING, SUMMARIES, TICK, TURN, type Answer, type Link, type Part, type Server as Out, type Wait } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
 
@@ -56,9 +55,9 @@ type Suggest = { on: boolean; due: boolean; text: string; call: Call | null; unu
 // held: the posts logging, one after another, and the logging held
 // meanwhile (null: none); switched: a main agent switch not noted in the
 // chat yet, was: the agent and pick noted before it; picks: what each
-// main agent ran on when left, if not its own (by name, "": Illi's);
+// main agent ran on when left, if not its own (by name, "": illi's);
 // suggest: the suggested reply; fit: the share of its context a turn
-// gets (Chat.refit makes it smaller, till Illi starts again), refits: the
+// gets (Chat.refit makes it smaller, till illi starts again), refits: the
 // refits since a call was last answered
 export type Chat = {
   mem   : Memory;
@@ -94,7 +93,7 @@ export type Chat = {
 const LOCK       = config.DIR + "/lock";
 // a turn's head, as a summary's is "Compaction:": one prompt serves both
 const HEAD       = "Turn: the user's new message:\n\n";
-// a goal's check (Chat.check): its own system prompt (Illi's, which says
+// a goal's check (Chat.check): its own system prompt (illi's, which says
 // a call is a turn or a compaction, made the model summarize the chat
 // instead of answering), asked after the chat (the view, its latest
 // messages whole) of its goal; unmet, the user's nudge
@@ -114,8 +113,8 @@ const NO_FIT     = "No reply: the chat won't fit #'s window even summarized. /cl
 
 // a new chat's first message, its node written with it, so no compactor
 // call summarizes it
-const HELLO      = "Hi, I'm illi, short for Illimitable: one chat that never ends, kept in a memory tree, recent days in more detail. I work in the folder you start me in. Ask me anything, for days, weeks, years; /help lists the commands.";
-const HELLO_LINE = "illi: hello: illi (Illimitable), one endless chat in a memory tree; works in the folder it starts in; /help for commands.";
+const HELLO      = "Hi, I'm illi, short for illimitable: one chat that never ends, kept in a memory tree, recent days in more detail. I work in the folder you start me in. Ask me anything, for days, weeks, years; /help lists the commands.";
+const HELLO_LINE = "illi: hello: illi (illimitable), one endless chat in a memory tree; works in the folder it starts in; /help for commands.";
 
 // a suggested reply (Chat.suggest): what the model is asked after the
 // turn's last request and its answer, none its answer unless the next
@@ -123,7 +122,7 @@ const HELLO_LINE = "illi: hello: illi (Illimitable), one endless chat in a memor
 // some 20; gpt-6-luna at high effort thought 30 to 120 more); how many in
 // a row going unused stop them till illi starts again; twice the words
 // it's asked for, past which one is none; answers that are none (one that
-// says so, thanks or praise, Illi's own voice)
+// says so, thanks or praise, illi's own voice)
 const SUGGEST     = [
   "Suggest the user's next message to illi: what they'd type next, not what illi thinks they should do. They should think: I was about to type that.",
   "2 to 12 words, in their own voice and style, and specific: \"run the tests\", not \"continue\". illi offered choices: the one they'd pick. illi asked to go on: \"yes\". The work is done and the next step plain: that step, like \"commit it\".",
@@ -238,7 +237,7 @@ export namespace Chat {
     return { ...Pick.ask(chat.pick), system, searches: 0, server: "" };
   }
 
-  // a turn's system prompt: Illi's, with its main agent's instructions
+  // a turn's system prompt: illi's, with its main agent's instructions
   export function system(chat: Chat): string {
     return Tools.system(MASTER + Custom.section(Custom.agent(chat.tools.cwd, chat.mem.agent)), chat.tools.cwd);
   }
@@ -669,7 +668,7 @@ export namespace Chat {
     }).catch((err) => Chat.all(chat, { $: "note", text: "after: " + (err?.message ?? err) }));
   }
 
-  // the work a quit cut goes on, told so: each agent, and Illi's turn by a
+  // the work a quit cut goes on, told so: each agent, and illi's turn by a
   // note
   export async function resume(chat: Chat, work: string[]): Promise<void> {
     if (work.length === 0) {
@@ -680,12 +679,12 @@ export namespace Chat {
     await Promise.all(work.map((w) => (w === TURN ? Chat.take(chat, msg) : Tools.tell(chat.tools, w, text))));
   }
 
-  // what runs: Illi's turn, the agents at work
+  // what runs: illi's turn, the agents at work
   export function running(chat: Chat): string[] {
     return [...(chat.busy ? [TURN] : []), ...Tools.working(chat.tools).map((a) => a.name)];
   }
 
-  // Illi's turn only, with the spawns and tells it waits on (for the view:
+  // illi's turn only, with the spawns and tells it waits on (for the view:
   // Tools.view, on chat.halt); agents go on. why: the note the turn's end
   // logs (Chat.turn), so after the reply the stop cut; null: none
   export function interrupt(chat: Chat, why: string | null): void {
@@ -976,7 +975,7 @@ export namespace Chat {
   }
 
   // the main agent: a primary agent of the user's, by name (Custom.ts), or
-  // Illi's own (null); on what it ran on when last left, if not its own,
+  // illi's own (null); on what it ran on when last left, if not its own,
   // else on its own (its file's model, or the configured pick). Noted in
   // the chat before the next message, so the agent knows who it was when,
   // and an agent only passed through (a Shift+Tab) is never noted
@@ -1011,7 +1010,7 @@ export namespace Chat {
     return {};
   }
 
-  // what an agent runs on by its file (null: Illi's own, on the configured
+  // what an agent runs on by its file (null: illi's own, on the configured
   // pick); a string: why it can't
   export function own(profile: Profile | null): Pick | string {
     return profile === null ? config.PICK : Custom.pick(profile, config.PICK, config.OFFER);
@@ -1019,7 +1018,7 @@ export namespace Chat {
 
   // the note of the main agent now, as a switch to it
   export function switch_note(chat: Chat): string {
-    const who = chat.mem.agent === null ? "illi's own" : agent_name(chat.mem.agent);
+    const who = chat.mem.agent === null ? "illi's own" : chat.mem.agent;
     return "Main agent: " + who + ", on " + Pick.shown(chat.pick) + ".";
   }
 

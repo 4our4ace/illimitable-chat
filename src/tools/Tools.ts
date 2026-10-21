@@ -1,6 +1,6 @@
 // Tools
 // =====
-// Illi's prompts, tools and agents. Calls get the tools as MCP over one
+// illi's prompts, tools and agents. Calls get the tools as MCP over one
 // local port, at a URL with the chat's secret and the caller ("main", an
 // agent; a compaction has none).
 // shell, read, write and edit run here, on the user's computer, in the
@@ -264,7 +264,7 @@ export namespace Tools {
   }
 
   // the user's rules: theirs for every project (config.RULES, RULES.md in
-  // illi's folder; named even while there is none, so Illi knows where it
+  // illi's folder; named even while there is none, so illi knows where it
   // goes), then the project's (Tools.project), each whole up to RULES_MOST
   export function rules(cwd: string): string {
     const own  = rules_read(config.RULES);

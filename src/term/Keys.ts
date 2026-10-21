@@ -175,7 +175,7 @@ export function term_page(t: Term, key: string): void {
 
 // Enter: runs a command, or sends the input, its pastes' text in place
 // of their tokens and the images it names (the chat shown from its end,
-// the notes gone); empty, it interrupts Illi's turn, on any page; text
+// the notes gone); empty, it interrupts illi's turn, on any page; text
 // not sent stays (it was lost: an unknown /word)
 export function term_enter(t: Term): void {
   const typed = Screen.ed_take(t.scr.ed);
@@ -192,7 +192,7 @@ export function term_enter(t: Term): void {
   Screen.ed_type(t.scr.ed, typed);
 }
 
-// a message for Illi (or /goal, /halt, /clear, /compact, the user's
+// a message for illi (or /goal, /halt, /clear, /compact, the user's
 // commands and skills) sent from an agent's page: not sent, a note says
 // where messages go, and the input has it back as typed (its tokens: a
 // paste's text found in the history; none: text); true if so
@@ -213,7 +213,7 @@ export function term_shots(t: Term, text: string): Blob[] {
 }
 
 // the suggested reply the input shows, dim: the chat's, while the input
-// is empty on Illi's page and nothing typed dismissed it; "": none
+// is empty on illi's page and nothing typed dismissed it; "": none
 export function term_hint(t: Term): string {
   const shown = t.v.suggest !== "" && t.v.suggest !== t.dropped && t.scr.ed.text === "" && View.view_typing(t.v);
   return shown ? t.v.suggest : "";
@@ -229,14 +229,14 @@ export function term_take(t: Term): void {
   }
 }
 
-// Esc: the notes cleared, Illi's turn interrupted
+// Esc: the notes cleared, illi's turn interrupted
 export function term_esc(t: Term): void {
   term_unnote(t);
   term_act(t, { $: "Send", text: "" });
 }
 
 // Ctrl+C or Ctrl+D: clears the input; on an empty one, Ctrl+C interrupts
-// Illi's turn and says how to quit, a second within AGAIN quits; Ctrl+D
+// illi's turn and says how to quit, a second within AGAIN quits; Ctrl+D
 // quits
 export function term_clear(t: Term, key: string): void {
   if (t.scr.ed.text !== "") {
@@ -250,9 +250,9 @@ export function term_clear(t: Term, key: string): void {
   }
 }
 
-// Shift+Tab: Illi runs as the next primary agent that can run (Illi's own
+// Shift+Tab: illi runs as the next primary agent that can run (illi's own
 // among them), after the one asked for last if not answered yet; one that
-// can't run any more goes back to Illi's own; none to go to, a note says
+// can't run any more goes back to illi's own; none to go to, a note says
 // why
 export function term_next(t: Term): void {
   term_primaries(t);

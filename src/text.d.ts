@@ -4,7 +4,7 @@ declare module "*.txt" {
   export default text;
 }
 
-// a skill Illi comes with (Custom.ts), imported whole as text
+// a skill illi comes with (Custom.ts), imported whole as text
 declare module "*.md" {
   const text: string;
   export default text;

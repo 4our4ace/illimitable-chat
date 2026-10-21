@@ -1,6 +1,6 @@
 // Reply
 // =====
-// Illi's replies drawn as cellsmith draws Claude Code's (cellsmith/, from
+// illi's replies drawn as cellsmith draws Claude Code's (cellsmith/, from
 // github.com/4our4ace/cellsmith): its parser (cellsmith/markdown.ts) reads
 // the text, and each block draws as its renderer draws it, in Paint's
 // lines, in a cellsmith palette (Draw.draw_theme: the one named, or by

@@ -5,7 +5,7 @@
 // (by the Link). The main chat shows what its agent sees (Chat.ts): the
 // view's parts as blocks ("nx"), from the turn on each message whole
 // (0x) and its thoughts, then what streams or what the turn waits on. The
-// work between the person's words and Illi's (tool calls, their results,
+// work between the person's words and illi's (tool calls, their results,
 // thinking, the agents' reports: ACTIVITY) shows as one line per run
 // (an "Act" row: what was done, counted), opened by a click or all at
 // once (verbose: Ctrl+O); while closed, what streams of it shows only on
@@ -17,7 +17,7 @@ import type { Kind, Vendor } from "../ai/AskAI.ts";
 import * as Call from "./Call.ts";
 import * as Md from "./Md.ts";
 import { LABELS, type Move, Pick } from "../ai/Pick.ts";
-import { agent_name, GLYPH, WHO } from "./Theme.ts";
+import { GLYPH, WHO } from "./Theme.ts";
 
 // Types
 // =====
@@ -60,12 +60,12 @@ export type Fill = { used: number; cap: number; window: number };
 // how full the chat is (null: not told yet)
 export type Use = { tokens: number | null; limits: Limit[]; plan?: string; fill?: Fill | null };
 
-// an item of Illi's to-do list (Tools.ts todo): what to do, how it stands
+// an item of illi's to-do list (Tools.ts todo): what to do, how it stands
 export type Todo = { text: string; status: "pending" | "active" | "done" };
 
-// agents: those at work; agent: the main agent (null: Illi's own);
+// agents: those at work; agent: the main agent (null: illi's own);
 // vendors and models: those offered; use: what its calls use; todo:
-// Illi's to-do list; suggest: the user's likely next message, asked as
+// illi's to-do list; suggest: the user's likely next message, asked as
 // the last turn ended (Chat.suggest; "": none)
 export type State = {
   busy    : boolean;
@@ -84,7 +84,7 @@ export type State = {
 // ("id+n") and messages known; open: the blocks opened (true) or shut by
 // hand; acts: the runs of work opened (by their first message's id),
 // verbose: all of them; minds: the thoughts after each message; pages: the agents' asked
-// for; page: the one shown (null: Illi's); the Link's: this view's
+// for; page: the one shown (null: illi's); the Link's: this view's
 // id, acts not answered, socket (up: it showed the chat)
 export type View = State & {
   parts : Part[];
@@ -139,7 +139,7 @@ export type Client =
   | { $: "clear" } // a fresh session: the chat so far folds into the view (/clear)
   | { $: "compact" } // all but the last exchanges fold into the view, still shown (/compact)
   | { $: "pick"; to: Pick }
-  | { $: "main"; name: string | null } // the main agent (/agent), or Illi's own
+  | { $: "main"; name: string | null } // the main agent (/agent), or illi's own
   | { $: "zoom"; part: Part }
   | { $: "root" }
   | { $: "agent"; name: string };
@@ -166,18 +166,18 @@ export type Act =
   | { $: "Open"; id: number; n: number }        // a click on a block
   | { $: "Shut"; id: number; n: number }        // a click on an open block's bar
   | { $: "Fold"; on: boolean }                  // fold all, unfold all
-  | { $: "Goto"; name: string | null }          // a tab, a name, the logo (null: Illi)
+  | { $: "Goto"; name: string | null }          // a tab, a name, the logo (null: illi)
 
 // what a page draws, top to bottom
 export type Row =
   | { $: "Sum"; id: number; n: number; text: string; call: Call.Call | null; kind: Kind | null }  // a block: nx, its summary (call: a tool call's, word for word; kind: its message's, of one known)
   | { $: "Box"; id: number; n: number; text: string; rows: Row[] }                              // a block open: its bar
   | { $: "Act"; id: number; text: string; open: boolean; rows: Row[] }                         // a run of work (ACTIVITY), from message id: what was done, its rows if open
-  | { $: "Msg"; id: number | null; kind: Kind; who: string; text: string; body: Md.Block[]; call: Call.Call | null; images: string[] } // a message whole: 0x (who: its speaker or "↳ result", named on its block; body: its blocks, none for Illi's (drawn from its text); call: a tool call's, drawn as Call.ts reads it)
+  | { $: "Msg"; id: number | null; kind: Kind; who: string; text: string; body: Md.Block[]; call: Call.Call | null; images: string[] } // a message whole: 0x (who: its speaker or "↳ result", named on its block; body: its blocks, none for illi's (drawn from its text); call: a tool call's, drawn as Call.ts reads it)
   | { $: "Cap"; text: string }                                                                  // a line about the page
 
 // a tab: its page (null: the chat), whether it's shown, its mark, its
-// text (the mark, then the agent Illi runs as, or the page's agent's
+// text (the mark, then the agent illi runs as, or the page's agent's
 // name) and the agent whose color its mark takes (a subagent's own: its
 // name, unnumbered)
 export type Tab = { name: string | null; here: boolean; mark: string; text: string; agent: string };
@@ -190,10 +190,10 @@ export type Knob = { text: string; move: Move; hint: string };
 // =========
 
 // the app's name, as the head shows it; MAIN: its agent's, a nickname
-export const NAME = "Illimitable";
+export const NAME = "illimitable";
 export const MAIN = "illi";
 
-// Illi's turn, as a stop names it among the agents at work
+// illi's turn, as a stop names it among the agents at work
 export const TURN = "illi's turn";
 
 // the messages' version, in a view's query; one more for each change an
@@ -244,7 +244,7 @@ export const IMAGES = "Images are png, jpeg, gif or webp.";
 const TOOL = "tool: ";
 const FOLD = "The whole chat, folded into the fewest blocks.";
 
-// the kinds of the work between the person's words and Illi's, shown as
+// the kinds of the work between the person's words and illi's, shown as
 // one line per run; a summary's kind, read off its line (Memory.show)
 const ACTIVITY: Kind[] = ["tool", "echo", "mind", "work"];
 const KINDED   = /^(user|illi|tool|echo|mind|note|work): /;
@@ -547,7 +547,8 @@ function act_text(rows: Row[]): string {
   const did   = [...calls].map(([name, n]) => (DID[name] === undefined ? "called " + (n === 1 ? name : name + " ×" + n) : DID[name][n === 1 ? 0 : 1].replace("#", String(n))));
   const parts = [did.join(", "), mind ? "thought" : "", who.size === 0 ? "" : [...who].join(", ") + " reported"].filter((x) => x !== "");
   const text  = parts.length > 0 ? parts.join(" · ") : results + (results === 1 ? " result" : " results");
-  return text[0].toUpperCase() + text.slice(1);
+  const named = did.length === 0 && !mind && who.size > 0;
+  return named ? text : text[0].toUpperCase() + text.slice(1);
 }
 
 // a run of work opened, or closed
@@ -598,7 +599,7 @@ export function view_tabs(v: View): Tab[] {
   return [null, ...names].map((name) => {
     const here = name === at;
     const mark = here ? GLYPH.here : GLYPH.tab;
-    return { name, here, mark, text: mark + " " + agent_name(name ?? v.agent ?? MAIN), agent: name?.replace(/-\d+$/, "") ?? v.agent ?? MAIN };
+    return { name, here, mark, text: mark + " " + (name ?? v.agent ?? MAIN), agent: name?.replace(/-\d+$/, "") ?? v.agent ?? MAIN };
   });
 }
 
@@ -620,9 +621,9 @@ export function view_doing(v: View): Doing | null {
   }
   const last   = v.live[v.live.length - 1];
   const call   = last?.kind === "tool" ? Call.call_parse(last.text) : null;
-  const agents = v.agents.length === 0 ? "" : v.agents.length === 1 ? agent_name(v.agents[0]) + " at work" : v.agents.length + " agents at work";
+  const agents = v.agents.length === 0 ? "" : v.agents.length === 1 ? v.agents[0] + " at work" : v.agents.length + " agents at work";
   if (!v.busy) {
-    return { verb: "Waiting on " + (v.agents.length === 1 ? agent_name(v.agents[0]) : v.agents.length + " agents"), what: "", stop: false };
+    return { verb: "Waiting on " + (v.agents.length === 1 ? v.agents[0] : v.agents.length + " agents"), what: "", stop: false };
   }
   const [verb, what] =
     call !== null ? [("Running " + call.name).trim(), call.head.split("\n")[0].trim()]
@@ -668,7 +669,7 @@ function view_learn(v: View, pack: Pack): void {
 }
 
 // a message: on its agent's page (its log's first: a new agent so named,
-// the page starts anew), in Illi's chat, or, a thought (not logged),
+// the page starts anew), in illi's chat, or, a thought (not logged),
 // after the last message
 function view_entry(v: View, msg: Server & { $: "entry" }): void {
   const { $, agent, id, ...entry } = msg;
@@ -811,7 +812,7 @@ function part_window(v: View, [id, n]: Part): number {
 
 // t: the turn; talk: whether talk opens by itself (not in Fold all). Open:
 // the person's choice (Open, Shut) if made, else a message of the user or
-// Illi (tool calls, reports and the rest stay folded)
+// illi (tool calls, reports and the rest stay folded)
 function part_rows(v: View, id: number, n: number, t: number, talk: boolean): Row[] {
   const key   = id + "+" + n;
   const entry = v.whole.get(id);
@@ -861,7 +862,7 @@ function sum_rows(id: number, n: number, node: Node = { text: WAIT, to: "" }, ki
 
 // an agent's page, its log (once it comes) from message `from` on
 export function page_rows(v: View, page: Page, from = 0): Row[] {
-  const head = Cap(agent_name(page.name) + (v.agents.includes(page.name) ? " · at work" : " · done"));
+  const head = Cap(page.name + (v.agents.includes(page.name) ? " · at work" : " · done"));
   return [head, ...(page.log ?? []).slice(from).flatMap((e) => whole_rows(null, e))];
 }
 
@@ -909,14 +910,14 @@ export function image_kind(head: Uint8Array): string | null {
 // Entry
 // =====
 
-// a message's row (none: nothing to show); Illi's reply is drawn from its
+// a message's row (none: nothing to show); illi's reply is drawn from its
 // text (Reply.ts), so only whether it has any is asked, never its blocks
 // (a reply streaming would be parsed at every paint)
 export function entry_rows(id: number | null, kind: Kind, text: string, images: string[] = []): Row[] {
   const call = kind === "tool" ? Call.call_parse(text) : null;
   const report = kind === "work" ? Call.report_read(text) : null;
   const body = call === null && kind !== "illi" ? entry_body(kind, report?.text ?? text) : [];
-  const who = report === null ? WHO[kind] ?? "" : agent_name(report.name);
+  const who = report === null ? WHO[kind] ?? "" : report.name;
   const none = kind === "illi" ? text.trim() === "" : call === null && body.length === 0;
   return none && images.length === 0 ? [] : [{ $: "Msg", id, kind, who, text, body, call, images }];
 }
