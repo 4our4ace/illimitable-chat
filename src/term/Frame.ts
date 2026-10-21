@@ -47,6 +47,10 @@ let painted = 0;
 // a size held this long is settled: a drag's sizes come faster (ms)
 const SETTLE = 30;
 
+// the screen's rows as last painted, each its pieces: one list, filled
+// anew by each paint (each row a new one: Screen.ts keeps them)
+const ROWS: Screen.Piece[][] = [];
+
 // the mark over the input while work runs, as illimitable has no end:
 // an infinity sign traced for ever, in braille (a cell 2 dots wide and 4
 // high, so 4 cells hold a ∞ 8 by 4): its path, round its left loop and
@@ -189,13 +193,22 @@ export function term_paint(t: Term): void {
   const lines = [...above, toast, term_rule(t, iw, ruled), ...input.lines, ...(paned ? [] : [Paint.rule(iw)]), Paint.tabs_line(t.v, iw, side === 0)];
   const foot  = term_area(t, { key: "foot", lines, first: 0, row: 1 + tall, col: MARGIN, w: iw, tall: lines.length });
   const head  = term_area(t, { key: "head", lines: [term_head(t, full)], first: 0, row: 0, col: 0, w: full, tall: 1 });
-  const rows: Screen.Piece[][] = [[{ col: 0, w: full, line: head[0] }]];
+  const rows  = ROWS;
+  const with_: number[] = [];
+  rows.length = 0;
+  rows.push([{ col: 0, w: full, line: head[0] }]);
   for (let k = 0; k < tall; k++) {
-    const by = sides[k] === undefined || (box?.wide && 1 + k >= top) ? [] : [{ col: at, w: side, line: term_side_line(sided[k], sw, left > 0) }];
-    rows.push([{ col: left + MARGIN, w: cw, line: shown[k] }, ...by]);
-    term_hit(t, 1 + k, at, at + side, by.length === 0 ? null : sides[k]?.[1] ?? null);
+    const row: Screen.Piece[] = [{ col: left + MARGIN, w: cw, line: shown[k] }];
+    if (sides[k] !== undefined && !(box?.wide && 1 + k >= top)) {
+      row.push({ col: at, w: side, line: term_side_line(sided[k], sw, left > 0) });
+      with_.push(k);
+    }
+    rows.push(row);
+    term_hit(t, 1 + k, at, at + side, row.length === 1 ? null : sides[k][1]);
   }
-  rows.push(...foot.map((line) => [{ col: MARGIN, w: iw, line }]));
+  for (const line of foot) {
+    rows.push([{ col: MARGIN, w: iw, line }]);
+  }
   if (box !== null) {
     term_over(t, rows, box, top, mid);
   } else if (t.pane === null && t.scroll > 0) {
@@ -204,8 +217,7 @@ export function term_paint(t: Term): void {
   t.hover = t.sel?.held ? undefined : term_under(t, t.scr.point);
   term_tabs(t, h - 1, side === 0);
   const cursor = box?.at !== undefined ? { row: top + box.at.row, col: box.col + box.at.col } : input.at === null ? null : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
-  const with_ = sides.map((_, k) => k).filter((k) => rows[1 + k].length > 1 && !(box?.wide && 1 + k >= top));
-  t.ruled = { row: 2 + tall + above.length, w: iw, at: cursor, rows, side: box === null ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
+  t.ruled ={ row: 2 + tall + above.length, w: iw, at: cursor, rows, side: box === null ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
   t.scr.blink = idle || form !== null;
   Screen.screen_paint(t.scr, rows, cursor);
   painted = Date.now();
