@@ -41,9 +41,11 @@ export type Page = { name: string; log: Entry[] | null; live: Live[] };
 export const SUMMARIES = "summaries";
 export type Wait = string;
 
-// what runs, in words (view_doing): the step it is at, and about how
-// many tokens the models have written since work began (made)
-export type Doing = { verb: string; tokens: number };
+// what runs, in words (view_doing): the step it is at, about how many
+// tokens the models have written since work began (made), and how fast
+// they write now (tokens a second, over the last RATE ms; 0: nothing
+// streams)
+export type Doing = { verb: string; tokens: number; rate: number };
 
 // a plan's rate limit, as its last response told it (ChatGPT.ts): its
 // window (minutes), the share of it used (%), when it starts anew (ms)
@@ -91,9 +93,9 @@ export type State = {
 // hand; acts: the runs of work opened (by their first message's id),
 // verbose: all of them; minds: the thoughts after each message; pages: the agents' asked
 // for; page: the one shown (null: illi's); made: the characters the
-// models streamed (replies, thoughts, calls) since work began; the
-// Link's: this view's id, acts not answered, socket (up: it showed the
-// chat)
+// models streamed (replies, thoughts, calls) since work began; flow:
+// the last RATE ms of them (when, how many); the Link's: this view's
+// id, acts not answered, socket (up: it showed the chat)
 export type View = State & {
   parts : Part[];
   turn  : number;
@@ -104,6 +106,7 @@ export type View = State & {
   acts  : Set<number>;
   verbose: boolean;
   made  : number;
+  flow  : Array<[number, number]>;
   live  : Live[];
   minds : Map<number, string[]>;
   pages : Map<string, Page>;
@@ -228,9 +231,11 @@ export const FRAME = 2 ** 22;
 export const HINT = "Message illi";
 
 // what a model writes, as the work's count of tokens takes it (made);
-// about how many characters make a token
+// about how many characters make a token; the time its speed is taken
+// over (ms)
 const MADE  = new Set<Kind>(["illi", "mind", "tool"]);
 const CHARS = 4;
+const RATE  = 2000;
 
 const WAIT = "compressing…";
 const SUMS = "compressing earlier messages…";
@@ -303,6 +308,7 @@ export function view_new(): View {
     acts      : new Set(),
     verbose   : false,
     made      : 0,
+    flow      : [],
     live      : [],
     minds     : new Map(),
     pages     : new Map(),
@@ -345,6 +351,8 @@ export function view_hear(v: View, msg: Server): Client[] {
       }
       if (MADE.has(msg.kind)) {
         v.made += msg.text.length;
+        v.flow.push([Date.now(), msg.text.length]);
+        v.flow = v.flow.filter(([at]) => at > Date.now() - RATE);
       }
       return [];
     }
@@ -360,7 +368,7 @@ export function view_hear(v: View, msg: Server): Client[] {
       const was = view_running(v);
       Object.assign(v, state);
       if (!was && view_running(v)) {
-        v.made = 0;
+        [v.made, v.flow] = [0, []];
       }
       return [];
     }
@@ -628,14 +636,17 @@ export function view_running(v: View): boolean {
 // what runs, in words; null: nothing. A turn: the last thing streaming
 // (a tool's call: its tool; thinking; the reply), else what it waits on.
 // No turn: the agents waited on. Its tokens, as many as the characters
-// streamed make (about CHARS each)
-export function view_doing(v: View): Doing | null {
+// streamed make (about CHARS each); its rate, those of the RATE ms
+// before now, a second's share
+export function view_doing(v: View, now = Date.now()): Doing | null {
   if (!view_running(v)) {
     return null;
   }
   const last   = v.live[v.live.length - 1];
   const call   = last?.kind === "tool" ? Call.call_parse(last.text) : null;
   const tokens = Math.round(v.made / CHARS);
+  const recent = v.flow.reduce((n, [at, chars]) => (at > now - RATE ? n + chars : n), 0);
+  const rate   = Math.round(recent / CHARS / (RATE / 1000));
   const verb   =
     !v.busy ? "Waiting on agents"
     : call !== null ? ("Running " + call.name).trim()
@@ -644,7 +655,7 @@ export function view_doing(v: View): Doing | null {
     : v.wait === SUMMARIES ? "Summarizing earlier messages"
     : v.wait !== "" ? "Waiting for " + v.wait
     : "Working";
-  return { verb, tokens };
+  return { verb, tokens, rate };
 }
 
 // the pick as last asked for and not acked yet, else the chat's (null:

@@ -218,11 +218,12 @@ function term_rule(t: Term, w: number, note?: Paint.Line): Paint.Line {
 
 // the rule while work runs, w wide, at a time: the ∞ traced, the step
 // it is at (bold, in the accent), how long it has run, the tokens the
-// models wrote (once any), cut to the width
+// models wrote (once any) and how fast they write now (while they do),
+// cut to the width
 function term_working(t: Term, doing: View.Doing, w: number, now: number): Paint.Line {
   const c    = Draw.draw_theme().accent ?? "5";
   const head = [Paint.Run(RULE_HEAD, Paint.DIM), ...term_trace(now - t.since, c, t.scr.canvas), Paint.Run(" "), Paint.Run(doing.verb, { ...Paint.INK, c, b: true })];
-  const tail = [term_elapsed(now - t.since), doing.tokens > 0 ? "↓ " + term_tokens(doing.tokens) + " tokens" : ""].filter((x) => x !== "").join(" · ");
+  const tail = [term_elapsed(now - t.since), doing.tokens > 0 ? "↓ " + term_tokens(doing.tokens) + " tokens" : "", doing.rate > 0 ? doing.rate + " tok/s" : ""].filter((x) => x !== "").join(" · ");
   const room = w - Paint.line_width(head) - 6;
   const said = Paint.text_width(tail) <= room ? tail : room < 2 ? "" : Paint.runs_wrap([Paint.Run(tail)], room - 1, true)[0].map((r) => r.x).join("") + "…";
   const used = Paint.line_width(head) + Paint.text_width(said) + 4;
@@ -267,6 +268,7 @@ function term_tick(t: Term): void {
     return term_paint(t);
   }
   const now = Date.now();
+  t.doing   = View.view_doing(t.v, now) ?? t.doing;
   Screen.screen_row(t.scr, r.row, [{ col: MARGIN, w: r.w, line: term_working(t, t.doing, r.w, now) }], r.at);
   const spin = term_spinner(now - t.since);
   if (t.v.agents.length > 0 && spin !== r.spin) {
