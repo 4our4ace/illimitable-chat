@@ -45,7 +45,7 @@ test("the todo tool is the master's alone", () => {
 
 test("a list given whole replaces the one before, kept in the chat's folder and told to a view at once", async () => {
   const v = View.view_new();
-  View.link_open(v, Chat.link(chat, (msg) => void View.view_hear(v, msg), async () => true));
+  View.link_open(v, Chat.link(chat, (msg) => void View.view_hear(v, msg)));
   await until(() => v.up);
   expect(v.todo).toEqual([]);
   expect(await todo([{ text: "Old", status: "active" }])).toMatchObject({ fail: false });
@@ -117,7 +117,7 @@ test("a caller in Claude Code gets only the tools it lacks, served at ?lean; its
 
 test("Claude Code's permission prompt is a question at illi's screen: yes, no with a reason, yes for the rest of the run; stopped or no one there, no", async () => {
   const v = View.view_new();
-  View.link_open(v, Chat.link(chat, (msg) => void View.view_hear(v, msg), async () => true));
+  View.link_open(v, Chat.link(chat, (msg) => void View.view_hear(v, msg)));
   await until(() => v.up);
   const approve = async (tool: string, input: unknown, signal = new AbortController().signal) => JSON.parse((await Tools.call(chat.tools, "main", "approve", { tool_name: tool, input }, signal)).text);
   const answer  = async (yes: boolean, always: boolean, why = "") => {

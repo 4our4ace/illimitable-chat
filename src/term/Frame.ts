@@ -115,7 +115,7 @@ export function term_draw(t: Term): void {
 // wide as the input), else the picker (at the chat's left; the palette's
 // in the screen's middle, all else dimmed under it); a row with, at the chat's right
 // end, a toast in the theme's blue (its links'); a rule (what runs,
-// while it does), the input, a rule (offline), the pages, the agent
+// while it does), the input, a rule, the pages, the agent
 // and the pick. The notes, however the chat is scrolled, end over the
 // input: the newest in the rule, the one before it, faded, in the row
 // above (unless the toast leaves it no room); while work runs (its
@@ -163,8 +163,7 @@ export function term_paint(t: Term): void {
   const sided = term_area(t, { key: "side", lines: sides.map((s) => s[0]), first: 0, row: 1, col: left > 0 ? 1 : at + 2, w: sw, tall: sides.length });
   const blue  = { ...Paint.INK, c: Draw.draw_theme().link ?? "4" };
   const toast = box !== null ? [] : [...lead, Paint.Run(" ".repeat(Math.max(1, left + cw - Paint.line_width(lead) - Paint.text_width(said.toast)))), Paint.Run(said.toast, blue)];
-  const under = !t.v.up ? "offline" : "";
-  const lines = [...above, toast, term_rule(t, iw, ruled), ...input.lines, Paint.rule_text(under, iw), Paint.tabs_line(t.v, iw, side === 0)];
+  const lines = [...above, toast, term_rule(t, iw, ruled), ...input.lines, Paint.rule(iw), Paint.tabs_line(t.v, iw, side === 0)];
   const foot  = term_area(t, { key: "foot", lines, first: 0, row: 1 + tall, col: MARGIN, w: iw, tall: lines.length });
   const head  = term_area(t, { key: "head", lines: [term_head(t, full)], first: 0, row: 0, col: 0, w: full, tall: 1 });
   const rows: Screen.Piece[][] = [[{ col: 0, w: full, line: head[0] }]];
@@ -221,7 +220,7 @@ function term_rule(t: Term, w: number, note?: Paint.Line): Paint.Line {
   term_spin(t, doing !== null);
   t.doing = doing;
   if (doing === null) {
-    return note === undefined ? Paint.rule_text("", w) : [Paint.Run("─".repeat(NOTE_IN - 1) + " ", Paint.DIM), ...note, Paint.Run(" " + "─".repeat(Math.max(0, w - NOTE_IN - 1 - Paint.line_width(note))), Paint.DIM)];
+    return note === undefined ? Paint.rule(w) : [Paint.Run("─".repeat(NOTE_IN - 1) + " ", Paint.DIM), ...note, Paint.Run(" " + "─".repeat(Math.max(0, w - NOTE_IN - 1 - Paint.line_width(note))), Paint.DIM)];
   }
   return term_working(t, doing, w, Date.now());
 }

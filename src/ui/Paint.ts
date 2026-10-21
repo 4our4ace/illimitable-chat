@@ -582,10 +582,9 @@ export function ends_line(left: Line, right: string, w: number): Line {
   return room < 1 ? left : [...left, Run(" ".repeat(room) + right, DIM)];
 }
 
-// a rule, a text at its right end ("": none)
-export function rule_text(text: string, w: number): Line {
-  const tag = text === "" ? "" : " " + text + " ";
-  return [Run("─".repeat(Math.max(0, w - text_width(tag) - 1)) + tag + "─", DIM)];
+// a rule, w wide
+export function rule(w: number): Line {
+  return [Run("─".repeat(Math.max(0, w)), DIM)];
 }
 
 // the last line, w wide: a tab for the chat (named as the agent illi

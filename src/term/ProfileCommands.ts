@@ -136,7 +136,7 @@ async function term_restart(t: Term, name: string, step?: () => void): Promise<v
 // the lock released, the terminal as it was
 async function term_leave(t: Term): Promise<void> {
   t.login?.abort();
-  t.v.ws?.close(View.QUIT);
+  t.v.ws?.close();
   Chat.close(t.chat);
   Machine.end();
   await Promise.race([Mcp.stop(), Bun.sleep(LEAVE)]);
