@@ -1,10 +1,11 @@
 // Frame
 // =====
-// The screen painted, a frame at most each FRAME ms: the head; the chat
-// (or a pane; over its foot the commands suggested, else the picker, the
-// cursor in its search if it has one), the side beside it (Side.ts); the
-// notes, the toast and the jump to the end; the rule (what runs, the ∞
-// traced), the input, the pages, the pick. A pipe gets text.
+// The screen painted as the work at hand is done (a key's at once), a
+// frame at most each FRAME ms: the head; the chat (or a pane; over its
+// foot the commands suggested, else the picker, the cursor in its search
+// if it has one), the side beside it (Side.ts); the notes, the toast and
+// the jump to the end; the rule (what runs, the ∞ traced), the input,
+// the pages, the pick. A pipe gets text.
 
 import { term_asks, term_form_lines } from "./Asks.ts";
 import { term_suggest, term_suggested } from "./Commands.ts";
@@ -39,8 +40,9 @@ const JUMP_UP = 1;
 const PIPE = 76;
 
 // a paint's frame: a stream's pieces come faster than a screen shows
-// them (ms)
+// them (ms); when the last paint began, and once done, ended
 const FRAME = 16;
+let painted = 0;
 
 // a size held this long is settled: a drag's sizes come faster (ms)
 const SETTLE = 30;
@@ -101,11 +103,19 @@ export function term_redraw(t: Term): void {
   term_draw(t);
 }
 
-// a paint, a frame from now, unless one is due
+// a paint, unless one is due: as soon as the work at hand is done (a
+// key's and all it set off, in one paint); within FRAME of the last
+// one's end, once that frame is up (all asked for meanwhile in it)
 export function term_draw(t: Term): void {
-  if (!t.due) {
-    t.due = true;
-    setTimeout(() => term_paint(t), FRAME);
+  if (t.due) {
+    return;
+  }
+  t.due = true;
+  const wait = painted + FRAME - Date.now();
+  if (wait > 0) {
+    setTimeout(() => term_paint(t), wait);
+  } else {
+    setImmediate(() => term_paint(t));
   }
 }
 
@@ -125,6 +135,7 @@ export function term_draw(t: Term): void {
 // as Ctrl+End does). A pipe gets the notes as text
 export function term_paint(t: Term): void {
   t.due   = false;
+  painted = Date.now();
   term_asks(t);
   const said = term_shown(t);
   if (!t.scr.tty) {
@@ -187,6 +198,7 @@ export function term_paint(t: Term): void {
   t.ruled = { row: 2 + tall + above.length, w: iw, at: cursor, rows, side: box === null ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
   t.scr.blink = idle || form !== null;
   Screen.screen_paint(t.scr, rows, cursor);
+  painted = Date.now();
 }
 
 // a line of the side, w wide, with its edge toward the chat: the side
