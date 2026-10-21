@@ -175,8 +175,8 @@ export namespace ClaudeCode {
 
   // a call's arguments: streamed both ways, on its pick, illi's prompt
   // after Claude Code's (its file); with tools, illi's (its MCP server,
-  // the lean list, allowed), else none, nor Claude Code's servers,
-  // commands or hooks
+  // the lean list, allowed; illi's ask for Claude Code's own), else none,
+  // nor Claude Code's servers, commands or hooks
   export function args(ask: Ask, file: string): string[] {
     const io = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--replay-user-messages", "--no-session-persistence"];
     const pick = ["--model", ask.model, "--effort", ask.effort, "--append-system-prompt-file", file];
@@ -184,7 +184,7 @@ export namespace ClaudeCode {
       return [...io, ...pick, "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--settings", JSON.stringify({ disableAllHooks: true })];
     }
     const mcp = { mcpServers: { illi: { type: "http", url: ask.server + "?lean", timeout: WAIT } } };
-    return [...io, ...pick, "--mcp-config", JSON.stringify(mcp), "--allowedTools", "mcp__illi", "--permission-prompt-tool", "mcp__illi__approve"];
+    return [...io, ...pick, "--mcp-config", JSON.stringify(mcp), "--allowedTools", "mcp__illi", "--disallowedTools", "AskUserQuestion", "--permission-prompt-tool", "mcp__illi__approve"];
   }
 
   // illi's prompt in a file of its own, readable by the user alone

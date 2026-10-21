@@ -7,6 +7,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { term_form_paste } from "./Asks.ts";
 import { term_draw } from "./Frame.ts";
 import { term_note } from "./Notices.ts";
 import * as Screen from "../ui/Screen.ts";
@@ -34,9 +35,13 @@ export function term_image(t: Term, arg: string): void {
   }
 }
 
-// a paste: a path to an image (a file dropped) attaches it; else it goes
-// in the input, a long one as its token
+// a paste: to illi's question if it asks (Asks.ts); a path to an image
+// (a file dropped) attaches it; else it goes in the input, a long one as
+// its token
 export function term_paste(t: Term, text: string): void {
+  if (term_form_paste(t, text)) {
+    return;
+  }
   const file = text.includes("\n") ? null : term_file(text.trim());
   if (file === null || !term_attach(t, file)) {
     Screen.ed_paste(t.scr.ed, text);

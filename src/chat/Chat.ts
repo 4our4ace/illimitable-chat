@@ -105,11 +105,14 @@ const GOAL_ASK   = "\nThe goal:\n\n";
 const GOAL_NO    = "The goal isn't satisfied yet: keep working.";
 
 // a no to a question (Chat.question): the user's, without a reason and
-// before one; no one at the screen to ask; its request stopped
+// before one; no one at the screen to ask; its request stopped. illi's
+// own answered, before the answer; skipped
 const SAID_NO    = "The user said no, asked at illi's screen.";
 const SAID_WHY   = "The user said no, asked at illi's screen: ";
 const NO_ONE     = "No one is at illi's screen to ask, so it isn't allowed.";
 const STOPPED    = "The request was stopped.";
+const ANSWERED   = "The user answered at illi's screen:\n";
+const SKIPPED    = "The user skipped the question (Esc): decide yourself, or ask in your reply.";
 
 // a chat that outgrew its model's window (Chat.refit): a turn's share of
 // the context made this much smaller, when the request itself was too
@@ -198,7 +201,7 @@ export namespace Chat {
     fs.mkdirSync(dir, { recursive: true });
     const mem = Memory.load(dir, () => Chat.share(chat));
     const tools = Tools.serve(mem, {
-      ask    : (who, tool, what, signal) => Chat.question(chat, who, tool, what, signal),
+      ask    : (q, signal) => Chat.question(chat, q, signal),
       push   : (agent, kind, text) => Chat.push(chat, agent, kind, text),
       on     : (agent, ev) => Chat.on(chat, agent, ev),
       report : (agent, text, stopped) => Chat.report(chat, agent, text, stopped),
@@ -764,30 +767,30 @@ export namespace Chat {
     return { $: "state", busy: chat.busy, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, ...tools, use: { ...tools.use, fill }, suggest: chat.suggest.text, asks };
   }
 
-  // a question for the user (Claude Code asking leave to use a tool),
-  // shown by the views till one answers, or its request drops (a stop:
-  // no); with no view to ask, no at once
-  export function question(chat: Chat, who: string, tool: string, what: string, signal: AbortSignal): Promise<Reply> {
+  // a question for the user (Claude Code asking leave to use a tool,
+  // illi's own), shown by the views till one answers, or its request
+  // drops (a stop: no); with no view to ask, no at once
+  export function question(chat: Chat, q: Omit<Question, "id">, signal: AbortSignal): Promise<Reply> {
     if (chat.socks.size === 0 || signal.aborted) {
-      return Promise.resolve({ yes: false, always: false, why: NO_ONE });
+      return Promise.resolve({ yes: false, always: false, said: NO_ONE });
     }
     return new Promise((done) => {
       const id = crypto.randomUUID();
-      chat.asks.push({ id, who, tool, what, done });
+      chat.asks.push({ ...q, id, done });
       signal.addEventListener("abort", () => Chat.answered(chat, id, false, false, STOPPED), { once: true });
       Chat.change(chat);
     });
   }
 
-  // a question answered (none: one answered already); why: a no's
-  // reason, for the model
-  export function answered(chat: Chat, id: string, yes: boolean, always: boolean, why: string): void {
+  // a question answered (none: one answered already); said: what the
+  // user said, for the model (a no's reason, the answer to illi's own)
+  export function answered(chat: Chat, id: string, yes: boolean, always: boolean, said: string): void {
     const k = chat.asks.findIndex((q) => q.id === id);
     if (k < 0) {
       return;
     }
     const [q] = chat.asks.splice(k, 1);
-    q.done({ yes, always, why: yes ? "" : why });
+    q.done({ yes, always, said: yes && q.options === undefined ? "" : said });
     Chat.change(chat);
   }
 
@@ -924,8 +927,10 @@ export namespace Chat {
         return Chat.clear(chat);
       }
       case "answer": {
-        const why = typeof msg.why === "string" ? msg.why.trim() : "";
-        Chat.answered(chat, String(msg.ask), msg.yes === true, msg.always === true, why === "" ? SAID_NO : SAID_WHY + why);
+        const said = typeof msg.said === "string" ? msg.said.trim() : "";
+        const own  = chat.asks.find((q) => q.id === msg.ask)?.options !== undefined;
+        const yes  = msg.yes === true && (!own || said !== "");
+        Chat.answered(chat, String(msg.ask), yes, msg.always === true, own ? (yes ? ANSWERED + said : SKIPPED) : said === "" ? SAID_NO : SAID_WHY + said);
         return {};
       }
       case "compact": {

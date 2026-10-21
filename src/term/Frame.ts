@@ -6,7 +6,7 @@
 // notes, the toast and the jump to the end; the rule (what runs, the ∞
 // traced), the input, the pages, the pick. A pipe gets text.
 
-import { term_asks } from "./Asks.ts";
+import { term_asks, term_form_lines } from "./Asks.ts";
 import { term_suggest, term_suggested } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import * as Draw from "../ui/Draw.ts";
@@ -140,7 +140,8 @@ export function term_paint(t: Term): void {
   const cw    = full - side - 2 * MARGIN;
   const iw    = full - 2 * MARGIN;
   const off   = !View.view_typing(t.v);
-  const input = Screen.screen_input(t.scr, iw, Math.max(1, Math.floor(h / 3)), off ? OFF + (t.v.agent ?? View.MAIN) : term_hint(t), off);
+  const form  = t.choose === null ? term_form_lines(t, iw, Math.max(1, Math.floor(h / 4))) : null;
+  const input = form ?? Screen.screen_input(t.scr, iw, Math.max(1, Math.floor(h / 3)), off ? OFF + (t.v.agent ?? View.MAIN) : term_hint(t), off);
   const idle  = View.view_doing(t.v) === null;
   const notes = term_notes(idle ? said.notes : said.notes.slice(-1), iw - 2 * NOTE_IN);
   const ruled = idle ? notes.pop() : undefined;
@@ -183,7 +184,7 @@ export function term_paint(t: Term): void {
   const cursor = box?.at !== undefined ? { row: top + box.at.row, col: box.col + box.at.col } : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
   const with_ = sides.map((_, k) => k).filter((k) => rows[1 + k].length > 1 && !(box?.wide && 1 + k >= top));
   t.ruled = { row: 2 + tall + above.length, w: iw, at: cursor, rows, side: box === null ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
-  t.scr.blink = idle;
+  t.scr.blink = idle || form !== null;
   Screen.screen_paint(t.scr, rows, cursor);
 }
 
@@ -395,7 +396,7 @@ function term_view(t: Term, w: number, tall: number, row: number, col: number): 
 // picker, pw wide at column col (none: null); at: the cursor's place in
 // it, if it takes the typing (a search)
 function term_box(t: Term, iw: number, pw: number, col: number, room: number): { items: Item[]; col: number; w: number; wide: boolean; at?: Screen.Spot } | null {
-  const sug = term_suggest(t);
+  const sug = t.asking?.form == null ? term_suggest(t) : null;
   if (sug !== null) {
     return { items: term_suggestions(t, sug, iw, room), col: MARGIN, w: iw, wide: true };
   }

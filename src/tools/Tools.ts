@@ -41,7 +41,7 @@ import { Mcp } from "./Mcp.ts";
 import { MAIN, Memory } from "../chat/Memory.ts";
 import PROMPT from "./prompt.txt" with { type: "text" };
 import { EFFORTS, Pick } from "../ai/Pick.ts";
-import type { Live, State, Todo } from "../ui/View.ts";
+import type { Live, Option, Question, State, Todo } from "../ui/View.ts";
 
 export type { Live };
 
@@ -69,12 +69,13 @@ export type Agent = {
 // vendor busy or out of reach, stays unanswered: a turn would fail alike;
 // pick: the chat's pick; halt: what stops its turn; main: the master's
 // agent, null: none)
-// a question's answer (Hooks ask): yes, and whether for the rest of the
-// chat's run; a no's reason, for the model
-export type Reply = { yes: boolean; always: boolean; why: string };
+// a question's answer (Hooks ask): yes (illi's own: answered), and
+// whether for the rest of the chat's run; what the user said, for the
+// model: a no's reason, the answer to illi's own
+export type Reply = { yes: boolean; always: boolean; said: string };
 
 type Hooks = {
-  ask    : (who: string, tool: string, what: string, signal: AbortSignal) => Promise<Reply>;
+  ask    : (q: Omit<Question, "id">, signal: AbortSignal) => Promise<Reply>;
   push   : (agent: Agent, kind: Kind, text: string) => void;
   on     : (agent: Agent, ev: Event) => void;
   report : (agent: Agent, text: string, stopped: boolean) => void;
@@ -173,9 +174,9 @@ const HOSTED: Array<[string | RegExp, string]> = [
 // by the user at illi's screen; illi's own tools that Claude Code loads
 // up front (the user's MCP servers' wait for its tool search)
 const APPROVE: Spec = spec("approve", "Claude Code's permission prompt, answered by the user at illi's screen. Not a tool to call yourself.", { tool_name: STR, input: { type: "object" }, tool_use_id: STR }, ["tool_name", "input"]);
-const UPFRONT = new Set(["zoom", "date", "spawn", "tell", "todo"]);
+const UPFRONT = new Set(["zoom", "date", "spawn", "tell", "todo", "ask"]);
 
-const HOSTED_TOOLS = `illi's own tools (zoom, date, todo, spawn, tell, skill and the user's
+const HOSTED_TOOLS = `illi's own tools (zoom, date, todo, spawn, tell, ask, skill and the user's
 MCP servers in illi) come from illi, as its MCP server's (mcp__illi__):
 keep your to-do list with illi's todo, which the user sees beside the
 chat.`;
@@ -202,10 +203,22 @@ const TODO: Spec = spec("todo", "Keep your to-do list for the work at hand; the 
   items: { type: "array", items: { type: "object", properties: { text: { type: "string", description: "The step, in a few words: Run the tests" }, status: { type: "string", enum: ["pending", "active", "done"] } }, required: ["text", "status"] } },
 }, ["items"]);
 const STATUSES: Todo["status"][] = ["pending", "active", "done"];
+
+// the most options a question offers
+const OPTIONS = 6;
+
+// the master's question for the user, shown in place of their input:
+// options to pick (several, with multi), words of their own beside them
+const ASK: Spec = spec("ask", "Ask the user a question and wait for the answer, when you need their decision or preference to go on and can offer the likely answers. They see the question and your options in place of their input, pick one (several, with multi), and may type words of their own beside or instead of them. For an open question, ask in your reply instead.", {
+  question : { type: "string", description: "The question, in a sentence or two." },
+  options  : { type: "array", minItems: 2, maxItems: OPTIONS, items: { type: "object", properties: { label: { type: "string", description: "The option, in a few words." }, about: { type: "string", description: "What it means or costs, in a short line." } }, required: ["label"] } },
+  multi    : { type: "boolean", description: "Whether several options may be picked." },
+}, ["question", "options"]);
 const TODO_FILE = "/todo.json";
 
 // the most of a skill's files named when it loads
 const FILES = 50;
+
 
 // the most characters of what a tool would do that a question shows
 const WHAT = 400;
@@ -240,7 +253,7 @@ function boss(cwd: string): Spec[] {
   const agents = Custom.subagents(cwd).map((a) => a.name + (a.description === "" ? "" : " (" + a.description + ")"));
   const agent = { type: "string", description: "The user's agent to run each task as, by name, with its own instructions, model and tools: " + agents.join("; ") + ". None: a plain subagent." };
   const fields = agents.length === 0 ? { tasks: { type: "array", items: STR }, effort: EFFORT } : { tasks: { type: "array", items: STR }, agent, effort: EFFORT };
-  return [spec("spawn", SPAWN, fields, ["tasks"]), TELL, TODO];
+  return [spec("spawn", SPAWN, fields, ["tasks"]), TELL, TODO, ASK];
 }
 
 // Tools
@@ -465,6 +478,13 @@ export namespace Tools {
         const why = !skill.sticky ? skill.name + " isn't sticky: load it without on, for the task at hand." : who !== MAIN ? "Only illi's own turns turn a sticky skill on or off." : Custom.stick(skill, args.on);
         return why !== null ? { text: why, fail: true } : { text: args.on ? skill.name + " is on: follow it in every reply from now on (from the next turn it is in your system prompt).\n\n" + Tools.skill(skill) : skill.name + " is off: its rules no longer apply.", fail: false };
       }
+      case "ask": {
+        const options = Tools.options(args.options);
+        if (typeof options === "string" || typeof args.question !== "string" || args.question.trim() === "") {
+          return { text: typeof options === "string" ? options : "Ask a question: question is its text.", fail: true };
+        }
+        return { text: (await tools.hooks.ask({ who: "illi", tool: "ask", what: args.question.trim(), options, multi: args.multi === true }, signal)).said, fail: false };
+      }
       case "todo": {
         const list = Tools.todo_check(args.items);
         if (typeof list === "string") {
@@ -583,12 +603,19 @@ export namespace Tools {
   // user's answer (a dropped request: no). Its answer as Claude Code
   // reads it: the input as it was, or a no with its reason
   export async function approve(tools: Tools, who: string, tool: string, input: unknown, signal: AbortSignal): Promise<Out> {
-    const reply = tools.allowed.has(tool) ? { yes: true, always: true, why: "" } : await tools.hooks.ask(who === MAIN ? "illi" : who, tool, Tools.what(input), signal);
+    const reply = tools.allowed.has(tool) ? { yes: true, always: true, said: "" } : await tools.hooks.ask({ who: who === MAIN ? "illi" : who, tool, what: Tools.what(input) }, signal);
     if (reply.yes && reply.always) {
       tools.allowed.add(tool);
     }
-    const said = reply.yes ? { behavior: "allow", updatedInput: input } : { behavior: "deny", message: reply.why };
-    return { text: JSON.stringify(said), fail: false };
+    const answer = reply.yes ? { behavior: "allow", updatedInput: input } : { behavior: "deny", message: reply.said };
+    return { text: JSON.stringify(answer), fail: false };
+  }
+
+  // the ask tool's options, each a label and what it means; a string: why
+  // they make none (not 2 to OPTIONS, one without a label)
+  export function options(raw: unknown): Option[] | string {
+    const list = Array.isArray(raw) ? raw.map((o) => ({ label: String(o?.label ?? "").trim(), about: String(o?.about ?? "").trim() })) : [];
+    return list.length < 2 || list.length > OPTIONS || list.some((o) => o.label === "") ? "Give 2 to " + OPTIONS + " options, each with a label." : list;
   }
 
   // what a tool would do, as a question shows it: a command, a file, a

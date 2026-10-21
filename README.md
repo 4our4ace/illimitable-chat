@@ -74,7 +74,8 @@ flowchart TD
   (the screen keeps showing them); `/clear` empties the screen for a
   fresh topic, and illi still remembers it all. `/tree` writes yours
   as a web page into the current folder.
-- **Tools.** Shell, file edits, subagents, a to-do list, MCP servers.
+- **Tools.** Shell, file edits, subagents, a to-do list, MCP servers,
+  questions with options you pick in the input.
   `/goal <message>` keeps it working until the goal is met.
 - **Drawn replies.** Mermaid diagrams, highlighted code and boxed tables,
   the way [cellsmith](https://github.com/4our4ace/cellsmith) draws them
