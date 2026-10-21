@@ -2,8 +2,8 @@
 // ====
 // The side panel, on a wide screen: the primary agents, the subagents of
 // this run, the profiles, a ChatGPT plan's use, the chat's (the context,
-// the memory), the MCP servers, a hint for the keys or illi's to-do list;
-// the side and side_width settings place it.
+// the memory), the MCP servers, the folder illi works in or its to-do
+// list; the side and side_width settings place it.
 
 import { term_choose, term_mcp } from "./Commands.ts";
 import * as config from "../config/Config.ts";
@@ -22,9 +22,6 @@ const SIDE  = 20;
 const ROOM  = 60;
 const WIDE  = 100;
 
-// the side's hint at its foot, faint
-const HINT = "/help for all keys";
-
 // the side's: the width of its labels (Context, 5h, Week, Memory); its
 // bars' widest, every one alike; the to-do items a folded list shows;
 // how often its clocks (a plan window's reset) move (ms)
@@ -37,8 +34,8 @@ export const CLOCK   = 60000;
 // one the main agent), the tabs (a click shows one), the profiles (a
 // click on the head: /profile), a ChatGPT plan's use, the chat's (its
 // context, the memory), the MCP servers (a click: /mcp); at its foot illi's to-do list, which, longer than the room,
-// pushes the rest up (its head stays); with none, a faint hint for the
-// keys (HINT), if it fits
+// pushes the rest up (its head stays); with none, the folder illi was
+// started in, faint, its start cut (…) to fit, if there's room
 export function term_side(t: Term, w: number, tall: number): Item[] {
   const bold  = { ...Paint.INK, b: true };
   const head  = (text: string, run: (() => void) | null = null): Item => [[Paint.Run(text, bold)], run];
@@ -52,12 +49,13 @@ export function term_side(t: Term, w: number, tall: number): Item[] {
   const subs  = term_side_subs(t);
   const mcp   = term_side_mcp(t);
   const todo  = term_side_todo(t, w);
-  const keys  = [[[Paint.Run(HINT, Paint.DIM)], null] as Item];
+  const here  = config.config_home(process.cwd());
+  const where = [[[Paint.Run(Paint.text_width(here) <= w ? here : "…" + here.slice(-(w - 1)), Paint.DIM)], null] as Item];
   const gap   = [[], null] as Item;
   const fill  = (n: number) => Array.from({ length: n }, (): Item => [[], null]);
   const plan  = term_side_plan(t, w);
   const top   = [head("Agents"), ...mains, gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...term_side_profiles(t), ...(plan.length === 0 ? [] : [...plan, gap]), head("Chat"), ...term_side_use(t, w), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp])];
-  const foot  = todo.length === 0 ? keys : todo;
+  const foot  = todo.length === 0 ? where : todo;
   const room  = tall - top.length - foot.length;
   const items = room > 0 ? [...top, ...fill(room), ...foot]
     : todo.length === 0 ? top
