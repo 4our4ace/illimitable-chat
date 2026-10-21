@@ -10,8 +10,11 @@
 // variable's: the working folder). Each key set is checked at the start
 // (config_check), so one that won't do stops illi with a word on why;
 // a pick set that isn't offered here (a model or vendor gone) gives way
-// to its default instead, told (NOTES). Illi's own pick and the
-// compactor's default to the first vendor offered's (config_def).
+// to its default instead, told (NOTES). Illi's own pick defaults to the
+// first vendor offered's (config_def). The providers stay apart: a
+// chat's summaries and subagents run on its pick's vendor, each
+// vendor's own (`compactor`, `agents`: a pick per vendor), never
+// another's.
 // /settings changes them (config_set), some at once, the rest at the
 // next start. The API
 // keys are read from the environment and removed from it, so no program
@@ -49,7 +52,8 @@ export const NOTES: string[] = [];
 // by the terminal: Settings.ts) or at the next start; what it is, short
 // (the picker shows it by the value); what holds while it's none; the
 // shape its value takes (config_check), if any; whether it's a path. A
-// pick's default here is chatgpt's: it follows the vendors (config_def)
+// pick's default here is chatgpt's: it follows the vendors (config_def);
+// a role's (agents, compactor) is a pick per vendor, comma-separated
 export type Setting = { def: string; values: string[] | "pick" | "text"; now: boolean; what: string; none?: string; shape?: [RegExp, string]; path?: boolean };
 
 // every setting, in the order /settings lists them: a key read here
@@ -57,8 +61,8 @@ export type Setting = { def: string; values: string[] | "pick" | "text"; now: bo
 // config_check need; the README and the customize-illi skill say each
 const TABLE = {
   pick       : { def: "chatgpt:gpt-6.1-sol:medium:slow", values: "pick", now: true, what: "illi's own default model" },
-  agents     : { def: "", values: "pick", now: true, what: "what subagents run on", none: "the chat's pick" },
-  compactor  : { def: "chatgpt:gpt-6-luna:medium:slow", values: "pick", now: true, what: "what writes the summaries" },
+  agents     : { def: "", values: "pick", now: true, what: "what subagents run on, by provider", none: "the chat's pick" },
+  compactor  : { def: "", values: "pick", now: true, what: "what writes the summaries, by provider", none: "each provider's small model" },
   suggest    : { def: "on", values: ["on", "off"], now: true, what: "suggested replies (Tab)", shape: [/^(on|off|true|false|0|1)$/i, "on or off"] },
   side       : { def: "right", values: ["right", "left", "off"], now: true, what: "where the side panel shows", shape: [/^(right|left|off)$/, "right, left or off"] },
   side_width : { def: "25%", values: ["20%", "25%", "30%", "35%", "40%"], now: true, what: "the side panel's width", shape: [/^\d+(\.\d+)?%?$/, "columns (40) or a share of the screen (30%)"] },
@@ -88,13 +92,18 @@ export const OFFER: Offer = {
   models  : config_list(config_value("models") || LABELS.join()),
 };
 
-// Illi's own pick and the compactor's on each vendor, by default: the
-// first vendor offered's (config_def)
+// Illi's own pick on each vendor, by default: the first vendor
+// offered's (config_def); the compactor each vendor's own, while
+// `compactor` names none for it
 const DEFS: Record<Vendor, { pick: string; compactor: string }> = {
   "claude-api": { pick: "claude-api:sonnet-5.5:medium:slow",  compactor: "claude-api:haiku-5.5:medium:slow" },
   "openai-api": { pick: "openai-api:gpt-6.1-sol:medium:slow", compactor: "openai-api:gpt-6-luna:medium:slow" },
-  "chatgpt"   : { pick: TABLE.pick.def,                       compactor: TABLE.compactor.def },
+  "chatgpt"   : { pick: TABLE.pick.def,                       compactor: "chatgpt:gpt-6-luna:medium:slow" },
 };
+
+// the settings that name a pick per vendor (a role's)
+const ROLED = ["agents", "compactor"] as const;
+type Role = (typeof ROLED)[number];
 config_gone();
 
 // the settings read anew as config_set changes one (config_live): the
@@ -117,11 +126,9 @@ export let SIDE       = "";
 export let SIDE_WIDTH = "";
 
 // Illi's own pick (a new chat's, and the chat's again after an agent);
-// what every compaction runs on, whatever the chat's pick; what
-// subagents run on (null: the chat's pick)
+// the picks each role names, by vendor (config_role)
 export let PICK!     : Pick;
-export let COMPACTOR!: Pick;
-export let AGENTS    : Pick | null = null;
+let ROLES: Record<Role, Partial<Record<Vendor, Pick>>> = { agents: {}, compactor: {} };
 
 // how much of the chat a turn sends (Memory.cutoff), in tokens (4 bytes
 // each), on a model: its `contexts` entry, else `context`: a number of
@@ -177,15 +184,15 @@ function config_raw(key: Key): unknown {
   return GONE.has(key) ? undefined : process.env["ILLI_" + key.toUpperCase()] ?? FILE[key];
 }
 
-// a key's default: for Illi's own pick and the compactor's, the first
-// vendor's (DEFS) that offer has, else its first model at medium effort
-// (none offered: SETTINGS'); for the rest, SETTINGS'
+// a key's default: for Illi's own pick, the first vendor's (DEFS) that
+// offer has, else its first model at medium effort (none offered:
+// SETTINGS'); for the rest, SETTINGS'
 export function config_def(key: Key, offer?: Offer): string {
-  if (key !== "pick" && key !== "compactor") {
+  if (key !== "pick") {
     return SETTINGS[key].def;
   }
   const on    = offer ?? OFFER;
-  const def   = on.vendors.map((v) => DEFS[v][key]).find((text) => Pick.read(config_split(text), on) !== null);
+  const def   = on.vendors.map((v) => DEFS[v].pick).find((text) => Pick.read(config_split(text), on) !== null);
   const first = Pick.models(on.vendors, on.models)[0];
   return def ?? (first === undefined ? SETTINGS[key].def : Pick.label({ vendor: first[0], model: first[1].label, effort: "medium", speed: first[1].speeds[0] }));
 }
@@ -198,14 +205,21 @@ function config_where(key: Key): string {
 // the picks set as vendor:model:effort:speed that aren't offered here (a
 // model or vendor gone since) given way to their defaults, each told
 // (NOTES) with where it's set; one not of that shape is left to
-// config_start, which stops illi
+// config_start, which stops illi. A role's pick of a vendor not offered
+// waits till it is, untold
 function config_gone(): void {
-  for (const key of ["pick", "compactor", "agents"] as const) {
-    const raw = config_raw(key);
-    if (typeof raw === "string" && raw.split(":").length === 4 && Pick.read(config_split(raw), OFFER) === null) {
-      GONE.add(key);
-      const def = config_value(key);
-      NOTES.push(key + " " + raw + " isn't offered here, so illi runs on " + (def === "" ? "the chat's pick" : def) + " instead: change it in " + config_where(key) + (config_env_set(key) === null ? " or with /settings." : "."));
+  const told = (key: Key, raw: string, def: string) => NOTES.push(key + " " + raw + " isn't offered here, so illi runs on " + def + " instead: change it in " + config_where(key) + (config_env_set(key) === null ? " or with /settings." : "."));
+  const raw = config_raw("pick");
+  if (typeof raw === "string" && raw.split(":").length === 4 && Pick.read(config_split(raw), OFFER) === null) {
+    GONE.add("pick");
+    told("pick", raw, config_value("pick"));
+  }
+  for (const key of ROLED) {
+    const set = config_raw(key);
+    const own = typeof set === "string" ? config_list(set).filter((text) => text.split(":").length === 4) : [];
+    for (const text of own.filter((text) => OFFER.vendors.includes(text.split(":")[0] as Vendor) && Pick.read(config_split(text), OFFER) === null)) {
+      const vendor = text.split(":")[0] as Vendor;
+      told(key, text, key === "agents" ? "the chat's pick" : DEFS[vendor].compactor);
     }
   }
 }
@@ -240,12 +254,27 @@ export function config_pick(key: Key): Pick | null {
   return text === "" ? null : config_run(key, text);
 }
 
+// what a role runs on for a chat on `pick`, always its vendor: the pick
+// the role's setting names for that vendor, else (the compactor) the
+// vendor's own default, else the chat's pick itself
+export function config_role(key: Role, pick: Pick): Pick {
+  const def = key === "compactor" ? Pick.read(config_split(DEFS[pick.vendor].compactor), OFFER) : null;
+  return ROLES[key][pick.vendor] ?? def ?? pick;
+}
+
+// a role's setting with `pick` in its vendor's place, the other vendors'
+// kept
+export function config_role_set(key: Role, pick: Pick): string {
+  const rest = config_list(config_value(key)).filter((text) => text !== "" && text.split(":")[0] !== pick.vendor);
+  return [...rest, Pick.label(pick)].join(",");
+}
+
 // each key set (in a config.json or a variable) checked as /set checks
 // one; one that won't do throws, saying where it's set
 function config_start(): void {
   for (const key of Object.keys(SETTINGS) as Key[]) {
     const raw = config_raw(key);
-    const why = raw === undefined ? null : config_check(key, raw);
+    const why = raw === undefined ? null : config_check(key, raw, false);
     if (why !== null) {
       throw new Error("config: " + why + " (" + (config_env_set(key) ?? "config.json") + ")");
     }
@@ -256,17 +285,16 @@ function config_start(): void {
 // read first, then all kept, so one that won't read leaves them as they
 // were
 function config_live(): void {
-  const agents = config_value("agents");
-  const picks  = [config_run("pick", config_value("pick")), config_run("compactor", config_value("compactor")), agents === "" ? null : config_run("agents", agents)] as const;
+  const pick   = config_run("pick", config_value("pick"));
+  const roles  = { agents: config_roles("agents", config_value("agents"), OFFER, false), compactor: config_roles("compactor", config_value("compactor"), OFFER, false) };
   const own    = config_contexts(config_value("contexts"));
   RULES       = config_place("rules");
   AFTER       = config_value("after");
   SUGGEST     = !["off", "false", "0"].includes(String(config_value("suggest")).trim().toLowerCase());
   SIDE        = config_value("side");
   SIDE_WIDTH  = config_value("side_width");
-  PICK        = picks[0];
-  COMPACTOR   = picks[1];
-  AGENTS      = picks[2];
+  PICK        = pick;
+  ROLES       = roles;
   CONTEXT_SET = String(config_value("context")).trim();
   CONTEXTS    = own ?? {};
 }
@@ -330,9 +358,12 @@ export function config_set(key: Key, value: unknown): void {
 // offered both by this illi (read anew at once) and at the next start (a
 // vendor or a model taken out may leave one that won't start; one added
 // is offered only then). A pick not set is its default on the vendors
-// then (config_def), so only one set must be offered now. A file named
-// needn't be there: none is none
-export function config_check(key: string, value: unknown): string | null {
+// then (config_def), so only one set must be offered now. A role's picks
+// (one per vendor) must each be offered if their vendor is, the key's
+// being set (`strict`; else, as at the start, one not offered waits); one
+// of a vendor not offered waits till it is. A file named needn't be
+// there: none is none
+export function config_check(key: string, value: unknown, strict = true): string | null {
   if (!(key in SETTINGS)) {
     return "No setting " + key + ". The settings: " + Object.keys(SETTINGS).join(", ") + ".";
   }
@@ -356,16 +387,18 @@ export function config_check(key: string, value: unknown): string | null {
   try {
     later.vendors = config_vendors(get("vendors"));
     later.models  = key === "models" ? config_list(text || LABELS.join()) : OFFER.models;
-    for (const k of (["pick", "compactor", "agents"] as const).filter((k) => get(k) !== "")) {
-      config_run(k, set(k) ? get(k) : config_def(k, later), later);
+    config_run("pick", set("pick") ? get("pick") : config_def("pick", later), later);
+    for (const k of ROLED) {
+      config_roles(k, get(k), later, strict && k === key);
     }
   } catch (err: any) {
     return err.message.replace(/^config: /, "");
   }
-  for (const k of (["pick", "compactor", "agents"] as const).filter((k) => set(k) && get(k) !== "")) {
-    if (Pick.read(config_split(get(k)), OFFER) === null) {
-      return k + " " + get(k) + " is offered from the next start (vendors and models change then): set it once illi starts again.";
-    }
+  const now = (text: string) => Pick.read(config_split(text), OFFER) !== null;
+  const own = ROLED.includes(key as Role) && strict ? config_list(text).filter((one) => OFFER.vendors.includes(one.split(":")[0] as Vendor)) : [];
+  const off = [...(set("pick") && !now(get("pick")) ? ["pick " + get("pick")] : []), ...own.filter((one) => !now(one)).map((one) => key + " " + one)];
+  if (off.length > 0) {
+    return off[0] + " is offered from the next start (vendors and models change then): set it once illi starts again.";
   }
   return null;
 }
@@ -387,6 +420,32 @@ function config_place(key: Key): string {
 // or the root's under it)
 function config_base(key: Key): string {
   return config_env_set(key) !== null ? process.cwd() : key in config_file(PATH) ? DIR : ROOT;
+}
+
+// a role's setting read: its picks by vendor, one each; one of a vendor
+// not offered waits till it is; one of an offered vendor that isn't
+// offered throws (`strict`), else waits too
+function config_roles(key: Role, text: string, offer = OFFER, strict = true): Partial<Record<Vendor, Pick>> {
+  const roles: Partial<Record<Vendor, Pick>> = {};
+  const seen = new Set<Vendor>();
+  for (const one of config_list(text).filter((one) => one !== "")) {
+    const vendor = one.split(":")[0] as Vendor;
+    if (one.split(":").length !== 4 || !VENDORS.includes(vendor)) {
+      throw new Error("config: " + key + " takes a vendor:model:effort:speed per provider, comma-separated: " + one);
+    }
+    if (seen.has(vendor)) {
+      throw new Error("config: " + key + " takes one pick per provider: two for " + vendor);
+    }
+    seen.add(vendor);
+    const pick = offer.vendors.includes(vendor) ? Pick.read(config_split(one), offer) : null;
+    if (pick === null && strict && offer.vendors.includes(vendor)) {
+      config_run(key, one, offer);
+    }
+    if (pick !== null) {
+      roles[vendor] = pick;
+    }
+  }
+  return roles;
 }
 
 function config_run(key: string, text: string, offer = OFFER): Pick {

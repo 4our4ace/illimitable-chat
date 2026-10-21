@@ -7,7 +7,8 @@
 // Over the messages grows a binary tree: node (0,i) is message i
 // (or the line it was logged with) in at most NODE bytes, node (l,i)
 // merges (l-1,2i) and (l-1,2i+1). A source that fits is its node; else a
-// compaction writes it: a call like a turn, on the config's COMPACTOR,
+// compaction writes it: a call like a turn, on the chat's compactor (its
+// pick's vendor's: config_role),
 // with the same system prompt (`share`), no tools, and its
 // own view (`seen`) up to the node's `ctx`; a line too long is asked
 // anew (build). The call asks till it is answered (AskAI patient: an
@@ -903,10 +904,11 @@ export namespace Memory {
     parts.forEach(({ l, i }) => mem.made?.(l, i));
   }
 
-  // a call of a summary, its blocks, on the compactor; a try that failed
-  // told (mem.stuck)
+  // a call of a summary, its blocks, on the compactor of the chat's
+  // pick's vendor; a try that failed told (mem.stuck)
   export function ask(mem: Memory, blocks: Block[]): Call {
-    return AskAI.ask({ ...mem.share(), ...Pick.ask(config.COMPACTOR), blocks, patient: true, stuck: (why) => mem.stuck?.(why) }, () => {});
+    const share = mem.share();
+    return AskAI.ask({ ...share, ...Pick.ask(config.config_role("compactor", share)), blocks, patient: true, stuck: (why) => mem.stuck?.(why) }, () => {});
   }
 
   // a summary's try: its call's end, the call held in `calls` till then

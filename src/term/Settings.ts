@@ -4,7 +4,8 @@
 // it is added there) in the picker, its value now and what it is, typed
 // to search. The lit one: Left and Right step it through its values, so
 // does Enter (kept in config.json at once); Enter on a pick opens the
-// model picker for it, on one typed in puts `/set <key> <value>` in the
+// model picker for it (a role's: the chat's vendor's pick, the choice
+// kept in its vendor's place), on one typed in puts `/set <key> <value>` in the
 // input to change; Delete puts its default back. A change applies at
 // once or at the next start, as the foot says. /set changes one by its
 // words.
@@ -94,12 +95,13 @@ function setting_open(t: Term, key: config.Key): void {
   const env = config.config_env_set(key);
   if (config.SETTINGS[key].values === "pick") {
     const rows = Pick.models(t.v.vendors, t.v.models);
-    const from = config.config_pick(key) ?? t.v.pick;
+    const role = key === "agents" || key === "compactor" ? key : null;
+    const from = role !== null && t.v.pick !== null ? config.config_role(role, t.v.pick) : config.config_pick(key) ?? t.v.pick;
     if (env !== null || from === null || rows.length === 0) {
       return term_note(t, env !== null ? key + " is set by " + env + ": unset it to change it here." : "No models offered yet.");
     }
     return term_model_pick(t, rows, "Settings: " + key, from, (p) => {
-      if (setting_set(t, key, Pick.label(p))) {
+      if (setting_set(t, key, role === null ? Pick.label(p) : config.config_role_set(role, p))) {
         term_note(t, setting_said(key));
       }
       term_settings(t, key);
@@ -140,8 +142,8 @@ export function setting_set(t: Term, key: config.Key, value: unknown): boolean {
 }
 
 // a setting's value (now, else the one given) as shown: a pick as a
-// person reads it (Pick.shown); none, what holds instead; a path in
-// Illi's folder by its name, else from ~
+// person reads it (Pick.shown; a role's, each); none, what holds
+// instead; a path in Illi's folder by its name, else from ~
 function setting_shown(key: config.Key, value?: string): string {
   const s    = config.SETTINGS[key];
   const raw  = value ?? (config.config_value(key) as unknown);
@@ -150,8 +152,11 @@ function setting_shown(key: config.Key, value?: string): string {
     return s.none ?? "none";
   }
   const file = text.startsWith(config.DIR + "/") ? text.slice(config.DIR.length + 1) : term_home(text);
-  const [vendor, model, effort, speed] = text.split(":");
-  return s.values === "pick" ? Pick.shown({ vendor, model, effort, speed } as Pick) : s.path ? file : text;
+  const shown = (one: string) => {
+    const [vendor, model, effort, speed] = one.trim().split(":");
+    return Pick.shown({ vendor, model, effort, speed } as Pick);
+  };
+  return s.values === "pick" ? text.split(",").map(shown).join(", ") : s.path ? file : text;
 }
 
 // a value cut to WIDE characters, an ellipsis at its end

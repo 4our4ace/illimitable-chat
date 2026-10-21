@@ -85,9 +85,12 @@ All keys are optional, and an ILLI_<KEY> environment variable overrides
 one:
 
 - vendors: chatgpt (the default), claude-api, openai-api
-- pick: what illi runs on, as vendor:model:effort:speed; compactor: what
-  writes its memory's summaries (both default to the first vendor's
-  models); agents: what subagents run on
+- pick: what illi runs on, as vendor:model:effort:speed (default: the
+  first vendor's); compactor: what writes its memory's summaries; agents:
+  what subagents run on. Those two take a pick per vendor,
+  comma-separated, and a chat uses its own vendor's: vendors never mix.
+  Unset, the compactor is the vendor's small model, agents the chat's
+  pick
 - models: the models offered; context: the tokens a turn sends ("auto", a
   number, or a share like "60%"); contexts: per model
 - rules: the rules file, RULES.md in illi's folder unless set; after: a

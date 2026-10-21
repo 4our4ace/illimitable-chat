@@ -68,6 +68,10 @@ defaults):
 `ILLI_VENDORS=claude-api illi` tries it without a file; `/set vendors
 claude-api` in the chat works from the next start.
 
+The vendors never mix: a chat's summaries and subagents run on its own
+vendor's models, haiku-5.5 or gpt-6-luna unless `compactor` names
+another for that vendor (one pick per vendor, comma-separated).
+
 How it works
 ------------
 
@@ -209,8 +213,8 @@ Config
 | ------------ | --------------------------------- | ------------------------------------------------ |
 | `vendors`    | `chatgpt`                         | also `claude-api`, `openai-api` (API keys)       |
 | `pick`       | `chatgpt:gpt-6.1-sol:medium:slow` | vendor:model:effort:speed (`/model` per chat); default: the first vendor's |
-| `compactor`  | `chatgpt:gpt-6-luna:medium:slow`  | writes the summaries; default: the first vendor's |
-| `agents`     | the pick                          | what subagents run on                            |
+| `compactor`  | each vendor's small model         | writes the summaries: a pick per vendor, comma-separated |
+| `agents`     | the pick                          | what subagents run on: a pick per vendor         |
 | `models`     | all                               | models offered                                   |
 | `context`    | `auto`                            | tokens a turn sends: `auto` (70% of the window, at most 400k), a number, or `"60%"` |
 | `contexts`   |                                   | per model: `{ "gpt-6.1-sol": 350000 }`           |

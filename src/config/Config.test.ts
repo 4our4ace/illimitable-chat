@@ -7,7 +7,9 @@
 // in config.json taken as its text. Each key set is checked at the
 // start: one that won't do stops illi with one line on why, no trace;
 // a pick set that isn't offered gives way to its default, told. The
-// picks' defaults follow the vendors, so vendors alone start; the start
+// picks' defaults follow the vendors, so vendors alone start. Each
+// provider's roles are its own: summaries on its small model or the one
+// set for it, subagents on the chat's pick or the one set for it; the start
 // tells of an API key set whose vendor isn't offered, and of the pick's
 // key missing. An unknown argument is named.
 
@@ -84,16 +86,34 @@ test("vendors alone start, the picks' defaults theirs; a pick set that isn't off
   for (const vendors of ["claude-api", "openai-api", "claude-api,chatgpt"]) {
     expect(start({ ILLI_VENDORS: vendors })).toMatchObject({ code: 0, err: "" });
   }
-  const gone = start({ ILLI_VENDORS: "claude-api", ILLI_COMPACTOR: "chatgpt:gpt-6-luna:medium:slow" });
+  const gone = start({ ILLI_VENDORS: "claude-api", ILLI_COMPACTOR: "chatgpt:gpt-6-luna:medium:slow,claude-api:nope-1:medium:slow" });
   expect(gone).toMatchObject({ code: 0, err: "" });
-  expect(gone.out!.replace(/\s+/g, " ")).toContain("compactor chatgpt:gpt-6-luna:medium:slow isn't offered here, so illi runs on claude-api:haiku-5.5:medium:slow instead: change it in ILLI_COMPACTOR.");
+  const said = gone.out!.replace(/\s+/g, " ");
+  expect(said).toContain("compactor claude-api:nope-1:medium:slow isn't offered here, so illi runs on claude-api:haiku-5.5:medium:slow instead: change it in ILLI_COMPACTOR.");
+  expect(said).not.toContain("gpt-6-luna");
+});
+
+test("each provider's roles stay its own: summaries on its small model or the one set for it, subagents on the chat's pick or the one set for it", () => {
+  const luna = { vendor: "chatgpt", model: "gpt-6-luna", effort: "medium", speed: "slow" } as const;
+  const sol  = { vendor: "chatgpt", model: "gpt-6.1-sol", effort: "high", speed: "slow" } as const;
+  expect(config.config_role("compactor", sol)).toEqual(luna);
+  expect(config.config_role("agents", sol)).toEqual(sol);
+  config.config_set("compactor", "claude-api:haiku-5.5:low:slow,chatgpt:gpt-6.1-sol:low:slow");
+  config.config_set("agents", "chatgpt:gpt-6-luna:medium:slow");
+  expect(config.config_role("compactor", sol)).toEqual({ ...sol, effort: "low" });
+  expect(config.config_role("agents", sol)).toEqual(luna);
+  expect(config.config_role_set("compactor", luna)).toBe("claude-api:haiku-5.5:low:slow,chatgpt:gpt-6-luna:medium:slow");
+  expect(config.config_check("compactor", "chatgpt:gpt-6-luna:medium:slow,chatgpt:gpt-6.1-sol:low:slow")).toBe("compactor takes one pick per provider: two for chatgpt");
+  expect(config.config_check("compactor", "chatgpt:nope:medium:slow")).toBe("compactor is no vendor:model:effort:speed offered here: chatgpt:nope:medium:slow");
+  config.config_set("compactor", null);
+  config.config_set("agents", null);
+  expect(config.config_role("compactor", sol)).toEqual(luna);
 });
 
 test("the picks' defaults are the first vendor's that is offered; the vendors change while the picks are unset", () => {
   const all = { vendors: ["claude-api", "chatgpt"], models: LABELS } as Offer;
-  expect([config.config_def("pick", all), config.config_def("compactor", all)]).toEqual(["claude-api:sonnet-5.5:medium:slow", "claude-api:haiku-5.5:medium:slow"]);
+  expect([config.config_def("pick", all), config.config_def("compactor", all)]).toEqual(["claude-api:sonnet-5.5:medium:slow", ""]);
   expect(config.config_def("pick", { vendors: ["openai-api"], models: LABELS })).toBe("openai-api:gpt-6.1-sol:medium:slow");
-  expect(config.config_def("compactor", { vendors: ["claude-api", "chatgpt"], models: ["opus-5.5"] })).toBe("claude-api:opus-5.5:medium:slow");
   expect(config.config_def("jobs")).toBe("8");
   expect(config.config_check("vendors", "claude-api")).toBeNull();
   expect(config.config_check("vendors", "openai-api")).toBeNull();

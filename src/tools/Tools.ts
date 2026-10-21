@@ -498,13 +498,14 @@ export namespace Tools {
     tools.hooks.report(agent, report_text(agent.name, agent.log ?? agent.name, agent.replies.join("\n\n")), agent.stop || away);
   }
 
-  // a call of an agent: on its user's agent's model, else config.AGENTS,
-  // else the chat's pick (an agent's model not offered gives way to them)
+  // a call of an agent: on its user's agent's model, else the agents
+  // pick of the chat's vendor, else the chat's pick (an agent's model not
+  // offered gives way to them)
   export function ask(tools: Tools, agent: Agent): Ask {
     const log = { text: Memory.agent_show(tools.mem, agent.name), mark: true };
     const server = Tools.at(tools, agent.name);
     const profile = Custom.agent(tools.cwd, agent.role.agent);
-    const base = config.AGENTS ?? tools.hooks.pick();
+    const base = config.config_role("agents", tools.hooks.pick());
     const own = profile === null ? base : Custom.pick(profile, base, config.OFFER);
     const run = Pick.ask(typeof own === "string" ? base : own);
     const system = Tools.system(SUB + Custom.section(profile), tools.cwd);
