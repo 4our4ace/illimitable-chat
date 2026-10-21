@@ -107,7 +107,7 @@ const until = async (ok: () => boolean) => {
 test("a turn runs Claude Code whole, illi's prompt after its own and illi's tools added; its stream shown and logged", async () => {
   const { events, end, log } = await call("turn");
   expect(log.args).toContain("--mcp-config");
-  expect(JSON.parse(log.args[log.args.indexOf("--mcp-config") + 1])).toEqual({ mcpServers: { illi: { type: "http", url: "http://127.0.0.1:1/key/main?lean" } } });
+  expect(JSON.parse(log.args[log.args.indexOf("--mcp-config") + 1])).toEqual({ mcpServers: { illi: { type: "http", url: "http://127.0.0.1:1/key/main?lean", timeout: 86400000 } } });
   expect(log.args.slice(log.args.indexOf("--allowedTools"), log.args.indexOf("--allowedTools") + 2)).toEqual(["--allowedTools", "mcp__illi"]);
   expect(log.args.slice(log.args.indexOf("--permission-prompt-tool"), log.args.indexOf("--permission-prompt-tool") + 2)).toEqual(["--permission-prompt-tool", "mcp__illi__approve"]);
   expect(log.args).not.toContain("--tools");
