@@ -7,6 +7,8 @@
 // never passes its width; each block's lines are marked.
 
 import { expect, test } from "bun:test";
+import * as fs from "node:fs";
+import * as os from "node:os";
 import * as Paint from "./Paint.ts";
 import * as Reply from "./Reply.ts";
 import * as Screen from "./Screen.ts";
@@ -91,6 +93,30 @@ test("an image's token, spaced from the words, named in order", () => {
   expect(Screen.ed_image(ed)).toBe(2);
   expect(ed.text).toBe("look [Image #1] and [Image #2] ");
   expect(Screen.ed_images(ed.text + " [Image #1]")).toEqual([1, 2, 1]);
+});
+
+test("the terminal's input, read into one buffer, keeps a character cut by a read's end whole; left, it is read no more", async () => {
+  const dir  = fs.mkdtempSync(os.tmpdir() + "/illi-read-");
+  Bun.spawnSync(["mkfifo", dir + "/in"]);
+  const fd   = fs.openSync(dir + "/in", "r+");
+  const { scr } = screen();
+  const sent = Buffer.from("héllo 𝒜");
+  try {
+    Screen.screen_read(scr, fd);
+    fs.writeSync(fd, sent.subarray(0, 2));
+    await Bun.sleep(50);
+    expect(scr.ed.text).toBe("h");
+    fs.writeSync(fd, sent.subarray(2));
+    await Bun.sleep(50);
+    expect(scr.ed.text).toBe("héllo 𝒜");
+    scr.left = true;
+    fs.writeSync(fd, "x");
+    await Bun.sleep(50);
+    expect(scr.ed.text).toBe("héllo 𝒜");
+  } finally {
+    fs.closeSync(fd);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("a paste goes to what takes it, else it is typed", () => {
