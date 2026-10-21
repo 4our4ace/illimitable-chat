@@ -53,7 +53,7 @@ const chat = Chat.open(process.cwd());
 test("a view over the pipe sends a message and hears the reply", async () => {
   const v = View.view_new();
   const hear = (msg: any) => View.view_hear(v, msg).forEach((out) => View.link_send(v, out));
-  View.link_open(v, Chat.link(chat, hear, async () => true));
+  View.link_open(v, Chat.link(chat, hear));
   await until(() => v.up);
   expect([...v.whole.values()][0].kind).toBe("illi");
   View.view_act(v, { $: "Send", text: "hi" }).forEach((out) => View.link_send(v, out));

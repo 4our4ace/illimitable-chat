@@ -1,8 +1,8 @@
 // View
 // ====
-// What a view of the chat holds and draws (Term.ts), with no DOM: `view_hear` takes the server's
-// messages, `view_act` the person's acts, and both answer what to send
-// (by the Link). The main chat shows what its agent sees (Chat.ts): the
+// What a view of the chat holds and draws (Term.ts): `view_hear` takes
+// the chat's messages, `view_act` the person's acts, and both answer what
+// to send (by the Link). The main chat shows what its agent sees (Chat.ts): the
 // view's parts as blocks ("nx"), from the turn on each message whole
 // (0x) and its thoughts, then what streams or what the turn waits on. The
 // work between the person's words and illi's (tool calls, their results,
@@ -94,8 +94,8 @@ export type State = {
 // verbose: all of them; minds: the thoughts after each message; pages: the agents' asked
 // for; page: the one shown (null: illi's); made: the characters the
 // models streamed (replies, thoughts, calls) since work began; flow:
-// the last RATE ms of them (when, how many); the Link's: this view's
-// id, acts not answered, socket (up: it showed the chat)
+// the last RATE ms of them (when, how many); the Link's: acts not
+// answered, the pipe (up: it showed the chat), what sends those not sent
 export type View = State & {
   parts : Part[];
   turn  : number;
@@ -112,9 +112,8 @@ export type View = State & {
   pages : Map<string, Page>;
   page  : Page | null;
   notes : string[];
-  tab   : string;
   out   : Post[];
-  ws    : WebSocket | null;
+  ws    : Pipe | null;
   up    : boolean;
   flush : () => void;
 };
@@ -157,18 +156,20 @@ export type Client =
   | { $: "agent"; name: string }
   | { $: "answer"; ask: string; yes: boolean; always: boolean; why?: string }; // a question (State asks, its id) answered; why: a no's reason
 
-// an act not answered: with its id, the socket it went by, what its
-// answer does, what a message said (shown while offline: view_tail)
-export type Post = { msg: Client & { id: string }; ws: WebSocket | null; done: (a: Answer) => void; said: string };
+// an act not answered: with its id, whether it was sent, what its
+// answer does
+export type Post = { msg: Client & { id: string }; sent: boolean; done: (a: Answer) => void };
 
-// how a view reaches the server: a socket by its query, a post, what it
-// does with a message, and, one lost (up: it showed the chat), whether to
-// open another
+// the view's end of a pipe to the chat (Chat.pipe): an act sent as JSON,
+// the end; the chat's messages come to onmessage
+export type Pipe = { send: (text: string) => void; close: () => void; onmessage: ((ev: { data: string }) => void) | null };
+
+// how a view reaches the chat: its pipe, an act with a body (its fields,
+// its body), what it does with a message
 export type Link = {
-  open : (query: string) => WebSocket;
-  post : (path: string, body: any) => Promise<Response>;
+  open : () => Pipe;
+  post : (msg: object, body: Blob) => Promise<Answer>;
   hear : (msg: Server) => void;
-  lost : (up: boolean) => Promise<boolean>;
 };
 
 // what a person does
@@ -209,19 +210,6 @@ export const MAIN = "illi";
 // illi's turn, as a stop names it among the agents at work
 export const TURN = "illi's turn";
 
-// the messages' version, in a view's query; one more for each change an
-// older view would misread
-export const WIRE = 2;
-
-// the Link's: the most a live socket hears nothing (ms); the wait to open
-// another; the server's tick; a terminal's close as it quits; the
-// server's close as the chat moves to its next process (a deploy)
-export const PING  = 10000;
-export const RETRY = 1000;
-export const TICK  = "+";
-export const QUIT  = 4000;
-export const MOVE  = 4001;
-
 // what a model writes, as the work's count of tokens takes it (made);
 // about how many characters make a token; the time its speed is taken
 // over, and how often it is taken anew (ms)
@@ -232,9 +220,6 @@ const STEP  = 500;
 
 const WAIT = "compressing…";
 const SUMS = "compressing earlier messages…";
-
-// under the messages sent while offline, still kept to send
-const UNSENT = "Sends once connected.";
 
 // the kinds an image may be, each by its mark at a byte of its first HEAD
 const MARKS: Array<[string, number, string]> = [
@@ -307,7 +292,6 @@ export function view_new(): View {
     pages     : new Map(),
     page      : null,
     notes     : [],
-    tab       : crypto.randomUUID(),
     out       : [],
     ws        : null,
     up        : false,
@@ -584,8 +568,7 @@ export function view_rows(v: View, parts: Part[]): Row[][] {
 }
 
 // what streams on the page shown, or what the turn waits on (unless the
-// screen says it otherwise: caption false); the messages kept while
-// offline
+// screen says it otherwise: caption false)
 export function view_tail(v: View, caption = true): Row[] {
   const live = view_stream(v);
   if (v.page === null && v.fold !== null) {
@@ -593,12 +576,10 @@ export function view_tail(v: View, caption = true): Row[] {
   }
   const shown = v.page !== null || v.verbose ? live : live.filter((l) => !ACTIVITY.includes(l.kind));
   const rows  = shown.flatMap((l) => entry_rows(null, l.kind, l.text));
-  const said = v.page === null && !v.up ? v.out.flatMap((p) => entry_rows(null, "user", p.said)) : [];
-  const kept = said.length > 0 ? [...said, Cap(UNSENT)] : [];
   if (v.page !== null || rows.length > 0 || v.wait === "" || !caption) {
-    return [...rows, ...kept];
+    return rows;
   }
-  return [Cap(v.wait === SUMMARIES ? SUMS : "waiting for " + v.wait + "…"), ...kept];
+  return [Cap(v.wait === SUMMARIES ? SUMS : "waiting for " + v.wait + "…")];
 }
 
 // what streams on the page shown
@@ -716,78 +697,43 @@ function view_live(v: View, agent: string | undefined): Live[] | null {
 
 // Link
 // ====
-// What TCP, WebSocket and HTTP do is theirs; the Link adds only what
-// they can't. A socket that dies loses what was in flight: each act has
-// an id and is kept until answered (its ack, or its post's answer); those
-// not answered go again once the next socket shows the chat (none on a
-// live one); the server does each once (Chat.apply). An act
-// with a body is a post of its own; one unanswered means the link is
-// lost. A page sees no pings: the server ticks each PING / 2, and a view
-// drops a socket silent for a PING. A socket closed as MOVE opens again
-// at once, unseen: no link was lost.
+// A view's end of the chat, in this process (Chat.link). Each act has an
+// id and is kept till answered (its ack); those made before the chat was
+// first shown go once it is. An act with a body goes as a post.
 
 export function link_open(v: View, link: Link): void {
-  const ws   = link.open("?tab=" + v.tab + "&wire=" + WIRE);
-  let heard  = Date.now();
-  const tick = setInterval(() => Date.now() - heard > PING && drop(), PING / 2);
-  async function drop(moved = false): Promise<void> {
-    const up = v.up;
-    ws.onmessage = null;
-    ws.onclose   = null;
-    clearInterval(tick);
-    ws.close();
-    [v.ws, v.up] = [null, false];
-    if (moved || await link.lost(up)) {
-      setTimeout(() => link_open(v, link), moved ? 0 : RETRY);
-    }
-  }
-  // sends, in order, the acts not sent on this socket
+  const pipe = link.open();
+  // sends, in order, the acts not sent yet
   function flush(): void {
-    for (const post of v.up && v.ws === ws ? v.out.filter((p) => p.ws !== ws) : []) {
-      post.ws = ws;
+    for (const post of v.up ? v.out.filter((p) => !p.sent) : []) {
+      post.sent = true;
       if ("body" in post.msg) {
-        upload(post);
+        void upload(post);
       } else {
-        ws.send(JSON.stringify(post.msg));
+        pipe.send(JSON.stringify(post.msg));
       }
     }
   }
   async function upload(post: Post): Promise<void> {
     const { body, ...rest } = post.msg as any;
-    const query = Object.entries(rest).map(([k, x]) => k + "=" + encodeURIComponent(String(x)));
-    const res = await link.post("/api/act?" + query.join("&"), await body()).catch(() => null);
-    const out = await res?.json().catch(() => null);
-    if (out != null) {
-      link.hear({ $: "ack", id: post.msg.id, ...out });
-    } else if (post.ws === ws && v.ws === ws) {
-      drop();
-    }
+    const out = await Promise.try(async () => link.post(rest, await body())).catch((err): Answer => ({ error: String(err?.message ?? err) }));
+    link.hear({ $: "ack", id: post.msg.id, ...out });
   }
-  [v.ws, v.flush] = [ws, flush];
-  ws.onmessage = (ev) => {
-    heard = Date.now();
-    if (ev.data === TICK) {
-      return;
-    }
-    const msg = JSON.parse(String(ev.data));
+  [v.ws, v.flush] = [pipe, flush];
+  pipe.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
     const join = msg.$ === "view" && !v.up;
-    if (join) {
-      v.up = true;
-      v.pages.clear();
-    }
+    v.up ||= join;
     link.hear(msg);
     if (join) {
-      view_act(v, { $: "Goto", name: v.page?.name ?? null }).forEach((out) => link_send(v, out));
       flush();
     }
   };
-  ws.onclose = (ev) => drop(ev.code === MOVE);
 }
 
-// an act, kept until answered; by default a refusal is a note; said: a
-// message's text
-export function link_send(v: View, msg: Client, done = (a: Answer) => link_note(v, a), said = ""): void {
-  v.out.push({ msg: { id: crypto.randomUUID(), ...msg }, ws: null, done, said });
+// an act, kept until answered; by default a refusal is a note
+export function link_send(v: View, msg: Client, done = (a: Answer) => link_note(v, a)): void {
+  v.out.push({ msg: { id: crypto.randomUUID(), ...msg }, sent: false, done });
   v.flush();
 }
 

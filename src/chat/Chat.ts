@@ -1,10 +1,9 @@
 // Chat
 // ====
 // The agent: one chat that never ends (Memory.ts), at config.DIR/chat, run
-// in this process, and its views (View.ts), each fed by an in-process pipe
-// shaped as the socket a remote view would use (Chat.link): the chat's
-// events one way, the person's acts the other (Chat.apply), each
-// answered once what it logged is on disk. One process at a time holds the chat (Chat.lock).
+// in this process, and its views (View.ts), each fed by a pipe (Chat.link):
+// the chat's events one way, the person's acts the other (Chat.apply),
+// each answered once what it logged is on disk. One process at a time holds the chat (Chat.lock).
 //
 // One turn at a time. A message is logged as it arrives; the running call
 // takes it between tool calls if it goes whole beside its view, else the
@@ -22,14 +21,14 @@ import { Disk } from "./Disk.ts";
 import { Memory, type Share } from "./Memory.ts";
 import { Pick } from "../ai/Pick.ts";
 import { MASTER, SEARCHES, Tools, type Agent, type Live, type Reply } from "../tools/Tools.ts";
-import { IMAGES, live_push, PING, SUMMARIES, TICK, TURN, type Answer, type Link, type Part, type Question, type Server as Out, type Wait } from "../ui/View.ts";
+import { IMAGES, live_push, SUMMARIES, TURN, type Answer, type Link, type Part, type Pipe, type Question, type Server as Out, type Wait } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
 
 // Types
 // =====
 
-// a view's end of its pipe: the parts it was shown (Chat.teach)
-type Sock = { data: { seen: Set<string> }; send: (text: string) => void; close: (code?: number) => void };
+// the chat's end of a view's pipe: the parts it was shown (Chat.teach)
+type Sock = { data: { seen: Set<string> }; send: (text: string) => void };
 
 // a message logged: its pages [id, end)
 type Msg = { id: number; end: number };
@@ -718,55 +717,34 @@ export namespace Chat {
 
   // Views
   // -----
-  // A pipe message carries at most one log entry or summary, as a socket
-  // message would.
+  // A pipe message carries at most one log entry or summary.
 
-  // a view in this process, by the Link a remote one would use: its acts
-  // reach the chat, the chat's messages reach it, each in order, a step
-  // of the event loop later (as a socket's would); acts with a body come
-  // as posts
-  export function link(chat: Chat, hear: Link["hear"], lost: Link["lost"]): Link {
-    return {
-      open : () => Chat.pipe(chat),
-      post : async (path, body) => Response.json(await Chat.posted(chat, path, body)),
-      hear,
-      lost,
-    };
+  // a view's way to the chat: its acts reach the chat, the chat's
+  // messages reach it, each in order, a step of the event loop later;
+  // acts with a body come as posts
+  export function link(chat: Chat, hear: Link["hear"]): Link {
+    return { open: () => Chat.pipe(chat), post: (msg, body) => Chat.posted(chat, msg, body), hear };
   }
 
-  // the view's end, as a WebSocket, and the chat's (a Sock), joined; ticks
-  // as a server's socket does, so the view never thinks it lost
-  export function pipe(chat: Chat): WebSocket {
-    const view: any = { onmessage: null, onclose: null };
-    const tick = setInterval(() => view.onmessage?.({ data: TICK }), PING / 2);
-    tick.unref();
+  // the view's end and the chat's (a Sock), joined, till the view's ends
+  export function pipe(chat: Chat): Pipe {
     let shut = false;
-    const end = () => {
-      shut = true;
-      clearInterval(tick);
-      Chat.leave(chat, sock);
+    const sock: Sock = { data: { seen: new Set() }, send: (text) => queueMicrotask(() => shut || view.onmessage?.({ data: text })) };
+    const view: Pipe = {
+      onmessage : null,
+      send      : (data) => queueMicrotask(() => shut || Chat.answer(chat, sock, data)),
+      close     : () => {
+        shut = true;
+        Chat.leave(chat, sock);
+      },
     };
-    const sock: Sock = {
-      data  : { seen: new Set() },
-      send  : (text) => queueMicrotask(() => shut || view.onmessage?.({ data: text })),
-      close : (code) => queueMicrotask(() => {
-        if (!shut) {
-          end();
-          view.onclose?.({ code });
-        }
-      }),
-    };
-    view.send = (data: string) => queueMicrotask(() => shut || Chat.answer(chat, sock, data));
-    view.close = () => shut || end();
     queueMicrotask(() => Chat.join(chat, sock));
     return view;
   }
 
-  // an act with a body, posted (View.ts upload): its fields in the query
-  export async function posted(chat: Chat, path: string, body: Blob): Promise<Answer> {
-    const msg = Object.fromEntries(new URL(path, "http://illi").searchParams);
-    const bytes = Buffer.from(await body.arrayBuffer());
-    return Chat.apply(chat, { ...msg, body: bytes }).catch(Chat.fail);
+  // an act with a body, posted (View.ts upload)
+  export async function posted(chat: Chat, msg: object, body: Blob): Promise<Answer> {
+    return Chat.apply(chat, { ...msg, body: Buffer.from(await body.arrayBuffer()) }).catch(Chat.fail);
   }
 
   export function all(chat: Chat, msg: Out): void {
@@ -910,7 +888,7 @@ export namespace Chat {
   export async function act(chat: Chat, msg: any): Promise<Answer> {
     switch (msg.$) {
       case "say": {
-        return Chat.say(chat, String(msg.sizes ?? "").split(",").filter(Boolean).map(Number), msg.body);
+        return Chat.say(chat, msg.sizes ?? [], msg.body);
       }
       case "stop": {
         const name = msg.name === undefined ? null : String(msg.name);

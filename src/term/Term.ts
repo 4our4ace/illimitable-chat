@@ -281,15 +281,11 @@ export function term_primaries(t: Term): void {
 
 // connects to the chat, by View's link
 function term_connect(t: Term): void {
-  View.link_open(t.v, Chat.link(t.chat, (msg) => term_hear(t, msg), async () => {
-    term_draw(t);
-    return true;
-  }));
+  View.link_open(t.v, Chat.link(t.chat, (msg) => term_hear(t, msg)));
 }
 
 // an act to the chat; a message refused goes back in the input
 export function term_send(t: Term, msg: View.Client, sent?: View.Sent): void {
-  const said = sent === undefined ? "" : sent.text.trim();
   View.link_send(t.v, msg, (a) => {
     if (a.error !== undefined) {
       term_note(t, a.error);
@@ -298,7 +294,7 @@ export function term_send(t: Term, msg: View.Client, sent?: View.Sent): void {
       term_back(t, sent);
     }
     term_idle(t);
-  }, said);
+  });
 }
 
 // a message of the chat: to the view (all but a stream's piece changes
@@ -399,14 +395,14 @@ export function term_idle(t: Term): void {
 // quits, its work cut (the next start resumes it), once all painted is
 // out (a write's callback comes after those before it), with exitCode
 export function term_quit(t: Term): void {
-  t.v.ws?.close(View.QUIT);
+  t.v.ws?.close();
   term_paint(t);
   process.stdout.write("", () => process.exit());
 }
 
 // quits at a signal (the terminal may be gone: nothing painted)
 function term_bye(t: Term): void {
-  t.v.ws?.close(View.QUIT);
+  t.v.ws?.close();
   process.exit(0);
 }
 
