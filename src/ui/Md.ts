@@ -114,7 +114,7 @@ function span_mark(m: RegExpMatchArray): Span {
   return { $: "Link", x: m[7], k: m[7] };
 }
 
-// a line's text, its marks dropped (a summary is plain text: View.ts)
+// a line's text, its marks dropped (a summary is plain text: Paint.ts)
 export function md_flat(s: string): string {
   return span_parse(s).map((span) => span.x).join("");
 }
