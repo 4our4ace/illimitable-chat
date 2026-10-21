@@ -35,7 +35,7 @@ import { term_draw, term_paint, term_print, term_resize } from "./Frame.ts";
 import { term_enter, term_grab, term_press, term_type } from "./Keys.ts";
 import { Machine } from "../tools/Machine.ts";
 import { Mcp } from "../tools/Mcp.ts";
-import { term_note, type Notice } from "./Notices.ts";
+import { term_note, term_notify, term_unnotify, type Notice } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import * as Profiles from "../config/Profiles.ts";
 import * as Reply from "../ui/Reply.ts";
@@ -184,6 +184,12 @@ export type Cmd = [use: string, keys: string, text: string, run: (t: Term, arg: 
 
 // where the agent's log lines go on a terminal
 const LOG = config.DIR + "/illi.log";
+
+// how long the start's notes hold (ms): till the first message or Esc
+// lets them go, the login's till signing in too (term_unhint); hint: that
+// one, while it shows
+const HOLD = 24 * 3600 * 1000;
+let hint: Notice | null = null;
 
 function term_new(chat: Chat): Term {
   const t: Term = {
@@ -409,8 +415,29 @@ export async function term_start(): Promise<void> {
   const t = term_new(Chat.open(process.cwd()));
   Mcp.start(process.cwd(), () => term_draw(t));
   term_connect(t);
-  if (t.scr.tty && config.OFFER.vendors.includes("chatgpt") && !ChatGPT.signed()) {
-    term_note(t, "No ChatGPT login yet: type /login to sign in with your ChatGPT plan.");
-  }
+  term_hints(t);
   term_models(t);
+}
+
+// the start's notes, held (HOLD): a pick set that gave way (config.NOTES);
+// on a terminal, the ChatGPT login missing, and what the API keys need
+// (config.config_tips)
+function term_hints(t: Term): void {
+  const signed = ChatGPT.signed();
+  config.NOTES.forEach((text) => term_note(t, text, HOLD));
+  if (!t.scr.tty) {
+    return;
+  }
+  if (config.OFFER.vendors.includes("chatgpt") && !signed) {
+    hint = term_notify(t, "No ChatGPT login yet: type /login to sign in with your ChatGPT plan.", false, HOLD);
+  }
+  config.config_tips(t.chat.pick, signed).forEach((text) => term_note(t, text, HOLD));
+}
+
+// the start's login note let go (signed in)
+export function term_unhint(t: Term): void {
+  if (hint !== null) {
+    term_unnotify(t, hint);
+    hint = null;
+  }
 }
