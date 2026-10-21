@@ -79,10 +79,9 @@ flowchart TD
   the way [cellsmith](https://github.com/4our4ace/cellsmith) draws them
   in Claude Code.
 
-While it works, the line over the input traces an ∞ and says the step,
-how long it has run and the tokens written so far:
+Two subagents at work side by side, then illi merging what they found:
 
-![illi thinking: the ∞ traced over the input, the step, the time and the tokens](assets/screens/working.webp)
+![illi with two subagents, a reviewer and a tester, then their findings merged into one table](assets/screens/working.webp)
 
 Keys and commands
 -----------------
