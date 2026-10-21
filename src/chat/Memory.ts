@@ -856,8 +856,8 @@ export namespace Memory {
   // those blocks, never a try's words or thoughts; one after a line too
   // long adds only its size and where the limit cuts it (`over`): never
   // more than the first and that note. No line (a refusal: its input's
-  // doing): its source clipped; a try cut (a stop) throws, unless a line
-  // came
+  // doing; or too long for the compactor's window): its source clipped;
+  // a try cut (a stop) throws, unless a line came
   export async function build(mem: Memory, l: number, i: number, text: string): Promise<void> {
     const task = { text: Memory.task(l, i) + text + "\n</input>", mark: false };
     const upto = Math.min(Memory.ctx(l, i), Memory.first(mem));
@@ -873,7 +873,7 @@ export namespace Memory {
       const note = { text: Memory.over(line), mark: false };
       end = await Memory.compact(mem, l, i, Memory.ask(mem, [...blocks, note]));
     }
-    if (lines.length === 0 && !end.ok && end.stop !== "fail") {
+    if (lines.length === 0 && !end.ok && end.stop !== "fail" && end.stop !== "full") {
       throw new Error(end.text);
     }
     if (lines.length === 0) {

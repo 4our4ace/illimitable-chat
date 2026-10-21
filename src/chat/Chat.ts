@@ -57,7 +57,9 @@ type Suggest = { on: boolean; due: boolean; text: string; call: Call | null; unu
 // meanwhile (null: none); switched: a main agent switch not noted in the
 // chat yet, was: the agent and pick noted before it; picks: what each
 // main agent ran on when left, if not its own (by name, "": Illi's);
-// suggest: the suggested reply
+// suggest: the suggested reply; fit: the share of its context a turn
+// gets (Chat.refit makes it smaller, till Illi starts again), refits: the
+// refits since a call was last answered
 export type Chat = {
   mem   : Memory;
   tools : Tools;
@@ -82,6 +84,8 @@ export type Chat = {
   was   : { agent: string | null; pick: string } | null;
   picks : Map<string, Pick>;
   suggest: Suggest;
+  fit   : number;
+  refits: number;
 };
 
 // Constants
@@ -97,6 +101,16 @@ const HEAD       = "Turn: the user's new message:\n\n";
 const GOAL       = "You check a goal. Below is a chat between a user and Illi, an AI agent: its older messages as summary lines (id+n|text), then its latest messages whole, then the goal the user set with /goal. Answer yes if the chat shows the goal fully satisfied now, else no. Write that one word, nothing else.";
 const GOAL_ASK   = "\nThe goal:\n\n";
 const GOAL_NO    = "The goal isn't satisfied yet: keep working.";
+
+// a chat that outgrew its model's window (Chat.refit): a turn's share of
+// the context made this much smaller, when the request itself was too
+// long; the most refits in a row; a turn's room, of the model's window;
+// the note the turn goes on from (#: the model), the one it ends with
+const FIT        = 0.8;
+const REFITS     = 3;
+const ROOM       = 0.9;
+const REFIT      = "The chat outgrew #'s window: more of it is summarized now, each summary a zoom away. Go on where you were.";
+const NO_FIT     = "No reply: the chat won't fit #'s window even summarized. /clear starts a fresh screen, or /model picks a model with a bigger window.";
 
 // a new chat's first message, its node written with it, so no compactor
 // call summarizes it
@@ -188,7 +202,7 @@ export namespace Chat {
       mem, tools, pick, socks: new Set(), busy: false, call: null, model: "", asked: false, open: 0, sent: [], wait: [], next: [],
       halt: new AbortController(), live: [], calls: {}, eye: { parts: [], from: 0 }, after: Promise.resolve(),
       writes: Promise.resolve(), held: null, switched: false, was: null, picks: new Map(),
-      suggest: { on: false, due: false, text: "", call: null, unused: 0 },
+      suggest: { on: false, due: false, text: "", call: null, unused: 0 }, fit: 1, refits: 0,
     };
     // a saved pick not offered gave way: told once
     const saved = mem.pick === null ? null : Pick.label(mem.pick as Pick);
@@ -337,9 +351,10 @@ export namespace Chat {
     return Memory.cutoff(chat.mem, Chat.cap(chat) * 4);
   }
 
-  // the tokens of the chat a turn sends on the chat's model
+  // the tokens of the chat a turn sends on the chat's model, its share as
+  // the chat's refits left it (fit)
   export function cap(chat: Chat): number {
-    return config.config_context(chat.pick.model, Pick.window(chat.pick));
+    return Math.round(config.config_context(chat.pick.model, Pick.window(chat.pick)) * chat.fit);
   }
 
   // false: the turn ends. Its new text: all logged from the first message
@@ -375,7 +390,8 @@ export namespace Chat {
     chat.eye = Chat.eye(mem, mem.show);
     chat.socks.forEach((sock) => Chat.show(chat, sock));
     const blocks = [...view, Tools.here(chat.tools), Tools.at_work(chat.tools), { text: HEAD + text, mark: true }];
-    const ask = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server, blocks, imgs, keep: true };
+    const window = Pick.window(chat.pick);
+    const ask = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server, blocks, imgs, keep: true, room: window === undefined ? undefined : Math.round(window * ROOM) };
     chat.model = chat.pick.model;
     chat.asked = true;
     chat.open = 0;
@@ -392,11 +408,16 @@ export namespace Chat {
     Chat.live(chat, null, []);
     chat.wait.unshift(...chat.sent.slice(chat.sent.length - end.left.length));
     chat.suggest.due = end.ok && !halt.signal.aborted;
-    if (!end.ok && !halt.signal.aborted) {
+    chat.refits = end.ok ? 0 : chat.refits;
+    const full = end.stop === "full" && !halt.signal.aborted;
+    if (!end.ok && !halt.signal.aborted && !full) {
       Chat.failed(chat, end.text);
     }
     if (end.note) {
       Chat.all(chat, { $: "note", text: end.note });
+    }
+    if (full) {
+      return Chat.refit(chat, end.text !== "");
     }
     const goal = chat.mem.goal;
     if (end.ok && !halt.signal.aborted && chat.wait.length === 0 && goal !== null) {
@@ -486,6 +507,25 @@ export namespace Chat {
     if (s.text !== "") {
       s.unused = text.trim().startsWith(s.text) ? 0 : s.unused + 1;
     }
+  }
+
+  // the chat outgrew the model's window (a call ended `full`): the
+  // request itself too long (shrink: a vendor's refusal, or past its room
+  // at its first step: the chat's text is more tokens than its bytes
+  // told), a turn's share made FIT smaller; either way a note says so,
+  // and the turn goes on from it, the chat as it now is, more of it as
+  // summary lines (Chat.from moves on). Past REFITS in a row, the turn
+  // ends, saying why. false: the turn ends
+  export function refit(chat: Chat, shrink: boolean): boolean {
+    chat.refits += 1;
+    if (chat.refits > REFITS) {
+      chat.refits = 0;
+      Chat.note(chat, NO_FIT.replace("#", chat.model));
+      return false;
+    }
+    chat.fit *= shrink ? FIT : 1;
+    Chat.hold(chat, () => Chat.take(chat, Chat.push(chat, null, "note", REFIT.replace("#", chat.model))));
+    return true;
   }
 
   // a failed turn's why, as a note
