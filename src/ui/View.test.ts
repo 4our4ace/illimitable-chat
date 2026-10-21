@@ -24,22 +24,24 @@ test("a turn's wait names its model", () => {
 // streaming, else the wait (a call's tool, never its input, nor the
 // agents at work); no turn, agents waited on. Its tokens: the models'
 // streamed characters since work began, four a token, results not
-// counted
+// counted; its rate: those of the last two seconds, a second's share
 test("what runs, in words", () => {
   const v = View.view_new();
   expect(View.view_doing(v)).toBeNull();
   View.view_hear(v, { $: "state", ...v, busy: true, wait: "gpt-6.1-sol" });
-  expect(View.view_doing(v)).toEqual({ verb: "Waiting for gpt-6.1-sol", tokens: 0 });
+  expect(View.view_doing(v)).toEqual({ verb: "Waiting for gpt-6.1-sol", tokens: 0, rate: 0 });
   View.view_hear(v, { $: "delta", kind: "mind", text: "hm".repeat(200) });
-  expect(View.view_doing(v)).toEqual({ verb: "Thinking", tokens: 100 });
+  expect(View.view_doing(v)).toEqual({ verb: "Thinking", tokens: 100, rate: 50 });
+  expect(View.view_doing(v, Date.now() + 2500)).toEqual({ verb: "Thinking", tokens: 100, rate: 0 });
   View.view_hear(v, { $: "delta", kind: "echo", text: "x".repeat(4000) });
   View.view_hear(v, { $: "delta", agent: "explorer", kind: "illi", text: "y".repeat(398) });
   View.view_hear(v, { $: "delta", kind: "tool", text: 'shell {"command":"grep -n x a.log\\nwc -l"}' });
   View.view_hear(v, { $: "state", ...v, agents: ["explorer", "reviewer"] });
-  expect(View.view_doing(v)).toEqual({ verb: "Running shell", tokens: 210 });
+  expect(View.view_doing(v)?.verb).toBe("Running shell");
+  expect(View.view_doing(v)?.tokens).toBe(210);
   View.view_hear(v, { $: "live", live: [] });
   View.view_hear(v, { $: "state", ...v, busy: false, wait: "", agents: ["explorer"] });
-  expect(View.view_doing(v)).toEqual({ verb: "Waiting on agents", tokens: 210 });
+  expect(View.view_doing(v, Date.now() + 2500)).toEqual({ verb: "Waiting on agents", tokens: 210, rate: 0 });
   View.view_hear(v, { $: "state", ...v, agents: [] });
   View.view_hear(v, { $: "state", ...v, busy: true });
   expect(View.view_doing(v)?.tokens).toBe(0);
