@@ -97,7 +97,7 @@ export type Term = {
   hits    : Hit[];
   since   : number;
   spin    : Timer | undefined;
-  ruled   : { row: number; w: number; at: Screen.Spot; rows: Screen.Piece[][]; side: { at: number; w: number; sw: number; left: boolean; tall: number; with: number[] } | null; spin: string } | null;
+  ruled   : { row: number; w: number; at: Screen.Spot | null; rows: Screen.Piece[][]; side: { at: number; w: number; sw: number; left: boolean; tall: number; with: number[] } | null; spin: string } | null;
   doing   : View.Doing | null;
   subs    : Map<string, boolean>;
   side    : { place: string; width: string };

@@ -250,7 +250,8 @@ export function screen_size(): { w: number; h: number } {
 
 // the screen's rows, each its pieces; only those not as last written are
 // written again (all, after screen_wipe), then the cursor at its spot
-export function screen_paint(scr: Screen, rows: Piece[][], at: Spot): void {
+// (null: hidden)
+export function screen_paint(scr: Screen, rows: Piece[][], at: Spot | null): void {
   if (scr.left) {
     return;
   }
@@ -258,7 +259,12 @@ export function screen_paint(scr: Screen, rows: Piece[][], at: Spot): void {
   const fresh = scr.shown.length === 0;
   const out   = text.map((x, k) => (fresh || scr.shown[k] !== x ? "\x1b[" + (k + 1) + ";1H" + x : "")).join("");
   scr.shown = text;
-  process.stdout.write(SYNC_ON + HIDE + (fresh ? CLEAR : "") + out + "\x1b[" + (at.row + 1) + ";" + (at.col + 1) + "H" + SHOW + screen_style(scr) + SYNC_OFF);
+  process.stdout.write(SYNC_ON + HIDE + (fresh ? CLEAR : "") + out + screen_cursor(scr, at) + SYNC_OFF);
+}
+
+// the cursor put at its spot and shown, in its look (null: left hidden)
+function screen_cursor(scr: Screen, at: Spot | null): string {
+  return at === null ? "" : "\x1b[" + (at.row + 1) + ";" + (at.col + 1) + "H" + SHOW + screen_style(scr);
 }
 
 // the cursor's look, if it's to change (blinking while illi waits)
@@ -269,13 +275,13 @@ function screen_style(scr: Screen): string {
 
 // row k written again alone, if it changed, the others as last written
 // (a spinner's frame, between paints); none written yet: nothing
-export function screen_row(scr: Screen, k: number, row: Piece[], at: Spot): void {
+export function screen_row(scr: Screen, k: number, row: Piece[], at: Spot | null): void {
   const x = screen_row_text(row);
   if (scr.left || scr.shown.length <= k || scr.shown[k] === x) {
     return;
   }
   scr.shown[k] = x;
-  process.stdout.write(SYNC_ON + HIDE + "\x1b[" + (k + 1) + ";1H" + x + "\x1b[" + (at.row + 1) + ";" + (at.col + 1) + "H" + SHOW + screen_style(scr) + SYNC_OFF);
+  process.stdout.write(SYNC_ON + HIDE + "\x1b[" + (k + 1) + ";1H" + x + screen_cursor(scr, at) + SYNC_OFF);
 }
 
 // a row as written: cleared, then each piece at its column, cut to its

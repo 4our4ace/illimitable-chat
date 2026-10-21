@@ -32,7 +32,7 @@ afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 const term = () => {
   const v = View.view_new();
   View.view_hear(v, { $: "state", ...v, vendors: ["claude-api", "openai-api"], pick: { vendor: "claude-api", model: "sonnet-5.5", effort: "medium", speed: "slow" } });
-  return { v, scr: { tty: true, ed: Screen.ed_new() }, choose: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], subs: new Map(), due: true } as any;
+  return { v, scr: { tty: true, ed: Screen.ed_new() }, choose: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], subs: new Map(), seen: { tall: 20 }, due: true } as any;
 };
 
 // /model typed with no name
@@ -138,6 +138,20 @@ test("/agents' pane has no copy buttons: a pane is no reply", () => {
   t.agents = [];
   term_commands().find(([use]) => use === "/agents")![3](t, "");
   expect(t.pane.make(80).flat().filter((r: any) => r.copy !== undefined)).toEqual([]);
+});
+
+test("a pane: Esc and Enter close it, no editing key reaches the input under it, typing closes it and goes to the input", () => {
+  const t = term();
+  Screen.ed_set(t.scr.ed, "draft");
+  for (const key of ["Esc", "Enter"]) {
+    run(t, "/help");
+    expect(term_grab(t, "Backspace")).toBe(true);
+    term_grab(t, key);
+    expect([t.pane, t.scr.ed.text]).toEqual([null, "draft"]);
+  }
+  run(t, "/help");
+  expect(term_type(t, "x")).toBe(false);
+  expect(t.pane).toBeNull();
 });
 
 test("/help: Ctrl+C and Ctrl+D a row each, the setup commands in a group of their own", () => {

@@ -68,8 +68,8 @@ export function term_press(t: Term, key: string): void {
 // or a pane is open: theirs first (true: taken). The commands move by Up
 // and Down, fill one in by Tab, run it by Enter; the picker as
 // term_choose_key; the question as Asks.ts says; a pane scrolls by the
-// arrows, the pages and the wheel; Esc closes any, and so does Enter a
-// pane, the input empty
+// arrows, the pages and the wheel, Esc and Enter close it, and no
+// editing key reaches the input hidden under it
 export function term_grab(t: Term, key: string): boolean {
   if (t.choose === null && term_form_key(t, key)) {
     return true;
@@ -86,14 +86,14 @@ export function term_grab(t: Term, key: string): boolean {
   }
   const page = Math.max(1, t.seen.tall - 2);
   const move = ({ Up: -1, Down: 1, PgUp: -page, PgDn: page, WheelUp: -WHEEL, WheelDown: WHEEL, "Ctrl+Home": -Infinity, "Ctrl+End": Infinity } as Record<string, number>)[key];
-  const shut = key === "Esc" || (key === "Enter" && t.scr.ed.text.trim() === "");
+  const shut = key === "Esc" || key === "Enter";
   if (move !== undefined) {
     t.pane.scroll = Math.max(0, t.pane.scroll + move);
   }
   if (shut) {
     t.pane = null;
   }
-  return move !== undefined || shut;
+  return move !== undefined || shut || Screen.ed_key(Screen.ed_new(), key);
 }
 
 // a key to the picker (true: taken): the lit option's own first (the
@@ -134,9 +134,13 @@ function term_choose_key(t: Term, c: Chooser, key: string): boolean {
 }
 
 // text typed while the picker searches: to its search, not the input;
-// while illi asks, to its question (Asks.ts)
+// while illi asks, to its question (Asks.ts); over a pane, to the input,
+// the pane closed
 export function term_type(t: Term, text: string): boolean {
   const c = t.choose;
+  if (c === null && t.pane !== null) {
+    t.pane = null;
+  }
   if (c === null || c.find === null) {
     return c === null && term_form_type(t, text);
   }
