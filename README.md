@@ -79,6 +79,11 @@ flowchart TD
   the way [cellsmith](https://github.com/4our4ace/cellsmith) draws them
   in Claude Code.
 
+While it works, the line over the input traces an ∞ and says the step,
+how long it has run and the tokens written so far:
+
+![illi thinking: the ∞ traced over the input, the step, the time and the tokens](assets/screens/working.webp)
+
 Keys and commands
 -----------------
 
