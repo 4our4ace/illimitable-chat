@@ -88,7 +88,7 @@ Keys and commands
 
 | Key or command       | Does                                  |
 | -------------------- | ------------------------------------- |
-| Enter / Esc          | send / interrupt                      |
+| Enter / Esc twice    | send / interrupt                      |
 | Tab                  | take the suggested reply              |
 | `/`                  | command list                          |
 | Shift+Tab            | switch primary agent                  |

@@ -5,7 +5,8 @@
 // start (on an agent's page, none); Tab puts it in the input, not sent;
 // anything typed dismisses it, even erased, till the next one comes; with
 // none shown, Tab does nothing; the picker keeps its Tab. On an agent's
-// page, Esc, Enter and Ctrl+C still interrupt illi; a message or a chat's
+// page, Esc twice, Enter and Ctrl+C still interrupt illi (one Esc says a
+// second does; with no turn, it interrupts nothing); a message or a chat's
 // command typed there comes back to the input, a note saying why. Ctrl+C
 // closes a picker, as Esc does. Shift+Tab goes back to illi's own agent
 // from one that can't run.
@@ -87,14 +88,27 @@ test("the picker keeps its Tab while a suggested reply shows", () => {
 const sent = (t: any) => t.v.out.map((p: any) => { const { id, ...msg } = p.msg; return msg; });
 const note = (t: any) => t.notices.filter((n: any) => !n.toast).at(-1)?.text ?? "";
 
-test("on an agent's page, Esc, Enter and Ctrl+C interrupt illi's turn", () => {
-  for (const key of ["\x1b[27u", "\r", "\x03"]) {
+test("on an agent's page, Esc twice, Enter and Ctrl+C interrupt illi's turn", () => {
+  for (const key of ["\x1b[27u\x1b[27u", "\r", "\x03"]) {
     const t = term("");
     t.v.busy = true;
     t.v.page = { name: "reviewer", log: [], live: [] };
     Screen.screen_feed(t.scr, key);
     expect([key, sent(t)]).toEqual([key, [{ $: "stop", name: View.TURN }]]);
   }
+});
+
+test("one Esc says a second interrupts, and a second does; with no turn running, Esc interrupts nothing", () => {
+  const t = term("");
+  t.v.busy = true;
+  Screen.screen_feed(t.scr, "\x1b[27u");
+  expect(sent(t)).toEqual([]);
+  expect(t.notices.at(-1).text).toBe("Esc again to interrupt");
+  Screen.screen_feed(t.scr, "\x1b[27u");
+  expect(sent(t)).toEqual([{ $: "stop", name: View.TURN }]);
+  const idle = term("");
+  Screen.screen_feed(idle.scr, "\x1b[27u\x1b[27u");
+  expect(sent(idle)).toEqual([]);
 });
 
 test("on an agent's page, a message or a chat's command comes back to the input, a note saying why", () => {

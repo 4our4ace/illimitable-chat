@@ -48,7 +48,7 @@ import * as View from "../ui/View.ts";
 // due: a paint; settle: a new size's; imgs: the images attached, by
 // their tokens' numbers (kept: a message sent again from the history
 // names them still); quit: when Ctrl+C was last pressed on an empty
-// input (ms); notices: the notes and the toast said for a while, expire:
+// input (ms), esc: Esc while illi's turn ran (ms); notices: the notes and the toast said for a while, expire:
 // the clock that lets them go (Notices.ts); scroll: lines up from the
 // chat's end (0: following it); seen: the chat as last painted; ver: a
 // count of the changes to the chat's rows (a stream's aside), body: its
@@ -82,6 +82,7 @@ export type Term = {
   settle  : Timer | undefined;
   imgs    : Map<number, Blob>;
   quit    : number;
+  esc     : number;
   notices : Notice[];
   expire  : Timer | undefined;
   scroll  : number;
@@ -204,6 +205,7 @@ function term_new(chat: Chat): Term {
     settle  : undefined,
     imgs    : new Map(),
     quit    : 0,
+    esc     : 0,
     notices : [],
     expire  : undefined,
     scroll  : 0,
