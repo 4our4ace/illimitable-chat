@@ -18,7 +18,8 @@
 // call's fill; a file's lines (a read, a diff) framed, the file on the
 // top edge, each numbered. Control characters never reach the terminal.
 // A row's lines are laid out once per width (a paint lays out the whole
-// chat), and each block's place in them is marked, so a click finds it.
+// chat; a reply streaming, only past its finished blocks: Reply.ts), and
+// each block's place in them is marked, so a click finds it.
 
 import type { Kind } from "../ai/AskAI.ts";
 import * as Call from "./Call.ts";
@@ -66,6 +67,10 @@ const GRAPHEMES = new Intl.Segmenter("en", { granularity: "grapheme" });
 // (row_cached); the look, counted up as the colors change
 const LAID = new WeakMap<View.Row, { w: number; look: number; lines: Line[] }>();
 let LOOK = 0;
+
+// the reply last laid out, as far as it was finished (Reply.reply_grow),
+// at the look it was: a stream's next text lays out only what follows
+let GROWN: { look: number; grown: Reply.Grown } | null = null;
 
 // how much a fill lightens a dark background, darkens a light one; the
 // fill (the user's ANSI.block, else a shade of the background once told;
@@ -352,12 +357,20 @@ function row_lines(row: View.Row, w: number): Line[] {
       return [];
     }
     case "Msg": {
-      return row.call !== null ? fill_lines(call_lines(row.call, w - 2), w - 2) : row.kind === "illi" ? Reply.reply_lines(row.text, w) : msg_lines(row.kind, row.who, row.body, row.text, w);
+      return row.call !== null ? fill_lines(call_lines(row.call, w - 2), w - 2) : row.kind === "illi" ? reply_lines(row.text, w) : msg_lines(row.kind, row.who, row.body, row.text, w);
     }
     case "Cap": {
       return runs_wrap([Run(text_clean(row.text), { ...DIM, i: true })], w, false);
     }
   }
+}
+
+// illi's reply, from its finished blocks on if it grew from the last one
+// laid out (GROWN): a stream's text grows a piece each paint
+function reply_lines(text: string, w: number): Line[] {
+  const [lines, grown] = Reply.reply_grow(text, w, GROWN?.look === LOOK ? GROWN.grown : null);
+  GROWN = { look: LOOK, grown };
+  return lines;
 }
 
 // a block's summary (a tool call's: after its glyph and verb); the

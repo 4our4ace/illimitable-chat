@@ -1,6 +1,7 @@
 // View test
 // =========
-// `bun test View.test.ts`. What a view draws of the server's messages.
+// `bun test View.test.ts`. What a view draws of the server's messages;
+// what streams made anew only as it grows.
 
 import { expect, test } from "bun:test";
 import type { Pick } from "../ai/Pick.ts";
@@ -97,4 +98,21 @@ test("a pick set whole is one change and one note", () => {
   expect(v.notes.at(-1)).toBe("Now on opus-5.5 (claude-api), low effort.");
   expect(View.view_act(v, { $: "Pick", to: { ...to, speed: "ultrafast" } })).toEqual([]);
   expect(v.notes.at(-1)).toBe("No pick opus-5.5 · high · ultrafast here.");
+});
+
+// what streams keeps its rows while its text holds, so a paint lays out
+// again only the message still growing
+test("what streams is made anew only as it grows", () => {
+  const v = View.view_new();
+  v.verbose = true;
+  View.view_hear(v, { $: "delta", kind: "tool", text: 'shell {"command":"ls"}', fresh: true });
+  View.view_hear(v, { $: "delta", kind: "illi", text: "Here" });
+  const [call, said] = View.view_tail(v);
+  expect(View.view_tail(v)[0]).toBe(call);
+  expect(View.view_tail(v)[1]).toBe(said);
+  View.view_hear(v, { $: "delta", kind: "illi", text: " it is" });
+  const grown = View.view_tail(v);
+  expect(grown[0]).toBe(call);
+  expect(grown[1]).not.toBe(said);
+  expect(grown[1]).toMatchObject({ $: "Msg", kind: "illi", text: "Here it is" });
 });

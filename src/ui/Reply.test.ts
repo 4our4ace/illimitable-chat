@@ -5,7 +5,8 @@
 // side under their buttons; headings, lists, quotes and alerts; text's
 // colors from the palette, the terminal's own while its background is
 // untold; each button copying its block, the last the reply; no buttons
-// in a pipe.
+// in a pipe. A reply streaming, laid out as it grows, is the reply laid
+// out whole at each length, its finished blocks' lines kept.
 
 import { expect, test } from "bun:test";
 import * as Paint from "./Paint.ts";
@@ -71,4 +72,26 @@ test("a pipe's reply has no buttons", () => {
   const lines = Reply.reply_lines(CODE + "\n\n" + TABLE, 60);
   expect(lines.flat().some((r) => r.copy !== undefined || r.x.includes("⧉"))).toBe(false);
   Reply.reply_buttons(true);
+});
+
+// every kind of block, figures side by side, a fence holding blank lines
+// and one never closed, CRLF too: grown a piece at a time, each length
+// lays out as it does whole (its text, inks, what each button copies);
+// a finished block's lines are those laid out before
+test("a reply grown a piece at a time is the reply laid out whole", () => {
+  const md   = "# Plan\n\nRead **this** at /tmp/a.log, 3 times.\n\n" + TABLE + "\n\n" + FLOW + "\n\n- one\n- two\n  more\n\n> said\n\n```ts\nconst x = 1;\n\nconst y = 2;\n```\n\n---\r\n\r\nlast words\n\n```sh\nls -l";
+  const seen = (lines: Paint.Line[]) => lines.map((l) => l.map((r) => [r.x, r.s, r.copy?.()]));
+  for (const step of [1, 7, 40]) {
+    let was: Reply.Grown | null = null;
+    let kept = 0;
+    for (let at = step; at < md.length + step; at += step) {
+      const text = md.slice(0, at);
+      const [lines, grown] = Reply.reply_grow(text, 70, was);
+      expect(seen(lines)).toEqual(seen(Reply.reply_lines(text, 70)));
+      expect((was?.lines ?? []).every((l, k) => lines[k] === l)).toBe(true);
+      kept = Math.max(kept, grown.n);
+      was = grown;
+    }
+    expect(kept).toBeGreaterThan(5);
+  }
 });

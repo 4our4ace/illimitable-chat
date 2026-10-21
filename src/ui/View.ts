@@ -591,7 +591,7 @@ export function view_tail(v: View, caption = true): Row[] {
     return [];
   }
   const shown = v.page !== null || v.verbose ? live : live.filter((l) => !ACTIVITY.includes(l.kind) || entry_answer(l.kind, l.text));
-  const rows  = shown.flatMap((l) => entry_rows(null, l.kind, l.text));
+  const rows  = shown.flatMap(live_rows);
   if (v.page !== null || rows.length > 0 || v.wait === "" || !caption) {
     return rows;
   }
@@ -839,6 +839,20 @@ export function live_push(live: Live[], kind: Kind, text: string, fresh = false)
   } else {
     live.push({ kind, text });
   }
+}
+
+// what streams, as rows: a message's made again only as its text grows,
+// so a paint lays out anew only the one still streaming (Paint.ts)
+const LIVE = new WeakMap<Live, { text: string; rows: Row[] }>();
+
+function live_rows(l: Live): Row[] {
+  const known = LIVE.get(l);
+  if (known?.text === l.text) {
+    return known.rows;
+  }
+  const rows = entry_rows(null, l.kind, l.text);
+  LIVE.set(l, { text: l.text, rows });
+  return rows;
 }
 
 // the whole stream, told anew (a view joining, a call's entry): one that

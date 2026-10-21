@@ -25,6 +25,11 @@
 // blocks than one ends with one that copies it whole. A button's runs
 // hold what it copies (Paint.Run's `copy`): a click copies it (Term.ts).
 // A pipe's text has none (reply_buttons).
+//
+// A reply streaming grows (reply_grow): its blocks before its last blank
+// line outside code are finished, as no text after them changes them,
+// so their lines are kept and only the text after is read and laid out
+// again (but after a figure: the next may sit beside it).
 
 import { displayText, inlineText, parse, type Block, type Inline } from "../../vendor/cellsmith/markdown.ts";
 import * as Draw from "./Draw.ts";
@@ -45,6 +50,11 @@ type Drawn = { lines: Line[]; fig: boolean };
 
 // a button: its label, what it copies
 type Button = [label: string, copy: () => string];
+
+// a reply laid out as far as it is finished (reply_grow): its text to
+// there (newlines as \n), its blocks there, counted and laid out, at a
+// width, with buttons or not
+export type Grown = { text: string; n: number; lines: Line[]; w: number; copy: boolean };
 
 // Constants
 // =========
@@ -84,16 +94,53 @@ export function reply_buttons(on: boolean): void {
 
 // a reply's lines, w wide; with copy false, no buttons at all
 export function reply_lines(text: string, w: number, copy = true): Line[] {
+  return reply_grow(text, w, null, copy)[0];
+}
+
+// a reply's lines, w wide, and how far it is finished; was: as far as an
+// earlier text of it was (none, or another reply's: all laid out anew)
+export function reply_grow(text: string, w: number, was: Grown | null, copy = true): [Line[], Grown] {
   const on = buttons;
   buttons  = on && copy;
   try {
     const pal    = Draw.draw_theme();
-    const blocks = parse(text, { numbers: true, paths: true });
-    const lines  = reply_join(blocks.map((b) => block_drawn(pal, b, w)), w);
-    return buttons && blocks.length > 1 ? [...lines, [], line_right(button_line(pal, [["⧉ copy reply", () => text]]), w)] : lines;
+    const src    = text.includes("\r") ? text.replace(/\r\n?/g, "\n") : text;
+    const from   = was !== null && was.w === w && was.copy === buttons && src.startsWith(was.text) ? was : { text: "", n: 0, lines: [], w, copy: buttons };
+    const rest   = src.slice(from.text.length);
+    const blocks = parse(rest, { numbers: true, paths: true });
+    const drawn  = blocks.map((b) => block_drawn(pal, b, w));
+    const [k, at] = reply_done(rest, blocks, drawn);
+    const head   = lines_after(from.lines, from.n, reply_join(drawn.slice(0, k), w), k);
+    const lines  = lines_after(head, from.n + k, reply_join(drawn.slice(k), w), blocks.length - k);
+    const grown  = { text: from.text + rest.slice(0, at), n: from.n + k, lines: head, w, copy: buttons };
+    return [buttons && from.n + blocks.length > 1 ? [...lines, [], line_right(button_line(pal, [["⧉ copy reply", () => text]]), w)] : lines, grown];
   } finally {
     buttons = on;
   }
+}
+
+// how many of a text's blocks are finished, and where the text after
+// them starts: those before its last blank line (not its last line, which
+// may grow) between two blocks or after the last, unless a figure is
+// right before it. Only blank lines lie between blocks (the parser's)
+function reply_done(text: string, blocks: Block[], drawn: Drawn[]): [number, number] {
+  const lines = text.split("\n");
+  let [line, at] = [0, 0];
+  let done: [number, number] = [0, 0];
+  const blank = (n: number) => n < lines.length && lines[n].trim() === "";
+  const next  = () => (at += lines[line++].length + 1);
+  for (const [k, b] of blocks.entries()) {
+    while (blank(line)) {
+      next();
+    }
+    for (let n = b.raw.split("\n").length; n > 0 && line < lines.length; n--) {
+      next();
+    }
+    if (!drawn[k].fig && line < lines.length - 1 && blank(line)) {
+      done = [k + 1, at + lines[line].length + 1];
+    }
+  }
+  return done;
 }
 
 // the blocks a blank line apart; figures one after another side by side,
@@ -398,6 +445,11 @@ function lines_aside(pal: Pal, lines: Line[], copy: () => string, w: number): Li
 
 // Lines
 // =====
+
+// the lines of n blocks after those of m blocks, a blank line between
+function lines_after(head: Line[], m: number, tail: Line[], n: number): Line[] {
+  return m === 0 ? tail : n === 0 ? head : [...head, [], ...tail];
+}
 
 function lines_width(lines: Line[]): number {
   return lines.reduce((n, l) => Math.max(n, Paint.line_width(l)), 0);
