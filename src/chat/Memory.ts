@@ -31,14 +31,12 @@
 // with the folder illi ran in, the nodes, the agents' logs, and the state
 // (the views, the chat's pick and goal...), written over. A message's
 // pages are logged in one write. Memory holds only the view's nodes and
-// those built above them; any other is read from the file. Images are in
-// docs/images/ by their hash.
+// those built above them; any other is read from the file, and so are
+// images, by their hash.
 
-import * as fs from "node:fs";
 import { AskAI, type Ask, type Block, type Call, type Img, type Kind, type Say } from "../ai/AskAI.ts";
 import { clip_page, clip_pages } from "../tools/Clip.ts";
 import * as config from "../config/Config.ts";
-import { Disk } from "./Disk.ts";
 import { Pick } from "../ai/Pick.ts";
 import * as names from "./Names.ts";
 import { HOME, Store, type Place } from "./Store.ts";
@@ -152,8 +150,6 @@ const SCALE = "-".repeat(NODE);
 
 const WAIT = "(not summarized yet: zoom it)";
 
-const IMAGES = "/docs/images/";
-
 // an agent's name: a letter, then letters, digits, _ and -; its log's,
 // the name and a tag (one name, freed, is used again: each log its own),
 // the tag and the name back from a file
@@ -250,22 +246,6 @@ export namespace Memory {
     return (2 * i + 1) * 2 ** l - 1;
   }
 
-  // up to n bytes of an open file, from byte `at`
-  export function pread(fd: number, at: number, n: number): Buffer {
-    const buf = Buffer.alloc(n);
-    return buf.subarray(0, fs.readSync(fd, buf, 0, n, at));
-  }
-
-  // up to n bytes of a file, from byte `at`
-  export function slice(file: string, at: number, n: number): Buffer {
-    const fd = fs.openSync(file, "r");
-    try {
-      return Memory.pread(fd, at, n);
-    } finally {
-      fs.closeSync(fd);
-    }
-  }
-
   export function bytes(text: string): number {
     return Buffer.byteLength(text, "utf8");
   }
@@ -280,7 +260,7 @@ export namespace Memory {
 
   // a message as models read it, tagged by its kind
   export function show(root: Root): string {
-    const pics = (root.images ?? []).map((name) => "\n[image docs/images/" + name + "]");
+    const pics = (root.images ?? []).map((name) => "\n[image " + name + "]");
     return root.kind + ": " + root.text + pics.join("");
   }
 
@@ -429,9 +409,9 @@ export namespace Memory {
   // Images
   // ------
 
-  // an image's bytes put in place, by their hash, its copy for models
-  // beside it; hashed and scaled off the event loop; null: no image kind
-  // or unreadable
+  // an image's bytes kept in the chat's file, by their hash, with its
+  // copy for models (smaller) if one is made; hashed and scaled off the
+  // event loop; null: no image kind or unreadable
   export async function image_add(mem: Memory, bytes: Buffer): Promise<string | null> {
     const kind = image_kind(bytes);
     if (kind === null) {
@@ -450,29 +430,22 @@ export namespace Memory {
     const name = hash.digest("hex").slice(0, 16) + "." + kind.split("/")[1];
     const k = Math.min(1, FIT / Math.max(size.width, size.height));
     const fit = (k < 1 || bytes.length > IMAGE) && size.width * size.height <= PIXELS;
-    fs.mkdirSync(mem.dir + IMAGES, { recursive: true });
-    if (fit) {
-      const out = img.resize(Math.round(size.width * k), Math.round(size.height * k)).jpeg({ quality: 85 });
-      await Bun.write(mem.dir + IMAGES + name + ".jpg", await out.bytes());
-      Disk.wrote(mem.dir + IMAGES + name + ".jpg");
-    }
-    await Bun.write(mem.dir + IMAGES + name, bytes);
-    Disk.wrote(mem.dir + IMAGES + name);
+    const out = fit ? await img.resize(Math.round(size.width * k), Math.round(size.height * k)).jpeg({ quality: 85 }).bytes() : null;
+    Store.image_put(mem.store, name, bytes, out);
     return name;
   }
 
-  export function image_file(mem: Memory, name: string): string | null {
-    const file = mem.dir + IMAGES + name;
-    return /^[0-9a-f]{16}\.[a-z]+$/.test(name) && fs.existsSync(file) ? file : null;
-  }
-
-  // what models get of message id's images: their copies, if any
+  // what models get of message id's images: their copies, if any (one
+  // not kept: left out)
   export function images(mem: Memory, id: number): Img[] {
     const names = Memory.message(mem, id)?.images ?? [];
-    return names.map((name) => {
-      const fit = fs.existsSync(mem.dir + IMAGES + name + ".jpg");
-      const data = fs.readFileSync(mem.dir + IMAGES + name + (fit ? ".jpg" : "")).toString("base64");
-      return { type: fit ? "image/jpeg" : "image/" + name.split(".")[1], data };
+    return names.flatMap((name) => {
+      const img = Store.image(mem.store, name);
+      if (img === null) {
+        return [];
+      }
+      const data = Buffer.from(img.fit ?? img.data).toString("base64");
+      return [{ type: img.fit !== null ? "image/jpeg" : "image/" + name.split(".")[1], data }];
     });
   }
 
@@ -996,13 +969,14 @@ ${Memory.cut(line)}| ← LIMIT`;
     yield '},\n"images": {';
     sep = "\n";
     for (const name of [...pics].sort()) {
-      const file = Memory.image_file(mem, name);
-      if (file === null) {
+      const img = Store.image(mem.store, name);
+      if (img === null) {
         continue;
       }
+      const data = Buffer.from(img.data.buffer, img.data.byteOffset, img.data.byteLength);
       yield sep + JSON.stringify(name) + ': "';
-      for (let at = 0, size = fs.statSync(file).size; at < size; at += 3 * PIECE) {
-        yield Memory.slice(file, at, 3 * PIECE).toString("base64");
+      for (let at = 0; at < data.length; at += 3 * PIECE) {
+        yield data.subarray(at, at + 3 * PIECE).toString("base64");
       }
       yield '"';
       sep = ",\n";

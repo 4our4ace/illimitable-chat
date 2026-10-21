@@ -3,7 +3,7 @@
 // `bun test ProjectCommands.test.ts`. /projects lists this project first,
 // then the one used last first, each with its last day, size and folder;
 // Enter says more. Delete asks first, Cancel lit: Cancel keeps it; Forget
-// drops it, with the images only it named; a copy exported first goes to
+// drops it, its images too; a copy exported first goes to
 // ./illi-project-<name>.json, never over a file there; one open in
 // another terminal is kept, and so is this one, its chat run in another
 // terminal (this one a view of it).
@@ -33,8 +33,8 @@ afterAll(() => {
   fs.rmSync(TMP, { recursive: true, force: true });
 });
 
-// this project's chat, and two others: site (an image of its own, one
-// it shares with app) and app, used last
+// this project's chat, and two others: site (two images) and app (one,
+// the same as one of site's), used last
 const HERE = Projects.place(TMP);
 const mem  = Memory.load(DIR + "/chat", () => ({}) as any, HERE);
 mem.hold = true;
@@ -44,14 +44,12 @@ function project(place: any, day: string, images: string[]): void {
   const store = Store.open(DIR + "/chat", place);
   Store.push(store, [{ i: 0, kind: "user", text: "work on " + place.name, date: day + "T10:00:00.000Z", size: 20, images }], place.path);
   Store.nodes(store, [{ first: 0, n: 1, text: "user: work on " + place.name }]);
+  images.forEach((name) => Store.image_put(store, name, Buffer.from("img"), null));
   Store.close(store);
 }
 project(SITE, "2026-10-01", ["aaaaaaaaaaaaaaaa.png", "bbbbbbbbbbbbbbbb.png"]);
 project(APP, "2026-10-10", ["bbbbbbbbbbbbbbbb.png"]);
-fs.mkdirSync(DIR + "/chat/docs/images", { recursive: true });
-for (const f of ["aaaaaaaaaaaaaaaa.png", "aaaaaaaaaaaaaaaa.png.jpg", "bbbbbbbbbbbbbbbb.png"]) {
-  fs.writeFileSync(DIR + "/chat/docs/images/" + f, "img");
-}
+const pictures = () => (mem.store.db.query("select count(*) as n from image").get() as { n: number }).n;
 
 // a terminal with no screen, only its view, notes and chat (view: another
 // terminal's, this one a view of it)
@@ -78,20 +76,20 @@ test("/projects lists this project first, then the one used last first, each its
   expect(note(t)).toBe("site-7q2m0d · /work/site · 1 message, 2026-10-01. Lately: user: work on site-7q2m0d");
 });
 
-test("Delete asks first, Cancel lit and keeping it; Forget drops it and the images only it named", async () => {
+test("Delete asks first, Cancel lit and keeping it; Forget drops it, its images too", async () => {
   const t = term();
   term_projects(t);
   expect(t.choose.keys(2, "Delete")).toBe(true);
   expect([t.choose.title, t.choose.names, t.choose.at]).toEqual(["Forget site-7q2m0d?", ["Cancel", "Export a copy first, then forget", "Forget"], 0]);
-  expect(t.choose.about[2]).toBe("1 message and 1 image, gone for good");
+  expect(t.choose.about[2]).toBe("1 message and 2 images, gone for good");
   t.choose.pick(0);
   expect(Store.projects(mem.store).map((p) => p.name)).toContain("site-7q2m0d");
   term_projects(t);
   t.choose.keys(2, "Delete");
   t.choose.pick(2);
-  expect(await noted(t, "Forgot")).toBe("Forgot site-7q2m0d: 1 message and 1 image.");
+  expect(await noted(t, "Forgot")).toBe("Forgot site-7q2m0d: 1 message and 2 images.");
   expect(Store.projects(mem.store).map((p) => p.name)).toEqual(["app-k3f9x2", HERE.name]);
-  expect(fs.readdirSync(DIR + "/chat/docs/images")).toEqual(["bbbbbbbbbbbbbbbb.png"]);
+  expect(pictures()).toBe(1);
 });
 
 test("a copy exported first goes to ./illi-project-<name>.json, never over a file there; one open in another terminal is kept", async () => {

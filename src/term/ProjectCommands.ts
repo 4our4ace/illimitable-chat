@@ -3,13 +3,12 @@
 // /projects: the projects (Projects.ts), in a list in the screen's middle
 // as Ctrl+P's, this one first, then the one used last first: each its
 // name, its last day and its messages, its folder (last: the longest),
-// typed to search. Enter
-// says more of one; Delete asks to forget it: Cancel (lit), a copy
-// exported first (./illi-project-<name>.json, never over a file), or
-// forget. A project forgotten is gone from the file (Store.forget), with
-// the images only it named; its lock is held meanwhile, so one open in
-// another terminal is kept (quit it there first). This one, forgotten,
-// starts anew: illi runs again.
+// typed to search. Enter says more of one; Delete asks to forget it:
+// Cancel (lit), a copy exported first (./illi-project-<name>.json, never
+// over a file), or forget. A project forgotten is gone from the file,
+// its images too (Store.forget); its lock is held meanwhile, so one open
+// in another terminal is kept (quit it there first). This one,
+// forgotten, starts anew: illi runs again.
 
 import * as fs from "node:fs";
 import { Chat } from "../chat/Chat.ts";
@@ -19,14 +18,11 @@ import { Memory } from "../chat/Memory.ts";
 import { term_note } from "./Notices.ts";
 import { term_restart } from "./ProfileCommands.ts";
 import { Projects } from "../chat/Projects.ts";
-import { Store, type Project, type Store as File } from "../chat/Store.ts";
+import { Store, type Project } from "../chat/Store.ts";
 import type { Term } from "./Term.ts";
 
 // the most columns the list takes, the screen's width allowing
 const WIDE = 72;
-
-// the images' folder, in the chat's
-const IMAGES = "/docs/images/";
 
 // the list
 export function term_projects(t: Term): void {
@@ -70,7 +66,7 @@ function project_more(t: Term, p: Project): void {
 
 // whether to forget a project, asked: Cancel lit
 function project_ask(t: Term, p: Project): void {
-  const pics  = Store.only(t.mem().store, p.id).length;
+  const pics  = Store.pictures(t.mem().store, p.id);
   const what  = project_count(p) + (pics === 0 ? "" : " and " + pics + (pics === 1 ? " image" : " images"));
   const names = ["Cancel", "Export a copy first, then forget", "Forget"];
   const about = ["keep it", "./illi-project-" + p.name + ".json, then forgotten", what + ", gone for good"];
@@ -105,19 +101,18 @@ async function project_forget(t: Term, p: Project, copy: boolean): Promise<void>
     await Bun.write(out, [...Memory.dump(here ? mem : Memory.glance(mem, of.project, of.chat))].join(""));
     term_note(t, "A copy of " + p.name + " is in " + config.config_home(out) + ".");
   }
-  const drop = (store: File) => Store.forget(store, p.id).forEach((name) => [name, name + ".jpg"].forEach((f) => fs.rmSync(mem.dir + IMAGES + f, { force: true })));
   if (here) {
     return term_restart(t, config.PROFILE, () => {
       const store = Store.open(mem.dir, null);
       try {
-        drop(store);
+        Store.forget(store, p.id);
       } finally {
         Store.close(store);
       }
     }, true);
   }
-  const pics = Store.only(mem.store, p.id).length;
-  if (!(await project_held(p, () => drop(mem.store)))) {
+  const pics = Store.pictures(mem.store, p.id);
+  if (!(await project_held(p, () => Store.forget(mem.store, p.id)))) {
     return term_note(t, p.name + " is open in another terminal: quit illi there first, then forget it here.");
   }
   term_note(t, "Forgot " + p.name + ": " + project_count(p) + (pics === 0 ? "" : " and " + pics + (pics === 1 ? " image" : " images")) + ".");

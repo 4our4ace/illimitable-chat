@@ -20,9 +20,9 @@
 // it turns a sticky one on and off too, Custom.ts)
 // and their MCP servers' tools (Mcp.ts), for the master and agents alike;
 // a listing waits for the servers still starting. The master keeps a
-// to-do list as it works (todo: the whole list each time), in the chat's
-// folder (TODO_FILE), which the views show with what its calls use
-// (Tools.state).
+// to-do list as it works (todo: the whole list each time), the
+// project's, in the chat's file (Store.todo), which the views show with
+// what its calls use (Tools.state).
 // A call on claude-code runs in Claude Code, with its own prompt and
 // tools: it gets the tools Claude Code lacks (a `lean` list: no shell or
 // files), and prompts that say it works inside illi (Tools.hosted), the
@@ -215,7 +215,6 @@ const TODO: Spec = spec("todo", "Keep your to-do list for the work at hand; the 
   items: { type: "array", items: { type: "object", properties: { text: { type: "string", description: "The step, in a few words: Run the tests" }, status: { type: "string", enum: ["pending", "active", "done"] } }, required: ["text", "status"] } },
 }, ["items"]);
 const STATUSES: Todo["status"][] = ["pending", "active", "done"];
-const TODO_FILE = "/todo.json";
 
 // the most questions an ask holds, options a question offers, and
 // characters of a question's tab
@@ -704,9 +703,13 @@ export namespace Tools {
     return { use: { tokens: AskAI.held(Tools.at(tools, "main")), limits: ChatGPT.limits(), plan: ChatGPT.tier() }, todo: Tools.todo(tools) };
   }
 
-  // the master's to-do list: as last set, else as its file keeps it
+  // the master's to-do list: as last set, else as the chat's file keeps
+  // it (one that won't read: none)
   export function todo(tools: Tools): Todo[] {
-    tools.todo ??= Tools.todo_load(tools.mem.dir + TODO_FILE);
+    if (tools.todo === undefined) {
+      const list = Tools.todo_check(Store.todo(tools.mem.store) ?? []);
+      tools.todo = typeof list === "string" ? [] : list;
+    }
     return tools.todo;
   }
 
@@ -728,21 +731,11 @@ export namespace Tools {
     return list;
   }
 
-  // the list set: kept in its file, and shown at once
+  // the list set: kept in the chat's file, and shown at once
   export function todo_set(tools: Tools, list: Todo[]): void {
     tools.todo = list;
-    fs.writeFileSync(tools.mem.dir + TODO_FILE, JSON.stringify(list, null, 2) + "\n");
+    Store.todo_save(tools.mem.store, list);
     tools.hooks.change();
-  }
-
-  // a list's file, read; none, or one that won't read: no list
-  export function todo_load(file: string): Todo[] {
-    try {
-      const list = Tools.todo_check(JSON.parse(fs.readFileSync(file, "utf8")));
-      return typeof list === "string" ? [] : list;
-    } catch {
-      return [];
-    }
   }
 
   // a list, as its tool answers: how far along, what is active
