@@ -3,7 +3,8 @@
 // `bun test ClaudeCode.test.ts`. Claude Code stood in for by a script
 // that plays a scene, named by the call's message: a turn runs Claude
 // Code whole with illi's prompt after its own and illi's tools added
-// (lean), its stream shown live and logged, illi's tools by their own
+// (lean), the view's marked block cached for an hour, its stream shown
+// live and logged, illi's tools by their own
 // names, and the model's window learned; a call without tools has none
 // of Claude Code's; a message sent mid-run is taken as it is echoed, one
 // sent after the end is left; a plan's limit, a missing login, a chat
@@ -108,11 +109,12 @@ test("a turn runs Claude Code whole, illi's prompt after its own and illi's tool
   expect(log.args).toContain("--mcp-config");
   expect(JSON.parse(log.args[log.args.indexOf("--mcp-config") + 1])).toEqual({ mcpServers: { illi: { type: "http", url: "http://127.0.0.1:1/key/main?lean" } } });
   expect(log.args.slice(log.args.indexOf("--allowedTools"), log.args.indexOf("--allowedTools") + 2)).toEqual(["--allowedTools", "mcp__illi"]);
+  expect(log.args.slice(log.args.indexOf("--permission-prompt-tool"), log.args.indexOf("--permission-prompt-tool") + 2)).toEqual(["--permission-prompt-tool", "mcp__illi__approve"]);
   expect(log.args).not.toContain("--tools");
   expect(log.args).not.toContain("--system-prompt");
   expect(log.args.slice(log.args.indexOf("--model"), log.args.indexOf("--model") + 4)).toEqual(["--model", "claude-opus-5-5", "--effort", "high"]);
   expect(log.prompt).toBe("illi's prompt");
-  expect(log.input[0].message.content).toEqual([{ type: "text", text: "the view" }, { type: "text", text: "turn" }]);
+  expect(log.input[0].message.content).toEqual([{ type: "text", text: "the view", cache_control: { type: "ephemeral", ttl: "1h" } }, { type: "text", text: "turn" }]);
   expect(events.filter((e) => e.$ === "Delta").map((e) => e.text)).toEqual(["Hel", "lo"]);
   const entries = events.filter((e) => e.$ === "Entry").map(({ kind, text, of }) => ({ kind, text, of }));
   expect(entries).toEqual([

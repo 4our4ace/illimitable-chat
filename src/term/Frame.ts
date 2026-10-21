@@ -7,6 +7,7 @@
 // traced), the input, the pages, the pick. A pipe gets text.
 
 import * as os from "node:os";
+import { term_asks } from "./Asks.ts";
 import { term_suggest, term_suggested } from "./Commands.ts";
 import * as Draw from "../ui/Draw.ts";
 import { term_hint } from "./Keys.ts";
@@ -115,6 +116,7 @@ export function term_draw(t: Term): void {
 // as Ctrl+End does). A pipe gets the notes as text
 export function term_paint(t: Term): void {
   t.due   = false;
+  term_asks(t);
   const said = term_shown(t);
   if (!t.scr.tty) {
     term_print(t, said.notes.map(View.Cap));

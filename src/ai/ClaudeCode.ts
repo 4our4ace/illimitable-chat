@@ -7,10 +7,13 @@
 // token. A call is one `claude -p`, streamed both ways (stream-json),
 // leaving no session in Claude Code's history. One with tools
 // (Ask.server) adds illi's over MCP, those Claude Code lacks (Tools.list
-// `lean`), allowed to run (as `-p` asks no one), and illi's prompt after
+// `lean`), allowed to run (as `-p` asks no one), its permission prompts
+// asked of the user at illi's screen (Tools.approve), and illi's prompt after
 // Claude Code's (from a file, so no argument limit); one without (a summary, a goal check) runs with none
 // of Claude Code's either, nor its MCP servers, commands or hooks. The
-// blocks go as one user message, a message sent mid-run as another
+// blocks go as one user message, each marked one but the last cached
+// for an hour (MARK: else a call re-writes the whole view to the cache,
+// though only its end changed), a message sent mid-run as another
 // (taken as Claude Code echoes it); the input ends at the first result,
 // so Claude Code ends once all it read is done, and a message sent after
 // is left. Its stream: the API's own events shown live (Anthropic.read),
@@ -25,7 +28,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import type { Subprocess } from "bun";
-import { AskAI, type Ask, type End, type Event, type Img, type Say, type Try } from "./AskAI.ts";
+import { AskAI, type Ask, type Block, type End, type Event, type Img, type Say, type Try } from "./AskAI.ts";
 import { Agent, type Emit, type Entry } from "./Agent.ts";
 import { Anthropic } from "./Anthropic.ts";
 import { Pick } from "./Pick.ts";
@@ -58,6 +61,11 @@ type Run = {
 
 // illi's tools as Claude Code names them, by their MCP server's name
 const OURS = "mcp__illi__";
+
+// a marked block's cache entry: an hour, as Claude Code's own are (one
+// of five minutes may not follow theirs); the last block Claude Code
+// marks itself, so a request holds its four marks at most
+const MARK = { type: "ephemeral", ttl: "1h" };
 
 // how long a stop waits for Claude Code to end before killing it (ms)
 const KILL = 5e3;
@@ -117,9 +125,9 @@ export namespace ClaudeCode {
         } catch {}
       }
     };
-    write(ClaudeCode.user(ask.blocks.map((b) => b.text), ask.imgs ?? []));
+    write(ClaudeCode.user(ask.blocks, ask.imgs ?? []));
     const send = (say: Say) => {
-      if (run.shut || stopped || !write(ClaudeCode.user([say.text], say.imgs))) {
+      if (run.shut || stopped || !write(ClaudeCode.user([{ text: say.text, mark: false }], say.imgs))) {
         left.push(say);
         return;
       }
@@ -171,7 +179,7 @@ export namespace ClaudeCode {
       return [...io, ...pick, "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--settings", JSON.stringify({ disableAllHooks: true })];
     }
     const mcp = { mcpServers: { illi: { type: "http", url: ask.server + "?lean" } } };
-    return [...io, ...pick, "--mcp-config", JSON.stringify(mcp), "--allowedTools", "mcp__illi"];
+    return [...io, ...pick, "--mcp-config", JSON.stringify(mcp), "--allowedTools", "mcp__illi", "--permission-prompt-tool", "mcp__illi__approve"];
   }
 
   // illi's prompt in a file of its own, readable by the user alone
@@ -189,10 +197,12 @@ export namespace ClaudeCode {
     return env;
   }
 
-  // a user message as Claude Code reads it: its texts (none empty), then
-  // its images
-  export function user(texts: string[], imgs: Img[]): unknown {
-    return { type: "user", message: { role: "user", content: Anthropic.content(texts, imgs) } };
+  // a user message as Claude Code reads it: its blocks' texts (none
+  // empty), each marked one but the last cached (MARK), then its images
+  export function user(blocks: Block[], imgs: Img[]): unknown {
+    const texts = blocks.filter((b) => b.text !== "");
+    const content = texts.map((b, k) => ({ type: "text", text: b.text, ...(b.mark && k < texts.length - 1 ? { cache_control: MARK } : {}) }));
+    return { type: "user", message: { role: "user", content: [...content, ...imgs.map(Anthropic.image)] } };
   }
 
   // one line of the stream; a subagent's own steps skipped

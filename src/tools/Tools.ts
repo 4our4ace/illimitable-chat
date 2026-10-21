@@ -68,7 +68,12 @@ export type Agent = {
 // vendor busy or out of reach, stays unanswered: a turn would fail alike;
 // pick: the chat's pick; halt: what stops its turn; main: the master's
 // agent, null: none)
+// a question's answer (Hooks ask): yes, and whether for the rest of the
+// chat's run; a no's reason, for the model
+export type Reply = { yes: boolean; always: boolean; why: string };
+
 type Hooks = {
+  ask    : (who: string, tool: string, what: string, signal: AbortSignal) => Promise<Reply>;
   push   : (agent: Agent, kind: Kind, text: string) => void;
   on     : (agent: Agent, ev: Event) => void;
   report : (agent: Agent, text: string, stopped: boolean) => void;
@@ -79,10 +84,12 @@ type Hooks = {
 };
 
 // the tools: their secret and URL, the working dir, the master's to-do
-// list (none: not read yet)
+// list (none: not read yet), the tools Claude Code may use unasked for
+// the rest of this run (approve)
 export type Tools = {
   mem    : Memory;
   agents : Map<string, Agent>;
+  allowed: Set<string>;
   key    : string;
   url    : string;
   cwd    : string;
@@ -162,6 +169,12 @@ const HOSTED: Array<[string | RegExp, string]> = [
   [/^You are a subagent of illi, an AI agent that works for one user in a\nsingle chat that never ends\./, "Here you work as a subagent of illi (short for illimitable), an app that\nworks for one user in a single chat that never ends."],
   [/Your shell, read, write and edit tools run/, "Your tools run"],
 ];
+// Claude Code's permission prompt (--permission-prompt-tool), answered
+// by the user at illi's screen; illi's own tools that Claude Code loads
+// up front (the user's MCP servers' wait for its tool search)
+const APPROVE: Spec = spec("approve", "Claude Code's permission prompt, answered by the user at illi's screen. Not a tool to call yourself.", { tool_name: STR, input: { type: "object" }, tool_use_id: STR }, ["tool_name", "input"]);
+const UPFRONT = new Set(["zoom", "date", "spawn", "tell", "todo"]);
+
 const HOSTED_TOOLS = `illi's own tools (zoom, date, todo, spawn, tell, skill and the user's
 MCP servers in illi) come from illi, as its MCP server's (mcp__illi__):
 keep your to-do list with illi's todo, which the user sees beside the
@@ -189,6 +202,9 @@ const TODO_FILE = "/todo.json";
 
 // the most of a skill's files named when it loads
 const FILES = 50;
+
+// the most characters of what a tool would do that a question shows
+const WHAT = 400;
 
 // the most bytes of a rules file sent (a longer one cut, saying so), and
 // a project's rules files, in each folder the first there
@@ -231,7 +247,7 @@ export namespace Tools {
   export function serve(mem: Memory, hooks: Hooks, cwd: string): Tools {
     const key = crypto.randomUUID();
     const url = Tools.base() + key + "/";
-    const tools: Tools = { mem, agents: new Map(), key, url, cwd, hooks };
+    const tools: Tools = { mem, agents: new Map(), allowed: new Set(), key, url, cwd, hooks };
     CHATS.set(key, tools);
     return tools;
   }
@@ -365,7 +381,8 @@ export namespace Tools {
       }
       case "tools/list": {
         await Mcp.settle();
-        return { tools: Tools.list(tools, who, lean).map((t) => ({ name: t.name, description: t.info, inputSchema: t.schema })) };
+        const upfront = (name: string) => (lean && UPFRONT.has(name) ? { _meta: { "anthropic/alwaysLoad": true } } : {});
+        return { tools: Tools.list(tools, who, lean).map((t) => ({ name: t.name, description: t.info, inputSchema: t.schema, ...upfront(t.name) })) };
       }
       case "tools/call": {
         const name = String(params.name);
@@ -382,9 +399,9 @@ export namespace Tools {
   }
 
   // a caller's tools, as its agent allows; `lean`, a caller in Claude
-  // Code, none it has (shell, files: TOOLS)
+  // Code, none it has (shell, files: TOOLS), and its permission prompt
   export function list(tools: Tools, who: string, lean = false): Spec[] {
-    const user = [...skill_tools(tools.cwd), ...Mcp.tools()];
+    const user = [...skill_tools(tools.cwd), ...Mcp.tools(), ...(lean ? [APPROVE] : [])];
     const here = lean ? [] : TOOLS;
     if (who === MAIN) {
       return Custom.allow(Custom.agent(tools.cwd, tools.hooks.main()), [...OWN, ...boss(tools.cwd), ...here, ...user]);
@@ -395,6 +412,9 @@ export namespace Tools {
   export async function call(tools: Tools, who: string, name: string, args: any, signal: AbortSignal): Promise<Out> {
     const mem = tools.mem;
     switch (name) {
+      case "approve": {
+        return Tools.approve(tools, who, String(args.tool_name ?? ""), args.input ?? {}, signal);
+      }
       case "zoom": {
         const id = String(args.id);
         const n = Number(args.n ?? 1);
@@ -541,6 +561,27 @@ export namespace Tools {
     const blocks = [...agent.view, Tools.here(tools), log];
     const effort = agent.role.effort ?? run.effort;
     return { ...run, effort, system, blocks, searches: SEARCHES, server };
+  }
+
+  // Claude Code asking leave to use a tool (its permission prompt): yes
+  // at once for one the user allowed for the rest of the run, else the
+  // user's answer (a dropped request: no). Its answer as Claude Code
+  // reads it: the input as it was, or a no with its reason
+  export async function approve(tools: Tools, who: string, tool: string, input: unknown, signal: AbortSignal): Promise<Out> {
+    const reply = tools.allowed.has(tool) ? { yes: true, always: true, why: "" } : await tools.hooks.ask(who === MAIN ? "illi" : who, tool, Tools.what(tool, input), signal);
+    if (reply.yes && reply.always) {
+      tools.allowed.add(tool);
+    }
+    const said = reply.yes ? { behavior: "allow", updatedInput: input } : { behavior: "deny", message: reply.why };
+    return { text: JSON.stringify(said), fail: false };
+  }
+
+  // what a tool would do, as a question shows it: a command, a file, a
+  // URL or a query, else its input, WHAT characters at most
+  export function what(tool: string, input: any): string {
+    const one = input?.command ?? input?.file_path ?? input?.url ?? input?.query ?? input?.pattern;
+    const text = typeof one === "string" ? one : JSON.stringify(input ?? {});
+    return text.length > WHAT ? text.slice(0, WHAT - 1) + "…" : text;
   }
 
   // a string: why there is none (Memory.settle)

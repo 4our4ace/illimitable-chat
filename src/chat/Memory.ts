@@ -855,7 +855,8 @@ export namespace Memory {
   }
 
   // node (l,i)'s summary: its view to the node and its task, asked till
-  // a line fits, TRIES lines at most, the shortest kept. Each try sends
+  // a line fits (a leaf's tagged with its message's kind: Memory.tagged),
+  // TRIES lines at most, the shortest kept. Each try sends
   // those blocks, never a try's words or thoughts; one after a line too
   // long adds only its size and where the limit cuts it (`over`): never
   // more than the first and that note. No line (a refusal: its input's
@@ -868,7 +869,7 @@ export namespace Memory {
     const lines: string[] = [];
     let end = await Memory.compact(mem, l, i, Memory.ask(mem, blocks));
     while (end.ok && end.text.trim() !== "") {
-      const line = end.text.trim();
+      const line = Memory.tagged(l, text, end.text.trim());
       lines.push(line);
       if (Memory.bytes(line) <= NODE || lines.length === TRIES || mem.done) {
         break;
@@ -885,6 +886,15 @@ export namespace Memory {
     const line = lines.length === 0 ? Memory.cut(Memory.flat(text)) : lines.reduce((a, b) => (Memory.bytes(b) < Memory.bytes(a) ? b : a));
     Memory.store(mem, [{ l, i, text: line }]);
     mem.stuck?.("");
+  }
+
+  // a leaf's line starting with its message's kind, as the task asks
+  // ("user: ..."), where the compactor left it out: one message is one
+  // item. A line tagged already, or a merge's, as it is
+  export function tagged(l: number, source: string, line: string): string {
+    const kind = l === 0 ? /^([a-z]+): /.exec(source)?.[1] : undefined;
+    const has = /^(user|work|mind|illi|tool|echo|note):/.test(line);
+    return kind === undefined || has ? line : kind + ": " + line;
   }
 
   // nodes built: logged in one write, kept

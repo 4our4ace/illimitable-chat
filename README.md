@@ -58,7 +58,10 @@ For your Claude plan (Pro or Max), install
 illi then runs Claude Code itself, as it ships, on your login: its own
 prompt and tools, with illi's memory tools (zoom, the to-do list,
 subagents) added through MCP. illi never sees your Claude token, and its
-turns stay out of Claude Code's session history.
+turns stay out of Claude Code's session history. When Claude Code wants
+to run something its own settings don't allow, illi asks you on its
+screen: yes, yes for that tool until illi quits, no, or no with a reason
+the model reads.
 
 Or use API keys: set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, and name
 the vendor there:
@@ -281,7 +284,8 @@ to, as you: use it where you'd let it.
 
 - **Permissions.** Rules for what illi may run or change without asking
   (allow, ask, deny), and a prompt for the rest: once, always in this
-  project, always, or no with a reason illi reads. Secrets such as
+  project, always, or no with a reason illi reads (on `claude-code`,
+  Claude Code's own prompts already come to illi's screen). Secrets such as
   `~/.ssh` hidden, `.git` and shell rc files protected, the mode on the
   bottom line, and subagents' requests in the same queue, named.
 - **Sandbox.** Shell commands in a bubblewrap sandbox: only the project

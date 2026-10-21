@@ -8,7 +8,8 @@
 // older chat's act lines still read; old days are gzipped daily. /compact
 // counts a user's message of many pages once. An agent spawned as the
 // user's is named after it; a freed name is used again, each log its own;
-// one named main, the chat's own caller, is refused.
+// one named main, the chat's own caller, is refused. A leaf's summary
+// starts with its message's kind, the compactor's or added.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -146,4 +147,11 @@ test("an agent spawned as the user's is named after it, numbered while one so na
   expect(Memory.agent(mem, "../reviewer")).toBeNull();
   expect(() => spawn("main")).toThrow("Rename the agent's file (main.md)");
   expect(spawn("Main")).toBe("Main");
+});
+
+test("a leaf's summary starts with its message's kind, added where the compactor left it out; a merge's stays as it is", () => {
+  expect(Memory.tagged(0, "user: Notes for later: launch moves to April 14", "Project notes: launch Apr 14")).toBe("user: Project notes: launch Apr 14");
+  expect(Memory.tagged(0, "tool: shell {\"command\":\"ls\"}", "tool: shell ls")).toBe("tool: shell ls");
+  expect(Memory.tagged(0, "tool: Bash {}", "echo: no output")).toBe("echo: no output");
+  expect(Memory.tagged(1, "user: a\nilli: b", "a then b")).toBe("a then b");
 });

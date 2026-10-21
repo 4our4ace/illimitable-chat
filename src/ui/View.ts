@@ -63,10 +63,16 @@ export type Use = { tokens: number | null; limits: Limit[]; plan?: string; fill?
 // an item of illi's to-do list (Tools.ts todo): what to do, how it stands
 export type Todo = { text: string; status: "pending" | "active" | "done" };
 
+// a question the chat asks the user (Tools.ts approve: Claude Code
+// asking leave to use a tool), answered by a view: who asks (illi, an
+// agent), the tool, what it would do
+export type Question = { id: string; who: string; tool: string; what: string };
+
 // agents: those at work; agent: the main agent (null: illi's own);
 // vendors and models: those offered; use: what its calls use; todo:
 // illi's to-do list; suggest: the user's likely next message, asked as
-// the last turn ended (Chat.suggest; "": none)
+// the last turn ended (Chat.suggest; "": none); asks: the questions
+// waiting for an answer, the first shown
 export type State = {
   busy    : boolean;
   wait    : Wait;
@@ -78,6 +84,7 @@ export type State = {
   use     : Use;
   todo    : Todo[];
   suggest : string;
+  asks    : Question[];
 };
 
 // fold: the tops shown (null: not folded); nodes and whole: the summaries
@@ -142,7 +149,8 @@ export type Client =
   | { $: "main"; name: string | null } // the main agent (/agent), or illi's own
   | { $: "zoom"; part: Part }
   | { $: "root" }
-  | { $: "agent"; name: string };
+  | { $: "agent"; name: string }
+  | { $: "answer"; ask: string; yes: boolean; always: boolean; why?: string }; // a question (State asks, its id) answered; why: a no's reason
 
 // an act not answered: with its id, the socket it went by, what its
 // answer does, what a message said (shown while offline: view_tail)
@@ -285,6 +293,7 @@ export function view_new(): View {
     use       : { tokens: null, limits: [] },
     todo      : [],
     suggest   : "",
+    asks      : [],
     parts     : [],
     turn      : Infinity,
     fold      : null,
