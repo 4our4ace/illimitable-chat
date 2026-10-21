@@ -155,7 +155,7 @@ export namespace Chat {
         sock.on("error", () => done(false));
       });
       if (live) {
-        throw new Error("Illi is already open in another terminal (" + config.DIR + ")");
+        throw new Error("Illi is already open in another terminal (" + config.DIR + "): quit it there (Ctrl+D), or start another profile: ILLI_PROFILE=<name> illi");
       }
       fs.rmSync(LOCK, { force: true });
     }
