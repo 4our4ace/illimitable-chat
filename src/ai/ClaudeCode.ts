@@ -7,8 +7,8 @@
 // token. A call is one `claude -p`, streamed both ways (stream-json),
 // leaving no session in Claude Code's history. One with tools
 // (Ask.server) adds illi's over MCP, those Claude Code lacks (Tools.list
-// `lean`), and illi's prompt after Claude Code's (from a file, so no
-// argument limit); one without (a summary, a goal check) runs with none
+// `lean`), allowed to run (as `-p` asks no one), and illi's prompt after
+// Claude Code's (from a file, so no argument limit); one without (a summary, a goal check) runs with none
 // of Claude Code's either, nor its MCP servers, commands or hooks. The
 // blocks go as one user message, a message sent mid-run as another
 // (taken as Claude Code echoes it); the input ends at the first result,
@@ -162,8 +162,8 @@ export namespace ClaudeCode {
 
   // a call's arguments: streamed both ways, on its pick, illi's prompt
   // after Claude Code's (its file); with tools, illi's (its MCP server,
-  // the lean list), else none, nor Claude Code's servers, commands or
-  // hooks
+  // the lean list, allowed), else none, nor Claude Code's servers,
+  // commands or hooks
   export function args(ask: Ask, file: string): string[] {
     const io = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--replay-user-messages", "--no-session-persistence"];
     const pick = ["--model", ask.model, "--effort", ask.effort, "--append-system-prompt-file", file];
@@ -171,7 +171,7 @@ export namespace ClaudeCode {
       return [...io, ...pick, "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--settings", JSON.stringify({ disableAllHooks: true })];
     }
     const mcp = { mcpServers: { illi: { type: "http", url: ask.server + "?lean" } } };
-    return [...io, ...pick, "--mcp-config", JSON.stringify(mcp)];
+    return [...io, ...pick, "--mcp-config", JSON.stringify(mcp), "--allowedTools", "mcp__illi"];
   }
 
   // illi's prompt in a file of its own, readable by the user alone
