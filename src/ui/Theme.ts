@@ -182,7 +182,7 @@ function theme_read(): { ansi?: Record<string, string>; glyph?: Record<string, s
   try {
     return theme_check(JSON.parse(fs.readFileSync(config.THEME, "utf8")));
   } catch (err: any) {
-    THEME_TROUBLE = "The theme file " + config.THEME + " won't read (" + err.message + "), so Illi uses its own colors.";
+    THEME_TROUBLE = "The theme file " + config.THEME + " won't read (" + err.message + "), so illi uses its own colors.";
     return {};
   }
 }

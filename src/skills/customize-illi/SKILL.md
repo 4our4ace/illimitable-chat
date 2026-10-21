@@ -1,15 +1,15 @@
 ---
 name: customize-illi
-description: Customize Illi itself - add or change its agents, slash commands, skills, MCP servers, theme, settings, or the rules added to its prompt. Use when the user asks Illi to change how it works, remember a workflow as a skill or a command, add an agent, connect a tool server, or change a setting.
+description: Customize illi itself - add or change its agents, slash commands, skills, MCP servers, theme, settings, or the rules added to its prompt. Use when the user asks illi to change how it works, remember a workflow as a skill or a command, add an agent, connect a tool server, or change a setting.
 ---
 
-Illi is customized with plain files, which you write with your tools:
+illi is customized with plain files, which you write with your tools:
 
-- Illi's folder: {{illi}}
+- illi's folder: {{illi}}
 - This project's: {{project}} (agents, commands and skills only; by
-  name, a project's win over Illi's folder)
+  name, a project's win over illi's folder)
 
-Write to Illi's folder unless the user asks for this project only. /agents
+Write to illi's folder unless the user asks for this project only. /agents
 shows the user every agent, command and skill, and where their files go.
 
 # What goes where
@@ -26,7 +26,7 @@ description: Ships a release - tags it, writes the changelog, uploads it. Use wh
 1. ...
 ```
 
-The description is all Illi sees of a skill until it loads: say what it
+The description is all illi sees of a skill until it loads: say what it
 does and when to use it, in the words the user would use. The body says
 how. Long references, templates and scripts go in files beside SKILL.md,
 named in the body, to be read as needed. The user can also type /<name> to
@@ -53,7 +53,7 @@ color: "#e0af68"
 You review code changes. ...
 ```
 
-- mode: primary (Illi runs as it: Shift+Tab, /agent), subagent (an agent spawns
+- mode: primary (illi runs as it: Shift+Tab, /agent), subagent (an agent spawns
   it, as spawn's agent), or all (both, the default)
 - model: a model's name, or vendor:model:effort:speed; effort: low,
   medium, high, xhigh or max
@@ -63,7 +63,7 @@ You review code changes. ...
 - color: its mark's color; none: one is made for it
 - the body: its instructions, added to its system prompt
 
-## MCP servers: mcp.json, in Illi's folder only
+## MCP servers: mcp.json, in illi's folder only
 
 A project's is never read: a server is a program, and a repository's would
 run on opening it. The shape is Claude Code's, so entries copy over:
@@ -80,22 +80,22 @@ Secrets go in as ${VAR}, read from the environment, never in the file.
 
 ## Settings: config.json
 
-Every profile reads {{root}}/config.json, then its own in Illi's folder.
+Every profile reads {{root}}/config.json, then its own in illi's folder.
 All keys are optional, and an ILLI_<KEY> environment variable overrides
 one:
 
 - vendors: chatgpt (the default), claude-api, openai-api
-- pick: what Illi runs on, as vendor:model:effort:speed; compactor: what
+- pick: what illi runs on, as vendor:model:effort:speed; compactor: what
   writes its memory's summaries (both default to the first vendor's
   models); agents: what subagents run on
 - models: the models offered; context: the tokens a turn sends ("auto", a
   number, or a share like "60%"); contexts: per model
-- rules: the rules file, RULES.md in Illi's folder unless set; after: a
+- rules: the rules file, RULES.md in illi's folder unless set; after: a
   shell command run after each turn
 - side: right, left or off; side_width: "25%" or columns; jobs: summaries
   built at once
 - suggest: on or off, a suggested reply after each turn
-- theme, mcp: where those files are, if not in Illi's folder; login: the
+- theme, mcp: where those files are, if not in illi's folder; login: the
   ChatGPT login file, if not {{root}}/login.json (the shared one /login
   makes) or else opencode's
 - a relative path is taken from the folder of the config.json naming it
@@ -110,14 +110,14 @@ environment.
 ## Rules: RULES.md, and a project's AGENTS.md
 
 {{illi}}/RULES.md (or the file the "rules" setting names) goes into every
-system prompt, Illi's and its agents', for every project: who the user is,
-how they want work done, Illi's tone. Change it only when the user asks
+system prompt, illi's and its agents', for every project: who the user is,
+how they want work done, illi's tone. Change it only when the user asks
 (never on your own): then write it for them as short lines (create it if
 it isn't there), keep it tidy, and say what you changed. A missing file is
 just no rules.
 
 A project's own AGENTS.md (else CLAUDE.md) is read too, in each folder from
-the repo's top down to where Illi started. Change those only when the user
+the repo's top down to where illi started. Change those only when the user
 asks: they belong to the project.
 ## Theme: theme.json
 
@@ -142,9 +142,9 @@ palette's over it; glyph, tool, ansi and syntax entries too.
 - Keep JSON valid: parse a file after editing it (python3 -m json.tool
   FILE).
 - Keep secrets out of these files.
-- Leave Illi's own state alone: login.json, models.json, chat/, profiles/.
+- Leave illi's own state alone: login.json, models.json, chat/, profiles/.
 - Say when it applies: agents, commands, skills and the rules file's text
-  at the next message; config.json, theme.json and mcp.json once Illi
+  at the next message; config.json, theme.json and mcp.json once illi
   starts again (Ctrl+D, then `illi`: the chat goes on where it was).
 - Then tell the user how to use it: /<name>, Shift+Tab, or that the skill loads
   when a task matches.

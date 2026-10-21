@@ -1299,7 +1299,7 @@ h4 { margin: .8em 0 .2em; color: #888; font-weight: normal; } pre { margin: 0; w
   // is refused: its calls would pass for the chat's own
   export function agent_new(mem: Memory, own: string | null, taken: (name: string) => boolean): string {
     if (own === MAIN) {
-      throw new Error("No agent can be named " + MAIN + ": that name is Illi's own. Rename the agent's file (" + MAIN + ".md) to spawn it.");
+      throw new Error("No agent can be named " + MAIN + ": that name is illi's own. Rename the agent's file (" + MAIN + ".md) to spawn it.");
     }
     fs.mkdirSync(mem.dir + AGENTS, { recursive: true });
     const base = own !== null && AGENT.test(own) ? own : null;

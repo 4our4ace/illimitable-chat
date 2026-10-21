@@ -208,7 +208,7 @@ test("a retry-after past the longest wait ends the call at once, saying till whe
 
 test("a refused key names its variable; an HTML page is never shown, its body logged", () => fast(async () => {
   globalThis.fetch = (async () => Response.json({ type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } }, { status: 401 })) as any;
-  expect((await turn()).text).toBe("Anthropic refused the API key (HTTP 401: invalid x-api-key): check ANTHROPIC_API_KEY and restart Illi");
+  expect((await turn()).text).toBe("Anthropic refused the API key (HTTP 401: invalid x-api-key): check ANTHROPIC_API_KEY and restart illi");
   const page = "<!DOCTYPE html><html><body>" + "Bad gateway ".repeat(100) + "</body></html>";
   globalThis.fetch = (async () => new Response(page, { status: 400 })) as any;
   logged.length = 0;
@@ -220,7 +220,7 @@ test("no API key ends the call saying which to set, and to restart", () => fast(
   config.KEYS.anthropic = "";
   const end = await Agent.ask({ ...SHARE, blocks: [{ text: "hi", mark: true }] }, () => {}).done;
   config.KEYS.anthropic = "test";
-  expect(end).toMatchObject({ ok: false, stop: "down", text: "no API key: set ANTHROPIC_API_KEY and restart Illi" });
+  expect(end).toMatchObject({ ok: false, stop: "down", text: "no API key: set ANTHROPIC_API_KEY and restart illi" });
   expect(end.again).toBeUndefined();
 }));
 

@@ -200,7 +200,7 @@ export function term_away(t: Term, text: string, typed?: string): boolean {
   if (View.view_typing(t.v)) {
     return false;
   }
-  term_note(t, "Messages go to Illi: Ctrl+PgUp or /tab illi goes back.");
+  term_note(t, "Messages go to illi: Ctrl+PgUp or /tab illi goes back.");
   if (t.scr.ed.text === "") {
     Screen.ed_type(t.scr.ed, typed ?? t.scr.ed.hist.findLast((h) => Screen.ed_expand(t.scr.ed, h) === text) ?? text);
   }

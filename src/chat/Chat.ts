@@ -98,7 +98,7 @@ const HEAD       = "Turn: the user's new message:\n\n";
 // a call is a turn or a compaction, made the model summarize the chat
 // instead of answering), asked after the chat (the view, its latest
 // messages whole) of its goal; unmet, the user's nudge
-const GOAL       = "You check a goal. Below is a chat between a user and Illi, an AI agent: its older messages as summary lines (id+n|text), then its latest messages whole, then the goal the user set with /goal. Answer yes if the chat shows the goal fully satisfied now, else no. Write that one word, nothing else.";
+const GOAL       = "You check a goal. Below is a chat between a user and illi, an AI agent: its older messages as summary lines (id+n|text), then its latest messages whole, then the goal the user set with /goal. Answer yes if the chat shows the goal fully satisfied now, else no. Write that one word, nothing else.";
 const GOAL_ASK   = "\nThe goal:\n\n";
 const GOAL_NO    = "The goal isn't satisfied yet: keep working.";
 
@@ -114,8 +114,8 @@ const NO_FIT     = "No reply: the chat won't fit #'s window even summarized. /cl
 
 // a new chat's first message, its node written with it, so no compactor
 // call summarizes it
-const HELLO      = "Hi, I'm Illi, short for Illimitable: one chat that never ends, kept in a memory tree, recent days in more detail. I work in the folder you start me in. Ask me anything, for days, weeks, years; /help lists the commands.";
-const HELLO_LINE = "illi: hello: Illi (Illimitable), one endless chat in a memory tree; works in the folder it starts in; /help for commands.";
+const HELLO      = "Hi, I'm illi, short for Illimitable: one chat that never ends, kept in a memory tree, recent days in more detail. I work in the folder you start me in. Ask me anything, for days, weeks, years; /help lists the commands.";
+const HELLO_LINE = "illi: hello: illi (Illimitable), one endless chat in a memory tree; works in the folder it starts in; /help for commands.";
 
 // a suggested reply (Chat.suggest): what the model is asked after the
 // turn's last request and its answer, none its answer unless the next
@@ -125,9 +125,9 @@ const HELLO_LINE = "illi: hello: Illi (Illimitable), one endless chat in a memor
 // it's asked for, past which one is none; answers that are none (one that
 // says so, thanks or praise, Illi's own voice)
 const SUGGEST     = [
-  "Suggest the user's next message to Illi: what they'd type next, not what Illi thinks they should do. They should think: I was about to type that.",
-  "2 to 12 words, in their own voice and style, and specific: \"run the tests\", not \"continue\". Illi offered choices: the one they'd pick. Illi asked to go on: \"yes\". The work is done and the next step plain: that step, like \"commit it\".",
-  "Never thanks or praise, a question, Illi's voice (\"Let me\", \"I'll\"), an idea they didn't ask for, or more than one sentence.",
+  "Suggest the user's next message to illi: what they'd type next, not what illi thinks they should do. They should think: I was about to type that.",
+  "2 to 12 words, in their own voice and style, and specific: \"run the tests\", not \"continue\". illi offered choices: the one they'd pick. illi asked to go on: \"yes\". The work is done and the next step plain: that step, like \"commit it\".",
+  "Never thanks or praise, a question, illi's voice (\"Let me\", \"I'll\"), an idea they didn't ask for, or more than one sentence.",
   "After an error or a misunderstanding, or when the next step isn't plain from what they said, answer with nothing: none beats a wrong guess. Output only the message, or nothing.",
 ].join("\n");
 const SUGGEST_MAX = 256;
@@ -169,7 +169,7 @@ export namespace Chat {
         sock.on("error", () => done(false));
       });
       if (live) {
-        throw new Error("Illi is already open in another terminal (" + config.DIR + "): quit it there (Ctrl+D), or start another profile: ILLI_PROFILE=<name> illi");
+        throw new Error("illi is already open in another terminal (" + config.DIR + "): quit it there (Ctrl+D), or start another profile: ILLI_PROFILE=<name> illi");
       }
       fs.rmSync(LOCK, { force: true });
     }
@@ -675,7 +675,7 @@ export namespace Chat {
     if (work.length === 0) {
       return;
     }
-    const text = "Illi restarted, cutting " + work.join(", ") + "; nothing was lost: go on.";
+    const text = "illi restarted, cutting " + work.join(", ") + "; nothing was lost: go on.";
     const msg = Chat.push(chat, null, "note", text);
     await Promise.all(work.map((w) => (w === TURN ? Chat.take(chat, msg) : Tools.tell(chat.tools, w, text))));
   }
@@ -933,7 +933,7 @@ export namespace Chat {
   export function clear(chat: Chat): Answer {
     const mem = chat.mem;
     if (chat.busy) {
-      return { error: "Illi is at work: /clear once it's done (Esc interrupts it)." };
+      return { error: "illi is at work: /clear once it's done (Esc interrupts it)." };
     }
     if (mem.cut === mem.count) {
       return {};
@@ -941,7 +941,7 @@ export namespace Chat {
     mem.cut = mem.show = mem.top = mem.count;
     Memory.fit(mem);
     Memory.save(mem);
-    Chat.note(chat, "New session, for a new topic. Illi still remembers the chat before this note: it is in the summaries, and a zoom brings back any part of it.");
+    Chat.note(chat, "New session, for a new topic. illi still remembers the chat before this note: it is in the summaries, and a zoom brings back any part of it.");
     chat.eye = Chat.eye(mem, mem.cut);
     chat.socks.forEach((sock) => Chat.show(chat, sock));
     Chat.change(chat);
@@ -957,11 +957,11 @@ export namespace Chat {
   export function compact(chat: Chat): Answer {
     const mem = chat.mem;
     if (chat.busy) {
-      return { error: "Illi is at work: /compact once it's done (Esc interrupts it)." };
+      return { error: "illi is at work: /compact once it's done (Esc interrupts it)." };
     }
     const from = Memory.kept(mem, Chat.cap(chat));
     if (from <= mem.cut) {
-      return { error: "Nothing to summarize: Illi gets only the latest messages whole already." };
+      return { error: "Nothing to summarize: illi gets only the latest messages whole already." };
     }
     const folded = from - mem.cut;
     mem.cut = from;
@@ -1019,7 +1019,7 @@ export namespace Chat {
 
   // the note of the main agent now, as a switch to it
   export function switch_note(chat: Chat): string {
-    const who = chat.mem.agent === null ? "Illi's own" : agent_name(chat.mem.agent);
+    const who = chat.mem.agent === null ? "illi's own" : agent_name(chat.mem.agent);
     return "Main agent: " + who + ", on " + Pick.shown(chat.pick) + ".";
   }
 

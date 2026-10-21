@@ -144,7 +144,7 @@ export function profile_why(root: string, name: string): string | null {
     return "Only " + NAMED + ".";
   }
   if (name === DEFAULT) {
-    return DEFAULT + " names Illi's own folder: pick another name.";
+    return DEFAULT + " names illi's own folder: pick another name.";
   }
   return fs.existsSync(profile_dir(root, name)) ? "There's a profile " + name + " already." : null;
 }

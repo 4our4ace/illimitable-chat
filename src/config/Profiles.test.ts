@@ -54,7 +54,7 @@ test("a new profile: named well, never twice, never default (new is a name like 
   expect(Profiles.profile_why(ROOT, "Work")).toContain("Only a-z");
   expect(Profiles.profile_why(ROOT, "-x")).toContain("Only a-z");
   expect(Profiles.profile_why(ROOT, "a/b")).toContain("Only a-z");
-  expect(Profiles.profile_why(ROOT, "default")).toContain("Illi's own folder");
+  expect(Profiles.profile_why(ROOT, "default")).toContain("illi's own folder");
   expect(Profiles.profile_why(ROOT, "new")).toBeNull();
   expect(Profiles.profile_why(ROOT, "work")).toBeNull();
   Profiles.profile_new(ROOT, "work", null);
