@@ -57,7 +57,7 @@ const SETTLE = 30;
 // older than its cell's newest is left out. Each subagent at work in the
 // side gets the same in one cell: a trail of ORBIT_TRAIL round its edge,
 // a dot each 2 TRACE. One clock draws them all, waking only as they
-// change (term_wake)
+// change (term_wake); a dot of the ∞ writes only the cells it changed
 const INFINITY: [number, number][] = [[3, 2], [2, 3], [1, 3], [0, 2], [0, 1], [1, 0], [2, 0], [3, 1], [4, 2], [5, 3], [6, 3], [7, 2], [7, 1], [6, 0], [5, 0], [4, 1]];
 const TRAIL       = 8;
 const CROSS       = 3;
@@ -67,6 +67,16 @@ const ORBIT_TRAIL = 3;
 
 // a braille dot's bit, by its column (0, 1) and row (0 to 3)
 const DOT = [[0x01, 0x02, 0x04, 0x40], [0x08, 0x10, 0x20, 0x80]];
+
+// the rule's words (how long work ran, how fast the models write) looked
+// at again this often while it runs (ms): the rate moves at most twice
+// a second (View.ts); between, and while they say the same, a tick writes
+// the ∞'s cells alone
+const WORDS = 500;
+
+// the ∞ as the clock last wrote it on the screen as last painted (of):
+// its frame (-1: none since the paint), the words' step and second
+let traced: { of: Term["ruled"]; head: number; step: number; sec: number } | null = null;
 
 // the rule's start, before the trace while work runs
 const RULE_HEAD = "── ";
@@ -277,8 +287,10 @@ function term_wake(t: Term): void {
   }, TRACE - ((Date.now() - t.since) % TRACE) + 1);
 }
 
-// a wake of the clock: the rule written again alone, where it was last
-// painted, from what ran then; with agents at work and their spinner
+// a wake of the clock, where the rule was last painted: the ∞'s cells
+// that changed written again alone (term_traced); each WORDS, from what
+// runs now, the rule written whole if its words changed (too narrow for
+// the ∞ whole: at each wake). With agents at work and their spinner
 // changed, the side's rows too (term_side_again). No paint, no layout of
 // the chat; a whole paint only once work ended, with text chosen (its
 // look may cover them) or the box in the middle open (the rule dimmed
@@ -291,14 +303,55 @@ function term_tick(t: Term): void {
   if (r === null || t.doing === null || t.sel !== null || t.choose?.middle !== undefined || !View.view_running(t.v)) {
     return term_paint(t);
   }
-  const now = Date.now();
-  t.doing   = View.view_doing(t.v, now) ?? t.doing;
-  Screen.screen_row(t.scr, r.row, [{ col: MARGIN, w: r.w, line: term_working(t, t.doing, r.w, now) }], r.at);
-  const spin = term_spinner(now - t.since);
+  const now  = Date.now();
+  const ms   = now - t.since;
+  const head = Math.floor(ms / TRACE) % INFINITY.length;
+  const fits = r.w >= Paint.text_width(RULE_HEAD) + 4;
+  const tr   = traced?.of === r ? traced : (traced = { of: r, head: -1, step: -1, sec: -1 });
+  if (!fits || Math.floor(ms / WORDS) !== tr.step) {
+    const was = t.doing;
+    t.doing   = View.view_doing(t.v, now) ?? was;
+    tr.step   = Math.floor(ms / WORDS);
+    if (!fits || Math.floor(ms / 1000) !== tr.sec || t.doing.verb !== was.verb || t.doing.tokens !== was.tokens || t.doing.rate !== was.rate) {
+      [tr.head, tr.sec] = [head, Math.floor(ms / 1000)];
+      Screen.screen_row(t.scr, r.row, [{ col: MARGIN, w: r.w, line: term_working(t, t.doing, r.w, now) }], r.at);
+    }
+  }
+  if (head !== tr.head) {
+    Screen.screen_cells(t.scr, r.row, term_traced(t, head, tr.head), r.at);
+    tr.head = head;
+  }
+  const spin = term_spinner(ms);
   if (t.v.agents.length > 0 && spin !== r.spin) {
     r.spin = spin;
     term_side_again(t);
   }
+}
+
+// the ∞'s frame `head`, as pieces of the rule's row: the cells that
+// changed from frame `was` (-1: none known, all of them), those side by
+// side in one piece. Made at each wake: frames made once and written
+// again made Bun's collector run more, not less (each wake allocating
+// next to nothing, it collects again and again, finding nothing)
+function term_traced(t: Term, head: number, was: number): Screen.Piece[] {
+  const c      = Draw.draw_theme().accent ?? "5";
+  const cells  = term_trace(head * TRACE, c, t.scr.canvas);
+  const before = was < 0 ? [] : term_trace(was * TRACE, c, t.scr.canvas);
+  const col    = MARGIN + Paint.text_width(RULE_HEAD);
+  const pieces: Screen.Piece[] = [];
+  cells.forEach((run, k) => {
+    const last = pieces.at(-1);
+    if (run.x === before[k]?.x && run.s.c === before[k].s.c && run.s.d === before[k].s.d) {
+      return;
+    }
+    if (last !== undefined && last.col + last.w === col + k) {
+      last.w += 1;
+      last.line.push(run);
+    } else {
+      pieces.push({ col: col + k, w: 1, line: [run] });
+    }
+  });
+  return pieces;
 }
 
 // the side's rows written again alone, beside the chat's as last painted

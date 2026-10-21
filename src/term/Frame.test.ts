@@ -11,7 +11,7 @@ import * as os from "node:os";
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-frame-");
 process.env.ILLI_DIR = DIR;
 
-const { term_draw } = await import("./Frame.ts");
+const { term_draw, term_paint } = await import("./Frame.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
 
@@ -65,4 +65,23 @@ test("a paint comes as the work at hand is done; asked again within a frame, at 
   expect(plain[0]).toContain("> a\x1b");
   expect(plain[1]).toContain("> abc\x1b");
   expect(t.due).toBe(false);
+});
+
+test("while work runs, a tick writes the ∞'s changed cells alone, the rule whole only as its words change", async () => {
+  const t = term();
+  t.v.busy = true;
+  const out = await written(async () => {
+    term_paint(t);
+    await Bun.sleep(1150);
+    t.v.busy = false;
+    term_paint(t);
+  });
+  const ticks = out.slice(1, -1);
+  const whole = ticks.filter((s) => s.includes("Working")).map((s) => s.replace(/\x1b\[[0-9;]*m/g, ""));
+  const cells = ticks.filter((s) => !s.includes("Working"));
+  expect(whole.length).toBeGreaterThanOrEqual(2);
+  expect(whole.at(-1)).toContain("Working · 1s");
+  expect(cells.length).toBeGreaterThanOrEqual(8);
+  expect(cells.every((s) => s.length < 160 && /[⠀-⣿]/.test(s) && !s.includes("─"))).toBe(true);
+  expect(t.spin).toBeUndefined();
 });

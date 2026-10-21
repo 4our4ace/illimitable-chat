@@ -319,6 +319,31 @@ test("a paint writes only the rows that changed", () => {
   expect(out[1]).toContain("\x1b[3;5H");
 });
 
+test("a paint with nothing changed writes nothing; the cursor moved, its look changed or hidden, the cursor alone", () => {
+  const { scr } = screen();
+  const out: string[] = [];
+  const write = process.stdout.write;
+  process.stdout.write = ((s: string) => out.push(s)) as any;
+  const rows = () => [[{ col: 2, w: 20, line: [Paint.Run("one")] }], [{ col: 2, w: 20, line: [Paint.Run("two")] }]];
+  try {
+    Screen.screen_paint(scr, rows(), { row: 1, col: 4 });
+    Screen.screen_paint(scr, rows(), { row: 1, col: 4 });
+    expect(out).toHaveLength(1);
+    Screen.screen_paint(scr, rows(), { row: 1, col: 5 });
+    scr.blink = true;
+    Screen.screen_paint(scr, rows(), { row: 1, col: 5 });
+    Screen.screen_paint(scr, rows(), null);
+    Screen.screen_paint(scr, rows(), null);
+  } finally {
+    process.stdout.write = write;
+  }
+  expect(out).toHaveLength(4);
+  expect(out.slice(1).some((s) => s.includes("one") || s.includes("two"))).toBe(false);
+  expect(out[1]).toContain("\x1b[2;6H");
+  expect(out[2]).toContain("\x1b[1 q");
+  expect(out[3]).not.toContain("\x1b[?25h");
+});
+
 test("words: Ctrl+W, Alt+B, Alt+F", () => {
   const { scr } = screen();
   const ed = scr.ed;
