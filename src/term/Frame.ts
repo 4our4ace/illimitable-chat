@@ -9,6 +9,7 @@
 import * as os from "node:os";
 import { term_asks } from "./Asks.ts";
 import { term_suggest, term_suggested } from "./Commands.ts";
+import * as config from "../config/Config.ts";
 import * as Draw from "../ui/Draw.ts";
 import { term_hint } from "./Keys.ts";
 import * as Paint from "../ui/Paint.ts";
@@ -218,12 +219,12 @@ function term_rule(t: Term, w: number, note?: Paint.Line): Paint.Line {
 
 // the rule while work runs, w wide, at a time: the ∞ traced, the step
 // it is at (bold, in the accent), how long it has run, the tokens the
-// models wrote (once any) and how fast they write now (while they do),
-// cut to the width
+// models wrote (once any) and how fast they write now (while they do,
+// unless the tps setting is off), cut to the width
 function term_working(t: Term, doing: View.Doing, w: number, now: number): Paint.Line {
   const c    = Draw.draw_theme().accent ?? "5";
   const head = [Paint.Run(RULE_HEAD, Paint.DIM), ...term_trace(now - t.since, c, t.scr.canvas), Paint.Run(" "), Paint.Run(doing.verb, { ...Paint.INK, c, b: true })];
-  const tail = [term_elapsed(now - t.since), doing.tokens > 0 ? "↓ " + term_tokens(doing.tokens) + " tokens" : "", doing.rate > 0 ? doing.rate + " tok/s" : ""].filter((x) => x !== "").join(" · ");
+  const tail = [term_elapsed(now - t.since), doing.tokens > 0 ? "↓ " + term_tokens(doing.tokens) + " tokens" : "", doing.rate > 0 && config.TPS ? doing.rate + " tok/s" : ""].filter((x) => x !== "").join(" · ");
   const room = w - Paint.line_width(head) - 6;
   const said = Paint.text_width(tail) <= room ? tail : room < 2 ? "" : Paint.runs_wrap([Paint.Run(tail)], room - 1, true)[0].map((r) => r.x).join("") + "…";
   const used = Paint.line_width(head) + Paint.text_width(said) + 4;

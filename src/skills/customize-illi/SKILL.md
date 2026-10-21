@@ -99,6 +99,8 @@ one:
 - side: right, left or off; side_width: "25%" or columns; jobs: summaries
   built at once
 - suggest: on or off, a suggested reply after each turn
+- tps: on or off, tokens a second (tok/s) on the line over the input while
+  text streams
 - theme, mcp: where those files are, if not in illi's folder; login: the
   ChatGPT login file, if not {{root}}/login.json (the shared one /login
   makes) or else opencode's

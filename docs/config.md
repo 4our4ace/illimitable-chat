@@ -25,6 +25,7 @@ Config
 | `after`      |                                   | a shell command run after each turn              |
 | `side`       | `right`                           | side panel: `left`, `off`; `side_width` `25%`    |
 | `suggest`    | `on`                              | a suggested reply after each turn; `off`         |
+| `tps`        | `on`                              | tokens a second (tok/s) on the line over the input while text streams; `off` |
 | `jobs`       | `8`                               | summaries built at once                          |
 | `theme`, `mcp` | the profile's folder            | the theme's and the MCP servers' files           |
 | `login`      | `~/.illi/login.json`, opencode's  | the ChatGPT login file, which `/login` writes    |
