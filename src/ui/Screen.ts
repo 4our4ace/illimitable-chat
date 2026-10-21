@@ -1,9 +1,10 @@
 // Screen
 // ======
 // The terminal of Term.ts, whole: its alternate screen, drawn as rows,
-// each paint writing only the rows that changed, in one synchronized
-// write; the terminal's own scrollback stays as it was, and is back as
-// illi quits, or hands the terminal on (screen_leave). A pipe gets lines
+// each paint writing only the rows that changed (none: nothing; a
+// spinner's frame only its cells), in one synchronized write; the
+// terminal's own scrollback stays as it was, and is back as illi quits,
+// or hands the terminal on (screen_leave). A pipe gets lines
 // as text. Input is read raw (macOS cuts a
 // cooked line at 1024 bytes) as one stream; a paste comes bracketed and
 // is typed whole. Kitty's keys at flag 1 only, so dead keys still
@@ -71,7 +72,7 @@ export type Match = { k: number; at: number[] };
 // the input), what takes a paste (none: typed); the terminal's
 // background (#rrggbb) once told, and whether it is awaited; whether it
 // was left (screen_leave: it paints no more); whether the cursor blinks
-// (illi waits), and its look as last written
+// (illi waits), its look and its spot as last written (null: hidden)
 export type Screen = {
   tty    : boolean;
   kitty  : boolean;
@@ -92,6 +93,7 @@ export type Screen = {
   left?  : boolean;
   blink? : boolean;
   styled?: string;
+  at?    : Spot | null;
 };
 
 // Constants
@@ -250,7 +252,7 @@ export function screen_size(): { w: number; h: number } {
 
 // the screen's rows, each its pieces; only those not as last written are
 // written again (all, after screen_wipe), then the cursor at its spot
-// (null: hidden)
+// (null: hidden); none, and the cursor as it was: nothing written
 export function screen_paint(scr: Screen, rows: Piece[][], at: Spot | null): void {
   if (scr.left) {
     return;
@@ -259,7 +261,17 @@ export function screen_paint(scr: Screen, rows: Piece[][], at: Spot | null): voi
   const fresh = scr.shown.length === 0;
   const out   = text.map((x, k) => (fresh || scr.shown[k] !== x ? "\x1b[" + (k + 1) + ";1H" + x : "")).join("");
   scr.shown = text;
+  if (!fresh && out === "" && screen_still(scr, at)) {
+    return;
+  }
+  scr.at = at;
   process.stdout.write(SYNC_ON + HIDE + (fresh ? CLEAR : "") + out + screen_cursor(scr, at) + SYNC_OFF);
+}
+
+// whether the cursor shows as last written: at the same spot in the
+// same look, or hidden still
+function screen_still(scr: Screen, at: Spot | null): boolean {
+  return at === null ? scr.at === null : scr.at?.row === at.row && scr.at.col === at.col && (scr.blink ? BLINK : STEADY) === scr.styled;
 }
 
 // the cursor put at its spot and shown, in its look (null: left hidden)
@@ -282,6 +294,19 @@ export function screen_row(scr: Screen, k: number, row: Piece[], at: Spot | null
   }
   scr.shown[k] = x;
   process.stdout.write(SYNC_ON + HIDE + "\x1b[" + (k + 1) + ";1H" + x + screen_cursor(scr, at) + SYNC_OFF);
+}
+
+// pieces of row k written again alone, the rest of the row as it is,
+// then the cursor at its spot (a spinner's frame): each piece's cells
+// erased, then its line, cut to them; the row as last written then
+// unknown, so the next paint writes it whole. None written yet: nothing
+export function screen_cells(scr: Screen, k: number, pieces: Piece[], at: Spot | null): void {
+  if (scr.left || scr.shown.length <= k) {
+    return;
+  }
+  const cells = pieces.map((p) => "\x1b[" + (p.col + 1) + "G\x1b[" + p.w + "X" + Paint.line_ansi(Paint.runs_wrap(p.line, p.w, true)[0])).join("");
+  scr.shown[k] = "";
+  process.stdout.write(SYNC_ON + HIDE + "\x1b[" + (k + 1) + ";1H" + cells + screen_cursor(scr, at) + SYNC_OFF);
 }
 
 // a row as written: cleared, then each piece at its column, cut to its
