@@ -39,6 +39,7 @@ test("a question shows in the picker with a note; Enter on Yes allows it, once",
   expect(note(t)).toBe("illi asks to use Bash: rm -r build");
   expect(t.choose.title).toBe("Allow Bash?");
   expect(t.choose.names).toEqual(["Yes", "Yes, and don't ask again for Bash this run", "No", "No, and say why"]);
+  expect(t.choose.foot(0)).toBe("rm -r build");
   term_grab(t, "Enter");
   expect(sent(t)).toEqual([{ ask: "q1", yes: true, always: false, why: "" }]);
   expect(t.choose).toBeNull();

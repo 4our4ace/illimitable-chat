@@ -105,9 +105,10 @@ const GOAL       = "You check a goal. Below is a chat between a user and illi, a
 const GOAL_ASK   = "\nThe goal:\n\n";
 const GOAL_NO    = "The goal isn't satisfied yet: keep working.";
 
-// a no to a question (Chat.question): the user's without a reason; no one at
-// the screen to ask; its request stopped
-const SAID_NO    = "The user said no.";
+// a no to a question (Chat.question): the user's, without a reason and
+// before one; no one at the screen to ask; its request stopped
+const SAID_NO    = "The user said no, asked at illi's screen.";
+const SAID_WHY   = "The user said no, asked at illi's screen: ";
 const NO_ONE     = "No one is at illi's screen to ask, so it isn't allowed.";
 const STOPPED    = "The request was stopped.";
 
@@ -799,15 +800,15 @@ export namespace Chat {
     });
   }
 
-  // a question answered (none: one answered already); a no's reason for
-  // the model, the user's or SAID_NO
-  export function answered(chat: Chat, id: string, yes: boolean, always: boolean, why = ""): void {
+  // a question answered (none: one answered already); why: a no's
+  // reason, for the model
+  export function answered(chat: Chat, id: string, yes: boolean, always: boolean, why: string): void {
     const k = chat.asks.findIndex((q) => q.id === id);
     if (k < 0) {
       return;
     }
     const [q] = chat.asks.splice(k, 1);
-    q.done({ yes, always, why: yes ? "" : why.trim() || SAID_NO });
+    q.done({ yes, always, why: yes ? "" : why });
     Chat.change(chat);
   }
 
@@ -944,7 +945,8 @@ export namespace Chat {
         return Chat.clear(chat);
       }
       case "answer": {
-        Chat.answered(chat, String(msg.ask), msg.yes === true, msg.always === true, typeof msg.why === "string" ? msg.why : "");
+        const why = typeof msg.why === "string" ? msg.why.trim() : "";
+        Chat.answered(chat, String(msg.ask), msg.yes === true, msg.always === true, why === "" ? SAID_NO : SAID_WHY + why);
         return {};
       }
       case "compact": {
