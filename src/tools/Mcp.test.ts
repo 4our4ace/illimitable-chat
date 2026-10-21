@@ -4,7 +4,7 @@
 // in pages, its env's ${VAR}, a call's text and images, a failure, a call
 // stopped and cancelled at it), a URL's (its session, an answer in an
 // event stream), one that dies, one that is no program, one disabled;
-// their tools beside Illi's, named apart, and an agent's allowing them by
+// their tools beside illi's, named apart, and an agent's allowing them by
 // server.
 
 import { afterAll, expect, test } from "bun:test";

@@ -112,7 +112,7 @@ test("/agent makes a primary agent the main agent: its model, instructions and t
   expect(asks.at(-1).system).toContain("You review.");
   expect(asks.at(-1).model).toBe("gpt-6-luna");
   const log = Array.from({ length: chat.mem.count }, (_, i) => Memory.message(chat.mem, i)!.text);
-  expect(log.indexOf("hi") - log.indexOf("Main agent: Reviewer, on gpt-6-luna · high.")).toBe(1);
+  expect(log.indexOf("hi") - log.indexOf("Main agent: reviewer, on gpt-6-luna · high.")).toBe(1);
   expect(Chat.main(chat, null)).toEqual({});
   expect(Chat.system(chat)).not.toContain("# Agent:");
   expect(Tools.list(chat.tools, "main").map((t) => t.name)).toContain("spawn");
@@ -133,7 +133,7 @@ test("an agent only passed through is never noted; each keeps its pick", async (
   expect(chat.switched).toBe(false);
   expect(Chat.main(chat, null)).toEqual({});
   Chat.push(chat, null, "user", "next");
-  expect(notes()).toEqual(["Main agent: Reviewer, on gpt-6-luna · high.", "Main agent: illi's own, on gpt-6.1-sol · medium."]);
+  expect(notes()).toEqual(["Main agent: reviewer, on gpt-6-luna · high.", "Main agent: illi's own, on gpt-6.1-sol · medium."]);
 });
 
 test("spawn's agent runs a subagent as it, and names the user's agents", async () => {

@@ -1,6 +1,6 @@
 // Agent
 // =====
-// claude-api, openai-api and chatgpt in Illi's own loop; a Wire
+// claude-api, openai-api and chatgpt in illi's own loop; a Wire
 // (Anthropic.ts, OpenAI.ts, ChatGPT.ts) shapes requests and reads streams,
 // signed with its API key or, chatgpt's, a login's token it renews (one
 // the vendor refused, renewed, is asked again); a response's headers are

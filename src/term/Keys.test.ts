@@ -5,9 +5,9 @@
 // start (on an agent's page, none); Tab puts it in the input, not sent;
 // anything typed dismisses it, even erased, till the next one comes; with
 // none shown, Tab does nothing; the picker keeps its Tab. On an agent's
-// page, Esc, Enter and Ctrl+C still interrupt Illi; a message or a chat's
+// page, Esc, Enter and Ctrl+C still interrupt illi; a message or a chat's
 // command typed there comes back to the input, a note saying why. Ctrl+C
-// closes a picker, as Esc does. Shift+Tab goes back to Illi's own agent
+// closes a picker, as Esc does. Shift+Tab goes back to illi's own agent
 // from one that can't run.
 
 import { afterAll, expect, test } from "bun:test";
@@ -76,7 +76,7 @@ test("anything typed dismisses the suggested reply, even erased, till the next o
 
 test("the picker keeps its Tab while a suggested reply shows", () => {
   const t = term("Run the tests");
-  term_chooser(t, "Agent", ["illi", "Reviewer"], ["", ""], 0, () => {});
+  term_chooser(t, "Agent", ["illi", "reviewer"], ["", ""], 0, () => {});
   Screen.screen_feed(t.scr, "\t");
   expect(t.choose.at).toBe(1);
   expect(t.scr.ed.text).toBe("");
@@ -110,7 +110,7 @@ test("on an agent's page, a message or a chat's command comes back to the input,
 test("Ctrl+C closes a picker, as Esc does: no interrupt, no quit armed", () => {
   const t = term("");
   t.v.busy = true;
-  term_chooser(t, "Agent", ["illi", "Reviewer"], ["", ""], 0, () => {});
+  term_chooser(t, "Agent", ["illi", "reviewer"], ["", ""], 0, () => {});
   Screen.screen_feed(t.scr, "\x03");
   expect([t.choose, t.quit, sent(t)]).toEqual([null, 0, []]);
 });

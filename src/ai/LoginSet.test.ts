@@ -2,7 +2,7 @@
 // ==============
 // `bun test LoginSet.test.ts`. With `login` naming a file, /login keeps
 // its tokens there (its other entries kept), the file in use, never as
-// Illi's own; /logout leaves that file.
+// illi's own; /logout leaves that file.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";

@@ -2,11 +2,11 @@
 // =====
 // The colors and glyphs of the view. What the machine wrote is filled,
 // what a person or
-// Illi said is framed: a block (a summary) and a tool call sit on a
+// illi said is framed: a block (a summary) and a tool call sit on a
 // fill, a shade of the terminal's own background; every result is a file's lines (a read's, a write's or
 // edit's diff, any other output's): framed, its name on the top edge,
 // each line numbered; the user's message and
-// a report sit in a frame; Illi's answer, its thinking and a note are bare.
+// a report sit in a frame; illi's answer, its thinking and a note are bare.
 // A call is named by its tool, a report or note by WHO; thinking
 // is unnamed, told by its faint italic. Every tool
 // is in ink, its emoji telling it at a glance (TOOL); a diff's lines are
@@ -14,7 +14,7 @@
 // fits any theme, light or dark; the fill is the terminal's background a
 // little lighter (a dark one) or darker (a light one), once the terminal
 // tells it (Paint.ts), and none while it doesn't: a dim bar marks what
-// it fills. Code's tokens are in the palette too (SYNTAX). Illi's replies
+// it fills. Code's tokens are in the palette too (SYNTAX). illi's replies
 // and diagrams paint true color, as cellsmith does (Reply.ts, Draw.ts): a
 // cellsmith palette (PALETTE) over the terminal's own background, or, the
 // background untold, the terminal's palette (REPLY). The user's theme
@@ -56,7 +56,7 @@ export const ANSI: Record<string, string> = { block: "", ink: "", add: "2", del:
 
 // what a message is, named on its top (a report's frame edge, a note's
 // first line; a result names itself on its frame's edge; a report: its agent's name, else this; a
-// call: its tool). The user's words (framed) and Illi's (bare) need none
+// call: its tool). The user's words (framed) and illi's (bare) need none
 export const WHO: Record<string, string> = { work: "Report", note: "Note" };
 
 export const KIND: Record<Kind, Look> = {
@@ -70,7 +70,7 @@ export const KIND: Record<Kind, Look> = {
 };
 
 // the kinds filled (the machine's); framed (the user's, an agent's); the
-// rest (Illi's, thinking, notes) bare, any name over it
+// rest (illi's, thinking, notes) bare, any name over it
 export const FILLED: Kind[] = ["tool"];
 export const FRAMED: Kind[] = ["user", "work"];
 
@@ -162,12 +162,6 @@ export const REPLY: Record<string, string> = {
 // the user's colors over the palette's, by slot: #rrggbb, or a palette
 // index ("0"-"255")
 export const COLORS: Record<string, string> = theme_entries(OWN.colors, theme_color);
-
-// an agent's name as shown: its first letter a capital (reviewer-2:
-// Reviewer-2); typed, and in the model's tools, as it is
-export function agent_name(name: string): string {
-  return name.charAt(0).toUpperCase() + name.slice(1);
-}
 
 export function tool_glyph(name: string): string {
   return TOOL[name] ?? TOOL_ANY;

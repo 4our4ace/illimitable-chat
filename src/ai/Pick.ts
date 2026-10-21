@@ -8,7 +8,7 @@
 // (`options`), wrapping (up and down stop at the ends): next, prev and
 // model every vendor's models, effort, speed (a model lacking one takes
 // its fastest below), up and down the efforts, never the speed; given a
-// value (`to`), to the pick whose part it is. A saved pick Illi
+// value (`to`), to the pick whose part it is. A saved pick illi
 // doesn't offer gives way to def, never to a pick like it.
 
 import type { Vendor } from "./AskAI.ts";

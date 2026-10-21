@@ -2,10 +2,10 @@
 // =======
 // The wire of chatgpt (Agent.ts): OpenAI.ts's Responses API on the Codex
 // backend, paid by a ChatGPT plan. Its login (ChatGPT.file) is the file
-// `login` names, else Illi's own (config.OWN_LOGIN), or else opencode's
+// `login` names, else illi's own (config.OWN_LOGIN), or else opencode's
 // (`opencode auth login`, ChatGPT Plus/Pro); /login makes one with
 // Codex's device login (a code the person enters at OpenAI's page;
-// `device`), kept in the file `login` names, else as Illi's own
+// `device`), kept in the file `login` names, else as illi's own
 // (ChatGPT.own). All are in opencode's shape.
 // The backend
 // takes no cache breakpoints; a prefix is cached for the session a
@@ -148,13 +148,13 @@ export namespace ChatGPT {
     return ChatGPT.login(data.openai);
   }
 
-  // the login file: the one config names, else Illi's own if there, else
-  // opencode's if there, else Illi's own (none yet)
+  // the login file: the one config names, else illi's own if there, else
+  // opencode's if there, else illi's own (none yet)
   export function file(): string {
     return config.LOGIN_SET ?? (fs.existsSync(config.OWN_LOGIN) || !fs.existsSync(config.OPENCODE_LOGIN) ? config.OWN_LOGIN : config.OPENCODE_LOGIN);
   }
 
-  // the file /login keeps its login in: the one config names, else Illi's own
+  // the file /login keeps its login in: the one config names, else illi's own
   export function own(): string {
     return config.LOGIN_SET ?? config.OWN_LOGIN;
   }
@@ -242,7 +242,7 @@ export namespace ChatGPT {
     throw new Error("the code expired after 15 minutes: /login for another");
   }
 
-  // Illi's own login removed (opencode's, if there, is used again); false:
+  // illi's own login removed (opencode's, if there, is used again); false:
   // there was none, or `login` names the file in use (never removed here)
   export function logout(): boolean {
     if (config.LOGIN_SET !== null || !fs.existsSync(config.OWN_LOGIN)) {

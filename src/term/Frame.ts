@@ -17,7 +17,7 @@ import * as Screen from "../ui/Screen.ts";
 import { term_area, term_under } from "./Select.ts";
 import { term_side, term_side_width } from "./Side.ts";
 import { term_act, type Area, type Item, type Pane, type Sug, type Term } from "./Term.ts";
-import { agent_name, GLYPH } from "../ui/Theme.ts";
+import { GLYPH } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
 
 // the folder illi works in, as the head shows it
@@ -44,7 +44,7 @@ const FRAME = 16;
 // a size held this long is settled: a drag's sizes come faster (ms)
 const SETTLE = 30;
 
-// the mark over the input while work runs, as Illimitable has no end:
+// the mark over the input while work runs, as illimitable has no end:
 // an infinity sign traced for ever, in braille (a cell 2 dots wide and 4
 // high, so 4 cells hold a ∞ 8 by 4): its path, round its left loop and
 // its right, crossing in the middle; a trail of TRAIL dots runs along it,
@@ -129,7 +129,7 @@ export function term_paint(t: Term): void {
   const cw    = full - side - 2 * MARGIN;
   const iw    = full - 2 * MARGIN;
   const off   = !View.view_typing(t.v);
-  const input = Screen.screen_input(t.scr, iw, Math.max(1, Math.floor(h / 3)), off ? OFF + agent_name(t.v.agent ?? View.MAIN) : term_hint(t), off);
+  const input = Screen.screen_input(t.scr, iw, Math.max(1, Math.floor(h / 3)), off ? OFF + (t.v.agent ?? View.MAIN) : term_hint(t), off);
   const idle  = View.view_doing(t.v) === null;
   const notes = term_notes(idle ? said.notes : said.notes.slice(-1), iw - 2 * NOTE_IN);
   const ruled = idle ? notes.pop() : undefined;
@@ -355,11 +355,11 @@ function term_hit(t: Term, row: number, col: number, to: number, run: (() => voi
   }
 }
 
-// the head: Illimitable, the page shown, the folder; at its right, a pane's
+// the head: illimitable, the page shown, the folder; at its right, a pane's
 // title, else what works
 function term_head(t: Term, w: number): Paint.Line {
   const bold  = { ...Paint.INK, b: true };
-  const page  = t.v.page === null ? [] : [Paint.Run(" › " + agent_name(t.v.page.name), bold)];
+  const page  = t.v.page === null ? [] : [Paint.Run(" › " + t.v.page.name, bold)];
   const left  = [Paint.Run(" " + View.NAME, bold), ...page, Paint.Run("  " + HERE, Paint.DIM)];
   const work  = t.v.agents.length === 0 ? "" : t.v.agents.length + " at work";
   const right = t.pane !== null ? t.pane.title + " · Esc closes" : work;
@@ -443,7 +443,7 @@ function term_paned(pane: Pane, w: number, tall: number): [Paint.Line[], number]
 }
 
 // the picker, framed, w wide, room lines at most: its search first, if
-// it has one (the cursor in it: at); each option shown (Illi's own and
+// it has one (the cursor in it: at); each option shown (illi's own and
 // each of the user's primary agents; each profile; each model; each
 // setting), what it is, the one now marked (none: no marks; one that
 // makes something new, "+ ...", has its "+" in the mark's place), the one

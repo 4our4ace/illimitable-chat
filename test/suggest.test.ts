@@ -8,7 +8,7 @@
 // it till a message; none after a failed turn, a stop, a tool call in its
 // answer, from a pipe (off); five in a row unused stop them, one used
 // starts the count anew; an answer of nothing, thanks or praise, or in
-// Illi's voice, is none.
+// illi's voice, is none.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
