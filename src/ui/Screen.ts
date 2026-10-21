@@ -71,7 +71,7 @@ export type Match = { k: number; at: number[] };
 // the input), what takes a paste (none: typed); the terminal's
 // background (#rrggbb) once told, and whether it is awaited; whether it
 // was left (screen_leave: it paints no more); whether the cursor blinks
-// (Illi waits), and its look as last written
+// (illi waits), and its look as last written
 export type Screen = {
   tty    : boolean;
   kitty  : boolean;
@@ -118,7 +118,7 @@ const CLEAR    = "\x1b[2J";
 const HIDE     = "\x1b[?25l";
 const SHOW     = "\x1b[?25h";
 
-// the cursor's look: a block, as terminals draw it, blinking while Illi
+// the cursor's look: a block, as terminals draw it, blinking while illi
 // waits (scr.blink), else steady (as opencode's: its own default); the
 // terminal's own again
 const BLINK  = "\x1b[1 q";
@@ -261,7 +261,7 @@ export function screen_paint(scr: Screen, rows: Piece[][], at: Spot): void {
   process.stdout.write(SYNC_ON + HIDE + (fresh ? CLEAR : "") + out + "\x1b[" + (at.row + 1) + ";" + (at.col + 1) + "H" + SHOW + screen_style(scr) + SYNC_OFF);
 }
 
-// the cursor's look, if it's to change (blinking while Illi waits)
+// the cursor's look, if it's to change (blinking while illi waits)
 function screen_style(scr: Screen): string {
   const style = scr.blink ? BLINK : STEADY;
   return style === scr.styled ? "" : (scr.styled = style);

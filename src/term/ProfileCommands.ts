@@ -75,7 +75,7 @@ function term_profile_name(t: Term): void {
   });
 }
 
-// a switch to profile `name`, only while Illi rests (a switch would cut
+// a switch to profile `name`, only while illi rests (a switch would cut
 // its turn), as term_restart does it
 export async function term_profile_go(t: Term, name: string): Promise<void> {
   t.profs = Profiles.profile_list(config.ROOT);
@@ -91,7 +91,7 @@ export async function term_profile_go(t: Term, name: string): Promise<void> {
   return term_restart(t, name);
 }
 
-// why a switch can't be now (said; true): from a pipe, or while Illi
+// why a switch can't be now (said; true): from a pipe, or while illi
 // works (a switch never cuts a turn)
 function term_profile_busy(t: Term, what: string): boolean {
   if (!t.scr.tty) {

@@ -86,7 +86,7 @@ type Saved = Kept & { seen?: Kept; main: End; tree: End; pick: object | null; go
 // day files read lately, unpacked, oldest first; count: the pages logged
 // whole; pick: the chat's, as last set;
 // goal: the user's (/goal; null: none), till met or halted (Chat.ts);
-// agent: the main agent's profile (Custom.ts; null: Illi's own); work:
+// agent: the main agent's profile (Custom.ts; null: illi's own); work:
 // what ran, as last saved; cut: the first message a turn's call gets
 // whole (Memory.cutoff; those before, as the view's lines), show: the
 // first the screen shows whole (at the cut, or behind it, as /compact
@@ -1240,7 +1240,7 @@ ${Memory.cut(line)}| ← LIMIT`;
     };
     const levels = Memory.levels(mem);
     const menu = ["VIEW", "ROOT", ...levels.map((l) => "LVL" + l)].map((name) => `<a href="#${name}">${name}</a>`);
-    yield `<!doctype html><meta charset="utf-8"><title>Illimitable memory</title>
+    yield `<!doctype html><meta charset="utf-8"><title>illimitable memory</title>
 <style>
 body { font: 13px/1.4 ui-monospace, monospace; margin: 2em; } nav a { margin-right: 1em; }
 section { display: none; } section:target { display: block; }

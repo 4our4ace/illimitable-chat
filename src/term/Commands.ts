@@ -25,7 +25,6 @@ import * as Screen from "../ui/Screen.ts";
 import { term_set, term_settings } from "./Settings.ts";
 import { term_side_set, term_tokens } from "./Side.ts";
 import { term_act, term_idle, term_primaries, term_quit, term_send, term_unhint, type Chooser, type Cmd, type Sug, type Term } from "./Term.ts";
-import { agent_name } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
 
 // how long the login's code shows: as long as it is good (ms), or till
@@ -182,7 +181,7 @@ function term_pane(t: Term, title: string, make: (w: number) => Paint.Line[]): v
   t.choose = null;
 }
 
-// a pane of markdown, drawn as Illi's words are but without a reply's
+// a pane of markdown, drawn as illi's words are but without a reply's
 // copy buttons (a pane is no reply)
 function term_pane_text(t: Term, title: string, text: string): void {
   const rows = View.entry_rows(null, "illi", text);
@@ -234,7 +233,7 @@ function term_custom(t: Term, cmd: Command, arg: string, word: string): void {
   }
 }
 
-// the user's skill (typed as `word`): Illi told to use it, for the words
+// the user's skill (typed as `word`): illi told to use it, for the words
 // after its name
 function term_skill(t: Term, skill: Skill, arg: string, word: string): void {
   term_custom(t, { name: skill.name, description: "", body: "Use your skill " + skill.name + (arg === "" ? "." : ": $ARGUMENTS"), file: skill.dir }, arg, word);
@@ -258,13 +257,13 @@ export function term_mcp(t: Term): void {
 // commands and skills, and the dirs of all
 function term_agents(t: Term): void {
   const cwd   = process.cwd();
-  const agent = (a: Profile) => "- **" + agent_name(a.name) + "**" + (a.name === t.v.agent ? " (main)" : "") + (a.description === "" ? "" : ": " + a.description) + [a.model, a.effort].filter(Boolean).map((x) => " · " + x).join("") + (a.tools === null ? "" : " · tools: " + a.tools.join(", "));
+  const agent = (a: Profile) => "- **" + a.name + "**" + (a.name === t.v.agent ? " (main)" : "") + (a.description === "" ? "" : ": " + a.description) + [a.model, a.effort].filter(Boolean).map((x) => " · " + x).join("") + (a.tools === null ? "" : " · tools: " + a.tools.join(", "));
   const cmd   = (c: Command) => "- **/" + c.name + "**" + (c.description === "" ? "" : ": " + c.description);
   const list  = (title: string, xs: string[]) => ["", title + (xs.length === 0 ? ": none yet." : ":"), ...xs];
   const dirs  = (kind: "agents" | "commands" | "skills") => Custom.dirs(cwd, kind).map(term_home).join(" or ");
   term_primaries(t);
   const text  = [
-    "Main agent: " + (t.v.agent === null ? "illi's own" : agent_name(t.v.agent)) + ". Shift+Tab runs illi as the next primary agent; so does a click at the side, and /agent <name>.",
+    "Main agent: " + (t.v.agent === null ? "illi's own" : t.v.agent) + ". Shift+Tab runs illi as the next primary agent; so does a click at the side, and /agent <name>.",
     ...list("Primary agents (illi runs as them)", t.agents.map(agent)),
     ...list("Subagents (only an agent spawns them)", Custom.subagents(cwd).map(agent)),
     ...list("Commands", Custom.commands(cwd).map(cmd)),
@@ -274,7 +273,7 @@ function term_agents(t: Term): void {
   term_pane_text(t, "Agents", text.join("\n"));
 }
 
-// the main agent: the primary agent named (illi: Illi's own); none opens
+// the main agent: the primary agent named (illi: illi's own); none opens
 // the picker, at the main agent
 function term_agent_set(t: Term, arg: string): void {
   if (arg !== "") {
@@ -283,7 +282,7 @@ function term_agent_set(t: Term, arg: string): void {
   term_primaries(t);
   const names = [null, ...t.agents.map((a) => a.name)];
   const about = names.map((_, k) => (k === 0 ? "illi's own, on " + Pick.shown(config.PICK) : t.agents[k - 1].description));
-  term_chooser(t, "Agent", names.map((name) => agent_name(name ?? View.MAIN)), about, names.indexOf(t.v.agent), (k) => term_choose(t, names[k]));
+  term_chooser(t, "Agent", names.map((name) => name ?? View.MAIN), about, names.indexOf(t.v.agent), (k) => term_choose(t, names[k]));
 }
 
 // the picker opened (closing the pane), at the option marked as now; with
@@ -328,7 +327,7 @@ export function term_main(t: Term, name: string | null): void {
 
 // /login: ChatGPT's device login: its page and code said (the code
 // copied), the login kept once the person gives it (in the file `login`
-// names, else as Illi's own); again, a new code (the last one let go)
+// names, else as illi's own); again, a new code (the last one let go)
 async function term_login(t: Term): Promise<void> {
   t.login?.abort();
   const stop = new AbortController();
@@ -362,7 +361,7 @@ export function term_models(t: Term): void {
   }
 }
 
-// /logout: Illi's own login removed; a file `login` names is left
+// /logout: illi's own login removed; a file `login` names is left
 function term_logout(t: Term): void {
   t.login?.abort();
   if (config.LOGIN_SET !== null) {
@@ -431,7 +430,7 @@ function term_fold(t: Term): void {
 }
 
 // shows an agent's chat, by the start of its name, or the chat's (by
-// Illi's name or the main agent's); no name lists the tabs
+// illi's name or the main agent's); no name lists the tabs
 function term_tab(t: Term, arg: string): void {
   const main = [View.MAIN, t.v.agent ?? View.MAIN].some((name) => name.toLowerCase() === arg.toLowerCase());
   if (arg === "") {
@@ -504,7 +503,7 @@ function term_pick(t: Term, move: Move, arg: string): void {
   term_note(t, move[0].toUpperCase() + move.slice(1) + "s: " + list.join(", ") + ". Pick one with /" + move + " <" + move + ">.");
 }
 
-// Illi's last reply on the tab shown, to the terminal's clipboard
+// illi's last reply on the tab shown, to the terminal's clipboard
 function term_copy(t: Term): void {
   const log  = t.v.page === null ? [...t.v.whole].sort((a, b) => a[0] - b[0]).map(([, e]) => e) : t.v.page.log ?? [];
   const last = log.filter((e) => e.kind === "illi").at(-1);

@@ -16,7 +16,7 @@
 // per width and palette. A reply's colors are the same palette's
 // (draw_theme).
 //
-// An agent's mark has a color of its own (draw_agent): Illi's is the
+// An agent's mark has a color of its own (draw_agent): illi's is the
 // brand's; another's, the one its file pins, else one made for it as the
 // agents are read, from its name and theirs, so it holds while they do.
 
@@ -50,7 +50,7 @@ const CODE    = 100000;
 // the drawings and highlights kept
 const KEPT = 64;
 
-// Illimitable's color, Illi's: the aqua its wordmark ends in (the
+// illimitable's color, illi's: the aqua its wordmark ends in (the
 // README's header); on a dark background, on a light one (the same hue,
 // deeper), and the terminal's own, untold; its hue (OKLCH)
 const BRAND     = { dark: "#81f8fb", light: "#0c9297", own: "6" };

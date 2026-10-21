@@ -1,6 +1,6 @@
 // Tools
 // =====
-// Illi's prompts, tools and agents. Calls get the tools as MCP over one
+// illi's prompts, tools and agents. Calls get the tools as MCP over one
 // local port, at a URL with the chat's secret and the caller ("main", an
 // agent; a compaction has none).
 // shell, read, write and edit run here, on the user's computer, in the
@@ -158,8 +158,8 @@ export const SUB = SUB_HEAD + "\n\n" + VIEW_DOC + "\n\n" + HERE_DOC;
 // a prompt's words for a call in Claude Code (Tools.hosted): who it is
 // is Claude Code's to say, its tools its own; illi's come from illi
 const HOSTED: Array<[string | RegExp, string]> = [
-  [/^You are illi \(short for Illimitable\), an AI agent that works for one user in a\nsingle chat that never ends\./, "Here you work inside illi (short for Illimitable), for one user in a single\nchat that never ends: your replies show in it as illi's."],
-  [/^You are a subagent of illi, an AI agent that works for one user in a\nsingle chat that never ends\./, "Here you work as a subagent of illi (short for Illimitable), an app that\nworks for one user in a single chat that never ends."],
+  [/^You are illi \(short for illimitable\), an AI agent that works for one user in a\nsingle chat that never ends\./, "Here you work inside illi (short for illimitable), for one user in a single\nchat that never ends: your replies show in it as illi's."],
+  [/^You are a subagent of illi, an AI agent that works for one user in a\nsingle chat that never ends\./, "Here you work as a subagent of illi (short for illimitable), an app that\nworks for one user in a single chat that never ends."],
   [/Your shell, read, write and edit tools run/, "Your tools run"],
 ];
 const HOSTED_TOOLS = `illi's own tools (zoom, date, todo, spawn, tell, skill and the user's
@@ -288,7 +288,7 @@ export namespace Tools {
   }
 
   // the user's rules: theirs for every project (config.RULES, RULES.md in
-  // illi's folder; named even while there is none, so Illi knows where it
+  // illi's folder; named even while there is none, so illi knows where it
   // goes), then the project's (Tools.project), each whole up to RULES_MOST
   export function rules(cwd: string, hosted = false): string {
     const own  = rules_read(config.RULES);

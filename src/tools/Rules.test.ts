@@ -1,7 +1,7 @@
 // Rules test
 // ==========
 // `bun test Rules.test.ts`. The user's rules in every system prompt: their
-// RULES.md (named even while there is none, so Illi knows where it goes;
+// RULES.md (named even while there is none, so illi knows where it goes;
 // a missing one is no rules, never an error; a long one cut, saying so),
 // then the project's: from the repo's top (the folder holding .git, else
 // the working folder alone) down to the working folder, in each folder

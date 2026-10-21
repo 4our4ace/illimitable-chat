@@ -6,7 +6,7 @@
 // Each is read anew at each use, so an edit applies at the next call.
 //
 // An agent (agents/<name>.md) is, by its mode (as opencode's), a
-// primary agent (primary: Illi runs as it, by Shift+Tab or /agent, named
+// primary agent (primary: illi runs as it, by Shift+Tab or /agent, named
 // in the view), a subagent (subagent: only an agent spawns it, as
 // spawn's `agent`), or both (all, the default). Its front matter also says what
 // it does (description), runs on (model: a label or
@@ -22,7 +22,7 @@
 // A skill (skills/<name>/SKILL.md, as Claude Code's) is instructions for
 // a kind of task, loaded when one comes (Tools.ts skill): its front
 // matter says when (description), its body how; its folder may hold
-// files the body names. Illi comes with some of its own (BUILT_IN, in
+// files the body names. illi comes with some of its own (BUILT_IN, in
 // the binary), the user's or a project's over them by name: one,
 // customize-illi, teaches it all this, so it can customize itself.
 //
@@ -67,7 +67,7 @@ export type Profile = {
 export type Command = { name: string; description: string; body: string; file: string };
 
 // a skill: its name (its folder's), when to use it, its instructions, its
-// folder ("": one built into Illi)
+// folder ("": one built into illi)
 export type Skill = { name: string; description: string; body: string; dir: string };
 
 // Constants
@@ -78,8 +78,8 @@ const NAME = /^[a-z0-9][a-z0-9_-]*$/i;
 
 const MODES: Mode[] = ["primary", "subagent", "all"];
 
-// the skills Illi comes with: SKILL.md files, named in their front
-// matter; {{illi}}, {{root}} and {{project}} in one are Illi's folder,
+// the skills illi comes with: SKILL.md files, named in their front
+// matter; {{illi}}, {{root}} and {{project}} in one are illi's folder,
 // its root's and the project's .illi
 const BUILT_IN = [CUSTOMIZE];
 
@@ -109,7 +109,7 @@ export namespace Custom {
     return [...Custom.files(cwd, "agents")].map(([name, file]) => Custom.profile(name, file));
   }
 
-  // the agents Illi may run as (Shift+Tab, /agent), of all (as read, if they
+  // the agents illi may run as (Shift+Tab, /agent), of all (as read, if they
   // were), and those an agent may spawn
   export function primaries(cwd: string, all = Custom.agents(cwd)): Profile[] {
     return all.filter((a) => a.mode !== "subagent");

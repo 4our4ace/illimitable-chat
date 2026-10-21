@@ -1,6 +1,6 @@
 // Mcp
 // ===
-// The user's MCP servers, their tools beside Illi's own (Tools.ts), each
+// The user's MCP servers, their tools beside illi's own (Tools.ts), each
 // named mcp__<server>__<tool> as the vendors take it, numbered if two
 // come out alike (get.user and get_user: mcp__s__get_user_2), and called
 // by that name at its server. The servers are in config.MCP
@@ -55,7 +55,7 @@ type Link = {
   close : () => Promise<unknown> | void;
 };
 
-// a server: its name, how it is (why: what failed), its tools as Illi
+// a server: its name, how it is (why: what failed), its tools as illi
 // names them, each one's name at the server, its link
 export type Server = {
   name  : string;
@@ -138,7 +138,7 @@ export namespace Mcp {
     }
   }
 
-  // a server's tools, all its pages, named as Illi names them, apart from
+  // a server's tools, all its pages, named as illi names them, apart from
   // the other servers' tools and each other
   export async function list(server: Server): Promise<void> {
     const got: any[] = [];
