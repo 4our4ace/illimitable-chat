@@ -2,8 +2,9 @@
 // ====
 // What a chat's calls run on, kept in its log: a vendor (claude-api,
 // openai-api, chatgpt: OpenAI's models on a ChatGPT plan), a model of its, an effort and a speed; label
-// vendor:model:effort:speed. A chat that saved none takes the config's
-// (`def`). A move steps one part along the picks that differ in it
+// vendor:model:effort:speed, shown to a person as model · effort (a
+// speed past the standard one after them). A chat that saved none takes
+// the config's (`def`). A move steps one part along the picks that differ in it
 // (`options`), wrapping (up and down stop at the ends): next, prev and
 // model every vendor's models, effort, speed (a model lacking one takes
 // its fastest below), up and down the efforts, never the speed; given a
@@ -142,6 +143,17 @@ export namespace Pick {
 
   export function label(pick: Pick): string {
     return [pick.vendor, pick.model, pick.effort, pick.speed].join(":");
+  }
+
+  // as a person reads it: model · effort, the speed only if not the
+  // standard one (gpt-6.1-sol · medium · fast)
+  export function shown(pick: Pick): string {
+    return [pick.model, pick.effort, ...(pick.speed === "slow" ? [] : [pick.speed])].join(" · ");
+  }
+
+  // a speed as a person reads it: slow is the standard one
+  export function speed(speed: string): string {
+    return speed === "slow" ? "standard" : speed;
   }
 
   // as a call takes it: the model by its id

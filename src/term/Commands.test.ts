@@ -4,8 +4,11 @@
 // searches the models as you type (Backspace too), sets the lit one's
 // effort by Left and Right and its speed by Tab, and sends all three as
 // one pick by Enter (Esc: none); /agent's and /profile's take no typing,
-// and Tab moves in them. /help fits a narrow pane; /agents' lists have
-// no copy buttons (a pane is no reply).
+// and Tab moves in them. /help fits a narrow pane, a row a key, the setup
+// commands their own group; /agents' lists have no copy buttons (a pane
+// is no reply). /speed says standard for slow; /tab finds the chat's tab
+// by the main agent's name; the dead ends (/stop, /fold, /image, /mcp
+// with nothing to act on) say something.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -34,6 +37,10 @@ const term = () => {
 // /model typed with no name
 const model = (t: any) => term_commands().find(([use]) => use.startsWith("/model "))![3](t, "");
 
+// a command typed, by its name, with its argument; the last note
+const run  = (t: any, name: string, arg = "") => term_commands().find(([use]) => use.split(" ")[0] === name)![3](t, arg);
+const note = (t: any) => t.notices.at(-1)?.text ?? "";
+
 // the names shown, the lit one, what the foot says of it
 const shown = (t: any) => t.choose.shown.map((m: Match) => t.choose.names[m.k]);
 const lit   = (t: any) => t.choose.names[t.choose.shown[t.choose.at].k];
@@ -46,7 +53,7 @@ test("the model picker lists each vendor's models, at the pick's", () => {
   expect(t.choose.about[0]).toBe("claude-api");
   expect(t.choose.about[4]).toBe("openai-api  500k context");
   expect([t.choose.here, lit(t)]).toEqual([1, "sonnet-5.5"]);
-  expect(foot(t)).toBe("effort ◂ medium ▸ · no fast");
+  expect(foot(t)).toBe("effort: ◂ medium ▸ · no fast mode");
 });
 
 test("typing searches the models, Backspace takes a character off; emptied, the one lit stays lit", () => {
@@ -77,16 +84,16 @@ test("Left and Right set the lit model's effort, Tab its speed; Enter sends all 
   term_grab(t, "Up");
   expect(lit(t)).toBe("opus-5.5");
   term_grab(t, "Right");
-  expect(foot(t)).toBe("effort ◂ high ▸ · Tab fast off");
+  expect(foot(t)).toBe("effort: ◂ high ▸ · Tab speed: standard");
   term_grab(t, "Tab");
-  expect(foot(t)).toBe("effort ◂ high ▸ · Tab fast on");
+  expect(foot(t)).toBe("effort: ◂ high ▸ · Tab speed: fast");
   term_grab(t, "Down");
   term_grab(t, "Tab");
-  expect(foot(t)).toBe("effort ◂ high ▸ · no fast");
+  expect(foot(t)).toBe("effort: ◂ high ▸ · no fast mode");
   ["Down", "Down", "Down"].forEach((key) => term_grab(t, key));
-  expect([lit(t), foot(t)]).toEqual(["gpt-6.1-sol", "effort ◂ high ▸ · Tab fast on"]);
+  expect([lit(t), foot(t)]).toEqual(["gpt-6.1-sol", "effort: ◂ high ▸ · Tab speed: fast"]);
   ["Right", "Right", "Right"].forEach((key) => term_grab(t, key));
-  expect(foot(t)).toBe("effort ◂ max · Tab fast on");
+  expect(foot(t)).toBe("effort: ◂ max · Tab speed: fast");
   term_grab(t, "Enter");
   expect(t.choose).toBeNull();
   expect(t.v.out.map((p: any) => p.msg)).toEqual([{ id: expect.any(String), $: "pick", to: { vendor: "openai-api", model: "gpt-6.1-sol", effort: "max", speed: "fast" } }]);
@@ -130,4 +137,49 @@ test("/agents' pane has no copy buttons: a pane is no reply", () => {
   t.agents = [];
   term_commands().find(([use]) => use === "/agents")![3](t, "");
   expect(t.pane.make(80).flat().filter((r: any) => r.copy !== undefined)).toEqual([]);
+});
+
+test("/help: Ctrl+C and Ctrl+D a row each, the setup commands in a group of their own", () => {
+  const t = term();
+  run(t, "/help");
+  const text = t.pane.make(120).map((l: any) => l.map((r: any) => r.x).join("").trimEnd());
+  expect(text.filter((l: string) => /^Ctrl\+[CD] /.test(l))).toHaveLength(2);
+  const setup = text.indexOf("Setup");
+  expect(setup).toBeGreaterThan(text.indexOf("Agents"));
+  expect(text.slice(setup).find((l: string) => l.startsWith("/login"))).toBeDefined();
+  expect(text.join("\n")).not.toMatch(/zoom|token|view's lines/);
+});
+
+test("/speed lists slow as standard, and takes standard for it", () => {
+  const t = term();
+  t.v.pick = { vendor: "claude-api", model: "opus-5.5", effort: "medium", speed: "fast" };
+  run(t, "/speed");
+  expect(note(t)).toBe("Speeds: standard, fast (now). Pick one with /speed <speed>.");
+  run(t, "/speed", "standard");
+  expect(t.v.out.map((p: any) => p.msg.to.speed)).toEqual(["slow"]);
+});
+
+test("/tab finds the chat's tab by the main agent's name, or Illi's; none lists the tabs", () => {
+  const t = term();
+  t.v.agent = "build";
+  for (const name of ["build", "illi"]) {
+    t.v.page = { name: "scout", log: [], live: [] };
+    run(t, "/tab", name);
+    expect(t.v.page).toBeNull();
+  }
+  run(t, "/tab");
+  expect(note(t)).toMatch(/^Tabs: /);
+});
+
+test("the dead ends say something: /stop with nothing running, /fold on an agent's tab, /image with no path, /mcp with no servers", () => {
+  const t = term();
+  run(t, "/stop");
+  expect([note(t), t.v.out]).toEqual(["Nothing is running.", []]);
+  t.v.page = { name: "scout", log: [], live: [] };
+  run(t, "/fold");
+  expect([note(t), t.v.fold]).toEqual(["Only the chat folds: Ctrl+PgUp goes back to it.", null]);
+  run(t, "/image");
+  expect(note(t)).toBe("Which image? /image <path>, or paste or drop the file.");
+  run(t, "/mcp");
+  expect(t.pane.make(200).map((l: any) => l.map((r: any) => r.x).join("")).join("\n")).toMatch(/^No MCP servers yet\. Add them to .*mcp\.json/);
 });

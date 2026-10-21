@@ -22,10 +22,12 @@ const CLIP_WIN  = "Add-Type -AssemblyName System.Windows.Forms, System.Drawing; 
 const CLIP_WAIT = 10000;
 
 // attaches the image at a path: its token in the input; a file of
-// another kind is refused here
+// another kind is refused here; no path, a note says how
 export function term_image(t: Term, arg: string): void {
   const file = term_file(arg);
-  if (file === null) {
+  if (arg === "") {
+    term_note(t, "Which image? /image <path>, or paste or drop the file.");
+  } else if (file === null) {
     term_note(t, "No file " + arg + ".");
   } else if (!term_attach(t, file)) {
     term_note(t, "Not attached: " + arg + " is no image (or over " + LARGEST / 2 ** 20 + " MB). " + View.IMAGES);
@@ -77,7 +79,7 @@ function term_attach(t: Term, file: string): boolean {
 export async function term_clip(t: Term): Promise<void> {
   const bytes = await term_clipboard();
   if (bytes === null || View.image_kind(bytes) === null) {
-    term_note(t, "No image in the clipboard. Text pastes as your terminal does (Ctrl+Shift+V, Ctrl+V, a right click).");
+    term_note(t, "No image in the clipboard. Text pastes as your terminal does (Ctrl+Shift+V or a right click).");
     return;
   }
   t.imgs.set(Screen.ed_image(t.scr.ed), new Blob([bytes]));

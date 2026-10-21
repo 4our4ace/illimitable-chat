@@ -4,10 +4,10 @@
 // themselves: a /word typed runs one, and, as it's typed, the commands it
 // matches show over the input (suggested); the picker (/agent, /profile,
 // /model, /settings), the panes over the chat (/help, /agents, /mcp), the
-// pick, the login, the pages, the blocks, the memory's exports.
+// pick, the login, the tabs, the blocks, the memory's exports.
 
 import type { Vendor } from "../ai/AskAI.ts";
-import { term_clip, term_image } from "./Attach.ts";
+import { term_clip, term_home, term_image } from "./Attach.ts";
 import { Chat } from "../chat/Chat.ts";
 import { ChatGPT } from "../ai/ChatGPT.ts";
 import * as config from "../config/Config.ts";
@@ -48,23 +48,24 @@ function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
   return [
     ["Chat", [
       ["",                  "Enter",                   "send; on an empty input, interrupt Illi",        term_enter],
-      ["",                  "Esc",                     "close a list; else clear the notes and interrupt Illi's turn (agents go on)", term_esc],
-      ["",                  "Ctrl+C, Ctrl+D",          "clear; on an empty input, interrupt (Ctrl+C again: quit), quit", term_clear],
+      ["",                  "Esc",                     "close a list; else clear the notes and interrupt Illi (agents go on)", term_esc],
+      ["",                  "Ctrl+C",                  "clear the input; on an empty one, interrupt Illi (again: quit)", term_clear],
+      ["",                  "Ctrl+D",                  "clear the input; on an empty one, quit",         term_clear],
       ["",                  "Tab",                     "take the suggested reply",                       term_take],
-      ["/goal <message>",   "",                        "send a message as the goal: at each turn's end, Illi asks itself if it is met, and goes on till it is", (t, a) => term_say(t, "/goal " + a)],
+      ["/goal <message>",   "",                        "send a goal: Illi goes on until it is met",      (t, a) => term_say(t, "/goal " + a)],
       ["/halt",             "",                        "drop the goal; the turn running ends as it would", (t) => term_say(t, "/halt")],
-      ["/clear",            "",                        "a fresh session for a new topic: the screen starts empty, and Illi gets the chat so far only as its memory tree's summaries (each a zoom away, so it still remembers)", (t) => term_say(t, "/clear")],
-      ["/compact",          "",                        "fold all but the last two exchanges into Illi's memory tree, so each turn sends less; unlike /clear, the screen still shows them all", (t) => term_say(t, "/compact")],
-      ["/image <path>",     "",                        "attach an image: its token goes in the input, the image with it as it's sent (or paste or drop its file)", term_image],
-      ["",                  "Alt+V, Ctrl+V",           "attach the clipboard's image (the terminal's own paste brings text alone)", term_clip],
+      ["/clear",            "",                        "an empty screen for a new topic; Illi still remembers the chat before", (t) => term_say(t, "/clear")],
+      ["/compact",          "",                        "summarize all but the last two exchanges, so each turn sends less; the screen keeps them", (t) => term_say(t, "/compact")],
+      ["/image <path>",     "",                        "attach an image to the next message (or paste or drop the file)", term_image],
+      ["",                  "Alt+V, Ctrl+V",           "attach the clipboard's image (the terminal's own paste brings text)", term_clip],
       ["/open #id",         "",                        "open block #id and keep it open (or click it)",  (t, a) => term_block(t, a, true)],
       ["/close #id",        "",                        "close block #id and keep it closed (or click its top edge)", (t, a) => term_block(t, a, false)],
-      ["/fold",             "Ctrl+F",                  "the chat in the fewest blocks; again: unfold (Ctrl+F eaten? type /fold)", term_fold],
-      ["",                  "Ctrl+Y",                  "copy Illi's last reply (a drag copies the text it goes over, anywhere; a double click, a word, a path or a link; three, a line; dragged on, more of them)", term_copy],
-      ["",                  "Ctrl+O",                  "show the work between replies (tool calls, results, thinking, agents' reports), or hide it again; a click on one run shows that one", term_verbose],
+      ["/fold",             "Ctrl+F",                  "fold the chat into the fewest blocks; again: unfold", term_fold],
+      ["",                  "Ctrl+Y",                  "copy Illi's last reply (a drag copies the text it covers, a double click a word)", term_copy],
+      ["",                  "Ctrl+O",                  "show or hide the work between replies: tools, thinking, agents' reports", term_verbose],
       ["/export",           "",                        "save the memory as ./illi-memory.json",          term_export],
-      ["/tree",             "",                        "the whole memory tree as a page, ./illi-tree.html", term_tree],
-      ["",                  "Ctrl+L",                  "draw the screen anew",                           term_redraw],
+      ["/tree",             "",                        "save the whole memory tree as ./illi-tree.html", term_tree],
+      ["",                  "Ctrl+L",                  "draw the screen again",                          term_redraw],
       ["",                  "Ctrl+Z",                  "suspend; fg brings it back",                     (t) => Screen.screen_suspend(t.scr)],
       ["/quit",             "",                        "leave: what runs stops, and goes on at the next start", term_quit],
       ["/help",             "",                        "this list",                                      term_help],
@@ -76,26 +77,28 @@ function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
     ["Pick", [
       ["",                  "Shift+Left, Shift+Right", "the model before, the next",                     (t, k) => term_move(t, ARROWS[k])],
       ["",                  "Shift+Up, Shift+Down",    "more effort, less",                              (t, k) => term_move(t, ARROWS[k])],
-      ["/model [name]",     "",                        "pick the model, its effort and speed at once: type to search, Up and Down a model, Left and Right its effort, Tab fast, Enter; with a name, that model", term_model],
-      ["/effort [level]",   "",                        "the efforts; with one, that one",                (t, a) => term_pick(t, "effort", a)],
-      ["/speed [speed]",    "",                        "the speeds; with one, that one",                 (t, a) => term_pick(t, "speed", a)],
+      ["/model [name]",     "",                        "model, effort and speed in one list (Left and Right: effort, Tab: speed); a name: that model", term_model],
+      ["/effort [level]",   "",                        "set the effort; no level: lists them",           (t, a) => term_pick(t, "effort", a)],
+      ["/speed [speed]",    "",                        "set the speed; no speed: lists them",            (t, a) => term_pick(t, "speed", a)],
     ]],
     ["Agents", [
       ["",                  "Shift+Tab",               "Illi runs as the next primary agent (or click one at the side)", term_next],
-      ["/agent [name]",     "",                        "the primary agent named (illi: Illi's own); none: pick from a list", term_agent_set],
+      ["/agent [name]",     "",                        "Illi runs as that primary agent (illi: its own); no name: opens a list", term_agent_set],
       ["/agents",           "",                        "your agents, commands and skills, and where their files go", term_agents],
-      ["/mcp",              "",                        "your MCP servers: each one's tools, or why it failed", term_mcp],
-      ["/side [where|width]", "",                      "the side panel: right, left or off; or its width, in columns (40) or of the screen (30%)", term_side_set],
-      ["/settings",         "",                        "all the settings, each one's value: type to search, Left and Right (or Enter) change it, Enter on a model or a file changes that, Delete puts its default back", (t) => term_settings(t)],
-      ["/set <key> [value]", "",                       "a setting changed (default: its default back); with no value, what it is", term_set],
-      ["/login",            "",                        "sign in to ChatGPT (Plus or Pro) with a code, no opencode needed; Illi keeps and renews its own login", term_login],
+      ["",                  "Ctrl+PgDn, Ctrl+PgUp",    "the next tab, the one before: the chat's, each subagent's at work", term_cycle],
+      ["/tab [name]",       "",                        "go to that agent's tab; no name: lists the tabs", term_tab],
+      ["/stop [name]",      "",                        "stop all work, agents too; a name: only that agent", term_stop],
+    ]],
+    ["Setup", [
+      ["/login",            "",                        "sign in to ChatGPT (Plus or Pro) with a code; Illi keeps the login and renews it", term_login],
       ["/logout",           "",                        "remove Illi's own ChatGPT login (opencode's, if any, is used again)", term_logout],
-      ["",                  "Ctrl+PgDn, Ctrl+PgUp",    "the next page, the one before: Illi's, each subagent's at work", term_cycle],
-      ["/tab [name]",       "",                        "the pages; with a name, that one",               term_tab],
-      ["/stop [name]",      "",                        "stop all work, agents too; or that agent",       term_stop],
+      ["/settings",         "",                        "all the settings: type to search, Left, Right or Enter change one, Del puts its default back", (t) => term_settings(t)],
+      ["/set <key> [value]", "",                       "change a setting (default: back to its default); no value: says what it is", term_set],
+      ["/side [where|width]", "",                      "the side panel: right, left or off, or its width (40 or 30%); alone: says how it is", term_side_set],
+      ["/mcp",              "",                        "your MCP servers: their tools, or why one failed", term_mcp],
     ]],
     ["Profiles", [
-      ["/profile [name]",   "",                        "switch to the profile named (each its own chat, settings, agents and MCP servers; the login is shared); none: the list, where one is also made, renamed (Ctrl+R), exported (Ctrl+E), imported or deleted (Del)", term_profile],
+      ["/profile [name]",   "",                        "switch to that profile (its own chat, settings, agents and MCP servers; one login for all); no name: opens a list to make, rename, export, import or delete one", term_profile],
     ]],
     ...(yours.length === 0 ? [] : [["Yours", yours] as [string, Cmd[]]]),
   ];
@@ -212,7 +215,7 @@ function term_help(t: Term): void {
 }
 
 // a command of the chat's (/goal, /halt, /clear, /compact) sent as typed;
-// from an agent's page, not sent, the input has it back (term_away)
+// from an agent's tab, not sent, the input has it back (term_away)
 function term_say(t: Term, text: string): void {
   if (!term_away(t, text.trim())) {
     term_act(t, { $: "Send", text });
@@ -220,7 +223,7 @@ function term_say(t: Term, text: string): void {
 }
 
 // the user's command (typed as `word`): its message sent, with the images
-// its words name; from an agent's page, not sent (term_away)
+// its words name; from an agent's tab, not sent (term_away)
 function term_custom(t: Term, cmd: Command, arg: string, word: string): void {
   if (term_away(t, (word + " " + arg).trim())) {
     return;
@@ -236,14 +239,16 @@ function term_skill(t: Term, skill: Skill, arg: string, word: string): void {
   term_custom(t, { name: skill.name, description: "", body: "Use your skill " + skill.name + (arg === "" ? "." : ": $ARGUMENTS"), file: skill.dir }, arg, word);
 }
 
-// the user's MCP servers: each one's tools, or how it is; the file
+// the user's MCP servers: each one's tools, or how it is; the file (none
+// yet: where they go)
 export function term_mcp(t: Term): void {
   const { servers, trouble, file } = Mcp.status();
+  const where  = term_home(file);
   const server = (s: Server) => "- **" + s.name + "**: " + (s.state === "ready" ? s.own.size + " tools: " + [...s.own.values()].join(", ") : s.state === "starting" ? "starting…" : "failed: " + s.why);
   const text = [
-    servers.length === 0 ? "No MCP servers." : "MCP servers (their tools are named mcp__<server>__<tool>):", ...servers.map(server),
+    servers.length === 0 ? "No MCP servers yet. Add them to " + where + ", as Claude Code's mcpServers (the README shows the shape); they run from Illi's next start." : "MCP servers (their tools are named mcp__<server>__<tool>):", ...servers.map(server),
     ...(trouble === "" ? [] : ["", "The file won't read: " + trouble]),
-    "", "They are in " + file + ", as Claude Code's mcpServers; the README shows its shape. A change there applies at Illi's next start.",
+    ...(servers.length === 0 ? [] : ["", "They are in " + where + ", as Claude Code's mcpServers; the README shows the shape. A change there applies at Illi's next start."]),
   ];
   term_pane_text(t, "MCP", text.join("\n"));
 }
@@ -255,6 +260,7 @@ function term_agents(t: Term): void {
   const agent = (a: Profile) => "- **" + agent_name(a.name) + "**" + (a.name === t.v.agent ? " (main)" : "") + (a.description === "" ? "" : ": " + a.description) + [a.model, a.effort].filter(Boolean).map((x) => " · " + x).join("") + (a.tools === null ? "" : " · tools: " + a.tools.join(", "));
   const cmd   = (c: Command) => "- **/" + c.name + "**" + (c.description === "" ? "" : ": " + c.description);
   const list  = (title: string, xs: string[]) => ["", title + (xs.length === 0 ? ": none yet." : ":"), ...xs];
+  const dirs  = (kind: "agents" | "commands" | "skills") => Custom.dirs(cwd, kind).map(term_home).join(" or ");
   term_primaries(t);
   const text  = [
     "Main agent: " + (t.v.agent === null ? "Illi's own" : agent_name(t.v.agent)) + ". Shift+Tab runs Illi as the next primary agent; so does a click at the side, and /agent <name>.",
@@ -262,7 +268,7 @@ function term_agents(t: Term): void {
     ...list("Subagents (only an agent spawns them)", Custom.subagents(cwd).map(agent)),
     ...list("Commands", Custom.commands(cwd).map(cmd)),
     ...list("Skills (the agent loads one when a task matches; /name asks for it)", Custom.skills(cwd).map((s) => "- **" + s.name + "**" + (s.description === "" ? "" : ": " + s.description))),
-    "", "An agent is a markdown file in " + Custom.dirs(cwd, "agents").join(" or ") + " (the project's wins); its mode is primary, subagent, or all (both, the default). A command is one in " + Custom.dirs(cwd, "commands").join(" or ") + ", a skill a folder with a SKILL.md in " + Custom.dirs(cwd, "skills").join(" or ") + ". The README shows their shape.",
+    "", "An agent is a markdown file in " + dirs("agents") + " (the project's wins); its mode is primary, subagent, or all (both, the default). A command is one in " + dirs("commands") + ", a skill a folder with a SKILL.md in " + dirs("skills") + ". The README shows their shape.",
   ];
   term_pane_text(t, "Agents", text.join("\n"));
 }
@@ -275,7 +281,7 @@ function term_agent_set(t: Term, arg: string): void {
   }
   term_primaries(t);
   const names = [null, ...t.agents.map((a) => a.name)];
-  const about = names.map((_, k) => (k === 0 ? "Illi's own, on " + Pick.label(config.PICK) : t.agents[k - 1].description));
+  const about = names.map((_, k) => (k === 0 ? "Illi's own, on " + Pick.shown(config.PICK) : t.agents[k - 1].description));
   term_chooser(t, "Agent", names.map((name) => agent_name(name ?? View.MAIN)), about, names.indexOf(t.v.agent), (k) => term_choose(t, names[k]));
 }
 
@@ -359,16 +365,19 @@ export function term_models(t: Term): void {
 function term_logout(t: Term): void {
   t.login?.abort();
   if (config.LOGIN_SET !== null) {
-    return term_note(t, "Illi runs on the login in " + config.LOGIN_SET + ", which `login` names: /logout leaves it. /set login default goes back to Illi's own (or opencode's) at the next start.");
+    return term_note(t, "Illi uses the login in " + term_home(config.LOGIN_SET) + " (the login setting): /logout leaves it. /set login default switches back at the next start.");
   }
   const gone = ChatGPT.logout();
-  const left = ChatGPT.signed() ? " Illi runs on opencode's login now." : " /login signs in again.";
-  term_note(t, (gone ? "Signed out: Illi's own ChatGPT login is removed." : "Illi has no login of its own.") + left);
+  const left = ChatGPT.signed() ? " Now on opencode's login." : " /login signs in again.";
+  term_note(t, (gone ? "Signed out of ChatGPT." : "Illi has no login of its own.") + left);
 }
 
-// stops all that runs, or the agent named
+// stops all that runs, or the agent named; nothing running, says so
 function term_stop(t: Term, arg: string): void {
   const name = term_agent(t, arg);
+  if (arg === "" && !View.view_running(t.v)) {
+    return term_note(t, "Nothing is running.");
+  }
   if (arg !== "" && !t.v.agents.includes(name)) {
     term_note(t, "No agent " + arg + " at work.");
     return;
@@ -410,20 +419,22 @@ function block_row(rows: View.Row[], id: number, n: number): View.Row | undefine
   return undefined;
 }
 
-// folds all (shown when the tops come), or unfolds
+// folds all (shown when the tops come), or unfolds; on an agent's tab,
+// says it folds the chat's alone
 function term_fold(t: Term): void {
-  if (t.v.page === null) {
-    term_act(t, { $: "Fold", on: t.v.fold === null });
-    t.scroll = 0;
+  if (t.v.page !== null) {
+    return term_note(t, "Only the chat folds: Ctrl+PgUp goes back to it.");
   }
+  term_act(t, { $: "Fold", on: t.v.fold === null });
+  t.scroll = 0;
 }
 
-// shows an agent's chat, by the start of its name, or Illi's; no
-// name lists the pages
+// shows an agent's chat, by the start of its name, or the chat's (by
+// Illi's name or the main agent's); no name lists the tabs
 function term_tab(t: Term, arg: string): void {
-  const main = arg.toLowerCase() === View.MAIN.toLowerCase();
+  const main = [View.MAIN, t.v.agent ?? View.MAIN].some((name) => name.toLowerCase() === arg.toLowerCase());
   if (arg === "") {
-    return term_note(t, "Pages: " + View.view_tabs(t.v).map((tab) => tab.text).join("  "));
+    return term_note(t, "Tabs: " + View.view_tabs(t.v).map((tab) => tab.text).join("  "));
   }
   term_act(t, { $: "Goto", name: main ? null : term_agent(t, arg) });
 }
@@ -472,26 +483,27 @@ export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "
     const efforts = Pick.options(p, "effort", t.v).map(([effort]) => effort);
     const e       = efforts.indexOf(p.effort);
     const speeds  = Pick.options(p, "speed", t.v).length;
-    const speed   = speeds < 2 ? "no fast" : "Tab " + (p.speed === "slow" ? "fast off" : p.speed + " on");
-    return "effort " + (e > 0 ? "◂ " : "") + p.effort + (e < efforts.length - 1 ? " ▸" : "") + " · " + speed;
+    const speed   = speeds < 2 ? "no fast mode" : "Tab speed: " + Pick.speed(p.speed);
+    return "effort: " + (e > 0 ? "◂ " : "") + p.effort + (e < efforts.length - 1 ? " ▸" : "") + " · " + speed;
   };
   term_chooser(t, title, rows.map(([, m]) => m.label), about, here, (k) => done(pick(k)), { find: true, keys, foot });
 }
 
-// a part of the pick: to the value given, or, none, the values it may
-// take, the pick's marked
+// a part of the pick: to the value given (a speed as shown: standard
+// is slow), or, none, the values it may take, the pick's marked
 function term_pick(t: Term, move: Move, arg: string): void {
   const knob = View.view_pick(t.v).find((k) => k.move === move);
   if (arg !== "" || knob === undefined || t.v.pick === null) {
-    term_act(t, { $: "Move", move, to: arg });
+    term_act(t, { $: "Move", move, to: move === "speed" && arg.toLowerCase() === "standard" ? "slow" : arg });
     return;
   }
+  const now   = move === "speed" ? t.v.pick.speed : knob.text;
   const parts = [...new Set(Pick.options(t.v.pick, move, t.v).map(([part]) => part))];
-  const list  = parts.map((part) => (part === knob.text ? part + " (now)" : part));
+  const list  = parts.map((part) => (move === "speed" ? Pick.speed(part) : part) + (part === now ? " (now)" : ""));
   term_note(t, move[0].toUpperCase() + move.slice(1) + "s: " + list.join(", ") + ". Pick one with /" + move + " <" + move + ">.");
 }
 
-// Illi's last reply on the page shown, to the terminal's clipboard
+// Illi's last reply on the tab shown, to the terminal's clipboard
 function term_copy(t: Term): void {
   const log  = t.v.page === null ? [...t.v.whole].sort((a, b) => a[0] - b[0]).map(([, e]) => e) : t.v.page.log ?? [];
   const last = log.filter((e) => e.kind === "illi").at(-1);
@@ -506,12 +518,12 @@ function term_copy(t: Term): void {
 async function term_export(t: Term): Promise<void> {
   const file = process.cwd() + "/illi-memory.json";
   await Bun.write(file, [...Memory.dump(t.chat.mem)].join(""));
-  term_note(t, "Your memory is in " + file + ".");
+  term_note(t, "Your memory is in " + term_home(file) + ".");
 }
 
 // the memory tree, as a page
 async function term_tree(t: Term): Promise<void> {
   const file = process.cwd() + "/illi-tree.html";
   await Bun.write(file, [...Memory.page(t.chat.mem)].join(""));
-  term_note(t, "The memory tree is in " + file + ".");
+  term_note(t, "The memory tree is in " + term_home(file) + ".");
 }

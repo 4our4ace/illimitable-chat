@@ -83,5 +83,5 @@ test("a pick set whole is one change and one note", () => {
   View.view_act(v, { $: "Pick", to: { ...to, effort: "low", speed: "slow" } });
   expect(v.notes.at(-1)).toBe("Now on opus-5.5 (claude-api), low effort.");
   expect(View.view_act(v, { $: "Pick", to: { ...to, speed: "ultrafast" } })).toEqual([]);
-  expect(v.notes.at(-1)).toBe("No pick claude-api:opus-5.5:high:ultrafast here.");
+  expect(v.notes.at(-1)).toBe("No pick opus-5.5 · high · ultrafast here.");
 });

@@ -55,7 +55,7 @@ test("/settings lists each setting, its value and what it does; one a variable s
   const t = term();
   run(t, "/settings");
   expect(t.choose.names).toEqual(["pick", "agents", "compactor", "suggest", "side", "side_width", "context", "contexts", "rules", "after", "vendors", "models", "jobs", "theme", "mcp", "login"]);
-  expect(about(t)).toMatch(/^sonnet-5\.5 medium slow +Illi's own default model/);
+  expect(about(t)).toMatch(/^sonnet-5\.5 · medium +Illi's own default model/);
   expect(foot(t)).toBe("set by ILLI_PICK");
   term_grab(t, "Enter");
   expect(note(t)).toBe("pick is set by ILLI_PICK: unset it to change it here.");
@@ -93,7 +93,7 @@ test("Enter on a pick opens the model picker at the chat's pick; its choice is t
   term_grab(t, "Enter");
   expect(file().agents).toBe("claude-api:haiku-5.5:medium:slow");
   expect(config.AGENTS).toEqual({ vendor: "claude-api", model: "haiku-5.5", effort: "medium", speed: "slow" });
-  expect(note(t)).toMatch(/^agents: haiku-5\.5 medium slow, kept in .*config\.json; it applies now\.$/);
+  expect(note(t)).toMatch(/^agents: haiku-5\.5 · medium, kept in .*config\.json; it applies now\.$/);
   expect([t.choose.title, lit(t)]).toEqual(["Settings", "agents"]);
   term_grab(t, "Delete");
   expect(config.AGENTS).toBeNull();
@@ -117,8 +117,10 @@ test("Enter on one typed in puts /set in the input; /set checks the value, then 
   expect(note(t)).toBe("jobs takes a number, 1 or more.");
   run(t, "/set", "contexts {\"sonnet-5.5\": 100000}");
   expect(config.config_context("sonnet-5.5", 200000)).toBe(100000);
-  run(t, "/set", "contexts [1]");
-  expect(note(t)).toBe("contexts takes each model's context, like {\"gpt-6.1-sol\": 350000}.");
+  for (const bad of ["[1]", "{nope"]) {
+    run(t, "/set", "contexts " + bad);
+    expect(note(t)).toBe("contexts takes each model's context, like {\"gpt-6.1-sol\": 350000}.");
+  }
   run(t, "/set", "nope 1");
   expect(note(t)).toMatch(/^No setting nope\./);
   run(t, "/set", "side");

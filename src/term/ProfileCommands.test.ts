@@ -52,7 +52,7 @@ test("Ctrl+E exports a profile to the folder illi works in, never over a file th
   expect(fs.readFileSync(TMP + "/illi-profile-default.tar.gz", "utf8")).toBe("mine\n");
   fs.rmSync(TMP + "/illi-profile-default.tar.gz");
   t.choose.keys(0, "Ctrl+E");
-  expect(await noted(t, "Profile default")).toMatch(/^Profile default is in .*illi-profile-default\.tar\.gz: its chat and settings/);
+  expect(await noted(t, "Profile default")).toMatch(/^Profile default is in .*illi-profile-default\.tar\.gz, without the login\. \/profile imports it\.$/);
 });
 
 test("the import row asks the archive's path, then a name its file can't give, and says what came along", async () => {
@@ -62,9 +62,11 @@ test("the import row asks the archive's path, then a name its file can't give, a
   expect([t.choose.title, t.choose.ask.hint]).toEqual(["Import a profile", "the archive's path"]);
   expect(t.choose.ask.done(TMP + "/none.tar.gz")).toBe("No such file.");
   expect(t.choose.ask.done(TMP + "/illi-profile-default.tar.gz")).toBeNull();
-  expect([t.choose.title, t.choose.find, t.choose.foot(-1)]).toEqual(["Name the imported profile", "", "lowercase letters, digits, - and _"]);
+  expect([t.choose.title, t.choose.find, t.choose.foot(-1)]).toEqual(["Name the imported profile", "", "a-z, 0-9, - and _, a letter or digit first"]);
   expect(t.choose.ask.done("home")).toBeNull();
-  expect(await noted(t, "Imported")).toContain("Its agents, commands, skills, RULES.md and chat came as they were");
+  const said = await noted(t, "Imported");
+  expect(said).toContain("Its agents, commands, skills and RULES.md came as they were");
+  expect(said.length).toBeLessThanOrEqual(160);
   expect(fs.existsSync(DIR + "/profiles/home/config.json")).toBe(true);
 });
 
