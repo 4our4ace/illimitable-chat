@@ -447,31 +447,52 @@ function term_off(canvas: string | undefined, f: number): string | undefined {
   return term_mix(canvas, light ? "#000000" : "#ffffff", f);
 }
 
-// the chat's lines and the first shown, tall of them: its rows (laid out
-// again only once they changed), then what streams or is waited on.
-// Scrolled up, the lines read stay in place as more come below, and about
-// in place at a new width; a block asked for (/open, /close) shows at the
-// top
+// the chat's lines and the first shown, tall of them: its rows (made
+// again only once they changed), laid out from the last up as far as
+// shown and a screen more (those above as it is scrolled to them, any
+// text chosen in it kept on its lines), then what streams or is waited
+// on. Scrolled up, the lines read stay in place as more come below (the
+// rows laid out before laid out again, as with text chosen at the same
+// width), and about in place at a new width; a block asked for (/open,
+// /close) shows at the top
 function term_chat(t: Term, w: number, tall: number, row: number, col: number): [Paint.Line[], number] {
-  if (t.body === null || t.body.ver !== t.ver || t.body.w !== w) {
-    const marks: Paint.Mark[] = [];
-    t.body = { ver: t.ver, w, lines: Paint.rows_lines(View.view_body(t.v), w, marks, 1), marks };
+  const was   = t.body;
+  const body  = was !== null && was.ver === t.ver && !Paint.laid_stale(was, w) ? was : { ver: t.ver, ...Paint.laid_new(View.view_body(t.v), w, 1) };
+  if (body !== was) {
+    const keep = was !== null && (t.scroll > 0 || (t.sel?.key === "chat" && !Paint.laid_stale(was, w)));
+    Paint.laid_up(body, 0, keep ? was.from : Infinity);
+    t.body = body;
   }
   const tail  = Paint.rows_lines(View.view_tail(t.v, false), w);
-  const lines = [[], ...t.body.lines, ...(tail.length === 0 ? [] : [[], ...tail])];
-  const find  = t.find === null ? undefined : t.body.marks.find((m) => m.id === t.find![0] && m.n === t.find![1]);
+  const below = tail.length === 0 ? 0 : 1 + tail.length;
   const wider = t.seen.end - t.seen.col !== w;
   if (t.scroll > 0 && t.seen.total > 0) {
-    t.scroll = wider ? Math.round((t.scroll * lines.length) / t.seen.total) : t.scroll + Math.max(0, lines.length - t.seen.total);
+    const total = 1 + body.lines.length + below;
+    t.scroll = wider ? Math.round((t.scroll * total) / t.seen.total) : t.scroll + Math.max(0, total - t.seen.total);
   }
+  const at    = t.find === null ? -1 : Paint.rows_find(body.rows, t.find[0], t.find[1]);
+  const up    = Paint.laid_up(body, 0, at < 0 ? Infinity : at);
+  const find  = t.find === null ? undefined : body.marks.find((m) => m.id === t.find![0] && m.n === t.find![1]);
   if (find !== undefined) {
-    t.scroll = lines.length - tall - find.from + 1;
+    t.scroll = 1 + body.lines.length + below - tall - find.from + 1;
   }
-  t.find   = null;
+  t.find = null;
+  term_chosen(t, up + Paint.laid_up(body, t.scroll + 2 * tall - 1 - below));
+  const lines = [[], ...body.lines, ...(tail.length === 0 ? [] : [[], ...tail])];
   t.scroll = Math.max(0, Math.min(t.scroll, lines.length - tall));
   const first = Math.max(0, lines.length - tall - t.scroll);
-  t.seen = { total: lines.length, marks: t.body.marks, row, first, tall, col, end: col + w };
+  t.seen = { total: lines.length, marks: body.marks, row, first, tall, col, end: col + w };
   return [lines, first];
+}
+
+// lines laid out over the chat's top: text chosen in it moves down with
+// the lines it is on
+function term_chosen(t: Term, added: number): void {
+  const sel = t.sel;
+  if (added > 0 && sel?.key === "chat") {
+    const down = (c: typeof sel.a) => ({ ...c, line: c.line + added });
+    [sel.a, sel.b, sel.root] = [down(sel.a), down(sel.b), [down(sel.root[0]), down(sel.root[1])]];
+  }
 }
 
 // a pane, tall lines w wide in the chat's place: its title on a rule

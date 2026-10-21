@@ -197,7 +197,7 @@ export type Act =
 
 // what a page draws, top to bottom
 export type Row =
-  | { $: "Sum"; id: number; n: number; text: string; call: Call.Call | null; kind: Kind | null }  // a block: nx, its summary (call: a tool call's, word for word; kind: its message's, of one known)
+  | { $: "Sum"; id: number; n: number; text: string; call: Call.Call | null; kind: Kind | null }  // a block: nx, its summary (as written: drawn flat, Paint.ts; call: a tool call's, word for word; kind: its message's, of one known)
   | { $: "Box"; id: number; n: number; text: string; rows: Row[] }                              // a block open: its bar
   | { $: "Act"; id: number; text: string; open: boolean; rows: Row[] }                         // a run of work (ACTIVITY), from message id: what was done, its rows if open
   | { $: "Msg"; id: number | null; kind: Kind; who: string; text: string; body: Md.Block[]; call: Call.Call | null; images: string[] } // a message whole: 0x (who: its speaker or "↳ result", named on its block; body: its blocks, none for illi's (drawn from its text); call: a tool call's, drawn as Call.ts reads it)
@@ -813,7 +813,7 @@ function whole_rows(id: number | null, entry: Entry): Row[] {
 // if not known, read off its line
 function sum_rows(id: number, n: number, node: Node = { text: WAIT, to: "" }, kind?: Kind): Row[] {
   const said = n === 1 ? (KINDED.exec(node.text)?.[1] as Kind | undefined) : undefined;
-  const rows = ROWS.get(node) ?? [{ $: "Sum", id, n, text: Md.md_flat(node.text), call: sum_call(n, node.text), kind: kind ?? said ?? null }];
+  const rows = ROWS.get(node) ?? [{ $: "Sum", id, n, text: node.text, call: sum_call(n, node.text), kind: kind ?? said ?? null }];
   ROWS.set(node, rows);
   return rows;
 }

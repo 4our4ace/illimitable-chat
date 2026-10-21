@@ -150,8 +150,9 @@ export type Sel = { key: string; a: Cell; b: Cell; held: boolean; moved: boolean
 
 export type Ink = Paint.Run["s"];
 
-// the chat's rows laid out: at which change, at which width
-type Body = { ver: number; w: number; lines: Paint.Line[]; marks: Paint.Mark[] };
+// the chat's rows laid out (from the last up, as far as shown: Frame.ts),
+// at which change
+type Body = Paint.Laid & { ver: number };
 
 // a text over the chat: its title, its lines made for a width (made
 // again at another), how far it is scrolled down

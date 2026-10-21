@@ -17,15 +17,17 @@
 // framed, its bar in the frame's top edge; a call's code framed on the
 // call's fill; a file's lines (a read, a diff) framed, the file on the
 // top edge, each numbered. Control characters never reach the terminal.
-// A row's lines are laid out once per width (a paint lays out the whole
-// chat; a reply streaming, only past its finished blocks: Reply.ts), and
-// each block's place in them is marked, so a click finds it.
+// A row's lines are laid out once per width and look (a reply streaming,
+// only past its finished blocks: Reply.ts); a chat's rows from its last
+// up, only as far as asked (laid_up: a paint asks for what shows, so the
+// top of a long chat waits till it is scrolled to). Each block's place in
+// them is marked, so a click finds it.
 
 import type { Kind } from "../ai/AskAI.ts";
 import * as Call from "./Call.ts";
 import * as config from "../config/Config.ts";
 import * as Draw from "./Draw.ts";
-import type * as Md from "./Md.ts";
+import * as Md from "./Md.ts";
 import { DEFAULT } from "../config/Profiles.ts";
 import * as Reply from "./Reply.ts";
 import * as Theme from "./Theme.ts";
@@ -48,6 +50,11 @@ export type Line = Run[];
 // first message's id and size, whether open (the line is its bar);
 // a run of work's (act: a click opens or closes it, n 0)
 export type Mark = { from: number; to: number; id: number; n: number; open: boolean; act?: true };
+
+// rows laid out from the last up, only as far as asked (laid_up): the
+// rows, the first of them laid out, their lines as from line `at` on,
+// the blocks marked in them, at a width and look
+export type Laid = { rows: View.Row[]; from: number; at: number; w: number; look: number; lines: Line[]; marks: Mark[] };
 
 // Constants
 // =========
@@ -286,6 +293,55 @@ export function rows_lines(rows: View.Row[], w: number, marks: Mark[] = [], at =
   return out;
 }
 
+// rows to lay out, w wide, as from line `at` on: none yet
+export function laid_new(rows: View.Row[], w: number, at = 0): Laid {
+  return { rows, from: rows.length, at, w, look: LOOK, lines: [], marks: [] };
+}
+
+// whether rows laid out are at another width or look than now
+export function laid_stale(laid: Laid, w: number): boolean {
+  return laid.w !== w || laid.look !== LOOK;
+}
+
+// more of the rows laid out, up from the first laid out, till they have
+// `need` lines and row `top` is among them (or all are): their lines and
+// marks as rows_lines lays them out; the lines added at the top
+export function laid_up(laid: Laid, need: number, top = laid.rows.length): number {
+  const made: Array<{ lines: Line[]; marks: Mark[] }> = [];
+  const end  = laid.from;
+  let count  = laid.lines.length;
+  while (laid.from > 0 && (count < need || laid.from > top)) {
+    const marks: Mark[] = [];
+    const lines = rows_lines([laid.rows[--laid.from]], laid.w, marks);
+    count += lines.length + (laid.from + 1 < laid.rows.length ? 1 : 0);
+    made.push({ lines, marks });
+  }
+  if (made.length === 0) {
+    return 0;
+  }
+  const head: Line[] = [];
+  const marks: Mark[] = [];
+  for (const [k, row] of made.reverse().entries()) {
+    if (k > 0) {
+      head.push([]);
+    }
+    marks.push(...row.marks.map((m) => ({ ...m, from: m.from + laid.at + head.length, to: m.to + laid.at + head.length })));
+    head.push(...row.lines);
+  }
+  if (end < laid.rows.length) {
+    head.push([]);
+  }
+  laid.marks = [...marks, ...laid.marks.map((m) => ({ ...m, from: m.from + head.length, to: m.to + head.length }))];
+  laid.lines = [...head, ...laid.lines];
+  return head.length;
+}
+
+// the first of rows holding block (id, n): itself, or an open block or
+// run of work it is in; -1: none
+export function rows_find(rows: View.Row[], id: number, n: number): number {
+  return rows.findIndex((r) => ((r.$ === "Sum" || r.$ === "Box") && r.id === id && r.n === n) || ((r.$ === "Box" || r.$ === "Act") && rows_find(r.rows, id, n) >= 0));
+}
+
 // a row's lines, laid out once per width: a message's and a summary's rows
 // never change once known (View.ts ROWS), so a paint lays out only what
 // is new; an open block's are made anew, around its rows' own
@@ -357,7 +413,7 @@ function row_lines(row: View.Row, w: number): Line[] {
   switch (row.$) {
     case "Sum": {
       const head = row.call === null ? [] : verb_runs(row.call);
-      const text = row.call === null ? row.text : Call.call_line(row.call);
+      const text = row.call === null ? Md.md_flat(row.text) : Call.call_line(row.call);
       return fill_lines(sum_lines(row.id, row.n, head, text, w - 2), w - 2);
     }
     case "Box":
