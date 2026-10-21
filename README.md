@@ -81,7 +81,9 @@ flowchart TD
 - **Memory tree.** Each message is summarized into one line, and lines
   merge in pairs into a binary tree, written in the background by a
   smaller model. A turn sends the latest messages whole, up to
-  `context`; older ones go as lines, merged as they age.
+  `context`; older ones go as lines, merged as they age. A turn that
+  outgrows the model's window anyway goes on by itself, more of it
+  summarized.
 - **Zoom.** illi can open any line back down to the original messages.
   `/compact` folds all but the last two exchanges, so turns get smaller
   (the screen keeps showing them); `/clear` empties the screen for a
