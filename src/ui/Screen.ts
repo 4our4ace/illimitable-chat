@@ -72,7 +72,8 @@ export type Match = { k: number; at: number[] };
 // the input), what takes a paste (none: typed); the terminal's
 // background (#rrggbb) once told, and whether it is awaited; whether it
 // was left (screen_leave: it paints no more); whether the cursor blinks
-// (illi waits), its look and its spot as last written (null: hidden)
+// (illi waits), its look and its spot as last written (null: hidden);
+// the pieces of the rows as last written
 export type Screen = {
   tty    : boolean;
   kitty  : boolean;
@@ -94,6 +95,7 @@ export type Screen = {
   blink? : boolean;
   styled?: string;
   at?    : Spot | null;
+  drawn? : Piece[][];
 };
 
 // Constants
@@ -205,6 +207,10 @@ for (let k = 0; k < 10; k++) {
 // SS3) till no more comes for this long (ms)
 const ALONE = 50;
 
+// each line's text as written, at the width it was cut to
+// (screen_line_text); a line is never changed once made
+const WRITTEN = new WeakMap<Paint.Line, { w: number; text: string }>();
+
 // a word's character (a mark too: a letter decomposed is one word)
 const WORD = /[\p{L}\p{M}\p{N}_]/u;
 
@@ -252,20 +258,74 @@ export function screen_size(): { w: number; h: number } {
 
 // the screen's rows, each its pieces; only those not as last written are
 // written again (all, after screen_wipe), then the cursor at its spot
-// (null: hidden); none, and the cursor as it was: nothing written
+// (null: hidden); none, and the cursor as it was: nothing written. A row
+// whose pieces are alike those last written isn't even made again
 export function screen_paint(scr: Screen, rows: Piece[][], at: Spot | null): void {
   if (scr.left) {
     return;
   }
-  const text  = rows.map(screen_row_text);
   const fresh = scr.shown.length === 0;
-  const out   = text.map((x, k) => (fresh || scr.shown[k] !== x ? "\x1b[" + (k + 1) + ";1H" + x : "")).join("");
-  scr.shown = text;
+  const drawn = (scr.drawn ??= []);
+  let out = "";
+  for (let k = 0; k < rows.length; k++) {
+    if (fresh || !screen_alike(scr, k, rows[k])) {
+      const x = screen_row_text(rows[k]);
+      out += fresh || scr.shown[k] !== x ? "\x1b[" + (k + 1) + ";1H" + x : "";
+      scr.shown[k] = x;
+    }
+    drawn[k] = rows[k];
+  }
+  scr.shown.length = drawn.length = rows.length;
   if (!fresh && out === "" && screen_still(scr, at)) {
     return;
   }
   scr.at = at;
   process.stdout.write(SYNC_ON + HIDE + (fresh ? CLEAR : "") + out + screen_cursor(scr, at) + SYNC_OFF);
+}
+
+// whether row k's pieces are alike those last written there (its text
+// known): each at the same column, as wide, its line the same or alike
+function screen_alike(scr: Screen, k: number, row: Piece[]): boolean {
+  const was = scr.drawn?.[k];
+  if (was === undefined || was.length !== row.length || scr.shown[k] === "") {
+    return false;
+  }
+  for (let i = 0; i < row.length; i++) {
+    if (was[i].col !== row[i].col || was[i].w !== row[i].w || !lines_alike(was[i].line, row[i].line)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// whether two lines write alike: the same line, or run by run the same
+// text in the same ink
+function lines_alike(a: Paint.Line, b: Paint.Line): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let k = 0; k < a.length; k++) {
+    if (a[k].x !== b[k].x || !inks_alike(a[k].s, b[k].s)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// whether two inks are alike, mark by mark (dim, bold, color, ...)
+function inks_alike(a: Paint.Run["s"], b: Paint.Run["s"]): boolean {
+  if (a === b) {
+    return true;
+  }
+  for (const mark in a) {
+    if (a[mark as keyof typeof a] !== b[mark as keyof typeof b]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // whether the cursor shows as last written: at the same spot in the
@@ -293,6 +353,7 @@ export function screen_row(scr: Screen, k: number, row: Piece[], at: Spot | null
     return;
   }
   scr.shown[k] = x;
+  (scr.drawn ??= [])[k] = row;
   process.stdout.write(SYNC_ON + HIDE + "\x1b[" + (k + 1) + ";1H" + x + screen_cursor(scr, at) + SYNC_OFF);
 }
 
@@ -312,7 +373,23 @@ export function screen_cells(scr: Screen, k: number, pieces: Piece[], at: Spot |
 // a row as written: cleared, then each piece at its column, cut to its
 // width (a later piece over an earlier one)
 function screen_row_text(row: Piece[]): string {
-  return "\x1b[2K" + row.map((p) => "\x1b[" + (p.col + 1) + "G" + Paint.line_ansi(Paint.runs_wrap(p.line, p.w, true)[0])).join("");
+  let x = "\x1b[2K";
+  for (const p of row) {
+    x += "\x1b[" + (p.col + 1) + "G" + screen_line_text(p.line, p.w);
+  }
+  return x;
+}
+
+// a line as written, cut to w columns: made once a line and width (a
+// chat's lines, laid out once, are painted again and again)
+function screen_line_text(line: Paint.Line, w: number): string {
+  const known = WRITTEN.get(line);
+  if (known?.w === w) {
+    return known.text;
+  }
+  const text = Paint.line_ansi(Paint.runs_wrap(line, w, true)[0]);
+  WRITTEN.set(line, { w, text });
+  return text;
 }
 
 // the next paint clears the screen and writes every row, and the

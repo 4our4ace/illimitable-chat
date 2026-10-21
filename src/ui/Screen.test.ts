@@ -344,6 +344,36 @@ test("a paint with nothing changed writes nothing; the cursor moved, its look ch
   expect(out[3]).not.toContain("\x1b[?25h");
 });
 
+test("a row is written again as its text or ink change, cut at another width, or once its cells were written alone", () => {
+  const { scr } = screen();
+  const out: string[] = [];
+  const write = process.stdout.write;
+  process.stdout.write = ((s: string) => out.push(s)) as any;
+  const line = [Paint.Run("one"), Paint.Run(" two", Paint.DIM)];
+  const rows = (l: Paint.Line, w = 20) => [[{ col: 2, w, line: l }], [{ col: 2, w: 20, line: [Paint.Run("rest")] }]];
+  const at = { row: 1, col: 4 };
+  try {
+    Screen.screen_paint(scr, rows(line), at);
+    Screen.screen_paint(scr, rows([Paint.Run("one"), Paint.Run(" two", Paint.DIM)]), at);
+    Screen.screen_paint(scr, rows([Paint.Run("one"), Paint.Run(" two", { ...Paint.DIM, c: "4" })]), at);
+    Screen.screen_paint(scr, rows([Paint.Run("one"), Paint.Run(" too", { ...Paint.DIM, c: "4" })]), at);
+    Screen.screen_paint(scr, rows(line), at);
+    Screen.screen_paint(scr, rows(line, 5), at);
+    Screen.screen_cells(scr, 1, [{ col: 2, w: 1, line: [Paint.Run("R")] }], at);
+    Screen.screen_paint(scr, rows(line, 5), at);
+  } finally {
+    process.stdout.write = write;
+  }
+  const plain = out.map((s) => s.replace(/\x1b\[[0-9;]*m/g, ""));
+  expect(plain).toHaveLength(7);
+  expect(plain[1]).toContain("one two");
+  expect(plain[2]).toContain("one too");
+  expect(plain[3]).toContain("one two");
+  expect(plain[4]).toContain("one t\x1b");
+  expect(plain[6]).toContain("rest");
+  expect(plain.slice(1, 6).some((s) => s.includes("rest"))).toBe(false);
+});
+
 test("words: Ctrl+W, Alt+B, Alt+F", () => {
   const { scr } = screen();
   const ed = scr.ed;
