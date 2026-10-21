@@ -54,7 +54,7 @@ const file  = () => JSON.parse(fs.readFileSync(DIR + "/config.json", "utf8"));
 test("/settings lists each setting, its value and what it does; one a variable sets says so, and stays", () => {
   const t = term();
   run(t, "/settings");
-  expect(t.choose.names).toEqual(["pick", "agents", "compactor", "suggest", "side", "side_width", "context", "contexts", "rules", "after", "vendors", "models", "jobs", "theme", "mcp", "login"]);
+  expect(t.choose.names).toEqual(["pick", "agents", "compactor", "suggest", "tps", "side", "side_width", "context", "contexts", "rules", "after", "vendors", "models", "jobs", "theme", "mcp", "login"]);
   expect(about(t)).toMatch(/^sonnet-5\.5 · medium +illi's own default model/);
   expect(foot(t)).toBe("set by ILLI_PICK");
   term_grab(t, "Enter");
@@ -80,6 +80,17 @@ test("Left, Right and Enter step a setting, kept in config.json at once; Delete 
   term_grab(t, "Delete");
   expect(file().side_width).toBeUndefined();
   expect(config.SIDE_WIDTH).toBe("25%");
+});
+
+test("tps turns the line's tok/s off and on, at once", () => {
+  const t = term();
+  run(t, "/settings");
+  term_type(t, "tps");
+  expect(about(t)).toMatch(/^on +tokens a second while text streams/);
+  term_grab(t, "Right");
+  expect([file().tps, config.TPS]).toEqual(["off", false]);
+  term_grab(t, "Delete");
+  expect([file().tps, config.TPS]).toEqual([undefined, true]);
 });
 
 test("Enter on a pick opens the model picker at the chat's pick; its choice is the setting's, read anew, and the settings come back", () => {

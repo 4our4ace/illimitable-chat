@@ -64,6 +64,7 @@ const TABLE = {
   agents     : { def: "", values: "pick", now: true, what: "what subagents run on, by provider", none: "the chat's pick" },
   compactor  : { def: "", values: "pick", now: true, what: "what writes the summaries, by provider", none: "each provider's small model" },
   suggest    : { def: "on", values: ["on", "off"], now: true, what: "suggested replies (Tab)", shape: [/^(on|off|true|false|0|1)$/i, "on or off"] },
+  tps        : { def: "on", values: ["on", "off"], now: true, what: "tokens a second while text streams", shape: [/^(on|off|true|false|0|1)$/i, "on or off"] },
   side       : { def: "right", values: ["right", "left", "off"], now: true, what: "where the side panel shows", shape: [/^(right|left|off)$/, "right, left or off"] },
   side_width : { def: "25%", values: ["20%", "25%", "30%", "35%", "40%"], now: true, what: "the side panel's width", shape: [/^\d+(\.\d+)?%?$/, "columns (40) or a share of the screen (30%)"] },
   context    : { def: "auto", values: ["auto", "50%", "60%", "70%", "80%", "90%"], now: true, what: "chat sent before summarizing", shape: [/^(auto|\d+|\d+(\.\d+)?%)$/, "auto, tokens (350000) or a share of the window (60%)"] },
@@ -120,6 +121,10 @@ export const MCP      = config_place("mcp");
 // a suggested reply after each turn, Tab taking it (Chat.suggest): on,
 // unless off (or false, 0)
 export let SUGGEST    = true;
+
+// the models' speed on the line over the input while text streams
+// (tok/s, Frame.ts): on, unless off (or false, 0)
+export let TPS        = true;
 
 // the side panel (Term.ts): where it shows ("right", "left", "off"), how
 // wide (columns, or a share of the screen: "25%")
@@ -292,6 +297,7 @@ function config_live(): void {
   RULES       = config_place("rules");
   AFTER       = config_value("after");
   SUGGEST     = !["off", "false", "0"].includes(String(config_value("suggest")).trim().toLowerCase());
+  TPS         = !["off", "false", "0"].includes(String(config_value("tps")).trim().toLowerCase());
   SIDE        = config_value("side");
   SIDE_WIDTH  = config_value("side_width");
   PICK        = pick;
