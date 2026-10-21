@@ -29,10 +29,10 @@ const ODD     = ARGS.find((a) => !["help", "--help", "-h", "version", "--version
 
 const USAGE = `Usage: illi            the chat; its tools work in this folder
        illi upgrade    the latest release in this one's place
-       illi version    this illi's version
+       illi version    this Illi's version
        illi help       this
 The chat and its settings are in ~/.illi (ILLI_DIR); the README lists
-them. Other profiles' are in ~/.illi/profiles: illi opens the one used
+them. Other profiles' are in ~/.illi/profiles: Illi opens the one used
 last (ILLI_PROFILE names one). In the chat, /help lists every command and
 key.`;
 

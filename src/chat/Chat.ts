@@ -100,8 +100,8 @@ const GOAL_NO    = "The goal isn't satisfied yet: keep working.";
 
 // a new chat's first message, its node written with it, so no compactor
 // call summarizes it
-const HELLO      = "Hi, I'm Illi, short for Illimitable: one chat that never ends, kept in a memory tree, recent days in more detail. I work in the folder you start illi in. Ask me anything, for days, weeks, years; /help lists the commands.";
-const HELLO_LINE = "illi: hello: Illi (Illimitable), one endless chat in a memory tree; works in the folder illi starts in; /help for commands.";
+const HELLO      = "Hi, I'm Illi, short for Illimitable: one chat that never ends, kept in a memory tree, recent days in more detail. I work in the folder you start me in. Ask me anything, for days, weeks, years; /help lists the commands.";
+const HELLO_LINE = "illi: hello: Illi (Illimitable), one endless chat in a memory tree; works in the folder it starts in; /help for commands.";
 
 // a suggested reply (Chat.suggest): what the model is asked after the
 // turn's last request and its answer, none its answer unless the next
@@ -155,7 +155,7 @@ export namespace Chat {
         sock.on("error", () => done(false));
       });
       if (live) {
-        throw new Error("illi is already open in another terminal (" + config.DIR + ")");
+        throw new Error("Illi is already open in another terminal (" + config.DIR + ")");
       }
       fs.rmSync(LOCK, { force: true });
     }
@@ -616,7 +616,7 @@ export namespace Chat {
     if (work.length === 0) {
       return;
     }
-    const text = "illi restarted, cutting " + work.join(", ") + "; nothing was lost: go on.";
+    const text = "Illi restarted, cutting " + work.join(", ") + "; nothing was lost: go on.";
     const msg = Chat.push(chat, null, "note", text);
     await Promise.all(work.map((w) => (w === TURN ? Chat.take(chat, msg) : Tools.tell(chat.tools, w, text))));
   }

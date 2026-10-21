@@ -58,7 +58,7 @@ test("a relative path from the folder of the config.json that names it; a number
   expect(config.config_check("jobs", 4)).toBeNull();
 });
 
-test("a setting that won't do stops illi at the start, one line on why", () => {
+test("a setting that won't do stops Illi at the start, one line on why", () => {
   for (const [env, why] of [
     [{ ILLI_JOBS: "0" }, "illi: config: jobs takes a number, 1 or more. (ILLI_JOBS)"],
     [{ ILLI_JOBS: "abc" }, "illi: config: jobs takes a number, 1 or more. (ILLI_JOBS)"],
