@@ -41,14 +41,12 @@
 // older than compat refuses the file. A table a STEP adds for a chat's
 // rows references chat (id) on delete cascade, so an older illi's forget
 // reaches it; one that names images elsewhere sets compat (an older
-// illi's forget would delete them). The files of illi before it are
-// read in once (Import.ts).
+// illi's forget would delete them).
 
 import { Database } from "bun:sqlite";
 import * as fs from "node:fs";
 import type { Kind } from "../ai/AskAI.ts";
 import { Disk } from "./Disk.ts";
-import { Import } from "./Import.ts";
 
 // Types
 // =====
@@ -124,12 +122,11 @@ const WAIT = 10000;
 
 export namespace Store {
 
-  // the chat folder's file, made (or read in from the files before it)
-  // and moved on to this schema; the chat of the project at `place`,
-  // made if new (null: none, the file alone, for upkeep)
+  // the chat folder's file, made if new and moved on to this schema; the
+  // chat of the project at `place`, made if new (null: none, the file
+  // alone, for upkeep)
   export function open(dir: string, place: Place | null = HOME): Store {
     fs.mkdirSync(dir, { recursive: true });
-    Import.run(dir, Store.schema);
     const file = dir + FILE;
     const db = new Database(file, { create: true });
     db.run("pragma busy_timeout = " + WAIT);
