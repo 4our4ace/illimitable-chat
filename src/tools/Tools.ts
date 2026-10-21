@@ -20,11 +20,15 @@
 // to-do list as it works (todo: the whole list each time), in the chat's
 // folder (TODO_FILE), which the views show with what its calls use
 // (Tools.state).
+// A call on claude-code runs in Claude Code, with its own prompt and
+// tools: it gets the tools Claude Code lacks (a `lean` list: no shell or
+// files), and prompts that say it works inside illi (Tools.hosted), the
+// project's CLAUDE.md left to Claude Code, which reads it itself.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { AskAI, type Ask, type Block, type Call, type Event, type Kind } from "../ai/AskAI.ts";
+import { AskAI, type Ask, type Block, type Call, type Event, type Kind, type Vendor } from "../ai/AskAI.ts";
 import type { Out } from "../ai/Agent.ts";
 import { report_text } from "../ui/Call.ts";
 import { ChatGPT } from "../ai/ChatGPT.ts";
@@ -149,7 +153,19 @@ the working dir named at the start of each message: the folder where the
 user started illi. Relative paths start there.`;
 
 // a subagent's prompt: its part, then the view's and the tools' docs
-const SUB = SUB_HEAD + "\n\n" + VIEW_DOC + "\n\n" + HERE_DOC;
+export const SUB = SUB_HEAD + "\n\n" + VIEW_DOC + "\n\n" + HERE_DOC;
+
+// a prompt's words for a call in Claude Code (Tools.hosted): who it is
+// is Claude Code's to say, its tools its own; illi's come from illi
+const HOSTED: Array<[string | RegExp, string]> = [
+  [/^You are illi \(short for Illimitable\), an AI agent that works for one user in a\nsingle chat that never ends\./, "Here you work inside illi (short for Illimitable), for one user in a single\nchat that never ends: your replies show in it as illi's."],
+  [/^You are a subagent of illi, an AI agent that works for one user in a\nsingle chat that never ends\./, "Here you work as a subagent of illi (short for Illimitable), an app that\nworks for one user in a single chat that never ends."],
+  [/Your shell, read, write and edit tools run/, "Your tools run"],
+];
+const HOSTED_TOOLS = `illi's own tools (zoom, date, todo, spawn, tell, skill and the user's
+MCP servers in illi) come from illi, as its MCP server's (mcp__illi__):
+keep your to-do list with illi's todo, which the user sees beside the
+chat.`;
 
 // the tools of everyone (OWN), the master's (BOSS), and those that run
 // on this computer (Machine.ts's TOOLS)
@@ -231,9 +247,17 @@ export namespace Tools {
   }
 
   // a call's system prompt: its instructions, then the user's rules
-  // (Tools.rules) for a call working in cwd
-  export function system(head: string, cwd: string): string {
-    return head + "\n\n" + Tools.rules(cwd);
+  // (Tools.rules) for a call working in cwd; one on claude-code, its
+  // instructions as they read in Claude Code (Tools.hosted)
+  export function system(head: string, cwd: string, vendor?: Vendor): string {
+    const hosted = vendor === "claude-code";
+    return (hosted ? Tools.hosted(head) : head) + "\n\n" + Tools.rules(cwd, hosted);
+  }
+
+  // a prompt as Claude Code gets it, after its own: who it is and its
+  // tools left to Claude Code (HOSTED), illi's tools named
+  export function hosted(head: string): string {
+    return HOSTED.reduce((text, [from, to]) => text.replace(from, to), head) + "\n\n" + HOSTED_TOOLS;
   }
 
   // the working dir and the computer it is on
@@ -266,10 +290,10 @@ export namespace Tools {
   // the user's rules: theirs for every project (config.RULES, RULES.md in
   // illi's folder; named even while there is none, so Illi knows where it
   // goes), then the project's (Tools.project), each whole up to RULES_MOST
-  export function rules(cwd: string): string {
+  export function rules(cwd: string, hosted = false): string {
     const own  = rules_read(config.RULES);
     const top  = Tools.top(cwd);
-    const each = Tools.project(cwd).flatMap((file) => {
+    const each = Tools.project(cwd).filter((file) => !hosted || path.basename(file) !== "CLAUDE.md").flatMap((file) => {
       const text = rules_read(file);
       return text === null ? [] : ["This project's, in " + path.relative(top, file) + ":\n\n" + text];
     });
@@ -306,9 +330,12 @@ export namespace Tools {
   // MCP
   // ---
 
-  // a notification gets no answer; a request dropped stops its job
+  // a notification gets no answer; a request dropped stops its job. A
+  // URL with ?lean is a caller's in Claude Code (Tools.list)
   export async function fetch(req: Request): Promise<Response> {
-    const [, key, who, ...rest] = new URL(req.url).pathname.split("/");
+    const url = new URL(req.url);
+    const [, key, who, ...rest] = url.pathname.split("/");
+    const lean = url.searchParams.has("lean");
     const tools = CHATS.get(key);
     const caller = who === MAIN || tools?.agents.has(who);
     const msg = await req.json().catch(() => ({}));
@@ -322,7 +349,7 @@ export namespace Tools {
       return new Response(null, { status: 202 });
     }
     const no = { error: { code: -32601, message: "no method " + msg.method } };
-    const out = await Tools.answer(tools, who, msg.method, msg.params ?? {}, req.signal).then(
+    const out = await Tools.answer(tools, who, msg.method, msg.params ?? {}, req.signal, lean).then(
       (result) => (result === null ? no : { result }),
       (err) => ({ error: { code: -32603, message: String(err?.message ?? err) } }),
     );
@@ -330,7 +357,7 @@ export namespace Tools {
   }
 
   // null: no such method
-  export async function answer(tools: Tools, who: string, method: string, params: any, signal: AbortSignal): Promise<object | null> {
+  export async function answer(tools: Tools, who: string, method: string, params: any, signal: AbortSignal, lean = false): Promise<object | null> {
     switch (method) {
       case "initialize": {
         const protocolVersion = params.protocolVersion ?? "2025-06-18";
@@ -338,11 +365,11 @@ export namespace Tools {
       }
       case "tools/list": {
         await Mcp.settle();
-        return { tools: Tools.list(tools, who).map((t) => ({ name: t.name, description: t.info, inputSchema: t.schema })) };
+        return { tools: Tools.list(tools, who, lean).map((t) => ({ name: t.name, description: t.info, inputSchema: t.schema })) };
       }
       case "tools/call": {
         const name = String(params.name);
-        const has = Tools.list(tools, who).some((t) => t.name === name);
+        const has = Tools.list(tools, who, lean).some((t) => t.name === name);
         const out = has ? await Tools.call(tools, who, name, params.arguments ?? {}, signal) : { text: "No tool " + name + ".", fail: true };
         const imgs = (out.imgs ?? []).map((img) => ({ type: "image", data: img.data, mimeType: img.type }));
         return { content: [{ type: "text", text: out.text }, ...imgs], isError: out.fail };
@@ -354,13 +381,15 @@ export namespace Tools {
     return null;
   }
 
-  // a caller's tools, as its agent allows
-  export function list(tools: Tools, who: string): Spec[] {
+  // a caller's tools, as its agent allows; `lean`, a caller in Claude
+  // Code, none it has (shell, files: TOOLS)
+  export function list(tools: Tools, who: string, lean = false): Spec[] {
     const user = [...skill_tools(tools.cwd), ...Mcp.tools()];
+    const here = lean ? [] : TOOLS;
     if (who === MAIN) {
-      return Custom.allow(Custom.agent(tools.cwd, tools.hooks.main()), [...OWN, ...boss(tools.cwd), ...TOOLS, ...user]);
+      return Custom.allow(Custom.agent(tools.cwd, tools.hooks.main()), [...OWN, ...boss(tools.cwd), ...here, ...user]);
     }
-    return Custom.allow(Custom.agent(tools.cwd, tools.agents.get(who)?.role.agent ?? null), [...OWN, ...TOOLS, ...user]);
+    return Custom.allow(Custom.agent(tools.cwd, tools.agents.get(who)?.role.agent ?? null), [...OWN, ...here, ...user]);
   }
 
   export async function call(tools: Tools, who: string, name: string, args: any, signal: AbortSignal): Promise<Out> {
@@ -508,7 +537,7 @@ export namespace Tools {
     const base = config.config_role("agents", tools.hooks.pick());
     const own = profile === null ? base : Custom.pick(profile, base, config.OFFER);
     const run = Pick.ask(typeof own === "string" ? base : own);
-    const system = Tools.system(SUB + Custom.section(profile), tools.cwd);
+    const system = Tools.system(SUB + Custom.section(profile), tools.cwd, run.vendor);
     const blocks = [...agent.view, Tools.here(tools), log];
     const effort = agent.role.effort ?? run.effort;
     return { ...run, effort, system, blocks, searches: SEARCHES, server };

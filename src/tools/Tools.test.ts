@@ -5,7 +5,9 @@
 // told to a view at once, and named in its calls' messages; one with two
 // items active, or an item without text or a status, changes nothing; an
 // empty one clears it; a restart reads it back. What the views are told
-// of the calls: the input the main agent's last request read.
+// of the calls: the input the main agent's last request read. A caller in
+// Claude Code gets only the tools it lacks (?lean), and prompts that say
+// it works inside illi, the project's CLAUDE.md left to Claude Code.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -16,7 +18,7 @@ process.env.ILLI_DIR = DIR;
 
 const { AskAI } = await import("../ai/AskAI.ts");
 const { Chat } = await import("../chat/Chat.ts");
-const { Tools } = await import("./Tools.ts");
+const { MASTER, SUB, Tools } = await import("./Tools.ts");
 const View = await import("../ui/View.ts");
 
 const chat = Chat.open(process.cwd());
@@ -80,4 +82,30 @@ test("the views are told the input the main agent's last request read, not an ag
   AskAI.read(Tools.at(chat.tools, "Ada"), 9);
   AskAI.read("", 7);
   expect(Chat.state(chat)).toMatchObject({ use: { tokens: 41000 } });
+});
+
+test("a caller in Claude Code gets only the tools it lacks, served at ?lean; its prompts say it works inside illi, CLAUDE.md left to Claude Code", async () => {
+  const names = (lean: boolean) => Tools.list(chat.tools, "main", lean).map((t) => t.name);
+  expect(names(false)).toEqual(expect.arrayContaining(["shell", "read", "write", "edit"]));
+  expect(names(true)).not.toEqual(expect.arrayContaining(["shell"]));
+  expect(names(true).filter((n) => ["shell", "read", "write", "edit"].includes(n))).toEqual([]);
+  expect(names(true)).toEqual(expect.arrayContaining(["zoom", "date", "spawn", "tell", "todo"]));
+  const res = await fetch(Tools.at(chat.tools, "main") + "?lean", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
+  expect((await res.json()).result.tools.map((t: any) => t.name)).toEqual(names(true));
+  const hosted = Tools.hosted(MASTER);
+  expect(hosted).toStartWith("Here you work inside illi (short for Illimitable)");
+  expect(hosted).not.toContain("You are illi");
+  expect(hosted).not.toContain("Your shell, read, write and edit tools");
+  expect(hosted).toContain("mcp__illi__");
+  expect(Tools.hosted(SUB)).toStartWith("Here you work as a subagent of illi");
+  expect(Tools.hosted(SUB)).not.toContain("Your shell, read, write and edit tools");
+  const project = fs.mkdtempSync(os.tmpdir() + "/illi-tools-project-");
+  fs.mkdirSync(project + "/.git");
+  fs.writeFileSync(project + "/CLAUDE.md", "a rule of the project");
+  try {
+    expect(Tools.system("head", project)).toContain("a rule of the project");
+    expect(Tools.system("head", project, "claude-code")).not.toContain("a rule of the project");
+  } finally {
+    fs.rmSync(project, { recursive: true, force: true });
+  }
 });
