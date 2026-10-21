@@ -92,11 +92,11 @@ test("Enter on a pick opens the model picker at the chat's pick; its choice is t
   term_grab(t, "Down");
   term_grab(t, "Enter");
   expect(file().agents).toBe("claude-api:haiku-5.5:medium:slow");
-  expect(config.AGENTS).toEqual({ vendor: "claude-api", model: "haiku-5.5", effort: "medium", speed: "slow" });
+  expect(config.config_role("agents", t.v.pick)).toEqual({ vendor: "claude-api", model: "haiku-5.5", effort: "medium", speed: "slow" });
   expect(note(t)).toMatch(/^agents: haiku-5\.5 · medium, kept in .*config\.json; it applies now\.$/);
   expect([t.choose.title, lit(t)]).toEqual(["Settings", "agents"]);
   term_grab(t, "Delete");
-  expect(config.AGENTS).toBeNull();
+  expect(config.config_role("agents", t.v.pick)).toEqual(t.v.pick);
 });
 
 test("Enter on one typed in puts /set in the input; /set checks the value, then keeps it", () => {
