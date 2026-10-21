@@ -14,7 +14,7 @@ import { term_note, term_toast, term_unnote } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_copied, term_hover, term_mouse, term_selected, term_under } from "./Select.ts";
-import { term_act, term_primaries, term_quit, type Chooser, type Term } from "./Term.ts";
+import { term_act, term_primaries, term_quit, type Chooser, type Cmd, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
 // the editing keys a picker's search leaves to its rows: a new line, a
@@ -30,6 +30,11 @@ const AGAIN = 2000;
 // the lines a turn of the wheel scrolls
 const WHEEL = 3;
 
+// the commands by their keys (term_keyed), made at the first key: only
+// illi's own have keys (the user's commands and skills are typed), and
+// those never change
+let keyed: Map<string, Cmd> | null = null;
+
 // a key ("": the input may have changed): the mouse, the wheel, the
 // terminal's background told (the chat laid out anew: diagrams draw over
 // it), or its line of term_groups. Text chosen is let go at a key not KEEP's
@@ -43,7 +48,7 @@ export function term_press(t: Term, key: string): void {
   if (t.scr.ed.text !== "") {
     t.dropped = t.v.suggest;
   }
-  const cmd    = term_commands().find((c) => c[1] !== "" && c[1].split(", ").includes(key));
+  const cmd    = term_keyed(key);
   const chosen = key === "Ctrl+C" && t.sel?.moved === true && !t.sel.held ? term_selected(t) : null;
   if (t.scr.typed || !KEEP.includes(key)) {
     t.sel = null;
@@ -62,6 +67,15 @@ export function term_press(t: Term, key: string): void {
     cmd[3](t, cmd[0] === "" ? key : "");
   }
   term_draw(t);
+}
+
+// the command a key runs, if any: the first whose keys name it
+function term_keyed(key: string): Cmd | undefined {
+  if (keyed === null) {
+    const pairs = term_commands().flatMap((c) => (c[1] === "" ? [] : c[1].split(", ").map((k): [string, Cmd] => [k, c])));
+    keyed = new Map(pairs.reverse());
+  }
+  return keyed.get(key);
 }
 
 // a key while the commands suggested show, the picker, illi's question

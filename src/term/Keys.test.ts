@@ -9,7 +9,7 @@
 // second does; with no turn, it interrupts nothing); a message or a chat's
 // command typed there comes back to the input, a note saying why. Ctrl+C
 // closes a picker, as Esc does. Shift+Tab goes back to illi's own agent
-// from one that can't run.
+// from one that can't run. A key runs the command whose keys name it.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -73,6 +73,15 @@ test("anything typed dismisses the suggested reply, even erased, till the next o
   expect(t.scr.ed.text).toBe("");
   t.v.suggest = "Commit it";
   expect(term_hint(t)).toBe("Commit it");
+});
+
+test("a key runs the command whose keys name it, the second of its keys too", () => {
+  const t = term("");
+  t.seen = { tall: 20 };
+  Screen.screen_feed(t.scr, "\x1b[5~");
+  expect(t.scroll).toBe(18);
+  Screen.screen_feed(t.scr, "\x1b[6~");
+  expect(t.scroll).toBe(0);
 });
 
 test("the picker keeps its Tab while a suggested reply shows", () => {
