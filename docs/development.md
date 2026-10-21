@@ -8,13 +8,16 @@ Development
     src/ai/        model vendors, the agent loop, picks, token usage
     src/tools/     shell and files, MCP servers, the prompts
     src/config/    settings, profiles, your agents, commands and skills
+    src/skills/    the skills built into illi (customize-illi)
     test/          tests across modules; each module's own sit beside it
     vendor/        cellsmith's markdown parser and diagram engine
 
 Each file starts with a comment on its design. After `bun install`:
 
     bun run test     the tests
-    bun run check    the type check
+    bun run check    the type check (unused code fails it too)
+    bun run start    illi from the source
+    bun run build    one binary, ./illi
 
 From source, without installing:
 

@@ -199,3 +199,12 @@ test("the commands suggested: those run most first among those a word matches al
   await Bun.sleep(2100);
   expect(JSON.parse(fs.readFileSync(DIR + "/used.json", "utf8"))).toEqual({ "/settings": 1 });
 });
+
+test("each command and key is in docs/keys.md", () => {
+  const doc = fs.readFileSync(import.meta.dir + "/../../docs/keys.md", "utf8");
+  for (const [use, keys] of term_commands()) {
+    for (const said of [use === "" ? [] : ["`" + use.replace("|", "\\|") + "`"], keys === "" ? [] : keys.split(", ")].flat()) {
+      expect(doc).toContain(said);
+    }
+  }
+});
