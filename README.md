@@ -49,15 +49,26 @@ Pro): illi shows a code to enter on OpenAI's page, then keeps and renews
 the login itself. An existing [opencode](https://opencode.ai) login is
 picked up as it is.
 
+For your Claude plan (Pro or Max), install
+[Claude Code](https://code.claude.com) and log in there (`claude`, then
+`/login`); then name it as a vendor in `~/.illi/config.json`:
+
+    { "vendors": "chatgpt,claude-code" }
+
+illi then runs Claude Code itself, as it ships, on your login: its own
+prompt and tools, with illi's memory tools (zoom, the to-do list,
+subagents) added through MCP. illi never sees your Claude token, and its
+turns stay out of Claude Code's session history.
+
 Or use API keys: set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, and name
-the vendor in `~/.illi/config.json`:
+the vendor there:
 
     { "vendors": "claude-api" }
 
 illi's pick and the summaries' then default to that vendor's models:
 `claude-api` runs sonnet-5.5 and haiku-5.5, `openai-api` gpt-6.1-sol and
-gpt-6-luna. To choose them, or list more vendors (the first gives the
-defaults):
+gpt-6-luna, `claude-code` opus-5.5 and haiku-5.5. To choose them, or
+list more vendors (the first gives the defaults):
 
     {
       "vendors": "claude-api,chatgpt",
@@ -70,7 +81,8 @@ claude-api` in the chat works from the next start.
 
 The vendors never mix: a chat's summaries and subagents run on its own
 vendor's models, haiku-5.5 or gpt-6-luna unless `compactor` names
-another for that vendor (one pick per vendor, comma-separated).
+another for that vendor (one pick per vendor, comma-separated). On
+`claude-code`, summaries are `claude -p` calls with no tools.
 
 How it works
 ------------
@@ -211,7 +223,7 @@ Config
 
 | Key          | Default                           | What                                             |
 | ------------ | --------------------------------- | ------------------------------------------------ |
-| `vendors`    | `chatgpt`                         | also `claude-api`, `openai-api` (API keys)       |
+| `vendors`    | `chatgpt`                         | also `claude-code` (your Claude plan, through Claude Code), `claude-api`, `openai-api` (API keys) |
 | `pick`       | `chatgpt:gpt-6.1-sol:medium:slow` | vendor:model:effort:speed (`/model` per chat); default: the first vendor's |
 | `compactor`  | each vendor's small model         | writes the summaries: a pick per vendor, comma-separated |
 | `agents`     | the pick                          | what subagents run on: a pick per vendor         |
