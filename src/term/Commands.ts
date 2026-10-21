@@ -29,8 +29,9 @@ import { agent_name } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
 
 // how long the login's code shows: as long as it is good (ms), or till
-// the login ends
-const LOGIN = 15 * 60000;
+// the login ends; how long its failure shows, till Esc or a message
+const LOGIN        = 15 * 60000;
+const LOGIN_FAILED = 60000;
 
 // the pick's moves by Shift and an arrow
 const ARROWS: Record<string, Move> = { "Shift+Left": "prev", "Shift+Right": "next", "Shift+Up": "up", "Shift+Down": "down" };
@@ -336,7 +337,7 @@ async function term_login(t: Term): Promise<void> {
     term_models(t);
   } catch (err: any) {
     if (!stop.signal.aborted) {
-      term_note(t, "Login: " + err.message);
+      term_notify(t, "Login failed: " + err.message + ".", false, LOGIN_FAILED);
     }
   } finally {
     t.login = t.login === stop ? null : t.login;
