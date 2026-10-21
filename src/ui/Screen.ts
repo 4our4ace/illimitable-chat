@@ -6,7 +6,8 @@
 // terminal's own scrollback stays as it was, and is back as illi quits,
 // or hands the terminal on (screen_leave). A pipe gets lines
 // as text. Input is read raw (macOS cuts a
-// cooked line at 1024 bytes) as one stream; a paste comes bracketed and
+// cooked line at 1024 bytes) as one stream, into one buffer (Bun's own
+// reader takes half a megabyte a read); a paste comes bracketed and
 // is typed whole. Kitty's keys at flag 1 only, so dead keys still
 // compose. The mouse reports its wheel, its left button pressed (counted:
 // a double click, a triple), dragged and let go, and each move (SGR), for
@@ -23,6 +24,8 @@
 // input). A list open (grab) takes keys before the input does, and a
 // list searched (type) the text typed.
 
+import * as fs from "node:fs";
+import { StringDecoder } from "node:string_decoder";
 import * as Md from "./Md.ts";
 import * as Paint from "./Paint.ts";
 import * as Theme from "./Theme.ts";
@@ -211,6 +214,13 @@ const ALONE = 50;
 // (screen_line_text); a line is never changed once made
 const WRITTEN = new WeakMap<Paint.Line, { w: number; text: string }>();
 
+// a terminal's input is read into one buffer this big, again and again
+// (screen_read): Bun's own reader takes half a megabyte for each read, so
+// each key cost a collection; a read with nothing ready is tried again
+// after RETRY (ms)
+const READ  = 65536;
+const RETRY = 10;
+
 // a word's character (a mark too: a letter decomposed is one word)
 const WORD = /[\p{L}\p{M}\p{N}_]/u;
 
@@ -242,10 +252,33 @@ export function screen_new(on: (key: string) => void): Screen {
     process.on("exit", () => process.stdout.write(MODES_OFF));
     scr.asked = true;
     setTimeout(() => (scr.asked = false), AWAIT).unref();
+    screen_read(scr);
+    return scr;
   }
   process.stdin.setEncoding("utf8");
   process.stdin.on("data", (data: string) => screen_feed(scr, data)).resume();
   return scr;
+}
+
+// a terminal's input (fd), read into one buffer (READ) as it comes, each
+// read fed as text (a character cut by a read's end waits for its rest);
+// a read cut by a signal (Ctrl+Z), or with nothing ready, tried again;
+// till the screen is left or the terminal is gone
+export function screen_read(scr: Screen, fd = 0): void {
+  const buf  = Buffer.alloc(READ);
+  const text = new StringDecoder("utf8");
+  const next = (): void => fs.read(fd, buf, 0, READ, null, (err, n) => {
+    if (scr.left) {
+      return;
+    }
+    if (err?.code === "EINTR" || err?.code === "EAGAIN") {
+      setTimeout(next, err.code === "EAGAIN" ? RETRY : 0);
+    } else if (err === null && n > 0) {
+      screen_feed(scr, text.write(buf.subarray(0, n)));
+      next();
+    }
+  });
+  next();
 }
 
 // the screen's size: its columns, its rows
