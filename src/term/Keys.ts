@@ -229,10 +229,20 @@ export function term_take(t: Term): void {
   }
 }
 
-// Esc: the notes cleared, illi's turn interrupted
+// Esc: the notes cleared; while illi's turn runs, it says Esc again
+// interrupts it, and a second within AGAIN does, so a stray one never
 export function term_esc(t: Term): void {
   term_unnote(t);
-  term_act(t, { $: "Send", text: "" });
+  if (!t.v.busy) {
+    return;
+  }
+  if (Date.now() - t.esc < AGAIN) {
+    t.esc = 0;
+    term_act(t, { $: "Send", text: "" });
+    return;
+  }
+  t.esc = Date.now();
+  term_toast(t, "Esc again to interrupt", AGAIN);
 }
 
 // Ctrl+C or Ctrl+D: clears the input; on an empty one, Ctrl+C interrupts

@@ -48,7 +48,7 @@ function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
   return [
     ["Chat", [
       ["",                  "Enter",                   "send; on an empty input, interrupt illi",        term_enter],
-      ["",                  "Esc",                     "close a list; else clear the notes and interrupt illi (agents go on)", term_esc],
+      ["",                  "Esc",                     "close a list; else clear the notes, and twice: interrupt illi (agents go on)", term_esc],
       ["",                  "Ctrl+C",                  "clear the input; on an empty one, interrupt illi (again: quit)", term_clear],
       ["",                  "Ctrl+D",                  "clear the input; on an empty one, quit",         term_clear],
       ["",                  "Tab",                     "take the suggested reply",                       term_take],
