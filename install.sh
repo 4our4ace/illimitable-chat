@@ -107,4 +107,4 @@ case ":$PATH:" in
     ;;
 esac
 echo "Then run:  $next"
-echo "In the chat, type /login to sign in with your ChatGPT plan, or set API keys: see Sign in in the README."
+echo "In the chat, type /login to sign in with your ChatGPT plan, or see https://github.com/4our4ace/illimitable-chat/blob/main/docs/providers.md for your Claude plan or API keys."
