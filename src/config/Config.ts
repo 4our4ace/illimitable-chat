@@ -279,7 +279,7 @@ export function config_check(key: string, value: unknown): string | null {
   }
   for (const k of (["pick", "compactor", "agents"] as const).filter((k) => get(k) !== "")) {
     if (Pick.read(config_split(get(k)), OFFER) === null) {
-      return k + " " + get(k) + " is offered from the next start (vendors and models change then): set it once illi starts again.";
+      return k + " " + get(k) + " is offered from the next start (vendors and models change then): set it once Illi starts again.";
     }
   }
   return null;

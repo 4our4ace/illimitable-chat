@@ -243,7 +243,7 @@ export function term_mcp(t: Term): void {
   const text = [
     servers.length === 0 ? "No MCP servers." : "MCP servers (their tools are named mcp__<server>__<tool>):", ...servers.map(server),
     ...(trouble === "" ? [] : ["", "The file won't read: " + trouble]),
-    "", "They are in " + file + ", as Claude Code's mcpServers; the README shows its shape. A change there applies at illi's next start.",
+    "", "They are in " + file + ", as Claude Code's mcpServers; the README shows its shape. A change there applies at Illi's next start.",
   ];
   term_pane_text(t, "MCP", text.join("\n"));
 }

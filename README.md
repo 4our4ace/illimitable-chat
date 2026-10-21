@@ -155,7 +155,7 @@ most apply at once; `vendors`, `models`, `jobs`, `theme`,
 `mcp` and `login` at the next start. A key set by a variable stays as the
 variable says. A relative path is taken from the folder of the
 config.json that names it (a variable's: the working folder). A value
-that won't do stops illi at the start, saying which.
+that won't do stops Illi at the start, saying which.
 
 | Key          | Default                           | What                                             |
 | ------------ | --------------------------------- | ------------------------------------------------ |

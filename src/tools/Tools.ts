@@ -145,7 +145,7 @@ const SUB_RE   = /^subagent(?: ([a-z0-9][a-z0-9_-]*))?(?: at effort (\S+))?$/i;
 // changes a call's tail, never its cached prefix
 const HERE_DOC = `Your shell, read, write and edit tools run on the user's computer, in
 the working dir named at the start of each message: the folder where the
-user started illi. Relative paths start there.`;
+user started Illi. Relative paths start there.`;
 
 // a subagent's prompt: its part, then the view's and the tools' docs
 const SUB = SUB_HEAD + "\n\n" + VIEW_DOC + "\n\n" + HERE_DOC;

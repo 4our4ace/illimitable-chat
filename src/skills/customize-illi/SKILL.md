@@ -116,7 +116,7 @@ it isn't there), keep it tidy, and say what you changed. A missing file is
 just no rules.
 
 A project's own AGENTS.md (else CLAUDE.md) is read too, in each folder from
-the repo's top down to where illi started. Change those only when the user
+the repo's top down to where Illi started. Change those only when the user
 asks: they belong to the project.
 ## Theme: theme.json
 
@@ -143,7 +143,7 @@ palette's over it; glyph, tool, ansi and syntax entries too.
 - Keep secrets out of these files.
 - Leave Illi's own state alone: login.json, models.json, chat/, profiles/.
 - Say when it applies: agents, commands, skills and the rules file's text
-  at the next message; config.json, theme.json and mcp.json once illi
-  starts again (Ctrl+D, then illi: the chat goes on where it was).
+  at the next message; config.json, theme.json and mcp.json once Illi
+  starts again (Ctrl+D, then `illi`: the chat goes on where it was).
 - Then tell the user how to use it: /<name>, Shift+Tab, or that the skill loads
   when a task matches.

@@ -388,7 +388,7 @@ export namespace Mcp {
     switch (method) {
       case "ping"       : return { result: {} };
       case "roots/list" : return { result: { roots: [{ uri: "file://" + cwd, name: "working dir" }] } };
-      default           : return { error: { code: -32601, message: "illi does no " + method } };
+      default           : return { error: { code: -32601, message: "Illi doesn't do " + method } };
     }
   }
 
