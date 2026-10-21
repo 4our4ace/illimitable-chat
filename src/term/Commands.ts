@@ -24,7 +24,7 @@ import * as Reply from "../ui/Reply.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_set, term_settings } from "./Settings.ts";
 import { term_side_set, term_tokens } from "./Side.ts";
-import { term_act, term_idle, term_primaries, term_quit, term_send, type Chooser, type Cmd, type Sug, type Term } from "./Term.ts";
+import { term_act, term_idle, term_primaries, term_quit, term_send, term_unhint, type Chooser, type Cmd, type Sug, type Term } from "./Term.ts";
 import { agent_name } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
 
@@ -332,6 +332,7 @@ async function term_login(t: Term): Promise<void> {
     Screen.screen_copy(code);
     asked = term_notify(t, "Sign in to ChatGPT: open " + url + " and enter the code " + code + " (copied; it is good for 15 minutes). Illi waits for it.", false, LOGIN);
     await done;
+    term_unhint(t);
     term_note(t, "Signed in to ChatGPT. Illi keeps the login in " + ChatGPT.own() + (config.LOGIN_SET === null ? "" : " (the file `login` names)") + " and renews it there.");
     term_models(t);
   } catch (err: any) {

@@ -84,6 +84,7 @@ test("one process at a time holds the chat", async () => {
   const proc = Bun.spawn([process.execPath, "-e", code], { env: { ...process.env, ILLI_DIR: DIR }, stdout: "pipe" });
   const out = await new Response(proc.stdout).text();
   expect(out).toContain("already open");
+  expect(out).toContain("quit it there (Ctrl+D), or start another profile: ILLI_PROFILE=<name> illi");
 });
 
 test("/compact folds all but the last two exchanges for the agent, the screen still showing them; again, nothing to fold", async () => {

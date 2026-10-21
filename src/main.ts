@@ -27,10 +27,15 @@ const ASKED   = ARGS.some((a) => ["version", "--version", "-v"].includes(a));
 const UPGRADE = ARGS.includes("upgrade");
 const ODD     = ARGS.find((a) => !["help", "--help", "-h", "version", "--version", "-v", "upgrade"].includes(a));
 
+// an argument that means to sign in, which the chat does (/login)
+const LOGIN = /^-*(login|logout|signin|auth)$/i;
+
 const USAGE = `Usage: illi            the chat; its tools work in this folder
        illi upgrade    the latest release in this one's place
        illi version    this Illi's version
        illi help       this
+First, run illi in a project folder and type /login to sign in with
+your ChatGPT plan (Plus or Pro); API keys work too (the README's Sign in).
 The chat and its settings are in ~/.illi (ILLI_DIR); the README lists
 them. Other profiles' are in ~/.illi/profiles: Illi opens the one used
 last (ILLI_PROFILE names one). In the chat, /help lists every command and
@@ -57,7 +62,7 @@ async function main_upgrade(): Promise<number> {
 
 if (HELP || ODD !== undefined) {
   if (ODD !== undefined) {
-    console.error("illi: no argument " + ODD + ".\n\n" + USAGE);
+    console.error("illi: unknown argument " + ODD + "." + (LOGIN.test(ODD) ? " Sign in inside the chat: run illi, then type /login." : "") + "\n\n" + USAGE);
     process.exit(1);
   }
   console.log(USAGE);

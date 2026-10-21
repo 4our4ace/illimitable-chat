@@ -8,7 +8,10 @@
 // as ILLI_<KEY> instead; a path may start with "~/", and a relative one
 // is taken from the folder of the config.json that names it (a
 // variable's: the working folder). Each key set is checked at the start
-// (config_check), so one that won't do stops illi with a word on why.
+// (config_check), so one that won't do stops illi with a word on why;
+// a pick set that isn't offered here (a model or vendor gone) gives way
+// to its default instead, told (NOTES). Illi's own pick and the
+// compactor's default to the first vendor offered's (config_def).
 // /settings changes them (config_set), some at once, the rest at the
 // next start. The API
 // keys are read from the environment and removed from it, so no program
@@ -35,12 +38,18 @@ export const DIR     = PICKED.dir;
 const PATH = DIR + "/config.json";
 let FILE: Record<string, unknown> = config_files();
 
+// the picks set that aren't offered here, each given way to its default
+// (config_gone), and what the start tells of them
+const GONE = new Set<string>();
+export const NOTES: string[] = [];
+
 // a setting: its default ("": none); how /settings changes it (the
 // values it steps through; "pick": in the model picker; "text": typed
 // in); whether a change applies at once (read again by config_live, or
 // by the terminal: Settings.ts) or at the next start; what it is, short
 // (the picker shows it by the value); what holds while it's none; the
-// shape its value takes (config_check), if any; whether it's a path
+// shape its value takes (config_check), if any; whether it's a path. A
+// pick's default here is chatgpt's: it follows the vendors (config_def)
 export type Setting = { def: string; values: string[] | "pick" | "text"; now: boolean; what: string; none?: string; shape?: [RegExp, string]; path?: boolean };
 
 // every setting, in the order /settings lists them: a key read here
@@ -78,6 +87,15 @@ export const OFFER: Offer = {
   vendors : config_vendors(config_value("vendors")),
   models  : config_list(config_value("models") || LABELS.join()),
 };
+
+// Illi's own pick and the compactor's on each vendor, by default: the
+// first vendor offered's (config_def)
+const DEFS: Record<Vendor, { pick: string; compactor: string }> = {
+  "claude-api": { pick: "claude-api:sonnet-5.5:medium:slow",  compactor: "claude-api:haiku-5.5:medium:slow" },
+  "openai-api": { pick: "openai-api:gpt-6.1-sol:medium:slow", compactor: "openai-api:gpt-6-luna:medium:slow" },
+  "chatgpt"   : { pick: TABLE.pick.def,                       compactor: TABLE.compactor.def },
+};
+config_gone();
 
 // the settings read anew as config_set changes one (config_live): the
 // user's rules file (a system prompt's), a shell command after each turn,
@@ -133,9 +151,15 @@ export const OWN_LOGIN      = ROOT + "/login.json";
 export const OPENCODE_LOGIN = config_path((process.env.XDG_DATA_HOME ?? "~/.local/share") + "/opencode/auth.json");
 
 // the keys, by name, and the variable each is read from
-const VARS: Record<string, string> = {
+export const VARS: Record<string, string> = {
   anthropic       : "ANTHROPIC_API_KEY",
   openai          : "OPENAI_API_KEY",
+};
+
+// the vendor that runs on each key
+const KEYED: Record<string, Vendor> = {
+  anthropic       : "claude-api",
+  openai          : "openai-api",
 };
 export const KEYS: Record<string, string> = Object.fromEntries(Object.entries(VARS).map(([name, v]) => [name, config_key(v)]));
 
@@ -144,7 +168,64 @@ export const KEYS: Record<string, string> = Object.fromEntries(Object.entries(VA
 
 // a key's value, its default if none is set
 export function config_value(key: Key): string {
-  return process.env["ILLI_" + key.toUpperCase()] ?? (FILE[key] as string | undefined) ?? SETTINGS[key].def;
+  return (config_raw(key) as string | undefined) ?? config_def(key);
+}
+
+// a key as set (a variable over config.json); undefined: not set, or a
+// pick that gave way (GONE)
+function config_raw(key: Key): unknown {
+  return GONE.has(key) ? undefined : process.env["ILLI_" + key.toUpperCase()] ?? FILE[key];
+}
+
+// a key's default: for Illi's own pick and the compactor's, the first
+// vendor's (DEFS) that offer has, else its first model at medium effort
+// (none offered: SETTINGS'); for the rest, SETTINGS'
+export function config_def(key: Key, offer?: Offer): string {
+  if (key !== "pick" && key !== "compactor") {
+    return SETTINGS[key].def;
+  }
+  const on    = offer ?? OFFER;
+  const def   = on.vendors.map((v) => DEFS[v][key]).find((text) => Pick.read(config_split(text), on) !== null);
+  const first = Pick.models(on.vendors, on.models)[0];
+  return def ?? (first === undefined ? SETTINGS[key].def : Pick.label({ vendor: first[0], model: first[1].label, effort: "medium", speed: first[1].speeds[0] }));
+}
+
+// where a key is set: its variable, else the config.json that sets it
+function config_where(key: Key): string {
+  return config_env_set(key) ?? (key in config_file(PATH) ? PATH : ROOT + "/config.json");
+}
+
+// the picks set as vendor:model:effort:speed that aren't offered here (a
+// model or vendor gone since) given way to their defaults, each told
+// (NOTES) with where it's set; one not of that shape is left to
+// config_start, which stops illi
+function config_gone(): void {
+  for (const key of ["pick", "compactor", "agents"] as const) {
+    const raw = config_raw(key);
+    if (typeof raw === "string" && raw.split(":").length === 4 && Pick.read(config_split(raw), OFFER) === null) {
+      GONE.add(key);
+      const def = config_value(key);
+      NOTES.push(key + " " + raw + " isn't offered here, so Illi runs on " + (def === "" ? "the chat's pick" : def) + " instead: change it in " + config_where(key) + (config_env_set(key) === null ? " or with /settings." : "."));
+    }
+  }
+}
+
+// what the start tells of the API keys (KEYS): one set whose vendor isn't
+// offered, and how to use it (the vendors listed: a key's first while
+// there is no ChatGPT login); the key missing that the pick runs on
+export function config_tips(pick: Pick, signed: boolean): string[] {
+  const tips: string[] = [];
+  const env  = config_env_set("vendors");
+  for (const [name, vendor] of Object.entries(KEYED)) {
+    if (KEYS[name] !== "" && !OFFER.vendors.includes(vendor)) {
+      const list = (signed ? [...OFFER.vendors, vendor] : [vendor, ...OFFER.vendors]).join(",");
+      tips.push(VARS[name] + " is set, but Illi doesn't offer " + vendor + ": " + (env === null ? "/set vendors " + list : env + "=" + list) + ", then start Illi again.");
+    }
+    if (KEYS[name] === "" && pick.vendor === vendor) {
+      tips.push("The chat runs on " + vendor + ", but " + VARS[name] + " isn't set: set it and start Illi again, or /model picks another.");
+    }
+  }
+  return tips;
 }
 
 // the variable that sets a key over config.json, if it's set; else null
@@ -163,7 +244,7 @@ export function config_pick(key: Key): Pick | null {
 // one; one that won't do throws, saying where it's set
 function config_start(): void {
   for (const key of Object.keys(SETTINGS) as Key[]) {
-    const raw = process.env["ILLI_" + key.toUpperCase()] ?? FILE[key];
+    const raw = config_raw(key);
     const why = raw === undefined ? null : config_check(key, raw);
     if (why !== null) {
       throw new Error("config: " + why + " (" + (config_env_set(key) ?? "config.json") + ")");
@@ -240,6 +321,7 @@ export function config_set(key: Key, value: unknown): void {
   fs.mkdirSync(DIR, { recursive: true });
   fs.writeFileSync(PATH, JSON.stringify(file, null, 2) + "\n");
   FILE = config_files();
+  GONE.delete(key);
   config_live();
 }
 
@@ -247,15 +329,18 @@ export function config_set(key: Key, value: unknown): void {
 // are: its shape (a number or a yes taken as its text); the picks
 // offered both by this illi (read anew at once) and at the next start (a
 // vendor or a model taken out may leave one that won't start; one added
-// is offered only then). A file named needn't be there: none is none
+// is offered only then). A pick not set is its default on the vendors
+// then (config_def), so only one set must be offered now. A file named
+// needn't be there: none is none
 export function config_check(key: string, value: unknown): string | null {
   if (!(key in SETTINGS)) {
     return "No setting " + key + ". The settings: " + Object.keys(SETTINGS).join(", ") + ".";
   }
   const shape = SETTINGS[key as Key].shape;
   const plain = typeof value === "number" || typeof value === "boolean" ? String(value) : value;
-  const text  = plain === null ? SETTINGS[key as Key].def : typeof plain === "string" ? plain.trim() : "";
+  const text  = plain === null ? config_default(key as Key) : typeof plain === "string" ? plain.trim() : "";
   const get   = (k: Key) => (k === key ? text : config_value(k));
+  const set   = (k: Key) => k === key || config_raw(k) !== undefined;
   if (key === "contexts") {
     const got = value === null ? {} : config_contexts(value);
     const bad = got === null || Object.values(got).some((v) => !SETTINGS.context.shape![0].test(String(v)));
@@ -272,12 +357,12 @@ export function config_check(key: string, value: unknown): string | null {
     later.vendors = config_vendors(get("vendors"));
     later.models  = key === "models" ? config_list(text || LABELS.join()) : OFFER.models;
     for (const k of (["pick", "compactor", "agents"] as const).filter((k) => get(k) !== "")) {
-      config_run(k, get(k), later);
+      config_run(k, set(k) ? get(k) : config_def(k, later), later);
     }
   } catch (err: any) {
     return err.message.replace(/^config: /, "");
   }
-  for (const k of (["pick", "compactor", "agents"] as const).filter((k) => get(k) !== "")) {
+  for (const k of (["pick", "compactor", "agents"] as const).filter((k) => set(k) && get(k) !== "")) {
     if (Pick.read(config_split(get(k)), OFFER) === null) {
       return k + " " + get(k) + " is offered from the next start (vendors and models change then): set it once Illi starts again.";
     }
@@ -343,7 +428,7 @@ function config_list(text: string): string[] {
 // config.json's, else its default
 export function config_default(key: Key): string {
   const root = PATH === ROOT + "/config.json" ? undefined : config_file(ROOT + "/config.json")[key];
-  return root === undefined ? SETTINGS[key].def : typeof root === "string" ? root : JSON.stringify(root);
+  return root === undefined ? config_def(key) : typeof root === "string" ? root : JSON.stringify(root);
 }
 
 // the root's config.json, the profile's over it, key by key
