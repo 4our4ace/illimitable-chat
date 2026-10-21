@@ -7,7 +7,9 @@
 // goal check and a message sent mid-run fit the chat's model. A main
 // agent switch is a note of its own. A message sent as a stopped turn
 // winds down is answered, and what was logged between waiting messages
-// reaches the turn.
+// reaches the turn. A call too long for the model's window makes the
+// chat refit and the turn go on from a note, unasked; three in a row end
+// it, saying why.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -198,4 +200,56 @@ test("a turn's new text holds what was logged between its waiting messages, tagg
     Object.assign(chat, { busy: false, wait: [], sent: [] });
   }
   expect(asked).toEndWith("one\n\nnote: Stopped by the user: Illi.\n\ntwo");
+});
+
+// the model's turn calls ending as `ends` says, in turn (then answered;
+// a summary's call answered as ever): the last block of each turn call
+// asked, and its room
+async function refitted(ends: Array<{ text: string }>) {
+  await until(() => !chat.busy);
+  const asked: Array<{ text: string; room?: number }> = [];
+  const ask = AskAI.ask;
+  AskAI.ask = (a, on) => {
+    if (a.blocks.at(-1)!.text.endsWith("</input>")) {
+      return ask(a, on);
+    }
+    const end = ends[asked.length];
+    asked.push({ text: a.blocks.at(-1)!.text, room: a.room });
+    if (end === undefined) {
+      return ask(a, on);
+    }
+    const [call, feed] = AskAI.tie(on, () => {}, () => {});
+    queueMicrotask(() => feed.end({ ok: false, text: end.text, left: [], stop: "full" }));
+    return call;
+  };
+  try {
+    Chat.take(chat, Chat.push(chat, null, "user", "a long one"));
+    await until(() => !chat.busy && chat.wait.length === 0);
+  } finally {
+    AskAI.ask = ask;
+  }
+  return asked;
+}
+
+test("a call too long for the model's window: a turn's share shrinks, and the turn goes on from a note, unasked", async () => {
+  const fit = chat.fit;
+  const asked = await refitted([{ text: "HTTP 400: prompt is too long: 210000 tokens > 200000 maximum" }]);
+  expect(asked).toHaveLength(2);
+  expect(asked[1].text).toContain("The chat outgrew " + chat.model + "'s window");
+  expect(chat.fit).toBeCloseTo(fit * 0.8);
+  const notes = Array.from({ length: chat.mem.count }, (_, i) => Memory.message(chat.mem, i)!).filter((m) => m.kind === "note");
+  expect(notes.some((m) => m.text.startsWith("No reply"))).toBe(false);
+  const window = Pick.window(chat.pick);
+  expect(asked[0].room).toBe(window === undefined ? undefined : Math.round(window * 0.9));
+});
+
+test("a turn grown past its room goes on without shrinking; three refits in a row end the turn, saying why", async () => {
+  const fit = chat.fit;
+  expect(await refitted([{ text: "" }])).toHaveLength(2);
+  expect(chat.fit).toBe(fit);
+  const asked = await refitted([{ text: "" }, { text: "" }, { text: "" }, { text: "" }]);
+  expect(asked).toHaveLength(4);
+  const last = Memory.message(chat.mem, chat.mem.count - 1)!;
+  expect([last.kind, last.text]).toEqual(["note", "No reply: the chat won't fit " + chat.model + "'s window even summarized. /clear starts a fresh screen, or /model picks a model with a bigger window."]);
+  expect(chat.refits).toBe(0);
 });

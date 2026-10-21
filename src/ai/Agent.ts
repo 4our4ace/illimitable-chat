@@ -19,7 +19,10 @@
 // A busy model is logged as its first request asks again and as its
 // last is done, never each try (a storm logged ~600 lines a second).
 // A call ends answered (`fail`: the model's answer failed, a refusal or
-// a stop reason: its input's doing) or not: `down`, the vendor's (a
+// a stop reason: its input's doing) or not: `full`, the request too long
+// for the model's window (a vendor's refusal saying so, or a step past
+// the call's `room` in tokens once its tools ran: Chat.refit makes the
+// chat fit and goes on); `down`, the vendor's (a
 // refusal of the request, as when the API key is wrong or its credit
 // gone, or busy past TRIES); `lost`, ours (a stop), saying why. A
 // vendor's why goes to the log; a refusal's is the call's end too (the
@@ -75,9 +78,10 @@ export type Step = {
   out     : unknown[];
   uses    : Use[];
   entries : Entry[];
-  stop    : "done" | "tools" | "again" | "busy" | "down" | "lost" | "fail";
+  stop    : "done" | "tools" | "again" | "busy" | "down" | "lost" | "fail" | "full";
   why     : string;
   note    : string;
+  read?   : number;
 };
 
 export type Emit = (kind: Kind, text: string, fresh?: boolean) => void;
@@ -110,6 +114,9 @@ export const TRIES = 8;
 
 // what a call the vendor never answered says
 const BUSY  = "the AI service is busy or unavailable right now";
+
+// a refusal's body saying the request is too long for the model's window
+const FULL  = /prompt is too long|exceed(s|ed)? (the )?context (limit|window|length)|context_length_exceeded|maximum context length|context window of this model/i;
 
 // the requests asking a busy model again, by model, logged as they go
 // from none to some and back (Agent.step)
@@ -157,12 +164,14 @@ export namespace Agent {
     const tools = ask.from?.tools ?? (await Agent.server(run));
     const parts = ask.blocks.filter((b) => b.text !== "");
     const items: Item[] = [...(ask.from?.items ?? []), { $: "User", parts, imgs: ask.imgs ?? [] }];
+    let steps = 0;
     while (!signal.aborted) {
       const step = await Agent.step(wire, run, key, (max) => wire.body(ask, items, tools, max));
+      steps += 1;
       for (const entry of step.entries) {
         on({ $: "Entry", ...entry });
       }
-      if (step.stop === "down" || step.stop === "lost" || step.stop === "fail") {
+      if (step.stop === "down" || step.stop === "lost" || step.stop === "fail" || step.stop === "full") {
         end.text ||= step.why;
         end.stop = step.stop;
         return;
@@ -189,6 +198,11 @@ export namespace Agent {
         backs.push({ id: use.id, out });
       }
       if (signal.aborted) {
+        return;
+      }
+      if (backs.length > 0 && ask.room !== undefined && (step.read ?? 0) > ask.room) {
+        end.text = steps === 1 ? "the turn starts past " + ask.room + " tokens" : "";
+        end.stop = "full";
         return;
       }
       const says = run.sent.splice(0);
@@ -312,8 +326,9 @@ export namespace Agent {
       if (spoilt) {
         wire.auth!.spoil(token);
       }
-      const why = res.ok && res.body ? "" : "HTTP " + res.status + ": " + Agent.reason(await res.text());
-      step = why ? Agent.fail(why, [], spoilt || Agent.passing(res) ? "busy" : "down") : await Agent.stream(wire, run, res.body!, timer, seen, st, flight.begun, read);
+      const said = res.ok && res.body ? "" : await res.text();
+      const why = res.ok && res.body ? "" : "HTTP " + res.status + ": " + Agent.reason(said);
+      step = why ? Agent.fail(why, [], Agent.full(said) ? "full" : spoilt || Agent.passing(res) ? "busy" : "down") : await Agent.stream(wire, run, res.body!, timer, seen, st, flight.begun, read);
     } catch (err: any) {
       step = Agent.fail(err.message, [], "busy");
     }
@@ -321,9 +336,17 @@ export namespace Agent {
     flight.end();
     if (res?.ok && read.done) {
       const use = wire.usage(st);
-      AskAI.read(run.ask.server, use.input + use.write + use.read);
+      step.read = use.input + use.write + use.read;
+      AskAI.read(run.ask.server, step.read);
     }
     return { res, step };
+  }
+
+  // whether a refused request's body says it was too long for the model's
+  // window (Anthropic: "prompt is too long", input and max_tokens past
+  // the limit; OpenAI's and ChatGPT's context_length_exceeded)
+  export function full(body: string): boolean {
+    return FULL.test(body);
   }
 
   // a failed request's why: the API's message (Anthropic's and OpenAI's

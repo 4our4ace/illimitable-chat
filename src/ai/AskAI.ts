@@ -51,7 +51,9 @@ export type Block = { text: string; mark: boolean };
 // goes on from, its blocks after that one's items and answer, naming its
 // tools but running none: one step, unanswered if it calls one (a
 // suggested reply's: Chat.suggest); max: the most tokens it writes, its
-// thinking's too (none: the model's cap)
+// thinking's too (none: the model's cap); room: the most tokens a step
+// may read before the call ends `full` once its tools ran (a turn's:
+// Chat.refit goes on from the chat as it then is; none: no end)
 export type Ask = Pick & {
   system    : string;
   blocks    : Block[];
@@ -62,6 +64,7 @@ export type Ask = Pick & {
   keep?     : boolean;
   from?     : Last;
   max?      : number;
+  room?     : number;
 };
 
 // a request kept whole (Ask.keep): what it asked, the items it sent with
@@ -81,14 +84,15 @@ export type Event =
 
 // stop: who ended a call that failed (Agent.ts): the model (`fail`: it
 // answered, so the failure is its input's doing, a refusal or a stop
-// reason; asked again, it fails alike), we (`lost`: a stop), the vendor
-// (`down`), or none (our setup threw)
+// reason; asked again, it fails alike), the request's length (`full`:
+// too long for the model's window, or past its room), we (`lost`: a
+// stop), the vendor (`down`), or none (our setup threw)
 export type End = {
   ok    : boolean;
   text  : string;
   left  : Say[];
   note? : string;
-  stop? : "fail" | "lost" | "down";
+  stop? : "fail" | "lost" | "down" | "full";
 };
 
 // one try at a vendor
@@ -149,7 +153,7 @@ export namespace AskAI {
     const run = async (): Promise<End> => {
       let end = await call.done;
       for (;;) {
-        const wait = ask.patient === true && !end.ok && end.stop !== "fail" && end.stop !== "lost";
+        const wait = ask.patient === true && !end.ok && end.stop !== "fail" && end.stop !== "full" && end.stop !== "lost";
         if (wait) {
           await Machine.nap(AGAIN, halt.signal);
         }

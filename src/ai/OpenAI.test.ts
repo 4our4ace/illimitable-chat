@@ -1,8 +1,9 @@
 // OpenAI test
 // ===========
 // `bun test OpenAI.test.ts`. A failed response, or an error event, its
-// input caused fails (asked again, it fails alike); any other, a rate
-// limit as a server error, is busy, so it is asked again.
+// input caused fails (asked again, it fails alike), one too long for the
+// model's window is full (the chat refits); any other, a rate limit as a
+// server error, is busy, so it is asked again.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -26,11 +27,11 @@ test("a failure its input caused fails; a rate limit or server error is busy", (
   expect(failed("vector_store_timeout")).toBe("busy");
   expect(failed("invalid_prompt")).toBe("fail");
   expect(failed("invalid_image_format")).toBe("fail");
-  expect(failed("context_length_exceeded")).toBe("fail");
+  expect(failed("context_length_exceeded")).toBe("full");
 });
 
 test("an error event is read alike", () => {
   const event = (code: string) => OpenAI.step({ res: null, error: { type: "error", code, message: code }, use: {} as any }, ASK).stop;
   expect(event("rate_limit_exceeded")).toBe("busy");
-  expect(event("context_length_exceeded")).toBe("fail");
+  expect(event("context_length_exceeded")).toBe("full");
 });

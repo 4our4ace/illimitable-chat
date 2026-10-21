@@ -231,7 +231,7 @@ export namespace Anthropic {
       }
     }
     const why = st.why?.explanation;
-    return { ...step, stop: "fail", why: "stopped: " + st.stop + (why ? " (" + why + ")" : "") };
+    return { ...step, stop: st.stop === "model_context_window_exceeded" ? "full" : "fail", why: "stopped: " + st.stop + (why ? " (" + why + ")" : "") };
   }
 
   // the messages of an output, in order (a run of text blocks, split
