@@ -3,9 +3,9 @@
 // `bun test Chat.test.ts`. The chat in this process, the model stood in
 // for: a view over the pipe sends a message and hears the reply; a /model
 // while the turn's call runs picks the next call's (the wait names the
-// model the running one asked); one process at a time holds the chat. A
-// goal check and a message sent mid-run fit the chat's model. A main
-// agent switch is a note of its own. A message sent as a stopped turn
+// model the running one asked); one process at a time holds a project's
+// chat. A goal check and a message sent mid-run fit the chat's model. A
+// main agent switch is a note of its own. A message sent as a stopped turn
 // winds down is answered, and what was logged between waiting messages
 // reaches the turn. A call too long for the model's window makes the
 // chat refit and the turn go on from a note, unasked; three in a row end
@@ -23,6 +23,10 @@ process.env.ILLI_DIR = DIR;
 const { AskAI } = await import("../ai/AskAI.ts");
 const { Chat } = await import("./Chat.ts");
 const { Memory } = await import("./Memory.ts");
+const { Projects } = await import("./Projects.ts");
+
+// the project the tests run in (this repo), whose chat Chat.open opens
+const HERE = Projects.place(process.cwd());
 const { Pick } = await import("../ai/Pick.ts");
 const config = await import("../config/Config.ts");
 const View = await import("../ui/View.ts");
@@ -80,14 +84,35 @@ test("a turn's wait names the model it runs on, not one picked since", async () 
   await until(() => !chat.busy);
 });
 
-test("one process at a time holds the chat", async () => {
-  await Chat.lock();
-  const code = `const { Chat } = await import(${JSON.stringify(import.meta.dir + "/Chat.ts")}); await Chat.lock().then(() => console.log("held"), (e) => console.log(e.message));`;
-  const proc = Bun.spawn([process.execPath, "-e", code], { env: { ...process.env, ILLI_DIR: DIR }, stdout: "pipe" });
-  const out = await new Response(proc.stdout).text();
-  expect(out).toContain("already open");
-  expect(out).toContain("quit it there (Ctrl+D), or start another profile: ILLI_PROFILE=<name> illi");
-});
+test("one process at a time holds a project's chat, even many starting at once; its lock only its user's to reach, let go however a process ends; those held elsewhere counted", async () => {
+  expect(await Chat.lock()).toBe(true);
+  expect(fs.statSync(DIR + "/locks").mode & 0o777).toBe(0o700);
+  const env = { ...process.env, ILLI_DIR: DIR };
+  const code = (after = "", at = 0) => `const { Chat } = await import(${JSON.stringify(import.meta.dir + "/Chat.ts")}); while (Date.now() < ${at}) {} console.log(await Chat.lock()); ${after}`;
+  const proc = Bun.spawn([process.execPath, "-e", code()], { env, stdout: "pipe" });
+  expect(await new Response(proc.stdout).text()).toBe("false\n");
+  const repo = fs.realpathSync(fs.mkdtempSync(os.tmpdir() + "/illi-chat-repo-"));
+  const name = Projects.lock(repo);
+  fs.mkdirSync(repo + "/.git");
+  const at = Date.now() + 1500;
+  const many = Array.from({ length: 6 }, () => Bun.spawn([process.execPath, "-e", code("await Bun.sleep(2500); process.exit(0);", at)], { cwd: repo, env, stdout: "pipe" }));
+  const said = await Promise.all(many.map((p) => new Response(p.stdout).text()));
+  expect(said.sort()).toEqual(["false\n", "false\n", "false\n", "false\n", "false\n", "true\n"]);
+  const gone = Bun.spawn([process.execPath, "-e", code("process.exit(0);")], { cwd: repo, env, stdout: "pipe" });
+  expect(await new Response(gone.stdout).text()).toBe("true\n");
+  expect(Chat.others(DIR)).toBe(0);
+  const open = Bun.spawn([process.execPath, "-e", code("await Bun.sleep(60000);")], { cwd: repo, env, stdout: "pipe" });
+  const reader = open.stdout.getReader();
+  expect(new TextDecoder().decode((await reader.read()).value)).toBe("true\n");
+  expect([Chat.others(DIR), await Chat.claim(name)]).toEqual([1, null]);
+  open.kill("SIGKILL");
+  await open.exited;
+  expect(Chat.others(DIR)).toBe(0);
+  const after = await Chat.claim(name);
+  expect(after).not.toBeNull();
+  after!.stop();
+  fs.rmSync(repo, { recursive: true, force: true });
+}, 20000);
 
 test("/compact folds all but the last two exchanges for the agent, the screen still showing them; again, nothing to fold", async () => {
   await until(() => !chat.busy);
@@ -109,7 +134,7 @@ test("/compact folds all but the last two exchanges for the agent, the screen st
   expect(chat.eye.from).toBe(shown);
   expect(Memory.message(mem, mem.count - 1)!.kind).toBe("note");
   expect(Chat.compact(chat).error).toContain("Nothing to summarize");
-  expect(Memory.load(mem.dir, () => ({}) as any).show).toBe(shown);
+  expect(Memory.load(mem.dir, () => ({}) as any, HERE).show).toBe(shown);
 });
 
 test("/clear: the agent gets the chat so far as lines, and the screen starts anew from its note, also after a restart", async () => {
@@ -126,7 +151,7 @@ test("/clear: the agent gets the chat so far as lines, and the screen starts ane
   expect(chat.eye.parts).toEqual([]);
   expect(chat.eye.from).toBe(before);
   expect(Memory.message(mem, before)!.kind).toBe("note");
-  expect(Memory.load(mem.dir, () => ({}) as any).top).toBe(before);
+  expect(Memory.load(mem.dir, () => ({}) as any, HERE).top).toBe(before);
 });
 
 test("a goal check and a message sent mid-run hold no more than the chat's model takes", () => {
@@ -285,7 +310,7 @@ test("summaries stuck are told once, again only after one is built", () => {
   expect(count()).toBe(was + 2);
 });
 
-test("a save that fails is told to the views, never thrown", () => {
+test("a save that fails is told to the views, never thrown, in plain words (SQLite's too)", () => {
   const got: any[] = [];
   const sock: any = { data: { seen: new Set() }, send: (text: string) => got.push(JSON.parse(text)), close: () => {} };
   const save = Memory.save;
@@ -301,4 +326,5 @@ test("a save that fails is told to the views, never thrown", () => {
     chat.socks.delete(sock);
   }
   expect(got.find((m) => m.$ === "note").text).toBe("Can't save the chat: disk full (" + chat.mem.dir + ").");
+  expect(["SQLITE_FULL", "SQLITE_READONLY", "SQLITE_IOERR_WRITE", "SQLITE_BUSY", "SQLITE_MISMATCH"].map((code) => Chat.unsaved(Object.assign(new Error("as SQLite says it"), { code })))).toEqual(["disk full", "read-only disk", "the disk failed to write", "another illi kept the file busy too long", "as SQLite says it"]);
 });

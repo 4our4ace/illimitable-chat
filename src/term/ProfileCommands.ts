@@ -98,7 +98,7 @@ function term_profile_busy(t: Term, what: string): boolean {
     term_note(t, "A pipe runs in one profile: ILLI_PROFILE=<name> picks it.");
     return true;
   }
-  if (View.view_running(t.v) || t.chat.busy) {
+  if (View.view_running(t.v) || t.chat?.busy) {
     term_note(t, "illi is at work: " + what + " once it's done (Esc interrupts it). A switch never cuts a turn.");
     return true;
   }
@@ -109,12 +109,14 @@ function term_profile_busy(t: Term, what: string): boolean {
 // this illi holds let go (term_leave), `step` done (a rename, a chat
 // moved: what needs this one let go; if it fails, illi runs again where
 // it was, saying why), and illi runs in its place, on the same terminal
-// and folder; the API keys it took out of the environment go back in
-async function term_restart(t: Term, name: string, step?: () => void): Promise<void> {
-  await term_leave(t);
+// and folder; the API keys it took out of the environment go back in.
+// keep: the project's lock kept through the step (this project
+// forgotten: no illi opens it meanwhile), let go as illi runs again
+export async function term_restart(t: Term, name: string, step?: () => void | Promise<void>, keep = false): Promise<void> {
+  await term_leave(t, keep);
   let to = name;
   try {
-    step?.();
+    await step?.();
   } catch (err: any) {
     process.stderr.write("illi: " + err.message + "\n");
     to = config.PROFILE;
@@ -133,15 +135,18 @@ async function term_restart(t: Term, name: string, step?: () => void): Promise<v
 // all this illi holds let go, as a quit does, but waited on: the device
 // login let go, the chat stopped (what it cut goes on at its next start),
 // the agents' processes and the MCP servers ended, every write flushed,
-// the lock released, the terminal as it was
-async function term_leave(t: Term): Promise<void> {
+// the lock released (keep: kept, its views let go), the terminal as it
+// was
+async function term_leave(t: Term, keep = false): Promise<void> {
   t.login?.abort();
   t.v.ws?.close();
-  Chat.close(t.chat);
+  if (t.chat !== null) {
+    Chat.close(t.chat, keep);
+  }
   Machine.end();
   await Promise.race([Mcp.stop(), Bun.sleep(LEAVE)]);
   await Disk.end();
-  Chat.unlock();
+  Chat.unlock(keep);
   await Screen.screen_leave(t.scr);
 }
 
@@ -160,7 +165,7 @@ function term_profile_new(t: Term, name: string): void {
 // a new profile made, and switched to (move: with this chat, moved as
 // this illi lets it go)
 async function term_profile_make(t: Term, name: string, move: boolean): Promise<void> {
-  if (term_profile_busy(t, "make " + name)) {
+  if (term_profile_busy(t, "make " + name) || (move && (await term_profile_elsewhere(t, config.PROFILE, "moving its chat")))) {
     return;
   }
   Profiles.profile_new(config.ROOT, name);
@@ -181,15 +186,30 @@ function term_profile_rename(t: Term, from: string): void {
     if (to === from || why !== null) {
       return to === from ? null : why;
     }
-    if (from !== config.PROFILE) {
-      Profiles.profile_rename(config.ROOT, from, to);
-      t.profs = Profiles.profile_list(config.ROOT);
-      term_note(t, "Renamed profile " + from + " to " + to + ".");
-    } else if (!term_profile_busy(t, "rename it")) {
-      void term_restart(t, to, () => Profiles.profile_rename(config.ROOT, from, to));
-    }
+    void term_profile_elsewhere(t, from, "renaming it").then((busy) => {
+      if (busy) {
+        return;
+      }
+      if (from !== config.PROFILE) {
+        Profiles.profile_rename(config.ROOT, from, to);
+        t.profs = Profiles.profile_list(config.ROOT);
+        term_note(t, "Renamed profile " + from + " to " + to + ".");
+      } else if (!term_profile_busy(t, "rename it")) {
+        void term_restart(t, to, () => Profiles.profile_rename(config.ROOT, from, to));
+      }
+    });
     return null;
   });
+}
+
+// whether illi runs in profile `name` in another terminal (said; true):
+// its folder can't change under it
+async function term_profile_elsewhere(t: Term, name: string, what: string): Promise<boolean> {
+  const n = Chat.others(Profiles.profile_dir(config.ROOT, name));
+  if (n > 0) {
+    term_note(t, "illi runs in profile " + name + " in " + (n === 1 ? "another terminal" : n + " other terminals") + ": quit it there before " + what + ".");
+  }
+  return n > 0;
 }
 
 // a profile and all it holds gone, once the person says so in a picker;
@@ -202,14 +222,17 @@ export function term_profile_delete(t: Term, name: string): void {
   if (why !== null) {
     return term_note(t, why);
   }
-  const gone = () => {
+  const gone = async () => {
+    if (await term_profile_elsewhere(t, name, "deleting it")) {
+      return;
+    }
     Profiles.profile_delete(config.ROOT, name);
     t.profs = Profiles.profile_list(config.ROOT);
     term_note(t, "Deleted profile " + name + ".");
   };
   const about = ["", "its chat and setup, gone for good"];
   const foot  = () => "Ctrl+E in /profile exports a copy first";
-  term_chooser(t, "Delete profile " + name + "?", ["Keep it", "Delete it"], about, -1, (k) => (k === 1 ? gone() : term_note(t, "Kept profile " + name + ".")), { foot });
+  term_chooser(t, "Delete profile " + name + "?", ["Keep it", "Delete it"], about, -1, (k) => (k === 1 ? void gone() : term_note(t, "Kept profile " + name + ".")), { foot });
 }
 
 // a profile as one archive, ./illi-profile-<name>.tar.gz, never over a

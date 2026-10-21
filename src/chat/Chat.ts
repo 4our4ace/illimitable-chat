@@ -1,9 +1,11 @@
 // Chat
 // ====
-// The agent: one chat that never ends (Memory.ts), at config.DIR/chat, run
-// in this process, and its views (View.ts), each fed by a pipe (Chat.link):
-// the chat's events one way, the person's acts the other (Chat.apply),
-// each answered once what it logged is on disk. One process at a time holds the chat (Chat.lock).
+// The agent: the chat of the project illi runs in (Projects.ts), one that
+// never ends (Memory.ts), in config.DIR/chat, run in this process, and its
+// views (View.ts), each fed by a pipe (Chat.link): the chat's events one
+// way, the person's acts the other (Chat.apply), each answered once what
+// it logged is on disk. One process at a time holds a project's chat
+// (Chat.lock).
 //
 // One turn at a time. A message is logged as it arrives; the running call
 // takes it between tool calls if it goes whole beside its view, else the
@@ -13,13 +15,16 @@
 // answered asks for the user's likely next message, on the cache
 // (Chat.suggest), shown till a message or the next turn.
 
+import { Database } from "bun:sqlite";
 import * as fs from "node:fs";
 import * as net from "node:net";
 import { AskAI, type Call, type End, type Event, type Kind, type Say } from "../ai/AskAI.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
+import { Import } from "./Import.ts";
 import { Memory, type Share } from "./Memory.ts";
 import { Pick } from "../ai/Pick.ts";
+import { Projects } from "./Projects.ts";
 import { MASTER, SEARCHES, Tools, type Agent, type Live, type Reply } from "../tools/Tools.ts";
 import { ANSWERED, IMAGES, live_push, SUMMARIES, TURN, type Answer, type Link, type Part, type Pipe, type Question, type Server as Out, type Wait } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
@@ -32,6 +37,10 @@ type Sock = { data: { seen: Set<string> }; send: (text: string) => void };
 
 // a message logged: its pages [id, end)
 type Msg = { id: number; end: number };
+
+// a project's lock held: what stops its views' socket, what lets it go
+// (the socket too)
+export type Held = { views: () => void; stop: () => void };
 
 // what the agent saw at its last call: the view before message `from`,
 // then every message from it on
@@ -93,7 +102,8 @@ type Asked = Question & { done: (reply: Reply) => void };
 // Constants
 // =========
 
-const LOCK       = config.DIR + "/lock";
+// the locks, a socket a project (Projects.lock names it)
+const LOCKS      = config.DIR + "/locks";
 // a turn's head, as a summary's is "Compaction:": one prompt serves both
 const HEAD       = "Turn: the user's new message:\n\n";
 // a goal's check (Chat.check): its own system prompt (illi's, which says
@@ -127,8 +137,8 @@ const NO_FIT     = "No reply: the chat won't fit #'s window even summarized. /cl
 
 // a new chat's first message, its node written with it, so no compactor
 // call summarizes it
-const HELLO      = "Hi, I'm illi, short for illimitable: an AI, so I can make mistakes. One chat that never ends, kept in a memory tree, recent days in more detail. I work in the folder you start me in. Ask me anything, for days, weeks, years; /help lists the commands.";
-const HELLO_LINE = "illi: hello: illi (illimitable), one endless chat in a memory tree; works in the folder it starts in; /help for commands.";
+const HELLO      = "Hi, I'm illi, short for illimitable: an AI, so I can make mistakes. One chat that never ends, kept in a memory tree, recent days in more detail. I work in the folder you start me in; each git repo gets a chat of its own. Ask me anything, for days, weeks, years; /help lists the commands.";
+const HELLO_LINE = "illi: hello: illi (illimitable), one endless chat in a memory tree, one per git repo; works in the folder it starts in; /help for commands.";
 
 // a suggested reply (Chat.suggest): what the model is asked after the
 // turn's last request and its answer, none its answer unless the next
@@ -151,56 +161,145 @@ const NONE        = /^\W*(nothing|none|no suggestion|silence|n\/a|thanks|thank y
 // Globals
 // =======
 
-// the lock's socket, while this process holds the chat (Chat.lock)
-let held: { stop: (closeActive?: boolean) => void } | null = null;
+// the project's lock and its file, while this process holds its chat
+// (Chat.lock)
+let held: Held | null = null;
+let LOCK = "";
 
 // Chat
 // ====
 
 export namespace Chat {
 
-  // holds the chat for this process: a unix socket one listens on at a
-  // time; one a crash left refuses connections and is taken; one held
-  // means illi runs elsewhere
-  export async function lock(): Promise<void> {
-    fs.mkdirSync(config.DIR, { recursive: true });
-    while (true) {
-      try {
-        held = Bun.listen({ unix: LOCK, socket: { data() {} } });
-        return;
-      } catch (err: any) {
-        if (err.code !== "EADDRINUSE") {
-          throw err;
-        }
-      }
-      const live = await new Promise<boolean>((done) => {
-        const sock = net.connect(LOCK);
-        sock.on("connect", () => {
-          sock.destroy();
-          done(true);
-        });
-        sock.on("error", () => done(false));
-      });
-      if (live) {
-        throw new Error("illi is already open in another terminal (" + config.DIR + "): quit it there (Ctrl+D), or start another profile: ILLI_PROFILE=<name> illi");
-      }
-      fs.rmSync(LOCK, { force: true });
+  // holds the chat of the project at cwd for this process (Chat.claim),
+  // let go once the chat is closed (Chat.close); a connection to its
+  // socket goes to `serve` (another terminal's view: Remote.ts). false:
+  // another illi holds it
+  export async function lock(cwd = process.cwd(), serve?: (sock: net.Socket) => void): Promise<boolean> {
+    const name = Projects.lock(Projects.place(cwd).path);
+    const got = await Chat.claim(name, serve);
+    if (got === null) {
+      return false;
+    }
+    [held, LOCK] = [got, Chat.lock_file(name)];
+    return true;
+  }
+
+  // a project's lock (by its name, Projects.lock) taken: its lock file
+  // held in an exclusive transaction, which the system lets go however
+  // the process ends (a crash leaves nothing that holds it), so one
+  // process holds it at a time; in a folder only its user can open. With
+  // `serve`, a socket beside it too, where another terminal's view joins
+  // (a view can do what the person can): only the lock's holder makes
+  // one, so one there is a crash's, replaced. null: another holds it
+  export async function claim(name: string, serve?: (sock: net.Socket) => void): Promise<Held | null> {
+    fs.mkdirSync(LOCKS, { recursive: true, mode: 0o700 });
+    fs.chmodSync(LOCKS, 0o700);
+    const db = Chat.grip(Chat.lock_file(name));
+    if (db === null) {
+      return null;
+    }
+    if (serve === undefined) {
+      return { views: () => {}, stop: () => db.close() };
+    }
+    try {
+      const file = Chat.socket(name);
+      fs.rmSync(file, { force: true });
+      const views = await Chat.listen(file, serve);
+      return { views, stop: () => {
+        views();
+        db.close();
+      } };
+    } catch (err) {
+      db.close();
+      throw err;
     }
   }
 
-  // lets the chat go (a profile's switch): the socket closed and gone, so
-  // the next illi to open this folder takes it at once
-  export function unlock(): void {
-    held?.stop(true);
-    held = null;
-    fs.rmSync(LOCK, { force: true });
+  // a lock file held: an exclusive transaction on it, its journal in
+  // memory (no file a crash leaves); null: another connection has one
+  export function grip(file: string): Database | null {
+    const db = new Database(file, { create: true });
+    try {
+      db.run("pragma journal_mode = memory");
+      db.run("begin exclusive");
+      return db;
+    } catch (err: any) {
+      db.close();
+      if (err?.code === "SQLITE_BUSY") {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  // a server on a lock's socket, only its user's to reach; what stops it
+  // (its connections ended, its file gone), once
+  export function listen(file: string, serve: (sock: net.Socket) => void): Promise<() => void> {
+    return new Promise((done, fail) => {
+      const socks  = new Set<net.Socket>();
+      const server = net.createServer((sock) => {
+        socks.add(sock);
+        sock.on("close", () => socks.delete(sock));
+        sock.on("error", () => {});
+        serve(sock);
+      });
+      server.once("error", fail);
+      server.listen(file, () => {
+        fs.chmodSync(file, 0o600);
+        let up = true;
+        done(() => {
+          if (up) {
+            up = false;
+            server.close();
+            socks.forEach((sock) => sock.destroy());
+          }
+        });
+      });
+    });
+  }
+
+  // how many projects other illis hold in a profile's folder (dir)
+  export function others(dir: string): number {
+    const locks = fs.existsSync(dir + "/locks") ? fs.readdirSync(dir + "/locks").filter((f) => f.endsWith(".lock")) : [];
+    return locks.map((f) => dir + "/locks/" + f).filter((file) => {
+      if (file === LOCK) {
+        return false;
+      }
+      const db = Chat.grip(file);
+      db?.close();
+      return db === null;
+    }).length;
+  }
+
+  // a project's lock file, by its name (Projects.lock)
+  export function lock_file(name: string): string {
+    return LOCKS + "/" + name + ".lock";
+  }
+
+  // a project's socket, where views join, by its name
+  export function socket(name: string): string {
+    return LOCKS + "/" + name + ".sock";
+  }
+
+  // lets the chat go (its close, a profile's switch): the views' socket
+  // closed and gone, then the lock, so the next illi in this project
+  // takes it at once. keep: the lock kept, till illi runs again or ends
+  // (this project forgotten meanwhile: no illi opens it)
+  export function unlock(keep = false): void {
+    if (keep) {
+      return held?.views();
+    }
+    held?.stop();
+    [held, LOCK] = [null, ""];
   }
 
   // the chat, its tools working in cwd; what a quit cut goes on
   export function open(cwd: string): Chat {
     const dir = config.DIR + "/chat";
     fs.mkdirSync(dir, { recursive: true });
-    const mem = Memory.load(dir, () => Chat.share(chat));
+    const mem = Memory.load(dir, () => Chat.share(chat), Projects.place(cwd));
+    mem.cwd = cwd;
     const tools = Tools.serve(mem, {
       ask    : (q, signal) => Chat.question(chat, q, signal),
       push   : (agent, kind, text) => Chat.push(chat, agent, kind, text),
@@ -228,6 +327,7 @@ export namespace Chat {
     if (mem.count === 0) {
       Memory.push(mem, [{ kind: "illi", text: HELLO, line: HELLO_LINE }]);
     }
+    Import.told.splice(0).forEach((text) => Chat.note(chat, text));
     chat.eye = Chat.eye(mem, Math.min(mem.show, Chat.from(chat)));
     mem.made = (l, i) => Chat.made(chat, l, i);
     // summaries stuck: told once till one is built again ("")
@@ -259,11 +359,14 @@ export namespace Chat {
   }
 
   // stops all at once, as a quit does: what ran stays saved (mem.work), so
-  // the next start resumes it
-  export function close(chat: Chat): void {
+  // the next start resumes it; then the lock let go (keep: kept, Chat.unlock),
+  // so the next illi in the project (another terminal's view: Remote.ts)
+  // opens it as left
+  export function close(chat: Chat, keep = false): void {
     Chat.stop(chat, null);
     Chat.unsuggest(chat);
     Memory.stop(chat.mem);
+    Chat.unlock(keep);
   }
 
   // a message (its body: its images, sizes given, then its text), logged
@@ -819,10 +922,15 @@ export namespace Chat {
     Chat.all(chat, Chat.state(chat));
   }
 
-  // why a file won't write, in plain words
+  // why a file won't write, in plain words (its own, or SQLite's)
   export function unsaved(err: any): string {
-    const why: Record<string, string> = { ENOSPC: "disk full", EDQUOT: "disk quota used up", EACCES: "no permission", EPERM: "no permission", EROFS: "read-only disk" };
-    return why[err?.code] ?? String(err?.message ?? err);
+    const why: Record<string, string> = {
+      ENOSPC: "disk full", EDQUOT: "disk quota used up", EACCES: "no permission", EPERM: "no permission", EROFS: "read-only disk",
+      SQLITE_FULL: "disk full", SQLITE_READONLY: "read-only disk", SQLITE_PERM: "no permission", SQLITE_CANTOPEN: "can't open the file", SQLITE_IOERR: "the disk failed to write",
+      SQLITE_BUSY: "another illi kept the file busy too long", SQLITE_LOCKED: "another illi kept the file busy too long",
+    };
+    const code = String(err?.code ?? "");
+    return why[code] ?? why[code.replace(/^(SQLITE_[A-Z]+)_.*$/, "$1")] ?? String(err?.message ?? err);
   }
 
   // a view joins on the chat as it is now

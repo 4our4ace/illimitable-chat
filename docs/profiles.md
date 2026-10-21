@@ -1,8 +1,10 @@
 Profiles
 ========
 
-Separate chats, e.g. work and home: the default in `~/.illi`, the others
-in `~/.illi/profiles/<name>`.
+Separate setups and chats, e.g. work and personal: the default in
+`~/.illi`, the others in `~/.illi/profiles/<name>`. Each profile keeps a
+chat per project (each git repo, and home outside them); most people
+need just the one profile.
 
 `/profile` opens the list (the side panel shows them too), and all of it
 happens there:
@@ -17,7 +19,9 @@ happens there:
 | + import a profile  | asks for an archive                          |
 
 `/profile work` switches straight away; `ILLI_PROFILE=<name> illi` starts
-in one.
+in one. A profile that illi has open in another terminal (in any
+project) can't be renamed, deleted or have its chats moved: quit illi
+there first.
 
 Global and a profile's own
 --------------------------
@@ -44,7 +48,7 @@ what is its own:
   every profile's, a profile's own skill's that profile's.
 - The login, the API keys and the models list are shared.
 
-illi's memory is the running profile's chat alone: its read, write and
+illi's memory is the running profile's chats alone: its read, write and
 edit tools refuse every chat folder, and its prompt keeps the shell out
 of other profiles' too.
 

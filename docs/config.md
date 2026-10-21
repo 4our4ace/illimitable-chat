@@ -45,11 +45,25 @@ variables:
 | `ILLI_CLAUDE`  | the `claude` program the `claude-code` vendor runs    |
 | `ILLI_INSTALL`, `ILLI_SOURCE` | where the installer puts illi; `1`: build from the source |
 
-Your chat
----------
+Your chats
+----------
 
-The chat is in `~/.illi/chat`, every message kept; days over a month old
-are gzipped. Back it up.
+Each project has its own chat: a git repo's, by its top folder (a copy
+elsewhere, or the repo moved, is another project), and home, for illi
+started outside any repo. They are all in `~/.illi/chat`, every message
+kept: the messages, their summaries and the agents' logs in one SQLite
+file, `memory.sqlite`, the images beside it. A crash never leaves half a
+write. Back it up: copy the folder while illi is closed, or export the
+profile (`/profile`, Ctrl+E), which copies the chats whole while illi
+runs. `/projects` lists them and forgets one: its messages are
+overwritten on disk, not just unlinked. A chat from before projects is
+read in once as home, its old files kept in `before-sqlite/`.
+
+A project's chat runs in one illi. Started in a second terminal in the
+same project, illi joins it as another screen: the same chat, either
+one typing, asking or answering. The tools work in the first one's
+folder; its agents and MCP servers serve both. Quit the first, and the
+second takes the chat over on its own.
 
 What else illi keeps in `~/.illi`:
 
@@ -60,7 +74,7 @@ What else illi keeps in `~/.illi`:
 | `used.json`     | how often you ran each command: among those a `/word` matches alike, the most used come first |
 | `profile`       | the profile used last                                 |
 | `chat/todo.json`| illi's to-do list (each profile's own)                |
-| `lock`          | held while a profile's chat is open                   |
+| `locks/`        | a lock per project, held while its chat is open (by the system: a crash never leaves one held), and the socket a second terminal joins it by |
 | `illi.log`      | what went wrong (each profile's own)                  |
 
 `/export` writes `./illi-memory.json`, `/tree` `./illi-tree.html`.
@@ -70,6 +84,7 @@ Troubleshooting
 
 - Something went wrong: illi logs it in its profile's folder,
   `~/.illi/illi.log` (another profile's: `~/.illi/profiles/<name>/illi.log`).
-- "illi is already open in another terminal": a profile's chat runs in
-  one illi at a time. Quit it there (Ctrl+D), or start another profile:
-  `ILLI_PROFILE=<name> illi`.
+- "<project> is open in another terminal, but it is another version"
+  (or "it doesn't answer"): the illi there can't take a second screen,
+  as after an update. Quit illi there (Ctrl+D), then start it here
+  again.

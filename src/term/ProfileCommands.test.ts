@@ -99,7 +99,7 @@ test("the new row asks a name, a reason keeping the box open, then what comes al
   expect(t.choose.about[1]).toBe("this chat moves there; default starts empty");
 });
 
-test("Ctrl+R renames another profile, its old name to start from; Delete then deletes it, asked first", () => {
+test("Ctrl+R renames another profile, its old name to start from; Delete then deletes it, asked first", async () => {
   const t = term();
   term_profile(t, "");
   t.choose.keys(0, "Ctrl+R");
@@ -108,6 +108,7 @@ test("Ctrl+R renames another profile, its old name to start from; Delete then de
   expect([t.choose.title, t.choose.find.text]).toEqual(["Rename profile home", "home"]);
   expect(t.choose.ask.done("default")).toContain("illi's own folder");
   expect(t.choose.ask.done("house")).toBeNull();
+  await noted(t, "Renamed");
   expect([note(t), fs.existsSync(DIR + "/profiles/house")]).toEqual(["Renamed profile home to house.", true]);
   term_profile(t, "");
   t.choose.keys(1, "Delete");
@@ -116,5 +117,6 @@ test("Ctrl+R renames another profile, its old name to start from; Delete then de
   term_profile(t, "");
   t.choose.keys(1, "Delete");
   t.choose.pick(1);
+  await noted(t, "Deleted");
   expect([note(t), fs.existsSync(DIR + "/profiles/house")]).toEqual(["Deleted profile house.", false]);
 });

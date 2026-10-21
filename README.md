@@ -25,6 +25,12 @@ sessions.
 
 - **One chat, forever.** Every message stays on disk, for days, weeks,
   years. You never start over or explain things again.
+- **A chat per project.** Each git repo gets its own chat, picked by the
+  folder you start illi in; outside any repo, a home chat. illi looks
+  into your other projects when you mention them, and `/projects` lists
+  them, to forget one for good. Start illi in a second terminal in the
+  same project and it joins the running chat: both screens show it, and
+  either one can type.
 - **Nothing is forgotten.** Old messages fold into a tree of summary
   lines, coarser with age, and illi can zoom any line back down to the
   exact words.

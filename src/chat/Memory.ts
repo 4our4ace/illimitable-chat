@@ -27,27 +27,21 @@
 // (AskAI.ts); few lines, as those past it are read anew (a compaction's view
 // ends at its node, then its task, both unmarked).
 //
-// Files: main/ (messages) and tree/ (nodes), JSON lines in a file per
-// day, flushed (Disk.ts); a day's file PACK days old is gzipped in its
-// place (.jsonl.gz: pack), and read whole, unpacked, as a line of it is;
-// main.index and tree.index give each line's place by slot (its bytes in
-// the file unpacked); view.json keeps the view, the chat's pick and goal,
-// written over. A message's pages are logged in one write; pages `more`
-// after the last that isn't (a crash cut the write) are not in the chat.
-// Older chats' lines may name an act (`act`, `ans`, or a line of its own
-// with no index): read as any other, the act ignored.
-// Memory holds only the view's nodes and those built above them; any
-// other line is read by its index. Images are in docs/images/ by their
-// hash; an agent's log in docs/agent/<Name>.jsonl.
+// Kept in one SQLite file, memory.sqlite (Store.ts): the messages, each
+// with the folder illi ran in, the nodes, the agents' logs, and the state
+// (the views, the chat's pick and goal...), written over. A message's
+// pages are logged in one write. Memory holds only the view's nodes and
+// those built above them; any other is read from the file. Images are in
+// docs/images/ by their hash.
 
 import * as fs from "node:fs";
-import * as zlib from "node:zlib";
 import { AskAI, type Ask, type Block, type Call, type Img, type Kind, type Say } from "../ai/AskAI.ts";
-import { clip_page, clip_pages, json_object } from "../tools/Clip.ts";
+import { clip_page, clip_pages } from "../tools/Clip.ts";
 import * as config from "../config/Config.ts";
 import { Disk } from "./Disk.ts";
 import { Pick } from "../ai/Pick.ts";
 import * as names from "./Names.ts";
+import { HOME, Store, type Place } from "./Store.ts";
 import { image_kind } from "../ui/View.ts";
 
 // Types
@@ -70,21 +64,15 @@ type View = { parts: Part[]; size: number; batch: boolean; high: number };
 // what a compaction shares with the chat's turns: all but the blocks
 export type Share = Omit<Ask, "blocks">;
 
-// a log: of messages (main) or of nodes (tree)
-type Stream = "main" | "tree";
-
-// how far a log is indexed: its last file's day (since 1970), size
-type End = [number, number];
-
-// a view in view.json
+// a view as saved
 type Kept = { parts: Array<[number, number]>; batch: boolean };
 
-// view.json: the chat's view, the compactions' (none: the chat's)
-type Saved = Kept & { seen?: Kept; main: End; tree: End; pick: object | null; goal?: string | null; work?: string[]; agent?: string | null; cut?: number; show?: number; top?: number };
+// the state: the chat's view, the compactions' (none: the chat's)
+type Saved = Kept & { seen?: Kept; pick: object | null; goal?: string | null; work?: string[]; agent?: string | null; cut?: number; show?: number; top?: number };
 
-// fds: files read lately, open, oldest first; unpacked: the gzipped
-// day files read lately, unpacked, oldest first; count: the pages logged
-// whole; pick: the chat's, as last set;
+// store: its file (Store.ts); cwd: the folder illi runs in, logged with
+// each message ("": unknown); count: the pages logged; pick: the chat's,
+// as last set;
 // goal: the user's (/goal; null: none), till met or halted (Chat.ts);
 // agent: the main agent's profile (Custom.ts; null: illi's own); work:
 // what ran, as last saved; cut: the first message a turn's call gets
@@ -97,16 +85,16 @@ type Saved = Kept & { seen?: Kept; main: End; tree: End; pick: object | null; go
 // built and of those above them, by slot; agents: their logs' lengths,
 // logs: each name's log as now (a name freed takes a new one: agent_new);
 // view: the chat's view; seen: the compactions'; ready: the nodes not
-// built whose halves are, by level, in order; ends: how far each log is
-// indexed; busy: nodes building, by slot; calls: those building's calls;
+// built whose halves are, by level, in order; busy: nodes building, by
+// slot; calls: those building's calls;
 // hold: no summary starts (a test's chat, which no model answers);
 // wait: checks run as the views change; share: what compactions share
 // with the chat's turns; made: told of each node built; stuck: told why
 // a summary's try failed, as it waits to ask again ("": one was built)
 export type Memory = {
   dir    : string;
-  fds    : Map<string, number>;
-  unpacked: Map<string, Buffer>;
+  store  : Store;
+  cwd    : string;
   count  : number;
   pick   : object | null;
   goal   : string | null;
@@ -122,7 +110,6 @@ export type Memory = {
   view   : View;
   seen   : View;
   ready  : number[][];
-  ends   : Record<Stream, End>;
   busy   : Set<number>;
   calls  : Map<Call, Part>;
   hold   : boolean;
@@ -149,19 +136,6 @@ const HIGH  = config.CONTEXT * 4;
 const LINES = HIGH / 2;
 const SEEN  = 32000;
 const BLOCK = 4;
-const SLOT  = 16;
-const DAY   = 864e5;
-
-// the files a chat keeps open to read: its two indexes and the day files
-// read lately (mostly its last days), so a chat however old holds a few
-const FDS   = 8;
-
-// a day's file this many days old is gzipped (pack), the chat's start
-// PACK_WAIT ms behind, then each DAY while it is open; the gzipped files
-// read lately kept unpacked
-const PACK      = 30;
-const PACK_WAIT = 10000;
-const UNPACKED  = 4;
 
 // Anthropic takes 32 MB a request, 20 images at full size: 20 of IMAGE
 // bytes, in base64; PIXELS, the most decoded: a larger image goes as is
@@ -179,8 +153,6 @@ const SCALE = "-".repeat(NODE);
 const WAIT = "(not summarized yet: zoom it)";
 
 const IMAGES = "/docs/images/";
-
-const AGENTS = "/docs/agent/";
 
 // an agent's name: a letter, then letters, digits, _ and -; its log's,
 // the name and a tag (one name, freed, is used again: each log its own),
@@ -213,41 +185,38 @@ of them from there too.
 
 export namespace Memory {
 
-  export function load(dir: string, share: Memory["share"]): Memory {
-    const mem: Memory = {
-      dir, fds: new Map(), unpacked: new Map(), count: 0, pick: null, goal: null, agent: null, work: [], cut: 0, show: 0, top: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), logs: new Map(), ready: [], ends: { main: [0, 0], tree: [0, 0] },
-      view: { parts: [], size: 0, batch: false, high: LINES }, seen: { parts: [], size: 0, batch: false, high: SEEN },
-      busy: new Set(), calls: new Map(), hold: false, done: false, wait: new Set(), share,
-    };
-    const saved = Memory.saved(dir);
-    mem.pick = saved?.pick ?? null;
-    mem.goal = saved?.goal ?? null;
-    mem.agent = saved?.agent ?? null;
-    mem.work = saved?.work ?? [];
-    mem.cut = saved?.cut ?? 0;
-    mem.show = Math.min(saved?.show ?? mem.cut, mem.cut);
-    mem.top = saved?.top ?? 0;
-    mem.ends.main = Memory.index(mem, "main", saved?.main ?? [0, 0]);
-    mem.ends.tree = Memory.index(mem, "tree", saved?.tree ?? [0, 0]);
-    mem.count = fs.statSync(dir + "/main.index").size / SLOT;
-    while (Memory.message(mem, mem.count - 1)?.more) {
-      mem.count -= 1;
-    }
-    Memory.open(mem, mem.view, saved);
-    Memory.open(mem, mem.seen, saved?.seen ?? saved);
+  // the chat of the project at `place` (none: home)
+  export function load(dir: string, share: Memory["share"], place: Place = HOME): Memory {
+    const mem = Memory.read(dir, Store.open(dir, place), share, false);
     Memory.roots(mem.count).flatMap((part) => Memory.todo(mem, part)).forEach((part) => Memory.ready(mem, part, true));
     Memory.fit(mem);
     Memory.save(mem);
-    const pack = () => void Memory.pack(mem).catch((err) => console.error("memory: packing old days failed: " + err.message));
-    const daily = setInterval(() => (mem.done ? clearInterval(daily) : pack()), DAY);
-    setTimeout(pack, PACK_WAIT).unref();
-    daily.unref();
     return mem;
   }
 
-  // view.json; null: none, or unreadable
-  export function saved(dir: string): Saved | null {
-    return json_object(dir + "/view.json");
+  // a store's chat as saved; alone: to read while another illi runs it
+  // (Remote.ts), never saved, nothing built
+  export function read(dir: string, store: Store, share: Memory["share"], alone: boolean): Memory {
+    const mem: Memory = {
+      dir, store, cwd: "", count: Store.count(store), pick: null, goal: null, agent: null, work: [], cut: 0, show: 0, top: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), logs: new Map(), ready: [],
+      view: { parts: [], size: 0, batch: false, high: LINES }, seen: { parts: [], size: 0, batch: false, high: SEEN },
+      busy: new Set(), calls: new Map(), hold: alone, done: alone, wait: new Set(), share,
+    };
+    // a field of another shape than illi writes (an old file's): as if
+    // not saved
+    const saved = Store.state(store) as Saved | null;
+    const index = (v: unknown, or: number) => (Number.isInteger(v) && (v as number) >= 0 ? (v as number) : or);
+    const kept  = (k: any): Kept | null => (Array.isArray(k?.parts) && k.parts.every((p: unknown) => Array.isArray(p) && p.length === 2 && p.every(Number.isInteger)) ? k : null);
+    mem.pick = saved?.pick !== null && typeof saved?.pick === "object" ? saved.pick : null;
+    mem.goal = typeof saved?.goal === "string" ? saved.goal : null;
+    mem.agent = typeof saved?.agent === "string" ? saved.agent : null;
+    mem.work = Array.isArray(saved?.work) ? saved.work : [];
+    mem.cut = Math.min(index(saved?.cut, 0), mem.count);
+    mem.show = Math.min(index(saved?.show, mem.cut), mem.cut);
+    mem.top = index(saved?.top, 0);
+    Memory.open(mem, mem.view, kept(saved));
+    Memory.open(mem, mem.seen, kept(saved?.seen) ?? kept(saved));
+    return mem;
   }
 
   // a view as kept (none: the highest nodes built)
@@ -258,155 +227,28 @@ export namespace Memory {
     view.batch = kept?.batch ?? false;
   }
 
-  // written whole, then moved in place; flushed soon (Disk.ts)
+  // another chat of the same file, to read (zoom, date, images, an
+  // agent's log): no view, nothing built, saved or stopped
+  export function glance(mem: Memory, project: number, chat: number): Memory {
+    const store = Store.as(mem.store, project, chat);
+    return {
+      ...mem, store, count: Store.count(store), nodes: new Map(), agents: new Map(), logs: new Map(), ready: [], busy: new Set(), calls: new Map(), hold: true, done: true, wait: new Set(),
+      view: { parts: [], size: 0, batch: false, high: LINES }, seen: { parts: [], size: 0, batch: false, high: SEEN },
+    };
+  }
+
+  // the state, written over (none once the chat is stopped: its file is
+  // closed)
   export function save(mem: Memory): void {
-    const file = mem.dir + "/view.json";
+    if (mem.done) {
+      return;
+    }
     const [chat, seen] = [mem.view, mem.seen].map((view): Kept => ({ parts: view.parts.map((part) => [part.l, part.i]), batch: view.batch }));
-    fs.writeFileSync(file + ".new", JSON.stringify({ ...chat, seen, pick: mem.pick, goal: mem.goal, agent: mem.agent, work: mem.work, cut: mem.cut, show: mem.show, top: mem.top, ...mem.ends }));
-    fs.renameSync(file + ".new", file);
-    Disk.wrote(file);
-  }
-
-  // indexes the log's lines past `from` (none, or no index: all, in an
-  // index made anew); answers how far
-  export function index(mem: Memory, stream: Stream, from: End): End {
-    const file = mem.dir + "/" + stream + ".index";
-    let end: End = fs.existsSync(file) ? from : [0, 0];
-    fs.mkdirSync(mem.dir + "/" + stream, { recursive: true });
-    const fd = fs.openSync(file, end[0] === 0 ? "w+" : "r+");
-    const names = fs.readdirSync(mem.dir + "/" + stream).filter((f) => /^\d{4}-\d{2}-\d{2}\.jsonl(\.gz)?$/.test(f));
-    const days = [...new Set(names.map((f) => Date.parse(f.slice(0, 10)) / DAY))];
-    try {
-      for (const day of days.filter((day) => day >= end[0]).sort((a, b) => a - b)) {
-        end = [day, Memory.scan(mem, stream, day, day === end[0] ? end[1] : 0, fd)];
-      }
-    } finally {
-      fs.closeSync(fd);
-    }
-    return end;
-  }
-
-  // indexes, into fd, the lines of a day's file from byte `at` (gzipped:
-  // of it unpacked); answers the file's end. A line a crash cut short is
-  // skipped (a file gzipped has none)
-  export function scan(mem: Memory, stream: Stream, day: number, at: number, fd: number): number {
-    const file = Memory.path(mem, stream, day);
-    const data = fs.existsSync(file) ? Memory.slice(file, at, fs.statSync(file).size - at) : Memory.unpacked(mem, file).subarray(at);
-    let k = 0;
-    for (let nl = data.indexOf(10); nl >= 0; nl = data.indexOf(10, k)) {
-      const rec = Memory.parse(data.subarray(k, nl).toString("utf8"), file);
-      if (rec !== null) {
-        Memory.place(fd, stream, rec, day, at + k, nl - k);
-      }
-      k = nl + 1;
-    }
-    if (k < data.length) {
-      console.error("skipped the last line of " + file + ": cut short");
-      fs.appendFileSync(file, "\n");
-      return at + data.length + 1;
-    }
-    return at + k;
+    Store.save(mem.store, { ...chat, seen, pick: mem.pick, goal: mem.goal, agent: mem.agent, work: mem.work, cut: mem.cut, show: mem.show, top: mem.top });
   }
 
   export function slot(l: number, i: number): number {
     return (2 * i + 1) * 2 ** l - 1;
-  }
-
-  // a record's line, in its log's index (an old act's line of its own
-  // has none)
-  export function place(fd: number, stream: Stream, rec: any, day: number, at: number, length: number): void {
-    const buf = Buffer.alloc(SLOT);
-    if (rec.i === undefined) {
-      return;
-    }
-    buf.writeDoubleLE(at, 0);
-    buf.writeUInt32LE(day, 8);
-    buf.writeUInt32LE(length, 12);
-    fs.writeSync(fd, buf, 0, SLOT, (stream === "main" ? rec.i : Memory.slot(rec.l, rec.i)) * SLOT);
-  }
-
-  // the record at a slot of a log; null: none
-  export function read(mem: Memory, stream: Stream, slot: number): any {
-    const rec = Memory.pread(Memory.fd(mem, mem.dir + "/" + stream + ".index"), slot * SLOT, SLOT);
-    const day = rec.length < SLOT ? 0 : rec.readUInt32LE(8);
-    if (day === 0) {
-      return null;
-    }
-    const line = Memory.bytes_at(mem, Memory.path(mem, stream, day), rec.readDoubleLE(0), rec.readUInt32LE(12));
-    return JSON.parse(line.toString("utf8"));
-  }
-
-  // n bytes of a day's file from byte `at`: of the file, or, gzipped, of
-  // it unpacked
-  export function bytes_at(mem: Memory, file: string, at: number, n: number): Buffer {
-    if (mem.fds.has(file) || fs.existsSync(file)) {
-      return Memory.pread(Memory.fd(mem, file), at, n);
-    }
-    return Memory.unpacked(mem, file).subarray(at, at + n);
-  }
-
-  // a gzipped day's file unpacked, kept (the UNPACKED read last)
-  export function unpacked(mem: Memory, file: string): Buffer {
-    const data = mem.unpacked.get(file) ?? zlib.gunzipSync(fs.readFileSync(file + ".gz"));
-    mem.unpacked.delete(file);
-    mem.unpacked.set(file, data);
-    for (const old of mem.unpacked.keys()) {
-      if (mem.unpacked.size <= UNPACKED) {
-        break;
-      }
-      mem.unpacked.delete(old);
-    }
-    return data;
-  }
-
-  // each day's file PACK days old or more gzipped in its place, one at a
-  // time, while the chat is open: the archive written, checked against the
-  // file and flushed before the file goes (a crash between leaves both,
-  // the file read first, packed again next time); answers how many
-  export async function pack(mem: Memory, now = Date.now()): Promise<number> {
-    const today = Date.parse(new Date(now).toLocaleDateString("sv-SE")) / DAY;
-    let n = 0;
-    for (const stream of ["main", "tree"] as Stream[]) {
-      const names = fs.readdirSync(mem.dir + "/" + stream).filter((f) => /^\d{4}-\d{2}-\d{2}\.jsonl$/.test(f)).sort();
-      for (const name of names.filter((f) => Date.parse(f.slice(0, 10)) / DAY <= today - PACK)) {
-        const file = mem.dir + "/" + stream + "/" + name;
-        const data = await fs.promises.readFile(file);
-        if (mem.done || (data.length > 0 && data[data.length - 1] !== 10)) {
-          continue;
-        }
-        const gz = await new Promise<Buffer>((ok, fail) => zlib.gzip(data, (err, out) => (err ? fail(err) : ok(out))));
-        if (!zlib.gunzipSync(gz).equals(data)) {
-          throw new Error(file + " won't gzip back to itself");
-        }
-        await fs.promises.writeFile(file + ".gz.new", gz);
-        await fs.promises.rename(file + ".gz.new", file + ".gz");
-        await Disk.wrote(file + ".gz");
-        const fd = mem.fds.get(file);
-        if (fd !== undefined) {
-          fs.closeSync(fd);
-          mem.fds.delete(file);
-        }
-        await fs.promises.unlink(file);
-        n += 1;
-      }
-    }
-    return n;
-  }
-
-  // a file of the chat to read, kept open (the FDS read last) while the
-  // chat is in memory
-  export function fd(mem: Memory, file: string): number {
-    const fd = mem.fds.get(file) ?? fs.openSync(file, "r");
-    mem.fds.delete(file);
-    mem.fds.set(file, fd);
-    for (const [old, gone] of mem.fds) {
-      if (mem.fds.size <= FDS) {
-        break;
-      }
-      fs.closeSync(gone);
-      mem.fds.delete(old);
-    }
-    return fd;
   }
 
   // up to n bytes of an open file, from byte `at`
@@ -422,66 +264,6 @@ export namespace Memory {
       return Memory.pread(fd, at, n);
     } finally {
       fs.closeSync(fd);
-    }
-  }
-
-  export function path(mem: Memory, stream: Stream, day: number): string {
-    return mem.dir + "/" + stream + "/" + new Date(day * DAY).toISOString().slice(0, 10) + ".jsonl";
-  }
-
-  export function file(file: string): any[] {
-    const data = fs.readFileSync(file, "utf8");
-    if (data !== "" && !data.endsWith("\n")) {
-      fs.appendFileSync(file, "\n");
-    }
-    return data.split("\n").flatMap((line) => Memory.parse(line, file) ?? []);
-  }
-
-  // null: not JSON
-  export function parse(line: string, file: string): any {
-    try {
-      return JSON.parse(line);
-    } catch {
-      if (line !== "") {
-        console.error("skipped a line of " + file + ": not JSON");
-      }
-      return null;
-    }
-  }
-
-  // appended to the file of the local date and synced, then indexed
-  export function log(mem: Memory, stream: Stream, recs: object[]): void {
-    const day = Date.parse(new Date().toLocaleDateString("sv-SE")) / DAY;
-    const lines = recs.map((rec) => JSON.stringify(rec));
-    const file = Memory.path(mem, stream, day);
-    // a day gzipped written to again (the clock set back): unpacked first,
-    // the file read before the archive
-    if (!fs.existsSync(file) && fs.existsSync(file + ".gz")) {
-      fs.writeFileSync(file, Memory.unpacked(mem, file));
-    }
-    let at = Memory.append(file, lines);
-    const fd = fs.openSync(mem.dir + "/" + stream + ".index", "r+");
-    try {
-      for (const [k, line] of lines.entries()) {
-        Memory.place(fd, stream, recs[k], day, at, Memory.bytes(line));
-        at += Memory.bytes(line) + 1;
-      }
-    } finally {
-      fs.closeSync(fd);
-    }
-    mem.ends[stream] = [day, at];
-  }
-
-  // where they start; flushed soon (Disk.ts)
-  export function append(file: string, lines: string[]): number {
-    const fd = fs.openSync(file, "a");
-    try {
-      const at = fs.fstatSync(fd).size;
-      fs.writeSync(fd, lines.map((line) => line + "\n").join(""));
-      return at;
-    } finally {
-      fs.closeSync(fd);
-      Disk.wrote(file);
     }
   }
 
@@ -503,15 +285,15 @@ export namespace Memory {
     return root.kind + ": " + root.text + pics.join("");
   }
 
-  // message i, from its file; null: none
+  // message i, from the file; null: none
   export function message(mem: Memory, i: number): Root | null {
-    return Number.isInteger(i) && i >= 0 && i < mem.count ? Memory.read(mem, "main", i) : null;
+    return Number.isInteger(i) && i >= 0 && i < mem.count ? Store.msg(mem.store, i) : null;
   }
 
   // the messages' pages logged, in one write
   export function push(mem: Memory, msgs: Msg[]): Root[] {
     const roots = msgs.flatMap(Memory.pages).map((msg, k) => Memory.root(mem.count + k, msg));
-    Memory.log(mem, "main", roots);
+    Store.push(mem.store, roots, mem.cwd);
     mem.count += roots.length;
     roots.forEach(({ i }) => Memory.ready(mem, { l: 0, i }, true));
     Memory.fit(mem, true);
@@ -578,12 +360,7 @@ export namespace Memory {
 
   // the run, as a number: the latest message the user sent (-1: none)
   export function run(mem: Memory): number {
-    for (let i = mem.count - 1; i >= 0; i--) {
-      if (Memory.message(mem, i)!.kind === "user") {
-        return i;
-      }
-    }
-    return -1;
+    return Store.last(mem.store, "user", mem.count);
   }
 
   // where /compact has the chat go whole from (its rule of thumb): the
@@ -708,10 +485,9 @@ export namespace Memory {
     return mem.nodes.has(Memory.slot(l, i));
   }
 
-  // node (l,i)'s text, kept or from its file; null: not built
+  // node (l,i)'s text, kept or from the file; null: not built
   export function node(mem: Memory, part: Part): string | null {
-    const slot = Memory.slot(part.l, part.i);
-    return mem.nodes.get(slot) ?? Memory.read(mem, "tree", slot)?.text ?? null;
+    return mem.nodes.get(Memory.slot(part.l, part.i)) ?? Store.node(mem.store, part.i * 2 ** part.l, 2 ** part.l);
   }
 
   // the tree's roots: a node per power of two in the count, largest first
@@ -846,8 +622,7 @@ export namespace Memory {
   export function stop(mem: Memory): void {
     mem.done = true;
     mem.calls.forEach((_, call) => call.stop());
-    mem.fds.forEach((fd) => fs.closeSync(fd));
-    mem.fds.clear();
+    Store.close(mem.store);
   }
 
   // node (l,i)'s summary: its view to the node and its task, asked till
@@ -901,7 +676,7 @@ export namespace Memory {
 
   // nodes built: logged in one write, kept
   export function store(mem: Memory, parts: Array<Part & { text: string }>): void {
-    Memory.log(mem, "tree", parts.map(({ l, i, text }) => ({ l, i, text, size: Memory.bytes(text) })));
+    Store.nodes(mem.store, parts.map(({ l, i, text }) => ({ first: i * 2 ** l, n: 2 ** l, text })));
     for (const { l, i, text } of parts) {
       Memory.ready(mem, { l, i }, false);
       mem.nodes.set(Memory.slot(l, i), text);
@@ -1194,14 +969,15 @@ ${Memory.cut(line)}| ← LIMIT`;
     }
   }
 
-  // /export: the messages, the summaries, the agents' logs, then every
-  // image, each its base64, read a PIECE at a time
+  // /export: the chat's messages, summaries and agents' logs, then each
+  // image its messages name, its base64 read a PIECE at a time
   export function* dump(mem: Memory): Generator<string> {
-    const ls = (sub: string) => (fs.existsSync(mem.dir + sub) ? fs.readdirSync(mem.dir + sub).sort() : []);
+    const pics = new Set<string>();
     let sep = "\n";
     yield '{"messages": [';
     for (let i = 0; i < mem.count; i++) {
       const { kind, text, date, images, more } = Memory.message(mem, i)!;
+      images?.forEach((name) => pics.add(name));
       yield (i === 0 ? "\n" : ",\n") + JSON.stringify({ id: i, kind, text, date, images, more });
     }
     yield '],\n"summaries": [';
@@ -1213,18 +989,14 @@ ${Memory.cut(line)}| ← LIMIT`;
     }
     yield '],\n"agents": {';
     sep = "\n";
-    for (const name of ls(AGENTS).map((file) => file.replace(/\.jsonl$/, ""))) {
-      const log = Memory.agent(mem, name);
-      if (log === null) {
-        continue;
-      }
-      const entries = log.map(({ i, kind, text, date }) => ({ id: i, kind, text, date }));
-      yield sep + JSON.stringify(name) + ": " + JSON.stringify(entries);
+    for (const log of Store.logs(mem.store)) {
+      const entries = Store.work(mem.store, log)!.map(({ i, kind, text, date }) => ({ id: i, kind, text, date }));
+      yield sep + JSON.stringify(log) + ": " + JSON.stringify(entries);
       sep = ",\n";
     }
     yield '},\n"images": {';
     sep = "\n";
-    for (const name of ls(IMAGES)) {
+    for (const name of [...pics].sort()) {
       const file = Memory.image_file(mem, name);
       if (file === null) {
         continue;
@@ -1284,21 +1056,18 @@ h4 { margin: .8em 0 .2em; color: #888; font-weight: normal; } pre { margin: 0; w
   // never a path
   export function agent(mem: Memory, name: string): Root[] | null {
     const log  = LOG.test(name) ? (name.includes(".") ? name : Memory.agent_log(mem, name)) : null;
-    const file = mem.dir + AGENTS + log + ".jsonl";
-    return log !== null && fs.existsSync(file) ? Memory.file(file) : null;
+    const work = log === null ? null : Store.work(mem.store, log);
+    return work?.map((e) => ({ ...e, size: Memory.bytes(Memory.show({ ...e, size: 0 })) })) ?? null;
   }
 
-  // a name's log as now: the one it last took (kept), else on disk the
-  // newest so named (an old one, untagged, first); none: null
+  // a name's log as now: the one it last took (kept), else in the file
+  // the newest so named; none: null
   export function agent_log(mem: Memory, name: string): string | null {
     const known = mem.logs.get(name);
     if (known !== undefined || !AGENT.test(name)) {
       return known ?? null;
     }
-    const files = fs.existsSync(mem.dir + AGENTS) ? fs.readdirSync(mem.dir + AGENTS) : [];
-    const tags  = files.map((f) => LOG.exec(f.replace(/\.jsonl$/, ""))).filter((m) => m !== null && m[1] === name).map((m) => m![2] ?? "");
-    const tag   = tags.sort((a, b) => a.length - b.length || (a < b ? -1 : 1)).at(-1);
-    const log   = tag === undefined ? null : tag === "" ? name : name + "." + tag;
+    const log = Store.log_of(mem.store, name);
     if (log !== null) {
       mem.logs.set(name, log);
     }
@@ -1315,19 +1084,13 @@ h4 { margin: .8em 0 .2em; color: #888; font-weight: normal; } pre { margin: 0; w
     if (own === MAIN) {
       throw new Error("No agent can be named " + MAIN + ": that name is illi's own. Rename the agent's file (" + MAIN + ".md) to spawn it.");
     }
-    fs.mkdirSync(mem.dir + AGENTS, { recursive: true });
     const base = own !== null && AGENT.test(own) ? own : null;
     for (let n = 1; ; n++) {
       const name = base === null ? names.name_random() : n === 1 ? base : base + "-" + n;
       for (let k = 0; !taken(name); k++) {
         const log = name + "." + (Date.now() * 100 + k).toString(36);
-        try {
-          fs.writeFileSync(mem.dir + AGENTS + log + ".jsonl", "", { flag: "wx" });
-        } catch (err: any) {
-          if (err.code === "EEXIST") {
-            continue;
-          }
-          throw err;
+        if (!Store.log_new(mem.store, log, name)) {
+          continue;
         }
         mem.logs.set(name, log);
         mem.agents.set(name, 0);
@@ -1338,9 +1101,10 @@ h4 { margin: .8em 0 .2em; color: #888; font-weight: normal; } pre { margin: 0; w
 
   // its length read once, then counted (mem.agents)
   export function agent_push(mem: Memory, name: string, kind: Kind, text: string): number {
-    const n = mem.agents.get(name) ?? Memory.agent(mem, name)?.length ?? 0;
+    const log = Memory.agent_log(mem, name) ?? name;
+    const n = mem.agents.get(name) ?? Store.work_count(mem.store, log);
     const root = Memory.root(n, { kind, text });
-    Memory.append(mem.dir + AGENTS + (Memory.agent_log(mem, name) ?? name) + ".jsonl", [JSON.stringify(root)]);
+    Store.work_push(mem.store, log, name, root);
     mem.agents.set(name, n + 1);
     return root.i;
   }

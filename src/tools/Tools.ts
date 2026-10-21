@@ -4,8 +4,10 @@
 // local port, at a URL with the chat's secret and the caller ("main", an
 // agent; a compaction has none).
 // shell, read, write and edit run here, on the user's computer, in the
-// working dir: where illi was started (each call's message names it). A
-// request dropped (its call stopped) stops its job.
+// working dir: where illi was started (each call's message names it, and
+// its project). A request dropped (its call stopped) stops its job.
+// zoom and date read the chat, or another project's (Memory.glance);
+// projects and search look across them all (Projects.ts).
 // An agent (a subagent) has a name and a log (one spawned as a user's
 // subagent: that agent's name, numbered while another so named is at
 // work or of this run, as reviewer-2; else a random one; a name freed
@@ -41,6 +43,8 @@ import { Mcp } from "./Mcp.ts";
 import { MAIN, Memory } from "../chat/Memory.ts";
 import PROMPT from "./prompt.txt" with { type: "text" };
 import { EFFORTS, Pick } from "../ai/Pick.ts";
+import { Projects } from "../chat/Projects.ts";
+import { Store } from "../chat/Store.ts";
 import type { Live, Query, Question, State, Todo } from "../ui/View.ts";
 
 export type { Live };
@@ -145,7 +149,13 @@ the images its "[image <file>]" lines name. Zoom whenever a summary
 only mentions something you need, such as what your last reply said, a
 decision, a past attempt or where a file is, before you act, guess or
 ask. date(id) gives the date and time of message id. zoom("Name") gives
-an agent's whole chat.`;
+an agent's whole chat.
+
+Each project has its own chat: the git repo illi runs in, or home outside
+any repo; this one is named at the start of each message. projects()
+lists them all; search(words) finds summary lines holding the words,
+with project in that project's chat, or in all ("all"); zoom and date
+take a project too.`;
 
 // an agent's log starts with a note of what it is: SUB_NOTE, the user's
 // agent it runs as, and its effort if not the configured one
@@ -174,18 +184,20 @@ const HOSTED: Array<[string | RegExp, string]> = [
 // by the user at illi's screen; illi's own tools that Claude Code loads
 // up front (the user's MCP servers' wait for its tool search)
 const APPROVE: Spec = spec("approve", "Claude Code's permission prompt, answered by the user at illi's screen. Not a tool to call yourself.", { tool_name: STR, input: { type: "object" }, tool_use_id: STR }, ["tool_name", "input"]);
-const UPFRONT = new Set(["zoom", "date", "spawn", "tell", "todo", "ask"]);
+const UPFRONT = new Set(["zoom", "date", "projects", "search", "spawn", "tell", "todo", "ask"]);
 
-const HOSTED_TOOLS = `illi's own tools (zoom, date, todo, spawn, tell, ask, skill and the user's
-MCP servers in illi) come from illi, as its MCP server's (mcp__illi__):
+const HOSTED_TOOLS = `illi's own tools (zoom, date, projects, search, todo, spawn, tell, ask, skill
+and the user's MCP servers in illi) come from illi, as its MCP server's (mcp__illi__):
 keep your to-do list with illi's todo, which the user sees beside the
 chat.`;
 
 // the tools of everyone (OWN), the main agent's (boss), and those that run
 // on this computer (Machine.ts's TOOLS)
 const OWN: Spec[] = [
-  spec("zoom", "Open the line id+n of the view into the two lines of n/2 under it; n = 1 gives the message whole. With an agent's name as id, give that agent's whole chat. A long text comes in pages from character at, saying where to go on.", { id: { type: ["integer", "string"] }, n: INT, at: INT }, ["id"]),
-  spec("date", "The date and time of message id.", { id: INT }, ["id"]),
+  spec("zoom", "Open the line id+n of the view into the two lines of n/2 under it; n = 1 gives the message whole. With an agent's name as id, give that agent's whole chat. A long text comes in pages from character at, saying where to go on. With project (its name, from projects), the line, message or agent of that project's chat.", { id: { type: ["integer", "string"] }, n: INT, at: INT, project: STR }, ["id"]),
+  spec("date", "The date and time of message id; with project, of that project's chat.", { id: INT, project: STR }, ["id"]),
+  spec("projects", "The user's projects, each with a chat of its own (a git repo illi ran in, or home: outside any repo), the one used last first: its folder, its first and last day, its messages, its latest summary line. Look here first when the user means work that isn't in your view.", {}, []),
+  spec("search", "Find summary lines holding all the words (else any of them), the best first, as \"project id+n|text\": in this project's chat; with project (its name, from projects), in that one's; with project \"all\", in every one. Zoom a line with its project.", { words: STR, project: STR }, ["words"]),
 ];
 const SPAWN = "Start one subagent per task, in parallel, and return their names at once. Each one's report reaches you as a message \"[Name] report\" when it finishes. A subagent sees the view and the user's instructions, but knows what you want only from its task.";
 const EFFORT = { type: "string", enum: EFFORTS, description: "How hard they think. Leave it out to use their agent's effort (or, with none, yours); set it only to override that." };
@@ -299,9 +311,22 @@ export namespace Tools {
     return HOSTED.reduce((text, [from, to]) => text.replace(from, to), head) + "\n\n" + HOSTED_TOOLS;
   }
 
-  // the working dir and the computer it is on
+  // the working dir and the computer it is on, the project as kept
   export function here(tools: Tools): Block {
-    return { text: "Working dir: " + tools.cwd + " on " + os.hostname() + " (" + process.platform + ")\n\n", mark: false };
+    const place = Store.named(tools.mem.store);
+    const project = place.path === "" ? "home (outside any git repo)" : place.name;
+    return { text: "Working dir: " + tools.cwd + " on " + os.hostname() + " (" + process.platform + "), project " + project + "\n\n", mark: false };
+  }
+
+  // the chat a tool reads: this one, or a project's by its name (a model
+  // got from projects); a string: why none
+  export function chat_of(mem: Memory, project: unknown): Memory | string {
+    const name = project === undefined || project === null ? "" : String(project);
+    const found = name === "" ? null : Store.project(mem.store, name);
+    if (name === "" || found?.chat === mem.store.chat) {
+      return mem;
+    }
+    return found === null ? "No project " + name + ": projects lists them." : Memory.glance(mem, found.project, found.chat);
   }
 
   // a skill loaded: its folder, its instructions, the other files in its
@@ -449,14 +474,25 @@ export namespace Tools {
         const id = String(args.id);
         const n = Number(args.n ?? 1);
         const at = Number(args.at ?? 0);
-        if (/^[A-Za-z]/.test(id)) {
-          return { text: clip_page(Memory.agent_show(mem, id), at), fail: false };
+        const of = Tools.chat_of(mem, args.project);
+        if (typeof of === "string") {
+          return { text: of, fail: true };
         }
-        const imgs = n === 1 && at === 0 ? Memory.images(mem, Number(id)) : [];
-        return { text: Memory.zoom(mem, Number(id), n, at), fail: false, imgs };
+        if (/^[A-Za-z]/.test(id)) {
+          return { text: clip_page(Memory.agent_show(of, id), at), fail: false };
+        }
+        const imgs = n === 1 && at === 0 ? Memory.images(of, Number(id)) : [];
+        return { text: Memory.zoom(of, Number(id), n, at), fail: false, imgs };
       }
       case "date": {
-        return { text: Memory.date(mem, Number(args.id)), fail: false };
+        const of = Tools.chat_of(mem, args.project);
+        return typeof of === "string" ? { text: of, fail: true } : { text: Memory.date(of, Number(args.id)), fail: false };
+      }
+      case "projects": {
+        return { text: Projects.table(mem.store), fail: false };
+      }
+      case "search": {
+        return { text: Projects.search(mem.store, String(args.words ?? ""), args.project === undefined ? "" : String(args.project)), fail: false };
       }
       case "spawn": {
         const effort = args.effort === undefined ? null : String(args.effort);

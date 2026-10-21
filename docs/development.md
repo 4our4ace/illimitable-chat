@@ -4,7 +4,8 @@ Development
     src/main.ts    the illi command
     src/term/      the terminal app: keys, selection, commands, side panel
     src/ui/        the chat's view, markdown, replies, diagrams, the screen
-    src/chat/      the chat, its memory tree (Memory.ts), the disk
+    src/chat/      the chat, its memory tree (Memory.ts), its SQLite file (Store.ts),
+                   projects (Projects.ts), a second terminal's view (Remote.ts), the disk
     src/ai/        model vendors, the agent loop, picks, token usage
     src/tools/     shell and files, MCP servers, the prompts
     src/config/    settings, profiles, your agents, commands and skills

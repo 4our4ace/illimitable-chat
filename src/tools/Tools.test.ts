@@ -7,7 +7,8 @@
 // empty one clears it; a restart reads it back. What the views are told
 // of the calls: the input the main agent's last request read. A caller in
 // Claude Code gets only the tools it lacks (?lean), and prompts that say
-// it works inside illi, the project's CLAUDE.md left to Claude Code.
+// it works inside illi, the project's CLAUDE.md left to Claude Code. The
+// projects: their table, a search across them, a zoom into another's chat.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -19,6 +20,8 @@ process.env.ILLI_DIR = DIR;
 const { AskAI } = await import("../ai/AskAI.ts");
 const { Chat } = await import("../chat/Chat.ts");
 const { MASTER, SUB, Tools } = await import("./Tools.ts");
+const { Projects } = await import("../chat/Projects.ts");
+const { Store } = await import("../chat/Store.ts");
 const View = await import("../ui/View.ts");
 
 const chat = Chat.open(process.cwd());
@@ -96,7 +99,7 @@ test("a caller in Claude Code gets only the tools it lacks, served at ?lean; its
   expect(names(true)).toContain("approve");
   expect(names(false)).not.toContain("approve");
   const upfront = listed.filter((t: any) => t._meta?.["anthropic/alwaysLoad"] === true).map((t: any) => t.name);
-  expect(upfront.sort()).toEqual(["ask", "date", "spawn", "tell", "todo", "zoom"]);
+  expect(upfront.sort()).toEqual(["ask", "date", "projects", "search", "spawn", "tell", "todo", "zoom"]);
   const hosted = Tools.hosted(MASTER);
   expect(hosted).toStartWith("Here you work inside illi (short for illimitable)");
   expect(hosted).not.toContain("You are illi");
@@ -183,6 +186,27 @@ test("illi's own questions (ask): the main agent's; each checked; answered as th
   v.ws!.close();
   await until(() => chat.socks.size === 0);
   expect((await ask([{ question: "Which database?", options }])).text).toBe("No one is at illi's screen to answer: decide yourself, or ask in your reply.");
+});
+
+test("projects: the table, this chat's marked; a search in this project, another or all; zoom and date in another project's chat; each call names the project", async () => {
+  const here  = Projects.place(process.cwd()).name;
+  const other = Store.open(DIR + "/chat", { key: "git:/work/site", name: "site-7q2m0d", path: "/work/site" });
+  const date  = "2026-10-01T10:00:00.000Z";
+  Store.push(other, [{ i: 0, kind: "user", text: "the waveform on the landing page", date, size: 38 }], "/work/site");
+  Store.nodes(other, [{ first: 0, n: 1, text: "user: the waveform on the landing page" }]);
+  const call = (name: string, args: object) => Tools.call(chat.tools, "main", name, args, new AbortController().signal);
+  const table = (await call("projects", {})).text;
+  expect(table).toContain(here + " (this chat's) · " + process.cwd());
+  expect(table).toContain("site-7q2m0d · /work/site · 2026-10-01 · 1 message\n  lately: user: the waveform on the landing page");
+  expect((await call("search", { words: "waveform" })).text).toBe("No summary line holds that word in this project.");
+  expect((await call("search", { words: "landing waveform", project: "all" })).text).toBe("site-7q2m0d 0+1|user: the waveform on the landing page");
+  expect((await call("search", { words: "waveform", project: "site-7q2m0d" })).text).toStartWith("site-7q2m0d 0+1|");
+  expect((await call("zoom", { id: 0, n: 1, project: "site-7q2m0d" })).text).toBe("0+0|user: the waveform on the landing page");
+  expect((await call("date", { id: 0, project: "site-7q2m0d" })).text).toBe(new Date(date).toLocaleString("sv-SE"));
+  expect(await call("zoom", { id: 0, project: "nope" })).toEqual({ text: "No project nope: projects lists them.", fail: true });
+  expect((await call("zoom", { id: 0, n: 1, project: here })).text).toStartWith("0+0|");
+  expect(Tools.here(chat.tools).text).toContain(", project " + here + "\n");
+  Store.close(other);
 });
 
 test("what a question shows: a command, a file, a URL or a query, else the input, cut short", () => {

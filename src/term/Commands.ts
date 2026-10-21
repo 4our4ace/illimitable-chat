@@ -23,6 +23,7 @@ import * as Paint from "../ui/Paint.ts";
 import { term_palette } from "./Palette.ts";
 import { type Model, type Move, Pick } from "../ai/Pick.ts";
 import { term_profile } from "./ProfileCommands.ts";
+import { term_projects } from "./ProjectCommands.ts";
 import * as Reply from "../ui/Reply.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_set, term_settings } from "./Settings.ts";
@@ -76,8 +77,8 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/fold",             "Ctrl+F",                  "fold the chat into the fewest blocks; again: unfold", term_fold],
       ["",                  "Ctrl+Y",                  "copy illi's last reply (a drag copies the text it covers, a double click a word)", term_copy],
       ["",                  "Ctrl+O",                  "show or hide the work between replies: tools, thinking, agents' reports", term_verbose],
-      ["/export",           "",                        "save the memory as ./illi-memory.json",          term_export],
-      ["/tree",             "",                        "save the whole memory tree as ./illi-tree.html", term_tree],
+      ["/export",           "",                        "save this project's memory as ./illi-memory.json",          term_export],
+      ["/tree",             "",                        "save this project's whole memory tree as ./illi-tree.html", term_tree],
       ["",                  "Ctrl+L",                  "draw the screen again",                          term_redraw],
       ["",                  "Ctrl+Z",                  "suspend; fg brings it back",                     (t) => Screen.screen_suspend(t.scr)],
       ["/help",             "",                        "this list",                                      term_help],
@@ -108,8 +109,9 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/set <key> [value]", "",                       "change a setting (default: back to its default); no value: says what it is", term_set],
       ["/mcp",              "",                        "your MCP servers: their tools, or why one failed", term_mcp],
     ]],
-    ["Profiles", [
-      ["/profile [name]",   "",                        "switch to that profile (its own chat, on the global setup; one login for all); no name: opens a list to make, rename, export, import or delete one", term_profile],
+    ["Projects and profiles", [
+      ["/projects",         "",                        "your projects, each a git repo with its own chat (outside any: home), this one first: Enter says more, Del forgets one", term_projects],
+      ["/profile [name]",   "",                        "switch to that profile (its own chats, on the global setup; one login for all); no name: opens a list to make, rename, export, import or delete one", term_profile],
     ]],
     ...(yours.length === 0 ? [] : [["Yours", yours] as [string, Cmd[]]]),
   ];
@@ -403,9 +405,11 @@ async function term_login(t: Term): Promise<void> {
 
 // the models ChatGPT lists, learned (ChatGPT.ts models; signed in): a
 // new one offered, each one's window known; the chat tells its views
+// (one run in another terminal learns them there)
 export function term_models(t: Term): void {
-  if (config.OFFER.vendors.includes("chatgpt") && ChatGPT.signed()) {
-    void ChatGPT.models().then((fresh) => fresh !== null && Chat.change(t.chat));
+  const chat = t.chat;
+  if (chat !== null && config.OFFER.vendors.includes("chatgpt") && ChatGPT.signed()) {
+    void ChatGPT.models().then((fresh) => fresh !== null && Chat.change(chat));
   }
 }
 
@@ -565,13 +569,13 @@ function term_copy(t: Term): void {
 // the memory, as JSON
 async function term_export(t: Term): Promise<void> {
   const file = process.cwd() + "/illi-memory.json";
-  await Bun.write(file, [...Memory.dump(t.chat.mem)].join(""));
+  await Bun.write(file, [...Memory.dump(t.mem())].join(""));
   term_note(t, "Your memory is in " + config.config_home(file) + ".");
 }
 
 // the memory tree, as a page
 async function term_tree(t: Term): Promise<void> {
   const file = process.cwd() + "/illi-tree.html";
-  await Bun.write(file, [...Memory.page(t.chat.mem)].join(""));
+  await Bun.write(file, [...Memory.page(t.mem())].join(""));
   term_note(t, "The memory tree is in " + config.config_home(file) + ".");
 }

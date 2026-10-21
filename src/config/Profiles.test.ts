@@ -12,7 +12,8 @@
 // a JSON file. An export: no login, lock or log, its config stripped; an
 // import: a new profile only, its config's commands dropped, its MCP
 // servers off; an archive with a path out of its folder, or a link, is
-// refused before anything is unpacked. The chat folder a file is in, any
+// refused before anything is unpacked. An export's chat is a snapshot,
+// whole while an illi writes to it. The chat folder a file is in, any
 // profile's, through a link too.
 
 import { expect, test } from "bun:test";
@@ -142,6 +143,29 @@ test("an export: the folder but the login (one its config names in a subfolder t
   const work = TMP + "/illi-profile-work.tar.gz";
   expect(await Profiles.profile_export(ROOT, "work", work)).toBe(0);
   expect(tar(["-tzf", work]).trim()).toBe("./config.json");
+});
+
+test("an export takes the chat's memory.sqlite whole, as a snapshot, though an illi has it open and its last writes are in the WAL", async () => {
+  const { Database } = await import("bun:sqlite");
+  const root = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-snap-");
+  put(root + "/chat/docs/images/0123456789abcdef.png", "png");
+  const db = new Database(root + "/chat/memory.sqlite");
+  db.run("pragma journal_mode = wal");
+  db.run("create table msg (text text)");
+  db.run("insert into msg values ('kept')");
+  const file = TMP + "/illi-profile-snap.tar.gz";
+  try {
+    await Profiles.profile_export(root, "default", file);
+  } finally {
+    db.close();
+  }
+  const names = tar(["-tzf", file]).split("\n").filter((l) => l !== "").sort();
+  expect(names).toEqual(["./chat/", "./chat/docs/", "./chat/docs/images/", "./chat/docs/images/0123456789abcdef.png", "./chat/memory.sqlite", "./config.json"]);
+  fs.mkdirSync(TMP + "/snap");
+  tar(["-xzf", file, "-C", TMP + "/snap"]);
+  const back = new Database(TMP + "/snap/chat/memory.sqlite", { readonly: true });
+  expect(back.query("select text from msg").all()).toEqual([{ text: "kept" }]);
+  back.close();
 });
 
 test("an import: a new profile, its config's commands and files dropped, its MCP servers off", async () => {
