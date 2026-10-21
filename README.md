@@ -34,10 +34,11 @@ Install
 
     curl -fsSL https://raw.githubusercontent.com/4our4ace/illimitable-chat/main/install.sh | bash
 
-Then run `illi` in any project folder. `illi upgrade` updates it. Linux
-and macOS; on Windows, use WSL. The installer checks the release against
-its SHA256SUMS; with no release for your system (or `ILLI_SOURCE=1`) it
-builds from the source.
+Then run `illi` in any project folder. It goes in `~/.local/bin` (or
+`ILLI_INSTALL`); `illi upgrade` updates it, `illi version` says which it
+is. Linux and macOS; on Windows, use WSL. The installer checks the
+release against its SHA256SUMS; with no release for your system (or
+`ILLI_SOURCE=1`) it builds from the source.
 
 From source, with [Bun](https://bun.sh): see
 [Development](docs/development.md).
@@ -95,7 +96,7 @@ Keys and commands
 | Shift+Tab            | switch primary agent                  |
 | `/login`             | sign in with your ChatGPT plan        |
 | `/model`             | pick the model, its effort and speed  |
-| `/settings`          | change any setting below              |
+| `/settings`          | change any setting                    |
 | `/profile`           | switch, make or export a profile      |
 | `/tree`, `/export`   | the memory as a page, as JSON, written into the current folder |
 | Ctrl+O               | show tool calls and thinking          |
@@ -105,20 +106,21 @@ Keys and commands
 | PgUp/PgDn, Ctrl+End  | scroll, jump to the bottom            |
 | Ctrl+D               | quit (the next start resumes)         |
 
-`/help` lists everything. From a pipe, each line is a message:
-`echo "what changed?" | illi`.
+`/help` lists everything, as does [docs/keys.md](docs/keys.md). From a
+pipe, each line is a message: `echo "what changed?" | illi`.
 
 Docs
 ----
 
+- [Keys](docs/keys.md): every key and command, the mouse, the side panel.
 - [Providers](docs/providers.md): ChatGPT, your Claude plan through
   Claude Code, API keys, and which models do what.
 - [Customize](docs/customize.md): agents, commands, skills, MCP servers,
   theme and rules.
-- [Profiles](docs/profiles.md): separate chats on one global setup, e.g. work
-  and home.
-- [Config](docs/config.md): every setting, where your chat is kept,
-  troubleshooting.
+- [Profiles](docs/profiles.md): separate chats on one global setup, e.g.
+  work and home.
+- [Config](docs/config.md): every setting and variable, the files illi
+  keeps, troubleshooting.
 - [Development](docs/development.md) and what is [Planned](docs/planned.md).
 
 License
