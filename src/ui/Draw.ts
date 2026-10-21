@@ -14,17 +14,17 @@
 // (a pipe, a terminal that never answers), draws in the terminal's own
 // ink, its series told apart by shades (▓▒░). Each drawing is made once
 // per width and palette. A reply's colors are the same palette's
-// (draw_theme).
+// (draw_theme). Pele, the box art and Prism are loaded only as the first
+// diagram or code is drawn (Prism alone takes tens of ms), so a start
+// that shows neither never loads them.
 //
 // An agent's mark has a color of its own (draw_agent): illi's is the
 // brand's; another's, the one its file pins, else one made for it as the
 // agents are read, from its name and theirs, so it holds while they do.
 
-import { drawPele, pelePalette, type PelePalette } from "../../vendor/cellsmith/pele.ts";
+import type { PelePalette } from "../../vendor/cellsmith/pele.ts";
 import { CANVAS, PRESETS } from "../../vendor/cellsmith/presets.ts";
-import { renderMermaidAscii } from "../../vendor/cellsmith/vendor/mermaid-text.js";
-import { loadPele } from "../../vendor/cellsmith/vendor/pele.js";
-import { languages, tokenize, type PrismToken } from "../../vendor/cellsmith/vendor/prism.js";
+import type { PrismToken } from "../../vendor/cellsmith/vendor/prism.js";
 import * as Theme from "./Theme.ts";
 
 // Types
@@ -37,6 +37,11 @@ export type Cell = { text: string; fg?: string; bg?: string; bold?: boolean; inv
 // a piece of code: its text, its token's kind (Theme.SYNTAX's, a comment's;
 // "": none)
 export type Token = { text: string; kind: string };
+
+// what draws a diagram: cellsmith's drawing of Pele's layout, Pele, the
+// box art; and what reads code
+type Art   = { cells: typeof import("../../vendor/cellsmith/pele.ts"); pele: typeof import("../../vendor/cellsmith/vendor/pele.js"); box: typeof import("../../vendor/cellsmith/vendor/mermaid-text.js") };
+type Prism = typeof import("../../vendor/cellsmith/vendor/prism.js");
 
 // Constants
 // =========
@@ -81,8 +86,11 @@ const SHELL  = /(#.*)|('[^']*'?|"(?:\\.|[^"\\])*"?)|(--?\w[\w-]*)|(\|\||&&|[|;&]
 let canvas: string | null = null;
 let palette: { key: string; colors: PelePalette } | null = null;
 
+// what draws a diagram, and Prism, each loaded as it is first needed;
 // Pele, made at the first diagram (its 346 KB evaluated only then)
-let pele: ReturnType<typeof loadPele> | null = null;
+let art: Art | null = null;
+let prism: Prism | null = null;
+let pele: ReturnType<Art["pele"]["loadPele"]> | null = null;
 
 const DRAWN = new Map<string, Cell[][] | null>();
 const LIT   = new Map<string, Token[][] | null>();
@@ -108,9 +116,9 @@ export function draw_diagram(source: string, w: number): Cell[][] | null {
   }
   const { key, colors } = draw_palette();
   return draw_kept(DRAWN, w + "\0" + key + "\0" + source, () => {
-    const art = drawPele((src, opts) => (pele ??= loadPele()).render(src, opts), source, colors, w);
-    if (art !== null && art.rows.length > 0 && art.width <= w) {
-      return art.rows;
+    const drawn = draw_art().cells.drawPele((src, opts) => (pele ??= draw_art().pele.loadPele()).render(src, opts), source, colors, w);
+    if (drawn !== null && drawn.rows.length > 0 && drawn.width <= w) {
+      return drawn.rows;
     }
     const box = draw_box(source, w);
     return box === null ? null : box.split("\n").map((text) => [{ text }]);
@@ -124,7 +132,7 @@ function draw_palette(): { key: string; colors: PelePalette } {
   }
   const name = draw_name();
   const own    = Object.fromEntries(Object.entries(Theme.COLORS).filter(([, c]) => c.startsWith("#")));
-  const colors = pelePalette({ ...PRESETS[name], ...own }, canvas ?? CANVAS[name]);
+  const colors = draw_art().cells.pelePalette({ ...PRESETS[name], ...own }, canvas ?? CANVAS[name]);
   palette = { key: JSON.stringify(colors), colors };
   return palette;
 }
@@ -244,9 +252,9 @@ export function draw_dark(hex: string): boolean {
 function draw_box(source: string, w: number): string | null {
   for (const src of [source, source.replace(SIDEWAYS, "$1TD")]) {
     try {
-      const art = renderMermaidAscii(src, { colorMode: "none", paddingX: 3, paddingY: 1 }).replace(/[ \t]+$/gm, "").trimEnd();
-      if (art !== "" && art.split("\n").every((l) => Bun.stringWidth(l) <= w)) {
-        return art;
+      const box = draw_art().box.renderMermaidAscii(src, { colorMode: "none", paddingX: 3, paddingY: 1 }).replace(/[ \t]+$/gm, "").trimEnd();
+      if (box !== "" && box.split("\n").every((l) => Bun.stringWidth(l) <= w)) {
+        return box;
       }
     } catch {
       return null;
@@ -259,12 +267,23 @@ function draw_box(source: string, w: number): string | null {
 // language not known
 export function draw_code(lang: string, text: string): Token[][] | null {
   const name = lang.trim().split(/\s/)[0].toLowerCase();
-  const grammar = Object.hasOwn(languages, name) ? languages[name] : undefined;
   const shell = SHELLS.includes(name);
-  if (text.length > CODE || (!shell && (grammar === null || typeof grammar !== "object"))) {
+  const read = shell ? null : draw_prism();
+  const grammar = read !== null && Object.hasOwn(read.languages, name) ? read.languages[name] : undefined;
+  if (text.length > CODE || (read !== null && (grammar === null || typeof grammar !== "object"))) {
     return null;
   }
-  return draw_kept(LIT, name + "\0" + text, () => (shell ? draw_shell(text) : draw_lines(draw_flat(tokenize(text, grammar), ""))));
+  return draw_kept(LIT, name + "\0" + text, () => (read === null ? draw_shell(text) : draw_lines(draw_flat(read.tokenize(text, grammar), ""))));
+}
+
+// what draws a diagram, loaded as the first is drawn
+function draw_art(): Art {
+  return (art ??= { cells: require("../../vendor/cellsmith/pele.ts"), pele: require("../../vendor/cellsmith/vendor/pele.js"), box: require("../../vendor/cellsmith/vendor/mermaid-text.js") });
+}
+
+// Prism, loaded at the first code it reads
+function draw_prism(): Prism {
+  return (prism ??= require("../../vendor/cellsmith/vendor/prism.js"));
 }
 
 // Prism's tokens, flat, each its kind: its own, an alias's, else the one
