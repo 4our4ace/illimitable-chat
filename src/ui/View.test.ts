@@ -35,10 +35,10 @@ test("what runs, in words", () => {
   expect(View.view_doing(v)).toEqual({ verb: "Running shell", what: "grep -n x a.log · 2 agents at work", stop: true });
   View.view_hear(v, { $: "live", live: [] });
   View.view_hear(v, { $: "state", ...v, busy: false, wait: "", agents: ["explorer"] });
-  expect(View.view_doing(v)).toEqual({ verb: "Waiting on Explorer", what: "", stop: false });
+  expect(View.view_doing(v)).toEqual({ verb: "Waiting on explorer", what: "", stop: false });
 });
 
-// the work between the person's words and Illi's: one Act row per run,
+// the work between the person's words and illi's: one Act row per run,
 // saying what was done; open as a click or Ctrl+O says; what streams of
 // it shows only once verbose
 test("each run of work is one line saying what was done", () => {
@@ -55,7 +55,7 @@ test("each run of work is one line saying what was done", () => {
   ];
   const acts = View.view_acts(v, rows);
   expect(acts.map((r) => r.$)).toEqual(["Msg", "Act", "Msg"]);
-  expect(acts[1]).toMatchObject({ $: "Act", id: 2, open: false, text: "Ran 2 commands, read a file · thought · Explorer reported" });
+  expect(acts[1]).toMatchObject({ $: "Act", id: 2, open: false, text: "Ran 2 commands, read a file · thought · explorer reported" });
   View.view_toggle(v, 2);
   expect(View.view_acts(v, rows)[1]).toMatchObject({ open: true });
   View.view_toggle(v, 2);

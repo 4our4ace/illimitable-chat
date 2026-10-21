@@ -9,7 +9,7 @@
 // message's id (`#6840`, for /open); a tool call, its emoji and verb
 // bold; its result its own fill. The user's words
 // framed, unnamed; an agent's report framed, its name on the top edge
-// (Theme.FRAMED); Illi's words bare, drawn as cellsmith draws a reply
+// (Theme.FRAMED); illi's words bare, drawn as cellsmith draws a reply
 // (Reply.ts: its code, diagrams, tables, headings, lists and quotes, and
 // buttons that copy them). A run of work (View's Act) is one dim line,
 // ▸ what was done, or ▾ over its rows behind a dim bar. An open block
@@ -378,7 +378,7 @@ function sum_lines(id: number, n: number, head: Line, text: string, w: number): 
 // a message as its kind looks: a call filled; a result bare, its lines
 // framed as a file's (Md.md_output), the frame naming them; a person's
 // words (the user's, a report) framed in ink (the user's in blue),
-// Illi's and a note framed dim, each named on its top; thinking bare,
+// illi's and a note framed dim, each named on its top; thinking bare,
 // its name over it; all at the left, the column's width; none framed
 // nor filled without text (images alone)
 function msg_lines(kind: Kind, who: string, body: Md.Block[], w: number): Line[] {
@@ -588,9 +588,9 @@ export function rule_text(text: string, w: number): Line {
   return [Run("─".repeat(Math.max(0, w - text_width(tag) - 1)) + tag + "─", DIM)];
 }
 
-// the last line, w wide: a tab for the chat (named as the agent Illi
+// the last line, w wide: a tab for the chat (named as the agent illi
 // runs as) and each agent at work (or the shown alone: all false, the
-// side lists them), each mark in its agent's color (Illi's own: the
+// side lists them), each mark in its agent's color (illi's own: the
 // brand's; else Draw.draw_agent), the shown bold, then the profile
 // running (tabs_profile), then the pick (cut at the end; the standard
 // speed left out); with agents, the keys that move along them, if they

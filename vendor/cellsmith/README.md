@@ -3,8 +3,8 @@ cellsmith
 
 The diagram engine and markdown parser of
 [cellsmith](https://github.com/4our4ace/cellsmith) (at 3b987bd), which
-Illimitable draws replies with (Draw.ts, Reply.ts: its renderer's look,
-ported to Illimitable's lines). Copied, not edited, so they can be copied
+illimitable draws replies with (Draw.ts, Reply.ts: its renderer's look,
+ported to illimitable's lines). Copied, not edited, so they can be copied
 again when cellsmith changes:
 
 - `markdown.ts`: cellsmith's markdown parser (blocks and inline nodes:

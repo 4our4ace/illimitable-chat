@@ -1,10 +1,10 @@
 // Login test
 // ==========
-// `bun test Login.test.ts`. Illi's own ChatGPT login, against a stand-in
-// for OpenAI's auth server: opencode's is used while Illi has none; the
+// `bun test Login.test.ts`. illi's own ChatGPT login, against a stand-in
+// for OpenAI's auth server: opencode's is used while illi has none; the
 // device login gives a code and page, is polled till the person gives it
 // (no connection or a server error meanwhile only asked again), changes
-// its grant for tokens (its PKCE pair) and keeps them as Illi's own (an
+// its grant for tokens (its PKCE pair) and keeps them as illi's own (an
 // unreadable file of its own replaced), which is used from then on; logout lets it go. A renewal writes
 // back to the file it read, whatever a /login did meanwhile.
 

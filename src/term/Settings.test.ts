@@ -6,7 +6,7 @@
 // read anew; Delete puts its default back; Enter on a pick opens the
 // model picker, its choice the setting's; on one typed in, /set in the
 // input. /set checks a value first: its shape and the picks still
-// offered (a file named needn't be there). A pick set while Illi's own
+// offered (a file named needn't be there). A pick set while illi's own
 // agent is the main one is the chat's at once. /side changes its settings as /set does. Each
 // setting is in the README and the customize-illi skill.
 

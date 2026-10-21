@@ -114,7 +114,7 @@ function setting_open(t: Term, key: config.Key): void {
 
 // a setting to a value (null: its default), in config.json, and what
 // the terminal holds of it anew (the side panel, whether replies are
-// suggested; the pick, the chat's too while Illi's own agent is the main
+// suggested; the pick, the chat's too while illi's own agent is the main
 // one); true if set. One a variable sets, or that won't do, isn't: a
 // note says why
 export function setting_set(t: Term, key: config.Key, value: unknown): boolean {
@@ -143,7 +143,7 @@ export function setting_set(t: Term, key: config.Key, value: unknown): boolean {
 
 // a setting's value (now, else the one given) as shown: a pick as a
 // person reads it (Pick.shown; a role's, each); none, what holds
-// instead; a path in Illi's folder by its name, else from ~
+// instead; a path in illi's folder by its name, else from ~
 function setting_shown(key: config.Key, value?: string): string {
   const s    = config.SETTINGS[key];
   const raw  = value ?? (config.config_value(key) as unknown);

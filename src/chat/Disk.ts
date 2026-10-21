@@ -1,6 +1,6 @@
 // Disk
 // ====
-// Durability by group commit. What Illi writes under config.DIR goes at
+// Durability by group commit. What illi writes under config.DIR goes at
 // once to the OS's cache, so no chat waits on the disk; flushes run one
 // at a time, each making durable every write before it began: on Linux
 // one syncfs of the disk, as cheap for one file as for thousands, by a

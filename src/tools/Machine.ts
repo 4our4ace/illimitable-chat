@@ -7,7 +7,7 @@
 // A file changed (write over one, edit) answers as a unified diff (Diff),
 // which the view draws as one (Md.ts). Config.ts took the API keys out of
 // the environment the shells inherit. No read, write or edit reaches into
-// a chat's folder, any profile's (CHAT): Illi's own memory is zoomed, and
+// a chat's folder, any profile's (CHAT): illi's own memory is zoomed, and
 // another profile's chat is never its to touch. The shell isn't held so
 // (the prompt asks it); a sandbox would be.
 

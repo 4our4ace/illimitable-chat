@@ -65,7 +65,7 @@ import * as View from "../ui/View.ts";
 // nothing); subs:
 // the subagents of this run, whether at work (false: done, till the
 // person's next message); side: where the side panel shows and how wide
-// (config.SIDE, SIDE_WIDTH; /side); todo: whether Illi's to-do list shows
+// (config.SIDE, SIDE_WIDTH; /side); todo: whether illi's to-do list shows
 // whole there (else folded); login: the device login waiting for
 // the person (/login; null: none); areas: the parts of the screen as last
 // painted, sel: the text chosen in one (null: none), hover: the button

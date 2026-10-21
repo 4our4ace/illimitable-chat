@@ -10,7 +10,7 @@
 // variable's: the working folder). Each key set is checked at the start
 // (config_check), so one that won't do stops illi with a word on why;
 // a pick set that isn't offered here (a model or vendor gone) gives way
-// to its default instead, told (NOTES). Illi's own pick defaults to the
+// to its default instead, told (NOTES). illi's own pick defaults to the
 // first vendor offered's (config_def). The providers stay apart: a
 // chat's summaries and subagents run on its pick's vendor, each
 // vendor's own (`compactor`, `agents`: a pick per vendor), never
@@ -92,7 +92,7 @@ export const OFFER: Offer = {
   models  : config_list(config_value("models") || LABELS.join()),
 };
 
-// Illi's own pick on each vendor, by default: the first vendor
+// illi's own pick on each vendor, by default: the first vendor
 // offered's (config_def); the compactor each vendor's own, while
 // `compactor` names none for it
 const DEFS: Record<Vendor, { pick: string; compactor: string }> = {
@@ -126,7 +126,7 @@ export let SUGGEST    = true;
 export let SIDE       = "";
 export let SIDE_WIDTH = "";
 
-// Illi's own pick (a new chat's, and the chat's again after an agent);
+// illi's own pick (a new chat's, and the chat's again after an agent);
 // the picks each role names, by vendor (config_role)
 export let PICK!     : Pick;
 let ROLES: Record<Role, Partial<Record<Vendor, Pick>>> = { agents: {}, compactor: {} };
@@ -152,7 +152,7 @@ export const CONTEXT    = Number(CONTEXT_SET) > 0 ? Number(CONTEXT_SET) : AUTO_M
 export const JOBS       = Number(config_value("jobs"));
 
 // the ChatGPT login chatgpt runs on (ChatGPT.ts): the file `login` names,
-// else Illi's own (/login makes it; the root's, so every profile's) or,
+// else illi's own (/login makes it; the root's, so every profile's) or,
 // while there is none, opencode's (`opencode auth login`)
 export const LOGIN_SET      = config_value("login") === "" ? null : config_place("login");
 export const OWN_LOGIN      = ROOT + "/login.json";
@@ -185,7 +185,7 @@ function config_raw(key: Key): unknown {
   return GONE.has(key) ? undefined : process.env["ILLI_" + key.toUpperCase()] ?? FILE[key];
 }
 
-// a key's default: for Illi's own pick, the first vendor's (DEFS) that
+// a key's default: for illi's own pick, the first vendor's (DEFS) that
 // offer has, else its first model at medium effort (none offered:
 // SETTINGS'); for the rest, SETTINGS'
 export function config_def(key: Key, offer?: Offer): string {

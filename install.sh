@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Illimitable's installer: `illi`, one file, into ~/.local/bin (or
+# illimitable's installer: `illi`, one file, into ~/.local/bin (or
 # $ILLI_INSTALL). The latest release's binary for this system, checked
 # against the release's SHA256SUMS; with none for it (or ILLI_SOURCE=1),
 # built from the source with Bun (installed first if missing). A download
@@ -68,9 +68,9 @@ if [ -z "$build" ]; then
     *)   die "GitHub won't give SHA256SUMS now (HTTP $code): try again later" ;;
   esac
   mv "$tmp/$asset" "$tmp/illi"
-  say "Downloaded the latest release of Illimitable."
+  say "Downloaded the latest release of illimitable."
 else
-  say "Building Illimitable from its source ($build)."
+  say "Building illimitable from its source ($build)."
   command -v git >/dev/null || die "git is needed to build from the source"
   if ! command -v bun >/dev/null; then
     say "Installing Bun first (bun.sh)."

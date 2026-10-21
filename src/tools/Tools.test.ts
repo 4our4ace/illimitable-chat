@@ -93,7 +93,7 @@ test("a caller in Claude Code gets only the tools it lacks, served at ?lean; its
   const res = await fetch(Tools.at(chat.tools, "main") + "?lean", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
   expect((await res.json()).result.tools.map((t: any) => t.name)).toEqual(names(true));
   const hosted = Tools.hosted(MASTER);
-  expect(hosted).toStartWith("Here you work inside illi (short for Illimitable)");
+  expect(hosted).toStartWith("Here you work inside illi (short for illimitable)");
   expect(hosted).not.toContain("You are illi");
   expect(hosted).not.toContain("Your shell, read, write and edit tools");
   expect(hosted).toContain("mcp__illi__");
