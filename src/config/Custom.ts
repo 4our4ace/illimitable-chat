@@ -28,6 +28,13 @@
 // the binary), the user's or a project's over them by name: one,
 // customize-illi, teaches it all this, so it can customize itself.
 //
+// A sticky skill (sticky: true) is one for every reply, not a task: a
+// way to write, a language. Its command turns it on and off (stick),
+// and while on, its instructions are in every turn's system prompt
+// (Tools.stuck), so no summary drops them. It is on in the `sticky`
+// setting where its file is: a global one's (or one built in) the
+// root's, so in every profile; else the profile's (Config ADDS).
+//
 //     ---
 //     description: Reviews a change for bugs, reading only
 //     mode: subagent
@@ -68,8 +75,8 @@ export type Profile = {
 export type Command = { name: string; description: string; body: string; file: string };
 
 // a skill: its name (its folder's), when to use it, its instructions, its
-// folder ("": one built into illi)
-export type Skill = { name: string; description: string; body: string; dir: string };
+// folder ("": one built into illi), whether it's sticky
+export type Skill = { name: string; description: string; body: string; dir: string; sticky: boolean };
 
 // Constants
 // =========
@@ -78,6 +85,9 @@ export type Skill = { name: string; description: string; body: string; dir: stri
 const NAME = /^[a-z0-9][a-z0-9_-]*$/i;
 
 const MODES: Mode[] = ["primary", "subagent", "all"];
+
+// a front matter's yes (sticky: true)
+const YES = /^\s*(true|yes|on)\s*$/i;
 
 // the skills illi comes with: SKILL.md files, named in their front
 // matter; {{illi}}, {{root}} and {{project}} in one are illi's folder,
@@ -144,13 +154,13 @@ export namespace Custom {
     const out = new Map<string, Skill>();
     for (const { head, body } of BUILT_IN.map(Custom.parse)) {
       const filled = body.replaceAll("{{illi}}", config.DIR).replaceAll("{{root}}", config.ROOT).replaceAll("{{project}}", path.join(cwd, ".illi"));
-      out.set(head.name.toLowerCase(), { name: head.name, description: head.description ?? "", body: filled, dir: "" });
+      out.set(head.name.toLowerCase(), { name: head.name, description: head.description ?? "", body: filled, dir: "", sticky: YES.test(head.sticky ?? "") });
     }
     for (const dir of Custom.dirs(cwd, "skills")) {
       const names = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => NAME.test(f)).sort() : [];
       for (const name of names.filter((n) => fs.existsSync(path.join(dir, n, "SKILL.md")))) {
         const { head, body } = Custom.read(path.join(dir, name, "SKILL.md"));
-        out.set(name.toLowerCase(), { name, description: head.description ?? "", body, dir: path.join(dir, name) });
+        out.set(name.toLowerCase(), { name, description: head.description ?? "", body, dir: path.join(dir, name), sticky: YES.test(head.sticky ?? "") });
       }
     }
     return [...out.values()].filter((s) => all || !config.config_off(s.name)).sort((a, b) => a.name.localeCompare(b.name));
@@ -158,6 +168,37 @@ export namespace Custom {
 
   export function skill(cwd: string, name: string): Skill | null {
     return Custom.skills(cwd).find((s) => s.name.toLowerCase() === name.toLowerCase()) ?? null;
+  }
+
+  // the sticky skills on
+  export function stuck(cwd: string): Skill[] {
+    return Custom.skills(cwd).filter((s) => s.sticky && config.config_sticky(s.name));
+  }
+
+  // whether a skill's on and off is global (the root's list): in the
+  // default profile, or a global skill's, or one built in
+  export function global(skill: Skill): boolean {
+    return config.DIR === config.ROOT || skill.dir === "" || skill.dir.startsWith(path.join(config.ROOT, "skills") + path.sep);
+  }
+
+  // a sticky skill turned on, in the list where its file is (global: the
+  // root's), or off, out of both lists; null: done, else why not (a
+  // variable sets the lists)
+  export function stick(skill: Skill, on: boolean): string | null {
+    const env  = config.config_env_set("sticky");
+    const name = skill.name.toLowerCase();
+    if (env !== null) {
+      return "sticky is set by " + env + ": unset it to turn " + skill.name + " " + (on ? "on" : "off") + " here.";
+    }
+    const home = Custom.global(skill);
+    for (const root of config.DIR === config.ROOT ? [true] : [true, false]) {
+      const was  = config.config_names("sticky", root);
+      const next = [...was.filter((n) => n !== name), ...(on && root === home ? [name] : [])];
+      if (next.join() !== was.join()) {
+        config.config_set("sticky", next.length === 0 ? null : next.join(", "), root);
+      }
+    }
+    return null;
   }
 
   export function commands(cwd: string): Command[] {

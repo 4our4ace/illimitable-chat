@@ -7,7 +7,8 @@
 // keys put back for a switch; the root as the global layer: its skills,
 // agents, commands and MCP servers beside the profile's (whose win by
 // name), each setting said to come from the profile or global, the
-// profile's `off` leaving some out. Names a profile takes. Secrets left out of
+// profile's `off` leaving some out, its lists (off, sticky) added to the
+// root's. Names a profile takes. Secrets left out of
 // a JSON file. An export: no login, lock or log, its config stripped; an
 // import: a new profile only, its config's commands dropped, its MCP
 // servers off; an archive with a path out of its folder, or a link, is
@@ -212,6 +213,21 @@ test("the root is global: a profile has its skills, agents, commands and MCP ser
   expect(Object.keys(Mcp.read())).toEqual(["docs", "off"]);
   expect([Mcp.read().docs.url, Object.keys(Mcp.read(true))]).toEqual(["https://example.com/mine", ["github", "docs", "off"]]);
   expect([config.config_from("side"), config.config_from("tps")]).toEqual(["copy", "global"]);
+});
+
+test("a profile's lists of names add to the root's: what is off or sticky globally is so in it, its own list its own", async () => {
+  const config = await import("./Config.ts");
+  config.config_set("off", "slack", true);
+  expect(config.OFF).toEqual(["slack", "adhd", "github"]);
+  expect([config.config_names("off", true), config.config_names("off", false)]).toEqual([["slack"], ["adhd", "github"]]);
+  config.config_set("off", null);
+  expect([config.OFF, config.config_from("off")]).toEqual([["slack"], "global"]);
+  config.config_set("sticky", "Notes", true);
+  expect([config.config_sticky("notes"), config.STICKY]).toEqual([true, ["notes"]]);
+  config.config_set("off", null, true);
+  config.config_set("sticky", null, true);
+  config.config_set("off", "Adhd, github");
+  expect([config.OFF, config.STICKY]).toEqual([["adhd", "github"], []]);
 });
 
 test("a profile renamed, deleted (the one used last following), or made with another's chat moved in", () => {

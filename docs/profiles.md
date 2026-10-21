@@ -38,7 +38,10 @@ what is its own:
   puts the global one back.
 - The `off` setting turns global ones off for a profile: Enter on it in
   `/settings` lists every skill, agent, command and MCP server to turn on
-  and off.
+  and off. A profile's list adds to the global one: what is off globally
+  is off in every profile.
+- A sticky skill's on and off goes with the skill: a global one's is
+  every profile's, a profile's own skill's that profile's.
 - The login, the API keys and the models list are shared.
 
 illi's memory is the running profile's chat alone: its read, write and

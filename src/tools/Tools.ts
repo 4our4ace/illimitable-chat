@@ -14,7 +14,8 @@
 // reach the chat as one "[Name]" message. One spawned as a user's
 // subagent (Custom.ts) runs on its model, with its instructions and
 // tools; so does the master, given a primary agent (Shift+Tab, /agent).
-// Beside these, the user's: their skills (one tool, skill, listing them)
+// Beside these, the user's: their skills (one tool, skill, listing them;
+// it turns a sticky one on and off too, Custom.ts)
 // and their MCP servers' tools (Mcp.ts), for the master and agents alike;
 // a listing waits for the servers still starting. The master keeps a
 // to-do list as it works (todo: the whole list each time), in the chat's
@@ -189,7 +190,11 @@ const SPAWN = "Start one subagent per task, in parallel, and return their names 
 const EFFORT = { type: "string", enum: EFFORTS, description: "How hard they think. Leave it out to use their agent's effort (or, with none, yours); set it only to override that." };
 const TELL: Spec = spec("tell", "Send a message to a subagent, by name. One at work reads it between its tool calls, and its report answers it; an idle one goes on from its chat, and its reply reaches you as a message \"[Name] reply\".", { name: STR, message: STR }, ["name", "message"]);
 
-const SKILL = "Load a skill, the user's or illi's own: instructions for a kind of task, and the folder of any files it comes with. When a task matches a skill's description below, load it before starting and follow it.";
+const SKILL = "Load a skill, the user's or illi's own: instructions for a kind of task, and the folder of any files it comes with. When a task matches a skill's description below, load it before starting and follow it. A sticky one is for every reply, not a task: when the user asks for it to last, call skill with on: true; when they ask to stop it, on: false.";
+const ON    = { type: "boolean", description: "A sticky skill's only: true turns it on for every reply from now on, false turns it off. Leave it out to load a skill for the task at hand." };
+
+// the sticky skills on, atop their section of a turn's system prompt
+const STUCK = "# Sticky skills on\n\nThe user turned these on: follow each in every reply until they turn it off, by its command (/<name>) or by asking you to stop it (then call skill with its name and on: false).";
 
 // the master's to-do list, which the user sees beside the chat: its
 // tool, its items' states, its file in the chat's folder
@@ -225,8 +230,8 @@ function rules_read(file: string): string | null {
 // the skill tool, listing the user's skills (none: no tool)
 function skill_tools(cwd: string): Spec[] {
   const skills = Custom.skills(cwd);
-  const list = skills.map((s) => "- " + s.name + (s.description === "" ? "" : ": " + s.description)).join("\n");
-  return skills.length === 0 ? [] : [spec("skill", SKILL + "\n\n" + list, { name: { type: "string", enum: skills.map((s) => s.name) } }, ["name"])];
+  const list = skills.map((s) => "- " + s.name + (s.sticky ? " (sticky)" : "") + (s.description === "" ? "" : ": " + s.description)).join("\n");
+  return skills.length === 0 ? [] : [spec("skill", SKILL + "\n\n" + list, { name: { type: "string", enum: skills.map((s) => s.name) }, on: ON }, ["name"])];
 }
 
 // the master's tools: spawn, with the user's subagents to run tasks as,
@@ -289,6 +294,13 @@ export namespace Tools {
     const all   = (fs.readdirSync(skill.dir, { recursive: true }) as string[]).filter((f) => f !== "SKILL.md" && fs.statSync(skill.dir + "/" + f).isFile()).sort();
     const files = all.length === 0 ? "" : "\n\nIts files, in its folder: " + all.slice(0, FILES).join(", ") + (all.length > FILES ? ", and " + (all.length - FILES) + " more." : ".");
     return "Skill " + skill.name + ": its SKILL.md's instructions, whole, below; its folder: " + skill.dir + "\n\n" + skill.body + files;
+  }
+
+  // the sticky skills on (Custom.stuck), as a turn's section of its
+  // system prompt: each whole, as it loads, so no summary drops it
+  export function stuck(cwd: string): string {
+    const on = Custom.stuck(cwd);
+    return on.length === 0 ? "" : "\n\n" + STUCK + on.map((s) => "\n\n" + Tools.skill(s)).join("");
   }
 
   // the master's agents at work now, and its to-do list if any, at the
@@ -447,7 +459,11 @@ export namespace Tools {
       case "skill": {
         const skill = Custom.skill(tools.cwd, String(args.name));
         const names = Custom.skills(tools.cwd).map((s) => s.name).join(", ") || "none";
-        return skill === null ? { text: "No skill " + args.name + "; the skills: " + names + ".", fail: true } : { text: Tools.skill(skill), fail: false };
+        if (skill === null || typeof args.on !== "boolean") {
+          return skill === null ? { text: "No skill " + args.name + "; the skills: " + names + ".", fail: true } : { text: Tools.skill(skill), fail: false };
+        }
+        const why = !skill.sticky ? skill.name + " isn't sticky: load it without on, for the task at hand." : who !== MAIN ? "Only illi's own turns turn a sticky skill on or off." : Custom.stick(skill, args.on);
+        return why !== null ? { text: why, fail: true } : { text: args.on ? skill.name + " is on: follow it in every reply from now on (from the next turn it is in your system prompt).\n\n" + Tools.skill(skill) : skill.name + " is off: its rules no longer apply.", fail: false };
       }
       case "todo": {
         const list = Tools.todo_check(args.items);

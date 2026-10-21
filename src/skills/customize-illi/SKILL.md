@@ -36,6 +36,23 @@ how. Long references, templates and scripts go in files beside SKILL.md,
 named in the body, to be read as needed. The user can also type /<name> to
 ask for it.
 
+A sticky skill is one for every reply, not a task: a way to write, a
+language, a tone. With `sticky: true` in its front matter, /<name> turns it
+on and off, and while on its whole text is in every turn's system prompt,
+so no summary drops it. When you install or write a skill, read it and
+suggest one way before writing:
+
+- sticky, if it reads as rules for every reply: tone, format, language,
+  "for the rest of the session", "until told to stop"
+- not sticky, if it is steps for a kind of task: make an image, review a
+  PDF, ship a release
+
+Say what sticky costs: its SKILL.md's bytes / 4 tokens in every turn
+(cached, so about a tenth of that is billed); for one over 8 KB, suggest
+trimming it first. Ask, and add `sticky: true` only on a yes. A global
+sticky skill's on and off is every profile's; a profile's own, that
+profile's.
+
 ## A command: commands/<name>.md
 
 A message the user sends by typing /<name>. The body is the message;
@@ -102,7 +119,10 @@ one:
 - rules: the rules file, RULES.md in illi's folder (else the global
   folder's) unless set; after: a shell command run after each turn
 - off: skills, agents, commands and MCP servers turned off, by name,
-  comma-separated (in a profile: global ones it doesn't use)
+  comma-separated; a profile's adds to the global list (one off globally
+  is off in every profile)
+- sticky: the sticky skills on, by name, the same way; /<name> keeps it
+  for the user
 - side: right, left or off; side_width: "25%" or columns; jobs: summaries
   built at once
 - suggest: on or off, a suggested reply after each turn

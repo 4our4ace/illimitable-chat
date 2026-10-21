@@ -6,7 +6,8 @@
 // agent the main agent (its model, instructions and tools), noted before
 // the next message, each keeping its pick; spawn's agent runs a subagent
 // as it. A skill: its folder's SKILL.md (a folded description), the
-// project's over theirs, listed by the skill tool and loaded by it.
+// project's over theirs, listed by the skill tool and loaded by it; a
+// sticky one turned on and off by it, while on in every turn's prompt.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -185,4 +186,21 @@ test("illi's own skill, customize-illi: listed first, loaded with its folders na
   put(DIR + "/skills/customize-illi/SKILL.md", "---\ndescription: mine\n---\nMine.");
   expect(Custom.skill(CWD, "customize-illi")).toMatchObject({ description: "mine", body: "Mine.", dir: DIR + "/skills/customize-illi" });
   fs.rmSync(DIR + "/skills/customize-illi", { recursive: true });
+});
+
+test("a sticky skill: listed so, turned on by the skill tool (illi's own turns only) and then in every turn's prompt, never a summary's; off again", async () => {
+  put(DIR + "/skills/terse/SKILL.md", "---\ndescription: Short replies\nsticky: true\n---\nBe terse.");
+  const call = (who: string, args: object) => Tools.call(chat.tools, who, "skill", args, new AbortController().signal);
+  expect(Tools.list(chat.tools, "main").find((t) => t.name === "skill")!.info).toContain("- terse (sticky): Short replies");
+  expect((await call("main", { name: "pdf", on: true })).text).toBe("pdf isn't sticky: load it without on, for the task at hand.");
+  expect((await call("Scout", { name: "terse", on: true })).fail).toBe(true);
+  expect(Chat.system(chat)).not.toContain("Be terse.");
+  const on = await call("main", { name: "terse", on: true });
+  expect([on.fail, on.text]).toEqual([false, expect.stringMatching(/^terse is on: follow it in every reply from now on .*\n\nSkill terse: .*\n\nBe terse\.$/s)]);
+  expect([config.STICKY, Chat.system(chat)]).toEqual([["terse"], expect.stringContaining("# Sticky skills on\n\nThe user turned these on")]);
+  expect(Chat.system(chat)).toContain("Be terse.");
+  expect(Chat.share(chat).system).not.toContain("Be terse.");
+  expect((await call("main", { name: "terse", on: false })).text).toBe("terse is off: its rules no longer apply.");
+  expect([config.STICKY, Chat.system(chat).includes("Be terse.")]).toEqual([[], false]);
+  fs.rmSync(DIR + "/skills/terse", { recursive: true });
 });

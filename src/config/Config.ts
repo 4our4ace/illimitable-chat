@@ -4,7 +4,8 @@
 // (chat/): the folder of the profile running (Profiles.ts), the ROOT
 // itself ($ILLI_DIR, default ~/.illi) for the default. The root is the
 // global layer, every profile's: a profile's config.json goes over the
-// root's, key by key; its own RULES.md and theme.json over the root's, if
+// root's, key by key (its lists of names, off and sticky, added to the
+// root's); its own RULES.md and theme.json over the root's, if
 // it has them; the ChatGPT login is the root's, shared. Each key of config.json (SETTINGS) may be set
 // as ILLI_<KEY> instead; a path may start with "~/", and a relative one
 // is taken from the folder of the config.json that names it (a
@@ -39,6 +40,10 @@ const PICKED         = profile_pick(config_path(process.env.ILLI_DIR ?? "~/.illi
 export const ROOT    = PICKED.root;
 export const PROFILE = PICKED.name;
 export const DIR     = PICKED.dir;
+
+// the settings that are lists of names: a profile's adds to the root's,
+// so what is off or on globally is so in every profile
+const ADDS = ["off", "sticky"];
 
 const PATH = DIR + "/config.json";
 let FILE: Record<string, unknown> = config_files();
@@ -78,6 +83,7 @@ const TABLE = {
   rules      : { def: config_own("RULES.md"), values: "text", now: true, what: "your rules, every project", path: true },
   after      : { def: "", values: "text", now: true, what: "a command after each turn" },
   off        : { def: "", values: "text", now: true, what: "skills, agents, commands, MCP servers turned off", none: "none" },
+  sticky     : { def: "", values: "text", now: true, what: "sticky skills on, in every turn", none: "none" },
   vendors    : { def: "chatgpt", values: "text", now: false, what: "where models come from" },
   models     : { def: "", values: "text", now: false, what: "the models offered", none: "all" },
   jobs       : { def: "8", values: ["2", "4", "8", "16", "32"], now: false, what: "summaries built at once", shape: [/^[1-9]\d*$/, "a number, 1 or more"] },
@@ -127,13 +133,26 @@ export const THEME    = config_place("theme");
 export const MCP      = config_place("mcp");
 export const MCPS     = DIR === ROOT ? [MCP] : [...new Set([ROOT + "/mcp.json", MCP])];
 
-// the skills, agents, commands and MCP servers turned off, by name, in
-// lower case (Custom.ts, Mcp.ts)
+// the skills, agents, commands and MCP servers turned off, and the sticky
+// skills on, by name, in lower case (Custom.ts, Mcp.ts); each the root's
+// list and the profile's together (ADDS)
 export let OFF: string[] = [];
+export let STICKY: string[] = [];
 
 // whether a skill, agent, command or MCP server is turned off (OFF)
 export function config_off(name: string): boolean {
   return OFF.includes(name.toLowerCase());
+}
+
+// whether a sticky skill is on (STICKY)
+export function config_sticky(name: string): boolean {
+  return STICKY.includes(name.toLowerCase());
+}
+
+// a list's own names (ADDS), in lower case: the root's config.json's
+// (root), else the running profile's
+export function config_names(key: "off" | "sticky", root: boolean): string[] {
+  return config_list(String(config_file(root ? ROOT + "/config.json" : PATH)[key] ?? "").toLowerCase()).filter((name) => name !== "");
 }
 
 // a suggested reply after each turn, Tab taking it (Chat.suggest): on,
@@ -325,7 +344,8 @@ function config_live(): void {
   const own    = config_contexts(config_value("contexts"));
   RULES       = config_place("rules");
   AFTER       = config_value("after");
-  OFF         = config_list(config_value("off").toLowerCase()).filter((name) => name !== "");
+  OFF         = [...new Set(config_list(config_value("off").toLowerCase()).filter((name) => name !== ""))];
+  STICKY      = [...new Set(config_list(config_value("sticky").toLowerCase()).filter((name) => name !== ""))];
   SUGGEST     = !OFFS.includes(String(config_value("suggest")).trim().toLowerCase());
   TPS         = !OFFS.includes(String(config_value("tps")).trim().toLowerCase());
   SIDE        = config_value("side");
@@ -368,19 +388,20 @@ function config_models(): void {
 // file's other keys kept; what changes while illi runs (config_live) is
 // read again, the rest at the next start. One that won't do (config_check)
 // throws, the file untouched
-export function config_set(key: Key, value: unknown): void {
+export function config_set(key: Key, value: unknown, root = false): void {
   const why = config_check(key, value);
   if (why !== null) {
     throw new Error(why);
   }
-  const file = fs.existsSync(PATH) ? JSON.parse(fs.readFileSync(PATH, "utf8")) : {};
+  const [dir, at] = root ? [ROOT, ROOT + "/config.json"] : [DIR, PATH];
+  const file = fs.existsSync(at) ? JSON.parse(fs.readFileSync(at, "utf8")) : {};
   if (value === null) {
     delete file[key];
   } else {
     file[key] = value;
   }
-  fs.mkdirSync(DIR, { recursive: true });
-  fs.writeFileSync(PATH, JSON.stringify(file, null, 2) + "\n");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(at, JSON.stringify(file, null, 2) + "\n");
   FILE = config_files();
   GONE.delete(key);
   config_live();
@@ -528,9 +549,12 @@ export function config_default(key: Key): string {
   return root === undefined ? config_def(key) : typeof root === "string" ? root : JSON.stringify(root);
 }
 
-// the root's config.json, the profile's over it, key by key
+// the root's config.json, the profile's over it, key by key; a list
+// (ADDS) the two together
 function config_files(): Record<string, unknown> {
-  return { ...config_file(ROOT + "/config.json"), ...config_file(PATH) };
+  const [root, own] = [config_file(ROOT + "/config.json"), DIR === ROOT ? {} : config_file(PATH)];
+  const both = ADDS.filter((key) => key in root && key in own).map((key) => [key, root[key] + ", " + own[key]]);
+  return { ...root, ...own, ...Object.fromEntries(both) };
 }
 
 // a config.json's keys ({}: none); one that won't read says which

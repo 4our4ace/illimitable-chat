@@ -6,12 +6,14 @@
 // does Enter (kept in config.json at once); Enter on a pick opens the
 // model picker for it (a role's: the chat's vendor's pick, the choice
 // kept in its vendor's place), on `off` lists what it may turn off, on
-// one typed in puts `/set <key> <value>` in the input to change; Delete
-// puts its default back. In a profile, a change is its own, and each row
-// says where its value comes from: global (the default profile's, every
-// profile's), the profile, or a variable; Delete on one of the
-// profile's puts the global value back. A change applies at once or at
-// the next start, as the foot says. /set changes one by its words.
+// `sticky` the sticky skills to turn on, on one typed in puts
+// `/set <key> <value>` in the input to change; Delete puts its default
+// back. In a profile, a change is its own, and each row says where its
+// value comes from: global (the default profile's, every profile's), the
+// profile, or a variable; Delete on one of the profile's puts the global
+// value back (on a global one, it does nothing there). A change applies
+// at once or at the next start, as the foot says. /set changes one by
+// its words.
 
 import { Chat } from "../chat/Chat.ts";
 import { term_chooser, term_model_pick } from "./Commands.ts";
@@ -56,7 +58,7 @@ export function term_settings(t: Term, at = ""): void {
 export function setting_key(t: Term, key: config.Key, press: string): boolean {
   const vals = config.SETTINGS[key].values;
   const step = ({ Left: -1, Right: 1, Enter: 1 } as Record<string, number>)[press];
-  if (press !== "Delete" && (step === undefined || !Array.isArray(vals))) {
+  if (press === "Delete" ? config.config_from(key) === "global" && config.DIR !== config.ROOT : step === undefined || !Array.isArray(vals)) {
     return false;
   }
   const list = Array.isArray(vals) ? vals : [];
@@ -71,9 +73,9 @@ export function setting_key(t: Term, key: config.Key, press: string): boolean {
 export function setting_foot(key: config.Key): string {
   const s   = config.SETTINGS[key];
   const env = config.config_env_set(key);
-  const how = Array.isArray(s.values) ? "◂ ▸ Enter change" : s.values === "pick" ? "Enter pick a model" : key === "off" ? "Enter list" : "Enter edit";
-  const del = config.config_from(key) === config.PROFILE ? "Del global" : "Del default";
-  return env !== null ? "set by " + env : how + " · " + del + " · " + (s.now ? "applies now" : "at the next start");
+  const how = Array.isArray(s.values) ? "◂ ▸ Enter change" : s.values === "pick" ? "Enter pick a model" : key === "off" || key === "sticky" ? "Enter list" : "Enter edit";
+  const del = config.DIR === config.ROOT ? "Del default · " : config.config_from(key) === config.PROFILE ? "Del global · " : "";
+  return env !== null ? "set by " + env : how + " · " + del + (s.now ? "applies now" : "at the next start");
 }
 
 // a setting's value as its row shows it, WIDE characters at most
@@ -121,6 +123,9 @@ export function setting_open(t: Term, key: config.Key): void {
   if (key === "off") {
     return setting_off(t);
   }
+  if (key === "sticky") {
+    return setting_sticky(t);
+  }
   if (config.SETTINGS[key].values === "pick") {
     const rows = Pick.models(t.v.vendors, t.v.models);
     const role = key === "agents" || key === "compactor" ? key : null;
@@ -143,7 +148,9 @@ export function setting_open(t: Term, key: config.Key): void {
 // Enter on `off`: each skill, agent, command and MCP server, what it is
 // and where it's from (built in, global, the profile, the project), on
 // or off; Enter, Left or Right turns the lit one on or off, kept in
-// `off` at once (a server starts or stops at the next start)
+// `off` at once (a server starts or stops at the next start). In a
+// profile, one off globally stays off: a note says where to turn it on
+// (Config ADDS)
 function setting_off(t: Term): void {
   const cwd   = process.cwd();
   const own   = config.DIR !== config.ROOT;
@@ -155,13 +162,19 @@ function setting_off(t: Term): void {
     ...[...Custom.files(cwd, "commands", true)].map(([name, file]) => [name, "command · " + where(file)]),
     ...Object.keys(Mcp.read(true)).map((name) => [name, "MCP server · " + (own && name in mine ? config.PROFILE : "global")]),
   ];
-  const aside = () => rows.map(([name]) => (config.config_off(name) ? "off" : "on"));
-  const keys  = (k: number, press: string) => {
+  const global = (name: string) => own && config.config_names("off", true).includes(name.toLowerCase());
+  const aside  = () => rows.map(([name]) => (!config.config_off(name) ? "on" : global(name) ? "off globally" : "off"));
+  const keys   = (k: number, press: string) => {
     if (!["Enter", "Left", "Right"].includes(press)) {
       return false;
     }
     const name = rows[k][0].toLowerCase();
-    const next = config.config_off(name) ? config.OFF.filter((n) => n !== name) : [...config.OFF, name];
+    const list = config.config_names("off", false);
+    if (global(name)) {
+      term_note(t, rows[k][0] + " is off globally: turn it on in the default profile.");
+      return true;
+    }
+    const next = list.includes(name) ? list.filter((n) => n !== name) : [...list, name];
     if (setting_set(t, "off", next.length === 0 ? null : next.join(", ")) && t.choose !== null) {
       t.choose.aside = aside();
     }
@@ -169,6 +182,31 @@ function setting_off(t: Term): void {
   };
   const foot = (k: number) => "Enter on/off · " + (rows[k][1].startsWith("MCP") ? "at the next start" : "applies now");
   term_chooser(t, "Turned off" + (own ? " in " + config.PROFILE : ""), rows.map(([name]) => name), rows.map(([, about]) => about), -1, () => {}, { find: true, keys, foot, aside: aside() });
+}
+
+// Enter on `sticky`: each sticky skill, where its on and off is kept
+// (global, or the profile), on or off; Enter, Left or Right turns the
+// lit one on or off (Custom.stick), from the next turn
+function setting_sticky(t: Term): void {
+  const skills = Custom.skills(process.cwd()).filter((s) => s.sticky);
+  if (skills.length === 0) {
+    return term_note(t, "No sticky skills yet: a skill with sticky: true in its front matter is one.");
+  }
+  const aside = () => skills.map((s) => (config.config_sticky(s.name) ? "on" : "off"));
+  const keys  = (k: number, press: string) => {
+    if (!["Enter", "Left", "Right"].includes(press)) {
+      return false;
+    }
+    const why = Custom.stick(skills[k], !config.config_sticky(skills[k].name));
+    if (why !== null) {
+      term_note(t, why);
+    } else if (t.choose !== null) {
+      t.choose.aside = aside();
+    }
+    return true;
+  };
+  const about = skills.map((s) => (Custom.global(s) ? "global" : config.PROFILE) + (s.description === "" ? "" : " · " + s.description));
+  term_chooser(t, "Sticky skills", skills.map((s) => s.name), about, -1, () => {}, { find: true, keys, foot: () => "Enter on/off · from the next turn", aside: aside() });
 }
 
 // a setting to a value (null: its default), in config.json, and what
