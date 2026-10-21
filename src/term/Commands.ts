@@ -55,7 +55,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
   const skills = custom ? Custom.skills(process.cwd()).filter((s) => !cmds.some((c) => c.name === s.name)) : [];
   const yours  = [
     ...cmds.map((c): Cmd => ["/" + c.name + " [...]", "", c.description || "your command (" + c.file + ")", (t, a) => term_custom(t, c, a, "/" + c.name)]),
-    ...skills.map((s): Cmd => ["/" + s.name + " [...]", "", "skill: " + (s.description || s.dir), (t, a) => term_skill(t, s, a, "/" + s.name)]),
+    ...skills.map((s): Cmd => ["/" + s.name + " [...]", "", (!s.sticky ? "skill: " : config.config_sticky(s.name) ? "sticky skill, on: " : "sticky skill, off: ") + (s.description || s.dir), (t, a) => term_skill(t, s, a, "/" + s.name)]),
   ];
   return [
     ["Chat", [
@@ -264,9 +264,23 @@ function term_custom(t: Term, cmd: Command, arg: string, word: string): void {
 }
 
 // the user's skill (typed as `word`): illi told to use it, for the words
-// after its name
+// after its name. A sticky one is turned on or off by its name alone
+// (Custom.stick), on by its name with words, then the words sent
 function term_skill(t: Term, skill: Skill, arg: string, word: string): void {
-  term_custom(t, { name: skill.name, description: "", body: "Use your skill " + skill.name + (arg === "" ? "." : ": $ARGUMENTS"), file: skill.dir }, arg, word);
+  if (!skill.sticky) {
+    return term_custom(t, { name: skill.name, description: "", body: "Use your skill " + skill.name + (arg === "" ? "." : ": $ARGUMENTS"), file: skill.dir }, arg, word);
+  }
+  const on = config.config_sticky(skill.name);
+  if (arg === "" || !on) {
+    const why = Custom.stick(skill, !on);
+    term_note(t, why ?? (on ? skill.name + " is off." : skill.name + " is on: every reply follows it (" + (Custom.global(skill) ? "global" : config.PROFILE) + "). " + word + " again turns it off."));
+    if (why !== null) {
+      return;
+    }
+  }
+  if (arg !== "") {
+    term_custom(t, { name: skill.name, description: "", body: "$ARGUMENTS", file: skill.dir }, arg, word);
+  }
 }
 
 // the user's MCP servers: each one's tools, or how it is; the files (none

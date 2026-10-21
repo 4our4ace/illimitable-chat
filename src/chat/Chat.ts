@@ -249,8 +249,9 @@ export namespace Chat {
   }
 
   // a turn's system prompt: illi's, with its main agent's instructions
+  // and the sticky skills on (a summary's has neither)
   export function system(chat: Chat): string {
-    return Tools.system(MASTER + Custom.section(Custom.agent(chat.tools.cwd, chat.mem.agent)), chat.tools.cwd, chat.pick.vendor);
+    return Tools.system(MASTER + Custom.section(Custom.agent(chat.tools.cwd, chat.mem.agent)) + Tools.stuck(chat.tools.cwd), chat.tools.cwd, chat.pick.vendor);
   }
 
   // stops all at once, as a quit does: what ran stays saved (mem.work), so

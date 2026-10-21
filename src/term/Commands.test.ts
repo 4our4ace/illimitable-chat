@@ -8,7 +8,8 @@
 // commands their own group; /agents' lists have no copy buttons (a pane
 // is no reply). /speed says standard for slow; /tab finds the chat's tab
 // by the main agent's name; the dead ends (/stop, /fold, /image, /mcp
-// with nothing to act on) say something.
+// with nothing to act on) say something. A sticky skill's name alone
+// turns it on and off; with words, on, the words sent.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -31,7 +32,7 @@ afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 const term = () => {
   const v = View.view_new();
   View.view_hear(v, { $: "state", ...v, vendors: ["claude-api", "openai-api"], pick: { vendor: "claude-api", model: "sonnet-5.5", effort: "medium", speed: "slow" } });
-  return { v, scr: { tty: true, ed: Screen.ed_new() }, choose: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], due: true } as any;
+  return { v, scr: { tty: true, ed: Screen.ed_new() }, choose: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], subs: new Map(), due: true } as any;
 };
 
 // /model typed with no name
@@ -198,6 +199,24 @@ test("the commands suggested: those run most first among those a word matches al
   expect(top("/set")).toBe("/settings");
   await Bun.sleep(2100);
   expect(JSON.parse(fs.readFileSync(DIR + "/used.json", "utf8"))).toEqual({ "/settings": 1 });
+});
+
+test("a sticky skill: its name alone turns it on, again off, each said; with words, on, then the words sent", () => {
+  fs.mkdirSync(DIR + "/skills/terse", { recursive: true });
+  fs.writeFileSync(DIR + "/skills/terse/SKILL.md", "---\ndescription: Short replies\nsticky: true\n---\nBe terse.");
+  const config = require("../config/Config.ts");
+  const t = term();
+  term_command(t, "/terse");
+  expect([config.STICKY, note(t)]).toEqual([["terse"], "terse is on: every reply follows it (global). /terse again turns it off."]);
+  expect(term_commands(true).find(([use]) => use.startsWith("/terse"))![2]).toBe("sticky skill, on: Short replies");
+  term_command(t, "/terse");
+  expect([config.STICKY, note(t), t.v.out]).toEqual([[], "terse is off.", []]);
+  term_command(t, "/terse just the gist");
+  expect([config.STICKY, t.v.out.map((p: any) => p.msg.$)]).toEqual([["terse"], ["say"]]);
+  term_command(t, "/terse and again");
+  expect(config.STICKY).toEqual(["terse"]);
+  term_command(t, "/terse");
+  fs.rmSync(DIR + "/skills/terse", { recursive: true });
 });
 
 test("each command and key is in docs/keys.md", () => {
