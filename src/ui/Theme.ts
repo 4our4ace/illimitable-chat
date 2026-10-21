@@ -20,7 +20,8 @@
 // background untold, the terminal's palette (REPLY). The user's theme
 // (config.THEME, a JSON file) may set any entry of ANSI, GLYPH, TOOL and
 // SYNTAX, the PALETTE, and any of its colors (COLORS); a color that won't
-// do is left out, a glyph's control characters too (theme_check):
+// do is left out, a glyph's control characters too (theme_check); a file
+// that won't read is told once the screen is up (THEME_TROUBLE):
 //
 //     { "ansi": { "block": "7", "ink": "0" }, "glyph": { "input": "❯ " },
 //       "tool": { "shell": "$" }, "syntax": { "keyword": "4" },
@@ -39,6 +40,10 @@ type Look = { dim: boolean; it: boolean };
 
 // Constants
 // =========
+
+// why the user's theme file won't read ("": it does, or there is none),
+// for the screen to say once it is up (Term.ts)
+export let THEME_TROUBLE = "";
 
 // the user's theme: its entries over these (none: these)
 const OWN = theme_read();
@@ -169,7 +174,7 @@ export function tool_glyph(name: string): string {
 }
 
 // the user's theme file, read once, each entry checked (theme_check);
-// one that won't parse is said once
+// one that won't parse is kept to say (THEME_TROUBLE)
 function theme_read(): { ansi?: Record<string, string>; glyph?: Record<string, string>; tool?: Record<string, string>; syntax?: Record<string, string>; palette?: string; diagrams?: string; colors?: Record<string, string> } {
   if (!fs.existsSync(config.THEME)) {
     return {};
@@ -177,7 +182,7 @@ function theme_read(): { ansi?: Record<string, string>; glyph?: Record<string, s
   try {
     return theme_check(JSON.parse(fs.readFileSync(config.THEME, "utf8")));
   } catch (err: any) {
-    console.error("illi: theme " + config.THEME + ": " + err.message);
+    THEME_TROUBLE = "The theme file " + config.THEME + " won't read (" + err.message + "), so Illi uses its own colors.";
     return {};
   }
 }

@@ -4,11 +4,14 @@
 // Memory, AskAI and Agent loop against a fake Anthropic out of credit
 // (HTTP 400, "credit balance is too low"), then back: none is clipped, and
 // the tree completes once credit is back; the one summary the model
-// refuses is clipped (its input's doing); a turn in the outage says the
-// vendor's why (the key is the user's own). A model with no price known
-// runs. A rate limit's retries say BUSY, the vendor's words logged once,
-// and so does its end past the tries. A login that won't renew ends the
-// call at once, saying why. Timers run 1000 times fast.
+// refuses is clipped (its input's doing); a turn in the outage says, in
+// plain words, that the credit is used up (the key is the user's own). A
+// model with no price known runs. A rate limit's retries say BUSY, the
+// vendor's words logged once, and so does its end past the tries. A login
+// that won't renew ends the call at once, saying why. No connection says
+// which host can't be reached; a retry-after past the longest wait ends
+// the call at once; a refused key names its variable; a reply cut short
+// is marked once. Timers run 1000 times fast.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -102,7 +105,7 @@ async function completes(mem: any): Promise<void> {
   for (const [{ l, i }, text] of nodes(mem)) {
     expect(text).toEqual(l === 0 && i === REFUSED ? Memory.cut(source) : expect.stringMatching(/^line for Compaction:/));
   }
-  expect(logged.filter((line) => line.includes("clipped"))).toEqual(["compactor: node 0/" + REFUSED + ": stopped: refusal; clipped"]);
+  expect(logged.filter((line) => line.includes("clipped"))).toEqual(["compactor: node 0/" + REFUSED + ": the model declined to answer; clipped"]);
   Memory.stop(mem);
 }
 
@@ -130,7 +133,7 @@ test("an outage delays summaries, never clips them; a refusal clips", () => fast
   expect(logged.some((line) => line.includes(BROKE.slice(0, 40)))).toBe(true);
 
   const turn = await AskAI.ask({ ...SHARE, blocks: [{ text: "hi", mark: true }] }, () => {}).done;
-  expect(turn).toMatchObject({ ok: false, stop: "down", text: "HTTP 400: " + BROKE });
+  expect(turn).toMatchObject({ ok: false, stop: "down", text: "your Anthropic API credit is used up: add credit at console.anthropic.com, then send a message" });
 
   broke = false;
   await completes(mem);
@@ -172,4 +175,71 @@ test("a login that won't renew ends the call saying why, never asked again", () 
   await Agent.loop(wire, run);
   expect(run.end).toMatchObject({ ok: false, stop: "down", text: why });
   expect(asked).toBe(1);
+}));
+
+// a call's end on the fake vendor, its thoughts kept
+async function turn(minds: string[] = [], entries: string[] = []): Promise<any> {
+  const on = (ev: any) => (ev.kind === "mind" ? minds.push(ev.text) : ev.$ === "Entry" && entries.push(ev.text));
+  return AskAI.ask({ ...SHARE, blocks: [{ text: "hi", mark: true }] }, on).done;
+}
+
+test("no connection says which host can't be reached, as it asks again and at its end", () => fast(async () => {
+  globalThis.fetch = (async () => {
+    throw new Error("Unable to connect. Is the computer able to access the url?");
+  }) as any;
+  const minds: string[] = [];
+  const end = await turn(minds);
+  expect(end).toMatchObject({ ok: false, stop: "down", again: true, text: "can't reach api.anthropic.com: check your connection" });
+  expect(minds[0]).toBe("Can't reach api.anthropic.com: check your connection. Asking again in 2 s.");
+  expect(minds.at(-1)).toBe("Can't reach api.anthropic.com: check your connection. Asking again in 60 s.");
+}));
+
+test("a retry-after past the longest wait ends the call at once, saying till when", () => fast(async () => {
+  let asked = 0;
+  globalThis.fetch = (async () => {
+    asked += 1;
+    return Response.json({ error: { type: "rate_limit_error", message: LIMIT } }, { status: 429, headers: { "retry-after": "3600" } });
+  }) as any;
+  const end = await turn();
+  expect(asked).toBe(1);
+  expect(end).toMatchObject({ ok: false, stop: "down", again: true });
+  expect(end.text).toMatch(/^the AI service is busy: it asks to wait till (\w+ )?\d\d:\d\d$/);
+}));
+
+test("a refused key names its variable; an HTML page is never shown, its body logged", () => fast(async () => {
+  globalThis.fetch = (async () => Response.json({ type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } }, { status: 401 })) as any;
+  expect((await turn()).text).toBe("Anthropic refused the API key (HTTP 401: invalid x-api-key): check ANTHROPIC_API_KEY and restart Illi");
+  const page = "<!DOCTYPE html><html><body>" + "Bad gateway ".repeat(100) + "</body></html>";
+  globalThis.fetch = (async () => new Response(page, { status: 400 })) as any;
+  logged.length = 0;
+  expect(await turn()).toMatchObject({ ok: false, stop: "down", text: "HTTP 400" });
+  expect(logged.some((line) => line.includes(page))).toBe(true);
+}));
+
+test("no API key ends the call saying which to set, and to restart", () => fast(async () => {
+  config.KEYS.anthropic = "";
+  const end = await Agent.ask({ ...SHARE, blocks: [{ text: "hi", mark: true }] }, () => {}).done;
+  config.KEYS.anthropic = "test";
+  expect(end).toMatchObject({ ok: false, stop: "down", text: "no API key: set ANTHROPIC_API_KEY and restart Illi" });
+  expect(end.again).toBeUndefined();
+}));
+
+test("a reply cut short is marked once; the call says it was cut", () => fast(async () => {
+  globalThis.fetch = (async () => {
+    const events = [
+      { type: "message_start", message: { usage: {} } },
+      { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } },
+      { type: "content_block_delta", index: 0, delta: { type: "text_delta", text: "half a reply" } },
+    ];
+    return new Response(events.map((ev) => "data: " + JSON.stringify(ev) + "\n\n").join(""));
+  }) as any;
+  const entries: string[] = [];
+  const end = await turn([], entries);
+  expect(end).toMatchObject({ ok: false, stop: "down", again: true, cut: true, text: BUSY });
+  expect(entries.at(-1)).toBe("half a reply\n[cut off]");
+}));
+
+test("a stop reason is said in plain words", () => fast(async () => {
+  globalThis.fetch = (async () => answer("long", "max_tokens")) as any;
+  expect(await turn()).toMatchObject({ ok: false, stop: "fail", text: "the reply reached the most the model may write at once" });
 }));

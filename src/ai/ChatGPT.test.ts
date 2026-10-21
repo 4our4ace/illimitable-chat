@@ -4,7 +4,8 @@
 // renewed against a stand-in for OpenAI's token endpoint: a good token is
 // used as it is; one near its end, or refused, is renewed once however many
 // ask, and written back with the file's other entries kept. The plan's
-// limits, as a response's headers tell them.
+// limits, as a response's headers tell them; a limit used up says which
+// and when it resets. A login file that won't parse says so.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -16,6 +17,7 @@ process.env.ILLI_LOGIN = FILE;
 process.env.ILLI_DIR = DIR;
 
 const { ChatGPT } = await import("./ChatGPT.ts");
+const { Agent } = await import("./Agent.ts");
 
 // a JWT with these claims (unsigned: only read here)
 function jwt(claims: object): string {
@@ -112,4 +114,46 @@ test("a response's headers tell the plan's limits, a window 0 minutes long none;
   expect(ChatGPT.limits()).toHaveLength(2);
   ChatGPT.hear(new Headers({ "x-codex-primary-used-percent": "1", "x-codex-primary-window-minutes": "10080", "x-codex-primary-reset-after-seconds": "588282", "x-codex-secondary-used-percent": "0", "x-codex-secondary-window-minutes": "0" }));
   expect(ChatGPT.limits()).toEqual([{ window: 10080, used: 1, reset: expect.any(Number) }]);
+});
+
+test("a login file that won't parse says which, and that /login replaces it", async () => {
+  fs.writeFileSync(FILE, "{ not json");
+  expect(ChatGPT.signed()).toBe(false);
+  expect(ChatGPT.unread()).toBe("The ChatGPT login file " + FILE + " is unreadable: /login replaces it.");
+  await expect(ChatGPT.token()).rejects.toThrow("is unreadable: /login replaces it");
+  fs.rmSync(FILE);
+  expect(ChatGPT.unread()).toBe("");
+});
+
+test("a plan's usage limit used up is no busy service: it says which limit and when it resets", () => {
+  const now = Date.now();
+  ChatGPT.hear(new Headers({
+    "x-codex-primary-used-percent"        : "100",
+    "x-codex-primary-window-minutes"      : "300",
+    "x-codex-primary-reset-after-seconds" : "600",
+    "x-codex-secondary-used-percent"      : "40",
+    "x-codex-secondary-window-minutes"    : "10080",
+    "x-codex-secondary-reset-after-seconds": "86400",
+  }));
+  const body = { type: "usage_limit_reached", message: "The usage limit has been reached", plan_type: "plus" };
+  expect(Agent.spent("chatgpt", 429, body)).toBe("your ChatGPT plan's 5-hour limit is used up; it resets at " + Agent.when(now + 600e3));
+  const told = { ...body, resets_at: Math.round(now / 1000) + 1200 };
+  expect(Agent.spent("chatgpt", 429, told)).toBe("your ChatGPT plan's 5-hour limit is used up; it resets at " + Agent.when(told.resets_at * 1000));
+  expect(Agent.spent("chatgpt", 429, "Usage limit reached")).toContain("limit is used up");
+  expect(Agent.spent("chatgpt", 429, { code: "rate_limit_exceeded", message: "Rate limit reached" })).toBe("");
+  expect(Agent.spent("openai-api", 429, { type: "insufficient_quota", code: "insufficient_quota", message: "You exceeded your current quota" })).toContain("OpenAI API quota is used up");
+  expect(Agent.spent("claude-api", 400, { type: "invalid_request_error", message: "Your credit balance is too low to access the Anthropic API." })).toContain("Anthropic API credit is used up");
+  expect(Agent.spent("claude-api", 529, { type: "overloaded_error", message: "Overloaded" })).toBe("");
+  expect(ChatGPT.window(10080)).toBe("weekly");
+  expect(ChatGPT.window(1440)).toBe("1-day");
+});
+
+test("a failed request's why shows the API's message, short; an HTML page none", () => {
+  expect(Agent.reason(JSON.stringify({ error: { message: "bad" } }))).toBe("bad");
+  expect(Agent.reason(JSON.stringify({ detail: "Unsupported model" }))).toBe("Unsupported model");
+  expect(Agent.reason(JSON.stringify({ error: "nope" }))).toBe("nope");
+  expect(Agent.reason("<html><body>502</body></html>")).toBe("");
+  const long = Agent.reason(JSON.stringify({ items: "x".repeat(5000) }));
+  expect(long.length).toBe(200);
+  expect(long.endsWith("…")).toBe(true);
 });

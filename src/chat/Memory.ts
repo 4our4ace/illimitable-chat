@@ -100,7 +100,8 @@ type Saved = Kept & { seen?: Kept; main: End; tree: End; pick: object | null; go
 // indexed; busy: nodes building, by slot; calls: those building's calls;
 // hold: no summary starts (a test's chat, which no model answers);
 // wait: checks run as the views change; share: what compactions share
-// with the chat's turns; made: told of each node built
+// with the chat's turns; made: told of each node built; stuck: told why
+// a summary's try failed, as it waits to ask again ("": one was built)
 export type Memory = {
   dir    : string;
   fds    : Map<string, number>;
@@ -128,6 +129,7 @@ export type Memory = {
   wait   : Set<() => void>;
   share  : () => Share;
   made?  : (l: number, i: number) => void;
+  stuck? : (why: string) => void;
 };
 
 // Constants
@@ -881,6 +883,7 @@ export namespace Memory {
     }
     const line = lines.length === 0 ? Memory.cut(Memory.flat(text)) : lines.reduce((a, b) => (Memory.bytes(b) < Memory.bytes(a) ? b : a));
     Memory.store(mem, [{ l, i, text: line }]);
+    mem.stuck?.("");
   }
 
   // nodes built: logged in one write, kept
@@ -900,9 +903,10 @@ export namespace Memory {
     parts.forEach(({ l, i }) => mem.made?.(l, i));
   }
 
-  // a call of a summary, its blocks, on the compactor
+  // a call of a summary, its blocks, on the compactor; a try that failed
+  // told (mem.stuck)
   export function ask(mem: Memory, blocks: Block[]): Call {
-    return AskAI.ask({ ...mem.share(), ...Pick.ask(config.COMPACTOR), blocks, patient: true }, () => {});
+    return AskAI.ask({ ...mem.share(), ...Pick.ask(config.COMPACTOR), blocks, patient: true, stuck: (why) => mem.stuck?.(why) }, () => {});
   }
 
   // a summary's try: its call's end, the call held in `calls` till then
