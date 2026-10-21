@@ -5,15 +5,18 @@
 // call starts as the one before did, and past the call's size moves on
 // till they fill half (the oldest fold into the view); kept on disk. The
 // recent messages come in blocks, one marked in place of the view's.
-// Closed, the chat is one file. /compact counts a user's message of many
-// pages once. An agent spawned as the user's is named after it; a freed
-// name is used again, each log its own; one named main, the chat's own
-// caller, is refused. A leaf's summary starts with its message's kind,
-// the compactor's or added.
+// Closed, the chat is one file, its images in it too: a model gets each
+// one's copy if one was made (a big one, smaller, as JPEG), else the
+// image; an export, the image itself. /compact counts a user's message
+// of many pages once. An agent spawned as the user's is named after it;
+// a freed name is used again, each log its own; one named main, the
+// chat's own caller, is refused. A leaf's summary starts with its
+// message's kind, the compactor's or added.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
+import * as zlib from "node:zlib";
 
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-memory-");
 process.env.ILLI_DIR = DIR;
@@ -59,8 +62,39 @@ test("a turn's chat: the messages from the cut whole, in blocks, the last whole 
   expect(Memory.chat(mem, 9, 9).filter((b) => b.mark).length).toBeLessThanOrEqual(1);
 });
 
-test("closed, the chat is one file", () => {
-  const mem = chat("closed", 3);
+// a PNG w x h, one grey, made by hand
+function png(w: number, h: number): Buffer {
+  const chunk = (type: string, data: Buffer) => {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const out = Buffer.alloc(12 + data.length);
+    out.writeUInt32BE(data.length, 0);
+    body.copy(out, 4);
+    out.writeUInt32BE(Bun.hash.crc32(body), 8 + data.length);
+    return out;
+  };
+  const head = Buffer.alloc(13);
+  head.writeUInt32BE(w, 0);
+  head.writeUInt32BE(h, 4);
+  head.set([8, 2, 0, 0, 0], 8);
+  const rows = Buffer.concat(Array.from({ length: h }, () => Buffer.concat([Buffer.from([0]), Buffer.alloc(3 * w, 0x80)])));
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", head), chunk("IDAT", zlib.deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
+}
+
+test("closed, the chat is one file, its images in it: a model gets a big one's smaller copy, a small one whole; an export, each image itself", async () => {
+  const mem = chat("closed", 1);
+  const [small, big] = [png(4, 4), png(2400, 8)];
+  const names = [await Memory.image_add(mem, small), await Memory.image_add(mem, big), await Memory.image_add(mem, small)];
+  expect(names[0]).toMatch(/^[0-9a-f]{16}\.png$/);
+  expect(names[2]).toBe(names[0]);
+  expect(await Memory.image_add(mem, Buffer.from("no image"))).toBeNull();
+  Memory.push(mem, [{ kind: "user", text: "two screenshots", images: [names[0]!, names[1]!] }]);
+  const got = Memory.images(mem, 1);
+  expect(got.map((g) => g.type)).toEqual(["image/png", "image/jpeg"]);
+  expect(got[0].data).toBe(small.toString("base64"));
+  expect(Buffer.from(got[1].data, "base64").subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
+  expect(Memory.show(Memory.message(mem, 1)!)).toBe("user: two screenshots\n[image " + names[0] + "]\n[image " + names[1] + "]");
+  const out = JSON.parse([...Memory.dump(mem)].join(""));
+  expect(out.images).toEqual({ [names[0]!]: small.toString("base64"), [names[1]!]: big.toString("base64") });
   Memory.stop(mem);
   expect(fs.readdirSync(DIR + "/closed")).toEqual(["memory.sqlite"]);
 });

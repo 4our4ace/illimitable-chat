@@ -1,10 +1,11 @@
 // Tools test
 // ==========
 // `bun test Tools.test.ts`. The master's to-do list (todo), its alone: a
-// list given whole replaces the one before, kept in the chat's folder and
-// told to a view at once, and named in its calls' messages; one with two
-// items active, or an item without text or a status, changes nothing; an
-// empty one clears it; a restart reads it back. What the views are told
+// list given whole replaces the one before, kept in the chat's file (the
+// project's own) and told to a view at once, and named in its calls'
+// messages; one with two items active, or an item without text or a
+// status, changes nothing; an empty one clears it; a restart reads it
+// back. What the views are told
 // of the calls: the input the main agent's last request read. A caller in
 // Claude Code gets only the tools it lacks (?lean), and prompts that say
 // it works inside illi, the project's CLAUDE.md left to Claude Code. The
@@ -25,7 +26,7 @@ const { Store } = await import("../chat/Store.ts");
 const View = await import("../ui/View.ts");
 
 const chat = Chat.open(process.cwd());
-const FILE = DIR + "/chat/todo.json";
+const kept = () => Store.todo(chat.mem.store);
 
 // the todo tool called by the master
 function todo(items: unknown) {
@@ -46,7 +47,7 @@ test("the todo tool is the master's alone", () => {
   expect(Tools.list(chat.tools, "Ada").map((t) => t.name)).not.toContain("todo");
 });
 
-test("a list given whole replaces the one before, kept in the chat's folder and told to a view at once", async () => {
+test("a list given whole replaces the one before, kept in the chat's file (the project's own) and told to a view at once", async () => {
   const v = View.view_new();
   View.link_open(v, Chat.link(chat, (msg) => void View.view_hear(v, msg)));
   await until(() => v.up);
@@ -56,7 +57,10 @@ test("a list given whole replaces the one before, kept in the chat's folder and 
   expect(await todo(list)).toEqual({ text: "1 of 3 done; active: Write the tests.", fail: false });
   await until(() => v.todo.length === 3);
   expect(v.todo.map((x) => x.text)).toEqual(["Read the code", "Write the tests", "Run them"]);
-  expect(JSON.parse(fs.readFileSync(FILE, "utf8"))).toEqual(v.todo);
+  expect(kept()).toEqual(v.todo);
+  const other = Store.open(DIR + "/chat", { key: "git:/work/other", name: "other-k3f9x2", path: "/work/other" });
+  expect(Store.todo(other)).toBeNull();
+  Store.close(other);
   expect(Tools.at_work(chat.tools).text).toContain("1 of 3 done; active: Write the tests.\n- done: Read the code\n- active: Write the tests\n- pending: Run them\n");
   v.ws!.close();
 });
@@ -68,15 +72,16 @@ test("two items active, or an item without text or a status, changes nothing", a
   expect(await todo([{ text: "a", status: "started" }])).toMatchObject({ fail: true });
   expect(await todo("a")).toMatchObject({ fail: true });
   expect(JSON.stringify(Tools.todo(chat.tools))).toBe(before);
-  expect(fs.readFileSync(FILE, "utf8")).toContain("Write the tests");
+  expect(JSON.stringify(kept())).toContain("Write the tests");
 });
 
 test("a restart reads the list back; an empty one clears it", async () => {
-  expect(Tools.todo_load(FILE)).toEqual(Tools.todo(chat.tools));
+  const again = () => Tools.todo({ ...chat.tools, todo: undefined });
+  expect(again()).toEqual(Tools.todo(chat.tools));
+  expect(again().length).toBe(3);
   expect(await todo([])).toEqual({ text: "The to-do list is cleared.", fail: false });
-  expect(Tools.todo_load(FILE)).toEqual([]);
+  expect([kept(), again()]).toEqual([[], []]);
   expect(Tools.at_work(chat.tools).text).not.toContain("to-do");
-  expect(Tools.todo_load(DIR + "/none.json")).toEqual([]);
 });
 
 test("the views are told the input the main agent's last request read, not an agent's", () => {

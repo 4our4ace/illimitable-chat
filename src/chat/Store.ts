@@ -19,9 +19,13 @@
 // - node: a summary line, by the messages it covers (its first, how
 //   many: the zoom's id+n), so any shape of tree fits; one built twice
 //   keeps the first, which a view may hold already;
-// - log, work: an agent's log (a name and a tag) and its entries.
+// - log, work: an agent's log (a name and a tag) and its entries;
+// - image: an image a message names, by its chat and its name (its
+//   hash: one pasted twice kept once), its bytes, and its copy for
+//   models if made (smaller), as BLOBs.
 // One row a chat is written over: its state (the saved view, pick, goal,
-// work, cut...), never rebuilt from the facts (the cache holds by it).
+// work, cut...), never rebuilt from the facts (the cache holds by it);
+// and its to-do list (todo), the agent's, given whole each time.
 // Derived from node: find, the summary lines' words, for search (an FTS
 // table, which has no keys: deleted by hand, its words gone from its
 // index at once, secure-delete).
@@ -109,6 +113,11 @@ create table work (log integer not null references log (id) on delete cascade, i
 create virtual table find using fts5(text, chat unindexed, first unindexed, n unindexed, tokenize = 'unicode61 remove_diacritics 2');
 insert into find (find, rank) values ('secure-delete', 1);
 pragma application_id = ${MARK};
+`, `
+create table image (id integer primary key autoincrement, chat integer not null references chat (id) on delete cascade, name text not null, data blob not null, fit blob,
+  unique (chat, name));
+create table todo (chat integer primary key references chat (id) on delete cascade, list text not null);
+update meta set value = '2' where key = 'compat';
 `];
 
 // the most lines a search gives
@@ -345,6 +354,37 @@ export namespace Store {
     return id === null ? 0 : (store.db.query("select count(*) as n from work where log = ?").get(id) as { n: number }).n;
   }
 
+  // Images
+  // ------
+
+  // an image put in, by its name, with its copy for models (null: none);
+  // one there already kept
+  export function image_put(store: Store, name: string, data: Uint8Array, fit: Uint8Array | null): void {
+    store.db.query("insert into image (chat, name, data, fit) values (?, ?, ?, ?) on conflict do nothing").run(store.chat, name, data, fit);
+    Store.wrote(store);
+  }
+
+  // an image's bytes and its copy for models (null: none); null: no such
+  // image
+  export function image(store: Store, name: string): { data: Uint8Array; fit: Uint8Array | null } | null {
+    return store.db.query("select data, fit from image where chat = ? and name = ?").get(store.chat, name) as { data: Uint8Array; fit: Uint8Array | null } | null;
+  }
+
+  // To-do list
+  // ----------
+
+  // the chat's to-do list as last given; null: none
+  export function todo(store: Store): unknown {
+    const row = store.db.query("select list from todo where chat = ?").get(store.chat) as { list: string } | null;
+    return row === null ? null : JSON.parse(row.list);
+  }
+
+  // written over
+  export function todo_save(store: Store, list: unknown): void {
+    store.db.query("insert into todo (chat, list) values (?, ?) on conflict (chat) do update set list = excluded.list").run(store.chat, JSON.stringify(list));
+    Store.wrote(store);
+  }
+
   // Projects
   // --------
 
@@ -408,32 +448,24 @@ export namespace Store {
     return (store.db.query("select id from chat where project = ?").all(project) as Array<{ id: number }>).map((c) => c.id);
   }
 
-  // the images a project's messages name and no other project's do
-  export function only(store: Store, project: number): string[] {
-    const chats = Store.chats(store, project);
-    const ids = chats.map(() => "?").join(", ") || "null";
-    const named = (not: string) => new Set((store.db.query(`select distinct j.value as value from msg m, json_each(m.images) j where m.chat ${not}in (${ids})`).all(...chats) as Array<{ value: string }>).map((r) => r.value));
-    const rest = named("not ");
-    return [...named("")].filter((name) => !rest.has(name)).sort();
+  // the images a project's chats hold
+  export function pictures(store: Store, project: number): number {
+    return (store.db.query("select count(*) as n from image i join chat c on c.id = i.chat where c.project = ?").get(project) as { n: number }).n;
   }
 
   // a project forgotten: its row deleted, and with it all its chats'
-  // rows (foreign keys), find's by hand; overwritten (secure delete, in
-  // find's index too), its space given back. The images only it named,
-  // which the caller deletes
-  export function forget(store: Store, project: number): string[] {
+  // rows, their images too (foreign keys), find's by hand; overwritten
+  // (secure delete, in find's index too), its space given back
+  export function forget(store: Store, project: number): void {
     const db = store.db;
-    const images = db.transaction(() => {
+    db.transaction(() => {
       const chats = Store.chats(store, project);
-      const only = Store.only(store, project);
       db.query(`delete from find where chat in (${chats.map(() => "?").join(", ") || "null"})`).run(...chats);
       db.query("delete from project where id = ?").run(project);
-      return only;
     }).immediate();
     db.run("pragma incremental_vacuum");
     db.run("pragma wal_checkpoint(truncate)");
     Store.wrote(store);
-    return images;
   }
 
 }

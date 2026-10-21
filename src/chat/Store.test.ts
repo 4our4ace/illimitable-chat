@@ -8,9 +8,10 @@
 // numbered. The projects are listed the one used last first, with their
 // latest line, a message of two pages counted once; a search finds lines
 // with all the words (else any), in a project or all. A project
-// forgotten is gone from the file, its words too, its space given back,
-// the images only it named said, a later version's rows of its chats
-// too; the others stay, and no number is used again.
+// forgotten is gone from the file, its words, images and to-do list too,
+// its space given back, a later version's rows of its chats too; the
+// others stay, and no number is used again. A file of version 1 moves
+// on to 2, its tables and rows as they were.
 
 import { afterAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -38,8 +39,28 @@ function say(store: any, text: string, images?: string[]): void {
 test("a new file gives space back as rows go and bears illi's mark", () => {
   const store = Store.open(DIR + "/new");
   const get = (pragma: string) => Object.values(store.db.query("pragma " + pragma).get() as object)[0];
-  expect([get("auto_vacuum"), get("application_id"), get("journal_mode"), get("user_version")]).toEqual([2, 0x696c6c69, "wal", 1]);
+  expect([get("auto_vacuum"), get("application_id"), get("journal_mode"), get("user_version")]).toEqual([2, 0x696c6c69, "wal", 2]);
   Store.close(store);
+});
+
+test("a file of version 1 moves on to 2: its tables and rows as they were, an image table and a to-do table added, compat 2", () => {
+  const store = Store.open(DIR + "/v1", APP);
+  say(store, "a fact from version 1");
+  Store.save(store, { goal: "kept" });
+  Store.work_push(store, "Scout.x", "Scout", { i: 0, kind: "note", text: "logged", date });
+  store.db.run("drop table image; drop table todo; update meta set value = '1' where key = 'compat'; pragma user_version = 1");
+  const facts = (db: any) => ["meta", "project", "chat", "msg", "node", "state", "log", "work", "find"].map((t) => [t, db.query("select * from " + t).all()]);
+  const schema = (db: any) => db.query("select sql from sqlite_master where name not in ('image', 'todo') and name not like 'sqlite_autoindex_image%' order by name").all();
+  const [rows, tables] = [JSON.stringify(facts(store.db)).replace(`"value":"1"`, `"value":"2"`), schema(store.db)];
+  Store.close(store);
+  const after = Store.open(DIR + "/v1", APP);
+  expect((after.db.query("pragma user_version").get() as any).user_version).toBe(2);
+  expect(JSON.stringify(facts(after.db))).toBe(rows);
+  expect(schema(after.db)).toEqual(tables);
+  Store.image_put(after, "0123456789abcdef.png", new Uint8Array([1, 2, 3]), null);
+  Store.todo_save(after, [{ text: "go on", status: "pending" }]);
+  expect([Store.image(after, "0123456789abcdef.png")!.data, Store.todo(after)]).toEqual([new Uint8Array([1, 2, 3]), [{ text: "go on", status: "pending" }]]);
+  Store.close(after);
 });
 
 test("illis making the file at once each get their own project and chat", async () => {
@@ -122,14 +143,21 @@ test("a project forgotten is gone from the file, its words too, its space given 
     say(app, secret + " " + k + " " + "y".repeat(400), k === 0 ? ["aaaaaaaaaaaaaaaa.png", "bbbbbbbbbbbbbbbb.png"] : undefined);
   }
   say(home, "kept at home", ["bbbbbbbbbbbbbbbb.png"]);
+  const picture = Buffer.from("secret-screenshot-bytes-" + "q".repeat(5000));
+  Store.image_put(app, "aaaaaaaaaaaaaaaa.png", picture, picture.subarray(0, 100));
+  Store.image_put(app, "bbbbbbbbbbbbbbbb.png", Buffer.from("shared"), null);
+  Store.image_put(home, "bbbbbbbbbbbbbbbb.png", Buffer.from("shared"), null);
+  Store.todo_save(app, [{ text: secret, status: "active" }]);
   Store.save(app, { goal: "ship" });
   Store.work_push(app, "Scout.x", "Scout", { i: 0, kind: "note", text: secret, date });
   home.db.run("create table later (chat integer not null references chat (id) on delete cascade, text text)");
   home.db.query("insert into later values (?, ?), (?, ?)").run(app.chat, secret, home.chat, "kept");
   home.db.run("pragma wal_checkpoint(truncate)");
   const before = fs.statSync(home.file).size;
-  expect(Store.forget(home, app.project)).toEqual(["aaaaaaaaaaaaaaaa.png"]);
+  expect([Store.pictures(home, app.project), Store.pictures(home, home.project)]).toEqual([2, 1]);
+  Store.forget(home, app.project);
   expect(Store.projects(home).map((p) => p.name)).toEqual(["home"]);
+  expect([Store.image(home, "bbbbbbbbbbbbbbbb.png")?.data.length, home.db.query("select count(*) as n from image").get(), home.db.query("select count(*) as n from todo").get()]).toEqual([6, { n: 1 }, { n: 0 }]);
   expect(Store.search(home, ["client"], null)).toEqual([]);
   expect([Store.count(home), Store.msg(home, 0)!.text]).toEqual([1, "kept at home"]);
   expect(home.db.query("select text from later").all()).toEqual([{ text: "kept" }]);
@@ -138,6 +166,7 @@ test("a project forgotten is gone from the file, its words too, its space given 
   Store.close(home);
   expect(fs.statSync(DIR + "/forget/memory.sqlite").size).toBeLessThan(before / 4);
   expect(fs.readFileSync(DIR + "/forget/memory.sqlite").includes("client-secret-plan")).toBe(false);
+  expect(fs.readFileSync(DIR + "/forget/memory.sqlite").includes("secret-screenshot-bytes")).toBe(false);
   const back = Store.open(DIR + "/forget", APP);
   expect([Store.count(back), Store.state(back)]).toEqual([0, null]);
   expect([back.project, back.chat]).toEqual([app.project + 1, app.chat + 1]);

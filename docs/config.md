@@ -50,13 +50,13 @@ Your chats
 
 Each project has its own chat: a git repo's, by its top folder (a copy
 elsewhere, or the repo moved, is another project), and home, for illi
-started outside any repo. They are all in `~/.illi/chat`, every message
-kept: the messages, their summaries and the agents' logs in one SQLite
-file, `memory.sqlite`, the images beside it. A crash never leaves half a
-write. Back it up: copy the folder while illi is closed, or export the
-profile (`/profile`, Ctrl+E), which copies the chats whole while illi
-runs. `/projects` lists them and forgets one: its messages are
-overwritten on disk, not just unlinked.
+started outside any repo. They are all in one SQLite file,
+`~/.illi/chat/memory.sqlite`, every message kept: the messages, their
+summaries, the images, the agents' logs and each project's to-do list.
+A crash never leaves half a write. Back it up: copy the file while illi
+is closed, or export the profile (`/profile`, Ctrl+E), which copies the
+chats whole while illi runs. `/projects` lists them and forgets one: its
+messages and images are overwritten on disk, not just unlinked.
 
 A project's chat runs in one illi. Started in a second terminal in the
 same project, illi joins it as another screen: the same chat, either
@@ -72,7 +72,6 @@ What else illi keeps in `~/.illi`:
 | `models.json`   | the models the vendors listed last                    |
 | `used.json`     | how often you ran each command: among those a `/word` matches alike, the most used come first |
 | `profile`       | the profile used last                                 |
-| `chat/todo.json`| illi's to-do list (each profile's own)                |
 | `locks/`        | a lock per project, held while its chat is open (by the system: a crash never leaves one held), and the socket a second terminal joins it by |
 | `illi.log`      | what went wrong (each profile's own)                  |
 
