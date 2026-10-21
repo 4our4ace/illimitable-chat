@@ -136,6 +136,5 @@ Mouse and side panel
 - From 100 columns on, a side panel shows the primary agents (a click
   makes one the main agent), the subagents at work, the profiles (a
   click switches), a ChatGPT plan's use, the context and the memory, the
-  MCP servers (a click opens `/mcp`), and illi's to-do list or, with
-  none, the folder illi works in. The `side` and `side_width` settings
-  place it.
+  MCP servers (a click opens `/mcp`) and illi's to-do list. The `side`
+  and `side_width` settings place it.
