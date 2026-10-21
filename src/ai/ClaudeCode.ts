@@ -67,6 +67,11 @@ const OURS = "mcp__illi__";
 // marks itself, so a request holds its four marks at most
 const MARK = { type: "ephemeral", ttl: "1h" };
 
+// how long one call to illi's tools may take (ms): a subagent's work, a
+// question the user answers late. Claude Code's own limit for an HTTP
+// server, unless its config says one, is a minute
+const WAIT = 24 * 60 * 60 * 1000;
+
 // how long a stop waits for Claude Code to end before killing it (ms)
 const KILL = 5e3;
 
@@ -178,7 +183,7 @@ export namespace ClaudeCode {
     if (ask.server === "") {
       return [...io, ...pick, "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--settings", JSON.stringify({ disableAllHooks: true })];
     }
-    const mcp = { mcpServers: { illi: { type: "http", url: ask.server + "?lean" } } };
+    const mcp = { mcpServers: { illi: { type: "http", url: ask.server + "?lean", timeout: WAIT } } };
     return [...io, ...pick, "--mcp-config", JSON.stringify(mcp), "--allowedTools", "mcp__illi", "--permission-prompt-tool", "mcp__illi__approve"];
   }
 
