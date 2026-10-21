@@ -52,9 +52,9 @@ export const NAMED   = "a-z, 0-9, - and _, a letter or digit first";
 const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
 
 // what a profile's folder holds that is never a profile's to give: the
-// login (the root's, shared), the locks (old and new), the log; the
-// default's folder also holds the others, and which was used last
-const OWN    = ["login.json", "lock", "locks", "illi.log"];
+// login (the root's, shared), the locks, the log; the default's folder
+// also holds the others, and which was used last
+const OWN    = ["login.json", "locks", "illi.log"];
 const ROOTED = ["profiles", "profile"];
 
 // the files that go out with their secrets left out, as JSON; config.json's

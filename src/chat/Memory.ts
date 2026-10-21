@@ -202,8 +202,7 @@ export namespace Memory {
       view: { parts: [], size: 0, batch: false, high: LINES }, seen: { parts: [], size: 0, batch: false, high: SEEN },
       busy: new Set(), calls: new Map(), hold: alone, done: alone, wait: new Set(), share,
     };
-    // a field of another shape than illi writes (an old file's): as if
-    // not saved
+    // a field of another shape than illi writes: as if not saved
     const saved = Store.state(store) as Saved | null;
     const index = (v: unknown, or: number) => (Number.isInteger(v) && (v as number) >= 0 ? (v as number) : or);
     const kept  = (k: any): Kept | null => (Array.isArray(k?.parts) && k.parts.every((p: unknown) => Array.isArray(p) && p.length === 2 && p.every(Number.isInteger)) ? k : null);

@@ -21,7 +21,6 @@ import * as net from "node:net";
 import { AskAI, type Call, type End, type Event, type Kind, type Say } from "../ai/AskAI.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
-import { Import } from "./Import.ts";
 import { Memory, type Share } from "./Memory.ts";
 import { Pick } from "../ai/Pick.ts";
 import { Projects } from "./Projects.ts";
@@ -327,7 +326,6 @@ export namespace Chat {
     if (mem.count === 0) {
       Memory.push(mem, [{ kind: "illi", text: HELLO, line: HELLO_LINE }]);
     }
-    Import.told.splice(0).forEach((text) => Chat.note(chat, text));
     chat.eye = Chat.eye(mem, Math.min(mem.show, Chat.from(chat)));
     mem.made = (l, i) => Chat.made(chat, l, i);
     // summaries stuck: told once till one is built again ("")

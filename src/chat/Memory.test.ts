@@ -4,28 +4,20 @@
 // it whole, the view's lines before it; it holds while they fit, so each
 // call starts as the one before did, and past the call's size moves on
 // till they fill half (the oldest fold into the view); kept on disk. The
-// recent messages come in blocks, one marked in place of the view's. A
-// chat in the files before SQLite is read in once (a gzipped day, an
-// act's line, a line cut short, a page cut off; a message lacking its kind
-// or date, a day that won't unpack), its files kept aside; one whose data
-// won't go in, kept aside too, the chat starting empty, saying why; an
-// import a crash cut is redone (its file swept, a running one's left), a
-// move finished; illis started at once read it in once. Closed, the chat
-// is one file. /compact counts a user's message of many pages once. An
-// agent spawned as the user's is named after it; a freed name is used
-// again, each log its own; one named main, the chat's own caller, is
-// refused. A leaf's summary starts with its message's kind, the
-// compactor's or added.
+// recent messages come in blocks, one marked in place of the view's.
+// Closed, the chat is one file. /compact counts a user's message of many
+// pages once. An agent spawned as the user's is named after it; a freed
+// name is used again, each log its own; one named main, the chat's own
+// caller, is refused. A leaf's summary starts with its message's kind,
+// the compactor's or added.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
-import * as zlib from "node:zlib";
 
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-memory-");
 process.env.ILLI_DIR = DIR;
 
-const { Import } = await import("./Import.ts");
 const { Memory } = await import("./Memory.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
@@ -67,121 +59,11 @@ test("a turn's chat: the messages from the cut whole, in blocks, the last whole 
   expect(Memory.chat(mem, 9, 9).filter((b) => b.mark).length).toBeLessThanOrEqual(1);
 });
 
-// a chat in the files before SQLite: two messages in a gzipped day; then
-// an act's line, two messages (one naming an act), a page cut off (more)
-// and a line cut short; nodes (one built twice, one past the messages);
-// its state; an agent's logs, an old untagged one and a newer; an index
-// that would mislead; an image
-function old(name: string): string {
-  const dir  = DIR + "/" + name;
-  const date = "2026-10-20T10:00:00.000Z";
-  const msg  = (i: number, text: string, more?: boolean) => JSON.stringify({ i, kind: "user", text, size: 6 + text.length, date, ...(more ? { more } : {}) });
-  for (const sub of ["main", "tree", "docs/agent", "docs/images"]) {
-    fs.mkdirSync(dir + "/" + sub, { recursive: true });
-  }
-  fs.writeFileSync(dir + "/main/2026-09-01.jsonl.gz", zlib.gzipSync(msg(0, "zero") + "\n" + msg(1, "one") + "\n"));
-  fs.writeFileSync(dir + "/main/2026-10-20.jsonl", [JSON.stringify({ act: "a1", ans: { ok: true } }), JSON.stringify({ ...JSON.parse(msg(2, "two")), act: "a2" }), msg(3, "three"), msg(4, "four, cut", true), '{"i": 5, "kind": "us'].join("\n"));
-  fs.writeFileSync(dir + "/tree/2026-10-20.jsonl", [{ l: 0, i: 0, text: "zero, first" }, { l: 1, i: 0, text: "zero and one" }, { l: 0, i: 0, text: "zero, again" }, { l: 0, i: 6, text: "past the end" }].map((r) => JSON.stringify(r)).join("\n") + "\n");
-  fs.writeFileSync(dir + "/view.json", JSON.stringify({ parts: [[1, 0], [0, 2], [0, 3]], batch: false, pick: null, goal: "ship it", cut: 2, show: 2, top: 0, main: [1, 9], tree: [1, 9] }));
-  fs.writeFileSync(dir + "/main.index", Buffer.alloc(16 * 9, 7));
-  fs.writeFileSync(dir + "/docs/agent/Scout.jsonl", JSON.stringify({ i: 0, kind: "note", text: "older", size: 11, date }) + "\n");
-  fs.writeFileSync(dir + "/docs/agent/Scout.mf0abc.jsonl", JSON.stringify({ i: 0, kind: "note", text: "newer", size: 11, date }) + "\n");
-  fs.writeFileSync(dir + "/docs/images/0123456789abcdef.png", "png");
-  return dir;
-}
-
-test("a chat in the files before SQLite is read in once: its messages, nodes, state and agents' logs; the files kept aside", () => {
-  const dir = old("old");
-  const mem = Memory.load(dir, () => ({}) as any);
-  mem.hold = true;
-  expect(mem.count).toBe(4);
-  expect(Array.from({ length: 4 }, (_, i) => Memory.message(mem, i)!.text)).toEqual(["zero", "one", "two", "three"]);
-  expect(Memory.message(mem, 2)).toEqual({ i: 2, kind: "user", text: "two", size: 9, date: "2026-10-20T10:00:00.000Z" });
-  expect([Memory.node(mem, { l: 1, i: 0 }), Memory.node(mem, { l: 0, i: 0 }), Memory.node(mem, { l: 0, i: 6 })]).toEqual(["zero and one", "zero, again", null]);
-  expect([mem.goal, mem.cut, mem.view.parts]).toEqual(["ship it", 2, [{ l: 1, i: 0 }, { l: 0, i: 2 }, { l: 0, i: 3 }]]);
-  expect(Memory.agent(mem, "Scout")!.map((r) => r.text)).toEqual(["newer"]);
-  expect(Memory.agent(mem, "Scout.mf0abc")!.map((r) => r.text)).toEqual(["newer"]);
-  expect(fs.readdirSync(dir).sort()).toEqual(["before-sqlite", "docs", "memory.sqlite", "memory.sqlite-shm", "memory.sqlite-wal"]);
-  expect(fs.readdirSync(dir + "/docs")).toEqual(["images"]);
-  expect(fs.readdirSync(dir + "/before-sqlite").sort()).toEqual(["docs", "main", "main.index", "tree", "view.json"]);
-  Memory.push(mem, [{ kind: "illi", text: "after" }]);
+test("closed, the chat is one file", () => {
+  const mem = chat("closed", 3);
   Memory.stop(mem);
-  const again = Memory.load(dir, () => ({}) as any);
-  again.hold = true;
-  expect([again.count, Memory.message(again, 4)!.text, again.goal]).toEqual([5, "after", "ship it"]);
-  expect(fs.readdirSync(dir + "/before-sqlite/main").sort()).toEqual(["2026-09-01.jsonl.gz", "2026-10-20.jsonl"]);
-  Memory.stop(again);
+  expect(fs.readdirSync(DIR + "/closed")).toEqual(["memory.sqlite"]);
 });
-
-test("an import a crash cut is redone, its file swept, a running one's left; a move a crash cut is finished; closed, the chat is one file", () => {
-  const dir = old("crash");
-  const gone = Bun.spawnSync(["true"]).pid;
-  const running = "memory.sqlite." + process.ppid + ".new";
-  fs.writeFileSync(dir + "/memory.sqlite." + gone + ".new", "half an import");
-  fs.writeFileSync(dir + "/" + running, "another illi's, at work");
-  const mem = Memory.load(dir, () => ({}) as any);
-  mem.hold = true;
-  expect(mem.count).toBe(4);
-  Memory.stop(mem);
-  expect(fs.readdirSync(dir).sort()).toEqual(["before-sqlite", "docs", "memory.sqlite", running]);
-  fs.rmSync(dir + "/" + running);
-  fs.writeFileSync(dir + "/view.json", "{}");
-  Memory.stop(Memory.load(dir, () => ({}) as any));
-  expect(fs.existsSync(dir + "/view.json")).toBe(false);
-  expect(fs.readdirSync(dir + "/before-sqlite").sort()).toEqual(["docs", "main", "main.index", "tree", "view.json", "view.json.1"]);
-});
-
-test("an old chat with a message lacking its kind, one lacking its date, and a gzipped day that won't unpack still reads in", () => {
-  const dir = old("odd");
-  const date = "2026-10-20T10:00:00.000Z";
-  fs.writeFileSync(dir + "/main/2026-08-01.jsonl.gz", "not gzip at all");
-  fs.writeFileSync(dir + "/main/2026-10-21.jsonl", [{ i: 4, kind: "user", text: "four, whole", size: 15, date }, { i: 5, text: "no kind", size: 7, date }, { i: 6, kind: "illi", text: "no date" }].map((r) => JSON.stringify(r)).join("\n") + "\n");
-  const mem = Memory.load(dir, () => ({}) as any);
-  mem.hold = true;
-  expect(mem.count).toBe(7);
-  expect([Memory.message(mem, 0)!.text, Memory.message(mem, 4)!.text]).toEqual(["zero", "four, whole"]);
-  expect(Memory.message(mem, 5)).toMatchObject({ kind: "note", text: "(a message here didn't read in from the files before SQLite)" });
-  expect(Memory.message(mem, 6)).toMatchObject({ kind: "illi", text: "no date", date: "2026-10-21T00:00:00.000Z" });
-  Memory.stop(mem);
-});
-
-test("an old chat whose data still won't go in starts empty, its files kept, saying why", () => {
-  const dir = old("refused");
-  const fill = Import.fill;
-  (Import as any).fill = () => {
-    throw new Error("a shape never seen");
-  };
-  try {
-    const mem = Memory.load(dir, () => ({}) as any);
-    mem.hold = true;
-    expect(mem.count).toBe(0);
-    Memory.stop(mem);
-  } finally {
-    (Import as any).fill = fill;
-  }
-  expect(Import.told.splice(0)).toEqual(["The chat from before SQLite didn't read in (a shape never seen): this one starts empty, and the old files are kept in " + dir + "/before-sqlite."]);
-  expect(fs.readdirSync(dir + "/before-sqlite").sort()).toEqual(["docs", "main", "main.index", "tree", "view.json"]);
-});
-
-test("illis started at once read the old chat in once, each opening it whole", async () => {
-  const dir = old("race");
-  const at = Date.now() + 1500;
-  const script = DIR + "/race.ts";
-  fs.writeFileSync(script, `
-    const { Memory } = await import(${JSON.stringify(import.meta.dir + "/Memory.ts")});
-    while (Date.now() < ${at}) {}
-    const mem = Memory.load(${JSON.stringify(dir)}, () => ({}));
-    mem.hold = true;
-    console.log(mem.count + " " + Memory.message(mem, 3).text);
-    Memory.stop(mem);
-    process.exit(0);
-  `);
-  const runs = Array.from({ length: 6 }, () => Bun.spawn(["bun", script], { env: { ...process.env, ILLI_DIR: DIR }, stdout: "pipe", stderr: "pipe" }));
-  const outs = await Promise.all(runs.map(async (p) => [await new Response(p.stdout).text(), (await new Response(p.stderr).text()).replace(/^illi: skipped a line .*\n/gm, ""), await p.exited]));
-  expect(outs).toEqual(Array.from({ length: 6 }, () => ["4 three\n", "", 0]));
-  expect(fs.readdirSync(dir).sort()).toEqual(["before-sqlite", "docs", "memory.sqlite"]);
-  expect(fs.readdirSync(dir + "/before-sqlite").sort()).toEqual(["docs", "main", "main.index", "tree", "view.json"]);
-}, 20000);
 
 test("the screen folds with the cut as it moves on by itself, and stays behind a cut moved for it", () => {
   const mem  = chat("show", 40);

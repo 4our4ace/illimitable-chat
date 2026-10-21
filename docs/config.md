@@ -56,8 +56,7 @@ file, `memory.sqlite`, the images beside it. A crash never leaves half a
 write. Back it up: copy the folder while illi is closed, or export the
 profile (`/profile`, Ctrl+E), which copies the chats whole while illi
 runs. `/projects` lists them and forgets one: its messages are
-overwritten on disk, not just unlinked. A chat from before projects is
-read in once as home, its old files kept in `before-sqlite/`.
+overwritten on disk, not just unlinked.
 
 A project's chat runs in one illi. Started in a second terminal in the
 same project, illi joins it as another screen: the same chat, either
