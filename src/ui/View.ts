@@ -66,12 +66,21 @@ export type Todo = { text: string; status: "pending" | "active" | "done" };
 
 // a question the chat asks the user, answered by a view: who asks
 // (illi, an agent), the tool, what it would do: Claude Code asking leave
-// to use a tool (Tools.ts approve); or illi's own (ask: what it asks,
-// the options it offers, whether several may be picked)
-export type Question = { id: string; who: string; tool: string; what: string; options?: Option[]; multi?: boolean };
+// to use a tool (Tools.ts approve); or illi's own (ask: its queries, one
+// or more, answered at once)
+export type Question = { id: string; who: string; tool: string; what: string; queries?: Query[] };
 
-// an option illi's question offers: its label, what it means ("": none)
+// one of illi's questions: what it asks, its tab's label, the options it
+// offers, whether several may be picked
+export type Query = { text: string; head: string; options: Option[]; multi: boolean };
+
+// an option a query offers: its label, what it means ("": none)
 export type Option = { label: string; about: string };
+
+// the answers to illi's question, as the model gets them (Chat.ts): this,
+// then each query and what was said to it. The view shows them as the
+// user's, not as work (entry_rows)
+export const ANSWERED = "The user answered at illi's screen:\n";
 
 // agents: those at work; agent: the main agent (null: illi's own);
 // vendors and models: those offered; use: what its calls use; todo:
@@ -243,6 +252,9 @@ const FOLD = "The whole chat, folded into the fewest blocks.";
 // one line per run; a summary's kind, read off its line (Memory.show)
 const ACTIVITY: Kind[] = ["tool", "echo", "mind", "work"];
 const KINDED   = /^(user|illi|tool|echo|mind|note|work): /;
+
+// the name on the answers to illi's question
+const ANSWERS = "your answers";
 
 // what a run's tool calls did, by tool: one, many (the rest: "called")
 const DID: Record<string, [string, string]> = {
@@ -578,7 +590,7 @@ export function view_tail(v: View, caption = true): Row[] {
   if (v.page === null && v.fold !== null) {
     return [];
   }
-  const shown = v.page !== null || v.verbose ? live : live.filter((l) => !ACTIVITY.includes(l.kind));
+  const shown = v.page !== null || v.verbose ? live : live.filter((l) => !ACTIVITY.includes(l.kind) || entry_answer(l.kind, l.text));
   const rows  = shown.flatMap((l) => entry_rows(null, l.kind, l.text));
   if (v.page !== null || rows.length > 0 || v.wait === "" || !caption) {
     return rows;
@@ -614,9 +626,9 @@ export function view_running(v: View): boolean {
 // what runs, in words; null: nothing. A turn: a question the user is
 // asked, else the last thing streaming (a tool's call: its tool;
 // thinking; the reply), else what it waits on. No turn: the agents
-// waited on. Its tokens, as many as the characters
-// streamed make (about CHARS each); its rate, those of the RATE ms
-// before the last STEP's start, a second's share (so it holds a STEP)
+// waited on. Its tokens, as many as the characters streamed make (about
+// CHARS each); its rate, those of the RATE ms before the last STEP's
+// start, a second's share (so it holds a STEP)
 export function view_doing(v: View, now = Date.now()): Doing | null {
   if (!view_running(v)) {
     return null;
@@ -861,8 +873,13 @@ export function image_kind(head: Uint8Array): string | null {
 
 // a message's row (none: nothing to show); illi's reply is drawn from its
 // text (Reply.ts), so only whether it has any is asked, never its blocks
-// (a reply streaming would be parsed at every paint)
+// (a reply streaming would be parsed at every paint). The answers to
+// illi's question show as the user's words, framed so, named
 export function entry_rows(id: number | null, kind: Kind, text: string, images: string[] = []): Row[] {
+  if (entry_answer(kind, text)) {
+    const said = text.slice(ANSWERED.length);
+    return [{ $: "Msg", id, kind: "user", who: ANSWERS, text: said, body: Md.md_plain(said), call: null, images }];
+  }
   const call = kind === "tool" ? Call.call_parse(text) : null;
   const report = kind === "work" ? Call.report_read(text) : null;
   const plain = kind === "user" || kind === "work" || kind === "echo";
@@ -870,6 +887,11 @@ export function entry_rows(id: number | null, kind: Kind, text: string, images: 
   const who = report === null ? WHO[kind] ?? "" : report.name;
   const none = call === null && (plain ? body.length === 0 : text.trim() === "");
   return none && images.length === 0 ? [] : [{ $: "Msg", id, kind, who, text, body, call, images }];
+}
+
+// whether a message is the answers to illi's question (ANSWERED)
+export function entry_answer(kind: Kind, text: string): boolean {
+  return kind === "echo" && text.startsWith(ANSWERED);
 }
 
 // a person's words (the user's, a report) as typed; a result as a file's

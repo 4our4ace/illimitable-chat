@@ -41,7 +41,7 @@ import { Mcp } from "./Mcp.ts";
 import { MAIN, Memory } from "../chat/Memory.ts";
 import PROMPT from "./prompt.txt" with { type: "text" };
 import { EFFORTS, Pick } from "../ai/Pick.ts";
-import type { Live, Option, Question, State, Todo } from "../ui/View.ts";
+import type { Live, Query, Question, State, Todo } from "../ui/View.ts";
 
 export type { Live };
 
@@ -203,22 +203,28 @@ const TODO: Spec = spec("todo", "Keep your to-do list for the work at hand; the 
   items: { type: "array", items: { type: "object", properties: { text: { type: "string", description: "The step, in a few words: Run the tests" }, status: { type: "string", enum: ["pending", "active", "done"] } }, required: ["text", "status"] } },
 }, ["items"]);
 const STATUSES: Todo["status"][] = ["pending", "active", "done"];
-
-// the most options a question offers
-const OPTIONS = 6;
-
-// the master's question for the user, shown in place of their input:
-// options to pick (several, with multi), words of their own beside them
-const ASK: Spec = spec("ask", "Ask the user a question and wait for the answer, when you need their decision or preference to go on and can offer the likely answers. They see the question and your options in place of their input, pick one (several, with multi), and may type words of their own beside or instead of them. For an open question, ask in your reply instead.", {
-  question : { type: "string", description: "The question, in a sentence or two." },
-  options  : { type: "array", minItems: 2, maxItems: OPTIONS, items: { type: "object", properties: { label: { type: "string", description: "The option, in a few words." }, about: { type: "string", description: "What it means or costs, in a short line." } }, required: ["label"] } },
-  multi    : { type: "boolean", description: "Whether several options may be picked." },
-}, ["question", "options"]);
 const TODO_FILE = "/todo.json";
+
+// the most questions an ask holds, options a question offers, and
+// characters of a question's tab
+const QUERIES = 4;
+const OPTIONS = 6;
+const HEAD    = 12;
+
+// the master's questions for the user, shown in place of their input,
+// each on a tab: options to pick (one, or several), words of their own
+// beside them; then all the answers to look over, and send
+const ASK: Spec = spec("ask", "Ask the user one or more questions and wait for the answers, when you need their decisions or preferences to go on and can offer the likely answers. They see each question with your options in place of their input, pick one (or several, where multi is true), may type words of their own beside or instead of them, then look over all their answers and send them. For an open question, ask in your reply instead.", {
+  questions: { type: "array", minItems: 1, maxItems: QUERIES, items: { type: "object", properties: {
+    question : { type: "string", description: "The question, in a sentence or two." },
+    head     : { type: "string", description: "Its tab's label, " + HEAD + " characters at most: Database, Auth, Scope." },
+    options  : { type: "array", minItems: 2, maxItems: OPTIONS, items: { type: "object", properties: { label: { type: "string", description: "The option, in a few words." }, about: { type: "string", description: "What it means or costs, in a short line." } }, required: ["label"] } },
+    multi    : { type: "boolean", description: "true: several options may be picked; false or none: one only." },
+  }, required: ["question", "options"] } },
+}, ["questions"]);
 
 // the most of a skill's files named when it loads
 const FILES = 50;
-
 
 // the most characters of what a tool would do that a question shows
 const WHAT = 400;
@@ -479,11 +485,11 @@ export namespace Tools {
         return why !== null ? { text: why, fail: true } : { text: args.on ? skill.name + " is on: follow it in every reply from now on (from the next turn it is in your system prompt).\n\n" + Tools.skill(skill) : skill.name + " is off: its rules no longer apply.", fail: false };
       }
       case "ask": {
-        const options = Tools.options(args.options);
-        if (typeof options === "string" || typeof args.question !== "string" || args.question.trim() === "") {
-          return { text: typeof options === "string" ? options : "Ask a question: question is its text.", fail: true };
+        const queries = Tools.queries(args.questions);
+        if (typeof queries === "string") {
+          return { text: queries, fail: true };
         }
-        return { text: (await tools.hooks.ask({ who: "illi", tool: "ask", what: args.question.trim(), options, multi: args.multi === true }, signal)).said, fail: false };
+        return { text: (await tools.hooks.ask({ who: "illi", tool: "ask", what: queries[0].text, queries }, signal)).said, fail: false };
       }
       case "todo": {
         const list = Tools.todo_check(args.items);
@@ -611,11 +617,19 @@ export namespace Tools {
     return { text: JSON.stringify(answer), fail: false };
   }
 
-  // the ask tool's options, each a label and what it means; a string: why
-  // they make none (not 2 to OPTIONS, one without a label)
-  export function options(raw: unknown): Option[] | string {
-    const list = Array.isArray(raw) ? raw.map((o) => ({ label: String(o?.label ?? "").trim(), about: String(o?.about ?? "").trim() })) : [];
-    return list.length < 2 || list.length > OPTIONS || list.some((o) => o.label === "") ? "Give 2 to " + OPTIONS + " options, each with a label." : list;
+  // the ask tool's questions, each its text, its tab's label (none: its
+  // first words), its options (each a label and what it means), whether
+  // several may be picked; a string: why they make none
+  export function queries(raw: unknown): Query[] | string {
+    const list = Array.isArray(raw) ? raw : [];
+    const each = list.map((q): Query => ({
+      text    : String(q?.question ?? "").trim(),
+      head    : (String(q?.head ?? "").trim() || String(q?.question ?? "").trim()).slice(0, HEAD).trim(),
+      options : Array.isArray(q?.options) ? q.options.map((o: any) => ({ label: String(o?.label ?? "").trim(), about: String(o?.about ?? "").trim() })) : [],
+      multi   : q?.multi === true,
+    }));
+    const bad = list.length < 1 || list.length > QUERIES || each.some((q) => q.text === "" || q.options.length < 2 || q.options.length > OPTIONS || q.options.some((o) => o.label === ""));
+    return bad ? "Ask 1 to " + QUERIES + " questions, each with its text and 2 to " + OPTIONS + " options, each with a label." : each;
   }
 
   // what a tool would do, as a question shows it: a command, a file, a

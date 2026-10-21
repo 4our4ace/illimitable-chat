@@ -5,10 +5,11 @@
 // the run; Esc says no; "No, and say why" asks a line (Esc: back to the
 // picker). One gone before it is answered closes its picker; the next
 // shows once the one before is gone. A pipe answers no at once. illi's
-// own question (ask) shows in place of the input: Up and Down move,
-// Space picks (one; several with multi), typing goes to the words of
-// the user's own, Enter sends both (nothing picked: the lit option),
-// Esc skips; a picker opened over it takes the keys.
+// own questions (ask) show in place of the input, a tab each: Up and
+// Down move, Space picks (one; several with multi), typing goes to the
+// words of the user's own, Enter picks the lit option and goes on; the
+// last tab shows all the answers, and Enter there sends them; Esc skips;
+// a picker opened over it takes the keys.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -37,12 +38,15 @@ const asks = (t: any, ...qs: Array<[string, string, string]>) => {
   term_asks(t);
 };
 
-// illi's own question, with three options
-const own = (t: any, multi = false) => {
-  t.v.asks = [{ id: "a1", who: "illi", tool: "ask", what: "Which database?", options: [{ label: "Postgres", about: "you know it" }, { label: "SQLite", about: "" }, { label: "MySQL", about: "" }], multi }];
+// illi's own questions: which database (one of three), and the cache
+// (any of two)
+const DB    = { text: "Which database?", head: "Database", options: [{ label: "Postgres", about: "you know it" }, { label: "SQLite", about: "" }, { label: "MySQL", about: "" }], multi: false };
+const CACHE = { text: "Which caches?", head: "Cache", options: [{ label: "Redis", about: "" }, { label: "Memcached", about: "" }], multi: true };
+const own   = (t: any, queries = [DB]) => {
+  t.v.asks = [{ id: "a1", who: "illi", tool: "ask", what: queries[0].text, queries }];
   term_asks(t);
 };
-const text = (t: any) => term_form_lines(t, 60, 4)!.lines.map((l: any) => l.map((r: any) => r.x).join("").trimEnd());
+const text = (t: any) => term_form_lines(t, 70, 4)!.lines.map((l: any) => l.map((r: any) => r.x).join("").trimEnd());
 
 test("a question shows in the picker with a note; Enter on Yes allows it, once", () => {
   const t = term();
@@ -120,15 +124,15 @@ test("a pipe has no one to ask: no, at once", () => {
   expect(sent(t)).toHaveLength(1);
 });
 
-test("illi's own question shows in place of the input: the question, its options, a row for words of the user's own, the keys", () => {
+test("illi's question shows in place of the input: its tabs, the question, its options, a row for words of the user's own, the keys", () => {
   const t = term();
   own(t);
   expect([t.choose, t.notices]).toEqual([null, []]);
-  expect(text(t)).toEqual(["illi asks", "Which database?", "› ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter send · Esc skip"]);
-  expect(term_form_lines(t, 60, 4)!.at).toEqual({ row: 5, col: 4 });
+  expect(text(t)).toEqual(["illi asks  Database   Review", "Which database?  pick one", "› ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
+  expect(term_form_lines(t, 70, 4)!.at).toEqual({ row: 5, col: 4 });
 });
 
-test("Space picks one option, typing goes to the words; Enter sends both", () => {
+test("one question: Space picks one, typing goes to the words, Enter goes on to the answers, Enter there sends them", () => {
   const t = term();
   own(t);
   term_grab(t, "Down");
@@ -138,39 +142,50 @@ test("Space picks one option, typing goes to the words; Enter sends both", () =>
   expect(text(t).slice(2, 5)).toEqual(["  ○ Postgres  you know it", "  ○ SQLite", "› ● MySQL"]);
   term_type(t, "with replicas");
   term_grab(t, "Ctrl+W");
-  expect(text(t)[5]).toBe("› > with");
   term_type(t, "backups");
   term_grab(t, "Enter");
-  expect(sent(t)).toEqual([{ ask: "a1", yes: true, always: false, said: "picked: MySQL\nwrote: with backups" }]);
-  expect(term_form_lines(t, 60, 4)).toBeNull();
-});
-
-test("with multi, Space picks several; nothing picked, Enter sends the lit option; on the words' row with none, nothing", () => {
-  const t = term();
-  own(t, true);
-  term_type(t, " ");
-  term_grab(t, "Down");
-  term_grab(t, "Down");
-  term_type(t, " ");
-  expect(text(t).slice(0, 5)).toEqual(["illi asks · pick any", "Which database?", "  ■ Postgres  you know it", "  □ SQLite", "› ■ MySQL"]);
+  expect(text(t)).toEqual(["illi asks  ✓ Database   Review", "Which database?", "  ● MySQL", "  > with backups", "Enter send · Shift+Tab back · Esc skip"]);
+  expect(sent(t)).toEqual([]);
+  term_type(t, "x");
+  term_grab(t, "Backspace");
   term_grab(t, "Enter");
-  expect(sent(t)).toEqual([{ ask: "a1", yes: true, always: false, said: "picked: Postgres, MySQL" }]);
-  const u = term();
-  own(u);
-  term_grab(u, "Up");
-  term_grab(u, "Enter");
-  expect(sent(u)).toEqual([]);
-  term_grab(u, "Up");
-  term_grab(u, "Enter");
-  expect(sent(u)).toEqual([{ ask: "a1", yes: true, always: false, said: "picked: MySQL" }]);
+  expect(sent(t)).toEqual([{ ask: "a1", yes: true, always: false, said: "Which database?\npicked: MySQL\nwrote: with backups" }]);
+  expect([term_form_lines(t, 70, 4), t.scr.ed.text]).toEqual([null, ""]);
 });
 
-test("Esc skips illi's question; a picker opened over it takes the keys first", () => {
+test("several questions, a tab each: Enter on an option picks it and goes on; several picked where multi; one unanswered says so", () => {
+  const t = term();
+  own(t, [DB, CACHE, { ...DB, text: "And for tests?", head: "Tests" }]);
+  term_grab(t, "Down");
+  term_grab(t, "Enter");
+  expect(text(t)[0]).toBe("illi asks  ✓ Database   Cache   Tests   Review");
+  expect(text(t).slice(1, 4)).toEqual(["Which caches?  pick any", "› □ Redis", "  □ Memcached"]);
+  term_type(t, " ");
+  term_grab(t, "Down");
+  term_type(t, " ");
+  term_grab(t, "Enter");
+  term_grab(t, "Tab");
+  expect(text(t)).toEqual(["illi asks  ✓ Database   ✓ Cache   Tests   Review", "Which database?", "  ● SQLite", "Which caches?", "  ● Redis, Memcached", "And for tests?", "  no answer", "Enter send · Shift+Tab back · Esc skip"]);
+  term_grab(t, "Shift+Tab");
+  term_grab(t, "Left");
+  expect(text(t)[1]).toBe("Which caches?  pick any");
+  term_grab(t, "Tab");
+  term_grab(t, "Tab");
+  term_grab(t, "Enter");
+  expect(sent(t)).toEqual([{ ask: "a1", yes: true, always: false, said: "Which database?\npicked: SQLite\n\nWhich caches?\npicked: Redis, Memcached\n\nAnd for tests?\nno answer" }]);
+});
+
+test("nothing said to any question sends as skipped; Esc skips at once; a picker opened over it takes the keys first", () => {
   const t = term();
   own(t);
-  t.choose = { names: ["x"], shown: [{ k: 0, at: [] }], at: 0, keys: () => false, find: null, ask: null, pick: () => {} };
-  term_grab(t, "Esc");
-  expect([t.choose, sent(t)]).toEqual([null, []]);
-  term_grab(t, "Esc");
+  term_grab(t, "Tab");
+  term_grab(t, "Enter");
   expect(sent(t)).toEqual([{ ask: "a1", yes: false, always: false, said: "" }]);
+  const u = term();
+  own(u);
+  u.choose = { names: ["x"], shown: [{ k: 0, at: [] }], at: 0, keys: () => false, find: null, ask: null, pick: () => {} };
+  term_grab(u, "Esc");
+  expect([u.choose, sent(u)]).toEqual([null, []]);
+  term_grab(u, "Esc");
+  expect(sent(u)).toEqual([{ ask: "a1", yes: false, always: false, said: "" }]);
 });

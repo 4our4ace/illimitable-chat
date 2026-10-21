@@ -110,14 +110,16 @@ In a list
 When illi asks
 --------------
 
-illi may ask you a question with options. It shows in place of the
-input:
+illi may ask you questions with options, up to four at once. They show
+in place of the input, a tab each:
 
-- Up and Down (or Tab) move, Space picks an option (several, if the
-  question allows), and typing writes words of your own: beside the
-  options picked, or instead of them.
-- Enter sends what you picked (nothing picked: the option you're on)
-  and your words. Esc skips the question.
+- Up and Down move, Space picks an option (one, or several where the
+  question says "pick any"), and typing writes words of your own: beside
+  the options picked, or instead of them.
+- Enter picks the option you're on and goes to the next question; Tab
+  and Shift+Tab (Left and Right, off your words) switch tabs.
+- The last tab, Review, shows all your answers: Enter sends them, Esc
+  skips the questions. Your answers then show in the chat as yours.
 
 Mouse and side panel
 --------------------

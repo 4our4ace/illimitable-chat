@@ -112,10 +112,11 @@ export type Term = {
   asking  : { id: string; c: Chooser | null; done: boolean; form: Form | null } | null; // the question shown (Asks.ts): its picker or form, whether answered
 };
 
-// illi's own question, in place of the input (Asks.ts): the words typed
-// beside its options, the row lit (past the options: the words'), the
-// options picked
-export type Form = { ed: Screen.Ed; at: number; picked: number[] };
+// illi's own questions, in place of the input (Asks.ts): the tab shown
+// (past the last question: the answers, to look over), and for each
+// question the words typed beside its options, the row lit (past the
+// options: the words'), the options picked
+export type Form = { tab: number; each: Array<{ ed: Screen.Ed; at: number; picked: number[] }> };
 
 // the chat as last painted: its lines, its blocks in them, the screen
 // row of its first line shown and that line, the rows it had, its first
