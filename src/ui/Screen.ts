@@ -559,7 +559,7 @@ export function ed_expand(ed: Ed, text: string): string {
 
 // the messages sent before, as typed: each marked paste its token again
 export function ed_history(ed: Ed, sent: string[]): void {
-  ed.hist = sent.map((text) => text.replace(Md.PASTE, (_, n: string, x: string) => {
+  ed.hist = sent.map((text) => text.replace(Md.PASTE, (_, _n: string, x: string) => {
     ed.pastes.set(++ed.n, x);
     return Md.paste_label(ed.n, x);
   }));

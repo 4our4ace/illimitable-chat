@@ -22,7 +22,7 @@ test("a theme's colors that won't do are left out; its glyphs and tools lose the
   expect(own.glyph).toEqual({ input: "]52;c;eA==> " });
   expect(own.tool).toEqual({ shell: "$[2J" });
   expect(own.palette).toBe("nord");
-  expect(Theme.theme_check(null)).toEqual({ ansi: {}, glyph: {}, tool: {}, syntax: {}, palette: undefined, diagrams: undefined, colors: undefined });
+  expect(Theme.theme_check(null)).toEqual({ ansi: {}, glyph: {}, tool: {}, syntax: {}, palette: undefined, colors: undefined });
 });
 
 test("a palette index is its basic SGR to 15, the 256 colors' past it; any other none", () => {

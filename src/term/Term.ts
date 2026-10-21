@@ -318,7 +318,7 @@ function term_hear(t: Term, msg: View.Server): void {
     term_primaries(t);
   }
   if (!t.scr.tty && msg.$ === "entry" && msg.agent === undefined && msg.id !== undefined) {
-    term_print(t, View.entry_rows(msg.id, msg.kind, msg.text, msg.images));
+    term_print(View.entry_rows(msg.id, msg.kind, msg.text, msg.images));
   }
   if (first) {
     term_history(t);

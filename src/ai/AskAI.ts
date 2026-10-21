@@ -38,6 +38,11 @@ export type Kind = "user" | "work" | "mind" | "illi" | "tool" | "echo" | "note";
 
 export type Vendor = "claude-api" | "openai-api" | "chatgpt" | "claude-code";
 
+// what a request used, as its vendor tells it: tokens read (input, cache
+// writes and reads), the speed it ran at; Agent.ts keeps the input each
+// caller's last request read
+export type Usage = { input: number; write: number; read: number; speed: string };
+
 // an image: its mime type, its bytes in base64
 export type Img = { type: string; data: string };
 

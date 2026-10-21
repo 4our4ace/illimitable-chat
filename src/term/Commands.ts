@@ -1,6 +1,6 @@
 // Commands
 // ========
-// All a person can do here, by group (COMMANDS, /help), and the commands
+// All a person can do here, by group (term_groups, /help), and the commands
 // themselves: a /word typed runs one, and, as it's typed, the commands it
 // matches show over the input (suggested, the ones run most first among
 // those it matches alike); the picker (/agent, /profile,
@@ -9,7 +9,7 @@
 
 import * as fs from "node:fs";
 import type { Vendor } from "../ai/AskAI.ts";
-import { term_clip, term_home, term_image } from "./Attach.ts";
+import { term_clip, term_image } from "./Attach.ts";
 import { Chat } from "../chat/Chat.ts";
 import { ChatGPT } from "../ai/ChatGPT.ts";
 import * as config from "../config/Config.ts";
@@ -279,7 +279,7 @@ function term_skill(t: Term, skill: Skill, arg: string, word: string): void {
 // yet: where they go)
 export function term_mcp(t: Term): void {
   const { servers, trouble, files } = Mcp.status();
-  const where  = files.map((f, k) => term_home(f) + (files.length === 1 ? "" : k === 0 ? " (every profile)" : " (this profile's)")).join(" or ");
+  const where  = files.map((f, k) => config.config_home(f) + (files.length === 1 ? "" : k === 0 ? " (every profile)" : " (this profile's)")).join(" or ");
   const server = (s: Server) => "- **" + s.name + "**: " + (s.state === "ready" ? s.own.size + " tools: " + [...s.own.values()].join(", ") : s.state === "starting" ? "starting…" : "failed: " + s.why);
   const text = [
     servers.length === 0 ? "No MCP servers yet. Add them to " + where + ", as Claude Code's mcpServers (illi's docs/customize.md shows the shape); they run from illi's next start." : "MCP servers (their tools are named mcp__<server>__<tool>):", ...servers.map(server),
@@ -296,7 +296,7 @@ function term_agents(t: Term): void {
   const agent = (a: Profile) => "- **" + a.name + "**" + (a.name === t.v.agent ? " (main)" : "") + (a.description === "" ? "" : ": " + a.description) + [a.model, a.effort].filter(Boolean).map((x) => " · " + x).join("") + (a.tools === null ? "" : " · tools: " + a.tools.join(", "));
   const cmd   = (c: Command) => "- **/" + c.name + "**" + (c.description === "" ? "" : ": " + c.description);
   const list  = (title: string, xs: string[]) => ["", title + (xs.length === 0 ? ": none yet." : ":"), ...xs];
-  const dirs  = (kind: "agents" | "commands" | "skills") => Custom.dirs(cwd, kind).map(term_home).join(" or ");
+  const dirs  = (kind: "agents" | "commands" | "skills") => Custom.dirs(cwd, kind).map(config.config_home).join(" or ");
   term_primaries(t);
   const text  = [
     "Main agent: " + (t.v.agent === null ? "illi's own" : t.v.agent) + ". Shift+Tab runs illi as the next primary agent; so does a click at the side, and /agent <name>.",
@@ -405,7 +405,7 @@ export function term_models(t: Term): void {
 function term_logout(t: Term): void {
   t.login?.abort();
   if (config.LOGIN_SET !== null) {
-    return term_note(t, "illi uses the login in " + term_home(config.LOGIN_SET) + " (the login setting): /logout leaves it. /set login default switches back at the next start.");
+    return term_note(t, "illi uses the login in " + config.config_home(config.LOGIN_SET) + " (the login setting): /logout leaves it. /set login default switches back at the next start.");
   }
   const gone = ChatGPT.logout();
   const left = ChatGPT.signed() ? " Now on opencode's login." : " /login signs in again.";
@@ -558,12 +558,12 @@ function term_copy(t: Term): void {
 async function term_export(t: Term): Promise<void> {
   const file = process.cwd() + "/illi-memory.json";
   await Bun.write(file, [...Memory.dump(t.chat.mem)].join(""));
-  term_note(t, "Your memory is in " + term_home(file) + ".");
+  term_note(t, "Your memory is in " + config.config_home(file) + ".");
 }
 
 // the memory tree, as a page
 async function term_tree(t: Term): Promise<void> {
   const file = process.cwd() + "/illi-tree.html";
   await Bun.write(file, [...Memory.page(t.chat.mem)].join(""));
-  term_note(t, "The memory tree is in " + term_home(file) + ".");
+  term_note(t, "The memory tree is in " + config.config_home(file) + ".");
 }

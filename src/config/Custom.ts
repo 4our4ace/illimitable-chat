@@ -38,7 +38,6 @@
 //     You review changes for bugs. Read the diff, then ...
 
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { EFFORTS, Pick, type Offer } from "../ai/Pick.ts";
 import * as config from "./Config.ts";
@@ -103,17 +102,13 @@ export namespace Custom {
     const out = new Map<string, string>();
     for (const dir of Custom.dirs(cwd, kind)) {
       const names = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".md")).sort() : [];
-      for (const f of names.filter((f) => NAME.test(f.slice(0, -3)) && (all || !Custom.off(f.slice(0, -3))))) {
+      for (const f of names.filter((f) => NAME.test(f.slice(0, -3)) && (all || !config.config_off(f.slice(0, -3))))) {
         out.set(f.slice(0, -3), path.join(dir, f));
       }
     }
     return out;
   }
 
-  // whether a skill, agent, command or MCP server is turned off (`off`)
-  export function off(name: string): boolean {
-    return config.OFF.includes(name.toLowerCase());
-  }
 
   export function agents(cwd: string): Profile[] {
     return [...Custom.files(cwd, "agents")].map(([name, file]) => Custom.profile(name, file));
@@ -129,7 +124,7 @@ export namespace Custom {
   // file goes (from ~)
   export function primaries_said(cwd: string): string {
     const names = Custom.primaries(cwd).map((a) => a.name);
-    const dirs  = Custom.dirs(cwd, "agents").map((d) => (d.startsWith(os.homedir()) ? "~" + d.slice(os.homedir().length) : d));
+    const dirs  = Custom.dirs(cwd, "agents").map(config.config_home);
     return names.length > 0 ? "Your primary agents: " + names.join(", ") + "." : "No primary agents yet: add an agent file (mode: primary, or none) to " + dirs.join(" or ") + "; /agents shows how.";
   }
 
@@ -158,7 +153,7 @@ export namespace Custom {
         out.set(name.toLowerCase(), { name, description: head.description ?? "", body, dir: path.join(dir, name) });
       }
     }
-    return [...out.values()].filter((s) => all || !Custom.off(s.name)).sort((a, b) => a.name.localeCompare(b.name));
+    return [...out.values()].filter((s) => all || !config.config_off(s.name)).sort((a, b) => a.name.localeCompare(b.name));
   }
 
   export function skill(cwd: string, name: string): Skill | null {

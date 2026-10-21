@@ -83,14 +83,13 @@ type Hooks = {
   main   : () => string | null;
 };
 
-// the tools: their secret and URL, the working dir, the master's to-do
+// the tools: their URL (a secret in it), the working dir, the main agent's to-do
 // list (none: not read yet), the tools Claude Code may use unasked for
 // the rest of this run (approve)
 export type Tools = {
   mem    : Memory;
   agents : Map<string, Agent>;
   allowed: Set<string>;
-  key    : string;
   url    : string;
   cwd    : string;
   hooks  : Hooks;
@@ -180,7 +179,7 @@ MCP servers in illi) come from illi, as its MCP server's (mcp__illi__):
 keep your to-do list with illi's todo, which the user sees beside the
 chat.`;
 
-// the tools of everyone (OWN), the master's (BOSS), and those that run
+// the tools of everyone (OWN), the main agent's (boss), and those that run
 // on this computer (Machine.ts's TOOLS)
 const OWN: Spec[] = [
   spec("zoom", "Open the line id+n of the view into the two lines of n/2 under it; n = 1 gives the message whole. With an agent's name as id, give that agent's whole chat. A long text comes in pages from character at, saying where to go on.", { id: { type: ["integer", "string"] }, n: INT, at: INT }, ["id"]),
@@ -247,7 +246,7 @@ export namespace Tools {
   export function serve(mem: Memory, hooks: Hooks, cwd: string): Tools {
     const key = crypto.randomUUID();
     const url = Tools.base() + key + "/";
-    const tools: Tools = { mem, agents: new Map(), allowed: new Set(), key, url, cwd, hooks };
+    const tools: Tools = { mem, agents: new Map(), allowed: new Set(), url, cwd, hooks };
     CHATS.set(key, tools);
     return tools;
   }
@@ -568,7 +567,7 @@ export namespace Tools {
   // user's answer (a dropped request: no). Its answer as Claude Code
   // reads it: the input as it was, or a no with its reason
   export async function approve(tools: Tools, who: string, tool: string, input: unknown, signal: AbortSignal): Promise<Out> {
-    const reply = tools.allowed.has(tool) ? { yes: true, always: true, why: "" } : await tools.hooks.ask(who === MAIN ? "illi" : who, tool, Tools.what(tool, input), signal);
+    const reply = tools.allowed.has(tool) ? { yes: true, always: true, why: "" } : await tools.hooks.ask(who === MAIN ? "illi" : who, tool, Tools.what(input), signal);
     if (reply.yes && reply.always) {
       tools.allowed.add(tool);
     }
@@ -578,7 +577,7 @@ export namespace Tools {
 
   // what a tool would do, as a question shows it: a command, a file, a
   // URL or a query, else its input, WHAT characters at most
-  export function what(tool: string, input: any): string {
+  export function what(input: any): string {
     const one = input?.command ?? input?.file_path ?? input?.url ?? input?.query ?? input?.pattern;
     const text = typeof one === "string" ? one : JSON.stringify(input ?? {});
     return text.length > WHAT ? text.slice(0, WHAT - 1) + "…" : text;

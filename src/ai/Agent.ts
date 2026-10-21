@@ -37,12 +37,11 @@
 // its request at once. A request takes its place in single flight
 // (AskAI.wait) as it is sent.
 
-import { AskAI, type Ask, type Block, type Flight, type Try, type End, type Event, type Img, type Kind, type Say, type Vendor } from "./AskAI.ts";
+import { AskAI, type Ask, type Block, type Flight, type Try, type End, type Event, type Img, type Kind, type Say, type Usage, type Vendor } from "./AskAI.ts";
 import { Anthropic } from "./Anthropic.ts";
 import { ChatGPT } from "./ChatGPT.ts";
 import { ClaudeCode } from "./ClaudeCode.ts";
 import { OpenAI } from "./OpenAI.ts";
-import type { Usage } from "./Price.ts";
 import { live_push } from "../ui/View.ts";
 import { Machine, type Spec } from "../tools/Machine.ts";
 import * as config from "../config/Config.ts";

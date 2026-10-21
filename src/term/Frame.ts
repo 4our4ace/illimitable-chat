@@ -6,7 +6,6 @@
 // notes, the toast and the jump to the end; the rule (what runs, the ∞
 // traced), the input, the pages, the pick. A pipe gets text.
 
-import * as os from "node:os";
 import { term_asks } from "./Asks.ts";
 import { term_suggest, term_suggested } from "./Commands.ts";
 import * as config from "../config/Config.ts";
@@ -23,7 +22,7 @@ import { GLYPH } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
 
 // the folder illi works in, as the head shows it
-const HERE = process.cwd().startsWith(os.homedir()) ? "~" + process.cwd().slice(os.homedir().length) : process.cwd();
+const HERE = config.config_home(process.cwd());
 
 // the margin left and right of the chat and the input
 const MARGIN = 2;
@@ -129,7 +128,7 @@ export function term_paint(t: Term): void {
   term_asks(t);
   const said = term_shown(t);
   if (!t.scr.tty) {
-    term_print(t, said.notes.map(View.Cap));
+    term_print(said.notes.map(View.Cap));
     return;
   }
   t.hits  = [];
@@ -353,7 +352,7 @@ function term_elapsed(ms: number): string {
 }
 
 // a pipe's rows, as text
-export function term_print(t: Term, rows: View.Row[]): void {
+export function term_print(rows: View.Row[]): void {
   if (rows.length > 0) {
     Screen.screen_print(term_inset([[], ...Paint.rows_lines(rows, PIPE)]));
   }

@@ -140,7 +140,7 @@ export const COMMENTS = ["comment", "prolog", "doctype", "cdata"];
 // (cellsmith/presets.ts), "mono" (the terminal's ink: bold and dim, shades
 // for a diagram's series), or "auto": a dark or light one by the
 // terminal's background; untold, replies in REPLY, diagrams mono
-export const PALETTE = OWN.palette ?? OWN.diagrams ?? "auto";
+export const PALETTE = OWN.palette ?? "auto";
 
 // a reply's colors in the terminal's own palette, for "auto" untold:
 // cellsmith's slots (Reply.ts); a slot left out is the ink (a comment, a
@@ -169,7 +169,7 @@ export function tool_glyph(name: string): string {
 
 // the user's theme file, read once, each entry checked (theme_check);
 // one that won't parse is kept to say (THEME_TROUBLE)
-function theme_read(): { ansi?: Record<string, string>; glyph?: Record<string, string>; tool?: Record<string, string>; syntax?: Record<string, string>; palette?: string; diagrams?: string; colors?: Record<string, string> } {
+function theme_read(): { ansi?: Record<string, string>; glyph?: Record<string, string>; tool?: Record<string, string>; syntax?: Record<string, string>; palette?: string; colors?: Record<string, string> } {
   if (!fs.existsSync(config.THEME)) {
     return {};
   }
@@ -195,7 +195,6 @@ export function theme_check(own: any): ReturnType<typeof theme_read> {
     tool     : theme_entries(own?.tool, text),
     syntax   : theme_entries(own?.syntax, theme_color),
     palette  : name(own?.palette),
-    diagrams : name(own?.diagrams),
     colors   : own?.colors,
   };
 }

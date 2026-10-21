@@ -10,7 +10,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { term_file, term_home } from "./Attach.ts";
+import { term_file } from "./Attach.ts";
 import { Chat } from "../chat/Chat.ts";
 import { term_ask, term_chooser } from "./Commands.ts";
 import * as config from "../config/Config.ts";
@@ -43,7 +43,7 @@ export function term_profile(t: Term, arg: string): void | Promise<void> {
 export function term_profile_pick(t: Term): void {
   t.profs     = Profiles.profile_list(config.ROOT);
   const names = t.profs;
-  const where = names.map((p) => term_home(Profiles.profile_dir(config.ROOT, p))).map((d) => (d.length <= 40 ? d : "…" + d.slice(-39)));
+  const where = names.map((p) => config.config_home(Profiles.profile_dir(config.ROOT, p))).map((d) => (d.length <= 40 ? d : "…" + d.slice(-39)));
   const acts: Record<string, (t: Term, name: string) => unknown> = { "Ctrl+R": term_profile_rename, "Ctrl+E": term_profile_export, Delete: term_profile_delete };
   const keys  = (k: number, key: string) => {
     if (acts[key] === undefined || k >= names.length) {
@@ -173,7 +173,7 @@ async function term_profile_make(t: Term, name: string, move: boolean): Promise<
 // runs again under its new name
 function term_profile_rename(t: Term, from: string): void {
   if (from === Profiles.DEFAULT) {
-    return term_note(t, "The default profile is illi's own folder (" + term_home(config.ROOT) + ") and keeps its name.");
+    return term_note(t, "The default profile is illi's own folder (" + config.config_home(config.ROOT) + ") and keeps its name.");
   }
   term_ask(t, "Rename profile " + from, "its new name", from, Profiles.NAMED, (text) => {
     const to  = text.toLowerCase();
@@ -196,7 +196,7 @@ function term_profile_rename(t: Term, from: string): void {
 // never the default, nor the one running
 export function term_profile_delete(t: Term, name: string): void {
   const why =
-    name === Profiles.DEFAULT ? "The default profile is illi's own folder (" + term_home(config.ROOT) + ") and can't be deleted." :
+    name === Profiles.DEFAULT ? "The default profile is illi's own folder (" + config.config_home(config.ROOT) + ") and can't be deleted." :
     name === config.PROFILE ? "This is profile " + name + ": switch to another first." :
     null;
   if (why !== null) {
@@ -217,14 +217,14 @@ export function term_profile_delete(t: Term, name: string): void {
 async function term_profile_export(t: Term, name: string): Promise<void> {
   const file = path.resolve("illi-profile-" + name + ".tar.gz");
   if (fs.existsSync(file)) {
-    return term_note(t, "Not exported: " + term_home(file) + " is there already. Move it away first.");
+    return term_note(t, "Not exported: " + config.config_home(file) + " is there already. Move it away first.");
   }
   try {
     if (name === config.PROFILE) {
       await Disk.synced();
     }
     const cut = await Profiles.profile_export(config.ROOT, name, file);
-    term_note(t, "Profile " + name + " is in " + term_home(file) + ", without the login" + (cut === 0 ? "" : " or " + cut + " secret" + (cut === 1 ? "" : "s")) + ". /profile imports it.");
+    term_note(t, "Profile " + name + " is in " + config.config_home(file) + ", without the login" + (cut === 0 ? "" : " or " + cut + " secret" + (cut === 1 ? "" : "s")) + ". /profile imports it.");
   } catch (err: any) {
     term_note(t, "Not exported. " + err.message);
   }

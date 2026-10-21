@@ -1,7 +1,7 @@
 // Keys
 // ====
 // A key, as Screen.ts reads it: the mouse's (Select.ts), the wheel, the
-// keys of COMMANDS (Commands.ts), and what the lists and panes over the
+// keys of term_groups (Commands.ts), and what the lists and panes over the
 // chat take first (a picker searched, the text typed too); Enter, Esc,
 // Ctrl+C and Ctrl+D, Tab (the suggested reply), Shift+Tab and the pages.
 
@@ -31,7 +31,7 @@ const WHEEL = 3;
 
 // a key ("": the input may have changed): the mouse, the wheel, the
 // terminal's background told (the chat laid out anew: diagrams draw over
-// it), or its line of COMMANDS. Text chosen is let go at a key not KEEP's
+// it), or its line of term_groups. Text chosen is let go at a key not KEEP's
 // or at typing; Ctrl+C copies it again instead. Text in the input
 // dismisses the suggested reply
 export function term_press(t: Term, key: string): void {
