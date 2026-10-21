@@ -5,7 +5,8 @@
 // and misses the cache); the speed is a service tier ("priority" is
 // fast). A marked block is an explicit breakpoint; the end is cached
 // implicitly only if marked (AskAI.tail). A failure its input caused
-// (INPUT), incomplete or refused fails; any other failure (a server
+// (INPUT), incomplete or refused fails (said in plain words); a plan or
+// quota used up is down (Agent.spent); any other failure (a server
 // error, a rate limit) is busy. Silent while it reasons, it is dead
 // after 20 min.
 
@@ -159,14 +160,19 @@ export namespace OpenAI {
     const note = ran !== ask.speed ? "ran at " + ran + " speed" : "";
     const refusals = out.flatMap((o) => (o.type === "message" ? o.content : [])).filter((c: any) => c.type === "refusal");
     const step: Step = { out, uses, entries: out.flatMap(OpenAI.entries), stop: "done", why: "", note };
+    const spent = res.status === "failed" ? Agent.spent(ask.vendor, 0, res.error) : "";
+    if (spent !== "") {
+      return { ...step, stop: "down", why: spent };
+    }
     if (res.status === "failed") {
       return { ...step, stop: INPUT.test(String(res.error?.code ?? "")) ? "fail" : "busy", why: res.error?.message ?? "failed" };
     }
     if (res.status === "incomplete") {
-      return { ...step, stop: "fail", why: "incomplete: " + res.incomplete_details?.reason };
+      const reason = String(res.incomplete_details?.reason);
+      return { ...step, stop: "fail", why: Agent.stopped(reason, "incomplete: " + reason) };
     }
     if (refusals.length > 0) {
-      return { ...step, stop: "fail", why: "refused: " + refusals.map((c: any) => c.refusal).join(" ") };
+      return { ...step, stop: "fail", why: Agent.stopped("refusal", "", refusals.map((c: any) => c.refusal).join(" ")) };
     }
     return { ...step, stop: uses.length > 0 ? "tools" : "done" };
   }
