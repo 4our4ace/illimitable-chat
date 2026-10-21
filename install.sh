@@ -90,14 +90,21 @@ cp "$tmp/illi" "$BIN/.illi.new"
 mv -f "$BIN/.illi.new" "$BIN/illi"
 say "Installed $version in $BIN/illi"
 
+# off the PATH: the line that puts it there, and how a shell open now
+# gets it (fish_add_path reaches every fish at once; an rc file, a new
+# terminal or the file sourced)
+next="illi"
 case ":$PATH:" in
   *":$BIN:"*) ;;
   *)
     case "$(basename "${SHELL:-}")" in
       fish) echo "Put it on your PATH:  fish_add_path $BIN" ;;
-      zsh)  echo "Put it on your PATH:  echo 'export PATH=\"$BIN:\$PATH\"' >> ~/.zshrc" ;;
-      *)    echo "Put it on your PATH:  echo 'export PATH=\"$BIN:\$PATH\"' >> ~/.bashrc" ;;
+      zsh)  echo "Put it on your PATH:  echo 'export PATH=\"$BIN:\$PATH\"' >> ~/.zshrc"
+            next="illi  (in a new terminal, or after: source ~/.zshrc)" ;;
+      *)    echo "Put it on your PATH:  echo 'export PATH=\"$BIN:\$PATH\"' >> ~/.bashrc"
+            next="illi  (in a new terminal, or after: source ~/.bashrc)" ;;
     esac
     ;;
 esac
-echo "Then run:  illi"
+echo "Then run:  $next"
+echo "In the chat, type /login to sign in with your ChatGPT plan, or set API keys: see Sign in in the README."

@@ -4,7 +4,8 @@ A terminal AI agent with one chat that never ends. Illi (short for
 Illimitable) folds old messages into a memory tree it can zoom back
 into, so it forgets nothing.
 
-Written mostly by AI agents: expect bugs.
+Written mostly by AI agents: expect bugs. Illi runs shell commands and
+edits files without asking, so use it where you'd let it.
 
 Why Illi
 --------
@@ -40,9 +41,32 @@ From source, with [Bun](https://bun.sh):
     git clone https://github.com/4our4ace/illimitable-chat
     bun illimitable-chat/src/main.ts
 
-Sign in with `/login` (ChatGPT Plus or Pro). An existing
-[opencode](https://opencode.ai) login works too, or API keys (`vendors`
-below).
+Sign in
+-------
+
+In the chat, type `/login` to sign in with your ChatGPT plan (Plus or
+Pro): Illi shows a code to enter on OpenAI's page, then keeps and renews
+the login itself. An existing [opencode](https://opencode.ai) login is
+picked up as it is.
+
+Or use API keys: set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, and name
+the vendor in `~/.illi/config.json`:
+
+    { "vendors": "claude-api" }
+
+Illi's pick and the summaries' then default to that vendor's models:
+`claude-api` runs sonnet-5.5 and haiku-5.5, `openai-api` gpt-6.1-sol and
+gpt-6-luna. To choose them, or list more vendors (the first gives the
+defaults):
+
+    {
+      "vendors": "claude-api,chatgpt",
+      "pick": "claude-api:opus-5.5:high:slow",
+      "compactor": "claude-api:haiku-5.5:medium:slow"
+    }
+
+`ILLI_VENDORS=claude-api illi` tries it without a file; `/set vendors
+claude-api` in the chat works from the next start.
 
 How it works
 ------------
@@ -61,25 +85,28 @@ flowchart TD
 - **Zoom.** Illi can open any line back down to the original messages.
   `/compact` folds all but the last two exchanges, so turns get smaller
   (the screen keeps showing them); `/clear` empties the screen for a
-  fresh topic, and Illi still remembers it all. `/tree` shows yours as
-  a web page.
+  fresh topic, and Illi still remembers it all. `/tree` writes yours
+  as a web page into the current folder.
 - **Tools.** Shell, file edits, subagents, a to-do list, MCP servers.
   `/goal <message>` keeps it working until the goal is met.
 - **Drawn replies.** Mermaid diagrams, highlighted code and boxed tables,
   the way [cellsmith](https://github.com/4our4ace/cellsmith) draws them
   in Claude Code.
 
-Keys
-----
+Keys and commands
+-----------------
 
-| Key                  | Does                                  |
+| Key or command       | Does                                  |
 | -------------------- | ------------------------------------- |
 | Enter / Esc          | send / interrupt                      |
 | Tab                  | take the suggested reply              |
 | `/`                  | command list                          |
 | Shift+Tab            | switch primary agent                  |
+| `/login`             | sign in with your ChatGPT plan        |
 | `/model`             | pick the model, its effort and speed  |
 | `/settings`          | change any setting below              |
+| `/profile`           | switch, make or export a profile      |
+| `/tree`, `/export`   | the memory as a page, as JSON, written into the current folder |
 | Ctrl+O               | show tool calls and thinking          |
 | Drag, double-click   | copy text                             |
 | Ctrl+Y               | copy the last reply                   |
@@ -93,17 +120,19 @@ Keys
 Customize
 ---------
 
-All in `~/.illi/`, or a project's `.illi/` (which wins by name).
-`examples/` has samples. Or ask Illi: it comes with a skill,
-`customize-illi`, and writes these files itself.
+All in `~/.illi/`. A project's `.illi/` may hold agents, commands and
+skills too, which win by name; the rest is read only from yours.
+[`examples/`](https://github.com/4our4ace/illimitable-chat/tree/main/examples)
+has samples. Or ask Illi: it comes with a skill, `customize-illi`, and
+writes these files itself.
 
 - `agents/*.md`: agents. `mode: primary` ones are switched to with
-  Shift+Tab; `subagent` ones are spawned by Illi. Each gets a color of
-  its own; `color: "#rrggbb"` picks one.
+  Shift+Tab; `subagent` ones are spawned by Illi; `all`, the default,
+  both. Each gets a color of its own; `color: "#rrggbb"` picks one.
 - `commands/*.md`: `/name` sends the file, `$ARGUMENTS` filled in.
 - `skills/<name>/SKILL.md`: skills, in Claude Code's format.
-- `mcp.json`: MCP servers, in Claude Code's `mcpServers` shape. Only
-  yours is read, never a project's.
+- `mcp.json`: MCP servers, in Claude Code's `mcpServers` shape (below).
+  Only yours is read, never a project's.
 - `theme.json`: colors and palette (`"palette": "nord"`, `mono`, `auto`).
 - `RULES.md`: your rules for every project, in every prompt. Illi writes
   it when you ask ("add that to my rules"), never on its own. A
@@ -122,6 +151,18 @@ An agent:
     ---
     You review code changes. ...
 
+An `mcp.json`:
+
+```json
+{ "mcpServers": {
+    "github": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"],
+                "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}" } },
+    "docs":   { "type": "http", "url": "https://example.com/mcp",
+                "headers": { "Authorization": "Bearer ${DOCS_TOKEN}" } } } }
+```
+
+Secrets go in as `${VAR}`, read from the environment, never in the file.
+
 Profiles
 --------
 
@@ -137,31 +178,36 @@ login, the API keys and the default's config.json. Illi's memory is the
 running profile's chat alone: its read, write and edit tools refuse every
 chat folder, and its prompt keeps the shell out of other profiles' too.
 
-An export leaves out the login (and a login file its config names inside
-the profile's folder), the lock and the log, and strips config.json and
-mcp.json of secrets (by key name, or shaped like a known key or token).
-The rest of the folder goes as it is: the chat, agents, commands,
-skills, theme.json and RULES.md. An import is treated as untrusted: its
-config's `after`, `rules`, `login`, `mcp` and `theme` are dropped and its
-MCP servers turned off, but its agents, commands, skills, RULES.md and
-chat come in as they are, at work once you switch to it.
+- An export leaves out the login (and a login file its config names
+  inside the profile's folder), the lock and the log.
+- It strips config.json and mcp.json of secrets: by key name, or shaped
+  like a known key or token.
+- The rest goes as it is: the chat, agents, commands, skills, theme.json
+  and RULES.md.
+- An import is treated as untrusted: its config's `after`, `rules`,
+  `login`, `mcp` and `theme` are dropped and its MCP servers turned off.
+- Its agents, commands, skills, RULES.md and chat come in as they are, at
+  work once you switch to it.
 
 Config
 ------
 
 `~/.illi/config.json`, or `ILLI_<KEY>` variables. All optional.
-`/settings` changes them from inside Illi (`/set <key> <value>` too);
-most apply at once; `vendors`, `models`, `jobs`, `theme`,
-`mcp` and `login` at the next start. A key set by a variable stays as the
-variable says. A relative path is taken from the folder of the
-config.json that names it (a variable's: the working folder). A value
-that won't do stops Illi at the start, saying which.
+
+- `/settings` changes them from inside Illi (`/set <key> <value>` too).
+- Most apply at once; `vendors`, `models`, `jobs`, `theme`, `mcp` and
+  `login` at the next start.
+- A key set by a variable stays as the variable says.
+- A relative path is taken from the folder of the config.json that names
+  it (a variable's: the working folder).
+- A value that won't do stops Illi at the start, saying which. A pick
+  no longer offered gives way to its default, with a note.
 
 | Key          | Default                           | What                                             |
 | ------------ | --------------------------------- | ------------------------------------------------ |
 | `vendors`    | `chatgpt`                         | also `claude-api`, `openai-api` (API keys)       |
-| `pick`       | `chatgpt:gpt-6.1-sol:medium:slow` | vendor:model:effort:speed (`/model` per chat)    |
-| `compactor`  | `chatgpt:gpt-6-luna:medium:slow`  | writes the summaries                             |
+| `pick`       | `chatgpt:gpt-6.1-sol:medium:slow` | vendor:model:effort:speed (`/model` per chat); default: the first vendor's |
+| `compactor`  | `chatgpt:gpt-6-luna:medium:slow`  | writes the summaries; default: the first vendor's |
 | `agents`     | the pick                          | what subagents run on                            |
 | `models`     | all                               | models offered                                   |
 | `context`    | `auto`                            | tokens a turn sends: `auto` (70% of the window, at most 400k), a number, or `"60%"` |
@@ -178,6 +224,15 @@ API keys come from `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`. The chat is
 in `~/.illi/chat`, every message kept; days over a month old are gzipped.
 Back it up.
 
+Troubleshooting
+---------------
+
+- Something went wrong: Illi logs it in its profile's folder,
+  `~/.illi/illi.log` (another profile's: `~/.illi/profiles/<name>/illi.log`).
+- "Illi is already open in another terminal": a profile's chat runs in
+  one Illi at a time. Quit it there (Ctrl+D), or start another profile:
+  `ILLI_PROFILE=<name> illi`.
+
 Code
 ----
 
@@ -185,7 +240,7 @@ Code
     src/term/      the terminal app: keys, selection, commands, side panel
     src/ui/        the chat's view, markdown, replies, diagrams, the screen
     src/chat/      the chat, its memory tree (Memory.ts), the disk
-    src/ai/        model vendors, the agent loop, picks, prices
+    src/ai/        model vendors, the agent loop, picks, token usage
     src/tools/     shell and files, MCP servers, the prompts
     src/config/    settings, profiles, your agents, commands and skills
     test/          tests across modules; each module's own sit beside it
