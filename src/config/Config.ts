@@ -2,9 +2,10 @@
 // ======
 // illi's settings. Its DIR holds config.json, the lock and the chat
 // (chat/): the folder of the profile running (Profiles.ts), the ROOT
-// itself ($ILLI_DIR, default ~/.illi) for the default. A profile's
-// config.json goes over the root's, key by key; the ChatGPT login is the
-// root's, shared. Each key of config.json (SETTINGS) may be set
+// itself ($ILLI_DIR, default ~/.illi) for the default. The root is the
+// global layer, every profile's: a profile's config.json goes over the
+// root's, key by key; its own RULES.md and theme.json over the root's, if
+// it has them; the ChatGPT login is the root's, shared. Each key of config.json (SETTINGS) may be set
 // as ILLI_<KEY> instead; a path may start with "~/", and a relative one
 // is taken from the folder of the config.json that names it (a
 // variable's: the working folder). Each key set is checked at the start
@@ -69,12 +70,13 @@ const TABLE = {
   side_width : { def: "25%", values: ["20%", "25%", "30%", "35%", "40%"], now: true, what: "the side panel's width", shape: [/^\d+(\.\d+)?%?$/, "columns (40) or a share of the screen (30%)"] },
   context    : { def: "auto", values: ["auto", "50%", "60%", "70%", "80%", "90%"], now: true, what: "chat sent before summarizing", shape: [/^(auto|\d+|\d+(\.\d+)?%)$/, "auto, tokens (350000) or a share of the window (60%)"] },
   contexts   : { def: "", values: "text", now: true, what: "context by model, as JSON" },
-  rules      : { def: DIR + "/RULES.md", values: "text", now: true, what: "your rules, every project", path: true },
+  rules      : { def: config_own("RULES.md"), values: "text", now: true, what: "your rules, every project", path: true },
   after      : { def: "", values: "text", now: true, what: "a command after each turn" },
+  off        : { def: "", values: "text", now: true, what: "skills, agents, commands, MCP servers turned off", none: "none" },
   vendors    : { def: "chatgpt", values: "text", now: false, what: "where models come from" },
   models     : { def: "", values: "text", now: false, what: "the models offered", none: "all" },
   jobs       : { def: "8", values: ["2", "4", "8", "16", "32"], now: false, what: "summaries built at once", shape: [/^[1-9]\d*$/, "a number, 1 or more"] },
-  theme      : { def: DIR + "/theme.json", values: "text", now: false, what: "the theme file", path: true },
+  theme      : { def: config_own("theme.json"), values: "text", now: false, what: "the theme file", path: true },
   mcp        : { def: DIR + "/mcp.json", values: "text", now: false, what: "the MCP servers' file", path: true },
   login      : { def: "", values: "text", now: false, what: "the ChatGPT login file", none: "illi's own", path: true },
 } satisfies Record<string, Setting>;
@@ -114,9 +116,15 @@ config_gone();
 export let RULES      = "";
 export let AFTER      = "";
 
-// the theme's file (Theme.ts) and the user's MCP servers (Mcp.ts)
+// the theme's file (Theme.ts) and the user's MCP servers (Mcp.ts): in a
+// profile, the root's mcp.json too, its servers under the profile's
 export const THEME    = config_place("theme");
 export const MCP      = config_place("mcp");
+export const MCPS     = DIR === ROOT ? [MCP] : [...new Set([ROOT + "/mcp.json", MCP])];
+
+// the skills, agents, commands and MCP servers turned off, by name, in
+// lower case (Custom.ts, Mcp.ts)
+export let OFF: string[] = [];
 
 // a suggested reply after each turn, Tab taking it (Chat.suggest): on,
 // unless off (or false, 0)
@@ -208,6 +216,17 @@ function config_where(key: Key): string {
   return config_env_set(key) ?? (key in config_file(PATH) ? PATH : ROOT + "/config.json");
 }
 
+// where a key's value comes from, as /settings says it: its variable,
+// this profile (its own config.json sets it), else global (the root's)
+export function config_from(key: Key): string {
+  return config_env_set(key) ?? (DIR !== ROOT && key in config_file(PATH) ? PROFILE : "global");
+}
+
+// a file of the profile's own, if it has one; else the root's, global
+function config_own(name: string): string {
+  return DIR === ROOT || fs.existsSync(DIR + "/" + name) ? DIR + "/" + name : ROOT + "/" + name;
+}
+
 // the picks set as vendor:model:effort:speed that aren't offered here (a
 // model or vendor gone since) given way to their defaults, each told
 // (NOTES) with where it's set; one not of that shape is left to
@@ -296,6 +315,7 @@ function config_live(): void {
   const own    = config_contexts(config_value("contexts"));
   RULES       = config_place("rules");
   AFTER       = config_value("after");
+  OFF         = config_list(config_value("off").toLowerCase()).filter((name) => name !== "");
   SUGGEST     = !["off", "false", "0"].includes(String(config_value("suggest")).trim().toLowerCase());
   TPS         = !["off", "false", "0"].includes(String(config_value("tps")).trim().toLowerCase());
   SIDE        = config_value("side");

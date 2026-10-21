@@ -5,15 +5,20 @@
 // to search. The lit one: Left and Right step it through its values, so
 // does Enter (kept in config.json at once); Enter on a pick opens the
 // model picker for it (a role's: the chat's vendor's pick, the choice
-// kept in its vendor's place), on one typed in puts `/set <key> <value>` in the
-// input to change; Delete puts its default back. A change applies at
-// once or at the next start, as the foot says. /set changes one by its
-// words.
+// kept in its vendor's place), on `off` lists what it may turn off, on
+// one typed in puts `/set <key> <value>` in the input to change; Delete
+// puts its default back. In a profile, a change is its own, and each row
+// says where its value comes from: global (the default profile's, every
+// profile's), the profile, or a variable; Delete on one of the
+// profile's puts the global value back. A change applies at once or at
+// the next start, as the foot says. /set changes one by its words.
 
 import { term_home } from "./Attach.ts";
 import { Chat } from "../chat/Chat.ts";
 import { term_chooser, term_model_pick } from "./Commands.ts";
 import * as config from "../config/Config.ts";
+import { Custom } from "../config/Custom.ts";
+import { Mcp } from "../tools/Mcp.ts";
 import { term_note } from "./Notices.ts";
 import { Pick } from "../ai/Pick.ts";
 import * as Screen from "../ui/Screen.ts";
@@ -32,16 +37,17 @@ export function term_settings(t: Term, at = ""): void {
     const vw    = Math.max(...shown.map((v) => v.length));
     return KEYS.map((key, k) => shown[k].padEnd(vw) + "  " + config.SETTINGS[key].what);
   };
+  const from = () => (config.DIR === config.ROOT ? undefined : KEYS.map(config.config_from));
   const keys = (k: number, press: string) => {
     if (!setting_key(t, KEYS[k], press)) {
       return false;
     }
     if (t.choose !== null) {
-      t.choose.about = about();
+      [t.choose.about, t.choose.aside] = [about(), from()];
     }
     return true;
   };
-  term_chooser(t, "Settings", KEYS, about(), -1, (k) => setting_open(t, KEYS[k]), { find: true, keys, foot: (k) => setting_foot(KEYS[k]) });
+  term_chooser(t, "Settings", KEYS, about(), -1, (k) => setting_open(t, KEYS[k]), { find: true, keys, foot: (k) => setting_foot(KEYS[k]), aside: from() });
   t.choose!.at = Math.max(0, KEYS.indexOf(at as config.Key));
 }
 
@@ -66,8 +72,9 @@ export function setting_key(t: Term, key: config.Key, press: string): boolean {
 export function setting_foot(key: config.Key): string {
   const s   = config.SETTINGS[key];
   const env = config.config_env_set(key);
-  const how = Array.isArray(s.values) ? "◂ ▸ Enter change" : s.values === "pick" ? "Enter pick a model" : "Enter edit";
-  return env !== null ? "set by " + env : how + " · Del default · " + (s.now ? "applies now" : "at the next start");
+  const how = Array.isArray(s.values) ? "◂ ▸ Enter change" : s.values === "pick" ? "Enter pick a model" : key === "off" ? "Enter list" : "Enter edit";
+  const del = config.config_from(key) === config.PROFILE ? "Del global" : "Del default";
+  return env !== null ? "set by " + env : how + " · " + del + " · " + (s.now ? "applies now" : "at the next start");
 }
 
 // a setting's value as its row shows it, WIDE characters at most
@@ -112,6 +119,9 @@ export function term_set(t: Term, arg: string): void {
 // settings back at it; one typed in, `/set <key> <value>` in the input
 export function setting_open(t: Term, key: config.Key): void {
   const env = config.config_env_set(key);
+  if (key === "off") {
+    return setting_off(t);
+  }
   if (config.SETTINGS[key].values === "pick") {
     const rows = Pick.models(t.v.vendors, t.v.models);
     const role = key === "agents" || key === "compactor" ? key : null;
@@ -129,6 +139,37 @@ export function setting_open(t: Term, key: config.Key): void {
   const raw = config.config_value(key) as unknown;
   Screen.ed_set(t.scr.ed, "/set " + key + " " + (typeof raw === "string" ? raw : JSON.stringify(raw)));
   t.scr.typed = true;
+}
+
+// Enter on `off`: each skill, agent, command and MCP server, what it is
+// and where it's from (built in, global, the profile, the project), on
+// or off; Enter, Left or Right turns the lit one on or off, kept in
+// `off` at once (a server starts or stops at the next start)
+function setting_off(t: Term): void {
+  const cwd   = process.cwd();
+  const own   = config.DIR !== config.ROOT;
+  const where = (file: string) => (file === "" ? "built in" : own && file.startsWith(config.DIR + "/") ? config.PROFILE : file.startsWith(config.ROOT + "/") ? "global" : "project");
+  const mine  = Mcp.file(config.MCP);
+  const rows  = [
+    ...Custom.skills(cwd, true).map((s) => [s.name, "skill · " + where(s.dir)]),
+    ...[...Custom.files(cwd, "agents", true)].map(([name, file]) => [name, "agent · " + where(file)]),
+    ...[...Custom.files(cwd, "commands", true)].map(([name, file]) => [name, "command · " + where(file)]),
+    ...Object.keys(Mcp.read(true)).map((name) => [name, "MCP server · " + (own && name in mine ? config.PROFILE : "global")]),
+  ];
+  const aside = () => rows.map(([name]) => (Custom.off(name) ? "off" : "on"));
+  const keys  = (k: number, press: string) => {
+    if (!["Enter", "Left", "Right"].includes(press)) {
+      return false;
+    }
+    const name = rows[k][0].toLowerCase();
+    const next = Custom.off(name) ? config.OFF.filter((n) => n !== name) : [...config.OFF, name];
+    if (setting_set(t, "off", next.length === 0 ? null : next.join(", ")) && t.choose !== null) {
+      t.choose.aside = aside();
+    }
+    return true;
+  };
+  const foot = (k: number) => "Enter on/off · " + (rows[k][1].startsWith("MCP") ? "at the next start" : "applies now");
+  term_chooser(t, "Turned off" + (own ? " in " + config.PROFILE : ""), rows.map(([name]) => name), rows.map(([, about]) => about), -1, () => {}, { find: true, keys, foot, aside: aside() });
 }
 
 // a setting to a value (null: its default), in config.json, and what

@@ -5,7 +5,8 @@
 // and Enter step one through its values, kept in config.json at once and
 // read anew; Delete puts its default back; Enter on a pick opens the
 // model picker, its choice the setting's; on one typed in, /set in the
-// input. /set checks a value first: its shape and the picks still
+// input; on `off`, what it may turn off, Enter turning one off and on.
+// /set checks a value first: its shape and the picks still
 // offered (a file named needn't be there). A pick set while illi's own
 // agent is the main one is the chat's at once. /side changes its settings as /set does. Each
 // setting is in docs/config.md and the customize-illi skill.
@@ -54,7 +55,7 @@ const file  = () => JSON.parse(fs.readFileSync(DIR + "/config.json", "utf8"));
 test("/settings lists each setting, its value and what it does; one a variable sets says so, and stays", () => {
   const t = term();
   run(t, "/settings");
-  expect(t.choose.names).toEqual(["pick", "agents", "compactor", "suggest", "tps", "side", "side_width", "context", "contexts", "rules", "after", "vendors", "models", "jobs", "theme", "mcp", "login"]);
+  expect(t.choose.names).toEqual(["pick", "agents", "compactor", "suggest", "tps", "side", "side_width", "context", "contexts", "rules", "after", "off", "vendors", "models", "jobs", "theme", "mcp", "login"]);
   expect(about(t)).toMatch(/^sonnet-5\.5 · medium +illi's own default model/);
   expect(foot(t)).toBe("set by ILLI_PICK");
   term_grab(t, "Enter");
@@ -191,4 +192,18 @@ test("each setting is said where a person or illi reads of it: docs/config.md, t
     expect([key, config_part.includes("`" + key + "`")]).toEqual([key, true]);
     expect([key, new RegExp("\\b" + key + "\\b").test(skill)]).toEqual([key, true]);
   }
+});
+
+test("Enter on off lists each skill, agent, command and MCP server; Enter turns one off, again on", () => {
+  const t = term();
+  run(t, "/settings");
+  term_type(t, "off");
+  expect([lit(t), foot(t)]).toEqual(["off", "Enter list · Del default · applies now"]);
+  term_grab(t, "Enter");
+  term_type(t, "customize");
+  expect([t.choose.title, lit(t), about(t), t.choose.aside[0]]).toEqual(["Turned off", "customize-illi", "skill · built in", "on"]);
+  term_grab(t, "Enter");
+  expect([file().off, config.OFF, t.choose.aside[0]]).toEqual(["customize-illi", ["customize-illi"], "off"]);
+  term_grab(t, "Enter");
+  expect([file().off, config.OFF]).toEqual([undefined, []]);
 });

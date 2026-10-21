@@ -5,10 +5,10 @@
 // one's: <root>/profiles/<name>. illi opens the one asked
 // ($ILLI_PROFILE), else the one used last (<root>/profile, a line), else
 // the default; Config.ts takes its folder as DIR. A profile is made
-// empty or with another's setup (profile_new), and may take that one's
-// chat along (profile_move_chat); any but the default may be renamed or
-// deleted. What stays the root's, shared, is Config.ts's to say (the
-// ChatGPT login; its config.json under each profile's). A profile goes
+// empty (profile_new), the root's setup its own (Config.ts, Custom.ts,
+// Mcp.ts: the global layer), and may take the running one's chat along
+// (profile_move_chat); any but the default may be renamed or deleted. A
+// profile goes
 // out as one archive (tar.gz, by the
 // system's tar): its folder but the login (a login file its config names
 // too, wherever in it), the lock, the log (and, the default's, the other
@@ -52,10 +52,6 @@ const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
 // also holds the others, and which was used last
 const OWN    = ["login.json", "lock", "illi.log"];
 const ROOTED = ["profiles", "profile"];
-
-// what a new profile copies of the one running, when asked: its
-// settings, agents, commands and skills (never its chat)
-const SETTINGS = ["config.json", "mcp.json", "theme.json", "agents", "commands", "skills"];
 
 // the files that go out with their secrets left out, as JSON; config.json's
 // keys left out of an export (a file here), and dropped from an import (a
@@ -149,17 +145,10 @@ export function profile_why(root: string, name: string): string | null {
   return fs.existsSync(profile_dir(root, name)) ? "There's a profile " + name + " already." : null;
 }
 
-// a new profile's folder: empty, or with copies of another's settings,
-// agents, commands and skills (from: its folder)
-export function profile_new(root: string, name: string, from: string | null): void {
-  const dir = profile_dir(root, name);
+// a new profile's folder, empty
+export function profile_new(root: string, name: string): void {
   fs.mkdirSync(root + "/profiles", { recursive: true });
-  fs.mkdirSync(dir);
-  for (const part of from === null ? [] : SETTINGS) {
-    if (fs.existsSync(from + "/" + part)) {
-      fs.cpSync(from + "/" + part, dir + "/" + part, { recursive: true });
-    }
-  }
+  fs.mkdirSync(profile_dir(root, name));
 }
 
 // a profile renamed (never the default: its folder is the root), and the

@@ -1,7 +1,8 @@
 Config
 ======
 
-`~/.illi/config.json`, or `ILLI_<KEY>` variables. All optional.
+`~/.illi/config.json`, or `ILLI_<KEY>` variables. All optional. A
+profile's own `config.json` goes over it, key by key ([Profiles](profiles.md)).
 
 - `/settings` changes them from inside illi (`/set <key> <value>` too).
 - Most apply at once; `vendors`, `models`, `jobs`, `theme`, `mcp` and
@@ -21,13 +22,15 @@ Config
 | `models`     | all                               | models offered                                   |
 | `context`    | `auto`                            | tokens a turn sends: `auto` (70% of the window, at most 400k), a number, or `"60%"` |
 | `contexts`   |                                   | per model: `{ "gpt-6.1-sol": 350000 }`           |
-| `rules`      | `RULES.md` in the profile's folder | your rules for every project (none: no rules)   |
+| `rules`      | `RULES.md`: the profile's, else `~/.illi`'s | your rules for every project (none: no rules) |
 | `after`      |                                   | a shell command run after each turn              |
+| `off`        |                                   | skills, agents, commands and MCP servers turned off, by name; `/settings` lists them to turn on and off |
 | `side`       | `right`                           | side panel: `left`, `off`; `side_width` `25%`    |
 | `suggest`    | `on`                              | a suggested reply after each turn; `off`         |
 | `tps`        | `on`                              | tokens a second (tok/s) on the line over the input while text streams; `off` |
 | `jobs`       | `8`                               | summaries built at once                          |
-| `theme`, `mcp` | the profile's folder            | the theme's and the MCP servers' files           |
+| `theme`      | `theme.json`: the profile's, else `~/.illi`'s | the theme's file                   |
+| `mcp`        | `mcp.json` in the profile's folder | the MCP servers' file; `~/.illi/mcp.json` is read too |
 | `login`      | `~/.illi/login.json`, opencode's  | the ChatGPT login file, which `/login` writes    |
 
 API keys come from `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`.
