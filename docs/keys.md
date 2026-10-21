@@ -26,8 +26,8 @@ Chat
 | `/fold`, Ctrl+F | fold the chat into the fewest blocks; again: unfold |
 | Ctrl+Y | copy illi's last reply (a drag copies the text it covers, a double click a word) |
 | Ctrl+O | show or hide the work between replies: tools, thinking, agents' reports |
-| `/export` | save the memory as ./illi-memory.json |
-| `/tree` | save the whole memory tree as ./illi-tree.html |
+| `/export` | save this project's memory as ./illi-memory.json |
+| `/tree` | save this project's whole memory tree as ./illi-tree.html |
 | Ctrl+L | draw the screen again |
 | Ctrl+Z | suspend; fg brings it back |
 | `/help` | this list |
@@ -74,12 +74,13 @@ Setup
 | `/set <key> [value]` | change a setting (default: back to its default); no value: says what it is |
 | `/mcp` | your MCP servers: their tools, or why one failed |
 
-Profiles
---------
+Projects and profiles
+---------------------
 
 | Key or command | Does |
 | -------------- | ---- |
-| `/profile [name]` | switch to that profile (its own chat, on the global setup; one login for all); no name: opens a list to make, rename, export, import or delete one |
+| `/projects` | your projects, each a git repo with its own chat (outside any: home), this one first: Enter says more, Del forgets one (Cancel, export a copy first, or forget) |
+| `/profile [name]` | switch to that profile (its own chats, on the global setup; one login for all); no name: opens a list to make, rename, export, import or delete one |
 
 Typing
 ------
@@ -135,7 +136,7 @@ Mouse and side panel
 - The wheel scrolls the chat or a pane.
 - From 100 columns on, a side panel shows the primary agents (a click
   makes one the main agent), the subagents at work, the sticky skills on
-  (a click turns one off), the profiles (a click switches), a ChatGPT
-  plan's use, the context and the memory, the MCP servers (a click opens
-  `/mcp`) and illi's to-do list. The `side` and `side_width` settings
-  place it.
+  (a click turns one off), the profiles once you have two (a click
+  switches), a ChatGPT plan's use, the context and the memory, the MCP
+  servers (a click opens `/mcp`) and illi's to-do list. The `side` and
+  `side_width` settings place it.

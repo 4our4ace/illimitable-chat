@@ -11,9 +11,11 @@
 // profile goes
 // out as one archive (tar.gz, by the
 // system's tar): its folder but the login (a login file its config names
-// too, wherever in it), the lock, the log (and, the default's, the other
+// too, wherever in it), the locks, the log (and, the default's, the other
 // profiles), its config.json and mcp.json with their secrets left out;
-// the rest (its chat, agents, commands, skills, theme, rules) as it is.
+// its chat's memory.sqlite as a snapshot SQLite takes (VACUUM INTO), whole
+// though an illi writes to it; the rest (its chat's images, agents,
+// commands, skills, theme, rules) as it is.
 // One comes in only as a new profile, its archive taken as untrusted:
 // each entry a file or a folder, inside it, checked before a byte is
 // unpacked; once unpacked, its config's keys that run a command or name a
@@ -21,6 +23,7 @@
 // off till the person turns them on. Its agents, commands, skills,
 // RULES.md and chat are the profile's at once.
 
+import { Database } from "bun:sqlite";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -49,9 +52,9 @@ export const NAMED   = "a-z, 0-9, - and _, a letter or digit first";
 const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
 
 // what a profile's folder holds that is never a profile's to give: the
-// login (the root's, shared), the lock, the log; the default's folder
-// also holds the others, and which was used last
-const OWN    = ["login.json", "lock", "illi.log"];
+// login (the root's, shared), the locks (old and new), the log; the
+// default's folder also holds the others, and which was used last
+const OWN    = ["login.json", "lock", "locks", "illi.log"];
 const ROOTED = ["profiles", "profile"];
 
 // the files that go out with their secrets left out, as JSON; config.json's
@@ -251,13 +254,32 @@ export async function profile_export(root: string, name: string, file: string): 
       cut += n;
       fs.writeFileSync(tmp + "/" + part, JSON.stringify(kept, null, 2) + "\n");
     }
-    const parts = fs.readdirSync(dir).filter((p) => !skip.includes(p)).map((p) => "./" + p);
+    const snap  = profile_snapshot(dir + "/chat", tmp + "/chat");
+    const parts = fs.readdirSync(dir).filter((p) => !skip.includes(p) && !(snap && p === "chat")).map((p) => "./" + p);
+    const chat  = snap ? fs.readdirSync(dir + "/chat").filter((p) => !p.startsWith("memory.sqlite")).map((p) => "./chat/" + p) : [];
     const clean = fs.readdirSync(tmp).map((p) => "./" + p);
-    await profile_tar(["-czhf", file, ...local, "-C", dir, ...parts, "-C", tmp, ...clean]);
+    await profile_tar(["-czhf", file, ...local, "-C", dir, ...parts, ...chat, "-C", tmp, ...clean]);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
   return cut;
+}
+
+// a chat folder's memory.sqlite copied whole into another folder, as it
+// is now, though an illi writes to it; false: it has none
+function profile_snapshot(chat: string, into: string): boolean {
+  if (!fs.existsSync(chat + "/memory.sqlite")) {
+    return false;
+  }
+  fs.mkdirSync(into, { recursive: true });
+  const db = new Database(chat + "/memory.sqlite");
+  try {
+    db.run("pragma busy_timeout = 5000");
+    db.run("vacuum into ?", [into + "/memory.sqlite"]);
+  } finally {
+    db.close();
+  }
+  return true;
 }
 
 // an archive (file: absolute) unpacked as new profile `name`: its entries

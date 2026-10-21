@@ -12,7 +12,10 @@
 // user's commands (Custom.ts) and skills; images attach by a path, a
 // drop or the clipboard (Attach.ts). The user's MCP servers start with
 // it (Mcp.ts). The agent's tools work in the folder illi starts in; all
-// they left running dies as illi quits. Each profile (Profiles.ts) is its
+// they left running dies as illi quits. Started in a project whose chat
+// runs in another terminal, illi is one more view of it (Remote.ts): no
+// chat, agents or MCP servers of its own; as that illi quits, this one
+// runs again and holds the chat. Each profile (Profiles.ts) is its
 // own chat and settings; /profile switches by letting all go, as a quit
 // does, and running illi again, in place, in the one chosen
 // (ProfileCommands.ts). From a pipe, each line is a message, and each
@@ -35,16 +38,22 @@ import { term_draw, term_paint, term_print, term_resize } from "./Frame.ts";
 import { term_enter, term_grab, term_press, term_type } from "./Keys.ts";
 import { Machine } from "../tools/Machine.ts";
 import { Mcp } from "../tools/Mcp.ts";
+import { Memory } from "../chat/Memory.ts";
 import { term_note, term_notify, term_unnotify, type Notice } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
+import { term_restart } from "./ProfileCommands.ts";
 import * as Profiles from "../config/Profiles.ts";
+import { Projects } from "../chat/Projects.ts";
+import { Remote } from "../chat/Remote.ts";
 import * as Reply from "../ui/Reply.ts";
 import * as Screen from "../ui/Screen.ts";
 import { CLOCK } from "./Side.ts";
+import { Store } from "../chat/Store.ts";
 import { THEME_TROUBLE } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
 
-// the terminal: the chat; ended: input's; pending: commands at work;
+// the terminal: the chat, run here (null: another terminal's, this one a
+// view of it: Remote.ts); mem: its memory, to read; ended: input's; pending: commands at work;
 // due: a paint; settle: a new size's; imgs: the images attached, by
 // their tokens' numbers (kept: a message sent again from the history
 // names them still); quit: when Ctrl+C was last pressed on an empty
@@ -75,7 +84,8 @@ import * as View from "../ui/View.ts";
 export type Term = {
   v       : View.View;
   scr     : Screen.Screen;
-  chat    : Chat;
+  chat    : Chat | null;
+  mem     : () => Memory;
   ended   : boolean;
   pending : number;
   due     : boolean;
@@ -210,11 +220,18 @@ const LOG = config.DIR + "/illi.log";
 const HOLD = 24 * 3600 * 1000;
 let hint: Notice | null = null;
 
-function term_new(chat: Chat): Term {
+// how long the note that the other terminal's illi quit shows before
+// this one runs again in its place, ms; how many times in a row one not
+// reached is tried again
+const GONE   = 600;
+const REJOIN = 20;
+
+function term_new(chat: Chat | null, mem: () => Memory): Term {
   const t: Term = {
     v       : View.view_new(),
     scr     : Screen.screen_new((key) => term_press(t, key)),
     chat,
+    mem,
     ended   : false,
     pending : 0,
     due     : false,
@@ -251,7 +268,9 @@ function term_new(chat: Chat): Term {
     asking  : null,
   };
   // the chat suggests replies to a screen that shows them, never a pipe
-  chat.suggest.on = t.scr.tty && config.SUGGEST;
+  if (chat !== null) {
+    chat.suggest.on = t.scr.tty && config.SUGGEST;
+  }
   term_primaries(t);
   Reply.reply_buttons(t.scr.tty);
   t.scr.grab  = (key) => term_grab(t, key);
@@ -266,7 +285,9 @@ function term_new(chat: Chat): Term {
   });
   process.stdout.on("resize", () => term_resize(t));
   process.on("exit", () => {
-    Chat.close(chat);
+    if (chat !== null) {
+      Chat.close(chat);
+    }
     Machine.end();
     Mcp.stop();
   });
@@ -285,9 +306,33 @@ export function term_primaries(t: Term): void {
   Draw.draw_agents(all);
 }
 
-// connects to the chat, by View's link
+// connects to the chat, by View's link: in this process, or another
+// terminal's (Remote.ts; it gone, term_gone)
 function term_connect(t: Term): void {
-  View.link_open(t.v, Chat.link(t.chat, (msg) => term_hear(t, msg)));
+  const hear = (msg: View.Server) => term_hear(t, msg);
+  const file = Chat.socket(Projects.lock(Projects.place(process.cwd()).path));
+  View.link_open(t.v, t.chat !== null ? Chat.link(t.chat, hear) : Remote.link(file, hear, (why, heard) => term_gone(t, why, heard)));
+}
+
+// the other terminal's illi gone: this one runs again in its place
+// (term_restart) and holds the chat, or joins one that got there first;
+// one not reached (its socket not up yet, as it starts) tried again,
+// REJOIN times in a row at most. One that refused this view, or never
+// spoke, said as this one quits
+function term_gone(t: Term, why: string, heard: boolean): void {
+  const tries = heard ? 0 : Number(process.env.ILLI_REJOIN ?? 0) + 1;
+  if (why === "" && tries <= REJOIN) {
+    process.env.ILLI_REJOIN = String(tries);
+    if (heard) {
+      term_note(t, "The other terminal's illi quit: this one takes the chat on.");
+      term_draw(t);
+    }
+    setTimeout(() => void term_restart(t, config.PROFILE), GONE);
+    return;
+  }
+  const name = Store.named(t.mem().store).name;
+  process.on("exit", () => process.stderr.write("illi: " + name + " is open in another terminal, but " + (why || "it can't be reached") + ": quit illi there, then start it here again.\n"));
+  process.exit(1);
 }
 
 // an act to the chat; a message refused goes back in the input
@@ -440,14 +485,14 @@ function term_trouble(t: Term, told: Set<string>): void {
   }
 }
 
-// the chat opened in the working folder (its lock taken: one illi a
-// profile), on the terminal (its log lines to LOG; a crash said, the
+// the chat of the working folder's project opened (its lock taken: one
+// illi a project), on the terminal (its log lines to LOG; a crash said, the
 // terminal left as found: term_crash) or a pipe; the MCP servers started
 // (a failure told: term_trouble); the models ChatGPT lists learned
 export async function term_start(): Promise<void> {
   process.on("uncaughtException", term_crash);
   process.on("unhandledRejection", term_crash);
-  await Chat.lock().catch((err) => {
+  const holds = await Chat.lock(process.cwd(), Remote.serve).catch((err) => {
     console.error("illi: " + err.message);
     process.exit(1);
   });
@@ -456,12 +501,19 @@ export async function term_start(): Promise<void> {
     const log = (...args: unknown[]) => fs.appendFileSync(LOG, new Date().toISOString() + " " + args.map(String).join(" ") + "\n");
     console.log = console.warn = console.error = log;
   }
-  const t = term_new(Chat.open(process.cwd()));
+  if (holds) {
+    delete process.env.ILLI_REJOIN;
+  }
+  const chat = holds ? Chat.open(process.cwd()) : null;
+  const t = term_new(chat, chat !== null ? () => chat.mem : term_reader());
   const told = new Set<string>();
-  Mcp.start(process.cwd(), () => {
-    term_trouble(t, told);
-    term_draw(t);
-  });
+  if (chat !== null) {
+    Remote.share(chat);
+    Mcp.start(process.cwd(), () => {
+      term_trouble(t, told);
+      term_draw(t);
+    });
+  }
   term_connect(t);
   term_trouble(t, told);
   term_hints(t);
@@ -482,7 +534,19 @@ function term_hints(t: Term): void {
   if (unread !== "" || (chatgpt && !signed)) {
     hint = term_notify(t, unread !== "" ? unread : "No ChatGPT login yet: type /login to sign in with your ChatGPT plan.", false, HOLD);
   }
-  config.config_tips(t.chat.pick, signed).forEach((text) => term_note(t, text, HOLD));
+  if (t.chat !== null) {
+    config.config_tips(t.chat.pick, signed).forEach((text) => term_note(t, text, HOLD));
+  }
+}
+
+// the project's chat to read, in a view of another terminal's: as saved,
+// read anew each time
+function term_reader(): () => Memory {
+  const dir   = config.DIR + "/chat";
+  const store = Store.open(dir, Projects.place(process.cwd()));
+  return () => Memory.read(dir, store, () => {
+    throw new Error("a view's chat to read builds nothing");
+  }, true);
 }
 
 // the start's login note let go (signed in)

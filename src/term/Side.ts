@@ -1,9 +1,10 @@
 // Side
 // ====
 // The side panel, on a wide screen: the primary agents, the subagents of
-// this run, the sticky skills on, the profiles, a ChatGPT plan's use, the
-// chat's (the context, the memory), the MCP servers, a hint for the keys
-// or illi's to-do list; the side and side_width settings place it.
+// this run, the sticky skills on, the profiles (two or more), a ChatGPT
+// plan's use, the chat's (the context, the memory), the MCP servers, a
+// hint for the keys or illi's to-do list; the side and side_width
+// settings place it.
 
 import { term_choose, term_mcp } from "./Commands.ts";
 import * as config from "../config/Config.ts";
@@ -38,11 +39,11 @@ export const CLOCK   = 60000;
 
 // the side, w wide and tall: illi and the primary agents (a click makes
 // one the main agent), the tabs (a click shows one), the sticky skills on
-// (a click turns one off), the profiles (a click on the head: /profile),
-// a ChatGPT plan's use, the chat's (its context, the memory), the MCP
-// servers (a click: /mcp); at its foot illi's to-do list, which, longer
-// than the room, pushes the rest up (its head stays); with none, a faint
-// hint for the keys (HINT), if it fits
+// (a click turns one off), the profiles, once there are two (a click on
+// the head: /profile), a ChatGPT plan's use, the chat's (its context, the
+// memory), the MCP servers (a click: /mcp); at its foot illi's to-do
+// list, which, longer than the room, pushes the rest up (its head stays);
+// with none, a faint hint for the keys (HINT), if it fits
 export function term_side(t: Term, w: number, tall: number): Item[] {
   const bold  = { ...Paint.INK, b: true };
   const head  = (text: string, run: (() => void) | null = null): Item => [[Paint.Run(text, bold)], run];
@@ -253,9 +254,13 @@ function term_side_sticky(t: Term): Item[] {
   return items.length === 0 ? [] : [[[Paint.Run("Sticky skills", { ...Paint.INK, b: true })], () => setting_open(t, "sticky")], ...items, [[], null]];
 }
 
-// the side's profiles: a head (a click: /profile's picker), each profile
-// (the one running marked), a gap; a click on another switches to it
+// the side's profiles, once there are two: a head (a click: /profile's
+// picker), each profile (the one running marked), a gap; a click on
+// another switches to it
 function term_side_profiles(t: Term): Item[] {
+  if (t.profs.length < 2) {
+    return [];
+  }
   const items = t.profs.map((name): Item => {
     const here = name === config.PROFILE;
     return [[Paint.Run((here ? GLYPH.here : GLYPH.tab) + " " + name, here ? Paint.INK : Paint.DIM)], here ? null : () => void term_profile_go(t, name)];

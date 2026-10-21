@@ -70,7 +70,7 @@ test("a search finds a word in what a command does, not only in its name; it edi
 test("in groups, /help's then the settings', each one's head over its first", () => {
   const t = open();
   const head = (name: string) => t.choose.heads[t.choose.names.indexOf(name)];
-  expect([head("/goal"), head("/model"), head("/agents"), head("/settings"), head("/profile"), head("set tps")]).toEqual(["Chat", "Pick", "Agents", "Setup", "Profiles", "Settings"]);
+  expect([head("/goal"), head("/model"), head("/agents"), head("/settings"), head("/profile"), head("set tps")]).toEqual(["Chat", "Pick", "Agents", "Setup", "Projects and profiles", "Settings"]);
 });
 
 test("Enter runs a command, or its key's; one that needs words goes in the input to finish", () => {

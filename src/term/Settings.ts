@@ -227,7 +227,7 @@ export function setting_set(t: Term, key: config.Key, value: unknown): boolean {
     return false;
   }
   t.side = { place: config.SIDE, width: config.SIDE_WIDTH };
-  if (key === "suggest") {
+  if (key === "suggest" && t.chat !== null) {
     t.chat.suggest.on = t.scr.tty && config.SUGGEST;
     Chat.unsuggest(t.chat);
     Chat.change(t.chat);
