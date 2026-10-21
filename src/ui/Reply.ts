@@ -82,12 +82,18 @@ export function reply_buttons(on: boolean): void {
   buttons = on;
 }
 
-// a reply's lines, w wide
-export function reply_lines(text: string, w: number): Line[] {
-  const pal    = Draw.draw_theme();
-  const blocks = parse(text, { numbers: true, paths: true });
-  const lines  = reply_join(blocks.map((b) => block_drawn(pal, b, w)), w);
-  return buttons && blocks.length > 1 ? [...lines, [], line_right(button_line(pal, [["⧉ copy reply", () => text]]), w)] : lines;
+// a reply's lines, w wide; with copy false, no buttons at all
+export function reply_lines(text: string, w: number, copy = true): Line[] {
+  const on = buttons;
+  buttons  = on && copy;
+  try {
+    const pal    = Draw.draw_theme();
+    const blocks = parse(text, { numbers: true, paths: true });
+    const lines  = reply_join(blocks.map((b) => block_drawn(pal, b, w)), w);
+    return buttons && blocks.length > 1 ? [...lines, [], line_right(button_line(pal, [["⧉ copy reply", () => text]]), w)] : lines;
+  } finally {
+    buttons = on;
+  }
 }
 
 // the blocks a blank line apart; figures one after another side by side,

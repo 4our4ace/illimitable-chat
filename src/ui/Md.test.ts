@@ -1,26 +1,22 @@
 // Md test
 // =======
-// `bun test Md.test.ts`. How the little markdown of a message reads; a
-// message typed keeps its blank lines; a command's exit names its result.
+// `bun test Md.test.ts`. A message typed keeps its blank lines; a
+// command's exit names its result; a note or a thought draws as a reply
+// does, in its look.
 
 import { expect, test } from "bun:test";
 import * as Md from "./Md.ts";
 import * as Paint from "./Paint.ts";
 import * as View from "./View.ts";
 
-const kinds = (src: string) => Md.md_parse(src).map((b) => (b.$ === "List" ? "List:" + (b.k ? "1." : "-") + b.x.length : b.$));
-
-// a list is of one kind: numbered items after bullets start a list of
-// their own, and bullets after numbered ones
-test("a list holds items of one kind", () => {
-  expect(kinds("- a\n  more\n- b\n1. c\n2. d\n- e")).toEqual(["List:-2", "List:1.2", "List:-1"]);
-});
-
-// a rule ends the paragraph above it, as a heading or a list does
-test("a rule right under a paragraph is a rule", () => {
-  expect(kinds("para\n---\nnext")).toEqual(["Para", "Rule", "Para"]);
-  expect(kinds("a\n|x|y|\n|-|-|\n|1|2|")).toEqual(["Para", "Tabl"]);
-  expect(kinds("a\n| not a table |\nb")).toEqual(["Para"]);
+// a thought: markdown drawn as a reply's (its list's bullet), all of it
+// dim and italic; with no text, nothing
+test("a thought draws as a reply does, dim and italic", () => {
+  const lines = Paint.rows_lines(View.entry_rows(1, "mind", "**Plan**\n\n- one\n- two"), 40);
+  const text  = lines.map((l) => l.map((r) => r.x).join("").trim()).filter((x) => x !== "");
+  expect(text).toEqual(["Plan", "• one", "• two"]);
+  expect(lines.flat().filter((r) => r.x.trim() !== "").every((r) => r.s.d && r.s.i)).toBe(true);
+  expect(View.entry_rows(1, "mind", "  ")).toEqual([]);
 });
 
 // a message typed (a short paste is typed too) shows as it was: each
