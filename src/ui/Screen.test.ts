@@ -1,10 +1,11 @@
 // Screen's input, fed byte streams as a terminal sends them: any read may
 // end anywhere (a reader held up lets the terminal's writes split at any
 // byte), and no text typed or pasted may slow a key down; the mouse's
-// reports. A paint writes only the rows that changed. Then the lines
-// Paint lays out: a link wider than a line breaks at its edge, its pieces
-// each opening it whole; a word of several runs is kept whole; a frame
-// never passes its width; each block's lines are marked.
+// reports. A paint writes only the rows that changed, those moved as a
+// block moved by the terminal. Then the lines Paint lays out: a link
+// wider than a line breaks at its edge, its pieces each opening it whole;
+// a word of several runs is kept whole; a frame never passes its width;
+// each block's lines are marked.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -93,6 +94,89 @@ test("an image's token, spaced from the words, named in order", () => {
   expect(Screen.ed_image(ed)).toBe(2);
   expect(ed.text).toBe("look [Image #1] and [Image #2] ");
   expect(Screen.ed_images(ed.text + " [Image #1]")).toEqual([1, 2, 1]);
+});
+
+// a terminal of h rows, w columns, as far as a paint drives it: the
+// cursor put, a line cleared, a column, cells erased, a scroll region and
+// its scroll up or down, text (one column a character); all else (inks,
+// modes) left out. Its rows as text, their ends' spaces dropped
+function tty(writes: string[], h: number, w: number): string[] {
+  const rows = Array.from({ length: h }, () => Array<string>(w).fill(" "));
+  let [row, col, top, bot] = [0, 0, 0, h - 1];
+  const scroll = (n: number) => {
+    for (let k = 0; k < Math.abs(n); k++) {
+      const blank = Array<string>(w).fill(" ");
+      if (n > 0) {
+        rows.splice(top, 1);
+        rows.splice(bot, 0, blank);
+      } else {
+        rows.splice(bot, 1);
+        rows.splice(top, 0, blank);
+      }
+    }
+  };
+  for (const s of writes) {
+    for (const m of s.matchAll(/\x1b\[([?0-9;]*)([ -\/]?[@-~])|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|([^\x1b])/g)) {
+      const [ps, f, ch] = [m[1] ?? "", m[2], m[3]];
+      const n = ps.split(";").map((x) => Number(x) || 0);
+      if (ch !== undefined) {
+        rows[row][col++] = ch;
+      } else if (f === "H") {
+        [row, col] = [Math.max(1, n[0]) - 1, Math.max(1, n[1] ?? 1) - 1];
+      } else if (f === "G") {
+        col = Math.max(1, n[0]) - 1;
+      } else if (f === "K" && ps === "2") {
+        rows[row].fill(" ");
+      } else if (f === "X") {
+        rows[row].fill(" ", col, col + Math.max(1, n[0]));
+      } else if (f === "J" && ps === "2") {
+        rows.forEach((r) => r.fill(" "));
+      } else if (f === "r") {
+        [top, bot, row, col] = [ps === "" ? 0 : n[0] - 1, ps === "" ? h - 1 : n[1] - 1, 0, 0];
+      } else if (f === "S" || f === "T") {
+        scroll(f === "S" ? Math.max(1, n[0]) : -Math.max(1, n[0]));
+      }
+    }
+  }
+  return rows.map((r) => r.join("").trimEnd());
+}
+
+test("rows moved as a block are scrolled by the terminal, only those left written; the screen as painted, whichever way", () => {
+  const { scr } = screen();
+  const out: string[] = [];
+  const write = process.stdout.write;
+  process.stdout.write = ((s: string) => out.push(s)) as any;
+  const lines = Array.from({ length: 30 }, (_, k): Paint.Line => [Paint.Run("line " + k + " of the chat")]);
+  const frame = (from: number, box = false) => [
+    [{ col: 0, w: 40, line: [Paint.Run("head")] }],
+    ...Array.from({ length: 9 }, (_, k) => [{ col: 2, w: 36, line: lines[from + k] }, ...(box && k >= 6 ? [{ col: 4, w: 10, line: [Paint.Run("[box " + k + "]")] }] : [])]),
+    [{ col: 2, w: 36, line: [Paint.Run("────")] }],
+    [{ col: 2, w: 36, line: [Paint.Run("> typed")] }],
+  ];
+  const text  = (row: Screen.Piece[]) => {
+    const cells = Array<string>(40).fill(" ");
+    for (const p of row) {
+      [...p.line.map((r) => r.x).join("").slice(0, p.w).trimEnd()].forEach((c, i) => (cells[p.col + i] = c));
+    }
+    return cells.join("").trimEnd();
+  };
+  const shown = (rows: Screen.Piece[][]) => tty(out, 12, 40).every((x, k) => x === text(rows[k]));
+  const seen: boolean[] = [];
+  try {
+    for (const [from, box] of [[0, false], [2, false], [3, false], [0, false], [5, true], [7, true], [20, false]] as [number, boolean][]) {
+      Screen.screen_paint(scr, frame(from, box), { row: 11, col: 9 });
+      seen.push(shown(frame(from, box)));
+    }
+  } finally {
+    process.stdout.write = write;
+  }
+  expect(seen).toEqual([true, true, true, true, true, true, true]);
+  expect(out[1]).toContain("\x1b[2;10r\x1b[2S\x1b[r");
+  expect(out[1]).toContain("line 9 ");
+  expect(out[1]).not.toContain("line 5 ");
+  expect(out[3]).toContain("\x1b[2;10r\x1b[3T\x1b[r");
+  expect(out[3]).not.toContain("line 5 ");
+  expect(out.at(-1)).not.toMatch(/\x1b\[\d+;\d+r/);
 });
 
 test("the terminal's input, read into one buffer, keeps a character cut by a read's end whole; left, it is read no more", async () => {

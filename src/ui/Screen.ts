@@ -2,7 +2,8 @@
 // ======
 // The terminal of Term.ts, whole: its alternate screen, drawn as rows,
 // each paint writing only the rows that changed (none: nothing; a
-// spinner's frame only its cells), in one synchronized write; the
+// spinner's frame only its cells; rows moved as a block, as a chat grows
+// or scrolls, moved by the terminal), in one synchronized write; the
 // terminal's own scrollback stays as it was, and is back as illi quits,
 // or hands the terminal on (screen_leave). A pipe gets lines
 // as text. Input is read raw (macOS cuts a
@@ -214,6 +215,10 @@ const ALONE = 50;
 // (screen_line_text); a line is never changed once made
 const WRITTEN = new WeakMap<Paint.Line, { w: number; text: string }>();
 
+// rows moved as a block, at least this many, are moved by the terminal
+// (screen_shift) rather than written again
+const BLOCK = 4;
+
 // a terminal's input is read into one buffer this big, again and again
 // (screen_read): Bun's own reader takes half a megabyte for each read, so
 // each key cost a collection; a read with nothing ready is tried again
@@ -299,9 +304,10 @@ export function screen_paint(scr: Screen, rows: Piece[][], at: Spot | null): voi
   }
   const fresh = scr.shown.length === 0;
   const drawn = (scr.drawn ??= []);
-  let out = "";
+  const moved = rows.map((row, k) => fresh || !screen_alike(scr, k, row));
+  let out = fresh ? "" : screen_shift(scr, rows, moved);
   for (let k = 0; k < rows.length; k++) {
-    if (fresh || !screen_alike(scr, k, rows[k])) {
+    if (moved[k]) {
       const x = screen_row_text(rows[k]);
       out += fresh || scr.shown[k] !== x ? "\x1b[" + (k + 1) + ";1H" + x : "";
       scr.shown[k] = x;
@@ -314,6 +320,48 @@ export function screen_paint(scr: Screen, rows: Piece[][], at: Spot | null): voi
   }
   scr.at = at;
   process.stdout.write(SYNC_ON + HIDE + (fresh ? CLEAR : "") + out + screen_cursor(scr, at) + SYNC_OFF);
+}
+
+// rows moved as a block since last written (a chat grown or scrolled, d
+// rows): from a changed row with text, in the middle of those changed,
+// to each row it is alike as last written, the longest run of rows each
+// alike the row d away. The terminal moves the run itself (a scroll
+// region), and the rows as last written move with it (those it leaves
+// blank unknown), so only the rest is written; the scroll ("": none worth
+// it, BLOCK rows at least). moved: whether each row changed, kept true
+function screen_shift(scr: Screen, rows: Piece[][], moved: boolean[]): string {
+  const changed = moved.flatMap((m, k) => (m && rows[k].some((p) => p.line.length > 0) ? [k] : []));
+  const n = Math.min(rows.length, scr.shown.length);
+  let [a, b, d] = [0, -1, 0];
+  for (const p of changed.length < BLOCK ? [] : [changed[changed.length >> 1], changed[changed.length >> 2], changed[(3 * changed.length) >> 2]]) {
+    for (let j = 0; j < n; j++) {
+      if (j === p || !screen_alike(scr, j, rows[p])) {
+        continue;
+      }
+      let [lo, hi] = [p, p];
+      while (lo > 0 && lo - 1 + j - p >= 0 && screen_alike(scr, lo - 1 + j - p, rows[lo - 1])) {
+        lo--;
+      }
+      while (hi + 1 < n && hi + 1 + j - p < n && screen_alike(scr, hi + 1 + j - p, rows[hi + 1])) {
+        hi++;
+      }
+      if (hi - lo > b - a) {
+        [a, b, d] = [lo, hi, j - p];
+      }
+    }
+  }
+  if (b - a + 1 < BLOCK || b - a + 1 <= Math.abs(d)) {
+    return "";
+  }
+  const [top, bot] = d > 0 ? [a, b + d] : [a + d, b];
+  const [shown, drawn] = [scr.shown.slice(top, bot + 1), scr.drawn!.slice(top, bot + 1)];
+  for (let r = top; r <= bot; r++) {
+    const from = r + d - top;
+    scr.shown[r]  = from >= 0 && from < shown.length ? shown[from] : "";
+    scr.drawn![r] = from >= 0 && from < shown.length ? drawn[from] : [];
+    moved[r]      = !screen_alike(scr, r, rows[r]);
+  }
+  return "\x1b[" + (top + 1) + ";" + (bot + 1) + "r\x1b[" + Math.abs(d) + (d > 0 ? "S" : "T") + "\x1b[r";
 }
 
 // whether row k's pieces are alike those last written there (its text
