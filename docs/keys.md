@@ -30,7 +30,6 @@ Chat
 | `/tree` | save the whole memory tree as ./illi-tree.html |
 | Ctrl+L | draw the screen again |
 | Ctrl+Z | suspend; fg brings it back |
-| `/quit` | leave: what runs stops, and goes on at the next start |
 | `/help` | this list |
 
 Scroll
@@ -73,7 +72,6 @@ Setup
 | `/logout` | remove illi's own ChatGPT login (opencode's, if any, is used again) |
 | `/settings` | all the settings: type to search, Left, Right or Enter change one, Del puts its default back |
 | `/set <key> [value]` | change a setting (default: back to its default); no value: says what it is |
-| `/side [where\|width]` | the side panel: right, left or off, or its width (40 or 30%); alone: says how it is |
 | `/mcp` | your MCP servers: their tools, or why one failed |
 
 Profiles
@@ -120,5 +118,5 @@ Mouse and side panel
 - From 100 columns on, a side panel shows the primary agents (a click
   makes one the main agent), the subagents at work, the profiles (a
   click switches), a ChatGPT plan's use, the context and the memory, the
-  MCP servers (a click opens `/mcp`) and illi's to-do list. `/side` or
-  the `side` setting places it.
+  MCP servers (a click opens `/mcp`) and illi's to-do list. The `side`
+  and `side_width` settings place it.
