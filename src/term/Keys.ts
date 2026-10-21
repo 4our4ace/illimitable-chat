@@ -55,8 +55,9 @@ export function term_press(t: Term, key: string): void {
   }
   t.scr.typed = false;
   if (key === "Canvas" && t.scr.canvas !== undefined) {
-    Paint.paint_canvas(t.scr.canvas);
-    t.ver += 1;
+    if (Paint.paint_canvas(t.scr.canvas)) {
+      t.ver += 1;
+    }
   } else if (key === "Press" || key === "Drag" || key === "Release") {
     term_mouse(t, key);
   } else if (chosen !== null) {
