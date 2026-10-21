@@ -1,7 +1,9 @@
 // Pick
 // ====
 // What a chat's calls run on, kept in its log: a vendor (claude-api,
-// openai-api, chatgpt: OpenAI's models on a ChatGPT plan), a model of its, an effort and a speed; label
+// openai-api, chatgpt: OpenAI's models on a ChatGPT plan, claude-code:
+// Claude's on a Claude plan, through Claude Code), a model of its, an
+// effort and a speed; label
 // vendor:model:effort:speed, shown to a person as model · effort (a
 // speed past the standard one after them). A chat that saved none takes
 // the config's (`def`). A move steps one part along the picks that differ in it
@@ -36,7 +38,7 @@ export type Offer = { vendors: Vendor[]; models: string[] };
 // Constants
 // =========
 
-export const VENDORS: Vendor[] = ["claude-api", "openai-api", "chatgpt"];
+export const VENDORS: Vendor[] = ["claude-api", "openai-api", "chatgpt", "claude-code"];
 
 const OPUS  : Model = { label: "opus-5.5",   id: "claude-opus-5-5",   speeds: ["slow", "fast"] };
 const SONNET: Model = { label: "sonnet-5.5", id: "claude-sonnet-5-5", speeds: ["slow"] };
@@ -50,11 +52,17 @@ const OPENAI: Model[] = [
 // the same on a ChatGPT plan (ChatGPT.ts), at its one speed
 const CHATGPT: Model[] = OPENAI.map((m) => ({ ...m, speeds: ["slow"] }));
 
+// Claude's on a Claude plan, through Claude Code (ClaudeCode.ts), at its
+// standard speed; each one's window as Claude Code tells it
+const FABLE : Model = { label: "fable-5.1", id: "claude-fable-5-1", speeds: ["slow"] };
+const CLAUDE: Model[] = [FABLE, ...[OPUS, SONNET, HAIKU].map((m) => ({ ...m, speeds: ["slow"] }))];
+
 // each vendor's models, at the speeds it runs them
 const MODELS: Record<Vendor, Model[]> = {
-  "claude-api": [OPUS, SONNET, HAIKU],
-  "openai-api": OPENAI,
-  "chatgpt"   : CHATGPT,
+  "claude-api" : [OPUS, SONNET, HAIKU],
+  "openai-api" : OPENAI,
+  "chatgpt"    : CHATGPT,
+  "claude-code": CLAUDE,
 };
 
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
@@ -95,6 +103,15 @@ export namespace Pick {
   // the tokens a pick's model takes in (none: not known)
   export function window(pick: Pick): number | undefined {
     return Pick.model(pick.vendor, pick.model)?.window;
+  }
+
+  // a vendor's model, by the id it runs as, takes `window` tokens in, as
+  // its vendor told (a model not known: none)
+  export function told(vendor: Vendor, id: string, window: number): void {
+    const model = MODELS[vendor].find((m) => m.id === id);
+    if (model !== undefined && window > 0) {
+      model.window = window;
+    }
   }
 
   export function on(pick: Pick, vendor: Vendor, model: Model): Pick {

@@ -234,13 +234,13 @@ export namespace Chat {
   // prompt. A summary gets no tools: one it called, ours or the API's
   // own (web search brings code execution), sent its whole input again
   export function share(chat: Chat): Share {
-    const system = Tools.system(MASTER, chat.tools.cwd);
+    const system = Tools.system(MASTER, chat.tools.cwd, chat.pick.vendor);
     return { ...Pick.ask(chat.pick), system, searches: 0, server: "" };
   }
 
   // a turn's system prompt: Illi's, with its main agent's instructions
   export function system(chat: Chat): string {
-    return Tools.system(MASTER + Custom.section(Custom.agent(chat.tools.cwd, chat.mem.agent)), chat.tools.cwd);
+    return Tools.system(MASTER + Custom.section(Custom.agent(chat.tools.cwd, chat.mem.agent)), chat.tools.cwd, chat.pick.vendor);
   }
 
   // stops all at once, as a quit does: what ran stays saved (mem.work), so
@@ -475,11 +475,12 @@ export namespace Chat {
   // last request and its answer (AskAI.last), SUGGEST, on what it ran on,
   // with its system prompt and tools, so all before SUGGEST is read from
   // the cache. Its line is shown till a message or the next turn; a tool
-  // call, a failure or nothing back shows none
+  // call, a failure or nothing back shows none. A turn of Claude Code's
+  // keeps no request, so one kept on another vendor never stands in
   export function suggest(chat: Chat): void {
     const s = chat.suggest;
     const last = AskAI.last(Tools.at(chat.tools, "main"));
-    if (!s.on || s.unused >= UNUSED || last === null) {
+    if (!s.on || s.unused >= UNUSED || last === null || last.ask.vendor !== chat.pick.vendor) {
       return;
     }
     const blocks = [{ text: SUGGEST, mark: false }];

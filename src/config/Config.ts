@@ -96,9 +96,10 @@ export const OFFER: Offer = {
 // offered's (config_def); the compactor each vendor's own, while
 // `compactor` names none for it
 const DEFS: Record<Vendor, { pick: string; compactor: string }> = {
-  "claude-api": { pick: "claude-api:sonnet-5.5:medium:slow",  compactor: "claude-api:haiku-5.5:medium:slow" },
-  "openai-api": { pick: "openai-api:gpt-6.1-sol:medium:slow", compactor: "openai-api:gpt-6-luna:medium:slow" },
-  "chatgpt"   : { pick: TABLE.pick.def,                       compactor: "chatgpt:gpt-6-luna:medium:slow" },
+  "claude-api" : { pick: "claude-api:sonnet-5.5:medium:slow",  compactor: "claude-api:haiku-5.5:medium:slow" },
+  "openai-api" : { pick: "openai-api:gpt-6.1-sol:medium:slow", compactor: "openai-api:gpt-6-luna:medium:slow" },
+  "chatgpt"    : { pick: TABLE.pick.def,                       compactor: "chatgpt:gpt-6-luna:medium:slow" },
+  "claude-code": { pick: "claude-code:opus-5.5:medium:slow",   compactor: "claude-code:haiku-5.5:medium:slow" },
 };
 
 // the settings that name a pick per vendor (a role's)

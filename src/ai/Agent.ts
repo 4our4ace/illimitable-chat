@@ -1,6 +1,7 @@
 // Agent
 // =====
-// claude-api, openai-api and chatgpt in Illi's own loop; a Wire
+// claude-api, openai-api and chatgpt in Illi's own loop (claude-code
+// runs in Claude Code's: ClaudeCode.ts); a Wire
 // (Anthropic.ts, OpenAI.ts, ChatGPT.ts) shapes requests and reads streams,
 // signed with its API key or, chatgpt's, a login's token it renews (one
 // the vendor refused, renewed, is asked again); a response's headers are
@@ -39,6 +40,7 @@
 import { AskAI, type Ask, type Block, type Flight, type Try, type End, type Event, type Img, type Kind, type Say, type Vendor } from "./AskAI.ts";
 import { Anthropic } from "./Anthropic.ts";
 import { ChatGPT } from "./ChatGPT.ts";
+import { ClaudeCode } from "./ClaudeCode.ts";
 import { OpenAI } from "./OpenAI.ts";
 import type { Usage } from "./Price.ts";
 import { live_push } from "../ui/View.ts";
@@ -162,6 +164,9 @@ const ASKING = new Map<string, number>();
 export namespace Agent {
 
   export function ask(ask: Ask, on: (ev: Event) => void): Try {
+    if (ask.vendor === "claude-code") {
+      return ClaudeCode.ask(ask, on);
+    }
     const end = AskAI.end("");
     const run: Run = { ask, on, sent: [], abort: new AbortController(), end };
     const send = (say: Say) => run.sent.push(say);

@@ -4,7 +4,8 @@
 // Deltas (live pieces) and an Entry per finished message out. send()
 // hands the agent a message at its next chance, stop() aborts, `left`
 // holds those never taken. Every vendor is an API run in our loop
-// (Agent.ts). A patient call (a summary's) asks again, AGAIN after each
+// (Agent.ts), but claude-code: the user's Claude Code, run whole in its
+// own (ClaudeCode.ts). A patient call (a summary's) asks again, AGAIN after each
 // try nothing answered (the vendor down or refusing it, as when the API
 // key's credit is gone; our setup failing), each time telling why (its
 // `stuck`), till one is answered or we stop it: an outage only delays it, and no summary is made of a failure
@@ -35,7 +36,7 @@ import type { Pick } from "./Pick.ts";
 // main agent switch, a restart)
 export type Kind = "user" | "work" | "mind" | "illi" | "tool" | "echo" | "note";
 
-export type Vendor = "claude-api" | "openai-api" | "chatgpt";
+export type Vendor = "claude-api" | "openai-api" | "chatgpt" | "claude-code";
 
 // an image: its mime type, its bytes in base64
 export type Img = { type: string; data: string };
@@ -127,6 +128,7 @@ export const TTL: Record<Vendor, number> = {
   "claude-api" : 300e3,
   "openai-api" : 1800e3,
   "chatgpt"    : 300e3,
+  "claude-code": 300e3,
 };
 
 // the prefixes cached, by key (AskAI.keys)
