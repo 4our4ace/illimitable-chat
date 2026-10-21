@@ -146,8 +146,9 @@ type Hit = { row: number; col: number; to: number; run: () => void };
 
 // the picker over the chat's foot (/agent, /profile, /model, /settings):
 // its title, its options' names and what each is, the one marked as now
-// (-1: none), what picking option k does; find: the search typed (null:
-// none, typing goes to the input), shown: the options it matches
+// (-1: none), what picking option k does; find: the search typed, an
+// input as the chat's, its editing keys too (null: none, typing goes to
+// the input), shown: the options it matches
 // (Screen.ed_rank), best first, at: the one lit among them, top: the
 // first in view; keys: what else the lit option k takes (true: taken; the
 // model picker's effort and speed, a setting's steps), foot: what the
@@ -158,7 +159,8 @@ type Hit = { row: number; col: number; to: number; run: () => void };
 // hay: what a search looks in, an option's each (none: its name);
 // aside: what shows at an option's right end, each (its keys, its value);
 // middle: the box in the screen's middle, over all else, this many
-// columns wide at most (none: over the chat's foot, Frame.ts)
+// columns wide at most (none: over the chat's foot, Frame.ts); heads:
+// each option's group, a head over its first while nothing is searched
 export type Chooser = {
   title  : string;
   names  : string[];
@@ -166,9 +168,10 @@ export type Chooser = {
   hay?   : string[];
   aside? : string[];
   middle?: number;
+  heads? : string[];
   here   : number;
   pick   : (k: number) => void;
-  find   : string | null;
+  find   : Screen.Ed | null;
   shown  : Screen.Match[];
   at     : number;
   top    : number;

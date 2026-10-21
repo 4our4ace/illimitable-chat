@@ -44,7 +44,7 @@ const file  = () => JSON.parse(fs.readFileSync(DIR + "/config.json", "utf8"));
 
 test("Ctrl+P lists each command and each setting with its value, but no key that means something only pressed", () => {
   const t = open();
-  expect([t.choose.title, t.choose.middle]).toEqual(["Commands", 88]);
+  expect([t.choose.title, t.choose.middle]).toEqual(["Commands", 72]);
   expect(t.choose.names).toEqual(expect.arrayContaining(["/model", "/fold", "/goal", "Ctrl+Y", "Ctrl+O", "Shift+Tab", "Ctrl+PgDn", "set tps", "set side"]));
   expect(right(t, "Ctrl+PgDn")).toBe("Ctrl+PgUp");
   for (const key of ["Enter", "Esc", "Ctrl+C", "Ctrl+P", "PgUp, PgDn", "Shift+Up, Shift+Down"]) {
@@ -55,9 +55,22 @@ test("Ctrl+P lists each command and each setting with its value, but no key that
   expect(t.choose.about[t.choose.names.indexOf("/fold")]).toBe("fold the chat into the fewest blocks");
 });
 
-test("a search finds a word in what a command does, not only in its name", () => {
+test("a search finds a word in what a command does, not only in its name; it edits as the input does", () => {
   expect(lit(open("copy illi"))).toBe("Ctrl+Y");
-  expect(lit(open("/mod"))).toBe("/model");
+  const t = open("/mod");
+  expect(lit(t)).toBe("/model");
+  term_grab(t, "Ctrl+Backspace");
+  expect(t.choose.find.text).toBe("/");
+  term_type(t, "settings");
+  term_grab(t, "Home");
+  term_type(t, "x");
+  expect([t.choose.find.text, t.choose.shown.length]).toEqual(["x/settings", 0]);
+});
+
+test("in groups, /help's then the settings', each one's head over its first", () => {
+  const t = open();
+  const head = (name: string) => t.choose.heads[t.choose.names.indexOf(name)];
+  expect([head("/goal"), head("/model"), head("/agents"), head("/settings"), head("/profile"), head("set tps")]).toEqual(["Chat", "Pick", "Agents", "Setup", "Profiles", "Settings"]);
 });
 
 test("Enter runs a command, or its key's; one that needs words goes in the input to finish", () => {

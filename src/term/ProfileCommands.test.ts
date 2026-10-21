@@ -62,7 +62,7 @@ test("the import row asks the archive's path, then a name its file can't give, a
   expect([t.choose.title, t.choose.ask.hint]).toEqual(["Import a profile", "the archive's path"]);
   expect(t.choose.ask.done(TMP + "/none.tar.gz")).toBe("No such file.");
   expect(t.choose.ask.done(TMP + "/illi-profile-default.tar.gz")).toBeNull();
-  expect([t.choose.title, t.choose.find, t.choose.foot(-1)]).toEqual(["Name the imported profile", "", "a-z, 0-9, - and _, a letter or digit first"]);
+  expect([t.choose.title, t.choose.find.text, t.choose.foot(-1)]).toEqual(["Name the imported profile", "", "a-z, 0-9, - and _, a letter or digit first"]);
   expect(t.choose.ask.done("home")).toBeNull();
   const said = await noted(t, "Imported");
   expect(said).toContain("Its agents, commands, skills and RULES.md came as they were");
@@ -86,13 +86,13 @@ test("the new row asks a name, a reason keeping the box open, then what comes al
   const t = term();
   term_profile(t, "");
   t.choose.pick(t.choose.names.indexOf("+ new profile"));
-  expect([t.choose.title, t.choose.ask.hint, t.choose.find]).toEqual(["New profile", "its name", ""]);
+  expect([t.choose.title, t.choose.ask.hint, t.choose.find.text]).toEqual(["New profile", "its name", ""]);
   term_grab(t, "Enter");
   expect([t.choose?.title, t.choose?.foot(-1)]).toEqual(["New profile", "Type its name first."]);
-  t.choose.find = "Home";
+  Object.assign(t.choose.find, { text: "Home", pos: 4 });
   term_grab(t, "Enter");
   expect(t.choose.foot(-1)).toBe("There's a profile home already.");
-  t.choose.find = "work";
+  Object.assign(t.choose.find, { text: "work", pos: 4 });
   term_grab(t, "Enter");
   expect(t.choose.title).toBe("New profile work");
   expect(t.choose.names).toEqual(["Fresh chat", "With this chat"]);
@@ -105,7 +105,7 @@ test("Ctrl+R renames another profile, its old name to start from; Delete then de
   t.choose.keys(0, "Ctrl+R");
   expect(note(t)).toMatch(/^The default profile is illi's own folder .* and keeps its name\.$/);
   t.choose.keys(1, "Ctrl+R");
-  expect([t.choose.title, t.choose.find]).toEqual(["Rename profile home", "home"]);
+  expect([t.choose.title, t.choose.find.text]).toEqual(["Rename profile home", "home"]);
   expect(t.choose.ask.done("default")).toContain("illi's own folder");
   expect(t.choose.ask.done("house")).toBeNull();
   expect([note(t), fs.existsSync(DIR + "/profiles/house")]).toEqual(["Renamed profile home to house.", true]);

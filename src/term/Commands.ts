@@ -2,10 +2,12 @@
 // ========
 // All a person can do here, by group (COMMANDS, /help), and the commands
 // themselves: a /word typed runs one, and, as it's typed, the commands it
-// matches show over the input (suggested); the picker (/agent, /profile,
+// matches show over the input (suggested, the ones run most first among
+// those it matches alike); the picker (/agent, /profile,
 // /model, /settings), the panes over the chat (/help, /agents, /mcp), the
 // pick, the login, the tabs, the blocks, the memory's exports.
 
+import * as fs from "node:fs";
 import type { Vendor } from "../ai/AskAI.ts";
 import { term_clip, term_home, term_image } from "./Attach.ts";
 import { Chat } from "../chat/Chat.ts";
@@ -36,10 +38,19 @@ const LOGIN_FAILED = 60000;
 // the pick's moves by Shift and an arrow
 const ARROWS: Record<string, Move> = { "Shift+Left": "prev", "Shift+Right": "next", "Shift+Up": "up", "Shift+Down": "down" };
 
+// how often each command was run, by its /word: the root's, every
+// profile's; kept KEEP after the last run (ms)
+const USED_FILE = config.ROOT + "/used.json";
+const KEEP      = 2000;
+
+// the counts, read once, at the first command suggested
+let used: Record<string, number> | null = null;
+let keep: ReturnType<typeof setTimeout> | undefined;
+
 // all a person can do here, by group (the editing keys are Screen's);
 // with `custom`, the user's commands and skills too (read anew: never at
 // each key; a command wins a skill's name)
-function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
+export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
   const cmds   = custom ? Custom.commands(process.cwd()) : [];
   const skills = custom ? Custom.skills(process.cwd()).filter((s) => !cmds.some((c) => c.name === s.name)) : [];
   const yours  = [
@@ -100,7 +111,7 @@ function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/mcp",              "",                        "your MCP servers: their tools, or why one failed", term_mcp],
     ]],
     ["Profiles", [
-      ["/profile [name]",   "",                        "switch to that profile (its own chat, settings, agents and MCP servers; one login for all); no name: opens a list to make, rename, export, import or delete one", term_profile],
+      ["/profile [name]",   "",                        "switch to that profile (its own chat, on the global setup; one login for all); no name: opens a list to make, rename, export, import or delete one", term_profile],
     ]],
     ...(yours.length === 0 ? [] : [["Yours", yours] as [string, Cmd[]]]),
   ];
@@ -115,6 +126,9 @@ export function term_commands(custom = false): Cmd[] {
 export function term_command(t: Term, text: string): boolean {
   const word = text.trim().split(/\s+/)[0];
   const cmd = word.startsWith("/") ? term_commands(true).find(([use]) => use !== "" && use.split(" ")[0] === word) : undefined;
+  if (cmd !== undefined) {
+    term_used_one(word);
+  }
   const run = cmd?.[3](t, text.trim().slice(word.length).trim());
   if (run instanceof Promise) {
     t.pending += 1;
@@ -139,9 +153,29 @@ export function term_suggest(t: Term): Sug | null {
   const sug = t.sug;
   if (sug.word !== word) {
     const names = sug.cmds.map(([use]) => use.split(" ")[0].slice(1));
-    Object.assign(sug, { word, found: Screen.ed_rank(word.slice(1), names), at: 0, top: 0, off: null });
+    const count = term_used();
+    Object.assign(sug, { word, found: Screen.ed_rank(word.slice(1), names, (k) => count["/" + names[k]] ?? 0), at: 0, top: 0, off: null });
   }
   return sug.off === word ? null : sug;
+}
+
+// how often each command was run (USED_FILE), read once
+function term_used(): Record<string, number> {
+  try {
+    const kept = used ?? JSON.parse(fs.readFileSync(USED_FILE, "utf8"));
+    used = typeof kept === "object" && kept !== null && !Array.isArray(kept) ? kept : {};
+  } catch {}
+  return (used ??= {});
+}
+
+// a command run, counted; the counts kept once runs pause (never in the
+// way: written in the background, never holding illi open)
+function term_used_one(word: string): void {
+  const count = term_used();
+  count[word] = (count[word] ?? 0) + 1;
+  clearTimeout(keep);
+  keep = setTimeout(() => void Bun.write(USED_FILE, JSON.stringify(count)).catch(() => {}), KEEP);
+  keep.unref?.();
 }
 
 // a key to the commands suggested (true: taken): Up and Down move round
@@ -290,11 +324,11 @@ function term_agent_set(t: Term, arg: string): void {
 // the picker opened (closing the pane), at the option marked as now; with
 // `more`, a search (typing ranks the names, or each option's hay), what
 // else the lit option takes and what the foot says of it (the model
-// picker's), what shows at each option's right end, and the screen's
-// middle as its place (the palette's)
-export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; hay?: string[]; aside?: string[]; middle?: number } = {}): void {
+// picker's), what shows at each option's right end, the screen's middle
+// as its place and each option's group (the palette's)
+export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; hay?: string[]; aside?: string[]; middle?: number; heads?: string[] } = {}): void {
   const shown = Screen.ed_rank("", names);
-  t.choose = { title, names, about, hay: more.hay, aside: more.aside, middle: more.middle, here, pick, find: more.find ? "" : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null };
+  t.choose = { title, names, about, hay: more.hay, aside: more.aside, middle: more.middle, heads: more.heads, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null };
   t.pane   = null;
 }
 
@@ -302,16 +336,18 @@ export function term_chooser(t: Term, title: string, names: string[], about: str
 // while it is empty, what it starts as, what the foot says, what Enter
 // does with it (a reason: the box stays, saying it)
 export function term_ask(t: Term, title: string, hint: string, start: string, foot: string, done: (text: string) => string | null): void {
-  t.choose = { title, names: [], about: [], here: -1, pick: () => {}, find: start, shown: [], at: 0, top: 0, keys: () => false, foot: () => foot, ask: { hint, done } };
+  const find = Screen.ed_new();
+  Screen.ed_set(find, start);
+  t.choose = { title, names: [], about: [], here: -1, pick: () => {}, find, shown: [], at: 0, top: 0, keys: () => false, foot: () => foot, ask: { hint, done } };
   t.pane   = null;
 }
 
 // the picker's search changed: the options it matches, the best lit;
 // emptied, all, the one lit before still lit (none: the one marked as
 // now)
-export function term_chooser_find(c: Chooser, find: string): void {
-  const was = c.shown[c.at]?.k ?? c.here;
-  c.find  = find;
+export function term_chooser_find(c: Chooser): void {
+  const was  = c.shown[c.at]?.k ?? c.here;
+  const find = c.find?.text ?? "";
   c.shown = Screen.ed_rank(find, c.hay ?? c.names);
   c.at    = find === "" ? Math.max(0, c.shown.findIndex((m) => m.k === was)) : 0;
   c.top   = 0;

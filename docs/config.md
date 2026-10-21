@@ -41,6 +41,9 @@ Your chat
 The chat is in `~/.illi/chat`, every message kept; days over a month old
 are gzipped. Back it up.
 
+`~/.illi/used.json` counts the commands you run, for every profile: among
+the commands a `/word` matches alike, the ones you use most come first.
+
 Troubleshooting
 ---------------
 

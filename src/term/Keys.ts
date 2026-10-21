@@ -16,6 +16,10 @@ import { term_copied, term_hover, term_mouse, term_selected, term_under } from "
 import { term_act, term_primaries, term_quit, type Chooser, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
+// the editing keys a picker's search leaves to its rows: a new line, a
+// line up or down
+const ROWS = ["Up", "Down", "Shift+Enter", "Ctrl+J"];
+
 // the keys that leave text chosen (any other lets it go)
 const KEEP   = ["", "Canvas", "Press", "Drag", "Release", "WheelUp", "WheelDown", "Esc", "PgUp", "PgDn", "Ctrl+Home", "Ctrl+End"];
 
@@ -92,7 +96,7 @@ export function term_grab(t: Term, key: string): boolean {
 // the options shown, Enter picks the lit one (none matching the search:
 // nothing; a line asked for: given, the box kept with a reason if it
 // won't do), Esc and Ctrl+C close (Ctrl+C neither interrupts nor quits
-// here), and Backspace takes a character off the search
+// here), and the search takes the input's editing keys (but its rows')
 function term_choose_key(t: Term, c: Chooser, key: string): boolean {
   const n    = c.shown.length;
   const lit  = c.shown[c.at]?.k;
@@ -102,22 +106,22 @@ function term_choose_key(t: Term, c: Chooser, key: string): boolean {
   }
   if (key === "Enter" && c.ask !== null) {
     t.choose  = null;
-    const why = c.ask.done((c.find ?? "").trim());
+    const why = c.ask.done((c.find?.text ?? "").trim());
     if (why !== null) {
       t.choose = c;
       c.foot   = () => why;
     }
     return true;
   }
-  if (key === "Backspace" && c.find !== null) {
-    term_chooser_find(c, Paint.text_graphemes(c.find).slice(0, -1).join(""));
-  } else if (move !== undefined) {
+  if (move !== undefined) {
     c.at = n === 0 ? 0 : (c.at + move + n) % n;
   } else if (key === "Enter" && lit !== undefined) {
     t.choose = null;
     c.pick(lit);
   } else if (key === "Esc" || key === "Ctrl+C") {
     t.choose = null;
+  } else if (c.find !== null && !ROWS.includes(key) && Screen.ed_key(c.find, key)) {
+    term_chooser_find(c);
   } else if (key !== "Enter") {
     return false;
   }
@@ -130,7 +134,8 @@ export function term_type(t: Term, text: string): boolean {
   if (c === null || c.find === null) {
     return false;
   }
-  term_chooser_find(c, c.find + text);
+  Screen.ed_type(c.find, text);
+  term_chooser_find(c);
   return true;
 }
 

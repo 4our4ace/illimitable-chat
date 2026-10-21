@@ -18,7 +18,7 @@ import type { Match } from "../ui/Screen.ts";
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-commands-");
 process.env.ILLI_DIR = DIR;
 
-const { term_chooser, term_commands } = await import("./Commands.ts");
+const { term_chooser, term_command, term_commands, term_suggest } = await import("./Commands.ts");
 const { term_grab, term_type } = await import("./Keys.ts");
 const Paint = await import("../ui/Paint.ts");
 const Screen = await import("../ui/Screen.ts");
@@ -65,11 +65,11 @@ test("typing searches the models, Backspace takes a character off; emptied, the 
   expect(term_grab(t, "Backspace")).toBe(true);
   expect(shown(t)).toEqual(["sonnet-5.5", "gpt-6.1-sol"]);
   term_grab(t, "Backspace");
-  expect(shown(t)).toEqual(["sonnet-5.5", "opus-5.5", "gpt-6.1-sol", "gpt-6-astra"]);
+  expect(shown(t)).toEqual(["sonnet-5.5", "gpt-6.1-sol", "opus-5.5", "gpt-6-astra"]);
   term_grab(t, "Down");
   term_grab(t, "Backspace");
   expect(shown(t)).toHaveLength(6);
-  expect(lit(t)).toBe("opus-5.5");
+  expect(lit(t)).toBe("gpt-6.1-sol");
   expect(t.scr.ed.text).toBe("");
   term_type(t, "xyz");
   expect(shown(t)).toEqual([]);
@@ -182,4 +182,20 @@ test("the dead ends say something: /stop with nothing running, /fold on an agent
   expect(note(t)).toBe("Which image? /image <path>, or paste or drop the file.");
   run(t, "/mcp");
   expect(t.pane.make(200).map((l: any) => l.map((r: any) => r.x).join("")).join("\n")).toMatch(/^No MCP servers yet\. Add them to .*mcp\.json/);
+});
+
+test("the commands suggested: those run most first among those a word matches alike; the counts kept in the root", async () => {
+  const t = term();
+  const top = (word: string) => {
+    Screen.ed_set(t.scr.ed, word);
+    const sug = term_suggest(t)!;
+    return sug.cmds[sug.found[0].k][0].split(" ")[0];
+  };
+  expect(top("/set")).toBe("/set");
+  term_command(t, "/settings");
+  t.choose = null;
+  expect(top("/sett")).toBe("/settings");
+  expect(top("/set")).toBe("/settings");
+  await Bun.sleep(2100);
+  expect(JSON.parse(fs.readFileSync(DIR + "/used.json", "utf8"))).toEqual({ "/settings": 1 });
 });
