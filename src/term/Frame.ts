@@ -68,9 +68,9 @@ const DOT = [[0x01, 0x02, 0x04, 0x40], [0x08, 0x10, 0x20, 0x80]];
 // the rule's start, before the trace while work runs
 const RULE_HEAD = "── ";
 
-// the input's hint on an agent's page (in the chat's: the suggested
-// reply, if any)
-const OFF = "Commands only: /help";
+// the input's hint on an agent's tab, the main agent's name after it (in
+// the chat's: the suggested reply, if any)
+const OFF = "Read-only · Ctrl+PgUp back to ";
 
 // the commands suggested: the most lines shown, the keys said in its top
 // edge; the picker's widest
@@ -129,7 +129,7 @@ export function term_paint(t: Term): void {
   const cw    = full - side - 2 * MARGIN;
   const iw    = full - 2 * MARGIN;
   const off   = !View.view_typing(t.v);
-  const input = Screen.screen_input(t.scr, iw, Math.max(1, Math.floor(h / 3)), off ? OFF : term_hint(t), off);
+  const input = Screen.screen_input(t.scr, iw, Math.max(1, Math.floor(h / 3)), off ? OFF + agent_name(t.v.agent ?? View.MAIN) : term_hint(t), off);
   const idle  = View.view_doing(t.v) === null;
   const notes = term_notes(idle ? said.notes : said.notes.slice(-1), iw - 2 * NOTE_IN);
   const ruled = idle ? notes.pop() : undefined;

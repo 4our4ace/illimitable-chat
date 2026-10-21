@@ -12,7 +12,8 @@ import { term_spinner } from "./Frame.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
 import { term_note } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
-import { term_profile_go } from "./ProfileCommands.ts";
+import { term_profile_go, term_profile_pick } from "./ProfileCommands.ts";
+import * as Screen from "../ui/Screen.ts";
 import { setting_set } from "./Settings.ts";
 import { term_act, type Item, type Term } from "./Term.ts";
 import { agent_name, GLYPH } from "../ui/Theme.ts";
@@ -36,16 +37,16 @@ const FOLDED  = 3;
 export const CLOCK   = 60000;
 
 // the side, w wide and tall: Illi and the primary agents (a click makes
-// one the main agent), the pages (a click shows one), a ChatGPT plan's
-// use, the chat's (its context, the memory), the MCP servers (a click:
-// /mcp); at its foot Illi's to-do list, which, longer than the room,
+// one the main agent), the tabs (a click shows one), the profiles (a
+// click on the head: /profile), a ChatGPT plan's use, the chat's (its
+// context, the memory), the MCP servers (a click: /mcp); at its foot Illi's to-do list, which, longer than the room,
 // pushes the rest up (its head stays); with none, a faint hint for the
 // keys (HINT), if it fits
 export function term_side(t: Term, w: number, tall: number): Item[] {
   const bold  = { ...Paint.INK, b: true };
   const head  = (text: string, run: (() => void) | null = null): Item => [[Paint.Run(text, bold)], run];
   const item  = (here: boolean, text: string, run: () => void): Item => [[Paint.Run((here ? GLYPH.here : GLYPH.tab) + " " + text, here ? Paint.INK : Paint.DIM)], run];
-  const about = (k: number) => (k === 0 ? "Illi's own" : t.agents[k - 1].description);
+  const about = (k: number) => (k === 0 ? "" : t.agents[k - 1].description);
   const mains = [null, ...t.agents.map((a) => a.name)].map((name, k): Item => {
     const [line, run] = item(name === t.v.agent, agent_name(name ?? View.MAIN), () => term_choose(t, name));
     const room = w - Paint.line_width(line) - 2;
@@ -68,18 +69,20 @@ export function term_side(t: Term, w: number, tall: number): Item[] {
   return items.slice(0, tall).map(([line, run]) => [Paint.runs_wrap(line, w, true)[0], run]);
 }
 
-// a ChatGPT plan's use, w wide (another vendor: nothing): its head, the
-// plan named (ChatGPT Pro), then each of its windows, a label a line:
-// the share used and when it starts anew, a bar under it (in the theme's
+// a ChatGPT plan's use, w wide (another vendor, or nothing told yet:
+// nothing): its head, the plan named (ChatGPT Pro; as Pro, else not at
+// all, if it won't fit), then each of its windows, a label a line: the
+// share used and when it starts anew, a bar under it (in the theme's
 // blue, as term_bar colors it); none told yet, a line says when it will
 // be. What won't fit says less
 function term_side_plan(t: Term, w: number): Item[] {
-  if (t.v.pick?.vendor !== "chatgpt") {
+  const tier  = t.v.use.plan ?? "";
+  if (t.v.pick?.vendor !== "chatgpt" || (tier === "" && t.v.use.limits.length === 0)) {
     return [];
   }
-  const tier  = t.v.use.plan ?? "";
-  const name  = tier === "" ? [] : [Paint.Run(" · ChatGPT " + tier[0].toUpperCase() + tier.slice(1), Paint.DIM)];
-  const head  = [[Paint.Run("Usage", { ...Paint.INK, b: true }), ...name], null] as Item;
+  const plan  = tier === "" ? "" : tier[0].toUpperCase() + tier.slice(1);
+  const says  = plan === "" ? [] : [" · ChatGPT " + plan, " · " + plan].filter((x) => Paint.text_width("Usage" + x) <= w);
+  const head  = [[Paint.Run("Usage", { ...Paint.INK, b: true }), ...says.slice(0, 1).map((x) => Paint.Run(x, Paint.DIM))], null] as Item;
   const blue  = Draw.draw_theme().link ?? "4";
   const shown = t.v.use.limits.flatMap((l) => {
     const left  = l.reset - Date.now();
@@ -87,7 +90,7 @@ function term_side_plan(t: Term, w: number): Item[] {
     const used  = term_pct(share, blue);
     return [term_row(w, term_window(l.window), [used, Paint.Run(left > 0 ? " · resets " + term_left(left) : " · reset", Paint.DIM)], [used]), term_bar(share, w, blue)];
   });
-  return [head, ...(shown.length > 0 ? shown : [[[Paint.Run("told with the first reply", Paint.DIM)], null] as Item])];
+  return [head, ...(shown.length > 0 ? shown : [[[Paint.Run("shown after a reply", Paint.DIM)], null] as Item])];
 }
 
 // what the calls use, w wide, a label a line: how full the chat a turn
@@ -105,9 +108,10 @@ function term_side_use(t: Term, w: number): Item[] {
   const of     = window === undefined ? [] : [Paint.Run(" / " + term_tokens(window), Paint.DIM)];
   const part   = share === null ? [] : [Paint.Run(" · ", Paint.DIM), term_pct(share, c)];
   const bar    = share === null ? [] : [term_bar(tokens! > 0 ? Math.max(share, 1e-9) : 0, w, c)];
-  const says   = fill === null ? [] : ["auto-summary at " + term_tokens(fill.cap) + " · window " + term_tokens(fill.window), "auto-summary at " + term_tokens(fill.cap), "at " + term_tokens(fill.cap)];
+  const says   = fill === null ? [] : ["summarizes at " + term_tokens(fill.cap) + " · window " + term_tokens(fill.window), "summarizes at " + term_tokens(fill.cap), "at " + term_tokens(fill.cap)];
   const folds  = says.length === 0 ? [] : [[[Paint.Run(says.find((x) => Paint.text_width(x) <= w) ?? says[says.length - 1], Paint.DIM)], null] as Item];
-  const n      = Paint.Run(View.view_count(t.v) + " messages");
+  const count  = View.view_count(t.v);
+  const n      = Paint.Run(count + (count === 1 ? " message" : " messages"));
   const blocks = t.v.parts.length;
   const memory = term_row(w, "Memory", [n, Paint.Run(" · " + blocks + " blocks in view", Paint.DIM)], [n, Paint.Run(" · " + blocks + " blocks", Paint.DIM)], [n]);
   return [term_row(w, "Context", [read, ...of, ...part], [read, ...part]), ...bar, ...folds, memory];
@@ -221,7 +225,8 @@ export function term_side_width(t: Term, w: number): number {
 
 // /side: where the side panel shows (right, left, off) or how wide (40,
 // 30%), kept in config.json (as /set does it: not over a variable, nor
-// into a config.json that won't read); none: says how it is
+// into a config.json that won't read); none: says how it is. On a screen
+// too narrow, says it is hidden there
 export function term_side_set(t: Term, arg: string): void {
   const how = arg.trim().toLowerCase();
   const key = ["right", "left", "off"].includes(how) ? "side" : /^\d+(?:\.\d+)?%?$/.test(how) ? "side_width" : null;
@@ -231,18 +236,20 @@ export function term_side_set(t: Term, arg: string): void {
   if (key !== null && !setting_set(t, key, how)) {
     return;
   }
-  term_note(t, "The side panel: " + t.side.place + ", " + t.side.width + " wide" + (how === "" ? " (/side right, left, off, or a width like 40 or 30%)." : "; kept in config.json."));
+  const w    = Screen.screen_size().w;
+  const hid  = t.side.place !== "off" && w < WIDE ? " Hidden on this screen: it shows from " + WIDE + " columns, this one has " + w + "." : "";
+  term_note(t, "The side panel: " + t.side.place + ", " + t.side.width + " wide" + (how === "" ? " (/side right, left, off, or a width like 40 or 30%)." : "; kept in config.json.") + hid);
 }
 
-// the side's subagents: the way back to the chat while a page shows;
-// each subagent of this run, at work (the spinner) or done (✓), its page
-// shown bold; a click shows its page
+// the side's subagents: the way back to the chat while an agent's tab
+// shows (named as the main agent); each subagent of this run, at work
+// (the spinner) or done (✓), its tab shown bold; a click shows its tab
 function term_side_subs(t: Term): Item[] {
   const shown = t.v.page?.name ?? null;
   const c     = Draw.draw_theme().accent ?? "5";
   const spin  = term_spinner(Date.now() - t.since);
   const names = shown === null || t.subs.has(shown) ? [...t.subs] : [...t.subs, [shown, t.v.agents.includes(shown)] as [string, boolean]];
-  const back  = shown === null ? [] : [[[Paint.Run("‹ " + View.MAIN, Paint.DIM)], () => term_act(t, { $: "Goto", name: null })] as Item];
+  const back  = shown === null ? [] : [[[Paint.Run("‹ " + agent_name(t.v.agent ?? View.MAIN), Paint.DIM)], () => term_act(t, { $: "Goto", name: null })] as Item];
   const subs  = names.map(([name, working]): Item => [
     [Paint.Run((working ? spin : "✓") + " ", working ? { ...Paint.INK, c, b: true } : { ...Paint.INK, c: "2" }), Paint.Run(agent_name(name), name === shown ? { ...Paint.INK, b: true } : working ? Paint.INK : Paint.DIM)],
     () => term_act(t, { $: "Goto", name }),
@@ -250,12 +257,12 @@ function term_side_subs(t: Term): Item[] {
   return [...back, ...subs];
 }
 
-// the side's profiles: a head, each profile (the one running marked), a
-// gap; a click on another switches to it
+// the side's profiles: a head (a click: /profile's picker), each profile
+// (the one running marked), a gap; a click on another switches to it
 function term_side_profiles(t: Term): Item[] {
   const items = t.profs.map((name): Item => {
     const here = name === config.PROFILE;
     return [[Paint.Run((here ? GLYPH.here : GLYPH.tab) + " " + name, here ? Paint.INK : Paint.DIM)], here ? null : () => void term_profile_go(t, name)];
   });
-  return [[[Paint.Run("Profiles", { ...Paint.INK, b: true })], null], ...items, [[], null]];
+  return [[[Paint.Run("Profiles", { ...Paint.INK, b: true })], () => term_profile_pick(t)], ...items, [[], null]];
 }
