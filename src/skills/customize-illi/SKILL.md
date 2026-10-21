@@ -34,7 +34,9 @@ The description is all illi sees of a skill until it loads: say what it
 does and when to use it, in the words the user would use. The body says
 how. Long references, templates and scripts go in files beside SKILL.md,
 named in the body, to be read as needed. The user can also type /<name> to
-ask for it.
+ask for it. That /<name> comes with every skill: never write a command of a
+skill's name, which would hide it. For rules that should last, make the
+skill sticky instead of a command that says "until I say stop".
 
 A sticky skill is one for every reply, not a task: a way to write, a
 language, a tone. With `sticky: true` in its front matter, /<name> turns it
