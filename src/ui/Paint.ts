@@ -64,9 +64,11 @@ const GUTTER = 7;
 const GRAPHEMES = new Intl.Segmenter("en", { granularity: "grapheme" });
 
 // each row's lines, at the width and look they were laid out at
-// (row_cached); the look, counted up as the colors change
+// (row_cached); the look, counted up as the colors change; the
+// terminal's background, as told (null: not yet)
 const LAID = new WeakMap<View.Row, { w: number; look: number; lines: Line[] }>();
 let LOOK = 0;
+let CANVAS: string | null = null;
 
 // the reply last laid out, as far as it was finished (Reply.reply_grow),
 // at the look it was: a stream's next text lays out only what follows
@@ -298,11 +300,17 @@ function row_cached(row: View.Row, w: number): Line[] {
 }
 
 // the terminal told its background: diagrams draw in a new palette, so
-// every row is laid out anew
-export function paint_canvas(hex: string): void {
+// every row is laid out anew; told the one it was, nothing changes
+// (false)
+export function paint_canvas(hex: string): boolean {
+  if (hex === CANVAS) {
+    return false;
+  }
+  CANVAS = hex;
   Draw.draw_canvas(hex);
   FILL = Theme.ANSI.block === "" ? canvas_shade(hex) : FILL;
   LOOK += 1;
+  return true;
 }
 
 // a shade of a background: a dark one lighter, a light one darker
