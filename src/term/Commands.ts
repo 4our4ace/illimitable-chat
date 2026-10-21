@@ -26,8 +26,8 @@ import { term_profile } from "./ProfileCommands.ts";
 import * as Reply from "../ui/Reply.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_set, term_settings } from "./Settings.ts";
-import { term_side_set, term_tokens } from "./Side.ts";
-import { term_act, term_idle, term_primaries, term_quit, term_send, term_unhint, type Chooser, type Cmd, type Sug, type Term } from "./Term.ts";
+import { term_tokens } from "./Side.ts";
+import { term_act, term_idle, term_primaries, term_send, term_unhint, type Chooser, type Cmd, type Sug, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
 // how long the login's code shows: as long as it is good (ms), or till
@@ -80,7 +80,6 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/tree",             "",                        "save the whole memory tree as ./illi-tree.html", term_tree],
       ["",                  "Ctrl+L",                  "draw the screen again",                          term_redraw],
       ["",                  "Ctrl+Z",                  "suspend; fg brings it back",                     (t) => Screen.screen_suspend(t.scr)],
-      ["/quit",             "",                        "leave: what runs stops, and goes on at the next start", term_quit],
       ["/help",             "",                        "this list",                                      term_help],
     ]],
     ["Scroll", [
@@ -107,7 +106,6 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/logout",           "",                        "remove illi's own ChatGPT login (opencode's, if any, is used again)", term_logout],
       ["/settings",         "",                        "all the settings: type to search, Left, Right or Enter change one, Del puts its default back", (t) => term_settings(t)],
       ["/set <key> [value]", "",                       "change a setting (default: back to its default); no value: says what it is", term_set],
-      ["/side [where|width]", "",                      "the side panel: right, left or off, or its width (40 or 30%); alone: says how it is", term_side_set],
       ["/mcp",              "",                        "your MCP servers: their tools, or why one failed", term_mcp],
     ]],
     ["Profiles", [

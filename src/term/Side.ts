@@ -2,19 +2,16 @@
 // ====
 // The side panel, on a wide screen: the primary agents, the subagents of
 // this run, the profiles, a ChatGPT plan's use, the chat's (the context,
-// the memory), the MCP servers, a hint for the keys or illi's to-do list; /side
-// places it.
+// the memory), the MCP servers, a hint for the keys or illi's to-do list;
+// the side and side_width settings place it.
 
 import { term_choose, term_mcp } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import * as Draw from "../ui/Draw.ts";
 import { term_spinner } from "./Frame.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
-import { term_note } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_profile_go, term_profile_pick } from "./ProfileCommands.ts";
-import * as Screen from "../ui/Screen.ts";
-import { setting_set } from "./Settings.ts";
 import { term_act, type Item, type Term } from "./Term.ts";
 import { GLYPH } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
@@ -221,24 +218,6 @@ export function term_side_width(t: Term, w: number): number {
   const share = /^(\d+(?:\.\d+)?)%$/.exec(t.side.width);
   const want  = share !== null ? Math.floor((w * Number(share[1])) / 100) : Number(t.side.width) || Math.floor(w / 4);
   return Math.max(SIDE, Math.min(want, w - ROOM));
-}
-
-// /side: where the side panel shows (right, left, off) or how wide (40,
-// 30%), kept in config.json (as /set does it: not over a variable, nor
-// into a config.json that won't read); none: says how it is. On a screen
-// too narrow, says it is hidden there
-export function term_side_set(t: Term, arg: string): void {
-  const how = arg.trim().toLowerCase();
-  const key = ["right", "left", "off"].includes(how) ? "side" : /^\d+(?:\.\d+)?%?$/.test(how) ? "side_width" : null;
-  if (key === null && how !== "") {
-    return term_note(t, "/side takes right, left or off, or a width: columns (40) or a share of the screen (30%).");
-  }
-  if (key !== null && !setting_set(t, key, how)) {
-    return;
-  }
-  const w    = Screen.screen_size().w;
-  const hid  = t.side.place !== "off" && w < WIDE ? " Hidden on this screen: it shows from " + WIDE + " columns, this one has " + w + "." : "";
-  term_note(t, "The side panel: " + t.side.place + ", " + t.side.width + " wide" + (how === "" ? " (/side right, left, off, or a width like 40 or 30%)." : "; kept in config.json.") + hid);
 }
 
 // the side's subagents: the way back to the chat while an agent's tab

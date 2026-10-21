@@ -8,7 +8,8 @@
 // input; on `off`, what it may turn off, Enter turning one off and on.
 // /set checks a value first: its shape and the picks still
 // offered (a file named needn't be there). A pick set while illi's own
-// agent is the main one is the chat's at once. /side changes its settings as /set does. Each
+// agent is the main one is the chat's at once: not over a variable, nor
+// into a config.json that won't read. Each
 // setting is in docs/config.md and the customize-illi skill.
 
 import { afterAll, expect, test } from "bun:test";
@@ -156,13 +157,13 @@ test("the pick set while illi's own agent is the main one is the chat's at once;
   }
 });
 
-test("/side changes its settings as /set does: not over a variable, nor into a config.json that won't read", () => {
+test("/set side: not over a variable, nor into a config.json that won't read", () => {
   const t = term();
-  run(t, "/side", "left");
+  run(t, "/set", "side left");
   expect([file().side, t.side.place]).toEqual(["left", "left"]);
   process.env.ILLI_SIDE = "right";
   try {
-    run(t, "/side", "off");
+    run(t, "/set", "side off");
     expect(note(t)).toBe("side is set by ILLI_SIDE, over config.json: unset it to change it here.");
     expect(file().side).toBe("left");
   } finally {
@@ -171,12 +172,12 @@ test("/side changes its settings as /set does: not over a variable, nor into a c
   const kept = fs.readFileSync(DIR + "/config.json", "utf8");
   fs.writeFileSync(DIR + "/config.json", "{ nope");
   try {
-    expect(() => run(t, "/side", "40")).not.toThrow();
-    expect(note(t)).not.toMatch(/^The side panel/);
+    expect(() => run(t, "/set", "side_width 40")).not.toThrow();
+    expect(note(t)).not.toMatch(/^side_width: 40/);
   } finally {
     fs.writeFileSync(DIR + "/config.json", kept);
   }
-  run(t, "/side", "right");
+  run(t, "/set", "side right");
 });
 
 test("a vendor or a model taken out that a pick runs on won't do", () => {
