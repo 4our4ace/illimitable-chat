@@ -157,29 +157,32 @@ test("Claude Code's permission prompt is a question at illi's screen: yes, no wi
   chat.tools.allowed.clear();
 });
 
-test("illi's own question (ask): the main agent's; its options checked; answered as the user said, skipped when they skip", async () => {
+test("illi's own questions (ask): the main agent's; each checked; answered as the user said, skipped when they skip", async () => {
   const v = View.view_new();
   View.link_open(v, Chat.link(chat, (msg) => void View.view_hear(v, msg)));
   await until(() => v.up);
   expect(Tools.list(chat.tools, "main").map((t) => t.name)).toContain("ask");
   expect(Tools.list(chat.tools, "Scout").map((t) => t.name)).not.toContain("ask");
-  const ask = (args: object) => Tools.call(chat.tools, "main", "ask", args, new AbortController().signal);
+  const ask = (questions: object[]) => Tools.call(chat.tools, "main", "ask", { questions }, new AbortController().signal);
   const options = [{ label: "Postgres", about: "you know it" }, { label: "SQLite" }];
-  expect((await ask({ question: "Which?", options: [{ label: "one" }] })).text).toBe("Give 2 to 6 options, each with a label.");
-  expect((await ask({ question: " ", options })).fail).toBe(true);
-  const answered = ask({ question: "Which database?", options, multi: true });
+  const wrong = "Ask 1 to 4 questions, each with its text and 2 to 6 options, each with a label.";
+  expect((await ask([{ question: "Which?", options: [{ label: "one" }] }])).text).toBe(wrong);
+  expect((await ask([])).text).toBe(wrong);
+  expect((await ask(Array(5).fill({ question: "Which?", options }))).text).toBe(wrong);
+  const answered = ask([{ question: "Which database for the demo?", options, multi: true }, { question: "Cache?", head: "Cache", options }]);
   await until(() => v.asks.length === 1);
-  expect(v.asks[0]).toMatchObject({ who: "illi", tool: "ask", what: "Which database?", options: [{ label: "Postgres", about: "you know it" }, { label: "SQLite", about: "" }], multi: true });
-  View.link_send(v, { $: "answer", ask: v.asks[0].id, yes: true, always: false, said: "picked: Postgres\nwrote: with backups" });
-  expect(await answered).toEqual({ text: "The user answered at illi's screen:\npicked: Postgres\nwrote: with backups", fail: false });
+  expect(v.asks[0]).toMatchObject({ who: "illi", tool: "ask", what: "Which database for the demo?", queries: [{ text: "Which database for the demo?", head: "Which databa", options: [{ label: "Postgres", about: "you know it" }, { label: "SQLite", about: "" }], multi: true }, { head: "Cache", multi: false }] });
+  View.link_send(v, { $: "answer", ask: v.asks[0].id, yes: true, always: false, said: "Which database for the demo?\npicked: Postgres\n\nCache?\nno answer" });
+  expect(await answered).toEqual({ text: View.ANSWERED + "Which database for the demo?\npicked: Postgres\n\nCache?\nno answer", fail: false });
   await until(() => v.asks.length === 0);
-  const skipped = ask({ question: "Which database?", options });
+  const skipped = ask([{ question: "Which database?", options }]);
   await until(() => v.asks.length === 1);
   View.link_send(v, { $: "answer", ask: v.asks[0].id, yes: false, always: false });
-  expect((await skipped).text).toBe("The user skipped the question (Esc): decide yourself, or ask in your reply.");
+  expect((await skipped).text).toBe("The user skipped the questions: decide yourself, or ask in your reply.");
   await until(() => v.asks.length === 0);
   v.ws!.close();
   await until(() => chat.socks.size === 0);
+  expect((await ask([{ question: "Which database?", options }])).text).toBe("No one is at illi's screen to answer: decide yourself, or ask in your reply.");
 });
 
 test("what a question shows: a command, a file, a URL or a query, else the input, cut short", () => {

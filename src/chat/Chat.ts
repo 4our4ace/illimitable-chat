@@ -21,7 +21,7 @@ import { Disk } from "./Disk.ts";
 import { Memory, type Share } from "./Memory.ts";
 import { Pick } from "../ai/Pick.ts";
 import { MASTER, SEARCHES, Tools, type Agent, type Live, type Reply } from "../tools/Tools.ts";
-import { IMAGES, live_push, SUMMARIES, TURN, type Answer, type Link, type Part, type Pipe, type Question, type Server as Out, type Wait } from "../ui/View.ts";
+import { ANSWERED, IMAGES, live_push, SUMMARIES, TURN, type Answer, type Link, type Part, type Pipe, type Question, type Server as Out, type Wait } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
 
 // Types
@@ -106,13 +106,14 @@ const GOAL_NO    = "The goal isn't satisfied yet: keep working.";
 
 // a no to a question (Chat.question): the user's, without a reason and
 // before one; no one at the screen to ask; its request stopped. illi's
-// own answered, before the answer; skipped
+// own skipped, or no one there to answer (answered: View ANSWERED, then
+// the answers)
 const SAID_NO    = "The user said no, asked at illi's screen.";
 const SAID_WHY   = "The user said no, asked at illi's screen: ";
 const NO_ONE     = "No one is at illi's screen to ask, so it isn't allowed.";
 const STOPPED    = "The request was stopped.";
-const ANSWERED   = "The user answered at illi's screen:\n";
-const SKIPPED    = "The user skipped the question (Esc): decide yourself, or ask in your reply.";
+const SKIPPED    = "The user skipped the questions: decide yourself, or ask in your reply.";
+const NO_ANSWER  = "No one is at illi's screen to answer: decide yourself, or ask in your reply.";
 
 // a chat that outgrew its model's window (Chat.refit): a turn's share of
 // the context made this much smaller, when the request itself was too
@@ -772,7 +773,7 @@ export namespace Chat {
   // drops (a stop: no); with no view to ask, no at once
   export function question(chat: Chat, q: Omit<Question, "id">, signal: AbortSignal): Promise<Reply> {
     if (chat.socks.size === 0 || signal.aborted) {
-      return Promise.resolve({ yes: false, always: false, said: NO_ONE });
+      return Promise.resolve({ yes: false, always: false, said: q.queries === undefined ? NO_ONE : NO_ANSWER });
     }
     return new Promise((done) => {
       const id = crypto.randomUUID();
@@ -790,7 +791,7 @@ export namespace Chat {
       return;
     }
     const [q] = chat.asks.splice(k, 1);
-    q.done({ yes, always, said: yes && q.options === undefined ? "" : said });
+    q.done({ yes, always, said: yes && q.queries === undefined ? "" : said });
     Chat.change(chat);
   }
 
@@ -928,7 +929,7 @@ export namespace Chat {
       }
       case "answer": {
         const said = typeof msg.said === "string" ? msg.said.trim() : "";
-        const own  = chat.asks.find((q) => q.id === msg.ask)?.options !== undefined;
+        const own  = chat.asks.find((q) => q.id === msg.ask)?.queries !== undefined;
         const yes  = msg.yes === true && (!own || said !== "");
         Chat.answered(chat, String(msg.ask), yes, msg.always === true, own ? (yes ? ANSWERED + said : SKIPPED) : said === "" ? SAID_NO : SAID_WHY + said);
         return {};

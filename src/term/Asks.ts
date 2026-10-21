@@ -5,10 +5,11 @@
 // not again for that tool this run; No (Esc too); No, and say why (a
 // line typed, for the model). What it would do shows at its foot, and
 // as a note.
-// illi's own question (ask) shows in place of the input instead (its
-// form): the question, its options, and a row for words of the user's
-// own, which they may type beside the options they pick or instead of
-// them; Esc skips it.
+// illi's own questions (ask) show in place of the input instead (its
+// form), a tab each: the question, its options (one to pick, or
+// several), and a row for words of the user's own, which they may type
+// beside the options they pick or instead of them; then a tab with all
+// the answers, to look over and send. Esc skips them all.
 // One answered elsewhere, or dropped (a stop), closes its picker; one
 // that comes while another picker is open waits for it to close. A
 // pipe has no one to ask: no, at once.
@@ -19,13 +20,17 @@ import { term_note } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_send, type Form, type Term } from "./Term.ts";
-import type { Question } from "../ui/View.ts";
+import type { Query, Question } from "../ui/View.ts";
 
 // the answers, in the picker's order
 const YES = 0, ALWAYS = 1, NO = 2, WHY = 3;
 
-// the form's keys, at its foot
-const KEYS = "↑↓ move · Space pick · type your own · Enter send · Esc skip";
+// the form's keys, at its foot: a question's, the answers'
+const KEYS = "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip";
+const SEND = "Enter send · Shift+Tab back · Esc skip";
+
+// illi's questions, as the form asks them
+type Asked = Question & { queries: Query[] };
 
 // the question first asked, shown till it is answered or gone
 export function term_asks(t: Term): void {
@@ -40,8 +45,8 @@ export function term_asks(t: Term): void {
     return;
   }
   if (t.asking === null) {
-    t.asking = { id: q.id, c: null, done: false, form: q.options === undefined ? null : { ed: Screen.ed_new(), at: 0, picked: [] } };
-    if (q.options === undefined) {
+    t.asking = { id: q.id, c: null, done: false, form: q.queries === undefined ? null : { tab: 0, each: q.queries.map(() => ({ ed: Screen.ed_new(), at: 0, picked: [] })) } };
+    if (q.queries === undefined) {
       term_note(t, q.who + " asks to use " + q.tool + (q.what === "" ? "." : ": " + q.what));
     }
     if (!t.scr.tty) {
@@ -53,75 +58,111 @@ export function term_asks(t: Term): void {
   }
 }
 
-// illi's question open, and its form
-function term_form(t: Term): [Question & { options: NonNullable<Question["options"]> }, Form] | null {
+// illi's questions open, and their form
+function term_form(t: Term): [Asked, Form] | null {
   const q = t.v.asks[0];
   const f = t.asking?.form ?? null;
-  return f === null || q?.id !== t.asking!.id || q.options === undefined ? null : [q as Question & { options: NonNullable<Question["options"]> }, f];
+  return f === null || q?.id !== t.asking!.id || q.queries === undefined ? null : [q as Asked, f];
 }
 
-// a key to illi's question (true: taken): Up and Down (Tab too) move
-// round its options and the words' row; Enter sends the options picked
-// (none: the lit one) and the words; Esc and Ctrl+C skip it; the rest
-// edit the words, as the input's keys do
+// a key to illi's questions (true: taken). On a question, Up and Down
+// move round its options and the words' row; Enter picks the lit option
+// (of several, only while none is picked nor typed) and goes on; the
+// rest edit the words, as the input's keys do. Tab and Shift+Tab (Left
+// and Right off the words) go round the questions and the answers,
+// where Enter sends them (no editing key reaches the input there). Esc
+// and Ctrl+C skip them all
 export function term_form_key(t: Term, key: string): boolean {
   const open = term_form(t);
   if (open === null) {
     return false;
   }
   const [q, f] = open;
-  const n      = q.options.length;
-  const move   = ({ Up: -1, "Shift+Tab": -1, Down: 1, Tab: 1 } as Record<string, number>)[key];
-  if (move !== undefined) {
-    f.at = (f.at + move + n + 1) % (n + 1);
-  } else if (key === "Enter") {
-    const picked = f.picked.length > 0 ? [...f.picked].sort((a, b) => a - b) : f.at < n ? [f.at] : [];
-    const words  = Screen.ed_expand(f.ed, f.ed.text).trim();
-    const said   = [picked.length === 0 ? "" : "picked: " + picked.map((k) => q.options[k].label).join(", "), words === "" ? "" : "wrote: " + words];
-    if (picked.length > 0 || words !== "") {
-      term_answer(t, q, true, false, said.filter((x) => x !== "").join("\n"));
-    }
-  } else if (key === "Esc" || key === "Ctrl+C") {
+  const n      = q.queries.length;
+  const e      = f.each[f.tab];
+  const query  = q.queries[f.tab];
+  const o      = query?.options.length ?? 0;
+  const side   = e === undefined || e.at < o ? { Left: -1, Right: 1 } : {};
+  const tab    = ({ Tab: 1, "Shift+Tab": -1, ...side } as Record<string, number>)[key];
+  const row    = ({ Up: -1, Down: 1 } as Record<string, number>)[key];
+  if (key === "Esc" || key === "Ctrl+C") {
     term_answer(t, q, false, false, "");
-  } else if (Screen.ed_key(f.ed, key)) {
-    f.at = n;
+  } else if (tab !== undefined) {
+    f.tab = (f.tab + tab + n + 1) % (n + 1);
+  } else if (e === undefined) {
+    if (key === "Enter") {
+      const said = term_said(q, f);
+      term_answer(t, q, said !== "", false, said);
+    }
+    return key === "Enter" || row !== undefined || Screen.ed_key(Screen.ed_new(), key);
+  } else if (row !== undefined) {
+    e.at = (e.at + row + o + 1) % (o + 1);
+  } else if (key === "Enter") {
+    if (e.at < o && (!query.multi || (e.picked.length === 0 && e.ed.text.trim() === ""))) {
+      e.picked = [e.at];
+    }
+    f.tab += 1;
+  } else if (Screen.ed_key(e.ed, key)) {
+    e.at = o;
   } else {
     return false;
   }
   return true;
 }
 
-// text typed at illi's question (true: taken): a space on an option picks
-// it (the one picked, but with multi; again: not), else to the words
+// text typed at illi's questions (true: taken): a space on an option
+// picks it (the one picked, but where several may be; again: not), else
+// to the words; on the answers, nowhere
 export function term_form_type(t: Term, text: string): boolean {
   const open = term_form(t);
   if (open === null) {
     return false;
   }
   const [q, f] = open;
-  if (text === " " && f.at < q.options.length) {
-    f.picked = f.picked.includes(f.at) ? f.picked.filter((k) => k !== f.at) : q.multi === true ? [...f.picked, f.at] : [f.at];
+  const e      = f.each[f.tab];
+  const query  = q.queries[f.tab];
+  if (e === undefined) {
+    return true;
+  }
+  if (text === " " && e.at < query.options.length) {
+    e.picked = e.picked.includes(e.at) ? e.picked.filter((k) => k !== e.at) : query.multi ? [...e.picked, e.at] : [e.at];
   } else {
-    Screen.ed_type(f.ed, text);
-    f.at = q.options.length;
+    Screen.ed_type(e.ed, text);
+    e.at = query.options.length;
   }
   return true;
 }
 
-// a paste at illi's question: to its words (true: taken)
+// a paste at illi's questions: to the words of the one shown (true:
+// taken; on the answers, nowhere)
 export function term_form_paste(t: Term, text: string): boolean {
   const open = term_form(t);
-  if (open !== null) {
-    Screen.ed_paste(open[1].ed, text);
-    open[1].at = open[0].options.length;
+  const e    = open?.[1].each[open[1].tab];
+  if (open !== null && e !== undefined) {
+    Screen.ed_paste(e.ed, text);
+    e.at = open[0].queries[open[1].tab].options.length;
   }
   return open !== null;
 }
 
-// illi's question as lines in place of the input, w wide, its words at
-// most max lines (null: none open): who asks, the question, its options
-// (the lit one marked, those picked filled; several: squares), the
-// words' row as the input looks, the keys; the cursor in the words
+// what was said to each question, as the model gets it (after View
+// ANSWERED) and the chat shows it: the question, the options picked,
+// the words written, else no answer; "": nothing said to any
+function term_said(q: Asked, f: Form): string {
+  const each = q.queries.map((query, k) => {
+    const picked = [...f.each[k].picked].sort((a, b) => a - b).map((i) => query.options[i].label);
+    const words  = Screen.ed_expand(f.each[k].ed, f.each[k].ed.text).trim();
+    return [picked.length === 0 ? "" : "picked: " + picked.join(", "), words === "" ? "" : "wrote: " + words].filter((x) => x !== "");
+  });
+  return each.every((said) => said.length === 0) ? "" : q.queries.map((query, k) => [query.text, ...(each[k].length === 0 ? ["no answer"] : each[k])].join("\n")).join("\n\n");
+}
+
+// illi's questions as lines in place of the input, w wide, the words at
+// most max lines (null: none open): who asks over the tabs (the one shown
+// lit, one answered ticked), then the question shown, its options (the
+// lit one marked, those picked filled; several: squares), the words' row
+// as the input looks, the keys; or the answers, each under its question.
+// The cursor in the words (on the answers: at the keys)
 export function term_form_lines(t: Term, w: number, max: number): { lines: Paint.Line[]; at: Screen.Spot } | null {
   const open = term_form(t);
   if (open === null) {
@@ -130,21 +171,37 @@ export function term_form_lines(t: Term, w: number, max: number): { lines: Paint
   const [q, f] = open;
   const bold   = { ...Paint.INK, b: true };
   const accent = { ...bold, c: Draw.draw_theme().accent ?? "5" };
-  const lead   = (k: number) => Paint.Run(k === f.at ? "› " : "  ", bold);
-  const marks  = q.multi === true ? ["□ ", "■ "] : ["○ ", "● "];
+  const said   = (k: number) => f.each[k].picked.length > 0 || f.each[k].ed.text.trim() !== "";
+  const names  = [...q.queries.map((query, k) => (said(k) ? "✓ " : "") + Paint.text_clean(query.head)), "Review"];
+  const tabs   = names.flatMap((name, k) => [Paint.Run(" "), Paint.Run(" " + name + " ", k === f.tab ? { ...bold, v: true } : k < q.queries.length && said(k) ? Paint.INK : Paint.DIM)]);
+  const head   = Paint.runs_wrap([Paint.Run(q.who + " asks", accent), ...tabs], w, false);
+  const e      = f.each[f.tab];
+  if (e === undefined) {
+    const answer = (k: number) => {
+      const picked = [...f.each[k].picked].sort((a, b) => a - b).map((i) => q.queries[k].options[i].label);
+      const words  = Screen.ed_expand(f.each[k].ed, f.each[k].ed.text).trim();
+      const lines  = [...(picked.length === 0 ? [] : [[Paint.Run("  ● ", accent), Paint.Run(Paint.text_clean(picked.join(", ")))]]), ...(words === "" ? [] : [[Paint.Run("  > ", Paint.DIM), Paint.Run(Paint.text_clean(words))]])];
+      return lines.length === 0 ? [[Paint.Run("  no answer", Paint.DIM)]] : lines.flatMap((l) => Paint.runs_wrap(l, w, false));
+    };
+    const each  = q.queries.flatMap((query, k) => [...Paint.runs_wrap([Paint.Run(Paint.text_clean(query.text), bold)], w, false), ...answer(k)]);
+    const lines = [...head, ...each, [Paint.Run(SEND, Paint.DIM)]];
+    return { lines, at: { row: lines.length - 1, col: 0 } };
+  }
+  const query  = q.queries[f.tab];
+  const lead   = (k: number) => Paint.Run(k === e.at ? "› " : "  ", bold);
+  const marks  = query.multi ? ["□ ", "■ "] : ["○ ", "● "];
   const option = (o: { label: string; about: string }, k: number) => {
-    const runs = [Paint.Run(Paint.text_clean(o.label), k === f.at ? bold : Paint.INK), ...(o.about === "" ? [] : [Paint.Run("  " + Paint.text_clean(o.about), Paint.DIM)])];
+    const runs = [Paint.Run(Paint.text_clean(o.label), k === e.at ? bold : Paint.INK), ...(o.about === "" ? [] : [Paint.Run("  " + Paint.text_clean(o.about), Paint.DIM)])];
     const rows = Paint.runs_wrap(runs, Math.max(1, w - 4), false);
-    const mark = Paint.Run(marks[f.picked.includes(k) ? 1 : 0], f.picked.includes(k) ? accent : Paint.DIM);
+    const mark = Paint.Run(marks[e.picked.includes(k) ? 1 : 0], e.picked.includes(k) ? accent : Paint.DIM);
     return rows.map((l, j) => (j === 0 ? [lead(k), mark, ...l] : [Paint.Run("    "), ...l]));
   };
-  const head   = [Paint.Run(q.who + " asks" + (q.multi === true ? " · pick any" : ""), accent)];
-  const ask    = Paint.runs_wrap([Paint.Run(Paint.text_clean(q.what))], w, false);
-  const opts   = q.options.flatMap(option);
-  const words  = Screen.screen_input({ ...t.scr, ed: f.ed }, w - 2, max, "Something else: type your own", false);
-  const own    = words.lines.map((l, j) => [j === 0 ? lead(q.options.length) : Paint.Run("  "), ...l]);
-  const lines  = [head, ...ask, ...opts, ...own, [Paint.Run(KEYS, Paint.DIM)]];
-  return { lines, at: { row: 1 + ask.length + opts.length + words.at.row, col: 2 + words.at.col } };
+  const ask    = Paint.runs_wrap([Paint.Run(Paint.text_clean(query.text)), Paint.Run(query.multi ? "  pick any" : "  pick one", Paint.DIM)], w, false);
+  const opts   = query.options.flatMap(option);
+  const words  = Screen.screen_input({ ...t.scr, ed: e.ed }, w - 2, max, "Something else: type your own", false);
+  const own    = words.lines.map((l, j) => [j === 0 ? lead(query.options.length) : Paint.Run("  "), ...l]);
+  const lines  = [...head, ...ask, ...opts, ...own, [Paint.Run(KEYS, Paint.DIM)]];
+  return { lines, at: { row: head.length + ask.length + opts.length + words.at.row, col: 2 + words.at.col } };
 }
 
 // the picker for a question
