@@ -29,7 +29,7 @@
 
 import * as fs from "node:fs";
 import type { Out } from "../ai/Agent.ts";
-import { clip } from "./Clip.ts";
+import { clip, stream_lines } from "./Clip.ts";
 import * as config from "../config/Config.ts";
 import type { Spec } from "./Machine.ts";
 
@@ -112,7 +112,7 @@ export namespace Mcp {
   // ones; but those turned off (all: those too)
   export function read(all = false): Record<string, Def> {
     const defs: Record<string, Def> = Object.assign({}, ...config.MCPS.map(Mcp.file));
-    return Object.fromEntries(Object.entries(defs).filter(([name]) => all || !config.OFF.includes(name.toLowerCase())));
+    return Object.fromEntries(Object.entries(defs).filter(([name]) => all || !config.config_off(name)));
   }
 
   // the servers in a file, by name; one that won't read is told
@@ -405,15 +405,10 @@ export namespace Mcp {
     return text.replace(/\$\{(\w+)(?::-([^}]*))?\}/g, (_, name: string, def?: string) => process.env[name] ?? def ?? "");
   }
 
-  // each line a stream's bytes make, as it comes
+  // each line a stream's bytes make, as it comes (blank ones left out)
   export async function lines(stream: ReadableStream<Uint8Array>, on: (line: string) => void): Promise<void> {
-    const dec = new TextDecoder();
-    let rest  = "";
-    for await (const chunk of stream as unknown as AsyncIterable<Uint8Array>) {
-      rest += dec.decode(chunk, { stream: true });
-      const parts = rest.split("\n");
-      rest = parts.pop() ?? "";
-      parts.filter((l) => l.trim() !== "").forEach(on);
+    for await (const batch of stream_lines(stream)) {
+      batch.filter((l) => l.trim() !== "").forEach(on);
     }
   }
 

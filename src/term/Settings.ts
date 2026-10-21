@@ -13,7 +13,6 @@
 // profile's puts the global value back. A change applies at once or at
 // the next start, as the foot says. /set changes one by its words.
 
-import { term_home } from "./Attach.ts";
 import { Chat } from "../chat/Chat.ts";
 import { term_chooser, term_model_pick } from "./Commands.ts";
 import * as config from "../config/Config.ts";
@@ -156,13 +155,13 @@ function setting_off(t: Term): void {
     ...[...Custom.files(cwd, "commands", true)].map(([name, file]) => [name, "command · " + where(file)]),
     ...Object.keys(Mcp.read(true)).map((name) => [name, "MCP server · " + (own && name in mine ? config.PROFILE : "global")]),
   ];
-  const aside = () => rows.map(([name]) => (Custom.off(name) ? "off" : "on"));
+  const aside = () => rows.map(([name]) => (config.config_off(name) ? "off" : "on"));
   const keys  = (k: number, press: string) => {
     if (!["Enter", "Left", "Right"].includes(press)) {
       return false;
     }
     const name = rows[k][0].toLowerCase();
-    const next = Custom.off(name) ? config.OFF.filter((n) => n !== name) : [...config.OFF, name];
+    const next = config.config_off(name) ? config.OFF.filter((n) => n !== name) : [...config.OFF, name];
     if (setting_set(t, "off", next.length === 0 ? null : next.join(", ")) && t.choose !== null) {
       t.choose.aside = aside();
     }
@@ -211,7 +210,7 @@ function setting_shown(key: config.Key, value?: string): string {
   if (text === "") {
     return s.none ?? "none";
   }
-  const file = text.startsWith(config.DIR + "/") ? text.slice(config.DIR.length + 1) : term_home(text);
+  const file = text.startsWith(config.DIR + "/") ? text.slice(config.DIR.length + 1) : config.config_home(text);
   const shown = (one: string) => {
     const [vendor, model, effort, speed] = one.trim().split(":");
     return Pick.shown({ vendor, model, effort, speed } as Pick);
@@ -226,5 +225,5 @@ function setting_cut(text: string): string {
 
 // a change, as a note says it: the value now, kept, when it applies
 function setting_said(key: config.Key): string {
-  return key + ": " + setting_shown(key) + ", kept in " + term_home(config.DIR) + "/config.json; " + (config.SETTINGS[key].now ? "it applies now." : "it applies at illi's next start.");
+  return key + ": " + setting_shown(key) + ", kept in " + config.config_home(config.DIR) + "/config.json; " + (config.SETTINGS[key].now ? "it applies now." : "it applies at illi's next start.");
 }

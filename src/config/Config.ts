@@ -57,6 +57,10 @@ export const NOTES: string[] = [];
 // a role's (agents, compactor) is a pick per vendor, comma-separated
 export type Setting = { def: string; values: string[] | "pick" | "text"; now: boolean; what: string; none?: string; shape?: [RegExp, string]; path?: boolean };
 
+// an on/off setting's shape, and the words that turn one off
+const ON_OFF: [RegExp, string] = [/^(on|off|true|false|0|1)$/i, "on or off"];
+const OFFS = ["off", "false", "0"];
+
 // every setting, in the order /settings lists them: a key read here
 // (config_value) must be one, and one is all /settings, /set and
 // config_check need; docs/config.md and the customize-illi skill say each
@@ -64,8 +68,8 @@ const TABLE = {
   pick       : { def: "chatgpt:gpt-6.1-sol:medium:slow", values: "pick", now: true, what: "illi's own default model" },
   agents     : { def: "", values: "pick", now: true, what: "what subagents run on, by provider", none: "the chat's pick" },
   compactor  : { def: "", values: "pick", now: true, what: "what writes the summaries, by provider", none: "each provider's small model" },
-  suggest    : { def: "on", values: ["on", "off"], now: true, what: "suggested replies (Tab)", shape: [/^(on|off|true|false|0|1)$/i, "on or off"] },
-  tps        : { def: "on", values: ["on", "off"], now: true, what: "tokens a second while text streams", shape: [/^(on|off|true|false|0|1)$/i, "on or off"] },
+  suggest    : { def: "on", values: ["on", "off"], now: true, what: "suggested replies (Tab)", shape: ON_OFF },
+  tps        : { def: "on", values: ["on", "off"], now: true, what: "tokens a second while text streams", shape: ON_OFF },
   side       : { def: "right", values: ["right", "left", "off"], now: true, what: "where the side panel shows", shape: [/^(right|left|off)$/, "right, left or off"] },
   side_width : { def: "25%", values: ["20%", "25%", "30%", "35%", "40%"], now: true, what: "the side panel's width", shape: [/^\d+(\.\d+)?%?$/, "columns (40) or a share of the screen (30%)"] },
   context    : { def: "auto", values: ["auto", "50%", "60%", "70%", "80%", "90%"], now: true, what: "chat sent before summarizing", shape: [/^(auto|\d+|\d+(\.\d+)?%)$/, "auto, tokens (350000) or a share of the window (60%)"] },
@@ -125,6 +129,11 @@ export const MCPS     = DIR === ROOT ? [MCP] : [...new Set([ROOT + "/mcp.json", 
 // the skills, agents, commands and MCP servers turned off, by name, in
 // lower case (Custom.ts, Mcp.ts)
 export let OFF: string[] = [];
+
+// whether a skill, agent, command or MCP server is turned off (OFF)
+export function config_off(name: string): boolean {
+  return OFF.includes(name.toLowerCase());
+}
 
 // a suggested reply after each turn, Tab taking it (Chat.suggest): on,
 // unless off (or false, 0)
@@ -316,8 +325,8 @@ function config_live(): void {
   RULES       = config_place("rules");
   AFTER       = config_value("after");
   OFF         = config_list(config_value("off").toLowerCase()).filter((name) => name !== "");
-  SUGGEST     = !["off", "false", "0"].includes(String(config_value("suggest")).trim().toLowerCase());
-  TPS         = !["off", "false", "0"].includes(String(config_value("tps")).trim().toLowerCase());
+  SUGGEST     = !OFFS.includes(String(config_value("suggest")).trim().toLowerCase());
+  TPS         = !OFFS.includes(String(config_value("tps")).trim().toLowerCase());
   SIDE        = config_value("side");
   SIDE_WIDTH  = config_value("side_width");
   PICK        = pick;
@@ -435,6 +444,11 @@ export function config_check(key: string, value: unknown, strict = true): string
 function config_path(text: string, base?: string): string {
   const home = text.startsWith("~/") ? os.homedir() + text.slice(1) : text;
   return base === undefined || home === "" ? home : path.resolve(base, home);
+}
+
+// a path as illi shows it: ~ for the home folder
+export function config_home(file: string): string {
+  return file.startsWith(os.homedir()) ? "~" + file.slice(os.homedir().length) : file;
 }
 
 // the path a key names, from the folder of the config.json that sets it

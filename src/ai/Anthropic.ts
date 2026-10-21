@@ -12,9 +12,8 @@
 // busy. It pings while the model thinks, so 5 silent
 // minutes mean it is dead.
 
-import { AskAI, type Ask, type Img } from "./AskAI.ts";
+import { AskAI, type Ask, type Img, type Usage } from "./AskAI.ts";
 import { Agent, type Emit, type Entry, type Item, type Step, type Tool, type Use, type Wire } from "./Agent.ts";
-import { Price, type Usage } from "./Price.ts";
 
 // Types
 // =====
@@ -150,8 +149,6 @@ export namespace Anthropic {
     use.input    = u.input_tokens ?? use.input;
     use.write    = u.cache_creation_input_tokens ?? use.write;
     use.read     = u.cache_read_input_tokens ?? use.read;
-    use.output   = u.output_tokens ?? use.output;
-    use.searches = u.server_tool_use?.web_search_requests ?? use.searches;
     use.speed    = u.speed === undefined ? use.speed : u.speed === "fast" ? "fast" : "slow";
   }
 
@@ -294,7 +291,7 @@ export namespace Anthropic {
     url     : "https://api.anthropic.com/v1/messages",
     headers : Anthropic.headers,
     body    : Anthropic.body,
-    start   : () => ({ blocks: [], json: [], stop: "", why: null, use: Price.usage("slow"), error: null }),
+    start   : () => ({ blocks: [], json: [], stop: "", why: null, use: { input: 0, write: 0, read: 0, speed: "slow" }, error: null }),
     read    : Anthropic.read,
     begun   : (ev) => ev.type === "message_start",
     step    : Anthropic.step,

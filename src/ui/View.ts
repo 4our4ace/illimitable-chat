@@ -222,14 +222,6 @@ export const TICK  = "+";
 export const QUIT  = 4000;
 export const MOVE  = 4001;
 
-// the most a socket message may be (bytes; Bun's own cap is 16 MiB): 3x
-// a tool's largest output, a screenshot (at most 1280x800: a screen of
-// noise, the worst case, is 1.33 MB in base64; a real one ~0.15 MB). A
-// bigger one closes its socket
-export const FRAME = 2 ** 22;
-
-export const HINT = "Message illi";
-
 // what a model writes, as the work's count of tokens takes it (made);
 // about how many characters make a token; the time its speed is taken
 // over, and how often it is taken anew (ms)
@@ -803,14 +795,6 @@ export function link_note(v: View, a: Answer): void {
   if (a.error !== undefined) {
     v.notes.push(a.error);
   }
-}
-
-// a JSON post's answer, ok if its status was
-export async function post(url: string, body: object, auth: Record<string, string> = {}): Promise<any> {
-  const headers = { ...auth, "content-type": "application/json" };
-  const res = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) }).catch(() => null);
-  const out = res === null ? { error: "Can't reach the server." } : await res.json().catch(() => (res.ok ? {} : { error: "HTTP " + res.status }));
-  return { ...out, ok: res?.ok === true, status: res?.status ?? 0 };
 }
 
 // Part

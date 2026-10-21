@@ -158,10 +158,10 @@ test("Claude Code's permission prompt is a question at illi's screen: yes, no wi
 });
 
 test("what a question shows: a command, a file, a URL or a query, else the input, cut short", () => {
-  expect(Tools.what("Bash", { command: "git status", description: "x" })).toBe("git status");
-  expect(Tools.what("Edit", { file_path: "src/a.ts", old_string: "a" })).toBe("src/a.ts");
-  expect(Tools.what("WebFetch", { url: "https://example.com", prompt: "p" })).toBe("https://example.com");
-  expect(Tools.what("Grep", { pattern: "TODO" })).toBe("TODO");
-  expect(Tools.what("Other", { n: 1 })).toBe('{"n":1}');
-  expect(Tools.what("Bash", { command: "x".repeat(1000) })).toHaveLength(400);
+  expect(Tools.what({ command: "git status", description: "x" })).toBe("git status");
+  expect(Tools.what({ file_path: "src/a.ts", old_string: "a" })).toBe("src/a.ts");
+  expect(Tools.what({ url: "https://example.com", prompt: "p" })).toBe("https://example.com");
+  expect(Tools.what({ pattern: "TODO" })).toBe("TODO");
+  expect(Tools.what({ n: 1 })).toBe('{"n":1}');
+  expect(Tools.what({ command: "x".repeat(1000) })).toHaveLength(400);
 });

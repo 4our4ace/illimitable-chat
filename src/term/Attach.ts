@@ -58,11 +58,6 @@ export function term_path(arg: string): string {
   return file === "" ? "" : path.resolve(file);
 }
 
-// a path as the head shows it: ~ for the home folder
-export function term_home(file: string): string {
-  return file.startsWith(os.homedir()) ? "~" + file.slice(os.homedir().length) : file;
-}
-
 // the image in a file attached, its bytes as read now (a Bun file inside
 // a Blob adds nothing to it, Bun 1.3.14: the server got the text alone
 // and refused the message); false: no image, or too big

@@ -11,9 +11,8 @@
 // is busy. Silent while it reasons, it is dead
 // after 20 min.
 
-import { AskAI, type Ask, type Img } from "./AskAI.ts";
+import { AskAI, type Ask, type Img, type Usage } from "./AskAI.ts";
 import { Agent, type Emit, type Entry, type Item, type Step, type Tool, type Use, type Wire } from "./Agent.ts";
-import { Price, type Usage } from "./Price.ts";
 
 // Types
 // =====
@@ -141,8 +140,6 @@ export namespace OpenAI {
     use.read     = u.input_tokens_details?.cached_tokens ?? 0;
     use.write    = u.input_tokens_details?.cache_write_tokens ?? 0;
     use.input    = (u.input_tokens ?? 0) - use.read - use.write;
-    use.output   = u.output_tokens ?? 0;
-    use.searches = (res.output ?? []).filter((o: any) => o.type === "web_search_call").length;
     use.speed    = OpenAI.tier(res);
   }
 
@@ -213,7 +210,7 @@ export namespace OpenAI {
     url     : "https://api.openai.com/v1/responses",
     headers : (key) => ({ authorization: "Bearer " + key, "content-type": "application/json" }),
     body    : OpenAI.body,
-    start   : (ask) => ({ res: null, error: null, use: Price.usage(ask.speed) }),
+    start   : (ask) => ({ res: null, error: null, use: { input: 0, write: 0, read: 0, speed: ask.speed } }),
     read    : OpenAI.read,
     begun   : (ev) => ev.type === "response.output_item.added",
     step    : OpenAI.step,

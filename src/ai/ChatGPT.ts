@@ -28,7 +28,6 @@ import type { Ask } from "./AskAI.ts";
 import { Agent, type Wire } from "./Agent.ts";
 import { OpenAI } from "./OpenAI.ts";
 import { Pick } from "./Pick.ts";
-import { Price } from "./Price.ts";
 import type { Limit } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
 
@@ -458,7 +457,7 @@ export namespace ChatGPT {
     heard   : (res) => ChatGPT.hear(res.headers),
     headers : (token, ask) => ChatGPT.headers(token, ask),
     body    : (...args) => ChatGPT.body(...args),
-    start   : (ask) => ({ res: null, error: null, use: Price.usage(ask.speed), items: [] }),
+    start   : (ask) => ({ res: null, error: null, use: { input: 0, write: 0, read: 0, speed: ask.speed }, items: [] }),
     read    : (st, ev, on) => ChatGPT.read(st, ev, on),
     begun   : (ev) => ev.type === "response.output_item.added",
     step    : (st, ask) => OpenAI.step(st, ask),

@@ -2,7 +2,7 @@
 // =======
 // Ctrl+P: all a person can do, in one list typed to search, as OpenCode's
 // command palette, a box in the screen's middle, in groups (/help's, then
-// the settings) while nothing is searched: each command (COMMANDS:
+// the settings) while nothing is searched: each command (term_groups:
 // its /name, else its first key), what it does (its first clause) and, at
 // the right, its keys (the others); then each setting (Config SETTINGS,
 // as `set <key>`), what it is and its value. A search finds a word in any

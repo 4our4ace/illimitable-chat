@@ -34,7 +34,7 @@ function write(access: string, expires: number): void {
 // fetch stood in for: each renewal it was asked, and the tokens it gives
 const asked: URLSearchParams[] = [];
 const real = globalThis.fetch;
-globalThis.fetch = (async (url: string, init: any) => {
+globalThis.fetch = (async (_url: string, init: any) => {
   asked.push(new URLSearchParams(String(init.body)));
   await Bun.sleep(20);
   const access = jwt({ ...ACCOUNT, n: asked.length });
