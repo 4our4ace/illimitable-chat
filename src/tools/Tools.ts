@@ -60,7 +60,8 @@ export type Agent = {
   replies : string[];
 };
 
-// what the chat does for agents (report: work stopped stays unanswered;
+// what the chat does for agents (report: work stopped, or cut by the
+// vendor busy or out of reach, stays unanswered: a turn would fail alike;
 // pick: the chat's pick; halt: what stops its turn; main: the master's
 // agent, null: none)
 type Hooks = {
@@ -475,9 +476,11 @@ export namespace Tools {
   }
 
   // calls while a message waits in its log (told too late for the call
-  // before); then its report. Detached: a throw ends it as a failed reply,
-  // still reported
+  // before); then its report, unanswered if stopped or the vendor was busy
+  // or out of reach (End.again). Detached: a throw ends it as a failed
+  // reply, still reported
   export async function run(tools: Tools, agent: Agent, call: Call | null = null): Promise<void> {
+    let away = false;
     try {
       for (let more = true; more; call = null) {
         agent.call = call ?? AskAI.ask(Tools.ask(tools, agent), (ev) => tools.hooks.on(agent, ev));
@@ -486,12 +489,13 @@ export namespace Tools {
         agent.call = null;
         agent.replies.push(end.ok ? end.text : "failed: " + end.text);
         more = end.ok && end.left.length > 0;
+        away = !end.ok && end.again === true;
       }
     } catch (err: any) {
       agent.call = null;
       agent.replies.push("failed: " + String(err?.message ?? err));
     }
-    tools.hooks.report(agent, report_text(agent.name, agent.log ?? agent.name, agent.replies.join("\n\n")), agent.stop);
+    tools.hooks.report(agent, report_text(agent.name, agent.log ?? agent.name, agent.replies.join("\n\n")), agent.stop || away);
   }
 
   // a call of an agent: on its user's agent's model, else config.AGENTS,

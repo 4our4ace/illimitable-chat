@@ -16,7 +16,7 @@
 
 import * as fs from "node:fs";
 import * as net from "node:net";
-import { AskAI, type Call, type Event, type Kind, type Say } from "../ai/AskAI.ts";
+import { AskAI, type Call, type End, type Event, type Kind, type Say } from "../ai/AskAI.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
 import { Memory, type Share } from "./Memory.ts";
@@ -202,6 +202,14 @@ export namespace Chat {
     }
     chat.eye = Chat.eye(mem, Math.min(mem.show, Chat.from(chat)));
     mem.made = (l, i) => Chat.made(chat, l, i);
+    // summaries stuck: told once till one is built again ("")
+    let stuck = false;
+    mem.stuck = (why) => {
+      if (why !== "" && !stuck) {
+        Chat.stuck(chat, why);
+      }
+      stuck = why !== "";
+    };
     const work = mem.work;
     Memory.pump(mem);
     Chat.resume(chat, work).finally(() => Chat.change(chat)).catch((err) => console.error("illi: resume: " + (err?.message ?? err)));
@@ -393,7 +401,7 @@ export namespace Chat {
     chat.wait.unshift(...chat.sent.slice(chat.sent.length - end.left.length));
     chat.suggest.due = end.ok && !halt.signal.aborted;
     if (!end.ok && !halt.signal.aborted) {
-      Chat.failed(chat, end.text);
+      Chat.failed(chat, end.text, end);
     }
     if (end.note) {
       Chat.all(chat, { $: "note", text: end.note });
@@ -488,9 +496,19 @@ export namespace Chat {
     }
   }
 
-  // a failed turn's why, as a note
-  export function failed(chat: Chat, why: string): void {
-    Chat.note(chat, "No reply: " + why.replace(/\.$/, "") + ". Send a message to try again.");
+  // a failed turn's why, as a note: a reply cut off, or none; asking to
+  // try again only if a later try may answer (all but the vendor's
+  // refusal, whose why says what to do)
+  export function failed(chat: Chat, why: string, end?: End): void {
+    const again = end?.stop !== "down" || end.again === true;
+    Chat.note(chat, (end?.cut ? "Reply cut off: " : "No reply: ") + why.replace(/\.$/, "") + "." + (again ? " Send a message to try again." : ""));
+  }
+
+  // a summary's try failed (Memory's stuck): why, as a note; how to stop
+  // a turn waiting on it
+  export function stuck(chat: Chat, why: string): void {
+    const turn = Chat.waits(chat) === SUMMARIES ? " (Esc stops this turn)" : "";
+    Chat.note(chat, "Summaries are stuck: " + why.replace(/\.$/, "") + "; retrying every minute" + turn + ".");
   }
 
   // a note in the chat, why work ended as it did
@@ -584,6 +602,7 @@ export namespace Chat {
   }
 
   // an agent's report, once it ends: a turn of its own, unless stopped
+  // (or cut by the vendor busy or out of reach: Tools.run)
   export function report(chat: Chat, agent: Agent, text: string, stopped: boolean): void {
     Chat.unanswered(chat, agent);
     Chat.live(chat, agent, []);
@@ -721,14 +740,26 @@ export namespace Chat {
     return summing ? SUMMARIES : "";
   }
 
-  // what runs changed: saved (a quit's next start resumes it), and told
+  // what runs changed: saved (a quit's next start resumes it; a save
+  // that fails told to the views, never logged), and told
   export function change(chat: Chat): void {
     const work = Chat.running(chat);
     if (String(work) !== String(chat.mem.work)) {
       chat.mem.work = work;
-      Memory.save(chat.mem);
+      try {
+        Memory.save(chat.mem);
+      } catch (err: any) {
+        console.error("illi: saving the chat: " + err.message);
+        Chat.all(chat, { $: "note", text: "Can't save the chat: " + Chat.unsaved(err) + " (" + chat.mem.dir + ")." });
+      }
     }
     Chat.all(chat, Chat.state(chat));
+  }
+
+  // why a file won't write, in plain words
+  export function unsaved(err: any): string {
+    const why: Record<string, string> = { ENOSPC: "disk full", EDQUOT: "disk quota used up", EACCES: "no permission", EPERM: "no permission", EROFS: "read-only disk" };
+    return why[err?.code] ?? String(err?.message ?? err);
   }
 
   // a view joins on the chat as it is now
