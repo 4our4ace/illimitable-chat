@@ -154,20 +154,27 @@ type Hit = { row: number; col: number; to: number; run: () => void };
 // box's foot says of it ("": nothing); ask: a line asked for instead of
 // options (a profile's name, a file): typed in `find`, its hint shown
 // while it is empty, given by Enter to `done`, whose answer null closes
-// the box (what it opened stays) and a reason keeps it open, in the foot
+// the box (what it opened stays) and a reason keeps it open, in the foot;
+// hay: what a search looks in, an option's each (none: its name);
+// aside: what shows at an option's right end, each (its keys, its value);
+// middle: the box in the screen's middle, over all else, this many
+// columns wide at most (none: over the chat's foot, Frame.ts)
 export type Chooser = {
-  title : string;
-  names : string[];
-  about : string[];
-  here  : number;
-  pick  : (k: number) => void;
-  find  : string | null;
-  shown : Screen.Match[];
-  at    : number;
-  top   : number;
-  keys  : (k: number, key: string) => boolean;
-  foot  : (k: number) => string;
-  ask   : { hint: string; done: (text: string) => string | null } | null;
+  title  : string;
+  names  : string[];
+  about  : string[];
+  hay?   : string[];
+  aside? : string[];
+  middle?: number;
+  here   : number;
+  pick   : (k: number) => void;
+  find   : string | null;
+  shown  : Screen.Match[];
+  at     : number;
+  top    : number;
+  keys   : (k: number, key: string) => boolean;
+  foot   : (k: number) => string;
+  ask    : { hint: string; done: (text: string) => string | null } | null;
 };
 
 // a line drawn and what a click on it does (null: nothing)

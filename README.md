@@ -91,6 +91,7 @@ Keys and commands
 | Enter / Esc twice    | send / interrupt                      |
 | Tab                  | take the suggested reply              |
 | `/`                  | command list                          |
+| Ctrl+P               | every command and setting, searchable |
 | Shift+Tab            | switch primary agent                  |
 | `/login`             | sign in with your ChatGPT plan        |
 | `/model`             | pick the model, its effort and speed  |

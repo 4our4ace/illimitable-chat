@@ -18,6 +18,7 @@ import { Mcp, type Server } from "../tools/Mcp.ts";
 import { Memory } from "../chat/Memory.ts";
 import { term_note, term_notify, term_unnote, term_unnotify, type Notice } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
+import { term_palette } from "./Palette.ts";
 import { type Model, type Move, Pick } from "../ai/Pick.ts";
 import { term_profile } from "./ProfileCommands.ts";
 import * as Reply from "../ui/Reply.ts";
@@ -52,6 +53,7 @@ function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["",                  "Ctrl+C",                  "clear the input; on an empty one, interrupt illi (again: quit)", term_clear],
       ["",                  "Ctrl+D",                  "clear the input; on an empty one, quit",         term_clear],
       ["",                  "Tab",                     "take the suggested reply",                       term_take],
+      ["",                  "Ctrl+P",                  "all commands and settings in one list, typed to search", term_palette],
       ["/goal <message>",   "",                        "send a goal: illi goes on until it is met",      (t, a) => term_say(t, "/goal " + a)],
       ["/halt",             "",                        "drop the goal; the turn running ends as it would", (t) => term_say(t, "/halt")],
       ["/clear",            "",                        "an empty screen for a new topic; illi still remembers the chat before", (t) => term_say(t, "/clear")],
@@ -286,11 +288,13 @@ function term_agent_set(t: Term, arg: string): void {
 }
 
 // the picker opened (closing the pane), at the option marked as now; with
-// `more`, a search (typing ranks the names), what else the lit option
-// takes and what the foot says of it (the model picker's)
-export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"] } = {}): void {
+// `more`, a search (typing ranks the names, or each option's hay), what
+// else the lit option takes and what the foot says of it (the model
+// picker's), what shows at each option's right end, and the screen's
+// middle as its place (the palette's)
+export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; hay?: string[]; aside?: string[]; middle?: number } = {}): void {
   const shown = Screen.ed_rank("", names);
-  t.choose = { title, names, about, here, pick, find: more.find ? "" : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null };
+  t.choose = { title, names, about, hay: more.hay, aside: more.aside, middle: more.middle, here, pick, find: more.find ? "" : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null };
   t.pane   = null;
 }
 
@@ -308,7 +312,7 @@ export function term_ask(t: Term, title: string, hint: string, start: string, fo
 export function term_chooser_find(c: Chooser, find: string): void {
   const was = c.shown[c.at]?.k ?? c.here;
   c.find  = find;
-  c.shown = Screen.ed_rank(find, c.names);
+  c.shown = Screen.ed_rank(find, c.hay ?? c.names);
   c.at    = find === "" ? Math.max(0, c.shown.findIndex((m) => m.k === was)) : 0;
   c.top   = 0;
 }
