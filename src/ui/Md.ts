@@ -1,18 +1,17 @@
 // Md
 // ==
-// The little markdown a message uses, as tokens the view draws (Paint.ts):
-// fenced code, headings, rules, quotes, lists, tables,
-// paragraphs; inline code, links, bold, italics, and agent names
-// (`[FireAnt]`, linked to its chat). `md_plain` reads text as it is:
-// its lines, blank ones kept, names, an image as its token, and a long
-// paste (sent marked, paste_mark) whole, as pasted. `md_output` reads a
-// tool's result as a file's lines: a read's as its lines, a unified diff
-// (Machine.ts writes them, git too) as its file and hunks, any other text
-// as lines named "result" (a command's exit and time in that name), so
-// every result looks as a read does. Tokens hold
-// raw text; each emitter escapes it. A block is read by its first line
-// and runs while the next pass its test. A span is the first mark at its
-// point.
+// What the view draws (Paint.ts) of a message that isn't markdown
+// (markdown is Reply.ts's): spans (inline code, links, bold, italics,
+// agent names, `[FireAnt]`, linked to its chat), flattened for a summary
+// by `md_flat`; a code block, as a tool call holds it. `md_plain` reads
+// text as it is: its lines, blank ones kept, names, an image as its
+// token, and a long paste (sent marked, paste_mark) whole, as pasted.
+// `md_output` reads a tool's result as a file's lines: a read's as its
+// lines, a unified diff (Machine.ts writes them, git too) as its file
+// and hunks, any other text as lines named "result" (a command's exit
+// and time in that name), so every result looks as a read does. Tokens
+// hold raw text; each emitter escapes it. A span is the first mark at
+// its point.
 
 import * as Names from "../chat/Names.ts";
 
@@ -38,12 +37,6 @@ export type Line = { s: " " | "-" | "+"; n: number; x: string };
 
 export type Block =
   | { $: "Para"; x: Span[][] }             // its lines
-  | { $: "Head"; k: number; x: Span[] }    // # x (k: the level, 1 to 6)
-  | Code
-  | { $: "Rule" }                          // ---
-  | { $: "Quot"; x: Block[] }              // > x
-  | { $: "List"; k: boolean; x: Span[][] } // - x (k: numbered, 1. x)
-  | { $: "Tabl"; x: Span[][][] }           // | x | (rows of cells; 1st: head)
   | { $: "Diff"; k: string; x: Line[][] }  // --- k, +++ k, then hunks (@@ -1,2 +1,3 @@)
   | { $: "File"; k: string; n: number; x: string[] } // a file's lines x, from line n, named k (a read's "lines 4-7 of 15", else "result")
 
@@ -61,14 +54,6 @@ const SPAN  = new RegExp([
   /(?<![*\w])\*([^*\s][^*\n]*?)\*(?![\w*])/.source,
   /(?<![^\s(])(https?:\/\/[^\s<)]+[^\s<).,;:!?])/.source,
 ].join("|"), "g");
-const LIST  = /^\s*([-*+]|\d+[.)])\s+/;
-const MORE  = /^\s{2,}\S/;
-const FENCE = /^\s*```/;
-const HEAD  = /^(#{1,6})\s+(.*)$/;
-const RULE  = /^\s*([-*_])(\s*\1){2,}\s*$/;
-const QUOT  = /^\s*>\s?/;
-const ROW   = /^\s*\|.*\|\s*$/;
-const BAR   = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
 const NEW   = /^\+\+\+ (.*)$/;
 const READ  = /^\[(lines (\d+)-\d+ of \d+[^\]]*)\]$/;
 const HUNK  = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
@@ -261,95 +246,3 @@ function hunk_parse(lines: string[], j: number, h: RegExpExecArray): [Line[] | n
   return [out, j];
 }
 
-export function md_parse(src: string): Block[] {
-  const lines = src.replace(/\r/g, "").split("\n");
-  const out: Block[] = [];
-  let i = 0;
-  while (i < lines.length) {
-    const [block, next] = block_parse(lines, i);
-    if (block !== null) {
-      out.push(block);
-    }
-    i = next;
-  }
-  return out;
-}
-
-// null: a blank line; and the line after the block
-function block_parse(lines: string[], i: number): [Block | null, number] {
-  const line = lines[i];
-  const head = HEAD.exec(line);
-  const numbered = list_numbered(line);
-  const runs = (test: (l: string, j: number) => boolean) => lines_run(lines, i, test);
-  if (line.trim() === "") {
-    return [null, i + 1];
-  }
-  if (FENCE.test(line)) {
-    const end = runs((l) => !FENCE.test(l));
-    const k = line.trim().slice(3).trim();
-    const x = lines.slice(i + 1, end).join("\n");
-    return [{ $: "Code", k, x, ...(end < lines.length ? {} : { open: true as const }) }, end + 1];
-  }
-  if (head !== null) {
-    const x = span_parse(head[2]);
-    return [{ $: "Head", k: head[1].length, x }, i + 1];
-  }
-  if (RULE.test(line)) {
-    return [{ $: "Rule" }, i + 1];
-  }
-  if (QUOT.test(line)) {
-    const end = runs((l) => QUOT.test(l));
-    const body = lines.slice(i, end).map((l) => l.replace(QUOT, ""));
-    return [{ $: "Quot", x: md_parse(body.join("\n")) }, end];
-  }
-  if (numbered !== null) {
-    const item = (l: string) => list_numbered(l) === numbered;
-    const end = runs((l) => item(l) || MORE.test(l));
-    const items: string[] = [];
-    for (const l of lines.slice(i, end)) {
-      if (item(l)) {
-        items.push(l.replace(LIST, ""));
-      } else {
-        items[items.length - 1] += " " + l.trim();
-      }
-    }
-    return [{ $: "List", k: numbered, x: items.map(span_parse) }, end];
-  }
-  if (ROW.test(line) && BAR.test(lines[i + 1] ?? "")) {
-    const end = lines_run(lines, i + 1, (l) => ROW.test(l));
-    const rows = [line, ...lines.slice(i + 2, end)];
-    return [{ $: "Tabl", x: rows.map(row_cells) }, end];
-  }
-  const end = runs((l, j) => l.trim() !== "" && !block_starts(lines, j));
-  const x = lines.slice(i, end).map(span_parse);
-  return [{ $: "Para", x }, end];
-}
-
-function lines_run(lines: string[], i: number, test: (l: string, j: number) => boolean): number {
-  let j = i + 1;
-  while (j < lines.length && test(lines[j], j)) {
-    j++;
-  }
-  return j;
-}
-
-// whether line j starts a block block_parse reads, but a paragraph: one
-// ends a paragraph, a rule too ("---" right under a line), a table only
-// with its bar under it
-function block_starts(lines: string[], j: number): boolean {
-  const l = lines[j];
-  return FENCE.test(l) || HEAD.test(l) || RULE.test(l) || QUOT.test(l) || LIST.test(l) || (ROW.test(l) && BAR.test(lines[j + 1] ?? ""));
-}
-
-// whether a list item is numbered (1. x) or not (- x); null: no item. A
-// list is of one kind: "1." after "- " items starts another
-function list_numbered(l: string): boolean | null {
-  const m = LIST.exec(l);
-  return m === null ? null : /\d/.test(m[1]);
-}
-
-// a table row's cells, split at each | but an escaped one (\|)
-function row_cells(line: string): Span[][] {
-  const cells = line.trim().replace(/^\||(?<!\\)\|$/g, "").split(/(?<!\\)\|/);
-  return cells.map((c) => span_parse(c.trim().replace(/\\\|/g, "|")));
-}

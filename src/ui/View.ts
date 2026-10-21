@@ -859,23 +859,15 @@ export function image_kind(head: Uint8Array): string | null {
 export function entry_rows(id: number | null, kind: Kind, text: string, images: string[] = []): Row[] {
   const call = kind === "tool" ? Call.call_parse(text) : null;
   const report = kind === "work" ? Call.report_read(text) : null;
-  const body = call === null && kind !== "illi" ? entry_body(kind, report?.text ?? text) : [];
+  const plain = kind === "user" || kind === "work" || kind === "echo";
+  const body = call === null && plain ? entry_body(kind, report?.text ?? text) : [];
   const who = report === null ? WHO[kind] ?? "" : report.name;
-  const none = kind === "illi" ? text.trim() === "" : call === null && body.length === 0;
+  const none = call === null && (plain ? body.length === 0 : text.trim() === "");
   return none && images.length === 0 ? [] : [{ $: "Msg", id, kind, who, text, body, call, images }];
 }
 
+// a person's words (the user's, a report) as typed; a result as a file's
+// lines (the rest, markdown, draw from their text: Paint.ts)
 function entry_body(kind: Kind, text: string): Md.Block[] {
-  switch (kind) {
-    case "user":
-    case "work": {
-      return Md.md_plain(text);
-    }
-    case "echo": {
-      return Md.md_output(text);
-    }
-    default: {
-      return Md.md_parse(text);
-    }
-  }
+  return kind === "echo" ? Md.md_output(text) : Md.md_plain(text);
 }

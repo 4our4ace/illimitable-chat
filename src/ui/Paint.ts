@@ -11,16 +11,14 @@
 // framed, unnamed; an agent's report framed, its name on the top edge
 // (Theme.FRAMED); illi's words bare, drawn as cellsmith draws a reply
 // (Reply.ts: its code, diagrams, tables, headings, lists and quotes, and
-// buttons that copy them). A run of work (View's Act) is one dim line,
+// buttons that copy them); thinking and a note drawn so too, in their
+// look, without buttons. A run of work (View's Act) is one dim line,
 // ▸ what was done, or ▾ over its rows behind a dim bar. An open block
-// framed, its bar in the frame's top edge; other code filled (a call's,
-// framed on the call's fill); a file's lines
-// (a read, a diff) framed, the file on the top edge, each numbered. Control
-// characters never reach the terminal. Thinking's and a note's code shows
-// its tokens in the palette's colors, and a ```mermaid block, once whole,
-// shows as a diagram (Draw.ts, cellsmith's). A row's lines are laid out
-// once per width (a paint lays out the whole chat), and each block's
-// place in them is marked, so a click finds it.
+// framed, its bar in the frame's top edge; a call's code framed on the
+// call's fill; a file's lines (a read, a diff) framed, the file on the
+// top edge, each numbered. Control characters never reach the terminal.
+// A row's lines are laid out once per width (a paint lays out the whole
+// chat), and each block's place in them is marked, so a click finds it.
 
 import type { Kind } from "../ai/AskAI.ts";
 import * as Call from "./Call.ts";
@@ -354,7 +352,7 @@ function row_lines(row: View.Row, w: number): Line[] {
       return [];
     }
     case "Msg": {
-      return row.call !== null ? fill_lines(call_lines(row.call, w - 2), w - 2) : row.kind === "illi" ? Reply.reply_lines(row.text, w) : msg_lines(row.kind, row.who, row.body, w);
+      return row.call !== null ? fill_lines(call_lines(row.call, w - 2), w - 2) : row.kind === "illi" ? Reply.reply_lines(row.text, w) : msg_lines(row.kind, row.who, row.body, row.text, w);
     }
     case "Cap": {
       return runs_wrap([Run(text_clean(row.text), { ...DIM, i: true })], w, false);
@@ -375,27 +373,30 @@ function sum_lines(id: number, n: number, head: Line, text: string, w: number): 
   return [...rows, ...ends].map((l, k) => [Run(" " + (k === 0 ? n + "x" : "").padEnd(GUTTER), lvl), ...l]);
 }
 
-// a message as its kind looks: a call filled; a result bare, its lines
-// framed as a file's (Md.md_output), the frame naming them; a person's
-// words (the user's, a report) framed in ink (the user's in blue),
-// illi's and a note framed dim, each named on its top; thinking bare,
+// a message as its kind looks: its blocks (a person's words, a result's
+// lines, Md.md_plain, Md.md_output), else its text as markdown, drawn as
+// illi's replies are (Reply.ts) in its kind's look (a note and thinking
+// dim and italic); a call filled; a result bare, its lines framed as a
+// file's, the frame naming them; a person's words (the user's, a report)
+// framed in ink (the user's in blue), named on its top; thinking bare,
 // its name over it; all at the left, the column's width; none framed
 // nor filled without text (images alone)
-function msg_lines(kind: Kind, who: string, body: Md.Block[], w: number): Line[] {
+function msg_lines(kind: Kind, who: string, body: Md.Block[], text: string, w: number): Line[] {
   const look = Theme.KIND[kind];
   const ink  = { ...INK, d: look.dim, i: look.it };
-  if (body.length === 0) {
+  const own  = (iw: number) => body.length > 0 ? blocks_lines(body, iw, ink) : Reply.reply_lines(text, iw, false).map((l) => l.map((r) => ({ ...r, s: { ...r.s, d: r.s.d || look.dim, i: r.s.i || look.it } })));
+  if (body.length === 0 && text.trim() === "") {
     return [];
   }
   if (Theme.FILLED.includes(kind)) {
-    return fill_lines(blocks_lines(body, w - 2, ink), w - 2);
+    return fill_lines(own(w - 2), w - 2);
   }
   if (Theme.FRAMED.includes(kind)) {
     const edge = kind === "user" ? { ...INK, c: Theme.ANSI.you } : INK;
-    return frame_lines(blocks_lines(body, w - 4, ink), w - 4, edge, who === "" ? [] : [Run(" " + who + " ", { ...edge, b: true })]);
+    return frame_lines(own(w - 4), w - 4, edge, who === "" ? [] : [Run(" " + who + " ", { ...edge, b: true })]);
   }
   const name = who === "" ? [] : [[Run(who, { ...DIM, b: true })]];
-  return [...name, ...blocks_lines(body, w, ink)];
+  return [...name, ...own(w)];
 }
 
 // a tool call: its glyph and verb, its head after them if it fits on
@@ -405,7 +406,7 @@ function call_lines(c: Call.Call, w: number): Line[] {
   const one   = !c.head.includes("\n") && line_width(verb) + text_width(c.head) <= w;
   const top   = one ? [...verb, Run(text_clean(c.head))] : verb;
   const heads = one || c.head === "" ? [] : c.head.split("\n").flatMap((l) => runs_wrap([Run(text_clean(l))], w, true));
-  return [top, ...heads, ...c.blocks.flatMap((b) => code_lines(b.k, b.x, w, DIM, false))];
+  return [top, ...heads, ...c.blocks.flatMap((b) => code_lines(b.k, b.x, w))];
 }
 
 // a call's emoji and name, bold
@@ -426,25 +427,6 @@ function block_lines(b: Md.Block, w: number, ink: Ink): Line[] {
     case "Para": {
       return b.x.flatMap((spans) => runs_wrap(spans_runs(spans, ink), w, false));
     }
-    case "Head": {
-      return runs_wrap(spans_runs(b.x, { ...ink, b: true }), w, false);
-    }
-    case "Code": {
-      const art = b.k.trim().toLowerCase() === "mermaid" && b.open !== true ? Draw.draw_diagram(b.x, w) : null;
-      return art === null ? code_lines(b.k, b.x, w, ink, true) : art.map(cells_line);
-    }
-    case "Rule": {
-      return [[Run("─".repeat(Math.max(0, w)), DIM)]];
-    }
-    case "Quot": {
-      return blocks_lines(b.x, w - 2, { ...ink, d: true }).map((l) => [Run("│ ", DIM), ...l]);
-    }
-    case "List": {
-      return b.x.flatMap((spans, k) => item_lines(spans, b.k ? k + 1 + ". " : "• ", w, ink));
-    }
-    case "Tabl": {
-      return table_lines(b.x, w, ink);
-    }
     case "Diff": {
       return diff_lines(b.k, b.x, w);
     }
@@ -454,29 +436,12 @@ function block_lines(b: Md.Block, w: number, ink: Ink): Line[] {
   }
 }
 
-// a list's item: its mark, its text hung after it
-function item_lines(spans: Md.Span[], mark: string, w: number, ink: Ink): Line[] {
-  const mw   = text_width(mark);
-  const rows = runs_wrap(spans_runs(spans, ink), w - mw, false);
-  return rows.map((l, k) => [Run(k === 0 ? mark : " ".repeat(mw), ink), ...l]);
-}
-
-// code: its label (a key, a language: cleaned, cut at the width) over
-// its lines, on a fill (a message's) or in a frame (a call's, already on
-// a fill)
-function code_lines(label: string, text: string, w: number, ink: Ink, fill: boolean): Line[] {
-  const code = { ...INK, d: ink.d };
-  const iw   = fill ? w - 2 : w - 4;
-  const head = label === "" ? [] : [runs_wrap([Run(text_clean(label), { ...ink, d: true })], Math.max(1, w), true)[0]];
-  const rows = (fill ? Draw.draw_code(label, text) : null) ?? text.split("\n").map((x) => [{ text: x, kind: "" }]);
-  const body = rows.flatMap((l) => runs_wrap(l.map((t) => Run(text_clean(t.text), token_ink(t.kind, code))), iw, true));
-  return [...head, ...(fill ? fill_lines(body, iw) : frame_lines(body, iw, code, []))];
-}
-
-// a code token's ink by its kind: a comment dim, else its color if it has
-// one (Theme.SYNTAX)
-function token_ink(kind: string, code: Ink): Ink {
-  return Theme.COMMENTS.includes(kind) ? { ...code, d: true, i: true } : kind in Theme.SYNTAX ? { ...code, c: Theme.SYNTAX[kind] } : code;
+// a call's block: its label (a key: cleaned, cut at the width) over its
+// lines in a frame, all dim
+function code_lines(label: string, text: string, w: number): Line[] {
+  const head = label === "" ? [] : [runs_wrap([Run(text_clean(label), DIM)], Math.max(1, w), true)[0]];
+  const body = text.split("\n").flatMap((x) => runs_wrap([Run(text_clean(x), DIM)], w - 4, true));
+  return [...head, ...frame_lines(body, w - 4, DIM, [])];
 }
 
 // a diagram's row: each cell in its colors
@@ -507,42 +472,6 @@ function file_lines(shown: string, from: number, lines: string[], w: number): Li
   const line  = (x: string, k: number) => runs_wrap([Run(text_clean(x))], w - nw - 5, true).map((r, j) => [Run((j === 0 ? String(from + k) : "").padStart(nw) + " ", DIM), ...r]);
   return frame_lines(lines.flatMap(line), w - 4, DIM, title);
 }
-
-// a table: columns as wide as their widest cell, the head bold, a rule
-// between rows (as the web's). Too wide, the columns share the width
-// (table_fit) and each cell wraps in its column.
-function table_lines(rows: Md.Span[][][], w: number, ink: Ink): Line[] {
-  const cells  = rows.map((row, k) => row.map((c) => spans_runs(c, { ...ink, b: k === 0 })));
-  const cols   = cells.reduce((n, row) => Math.max(n, row.length), 0);
-  const want   = Array.from({ length: cols }, (_, c) => cells.reduce((n, row) => Math.max(n, line_width(row[c] ?? [])), 0));
-  const widths = table_fit(want, w - 2 * (cols - 1));
-  const rule   = [Run("─".repeat(Math.max(0, Math.min(w, widths.reduce((a, b) => a + b + 2, -2)))), DIM)];
-  return cells.flatMap((row, k) => (k === 0 ? row_lines(row) : [rule, ...row_lines(row)]));
-  function row_lines(row: Line[]): Line[] {
-    const wrap = widths.map((cw, c) => runs_wrap(row[c] ?? [], cw, false));
-    const tall = wrap.reduce((n, x) => Math.max(n, x.length), 0);
-    return Array.from({ length: tall }, (_, k) => wrap.flatMap((x, c) => cell_line(x[k] ?? [], widths[c])));
-  }
-  function cell_line(l: Line, cw: number): Line {
-    return [...l, Run(" ".repeat(Math.max(0, cw - line_width(l)) + 2))];
-  }
-}
-
-// columns' widths in w: each its want if all fit; else, narrowest first,
-// each at most an equal share of the width the ones before left
-function table_fit(want: number[], w: number): number[] {
-  const order = want.map((_, c) => c).sort((a, b) => want[a] - want[b]);
-  const out   = [...want];
-  let left = w;
-  for (const [k, c] of order.entries()) {
-    out[c] = Math.max(1, Math.min(want[c], Math.floor(left / (order.length - k))));
-    left  -= out[c];
-  }
-  return out;
-}
-
-// Span
-// ====
 
 function spans_runs(spans: Md.Span[], ink: Ink): Line {
   return spans.map((s) => span_run(s, ink));
