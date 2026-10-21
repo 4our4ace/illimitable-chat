@@ -107,6 +107,7 @@ test("a turn runs Claude Code whole, illi's prompt after its own and illi's tool
   const { events, end, log } = await call("turn");
   expect(log.args).toContain("--mcp-config");
   expect(JSON.parse(log.args[log.args.indexOf("--mcp-config") + 1])).toEqual({ mcpServers: { illi: { type: "http", url: "http://127.0.0.1:1/key/main?lean" } } });
+  expect(log.args.slice(log.args.indexOf("--allowedTools"), log.args.indexOf("--allowedTools") + 2)).toEqual(["--allowedTools", "mcp__illi"]);
   expect(log.args).not.toContain("--tools");
   expect(log.args).not.toContain("--system-prompt");
   expect(log.args.slice(log.args.indexOf("--model"), log.args.indexOf("--model") + 4)).toEqual(["--model", "claude-opus-5-5", "--effort", "high"]);
