@@ -80,6 +80,14 @@ const SUGGEST   = 10;
 const SUGGESTED = "Commands · ↑↓ · Tab fills in · Enter runs · Esc";
 const PICKER_W  = 72;
 
+// the box in the screen's middle (Chooser middle): the share of the
+// screen's rows it takes; how far from the background all else under it
+// is drawn, and the box's own background, toward white (toward black on
+// a light one)
+const MIDDLE    = 2 / 3;
+const BACKDROP  = 0.16;
+const PANEL     = 0.05;
+
 // the least of a picker's option's next column shown cut (term_about)
 const CUT       = 8;
 
@@ -105,7 +113,8 @@ export function term_draw(t: Term): void {
 // the screen, top to bottom: the head; the chat (or a pane), the side
 // beside it on a wide screen; over their foot, its last line right on
 // the input, a box: as a /word is typed, the commands it matches (as
-// wide as the input), else the picker (at the chat's left); a row with, at the chat's right
+// wide as the input), else the picker (at the chat's left; the palette's
+// in the screen's middle, all else dimmed under it); a row with, at the chat's right
 // end, a toast in the theme's blue (its links'); a rule (what runs,
 // while it does), the input, a rule (offline), the pages, the agent
 // and the pick. The notes, however the chat is scrolled, end over the
@@ -141,10 +150,11 @@ export function term_paint(t: Term): void {
   const lead  = roomy ? [Paint.Run(" ".repeat(NOTE_IN)), ...notes.pop()!] : [];
   const above = notes.slice(-Math.floor(h / 4)).map((l) => [Paint.Run(" ".repeat(NOTE_IN)), ...l]);
   const tall  = Math.max(1, h - 5 - input.lines.length - above.length);
-  const box   = term_box(t, iw, Math.min(cw, PICKER_W), left + MARGIN, tall + 1 + above.length);
-  const top   = box === null ? Infinity : 2 + tall + above.length - box.items.length;
+  const mid   = t.choose?.middle !== undefined;
+  const box   = mid ? term_middle(t, full, h) : term_box(t, iw, Math.min(cw, PICKER_W), left + MARGIN, tall + 1 + above.length);
+  const top   = box === null ? Infinity : mid ? Math.floor((h - box.items.length) / 2) : 2 + tall + above.length - box.items.length;
   const view  = term_view(t, cw, tall, 1, left + MARGIN);
-  for (let r = top; r <= tall; r++) {
+  for (let r = top; r <= tall && !mid; r++) {
     view.lines[view.first + r - 1] = [];
   }
   const shown = term_area(t, view);
@@ -166,7 +176,7 @@ export function term_paint(t: Term): void {
   }
   rows.push(...foot.map((line) => [{ col: MARGIN, w: iw, line }]));
   if (box !== null) {
-    term_over(t, rows, box, top);
+    term_over(t, rows, box, top, mid);
   } else if (t.pane === null && t.scroll > 0) {
     term_jump(t, rows, tall, left + MARGIN, cw, blue);
   }
@@ -258,14 +268,15 @@ function term_wake(t: Term): void {
 // a wake of the clock: the rule written again alone, where it was last
 // painted, from what ran then; with agents at work and their spinner
 // changed, the side's rows too (term_side_again). No paint, no layout of
-// the chat; a whole paint only once work ended or with text chosen (its
-// look may cover them); nothing while a paint is due
+// the chat; a whole paint only once work ended, with text chosen (its
+// look may cover them) or the box in the middle open (the rule dimmed
+// under it); nothing while a paint is due
 function term_tick(t: Term): void {
   const r = t.ruled;
   if (t.due) {
     return;
   }
-  if (r === null || t.doing === null || t.sel !== null || !View.view_running(t.v)) {
+  if (r === null || t.doing === null || t.sel !== null || t.choose?.middle !== undefined || !View.view_running(t.v)) {
     return term_paint(t);
   }
   const now = Date.now();
@@ -397,17 +408,44 @@ function term_box(t: Term, iw: number, pw: number, col: number, room: number): {
   return { items: items.slice(0, room), col, w: pw, wide: false, at };
 }
 
+// the picker in the screen's middle (Chooser middle): as wide as it
+// asks, the screen allowing, MIDDLE of the screen's rows tall
+function term_middle(t: Term, full: number, h: number): { items: Item[]; col: number; w: number; wide: boolean; at?: Screen.Spot } {
+  const w = Math.min(full - 2 * MARGIN, t.choose!.middle!);
+  const { items, at } = term_picker(t, w, Math.min(h - 2, Math.max(4, Math.floor(h * MIDDLE))));
+  return { items, col: Math.floor((full - w) / 2), w, wide: false, at };
+}
+
 // the box laid over the rows from screen row top on (the chat's under it
 // blanked by the caller); a click on its lines goes to it before what
-// is under it
-function term_over(t: Term, rows: Screen.Piece[][], box: { items: Item[]; col: number; w: number }, top: number): void {
-  const under = t.hits;
+// is under it. Over all (the middle's), all else fades, in one ink near
+// the background (dim, if the background wasn't told), and takes no
+// click; the box has a background of its own
+function term_over(t: Term, rows: Screen.Piece[][], box: { items: Item[]; col: number; w: number }, top: number, all = false): void {
+  const under = all ? [] : t.hits;
+  const fade  = term_off(t.scr.canvas, BACKDROP);
+  const panel = term_off(t.scr.canvas, PANEL);
+  const ink   = fade === undefined ? Paint.DIM : { ...Paint.INK, c: fade };
   t.hits = [];
+  for (const piece of all ? rows.flat() : []) {
+    piece.line = piece.line.map((run) => ({ ...run, s: ink }));
+  }
   for (const [k, [line, run]] of box.items.entries()) {
-    rows[top + k].push({ col: box.col, w: box.w, line });
+    const own = all && panel !== undefined ? line.map((r) => ({ ...r, s: { ...r.s, g: panel } })) : line;
+    rows[top + k].push({ col: box.col, w: box.w, line: own });
     term_hit(t, top + k, box.col, box.col + box.w, run);
   }
   t.hits.push(...under);
+}
+
+// a color f of the way from the background (canvas) toward white, or
+// toward black on a light one; the background not told: none
+function term_off(canvas: string | undefined, f: number): string | undefined {
+  if (canvas === undefined) {
+    return undefined;
+  }
+  const light = [1, 3, 5].reduce((n, k) => n + parseInt(canvas.slice(k, k + 2), 16), 0) > 3 * 128;
+  return term_mix(canvas, light ? "#000000" : "#ffffff", f);
 }
 
 // the chat's lines and the first shown, tall of them: its rows (laid out
@@ -455,7 +493,8 @@ function term_paned(pane: Pane, w: number, tall: number): [Paint.Line[], number]
 // lit bold, the characters the search matched bold in the accent: as many as
 // fit from the first in view (moved to keep the lit one in it), the box
 // as tall as all of them would be (blank past those shown; none: a note
-// says so). Its foot says what the lit one takes besides; a click on one
+// says so), and at its right end what it has aside (its keys, its
+// value). Its foot says what the lit one takes besides; a click on one
 // picks it. A line asked for (Chooser ask) is its one line, as the input
 // shows a message typed, its hint while empty; a search or a line too
 // long shows its end
@@ -483,8 +522,11 @@ function term_picker(t: Term, w: number, room: number): { items: Item[]; at?: Sc
       ...[...name].map((ch, j) => Paint.Run(ch, m.at.includes(j) ? lit : here ? bold : Paint.INK)),
       Paint.Run(" ".repeat(wide - Paint.text_width(name) + (act(name) ? 4 : 2))),
     ];
-    const about = term_about(Paint.text_clean(c.about[m.k]), w - 4 - Paint.line_width(head));
-    return [[...head, Paint.Run(about, Paint.DIM)], () => pick(m.k)];
+    const side  = Paint.text_clean(c.aside?.[m.k] ?? "");
+    const room  = w - 4 - Paint.line_width(head) - (side === "" ? 0 : Paint.text_width(side) + 2);
+    const about = term_about(Paint.text_clean(c.about[m.k]), room);
+    const right = side === "" ? [] : [Paint.Run(" ".repeat(Math.max(2, room - Paint.text_width(about) + 2))), Paint.Run(side, Paint.DIM)];
+    return [[...head, Paint.Run(about, Paint.DIM), ...right], () => pick(m.k)];
   };
   c.top       = Math.max(0, Math.min(c.top, c.at), c.at - rows + 1);
   const none  = [[Paint.Run("  Nothing matches " + Paint.text_clean(c.find ?? ""), Paint.DIM)], null] as Item;

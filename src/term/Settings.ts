@@ -28,32 +28,51 @@ const KEYS = Object.keys(config.SETTINGS) as config.Key[];
 // /settings: the settings' picker, at the setting named if any
 export function term_settings(t: Term, at = ""): void {
   const about = () => {
-    const shown = KEYS.map((key) => setting_cut(setting_shown(key)));
+    const shown = KEYS.map(setting_value);
     const vw    = Math.max(...shown.map((v) => v.length));
     return KEYS.map((key, k) => shown[k].padEnd(vw) + "  " + config.SETTINGS[key].what);
   };
   const keys = (k: number, press: string) => {
-    const vals = config.SETTINGS[KEYS[k]].values;
-    const step = ({ Left: -1, Right: 1, Enter: 1 } as Record<string, number>)[press];
-    if (press !== "Delete" && (step === undefined || !Array.isArray(vals))) {
+    if (!setting_key(t, KEYS[k], press)) {
       return false;
     }
-    const list = Array.isArray(vals) ? vals : [];
-    const now  = list.indexOf(config.config_value(KEYS[k]));
-    const next = press === "Delete" ? null : list[now < 0 ? (step > 0 ? 0 : list.length - 1) : (now + step + list.length) % list.length];
-    if (setting_set(t, KEYS[k], next) && t.choose !== null) {
+    if (t.choose !== null) {
       t.choose.about = about();
     }
     return true;
   };
-  const foot = (k: number) => {
-    const s   = config.SETTINGS[KEYS[k]];
-    const env = config.config_env_set(KEYS[k]);
-    const how = Array.isArray(s.values) ? "◂ ▸ Enter change" : s.values === "pick" ? "Enter pick a model" : "Enter edit";
-    return env !== null ? "set by " + env : how + " · Del default · " + (s.now ? "applies now" : "at the next start");
-  };
-  term_chooser(t, "Settings", KEYS, about(), -1, (k) => setting_open(t, KEYS[k]), { find: true, keys, foot });
+  term_chooser(t, "Settings", KEYS, about(), -1, (k) => setting_open(t, KEYS[k]), { find: true, keys, foot: (k) => setting_foot(KEYS[k]) });
   t.choose!.at = Math.max(0, KEYS.indexOf(at as config.Key));
+}
+
+// a key to a setting's row (true: taken): Left and Right step it through
+// its values, so does Enter (kept in config.json at once); Delete puts
+// its default back
+export function setting_key(t: Term, key: config.Key, press: string): boolean {
+  const vals = config.SETTINGS[key].values;
+  const step = ({ Left: -1, Right: 1, Enter: 1 } as Record<string, number>)[press];
+  if (press !== "Delete" && (step === undefined || !Array.isArray(vals))) {
+    return false;
+  }
+  const list = Array.isArray(vals) ? vals : [];
+  const now  = list.indexOf(config.config_value(key));
+  const next = press === "Delete" ? null : list[now < 0 ? (step > 0 ? 0 : list.length - 1) : (now + step + list.length) % list.length];
+  setting_set(t, key, next);
+  return true;
+}
+
+// what a setting's row's foot says: how to change it and when that
+// applies, or the variable that sets it
+export function setting_foot(key: config.Key): string {
+  const s   = config.SETTINGS[key];
+  const env = config.config_env_set(key);
+  const how = Array.isArray(s.values) ? "◂ ▸ Enter change" : s.values === "pick" ? "Enter pick a model" : "Enter edit";
+  return env !== null ? "set by " + env : how + " · Del default · " + (s.now ? "applies now" : "at the next start");
+}
+
+// a setting's value as its row shows it, WIDE characters at most
+export function setting_value(key: config.Key): string {
+  return setting_cut(setting_shown(key));
 }
 
 // /set <key> <value>: the setting changed ("default": its default back);
@@ -91,7 +110,7 @@ export function term_set(t: Term, arg: string): void {
 // Enter on a setting with no values to step through: a pick, the model
 // picker (from the pick set, or the chat's), its choice set and the
 // settings back at it; one typed in, `/set <key> <value>` in the input
-function setting_open(t: Term, key: config.Key): void {
+export function setting_open(t: Term, key: config.Key): void {
   const env = config.config_env_set(key);
   if (config.SETTINGS[key].values === "pick") {
     const rows = Pick.models(t.v.vendors, t.v.models);
