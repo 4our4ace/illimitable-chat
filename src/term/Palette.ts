@@ -1,7 +1,8 @@
 // Palette
 // =======
 // Ctrl+P: all a person can do, in one list typed to search, as OpenCode's
-// command palette, a box in the screen's middle: each command (COMMANDS:
+// command palette, a box in the screen's middle, in groups (/help's, then
+// the settings) while nothing is searched: each command (COMMANDS:
 // its /name, else its first key), what it does (its first clause) and, at
 // the right, its keys (the others); then each setting (Config SETTINGS,
 // as `set <key>`), what it is and its value. A search finds a word in any
@@ -10,7 +11,7 @@
 // a setting's row takes what /settings does (Left, Right and Enter step
 // it, Enter on a pick or a text opens it, Delete puts its default back).
 
-import { term_chooser, term_command, term_commands } from "./Commands.ts";
+import { term_chooser, term_command, term_groups } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import * as Screen from "../ui/Screen.ts";
 import { setting_foot, setting_key, setting_open, setting_value } from "./Settings.ts";
@@ -24,13 +25,15 @@ const PRESSED = new Set(["Enter", "Esc", "Ctrl+C", "Ctrl+D", "Tab", "PgUp, PgDn"
 const SET = "set ";
 
 // the most columns the palette takes, the screen's width allowing; the
-// most a value at a row's right end shows
-const WIDE  = 88;
+// most a value at a row's right end shows; the settings' group
+const WIDE  = 72;
 const ASIDE = 24;
+const GROUP = "Settings";
 
 // Ctrl+P: the palette; the user's commands and skills read anew
 export function term_palette(t: Term): void {
-  const cmds  = term_commands(true).filter(([use, keys]) => use !== "" || !PRESSED.has(keys));
+  const all   = term_groups(true).flatMap(([group, cmds]) => cmds.filter(([use, keys]) => use !== "" || !PRESSED.has(keys)).map((cmd) => [group, cmd] as const));
+  const cmds  = all.map(([, cmd]) => cmd);
   const keys  = Object.keys(config.SETTINGS) as config.Key[];
   const names = [...cmds.map(([use, keys]) => (use === "" ? keys.split(", ")[0] : use.split(" ")[0])), ...keys.map((key) => SET + key)];
   const whole = [...cmds.map(([, , text]) => text), ...keys.map((key) => config.SETTINGS[key].what)];
@@ -59,7 +62,7 @@ export function term_palette(t: Term): void {
     return s !== null ? setting_foot(s) : palette_needs(cmds[k][0]) ? "Enter type it in" : "Enter run";
   };
   const right = aside();
-  term_chooser(t, "Commands", names, about, -1, pick, { find: true, keys: press, foot, hay: names.map((name, k) => name + "  " + whole[k] + "  " + right[k]), aside: right, middle: WIDE });
+  term_chooser(t, "Commands", names, about, -1, pick, { find: true, keys: press, foot, hay: names.map((name, k) => name + "  " + whole[k] + "  " + right[k]), aside: right, middle: WIDE, heads: [...all.map(([group]) => group), ...keys.map(() => GROUP)] });
 }
 
 // a command chosen: one that needs words, in the input to finish (the

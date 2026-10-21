@@ -270,6 +270,17 @@ test("a word matches the name it is first, then those it starts, in their order,
   expect(Screen.ed_rank("mdl", names)[0].at).toEqual([0, 2, 4]);
 });
 
+test("in a word, at a word's start first; characters in turn, the closest together first; the most used first among alike", () => {
+  const names = ["/profile  switch to that profile (its own chat, settings, agents and MCP servers)", "/i-have-adhd  skill: short steps"];
+  expect(Screen.ed_rank("ihave", names).map((m) => m.k)).toEqual([1, 0]);
+  expect(Screen.ed_rank("ihave", names)[0].at).toEqual([1, 3, 4, 5, 6]);
+  expect(Screen.ed_rank("s", ["opus", "gpt-sol"]).map((m) => m.k)).toEqual([1, 0]);
+  const used = [0, 9];
+  expect(Screen.ed_rank("set", ["set", "settings"], (k) => used[k]).map((m) => m.k)).toEqual([1, 0]);
+  expect(Screen.ed_rank("set", ["set", "settings"]).map((m) => m.k)).toEqual([0, 1]);
+  expect(Screen.ed_rank("set", ["reset", "settings"], (k) => [9, 0][k]).map((m) => m.k)).toEqual([1, 0]);
+});
+
 test("a lone /word is a command typed; one sent before, brought back by Up, is none till edited", () => {
   const ed = Screen.ed_new();
   Screen.ed_history(ed, ["/help"]);

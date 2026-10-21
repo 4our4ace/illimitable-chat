@@ -34,7 +34,7 @@ import * as Theme from "./Theme.ts";
 // Left or Right moved the cursor, the width its rows wrap at; the long
 // pastes by their token's number, the last number given; its rows as
 // last laid out, and for what text and width (ed_layout)
-type Ed = {
+export type Ed = {
   text  : string;
   pos   : number;
   hist  : string[];
@@ -645,24 +645,45 @@ export function ed_slash(ed: Ed): string | null {
   return /^\/\S*$/.test(ed.text) && ed.text !== ed.hist[ed.at] ? ed.text : null;
 }
 
-// the names a word matches, best first, case aside: the one it is, those
-// it starts, in their order; then those it is in; then those with its
-// characters in turn
-export function ed_rank(word: string, names: string[]): Match[] {
+// the names a word matches, best first, case aside: those it starts (the
+// one it is first); then those it is in (at a word's start first, then
+// the earliest); then those with its characters in turn (the closest
+// together first). In each, the most used first (used: how often each
+// was chosen), then in their order
+export function ed_rank(word: string, names: string[], used: (k: number) => number = () => 0): Match[] {
   const want  = [...word].map((c) => c.toLowerCase());
-  const tiers: Match[][] = [[], [], [], []];
+  const found: Array<Match & { tier: number; cost: number }> = [];
   names.forEach((name, k) => {
     const have = [...name].map((c) => c.toLowerCase());
     const from = have.findIndex((_, i) => want.every((c, j) => have[i + j] === c));
-    const seq: number[] = [];
-    have.forEach((c, i) => c === want[seq.length] && seq.push(i));
-    if (from >= 0) {
-      tiers[from > 0 ? 2 : have.length === want.length ? 0 : 1].push({ k, at: want.map((_, j) => from + j) });
-    } else if (seq.length === want.length) {
-      tiers[3].push({ k, at: seq });
+    const seq  = from >= 0 ? null : ed_closest(have, want);
+    if (from === 0) {
+      found.push({ k, at: want.map((_, j) => j), tier: 0, cost: have.length === want.length ? 0 : 1 });
+    } else if (from > 0) {
+      found.push({ k, at: want.map((_, j) => from + j), tier: 1, cost: (/[a-z0-9]/.test(have[from - 1]) ? 1e6 : 0) + from });
+    } else if (seq !== null) {
+      found.push({ k, at: seq, tier: 2, cost: seq[seq.length - 1] - seq[0] });
     }
   });
-  return tiers.flat();
+  return found.sort((a, b) => a.tier - b.tier || used(b.k) - used(a.k) || a.cost - b.cost || a.k - b.k).map(({ k, at }) => ({ k, at }));
+}
+
+// the places of want's characters in have, in turn, the closest together
+// (null: not all there)
+function ed_closest(have: string[], want: string[]): number[] | null {
+  let best: number[] | null = null;
+  have.forEach((c, i) => {
+    const seq = [i];
+    for (let j = i + 1; c === want[0] && j < have.length && seq.length < want.length; j++) {
+      if (have[j] === want[seq.length]) {
+        seq.push(j);
+      }
+    }
+    if (c === want[0] && seq.length === want.length && (best === null || seq[seq.length - 1] - i < best[best.length - 1] - best[0])) {
+      best = seq;
+    }
+  });
+  return best;
 }
 
 // an editing key: a new line, a move, a character or word erased;
