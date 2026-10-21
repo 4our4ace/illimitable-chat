@@ -140,8 +140,9 @@ export function term_paint(t: Term): void {
   const cw    = full - side - 2 * MARGIN;
   const iw    = full - 2 * MARGIN;
   const off   = !View.view_typing(t.v);
+  const paned = t.pane !== null;
   const form  = t.choose === null ? term_form_lines(t, iw, Math.max(1, Math.floor(h / 4))) : null;
-  const input = form ?? Screen.screen_input(t.scr, iw, Math.max(1, Math.floor(h / 3)), off ? OFF + (t.v.agent ?? View.MAIN) : term_hint(t), off);
+  const input = paned ? { lines: [], at: null } : form ?? Screen.screen_input(t.scr, iw, Math.max(1, Math.floor(h / 3)), off ? OFF + (t.v.agent ?? View.MAIN) : term_hint(t), off);
   const idle  = View.view_doing(t.v) === null;
   const notes = term_notes(idle ? said.notes : said.notes.slice(-1), iw - 2 * NOTE_IN);
   const ruled = idle ? notes.pop() : undefined;
@@ -149,7 +150,7 @@ export function term_paint(t: Term): void {
   const roomy = last !== undefined && NOTE_IN + Paint.line_width(last) + 1 + Paint.text_width(said.toast) <= left + cw;
   const lead  = roomy ? [Paint.Run(" ".repeat(NOTE_IN)), ...notes.pop()!] : [];
   const above = notes.slice(-Math.floor(h / 4)).map((l) => [Paint.Run(" ".repeat(NOTE_IN)), ...l]);
-  const tall  = Math.max(1, h - 5 - input.lines.length - above.length);
+  const tall  = Math.max(1, h - (paned ? 4 : 5) - input.lines.length - above.length);
   const mid   = t.choose?.middle !== undefined;
   const box   = mid ? term_middle(t, full, h) : term_box(t, iw, Math.min(cw, PICKER_W), left + MARGIN, tall + 1 + above.length);
   const top   = box === null ? Infinity : mid ? Math.floor((h - box.items.length) / 2) : 2 + tall + above.length - box.items.length;
@@ -164,7 +165,7 @@ export function term_paint(t: Term): void {
   const sided = term_area(t, { key: "side", lines: sides.map((s) => s[0]), first: 0, row: 1, col: left > 0 ? 1 : at + 2, w: sw, tall: sides.length });
   const blue  = { ...Paint.INK, c: Draw.draw_theme().link ?? "4" };
   const toast = box !== null ? [] : [...lead, Paint.Run(" ".repeat(Math.max(1, left + cw - Paint.line_width(lead) - Paint.text_width(said.toast)))), Paint.Run(said.toast, blue)];
-  const lines = [...above, toast, term_rule(t, iw, ruled), ...input.lines, Paint.rule(iw), Paint.tabs_line(t.v, iw, side === 0)];
+  const lines = [...above, toast, term_rule(t, iw, ruled), ...input.lines, ...(paned ? [] : [Paint.rule(iw)]), Paint.tabs_line(t.v, iw, side === 0)];
   const foot  = term_area(t, { key: "foot", lines, first: 0, row: 1 + tall, col: MARGIN, w: iw, tall: lines.length });
   const head  = term_area(t, { key: "head", lines: [term_head(t, full)], first: 0, row: 0, col: 0, w: full, tall: 1 });
   const rows: Screen.Piece[][] = [[{ col: 0, w: full, line: head[0] }]];
@@ -181,7 +182,7 @@ export function term_paint(t: Term): void {
   }
   t.hover = t.sel?.held ? undefined : term_under(t, t.scr.point);
   term_tabs(t, h - 1, side === 0);
-  const cursor = box?.at !== undefined ? { row: top + box.at.row, col: box.col + box.at.col } : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
+  const cursor = box?.at !== undefined ? { row: top + box.at.row, col: box.col + box.at.col } : input.at === null ? null : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
   const with_ = sides.map((_, k) => k).filter((k) => rows[1 + k].length > 1 && !(box?.wide && 1 + k >= top));
   t.ruled = { row: 2 + tall + above.length, w: iw, at: cursor, rows, side: box === null ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
   t.scr.blink = idle || form !== null;
@@ -377,8 +378,7 @@ function term_head(t: Term, w: number): Paint.Line {
   const page  = t.v.page === null ? [] : [Paint.Run(" › " + t.v.page.name, bold)];
   const left  = [Paint.Run(" " + View.NAME, bold), ...page, Paint.Run("  " + HERE, Paint.DIM)];
   const work  = t.v.agents.length === 0 ? "" : t.v.agents.length + " at work";
-  const right = t.pane !== null ? t.pane.title + " · Esc closes" : work;
-  return Paint.ends_line(left, right === "" ? "" : right + " ", w);
+  return Paint.ends_line(left, work === "" ? "" : work + " ", w);
 }
 
 // the area over the input, tall rows from screen row `row`, column
@@ -386,7 +386,7 @@ function term_head(t: Term, w: number): Paint.Line {
 // its edge)
 function term_view(t: Term, w: number, tall: number, row: number, col: number): Area {
   const pane  = t.pane;
-  const [lines, first] = pane !== null ? term_paned(pane, w, tall) : term_chat(t, w, tall, row, col);
+  const [lines, first] = pane !== null ? term_paned(t, pane, w, tall) : term_chat(t, w, tall, row, col);
   const scroll = pane !== null ? (d: number) => void (pane.scroll = Math.max(0, pane.scroll + d)) : (d: number) => void (t.scroll = Math.max(0, t.scroll - d));
   return { key: pane !== null ? "pane" : "chat", lines, first, row, col, w, tall, scroll };
 }
@@ -474,14 +474,24 @@ function term_chat(t: Term, w: number, tall: number, row: number, col: number): 
   return [lines, first];
 }
 
-// a pane's lines, made for this width, and the first shown
-function term_paned(pane: Pane, w: number, tall: number): [Paint.Line[], number] {
-  if (pane.w !== w) {
-    [pane.w, pane.lines] = [w, pane.make(w)];
+// a pane, tall lines w wide in the chat's place: its title on a rule
+// over it, its keys on one under it (both kept as it scrolls), between
+// them as many of its lines (made for the width inside) as fit from its
+// scroll; all on the panel's background, the background told, so it
+// stands apart from the chat
+function term_paned(t: Term, pane: Pane, w: number, tall: number): [Paint.Line[], number] {
+  if (pane.w !== w - 2) {
+    [pane.w, pane.lines] = [w - 2, pane.make(w - 2)];
   }
-  const lines = [[], ...pane.lines];
-  pane.scroll = Math.max(0, Math.min(pane.scroll, lines.length - tall));
-  return [lines, pane.scroll];
+  const room  = Math.max(1, tall - 2);
+  pane.scroll = Math.max(0, Math.min(pane.scroll, pane.lines.length - room));
+  const body  = pane.lines.slice(pane.scroll, pane.scroll + room);
+  const rule  = (said: Paint.Line) => [Paint.Run("─ ", Paint.DIM), ...said, Paint.Run(" " + "─".repeat(Math.max(0, w - 3 - Paint.line_width(said))), Paint.DIM)];
+  const keys  = [Paint.Run("Esc", { ...Paint.INK, b: true }), Paint.Run(" close" + (pane.lines.length > room ? " · ↑↓ PgUp PgDn scroll" : "") + " · typing goes back to the chat", Paint.DIM)];
+  const lines = [rule([Paint.Run(pane.title, { ...Paint.INK, b: true, c: Draw.draw_theme().accent ?? "5" })]), ...body.map((l) => [Paint.Run(" "), ...l]), ...Array.from({ length: room - body.length }, (): Paint.Line => []), rule(keys)];
+  const panel = term_off(t.scr.canvas, PANEL);
+  const pad   = (l: Paint.Line): Paint.Line => [...l, Paint.Run(" ".repeat(Math.max(0, w - Paint.line_width(l))))];
+  return [panel === undefined ? lines : lines.map((l) => pad(l).map((r) => ({ ...r, s: { ...r.s, g: r.s.g || panel } }))), 0];
 }
 
 // the picker, framed, w wide, room lines at most: its search first, if

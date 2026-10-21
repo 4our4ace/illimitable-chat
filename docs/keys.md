@@ -107,6 +107,10 @@ In a list
 - `/settings`: Left, Right and Enter change a setting, Del puts its
   default back (in a profile: the global value).
 
+Panes (`/help`, `/agents`, `/mcp`) open in the chat's place,
+on a background of their own: Esc or Enter closes one, the arrows and
+the pages scroll it, and typing closes it and goes to the input.
+
 When illi asks
 --------------
 
