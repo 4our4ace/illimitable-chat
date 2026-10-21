@@ -5,6 +5,7 @@
 // chat take first (a picker searched, the text typed too); Enter, Esc,
 // Ctrl+C and Ctrl+D, Tab (the suggested reply), Shift+Tab and the pages.
 
+import { term_form_key, term_form_type } from "./Asks.ts";
 import { Chat } from "../chat/Chat.ts";
 import { term_chooser_find, term_command, term_commands, term_main, term_suggest, term_suggest_key } from "./Commands.ts";
 import { Custom } from "../config/Custom.ts";
@@ -63,12 +64,16 @@ export function term_press(t: Term, key: string): void {
   term_draw(t);
 }
 
-// a key while the commands suggested show, the picker or a pane is open:
-// theirs first (true: taken). The commands move by Up and Down, fill one
-// in by Tab, run it by Enter; the picker as term_choose_key; a pane
-// scrolls by the arrows, the pages and the wheel; Esc closes any, and so
-// does Enter a pane, the input empty
+// a key while the commands suggested show, the picker, illi's question
+// or a pane is open: theirs first (true: taken). The commands move by Up
+// and Down, fill one in by Tab, run it by Enter; the picker as
+// term_choose_key; the question as Asks.ts says; a pane scrolls by the
+// arrows, the pages and the wheel; Esc closes any, and so does Enter a
+// pane, the input empty
 export function term_grab(t: Term, key: string): boolean {
+  if (t.choose === null && term_form_key(t, key)) {
+    return true;
+  }
   const sug = term_suggest(t);
   if (sug !== null && term_suggest_key(t, sug, key)) {
     return true;
@@ -128,11 +133,12 @@ function term_choose_key(t: Term, c: Chooser, key: string): boolean {
   return true;
 }
 
-// text typed while the picker searches: to its search, not the input
+// text typed while the picker searches: to its search, not the input;
+// while illi asks, to its question (Asks.ts)
 export function term_type(t: Term, text: string): boolean {
   const c = t.choose;
   if (c === null || c.find === null) {
-    return false;
+    return c === null && term_form_type(t, text);
   }
   Screen.ed_type(c.find, text);
   term_chooser_find(c);

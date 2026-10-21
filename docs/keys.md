@@ -107,6 +107,18 @@ In a list
 - `/settings`: Left, Right and Enter change a setting, Del puts its
   default back (in a profile: the global value).
 
+When illi asks
+--------------
+
+illi may ask you a question with options. It shows in place of the
+input:
+
+- Up and Down (or Tab) move, Space picks an option (several, if the
+  question allows), and typing writes words of your own: beside the
+  options picked, or instead of them.
+- Enter sends what you picked (nothing picked: the option you're on)
+  and your words. Esc skips the question.
+
 Mouse and side panel
 --------------------
 
@@ -118,5 +130,6 @@ Mouse and side panel
 - From 100 columns on, a side panel shows the primary agents (a click
   makes one the main agent), the subagents at work, the profiles (a
   click switches), a ChatGPT plan's use, the context and the memory, the
-  MCP servers (a click opens `/mcp`) and illi's to-do list. The `side`
-  and `side_width` settings place it.
+  MCP servers (a click opens `/mcp`), and illi's to-do list or, with
+  none, the folder illi works in. The `side` and `side_width` settings
+  place it.

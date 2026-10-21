@@ -109,8 +109,13 @@ export type Term = {
   drift   : { d: number; timer: Timer } | undefined;
   sug     : Sug | null;
   dropped : string;
-  asking  : { id: string; c: Chooser | null; done: boolean } | null; // the question shown (Asks.ts): its picker, whether answered
+  asking  : { id: string; c: Chooser | null; done: boolean; form: Form | null } | null; // the question shown (Asks.ts): its picker or form, whether answered
 };
+
+// illi's own question, in place of the input (Asks.ts): the words typed
+// beside its options, the row lit (past the options: the words'), the
+// options picked
+export type Form = { ed: Screen.Ed; at: number; picked: number[] };
 
 // the chat as last painted: its lines, its blocks in them, the screen
 // row of its first line shown and that line, the rows it had, its first

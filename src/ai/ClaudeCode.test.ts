@@ -109,6 +109,7 @@ test("a turn runs Claude Code whole, illi's prompt after its own and illi's tool
   expect(log.args).toContain("--mcp-config");
   expect(JSON.parse(log.args[log.args.indexOf("--mcp-config") + 1])).toEqual({ mcpServers: { illi: { type: "http", url: "http://127.0.0.1:1/key/main?lean", timeout: 86400000 } } });
   expect(log.args.slice(log.args.indexOf("--allowedTools"), log.args.indexOf("--allowedTools") + 2)).toEqual(["--allowedTools", "mcp__illi"]);
+  expect(log.args.slice(log.args.indexOf("--disallowedTools"), log.args.indexOf("--disallowedTools") + 2)).toEqual(["--disallowedTools", "AskUserQuestion"]);
   expect(log.args.slice(log.args.indexOf("--permission-prompt-tool"), log.args.indexOf("--permission-prompt-tool") + 2)).toEqual(["--permission-prompt-tool", "mcp__illi__approve"]);
   expect(log.args).not.toContain("--tools");
   expect(log.args).not.toContain("--system-prompt");

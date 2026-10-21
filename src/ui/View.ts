@@ -64,10 +64,14 @@ export type Use = { tokens: number | null; limits: Limit[]; plan?: string; fill?
 // an item of illi's to-do list (Tools.ts todo): what to do, how it stands
 export type Todo = { text: string; status: "pending" | "active" | "done" };
 
-// a question the chat asks the user (Tools.ts approve: Claude Code
-// asking leave to use a tool), answered by a view: who asks (illi, an
-// agent), the tool, what it would do
-export type Question = { id: string; who: string; tool: string; what: string };
+// a question the chat asks the user, answered by a view: who asks
+// (illi, an agent), the tool, what it would do: Claude Code asking leave
+// to use a tool (Tools.ts approve); or illi's own (ask: what it asks,
+// the options it offers, whether several may be picked)
+export type Question = { id: string; who: string; tool: string; what: string; options?: Option[]; multi?: boolean };
+
+// an option illi's question offers: its label, what it means ("": none)
+export type Option = { label: string; about: string };
 
 // agents: those at work; agent: the main agent (null: illi's own);
 // vendors and models: those offered; use: what its calls use; todo:
@@ -154,7 +158,7 @@ export type Client =
   | { $: "zoom"; part: Part }
   | { $: "root" }
   | { $: "agent"; name: string }
-  | { $: "answer"; ask: string; yes: boolean; always: boolean; why?: string }; // a question (State asks, its id) answered; why: a no's reason
+  | { $: "answer"; ask: string; yes: boolean; always: boolean; said?: string }; // a question (State asks, its id) answered; said: a no's reason, or the answer to illi's own
 
 // an act not answered: with its id, whether it was sent, what its
 // answer does
@@ -607,9 +611,10 @@ export function view_running(v: View): boolean {
   return v.busy || v.agents.length > 0;
 }
 
-// what runs, in words; null: nothing. A turn: the last thing streaming
-// (a tool's call: its tool; thinking; the reply), else what it waits on.
-// No turn: the agents waited on. Its tokens, as many as the characters
+// what runs, in words; null: nothing. A turn: a question the user is
+// asked, else the last thing streaming (a tool's call: its tool;
+// thinking; the reply), else what it waits on. No turn: the agents
+// waited on. Its tokens, as many as the characters
 // streamed make (about CHARS each); its rate, those of the RATE ms
 // before the last STEP's start, a second's share (so it holds a STEP)
 export function view_doing(v: View, now = Date.now()): Doing | null {
@@ -624,6 +629,7 @@ export function view_doing(v: View, now = Date.now()): Doing | null {
   const rate   = Math.round(recent / CHARS / (RATE / 1000));
   const verb   =
     !v.busy ? "Waiting on agents"
+    : v.asks.length > 0 ? "Waiting for your answer"
     : call !== null ? ("Running " + call.name).trim()
     : last?.kind === "mind" ? "Thinking"
     : last?.kind === "illi" ? "Writing"
