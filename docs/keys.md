@@ -134,7 +134,8 @@ Mouse and side panel
   allow it.
 - The wheel scrolls the chat or a pane.
 - From 100 columns on, a side panel shows the primary agents (a click
-  makes one the main agent), the subagents at work, the profiles (a
-  click switches), a ChatGPT plan's use, the context and the memory, the
-  MCP servers (a click opens `/mcp`) and illi's to-do list. The `side`
-  and `side_width` settings place it.
+  makes one the main agent), the subagents at work, the sticky skills on
+  (a click turns one off), the profiles (a click switches), a ChatGPT
+  plan's use, the context and the memory, the MCP servers (a click opens
+  `/mcp`) and illi's to-do list. The `side` and `side_width` settings
+  place it.

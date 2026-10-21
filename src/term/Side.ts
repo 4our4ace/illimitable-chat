@@ -1,17 +1,20 @@
 // Side
 // ====
 // The side panel, on a wide screen: the primary agents, the subagents of
-// this run, the profiles, a ChatGPT plan's use, the chat's (the context,
-// the memory), the MCP servers, a hint for the keys or illi's to-do list;
-// the side and side_width settings place it.
+// this run, the sticky skills on, the profiles, a ChatGPT plan's use, the
+// chat's (the context, the memory), the MCP servers, a hint for the keys
+// or illi's to-do list; the side and side_width settings place it.
 
 import { term_choose, term_mcp } from "./Commands.ts";
 import * as config from "../config/Config.ts";
+import { Custom, type Skill } from "../config/Custom.ts";
 import * as Draw from "../ui/Draw.ts";
 import { term_spinner } from "./Frame.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
 import * as Paint from "../ui/Paint.ts";
+import { term_note } from "./Notices.ts";
 import { term_profile_go, term_profile_pick } from "./ProfileCommands.ts";
+import { setting_open } from "./Settings.ts";
 import { term_act, type Item, type Term } from "./Term.ts";
 import { GLYPH } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
@@ -34,11 +37,12 @@ const FOLDED  = 3;
 export const CLOCK   = 60000;
 
 // the side, w wide and tall: illi and the primary agents (a click makes
-// one the main agent), the tabs (a click shows one), the profiles (a
-// click on the head: /profile), a ChatGPT plan's use, the chat's (its
-// context, the memory), the MCP servers (a click: /mcp); at its foot illi's to-do list, which, longer than the room,
-// pushes the rest up (its head stays); with none, a faint hint for the
-// keys (HINT), if it fits
+// one the main agent), the tabs (a click shows one), the sticky skills on
+// (a click turns one off), the profiles (a click on the head: /profile),
+// a ChatGPT plan's use, the chat's (its context, the memory), the MCP
+// servers (a click: /mcp); at its foot illi's to-do list, which, longer
+// than the room, pushes the rest up (its head stays); with none, a faint
+// hint for the keys (HINT), if it fits
 export function term_side(t: Term, w: number, tall: number): Item[] {
   const bold  = { ...Paint.INK, b: true };
   const head  = (text: string, run: (() => void) | null = null): Item => [[Paint.Run(text, bold)], run];
@@ -56,7 +60,7 @@ export function term_side(t: Term, w: number, tall: number): Item[] {
   const gap   = [[], null] as Item;
   const fill  = (n: number) => Array.from({ length: n }, (): Item => [[], null]);
   const plan  = term_side_plan(t, w);
-  const top   = [head("Agents"), ...mains, gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...term_side_profiles(t), ...(plan.length === 0 ? [] : [...plan, gap]), head("Chat"), ...term_side_use(t, w), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp])];
+  const top   = [head("Agents"), ...mains, gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...term_side_sticky(t), ...term_side_profiles(t), ...(plan.length === 0 ? [] : [...plan, gap]), head("Chat"), ...term_side_use(t, w), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp])];
   const foot  = todo.length === 0 ? keys : todo;
   const room  = tall - top.length - foot.length;
   const items = room > 0 ? [...top, ...fill(room), ...foot]
@@ -234,6 +238,19 @@ function term_side_subs(t: Term): Item[] {
     () => term_act(t, { $: "Goto", name }),
   ]);
   return [...back, ...subs];
+}
+
+// the sticky skills on, each a click turning it off (its head: the list
+// of them, /settings); none: nothing. Read anew only once the settings
+// change (new lists), never at a paint
+let stuck: { on: string[]; off: string[]; skills: Skill[] } | null = null;
+function term_side_sticky(t: Term): Item[] {
+  if (stuck?.on !== config.STICKY || stuck.off !== config.OFF) {
+    stuck = { on: config.STICKY, off: config.OFF, skills: config.STICKY.length === 0 ? [] : Custom.stuck(process.cwd()) };
+  }
+  const off   = (s: Skill) => () => term_note(t, Custom.stick(s, false) ?? s.name + " is off.");
+  const items = stuck.skills.map((s): Item => [[Paint.Run(GLYPH.here + " " + s.name)], off(s)]);
+  return items.length === 0 ? [] : [[[Paint.Run("Sticky skills", { ...Paint.INK, b: true })], () => setting_open(t, "sticky")], ...items, [[], null]];
 }
 
 // the side's profiles: a head (a click: /profile's picker), each profile

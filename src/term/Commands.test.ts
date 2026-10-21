@@ -9,7 +9,8 @@
 // is no reply). /speed says standard for slow; /tab finds the chat's tab
 // by the main agent's name; the dead ends (/stop, /fold, /image, /mcp
 // with nothing to act on) say something. A sticky skill's name alone
-// turns it on and off; with words, on, the words sent.
+// turns it on and off; with words, on, the words sent; while on, it shows
+// at the side, where a click turns it off.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -21,6 +22,7 @@ process.env.ILLI_DIR = DIR;
 
 const { term_chooser, term_command, term_commands, term_suggest } = await import("./Commands.ts");
 const { term_grab, term_type } = await import("./Keys.ts");
+const { term_side } = await import("./Side.ts");
 const Paint = await import("../ui/Paint.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
@@ -215,7 +217,7 @@ test("the commands suggested: those run most first among those a word matches al
   expect(JSON.parse(fs.readFileSync(DIR + "/used.json", "utf8"))).toEqual({ "/settings": 1 });
 });
 
-test("a sticky skill: its name alone turns it on, again off, each said; with words, on, then the words sent", () => {
+test("a sticky skill: its name alone turns it on, again off, each said; with words, on, then the words sent; on, at the side, where a click turns it off", () => {
   fs.mkdirSync(DIR + "/skills/terse", { recursive: true });
   fs.writeFileSync(DIR + "/skills/terse/SKILL.md", "---\ndescription: Short replies\nsticky: true\n---\nBe terse.");
   const config = require("../config/Config.ts");
@@ -229,7 +231,14 @@ test("a sticky skill: its name alone turns it on, again off, each said; with wor
   expect([config.STICKY, t.v.out.map((p: any) => p.msg.$)]).toEqual([["terse"], ["say"]]);
   term_command(t, "/terse and again");
   expect(config.STICKY).toEqual(["terse"]);
-  term_command(t, "/terse");
+  Object.assign(t, { agents: [], profs: ["default"], since: Date.now() });
+  const side = () => term_side(t, 30, 40).map(([line, run]) => [line.map((r) => r.x).join("").trim(), run] as const).filter(([text]) => text !== "");
+  const on   = side();
+  const at   = on.findIndex(([text]) => text === "Sticky skills");
+  expect(on[at + 1][0]).toEndWith(" terse");
+  on[at + 1][1]!();
+  expect([config.STICKY, note(t)]).toEqual([[], "terse is off."]);
+  expect(side().map(([text]) => text)).not.toContain("Sticky skills");
   fs.rmSync(DIR + "/skills/terse", { recursive: true });
 });
 
