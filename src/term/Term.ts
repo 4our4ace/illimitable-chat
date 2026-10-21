@@ -41,6 +41,7 @@ import * as Profiles from "../config/Profiles.ts";
 import * as Reply from "../ui/Reply.ts";
 import * as Screen from "../ui/Screen.ts";
 import { CLOCK } from "./Side.ts";
+import { THEME_TROUBLE } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
 
 // the terminal: the chat; ended: input's; pending: commands at work;
@@ -393,10 +394,41 @@ function term_bye(t: Term): void {
   process.exit(0);
 }
 
+// a crash (an error nothing caught): its stack to LOG, the terminal left
+// as found (the screen's own exit handler, which runs first), then one
+// line on why and where the details are; exit code 1
+export function term_crash(err: unknown): void {
+  const e = err instanceof Error ? err : new Error(String(err));
+  try {
+    fs.appendFileSync(LOG, new Date().toISOString() + " illi: crashed: " + (e.stack ?? e.message) + "\n");
+  } catch {}
+  process.on("exit", () => process.stderr.write("illi: crashed: " + e.message + " (details in " + LOG + ")\n"));
+  process.exit(1);
+}
+
+// what went wrong before the screen was up, or out of sight, said once
+// it is: a theme file that won't read; the MCP servers' file that won't,
+// and each server that fails to start (once a session; /mcp says more)
+function term_trouble(t: Term, told: Set<string>): void {
+  const { servers, trouble } = Mcp.status();
+  const says: Array<[key: string, text: string]> = [
+    ["theme", THEME_TROUBLE],
+    ["mcp", trouble === "" ? "" : "The MCP servers' file won't read (" + trouble + "): /mcp says more."],
+    ...servers.filter((s) => s.state === "failed").map((s): [string, string] => ["mcp " + s.name, "The MCP server " + s.name + " didn't start: " + s.why.replace(/\.$/, "") + " (/mcp says more)."]),
+  ];
+  for (const [key, text] of says.filter(([key, text]) => text !== "" && !told.has(key))) {
+    told.add(key);
+    term_note(t, text);
+  }
+}
+
 // the chat opened in the working folder (its lock taken: one illi a
-// profile), on the terminal (its log lines to LOG) or a pipe; the MCP
-// servers started; the models ChatGPT lists learned
+// profile), on the terminal (its log lines to LOG; a crash said, the
+// terminal left as found: term_crash) or a pipe; the MCP servers started
+// (a failure told: term_trouble); the models ChatGPT lists learned
 export async function term_start(): Promise<void> {
+  process.on("uncaughtException", term_crash);
+  process.on("unhandledRejection", term_crash);
   await Chat.lock().catch((err) => {
     console.error("illi: " + err.message);
     process.exit(1);
@@ -407,9 +439,17 @@ export async function term_start(): Promise<void> {
     console.log = console.warn = console.error = log;
   }
   const t = term_new(Chat.open(process.cwd()));
-  Mcp.start(process.cwd(), () => term_draw(t));
+  const told = new Set<string>();
+  Mcp.start(process.cwd(), () => {
+    term_trouble(t, told);
+    term_draw(t);
+  });
   term_connect(t);
-  if (t.scr.tty && config.OFFER.vendors.includes("chatgpt") && !ChatGPT.signed()) {
+  term_trouble(t, told);
+  const login = config.OFFER.vendors.includes("chatgpt") ? ChatGPT.unread() : "";
+  if (t.scr.tty && login !== "") {
+    term_note(t, login);
+  } else if (t.scr.tty && config.OFFER.vendors.includes("chatgpt") && !ChatGPT.signed()) {
     term_note(t, "No ChatGPT login yet: type /login to sign in with your ChatGPT plan.");
   }
   term_models(t);
