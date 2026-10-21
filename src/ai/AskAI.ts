@@ -6,8 +6,8 @@
 // holds those never taken. Every vendor is an API run in our loop
 // (Agent.ts). A patient call (a summary's) asks again, AGAIN after each
 // try nothing answered (the vendor down or refusing it, as when the API
-// key's credit is gone; our setup failing), till one is answered or we
-// stop it: an outage only delays it, and no summary is made of a failure
+// key's credit is gone; our setup failing), each time telling why (its
+// `stuck`), till one is answered or we stop it: an outage only delays it, and no summary is made of a failure
 // that isn't its input's (Memory.ts). A call's events and end go to its
 // sink.
 //
@@ -51,7 +51,8 @@ export type Block = { text: string; mark: boolean };
 // goes on from, its blocks after that one's items and answer, naming its
 // tools but running none: one step, unanswered if it calls one (a
 // suggested reply's: Chat.suggest); max: the most tokens it writes, its
-// thinking's too (none: the model's cap)
+// thinking's too (none: the model's cap); stuck: a patient call's try
+// failed, why, as it waits to ask again
 export type Ask = Pick & {
   system    : string;
   blocks    : Block[];
@@ -62,6 +63,7 @@ export type Ask = Pick & {
   keep?     : boolean;
   from?     : Last;
   max?      : number;
+  stuck?    : (why: string) => void;
 };
 
 // a request kept whole (Ask.keep): what it asked, the items it sent with
@@ -82,13 +84,16 @@ export type Event =
 // stop: who ended a call that failed (Agent.ts): the model (`fail`: it
 // answered, so the failure is its input's doing, a refusal or a stop
 // reason; asked again, it fails alike), we (`lost`: a stop), the vendor
-// (`down`), or none (our setup threw)
+// (`down`), or none (our setup threw); again: down, but a later try may
+// answer (the vendor busy or out of reach); cut: a reply had begun
 export type End = {
-  ok    : boolean;
-  text  : string;
-  left  : Say[];
-  note? : string;
-  stop? : "fail" | "lost" | "down";
+  ok     : boolean;
+  text   : string;
+  left   : Say[];
+  note?  : string;
+  stop?  : "fail" | "lost" | "down";
+  again? : boolean;
+  cut?   : boolean;
 };
 
 // one try at a vendor
@@ -151,6 +156,7 @@ export namespace AskAI {
       for (;;) {
         const wait = ask.patient === true && !end.ok && end.stop !== "fail" && end.stop !== "lost";
         if (wait) {
+          ask.stuck?.(end.text);
           await Machine.nap(AGAIN, halt.signal);
         }
         if (halt.signal.aborted || !wait) {

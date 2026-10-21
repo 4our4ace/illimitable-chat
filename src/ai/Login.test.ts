@@ -2,9 +2,10 @@
 // ==========
 // `bun test Login.test.ts`. Illi's own ChatGPT login, against a stand-in
 // for OpenAI's auth server: opencode's is used while Illi has none; the
-// device login gives a code and page, is polled till the person gives it,
-// changes its grant for tokens (its PKCE pair) and keeps them as Illi's
-// own, which is used from then on; logout lets it go. A renewal writes
+// device login gives a code and page, is polled till the person gives it
+// (no connection or a server error meanwhile only asked again), changes
+// its grant for tokens (its PKCE pair) and keeps them as Illi's own (an
+// unreadable file of its own replaced), which is used from then on; logout lets it go. A renewal writes
 // back to the file it read, whatever a /login did meanwhile.
 
 import { afterAll, expect, test } from "bun:test";
@@ -37,7 +38,11 @@ globalThis.fetch = (async (url: string, init: any) => {
     return Response.json({ device_auth_id: "dev-1", usercode: "ABCD-1234", interval: "1" });
   }
   if (url.endsWith("/deviceauth/token")) {
-    return ++polls < 2 ? new Response("pending", { status: 403 }) : Response.json({ authorization_code: "code-1", code_challenge: "ch", code_verifier: "ver-1" });
+    polls += 1;
+    if (polls === 1) {
+      throw new Error("Unable to connect. Is the computer able to access the url?");
+    }
+    return polls < 3 ? new Response("<html>bad gateway</html>", { status: 502 }) : Response.json({ authorization_code: "code-1", code_challenge: "ch", code_verifier: "ver-1" });
   }
   const id = jwt({ "https://api.openai.com/auth": { chatgpt_account_id: "acct-9" } });
   return Response.json({ access_token: "own-access", refresh_token: "own-refresh", id_token: id, expires_in: 864000 });
@@ -56,12 +61,13 @@ test("opencode's login is used while Illi has none of its own", async () => {
 });
 
 test("the device login: a code and page, polled till given, its tokens kept as Illi's own", async () => {
+  fs.writeFileSync(config.OWN_LOGIN, "{ cut sho");
   const { url, code, done } = await ChatGPT.device(new AbortController().signal);
   expect(url).toBe("https://auth.openai.com/codex/device");
   expect(code).toBe("ABCD-1234");
   expect(JSON.parse(asked[0].body)).toEqual({ client_id: "app_EMoamEEZ73f0CkXaXp7hrann" });
   await done;
-  expect(polls).toBe(2);
+  expect(polls).toBe(3);
   expect(JSON.parse(asked[1].body)).toEqual({ device_auth_id: "dev-1", user_code: "ABCD-1234" });
   const exchange = new URLSearchParams(asked[asked.length - 1].body);
   expect(asked[asked.length - 1].url).toBe("https://auth.openai.com/oauth/token");
@@ -71,7 +77,7 @@ test("the device login: a code and page, polled till given, its tokens kept as I
   expect(fs.statSync(config.OWN_LOGIN).mode & 0o777).toBe(0o600);
   expect(ChatGPT.file()).toBe(config.OWN_LOGIN);
   expect(await ChatGPT.token()).toBe("own-access");
-});
+}, 10000);
 
 test("logout lets Illi's own login go: opencode's is used again", async () => {
   expect(ChatGPT.logout()).toBe(true);

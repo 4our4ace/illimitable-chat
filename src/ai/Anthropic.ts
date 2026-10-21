@@ -8,7 +8,8 @@
 // what every call shares (tools, system) stays cached whatever its view
 // does, so a view written anew writes only itself. A stream builds blocks
 // from pieces; tool_use and end_turn end a step, pause_turn asks again,
-// an error event is busy. It pings while the model thinks, so 5 silent
+// any other stop fails (in plain words: Agent.stopped), an error event is
+// busy. It pings while the model thinks, so 5 silent
 // minutes mean it is dead.
 
 import { AskAI, type Ask, type Img } from "./AskAI.ts";
@@ -230,8 +231,7 @@ export namespace Anthropic {
         return { ...step, stop: "again" };
       }
     }
-    const why = st.why?.explanation;
-    return { ...step, stop: "fail", why: "stopped: " + st.stop + (why ? " (" + why + ")" : "") };
+    return { ...step, stop: "fail", why: Agent.stopped(st.stop, "stopped: " + st.stop, st.why?.explanation) };
   }
 
   // the messages of an output, in order (a run of text blocks, split
