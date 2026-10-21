@@ -28,6 +28,7 @@ import * as path from "node:path";
 import type { Vendor } from "../ai/AskAI.ts";
 import { LABELS, VENDORS, Pick, type Offer } from "../ai/Pick.ts";
 import { profile_pick } from "./Profiles.ts";
+import { json_object } from "../tools/Clip.ts";
 
 // Constants
 // =========
@@ -357,14 +358,10 @@ export function config_context(label: string, window = GUESS): number {
 
 // the models listed last, learned (a file that won't read: none)
 function config_models(): void {
-  try {
-    const kept = JSON.parse(fs.readFileSync(MODELS_FILE, "utf8"));
-    for (const vendor of Object.keys(kept.vendors ?? {})) {
-      if (VENDORS.includes(vendor as Vendor)) {
-        Pick.learn(vendor as Vendor, kept.vendors[vendor]);
-      }
-    }
-  } catch {}
+  const kept = json_object(MODELS_FILE)?.vendors ?? {};
+  for (const vendor of Object.keys(kept).filter((v) => VENDORS.includes(v as Vendor))) {
+    Pick.learn(vendor as Vendor, kept[vendor]);
+  }
 }
 
 // a key set in config.json (null: taken out, so its default holds), the
