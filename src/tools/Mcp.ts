@@ -19,7 +19,7 @@
 // All start with illi, in the background, in the working dir; the tools
 // listed wait till each has answered or failed (at most SETTLE), so a
 // message sent at once still gets them. A server that fails is told in
-// /mcp and the log, its tools gone; one whose tools change is listed
+// /mcp, a note (Term.ts) and the log, its tools gone; one whose tools change is listed
 // again; each change is told (the side panel shows how each is: Term.ts).
 // A call stopped is cancelled at its server; the servers end with illi.
 // The project's own servers are never read: a server is a program, and a

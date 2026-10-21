@@ -25,7 +25,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { dlopen } from "bun:ffi";
 import type { Ask } from "./AskAI.ts";
-import { type Wire } from "./Agent.ts";
+import { Agent, type Wire } from "./Agent.ts";
 import { OpenAI } from "./OpenAI.ts";
 import { Pick } from "./Pick.ts";
 import { Price } from "./Price.ts";
@@ -121,7 +121,7 @@ export namespace ChatGPT {
         return now;
       }
       const body = new URLSearchParams({ grant_type: "refresh_token", refresh_token: now.refresh, client_id: CLIENT });
-      const res = await fetch(ISSUER, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body });
+      const res = await ChatGPT.reach(ISSUER, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body });
       if (!res.ok) {
         throw new Error("ChatGPT login renewal failed (HTTP " + res.status + "): sign in again with /login");
       }
@@ -159,6 +159,12 @@ export namespace ChatGPT {
     return config.LOGIN_SET ?? config.OWN_LOGIN;
   }
 
+  // why the login file is unreadable ("": it reads, or there is none)
+  export function unread(): string {
+    const file = ChatGPT.file();
+    return fs.existsSync(file) && ChatGPT.json(file) === null ? "The ChatGPT login file " + file + " is unreadable: /login replaces it." : "";
+  }
+
   // whether a login is there to run on
   export function signed(): boolean {
     try {
@@ -169,11 +175,25 @@ export namespace ChatGPT {
     }
   }
 
+  // a fetch whose failure to reach its host (no connection) says so
+  // (Agent.unreached); a stop's is thrown as it is
+  export async function reach(url: string, init: RequestInit): Promise<Response> {
+    try {
+      return await fetch(url, init);
+    } catch (err: any) {
+      if (init.signal?.aborted) {
+        throw err;
+      }
+      console.error("chatgpt: " + url + ": " + err?.message);
+      throw new Error(Agent.unreached(url));
+    }
+  }
+
   // Codex's device login: a code the person enters at OpenAI's page (url),
   // and the login it grants (done: polled for till then, at most DEVICE;
   // stop ends it), kept in ChatGPT.own
   export async function device(stop: AbortSignal): Promise<{ url: string; code: string; done: Promise<void> }> {
-    const res = await fetch(AUTH + "/api/accounts/deviceauth/usercode", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ client_id: CLIENT }), signal: stop });
+    const res = await ChatGPT.reach(AUTH + "/api/accounts/deviceauth/usercode", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ client_id: CLIENT }), signal: stop });
     if (!res.ok) {
       throw new Error("ChatGPT's device login would not start (HTTP " + res.status + ")");
     }
@@ -184,9 +204,10 @@ export namespace ChatGPT {
   }
 
   // a device login's grant, asked for every `every` ms till the person
-  // gives it (403 or 404: not yet), changed for tokens (its PKCE pair came
-  // with it), kept in ChatGPT.own (its other entries kept) and used from
-  // the next request on
+  // gives it (403 or 404: not yet; no connection or a server error: asked
+  // again), changed for tokens (its PKCE pair came with it), kept in
+  // ChatGPT.own (its other entries kept; one unreadable replaced) and used
+  // from the next request on
   export async function granted(id: string, code: string, every: number, stop: AbortSignal): Promise<void> {
     const json = { "content-type": "application/json" };
     for (const until = Date.now() + DEVICE; Date.now() < until; ) {
@@ -194,8 +215,13 @@ export namespace ChatGPT {
       if (stop.aborted) {
         throw new Error("the login was stopped");
       }
-      const res = await fetch(AUTH + "/api/accounts/deviceauth/token", { method: "POST", headers: json, body: JSON.stringify({ device_auth_id: id, user_code: code }), signal: stop });
-      if (res.status === 403 || res.status === 404) {
+      const res = await ChatGPT.reach(AUTH + "/api/accounts/deviceauth/token", { method: "POST", headers: json, body: JSON.stringify({ device_auth_id: id, user_code: code }), signal: stop }).catch((err) => {
+        if (stop.aborted) {
+          throw err;
+        }
+        return null;
+      });
+      if (res === null || res.status === 403 || res.status === 404 || res.status === 429 || res.status >= 500) {
         continue;
       }
       if (!res.ok) {
@@ -203,12 +229,12 @@ export namespace ChatGPT {
       }
       const grant: any = await res.json();
       const body = new URLSearchParams({ grant_type: "authorization_code", code: grant.authorization_code, redirect_uri: AUTH + "/deviceauth/callback", client_id: CLIENT, code_verifier: grant.code_verifier });
-      const tokens = await fetch(ISSUER, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body, signal: stop });
+      const tokens = await ChatGPT.reach(ISSUER, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body, signal: stop });
       if (!tokens.ok) {
         throw new Error("ChatGPT's device login got no tokens (HTTP " + tokens.status + ")");
       }
       const file = ChatGPT.own();
-      const kept = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+      const kept = ChatGPT.json(file) ?? {};
       ChatGPT.keep(file, kept, {}, await tokens.json(), null);
       held = null;
       return;
@@ -227,17 +253,30 @@ export namespace ChatGPT {
     return true;
   }
 
-  // the login file, and its entry for OpenAI
+  // the login file, and its entry for OpenAI; one unreadable says so
   export function entry(file = ChatGPT.file()): { data: any; entry: any } {
     if (!fs.existsSync(file)) {
       throw new Error(NO_LOGIN);
     }
-    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    const data = ChatGPT.json(file);
+    if (data === null) {
+      throw new Error("the ChatGPT login file " + file + " is unreadable: /login replaces it");
+    }
     const entry = data.openai;
     if (entry?.type !== "oauth" || !entry.access || !entry.refresh) {
       throw new Error(NO_LOGIN);
     }
     return { data, entry };
+  }
+
+  // a file's JSON object; null: none there, or not a JSON object
+  export function json(file: string): any {
+    try {
+      const data = JSON.parse(fs.readFileSync(file, "utf8"));
+      return typeof data === "object" && data !== null && !Array.isArray(data) ? data : null;
+    } catch {
+      return null;
+    }
   }
 
   export function login(entry: any): Login {
@@ -362,6 +401,28 @@ export namespace ChatGPT {
       return Number.isFinite(used) && window > 0 ? [{ window, used, reset }] : [];
     });
     plan = told.length > 0 ? told : plan;
+  }
+
+  // a plan's limit used up (the backend's usage_limit_reached): which
+  // window (the fullest the headers told), and when it starts anew, as the
+  // error tells (resets_at, resets_in_seconds), else as that window does
+  export function spent(err: any): string {
+    const now  = Date.now();
+    const full = [...plan].sort((a, b) => b.used - a.used || b.reset - a.reset)[0];
+    const at   = Number(err?.resets_at) > 0 ? Number(err.resets_at) * 1000 : Number(err?.resets_in_seconds) > 0 ? now + Number(err.resets_in_seconds) * 1000 : full?.reset ?? 0;
+    const name = full === undefined ? "usage" : ChatGPT.window(full.window);
+    return "your ChatGPT plan's " + name + " limit is used up" + (at > now ? "; it resets at " + Agent.when(at) : "");
+  }
+
+  // a window, by its minutes, as a limit's name: 5-hour, weekly, 2-day
+  export function window(minutes: number): string {
+    if (minutes === 10080) {
+      return "weekly";
+    }
+    if (minutes % 1440 === 0) {
+      return minutes / 1440 + "-day";
+    }
+    return minutes % 60 === 0 ? minutes / 60 + "-hour" : minutes + "-minute";
   }
 
   // the plan's limits, as last told (none: not yet)

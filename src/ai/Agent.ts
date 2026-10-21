@@ -15,24 +15,28 @@
 // takes one step, unanswered if it calls a tool. A request goes again,
 // TRIES times at most, after its retry-after or a doubling wait, for a
 // passing reason (`busy`: no connection, a retry status, a stream error,
-// cut short or silent for the wire's `idle`), dropping what it streamed.
-// A busy model is logged as its first request asks again and as its
-// last is done, never each try (a storm logged ~600 lines a second).
+// cut short or silent for the wire's `idle`), dropping what it streamed;
+// no wait longer than MOST, and none begun past LONGEST (a retry-after
+// past MOST ends the call, saying when it may go). A busy model is
+// logged as its first request asks again and as its last is done, never
+// each try (a storm logged ~600 lines a second).
 // A call ends answered (`fail`: the model's answer failed, a refusal or
 // a stop reason: its input's doing) or not: `full`, the request too long
 // for the model's window (a vendor's refusal saying so, or a step past
 // the call's `room` in tokens once its tools ran: Chat.refit makes the
 // chat fit and goes on); `down`, the vendor's (a
-// refusal of the request, as when the API key is wrong or its credit
-// gone, or busy past TRIES); `lost`, ours (a stop), saying why. A
-// vendor's why goes to the log; a refusal's is the call's end too (the
-// keys are the user's own, so is what to do about it), while a busy
-// vendor's reads only that the AI service is busy, as the call's end,
-// each retry's thought and where a call is cut. A stop ends the call
-// and cuts its request at once. A request takes its place in single
-// flight (AskAI.wait) as it is sent.
+// refusal of the request, as when the API key is wrong or its credit or
+// plan used up, or busy past the tries: End.again); `lost`, ours (a
+// stop), saying why. A vendor's why goes to the log (a refused body
+// whole); a refusal's is the call's end too, in plain words and with
+// what to do about it (the keys are the user's own), while a busy
+// vendor's reads only that the AI service is busy, or that its host
+// can't be reached (no connection), as the call's end and each retry's
+// thought; a reply cut short is marked so. A stop ends the call and cuts
+// its request at once. A request takes its place in single flight
+// (AskAI.wait) as it is sent.
 
-import { AskAI, type Ask, type Block, type Flight, type Try, type End, type Event, type Img, type Kind, type Say } from "./AskAI.ts";
+import { AskAI, type Ask, type Block, type Flight, type Try, type End, type Event, type Img, type Kind, type Say, type Vendor } from "./AskAI.ts";
 import { Anthropic } from "./Anthropic.ts";
 import { ChatGPT } from "./ChatGPT.ts";
 import { OpenAI } from "./OpenAI.ts";
@@ -73,7 +77,8 @@ export type Use = { id: string; name: string; input: unknown };
 
 export type Entry = { kind: Kind; text: string; of?: string };
 
-// note: what it did other than asked
+// note: what it did other than asked; again: a later try may answer
+// (down, the vendor busy or out of reach)
 export type Step = {
   out     : unknown[];
   uses    : Use[];
@@ -82,6 +87,7 @@ export type Step = {
   why     : string;
   note    : string;
   read?   : number;
+  again?  : boolean;
 };
 
 export type Emit = (kind: Kind, text: string, fresh?: boolean) => void;
@@ -112,8 +118,36 @@ export type Wire<S> = {
 const MAX   = 128000;
 export const TRIES = 8;
 
-// what a call the vendor never answered says
+// a retry's longest wait (s); how long after its first try a request
+// is tried again at most (ms)
+const MOST    = 60;
+const LONGEST = 600e3;
+
+// what a call the vendor never answered says; one whose host it never
+// reached starts so (Agent.unreached)
 const BUSY  = "the AI service is busy or unavailable right now";
+const AWAY  = "can't reach ";
+
+// a failed request's why, shown, at most this long (its body whole goes
+// to the log)
+const SAID  = 200;
+
+// the API keys' vendors, by their names in config.KEYS
+const VENDORS: Record<string, string> = { anthropic: "Anthropic", openai: "OpenAI" };
+
+// what to do when an API key's money is used up
+const CREDIT: Record<string, string> = {
+  "claude-api" : "your Anthropic API credit is used up: add credit at console.anthropic.com, then send a message",
+  "openai-api" : "your OpenAI API quota is used up: add credit at platform.openai.com, then send a message",
+};
+
+// stop reasons, in plain words
+const STOPS: Record<string, string> = {
+  max_tokens        : "the reply reached the most the model may write at once",
+  max_output_tokens : "the reply reached the most the model may write at once",
+  refusal           : "the model declined to answer",
+  content_filter    : "the vendor's content filter stopped the reply",
+};
 
 // a refusal's body saying the request is too long for the model's window
 const FULL  = /prompt is too long|exceed(s|ed)? (the )?context (limit|window|length)|context_length_exceeded|maximum context length|context window of this model/i;
@@ -159,7 +193,9 @@ export namespace Agent {
     const signal = run.abort.signal;
     const key = wire.auth ? "" : config.KEYS[wire.key];
     if (!wire.auth && !key) {
-      throw new Error("no API key: set " + wire.key.toUpperCase() + "_API_KEY");
+      end.text = "no API key: set " + wire.key.toUpperCase() + "_API_KEY and restart Illi";
+      end.stop = "down";
+      return;
     }
     const tools = ask.from?.tools ?? (await Agent.server(run));
     const parts = ask.blocks.filter((b) => b.text !== "");
@@ -173,7 +209,9 @@ export namespace Agent {
       }
       if (step.stop === "down" || step.stop === "lost" || step.stop === "fail" || step.stop === "full") {
         end.text ||= step.why;
-        end.stop = step.stop;
+        end.stop  = step.stop;
+        end.again = step.again;
+        end.cut   = step.entries.some((e) => e.kind === "illi");
         return;
       }
       if (ask.from !== undefined && (step.stop !== "done" || step.entries.some((e) => e.kind === "tool"))) {
@@ -232,6 +270,7 @@ export namespace Agent {
   export async function step<S>(wire: Wire<S>, run: Run, key: string, make: (max: number) => unknown): Promise<Step> {
     const signal = run.abort.signal;
     const model = run.ask.model;
+    const first = Date.now();
     let asking = false;
     try {
       for (let k = 1; !signal.aborted; k++) {
@@ -246,16 +285,20 @@ export namespace Agent {
         if (step.stop === "down") {
           console.error(model + ": " + step.why.slice(0, 300));
         }
-        if (step.stop !== "busy" || k >= TRIES) {
-          return step.stop === "busy" ? { ...step, stop: "down", why: BUSY } : step;
+        if (step.stop !== "busy" || k >= TRIES || Date.now() - first > LONGEST) {
+          return step.stop === "busy" ? { ...step, stop: "down", why: Agent.gone(step.why), again: true } : step;
+        }
+        const wait = Agent.wait(res, k);
+        if (wait > MOST) {
+          return { ...step, stop: "down", why: "the AI service is busy: it asks to wait till " + Agent.when(Date.now() + wait * 1000), again: true };
         }
         if (!asking) {
           Agent.hold(model, step.why);
           asking = true;
         }
-        const after = Number(res?.headers.get("retry-after") ?? "");
-        const wait = after > 0 ? after : 2 ** k;
-        run.on({ $: "Entry", kind: "mind", text: "The AI service is busy: asking again in " + wait + " s." });
+        const away = step.why.startsWith(AWAY);
+        const said = away ? "C" + step.why.slice(1) + ". Asking" : "The AI service is busy: asking";
+        run.on({ $: "Entry", kind: "mind", text: said + " again in " + Math.ceil(wait) + " s." });
         await Machine.nap(wait * 1000, signal);
       }
       return Agent.fail("stopped", []);
@@ -264,6 +307,37 @@ export namespace Agent {
         Agent.free(model);
       }
     }
+  }
+
+  // how long a busy request waits before its kth try again (s): its
+  // retry-after (seconds or a date), else a doubling wait, MOST at most
+  export function wait(res: Response | null, k: number): number {
+    const after = res?.headers.get("retry-after") ?? "";
+    const secs = /^\s*\d/.test(after) ? Number(after) : (Date.parse(after) - Date.now()) / 1000;
+    return secs > 0 ? secs : Math.min(MOST, 2 ** k);
+  }
+
+  // a time, as a person reads it: 14:05 today, Mon 14:05 within a week,
+  // else Oct 30 14:05
+  export function when(ms: number): string {
+    const at = new Date(ms);
+    const hm = String(at.getHours()).padStart(2, "0") + ":" + String(at.getMinutes()).padStart(2, "0");
+    if (at.toDateString() === new Date().toDateString()) {
+      return hm;
+    }
+    const day = ms - Date.now() < 6 * 86400e3 ? at.toLocaleDateString("en-US", { weekday: "short" }) : at.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return day + " " + hm;
+  }
+
+  // what a call busy past its tries says: that its host can't be reached,
+  // or BUSY
+  export function gone(why: string): string {
+    return why.startsWith(AWAY) ? why : BUSY;
+  }
+
+  // a request that never reached its host (no connection, no DNS, refused)
+  export function unreached(url: string): string {
+    return AWAY + new URL(url).host + ": check your connection";
   }
 
   // a request asks `model` again; the first says why
@@ -296,7 +370,8 @@ export namespace Agent {
     try {
       token = wire.auth ? await wire.auth.token() : key;
     } catch (err: any) {
-      return { res: null, step: Agent.fail(String(err?.message ?? err), [], "down") };
+      const why = String(err?.message ?? err);
+      return { res: null, step: Agent.fail(why, [], why.startsWith(AWAY) ? "busy" : "down") };
     }
     const flight = await AskAI.wait(run.ask);
     if (run.abort.signal.aborted) {
@@ -326,11 +401,13 @@ export namespace Agent {
       if (spoilt) {
         wire.auth!.spoil(token);
       }
-      const said = res.ok && res.body ? "" : await res.text();
-      const why = res.ok && res.body ? "" : "HTTP " + res.status + ": " + Agent.reason(said);
-      step = why ? Agent.fail(why, [], Agent.full(said) ? "full" : spoilt || Agent.passing(res) ? "busy" : "down") : await Agent.stream(wire, run, res.body!, timer, seen, st, flight.begun, read);
+      step = res.ok && res.body ? await Agent.stream(wire, run, res.body, timer, seen, st, flight.begun, read) : Agent.refused(wire, run.ask, res, await res.text(), spoilt);
     } catch (err: any) {
-      step = Agent.fail(err.message, [], "busy");
+      const away = res === null && !idle.signal.aborted && !run.abort.signal.aborted;
+      if (away) {
+        console.error(run.ask.model + ": " + err.message);
+      }
+      step = Agent.fail(away ? Agent.unreached(wire.url) : err.message, [], "busy");
     }
     clearTimeout(timer);
     flight.end();
@@ -349,15 +426,79 @@ export namespace Agent {
     return FULL.test(body);
   }
 
-  // a failed request's why: the API's message (Anthropic's and OpenAI's
-  // errors are {error: {message}}), else the start of its body
-  export function reason(body: string): string {
-    try {
-      const why = JSON.parse(body)?.error?.message;
-      return typeof why === "string" ? why : body.slice(0, 2000);
-    } catch {
-      return body.slice(0, 2000);
+  // a response that failed, its body: busy if asking again may answer (a
+  // login's token spoilt, a passing status), else down, saying what to do:
+  // a plan or credit used up (Agent.spent), too long for the model's
+  // window (full: Agent.full), a key refused (its variable named), else
+  // its status and why. A body its why shortens goes whole
+  // to the log, once down
+  export function refused<S>(wire: Wire<S>, ask: Ask, res: Response, body: string, spoilt: boolean): Step {
+    const err = Agent.error(body);
+    const spent = Agent.spent(ask.vendor, res.status, err);
+    const said = Agent.reason(body);
+    const why = "HTTP " + res.status + (said === "" ? "" : ": " + said);
+    const down = !spoilt && !Agent.passing(res);
+    if (down && said !== body.trim()) {
+      console.error(ask.model + ": HTTP " + res.status + ", whole: " + body);
     }
+    if (spent !== "") {
+      return Agent.fail(spent, [], "down");
+    }
+    if (Agent.full(body)) {
+      return Agent.fail(why, [], "full");
+    }
+    if (down && (res.status === 401 || res.status === 403) && !wire.auth) {
+      const name = wire.key.toUpperCase() + "_API_KEY";
+      return Agent.fail((VENDORS[wire.key] ?? wire.key) + " refused the API key (" + why + "): check " + name + " and restart Illi", [], "down");
+    }
+    return Agent.fail(why, [], down ? "down" : "busy");
+  }
+
+  // a failed response's error, as its body gives it (Anthropic's and
+  // OpenAI's are {error: {...}}, others' {error: "..."} or {detail}); null:
+  // none
+  export function error(body: string): any {
+    const json: any = body.trim().startsWith("{") ? Agent.parse(body) : null;
+    return json?.error ?? json?.detail ?? json;
+  }
+
+  // a failed request's why, shown: the API's message, else its body as
+  // text, SAID characters at most; an HTML page's is none
+  export function reason(body: string): string {
+    const err = Agent.error(body);
+    const msg = typeof err === "string" ? err : err?.message ?? err?.detail;
+    const text = (typeof msg === "string" ? msg : body).replace(/\s+/g, " ").trim();
+    if (/^<|<html|<!doctype/i.test(text)) {
+      return "";
+    }
+    return text.length > SAID ? text.slice(0, SAID - 1) + "…" : text;
+  }
+
+  // a refusal that means the money behind it is used up ("": not one),
+  // what to do about it: a ChatGPT plan's usage limit (ChatGPT.spent), or
+  // without Codex; an API key's credit or quota. status: its response's
+  // (0: an error in its stream)
+  export function spent(vendor: Vendor, status: number, err: any): string {
+    const said = (typeof err === "string" ? [err] : [err?.type, err?.code, err?.message].filter((x) => typeof x === "string")).join(" ");
+    if (said === "" || status >= 500) {
+      return "";
+    }
+    if (vendor === "chatgpt" && /usage_not_included/i.test(said)) {
+      return "your ChatGPT plan doesn't include Codex, which Illi runs on: /login with a plan that does (Plus or Pro)";
+    }
+    if (vendor === "chatgpt" && /usage.?limit/i.test(said)) {
+      return ChatGPT.spent(typeof err === "object" ? err : {});
+    }
+    if (/insufficient_quota|exceeded your current quota|credit balance|billing/i.test(said)) {
+      return CREDIT[vendor] ?? "";
+    }
+    return "";
+  }
+
+  // a stop reason, in plain words (unknown: as `none` says it), then what
+  // the vendor added
+  export function stopped(reason: string, none: string, more = ""): string {
+    return (STOPS[reason] ?? none) + (more ? ": " + more : "");
   }
 
   export function passing(res: Response): boolean {
@@ -394,8 +535,10 @@ export namespace Agent {
     }
   }
 
+  // a step that failed: what streamed marked as cut off (the why is the
+  // call's end)
   export function fail(why: string, seen: Entry[], stop: Step["stop"] = "lost"): Step {
-    const mark = "\n[cut off: " + (stop === "busy" ? BUSY : why).slice(0, 300) + "]";
+    const mark = "\n[cut off]";
     const entries = seen.filter((e) => e.text.trim()).map((e) => ({ kind: e.kind, text: e.text.trim() + mark }));
     return { out: [], uses: [], entries, stop, why, note: "" };
   }

@@ -75,16 +75,20 @@ if (HELP || ODD !== undefined) {
 }
 
 // the chat; a setting that won't do (Config.ts: "config: ...") said in
-// one line, no trace
+// one line, no trace, and so is any other failure before the chat loads;
+// one after, a crash (Term.ts term_crash: its trace to the log)
 async function main_chat(): Promise<void> {
+  let crash: ((err: unknown) => void) | null = null;
   try {
-    const { term_start } = await import("./term/Term.ts");
-    await term_start();
+    const term = await import("./term/Term.ts");
+    crash = term.term_crash;
+    await term.term_start();
   } catch (err: any) {
-    if (!String(err?.message).startsWith("config: ")) {
-      throw err;
+    const why = String(err?.message ?? err);
+    if (crash === null || why.startsWith("config: ")) {
+      console.error("illi: " + why);
+      process.exit(1);
     }
-    console.error("illi: " + err.message);
-    process.exit(1);
+    crash(err);
   }
 }

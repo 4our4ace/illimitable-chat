@@ -9,7 +9,9 @@
 // winds down is answered, and what was logged between waiting messages
 // reaches the turn. A call too long for the model's window makes the
 // chat refit and the turn go on from a note, unasked; three in a row end
-// it, saying why.
+// it, saying why. A failed turn asks to try again only when a later try
+// may answer, and says a reply was cut off; summaries stuck are told once;
+// a save that fails is told, never thrown.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -253,4 +255,50 @@ test("a turn grown past its room goes on without shrinking; three refits in a ro
   const last = Memory.message(chat.mem, chat.mem.count - 1)!;
   expect([last.kind, last.text]).toEqual(["note", "No reply: the chat won't fit " + chat.model + "'s window even summarized. /clear starts a fresh screen, or /model picks a model with a bigger window."]);
   expect(chat.refits).toBe(0);
+});
+
+// the chat's last message's text
+function last(): string {
+  return Memory.message(chat.mem, chat.mem.count - 1)!.text;
+}
+
+test("a failed turn asks to try again only when a later try may answer; a reply begun is cut off", () => {
+  Chat.failed(chat, "the AI service is busy or unavailable right now", { ok: false, text: "", left: [], stop: "down", again: true });
+  expect(last()).toBe("No reply: the AI service is busy or unavailable right now. Send a message to try again.");
+  Chat.failed(chat, "no API key: set ANTHROPIC_API_KEY and restart Illi", { ok: false, text: "", left: [], stop: "down" });
+  expect(last()).toBe("No reply: no API key: set ANTHROPIC_API_KEY and restart Illi.");
+  Chat.failed(chat, "the AI service is busy or unavailable right now", { ok: false, text: "", left: [], stop: "down", again: true, cut: true });
+  expect(last()).toStartWith("Reply cut off: the AI service is busy");
+  Chat.failed(chat, "boom");
+  expect(last()).toBe("No reply: boom. Send a message to try again.");
+});
+
+test("summaries stuck are told once, again only after one is built", () => {
+  const count = () => Array.from({ length: chat.mem.count }, (_, i) => Memory.message(chat.mem, i)!.text).filter((t) => t.startsWith("Summaries are stuck")).length;
+  const was = count();
+  chat.mem.stuck!("your ChatGPT plan's 5-hour limit is used up; it resets at 14:05");
+  chat.mem.stuck!("your ChatGPT plan's 5-hour limit is used up; it resets at 14:05");
+  expect(count()).toBe(was + 1);
+  expect(last()).toBe("Summaries are stuck: your ChatGPT plan's 5-hour limit is used up; it resets at 14:05; retrying every minute.");
+  chat.mem.stuck!("");
+  chat.mem.stuck!("down");
+  expect(count()).toBe(was + 2);
+});
+
+test("a save that fails is told to the views, never thrown", () => {
+  const got: any[] = [];
+  const sock: any = { data: { seen: new Set() }, send: (text: string) => got.push(JSON.parse(text)), close: () => {} };
+  const save = Memory.save;
+  chat.socks.add(sock);
+  Memory.save = () => {
+    throw Object.assign(new Error("ENOSPC: no space left on device, write"), { code: "ENOSPC" });
+  };
+  try {
+    chat.mem.work = ["changed"];
+    expect(() => Chat.change(chat)).not.toThrow();
+  } finally {
+    Memory.save = save;
+    chat.socks.delete(sock);
+  }
+  expect(got.find((m) => m.$ === "note").text).toBe("Can't save the chat: disk full (" + chat.mem.dir + ").");
 });
