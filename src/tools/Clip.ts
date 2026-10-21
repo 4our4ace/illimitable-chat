@@ -72,17 +72,41 @@ export function clip_page(str: string, at: number): string {
 }
 
 // a byte stream's lines, those of each read whole (one cut short waits
-// for the next read; the stream's last comes last, "" if it ends one)
+// for the next read; the stream's last comes last, "" if it ends one);
+// left early, the stream is cancelled
 export async function* stream_lines(stream: ReadableStream<Uint8Array>): AsyncGenerator<string[]> {
   const reader = stream.pipeThrough(new TextDecoderStream() as TransformStream<Uint8Array, string>).getReader();
   let rest = "";
-  for (let got = await reader.read(); !got.done; got = await reader.read()) {
-    const nl = got.value.lastIndexOf("\n");
-    if (nl >= 0) {
-      yield (rest + got.value.slice(0, nl)).split("\n");
-      rest = "";
+  try {
+    for (let got = await reader.read(); !got.done; got = await reader.read()) {
+      const nl = got.value.lastIndexOf("\n");
+      if (nl >= 0) {
+        yield (rest + got.value.slice(0, nl)).split("\n");
+        rest = "";
+      }
+      rest += got.value.slice(nl + 1);
     }
-    rest += got.value.slice(nl + 1);
+    yield [rest];
+  } finally {
+    reader.cancel().catch(() => {});
   }
-  yield [rest];
+}
+
+// each event's data in a server-sent event stream (its data: lines,
+// joined), as it comes
+export async function* stream_events(stream: ReadableStream<Uint8Array>): AsyncGenerator<string> {
+  let data: string[] = [];
+  for await (const lines of stream_lines(stream)) {
+    for (const line of lines.map((l) => l.replace(/\r$/, ""))) {
+      if (line === "" && data.length > 0) {
+        yield data.join("\n");
+        data = [];
+      } else if (line.startsWith("data:")) {
+        data.push(line.slice(5).trimStart());
+      }
+    }
+  }
+  if (data.length > 0) {
+    yield data.join("\n");
+  }
 }

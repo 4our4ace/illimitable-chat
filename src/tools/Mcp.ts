@@ -29,7 +29,7 @@
 
 import * as fs from "node:fs";
 import type { Out } from "../ai/Agent.ts";
-import { clip, stream_lines } from "./Clip.ts";
+import { clip, stream_events, stream_lines } from "./Clip.ts";
 import * as config from "../config/Config.ts";
 import type { Spec } from "./Machine.ts";
 
@@ -373,18 +373,10 @@ export namespace Mcp {
   // the answer to request id in an event stream: each event's data lines,
   // joined, a message
   export async function events(res: Response, id: number): Promise<any> {
-    const dec = new TextDecoder();
-    let rest  = "";
-    for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
-      rest += dec.decode(chunk, { stream: true }).replace(/\r\n/g, "\n");
-      for (let at = rest.indexOf("\n\n"); at >= 0; at = rest.indexOf("\n\n")) {
-        const data = rest.slice(0, at).split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trimStart()).join("\n");
-        rest = rest.slice(at + 2);
-        const msg = data === "" ? null : JSON.parse(data);
-        if (msg?.id === id && (msg.result !== undefined || msg.error !== undefined)) {
-          await res.body?.cancel().catch(() => {});
-          return msg;
-        }
+    for await (const data of stream_events(res.body!)) {
+      const msg = JSON.parse(data);
+      if (msg?.id === id && (msg.result !== undefined || msg.error !== undefined)) {
+        return msg;
       }
     }
     throw new Error("its answer never came");

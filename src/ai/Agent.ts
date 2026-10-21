@@ -43,6 +43,7 @@ import { ChatGPT } from "./ChatGPT.ts";
 import { ClaudeCode } from "./ClaudeCode.ts";
 import { OpenAI } from "./OpenAI.ts";
 import { live_push } from "../ui/View.ts";
+import { stream_events } from "../tools/Clip.ts";
 import { Machine, type Spec } from "../tools/Machine.ts";
 import * as config from "../config/Config.ts";
 
@@ -548,9 +549,9 @@ export namespace Agent {
   }
 
   export async function* events(stream: ReadableStream<Uint8Array>) {
-    for await (const line of AskAI.lines(stream)) {
-      if (line.startsWith("data:") && line.slice(5).trim() !== "[DONE]") {
-        yield JSON.parse(line.slice(5));
+    for await (const data of stream_events(stream)) {
+      if (data.trim() !== "[DONE]") {
+        yield JSON.parse(data);
       }
     }
   }
