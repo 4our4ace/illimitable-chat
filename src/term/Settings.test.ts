@@ -55,7 +55,7 @@ test("/settings lists each setting, its value and what it does; one a variable s
   const t = term();
   run(t, "/settings");
   expect(t.choose.names).toEqual(["pick", "agents", "compactor", "suggest", "side", "side_width", "context", "contexts", "rules", "after", "vendors", "models", "jobs", "theme", "mcp", "login"]);
-  expect(about(t)).toMatch(/^sonnet-5\.5 · medium +Illi's own default model/);
+  expect(about(t)).toMatch(/^sonnet-5\.5 · medium +illi's own default model/);
   expect(foot(t)).toBe("set by ILLI_PICK");
   term_grab(t, "Enter");
   expect(note(t)).toBe("pick is set by ILLI_PICK: unset it to change it here.");
@@ -127,7 +127,7 @@ test("Enter on one typed in puts /set in the input; /set checks the value, then 
   expect(note(t)).toBe("side: right. Where the side panel shows. /set side <value> changes it; /set side default puts back right.");
 });
 
-test("the pick set while Illi's own agent is the main one is the chat's at once; under another agent, only kept", () => {
+test("the pick set while illi's own agent is the main one is the chat's at once; under another agent, only kept", () => {
   const pick = process.env.ILLI_PICK;
   delete process.env.ILLI_PICK;
   try {
@@ -173,7 +173,7 @@ test("a vendor or a model taken out that a pick runs on won't do", () => {
   expect(config.config_check("models", "sonnet-5.5, haiku-5.5")).toBeNull();
 });
 
-test("each setting is said where a person or Illi reads of it: the README's Config, the customize-illi skill", () => {
+test("each setting is said where a person or illi reads of it: the README's Config, the customize-illi skill", () => {
   const readme = fs.readFileSync(import.meta.dir + "/../../README.md", "utf8");
   const config_part = readme.slice(readme.indexOf("\nConfig\n"), readme.indexOf("\nCode\n"));
   const skill = fs.readFileSync(import.meta.dir + "/../skills/customize-illi/SKILL.md", "utf8");

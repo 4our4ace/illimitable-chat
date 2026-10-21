@@ -89,7 +89,7 @@ afterAll(() => {
 
 const tools = { mem: null as any, agents: new Map(), key: "k", url: "", cwd: CWD, hooks: { main: () => null } as any };
 
-test("each server's tools, named by it, in pages, beside Illi's", async () => {
+test("each server's tools, named by it, in pages, beside illi's", async () => {
   await Mcp.settle();
   expect(Mcp.tools().map((t) => t.name)).toEqual(["mcp__fake__echo", "mcp__fake__fail_me", "mcp__fake__slow", "mcp__fake__fail_me_2", "mcp__web__add"]);
   expect(Mcp.tools()[0]).toMatchObject({ info: "(fake) Echo it", schema: { type: "object", properties: { text: { type: "string" } } } });

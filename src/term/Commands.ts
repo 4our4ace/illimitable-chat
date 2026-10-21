@@ -48,21 +48,21 @@ function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
   ];
   return [
     ["Chat", [
-      ["",                  "Enter",                   "send; on an empty input, interrupt Illi",        term_enter],
-      ["",                  "Esc",                     "close a list; else clear the notes and interrupt Illi (agents go on)", term_esc],
-      ["",                  "Ctrl+C",                  "clear the input; on an empty one, interrupt Illi (again: quit)", term_clear],
+      ["",                  "Enter",                   "send; on an empty input, interrupt illi",        term_enter],
+      ["",                  "Esc",                     "close a list; else clear the notes and interrupt illi (agents go on)", term_esc],
+      ["",                  "Ctrl+C",                  "clear the input; on an empty one, interrupt illi (again: quit)", term_clear],
       ["",                  "Ctrl+D",                  "clear the input; on an empty one, quit",         term_clear],
       ["",                  "Tab",                     "take the suggested reply",                       term_take],
-      ["/goal <message>",   "",                        "send a goal: Illi goes on until it is met",      (t, a) => term_say(t, "/goal " + a)],
+      ["/goal <message>",   "",                        "send a goal: illi goes on until it is met",      (t, a) => term_say(t, "/goal " + a)],
       ["/halt",             "",                        "drop the goal; the turn running ends as it would", (t) => term_say(t, "/halt")],
-      ["/clear",            "",                        "an empty screen for a new topic; Illi still remembers the chat before", (t) => term_say(t, "/clear")],
+      ["/clear",            "",                        "an empty screen for a new topic; illi still remembers the chat before", (t) => term_say(t, "/clear")],
       ["/compact",          "",                        "summarize all but the last two exchanges, so each turn sends less; the screen keeps them", (t) => term_say(t, "/compact")],
       ["/image <path>",     "",                        "attach an image to the next message (or paste or drop the file)", term_image],
       ["",                  "Alt+V, Ctrl+V",           "attach the clipboard's image (the terminal's own paste brings text)", term_clip],
       ["/open #id",         "",                        "open block #id and keep it open (or click it)",  (t, a) => term_block(t, a, true)],
       ["/close #id",        "",                        "close block #id and keep it closed (or click its top edge)", (t, a) => term_block(t, a, false)],
       ["/fold",             "Ctrl+F",                  "fold the chat into the fewest blocks; again: unfold", term_fold],
-      ["",                  "Ctrl+Y",                  "copy Illi's last reply (a drag copies the text it covers, a double click a word)", term_copy],
+      ["",                  "Ctrl+Y",                  "copy illi's last reply (a drag copies the text it covers, a double click a word)", term_copy],
       ["",                  "Ctrl+O",                  "show or hide the work between replies: tools, thinking, agents' reports", term_verbose],
       ["/export",           "",                        "save the memory as ./illi-memory.json",          term_export],
       ["/tree",             "",                        "save the whole memory tree as ./illi-tree.html", term_tree],
@@ -83,16 +83,16 @@ function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/speed [speed]",    "",                        "set the speed; no speed: lists them",            (t, a) => term_pick(t, "speed", a)],
     ]],
     ["Agents", [
-      ["",                  "Shift+Tab",               "Illi runs as the next primary agent (or click one at the side)", term_next],
-      ["/agent [name]",     "",                        "Illi runs as that primary agent (illi: its own); no name: opens a list", term_agent_set],
+      ["",                  "Shift+Tab",               "illi runs as the next primary agent (or click one at the side)", term_next],
+      ["/agent [name]",     "",                        "illi runs as that primary agent (illi: its own); no name: opens a list", term_agent_set],
       ["/agents",           "",                        "your agents, commands and skills, and where their files go", term_agents],
       ["",                  "Ctrl+PgDn, Ctrl+PgUp",    "the next tab, the one before: the chat's, each subagent's at work", term_cycle],
       ["/tab [name]",       "",                        "go to that agent's tab; no name: lists the tabs", term_tab],
       ["/stop [name]",      "",                        "stop all work, agents too; a name: only that agent", term_stop],
     ]],
     ["Setup", [
-      ["/login",            "",                        "sign in to ChatGPT (Plus or Pro) with a code; Illi keeps the login and renews it", term_login],
-      ["/logout",           "",                        "remove Illi's own ChatGPT login (opencode's, if any, is used again)", term_logout],
+      ["/login",            "",                        "sign in to ChatGPT (Plus or Pro) with a code; illi keeps the login and renews it", term_login],
+      ["/logout",           "",                        "remove illi's own ChatGPT login (opencode's, if any, is used again)", term_logout],
       ["/settings",         "",                        "all the settings: type to search, Left, Right or Enter change one, Del puts its default back", (t) => term_settings(t)],
       ["/set <key> [value]", "",                       "change a setting (default: back to its default); no value: says what it is", term_set],
       ["/side [where|width]", "",                      "the side panel: right, left or off, or its width (40 or 30%); alone: says how it is", term_side_set],
@@ -247,9 +247,9 @@ export function term_mcp(t: Term): void {
   const where  = term_home(file);
   const server = (s: Server) => "- **" + s.name + "**: " + (s.state === "ready" ? s.own.size + " tools: " + [...s.own.values()].join(", ") : s.state === "starting" ? "starting…" : "failed: " + s.why);
   const text = [
-    servers.length === 0 ? "No MCP servers yet. Add them to " + where + ", as Claude Code's mcpServers (the README shows the shape); they run from Illi's next start." : "MCP servers (their tools are named mcp__<server>__<tool>):", ...servers.map(server),
+    servers.length === 0 ? "No MCP servers yet. Add them to " + where + ", as Claude Code's mcpServers (the README shows the shape); they run from illi's next start." : "MCP servers (their tools are named mcp__<server>__<tool>):", ...servers.map(server),
     ...(trouble === "" ? [] : ["", "The file won't read: " + trouble]),
-    ...(servers.length === 0 ? [] : ["", "They are in " + where + ", as Claude Code's mcpServers; the README shows the shape. A change there applies at Illi's next start."]),
+    ...(servers.length === 0 ? [] : ["", "They are in " + where + ", as Claude Code's mcpServers; the README shows the shape. A change there applies at illi's next start."]),
   ];
   term_pane_text(t, "MCP", text.join("\n"));
 }
@@ -264,8 +264,8 @@ function term_agents(t: Term): void {
   const dirs  = (kind: "agents" | "commands" | "skills") => Custom.dirs(cwd, kind).map(term_home).join(" or ");
   term_primaries(t);
   const text  = [
-    "Main agent: " + (t.v.agent === null ? "Illi's own" : agent_name(t.v.agent)) + ". Shift+Tab runs Illi as the next primary agent; so does a click at the side, and /agent <name>.",
-    ...list("Primary agents (Illi runs as them)", t.agents.map(agent)),
+    "Main agent: " + (t.v.agent === null ? "illi's own" : agent_name(t.v.agent)) + ". Shift+Tab runs illi as the next primary agent; so does a click at the side, and /agent <name>.",
+    ...list("Primary agents (illi runs as them)", t.agents.map(agent)),
     ...list("Subagents (only an agent spawns them)", Custom.subagents(cwd).map(agent)),
     ...list("Commands", Custom.commands(cwd).map(cmd)),
     ...list("Skills (the agent loads one when a task matches; /name asks for it)", Custom.skills(cwd).map((s) => "- **" + s.name + "**" + (s.description === "" ? "" : ": " + s.description))),
@@ -282,7 +282,7 @@ function term_agent_set(t: Term, arg: string): void {
   }
   term_primaries(t);
   const names = [null, ...t.agents.map((a) => a.name)];
-  const about = names.map((_, k) => (k === 0 ? "Illi's own, on " + Pick.shown(config.PICK) : t.agents[k - 1].description));
+  const about = names.map((_, k) => (k === 0 ? "illi's own, on " + Pick.shown(config.PICK) : t.agents[k - 1].description));
   term_chooser(t, "Agent", names.map((name) => agent_name(name ?? View.MAIN)), about, names.indexOf(t.v.agent), (k) => term_choose(t, names[k]));
 }
 
@@ -337,10 +337,10 @@ async function term_login(t: Term): Promise<void> {
   try {
     const { url, code, done } = await ChatGPT.device(stop.signal);
     Screen.screen_copy(code);
-    asked = term_notify(t, "Sign in to ChatGPT: open " + url + " and enter the code " + code + " (copied; it is good for 15 minutes). Illi waits for it.", false, LOGIN);
+    asked = term_notify(t, "Sign in to ChatGPT: open " + url + " and enter the code " + code + " (copied; it is good for 15 minutes). illi waits for it.", false, LOGIN);
     await done;
     term_unhint(t);
-    term_note(t, "Signed in to ChatGPT. Illi keeps the login in " + ChatGPT.own() + (config.LOGIN_SET === null ? "" : " (the file `login` names)") + " and renews it there.");
+    term_note(t, "Signed in to ChatGPT. illi keeps the login in " + ChatGPT.own() + (config.LOGIN_SET === null ? "" : " (the file `login` names)") + " and renews it there.");
     term_models(t);
   } catch (err: any) {
     if (!stop.signal.aborted) {
@@ -366,11 +366,11 @@ export function term_models(t: Term): void {
 function term_logout(t: Term): void {
   t.login?.abort();
   if (config.LOGIN_SET !== null) {
-    return term_note(t, "Illi uses the login in " + term_home(config.LOGIN_SET) + " (the login setting): /logout leaves it. /set login default switches back at the next start.");
+    return term_note(t, "illi uses the login in " + term_home(config.LOGIN_SET) + " (the login setting): /logout leaves it. /set login default switches back at the next start.");
   }
   const gone = ChatGPT.logout();
   const left = ChatGPT.signed() ? " Now on opencode's login." : " /login signs in again.";
-  term_note(t, (gone ? "Signed out of ChatGPT." : "Illi has no login of its own.") + left);
+  term_note(t, (gone ? "Signed out of ChatGPT." : "illi has no login of its own.") + left);
 }
 
 // stops all that runs, or the agent named; nothing running, says so

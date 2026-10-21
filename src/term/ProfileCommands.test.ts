@@ -77,7 +77,7 @@ test("the picker lists every profile, then its new and import rows; Delete asks 
   expect([t.choose.here, t.choose.foot(0), t.choose.foot(2), t.choose.foot(3)]).toEqual([0, "Enter switch · Ctrl+R rename · Ctrl+E export · Del delete", "Enter name it", "Enter give its file"]);
   expect(t.choose.keys(2, "Delete")).toBe(false);
   expect(t.choose.keys(0, "Delete")).toBe(true);
-  expect(note(t)).toMatch(/^The default profile is Illi's own folder .* and can't be deleted\.$/);
+  expect(note(t)).toMatch(/^The default profile is illi's own folder .* and can't be deleted\.$/);
   t.choose.keys(1, "Delete");
   expect(t.choose.title).toBe("Delete profile home?");
 });
@@ -103,10 +103,10 @@ test("Ctrl+R renames another profile, its old name to start from; Delete then de
   const t = term();
   term_profile(t, "");
   t.choose.keys(0, "Ctrl+R");
-  expect(note(t)).toMatch(/^The default profile is Illi's own folder .* and keeps its name\.$/);
+  expect(note(t)).toMatch(/^The default profile is illi's own folder .* and keeps its name\.$/);
   t.choose.keys(1, "Ctrl+R");
   expect([t.choose.title, t.choose.find]).toEqual(["Rename profile home", "home"]);
-  expect(t.choose.ask.done("default")).toContain("Illi's own folder");
+  expect(t.choose.ask.done("default")).toContain("illi's own folder");
   expect(t.choose.ask.done("house")).toBeNull();
   expect([note(t), fs.existsSync(DIR + "/profiles/house")]).toEqual(["Renamed profile home to house.", true]);
   term_profile(t, "");

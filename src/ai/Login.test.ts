@@ -54,13 +54,13 @@ afterAll(() => {
   fs.rmSync(DATA, { recursive: true, force: true });
 });
 
-test("opencode's login is used while Illi has none of its own", async () => {
+test("opencode's login is used while illi has none of its own", async () => {
   expect(ChatGPT.file()).toBe(config.OPENCODE_LOGIN);
   expect(ChatGPT.signed()).toBe(true);
   expect(await ChatGPT.token()).toBe("opencode-access");
 });
 
-test("the device login: a code and page, polled till given, its tokens kept as Illi's own", async () => {
+test("the device login: a code and page, polled till given, its tokens kept as illi's own", async () => {
   fs.writeFileSync(config.OWN_LOGIN, "{ cut sho");
   const { url, code, done } = await ChatGPT.device(new AbortController().signal);
   expect(url).toBe("https://auth.openai.com/codex/device");
@@ -79,7 +79,7 @@ test("the device login: a code and page, polled till given, its tokens kept as I
   expect(await ChatGPT.token()).toBe("own-access");
 }, 10000);
 
-test("logout lets Illi's own login go: opencode's is used again", async () => {
+test("logout lets illi's own login go: opencode's is used again", async () => {
   expect(ChatGPT.logout()).toBe(true);
   expect(fs.existsSync(config.OWN_LOGIN)).toBe(false);
   expect(ChatGPT.file()).toBe(config.OPENCODE_LOGIN);
@@ -87,7 +87,7 @@ test("logout lets Illi's own login go: opencode's is used again", async () => {
   expect(ChatGPT.logout()).toBe(false);
 });
 
-test("a renewal writes back to the file it read, though a /login made Illi's own meanwhile", async () => {
+test("a renewal writes back to the file it read, though a /login made illi's own meanwhile", async () => {
   fs.writeFileSync(config.OPENCODE_LOGIN, JSON.stringify({ openai: { type: "oauth", access: "old-access", refresh: "r", expires: 0 }, other: { kept: true } }));
   const fresh = JSON.stringify({ openai: { type: "oauth", access: "fresh-access", refresh: "fresh-refresh", expires: Date.now() + 3600e3 } });
   const stand = globalThis.fetch;

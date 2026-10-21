@@ -32,12 +32,12 @@ const LOGIN = /^-*(login|logout|signin|auth)$/i;
 
 const USAGE = `Usage: illi            the chat; its tools work in this folder
        illi upgrade    the latest release in this one's place
-       illi version    this Illi's version
+       illi version    this illi's version
        illi help       this
 First, run illi in a project folder and type /login to sign in with
 your ChatGPT plan (Plus or Pro); API keys work too (the README's Sign in).
 The chat and its settings are in ~/.illi (ILLI_DIR); the README lists
-them. Other profiles' are in ~/.illi/profiles: Illi opens the one used
+them. Other profiles' are in ~/.illi/profiles: illi opens the one used
 last (ILLI_PROFILE names one). In the chat, /help lists every command and
 key.`;
 

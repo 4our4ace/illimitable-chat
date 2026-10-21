@@ -133,7 +133,7 @@ test("an agent only passed through is never noted; each keeps its pick", async (
   expect(chat.switched).toBe(false);
   expect(Chat.main(chat, null)).toEqual({});
   Chat.push(chat, null, "user", "next");
-  expect(notes()).toEqual(["Main agent: Reviewer, on gpt-6-luna · high.", "Main agent: Illi's own, on gpt-6.1-sol · medium."]);
+  expect(notes()).toEqual(["Main agent: Reviewer, on gpt-6-luna · high.", "Main agent: illi's own, on gpt-6.1-sol · medium."]);
 });
 
 test("spawn's agent runs a subagent as it, and names the user's agents", async () => {
@@ -149,7 +149,7 @@ test("spawn's agent runs a subagent as it, and names the user's agents", async (
   const out = await Tools.call(chat.tools, "main", "spawn", { tasks: ["review it"], agent: "reviewer" }, new AbortController().signal);
   const name = /Started (\w+)/.exec(out.text)![1];
   await until(() => asks.length > 0);
-  expect(asks[0].system).toContain("You are a subagent of Illi");
+  expect(asks[0].system).toContain("You are a subagent of illi");
   expect(asks[0].system).toContain("# Agent: reviewer\n\nYou review.");
   expect(asks[0]).toMatchObject({ model: "gpt-6-luna", effort: "high" });
   expect(Tools.list(chat.tools, name).map((t) => t.name)).toEqual(["zoom", "read"]);
@@ -172,13 +172,13 @@ test("a skill: its folder's SKILL.md, the project's over theirs; listed and load
   expect(Chat.main(chat, null)).toEqual({});
 });
 
-test("Illi's own skill, customize-illi: listed first, loaded with its folders named; the user's of its name takes its place", async () => {
+test("illi's own skill, customize-illi: listed first, loaded with its folders named; the user's of its name takes its place", async () => {
   const own = Custom.skills(CWD)[0];
   expect([own.name, own.dir]).toEqual(["customize-illi", ""]);
-  expect(own.description).toStartWith("Customize Illi itself");
+  expect(own.description).toStartWith("Customize illi itself");
   const out = await Tools.call(chat.tools, "main", "skill", { name: "customize-illi" }, new AbortController().signal);
-  expect(out.text).toStartWith("Skill customize-illi: its instructions, whole, below (built into Illi)\n\n");
-  expect(out.text).toContain("- Illi's folder: " + DIR + "\n");
+  expect(out.text).toStartWith("Skill customize-illi: its instructions, whole, below (built into illi)\n\n");
+  expect(out.text).toContain("- illi's folder: " + DIR + "\n");
   expect(out.text).toContain("- This project's: " + CWD + "/.illi (");
   expect(out.text).not.toContain("{{");
   put(DIR + "/skills/customize-illi/SKILL.md", "---\ndescription: mine\n---\nMine.");

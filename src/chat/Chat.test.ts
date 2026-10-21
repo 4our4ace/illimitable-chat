@@ -175,7 +175,7 @@ test("a message sent as a stopped turn winds down gets a turn of its own", async
   try {
     Chat.take(chat, Chat.push(chat, null, "user", "first"));
     await until(() => chat.call !== null);
-    Chat.interrupt(chat, "Stopped by the user: Illi.");
+    Chat.interrupt(chat, "Stopped by the user: illi.");
     Chat.take(chat, Chat.push(chat, null, "user", "after the stop"));
     go();
     await until(() => asked.length === 2 && !chat.busy);
@@ -194,7 +194,7 @@ test("a turn's new text holds what was logged between its waiting messages, tagg
   AskAI.ask = (a, on) => ((asked = a.blocks.at(-1)!.text), ask(a, on));
   try {
     const one = Chat.push(chat, null, "user", "one");
-    Chat.push(chat, null, "note", "Stopped by the user: Illi.");
+    Chat.push(chat, null, "note", "Stopped by the user: illi.");
     const two = Chat.push(chat, null, "user", "two");
     Object.assign(chat, { busy: true, wait: [one, two] });
     await Chat.call(chat);
@@ -202,7 +202,7 @@ test("a turn's new text holds what was logged between its waiting messages, tagg
     AskAI.ask = ask;
     Object.assign(chat, { busy: false, wait: [], sent: [] });
   }
-  expect(asked).toEndWith("one\n\nnote: Stopped by the user: Illi.\n\ntwo");
+  expect(asked).toEndWith("one\n\nnote: Stopped by the user: illi.\n\ntwo");
 });
 
 // the model's turn calls ending as `ends` says, in turn (then answered;
@@ -265,8 +265,8 @@ function last(): string {
 test("a failed turn asks to try again only when a later try may answer; a reply begun is cut off", () => {
   Chat.failed(chat, "the AI service is busy or unavailable right now", { ok: false, text: "", left: [], stop: "down", again: true });
   expect(last()).toBe("No reply: the AI service is busy or unavailable right now. Send a message to try again.");
-  Chat.failed(chat, "no API key: set ANTHROPIC_API_KEY and restart Illi", { ok: false, text: "", left: [], stop: "down" });
-  expect(last()).toBe("No reply: no API key: set ANTHROPIC_API_KEY and restart Illi.");
+  Chat.failed(chat, "no API key: set ANTHROPIC_API_KEY and restart illi", { ok: false, text: "", left: [], stop: "down" });
+  expect(last()).toBe("No reply: no API key: set ANTHROPIC_API_KEY and restart illi.");
   Chat.failed(chat, "the AI service is busy or unavailable right now", { ok: false, text: "", left: [], stop: "down", again: true, cut: true });
   expect(last()).toStartWith("Reply cut off: the AI service is busy");
   Chat.failed(chat, "boom");

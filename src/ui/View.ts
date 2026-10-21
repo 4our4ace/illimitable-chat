@@ -191,10 +191,10 @@ export type Knob = { text: string; move: Move; hint: string };
 
 // the app's name, as the head shows it; MAIN: its agent's, a nickname
 export const NAME = "Illimitable";
-export const MAIN = "Illi";
+export const MAIN = "illi";
 
 // Illi's turn, as a stop names it among the agents at work
-export const TURN = "Illi's turn";
+export const TURN = "illi's turn";
 
 // the messages' version, in a view's query; one more for each change an
 // older view would misread
@@ -215,11 +215,11 @@ export const MOVE  = 4001;
 // bigger one closes its socket
 export const FRAME = 2 ** 22;
 
-export const HINT = "Message Illi";
+export const HINT = "Message illi";
 
 // the disclosure both views show (EU AI Act art. 50, California SB 243,
 // New York GBL art. 47, Anthropic's usage policy)
-export const AI = "Illi is an AI, not a person, and can make mistakes.";
+export const AI = "illi is an AI, not a person, and can make mistakes.";
 
 // the AI notice's period (ms)
 const NOTICE = 3 * 60 * 60 * 1000;

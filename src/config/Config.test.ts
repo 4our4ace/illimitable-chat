@@ -66,7 +66,7 @@ test("a relative path from the folder of the config.json that names it; a number
   expect(config.config_check("jobs", 4)).toBeNull();
 });
 
-test("a setting that won't do stops Illi at the start, one line on why", () => {
+test("a setting that won't do stops illi at the start, one line on why", () => {
   for (const [env, why] of [
     [{ ILLI_JOBS: "0" }, "illi: config: jobs takes a number, 1 or more. (ILLI_JOBS)"],
     [{ ILLI_JOBS: "abc" }, "illi: config: jobs takes a number, 1 or more. (ILLI_JOBS)"],
@@ -86,7 +86,7 @@ test("vendors alone start, the picks' defaults theirs; a pick set that isn't off
   }
   const gone = start({ ILLI_VENDORS: "claude-api", ILLI_COMPACTOR: "chatgpt:gpt-6-luna:medium:slow" });
   expect(gone).toMatchObject({ code: 0, err: "" });
-  expect(gone.out!.replace(/\s+/g, " ")).toContain("compactor chatgpt:gpt-6-luna:medium:slow isn't offered here, so Illi runs on claude-api:haiku-5.5:medium:slow instead: change it in ILLI_COMPACTOR.");
+  expect(gone.out!.replace(/\s+/g, " ")).toContain("compactor chatgpt:gpt-6-luna:medium:slow isn't offered here, so illi runs on claude-api:haiku-5.5:medium:slow instead: change it in ILLI_COMPACTOR.");
 });
 
 test("the picks' defaults are the first vendor's that is offered; the vendors change while the picks are unset", () => {
@@ -100,10 +100,10 @@ test("the picks' defaults are the first vendor's that is offered; the vendors ch
 });
 
 test("the start tells of an API key set whose vendor isn't offered, and of the pick's key missing", () => {
-  expect(config.config_tips(config.PICK, false)).toEqual(["ANTHROPIC_API_KEY is set, but Illi doesn't offer claude-api: /set vendors claude-api,chatgpt, then start Illi again."]);
-  expect(config.config_tips(config.PICK, true)).toEqual(["ANTHROPIC_API_KEY is set, but Illi doesn't offer claude-api: /set vendors chatgpt,claude-api, then start Illi again."]);
+  expect(config.config_tips(config.PICK, false)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer claude-api: /set vendors claude-api,chatgpt, then start illi again."]);
+  expect(config.config_tips(config.PICK, true)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer claude-api: /set vendors chatgpt,claude-api, then start illi again."]);
   const openai = { vendor: "openai-api", model: "gpt-6-luna", effort: "medium", speed: "slow" } as const;
-  expect(config.config_tips(openai, true)).toContain("The chat runs on openai-api, but OPENAI_API_KEY isn't set: set it and start Illi again, or /model picks another.");
+  expect(config.config_tips(openai, true)).toContain("The chat runs on openai-api, but OPENAI_API_KEY isn't set: set it and start illi again, or /model picks another.");
 });
 
 test("an unknown argument is named; one meaning to sign in, told where", () => {

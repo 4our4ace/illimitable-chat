@@ -112,7 +112,7 @@ test("Esc closes the model picker, the pick as it was", () => {
 test("a picker without a search takes no typing; Tab moves in it", () => {
   const t = term();
   const picked: number[] = [];
-  term_chooser(t, "Agent", ["Illi", "Reviewer"], ["Illi's own", "reviews"], 0, (k) => picked.push(k));
+  term_chooser(t, "Agent", ["illi", "Reviewer"], ["illi's own", "reviews"], 0, (k) => picked.push(k));
   expect(term_type(t, "r")).toBe(false);
   term_grab(t, "Tab");
   term_grab(t, "Enter");
@@ -159,7 +159,7 @@ test("/speed lists slow as standard, and takes standard for it", () => {
   expect(t.v.out.map((p: any) => p.msg.to.speed)).toEqual(["slow"]);
 });
 
-test("/tab finds the chat's tab by the main agent's name, or Illi's; none lists the tabs", () => {
+test("/tab finds the chat's tab by the main agent's name, or illi's; none lists the tabs", () => {
   const t = term();
   t.v.agent = "build";
   for (const name of ["build", "illi"]) {

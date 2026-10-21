@@ -1,29 +1,29 @@
 ![Illimitable: one chat that never ends](assets/header.webp)
 
-A terminal AI agent with one chat that never ends. Illi (short for
+A terminal AI agent with one chat that never ends. illi (short for
 Illimitable) folds old messages into a memory tree it can zoom back
 into, so it forgets nothing.
 
-Written mostly by AI agents: expect bugs. Illi runs shell commands and
+Written mostly by AI agents: expect bugs. illi runs shell commands and
 edits files without asking, so use it where you'd let it.
 
-Why Illi
+Why illi
 --------
 
 Most coding agents work in sessions: each starts empty, and once it fills
-up it is squashed into a summary and the details are gone. Illi has no
+up it is squashed into a summary and the details are gone. illi has no
 sessions.
 
 - **One chat, forever.** Every message stays on disk, for days, weeks,
   years. You never start over or explain things again.
 - **Nothing is forgotten.** Old messages fold into a tree of summary
-  lines, coarser with age, and Illi can zoom any line back down to the
+  lines, coarser with age, and illi can zoom any line back down to the
   exact words.
 - **Built for the prompt cache.** The memory only changes at its end, so
   nearly every call is a cache hit: a long chat stays fast and cheap.
 - **Your ChatGPT plan, or your keys.** ChatGPT Plus or Pro, or Anthropic
-  and OpenAI API keys, all in Illi's own loop: no SDKs, no dependencies.
-- **Crash-proof.** A message is on disk before Illi answers. Quit or
+  and OpenAI API keys, all in illi's own loop: no SDKs, no dependencies.
+- **Crash-proof.** A message is on disk before illi answers. Quit or
   crash mid-turn, and the next start goes on where it was.
 
 Install
@@ -45,7 +45,7 @@ Sign in
 -------
 
 In the chat, type `/login` to sign in with your ChatGPT plan (Plus or
-Pro): Illi shows a code to enter on OpenAI's page, then keeps and renews
+Pro): illi shows a code to enter on OpenAI's page, then keeps and renews
 the login itself. An existing [opencode](https://opencode.ai) login is
 picked up as it is.
 
@@ -54,7 +54,7 @@ the vendor in `~/.illi/config.json`:
 
     { "vendors": "claude-api" }
 
-Illi's pick and the summaries' then default to that vendor's models:
+illi's pick and the summaries' then default to that vendor's models:
 `claude-api` runs sonnet-5.5 and haiku-5.5, `openai-api` gpt-6.1-sol and
 gpt-6-luna. To choose them, or list more vendors (the first gives the
 defaults):
@@ -82,10 +82,10 @@ flowchart TD
   merge in pairs into a binary tree, written in the background by a
   smaller model. A turn sends the latest messages whole, up to
   `context`; older ones go as lines, merged as they age.
-- **Zoom.** Illi can open any line back down to the original messages.
+- **Zoom.** illi can open any line back down to the original messages.
   `/compact` folds all but the last two exchanges, so turns get smaller
   (the screen keeps showing them); `/clear` empties the screen for a
-  fresh topic, and Illi still remembers it all. `/tree` writes yours
+  fresh topic, and illi still remembers it all. `/tree` writes yours
   as a web page into the current folder.
 - **Tools.** Shell, file edits, subagents, a to-do list, MCP servers.
   `/goal <message>` keeps it working until the goal is met.
@@ -123,18 +123,18 @@ Customize
 All in `~/.illi/`. A project's `.illi/` may hold agents, commands and
 skills too, which win by name; the rest is read only from yours.
 [`examples/`](https://github.com/4our4ace/illimitable-chat/tree/main/examples)
-has samples. Or ask Illi: it comes with a skill, `customize-illi`, and
+has samples. Or ask illi: it comes with a skill, `customize-illi`, and
 writes these files itself.
 
 - `agents/*.md`: agents. `mode: primary` ones are switched to with
-  Shift+Tab; `subagent` ones are spawned by Illi; `all`, the default,
+  Shift+Tab; `subagent` ones are spawned by illi; `all`, the default,
   both. Each gets a color of its own; `color: "#rrggbb"` picks one.
 - `commands/*.md`: `/name` sends the file, `$ARGUMENTS` filled in.
 - `skills/<name>/SKILL.md`: skills, in Claude Code's format.
 - `mcp.json`: MCP servers, in Claude Code's `mcpServers` shape (below).
   Only yours is read, never a project's.
 - `theme.json`: colors and palette (`"palette": "nord"`, `mono`, `auto`).
-- `RULES.md`: your rules for every project, in every prompt. Illi writes
+- `RULES.md`: your rules for every project, in every prompt. illi writes
   it when you ask ("add that to my rules"), never on its own. A
   project's own `AGENTS.md` (else `CLAUDE.md`) is read too, from the
   repo's top down to the folder you start in.
@@ -174,7 +174,7 @@ happens there: Enter switches, Ctrl+R renames, Ctrl+E exports to
 then what comes along: nothing, this profile's setup, this chat (moved,
 so this profile starts fresh), or both. "+ import a profile" asks for an
 archive. `/profile work` switches straight away. Profiles share the
-login, the API keys and the default's config.json. Illi's memory is the
+login, the API keys and the default's config.json. illi's memory is the
 running profile's chat alone: its read, write and edit tools refuse every
 chat folder, and its prompt keeps the shell out of other profiles' too.
 
@@ -194,13 +194,13 @@ Config
 
 `~/.illi/config.json`, or `ILLI_<KEY>` variables. All optional.
 
-- `/settings` changes them from inside Illi (`/set <key> <value>` too).
+- `/settings` changes them from inside illi (`/set <key> <value>` too).
 - Most apply at once; `vendors`, `models`, `jobs`, `theme`, `mcp` and
   `login` at the next start.
 - A key set by a variable stays as the variable says.
 - A relative path is taken from the folder of the config.json that names
   it (a variable's: the working folder).
-- A value that won't do stops Illi at the start, saying which. A pick
+- A value that won't do stops illi at the start, saying which. A pick
   no longer offered gives way to its default, with a note.
 
 | Key          | Default                           | What                                             |
@@ -227,10 +227,10 @@ Back it up.
 Troubleshooting
 ---------------
 
-- Something went wrong: Illi logs it in its profile's folder,
+- Something went wrong: illi logs it in its profile's folder,
   `~/.illi/illi.log` (another profile's: `~/.illi/profiles/<name>/illi.log`).
-- "Illi is already open in another terminal": a profile's chat runs in
-  one Illi at a time. Quit it there (Ctrl+D), or start another profile:
+- "illi is already open in another terminal": a profile's chat runs in
+  one illi at a time. Quit it there (Ctrl+D), or start another profile:
   `ILLI_PROFILE=<name> illi`.
 
 Code
@@ -258,16 +258,16 @@ bundles are MIT, licenses inside.
 Roadmap
 -------
 
-Planned, roughly in this order. Until then, Illi runs what it decides
+Planned, roughly in this order. Until then, illi runs what it decides
 to, as you: use it where you'd let it.
 
-- **Permissions.** Rules for what Illi may run or change without asking
+- **Permissions.** Rules for what illi may run or change without asking
   (allow, ask, deny), and a prompt for the rest: once, always in this
-  project, always, or no with a reason Illi reads. Secrets such as
+  project, always, or no with a reason illi reads. Secrets such as
   `~/.ssh` hidden, `.git` and shell rc files protected, the mode on the
   bottom line, and subagents' requests in the same queue, named.
 - **Sandbox.** Shell commands in a bubblewrap sandbox: only the project
-  and `/tmp` writable, secrets hidden, network off. Illi asks before
+  and `/tmp` writable, secrets hidden, network off. illi asks before
   anything leaves it, so work inside it needs no prompts.
 - **Project trust.** A project's own `.illi` agents, commands and skills
   load only once you trust the folder.

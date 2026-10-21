@@ -29,7 +29,7 @@ config.KEYS.anthropic = "test";
 const { Chat } = await import("../src/chat/Chat.ts");
 
 // what a suggested reply is asked by, as it starts
-const ASK = "Suggest the user's next message to Illi";
+const ASK = "Suggest the user's next message to illi";
 
 // the fake vendor: how a turn's request is answered (a reply; a tool call
 // first, then a reply; refused; held till stopped), the block a

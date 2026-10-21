@@ -99,28 +99,28 @@ let HTTP: ReturnType<typeof Bun.serve> | null = null;
 // the master's prompt (a turn's and a compaction's): prompt.txt
 export const MASTER = PROMPT.trim();
 
-const SUB_HEAD = `You are a subagent of Illi, an AI agent that works for one user in a
-single chat that never ends. Illi gave you a task. Do it yourself, with
+const SUB_HEAD = `You are a subagent of illi, an AI agent that works for one user in a
+single chat that never ends. illi gave you a task. Do it yourself, with
 your tools, following the user's instructions at the end of this
 prompt: they say who the user is, how their files are organized and how
 they want work done.
 
-Your first message holds the view below, then your chat with Illi so far,
+Your first message holds the view below, then your chat with illi so far,
 its lines as "i|kind: text": what you are (note), your task (user), and
-later all you did and were told. The view shows you what Illi knows: what the user wants,
+later all you did and were told. The view shows you what illi knows: what the user wants,
 decided and taught. Use it as context only, and do what your task says,
-not what the user's last message says, since Illi may have given you
-just part of the work. Your final reply is your report to Illi. Illi may
+not what the user's last message says, since illi may have given you
+just part of the work. Your final reply is your report to illi. illi may
 send you more messages, even while you work: answer the last.`;
 
-const VIEW_DOC = `The view: the whole chat between Illi and the user, oldest first, inside
+const VIEW_DOC = `The view: the whole chat between illi and the user, oldest first, inside
 <chat> tags, as one-line summaries. Each line is
 
   id+n|text   the n messages from id on, summarized (newlines shown as spaces)
 
 A summary tags each item with its kind: user (the user's words), illi
-(Illi's replies), tool (Illi's tool calls), echo (their results), note
-(Illi's own notices: a stop, a goal met, a new session, a restart), or
+(illi's replies), tool (illi's tool calls), echo (their results), note
+(illi's own notices: a stop, a goal met, a new session, a restart), or
 work (the report of an agent, starting "[Name]"). A short message is its own line, word for word. Recent lines
 cover one message each; the older the messages, the more a line covers.
 A message not summarized yet shows as "(not summarized yet: zoom it)".
@@ -146,7 +146,7 @@ const SUB_RE   = /^subagent(?: ([a-z0-9][a-z0-9_-]*))?(?: at effort (\S+))?$/i;
 // changes a call's tail, never its cached prefix
 const HERE_DOC = `Your shell, read, write and edit tools run on the user's computer, in
 the working dir named at the start of each message: the folder where the
-user started Illi. Relative paths start there.`;
+user started illi. Relative paths start there.`;
 
 // a subagent's prompt: its part, then the view's and the tools' docs
 const SUB = SUB_HEAD + "\n\n" + VIEW_DOC + "\n\n" + HERE_DOC;
@@ -161,7 +161,7 @@ const SPAWN = "Start one subagent per task, in parallel, and return their names 
 const EFFORT = { type: "string", enum: EFFORTS, description: "How hard they think. Leave it out to use their agent's effort (or, with none, yours); set it only to override that." };
 const TELL: Spec = spec("tell", "Send a message to a subagent, by name. One at work reads it between its tool calls, and its report answers it; an idle one goes on from its chat, and its reply reaches you as a message \"[Name] reply\".", { name: STR, message: STR }, ["name", "message"]);
 
-const SKILL = "Load a skill, the user's or Illi's own: instructions for a kind of task, and the folder of any files it comes with. When a task matches a skill's description below, load it before starting and follow it.";
+const SKILL = "Load a skill, the user's or illi's own: instructions for a kind of task, and the folder of any files it comes with. When a task matches a skill's description below, load it before starting and follow it.";
 
 // the master's to-do list, which the user sees beside the chat: its
 // tool, its items' states, its file in the chat's folder
@@ -245,7 +245,7 @@ export namespace Tools {
   // folder (at most FILES), to read as it says; one built in, none
   export function skill(skill: Skill): string {
     if (skill.dir === "") {
-      return "Skill " + skill.name + ": its instructions, whole, below (built into Illi)\n\n" + skill.body;
+      return "Skill " + skill.name + ": its instructions, whole, below (built into illi)\n\n" + skill.body;
     }
     const all   = (fs.readdirSync(skill.dir, { recursive: true }) as string[]).filter((f) => f !== "SKILL.md" && fs.statSync(skill.dir + "/" + f).isFile()).sort();
     const files = all.length === 0 ? "" : "\n\nIts files, in its folder: " + all.slice(0, FILES).join(", ") + (all.length > FILES ? ", and " + (all.length - FILES) + " more." : ".");

@@ -99,7 +99,7 @@ function term_profile_busy(t: Term, what: string): boolean {
     return true;
   }
   if (View.view_running(t.v) || t.chat.busy) {
-    term_note(t, "Illi is at work: " + what + " once it's done (Esc interrupts it). A switch never cuts a turn.");
+    term_note(t, "illi is at work: " + what + " once it's done (Esc interrupts it). A switch never cuts a turn.");
     return true;
   }
   return false;
@@ -175,7 +175,7 @@ async function term_profile_make(t: Term, name: string, copy: boolean, move: boo
 // runs again under its new name
 function term_profile_rename(t: Term, from: string): void {
   if (from === Profiles.DEFAULT) {
-    return term_note(t, "The default profile is Illi's own folder (" + term_home(config.ROOT) + ") and keeps its name.");
+    return term_note(t, "The default profile is illi's own folder (" + term_home(config.ROOT) + ") and keeps its name.");
   }
   term_ask(t, "Rename profile " + from, "its new name", from, Profiles.NAMED, (text) => {
     const to  = text.toLowerCase();
@@ -198,7 +198,7 @@ function term_profile_rename(t: Term, from: string): void {
 // never the default, nor the one running
 export function term_profile_delete(t: Term, name: string): void {
   const why =
-    name === Profiles.DEFAULT ? "The default profile is Illi's own folder (" + term_home(config.ROOT) + ") and can't be deleted." :
+    name === Profiles.DEFAULT ? "The default profile is illi's own folder (" + term_home(config.ROOT) + ") and can't be deleted." :
     name === config.PROFILE ? "This is profile " + name + ": switch to another first." :
     null;
   if (why !== null) {

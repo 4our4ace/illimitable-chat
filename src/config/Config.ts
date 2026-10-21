@@ -56,7 +56,7 @@ export type Setting = { def: string; values: string[] | "pick" | "text"; now: bo
 // (config_value) must be one, and one is all /settings, /set and
 // config_check need; the README and the customize-illi skill say each
 const TABLE = {
-  pick       : { def: "chatgpt:gpt-6.1-sol:medium:slow", values: "pick", now: true, what: "Illi's own default model" },
+  pick       : { def: "chatgpt:gpt-6.1-sol:medium:slow", values: "pick", now: true, what: "illi's own default model" },
   agents     : { def: "", values: "pick", now: true, what: "what subagents run on", none: "the chat's pick" },
   compactor  : { def: "chatgpt:gpt-6-luna:medium:slow", values: "pick", now: true, what: "what writes the summaries" },
   suggest    : { def: "on", values: ["on", "off"], now: true, what: "suggested replies (Tab)", shape: [/^(on|off|true|false|0|1)$/i, "on or off"] },
@@ -71,7 +71,7 @@ const TABLE = {
   jobs       : { def: "8", values: ["2", "4", "8", "16", "32"], now: false, what: "summaries built at once", shape: [/^[1-9]\d*$/, "a number, 1 or more"] },
   theme      : { def: DIR + "/theme.json", values: "text", now: false, what: "the theme file", path: true },
   mcp        : { def: DIR + "/mcp.json", values: "text", now: false, what: "the MCP servers' file", path: true },
-  login      : { def: "", values: "text", now: false, what: "the ChatGPT login file", none: "Illi's own", path: true },
+  login      : { def: "", values: "text", now: false, what: "the ChatGPT login file", none: "illi's own", path: true },
 } satisfies Record<string, Setting>;
 export type Key = keyof typeof TABLE;
 export const SETTINGS: Record<Key, Setting> = TABLE;
@@ -205,7 +205,7 @@ function config_gone(): void {
     if (typeof raw === "string" && raw.split(":").length === 4 && Pick.read(config_split(raw), OFFER) === null) {
       GONE.add(key);
       const def = config_value(key);
-      NOTES.push(key + " " + raw + " isn't offered here, so Illi runs on " + (def === "" ? "the chat's pick" : def) + " instead: change it in " + config_where(key) + (config_env_set(key) === null ? " or with /settings." : "."));
+      NOTES.push(key + " " + raw + " isn't offered here, so illi runs on " + (def === "" ? "the chat's pick" : def) + " instead: change it in " + config_where(key) + (config_env_set(key) === null ? " or with /settings." : "."));
     }
   }
 }
@@ -219,10 +219,10 @@ export function config_tips(pick: Pick, signed: boolean): string[] {
   for (const [name, vendor] of Object.entries(KEYED)) {
     if (KEYS[name] !== "" && !OFFER.vendors.includes(vendor)) {
       const list = (signed ? [...OFFER.vendors, vendor] : [vendor, ...OFFER.vendors]).join(",");
-      tips.push(VARS[name] + " is set, but Illi doesn't offer " + vendor + ": " + (env === null ? "/set vendors " + list : env + "=" + list) + ", then start Illi again.");
+      tips.push(VARS[name] + " is set, but illi doesn't offer " + vendor + ": " + (env === null ? "/set vendors " + list : env + "=" + list) + ", then start illi again.");
     }
     if (KEYS[name] === "" && pick.vendor === vendor) {
-      tips.push("The chat runs on " + vendor + ", but " + VARS[name] + " isn't set: set it and start Illi again, or /model picks another.");
+      tips.push("The chat runs on " + vendor + ", but " + VARS[name] + " isn't set: set it and start illi again, or /model picks another.");
     }
   }
   return tips;
@@ -364,7 +364,7 @@ export function config_check(key: string, value: unknown): string | null {
   }
   for (const k of (["pick", "compactor", "agents"] as const).filter((k) => set(k) && get(k) !== "")) {
     if (Pick.read(config_split(get(k)), OFFER) === null) {
-      return k + " " + get(k) + " is offered from the next start (vendors and models change then): set it once Illi starts again.";
+      return k + " " + get(k) + " is offered from the next start (vendors and models change then): set it once illi starts again.";
     }
   }
   return null;

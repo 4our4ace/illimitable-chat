@@ -161,5 +161,5 @@ function setting_cut(text: string): string {
 
 // a change, as a note says it: the value now, kept, when it applies
 function setting_said(key: config.Key): string {
-  return key + ": " + setting_shown(key) + ", kept in " + term_home(config.DIR) + "/config.json; " + (config.SETTINGS[key].now ? "it applies now." : "it applies at Illi's next start.");
+  return key + ": " + setting_shown(key) + ", kept in " + term_home(config.DIR) + "/config.json; " + (config.SETTINGS[key].now ? "it applies now." : "it applies at illi's next start.");
 }

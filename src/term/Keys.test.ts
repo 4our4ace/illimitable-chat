@@ -76,7 +76,7 @@ test("anything typed dismisses the suggested reply, even erased, till the next o
 
 test("the picker keeps its Tab while a suggested reply shows", () => {
   const t = term("Run the tests");
-  term_chooser(t, "Agent", ["Illi", "Reviewer"], ["", ""], 0, () => {});
+  term_chooser(t, "Agent", ["illi", "Reviewer"], ["", ""], 0, () => {});
   Screen.screen_feed(t.scr, "\t");
   expect(t.choose.at).toBe(1);
   expect(t.scr.ed.text).toBe("");
@@ -87,7 +87,7 @@ test("the picker keeps its Tab while a suggested reply shows", () => {
 const sent = (t: any) => t.v.out.map((p: any) => { const { id, ...msg } = p.msg; return msg; });
 const note = (t: any) => t.notices.filter((n: any) => !n.toast).at(-1)?.text ?? "";
 
-test("on an agent's page, Esc, Enter and Ctrl+C interrupt Illi's turn", () => {
+test("on an agent's page, Esc, Enter and Ctrl+C interrupt illi's turn", () => {
   for (const key of ["\x1b[27u", "\r", "\x03"]) {
     const t = term("");
     t.v.busy = true;
@@ -103,19 +103,19 @@ test("on an agent's page, a message or a chat's command comes back to the input,
     t.v.page = { name: "reviewer", log: [], live: [] };
     Screen.screen_feed(t.scr, typed + "\r");
     expect([typed, t.scr.ed.text, sent(t)]).toEqual([typed, typed, []]);
-    expect(note(t)).toMatch(/^Messages go to Illi/);
+    expect(note(t)).toMatch(/^Messages go to illi/);
   }
 });
 
 test("Ctrl+C closes a picker, as Esc does: no interrupt, no quit armed", () => {
   const t = term("");
   t.v.busy = true;
-  term_chooser(t, "Agent", ["Illi", "Reviewer"], ["", ""], 0, () => {});
+  term_chooser(t, "Agent", ["illi", "Reviewer"], ["", ""], 0, () => {});
   Screen.screen_feed(t.scr, "\x03");
   expect([t.choose, t.quit, sent(t)]).toEqual([null, 0, []]);
 });
 
-test("Shift+Tab goes back to Illi's own agent from one that can't run; with none to go to, a note", () => {
+test("Shift+Tab goes back to illi's own agent from one that can't run; with none to go to, a note", () => {
   const t = term("");
   t.v.agent = "gone";
   term_next(t);

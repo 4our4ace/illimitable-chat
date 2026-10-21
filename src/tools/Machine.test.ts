@@ -35,7 +35,7 @@ test("no read, write or edit reaches a chat's folder, this profile's or another'
   fs.writeFileSync(config.ROOT + "/chat/main/day.jsonl", "{}\n");
   const read = await run("read", { path: config.ROOT + "/chat/main/day.jsonl" });
   expect(read.fail).toBe(true);
-  expect(read.text).toEndWith("holds a chat, Illi's memory (this profile's or another's): no file tool reads or changes it. Your own memory is reached with zoom; another profile's chat isn't yours.");
+  expect(read.text).toEndWith("holds a chat, illi's memory (this profile's or another's): no file tool reads or changes it. Your own memory is reached with zoom; another profile's chat isn't yours.");
   expect((await run("write", { path: config.ROOT + "/profiles/work/chat/x.jsonl", content: "x" })).fail).toBe(true);
   expect(fs.existsSync(config.ROOT + "/profiles/work")).toBe(false);
   fs.writeFileSync(DIR + "/mine.txt", "a\n");
