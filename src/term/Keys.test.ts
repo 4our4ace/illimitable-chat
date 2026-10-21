@@ -10,6 +10,8 @@
 // command typed there comes back to the input, a note saying why. Ctrl+C
 // closes a picker, as Esc does. Shift+Tab goes back to illi's own agent
 // from one that can't run. A key runs the command whose keys name it.
+// The terminal's background told lays the chat out again only when it
+// changed.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -146,4 +148,15 @@ test("Shift+Tab goes back to illi's own agent from one that can't run; with none
   const own = term("");
   term_next(own);
   expect([sent(own), note(own)]).toEqual([[], expect.stringMatching(/^No primary agents yet/)]);
+});
+
+test("the terminal's background told lays the chat out again only when it changed", () => {
+  const t = term("");
+  t.scr.canvas = "#102030";
+  term_press(t, "Canvas");
+  const ver = t.ver;
+  term_press(t, "Canvas");
+  t.scr.canvas = "#203040";
+  term_press(t, "Canvas");
+  expect([ver, t.ver]).toEqual([1, 2]);
 });
