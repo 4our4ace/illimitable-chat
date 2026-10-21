@@ -10,8 +10,7 @@
 // (an "Act" row: what was done, counted), opened by a click or all at
 // once (verbose: Ctrl+O); while closed, what streams of it shows only on
 // the line over the input (Term.ts). An agent's page is its log, kept
-// live, whole. The AI notice (AI) opens the chat
-// and comes again before a message in another 3-hour window.
+// live, whole.
 
 import type { Kind, Vendor } from "../ai/AskAI.ts";
 import * as Call from "./Call.ts";
@@ -42,9 +41,9 @@ export type Page = { name: string; log: Entry[] | null; live: Live[] };
 export const SUMMARIES = "summaries";
 export type Wait = string;
 
-// what runs, in words (view_doing): a verb and what it acts on, what it
-// is at ("": nothing more), whether Esc stops it (a turn runs)
-export type Doing = { verb: string; what: string; stop: boolean };
+// what runs, in words (view_doing): the step it is at, and about how
+// many tokens the models have written since work began (made)
+export type Doing = { verb: string; tokens: number };
 
 // a plan's rate limit, as its last response told it (ChatGPT.ts): its
 // window (minutes), the share of it used (%), when it starts anew (ms)
@@ -91,8 +90,10 @@ export type State = {
 // ("id+n") and messages known; open: the blocks opened (true) or shut by
 // hand; acts: the runs of work opened (by their first message's id),
 // verbose: all of them; minds: the thoughts after each message; pages: the agents' asked
-// for; page: the one shown (null: illi's); the Link's: this view's
-// id, acts not answered, socket (up: it showed the chat)
+// for; page: the one shown (null: illi's); made: the characters the
+// models streamed (replies, thoughts, calls) since work began; the
+// Link's: this view's id, acts not answered, socket (up: it showed the
+// chat)
 export type View = State & {
   parts : Part[];
   turn  : number;
@@ -102,6 +103,7 @@ export type View = State & {
   open  : Map<string, boolean>;
   acts  : Set<number>;
   verbose: boolean;
+  made  : number;
   live  : Live[];
   minds : Map<number, string[]>;
   pages : Map<string, Page>;
@@ -225,12 +227,10 @@ export const FRAME = 2 ** 22;
 
 export const HINT = "Message illi";
 
-// the disclosure both views show (EU AI Act art. 50, California SB 243,
-// New York GBL art. 47, Anthropic's usage policy)
-export const AI = "illi is an AI, not a person, and can make mistakes.";
-
-// the AI notice's period (ms)
-const NOTICE = 3 * 60 * 60 * 1000;
+// what a model writes, as the work's count of tokens takes it (made);
+// about how many characters make a token
+const MADE  = new Set<Kind>(["illi", "mind", "tool"]);
+const CHARS = 4;
 
 const WAIT = "compressing…";
 const SUMS = "compressing earlier messages…";
@@ -302,6 +302,7 @@ export function view_new(): View {
     open      : new Map(),
     acts      : new Set(),
     verbose   : false,
+    made      : 0,
     live      : [],
     minds     : new Map(),
     pages     : new Map(),
@@ -342,6 +343,9 @@ export function view_hear(v: View, msg: Server): Client[] {
       if (live !== null) {
         live_push(live, msg.kind, msg.text, msg.fresh);
       }
+      if (MADE.has(msg.kind)) {
+        v.made += msg.text.length;
+      }
       return [];
     }
     case "live": {
@@ -353,7 +357,11 @@ export function view_hear(v: View, msg: Server): Client[] {
     }
     case "state": {
       const { $, ...state } = msg;
+      const was = view_running(v);
       Object.assign(v, state);
+      if (!was && view_running(v)) {
+        v.made = 0;
+      }
       return [];
     }
     case "agent": {
@@ -494,7 +502,7 @@ export function view_body(v: View): Row[] {
     const tops = v.fold.flatMap(([id, n]) => part_rows(v, id, n, Infinity, false));
     return [Cap(FOLD), ...tops];
   }
-  return [Cap(AI), ...view_acts(v, view_rows(v, v.parts).flat())];
+  return view_acts(v, view_rows(v, v.parts).flat());
 }
 
 // rows with each run of work (ACTIVITY) one Act row
@@ -569,12 +577,9 @@ export function view_toggle(v: View, id: number): void {
   }
 }
 
-// the chat's parts given, in order, as rows each (part_due)
+// the chat's parts given, in order, as rows each
 export function view_rows(v: View, parts: Part[]): Row[][] {
-  return parts.map(([id, n], k) => {
-    const rows = part_rows(v, id, n, v.turn, true);
-    return part_due(v, [id, n], parts[k - 1]) ? [Cap(AI), ...rows] : rows;
-  });
+  return parts.map(([id, n]) => part_rows(v, id, n, v.turn, true));
 }
 
 // what streams on the page shown, or what the turn waits on (unless the
@@ -621,27 +626,25 @@ export function view_running(v: View): boolean {
 }
 
 // what runs, in words; null: nothing. A turn: the last thing streaming
-// (a tool's call: its tool, its first line; thinking; the reply), else
-// what it waits on; then the agents at work. No turn: the agents waited
-// on
+// (a tool's call: its tool; thinking; the reply), else what it waits on.
+// No turn: the agents waited on. Its tokens, as many as the characters
+// streamed make (about CHARS each)
 export function view_doing(v: View): Doing | null {
   if (!view_running(v)) {
     return null;
   }
   const last   = v.live[v.live.length - 1];
   const call   = last?.kind === "tool" ? Call.call_parse(last.text) : null;
-  const agents = v.agents.length === 0 ? "" : v.agents.length === 1 ? v.agents[0] + " at work" : v.agents.length + " agents at work";
-  if (!v.busy) {
-    return { verb: "Waiting on " + (v.agents.length === 1 ? v.agents[0] : v.agents.length + " agents"), what: "", stop: false };
-  }
-  const [verb, what] =
-    call !== null ? [("Running " + call.name).trim(), call.head.split("\n")[0].trim()]
-    : last?.kind === "mind" ? ["Thinking", ""]
-    : last?.kind === "illi" ? ["Writing", ""]
-    : v.wait === SUMMARIES ? ["Summarizing earlier messages", ""]
-    : v.wait !== "" ? ["Waiting for " + v.wait, ""]
-    : ["Working", ""];
-  return { verb, what: [what, agents].filter((x) => x !== "").join(" · "), stop: true };
+  const tokens = Math.round(v.made / CHARS);
+  const verb   =
+    !v.busy ? "Waiting on agents"
+    : call !== null ? ("Running " + call.name).trim()
+    : last?.kind === "mind" ? "Thinking"
+    : last?.kind === "illi" ? "Writing"
+    : v.wait === SUMMARIES ? "Summarizing earlier messages"
+    : v.wait !== "" ? "Waiting for " + v.wait
+    : "Working";
+  return { verb, tokens };
 }
 
 // the pick as last asked for and not acked yet, else the chat's (null:
@@ -806,18 +809,6 @@ export function block_name(id: number, n: number): string {
   return "#" + id + (n === 1 ? "" : "+" + n);
 }
 
-// whether the AI notice comes before part, after the part `before`: a
-// message from the turn on, in another window than that part's
-export function part_due(v: View, part: Part, before: Part | undefined): boolean {
-  const last = before === undefined ? NaN : part_window(v, before);
-  return part[1] === 1 && part[0] >= v.turn && !Number.isNaN(last) && part_window(v, part) !== last;
-}
-
-// the window (NOTICE) of a part's last date (NaN: not known)
-function part_window(v: View, [id, n]: Part): number {
-  const date = n === 1 ? v.whole.get(id)?.date : v.nodes.get(id + "+" + n)?.to;
-  return Math.floor(Date.parse(date ?? "") / NOTICE);
-}
 
 // t: the turn; talk: whether talk opens by itself (not in Fold all). Open:
 // the person's choice (Open, Shut) if made, else a message of the user or

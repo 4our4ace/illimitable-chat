@@ -267,12 +267,8 @@ export function term_primaries(t: Term): void {
   Draw.draw_agents(all);
 }
 
-// connects to the chat, by View's link; a pipe's text starts with the AI
-// notice
+// connects to the chat, by View's link
 function term_connect(t: Term): void {
-  if (!t.scr.tty) {
-    term_print(t, [View.Cap(View.AI)]);
-  }
   View.link_open(t.v, Chat.link(t.chat, (msg) => term_hear(t, msg), async () => {
     term_draw(t);
     return true;
