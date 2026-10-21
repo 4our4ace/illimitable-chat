@@ -24,15 +24,19 @@ test("a turn's wait names its model", () => {
 // streaming, else the wait (a call's tool, never its input, nor the
 // agents at work); no turn, agents waited on. Its tokens: the models'
 // streamed characters since work began, four a token, results not
-// counted; its rate: those of the last two seconds, a second's share
+// counted; its rate: those of the two seconds before the last half second's
+// start, a second's share, so it holds for half a second
 test("what runs, in words", () => {
   const v = View.view_new();
   expect(View.view_doing(v)).toBeNull();
   View.view_hear(v, { $: "state", ...v, busy: true, wait: "gpt-6.1-sol" });
   expect(View.view_doing(v)).toEqual({ verb: "Waiting for gpt-6.1-sol", tokens: 0, rate: 0 });
   View.view_hear(v, { $: "delta", kind: "mind", text: "hm".repeat(200) });
-  expect(View.view_doing(v)).toEqual({ verb: "Thinking", tokens: 100, rate: 50 });
-  expect(View.view_doing(v, Date.now() + 2500)).toEqual({ verb: "Thinking", tokens: 100, rate: 0 });
+  expect(View.view_doing(v)?.tokens).toBe(100);
+  const step = Math.floor(Date.now() / 500) * 500 + 500;
+  expect(View.view_doing(v, step)).toEqual({ verb: "Thinking", tokens: 100, rate: 50 });
+  expect(View.view_doing(v, step + 499)?.rate).toBe(50);
+  expect(View.view_doing(v, step + 2000)?.rate).toBe(0);
   View.view_hear(v, { $: "delta", kind: "echo", text: "x".repeat(4000) });
   View.view_hear(v, { $: "delta", agent: "explorer", kind: "illi", text: "y".repeat(398) });
   View.view_hear(v, { $: "delta", kind: "tool", text: 'shell {"command":"grep -n x a.log\\nwc -l"}' });

@@ -232,10 +232,11 @@ export const HINT = "Message illi";
 
 // what a model writes, as the work's count of tokens takes it (made);
 // about how many characters make a token; the time its speed is taken
-// over (ms)
+// over, and how often it is taken anew (ms)
 const MADE  = new Set<Kind>(["illi", "mind", "tool"]);
 const CHARS = 4;
 const RATE  = 2000;
+const STEP  = 500;
 
 const WAIT = "compressing…";
 const SUMS = "compressing earlier messages…";
@@ -352,7 +353,7 @@ export function view_hear(v: View, msg: Server): Client[] {
       if (MADE.has(msg.kind)) {
         v.made += msg.text.length;
         v.flow.push([Date.now(), msg.text.length]);
-        v.flow = v.flow.filter(([at]) => at > Date.now() - RATE);
+        v.flow = v.flow.filter(([at]) => at > Date.now() - RATE - STEP);
       }
       return [];
     }
@@ -637,7 +638,7 @@ export function view_running(v: View): boolean {
 // (a tool's call: its tool; thinking; the reply), else what it waits on.
 // No turn: the agents waited on. Its tokens, as many as the characters
 // streamed make (about CHARS each); its rate, those of the RATE ms
-// before now, a second's share
+// before the last STEP's start, a second's share (so it holds a STEP)
 export function view_doing(v: View, now = Date.now()): Doing | null {
   if (!view_running(v)) {
     return null;
@@ -645,7 +646,8 @@ export function view_doing(v: View, now = Date.now()): Doing | null {
   const last   = v.live[v.live.length - 1];
   const call   = last?.kind === "tool" ? Call.call_parse(last.text) : null;
   const tokens = Math.round(v.made / CHARS);
-  const recent = v.flow.reduce((n, [at, chars]) => (at > now - RATE ? n + chars : n), 0);
+  const end    = Math.floor(now / STEP) * STEP;
+  const recent = v.flow.reduce((n, [at, chars]) => (at > end - RATE && at <= end ? n + chars : n), 0);
   const rate   = Math.round(recent / CHARS / (RATE / 1000));
   const verb   =
     !v.busy ? "Waiting on agents"
