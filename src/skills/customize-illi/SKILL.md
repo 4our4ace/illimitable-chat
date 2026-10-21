@@ -84,7 +84,8 @@ Every profile reads {{root}}/config.json, then its own in illi's folder.
 All keys are optional, and an ILLI_<KEY> environment variable overrides
 one:
 
-- vendors: chatgpt (the default), claude-api, openai-api
+- vendors: chatgpt (the default), claude-code (the user's Claude plan,
+  through their own Claude Code, logged in there), claude-api, openai-api
 - pick: what illi runs on, as vendor:model:effort:speed (default: the
   first vendor's); compactor: what writes its memory's summaries; agents:
   what subagents run on. Those two take a pick per vendor,
