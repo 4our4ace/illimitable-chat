@@ -8,7 +8,7 @@
 // input. /set checks a value first: its shape and the picks still
 // offered (a file named needn't be there). A pick set while illi's own
 // agent is the main one is the chat's at once. /side changes its settings as /set does. Each
-// setting is in the README and the customize-illi skill.
+// setting is in docs/config.md and the customize-illi skill.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -173,9 +173,8 @@ test("a vendor or a model taken out that a pick runs on won't do", () => {
   expect(config.config_check("models", "sonnet-5.5, haiku-5.5")).toBeNull();
 });
 
-test("each setting is said where a person or illi reads of it: the README's Config, the customize-illi skill", () => {
-  const readme = fs.readFileSync(import.meta.dir + "/../../README.md", "utf8");
-  const config_part = readme.slice(readme.indexOf("\nConfig\n"), readme.indexOf("\nCode\n"));
+test("each setting is said where a person or illi reads of it: docs/config.md, the customize-illi skill", () => {
+  const config_part = fs.readFileSync(import.meta.dir + "/../../docs/config.md", "utf8");
   const skill = fs.readFileSync(import.meta.dir + "/../skills/customize-illi/SKILL.md", "utf8");
   for (const key of Object.keys(config.SETTINGS)) {
     expect([key, config_part.includes("`" + key + "`")]).toEqual([key, true]);

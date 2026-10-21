@@ -58,7 +58,7 @@ export type Setting = { def: string; values: string[] | "pick" | "text"; now: bo
 
 // every setting, in the order /settings lists them: a key read here
 // (config_value) must be one, and one is all /settings, /set and
-// config_check need; the README and the customize-illi skill say each
+// config_check need; docs/config.md and the customize-illi skill say each
 const TABLE = {
   pick       : { def: "chatgpt:gpt-6.1-sol:medium:slow", values: "pick", now: true, what: "illi's own default model" },
   agents     : { def: "", values: "pick", now: true, what: "what subagents run on, by provider", none: "the chat's pick" },

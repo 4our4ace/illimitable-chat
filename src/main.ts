@@ -35,11 +35,11 @@ const USAGE = `Usage: illi            the chat; its tools work in this folder
        illi version    this illi's version
        illi help       this
 First, run illi in a project folder and type /login to sign in with
-your ChatGPT plan (Plus or Pro); API keys work too (the README's Sign in).
-The chat and its settings are in ~/.illi (ILLI_DIR); the README lists
-them. Other profiles' are in ~/.illi/profiles: illi opens the one used
-last (ILLI_PROFILE names one). In the chat, /help lists every command and
-key.`;
+your ChatGPT plan (Plus or Pro); your Claude plan and API keys work too
+(docs/providers.md). The chat and its settings are in ~/.illi
+(ILLI_DIR); docs/config.md lists them. Other profiles' are in
+~/.illi/profiles: illi opens the one used last (ILLI_PROFILE names
+one). In the chat, /help lists every command and key.`;
 
 // `illi upgrade`: one file, the installer run again into its folder (the
 // file replaced as a whole, so the one running goes on; a failed download

@@ -246,9 +246,9 @@ export function term_mcp(t: Term): void {
   const where  = term_home(file);
   const server = (s: Server) => "- **" + s.name + "**: " + (s.state === "ready" ? s.own.size + " tools: " + [...s.own.values()].join(", ") : s.state === "starting" ? "starting…" : "failed: " + s.why);
   const text = [
-    servers.length === 0 ? "No MCP servers yet. Add them to " + where + ", as Claude Code's mcpServers (the README shows the shape); they run from illi's next start." : "MCP servers (their tools are named mcp__<server>__<tool>):", ...servers.map(server),
+    servers.length === 0 ? "No MCP servers yet. Add them to " + where + ", as Claude Code's mcpServers (illi's docs/customize.md shows the shape); they run from illi's next start." : "MCP servers (their tools are named mcp__<server>__<tool>):", ...servers.map(server),
     ...(trouble === "" ? [] : ["", "The file won't read: " + trouble]),
-    ...(servers.length === 0 ? [] : ["", "They are in " + where + ", as Claude Code's mcpServers; the README shows the shape. A change there applies at illi's next start."]),
+    ...(servers.length === 0 ? [] : ["", "They are in " + where + ", as Claude Code's mcpServers; illi's docs/customize.md shows the shape. A change there applies at illi's next start."]),
   ];
   term_pane_text(t, "MCP", text.join("\n"));
 }
@@ -268,7 +268,7 @@ function term_agents(t: Term): void {
     ...list("Subagents (only an agent spawns them)", Custom.subagents(cwd).map(agent)),
     ...list("Commands", Custom.commands(cwd).map(cmd)),
     ...list("Skills (the agent loads one when a task matches; /name asks for it)", Custom.skills(cwd).map((s) => "- **" + s.name + "**" + (s.description === "" ? "" : ": " + s.description))),
-    "", "An agent is a markdown file in " + dirs("agents") + " (the project's wins); its mode is primary, subagent, or all (both, the default). A command is one in " + dirs("commands") + ", a skill a folder with a SKILL.md in " + dirs("skills") + ". The README shows their shape.",
+    "", "An agent is a markdown file in " + dirs("agents") + " (the project's wins); its mode is primary, subagent, or all (both, the default). A command is one in " + dirs("commands") + ", a skill a folder with a SKILL.md in " + dirs("skills") + ". illi's docs/customize.md shows their shape.",
   ];
   term_pane_text(t, "Agents", text.join("\n"));
 }
