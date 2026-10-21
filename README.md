@@ -1,4 +1,4 @@
-![illimitable: one chat that never ends](assets/header.webp)
+![illimitable: one chat that never ends](assets/banner.webp)
 
 A terminal AI agent with one chat that never ends. illi (short for
 illimitable) folds old messages into a memory tree it can zoom back
