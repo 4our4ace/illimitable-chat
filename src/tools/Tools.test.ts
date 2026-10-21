@@ -91,7 +91,12 @@ test("a caller in Claude Code gets only the tools it lacks, served at ?lean; its
   expect(names(true).filter((n) => ["shell", "read", "write", "edit"].includes(n))).toEqual([]);
   expect(names(true)).toEqual(expect.arrayContaining(["zoom", "date", "spawn", "tell", "todo"]));
   const res = await fetch(Tools.at(chat.tools, "main") + "?lean", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
-  expect((await res.json()).result.tools.map((t: any) => t.name)).toEqual(names(true));
+  const listed = (await res.json()).result.tools;
+  expect(listed.map((t: any) => t.name)).toEqual(names(true));
+  expect(names(true)).toContain("approve");
+  expect(names(false)).not.toContain("approve");
+  const upfront = listed.filter((t: any) => t._meta?.["anthropic/alwaysLoad"] === true).map((t: any) => t.name);
+  expect(upfront.sort()).toEqual(["date", "spawn", "tell", "todo", "zoom"]);
   const hosted = Tools.hosted(MASTER);
   expect(hosted).toStartWith("Here you work inside illi (short for illimitable)");
   expect(hosted).not.toContain("You are illi");
@@ -108,4 +113,55 @@ test("a caller in Claude Code gets only the tools it lacks, served at ?lean; its
   } finally {
     fs.rmSync(project, { recursive: true, force: true });
   }
+});
+
+test("Claude Code's permission prompt is a question at illi's screen: yes, no with a reason, yes for the rest of the run; stopped or no one there, no", async () => {
+  const v = View.view_new();
+  View.link_open(v, Chat.link(chat, (msg) => void View.view_hear(v, msg), async () => true));
+  await until(() => v.up);
+  const approve = async (tool: string, input: unknown, signal = new AbortController().signal) => JSON.parse((await Tools.call(chat.tools, "main", "approve", { tool_name: tool, input }, signal)).text);
+  const answer  = async (yes: boolean, always: boolean, why = "") => {
+    await until(() => v.asks.length === 1);
+    View.link_send(v, { $: "answer", ask: v.asks[0].id, yes, always, why });
+  };
+  const yes = approve("Bash", { command: "ls -la" });
+  await until(() => v.asks.length === 1);
+  expect(v.asks[0]).toMatchObject({ who: "illi", tool: "Bash", what: "ls -la" });
+  await answer(true, false);
+  expect(await yes).toEqual({ behavior: "allow", updatedInput: { command: "ls -la" } });
+  await until(() => v.asks.length === 0);
+  const no = approve("Bash", { command: "rm -r build" });
+  await answer(false, false, "use the clean script");
+  expect(await no).toEqual({ behavior: "deny", message: "use the clean script" });
+  await until(() => v.asks.length === 0);
+  const flat = approve("Bash", { command: "rm -r out" });
+  await answer(false, false);
+  expect(await flat).toEqual({ behavior: "deny", message: "The user said no." });
+  await until(() => v.asks.length === 0);
+  const always = approve("Bash", { command: "pwd" });
+  await answer(true, true);
+  expect((await always).behavior).toBe("allow");
+  await until(() => v.asks.length === 0);
+  expect(await approve("Bash", { command: "date" })).toEqual({ behavior: "allow", updatedInput: { command: "date" } });
+  expect(chat.asks).toEqual([]);
+  const stop    = new AbortController();
+  const stopped = approve("Write", { file_path: "a.txt", content: "x" }, stop.signal);
+  await until(() => v.asks.length === 1);
+  expect(v.asks[0].what).toBe("a.txt");
+  stop.abort();
+  expect(await stopped).toEqual({ behavior: "deny", message: "The request was stopped." });
+  await until(() => v.asks.length === 0);
+  v.ws!.close();
+  await until(() => chat.socks.size === 0);
+  expect((await approve("Edit", { file_path: "b.txt" })).message).toContain("No one is at illi's screen");
+  chat.tools.allowed.clear();
+});
+
+test("what a question shows: a command, a file, a URL or a query, else the input, cut short", () => {
+  expect(Tools.what("Bash", { command: "git status", description: "x" })).toBe("git status");
+  expect(Tools.what("Edit", { file_path: "src/a.ts", old_string: "a" })).toBe("src/a.ts");
+  expect(Tools.what("WebFetch", { url: "https://example.com", prompt: "p" })).toBe("https://example.com");
+  expect(Tools.what("Grep", { pattern: "TODO" })).toBe("TODO");
+  expect(Tools.what("Other", { n: 1 })).toBe('{"n":1}');
+  expect(Tools.what("Bash", { command: "x".repeat(1000) })).toHaveLength(400);
 });

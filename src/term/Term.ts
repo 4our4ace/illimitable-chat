@@ -108,6 +108,7 @@ export type Term = {
   drift   : { d: number; timer: Timer } | undefined;
   sug     : Sug | null;
   dropped : string;
+  asking  : { id: string; c: Chooser | null; done: boolean } | null; // the question shown (Asks.ts): its picker, whether answered
 };
 
 // the chat as last painted: its lines, its blocks in them, the screen
@@ -229,6 +230,7 @@ function term_new(chat: Chat): Term {
     drift   : undefined,
     sug     : null,
     dropped : "",
+    asking  : null,
   };
   // the chat suggests replies to a screen that shows them, never a pipe
   chat.suggest.on = t.scr.tty && config.SUGGEST;

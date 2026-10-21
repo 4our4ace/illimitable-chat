@@ -87,7 +87,7 @@ afterAll(() => {
   web.stop(true);
 });
 
-const tools = { mem: null as any, agents: new Map(), key: "k", url: "", cwd: CWD, hooks: { main: () => null } as any };
+const tools = { mem: null as any, agents: new Map(), allowed: new Set<string>(), key: "k", url: "", cwd: CWD, hooks: { main: () => null } as any };
 
 test("each server's tools, named by it, in pages, beside illi's", async () => {
   await Mcp.settle();

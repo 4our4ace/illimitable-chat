@@ -21,8 +21,8 @@ import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
 import { Memory, type Share } from "./Memory.ts";
 import { Pick } from "../ai/Pick.ts";
-import { MASTER, SEARCHES, Tools, type Agent, type Live } from "../tools/Tools.ts";
-import { IMAGES, live_push, PING, SUMMARIES, TICK, TURN, type Answer, type Link, type Part, type Server as Out, type Wait } from "../ui/View.ts";
+import { MASTER, SEARCHES, Tools, type Agent, type Live, type Reply } from "../tools/Tools.ts";
+import { IMAGES, live_push, PING, SUMMARIES, TICK, TURN, type Answer, type Link, type Part, type Question, type Server as Out, type Wait } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
 
 // Types
@@ -85,7 +85,11 @@ export type Chat = {
   suggest: Suggest;
   fit   : number;
   refits: number;
+  asks  : Asked[];
 };
+
+// a question asked of the user (Chat.question), and what its answer does
+type Asked = Question & { done: (reply: Reply) => void };
 
 // Constants
 // =========
@@ -100,6 +104,12 @@ const HEAD       = "Turn: the user's new message:\n\n";
 const GOAL       = "You check a goal. Below is a chat between a user and illi, an AI agent: its older messages as summary lines (id+n|text), then its latest messages whole, then the goal the user set with /goal. Answer yes if the chat shows the goal fully satisfied now, else no. Write that one word, nothing else.";
 const GOAL_ASK   = "\nThe goal:\n\n";
 const GOAL_NO    = "The goal isn't satisfied yet: keep working.";
+
+// a no to a question (Chat.question): the user's without a reason; no one at
+// the screen to ask; its request stopped
+const SAID_NO    = "The user said no.";
+const NO_ONE     = "No one is at illi's screen to ask, so it isn't allowed.";
+const STOPPED    = "The request was stopped.";
 
 // a chat that outgrew its model's window (Chat.refit): a turn's share of
 // the context made this much smaller, when the request itself was too
@@ -188,6 +198,7 @@ export namespace Chat {
     fs.mkdirSync(dir, { recursive: true });
     const mem = Memory.load(dir, () => Chat.share(chat));
     const tools = Tools.serve(mem, {
+      ask    : (who, tool, what, signal) => Chat.question(chat, who, tool, what, signal),
       push   : (agent, kind, text) => Chat.push(chat, agent, kind, text),
       on     : (agent, ev) => Chat.on(chat, agent, ev),
       report : (agent, text, stopped) => Chat.report(chat, agent, text, stopped),
@@ -201,7 +212,7 @@ export namespace Chat {
       mem, tools, pick, socks: new Set(), busy: false, call: null, model: "", asked: false, open: 0, sent: [], wait: [], next: [],
       halt: new AbortController(), live: [], calls: {}, eye: { parts: [], from: 0 }, after: Promise.resolve(),
       writes: Promise.resolve(), held: null, switched: false, was: null, picks: new Map(),
-      suggest: { on: false, due: false, text: "", call: null, unused: 0 }, fit: 1, refits: 0,
+      suggest: { on: false, due: false, text: "", call: null, unused: 0 }, fit: 1, refits: 0, asks: [],
     };
     // a saved pick not offered gave way: told once
     const saved = mem.pick as Pick | null;
@@ -769,7 +780,35 @@ export namespace Chat {
     const agents = Tools.working(chat.tools).map((a) => a.name);
     const tools  = Tools.state(chat.tools);
     const fill   = { used: Math.round(Memory.fill(chat.mem) / 4), cap: Chat.cap(chat), window: Pick.window(chat.pick) ?? config.GUESS };
-    return { $: "state", busy: chat.busy, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, ...tools, use: { ...tools.use, fill }, suggest: chat.suggest.text };
+    const asks   = chat.asks.map(({ done, ...q }) => q);
+    return { $: "state", busy: chat.busy, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, ...tools, use: { ...tools.use, fill }, suggest: chat.suggest.text, asks };
+  }
+
+  // a question for the user (Claude Code asking leave to use a tool),
+  // shown by the views till one answers, or its request drops (a stop:
+  // no); with no view to ask, no at once
+  export function question(chat: Chat, who: string, tool: string, what: string, signal: AbortSignal): Promise<Reply> {
+    if (chat.socks.size === 0 || signal.aborted) {
+      return Promise.resolve({ yes: false, always: false, why: NO_ONE });
+    }
+    return new Promise((done) => {
+      const id = crypto.randomUUID();
+      chat.asks.push({ id, who, tool, what, done });
+      signal.addEventListener("abort", () => Chat.answered(chat, id, false, false, STOPPED), { once: true });
+      Chat.change(chat);
+    });
+  }
+
+  // a question answered (none: one answered already); a no's reason for
+  // the model, the user's or SAID_NO
+  export function answered(chat: Chat, id: string, yes: boolean, always: boolean, why = ""): void {
+    const k = chat.asks.findIndex((q) => q.id === id);
+    if (k < 0) {
+      return;
+    }
+    const [q] = chat.asks.splice(k, 1);
+    q.done({ yes, always, why: yes ? "" : why.trim() || SAID_NO });
+    Chat.change(chat);
   }
 
   export function waits(chat: Chat): Wait {
@@ -903,6 +942,10 @@ export namespace Chat {
       }
       case "clear": {
         return Chat.clear(chat);
+      }
+      case "answer": {
+        Chat.answered(chat, String(msg.ask), msg.yes === true, msg.always === true, typeof msg.why === "string" ? msg.why : "");
+        return {};
       }
       case "compact": {
         return Chat.compact(chat);
