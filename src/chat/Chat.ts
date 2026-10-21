@@ -124,7 +124,7 @@ const NO_FIT     = "No reply: the chat won't fit #'s window even summarized. /cl
 
 // a new chat's first message, its node written with it, so no compactor
 // call summarizes it
-const HELLO      = "Hi, I'm illi, short for illimitable: one chat that never ends, kept in a memory tree, recent days in more detail. I work in the folder you start me in. Ask me anything, for days, weeks, years; /help lists the commands.";
+const HELLO      = "Hi, I'm illi, short for illimitable: an AI, so I can make mistakes. One chat that never ends, kept in a memory tree, recent days in more detail. I work in the folder you start me in. Ask me anything, for days, weeks, years; /help lists the commands.";
 const HELLO_LINE = "illi: hello: illi (illimitable), one endless chat in a memory tree; works in the folder it starts in; /help for commands.";
 
 // a suggested reply (Chat.suggest): what the model is asked after the

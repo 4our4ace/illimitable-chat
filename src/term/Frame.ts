@@ -16,7 +16,7 @@ import { term_shown } from "./Notices.ts";
 import { term_profile_pick } from "./ProfileCommands.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_area, term_under } from "./Select.ts";
-import { term_side, term_side_width } from "./Side.ts";
+import { term_side, term_side_width, term_tokens } from "./Side.ts";
 import { term_act, type Area, type Item, type Pane, type Sug, type Term } from "./Term.ts";
 import { GLYPH } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
@@ -216,13 +216,13 @@ function term_rule(t: Term, w: number, note?: Paint.Line): Paint.Line {
   return term_working(t, doing, w, Date.now());
 }
 
-// the rule while work runs, w wide, at a time: the ∞ traced, what runs
-// (bold, in the accent), how long it has run, what it is at, how to stop
-// it, cut to the width
+// the rule while work runs, w wide, at a time: the ∞ traced, the step
+// it is at (bold, in the accent), how long it has run, the tokens the
+// models wrote (once any), cut to the width
 function term_working(t: Term, doing: View.Doing, w: number, now: number): Paint.Line {
   const c    = Draw.draw_theme().accent ?? "5";
   const head = [Paint.Run(RULE_HEAD, Paint.DIM), ...term_trace(now - t.since, c, t.scr.canvas), Paint.Run(" "), Paint.Run(doing.verb, { ...Paint.INK, c, b: true })];
-  const tail = [term_elapsed(now - t.since), doing.what, doing.stop ? "Esc to interrupt" : ""].filter((x) => x !== "").join(" · ");
+  const tail = [term_elapsed(now - t.since), doing.tokens > 0 ? "↓ " + term_tokens(doing.tokens) + " tokens" : ""].filter((x) => x !== "").join(" · ");
   const room = w - Paint.line_width(head) - 6;
   const said = Paint.text_width(tail) <= room ? tail : room < 2 ? "" : Paint.runs_wrap([Paint.Run(tail)], room - 1, true)[0].map((r) => r.x).join("") + "…";
   const used = Paint.line_width(head) + Paint.text_width(said) + 4;

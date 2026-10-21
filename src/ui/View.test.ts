@@ -21,21 +21,28 @@ test("a turn's wait names its model", () => {
 });
 
 // what runs, in words, for the line over the input: the last thing
-// streaming, else the wait; the agents at work after it; no turn, the
-// agents waited on
+// streaming, else the wait (a call's tool, never its input, nor the
+// agents at work); no turn, agents waited on. Its tokens: the models'
+// streamed characters since work began, four a token, results not
+// counted
 test("what runs, in words", () => {
   const v = View.view_new();
   expect(View.view_doing(v)).toBeNull();
   View.view_hear(v, { $: "state", ...v, busy: true, wait: "gpt-6.1-sol" });
-  expect(View.view_doing(v)).toEqual({ verb: "Waiting for gpt-6.1-sol", what: "", stop: true });
-  View.view_hear(v, { $: "live", live: [{ kind: "mind", text: "hm" }] });
-  expect(View.view_doing(v)?.verb).toBe("Thinking");
-  View.view_hear(v, { $: "live", live: [{ kind: "mind", text: "hm" }, { kind: "tool", text: 'shell {"command":"grep -n x a.log\\nwc -l"}' }] });
+  expect(View.view_doing(v)).toEqual({ verb: "Waiting for gpt-6.1-sol", tokens: 0 });
+  View.view_hear(v, { $: "delta", kind: "mind", text: "hm".repeat(200) });
+  expect(View.view_doing(v)).toEqual({ verb: "Thinking", tokens: 100 });
+  View.view_hear(v, { $: "delta", kind: "echo", text: "x".repeat(4000) });
+  View.view_hear(v, { $: "delta", agent: "explorer", kind: "illi", text: "y".repeat(398) });
+  View.view_hear(v, { $: "delta", kind: "tool", text: 'shell {"command":"grep -n x a.log\\nwc -l"}' });
   View.view_hear(v, { $: "state", ...v, agents: ["explorer", "reviewer"] });
-  expect(View.view_doing(v)).toEqual({ verb: "Running shell", what: "grep -n x a.log · 2 agents at work", stop: true });
+  expect(View.view_doing(v)).toEqual({ verb: "Running shell", tokens: 210 });
   View.view_hear(v, { $: "live", live: [] });
   View.view_hear(v, { $: "state", ...v, busy: false, wait: "", agents: ["explorer"] });
-  expect(View.view_doing(v)).toEqual({ verb: "Waiting on explorer", what: "", stop: false });
+  expect(View.view_doing(v)).toEqual({ verb: "Waiting on agents", tokens: 210 });
+  View.view_hear(v, { $: "state", ...v, agents: [] });
+  View.view_hear(v, { $: "state", ...v, busy: true });
+  expect(View.view_doing(v)?.tokens).toBe(0);
 });
 
 // the work between the person's words and illi's: one Act row per run,
