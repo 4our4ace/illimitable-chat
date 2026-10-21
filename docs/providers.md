@@ -35,6 +35,8 @@ illi then runs Claude Code itself, as it ships, on your login:
   run something its settings don't allow, illi asks: yes, yes for that
   tool until illi quits, no, or no with a reason the model reads. The
   picker's bottom line shows what it would run.
+
+  ![Claude Code asking leave to run a command, answered at illi's screen](../assets/screens/permission.webp)
 - **Summaries run with nothing extra**: `claude -p` calls with no tools,
   MCP servers, commands or hooks.
 - **Plan limits are said plainly**: when your plan's limit is reached,

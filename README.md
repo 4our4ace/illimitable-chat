@@ -7,6 +7,8 @@ into, so it forgets nothing.
 Written mostly by AI agents: expect bugs. illi runs shell commands and
 edits files without asking, so use it where you'd let it.
 
+![illi on a Claude plan, answering with a sequence diagram and a table](assets/screens/hero.webp)
+
 Why illi
 --------
 
@@ -47,6 +49,8 @@ In the chat, type `/login` to sign in with your ChatGPT plan (Plus or
 Pro). Your Claude plan (Pro or Max) works through your own
 [Claude Code](https://code.claude.com), and Anthropic and OpenAI API
 keys work too: see [Providers](docs/providers.md).
+
+![/model: every vendor's models in one picker, with effort and speed](assets/screens/models.webp)
 
 How it works
 ------------
