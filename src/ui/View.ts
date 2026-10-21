@@ -429,7 +429,7 @@ export function view_act(v: View, act: Act): Client[] {
         return [];
       }
       if (to === null) {
-        const parts = Pick.options(from, act.move, v).map(([part]) => part);
+        const parts = Pick.options(from, act.move, v).map(([part]) => (act.move === "speed" ? Pick.speed(part) : part));
         v.notes.push("No " + [act.move, act.to].join(" ").trim() + "; one of: " + [...new Set(parts)].join(", ") + ".");
         return [];
       }
@@ -441,7 +441,7 @@ export function view_act(v: View, act: Act): Client[] {
       const from = view_asked(v);
       const to   = Pick.read(act.to, v);
       if (to === null) {
-        v.notes.push("No pick " + Pick.label(act.to) + " here.");
+        v.notes.push("No pick " + Pick.shown(act.to) + " here.");
         return [];
       }
       if (from !== null && Pick.label(from) === Pick.label(to)) {
@@ -628,7 +628,7 @@ export function view_doing(v: View): Doing | null {
     call !== null ? [("Running " + call.name).trim(), call.head.split("\n")[0].trim()]
     : last?.kind === "mind" ? ["Thinking", ""]
     : last?.kind === "illi" ? ["Writing", ""]
-    : v.wait === SUMMARIES ? ["Compressing earlier messages", ""]
+    : v.wait === SUMMARIES ? ["Summarizing earlier messages", ""]
     : v.wait !== "" ? ["Waiting for " + v.wait, ""]
     : ["Working", ""];
   return { verb, what: [what, agents].filter((x) => x !== "").join(" · "), stop: true };
@@ -640,6 +640,8 @@ export function view_asked(v: View): Pick | null {
   return v.out.flatMap((p) => (p.msg.$ === "pick" ? [p.msg.to] : [])).at(-1) ?? v.pick;
 }
 
+// the pick's parts, as the last line shows them (the standard speed: no
+// text)
 export function view_pick(v: View): Knob[] {
   if (v.pick === null) {
     return [];
@@ -648,7 +650,7 @@ export function view_pick(v: View): Knob[] {
   return [
     { text: model, move: "model", hint: model + " on " + vendor },
     { text: effort, move: "effort", hint: effort + " effort: how long it thinks first; more is smarter and slower" },
-    { text: speed, move: "speed", hint: speed },
+    { text: speed === "slow" ? "" : speed, move: "speed", hint: Pick.speed(speed) },
   ];
 }
 

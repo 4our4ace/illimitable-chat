@@ -36,6 +36,7 @@
 //     You review changes for bugs. Read the diff, then ...
 
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { EFFORTS, Pick, type Offer } from "../ai/Pick.ts";
 import * as config from "./Config.ts";
@@ -112,6 +113,14 @@ export namespace Custom {
   // were), and those an agent may spawn
   export function primaries(cwd: string, all = Custom.agents(cwd)): Profile[] {
     return all.filter((a) => a.mode !== "subagent");
+  }
+
+  // the primary agents, as a note names them; none yet: where an agent's
+  // file goes (from ~)
+  export function primaries_said(cwd: string): string {
+    const names = Custom.primaries(cwd).map((a) => a.name);
+    const dirs  = Custom.dirs(cwd, "agents").map((d) => (d.startsWith(os.homedir()) ? "~" + d.slice(os.homedir().length) : d));
+    return names.length > 0 ? "Your primary agents: " + names.join(", ") + "." : "No primary agents yet: add an agent file (mode: primary, or none) to " + dirs.join(" or ") + "; /agents shows how.";
   }
 
   export function subagents(cwd: string): Profile[] {

@@ -205,11 +205,11 @@ export namespace Chat {
       suggest: { on: false, due: false, text: "", call: null, unused: 0 }, fit: 1, refits: 0,
     };
     // a saved pick not offered gave way: told once
-    const saved = mem.pick === null ? null : Pick.label(mem.pick as Pick);
-    if (saved !== null && saved !== Pick.label(pick)) {
+    const saved = mem.pick as Pick | null;
+    if (saved !== null && Pick.label(saved) !== Pick.label(pick)) {
       mem.pick = pick;
       Memory.save(mem);
-      Chat.note(chat, saved + " isn't offered here, so the chat now runs on " + Pick.label(pick) + ".");
+      Chat.note(chat, Pick.shown(saved) + " (" + saved.vendor + ") isn't offered here, so the chat now runs on " + Pick.shown(pick) + ".");
     }
     if (mem.count === 0) {
       Memory.push(mem, [{ kind: "illi", text: HELLO, line: HELLO_LINE }]);
@@ -902,7 +902,7 @@ export namespace Chat {
   export function clear(chat: Chat): Answer {
     const mem = chat.mem;
     if (chat.busy) {
-      return { error: "Illi is at work: /clear once it's done (Esc stops it)" };
+      return { error: "Illi is at work: /clear once it's done (Esc interrupts it)." };
     }
     if (mem.cut === mem.count) {
       return {};
@@ -910,7 +910,7 @@ export namespace Chat {
     mem.cut = mem.show = mem.top = mem.count;
     Memory.fit(mem);
     Memory.save(mem);
-    Chat.note(chat, "New session: the user cleared the chat for a new topic. Everything before this note is in the view's lines; zoom into them when the user refers to it.");
+    Chat.note(chat, "New session, for a new topic. Illi still remembers the chat before this note: it is in the summaries, and a zoom brings back any part of it.");
     chat.eye = Chat.eye(mem, mem.cut);
     chat.socks.forEach((sock) => Chat.show(chat, sock));
     Chat.change(chat);
@@ -926,18 +926,18 @@ export namespace Chat {
   export function compact(chat: Chat): Answer {
     const mem = chat.mem;
     if (chat.busy) {
-      return { error: "Illi is at work: /compact once it's done (Esc stops it)" };
+      return { error: "Illi is at work: /compact once it's done (Esc interrupts it)." };
     }
     const from = Memory.kept(mem, Chat.cap(chat));
     if (from <= mem.cut) {
-      return { error: "Nothing to compact: Illi gets only the latest messages whole already." };
+      return { error: "Nothing to summarize: Illi gets only the latest messages whole already." };
     }
     const folded = from - mem.cut;
     mem.cut = from;
     Memory.fit(mem);
     Memory.save(mem);
     const n = (k: number, what: string) => k + " " + what + (k === 1 ? "" : "s");
-    Chat.note(chat, "Compacted: the user folded " + n(folded, "older message") + " into the view's lines; the latest " + n(mem.count - from, "message") + " still go whole. Zoom into the lines when you need what they hold.");
+    Chat.note(chat, "Summarized " + n(folded, "older message") + "; the latest " + n(mem.count - from, "message") + " still go whole. A zoom brings back any part of the summaries.");
     chat.eye = Chat.eye(mem, mem.show);
     chat.socks.forEach((sock) => Chat.show(chat, sock));
     Chat.change(chat);
@@ -952,12 +952,11 @@ export namespace Chat {
   export function main(chat: Chat, name: string | null): Answer {
     const cwd = chat.tools.cwd;
     const profile = Custom.agent(cwd, name);
-    const names = Custom.primaries(cwd).map((a) => a.name).join(", ") || "none yet";
     if (name !== null && profile === null) {
-      return { error: "No agent " + name + ". Your primary agents: " + names + " (files in " + Custom.dirs(cwd, "agents").join(" and ") + ")." };
+      return { error: "No agent " + name + ". " + Custom.primaries_said(cwd) };
     }
     if (profile?.mode === "subagent") {
-      return { error: name + " is a subagent: only an agent spawns it. Your primary agents: " + names + "." };
+      return { error: name + " is a subagent: only an agent spawns it. " + Custom.primaries_said(cwd) };
     }
     name = profile?.name ?? null;
     const pick = chat.picks.get(name ?? "") ?? Chat.own(profile);
@@ -990,7 +989,7 @@ export namespace Chat {
   // the note of the main agent now, as a switch to it
   export function switch_note(chat: Chat): string {
     const who = chat.mem.agent === null ? "Illi's own" : agent_name(chat.mem.agent);
-    return "Main agent: " + who + ", on " + Pick.label(chat.pick) + ".";
+    return "Main agent: " + who + ", on " + Pick.shown(chat.pick) + ".";
   }
 
   // what the screen shows: the view's lines before `from` (none of before

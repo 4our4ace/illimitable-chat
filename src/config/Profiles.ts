@@ -39,9 +39,10 @@ export type Imported = { keys: string[]; servers: number };
 // =========
 
 // the default profile's name (no other profile takes it); a profile's
-// name
+// name, and as a person is told it
 export const DEFAULT = "default";
 export const NAME    = /^[a-z0-9][a-z0-9_-]*$/;
+export const NAMED   = "a-z, 0-9, - and _, a letter or digit first";
 
 // a folder that is a profile's: <root>/profiles/<name>
 const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
@@ -140,7 +141,7 @@ export function profile_keep(root: string, name: string): void {
 // why a name can't be a new profile's (null: it can)
 export function profile_why(root: string, name: string): string | null {
   if (!NAME.test(name)) {
-    return "Only a-z, 0-9, - and _, starting with a letter or digit.";
+    return "Only " + NAMED + ".";
   }
   if (name === DEFAULT) {
     return DEFAULT + " names Illi's own folder: pick another name.";

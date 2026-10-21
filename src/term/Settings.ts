@@ -70,14 +70,16 @@ export function term_set(t: Term, arg: string): void {
   if (text === "") {
     const { what } = config.SETTINGS[key];
     const def      = config.config_default(key);
-    return term_note(t, key + ": " + setting_shown(key) + ". " + what[0].toUpperCase() + what.slice(1) + ". /set " + key + " <value> changes it; /set " + key + " default puts back " + (def === "" ? "none" : def) + ".");
+    return term_note(t, key + ": " + setting_shown(key) + ". " + what[0].toUpperCase() + what.slice(1) + ". /set " + key + " <value> changes it; /set " + key + " default puts back " + setting_shown(key, def) + ".");
   }
   let value: unknown = text === "default" ? null : text;
+  // contexts as JSON; text that won't parse goes on as it is, for
+  // config_check to say why it won't do
   if (key === "contexts" && value !== null) {
     try {
       value = JSON.parse(text);
     } catch {
-      return term_note(t, "contexts takes JSON, like {\"gpt-6.1-sol\": 350000}.");
+      value = text;
     }
   }
   if (setting_set(t, key, value)) {
@@ -137,18 +139,19 @@ export function setting_set(t: Term, key: config.Key, value: unknown): boolean {
   return true;
 }
 
-// a setting's value as shown: a pick by its model, effort and speed;
-// none, what holds instead; a path in Illi's folder by its name, else
-// from ~
-function setting_shown(key: config.Key): string {
+// a setting's value (now, else the one given) as shown: a pick as a
+// person reads it (Pick.shown); none, what holds instead; a path in
+// Illi's folder by its name, else from ~
+function setting_shown(key: config.Key, value?: string): string {
   const s    = config.SETTINGS[key];
-  const raw  = config.config_value(key) as unknown;
+  const raw  = value ?? (config.config_value(key) as unknown);
   const text = typeof raw === "string" ? raw.trim() : JSON.stringify(raw);
   if (text === "") {
     return s.none ?? "none";
   }
   const file = text.startsWith(config.DIR + "/") ? text.slice(config.DIR.length + 1) : term_home(text);
-  return s.values === "pick" ? text.split(":").slice(1).join(" ") : s.path ? file : text;
+  const [vendor, model, effort, speed] = text.split(":");
+  return s.values === "pick" ? Pick.shown({ vendor, model, effort, speed } as Pick) : s.path ? file : text;
 }
 
 // a value cut to WIDE characters, an ellipsis at its end

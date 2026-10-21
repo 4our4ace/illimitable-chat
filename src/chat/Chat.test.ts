@@ -106,7 +106,7 @@ test("/compact folds all but the last two exchanges for the agent, the screen st
   expect(mem.show).toBe(shown);
   expect(chat.eye.from).toBe(shown);
   expect(Memory.message(mem, mem.count - 1)!.kind).toBe("note");
-  expect(Chat.compact(chat).error).toContain("Nothing to compact");
+  expect(Chat.compact(chat).error).toContain("Nothing to summarize");
   expect(Memory.load(mem.dir, () => ({}) as any).show).toBe(shown);
 });
 

@@ -31,9 +31,6 @@ const LEAVE = 2000;
 const NEW    = "+ new profile";
 const IMPORT = "+ import a profile";
 
-// what a name asked for may be
-const NAMED = "lowercase letters, digits, - and _";
-
 // /profile: none opens the profiles' picker; a name switches to it
 export function term_profile(t: Term, arg: string): void | Promise<void> {
   return arg === "" ? term_profile_pick(t) : term_profile_go(t, arg.toLowerCase());
@@ -68,7 +65,7 @@ function term_profile_why(name: string): string | null {
 
 // a new profile's name asked for, then what comes along
 function term_profile_name(t: Term): void {
-  term_ask(t, "New profile", "its name", "", NAMED, (text) => {
+  term_ask(t, "New profile", "its name", "", Profiles.NAMED, (text) => {
     const name = text.toLowerCase();
     const why  = term_profile_why(name);
     if (why === null) {
@@ -180,7 +177,7 @@ function term_profile_rename(t: Term, from: string): void {
   if (from === Profiles.DEFAULT) {
     return term_note(t, "The default profile is Illi's own folder (" + term_home(config.ROOT) + ") and keeps its name.");
   }
-  term_ask(t, "Rename profile " + from, "its new name", from, NAMED, (text) => {
+  term_ask(t, "Rename profile " + from, "its new name", from, Profiles.NAMED, (text) => {
     const to  = text.toLowerCase();
     const why = term_profile_why(to);
     if (to === from || why !== null) {
@@ -229,7 +226,7 @@ async function term_profile_export(t: Term, name: string): Promise<void> {
       await Disk.synced();
     }
     const cut = await Profiles.profile_export(config.ROOT, name, file);
-    term_note(t, "Profile " + name + " is in " + term_home(file) + ": its chat and settings, no login or lock" + (cut === 0 ? "." : "; " + cut + " secret" + (cut === 1 ? "" : "s") + " left out of its config.") + " \"" + IMPORT + "\" in /profile brings it in.");
+    term_note(t, "Profile " + name + " is in " + term_home(file) + ", without the login" + (cut === 0 ? "" : " or " + cut + " secret" + (cut === 1 ? "" : "s")) + ". /profile imports it.");
   } catch (err: any) {
     term_note(t, "Not exported. " + err.message);
   }
@@ -249,7 +246,7 @@ function term_profile_file(t: Term): void {
       void term_profile_import(t, file, name!);
       return null;
     }
-    term_ask(t, "Name the imported profile", "its name", name ?? "", why === "" ? NAMED : why, (text) => {
+    term_ask(t, "Name the imported profile", "its name", name ?? "", why === "" ? Profiles.NAMED : why, (text) => {
       const named = text.toLowerCase();
       const no    = term_profile_why(named);
       if (no === null) {
@@ -267,11 +264,11 @@ async function term_profile_import(t: Term, file: string, name: string): Promise
   try {
     const got = await Profiles.profile_import(config.ROOT, file, name);
     const off = [
-      ...(got.keys.length === 0 ? [] : ["its config's " + got.keys.join(", ") + " (they run a command or read a file here)"]),
-      ...(got.servers === 0 ? [] : [got.servers + " MCP server" + (got.servers === 1 ? "" : "s") + ", now \"disabled\": true in its mcp.json"]),
+      ...got.keys,
+      ...(got.servers === 0 ? [] : [got.servers + " MCP server" + (got.servers === 1 ? "" : "s")]),
     ];
     t.profs = Profiles.profile_list(config.ROOT);
-    term_note(t, "Imported profile " + name + " into " + term_home(Profiles.profile_dir(config.ROOT, name)) + "." + (off.length === 0 ? "" : " Left off, as the archive is untrusted: " + off.join("; ") + ".") + " Its agents, commands, skills, RULES.md and chat came as they were, at work as soon as you switch to it: look at them first. /profile switches to it.");
+    term_note(t, "Imported profile " + name + "." + (off.length === 0 ? "" : " Turned off, as untrusted: " + off.join(", ") + ".") + " Its agents, commands, skills and RULES.md came as they were: look at them before you switch.");
   } catch (err: any) {
     term_note(t, "Not imported. " + err.message);
   }
