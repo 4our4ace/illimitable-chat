@@ -86,7 +86,8 @@ one:
 
 - vendors: chatgpt (the default), claude-api, openai-api
 - pick: what Illi runs on, as vendor:model:effort:speed; compactor: what
-  writes its memory's summaries; agents: what subagents run on
+  writes its memory's summaries (both default to the first vendor's
+  models); agents: what subagents run on
 - models: the models offered; context: the tokens a turn sends ("auto", a
   number, or a share like "60%"); contexts: per model
 - rules: the rules file, RULES.md in Illi's folder unless set; after: a
