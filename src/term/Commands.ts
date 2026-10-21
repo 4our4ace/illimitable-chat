@@ -7,11 +7,11 @@
 // /model, /settings), the panes over the chat (/help, /agents, /mcp), the
 // pick, the login, the tabs, the blocks, the memory's exports.
 
-import * as fs from "node:fs";
 import type { Vendor } from "../ai/AskAI.ts";
 import { term_clip, term_image } from "./Attach.ts";
 import { Chat } from "../chat/Chat.ts";
 import { ChatGPT } from "../ai/ChatGPT.ts";
+import { json_object } from "../tools/Clip.ts";
 import * as config from "../config/Config.ts";
 import { Custom, type Command, type Profile, type Skill } from "../config/Custom.ts";
 import { term_redraw } from "./Frame.ts";
@@ -159,11 +159,7 @@ export function term_suggest(t: Term): Sug | null {
 
 // how often each command was run (USED_FILE), read once
 function term_used(): Record<string, number> {
-  try {
-    const kept = used ?? JSON.parse(fs.readFileSync(USED_FILE, "utf8"));
-    used = typeof kept === "object" && kept !== null && !Array.isArray(kept) ? kept : {};
-  } catch {}
-  return (used ??= {});
+  return (used ??= json_object(USED_FILE) ?? {});
 }
 
 // a command run, counted; the counts kept once runs pause (never in the

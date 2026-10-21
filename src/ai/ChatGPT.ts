@@ -22,6 +22,7 @@
 // config.MODELS_FILE for the next start.
 
 import * as fs from "node:fs";
+import { json_object } from "../tools/Clip.ts";
 import * as path from "node:path";
 import { dlopen } from "bun:ffi";
 import type { Ask } from "./AskAI.ts";
@@ -161,7 +162,7 @@ export namespace ChatGPT {
   // why the login file is unreadable ("": it reads, or there is none)
   export function unread(): string {
     const file = ChatGPT.file();
-    return fs.existsSync(file) && ChatGPT.json(file) === null ? "The ChatGPT login file " + file + " is unreadable: /login replaces it." : "";
+    return fs.existsSync(file) && json_object(file) === null ? "The ChatGPT login file " + file + " is unreadable: /login replaces it." : "";
   }
 
   // whether a login is there to run on
@@ -233,7 +234,7 @@ export namespace ChatGPT {
         throw new Error("ChatGPT's device login got no tokens (HTTP " + tokens.status + ")");
       }
       const file = ChatGPT.own();
-      const kept = ChatGPT.json(file) ?? {};
+      const kept = json_object(file) ?? {};
       ChatGPT.keep(file, kept, {}, await tokens.json(), null);
       held = null;
       return;
@@ -257,7 +258,7 @@ export namespace ChatGPT {
     if (!fs.existsSync(file)) {
       throw new Error(NO_LOGIN);
     }
-    const data = ChatGPT.json(file);
+    const data = json_object(file);
     if (data === null) {
       throw new Error("the ChatGPT login file " + file + " is unreadable: /login replaces it");
     }
@@ -266,16 +267,6 @@ export namespace ChatGPT {
       throw new Error(NO_LOGIN);
     }
     return { data, entry };
-  }
-
-  // a file's JSON object; null: none there, or not a JSON object
-  export function json(file: string): any {
-    try {
-      const data = JSON.parse(fs.readFileSync(file, "utf8"));
-      return typeof data === "object" && data !== null && !Array.isArray(data) ? data : null;
-    } catch {
-      return null;
-    }
   }
 
   export function login(entry: any): Login {

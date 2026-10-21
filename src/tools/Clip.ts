@@ -4,7 +4,11 @@
 // keeps a command's output to 30,000 too). A command's output is clipped
 // to its head and tail as it streams (Machine.ts); any text kept is never
 // cut, but goes in pages (a message logged, a zoom, a read). It imports
-// nothing. A clip is a copy (a slice would keep its source alive).
+// nothing of illi's, so any file may use what it holds: a stream's lines
+// and events, a file's JSON. A clip is a copy (a slice would keep its
+// source alive).
+
+import * as fs from "node:fs";
 
 // Constants
 // =========
@@ -108,5 +112,15 @@ export async function* stream_events(stream: ReadableStream<Uint8Array>): AsyncG
   }
   if (data.length > 0) {
     yield data.join("\n");
+  }
+}
+
+// a file's JSON object; null: no file, not JSON, or not an object
+export function json_object(file: string): any {
+  try {
+    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    return typeof data === "object" && data !== null && !Array.isArray(data) ? data : null;
+  } catch {
+    return null;
   }
 }

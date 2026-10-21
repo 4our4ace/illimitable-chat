@@ -24,6 +24,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { json_object } from "../tools/Clip.ts";
 
 // Types
 // =====
@@ -218,15 +219,6 @@ export function profile_strip(value: unknown): [unknown, number] {
   return [kept, cut];
 }
 
-// a file's JSON (undefined: no file, or no JSON)
-function profile_json(file: string): any {
-  try {
-    return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 // an object without some keys; the keys it had of them
 function profile_omit(x: any, keys: string[]): [any, string[]] {
   const plain = typeof x === "object" && x !== null && !Array.isArray(x);
@@ -244,15 +236,15 @@ function profile_omit(x: any, keys: string[]): [any, string[]] {
 export async function profile_export(root: string, name: string, file: string): Promise<number> {
   const dir   = profile_dir(root, name);
   const tmp   = fs.mkdtempSync(path.join(os.tmpdir(), "illi-export-"));
-  const conf  = profile_json(dir + "/config.json");
+  const conf  = json_object(dir + "/config.json");
   const login = typeof conf?.login === "string" && conf.login !== "" ? path.relative(dir, path.resolve(dir, conf.login.replace(/^~(?=\/)/, os.homedir()))) : "";
   const local = login !== "" && profile_inside(login) ? ["--exclude=./" + login] : [];
   const skip  = [...OWN, ...CLEANED, ...(name === DEFAULT ? ROOTED : []), login];
   let cut = 0;
   try {
     for (const part of CLEANED) {
-      const json = profile_json(dir + "/" + part);
-      if (json === undefined && part !== "config.json") {
+      const json = json_object(dir + "/" + part);
+      if (json === null && part !== "config.json") {
         continue;
       }
       const [kept, n] = profile_strip(part === "config.json" ? profile_omit(json ?? {}, LOCAL)[0] : json);
@@ -288,12 +280,12 @@ export async function profile_import(root: string, file: string, name: string): 
     for (const part of [...OWN, ...ROOTED]) {
       fs.rmSync(tmp + "/" + part, { recursive: true, force: true });
     }
-    const conf = profile_json(tmp + "/config.json");
+    const conf = json_object(tmp + "/config.json");
     const [kept, keys] = profile_omit(conf, UNSAFE);
     if (fs.existsSync(tmp + "/config.json")) {
       fs.writeFileSync(tmp + "/config.json", JSON.stringify(kept, null, 2) + "\n");
     }
-    const mcp  = profile_json(tmp + "/mcp.json");
+    const mcp  = json_object(tmp + "/mcp.json");
     const defs = typeof mcp?.mcpServers === "object" && mcp.mcpServers !== null ? Object.values<any>(mcp.mcpServers).filter((d) => typeof d === "object" && d !== null) : [];
     const on   = defs.filter((d) => d.disabled !== true);
     on.forEach((d) => (d.disabled = true));

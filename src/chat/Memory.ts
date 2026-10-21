@@ -43,7 +43,7 @@
 import * as fs from "node:fs";
 import * as zlib from "node:zlib";
 import { AskAI, type Ask, type Block, type Call, type Img, type Kind, type Say } from "../ai/AskAI.ts";
-import { clip_page, clip_pages } from "../tools/Clip.ts";
+import { clip_page, clip_pages, json_object } from "../tools/Clip.ts";
 import * as config from "../config/Config.ts";
 import { Disk } from "./Disk.ts";
 import { Pick } from "../ai/Pick.ts";
@@ -247,11 +247,7 @@ export namespace Memory {
 
   // view.json; null: none, or unreadable
   export function saved(dir: string): Saved | null {
-    try {
-      return JSON.parse(fs.readFileSync(dir + "/view.json", "utf8"));
-    } catch {
-      return null;
-    }
+    return json_object(dir + "/view.json");
   }
 
   // a view as kept (none: the highest nodes built)
