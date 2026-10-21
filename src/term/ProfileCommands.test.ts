@@ -95,8 +95,8 @@ test("the new row asks a name, a reason keeping the box open, then what comes al
   t.choose.find = "work";
   term_grab(t, "Enter");
   expect(t.choose.title).toBe("New profile work");
-  expect(t.choose.names).toEqual(["Empty", "With this setup", "With this chat", "With both"]);
-  expect(t.choose.about[2]).toBe("this chat moves there; default starts empty");
+  expect(t.choose.names).toEqual(["Fresh chat", "With this chat"]);
+  expect(t.choose.about[1]).toBe("this chat moves there; default starts empty");
 });
 
 test("Ctrl+R renames another profile, its old name to start from; Delete then deletes it, asked first", () => {

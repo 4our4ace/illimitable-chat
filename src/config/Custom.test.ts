@@ -178,7 +178,8 @@ test("illi's own skill, customize-illi: listed first, loaded with its folders na
   expect(own.description).toStartWith("Customize illi itself");
   const out = await Tools.call(chat.tools, "main", "skill", { name: "customize-illi" }, new AbortController().signal);
   expect(out.text).toStartWith("Skill customize-illi: its instructions, whole, below (built into illi)\n\n");
-  expect(out.text).toContain("- illi's folder: " + DIR + "\n");
+  expect(out.text).toContain("- The global folder, every profile's: " + DIR + "\n");
+  expect(out.text).toContain("- illi's folder, this profile's own: " + DIR + " (");
   expect(out.text).toContain("- This project's: " + CWD + "/.illi (");
   expect(out.text).not.toContain("{{");
   put(DIR + "/skills/customize-illi/SKILL.md", "---\ndescription: mine\n---\nMine.");

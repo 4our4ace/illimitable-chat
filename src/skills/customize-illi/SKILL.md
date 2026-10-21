@@ -5,12 +5,16 @@ description: Customize illi itself - add or change its agents, slash commands, s
 
 illi is customized with plain files, which you write with your tools:
 
-- illi's folder: {{illi}}
+- The global folder, every profile's: {{root}}
+- illi's folder, this profile's own: {{illi}} (the same, in the default
+  profile; a profile's agents, commands, skills and MCP servers go beside
+  the global ones, and win by name)
 - This project's: {{project}} (agents, commands and skills only; by
-  name, a project's win over illi's folder)
+  name, a project's win over the others)
 
-Write to illi's folder unless the user asks for this project only. /agents
-shows the user every agent, command and skill, and where their files go.
+Write to illi's folder unless the user asks for every profile (the global
+folder) or this project only. /agents shows the user every agent, command
+and skill, and where their files go; the `off` setting turns one off.
 
 # What goes where
 
@@ -63,9 +67,10 @@ You review code changes. ...
 - color: its mark's color; none: one is made for it
 - the body: its instructions, added to its system prompt
 
-## MCP servers: mcp.json, in illi's folder only
+## MCP servers: mcp.json, in illi's folder or the global one
 
-A project's is never read: a server is a program, and a repository's would
+{{root}}/mcp.json is every profile's; a profile's own goes over it by
+name. A project's is never read: a server is a program, and a repository's would
 run on opening it. The shape is Claude Code's, so entries copy over:
 
 ```json
@@ -94,14 +99,17 @@ one:
   pick
 - models: the models offered; context: the tokens a turn sends ("auto", a
   number, or a share like "60%"); contexts: per model
-- rules: the rules file, RULES.md in illi's folder unless set; after: a
-  shell command run after each turn
+- rules: the rules file, RULES.md in illi's folder (else the global
+  folder's) unless set; after: a shell command run after each turn
+- off: skills, agents, commands and MCP servers turned off, by name,
+  comma-separated (in a profile: global ones it doesn't use)
 - side: right, left or off; side_width: "25%" or columns; jobs: summaries
   built at once
 - suggest: on or off, a suggested reply after each turn
 - tps: on or off, tokens a second (tok/s) on the line over the input while
   text streams
-- theme, mcp: where those files are, if not in illi's folder; login: the
+- theme, mcp: where those files are, if not in illi's folder (theme:
+  else the global folder's; the global mcp.json is read too); login: the
   ChatGPT login file, if not {{root}}/login.json (the shared one /login
   makes) or else opencode's
 - a relative path is taken from the folder of the config.json naming it
@@ -115,7 +123,8 @@ environment.
 
 ## Rules: RULES.md, and a project's AGENTS.md
 
-{{illi}}/RULES.md (or the file the "rules" setting names) goes into every
+{{illi}}/RULES.md (else {{root}}/RULES.md, or the file the "rules"
+setting names) goes into every
 system prompt, illi's and its agents', for every project: who the user is,
 how they want work done, illi's tone. Change it only when the user asks
 (never on your own): then write it for them as short lines (create it if

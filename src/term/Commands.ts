@@ -241,11 +241,11 @@ function term_skill(t: Term, skill: Skill, arg: string, word: string): void {
   term_custom(t, { name: skill.name, description: "", body: "Use your skill " + skill.name + (arg === "" ? "." : ": $ARGUMENTS"), file: skill.dir }, arg, word);
 }
 
-// the user's MCP servers: each one's tools, or how it is; the file (none
+// the user's MCP servers: each one's tools, or how it is; the files (none
 // yet: where they go)
 export function term_mcp(t: Term): void {
-  const { servers, trouble, file } = Mcp.status();
-  const where  = term_home(file);
+  const { servers, trouble, files } = Mcp.status();
+  const where  = files.map((f, k) => term_home(f) + (files.length === 1 ? "" : k === 0 ? " (every profile)" : " (this profile's)")).join(" or ");
   const server = (s: Server) => "- **" + s.name + "**: " + (s.state === "ready" ? s.own.size + " tools: " + [...s.own.values()].join(", ") : s.state === "starting" ? "starting…" : "failed: " + s.why);
   const text = [
     servers.length === 0 ? "No MCP servers yet. Add them to " + where + ", as Claude Code's mcpServers (illi's docs/customize.md shows the shape); they run from illi's next start." : "MCP servers (their tools are named mcp__<server>__<tool>):", ...servers.map(server),

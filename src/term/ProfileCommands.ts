@@ -3,8 +3,8 @@
 // /profile: the profiles' picker, where all a profile takes is done: Enter
 // switches (all this illi holds let go, and illi run again in its place,
 // in the profile chosen), Ctrl+R renames, Ctrl+E exports, Delete deletes
-// (asked first); its last rows make a new one (named, then empty, with
-// this one's setup, with this chat moved into it, or both) and bring one
+// (asked first); its last rows make a new one (named, then with a fresh
+// chat or this one moved into it; the global setup its own) and bring one
 // in from an archive. /profile <name> switches at once. Profiles.ts does
 // the files.
 
@@ -145,27 +145,25 @@ async function term_leave(t: Term): Promise<void> {
   await Screen.screen_leave(t.scr);
 }
 
-// what comes along to new profile `name`, asked in a picker: nothing,
-// this one's settings, agents, commands and skills, this chat (moved:
-// this one starts with an empty chat), or both
+// what new profile `name` starts with, asked in a picker: a fresh chat,
+// or this one (moved: this one starts with an empty chat); the global
+// setup either way
 function term_profile_new(t: Term, name: string): void {
   const here = config.PROFILE;
-  const rows: Array<[string, string, boolean, boolean]> = [
-    ["Empty",           "a fresh chat and settings",                        false, false],
-    ["With this setup", here + "'s config, agents, commands, skills",       true,  false],
-    ["With this chat",  "this chat moves there; " + here + " starts empty", false, true],
-    ["With both",       "the setup copied, and this chat moved",            true,  true],
+  const rows: Array<[string, string, boolean]> = [
+    ["Fresh chat",     "the global settings, skills and MCP servers; its own chat", false],
+    ["With this chat", "this chat moves there; " + here + " starts empty",           true],
   ];
-  term_chooser(t, "New profile " + name, rows.map((r) => r[0]), rows.map((r) => r[1]), -1, (k) => void term_profile_make(t, name, rows[k][2], rows[k][3]));
+  term_chooser(t, "New profile " + name, rows.map((r) => r[0]), rows.map((r) => r[1]), -1, (k) => void term_profile_make(t, name, rows[k][2]));
 }
 
-// a new profile made (copy: this one's setup), and switched to (move:
-// with this chat, moved as this illi lets it go)
-async function term_profile_make(t: Term, name: string, copy: boolean, move: boolean): Promise<void> {
+// a new profile made, and switched to (move: with this chat, moved as
+// this illi lets it go)
+async function term_profile_make(t: Term, name: string, move: boolean): Promise<void> {
   if (term_profile_busy(t, "make " + name)) {
     return;
   }
-  Profiles.profile_new(config.ROOT, name, copy ? config.DIR : null);
+  Profiles.profile_new(config.ROOT, name);
   const dir = Profiles.profile_dir(config.ROOT, name);
   return term_restart(t, name, move ? () => Profiles.profile_move_chat(config.DIR, dir) : undefined);
 }

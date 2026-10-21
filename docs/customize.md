@@ -1,8 +1,9 @@
 Customize
 =========
 
-All in `~/.illi/`. A project's `.illi/` may hold agents, commands and
-skills too, which win by name; the rest is read only from yours.
+All in `~/.illi/`, for every profile; a profile may add its own
+([Profiles](profiles.md)). A project's `.illi/` may hold agents, commands
+and skills too, which win by name; the rest is read only from yours.
 [`examples/`](../examples) has samples. Or ask illi: it comes with a
 skill, `customize-illi`, and writes these files itself.
 

@@ -1,9 +1,11 @@
 // Custom
 // ======
 // What the user defines, as markdown files: agents, commands and skills,
-// in config.DIR (theirs: ~/.illi/agents, ~/.illi/commands, ~/.illi/skills)
-// and in the working dir's .illi (the project's, which wins by name).
-// Each is read anew at each use, so an edit applies at the next call.
+// in config.ROOT (global: ~/.illi/agents, ~/.illi/commands,
+// ~/.illi/skills), a profile's folder (config.DIR, its own beside them)
+// and the working dir's .illi (the project's); by name, the later wins.
+// One named in the `off` setting is left out. Each is read anew at each
+// use, so an edit applies at the next call.
 //
 // An agent (agents/<name>.md) is, by its mode (as opencode's), a
 // primary agent (primary: illi runs as it, by Shift+Tab or /agent, named
@@ -88,21 +90,29 @@ const BUILT_IN = [CUSTOMIZE];
 
 export namespace Custom {
 
-  // where the user's files of a kind are, theirs first, the project's last
+  // where the user's files of a kind are: the global ones first, then
+  // the profile's, the project's last
   export function dirs(cwd: string, kind: "agents" | "commands" | "skills"): string[] {
-    return [path.join(config.DIR, kind), path.join(cwd, ".illi", kind)];
+    const own = config.DIR === config.ROOT ? [] : [path.join(config.ROOT, kind)];
+    return [...own, path.join(config.DIR, kind), path.join(cwd, ".illi", kind)];
   }
 
-  // the markdown files of a kind, by name: the project's over theirs
-  export function files(cwd: string, kind: "agents" | "commands"): Map<string, string> {
+  // the markdown files of a kind, by name, the later dir's over the
+  // earlier's; but those turned off (all: those too)
+  export function files(cwd: string, kind: "agents" | "commands", all = false): Map<string, string> {
     const out = new Map<string, string>();
     for (const dir of Custom.dirs(cwd, kind)) {
       const names = fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => f.endsWith(".md")).sort() : [];
-      for (const f of names.filter((f) => NAME.test(f.slice(0, -3)))) {
+      for (const f of names.filter((f) => NAME.test(f.slice(0, -3)) && (all || !Custom.off(f.slice(0, -3))))) {
         out.set(f.slice(0, -3), path.join(dir, f));
       }
     }
     return out;
+  }
+
+  // whether a skill, agent, command or MCP server is turned off (`off`)
+  export function off(name: string): boolean {
+    return config.OFF.includes(name.toLowerCase());
   }
 
   export function agents(cwd: string): Profile[] {
@@ -133,9 +143,9 @@ export namespace Custom {
     return found === undefined ? null : Custom.profile(...found);
   }
 
-  // the skills, by name: each folder holding a SKILL.md, the project's
-  // over theirs
-  export function skills(cwd: string): Skill[] {
+  // the skills, by name: each folder holding a SKILL.md, the later dir's
+  // over the earlier's; but those turned off (all: those too)
+  export function skills(cwd: string, all = false): Skill[] {
     const out = new Map<string, Skill>();
     for (const { head, body } of BUILT_IN.map(Custom.parse)) {
       const filled = body.replaceAll("{{illi}}", config.DIR).replaceAll("{{root}}", config.ROOT).replaceAll("{{project}}", path.join(cwd, ".illi"));
@@ -148,7 +158,7 @@ export namespace Custom {
         out.set(name.toLowerCase(), { name, description: head.description ?? "", body, dir: path.join(dir, name) });
       }
     }
-    return [...out.values()].sort((a, b) => a.name.localeCompare(b.name));
+    return [...out.values()].filter((s) => all || !Custom.off(s.name)).sort((a, b) => a.name.localeCompare(b.name));
   }
 
   export function skill(cwd: string, name: string): Skill | null {

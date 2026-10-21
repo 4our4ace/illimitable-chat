@@ -4,7 +4,10 @@
 // the one used last, else the default (the root itself); a folder that
 // is a profile's is that one, in its root. Config.ts on a profile: its
 // folder as DIR, its config.json over the root's, the root's login, the
-// keys put back for a switch. Names a profile takes. Secrets left out of
+// keys put back for a switch; the root as the global layer: its skills,
+// agents, commands and MCP servers beside the profile's (whose win by
+// name), each setting said to come from the profile or global, the
+// profile's `off` leaving some out. Names a profile takes. Secrets left out of
 // a JSON file. An export: no login, lock or log, its config stripped; an
 // import: a new profile only, its config's commands dropped, its MCP
 // servers off; an archive with a path out of its folder, or a link, is
@@ -50,18 +53,17 @@ test("the default runs first: the root itself", () => {
   expect(Profiles.profile_list(ROOT)).toEqual(["default"]);
 });
 
-test("a new profile: named well, never twice, never default (new is a name like any); a copy takes the settings, never the chat", () => {
+test("a new profile: named well, never twice, never default (new is a name like any); its folder empty", () => {
   expect(Profiles.profile_why(ROOT, "Work")).toContain("Only a-z");
   expect(Profiles.profile_why(ROOT, "-x")).toContain("Only a-z");
   expect(Profiles.profile_why(ROOT, "a/b")).toContain("Only a-z");
   expect(Profiles.profile_why(ROOT, "default")).toContain("illi's own folder");
   expect(Profiles.profile_why(ROOT, "new")).toBeNull();
   expect(Profiles.profile_why(ROOT, "work")).toBeNull();
-  Profiles.profile_new(ROOT, "work", null);
-  Profiles.profile_new(ROOT, "copy", ROOT);
+  Profiles.profile_new(ROOT, "work");
+  Profiles.profile_new(ROOT, "copy");
   expect(Profiles.profile_why(ROOT, "work")).toContain("already");
   expect(fs.readdirSync(ROOT + "/profiles/work")).toEqual([]);
-  expect(fs.readdirSync(ROOT + "/profiles/copy").sort()).toEqual(["agents", "config.json", "mcp.json"]);
   fs.mkdirSync(ROOT + "/profiles/.import-x");
   fs.mkdirSync(ROOT + "/profiles/Bad");
   expect(Profiles.profile_list(ROOT)).toEqual(["default", "copy", "work"]);
@@ -181,7 +183,7 @@ test("Config.ts on a profile: its folder, its config over the root's, the root's
   process.env.ILLI_DIR = ROOT;
   process.env.ILLI_PROFILE = "copy";
   process.env.ANTHROPIC_API_KEY = "test-key";
-  put(ROOT + "/profiles/copy/config.json", JSON.stringify({ side: "off" }));
+  put(ROOT + "/profiles/copy/config.json", JSON.stringify({ side: "off", off: "Adhd, github" }));
   const config = await import("./Config.ts");
   expect([config.ROOT, config.PROFILE, config.DIR]).toEqual([ROOT, "copy", ROOT + "/profiles/copy"]);
   expect(config.config_value("side")).toBe("off");
@@ -191,9 +193,30 @@ test("Config.ts on a profile: its folder, its config over the root's, the root's
   expect(config.config_env().ANTHROPIC_API_KEY).toBe("test-key");
 });
 
+test("the root is global: a profile has its skills, agents, commands and MCP servers beside its own, but those turned off", async () => {
+  const config = await import("./Config.ts");
+  const { Custom } = await import("./Custom.ts");
+  const { Mcp } = await import("../tools/Mcp.ts");
+  const own = ROOT + "/profiles/copy";
+  put(ROOT + "/skills/adhd/SKILL.md", "---\ndescription: global\n---\nG.");
+  put(ROOT + "/skills/notes/SKILL.md", "---\ndescription: global\n---\nG.");
+  put(own + "/skills/notes/SKILL.md", "---\ndescription: mine\n---\nM.");
+  put(ROOT + "/commands/ship.md", "Ship it.");
+  put(own + "/agents/reviewer.md", "---\ndescription: mine\n---\nMine.");
+  put(own + "/mcp.json", JSON.stringify({ mcpServers: { docs: { type: "http", url: "https://example.com/mine" } } }));
+  expect(Custom.dirs(TMP, "skills")).toEqual([ROOT + "/skills", own + "/skills", TMP + "/.illi/skills"]);
+  expect(Custom.skills(TMP).map((s) => s.name + ":" + s.description)).toEqual(["customize-illi:" + Custom.skills(TMP)[0].description, "notes:mine"]);
+  expect(Custom.skills(TMP, true).map((s) => s.name)).toContain("adhd");
+  expect([Custom.agent(TMP, "reviewer")?.description, Custom.commands(TMP).map((c) => c.name)]).toEqual(["mine", ["ship"]]);
+  expect(config.MCPS).toEqual([ROOT + "/mcp.json", own + "/mcp.json"]);
+  expect(Object.keys(Mcp.read())).toEqual(["docs", "off"]);
+  expect([Mcp.read().docs.url, Object.keys(Mcp.read(true))]).toEqual(["https://example.com/mine", ["github", "docs", "off"]]);
+  expect([config.config_from("side"), config.config_from("tps")]).toEqual(["copy", "global"]);
+});
+
 test("a profile renamed, deleted (the one used last following), or made with another's chat moved in", () => {
   const root = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-moves-");
-  Profiles.profile_new(root, "a", null);
+  Profiles.profile_new(root, "a");
   Profiles.profile_keep(root, "a");
   Profiles.profile_rename(root, "a", "b");
   expect([fs.existsSync(root + "/profiles/a"), fs.existsSync(root + "/profiles/b")]).toEqual([false, true]);
@@ -203,7 +226,7 @@ test("a profile renamed, deleted (the one used last following), or made with ano
   expect(fs.readFileSync(root + "/profile", "utf8").trim()).toBe("default");
   fs.mkdirSync(root + "/chat/main", { recursive: true });
   fs.writeFileSync(root + "/chat/main/day.jsonl", "{}\n");
-  Profiles.profile_new(root, "work", null);
+  Profiles.profile_new(root, "work");
   Profiles.profile_move_chat(root, root + "/profiles/work");
   expect([fs.existsSync(root + "/chat"), fs.readFileSync(root + "/profiles/work/chat/main/day.jsonl", "utf8")]).toEqual([false, "{}\n"]);
   fs.mkdirSync(root + "/chat");

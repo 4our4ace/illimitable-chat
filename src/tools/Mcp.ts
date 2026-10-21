@@ -3,8 +3,10 @@
 // The user's MCP servers, their tools beside illi's own (Tools.ts), each
 // named mcp__<server>__<tool> as the vendors take it, numbered if two
 // come out alike (get.user and get_user: mcp__s__get_user_2), and called
-// by that name at its server. The servers are in config.MCP
-// (~/.illi/mcp.json), in the shape Claude Code's and Claude Desktop's
+// by that name at its server. The servers are in config.MCPS
+// (~/.illi/mcp.json, global; in a profile, its own mcp.json too, whose
+// servers go over the global ones by name; one named in the `off`
+// setting is left out), in the shape Claude Code's and Claude Desktop's
 // take, so an entry copies over. A server is a command (stdio: a JSON-RPC
 // message a line, each way) or a URL (Streamable HTTP: a POST each
 // message, answered as JSON or as an event stream). `${VAR}` (or
@@ -106,16 +108,22 @@ export namespace Mcp {
     return started;
   }
 
-  // the servers in the file, by name; a file that won't read is told
-  export function read(): Record<string, Def> {
-    if (!fs.existsSync(config.MCP)) {
+  // the servers in the files, by name, the profile's over the global
+  // ones; but those turned off (all: those too)
+  export function read(all = false): Record<string, Def> {
+    const defs: Record<string, Def> = Object.assign({}, ...config.MCPS.map(Mcp.file));
+    return Object.fromEntries(Object.entries(defs).filter(([name]) => all || !config.OFF.includes(name.toLowerCase())));
+  }
+
+  // the servers in a file, by name; one that won't read is told
+  export function file(path: string): Record<string, Def> {
+    if (!fs.existsSync(path)) {
       return {};
     }
     try {
-      const file = JSON.parse(fs.readFileSync(config.MCP, "utf8"));
-      return file.mcpServers ?? {};
+      return JSON.parse(fs.readFileSync(path, "utf8")).mcpServers ?? {};
     } catch (err: any) {
-      trouble = config.MCP + ": " + err.message;
+      trouble = path + ": " + err.message;
       console.error("illi: mcp " + trouble);
       return {};
     }
@@ -229,8 +237,8 @@ export namespace Mcp {
 
   // each server: how it is, its tools' count, why it failed; what was
   // wrong with the file
-  export function status(): { servers: Server[]; trouble: string; file: string } {
-    return { servers: [...SERVERS.values()], trouble, file: config.MCP };
+  export function status(): { servers: Server[]; trouble: string; files: string[] } {
+    return { servers: [...SERVERS.values()], trouble, files: config.MCPS };
   }
 
   // ends every server; answers once each command's process is gone

@@ -115,7 +115,7 @@ Docs
   Claude Code, API keys, and which models do what.
 - [Customize](docs/customize.md): agents, commands, skills, MCP servers,
   theme and rules.
-- [Profiles](docs/profiles.md): separate chats and settings, e.g. work
+- [Profiles](docs/profiles.md): separate chats on one global setup, e.g. work
   and home.
 - [Config](docs/config.md): every setting, where your chat is kept,
   troubleshooting.

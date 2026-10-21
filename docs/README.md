@@ -5,7 +5,7 @@ illi's docs
   Claude Code, API keys, and which models do what.
 - [Customize](customize.md): agents, commands, skills, MCP servers,
   theme and rules.
-- [Profiles](profiles.md): separate chats and settings, exported and
+- [Profiles](profiles.md): separate chats on one global setup, exported and
   imported.
 - [Config](config.md): every setting, where your chat is kept,
   troubleshooting.
