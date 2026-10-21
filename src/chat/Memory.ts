@@ -869,7 +869,7 @@ export namespace Memory {
     const lines: string[] = [];
     let end = await Memory.compact(mem, l, i, Memory.ask(mem, blocks));
     while (end.ok && end.text.trim() !== "") {
-      const line = Memory.tagged(l, text, end.text.trim());
+      const line = Memory.tagged(l, text, Memory.bare(end.text.trim()));
       lines.push(line);
       if (Memory.bytes(line) <= NODE || lines.length === TRIES || mem.done) {
         break;
@@ -886,6 +886,12 @@ export namespace Memory {
     const line = lines.length === 0 ? Memory.cut(Memory.flat(text)) : lines.reduce((a, b) => (Memory.bytes(b) < Memory.bytes(a) ? b : a));
     Memory.store(mem, [{ l, i, text: line }]);
     mem.stuck?.("");
+  }
+
+  // a line without a label the compactor put first ("Merged line:"),
+  // though the prompt asks for none
+  export function bare(line: string): string {
+    return line.replace(/^(?:(?:merged|compressed|combined|one) )?(?:line|summary):\s*/i, "");
   }
 
   // a leaf's line starting with its message's kind, as the task asks

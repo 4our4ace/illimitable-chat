@@ -132,11 +132,11 @@ test("Claude Code's permission prompt is a question at illi's screen: yes, no wi
   await until(() => v.asks.length === 0);
   const no = approve("Bash", { command: "rm -r build" });
   await answer(false, false, "use the clean script");
-  expect(await no).toEqual({ behavior: "deny", message: "use the clean script" });
+  expect(await no).toEqual({ behavior: "deny", message: "The user said no, asked at illi's screen: use the clean script" });
   await until(() => v.asks.length === 0);
   const flat = approve("Bash", { command: "rm -r out" });
   await answer(false, false);
-  expect(await flat).toEqual({ behavior: "deny", message: "The user said no." });
+  expect(await flat).toEqual({ behavior: "deny", message: "The user said no, asked at illi's screen." });
   await until(() => v.asks.length === 0);
   const always = approve("Bash", { command: "pwd" });
   await answer(true, true);

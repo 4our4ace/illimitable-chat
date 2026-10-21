@@ -3,7 +3,8 @@
 // A question the chat asks (View Question: Claude Code asking leave to
 // use a tool, Tools.approve) in the picker, as it comes: Yes; Yes, and
 // not again for that tool this run; No (Esc too); No, and say why (a
-// line typed, for the model). What it would do shows above, as a note.
+// line typed, for the model). What it would do shows at its foot, and
+// as a note.
 // One answered elsewhere, or dropped (a stop), closes its picker; one
 // that comes while another picker is open waits for it to close. A
 // pipe has no one to ask: no, at once.
@@ -59,7 +60,8 @@ function term_ask_open(t: Term, q: Question): void {
     }
     term_answer(t, q, k !== NO, k === ALWAYS, "");
   };
-  term_chooser(t, "Allow " + q.tool + "?", names, names.map(() => ""), YES, pick, { keys, foot: () => "Enter answer · Esc no" });
+  const title = "Allow " + q.tool + (q.who === "illi" ? "" : " for " + q.who) + "?";
+  term_chooser(t, title, names, names.map(() => ""), YES, pick, { keys, foot: () => q.what === "" ? "Esc no" : q.what });
   t.asking!.c = t.choose;
 }
 

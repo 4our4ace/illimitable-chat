@@ -154,4 +154,8 @@ test("a leaf's summary starts with its message's kind, added where the compactor
   expect(Memory.tagged(0, "tool: shell {\"command\":\"ls\"}", "tool: shell ls")).toBe("tool: shell ls");
   expect(Memory.tagged(0, "tool: Bash {}", "echo: no output")).toBe("echo: no output");
   expect(Memory.tagged(1, "user: a\nilli: b", "a then b")).toBe("a then b");
+  expect(Memory.bare("Merged line: user asked for a file")).toBe("user asked for a file");
+  expect(Memory.bare("Line: done")).toBe("done");
+  expect(Memory.bare("line 42: the bug")).toBe("line 42: the bug");
+  expect(Memory.bare("user: Summary: none yet")).toBe("user: Summary: none yet");
 });
