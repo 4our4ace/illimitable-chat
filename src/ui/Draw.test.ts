@@ -3,7 +3,8 @@
 // `bun test Draw.test.ts`. What cellsmith draws for a message: a mermaid
 // block whole as a diagram, in the width, in the terminal's ink till its
 // background is told, then in a palette over it; one still streaming as
-// its code; code's tokens by kind, a shell's too.
+// its code; code's tokens by kind, a shell's too. Prism and Pele are
+// loaded only as they are first needed.
 
 import { expect, test } from "bun:test";
 import * as Draw from "./Draw.ts";
@@ -14,6 +15,19 @@ const FLOW = "flowchart TD\n  A[Start] --> B{Ready?}\n  B -->|yes| C[Go]\n  B --
 
 const text = (lines: Paint.Line[]) => lines.map((l) => l.map((r) => r.x).join("")).join("\n");
 const colors = (lines: Paint.Line[]) => new Set(lines.flatMap((l) => l.flatMap((r) => [r.s.c, r.s.g])).filter((c) => c.startsWith("#")));
+
+// what is loaded only as it is first needed: Prism at the first code not
+// a shell's, Pele and the box art at the first diagram
+test("Prism loads at the first code it reads, Pele at the first diagram", () => {
+  const loaded = () => Object.keys(require.cache).filter((k) => /cellsmith[\\/](pele\.ts|vendor[\\/])/.test(k)).map((k) => k.split(/[\\/]/).pop()).sort();
+  expect(loaded()).toEqual([]);
+  Draw.draw_code("bash", "ls -l");
+  expect(loaded()).toEqual([]);
+  Draw.draw_code("ts", "const x = 1;");
+  expect(loaded()).toEqual(["prism.js"]);
+  Draw.draw_diagram(FLOW, 60);
+  expect(loaded()).toEqual(["mermaid-text.js", "pele.js", "pele.ts", "prism.js"]);
+});
 
 test("a mermaid block whole is a diagram, in the width; streaming, its code", () => {
   const whole = Paint.rows_lines(View.entry_rows(1, "illi", "See:\n\n```mermaid\n" + FLOW + "\n```"), 60);
