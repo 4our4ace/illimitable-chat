@@ -13,6 +13,9 @@
 // chat's own caller, is refused. A leaf's summary starts with its
 // message's kind, the compactor's or added. Past a /clear, the chat's
 // view waits on no summary before it, nor holds a node wholly before it.
+// As a chat grows, each view tiles it (the chat's from its first message,
+// a /clear's too), its lines before the cut merging to fit, older ones
+// coarser, those from the cut single messages.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -171,4 +174,57 @@ test("past a /clear, the chat's view waits on no summary before it, nor holds a 
   expect(Memory.held(mem, { l: 1, i: 0 })).toBe(false);
   expect(Memory.held(mem, { l: 4, i: 0 })).toBe(true);
   expect(Memory.held(mem, { l: 0, i: 16 })).toBe(true);
+});
+
+// every node ready built, level by level (as compactions would: those a
+// node built makes ready too), each line `bytes()` long
+function build(mem: any, bytes: () => number): void {
+  for (let l = 0; l < mem.ready.length; l++) {
+    Memory.keep(mem, (mem.ready[l] ?? []).map((i: number) => ({ l, i, text: "line " + l + "/" + i + " " + "x".repeat(bytes()) })));
+  }
+}
+
+// a view's lines tile it from its first message to `end`, in order, no gap
+// nor overlap; each line above a message built; its size the sum of its
+// lines'
+function tiles(mem: any, view: any, end: number): void {
+  let at = view.from;
+  for (const part of view.parts) {
+    expect(Memory.span(part)[0]).toBe(at);
+    expect(part.l === 0 || Memory.built(mem, part.l, part.i)).toBe(true);
+    at = Memory.span(part)[1] + 1;
+  }
+  expect(at).toBe(end);
+  expect(view.size).toBe(view.parts.reduce((n: number, part: any) => n + Memory.size(mem, part), 0));
+}
+
+test("as a chat grows, each view tiles it, the chat's from its first message (a /clear's too); its lines before the cut merge to fit, the older the coarser, those from it single", () => {
+  const mem = chat("grows", 0);
+  let seed = 7;
+  const rand = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+  const high = 8000;
+  const coarse = [false, false];
+  for (let round = 0; round < 40; round++) {
+    Memory.push(mem, Array.from({ length: 10 }, (_, k) => ({ kind: "user" as const, text: "m " + round + "/" + k + " " + "y".repeat(Math.floor(rand() * 300)) })));
+    build(mem, () => 60 + Math.floor(rand() * 400));
+    if (round === 25) {
+      mem.cut = mem.show = mem.view.from = mem.count;
+      Memory.fit(mem);
+    }
+    Memory.cutoff(mem, high);
+    Memory.fit(mem);
+    tiles(mem, mem.view, mem.count);
+    tiles(mem, mem.seen, mem.count);
+    const k = Memory.cover(mem.view, mem.cut);
+    const head = mem.view.parts.slice(0, k);
+    expect(head.reduce((n: number, part: any) => n + Memory.size(mem, part), 0)).toBeLessThanOrEqual(mem.view.high);
+    expect(mem.view.parts.slice(k).every((part: any) => part.l === 0)).toBe(true);
+    for (let j = 1; j < head.length; j++) {
+      expect(head[j].l).toBeLessThanOrEqual(head[j - 1].l + 1);
+    }
+    coarse[round < 25 ? 0 : 1] ||= head.some((part: any) => part.l > 1);
+  }
+  expect(mem.view.from).toBe(260);
+  expect(coarse).toEqual([true, true]);
+  expect(mem.seen.parts[0].l).toBeGreaterThan(mem.view.parts[0].l);
 });
