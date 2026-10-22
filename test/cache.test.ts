@@ -39,7 +39,7 @@ const config = await import("../src/config/Config.ts");
 config.KEYS.anthropic = "test";
 
 const { AskAI } = await import("../src/ai/AskAI.ts");
-const { Memory } = await import("../src/chat/Memory.ts");
+const { Memory, TOKEN } = await import("../src/chat/Memory.ts");
 const { MASTER } = await import("../src/tools/Tools.ts");
 
 const PICK = { vendor: "claude-api" as const, model: "claude-opus-5-5", effort: "medium", speed: "slow" };
@@ -210,13 +210,13 @@ async function replay(logs: Log[]): Promise<Record<string, Use>> {
   return uses;
 }
 
-// a turn as Chat.call makes it: the view's lines before the cut, the
-// messages from it whole, the new one
+// a turn as Chat.call makes it (Memory.turn): the view's lines before the
+// cut, the messages from it whole, the new one
 async function turn(mem: any, id: number, log: Log): Promise<void> {
-  const from = Memory.cutoff(mem, config.CONTEXT * 4);
+  const from = Memory.cutoff(mem, config.CONTEXT * TOKEN);
   if ((await Memory.settle(mem, from, new AbortController().signal)) === null) {
-    const text = log.text + " #steps=" + log.steps;
-    const call = AskAI.ask({ ...SHARE, blocks: [...Memory.chat(mem, from, id), { text, mark: true }] }, () => {});
+    const { view, text } = Memory.turn(mem, from, [{ id, end: id + 1 }]);
+    const call = AskAI.ask({ ...SHARE, blocks: [...view, { text: text + " #steps=" + log.steps, mark: true }] }, () => {});
     await call.done;
   }
 }

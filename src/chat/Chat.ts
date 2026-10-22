@@ -18,7 +18,7 @@
 // restart between kept (it is saved with the chat's state).
 
 import * as fs from "node:fs";
-import { AskAI, type Call, type End, type Event, type Kind, type Say } from "../ai/AskAI.ts";
+import { AskAI, type Call, type End, type Event, type Kind } from "../ai/AskAI.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
 import { Compactor } from "./Compactor.ts";
@@ -337,9 +337,9 @@ export namespace Chat {
     return Math.round(config.config_context(chat.pick.model, Pick.window(chat.pick)) * chat.fit);
   }
 
-  // false: the turn ends. Its new text: all logged from the first message
-  // waiting, each waiting one as sent, any other entry between (a stop's
-  // note, a stopped agent's report) tagged with its kind
+  // a turn's call, once the summaries it sends are built: the chat as
+  // Memory.turn gives it, where illi works, its agents at work, then the
+  // new text. false: the turn ends
   export async function call(chat: Chat): Promise<boolean> {
     const mem = chat.mem;
     const halt = (chat.halt = new AbortController());
@@ -357,15 +357,7 @@ export namespace Chat {
       }
     }
     const msgs = (chat.sent = chat.wait.splice(0));
-    const says: Say[] = [];
-    for (let i = Math.max(msgs[0].id, from); i < mem.count; ) {
-      const msg = msgs.find((m) => i >= m.id && i < m.end);
-      says.push(msg === undefined ? { text: Memory.plain(Memory.message(mem, i)!), imgs: [] } : Memory.say(mem, i, msg.end));
-      i = msg === undefined ? i + 1 : msg.end;
-    }
-    const view = Memory.chat(mem, from, msgs[0].id);
-    const text = says.map((say) => say.text).join("\n\n");
-    const imgs = says.flatMap((say) => say.imgs);
+    const { view, text, imgs } = Memory.turn(mem, from, msgs);
     const server = Tools.at(chat.tools, "main");
     chat.eye = Chat.eye(mem, mem.show);
     chat.socks.forEach((sock) => Chat.show(chat, sock));
