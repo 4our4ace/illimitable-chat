@@ -27,6 +27,8 @@ process.env.ILLI_DIR = DIR;
 
 const { Memory } = await import("./Memory.ts");
 const { Compactor } = await import("./Compactor.ts");
+const { Export } = await import("./Export.ts");
+const { Logs } = await import("./Logs.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
@@ -98,7 +100,7 @@ test("closed, the chat is its project's one file, its images in it: a model gets
   expect(got[0].data).toBe(small.toString("base64"));
   expect(Buffer.from(got[1].data, "base64").subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
   expect(Memory.plain(Memory.message(mem, 1)!)).toBe("user: two screenshots\n[image " + names[0] + "]\n[image " + names[1] + "]");
-  const out = JSON.parse([...Memory.dump(mem)].join(""));
+  const out = JSON.parse([...Export.dump(mem)].join(""));
   expect(out.images).toEqual({ [names[0]!]: small.toString("base64"), [names[1]!]: big.toString("base64") });
   Memory.stop(mem);
   expect([fs.readdirSync(DIR + "/closed"), fs.readdirSync(DIR + "/closed/projects")]).toEqual([["projects"], ["home.sqlite"]]);
@@ -131,23 +133,23 @@ test("an agent spawned as the user's is named after it, numbered while one so na
   const mem   = chat("agents", 1);
   const taken = new Set<string>();
   const spawn = (own: string | null) => {
-    const name = Memory.agent_new(mem, own, (n) => taken.has(n));
+    const name = Logs.start(mem, own, (n) => taken.has(n));
     taken.add(name);
     return name;
   };
   expect([1, 2, 3].map(() => spawn("reviewer"))).toEqual(["reviewer", "reviewer-2", "reviewer-3"]);
-  Memory.agent_push(mem, "reviewer", "note", "the first");
-  const first = Memory.agent_log(mem, "reviewer")!;
+  Logs.push(mem, "reviewer", "note", "the first");
+  const first = Logs.log(mem, "reviewer")!;
   taken.clear();
   expect(spawn("reviewer")).toBe("reviewer");
-  Memory.agent_push(mem, "reviewer", "note", "the second");
-  expect(Memory.agent_log(mem, "reviewer")).not.toBe(first);
-  expect(Memory.agent(mem, "reviewer")!.map((r) => r.text)).toEqual(["the second"]);
-  expect(Memory.agent(mem, first)!.map((r) => r.text)).toEqual(["the first"]);
-  expect(Memory.agent(Memory.load(DIR + "/agents", () => ({}) as any), "reviewer")!.map((r) => r.text)).toEqual(["the second"]);
+  Logs.push(mem, "reviewer", "note", "the second");
+  expect(Logs.log(mem, "reviewer")).not.toBe(first);
+  expect(Logs.read(mem, "reviewer")!.map((r) => r.text)).toEqual(["the second"]);
+  expect(Logs.read(mem, first)!.map((r) => r.text)).toEqual(["the first"]);
+  expect(Logs.read(Memory.load(DIR + "/agents", () => ({}) as any), "reviewer")!.map((r) => r.text)).toEqual(["the second"]);
   expect(spawn("1st/../x")).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
   expect(spawn(null)).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
-  expect(Memory.agent(mem, "../reviewer")).toBeNull();
+  expect(Logs.read(mem, "../reviewer")).toBeNull();
   expect(() => spawn("main")).toThrow("Rename the agent's file (main.md)");
   expect(spawn("Main")).toBe("Main");
 });

@@ -41,6 +41,7 @@ put(DIR + "/skills/notes/README.md", "no SKILL.md: no skill");
 const { AskAI } = await import("../ai/AskAI.ts");
 const { Chat } = await import("../chat/Chat.ts");
 const { Custom } = await import("./Custom.ts");
+const { Logs } = await import("../chat/Logs.ts");
 const { Memory } = await import("../chat/Memory.ts");
 const { Tools } = await import("../tools/Tools.ts");
 const config = await import("./Config.ts");
@@ -154,7 +155,7 @@ test("spawn's agent runs a subagent as it, and names the user's agents", async (
   expect(asks[0].system).toContain("# Agent: reviewer\n\nYou review.");
   expect(asks[0]).toMatchObject({ model: "gpt-6-luna", effort: "high" });
   expect(Tools.list(chat.tools, name).map((t) => t.name)).toEqual(["zoom", "read"]);
-  expect(Memory.agent(chat.mem, name)![0].text).toBe("subagent reviewer");
+  expect(Logs.read(chat.mem, name)![0].text).toBe("subagent reviewer");
   chat.tools.agents.delete(name);
   expect(Tools.agent(chat.tools, name)!.role).toEqual({ $: "sub", effort: null, agent: "reviewer" });
   await until(() => !chat.busy);

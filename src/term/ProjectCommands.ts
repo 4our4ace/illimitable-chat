@@ -14,6 +14,7 @@ import * as fs from "node:fs";
 import { Chat } from "../chat/Chat.ts";
 import { term_chooser } from "./Commands.ts";
 import * as config from "../config/Config.ts";
+import { Export } from "../chat/Export.ts";
 import { Memory } from "../chat/Memory.ts";
 import { term_note } from "./Notices.ts";
 import { term_restart } from "./ProfileCommands.ts";
@@ -103,7 +104,7 @@ async function project_forget(t: Term, p: Project, copy: boolean): Promise<void>
     if (fs.existsSync(out)) {
       return term_note(t, "Not forgotten: " + config.config_home(out) + " is there already. Move it away first.");
     }
-    await Bun.write(out, Store.visit(mem.store, p.file, (store) => [...Memory.dump(here ? mem : Memory.glance(mem, store))].join("")));
+    await Bun.write(out, Store.visit(mem.store, p.file, (store) => [...Export.dump(here ? mem : Memory.glance(mem, store))].join("")));
     term_note(t, "A copy of " + p.name + " is in " + config.config_home(out) + ".");
   }
   if (here) {
