@@ -11,7 +11,8 @@
 // chat refit and the turn go on from a note, unasked; three in a row end
 // it, saying why. A failed turn asks to try again only when a later try
 // may answer, and says a reply was cut off; summaries stuck are told once;
-// a save that fails is told, never thrown.
+// a save that fails is told, never thrown. The suggested reply stays as
+// the chat closes, for the next start; a turn drops it.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -327,4 +328,27 @@ test("a save that fails is told to the views, never thrown, in plain words (SQLi
   }
   expect(got.find((m) => m.$ === "note").text).toBe("Can't save the chat: disk full (" + chat.mem.dir + ").");
   expect(["SQLITE_FULL", "SQLITE_READONLY", "SQLITE_IOERR_WRITE", "SQLITE_BUSY", "SQLITE_MISMATCH"].map((code) => Chat.unsaved(Object.assign(new Error("as SQLite says it"), { code })))).toEqual(["disk full", "read-only disk", "the disk failed to write", "another illi kept the file busy too long", "as SQLite says it"]);
+});
+
+test("the suggested reply stays as the chat closes, so the next start shows it (a screen that asks for none, none); a turn's start drops it", async () => {
+  const last = AskAI.last;
+  AskAI.last = () => ({ ask: { ...Pick.ask(chat.pick), blocks: [] } }) as any;
+  Object.assign(chat.suggest, { on: true, unused: 0 });
+  try {
+    Chat.suggest(chat);
+    await until(() => chat.suggest.text !== "");
+  } finally {
+    AskAI.last = last;
+  }
+  const saved = () => Memory.load(chat.mem.dir, () => ({}) as any, HERE).suggest;
+  const shown = () => (Chat.state(chat) as any).suggest;
+  expect([chat.suggest.text, saved(), shown()]).toEqual(["hello back", "hello back", "hello back"]);
+  chat.suggest.on = false;
+  expect(shown()).toBe("");
+  Chat.unsuggest(chat);
+  expect(saved()).toBe("");
+  chat.suggest.text = chat.mem.suggest = "Commit it";
+  Memory.save(chat.mem);
+  Chat.close(chat, true);
+  expect(saved()).toBe("Commit it");
 });

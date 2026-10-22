@@ -90,7 +90,8 @@ The columns, by table:
   already show it. The index `node_end` on `(chat, first + n)` finds a
   chat's latest line at once.
 - **state**: `chat`, `saved` (JSON: the chat's view, `seen` (the
-  compactions' view), the pick, the goal, the main agent, what ran, the
+  compactions' view), the pick, the goal, the suggested reply (so it
+  shows again after a restart), the main agent, what ran, the
   cut, `show` and `top`). It is never rebuilt from the facts,
   because the model's prompt cache depends on the saved view.
 - **log**: `id`, `chat`, `log`, `name`. **work**: `log` (references

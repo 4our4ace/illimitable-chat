@@ -29,7 +29,7 @@
 //
 // Kept in one SQLite file, memory.sqlite (Store.ts): the messages, each
 // with the folder illi ran in, the nodes, the agents' logs, and the state
-// (the views, the chat's pick and goal...), written over. A message's
+// (the views, the chat's pick, goal and suggested reply...), written over. A message's
 // pages are logged in one write. Memory holds only the view's nodes and
 // those built above them; any other is read from the file, and so are
 // images, by their hash.
@@ -66,13 +66,14 @@ export type Share = Omit<Ask, "blocks">;
 type Kept = { parts: Array<[number, number]>; batch: boolean };
 
 // the state: the chat's view, the compactions' (none: the chat's)
-type Saved = Kept & { seen?: Kept; pick: object | null; goal?: string | null; work?: string[]; agent?: string | null; cut?: number; show?: number; top?: number };
+type Saved = Kept & { seen?: Kept; pick: object | null; goal?: string | null; suggest?: string; work?: string[]; agent?: string | null; cut?: number; show?: number; top?: number };
 
 // store: its file (Store.ts); cwd: the folder illi runs in, logged with
 // each message ("": unknown); count: the pages logged; pick: the chat's,
 // as last set;
 // goal: the user's (/goal; null: none), till met or halted (Chat.ts);
-// agent: the main agent's profile (Custom.ts; null: illi's own); work:
+// suggest: the suggested reply shown as the last turn ended (Chat.suggest;
+// "": none), so a start shows it again; agent: the main agent's profile (Custom.ts; null: illi's own); work:
 // what ran, as last saved; cut: the first message a turn's call gets
 // whole (Memory.cutoff; those before, as the view's lines), show: the
 // first the screen shows whole (at the cut, or behind it, as /compact
@@ -96,6 +97,7 @@ export type Memory = {
   count  : number;
   pick   : object | null;
   goal   : string | null;
+  suggest: string;
   agent  : string | null;
   work   : string[];
   cut    : number;
@@ -194,7 +196,7 @@ export namespace Memory {
   // (Remote.ts), never saved, nothing built
   export function read(dir: string, store: Store, share: Memory["share"], alone: boolean): Memory {
     const mem: Memory = {
-      dir, store, cwd: "", count: Store.count(store), pick: null, goal: null, agent: null, work: [], cut: 0, show: 0, top: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), logs: new Map(), ready: [],
+      dir, store, cwd: "", count: Store.count(store), pick: null, goal: null, suggest: "", agent: null, work: [], cut: 0, show: 0, top: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), logs: new Map(), ready: [],
       view: { parts: [], size: 0, batch: false, high: LINES }, seen: { parts: [], size: 0, batch: false, high: SEEN },
       busy: new Set(), calls: new Map(), hold: alone, done: alone, wait: new Set(), share,
     };
@@ -204,6 +206,7 @@ export namespace Memory {
     const kept  = (k: any): Kept | null => (Array.isArray(k?.parts) && k.parts.every((p: unknown) => Array.isArray(p) && p.length === 2 && p.every(Number.isInteger)) ? k : null);
     mem.pick = saved?.pick !== null && typeof saved?.pick === "object" ? saved.pick : null;
     mem.goal = typeof saved?.goal === "string" ? saved.goal : null;
+    mem.suggest = typeof saved?.suggest === "string" ? saved.suggest : "";
     mem.agent = typeof saved?.agent === "string" ? saved.agent : null;
     mem.work = Array.isArray(saved?.work) ? saved.work : [];
     mem.cut = Math.min(index(saved?.cut, 0), mem.count);
@@ -239,7 +242,7 @@ export namespace Memory {
       return;
     }
     const [chat, seen] = [mem.view, mem.seen].map((view): Kept => ({ parts: view.parts.map((part) => [part.l, part.i]), batch: view.batch }));
-    Store.save(mem.store, { ...chat, seen, pick: mem.pick, goal: mem.goal, agent: mem.agent, work: mem.work, cut: mem.cut, show: mem.show, top: mem.top });
+    Store.save(mem.store, { ...chat, seen, pick: mem.pick, goal: mem.goal, suggest: mem.suggest, agent: mem.agent, work: mem.work, cut: mem.cut, show: mem.show, top: mem.top });
   }
 
   export function slot(l: number, i: number): number {
