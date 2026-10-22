@@ -50,7 +50,8 @@ type Check = { call: Call; goal: string };
 
 // a suggested reply (Chat.suggest): whether one is asked (a screen shows
 // it: Term.ts, config.SUGGEST), whether the turn's last call was answered
-// (one is asked as the turn ends), the one shown ("": none), its call
+// (one is asked as the turn ends), the one shown ("": none; kept in the
+// memory's state, mem.suggest, so a start shows it again), its call
 // running, how many in a row went unused
 type Suggest = { on: boolean; due: boolean; text: string; call: Call | null; unused: number };
 
@@ -319,7 +320,7 @@ export namespace Chat {
       mem, tools, pick, socks: new Set(), busy: false, call: null, model: "", asked: false, open: 0, sent: [], wait: [], next: [],
       halt: new AbortController(), live: [], calls: {}, eye: { parts: [], from: 0 }, after: Promise.resolve(),
       writes: Promise.resolve(), held: null, switched: false, was: null, picks: new Map(),
-      suggest: { on: false, due: false, text: "", call: null, unused: 0 }, fit: 1, refits: 0, asks: [],
+      suggest: { on: false, due: false, text: mem.suggest, call: null, unused: 0 }, fit: 1, refits: 0, asks: [],
     };
     // a saved pick not offered gave way: told once
     const saved = mem.pick as Pick | null;
@@ -363,12 +364,14 @@ export namespace Chat {
   }
 
   // stops all at once, as a quit does: what ran stays saved (mem.work), so
-  // the next start resumes it; then the lock let go (keep: kept, Chat.unlock),
-  // so the next illi in the project (another terminal's view: Remote.ts)
-  // opens it as left
+  // the next start resumes it, and the suggested reply shown (a suggestion
+  // still being asked, dropped); then the lock let go (keep: kept,
+  // Chat.unlock), so the next illi in the project (another terminal's
+  // view: Remote.ts) opens it as left
   export function close(chat: Chat, keep = false): void {
     Chat.stop(chat, null);
-    Chat.unsuggest(chat);
+    chat.suggest.call?.stop();
+    chat.suggest.call = null;
     Memory.stop(chat.mem);
     Chat.unlock(keep);
   }
@@ -615,6 +618,8 @@ export namespace Chat {
       if (s.call === call) {
         s.call = null;
         s.text = end.ok ? Chat.line(end.text) : "";
+        chat.mem.suggest = s.text;
+        Memory.save(chat.mem);
         Chat.change(chat);
       }
     });
@@ -627,11 +632,16 @@ export namespace Chat {
     return NONE.test(line) || line.split(/\s+/).length > WORDS ? "" : line;
   }
 
-  // the suggested reply goes, and the one being asked (a turn begins)
+  // the suggested reply goes, saved so, and the one being asked (a turn
+  // begins)
   export function unsuggest(chat: Chat): void {
     chat.suggest.call?.stop();
     chat.suggest.call = null;
     chat.suggest.text = "";
+    if (chat.mem.suggest !== "") {
+      chat.mem.suggest = "";
+      Memory.save(chat.mem);
+    }
   }
 
   // a message sent while a suggested reply shows: it used it (it starts
@@ -875,7 +885,7 @@ export namespace Chat {
     const tools  = Tools.state(chat.tools, chat.pick.vendor);
     const fill   = { used: Math.round(Memory.fill(chat.mem) / 4), cap: Chat.cap(chat), window: Pick.window(chat.pick) ?? config.GUESS };
     const asks   = chat.asks.map(({ done, ...q }) => q);
-    return { $: "state", busy: chat.busy, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, ...tools, use: { ...tools.use, fill }, suggest: chat.suggest.text, asks };
+    return { $: "state", busy: chat.busy, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, ...tools, use: { ...tools.use, fill }, suggest: chat.suggest.on ? chat.suggest.text : "", asks };
   }
 
   // a question for the user (Claude Code asking leave to use a tool,
