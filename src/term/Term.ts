@@ -173,7 +173,8 @@ type Hit = { row: number; col: number; to: number; run: () => void };
 // options (a profile's name, a file): typed in `find`, its hint shown
 // while it is empty, given by Enter to `done`, whose answer null closes
 // the box (what it opened stays) and a reason keeps it open, in the foot;
-// hay: what a search looks in, an option's each (none: its name);
+// hay: what a search looks in, an option's each (none: its name); used:
+// how often an option was picked (a search ranks the more used first);
 // aside: what shows at an option's right end, each (its keys, its value);
 // middle: the box in the screen's middle, over all else, this many
 // columns wide at most (none: over the chat's foot, Frame.ts); heads:
@@ -183,6 +184,7 @@ export type Chooser = {
   names  : string[];
   about  : string[];
   hay?   : string[];
+  used?  : (k: number) => number;
   aside? : string[];
   middle?: number;
   heads? : string[];

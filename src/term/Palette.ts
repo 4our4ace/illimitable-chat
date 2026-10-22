@@ -6,12 +6,14 @@
 // its /name, else its first key), what it does (its first clause) and, at
 // the right, its keys (the others); then each setting (Config SETTINGS,
 // as `set <key>`), what it is and its value. A search finds a word in any
-// (what a command does, all of it). Enter runs a command, but
+// (what a command does, all of it): rows matched by name first, then the
+// rest, each the more picked here first (its own count, apart from the
+// commands typed: picked.json). Enter runs a command, but
 // one that needs words after it (<...>, #id) goes in the input to finish;
 // a setting's row takes what /settings does (Left, Right and Enter step
 // it, Enter on a pick or a text opens it, Delete puts its default back).
 
-import { term_chooser, term_command, term_groups } from "./Commands.ts";
+import { PICKED, term_chooser, term_command, term_groups, term_tally, term_tally_one } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import * as Screen from "../ui/Screen.ts";
 import { setting_foot, setting_key, setting_open, setting_value } from "./Settings.ts";
@@ -54,15 +56,17 @@ export function term_palette(t: Term): void {
     return true;
   };
   const pick = (k: number) => {
+    term_tally_one(PICKED, names[k]);
     const s = setting(k);
     return s !== null ? setting_open(t, s) : palette_run(t, cmds[k]);
   };
+  const picked = term_tally(PICKED);
   const foot  = (k: number) => {
     const s = setting(k);
     return s !== null ? setting_foot(s) : palette_needs(cmds[k][0]) ? "Enter type it in" : "Enter run";
   };
   const right = aside();
-  term_chooser(t, "Commands", names, about, -1, pick, { find: true, keys: press, foot, hay: names.map((name, k) => name + "  " + whole[k] + "  " + right[k]), aside: right, middle: WIDE, heads: [...all.map(([group]) => group), ...keys.map(() => GROUP)] });
+  term_chooser(t, "Commands", names, about, -1, pick, { find: true, keys: press, foot, hay: names.map((name, k) => name + "  " + whole[k] + "  " + right[k]), used: (k) => picked[names[k]] ?? 0, aside: right, middle: WIDE, heads: [...all.map(([group]) => group), ...keys.map(() => GROUP)] });
 }
 
 // a command chosen: one that needs words, in the input to finish (the
@@ -74,7 +78,7 @@ function palette_run(t: Term, [use, keys, , run]: Cmd): void {
     Screen.ed_set(t.scr.ed, word + " ");
     t.scr.typed = true;
   } else if (use !== "") {
-    term_command(t, word);
+    term_command(t, word, false);
   } else {
     void run(t, keys.split(", ")[0]);
   }
