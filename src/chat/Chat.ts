@@ -591,7 +591,7 @@ export namespace Chat {
       Chat.note(chat, "No goal check: " + end.text.replace(/\.$/, "") + ". The goal stays; /halt drops it.");
     } else if (on && /^\W*yes\b/i.test(end.text)) {
       mem.goal = null;
-      Memory.save(mem);
+      Chat.save(chat);
       Chat.note(chat, "Goal met.");
     } else if (on) {
       await Chat.writing(chat, async () => Chat.take(chat, Chat.push(chat, null, "user", GOAL_NO)));
