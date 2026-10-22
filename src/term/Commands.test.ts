@@ -10,7 +10,10 @@
 // by the main agent's name; the dead ends (/stop, /fold, /image, /mcp
 // with nothing to act on) say something. A sticky skill's name alone
 // turns it on and off; with words, on, the words sent; while on, it shows
-// at the side, where a click turns it off. A use counted weighs half as
+// at the side, where a click turns it off. The leader (Ctrl+X), then a
+// key, runs that key's shortcut, from a list of them all; the shortcuts
+// and the leader are settings, and the leader is never a key illi takes
+// itself. A use counted weighs half as
 // much 100 uses on, a name faded under a tenth forgotten. The side shows
 // any vendor's plan alike: each window's share used, its bar as full.
 
@@ -23,7 +26,7 @@ const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-commands-");
 process.env.ILLI_DIR = DIR;
 
 const { term_chooser, term_command, term_commands, term_suggest, term_tally, term_tally_one } = await import("./Commands.ts");
-const { term_grab, term_type } = await import("./Keys.ts");
+const { term_grab, term_press, term_type } = await import("./Keys.ts");
 const { term_side } = await import("./Side.ts");
 const Paint = await import("../ui/Paint.ts");
 const Screen = await import("../ui/Screen.ts");
@@ -122,6 +125,66 @@ test("a picker without a search takes no typing; Tab moves in it", () => {
   term_grab(t, "Tab");
   term_grab(t, "Enter");
   expect(picked).toEqual([1]);
+});
+
+test("the leader, then a key: its shortcut, from a list of them all (again: closed; a key with none says so, the list kept)", () => {
+  const t = term();
+  term_press(t, "Ctrl+X");
+  expect([t.choose.title, t.choose.names]).toEqual(["Shortcuts", ["a", "e", "h", "l", "m", "p", "s", "t", "y"]]);
+  expect([t.choose.about[t.choose.names.indexOf("m")], t.choose.about[t.choose.names.indexOf("y")]]).toEqual(["/model · model, effort and speed in one list", "Ctrl+Y · copy illi's last reply"]);
+  term_type(t, "q");
+  expect([t.choose.title, foot(t)]).toEqual(["Shortcuts", "No shortcut on q · Esc closes"]);
+  term_press(t, "Ctrl+X");
+  expect(t.choose).toBeNull();
+  term_press(t, "Ctrl+X");
+  term_type(t, "S");
+  expect(t.choose.title).toBe("Settings");
+  term_press(t, "Ctrl+X");
+  expect(t.choose.title).toBe("Shortcuts");
+  for (let k = 0; k < 6; k++) {
+    term_grab(t, "Down");
+  }
+  expect(lit(t)).toBe("s");
+  term_grab(t, "Enter");
+  expect(t.choose.title).toBe("Settings");
+});
+
+test("the shortcuts and the leader are settings: a key changed, added or dropped, a key's name run as pressed; the leader never a key illi takes", () => {
+  const config = require("../config/Config.ts");
+  const t = term();
+  config.config_set("shortcuts", { m: "", x: "/settings", "?": "Ctrl+P", w: "/nope" });
+  config.config_set("leader", "alt+l");
+  term_press(t, "Ctrl+X");
+  expect(t.choose).toBeNull();
+  term_press(t, "Alt+L");
+  expect(t.choose.names).toEqual(["?", "a", "e", "h", "l", "p", "s", "t", "w", "x", "y"]);
+  term_type(t, "x");
+  expect(t.choose.title).toBe("Settings");
+  term_press(t, "Alt+L");
+  term_type(t, "?");
+  expect(t.choose.title).toBe("Commands");
+  t.choose = null;
+  term_press(t, "Alt+L");
+  term_type(t, "w");
+  expect([t.choose, note(t)]).toEqual([null, "/nope is no command or key of illi's: the shortcuts setting names it."]);
+  expect([config.config_check("shortcuts", { mm: "/model" }), config.config_check("shortcuts", "[1]"), config.config_check("leader", "ctrl+p"), config.config_check("leader", "x")]).toEqual([
+    "shortcuts takes each key after the leader and what it runs, like {\"m\": \"/model\"}.",
+    "shortcuts takes each key after the leader and what it runs, like {\"m\": \"/model\"}.",
+    "leader takes a key illi doesn't take itself; Ctrl+P is one.",
+    "leader takes Ctrl or Alt and a letter, like Ctrl+X.",
+  ]);
+  const letters = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"].flatMap((c) => ["Ctrl+" + c, "Alt+" + c]);
+  const edits   = (key: string) => {
+    const ed = Screen.ed_new();
+    Screen.ed_set(ed, "one two three");
+    ed.at = 4;
+    return Screen.ed_key(ed, key);
+  };
+  const own     = new Set(term_commands().flatMap(([, keys]) => keys.split(", ")).filter((k) => k !== config.LEADER));
+  expect(letters.filter((k) => (own.has(k) || edits(k)) && !config.TAKEN.includes(k))).toEqual([]);
+  config.config_set("shortcuts", null);
+  config.config_set("leader", null);
+  expect([config.LEADER, Object.keys(config.SHORTCUTS).length]).toEqual(["Ctrl+X", 9]);
 });
 
 test("/help fits a narrow pane: how each is typed on its own line, what it does under it", () => {

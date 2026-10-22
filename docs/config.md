@@ -28,6 +28,8 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `off`        |                                   | skills, agents, commands and MCP servers turned off, by name; `/settings` lists them to turn on and off |
 | `sticky`     |                                   | sticky skills on, by name; `/name` turns one on and off ([Customize](customize.md)) |
 | `side`       | `right`                           | side panel: `left`, `off`; `side_width` `25%`    |
+| `leader`     | `Ctrl+X`                          | the key before a shortcut: Ctrl or Alt and a letter illi doesn't use ([Keys](keys.md#shortcuts)) |
+| `shortcuts`  | illi's own                        | the keys after the leader: `{ "c": "/compact", "o": "Ctrl+O", "t": "" }`, over illi's own (`""` drops one) |
 | `suggest`    | `on`                              | a suggested reply after each turn; `off`         |
 | `tps`        | `on`                              | tokens a second (tok/s) on the line over the input while text streams; `off` |
 | `jobs`       | `8`                               | summaries built at once                          |

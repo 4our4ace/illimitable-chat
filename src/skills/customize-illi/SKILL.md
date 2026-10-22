@@ -127,6 +127,10 @@ one:
   for the user
 - side: right, left or off; side_width: "25%" or columns; jobs: summaries
   built at once
+- leader: the key before a shortcut (default Ctrl+X: Ctrl or Alt and a
+  letter illi doesn't use); shortcuts: the keys after it, as an object
+  over illi's own (a, e, h, l, m, p, s, t, y), each a command with its
+  words or a key's name: {"c": "/compact", "o": "Ctrl+O", "t": ""} ("" drops one)
 - suggest: on or off, a suggested reply after each turn
 - tps: on or off, tokens a second (tok/s) on the line over the input while
   text streams

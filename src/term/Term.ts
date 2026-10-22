@@ -178,7 +178,9 @@ type Hit = { row: number; col: number; to: number; run: () => void };
 // aside: what shows at an option's right end, each (its keys, its value);
 // middle: the box in the screen's middle, over all else, this many
 // columns wide at most (none: over the chat's foot, Frame.ts); heads:
-// each option's group, a head over its first while nothing is searched
+// each option's group, a head over its first while nothing is searched;
+// type: what a character typed does instead of searching or going to
+// the input (the shortcuts': run the one on that key)
 export type Chooser = {
   title  : string;
   names  : string[];
@@ -195,6 +197,7 @@ export type Chooser = {
   at     : number;
   top    : number;
   keys   : (k: number, key: string) => boolean;
+  type?  : (ch: string) => void;
   foot   : (k: number) => string;
   ask    : { hint: string; done: (text: string) => string | null } | null;
 };

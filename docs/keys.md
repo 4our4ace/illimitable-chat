@@ -15,6 +15,7 @@ Chat
 | Ctrl+D | clear the input; on an empty one, quit |
 | Tab | take the suggested reply |
 | Ctrl+P | all commands and settings in one list, typed to search |
+| Ctrl+X | shortcuts: a key after it runs a command (m /model, p /profile, l /projects…); the list shows yours ([below](#shortcuts)) |
 | `/goal <message>` | send a goal: illi goes on until it is met |
 | `/halt` | drop the goal; the turn running ends as it would |
 | `/clear` | an empty screen for a new topic; illi still remembers the chat before |
@@ -81,6 +82,43 @@ Projects and profiles
 | -------------- | ---- |
 | `/projects` | your projects, each a git repo with its own chat (outside any: home), this one first: Enter says more, Del forgets one (Cancel, export a copy first, or forget) |
 | `/profile [name]` | switch to that profile (its own chats, on the global setup; one login for all); no name: opens a list to make, rename, export, import or delete one |
+
+Shortcuts
+---------
+
+Press the leader, Ctrl+X, then a key, as in OpenCode: Ctrl+X then m opens
+the model list. The leader also shows a list of every shortcut: type its
+key, or pick one with Up, Down and Enter (or a click). Esc, or the
+leader again, closes the list. Letters work either case.
+
+| Key | Runs |
+| --- | ---- |
+| a | `/agent`: illi's primary agent |
+| e | `/effort` |
+| h | `/help` |
+| l | `/projects` |
+| m | `/model` |
+| p | `/profile` |
+| s | `/settings` |
+| t | `/tab` |
+| y | Ctrl+Y: copy illi's last reply |
+
+Ctrl+P shows each command's shortcut beside its keys. To change them, set
+`shortcuts` in `~/.illi/config.json` (or `/set shortcuts {...}`). A key
+maps to a command with its words, or to a key's name, and `""` drops one
+of illi's:
+
+```json
+{
+  "shortcuts": { "c": "/compact", "o": "Ctrl+O", "g": "/agent reviewer", "t": "" },
+  "leader": "Ctrl+G"
+}
+```
+
+`leader` takes Ctrl or Alt and a letter that illi doesn't use itself:
+not Ctrl+C, D, F, L, O, P, V, Y or Z, nor the input's editing keys
+(Ctrl+A, E, K, U, W, Alt+B, D, F, V), nor Ctrl+H, I, J or M, which
+terminals send as Backspace, Tab and Enter.
 
 Typing
 ------

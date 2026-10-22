@@ -56,7 +56,7 @@ const file  = () => JSON.parse(fs.readFileSync(DIR + "/config.json", "utf8"));
 test("/settings lists each setting, its value and what it does; one a variable sets says so, and stays", () => {
   const t = term();
   run(t, "/settings");
-  expect(t.choose.names).toEqual(["pick", "agents", "compactor", "suggest", "tps", "side", "side_width", "context", "contexts", "rules", "after", "off", "sticky", "vendors", "models", "jobs", "theme", "mcp", "login"]);
+  expect(t.choose.names).toEqual(["pick", "agents", "compactor", "suggest", "tps", "side", "side_width", "leader", "shortcuts", "context", "contexts", "rules", "after", "off", "sticky", "vendors", "models", "jobs", "theme", "mcp", "login"]);
   expect(about(t)).toMatch(/^sonnet-5\.5 · medium +illi's own default model/);
   expect(foot(t)).toBe("set by ILLI_PICK");
   term_grab(t, "Enter");

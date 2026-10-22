@@ -8,6 +8,7 @@
 import { term_form_key, term_form_type } from "./Asks.ts";
 import { Chat } from "../chat/Chat.ts";
 import { term_chooser_find, term_command, term_commands, term_main, term_suggest, term_suggest_key } from "./Commands.ts";
+import * as config from "../config/Config.ts";
 import { Custom } from "../config/Custom.ts";
 import { term_draw } from "./Frame.ts";
 import { term_note, term_toast, term_unnote } from "./Notices.ts";
@@ -30,10 +31,10 @@ const AGAIN = 2000;
 // the lines a turn of the wheel scrolls
 const WHEEL = 3;
 
-// the commands by their keys (term_keyed), made at the first key: only
-// illi's own have keys (the user's commands and skills are typed), and
-// those never change
-let keyed: Map<string, Cmd> | null = null;
+// the commands by their keys (term_keyed), made at the first key, again
+// once the leader changes: only illi's own have keys (the user's commands
+// and skills are typed), and the rest never change
+let keyed: { leader: string; cmds: Map<string, Cmd> } | null = null;
 
 // a key ("": the input may have changed): the mouse, the wheel, the
 // terminal's background told (the chat laid out anew: diagrams draw over
@@ -72,11 +73,11 @@ export function term_press(t: Term, key: string): void {
 
 // the command a key runs, if any: the first whose keys name it
 function term_keyed(key: string): Cmd | undefined {
-  if (keyed === null) {
+  if (keyed?.leader !== config.LEADER) {
     const pairs = term_commands().flatMap((c) => (c[1] === "" ? [] : c[1].split(", ").map((k): [string, Cmd] => [k, c])));
-    keyed = new Map(pairs.reverse());
+    keyed = { leader: config.LEADER, cmds: new Map(pairs.reverse()) };
   }
-  return keyed.get(key);
+  return keyed.cmds.get(key);
 }
 
 // a key while the commands suggested show, the picker, illi's question
@@ -148,11 +149,22 @@ function term_choose_key(t: Term, c: Chooser, key: string): boolean {
   return true;
 }
 
-// text typed while the picker searches: to its search, not the input;
-// while illi asks, to its question (Asks.ts); over a pane, to the input,
-// the pane closed
+// text typed to a picker that takes characters (the shortcuts'): its
+// first to it, the rest as typed after; while the picker searches: to its
+// search, not the input; while illi asks, to its question (Asks.ts); over
+// a pane, to the input, the pane closed
 export function term_type(t: Term, text: string): boolean {
   const c = t.choose;
+  if (c?.type !== undefined) {
+    const ch   = [...text][0];
+    const rest = text.slice(ch.length);
+    c.type(ch);
+    if (rest !== "" && !term_type(t, rest)) {
+      Screen.ed_type(t.scr.ed, rest);
+      t.scr.typed = true;
+    }
+    return true;
+  }
   if (c === null && t.pane !== null) {
     t.pane = null;
   }
