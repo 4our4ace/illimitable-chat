@@ -95,8 +95,9 @@ export type Emit = (kind: Kind, text: string, fresh?: boolean) => void;
 
 // an API: its key's name in config.KEYS (or, with `auth`, a login's token
 // for each request, and what spoils one it refused), what a response's
-// headers tell it (heard: chatgpt's plan limits), and how its stream
-// reads into a step (S: what it read so far)
+// headers tell it (heard: chatgpt's plan limits), how many cache marks a
+// request takes (marks: the last ones are kept, AskAI.marks), and how its
+// stream reads into a step (S: what it read so far)
 export type Wire<S> = {
   key     : string;
   idle    : number;
@@ -203,7 +204,9 @@ export namespace Agent {
       return;
     }
     const tools = ask.from?.tools ?? (await Agent.server(run));
-    const parts = AskAI.marks(ask.blocks.filter((b) => b.text !== ""), wire.marks(ask));
+    // the marks a call it goes on from kept count against its vendor's
+    const before = (ask.from?.items ?? []).flatMap((item) => (item.$ === "User" ? item.parts : [])).filter((p) => p.mark).length;
+    const parts = AskAI.marks(ask.blocks.filter((b) => b.text !== ""), Math.max(0, wire.marks(ask) - before));
     const items: Item[] = [...(ask.from?.items ?? []), { $: "User", parts, imgs: ask.imgs ?? [] }];
     let steps = 0;
     while (!signal.aborted) {

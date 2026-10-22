@@ -19,12 +19,14 @@
 // the last message (what came before is never sent, not even as lines: it is
 // found by search and zoom), and the compactions', from the first message to
 // the first not built.
-// A call gets one in BLOCK-line blocks, the last whole one marked for the cache
-// (AskAI.ts); few lines, as those past it are read anew (a compaction's view
-// ends at its node, then its task, both unmarked).
+// A call gets one in BLOCK-line blocks, the last whole one marked for the
+// cache, and so are the messages from the cut (recent): a wire keeps the
+// last marks its vendor takes (AskAI.marks); few lines, as those past it
+// are read anew (a compaction's view ends at its node, then its task,
+// both unmarked).
 //
 // Kept in the project's SQLite file (Store.ts): the messages, each
-// with the folder illi ran in, the nodes, the agents' logs, and the state
+// with the folder illi ran in, the nodes, the agents' logs (Logs.ts), and the state
 // (the views, the chat's pick, goal and suggested reply...), written
 // over. A message's pages are logged in one write. Memory holds only the
 // view's nodes and those built above them; any other is read from the
