@@ -103,6 +103,10 @@ type Asked = Question & { done: (reply: Reply) => void };
 
 // the locks, a socket a project (Projects.lock names it)
 const LOCKS      = config.DIR + "/locks";
+// how long a lock's taking waits on another's, ms: illis starting at once
+// would each hold the file shared and fail to take it whole; waiting,
+// SQLite has one let go (the others' wait would deadlock), one wins
+const GRIP       = 50;
 // a turn's head, as a summary's is "Compaction:": one prompt serves both
 const HEAD       = "Turn: the user's new message:\n\n";
 // a goal's check (Chat.check): its own system prompt (illi's, which says
@@ -220,6 +224,7 @@ export namespace Chat {
   export function grip(file: string): Database | null {
     const db = new Database(file, { create: true });
     try {
+      db.run("pragma busy_timeout = " + GRIP);
       db.run("pragma journal_mode = memory");
       db.run("begin exclusive");
       return db;
