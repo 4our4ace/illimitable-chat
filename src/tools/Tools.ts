@@ -710,11 +710,10 @@ export namespace Tools {
   // To-do
   // -----
 
-  // what the views show of the tools (Chat.state): what the master's
-  // calls use (the input its last request read, the plan of the vendor
-  // it's on), its to-do list
+  // what the views show of the tools (Chat.state): the plan of the vendor
+  // the master is on, its to-do list
   export function state(tools: Tools, vendor: Vendor): { use: State["use"]; todo: Todo[] } {
-    return { use: { tokens: AskAI.held(Tools.at(tools, "main")), plan: PLANS[vendor]?.() ?? null }, todo: Tools.todo(tools) };
+    return { use: { plan: PLANS[vendor]?.() ?? null }, todo: Tools.todo(tools) };
   }
 
   // the master's to-do list: as last set, else as the chat's file keeps

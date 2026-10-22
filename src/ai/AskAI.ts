@@ -17,10 +17,9 @@
 // within TTL leads; one whose prefix a leader is writing waits until the
 // leader's response begins (only then can it read the entry).
 //
-// The input each caller's last request read is kept (AskAI.held), so its
-// view shows how much context it holds; a turn's last request is kept
-// whole, with its answer (AskAI.last), for a call to go on from it (a
-// suggested reply: Chat.suggest) on the same prefix, so on the cache.
+// A turn's last request is kept whole, with its answer (AskAI.last), for
+// a call to go on from it (a suggested reply: Chat.suggest) on the same
+// prefix, so on the cache.
 
 import { Agent, type Item, type Tool } from "./Agent.ts";
 import { stream_lines } from "../tools/Clip.ts";
@@ -139,11 +138,6 @@ export const TTL: Record<Vendor, number> = {
 // the prefixes cached, by key (AskAI.keys)
 const CACHE = new Map<string, Cached>();
 
-// the input each caller's last request read, cached tokens too, by the
-// tools URL its calls name (Ask.server: a chat's main agent's, an
-// agent's): what it holds in context, for its view (Tools.state)
-const HELD = new Map<string, number>();
-
 // the last request of each caller that keeps it (Ask.keep: a chat's main
 // agent), whole, by its tools URL
 const LAST = new Map<string, Last>();
@@ -204,19 +198,6 @@ export namespace AskAI {
   // a call's end, before it ends: failed, saying `text`
   export function end(text: string): End {
     return { ok: false, text, left: [] };
-  }
-
-  // a request of a caller's (its tools URL; "": none, kept for no one)
-  // read its whole stream: its input, cached tokens too (Agent.send)
-  export function read(server: string, tokens: number): void {
-    if (server !== "") {
-      HELD.set(server, tokens);
-    }
-  }
-
-  // the input a caller's last request read; null: none yet
-  export function held(server: string): number | null {
-    return HELD.get(server) ?? null;
   }
 
   // a caller's request, kept whole with its answer (Ask.keep; its tools

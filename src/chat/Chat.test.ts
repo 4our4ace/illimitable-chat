@@ -154,7 +154,7 @@ test("/clear: the agent gets nothing of the chat so far, not even its lines, and
   told.forEach((m) => View.view_hear(seen, m));
   expect([seen.parts, View.view_count(seen)]).toEqual([[], before]);
   expect(mem.cut).toBe(before);
-  expect(mem.top).toBe(before);
+  expect(mem.view.from).toBe(before);
   expect(chat.eye.parts).toEqual([]);
   expect(chat.eye.from).toBe(before);
   expect(mem.count).toBe(before);
@@ -164,7 +164,7 @@ test("/clear: the agent gets nothing of the chat so far, not even its lines, and
   expect(Chat.clear(chat)).toEqual({});
   expect(mem.count).toBe(before);
   const again = Memory.load(mem.dir, () => ({}) as any, HERE);
-  expect([again.top, again.view.from, again.view.parts]).toEqual([before, before, []]);
+  expect([again.cut, again.show, again.view.from, again.view.parts]).toEqual([before, before, before, []]);
   expect([chat.suggest.text, again.suggest]).toEqual(["", ""]);
   for (let k = 0; k < 9; k++) {
     Memory.push(mem, [{ kind: "user", text: "after the clear " + k }]);

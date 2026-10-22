@@ -60,11 +60,10 @@ export type Fill = { used: number; cap: number; window: number };
 // not told)
 export type Plan = { brand: string; tier: string; limits: Limit[] };
 
-// what the main agent's calls use: the input its last request read,
-// cached tokens too (null: none yet); the plan of the vendor picked
-// (null: none told, or a vendor that tells none); how full the chat is
-// (null: not told yet)
-export type Use = { tokens: number | null; plan: Plan | null; fill?: Fill | null };
+// what the main agent's calls use: the plan of the vendor picked (null:
+// none told, or a vendor that tells none); how full the chat is (null:
+// not told yet)
+export type Use = { plan: Plan | null; fill?: Fill | null };
 
 // an item of illi's to-do list (Tools.ts todo): what to do, how it stands
 export type Todo = { text: string; status: "pending" | "active" | "done" };
@@ -255,7 +254,7 @@ const TOOL = "tool: ";
 const FOLD = "The whole chat, folded into the fewest blocks.";
 
 // the kinds of the work between the person's words and illi's, shown as
-// one line per run; a summary's kind, read off its line (Memory.show)
+// one line per run; a summary's kind, read off its line (Memory.plain)
 const ACTIVITY: Kind[] = ["tool", "echo", "mind", "work"];
 const KINDED   = /^(user|illi|tool|echo|mind|note|work): /;
 
@@ -295,7 +294,7 @@ export function view_new(): View {
     agent     : null,
     vendors   : [],
     models    : LABELS,
-    use       : { tokens: null, plan: null },
+    use       : { plan: null },
     todo      : [],
     suggest   : "",
     asks      : [],

@@ -19,7 +19,6 @@ import * as os from "node:os";
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-tools-");
 process.env.ILLI_DIR = DIR;
 
-const { AskAI } = await import("../ai/AskAI.ts");
 const { Chat } = await import("../chat/Chat.ts");
 const { MASTER, SUB, Tools } = await import("./Tools.ts");
 const { Projects } = await import("../chat/Projects.ts");
@@ -93,14 +92,6 @@ test("a list all done is let go, so it leaves the side; one with an item left is
   expect(await todo(going.map((x) => ({ ...x, status: "done" })))).toMatchObject({ fail: false });
   Tools.todo_finished(chat.tools);
   expect([Tools.todo(chat.tools), kept()]).toEqual([[], []]);
-});
-
-test("the views are told the input the main agent's last request read, not an agent's", () => {
-  expect(Chat.state(chat)).toMatchObject({ use: { tokens: null, plan: null } });
-  AskAI.read(Tools.at(chat.tools, "main"), 41000);
-  AskAI.read(Tools.at(chat.tools, "Ada"), 9);
-  AskAI.read("", 7);
-  expect(Chat.state(chat)).toMatchObject({ use: { tokens: 41000 } });
 });
 
 test("a caller in Claude Code gets only the tools it lacks, served at ?lean; its prompts say it works inside illi, CLAUDE.md left to Claude Code", async () => {
