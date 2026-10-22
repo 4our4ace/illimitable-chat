@@ -2,26 +2,21 @@
 // ==========
 // `bun test Store.test.ts`. A project's file is named after it, under
 // projects/, in WAL mode with illi's mark; illis starting at once each
-// get their project's file, two at one place the same. A file of version
-// 1 moves on to 3. A newer illi's file opens while it only added; one
-// that needs a newer illi is refused, and left out of the projects. Each
+// get their project's file, two at one place the same. A newer illi's
+// file opens while it only added; one that needs a newer illi is
+// refused, and left out of the projects; an older one, refused. Each
 // place is its own project with its own file and chat; a file another
 // place's already, numbered; a name looked up only among the files. The
-// projects are listed the one used last first, with their latest line, a
-// message of two pages counted once; a search finds lines with all the
-// words (else any), in a project or all, every match ranked however old,
-// each chat's best first (a big chat's never crowd out a small one's, the
-// projects with lines left out named), a project forgotten meanwhile left
-// out; a big chat leaves out a word in most lines all along while a
-// rarer one is in, a word common only of late kept. A project forgotten
-// is gone, its file deleted; a reader of it goes on as it was, and its
-// close leaves the place's new file alone. An older illi's one file moves
-// to a file per project, each project's rows as they were, then is left
-// a stub an older illi refuses; not while another illi has it open; one
-// cut off midway goes on, its own copies made again; one brought back
-// after its move drops nothing, copied beside the files there, even one
-// saved midway through its move (a file in use bears no mark); two illis
-// starting at once move it once. A file that won't open is named.
+// projects are listed the one used last first, with their latest line,
+// a message of two pages counted once; a search finds lines with all
+// the words (else any), in a project or all, every match ranked however
+// old, each chat's best first (a big chat's never crowd out a small
+// one's, the projects with lines left out named), a project forgotten
+// meanwhile left out; a big chat leaves out a word in most lines all
+// along while a rarer one is in, a word common only of late kept. A
+// project forgotten is gone, its file deleted; a reader of it goes on
+// as it was, and its close leaves the place's new file alone. A file
+// that won't open is named.
 
 import { afterAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -47,55 +42,6 @@ function say(store: any, text: string, images?: string[]): void {
   Store.nodes(store, [{ first: i, n: 1, text: "user: " + text }]);
 }
 
-// an older illi's one file (memory.sqlite) in `dir`, these places'
-// projects in it, each with a chat of `lines` messages, an image, a to-do
-// list, a state and an agent's log; its connection, and each project's
-// store by its name
-function older(dir: string, places: Array<typeof APP>, lines = 1): { db: Database; stores: Map<string, any> } {
-  fs.mkdirSync(dir, { recursive: true });
-  const db = Store.connect(dir + "/memory.sqlite", true);
-  const stores = new Map<string, any>();
-  for (const place of places) {
-    const project = Number(db.query("insert into project (uid, key, name, path, made) values (?, ?, ?, ?, ?)").run(crypto.randomUUID(), place.key, place.name, place.path, date).lastInsertRowid);
-    const chat = Number(db.query("insert into chat (uid, project, made) values (?, ?, ?)").run(crypto.randomUUID(), project, date).lastInsertRowid);
-    Store.words(db, chat);
-    const store = { file: dir + "/memory.sqlite", db, project, chat };
-    for (let k = 0; k < lines; k++) {
-      say(store, "work on " + place.name + " step " + k, k === 0 ? ["aaaaaaaaaaaaaaaa.png"] : undefined);
-    }
-    Store.image_put(store, "aaaaaaaaaaaaaaaa.png", Buffer.from("an image of " + place.name), null);
-    Store.todo_save(store, [{ text: "ship " + place.name, status: "pending" }]);
-    Store.save(store, { goal: place.name });
-    Store.work_push(store, "Scout.x", "Scout", { i: 0, kind: "note", text: "looked at " + place.name, date });
-    stores.set(place.name, store);
-  }
-  return { db, stores };
-}
-
-// a chat's rows, its project's, its index's
-function facts(db: Database, chat: number): unknown[] {
-  return [
-    db.query("select * from project where id = (select project from chat where id = ?)").all(chat),
-    db.query("select * from chat where id = ?").all(chat),
-    ...["msg", "node", "state", "image", "todo", "log"].map((t) => db.query(`select * from ${t} where chat = ?`).all(chat)),
-    db.query("select w.* from work w join log l on l.id = w.log where l.chat = ?").all(chat),
-    db.query(`select rowid, * from find_${chat}`).all(),
-  ];
-}
-
-// what an act writes to stderr meanwhile
-function said(act: () => void): string {
-  const out: string[] = [];
-  const write = process.stderr.write;
-  process.stderr.write = ((text: string) => out.push(text) > 0) as any;
-  try {
-    act();
-  } finally {
-    process.stderr.write = write;
-  }
-  return out.join("");
-}
-
 test("a project's file is named after it, under projects/, in WAL mode with illi's mark, at this version", () => {
   const store = Store.open(DIR + "/new", APP);
   const get = (pragma: string) => Object.values(store.db.query("pragma " + pragma).get() as object)[0];
@@ -103,34 +49,6 @@ test("a project's file is named after it, under projects/, in WAL mode with illi
   expect([get("application_id"), get("journal_mode"), get("user_version")]).toEqual([0x696c6c69, "wal", 3]);
   Store.close(store);
   expect([fs.readdirSync(DIR + "/new"), fs.readdirSync(DIR + "/new/projects")]).toEqual([["projects"], ["app-k3f9x2.sqlite"]]);
-});
-
-test("a file of version 1 moves on to 3: its facts as they were, an image and a to-do table added, the words in an index per chat, compat 3", () => {
-  const store = Store.open(DIR + "/v1", APP);
-  say(store, "a fact from version 1");
-  say(store, "a second fact");
-  Store.save(store, { goal: "kept" });
-  Store.work_push(store, "Scout.x", "Scout", { i: 0, kind: "note", text: "logged", date });
-  store.db.run(`drop table image; drop table todo; drop table find_${store.chat};
-    create virtual table find using fts5(text, chat unindexed, first unindexed, n unindexed, tokenize = 'unicode61 remove_diacritics 2');
-    insert into find (find, rank) values ('secure-delete', 1);
-    insert into find (text, chat, first, n) select text, chat, first, n from node order by first;
-    update meta set value = '1' where key = 'compat'; pragma user_version = 1`);
-  const rows = (db: any) => ["meta", "project", "chat", "msg", "node", "state", "log", "work"].map((t) => [t, db.query("select * from " + t).all()]);
-  const schema = (db: any) => db.query("select sql from sqlite_master where name not in ('image', 'todo') and name not like 'sqlite_autoindex_image%' and name not like 'find%' order by name").all();
-  const [before, tables] = [JSON.stringify(rows(store.db)).replace(`"value":"1"`, `"value":"3"`), schema(store.db)];
-  Store.close(store);
-  const after = Store.open(DIR + "/v1", APP);
-  expect((after.db.query("pragma user_version").get() as any).user_version).toBe(3);
-  expect(JSON.stringify(rows(after.db))).toBe(before);
-  expect(schema(after.db)).toEqual(tables);
-  expect(after.db.query("select name from sqlite_master where name = 'find'").get()).toBeNull();
-  expect(after.db.query(`select first, text from find_${after.chat} order by rowid`).all()).toEqual([{ first: 0, text: "user: a fact from version 1" }, { first: 1, text: "user: a second fact" }]);
-  expect(Store.search(after, ["second"], null).map((f) => f.first)).toEqual([1]);
-  Store.image_put(after, "0123456789abcdef.png", new Uint8Array([1, 2, 3]), null);
-  Store.todo_save(after, [{ text: "go on", status: "pending" }]);
-  expect([Store.image(after, "0123456789abcdef.png")!.data, Store.todo(after)]).toEqual([new Uint8Array([1, 2, 3]), [{ text: "go on", status: "pending" }]]);
-  Store.close(after);
 });
 
 test("illis starting at once each get their project's file, two at one place the same project and chat", async () => {
@@ -175,6 +93,13 @@ test("a newer illi's file opens while it only added; one that needs a newer illi
   }
   expect(logged).toEqual(["illi: chat: home.sqlite is of a newer illi: update illi to open it."]);
   Store.close(app);
+});
+
+test("a file of an older version is refused, said by its name", () => {
+  const store = Store.open(DIR + "/older", APP);
+  store.db.run("pragma user_version = 2");
+  Store.close(store);
+  expect(() => Store.open(DIR + "/older", APP)).toThrow("chat: app-k3f9x2.sqlite is of an older illi this one can't open: move it away to start the project fresh.");
 });
 
 test("each place is its own project with its own file and chat; the same place, the same chat; a file another place's already, numbered; a name looked up among the files only", () => {
@@ -288,133 +213,8 @@ test("a project forgotten is gone, its file deleted, its WAL too, the others kep
   expect(fs.readdirSync(DIR + "/forget/projects")).toEqual(["app-k3f9x2.sqlite", "home.sqlite"]);
 });
 
-test("an older illi's one file moves to a file per project, once, said: each project's rows as they were, by their numbers, its words searchable; the old file a stub an older illi refuses; nothing left beside", () => {
-  const dir = DIR + "/moved";
-  const { db, stores } = older(dir, [HOME, APP, SITE]);
-  const before = [...stores.values()].map((s) => facts(db, s.chat));
-  Store.shut(db);
-  let store: any;
-  expect(said(() => (store = Store.open(dir, APP)))).toBe("illi: moving the chats to a file per project (once)\n");
-  expect([store.project, store.chat, Store.count(store), Store.state(store)]).toEqual([2, 2, 1, { goal: "app-k3f9x2" }]);
-  const after = [HOME, APP, SITE].map((p, k) => Store.visit(store, dir + "/projects/" + p.name + ".sqlite", (s) => facts(s.db, [...stores.values()][k].chat)));
-  expect(after).toEqual(before);
-  expect(Store.search(store, ["site"], null).map((f) => f.project + " " + f.chat)).toEqual(["site-7q2m0d 3"]);
-  Store.close(store);
-  expect([fs.readdirSync(dir).sort(), fs.readdirSync(dir + "/projects").sort()]).toEqual([["memory.sqlite", "projects"], ["app-k3f9x2.sqlite", "home.sqlite", "site-7q2m0d.sqlite"]]);
-  const old = new Database(dir + "/memory.sqlite", { readwrite: true });
-  expect([old.query("pragma user_version").get(), old.query("select name from sqlite_master").all(), old.query("select key from meta order by key").all()]).toEqual([{ user_version: 4 }, [{ name: "meta" }], [{ key: "compat" }, { key: "moved" }]]);
-  expect(() => Store.schema(old)).toThrow("is of a newer illi");
-  old.close();
-  expect(fs.statSync(dir + "/memory.sqlite").size).toBeLessThan(16384);
-  expect(said(() => Store.close(Store.open(dir, SITE)))).toBe("");
-  expect(fs.readdirSync(dir).sort()).toEqual(["memory.sqlite", "projects"]);
-});
-
-test("an older illi's file another illi has open isn't moved: said, nothing done; once it's quit, moved", () => {
-  const dir = DIR + "/held-old";
-  const { db } = older(dir, [HOME, APP]);
-  expect(() => said(() => Store.open(dir, APP))).toThrow("chat: the chats move to a file per project once, but another illi has them open: quit it, then start illi again.");
-  expect([db.query("pragma journal_mode").get(), db.query("pragma user_version").get(), fs.existsSync(dir + "/projects")]).toEqual([{ journal_mode: "wal" }, { user_version: 3 }, false]);
-  say({ file: dir + "/memory.sqlite", db, project: 2, chat: 2 }, "written after");
-  Store.shut(db);
-  let store: any;
-  said(() => (store = Store.open(dir, APP)));
-  expect([Store.count(store), Store.msg(store, 1)!.text]).toEqual([2, "written after"]);
-  Store.close(store);
-  expect(fs.readdirSync(dir).sort()).toEqual(["memory.sqlite", "projects"]);
-});
-
-test("a move cut off midway goes on: the copies it made made again, with what the old file got since, a half-made file too; nothing numbered", () => {
-  const dir = DIR + "/cut";
-  const { db, stores } = older(dir, [HOME, APP, SITE]);
-  Store.shut(db);
-  const stub = Store.stub;
-  Store.stub = () => {
-    throw new Error("cut off");
-  };
-  try {
-    expect(() => said(() => Store.open(dir, SITE))).toThrow("chat: memory.sqlite couldn't move to a file per project: cut off");
-  } finally {
-    Store.stub = stub;
-  }
-  expect(fs.readdirSync(dir + "/projects").sort()).toEqual(["app-k3f9x2.sqlite", "home.sqlite", "site-7q2m0d.sqlite"]);
-  const old = new Database(dir + "/memory.sqlite", { readwrite: true });
-  say({ ...stores.get(APP.name), db: old }, "written by an older illi after the crash");
-  Store.shut(old);
-  fs.writeFileSync(dir + "/projects/site-7q2m0d.sqlite-new", "half a file");
-  let store: any;
-  said(() => (store = Store.open(dir, SITE)));
-  expect([store.chat, Store.count(store), Store.visit(store, dir + "/projects/app-k3f9x2.sqlite", Store.count)]).toEqual([3, 1, 2]);
-  Store.close(store);
-  expect([fs.readdirSync(dir).sort(), fs.readdirSync(dir + "/projects").sort()]).toEqual([["memory.sqlite", "projects"], ["app-k3f9x2.sqlite", "home.sqlite", "site-7q2m0d.sqlite"]]);
-});
-
-test("an older illi's file brought back after its move (a backup put back) drops nothing: each project the files hold already copied beside it, numbered", () => {
-  const dir = DIR + "/back";
-  Store.shut(older(dir, [HOME, APP]).db);
-  fs.copyFileSync(dir + "/memory.sqlite", DIR + "/back-up.sqlite");
-  let app: any;
-  said(() => (app = Store.open(dir, APP)));
-  say(app, "written after the move");
-  Store.close(app);
-  fs.copyFileSync(DIR + "/back-up.sqlite", dir + "/memory.sqlite");
-  expect(said(() => (app = Store.open(dir, APP)))).toBe("illi: moving the chats to a file per project (once)\n");
-  expect([app.file, Store.count(app)]).toEqual([dir + "/projects/app-k3f9x2.sqlite", 2]);
-  expect(Store.projects(app).map((p) => p.name + " " + p.count + " " + Store.visit(app, p.file, (s) => Store.named(s).name)).sort()).toEqual(["app-k3f9x2 2 app-k3f9x2", "app-k3f9x2-2 1 app-k3f9x2-2", "home 1 home", "home-2 1 home-2"]);
-  Store.close(app);
-});
-
-test("an older illi's file saved midway through its move and put back later drops nothing: a file in use bears no move's mark, so it's copied beside; one never opened since is made again, the same", () => {
-  const dir = DIR + "/mid";
-  Store.shut(older(dir, [HOME, APP]).db);
-  const stub = Store.stub;
-  Store.stub = () => {
-    throw new Error("cut off");
-  };
-  try {
-    expect(() => said(() => Store.open(dir, APP))).toThrow("cut off");
-  } finally {
-    Store.stub = stub;
-  }
-  fs.copyFileSync(dir + "/memory.sqlite", DIR + "/mid-saved.sqlite");
-  let app: any;
-  said(() => (app = Store.open(dir, APP)));
-  say(app, "written after the move");
-  Store.close(app);
-  fs.copyFileSync(DIR + "/mid-saved.sqlite", dir + "/memory.sqlite");
-  said(() => (app = Store.open(dir, APP)));
-  expect([app.file, Store.count(app)]).toEqual([dir + "/projects/app-k3f9x2.sqlite", 2]);
-  expect(Store.projects(app).map((p) => p.name + " " + p.count).sort()).toEqual(["app-k3f9x2 2", "app-k3f9x2-2 1", "home 1"]);
-  Store.close(app);
-});
-
 test("a chat file that won't open is said by its name", () => {
   fs.mkdirSync(DIR + "/junk/projects", { recursive: true });
   fs.writeFileSync(DIR + "/junk/projects/app-k3f9x2.sqlite", "not a database, a few bytes more than a header would take".repeat(4));
   expect(() => Store.open(DIR + "/junk", APP)).toThrow("chat: app-k3f9x2.sqlite won't open: file is not a database");
-  fs.writeFileSync(DIR + "/junk/memory.sqlite", "not a database either".repeat(10));
-  expect(() => Store.open(DIR + "/junk", APP)).toThrow("chat: memory.sqlite couldn't move to a file per project: file is not a database");
 });
-
-test("two illis starting at once move an older illi's file once: the second waits, then finds it moved", async () => {
-  const dir = DIR + "/race-old";
-  Store.shut(older(dir, [HOME, APP, SITE], 3000).db);
-  const at = Date.now() + 1500;
-  const script = DIR + "/race-old.ts";
-  fs.writeFileSync(script, `
-    const { Store } = await import(${JSON.stringify(import.meta.dir + "/Store.ts")});
-    const place = ${JSON.stringify([APP, SITE])}[Number(process.argv[2])];
-    while (Date.now() < ${at}) {}
-    const store = Store.open(${JSON.stringify(dir)}, place);
-    console.log(store.chat + " " + Store.count(store));
-    Store.close(store);
-    process.exit(0);
-  `);
-  const runs = [0, 1].map((k) => Bun.spawn(["bun", script, String(k)], { env: { ...process.env, ILLI_DIR: DIR }, stdout: "pipe", stderr: "pipe" }));
-  const outs = await Promise.all(runs.map(async (p) => [await new Response(p.stdout).text(), await new Response(p.stderr).text(), await p.exited]));
-  expect(outs.map((o) => [o[0], o[2]])).toEqual([["2 3000\n", 0], ["3 3000\n", 0]]);
-  const told = outs.map((o) => String(o[1])).join("").split("\n").filter((l) => l !== "");
-  expect(told.filter((l) => l === "illi: moving the chats to a file per project (once)").length).toBe(1);
-  expect(told.filter((l) => l !== "illi: moving the chats to a file per project (once)" && l !== "illi: another illi is moving the chats to a file per project: waiting for it")).toEqual([]);
-  expect(fs.readdirSync(dir).sort()).toEqual(["memory.sqlite", "projects"]);
-}, 30000);

@@ -269,8 +269,7 @@ export namespace Chat {
     });
   }
 
-  // how many projects other illis hold in a profile's folder (dir); the
-  // move's gate (Store.gate) counts as one while a move runs
+  // how many projects other illis hold in a profile's folder (dir)
   export function others(dir: string): number {
     const locks = fs.existsSync(dir + "/locks") ? fs.readdirSync(dir + "/locks").filter((f) => f.endsWith(".lock")) : [];
     return locks.map((f) => dir + "/locks/" + f).filter((file) => {
