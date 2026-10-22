@@ -579,7 +579,10 @@ sequenceDiagram
    another illi mid-read) holds the checkpoint back: it can't copy pages
    that reader may still need from the WAL. The checkpoint doesn't
    throw then; it returns `busy = 1`. `Store.settled` runs it again every
-   50 ms till it reports `busy = 0`, for up to 10 s (`WAIT`). If it's
+   50 ms till it reports `busy = 0`, for up to 10 s (`WAIT`); each try
+   itself waits `busy_timeout` for the reader (10 s on illi's own
+   connection, so there one try is usually the whole wait, and illi's
+   screen holds still meanwhile). If it's
    still held back, **forget stops here and returns `false`**: the
    project is gone from the tables and its zeros are in the WAL, but the
    file isn't shrunk. Nothing is cut off, so the zeros reach the file at

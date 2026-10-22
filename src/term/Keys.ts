@@ -1,9 +1,11 @@
 // Keys
 // ====
 // A key, as Screen.ts reads it: the mouse's (Select.ts), the wheel, the
-// keys of term_groups (Commands.ts), and what the lists and panes over the
-// chat take first (a picker searched, the text typed too); Enter, Esc,
-// Ctrl+C and Ctrl+D, Tab (the suggested reply), Shift+Tab and the pages.
+// keys of term_groups (Commands.ts), the key after the leader (its
+// shortcut, before all else), and what the lists and panes over the chat
+// take first (a picker searched, the text typed too); Enter (a skill
+// named mid-message told), Esc, Ctrl+C and Ctrl+D, Tab (the suggested
+// reply), Shift+Tab and the pages.
 
 import { term_form_key, term_form_type } from "./Asks.ts";
 import { Chat } from "../chat/Chat.ts";

@@ -182,7 +182,7 @@ type Hit = { row: number; col: number; to: number; run: () => void };
 // how often an option was picked (a search ranks the more used first);
 // aside: what shows at an option's right end, each (its keys, its value);
 // middle: the box in the screen's middle, over all else, this many
-// columns wide at most (none: over the chat's foot, Frame.ts); heads:
+// columns wide at most (none: down over the input, Frame.ts); heads:
 // each option's group, a head over its first while nothing is searched
 export type Chooser = {
   title  : string;

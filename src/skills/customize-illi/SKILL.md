@@ -128,9 +128,15 @@ one:
 - side: right, left or off; side_width: "25%" or columns; jobs: summaries
   built at once
 - leader: the key before a shortcut (default Ctrl+X: Ctrl or Alt and a
-  letter illi doesn't use); shortcuts: the keys after it, as an object
-  over illi's own (a, e, h, l, m, p, s, t, y), each a command with its
-  words or a key's name: {"c": "/compact", "o": "Ctrl+O", "t": ""} ("" drops one)
+  letter illi doesn't use; pressed, the screen greys till the next key,
+  which runs its shortcut); shortcuts: the keys after it, as an object
+  over illi's own (a /agent, e /effort, h /help, l /projects, m /model,
+  p /profile, s /settings, t /tab, y Ctrl+Y), each a command with its
+  words or a key's name: {"c": "/compact", "o": "Ctrl+O", "t": ""} ("" drops
+  one of illi's). The user changes these from inside illi with
+  /shortcuts (Enter changes one, Del drops it or puts illi's back, the
+  last row adds one), which applies at once: for one shortcut, point them
+  there
 - suggest: on or off, a suggested reply after each turn
 - tps: on or off, tokens a second (tok/s) on the line over the input while
   text streams

@@ -410,7 +410,9 @@ export function config_shortcut_mine(key: string): boolean {
 
 // a key after the leader set (run: a /command or a key's name; "": none;
 // null: illi's again, else none), kept in config.json; one set as illi's
-// has it, or to none where illi has none, is no change of the user's
+// has it, or to none where illi has none, is no change of the user's. In
+// a profile over the global file's shortcuts, none left is kept as {}
+// (taken out, the global's would hold again)
 export function config_shortcut(key: string, run: string | null): void {
   const mine = { ...config_shortcuts_mine() };
   const k    = key.toLowerCase();
@@ -424,7 +426,8 @@ export function config_shortcut(key: string, run: string | null): void {
       delete mine[x];
     }
   }
-  config_set("shortcuts", Object.keys(mine).length === 0 ? null : mine);
+  const under = DIR !== ROOT && config_file(ROOT + "/config.json").shortcuts !== undefined;
+  config_set("shortcuts", Object.keys(mine).length === 0 && !under ? null : mine);
 }
 
 // a setting that is an object (a variable's, or text, parsed as JSON);

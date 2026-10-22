@@ -5,7 +5,8 @@ Config
 profile's own `config.json` goes over it, key by key; its `off` and
 `sticky` add to the global lists ([Profiles](profiles.md)).
 
-- `/settings` changes them from inside illi (`/set <key> <value>` too).
+- `/settings` changes them from inside illi (`/set <key> <value>` too);
+  `/shortcuts` the leader and its shortcuts.
 - Most apply at once; `vendors`, `models`, `jobs`, `theme`, `mcp` and
   `login` at the next start.
 - A key set by a variable stays as the variable says.
@@ -29,7 +30,7 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `sticky`     |                                   | sticky skills on, by name; `/name` turns one on and off ([Customize](customize.md)) |
 | `side`       | `right`                           | side panel: `left`, `off`; `side_width` `25%`    |
 | `leader`     | `Ctrl+X`                          | the key before a shortcut: Ctrl or Alt and a letter illi doesn't use ([Keys](keys.md#shortcuts)) |
-| `shortcuts`  | illi's own                        | the keys after the leader: `{ "c": "/compact", "o": "Ctrl+O", "t": "" }`, over illi's own (`""` drops one) |
+| `shortcuts`  | illi's own                        | the keys after the leader: `{ "c": "/compact", "o": "Ctrl+O", "t": "" }`, over illi's own (`""` drops one); `/shortcuts` edits them |
 | `suggest`    | `on`                              | a suggested reply after each turn; `off`         |
 | `tps`        | `on`                              | tokens a second (tok/s) on the line over the input while text streams; `off` |
 | `jobs`       | `8`                               | summaries built at once                          |
@@ -72,7 +73,7 @@ What else illi keeps in `~/.illi`:
 | --------------- | ----------------------------------------------------- |
 | `login.json`    | the ChatGPT login `/login` makes (else opencode's, in `~/.local/share/opencode/auth.json`) |
 | `models.json`   | the models the vendors listed last                    |
-| `used.json`     | how often you ran each command: among those a `/word` matches alike, the most used come first; a use counts half as much 100 uses later, and a command you stopped using drops out |
+| `used.json`     | how often you ran each command: among those a `/word` matches alike, the most used come first; a use counts half as much 100 uses later, and a command you stopped using drops out (two illis at once each add theirs: [Storage](storage.md#usage-counts)) |
 | `picked.json`   | the same for what you pick in Ctrl+P's list, kept apart |
 | `profile`       | the profile used last                                 |
 | `locks/`        | a lock per project, held while its chat is open (by the system: a crash never leaves one held), and the socket a second terminal joins it by |

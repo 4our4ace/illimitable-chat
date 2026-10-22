@@ -42,7 +42,7 @@ const LOGIN_FAILED = 60000;
 // the pick's moves by Shift and an arrow
 const ARROWS: Record<string, Move> = { "Shift+Left": "prev", "Shift+Right": "next", "Shift+Up": "up", "Shift+Down": "down" };
 
-// the shortcuts' list's title (term_lead)
+// the shortcuts' list's title (term_shortcuts)
 const LEAD = "Shortcuts";
 
 // how often each was used, by its name, in a file of the root's (every
@@ -171,8 +171,10 @@ export function term_suggest(t: Term): Sug | null {
   if (slash === null) {
     return null;
   }
-  const skills = mid === null ? [] : term_skills().map((s) => "/" + s.name);
-  t.sug ??= { cmds: term_commands(true).filter(([use]) => use !== "" && (mid === null || skills.includes(use.split(" ")[0]))), word: "", found: [], at: 0, top: 0, tall: 1, off: null, mid };
+  if (t.sug === null) {
+    const skills = mid === null ? [] : term_skills().map((s) => "/" + s.name);
+    t.sug = { cmds: term_commands(true).filter(([use]) => use !== "" && (mid === null || skills.includes(use.split(" ")[0]))), word: "", found: [], at: 0, top: 0, tall: 1, off: null, mid };
+  }
   const sug  = t.sug;
   const word = slash.word;
   sug.mid    = mid;
@@ -217,20 +219,23 @@ export function term_tally_one(tally: Tally, name: string): void {
 // a tally's queued uses played over its file as it is now, so another
 // illi's uses kept meanwhile stay; written whole beside it, to a
 // thousandth, then moved over it (no reader sees half a file), and taken
-// as the counts here too. Never in the way: a failure keeps nothing
+// as the counts here too. Never in the way: a failure keeps nothing (nor
+// the file beside)
 export function term_tally_keep(tally: Tally): void {
   const uses = tally.uses ?? [];
+  const temp = tally.file + "." + process.pid;
   tally.uses = [];
   try {
     const count = json_object(tally.file) ?? {};
     for (const name of uses) {
       tally_use(count, name);
     }
-    const temp = tally.file + "." + process.pid;
     fs.writeFileSync(temp, JSON.stringify(count, (_, n) => (typeof n === "number" ? Math.round(n * 1000) / 1000 : n)));
     fs.renameSync(temp, tally.file);
     tally.count = count;
-  } catch {}
+  } catch {
+    fs.rmSync(temp, { force: true });
+  }
 }
 
 // one more use of a name, the others faded (one under GONE, or no
@@ -425,8 +430,14 @@ export function term_chooser(t: Term, title: string, names: string[], about: str
 
 // the leader pressed (config.LEADER): the screen greys till the next key,
 // which runs its shortcut (term_after); nothing else shows, a shortcut is
-// found by trying, or in /shortcuts
+// found by trying, or in /shortcuts. A picker open is closed first, the
+// commands suggested too (as Esc would), so the shortcut has the screen
 export function term_lead(t: Term): void {
+  t.choose = null;
+  const sug = term_suggest(t);
+  if (sug !== null) {
+    sug.off = sug.word;
+  }
   t.lead = true;
 }
 
@@ -464,23 +475,26 @@ export function term_shortcuts(t: Term, at = 0): void {
     const key  = keys[k - 1];
     const back = () => term_shortcuts(t, k);
     if (k === 0) {
-      return term_ask(t, "Leader", "Ctrl or Alt and a letter", config.LEADER, "Enter keeps it · Esc", (text) => term_shortcut_set(() => config.config_set("leader", text), back));
+      return term_ask(t, "Leader", "Ctrl or Alt and a letter", config.LEADER, "Enter keeps it · Esc", (text) => term_shortcut_set("leader", () => config.config_set("leader", text), back));
     }
     if (k === names.length - 1) {
       return term_ask(t, "Add a shortcut", "a key, a space, then a /command or a key's name", "", "Enter adds it · Esc", (text) => {
         const [ch = "", ...rest] = [...text.trim()];
         const run = rest.join("").trim();
-        return ch === "" || run === "" || rest[0] !== " " ? "a key, a space, then what it runs: c /compact" : term_shortcut_set(() => config.config_shortcut(ch, run), back);
+        return ch === "" || run === "" || rest[0] !== " " ? "a key, a space, then what it runs: c /compact" : term_shortcut_set("shortcuts", () => config.config_shortcut(ch, run), back);
       });
     }
-    term_ask(t, config.LEADER + " " + key, "a /command with its words, or a key's name; empty: none", config.SHORTCUTS[key] ?? "", "Enter keeps it · Esc", (text) => term_shortcut_set(() => config.config_shortcut(key, text.trim()), back));
+    term_ask(t, config.LEADER + " " + key, "a /command with its words, or a key's name; empty: none", config.SHORTCUTS[key] ?? "", "Enter keeps it · Esc", (text) => term_shortcut_set("shortcuts", () => config.config_shortcut(key, text.trim()), back));
   };
   const del = (k: number, name: string) => {
     if (name !== "Delete" || k === names.length - 1) {
       return false;
     }
     const key = keys[k - 1];
-    term_shortcut_set(() => (k === 0 ? config.config_set("leader", null) : config.config_shortcut(key, config.config_shortcut_mine(key) ? null : "")), () => term_shortcuts(t, k));
+    const why = term_shortcut_set(k === 0 ? "leader" : "shortcuts", () => (k === 0 ? config.config_set("leader", null) : config.config_shortcut(key, config.config_shortcut_mine(key) ? null : "")), () => term_shortcuts(t, k));
+    if (why !== null) {
+      term_note(t, why);
+    }
     return true;
   };
   const foot = (k: number) => {
@@ -491,9 +505,14 @@ export function term_shortcuts(t: Term, at = 0): void {
   t.choose!.at = Math.min(at, names.length - 1);
 }
 
-// a change to the shortcuts made, then `then` (the list again); why it
-// won't do instead, kept in the line asked for
-function term_shortcut_set(change: () => void, then: () => void): string | null {
+// a change to the leader or the shortcuts (`key`) made, then `then` (the
+// list again); why it won't do instead (one a variable sets, as
+// /settings says, else config_check's), kept in the line asked for
+function term_shortcut_set(key: config.Key, change: () => void, then: () => void): string | null {
+  const env = config.config_env_set(key);
+  if (env !== null) {
+    return key + " is set by " + env + ", over config.json: unset it to change it here.";
+  }
   try {
     change();
   } catch (err: any) {

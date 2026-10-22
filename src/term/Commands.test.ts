@@ -10,15 +10,16 @@
 // by the main agent's name; the dead ends (/stop, /fold, /image, /mcp
 // with nothing to act on) say something. A sticky skill's name alone
 // turns it on and off; with words, on, the words sent; while on, it shows
-// at the side, where a click turns it off. The leader (Ctrl+X) greys
-// the screen, and the next key runs its shortcut; /shortcuts lists them
-// and the leader, to change; the leader is never a key illi takes
-// itself. A skill named mid-message is suggested as it's typed, filled
-// in there, and illi told to use it as the message goes. A use counted
-// weighs half as
-// much 100 uses on, a name faded under a tenth forgotten; two illis
-// counting at once each keep theirs over the other's. The side shows
-// any vendor's plan alike: each window's share used, its bar as full.
+// at the side, where a click turns it off. The leader (Ctrl+X) greys the
+// screen (a picker open closed first), and the next key runs its
+// shortcut; /shortcuts lists them and the leader, to change (one a
+// variable sets, said so, unchanged); the leader is never a key illi
+// takes itself. A skill named mid-message is suggested as it's typed,
+// filled in there, and illi told to use it as the message goes. A use
+// counted weighs half as much 100 uses on, a name faded under a tenth
+// forgotten; two illis counting at once each keep theirs over the
+// other's. The side shows any vendor's plan alike: each window's share
+// used, its bar as full.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -130,7 +131,7 @@ test("a picker without a search takes no typing; Tab moves in it", () => {
   expect(picked).toEqual([1]);
 });
 
-test("the leader greys the screen till the next key, which runs its shortcut; Esc, the leader again or the wheel, none; a key with none says so", () => {
+test("the leader greys the screen till the next key, which runs its shortcut; Esc, the leader again or the wheel, none; a key with none says so; a picker open, or the commands suggested, close first", () => {
   const t = term();
   term_press(t, "Ctrl+X");
   expect([t.lead, t.choose]).toEqual([true, null]);
@@ -149,6 +150,14 @@ test("the leader greys the screen till the next key, which runs its shortcut; Es
   term_press(t, "Ctrl+X");
   term_type(t, "sx");
   expect([t.choose.title, t.choose.find.text]).toEqual(["Settings", "x"]);
+  term_press(t, "Ctrl+X");
+  expect([t.lead, t.choose]).toEqual([true, null]);
+  term_grab(t, "Esc");
+  Screen.ed_set(t.scr.ed, "/mod");
+  term_press(t, "Ctrl+X");
+  expect([t.lead, term_suggest(t)]).toEqual([true, null]);
+  term_type(t, "q");
+  Screen.ed_set(t.scr.ed, "");
 });
 
 test("/shortcuts: the leader and each key after it; Enter changes one, Del puts illi's back or drops it, the last row adds one; the leader never a key illi takes", () => {
@@ -211,6 +220,33 @@ test("/shortcuts: the leader and each key after it; Enter changes one, Del puts 
   expect(letters.filter((k) => (own.has(k) || edits(k)) && !config.TAKEN.includes(k))).toEqual([]);
   config.config_set("shortcuts", null);
   expect(Object.keys(config.SHORTCUTS).length).toBe(9);
+});
+
+test("/shortcuts while a variable sets them: a change, or a Del, says so and changes nothing", () => {
+  const config = require("../config/Config.ts");
+  const t = term();
+  const why = "shortcuts is set by ILLI_SHORTCUTS, over config.json: unset it to change it here.";
+  const at = (name: string) => {
+    t.choose.at = t.choose.shown.findIndex((m: Match) => t.choose.names[m.k] === name);
+  };
+  process.env.ILLI_SHORTCUTS = '{"c": "/compact"}';
+  try {
+    run(t, "/shortcuts");
+    at("Ctrl+X m");
+    term_grab(t, "Enter");
+    Screen.ed_set(t.choose.find, "/settings");
+    term_grab(t, "Enter");
+    expect(t.choose.foot(-1)).toBe(why);
+    term_grab(t, "Esc");
+    run(t, "/shortcuts");
+    at("Ctrl+X t");
+    term_grab(t, "Delete");
+    expect([note(t), config.SHORTCUTS.m, config.SHORTCUTS.t]).toEqual([why, "/model", "/tab"]);
+    expect(fs.existsSync(DIR + "/config.json") ? JSON.parse(fs.readFileSync(DIR + "/config.json", "utf8")).shortcuts : undefined).toBeUndefined();
+  } finally {
+    delete process.env.ILLI_SHORTCUTS;
+    t.choose = null;
+  }
 });
 
 test("/help fits a narrow pane: how each is typed on its own line, what it does under it", () => {
@@ -325,7 +361,7 @@ test("a use weighs half as much 100 uses on; a name faded under a tenth, or no n
   expect(JSON.parse(fs.readFileSync(DIR + "/faded.json", "utf8"))).toEqual({ "/new": Math.round(term_tally(tally)["/new"] * 1000) / 1000 });
 });
 
-test("two illis counting at once each keep their uses over the other's: the file holds both, and each takes it as its counts", () => {
+test("two illis counting at once each keep their uses over the other's: the file holds both, and each takes it as its counts; one that can't write leaves nothing beside it", () => {
   const [one, two] = [{ file: DIR + "/both.json", count: null }, { file: DIR + "/both.json", count: null }] as any[];
   term_tally_one(one, "/model");
   term_tally_one(two, "/agent");
@@ -340,6 +376,12 @@ test("two illis counting at once each keep their uses over the other's: the file
   expect(fs.readdirSync(DIR).filter((f) => f.startsWith("both.json."))).toEqual([]);
   clearTimeout(one.keep);
   clearTimeout(two.keep);
+  fs.mkdirSync(DIR + "/blocked.json");
+  const blocked = { file: DIR + "/blocked.json", count: null } as any;
+  term_tally_one(blocked, "/model");
+  term_tally_keep(blocked);
+  clearTimeout(blocked.keep);
+  expect([fs.statSync(DIR + "/blocked.json").isDirectory(), fs.readdirSync(DIR).filter((f) => f.startsWith("blocked.json."))]).toEqual([true, []]);
 });
 
 test("the side shows any vendor's plan alike: each window's share used, a bar as full, yellow and red as it fills; one past its reset, none", () => {
@@ -357,12 +399,22 @@ test("the side shows any vendor's plan alike: each window's share used, a bar as
   expect(term_side(t, 30, 40).map(([line]) => text(line))).not.toContain("Usage");
 });
 
-test("a skill named mid-message: suggested as it's typed (skills alone, none shown till one matches), filled in there by Enter, and illi told to use it as the message goes", () => {
+test("a skill named mid-message: suggested as it's typed (skills alone, none shown till one matches, read once), filled in there by Enter, and illi told to use it as the message goes", () => {
   fs.mkdirSync(DIR + "/skills/imagegen", { recursive: true });
   fs.writeFileSync(DIR + "/skills/imagegen/SKILL.md", "---\ndescription: Make images\n---\nDraw.");
   const t = term();
+  const { Custom } = require("../config/Custom.ts");
+  const skills = Custom.skills;
+  let reads = 0;
+  Custom.skills = (...args: any[]) => (reads++, skills(...args));
   Screen.ed_set(t.scr.ed, "use the /ima");
   const sug = term_suggest(t)!;
+  const once = reads;
+  Screen.ed_set(t.scr.ed, "use the /imag");
+  term_suggest(t);
+  term_suggest(t);
+  Custom.skills = skills;
+  expect(reads).toBe(once);
   expect([sug.mid, sug.cmds.map(([use]: any) => use), sug.cmds[sug.found[0].k][0]]).toEqual([8, ["/customize-illi [...]", "/imagegen [...]"], "/imagegen [...]"]);
   term_grab(t, "Enter");
   expect([t.scr.ed.text, t.scr.ed.pos, t.v.out]).toEqual(["use the /imagegen ", 18, []]);

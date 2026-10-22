@@ -22,7 +22,8 @@
 // a listing waits for the servers still starting. The master keeps a
 // to-do list as it works (todo: the whole list each time), the
 // project's, in the chat's file (Store.todo), which the views show with
-// what its calls use (Tools.state).
+// what its calls use (Tools.state); one with every item done is let go
+// as a turn starts or ends (todo_finished).
 // A call on claude-code runs in Claude Code, with its own prompt and
 // tools: it gets the tools Claude Code lacks (a `lean` list: no shell or
 // files), and prompts that say it works inside illi (Tools.hosted), the
