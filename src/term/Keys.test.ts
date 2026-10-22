@@ -64,7 +64,7 @@ test("Tab puts the suggested reply in the input, not sent; with none shown, Tab 
   expect(none.scr.ed.text).toBe("");
 });
 
-test("anything typed dismisses the suggested reply, even erased, till the next one comes", () => {
+test("anything typed dismisses the suggested reply, even erased, till the next one comes or a message of one's own goes; sent, it stays hidden", () => {
   const t = term("Run the tests");
   Screen.screen_feed(t.scr, "n");
   expect(term_hint(t)).toBe("");
@@ -75,6 +75,12 @@ test("anything typed dismisses the suggested reply, even erased, till the next o
   expect(t.scr.ed.text).toBe("");
   t.v.suggest = "Commit it";
   expect(term_hint(t)).toBe("Commit it");
+  Screen.screen_feed(t.scr, "also fix the typo\r");
+  expect([t.scr.ed.text, term_hint(t)]).toEqual(["", "Commit it"]);
+  Screen.screen_feed(t.scr, "\t");
+  expect(t.scr.ed.text).toBe("Commit it");
+  Screen.screen_feed(t.scr, "\r");
+  expect([t.scr.ed.text, term_hint(t)]).toEqual(["", ""]);
 });
 
 test("a key runs the command whose keys name it, the second of its keys too", () => {

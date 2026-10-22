@@ -13,8 +13,9 @@
 // primary agent of the user's, Custom.ts: Shift+Tab, /agent; none: illi's own). A quit cuts what runs;
 // the next start resumes it (Chat.resume), told so. A turn that ends
 // answered asks for the user's likely next message, on the cache
-// (Chat.suggest), shown till a message or the next turn, a restart
-// between kept (it is saved with the chat's state).
+// (Chat.suggest), shown till it is sent or a turn ends answered (a
+// message of the user's own leaves it, to send too, in the same turn), a
+// restart between kept (it is saved with the chat's state).
 
 import { Database } from "bun:sqlite";
 import * as fs from "node:fs";
@@ -445,12 +446,12 @@ export namespace Chat {
   }
 
   // a turn: its calls, one after another while messages wait; one that
-  // ends answered asks for a suggested reply. The messages sent as a
-  // stopped one wound down start a new one. A to-do list all done goes as
-  // it starts and ends (Tools.todo_finished)
+  // ends answered lets the suggested reply go (counted unused if it was
+  // never sent) and asks for the next. The messages sent as a stopped one
+  // wound down start a new one. A to-do list all done goes as it starts
+  // and ends (Tools.todo_finished)
   export async function turn(chat: Chat): Promise<void> {
     chat.busy = true;
-    Chat.unsuggest(chat);
     Tools.todo_finished(chat.tools);
     try {
       let go = true;
@@ -472,10 +473,15 @@ export namespace Chat {
       Tools.todo_finished(chat.tools);
       Chat.live(chat, null, []);
       Chat.after(chat);
+      const answered = why === null && chat.suggest.due;
+      if (answered && chat.suggest.text !== "") {
+        chat.suggest.unused += 1;
+        Chat.unsuggest(chat);
+      }
       Chat.change(chat);
       if (chat.wait.length > 0) {
         void Chat.turn(chat);
-      } else if (why === null && chat.suggest.due) {
+      } else if (answered) {
         Chat.suggest(chat);
       }
     }
@@ -603,8 +609,9 @@ export namespace Chat {
   // from a pipe, nor once UNUSED in a row went unused): after the turn's
   // last request and its answer (AskAI.last), SUGGEST, on what it ran on,
   // with its system prompt and tools, so all before SUGGEST is read from
-  // the cache. Its line is shown till a message or the next turn; a tool
-  // call, a failure or nothing back shows none. A turn of Claude Code's
+  // the cache. Its line is shown till it is sent or a turn ends answered
+  // (Chat.used, Chat.turn); a tool call, a failure or nothing back shows
+  // none. A turn of Claude Code's
   // keeps no request, so one kept on another vendor never stands in
   export function suggest(chat: Chat): void {
     const s = chat.suggest;
@@ -633,8 +640,8 @@ export namespace Chat {
     return NONE.test(line) || line.split(/\s+/).length > WORDS ? "" : line;
   }
 
-  // the suggested reply goes, saved so, and the one being asked (a turn
-  // begins)
+  // the suggested reply goes, saved so, and the one being asked (sent, a
+  // turn answered, /clear, the setting turned off)
   export function unsuggest(chat: Chat): void {
     chat.suggest.call?.stop();
     chat.suggest.call = null;
@@ -645,12 +652,15 @@ export namespace Chat {
     }
   }
 
-  // a message sent while a suggested reply shows: it used it (it starts
-  // with it), so the count of those unused starts anew; else one more
+  // a message sent while a suggested reply shows: one that used it (it
+  // starts with it) lets it go, and the count of those unused starts
+  // anew; one of the user's own leaves it, to send as well, till the turn
+  // is answered
   export function used(chat: Chat, text: string): void {
     const s = chat.suggest;
-    if (s.text !== "") {
-      s.unused = text.trim().startsWith(s.text) ? 0 : s.unused + 1;
+    if (s.text !== "" && text.trim().startsWith(s.text)) {
+      s.unused = 0;
+      Chat.unsuggest(chat);
     }
   }
 

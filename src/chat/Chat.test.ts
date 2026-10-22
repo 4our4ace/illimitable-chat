@@ -12,8 +12,9 @@
 // it, saying why. A failed turn asks to try again only when a later try
 // may answer, and says a reply was cut off; summaries stuck are told once;
 // a save that fails is told, never thrown (a goal met still ends as
-// met). The suggested reply stays as the chat closes, for the next
-// start; a turn drops it.
+// met). The suggested reply stays as a message of the user's own goes
+// (to send too) and as the chat closes (for the next start); sent, or a
+// turn answered, it goes.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -358,7 +359,43 @@ test("a goal met whose save fails still ends the turn as met, the failure told",
   expect([chat.mem.goal, got.map((m) => m.$ + ": " + m.text)] as unknown[]).toEqual([null, ["note: Can't save the chat: disk full (" + chat.mem.dir + ").", "entry: Goal met."]]);
 });
 
-test("the suggested reply stays as the chat closes, so the next start shows it (a screen that asks for none, none); a turn's start drops it", async () => {
+test("a suggested reply stays as a message of the user's own goes, to send too, and while the turn runs; it goes once sent or the turn answered, a stopped turn keeping it", async () => {
+  await until(() => !chat.busy);
+  const saved = () => Memory.load(chat.mem.dir, () => ({}) as any, HERE).suggest;
+  const offer = () => {
+    chat.suggest.text = chat.mem.suggest = "Commit it";
+    Memory.save(chat.mem);
+  };
+  let go = () => {};
+  offer();
+  Chat.used(chat, "also fix the typo");
+  expect(chat.suggest.text).toBe("Commit it");
+  Chat.used(chat, "Commit it, please");
+  expect([chat.suggest.text, saved()]).toEqual(["", ""]);
+  offer();
+  hold = new Promise((ok) => (go = ok));
+  try {
+    Chat.take(chat, Chat.push(chat, null, "user", "also fix the typo"));
+    await until(() => chat.call !== null);
+    expect(chat.suggest.text).toBe("Commit it");
+    go();
+    await until(() => !chat.busy);
+    expect([chat.suggest.text, saved()]).toEqual(["", ""]);
+    offer();
+    hold = new Promise((ok) => (go = ok));
+    Chat.take(chat, Chat.push(chat, null, "user", "and the docs"));
+    await until(() => chat.call !== null);
+    Chat.interrupt(chat, "Stopped by the user: illi.");
+    go();
+    await until(() => !chat.busy);
+    expect([chat.suggest.text, saved()]).toEqual(["Commit it", "Commit it"]);
+  } finally {
+    hold = Promise.resolve();
+    Chat.unsuggest(chat);
+  }
+});
+
+test("the suggested reply stays as the chat closes, so the next start shows it (a screen that asks for none, none); let go, saved so", async () => {
   const last = AskAI.last;
   AskAI.last = () => ({ ask: { ...Pick.ask(chat.pick), blocks: [] } }) as any;
   Object.assign(chat.suggest, { on: true, unused: 0 });
