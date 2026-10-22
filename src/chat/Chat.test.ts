@@ -395,6 +395,26 @@ test("a suggested reply stays as a message of the user's own goes, to send too, 
   }
 });
 
+test("a turn answered counts the suggested reply unused only if the user passed it over (an agent's report or a resumed turn passes over none), and stops one still being asked", async () => {
+  await until(() => !chat.busy);
+  const turn = async () => {
+    Chat.take(chat, Chat.push(chat, null, "note", "an agent reported"));
+    await until(() => !chat.busy);
+  };
+  Object.assign(chat.suggest, { text: "Commit it", unused: 0, passed: false });
+  await turn();
+  expect([chat.suggest.text, chat.suggest.unused]).toEqual(["", 0]);
+  chat.suggest.text = "Commit it";
+  Chat.used(chat, "also fix the typo");
+  await turn();
+  expect([chat.suggest.text, chat.suggest.unused]).toEqual(["", 1]);
+  let stopped = false;
+  chat.suggest.call = { stop: () => (stopped = true), done: new Promise(() => {}) } as any;
+  await turn();
+  expect([stopped, chat.suggest.call, chat.suggest.unused]).toEqual([true, null, 1]);
+  chat.suggest.unused = 0;
+});
+
 test("the suggested reply stays as the chat closes, so the next start shows it (a screen that asks for none, none); let go, saved so", async () => {
   const last = AskAI.last;
   AskAI.last = () => ({ ask: { ...Pick.ask(chat.pick), blocks: [] } }) as any;

@@ -54,8 +54,11 @@ type Check = { call: Call; goal: string };
 // it: Term.ts, config.SUGGEST), whether the turn's last call was answered
 // (one is asked as the turn ends), the one shown ("": none; kept in the
 // memory's state, mem.suggest, so a start shows it again), its call
-// running, how many in a row went unused
-type Suggest = { on: boolean; due: boolean; text: string; call: Call | null; unused: number };
+// running, whether a message of the user's own went while it showed
+// (passed over: it counts unused once the turn is answered; an agent's
+// report or a resumed turn passes over none), how many in a row went
+// unused
+type Suggest = { on: boolean; due: boolean; text: string; call: Call | null; passed: boolean; unused: number };
 
 // a chat: model: what the turn's call runs on, as picked when it began
 // (a /model since picks the next call's); asked: a request out, nothing
@@ -322,13 +325,13 @@ export namespace Chat {
       mem, tools, pick, socks: new Set(), busy: false, call: null, model: "", asked: false, open: 0, sent: [], wait: [], next: [],
       halt: new AbortController(), live: [], calls: {}, eye: { parts: [], from: 0 }, after: Promise.resolve(),
       writes: Promise.resolve(), held: null, switched: false, was: null, picks: new Map(),
-      suggest: { on: false, due: false, text: mem.suggest, call: null, unused: 0 }, fit: 1, refits: 0, asks: [],
+      suggest: { on: false, due: false, text: mem.suggest, call: null, passed: false, unused: 0 }, fit: 1, refits: 0, asks: [],
     };
     // a saved pick not offered gave way: told once
     const saved = mem.pick as Pick | null;
     if (saved !== null && Pick.label(saved) !== Pick.label(pick)) {
       mem.pick = pick;
-      Memory.save(mem);
+      Chat.save(chat);
       Chat.note(chat, Pick.shown(saved) + " (" + saved.vendor + ") isn't offered here, so the chat now runs on " + Pick.shown(pick) + ".");
     }
     if (mem.count === 0) {
@@ -446,10 +449,10 @@ export namespace Chat {
   }
 
   // a turn: its calls, one after another while messages wait; one that
-  // ends answered lets the suggested reply go (counted unused if it was
-  // never sent) and asks for the next. The messages sent as a stopped one
-  // wound down start a new one. A to-do list all done goes as it starts
-  // and ends (Tools.todo_finished)
+  // ends answered lets the suggested reply go (counted unused if the user
+  // passed it over; one still being asked, stopped) and asks for the
+  // next. The messages sent as a stopped one wound down start a new one.
+  // A to-do list all done goes as it starts and ends (Tools.todo_finished)
   export async function turn(chat: Chat): Promise<void> {
     chat.busy = true;
     Tools.todo_finished(chat.tools);
@@ -474,8 +477,8 @@ export namespace Chat {
       Chat.live(chat, null, []);
       Chat.after(chat);
       const answered = why === null && chat.suggest.due;
-      if (answered && chat.suggest.text !== "") {
-        chat.suggest.unused += 1;
+      if (answered) {
+        chat.suggest.unused += chat.suggest.passed ? 1 : 0;
         Chat.unsuggest(chat);
       }
       Chat.change(chat);
@@ -646,6 +649,7 @@ export namespace Chat {
     chat.suggest.call?.stop();
     chat.suggest.call = null;
     chat.suggest.text = "";
+    chat.suggest.passed = false;
     if (chat.mem.suggest !== "") {
       chat.mem.suggest = "";
       Chat.save(chat);
@@ -654,13 +658,15 @@ export namespace Chat {
 
   // a message sent while a suggested reply shows: one that used it (it
   // starts with it) lets it go, and the count of those unused starts
-  // anew; one of the user's own leaves it, to send as well, till the turn
-  // is answered
+  // anew; one of the user's own passes it over, leaving it, to send as
+  // well, till the turn is answered
   export function used(chat: Chat, text: string): void {
     const s = chat.suggest;
     if (s.text !== "" && text.trim().startsWith(s.text)) {
       s.unused = 0;
       Chat.unsuggest(chat);
+    } else if (s.text !== "") {
+      s.passed = true;
     }
   }
 
