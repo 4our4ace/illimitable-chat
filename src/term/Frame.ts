@@ -2,11 +2,12 @@
 // =====
 // The screen painted as the work at hand is done (a key's at once), a
 // frame at most each FRAME ms: the head; the chat (or a pane; over its
-// foot the commands suggested, else the picker, the cursor in its search
-// if it has one), the side beside it (Side.ts); the notes, the toast and
-// the jump to the end; the rule (what runs, the ∞ traced), the input,
-// the pages, the pick; all of it grey while the leader waits for its key
-// (Commands.ts term_lead). A pipe gets text.
+// foot the commands suggested), the side beside it (Side.ts); the notes,
+// the toast and the jump to the end; the rule (what runs, the ∞ traced),
+// the input, the pages, the pick; the picker down over the input and
+// its rules (the cursor in its search if it has one, the input's hidden;
+// the palette's in the screen's middle); all of it grey while the leader
+// waits for its key (Commands.ts term_lead). A pipe gets text.
 
 import { term_asks, term_form_lines } from "./Asks.ts";
 import { term_suggest, term_suggested } from "./Commands.ts";
@@ -138,8 +139,10 @@ export function term_draw(t: Term): void {
 // the screen, top to bottom: the head; the chat (or a pane), the side
 // beside it on a wide screen; over their foot, its last line right on
 // the input, a box: as a /word is typed, the commands it matches (as
-// wide as the input), else the picker (at the chat's left; the palette's
-// in the screen's middle, all else dimmed under it); a row with, at the chat's right
+// wide as the input); else the picker, down over the input and the rules
+// around it, its last line on the lower rule, the input's cursor hidden
+// (at the chat's left; the palette's in the screen's middle, all else
+// dimmed under it); a row with, at the chat's right
 // end, a toast in the theme's blue (its links'); a rule (what runs,
 // while it does), the input, a rule, the pages, the agent
 // and the pick. The notes, however the chat is scrolled, end over the

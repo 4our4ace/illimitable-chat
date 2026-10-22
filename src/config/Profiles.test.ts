@@ -8,7 +8,8 @@
 // agents, commands and MCP servers beside the profile's (whose win by
 // name), each setting said to come from the profile or global, the
 // profile's `off` leaving some out, its lists (off, sticky) added to the
-// root's. Names a profile takes. Secrets left out of
+// root's; a shortcut of the root's dropped in a profile stays dropped.
+// Names a profile takes. Secrets left out of
 // a JSON file. An export: no login, locks or log, its config stripped; an
 // import: a new profile only, its config's commands dropped, its MCP
 // servers off; an archive with a path out of its folder, or a link, is
@@ -252,6 +253,18 @@ test("a profile's lists of names add to the root's: what is off or sticky global
   config.config_set("sticky", null, true);
   config.config_set("off", "Adhd, github");
   expect([config.OFF, config.STICKY]).toEqual([["adhd", "github"], []]);
+});
+
+test("a profile over the root's shortcuts: one dropped stays dropped, the last of them too (none of the user's kept as {})", async () => {
+  const config = await import("./Config.ts");
+  config.config_set("shortcuts", { c: "/compact", o: "Ctrl+O" }, true);
+  expect([config.SHORTCUTS.c, config.SHORTCUTS.o]).toEqual(["/compact", "Ctrl+O"]);
+  config.config_shortcut("c", null);
+  config.config_shortcut("o", null);
+  expect([config.SHORTCUTS.c, config.SHORTCUTS.o, JSON.parse(fs.readFileSync(ROOT + "/profiles/copy/config.json", "utf8")).shortcuts]).toEqual([undefined, undefined, {}]);
+  config.config_set("shortcuts", null);
+  config.config_set("shortcuts", null, true);
+  expect(config.SHORTCUTS.c).toBeUndefined();
 });
 
 test("a profile renamed, deleted (the one used last following), or made with another's chat moved in", () => {

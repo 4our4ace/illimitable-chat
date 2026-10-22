@@ -38,7 +38,8 @@
 // act waits on. Closed, it checkpoints and leaves the one file. A file is
 // made with auto_vacuum incremental (only a new one can be: set before
 // WAL mode, which writes the file) and secure_delete, so what is forgotten
-// is overwritten and its space given back.
+// is overwritten and its space given back (kept for new rows instead,
+// while a reader holds the checkpoint back past WAIT: Store.forget).
 //
 // The schema's version is user_version: an older one moves on by each
 // STEP in turn, in one transaction each. A STEP only adds (a table, an

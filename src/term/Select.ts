@@ -8,8 +8,9 @@
 // text and on a blank line, the choice lights to its end (or the area's
 // width); what's copied drops each line's end spaces. A reply's button
 // under the pointer lights, and a click copies what it holds. The right
-// button dragged over the chat chooses the same way, and as it's let go
-// the text is quoted in the input, to reply to it; a right click soon
+// button dragged over the chat chooses the same way (not while a picker
+// has the focus), and as it's let go the text is quoted in the input, to
+// reply to it (not on an agent's read-only page); a right click soon
 // after takes the quote out again.
 
 import * as Draw from "../ui/Draw.ts";
@@ -19,6 +20,7 @@ import { term_toast } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import * as Screen from "../ui/Screen.ts";
 import type { Area, Cell, Ink, Sel, Term } from "./Term.ts";
+import * as View from "../ui/View.ts";
 
 // a drag past a chat's edge scrolls it a line each DRIFT ms; text chosen
 // shows on a fill SELECT of the way from the background to the accent; a
@@ -61,7 +63,7 @@ export function term_mouse(t: Term, key: string): void {
   const p = t.scr.point;
   if (key === "RightPress") {
     const area = term_area_at(t, p);
-    const at   = area?.key === "chat" ? term_cell(area, p) : null;
+    const at   = area?.key === "chat" && t.choose === null ? term_cell(area, p) : null;
     t.sel      = area !== undefined && at !== null ? { key: area.key, a: at, b: at, held: true, moved: false, unit: 1, root: [at, at] } : null;
   } else if (key === "RightRelease") {
     term_drift(t, 0);
@@ -263,11 +265,14 @@ function term_marked(t: Term, area: Area, k: number): Paint.Line {
 
 // a text quoted in the input, to reply to it: each of its lines after
 // "> " (a blank one ">"), at the input's end on lines of their own, the
-// cursor after them
-// (none: all blank, nothing quoted); said for a moment
+// cursor after them (none: all blank, nothing quoted); said for a moment.
+// On an agent's page, whose input is read-only, nothing is quoted: said
 export function term_quote(t: Term, text: string): void {
   if (text.trim() === "") {
     return;
+  }
+  if (!View.view_typing(t.v)) {
+    return term_toast(t, "Not quoted: this page's input is read-only");
   }
   const ed    = t.scr.ed;
   const lines = text.split("\n");
