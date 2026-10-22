@@ -11,8 +11,9 @@
 // chat refit and the turn go on from a note, unasked; three in a row end
 // it, saying why. A failed turn asks to try again only when a later try
 // may answer, and says a reply was cut off; summaries stuck are told once;
-// a save that fails is told, never thrown. The suggested reply stays as
-// the chat closes, for the next start; a turn drops it.
+// a save that fails is told, never thrown (a goal met still ends as
+// met). The suggested reply stays as the chat closes, for the next
+// start; a turn drops it.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -333,6 +334,28 @@ test("a save that fails is told to the views, never thrown (what ran, the sugges
   }
   expect(got.find((m) => m.$ === "note").text).toBe("Can't save the chat: disk full (" + chat.mem.dir + ").");
   expect(["SQLITE_FULL", "SQLITE_READONLY", "SQLITE_IOERR_WRITE", "SQLITE_BUSY", "SQLITE_MISMATCH"].map((code) => Chat.unsaved(Object.assign(new Error("as SQLite says it"), { code })))).toEqual(["disk full", "read-only disk", "the disk failed to write", "another illi kept the file busy too long", "as SQLite says it"]);
+});
+
+test("a goal met whose save fails still ends the turn as met, the failure told", async () => {
+  const got: any[] = [];
+  const sock: any = { data: { seen: new Set() }, send: (text: string) => got.push(JSON.parse(text)), close: () => {} };
+  const [save, wait] = [Memory.save, chat.wait];
+  const [call, feed] = AskAI.tie(() => {}, () => {}, () => {});
+  chat.socks.add(sock);
+  Object.assign(chat, { wait: [] });
+  chat.mem.goal = "ship it";
+  Memory.save = () => {
+    throw Object.assign(new Error("SQLITE_FULL: database or disk is full"), { code: "SQLITE_FULL" });
+  };
+  try {
+    feed.end({ ok: true, text: "yes", left: [] });
+    expect(await Chat.checked(chat, { call, goal: "ship it" }, new AbortController())).toBe(true);
+  } finally {
+    Memory.save = save;
+    chat.wait = wait;
+    chat.socks.delete(sock);
+  }
+  expect([chat.mem.goal, got.map((m) => m.$ + ": " + m.text)] as unknown[]).toEqual([null, ["note: Can't save the chat: disk full (" + chat.mem.dir + ").", "entry: Goal met."]]);
 });
 
 test("the suggested reply stays as the chat closes, so the next start shows it (a screen that asks for none, none); a turn's start drops it", async () => {
