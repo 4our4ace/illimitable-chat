@@ -1,11 +1,4 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo-on-dark.svg">
-    <img src="assets/logo.svg" alt="illimitable's logo: an infinity sign with an i at its crossing" width="120">
-  </picture>
-</p>
-
-![illimitable: one chat that never ends](assets/banner.webp)
+![illimitable: one chat that never ends. The illimitable logo, an infinity sign with an i at its crossing, sits left of the wordmark, which leads into a binary memory tree.](assets/banner.webp)
 
 A terminal AI agent with one chat that never ends. illi (short for
 illimitable) folds old messages into a memory tree it can zoom back
