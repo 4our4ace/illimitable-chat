@@ -14,8 +14,9 @@
 // message's kind, the compactor's or added. Past a /clear, the chat's
 // view waits on no summary before it, nor holds a node wholly before it.
 // As a chat grows, each view tiles it (the chat's from its first message,
-// a /clear's too), its lines before the cut merging to fit, older ones
-// coarser, those from the cut single messages.
+// a /clear's too), its lines before the cut merging to fit (none more
+// than a level coarser than the older one before it), those from the cut
+// single messages.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -201,7 +202,7 @@ function tiles(mem: any, view: any, end: number): void {
   expect(view.size).toBe(view.parts.reduce((n: number, part: any) => n + Memory.size(mem, part), 0));
 }
 
-test("as a chat grows, each view tiles it, the chat's from its first message (a /clear's too); its lines before the cut merge to fit, the older the coarser, those from it single", () => {
+test("as a chat grows, each view tiles it, the chat's from its first message (a /clear's too); its lines before the cut merge to fit, none more than a level coarser than the one before it, those from it single", () => {
   const mem = chat("grows", 0);
   let seed = 7;
   const rand = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;

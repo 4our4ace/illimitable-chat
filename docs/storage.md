@@ -96,10 +96,14 @@ The columns, by table:
   compactions' view), the pick, the goal, the suggested reply (so it
   shows again after a restart), the main agent, what ran, the
   cut, `show` and `top`, the last `/clear`: the chat's view starts
-  there, so nothing before it is sent). It is never rebuilt from the facts,
-  because the model's prompt cache depends on the saved view.
+  there, so nothing before it is sent; loaded, they are held to `top`
+  ≤ `show` ≤ `cut` ≤ the count, whatever was saved: `Memory.read`). It is
+  never rebuilt from the facts, because the model's prompt cache depends
+  on the saved view.
 - **log**: `id`, `chat`, `log`, `name`. **work**: `log` (references
-  `log`), `i`, `kind`, `text`, `date`.
+  `log`), `i`, `kind`, `text`, `date`. The agents' logs (`Logs.ts`): a
+  name freed goes on to a new agent, with a log of its own (the name and
+  a tag).
 - **image**: `id`, `chat`, `name` (its hash, so an image pasted twice is
   kept once), `data` (bytes), `fit` (a smaller copy for models, or null).
 - **todo**: `chat`, `list` (JSON).

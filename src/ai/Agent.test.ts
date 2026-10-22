@@ -3,7 +3,9 @@
 // `bun test Agent.test.ts`. A refusal saying the request is too long for
 // the model's window is told apart from any other; a call whose step
 // read past its room ends `full` once that step's tools ran, saying so
-// only if it was the first step (the request itself too long).
+// only if it was the first step (the request itself too long). A call
+// going on from another's keeps its vendor's cache marks in all: the
+// other's count.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -53,4 +55,25 @@ test("a step read past the call's room ends it full once its tools ran; saying w
   expect([grown.end.stop, grown.end.text, grown.ran]).toEqual(["full", "", ["t1", "t2", "t3"]]);
   const fits = await scripted([100, 200, 300], 400);
   expect([fits.end.ok, fits.end.stop, fits.ran]).toEqual([true, undefined, ["t1", "t2"]]);
+});
+
+test("a call going on from another's keeps its vendor's cache marks in all, the other's counted", async () => {
+  const step = Agent.step;
+  let items: any[] = [];
+  Agent.step = async (_wire, _run, _key, make) => {
+    items = [...(make(1) as any[])];
+    return { out: [], uses: [], entries: [], stop: "done", why: "", note: "", read: 0 } as any;
+  };
+  try {
+    const from = { ask: { blocks: [{ text: "end", mark: true }] }, items: [{ $: "User", parts: [{ text: "a", mark: true }, { text: "b", mark: true }], imgs: [] }], tools: [] };
+    const ask = { vendor: "claude-api", model: "m", effort: "low", speed: "slow", system: "", blocks: [{ text: "more", mark: true }], searches: 0, server: "", from } as any;
+    const run = { ask, on: () => {}, sent: [], abort: new AbortController(), end: AskAI.end("") };
+    const wire = { auth: { token: async () => "", spoil: () => {} }, marks: () => 2, body: (_ask: any, its: any[]) => its };
+    await Agent.loop(wire as any, run as any);
+    expect(items.at(-1).parts).toEqual([{ text: "more", mark: false }]);
+    await Agent.loop({ ...wire, marks: () => 3 } as any, { ...run, end: AskAI.end("") } as any);
+    expect(items.at(-1).parts).toEqual([{ text: "more", mark: true }]);
+  } finally {
+    Agent.step = step;
+  }
 });

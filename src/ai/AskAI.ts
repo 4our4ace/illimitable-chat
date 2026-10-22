@@ -12,7 +12,8 @@
 // that isn't its input's (Memory.ts). A call's events and end go to its
 // sink.
 //
-// Cache: a marked block ends a prefix the vendor caches. Single flight
+// Cache: a marked block ends a prefix the vendor caches; a request keeps
+// the last marks its vendor takes (Wire.marks, AskAI.marks). Single flight
 // (AskAI.wait), as a request is sent: one whose prefix no call cached
 // within TTL leads; one whose prefix a leader is writing waits until the
 // leader's response begins (only then can it read the entry).

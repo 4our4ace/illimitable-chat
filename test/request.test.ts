@@ -72,9 +72,9 @@ async function until(ok: () => boolean): Promise<void> {
 }
 
 // a turn on `text`: its first request's chat, as the model reads it: the
-// view's lines (by id) and the messages whole (by id), all its text, its
-// cache breakpoints
-async function turn(chat: any, text: string): Promise<{ lines: number[]; whole: number[]; text: string; marks: number }> {
+// view's lines (by id, and the message after each), the messages whole
+// (by id), all its text, its cache breakpoints
+async function turn(chat: any, text: string): Promise<{ lines: number[]; ends: number[]; whole: number[]; text: string; marks: number }> {
   const from = bodies.length;
   Chat.take(chat, Chat.push(chat, null, "user", text));
   await until(() => !chat.busy);
@@ -83,7 +83,8 @@ async function turn(chat: any, text: string): Promise<{ lines: number[]; whole: 
   const view = /<chat>\n([\s\S]*?)<\/chat>/.exec(all)![1];
   const recent = /<recent>\n([\s\S]*?)<\/recent>/.exec(all)?.[1] ?? "";
   const ids = (s: string, re: RegExp) => [...s.matchAll(re)].map((m) => Number(m[1]));
-  return { lines: ids(view, /^(\d+)\+\d+\|/gm), whole: ids(recent, /^(\d+)\|/gm), text: all, marks: JSON.stringify(body).split('"cache_control"').length - 1 };
+  const ends = [...view.matchAll(/^(\d+)\+(\d+)\|/gm)].map((m) => Number(m[1]) + Number(m[2]));
+  return { lines: ids(view, /^(\d+)\+\d+\|/gm), ends, whole: ids(recent, /^(\d+)\|/gm), text: all, marks: JSON.stringify(body).split('"cache_control"').length - 1 };
 }
 
 test("a chat that fits goes whole; /compact sends all but the last exchanges as lines; /clear sends nothing before it, opened again too", async () => {
@@ -103,8 +104,7 @@ test("a chat that fits goes whole; /compact sends all but the last exchanges as 
   expect(Memory.message(mem, cut)!.text).toBe("old 22");
   expect(compact.lines.length).toBeGreaterThan(0);
   expect(compact.whole[0]).toBe(cut);
-  expect(Math.max(...compact.lines)).toBeLessThan(cut);
-  expect(new Set([...compact.lines, ...compact.whole]).size).toBe(compact.lines.length + compact.whole.length);
+  expect(Math.max(...compact.ends)).toBeLessThanOrEqual(cut);
 
   const before = mem.count;
   expect(Chat.clear(chat)).toEqual({});
