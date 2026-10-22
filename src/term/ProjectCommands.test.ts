@@ -20,7 +20,7 @@ const WAS = process.cwd();
 process.chdir(TMP);
 
 const { term_projects } = await import("./ProjectCommands.ts");
-const { Chat } = await import("../chat/Chat.ts");
+const { Lock } = await import("../chat/Lock.ts");
 const { Memory } = await import("../chat/Memory.ts");
 const { Projects } = await import("../chat/Projects.ts");
 const { Store } = await import("../chat/Store.ts");
@@ -100,7 +100,7 @@ test("a copy exported first goes to ./illi-project-<name>.json, never over a fil
   t.choose.pick(1);
   expect(await noted(t, "Not forgotten")).toMatch(/^Not forgotten: .*illi-project-app-k3f9x2\.json is there already\. Move it away first\.$/);
   fs.rmSync(TMP + "/illi-project-app-k3f9x2.json");
-  const lock = (await Chat.claim(Projects.lock(APP.path)))!;
+  const lock = (await Lock.claim(Projects.lock(APP.path)))!;
   term_projects(t);
   t.choose.keys(1, "Delete");
   t.choose.pick(1);

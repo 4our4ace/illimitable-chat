@@ -330,7 +330,7 @@ One process at a time holds a project's chat. The lock lives in
 | `<code>.lock` | the lock. `<code>` is a 12-character hash of the project's folder, or `home` (`Projects.lock`) |
 | `<code>.sock` | the holder's socket (mode 0600), where a second terminal's view connects |
 
-**Taking it** (`Chat.claim`, `Chat.grip`): illi opens the lock file as an
+**Taking it** (`Lock.claim`, `Lock.grip`, src/chat/Lock.ts): illi opens the lock file as an
 SQLite database, sets `busy_timeout = 50` ms (`GRIP`) and `journal_mode
 = memory` (no journal file is left behind), and runs `begin exclusive`.
 If that succeeds, the transaction stays open as long as the process

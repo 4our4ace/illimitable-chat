@@ -21,6 +21,7 @@ fs.mkdirSync(REPO + "/.git");
 
 const { AskAI } = await import("../ai/AskAI.ts");
 const { Chat } = await import("./Chat.ts");
+const { Lock } = await import("./Lock.ts");
 const { Memory } = await import("./Memory.ts");
 const { Projects } = await import("./Projects.ts");
 const { Remote } = await import("./Remote.ts");
@@ -58,9 +59,9 @@ function view(make: (hear: (msg: any) => void) => any) {
   return { v, link };
 }
 
-const FILE = Chat.socket(Projects.lock(REPO));
+const FILE = Lock.socket(Projects.lock(REPO));
 const gone: Array<[string, boolean]> = [];
-expect(await Chat.lock(REPO, Remote.serve)).toBe(true);
+expect(await Lock.take(REPO, Remote.serve)).toBe(true);
 const there = view((hear) => Remote.link(FILE, hear, (why, heard) => gone.push([why, heard])));
 const chat = Chat.open(REPO);
 Remote.share(chat);

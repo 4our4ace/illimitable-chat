@@ -12,6 +12,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { term_file } from "./Attach.ts";
 import { Chat } from "../chat/Chat.ts";
+import { Lock } from "../chat/Lock.ts";
 import { term_ask, term_chooser } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Disk } from "../chat/Disk.ts";
@@ -149,7 +150,7 @@ async function term_leave(t: Term, keep = false): Promise<void> {
   Update.drop();
   await Promise.race([Mcp.stop(), Bun.sleep(LEAVE)]);
   await Disk.synced();
-  Chat.unlock(keep);
+  Lock.release(keep);
   await Screen.screen_leave(t.scr);
 }
 
@@ -208,7 +209,7 @@ function term_profile_rename(t: Term, from: string): void {
 // whether illi runs in profile `name` in another terminal (said; true):
 // its folder can't change under it
 async function term_profile_elsewhere(t: Term, name: string, what: string): Promise<boolean> {
-  const n = Chat.others(Profiles.profile_dir(config.ROOT, name));
+  const n = Lock.others(Profiles.profile_dir(config.ROOT, name));
   if (n > 0) {
     term_note(t, "illi runs in profile " + name + " in " + (n === 1 ? "another terminal" : n + " other terminals") + ": quit it there before " + what + ".");
   }

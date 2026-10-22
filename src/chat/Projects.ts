@@ -6,7 +6,7 @@
 // Outside any, home. A project is named after its folder, with a code made
 // from its path (chechen-learning-app-k3f9x2), so two copies of one repo
 // are two projects, and a repo moved starts a new one. Each has its own
-// chat in its own file (Store.ts), and its own lock (Chat.lock).
+// chat in its own file (Store.ts), and its own lock (Lock.take).
 //
 // A model looks across them by tools: first the table (Projects.table:
 // each project's folder, when it was used, its size, its latest line),
