@@ -192,7 +192,8 @@ export type Link = {
 
 // what a person does
 export type Act =
-  | ({ $: "Send" } & Sent)                      // Enter: a message, or, empty, interrupt
+  | ({ $: "Send" } & Sent)                      // Enter: a message (empty: nothing)
+  | { $: "Stop" }                               // Esc twice, Ctrl+C: illi's turn interrupted (none running: nothing)
   | { $: "Move"; move: Move; to?: string }      // the pick moves (to: to that value)
   | { $: "Pick"; to: Pick }                     // the pick set whole (the /model picker)
   | { $: "Open"; id: number; n: number }        // a click on a block
@@ -414,7 +415,7 @@ export function view_act(v: View, act: Act): Client[] {
       const word   = /^\/[a-z]+(?=\s|$)/i.exec(text)?.[0];
       const goal   = word === "/goal" ? text.slice(word.length).trim() : null;
       if (text === "" && images.length === 0) {
-        return v.busy ? [{ $: "stop", name: TURN }] : [];
+        return [];
       }
       if (!view_typing(v)) {
         return [];
@@ -486,6 +487,9 @@ export function view_act(v: View, act: Act): Client[] {
       v.open.clear();
       v.fold = act.on ? [] : null;
       return act.on ? [{ $: "root" }] : [];
+    }
+    case "Stop": {
+      return v.busy ? [{ $: "stop", name: TURN }] : [];
     }
     case "Goto": {
       if (act.name === null) {

@@ -233,8 +233,8 @@ export function term_page(t: Term, key: string): void {
 // Enter: runs a command, or sends the input, its pastes' text in place
 // of their tokens and the images it names (the chat shown from its end,
 // the notes gone, a suggested reply typing dismissed shown again, unless
-// this sent it); empty, it interrupts illi's turn, on any page; text not
-// sent stays (it was lost: an unknown /word)
+// this sent it); empty, nothing (Esc twice and Ctrl+C interrupt); text
+// not sent stays (it was lost: an unknown /word)
 export function term_enter(t: Term): void {
   const typed = Screen.ed_take(t.scr.ed);
   const text  = Screen.ed_expand(t.scr.ed, typed);
@@ -297,7 +297,7 @@ export function term_esc(t: Term): void {
   }
   if (Date.now() - t.esc < AGAIN) {
     t.esc = 0;
-    term_act(t, { $: "Send", text: "" });
+    term_act(t, { $: "Stop" });
     return;
   }
   t.esc = Date.now();
@@ -314,7 +314,7 @@ export function term_clear(t: Term, key: string): void {
     term_quit(t);
   } else {
     t.quit = Date.now();
-    term_act(t, { $: "Send", text: "" });
+    term_act(t, { $: "Stop" });
     term_toast(t, "Ctrl+C again to quit · what runs stops, and goes on at the next start", AGAIN);
   }
 }
