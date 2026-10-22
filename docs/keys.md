@@ -13,7 +13,7 @@ Chat
 | Esc | close a list; else clear the notes, and twice: interrupt illi (agents go on) |
 | Ctrl+C | clear the input; on an empty one, interrupt illi (again: quit) |
 | Ctrl+D | clear the input; on an empty one, quit |
-| Tab | take the suggested reply |
+| Tab | take the suggested reply (it stays after a message of your own, to send as well, till illi answers) |
 | Ctrl+P | all commands and settings in one list, typed to search |
 | Ctrl+X | the leader: the screen greys, and the next key runs its shortcut ([below](#shortcuts)) |
 | `/goal <message>` | send a goal: illi goes on until it is met |

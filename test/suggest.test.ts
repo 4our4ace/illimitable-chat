@@ -5,10 +5,11 @@
 // answered asks for a suggested reply that goes on from its last request
 // (the same model, system prompt, tools and messages, its answer, then
 // the ask; no breakpoint more, so the turn's cache serves it) and shows
-// it till a message; none after a failed turn, a stop, a tool call in its
-// answer, from a pipe (off); five in a row unused stop them, one used
-// starts the count anew; an answer of nothing, thanks or praise, or in
-// illi's voice, is none.
+// it till it is sent or a turn ends answered (a message of the user's
+// own, a stop, a failed turn keep it); none is asked after a failed
+// turn, a stop, a tool call in its answer, from a pipe (off); five in a
+// row unused stop them, one used starts the count anew; an answer of
+// nothing, thanks or praise, or in illi's voice, is none.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -109,6 +110,9 @@ const say = (text: string) => Chat.say(chat, [], Buffer.from(text));
 // the suggested replies asked so far
 const suggests = () => asked.filter((a) => a.kind === "suggest");
 
+// a turn ended and its suggested reply in
+const answered = () => until(() => !chat.busy && chat.suggest.call === null && chat.suggest.text !== "");
+
 // a request's cache breakpoints: its blocks' and its top-level one
 const marks = (body: any) => [...body.system, ...body.messages.flatMap((m: any) => m.content)].filter((c: any) => c.cache_control).length + (body.cache_control ? 1 : 0);
 
@@ -142,16 +146,16 @@ test("a turn ended answered asks for a suggested reply on its last request, so o
   expect(suggests()).toHaveLength(2);
 });
 
-test("none after a stop, a failed turn, a tool call in its answer, or from a pipe", async () => {
+test("none after a stop, a failed turn, a tool call in its answer, or from a pipe; one shown stays through a message of the user's own, a stop and a failed turn", async () => {
   const n = suggests().length;
   turn = "hold";
   await say("stop this");
-  expect(chat.suggest.text).toBe("");
+  expect(chat.suggest.text).toBe("Show me the diff");
   await until(() => chat.call !== null && asked.at(-1)!.kind === "turn");
   Chat.interrupt(chat, "Stopped by the user.");
   await until(() => !chat.busy);
   await Bun.sleep(30);
-  expect(suggests()).toHaveLength(n);
+  expect([suggests().length, chat.suggest.text]).toEqual([n, "Show me the diff"]);
   turn = "fail";
   const error = console.error;
   console.error = () => {};
@@ -159,7 +163,7 @@ test("none after a stop, a failed turn, a tool call in its answer, or from a pip
   await until(() => !chat.busy);
   console.error = error;
   await Bun.sleep(30);
-  expect(suggests()).toHaveLength(n);
+  expect([suggests().length, chat.suggest.text]).toEqual([n, "Show me the diff"]);
   turn = "ok";
   answer = { type: "tool_use", id: "t2", name: "date", input: { id: 0 } };
   await say("and now?");
@@ -181,18 +185,19 @@ test("five in a row unused stop them; one used starts the count anew", async () 
   turn = "ok";
   answer = { type: "text", text: "\"Run the tests\"" };
   await say("go on");
-  await until(() => chat.suggest.text === "Run the tests");
+  await answered();
   for (let k = 0; k < 4; k++) {
     await say("something else " + k);
-    await until(() => chat.suggest.text === "Run the tests");
+    await answered();
   }
   expect(chat.suggest.unused).toBe(4);
   await say("Run the tests");
-  await until(() => chat.suggest.text === "Run the tests");
+  expect(chat.suggest.text).toBe("");
+  await answered();
   expect(chat.suggest.unused).toBe(0);
   for (let k = 0; k < 4; k++) {
     await say("no " + k);
-    await until(() => chat.suggest.text === "Run the tests");
+    await answered();
   }
   const n = suggests().length;
   await say("no 4");

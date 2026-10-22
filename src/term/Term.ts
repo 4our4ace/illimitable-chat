@@ -80,7 +80,8 @@ import * as View from "../ui/View.ts";
 // painted, sel: the text chosen in one (null: none), hover: the button
 // under the pointer as last painted, drift: a drag's scrolling past an
 // area's edge; sug: the commands suggested as a /word is typed (null:
-// closed); dropped: the suggested reply typing dismissed ("": none);
+// closed); dropped: the suggested reply typing dismissed, till a message
+// goes (one that sent it keeps it so, as the chat lets it go; "": none);
 // lead: the leader pressed, the next key its shortcut's (the screen grey
 // meanwhile: Frame.ts); quoted: the quote a right drag put in the input
 // last, when and what it added (Select.ts; null: none)

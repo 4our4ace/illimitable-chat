@@ -232,8 +232,9 @@ export function term_page(t: Term, key: string): void {
 
 // Enter: runs a command, or sends the input, its pastes' text in place
 // of their tokens and the images it names (the chat shown from its end,
-// the notes gone); empty, it interrupts illi's turn, on any page; text
-// not sent stays (it was lost: an unknown /word)
+// the notes gone, a suggested reply typing dismissed shown again, unless
+// this sent it); empty, it interrupts illi's turn, on any page; text not
+// sent stays (it was lost: an unknown /word)
 export function term_enter(t: Term): void {
   const typed = Screen.ed_take(t.scr.ed);
   const text  = Screen.ed_expand(t.scr.ed, typed);
@@ -244,6 +245,7 @@ export function term_enter(t: Term): void {
   if (term_act(t, { $: "Send", text: term_named(text), images: term_shots(t, text) }).length > 0) {
     term_unnote(t);
     t.scroll = 0;
+    t.dropped = t.v.suggest !== "" && text.trim().startsWith(t.v.suggest) ? t.v.suggest : "";
     return;
   }
   Screen.ed_type(t.scr.ed, typed);
