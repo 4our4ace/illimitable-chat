@@ -26,6 +26,7 @@ process.env.ILLI_DIR = DIR;
 const { AskAI } = await import("../ai/AskAI.ts");
 const { Chat } = await import("./Chat.ts");
 const { Lock } = await import("./Lock.ts");
+const { Suggest } = await import("./Suggest.ts");
 const { Memory } = await import("./Memory.ts");
 const { Projects } = await import("./Projects.ts");
 
@@ -343,7 +344,7 @@ test("a save that fails is told to the views, never thrown (what ran, the sugges
     chat.mem.work = ["changed"];
     expect(() => Chat.change(chat)).not.toThrow();
     chat.mem.suggest = chat.suggest.text = "Commit it";
-    expect(() => Chat.unsuggest(chat)).not.toThrow();
+    expect(() => Suggest.drop(chat)).not.toThrow();
     expect(got.filter((m) => m.$ === "note").length).toBe(2);
   } finally {
     Memory.save = save;
@@ -384,9 +385,9 @@ test("a suggested reply stays as a message of the user's own goes, to send too, 
   };
   let go = () => {};
   offer();
-  Chat.used(chat, "also fix the typo");
+  Suggest.used(chat, "also fix the typo");
   expect(chat.suggest.text).toBe("Commit it");
-  Chat.used(chat, "Commit it, please");
+  Suggest.used(chat, "Commit it, please");
   expect([chat.suggest.text, saved()]).toEqual(["", ""]);
   offer();
   hold = new Promise((ok) => (go = ok));
@@ -407,7 +408,7 @@ test("a suggested reply stays as a message of the user's own goes, to send too, 
     expect([chat.suggest.text, saved()]).toEqual(["Commit it", "Commit it"]);
   } finally {
     hold = Promise.resolve();
-    Chat.unsuggest(chat);
+    Suggest.drop(chat);
   }
 });
 
@@ -421,7 +422,7 @@ test("a turn answered counts the suggested reply unused only if the user passed 
   await turn();
   expect([chat.suggest.text, chat.suggest.unused]).toEqual(["", 0]);
   chat.suggest.text = "Commit it";
-  Chat.used(chat, "also fix the typo");
+  Suggest.used(chat, "also fix the typo");
   await turn();
   expect([chat.suggest.text, chat.suggest.unused]).toEqual(["", 1]);
   let stopped = false;
@@ -436,7 +437,7 @@ test("the suggested reply stays as the chat closes, so the next start shows it (
   AskAI.last = () => ({ ask: { ...Pick.ask(chat.pick), blocks: [] } }) as any;
   Object.assign(chat.suggest, { on: true, unused: 0 });
   try {
-    Chat.suggest(chat);
+    Suggest.ask(chat);
     await until(() => chat.suggest.text !== "");
   } finally {
     AskAI.last = last;
@@ -446,7 +447,7 @@ test("the suggested reply stays as the chat closes, so the next start shows it (
   expect([chat.suggest.text, saved(), shown()]).toEqual(["hello back", "hello back", "hello back"]);
   chat.suggest.on = false;
   expect(shown()).toBe("");
-  Chat.unsuggest(chat);
+  Suggest.drop(chat);
   expect(saved()).toBe("");
   chat.suggest.text = chat.mem.suggest = "Commit it";
   Memory.save(chat.mem);

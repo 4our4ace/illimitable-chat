@@ -72,7 +72,7 @@ type Saved = Kept & { seen?: Kept; pick: object | null; goal?: string | null; su
 // as last set;
 // goal: the user's (/goal; null: none), till met or halted (Chat.ts);
 // suggest: the suggested reply shown as the last turn ended
-// (Chat.suggest; "": none), so a start shows it again; agent: the main
+// (Suggest.ask; "": none), so a start shows it again; agent: the main
 // agent's profile (Custom.ts; null: illi's own); work:
 // what ran, as last saved; cut: the first message a turn's call gets
 // whole (Memory.cutoff; those before, as the view's lines), show: the

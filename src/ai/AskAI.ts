@@ -18,7 +18,7 @@
 // leader's response begins (only then can it read the entry).
 //
 // A turn's last request is kept whole, with its answer (AskAI.last), for
-// a call to go on from it (a suggested reply: Chat.suggest) on the same
+// a call to go on from it (a suggested reply: Suggest.ask) on the same
 // prefix, so on the cache.
 
 import { Agent, type Item, type Tool } from "./Agent.ts";
@@ -55,7 +55,7 @@ export type Block = { text: string; mark: boolean };
 // last request is kept whole (AskAI.last: a turn's); from: the request it
 // goes on from, its blocks after that one's items and answer, naming its
 // tools but running none: one step, unanswered if it calls one (a
-// suggested reply's: Chat.suggest); max: the most tokens it writes, its
+// suggested reply's: Suggest.ask); max: the most tokens it writes, its
 // thinking's too (none: the model's cap); room: the most tokens a step
 // may read before the call ends `full` once its tools ran (a turn's:
 // Chat.refit goes on from the chat as it then is; none: no end); stuck:

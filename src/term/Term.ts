@@ -23,7 +23,7 @@
 // does, and running illi again, in place, in the one chosen
 // (ProfileCommands.ts). From a pipe, each line is a message, and each
 // message the chat logs prints as text. As a turn ends, the reply the
-// chat suggests shows in the empty input, dim (Chat.suggest; none from a
+// chat suggests shows in the empty input, dim (Suggest.ask; none from a
 // pipe): Tab takes it, typing dismisses it, a message of your own leaves
 // it, to send as well, till illi answers (Keys.ts).
 //

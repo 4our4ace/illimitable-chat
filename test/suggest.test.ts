@@ -28,6 +28,7 @@ const config = await import("../src/config/Config.ts");
 config.KEYS.anthropic = "test";
 
 const { Chat } = await import("../src/chat/Chat.ts");
+const { Suggest } = await import("../src/chat/Suggest.ts");
 
 // what a suggested reply is asked by, as it starts
 const ASK = "Suggest the user's next message to illi";
@@ -210,9 +211,9 @@ test("five in a row unused stop them; one used starts the count anew", async () 
 
 test("an answer of nothing, or one that's no message of theirs, shows none", () => {
   for (const none of ["", "nothing", "(nothing)", "None.", "No suggestion", "Thanks!", "Looks good", "Let me run the tests", "I'll commit it", "\"Here's the diff\""]) {
-    expect(Chat.line(none)).toBe("");
+    expect(Suggest.line(none)).toBe("");
   }
-  expect(Chat.line("\"Commit it\"")).toBe("Commit it");
-  expect(Chat.line("great, now push it")).toBe("great, now push it");
-  expect(Chat.line("Nothing else, push it")).toBe("Nothing else, push it");
+  expect(Suggest.line("\"Commit it\"")).toBe("Commit it");
+  expect(Suggest.line("great, now push it")).toBe("great, now push it");
+  expect(Suggest.line("Nothing else, push it")).toBe("Nothing else, push it");
 });

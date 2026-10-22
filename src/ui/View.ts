@@ -89,7 +89,7 @@ export const ANSWERED = "The user answered at illi's screen:\n";
 // agents: those at work; agent: the main agent (null: illi's own);
 // vendors and models: those offered; use: what its calls use; todo:
 // illi's to-do list; suggest: the user's likely next message, asked as
-// the last turn ended (Chat.suggest; "": none); asks: the questions
+// the last turn ended (Suggest.ask; "": none); asks: the questions
 // waiting for an answer, the first shown
 export type State = {
   busy    : boolean;

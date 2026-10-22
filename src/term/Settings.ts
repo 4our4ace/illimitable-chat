@@ -16,6 +16,7 @@
 // its words.
 
 import { Chat } from "../chat/Chat.ts";
+import { Suggest } from "../chat/Suggest.ts";
 import { term_chooser, term_model_pick } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Custom } from "../config/Custom.ts";
@@ -229,7 +230,7 @@ export function setting_set(t: Term, key: config.Key, value: unknown): boolean {
   t.side = { place: config.SIDE, width: config.SIDE_WIDTH };
   if (key === "suggest" && t.chat !== null) {
     t.chat.suggest.on = t.scr.tty && config.SUGGEST;
-    Chat.unsuggest(t.chat);
+    Suggest.drop(t.chat);
     Chat.change(t.chat);
   }
   if (key === "pick" && t.v.agent === null) {

@@ -159,7 +159,7 @@ export function config_names(key: "off" | "sticky", root: boolean): string[] {
   return config_list(String(config_file(root ? ROOT + "/config.json" : PATH)[key] ?? "").toLowerCase()).filter((name) => name !== "");
 }
 
-// a suggested reply after each turn, Tab taking it (Chat.suggest): on,
+// a suggested reply after each turn, Tab taking it (Suggest.ask): on,
 // unless off (or false, 0)
 export let SUGGEST    = true;
 
