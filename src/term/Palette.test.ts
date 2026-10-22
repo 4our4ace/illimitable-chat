@@ -3,7 +3,9 @@
 // `bun test Palette.test.ts`. Ctrl+P lists, in the screen's middle, each
 // command (its /name, else its first key; its keys at the right) and each
 // setting (its value at the right), but no key that means
-// something only pressed; a search finds a word in what one does too.
+// something only pressed; a search finds a word in what one does too,
+// rows matched by name first, each the more picked here first (its own
+// count, apart from the commands typed), nothing searched, in groups.
 // Enter runs a command (or its key's), puts one that needs words in the
 // input; on a setting it steps an on/off (so do Left and Right; Delete
 // puts its default back), and opens /settings' way for one typed in.
@@ -21,6 +23,7 @@ delete process.env.ILLI_AFTER;
 
 const config = await import("../config/Config.ts");
 const { term_palette } = await import("./Palette.ts");
+const { PICKED, USED, term_command, term_tally } = await import("./Commands.ts");
 const { term_grab, term_type } = await import("./Keys.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
@@ -65,6 +68,19 @@ test("a search finds a word in what a command does, not only in its name; it edi
   term_grab(t, "Home");
   term_type(t, "x");
   expect([t.choose.find.text, t.choose.shown.length]).toEqual(["x/settings", 0]);
+});
+
+test("the rows picked most rank first among matches as good, by their own count, apart from the commands typed; nothing searched, in their order", () => {
+  expect(lit(open("pro"))).toBe("/projects");
+  for (let k = 0; k < 2; k++) {
+    const t = open("/profile");
+    term_grab(t, "Enter");
+  }
+  expect([lit(open("pro")), term_tally(PICKED)["/profile"], term_tally(USED)["/profile"] ?? 0]).toEqual(["/profile", 2, 0]);
+  term_command(open(), "/settings");
+  expect([term_tally(USED)["/settings"], term_tally(PICKED)["/settings"] ?? 0]).toEqual([1, 0]);
+  const t = open();
+  expect(t.choose.shown.map((m: any) => m.k)).toEqual(t.choose.names.map((_: string, k: number) => k));
 });
 
 test("in groups, /help's then the settings', each one's head over its first", () => {

@@ -39,14 +39,16 @@ const LOGIN_FAILED = 60000;
 // the pick's moves by Shift and an arrow
 const ARROWS: Record<string, Move> = { "Shift+Left": "prev", "Shift+Right": "next", "Shift+Up": "up", "Shift+Down": "down" };
 
-// how often each command was run, by its /word: the root's, every
-// profile's; kept KEEP after the last run (ms)
-const USED_FILE = config.ROOT + "/used.json";
-const KEEP      = 2000;
+// how often each was used, by its name, in a file of the root's (every
+// profile's): its counts, read once, at the first use, and kept KEEP
+// after the last (ms)
+type Tally = { file: string; count: Record<string, number> | null; keep?: ReturnType<typeof setTimeout> };
+const KEEP = 2000;
 
-// the counts, read once, at the first command suggested
-let used: Record<string, number> | null = null;
-let keep: ReturnType<typeof setTimeout> | undefined;
+// the commands typed, by /word (their suggestions rank by it), and
+// apart, the palette's rows picked (Ctrl+P's search ranks by it)
+export const USED: Tally = { file: config.ROOT + "/used.json", count: null };
+export const PICKED: Tally = { file: config.ROOT + "/picked.json", count: null };
 
 // all a person can do here, by group (the editing keys are Screen's);
 // with `custom`, the user's commands and skills too (read anew: never at
@@ -121,13 +123,14 @@ export function term_commands(custom = false): Cmd[] {
   return term_groups(custom).flatMap(([, cmds]) => cmds);
 }
 
-// a command typed (`/name arg`): runs it (pending while it works on);
-// false if the text is none
-export function term_command(t: Term, text: string): boolean {
+// a command (`/name arg`): runs it (pending while it works on), counted
+// if typed (not: the palette's, which keeps its own); false if the text
+// is none
+export function term_command(t: Term, text: string, typed = true): boolean {
   const word = text.trim().split(/\s+/)[0];
   const cmd = word.startsWith("/") ? term_commands(true).find(([use]) => use !== "" && use.split(" ")[0] === word) : undefined;
-  if (cmd !== undefined) {
-    term_used_one(word);
+  if (cmd !== undefined && typed) {
+    term_tally_one(USED, word);
   }
   const run = cmd?.[3](t, text.trim().slice(word.length).trim());
   if (run instanceof Promise) {
@@ -153,25 +156,25 @@ export function term_suggest(t: Term): Sug | null {
   const sug = t.sug;
   if (sug.word !== word) {
     const names = sug.cmds.map(([use]) => use.split(" ")[0].slice(1));
-    const count = term_used();
+    const count = term_tally(USED);
     Object.assign(sug, { word, found: Screen.ed_rank(word.slice(1), names, (k) => count["/" + names[k]] ?? 0), at: 0, top: 0, off: null });
   }
   return sug.off === word ? null : sug;
 }
 
-// how often each command was run (USED_FILE), read once
-function term_used(): Record<string, number> {
-  return (used ??= json_object(USED_FILE) ?? {});
+// a tally's counts, read once
+export function term_tally(tally: Tally): Record<string, number> {
+  return (tally.count ??= json_object(tally.file) ?? {});
 }
 
-// a command run, counted; the counts kept once runs pause (never in the
+// one more use counted; the counts kept once uses pause (never in the
 // way: written in the background, never holding illi open)
-function term_used_one(word: string): void {
-  const count = term_used();
-  count[word] = (count[word] ?? 0) + 1;
-  clearTimeout(keep);
-  keep = setTimeout(() => void Bun.write(USED_FILE, JSON.stringify(count)).catch(() => {}), KEEP);
-  keep.unref?.();
+export function term_tally_one(tally: Tally, name: string): void {
+  const count = term_tally(tally);
+  count[name] = (count[name] ?? 0) + 1;
+  clearTimeout(tally.keep);
+  tally.keep = setTimeout(() => void Bun.write(tally.file, JSON.stringify(count)).catch(() => {}), KEEP);
+  tally.keep.unref?.();
 }
 
 // a key to the commands suggested (true: taken): Up and Down move round
@@ -332,13 +335,14 @@ function term_agent_set(t: Term, arg: string): void {
 }
 
 // the picker opened (closing the pane), at the option marked as now; with
-// `more`, a search (typing ranks the names, or each option's hay), what
-// else the lit option takes and what the foot says of it (the model
-// picker's), what shows at each option's right end, the screen's middle
-// as its place and each option's group (the palette's)
-export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; hay?: string[]; aside?: string[]; middle?: number; heads?: string[] } = {}): void {
+// `more`, a search (typing ranks the names, or each option's hay; with
+// `used`, the more used first among matches as good), what else the lit
+// option takes and what the foot says of it (the model picker's), what
+// shows at each option's right end, the screen's middle as its place and
+// each option's group (the palette's)
+export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; middle?: number; heads?: string[] } = {}): void {
   const shown = Screen.ed_rank("", names);
-  t.choose = { title, names, about, hay: more.hay, aside: more.aside, middle: more.middle, heads: more.heads, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null };
+  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, middle: more.middle, heads: more.heads, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null };
   t.pane   = null;
 }
 
@@ -352,13 +356,17 @@ export function term_ask(t: Term, title: string, hint: string, start: string, fo
   t.pane   = null;
 }
 
-// the picker's search changed: the options it matches, the best lit;
-// emptied, all, the one lit before still lit (none: the one marked as
-// now)
+// the picker's search changed: the options it matches, the best lit
+// (with hay, those matched by name first, then those only by the rest;
+// each the more used first); emptied, all in their order, the one lit
+// before still lit (none: the one marked as now)
 export function term_chooser_find(c: Chooser): void {
   const was  = c.shown[c.at]?.k ?? c.here;
   const find = c.find?.text ?? "";
-  c.shown = Screen.ed_rank(find, c.hay ?? c.names);
+  const used = find === "" ? undefined : c.used;
+  const named = Screen.ed_rank(find, c.names, used);
+  const by    = new Set(named.map((m) => m.k));
+  c.shown = c.hay === undefined ? named : [...named, ...Screen.ed_rank(find, c.hay, used).filter((m) => !by.has(m.k))];
   c.at    = find === "" ? Math.max(0, c.shown.findIndex((m) => m.k === was)) : 0;
   c.top   = 0;
 }
