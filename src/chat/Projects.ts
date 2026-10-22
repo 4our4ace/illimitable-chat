@@ -16,7 +16,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { HOME, Store, type Place, type Store as File } from "./Store.ts";
+import { HOME, Store, type Cut, type Place, type Store as File } from "./Store.ts";
 
 // Constants
 // =========
@@ -131,19 +131,25 @@ export namespace Projects {
     return worker;
   }
 
-  // an ask the thread couldn't run, run here
+  // an ask the thread couldn't run, run here (one answered already:
+  // nothing)
   export function here(id: number): void {
     const ask = ASKED.get(id);
+    if (ask === undefined) {
+      return;
+    }
     ASKED.delete(id);
     try {
-      ask?.done(Projects.search(ask.store, ask.words, ask.project));
+      ask.done(Projects.search(ask.store, ask.words, ask.project));
     } catch (err: any) {
-      ask?.fail(err);
+      ask.fail(err);
     }
   }
 
   // summary lines with these words, as a model reads them ("project
-  // id+n|text"): in this project, one by its name, or "all"
+  // id+n|text"): in this project, one by its name, or "all"; in all, the
+  // projects with lines left out are named after, by how many, so the
+  // model can search in one for them
   export function search(store: File, words: string, project = ""): string {
     const terms = words.split(/\s+/).filter((w) => w !== "");
     const named = project === "" || project === "all" ? null : Store.project(store, project);
@@ -151,11 +157,14 @@ export namespace Projects {
       return "No project " + project + ": projects lists them.";
     }
     const scope = project === "all" ? null : [named?.project ?? store.project];
-    const found = Store.search(store, terms, scope);
+    const cut   = new Map<string, Cut>();
+    const found = Store.search(store, terms, scope, cut);
     if (found.length === 0) {
       return "No summary line holds " + (terms.length === 1 ? "that word" : "those words") + (project === "all" ? " in any project." : " in " + (project || "this project") + ".");
     }
-    return found.map((f) => f.project + " " + f.first + "+" + f.n + "|" + f.text.replace(/\s*\n\s*/g, " ")).join("\n");
+    const lines = found.map((f) => f.project + " " + f.first + "+" + f.n + "|" + f.text.replace(/\s*\n\s*/g, " ")).join("\n");
+    const more  = [...cut].sort((a, b) => b[1].n - a[1].n).map(([name, c]) => name + " (" + c.n + (c.more ? "+" : "") + ")");
+    return project !== "all" || more.length === 0 ? lines : lines + "\nMore lines in: " + more.join(", ") + "; search with project to see them.";
   }
 
   // a line cut to LATELY characters, its newlines spaces

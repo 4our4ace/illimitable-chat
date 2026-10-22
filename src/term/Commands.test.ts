@@ -16,7 +16,8 @@
 // itself. A skill named mid-message is suggested as it's typed, filled
 // in there, and illi told to use it as the message goes. A use counted
 // weighs half as
-// much 100 uses on, a name faded under a tenth forgotten. The side shows
+// much 100 uses on, a name faded under a tenth forgotten; two illis
+// counting at once each keep theirs over the other's. The side shows
 // any vendor's plan alike: each window's share used, its bar as full.
 
 import { afterAll, expect, test } from "bun:test";
@@ -27,7 +28,7 @@ import type { Match } from "../ui/Screen.ts";
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-commands-");
 process.env.ILLI_DIR = DIR;
 
-const { term_chooser, term_command, term_commands, term_named, term_suggest, term_tally, term_tally_one } = await import("./Commands.ts");
+const { term_chooser, term_command, term_commands, term_named, term_suggest, term_tally, term_tally_keep, term_tally_one } = await import("./Commands.ts");
 const { term_grab, term_press, term_type } = await import("./Keys.ts");
 const { term_side } = await import("./Side.ts");
 const Paint = await import("../ui/Paint.ts");
@@ -322,6 +323,23 @@ test("a use weighs half as much 100 uses on; a name faded under a tenth, or no n
   expect(term_tally(tally)["/new"]).toBeLessThan(1 / (1 - 0.5 ** (1 / 100)));
   await Bun.sleep(2100);
   expect(JSON.parse(fs.readFileSync(DIR + "/faded.json", "utf8"))).toEqual({ "/new": Math.round(term_tally(tally)["/new"] * 1000) / 1000 });
+});
+
+test("two illis counting at once each keep their uses over the other's: the file holds both, and each takes it as its counts", () => {
+  const [one, two] = [{ file: DIR + "/both.json", count: null }, { file: DIR + "/both.json", count: null }] as any[];
+  term_tally_one(one, "/model");
+  term_tally_one(two, "/agent");
+  term_tally_keep(one);
+  term_tally_keep(two);
+  const fade = 0.5 ** (1 / 100);
+  const file = () => JSON.parse(fs.readFileSync(DIR + "/both.json", "utf8"));
+  expect(file()).toEqual({ "/model": Math.round(fade * 1000) / 1000, "/agent": 1 });
+  term_tally_one(one, "/model");
+  term_tally_keep(one);
+  expect([file()["/agent"], term_tally(one)["/agent"], file()["/model"]]).toEqual([Math.round(fade * 1000) / 1000, fade, Math.round((0.993 * fade + 1) * 1000) / 1000]);
+  expect(fs.readdirSync(DIR).filter((f) => f.startsWith("both.json."))).toEqual([]);
+  clearTimeout(one.keep);
+  clearTimeout(two.keep);
 });
 
 test("the side shows any vendor's plan alike: each window's share used, a bar as full, yellow and red as it fills; one past its reset, none", () => {

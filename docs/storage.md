@@ -89,8 +89,9 @@ The columns, by table:
   keeps the first one (`on conflict do nothing`), because a view may
   already show it. The index `node_end` on `(chat, first + n)` finds a
   chat's latest line at once.
-- **state**: `chat`, `saved` (JSON: the views, the pick, the goal, what
-  ran, the cut, `show` and `top`). It is never rebuilt from the facts,
+- **state**: `chat`, `saved` (JSON: the chat's view, `seen` (the
+  compactions' view), the pick, the goal, the main agent, what ran, the
+  cut, `show` and `top`). It is never rebuilt from the facts,
   because the model's prompt cache depends on the saved view.
 - **log**: `id`, `chat`, `log`, `name`. **work**: `log` (references
   `log`), `i`, `kind`, `text`, `date`.
@@ -213,6 +214,11 @@ own `STEPS.length`:
   `user_version`. Inside the transaction it checks the version again,
   because another illi may have just run the same step. A crash
   mid-step rolls the step back whole, and it runs again at the next open.
+  Steps run after `secure_delete` is on (what a step deletes is zeroed)
+  but before `synchronous = normal`, so at SQLite's default `full`: each
+  step's commit waits for the disk. A new file's first step even runs
+  before WAL mode, in SQLite's rollback journal; an older file is in WAL
+  mode already (the mode is kept in the file).
 - **The file is the same:** nothing happens.
 - **The file is newer:** illi reads `meta.compat`. If compat is at most
   its own number, the newer illi only *added* things, and this illi
@@ -357,7 +363,7 @@ The projects table
 message dates, message count, and latest summary line, the one used last
 first.
 
-For each chat it runs five small queries, all by index: the first
+For each chat it runs four small queries, all by index: the first
 message, the last message, the count of continued pages (subtracted to
 count whole messages), and the latest line. Two of them name their index
 (`indexed by msg_page`, `indexed by node_end`). The file keeps no table
@@ -416,6 +422,12 @@ entry of the build (`src/chat/Seeker.ts` in `package.json`'s `build`,
 3. Calls `Store.search`, then writes each line as `project first+n|text`,
    its newlines flattened to spaces. With nothing found it says so,
    naming the scope.
+4. In `all`, if lines were left out (step 5 of `Store.search` keeps 20),
+   it adds a last line naming the projects they're in, the most first,
+   with how many: *More lines in: app-k3f9x2 (12+), site-7q2m0d (3);
+   search with project to see them.* A `+` means a chat of that project
+   gave its most (20), so it may hold more still. The model can then
+   search that project alone.
 
 ### Store.search
 
@@ -433,10 +445,13 @@ entry of the build (`src/chat/Seeker.ts` in `package.json`'s `build`,
    ranked by bm25.
 5. **Merge.** Sorted by rank within its chat first, then by score: every
    chat's best line, best first; then every chat's second; and so on.
-   The first 20 are kept. A chat's bm25 scores weigh each word by how
-   rare it is *in that chat*, so scores from a big chat and a small one
-   can't be compared. Sorted by raw score, one big chat's matches would
-   fill all 20 places and hide every small project's.
+   The first 20 are kept; the rest are counted by project (`cut`), for
+   the *More lines in* line above. A chat's bm25 scores weigh each word
+   by how rare it is *in that chat*, so scores from a big chat and a
+   small one can't be compared. Sorted by raw score, one big chat's
+   matches would fill all 20 places and hide every small project's. With
+   many projects, though, each gets only a line or two: 20 projects with
+   matches give one line each.
 6. **AND, then OR.** First a line must hold *all* the terms. If nothing
    matches and there was more than one term, it searches again for
    lines holding *any* of them.
@@ -532,7 +547,8 @@ sequenceDiagram
   participant F as memory.sqlite
   C->>W: 1. one transaction: drop each find_chat, delete project (cascade); deleted content zeroed
   W->>F: (automatic checkpoint at that commit, usually)
-  C->>F: 2. wal_checkpoint(full): every page, zeros too, into the file
+  C->>F: 2. wal_checkpoint(full) till no reader holds it back (Store.settled)
+  Note over C: still held back after 10 s: stop here (false)
   C->>W: 3. auto_vacuum = full: at its commit, live pages move down
   W->>F: (checkpoint)
   Note over F: the file's end is cut off
@@ -551,14 +567,27 @@ sequenceDiagram
    the freed pages go on the free list; nothing moves yet. The commit
    writes the changed pages, zeros included, to the WAL. Usually the
    automatic checkpoint at that same commit copies them into the file.
-2. **`pragma wal_checkpoint(full)`** makes sure *every* page in the WAL,
-   the zeros included, is copied into the file. This must happen before
-   step 3: the file's end gets cut off there, and a checkpoint never
-   writes a page that lies past the file's new end. Without this step, a
-   project stored at the end of the file wouldn't be overwritten, only
-   released with the end of the file, its old bytes left on the disk.
-   This checkpoint waits (up to 10 s) for a running search that is still
-   reading an older snapshot.
+2. **`pragma wal_checkpoint(full)`, till it lands** (`Store.settled`)
+   makes sure *every* page in the WAL, the zeros included, is copied
+   into the file. This must happen before step 3: the file's end gets
+   cut off there, and a checkpoint never writes a page that lies past the
+   file's new end. Without this step, a project stored at the end of the
+   file wouldn't be overwritten, only released with the end of the file,
+   its old bytes left on the disk.
+
+   A reader still on a snapshot from before step 1 (a running search, or
+   another illi mid-read) holds the checkpoint back: it can't copy pages
+   that reader may still need from the WAL. The checkpoint doesn't
+   throw then; it returns `busy = 1`. `Store.settled` runs it again every
+   50 ms till it reports `busy = 0`, for up to 10 s (`WAIT`). If it's
+   still held back, **forget stops here and returns `false`**: the
+   project is gone from the tables and its zeros are in the WAL, but the
+   file isn't shrunk. Nothing is cut off, so the zeros reach the file at
+   the next checkpoint that gets through once the reader is done: the
+   automatic one at a commit that finds the WAL past 1,000 pages (about
+   4 MB; a big forget's WAL already is), or the last connection's close.
+   The free pages are reused for new messages. `/projects` then adds: *Its space stays
+   in the file, for new messages: it was being read.*
 3. **`pragma auto_vacuum = full`** changes one flag in the file's header,
    in a tiny transaction of its own. Because the mode is now `full`,
    SQLite's commit runs its vacuum: it moves every live page that sits
@@ -568,30 +597,40 @@ sequenceDiagram
    looks every page it moves up in the free list, which is quadratic:
    846 s instead of 28 s for a million-message project.)
 4. **`pragma auto_vacuum = incremental`** sets the flag back, so ordinary
-   commits never move pages. If illi stops between steps 3 and 4, the
-   file stays in `full` until the next open sets it back (opening, step
-   5).
+   commits never move pages. If illi stops between steps 3 and 4, or
+   step 4 itself fails, the file stays in `full` until the next open sets
+   it back (opening, step 5).
 5. **`pragma wal_checkpoint(truncate)`** copies the moved pages into the
    file and empties the WAL to 0 bytes. Otherwise the WAL would stay as
    big as the forgotten project, and the next message's commit would
    pay for the whole checkpoint mid-turn.
-6. `Store.wrote`: the WAL is flushed like any write.
+6. `Store.wrote` (in a `finally`, so on every path out, a stop at step 2
+   or an error too): the WAL is flushed like any write.
+
+`Store.forget` returns whether the space was given back. Only step 1
+throws to its caller (nothing forgotten then). An error in steps 2 to 5
+is logged (*illi: forget: the space wasn't given back: …*) and returns
+`false`, because the project is forgotten already.
 
 ### If it stops partway
 
 | illi stops… | Result |
 | ----------- | ------ |
 | during step 1 | the transaction rolls back: nothing is forgotten |
-| after step 1, before step 3 | the project is forgotten and zeroed (whatever reached the file), but the file hasn't shrunk; new writes reuse the free pages |
+| after step 1, before step 3 | the project is forgotten and zeroed in the WAL, the zeros in the file by the next checkpoint; the file hasn't shrunk, and new writes reuse the free pages |
 | between steps 3 and 4 | forgotten and shrunk; the next open sets `auto_vacuum` back |
 | after step 4 | done; the WAL is emptied at the next checkpoint |
 
 ### What "overwritten" means, exactly
 
-After a forget, `memory.sqlite` and its WAL no longer contain the
-project's bytes: the test `a project forgotten is gone from the file…`
-searches the file for a planted secret. That promise covers the file
-itself. It can't reach:
+After a forget that returned `true`, `memory.sqlite` and its WAL no
+longer contain the project's bytes: the test `a project forgotten is
+gone from the file…` searches the file for a planted secret. After one
+that returned `false` (a reader held step 2 back), the zeros are in the
+WAL and the old bytes are still in `memory.sqlite` until the next
+checkpoint gets through (step 2 says when); the test `a forget while a reader holds an older
+snapshot…` checks that they land then. Either way the promise covers
+the file itself. It can't reach:
 
 - **SSDs**, which write an overwritten block to a fresh physical place
   and erase the old one later, on their own schedule.
@@ -682,8 +721,17 @@ Usage counts
    used once and never again disappears after 333 other uses.
 3. The used name gets +1. A name used every single time levels off near
    145, so no weight grows without end.
-4. The file is written 2 s after the last use (in the background, never
-   holding illi open), each weight rounded to three decimals.
+4. Each illi reads the file once, at its first use, and counts in
+   memory from then on. Its uses are also queued.
+5. 2 s after the last use (a timer that never holds illi open,
+   `term_tally_keep`), it reads the file again, as another illi may have
+   written it meanwhile, and replays its queued uses over it (fade, +1,
+   each in order). It writes the result, each weight rounded to three
+   decimals, to `used.json.<pid>` beside it, then renames that over the
+   file, so no reader ever sees half a file. The result becomes its
+   counts in memory too. Two illis writing in the same instant can still
+   lose one's batch; a failure to write is silent and keeps nothing.
+   Uses queued when illi quits within those 2 s are not kept.
 
 Fading counts uses, not days: a month away from illi changes nothing.
 
@@ -697,8 +745,11 @@ Known limits
   13.6 s for 400,000 lines, and a second illi opening meanwhile fails to
   start.
 - **A search keeps a snapshot for as long as it runs,** so a checkpoint
-  can't finish behind it, and a forget's checkpoints wait for it (up to
-  10 s, then they continue partially).
+  can't finish behind it. A forget waits for it up to 10 s, then leaves
+  the file unshrunk (step 2): the space is reused, not given back.
+- **An `all` search gives 20 lines in all,** shared out across the
+  projects with matches, so with many projects each gets a line or two.
+  The rest are named, not shown (*More lines in: …*).
 - **Each search opens the file anew,** and parsing a schema with
   thousands of chats costs about 50 ms. A worker that keeps its
   connection open would avoid that.
