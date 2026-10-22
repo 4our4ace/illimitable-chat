@@ -105,15 +105,15 @@ test("a response's headers tell the plan's limits, a window 0 minutes long none;
     "x-codex-secondary-window-minutes"    : "10080",
     "x-codex-secondary-reset-at"          : String(Math.round(now / 1000) + 3 * 86400),
   }));
-  const [hours, week] = ChatGPT.limits();
+  const [hours, week] = ChatGPT.told()!.limits;
   expect(hours).toMatchObject({ window: 300, used: 23 });
   expect(Math.abs(hours.reset - (now + 7800e3))).toBeLessThan(1000);
   expect(week).toMatchObject({ window: 10080, used: 61 });
   expect(Math.abs(week.reset - (now + 3 * 86400e3))).toBeLessThan(1000);
   ChatGPT.hear(new Headers({ "content-type": "text/event-stream" }));
-  expect(ChatGPT.limits()).toHaveLength(2);
+  expect(ChatGPT.told()!.limits).toHaveLength(2);
   ChatGPT.hear(new Headers({ "x-codex-primary-used-percent": "1", "x-codex-primary-window-minutes": "10080", "x-codex-primary-reset-after-seconds": "588282", "x-codex-secondary-used-percent": "0", "x-codex-secondary-window-minutes": "0" }));
-  expect(ChatGPT.limits()).toEqual([{ window: 10080, used: 1, reset: expect.any(Number) }]);
+  expect(ChatGPT.told()).toMatchObject({ brand: "ChatGPT", limits: [{ window: 10080, used: 1, reset: expect.any(Number) }] });
 });
 
 test("a login file that won't parse says which, and that /login replaces it", async () => {

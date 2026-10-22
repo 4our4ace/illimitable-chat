@@ -70,7 +70,8 @@ What else illi keeps in `~/.illi`:
 | --------------- | ----------------------------------------------------- |
 | `login.json`    | the ChatGPT login `/login` makes (else opencode's, in `~/.local/share/opencode/auth.json`) |
 | `models.json`   | the models the vendors listed last                    |
-| `used.json`     | how often you ran each command: among those a `/word` matches alike, the most used come first |
+| `used.json`     | how often you ran each command: among those a `/word` matches alike, the most used come first; a use counts half as much 100 uses later, and a command you stopped using drops out |
+| `picked.json`   | the same for what you pick in Ctrl+P's list, kept apart |
 | `profile`       | the profile used last                                 |
 | `locks/`        | a lock per project, held while its chat is open (by the system: a crash never leaves one held), and the socket a second terminal joins it by |
 | `illi.log`      | what went wrong (each profile's own)                  |

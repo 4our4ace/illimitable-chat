@@ -71,22 +71,22 @@ export function term_side(t: Term, w: number, tall: number): Item[] {
   return items.slice(0, tall).map(([line, run]) => [Paint.runs_wrap(line, w, true)[0], run]);
 }
 
-// a ChatGPT plan's use, w wide (another vendor, or nothing told yet:
-// nothing): its head, the plan named (ChatGPT Pro; as Pro, else not at
-// all, if it won't fit), then each of its windows, a label a line: the
-// share used and when it starts anew, a bar under it (in the theme's
-// blue, as term_bar colors it); none told yet, a line says when it will
-// be. What won't fit says less
+// the plan's use, w wide, any vendor's alike (a vendor that tells none,
+// or nothing told yet: nothing): its head, the plan named (ChatGPT Pro;
+// as Pro, else not at all, if it won't fit), then each of its windows, a
+// label a line: the share used and when it starts anew, a bar under it
+// (in the theme's blue, as term_bar colors it); none told yet, a line
+// says when it will be. What won't fit says less
 function term_side_plan(t: Term, w: number): Item[] {
-  const tier  = t.v.use.plan ?? "";
-  if (t.v.pick?.vendor !== "chatgpt" || (tier === "" && t.v.use.limits.length === 0)) {
+  const told  = t.v.use.plan;
+  if (told === null) {
     return [];
   }
-  const plan  = tier === "" ? "" : tier[0].toUpperCase() + tier.slice(1);
-  const says  = plan === "" ? [] : [" · ChatGPT " + plan, " · " + plan].filter((x) => Paint.text_width("Usage" + x) <= w);
+  const plan  = told.tier === "" ? "" : told.tier[0].toUpperCase() + told.tier.slice(1);
+  const says  = plan === "" ? [] : [" · " + told.brand + " " + plan, " · " + plan].filter((x) => Paint.text_width("Usage" + x) <= w);
   const head  = [[Paint.Run("Usage", { ...Paint.INK, b: true }), ...says.slice(0, 1).map((x) => Paint.Run(x, Paint.DIM))], null] as Item;
   const blue  = Draw.draw_theme().link ?? "4";
-  const shown = t.v.use.limits.flatMap((l) => {
+  const shown = told.limits.flatMap((l) => {
     const left  = l.reset - Date.now();
     const share = left > 0 ? l.used / 100 : 0;
     const used  = term_pct(share, blue);

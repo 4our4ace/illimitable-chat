@@ -868,7 +868,7 @@ export namespace Chat {
 
   export function state(chat: Chat): Out {
     const agents = Tools.working(chat.tools).map((a) => a.name);
-    const tools  = Tools.state(chat.tools);
+    const tools  = Tools.state(chat.tools, chat.pick.vendor);
     const fill   = { used: Math.round(Memory.fill(chat.mem) / 4), cap: Chat.cap(chat), window: Pick.window(chat.pick) ?? config.GUESS };
     const asks   = chat.asks.map(({ done, ...q }) => q);
     return { $: "state", busy: chat.busy, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, ...tools, use: { ...tools.use, fill }, suggest: chat.suggest.text, asks };
