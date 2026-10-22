@@ -2,34 +2,22 @@
 // ====
 // Durability by group commit. What illi writes under config.DIR goes at
 // once to the OS's cache, so no chat waits on the disk; flushes run one
-// at a time, each making durable every write before it began: on Linux
-// one syncfs of the disk, as cheap for one file as for thousands, by a
-// shell kept for it (Bun has no syncfs; one that dies is replaced, its
-// flush done file by file); elsewhere an fsync per file. A process crash
-// loses nothing; a machine's, about the last flush. An act is answered
-// only once flushed.
+// at a time, each making durable every write before it began, by an
+// fsync of each file written since (the chat's WAL: one file, so no
+// flush of the whole disk would be cheaper). A process crash loses
+// nothing; a machine's, about the last flush. An act is answered only
+// once flushed.
 
 import * as fs from "node:fs";
-import type { FileSink } from "bun";
-import * as config from "../config/Config.ts";
-
-// Types
-// =====
-
-// the shell that flushes: its process, what it reads, what it answered
-// not yet read, its end
-type Shell = { pid: number; stdin: FileSink; out: ReadableStreamDefaultReader<Uint8Array>; got: string; exited: Promise<number> };
 
 // Globals
 // =======
 
 // the files written since the flush running began, the asks waiting on
-// them, the flushes running (null: none), the shell that flushes (null:
-// none started, or it ended)
+// them, the flushes running (null: none)
 const DIRTY = new Set<string>();
 let WAITS: Array<() => void> = [];
 let RUN: Promise<void> | null = null;
-let SHELL: Shell | null = null;
 
 // Disk
 // ====
@@ -58,75 +46,10 @@ export namespace Disk {
       const waits = WAITS;
       DIRTY.clear();
       WAITS = [];
-      await Disk.flush(files).catch((err: Error) => console.error("disk: a flush failed: " + err.message));
+      await Promise.all(files.map(Disk.fsync)).catch((err: Error) => console.error("disk: a flush failed: " + err.message));
       waits.forEach((ok) => ok());
     }
     RUN = null;
-  }
-
-  // by the shell; one that ended (a stop's signal, a kill) or whose pipe
-  // broke is let go, each file flushed by itself, and the next flush
-  // starts another
-  export async function flush(files: string[]): Promise<void> {
-    if (process.platform !== "linux") {
-      await Promise.all(files.map(Disk.fsync));
-      return;
-    }
-    const shell = (SHELL ??= Disk.shell());
-    try {
-      shell.stdin.write("\n");
-      await shell.stdin.flush();
-      while (!shell.got.includes("\n")) {
-        const got = await shell.out.read();
-        if (got.done) {
-          throw new Error("the shell ended");
-        }
-        shell.got += new TextDecoder().decode(got.value);
-      }
-    } catch {
-      Disk.lost(shell);
-      await Promise.all(files.map(Disk.fsync));
-      return;
-    }
-    const code = shell.got.slice(0, shell.got.indexOf("\n"));
-    shell.got = shell.got.slice(code.length + 1);
-    if (code !== "0") {
-      throw new Error("sync -f " + config.DIR + " exited " + code);
-    }
-  }
-
-  // its end lets it go at once, so no flush waits on it or writes to it
-  export function shell(): Shell {
-    const run = 'while read _; do sync -f "$0"; echo $?; done';
-    const proc = Bun.spawn(["sh", "-c", run, config.DIR], { stdin: "pipe", stdout: "pipe", stderr: "inherit" });
-    const shell = { pid: proc.pid, stdin: proc.stdin, out: proc.stdout.getReader(), got: "", exited: proc.exited };
-    proc.exited.then(() => Disk.lost(shell));
-    return shell;
-  }
-
-  // a shell that ended or failed let go (its pipe closed, any error
-  // closing it ignored); the next flush starts another
-  export function lost(shell: Shell): void {
-    if (SHELL === shell) {
-      SHELL = null;
-    }
-    Promise.try(() => shell.stdin.end()).catch(() => {});
-  }
-
-  // the shell that flushes now; null: none
-  export function flusher(): Shell | null {
-    return SHELL;
-  }
-
-  // all written so far flushed, then the shell that flushes ended (a
-  // profile's switch: illi runs again, leaving no process of its own)
-  export async function end(): Promise<void> {
-    await Disk.synced();
-    const shell = SHELL;
-    if (shell !== null) {
-      Disk.lost(shell);
-    }
-    await shell?.exited;
   }
 
   // a file gone since needs none
