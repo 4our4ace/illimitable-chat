@@ -16,8 +16,8 @@
 // is gone from the file, its words (its index dropped), images and to-do
 // list too, its space given back, a later version's rows of its chats
 // too; the others stay, and no number is used again. One while a reader
-// holds an older snapshot keeps its space, its zeros in the file at a
-// later checkpoint. A file of version 1 moves on to 3, its facts as they
+// holds an older snapshot doesn't wait for it, and the next open gives
+// its space back. A file of version 1 moves on to 3, its facts as they
 // were, the words moved to an index per chat.
 
 import { afterAll, expect, test } from "bun:test";
@@ -200,30 +200,34 @@ test("a big chat: every match ranked however old; a word in most lines all along
   Store.close(store);
 });
 
-test("a forget while a reader holds an older snapshot keeps the file's space, and still overwrites: the zeros reach the file at a later checkpoint", () => {
+test("a forget while a reader holds an older snapshot doesn't wait for it: the project is gone and overwritten, and the next open gives its space back", () => {
   const home = Store.open(DIR + "/held");
   const app = Store.open(DIR + "/held", APP);
   for (let k = 0; k < 200; k++) {
-    say(app, "held-secret-" + k + " " + "y".repeat(400));
+    say(app, "held-secret-" + k + " " + "y".repeat(5000));
   }
   home.db.run("pragma wal_checkpoint(truncate)");
   say(home, "a line in the WAL, so the reader's snapshot is of it");
+  const before = fs.statSync(home.file).size;
   const reader = new Database(home.file, { readonly: true });
   reader.run("begin");
   reader.query("select count(*) from msg").get();
-  home.db.run("pragma busy_timeout = 50");
-  expect(Store.forget(home, app.project, 100)).toBe(false);
-  const free = (home.db.query("pragma freelist_count").get() as { freelist_count: number }).freelist_count;
-  expect([(home.db.query("pragma auto_vacuum").get() as any).auto_vacuum, free > 0, Store.projects(home).map((p) => p.name)]).toEqual([2, true, ["home"]]);
+  const t0 = Date.now();
+  expect(Store.forget(home, app.project)).toBe(false);
+  expect(Date.now() - t0).toBeLessThan(2000);
+  const free = () => (home.db.query("pragma freelist_count").get() as { freelist_count: number }).freelist_count;
+  expect([(home.db.query("pragma auto_vacuum").get() as any).auto_vacuum, free() > 256, Store.projects(home).map((p) => p.name)]).toEqual([2, true, ["home"]]);
   reader.run("commit");
   reader.close();
-  home.db.run("pragma wal_checkpoint(truncate)");
-  expect(fs.readFileSync(DIR + "/held/memory.sqlite").includes("held-secret")).toBe(false);
   Store.close(app);
+  const next = Store.open(DIR + "/held");
+  expect([(next.db.query("pragma freelist_count").get() as any).freelist_count, fs.statSync(home.file).size < before / 2]).toEqual([0, true]);
+  expect(fs.readFileSync(DIR + "/held/memory.sqlite").includes("held-secret")).toBe(false);
+  Store.close(next);
   Store.close(home);
 });
 
-test("a project forgotten is gone from the file, its words too, its space given back, the images only it named said; the others stay", () => {
+test("a project forgotten is gone from the file and its WAL at once (a line not checkpointed yet too), its words too, its space given back, the images only it named said; the others stay", () => {
   const home = Store.open(DIR + "/forget");
   const app = Store.open(DIR + "/forget", APP);
   const secret = "client-secret-plan-" + "z".repeat(40);
@@ -242,8 +246,11 @@ test("a project forgotten is gone from the file, its words too, its space given 
   home.db.query("insert into later values (?, ?), (?, ?)").run(app.chat, secret, home.chat, "kept");
   home.db.run("pragma wal_checkpoint(truncate)");
   const before = fs.statSync(home.file).size;
+  say(app, secret + " still in the WAL as it's forgotten");
   expect([Store.pictures(home, app.project), Store.pictures(home, home.project)]).toEqual([2, 1]);
   expect(Store.forget(home, app.project)).toBe(true);
+  const held = (end: string) => !fs.existsSync(home.file + end) || fs.readFileSync(home.file + end).includes("client-secret-plan");
+  expect([held(""), held("-wal")]).toEqual([false, false]);
   expect(Store.projects(home).map((p) => p.name)).toEqual(["home"]);
   expect([home.db.query("pragma auto_vacuum").get(), home.db.query("pragma freelist_count").get()]).toEqual([{ auto_vacuum: 2 }, { freelist_count: 0 }]);
   expect([Store.image(home, "bbbbbbbbbbbbbbbb.png")?.data.length, home.db.query("select count(*) as n from image").get(), home.db.query("select count(*) as n from todo").get()]).toEqual([6, { n: 1 }, { n: 0 }]);
@@ -254,6 +261,7 @@ test("a project forgotten is gone from the file, its words too, its space given 
   expect(home.db.query("select count(*) as n from work").get()).toEqual({ n: 0 });
   Store.close(app);
   Store.close(home);
+  expect(fs.readdirSync(DIR + "/forget")).toEqual(["memory.sqlite"]);
   expect(fs.statSync(DIR + "/forget/memory.sqlite").size).toBeLessThan(before / 4);
   expect(fs.readFileSync(DIR + "/forget/memory.sqlite").includes("client-secret-plan")).toBe(false);
   expect(fs.readFileSync(DIR + "/forget/memory.sqlite").includes("secret-screenshot-bytes")).toBe(false);
