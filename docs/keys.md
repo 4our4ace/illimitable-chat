@@ -179,6 +179,9 @@ Mouse and side panel
   drag copies the text it covers, a double click a word; a reply's code
   has a copy button. Copying uses OSC 52, so the terminal (and tmux) must
   allow it.
+- A drag with the right button over the chat quotes what it covers in
+  your message, each line after `> `, to reply to it; a right click
+  within 5 seconds takes the quote out again.
 - The wheel scrolls the chat or a pane.
 - From 100 columns on, a side panel shows the primary agents (a click
   makes one the main agent), the subagents at work, the sticky skills on

@@ -312,9 +312,9 @@ test("the input: the mark on its first row alone, the rest indented; as tall as 
   expect(rows()).toEqual(["> first"]);
 });
 
-test("the mouse: the wheel, the left button pressed, dragged, let go, the pointer moved, never typed, whatever the reads", () => {
-  splits("\x1b[<64;10;5M\x1b[<65;10;5M\x1b[<0;12;7M\x1b[<32;13;7M\x1b[<0;13;7m\x1b[<35;20;3M\x1b[<2;1;1M", (text, keys) => {
-    expect(keys).toEqual(["WheelUp", "WheelDown", "Press", "Drag", "Release", "Move"]);
+test("the mouse: the wheel, the left button pressed, dragged, let go, the pointer moved, the right button the same, the middle one nothing; never typed, whatever the reads", () => {
+  splits("\x1b[<64;10;5M\x1b[<65;10;5M\x1b[<0;12;7M\x1b[<32;13;7M\x1b[<0;13;7m\x1b[<35;20;3M\x1b[<2;1;1M\x1b[<34;2;1M\x1b[<2;2;1m\x1b[<1;1;1M", (text, keys) => {
+    expect(keys).toEqual(["WheelUp", "WheelDown", "Press", "Drag", "Release", "Move", "RightPress", "RightDrag", "RightRelease"]);
     expect(text).toBe("");
   });
   const { scr } = screen();

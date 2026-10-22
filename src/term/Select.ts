@@ -7,7 +7,10 @@
 // scrolls. Empty space is chosen too, as in Claude Code: past a line's
 // text and on a blank line, the choice lights to its end (or the area's
 // width); what's copied drops each line's end spaces. A reply's button
-// under the pointer lights, and a click copies what it holds.
+// under the pointer lights, and a click copies what it holds. The right
+// button dragged over the chat chooses the same way, and as it's let go
+// the text is quoted in the input, to reply to it; a right click soon
+// after takes the quote out again.
 
 import * as Draw from "../ui/Draw.ts";
 import { term_draw, term_mix } from "./Frame.ts";
@@ -24,6 +27,9 @@ import type { Area, Cell, Ink, Sel, Term } from "./Term.ts";
 const DRIFT  = 50;
 const SELECT = 0.3;
 const LIT    = 0.3;
+
+// how long after a quote a right click takes it out (ms)
+const UNDO   = 5000;
 
 // a word's characters, for a double click (a path's, a link's, an
 // address's too), and those its end drops
@@ -48,10 +54,27 @@ function term_button(line: Paint.Line, col: number): (() => string) | undefined 
 // three times: from its line, a line at a time; a button's own click
 // comes first); dragged, the choice follows the pointer (a chat scrolls
 // while it's past an edge); let go, the text chosen is copied, else it
-// was a click
+// was a click. The right button: the same in the chat, a character at a
+// time, the text chosen quoted as it's let go (term_quote), else it was a
+// right click, which takes a quote just made out (term_unquote)
 export function term_mouse(t: Term, key: string): void {
   const p = t.scr.point;
-  if (key === "Press") {
+  if (key === "RightPress") {
+    const area = term_area_at(t, p);
+    const at   = area?.key === "chat" ? term_cell(area, p) : null;
+    t.sel      = area !== undefined && at !== null ? { key: area.key, a: at, b: at, held: true, moved: false, unit: 1, root: [at, at] } : null;
+  } else if (key === "RightRelease") {
+    term_drift(t, 0);
+    term_follow(t);
+    const sel = t.sel;
+    if (sel?.held && sel.moved) {
+      sel.held = false;
+      term_quote(t, term_selected(t));
+    } else {
+      t.sel = null;
+      term_unquote(t);
+    }
+  } else if (key === "Press") {
     const area = term_area_at(t, p);
     const at   = area === undefined ? null : term_cell(area, p);
     t.sel = null;
@@ -60,7 +83,7 @@ export function term_mouse(t: Term, key: string): void {
       const root = term_unit(area, at, unit);
       t.sel = { key: area.key, a: root[0], b: root[1], held: true, moved: unit > 1 && !term_after(root[0], root[1]), unit, root };
     }
-  } else if (key === "Drag" && t.sel?.held) {
+  } else if ((key === "Drag" || key === "RightDrag") && t.sel?.held) {
     const area = t.areas.find((a) => a.key === t.sel!.key);
     term_follow(t);
     term_drift(t, area?.scroll === undefined ? 0 : p.row < area.row ? -1 : p.row >= area.row + area.tall ? 1 : 0);
@@ -236,6 +259,38 @@ function term_marked(t: Term, area: Area, k: number): Paint.Line {
     line = Paint.line_mark(line, from, from + Paint.line_width(runs), () => lit);
   }
   return line;
+}
+
+// a text quoted in the input, to reply to it: each of its lines after
+// "> " (a blank one ">"), at the input's end on lines of their own, the
+// cursor after them
+// (none: all blank, nothing quoted); said for a moment
+export function term_quote(t: Term, text: string): void {
+  if (text.trim() === "") {
+    return;
+  }
+  const ed    = t.scr.ed;
+  const lines = text.split("\n");
+  const add   = (ed.text === "" || ed.text.endsWith("\n") ? "" : "\n") + lines.map((l) => (l === "" ? ">" : "> " + l)).join("\n") + "\n";
+  ed.text     = ed.text + add;
+  ed.pos      = ed.text.length;
+  t.quoted    = { at: Date.now(), add };
+  term_toast(t, "Quoted " + lines.length + (lines.length === 1 ? " line" : " lines") + " · right click to take it out");
+}
+
+// a right click: the quote made last taken out of the input, if made
+// within UNDO and still there (the cursor kept on the same text)
+export function term_unquote(t: Term): void {
+  const q = t.quoted;
+  t.quoted = null;
+  const ed = t.scr.ed;
+  const at = q === null || Date.now() - q.at > UNDO ? -1 : ed.text.lastIndexOf(q.add);
+  if (at < 0) {
+    return;
+  }
+  ed.text = ed.text.slice(0, at) + ed.text.slice(at + q!.add.length);
+  ed.pos  = ed.pos <= at ? ed.pos : Math.max(at, ed.pos - q!.add.length);
+  term_toast(t, "Quote taken out");
 }
 
 // a text copied (OSC 52), said for a moment over the input (none: all
