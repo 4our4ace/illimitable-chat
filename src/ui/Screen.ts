@@ -233,14 +233,15 @@ const WORD = /[\p{L}\p{M}\p{N}_]/u;
 const MODS: [number, string][] = [[4, "Ctrl+"], [2, "Alt+"], [1, "Shift+"]];
 
 // a mouse report's button: the wheel's bit, its down bit, its sideways
-// bit (66, 67), a move's bit (with no button down: NONE); the modifiers'
-// bits (ignored); how soon a press again in the same place counts twice
-// (ms)
+// bit (66, 67), a move's bit (with no button down: NONE), the right
+// button; the modifiers' bits (ignored); how soon a press again in the
+// same place counts twice (ms)
 const WHEEL    = 64;
 const DOWN     = 1;
 const SIDEWAYS = 2;
 const DRAG  = 32;
 const NONE  = 3;
+const RIGHT = 2;
 const SHIFT = 4 | 8 | 16;
 const TWICE = 400;
 
@@ -596,7 +597,8 @@ function screen_press(scr: Screen, key: string): void {
 // a mouse report (its params, whether pressed): the wheel as WheelUp or
 // WheelDown (turned sideways: nothing); the left button as Press (where: scr.click, how many times
 // there: scr.clicks), Drag and Release, the pointer moving with none
-// down as Move (each where: scr.point); the other buttons do nothing
+// down as Move, the right button as RightPress, RightDrag and
+// RightRelease (each where: scr.point); the middle one does nothing
 function screen_mouse(scr: Screen, params: string, down: boolean): void {
   const [, b, col, row] = MOUSE.exec(params)!.map(Number);
   const button = b & ~SHIFT;
@@ -609,6 +611,9 @@ function screen_mouse(scr: Screen, params: string, down: boolean): void {
   } else if (button === DRAG || button === (DRAG | NONE)) {
     scr.point = at;
     scr.on(button === DRAG ? "Drag" : "Move");
+  } else if (button === RIGHT || button === (DRAG | RIGHT)) {
+    scr.point = at;
+    scr.on(button === RIGHT ? (down ? "RightPress" : "RightRelease") : "RightDrag");
   } else if (button === 0 && down) {
     const again = now - scr.pressed < TWICE && at.row === scr.click.row && at.col === scr.click.col;
     scr.clicks  = again ? (scr.clicks % 3) + 1 : 1;

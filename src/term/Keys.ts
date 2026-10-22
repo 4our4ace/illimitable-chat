@@ -23,7 +23,7 @@ import * as View from "../ui/View.ts";
 const ROWS = ["Up", "Down", "Shift+Enter", "Ctrl+J"];
 
 // the keys that leave text chosen (any other lets it go)
-const KEEP   = ["", "Canvas", "Press", "Drag", "Release", "WheelUp", "WheelDown", "Esc", "PgUp", "PgDn", "Ctrl+Home", "Ctrl+End"];
+const KEEP   = ["", "Canvas", "Press", "Drag", "Release", "RightPress", "RightDrag", "RightRelease", "WheelUp", "WheelDown", "Esc", "PgUp", "PgDn", "Ctrl+Home", "Ctrl+End"];
 
 // how soon a second Ctrl+C quits (ms)
 const AGAIN = 2000;
@@ -46,7 +46,7 @@ export function term_press(t: Term, key: string): void {
     term_hover(t);
     return;
   }
-  if (key === "Press") {
+  if (key === "Press" || key === "RightPress") {
     t.lead = false;
   }
   if (t.scr.ed.text !== "") {
@@ -62,7 +62,7 @@ export function term_press(t: Term, key: string): void {
     if (Paint.paint_canvas(t.scr.canvas)) {
       t.ver += 1;
     }
-  } else if (key === "Press" || key === "Drag" || key === "Release") {
+  } else if (["Press", "Drag", "Release", "RightPress", "RightDrag", "RightRelease"].includes(key)) {
     term_mouse(t, key);
   } else if (chosen !== null) {
     term_copied(t, chosen);

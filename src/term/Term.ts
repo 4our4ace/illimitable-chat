@@ -82,7 +82,8 @@ import * as View from "../ui/View.ts";
 // area's edge; sug: the commands suggested as a /word is typed (null:
 // closed); dropped: the suggested reply typing dismissed ("": none);
 // lead: the leader pressed, the next key its shortcut's (the screen grey
-// meanwhile: Frame.ts)
+// meanwhile: Frame.ts); quoted: the quote a right drag put in the input
+// last, when and what it added (Select.ts; null: none)
 export type Term = {
   v       : View.View;
   scr     : Screen.Screen;
@@ -122,6 +123,7 @@ export type Term = {
   sug     : Sug | null;
   dropped : string;
   lead    : boolean;
+  quoted  : { at: number; add: string } | null;
   asking  : { id: string; c: Chooser | null; done: boolean; form: Form | null } | null; // the question shown (Asks.ts): its picker or form, whether answered
 };
 
@@ -274,6 +276,7 @@ function term_new(chat: Chat | null, mem: () => Memory): Term {
     sug     : null,
     dropped : "",
     lead    : false,
+    quoted  : null,
     asking  : null,
   };
   // the chat suggests replies to a screen that shows them, never a pipe

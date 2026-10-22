@@ -3,7 +3,9 @@
 // `bun test Select.test.ts`. Empty space is chosen too, as in Claude
 // Code: a drag lights the cells past a short line's text and a blank
 // line's whole width, it may start or end in empty space, and what it
-// copies drops each line's end spaces (a blank line an empty one).
+// copies drops each line's end spaces (a blank line an empty one). A
+// right drag over the chat quotes what it covers in the input, and a
+// right click soon after takes the quote out.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -15,6 +17,8 @@ process.env.ILLI_DIR = DIR;
 
 const { term_area, term_mouse, term_selected } = await import("./Select.ts");
 const Paint = await import("../ui/Paint.ts");
+const Screen = await import("../ui/Screen.ts");
+const View = await import("../ui/View.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
@@ -52,6 +56,35 @@ test("a choice lights a short line past its text and a blank line whole; it copi
   const rows = drag(t, [0, 6], [2, 10]);
   expect(rows.map(lit)).toEqual([range(6, 20), range(0, 20), range(0, 11)]);
   expect(term_selected(t)).toBe("world\n\nhi");
+});
+
+test("a right drag over the chat quotes what it covers at the input's end, a line each; a right click soon after takes it out, later not", () => {
+  const t = { ...term(), v: View.view_new(), notices: [], quoted: null, scr: { point: { row: 0, col: 0 }, clicks: 1, ed: Screen.ed_new() } };
+  const quote = (from: [number, number], to: [number, number], area = AREA) => {
+    t.areas = [];
+    term_area(t, area);
+    t.scr.point = { row: from[0], col: from[1] };
+    term_mouse(t, "RightPress");
+    t.scr.point = { row: to[0], col: to[1] };
+    term_mouse(t, "RightDrag");
+    term_mouse(t, "RightRelease");
+  };
+  const click = () => {
+    term_mouse(t, "RightPress");
+    term_mouse(t, "RightRelease");
+  };
+  Screen.ed_set(t.scr.ed, "my reply");
+  quote([0, 6], [2, 10]);
+  expect([t.scr.ed.text, t.scr.ed.pos, t.notices.at(-1).text]).toEqual(["my reply\n> world\n>\n> hi\n", 24, "Quoted 3 lines · right click to take it out"]);
+  click();
+  expect([t.scr.ed.text, t.scr.ed.pos, t.notices.at(-1).text]).toEqual(["my reply", 8, "Quote taken out"]);
+  quote([0, 0], [0, 4]);
+  expect(t.scr.ed.text).toBe("my reply\n> hello\n");
+  t.quoted.at -= 6000;
+  click();
+  expect(t.scr.ed.text).toBe("my reply\n> hello\n");
+  quote([0, 0], [0, 4], { ...AREA, key: "side" });
+  expect(t.scr.ed.text).toBe("my reply\n> hello\n");
 });
 
 test("a choice may start and end in empty space", () => {
