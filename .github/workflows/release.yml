@@ -45,7 +45,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14
-      - run: bun build --compile --minify --target=bun-${{ matrix.target }} src/main.ts --outfile illi-${{ matrix.target }}
+      - run: bun build --compile --minify --target=bun-${{ matrix.target }} src/main.ts src/chat/Seeker.ts --outfile illi-${{ matrix.target }}
       # macOS runs only signed binaries: signed ad hoc
       - if: runner.os == 'macOS'
         run: codesign --force --sign - illi-${{ matrix.target }}

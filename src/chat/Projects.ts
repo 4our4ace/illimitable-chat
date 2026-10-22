@@ -10,8 +10,8 @@
 //
 // A model looks across them by tools: first the table (Projects.table:
 // each project's folder, when it was used, its size, its latest line),
-// then a search of their summary lines (Projects.search), then a zoom
-// into one (Memory.glance).
+// then a search of their summary lines (Projects.search, in a thread of
+// its own: Seeker.ts), then a zoom into one (Memory.glance).
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -28,6 +28,20 @@ const LOCKED = 12;
 
 // the most of a line the table shows
 const LATELY = 300;
+
+// the thread's module: beside this one; in illi's binary (bun build
+// --compile, given it as an entry: one bundle, under /$bunfs), where the
+// build put it, chat/ beside main
+const SEEK = /\$bunfs|~BUN/.test(import.meta.path) ? "./chat/Seeker.ts" : new URL("./Seeker.ts", import.meta.url).href;
+
+// Globals
+// =======
+
+// the thread searches run in (Seeker.ts), started at the first (null:
+// none yet, or it failed), and the searches asked of it, by number
+let SEEKER: Worker | null = null;
+const ASKED = new Map<number, { store: File; words: string; project: string; done: (text: string) => void; fail: (err: Error) => void }>();
+let ASKS = 0;
 
 // Projects
 // ========
@@ -80,6 +94,52 @@ export namespace Projects {
       return head.concat(when).join(" · ") + lately;
     });
     return lines.join("\n");
+  }
+
+  // a search (Projects.search) in a thread of its own, on its own
+  // connection to the file, so however long it takes the screen goes on;
+  // one the thread can't run is run here
+  export function seek(store: File, words: string, project = ""): Promise<string> {
+    return new Promise((done, fail) => {
+      const id = ++ASKS;
+      ASKED.set(id, { store, words, project, done, fail });
+      try {
+        SEEKER ??= Projects.seeker();
+        SEEKER.postMessage({ id, file: store.file, project: store.project, words, scope: project });
+      } catch {
+        Projects.here(id);
+      }
+    });
+  }
+
+  // the thread, started: each answer to its ask; if it fails, the
+  // searches asked of it run here, and the next search starts another
+  export function seeker(): Worker {
+    const worker = new Worker(SEEK, { ref: false });
+    worker.onmessage = (e: MessageEvent<{ id: number; text?: string; error?: string }>) => {
+      const ask = ASKED.get(e.data.id);
+      ASKED.delete(e.data.id);
+      e.data.text === undefined ? ask?.fail(new Error(e.data.error)) : ask?.done(e.data.text);
+    };
+    worker.onerror = () => {
+      if (SEEKER === worker) {
+        SEEKER = null;
+      }
+      worker.terminate();
+      [...ASKED.keys()].forEach(Projects.here);
+    };
+    return worker;
+  }
+
+  // an ask the thread couldn't run, run here
+  export function here(id: number): void {
+    const ask = ASKED.get(id);
+    ASKED.delete(id);
+    try {
+      ask?.done(Projects.search(ask.store, ask.words, ask.project));
+    } catch (err: any) {
+      ask?.fail(err);
+    }
   }
 
   // summary lines with these words, as a model reads them ("project

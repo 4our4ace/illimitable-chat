@@ -78,7 +78,7 @@ else
     export PATH="$HOME/.bun/bin:$PATH"
   fi
   git clone --quiet --depth 1 "https://github.com/$REPO" "$tmp/repo"
-  bun build --compile --minify "$tmp/repo/src/main.ts" --outfile "$tmp/illi" >/dev/null
+  bun build --compile --minify "$tmp/repo/src/main.ts" "$tmp/repo/src/chat/Seeker.ts" --outfile "$tmp/illi" >/dev/null
 fi
 
 chmod 755 "$tmp/illi"

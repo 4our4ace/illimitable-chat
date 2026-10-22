@@ -491,7 +491,7 @@ export namespace Tools {
         return { text: Projects.table(mem.store), fail: false };
       }
       case "search": {
-        return { text: Projects.search(mem.store, String(args.words ?? ""), args.project === undefined ? "" : String(args.project)), fail: false };
+        return { text: await Projects.seek(mem.store, String(args.words ?? ""), args.project === undefined ? "" : String(args.project)), fail: false };
       }
       case "spawn": {
         const effort = args.effort === undefined ? null : String(args.effort);

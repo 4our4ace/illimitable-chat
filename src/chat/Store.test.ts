@@ -7,11 +7,14 @@
 // outside repos, the same place the same chat; a name another's already,
 // numbered. The projects are listed the one used last first, with their
 // latest line, a message of two pages counted once; a search finds lines
-// with all the words (else any), in a project or all. A project
-// forgotten is gone from the file, its words, images and to-do list too,
-// its space given back, a later version's rows of its chats too; the
-// others stay, and no number is used again. A file of version 1 moves
-// on to 2, its tables and rows as they were.
+// with all the words (else any), in a project or all, every match ranked
+// however old; a big chat leaves out a word in most lines all along
+// while a rarer one is in, a word common only of late kept. A project
+// forgotten is gone from the file, its words (its index
+// dropped), images and to-do list too, its space given back, a later
+// version's rows of its chats too; the others stay, and no number is used
+// again. A file of version 1 moves on to 3, its facts as they were, the
+// words moved to an index per chat.
 
 import { afterAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -39,24 +42,32 @@ function say(store: any, text: string, images?: string[]): void {
 test("a new file gives space back as rows go and bears illi's mark", () => {
   const store = Store.open(DIR + "/new");
   const get = (pragma: string) => Object.values(store.db.query("pragma " + pragma).get() as object)[0];
-  expect([get("auto_vacuum"), get("application_id"), get("journal_mode"), get("user_version")]).toEqual([2, 0x696c6c69, "wal", 2]);
+  expect([get("auto_vacuum"), get("application_id"), get("journal_mode"), get("user_version")]).toEqual([2, 0x696c6c69, "wal", 3]);
   Store.close(store);
 });
 
-test("a file of version 1 moves on to 2: its tables and rows as they were, an image table and a to-do table added, compat 2", () => {
+test("a file of version 1 moves on to 3: its facts as they were, an image and a to-do table added, the words in an index per chat, compat 3", () => {
   const store = Store.open(DIR + "/v1", APP);
   say(store, "a fact from version 1");
+  say(store, "a second fact");
   Store.save(store, { goal: "kept" });
   Store.work_push(store, "Scout.x", "Scout", { i: 0, kind: "note", text: "logged", date });
-  store.db.run("drop table image; drop table todo; update meta set value = '1' where key = 'compat'; pragma user_version = 1");
-  const facts = (db: any) => ["meta", "project", "chat", "msg", "node", "state", "log", "work", "find"].map((t) => [t, db.query("select * from " + t).all()]);
-  const schema = (db: any) => db.query("select sql from sqlite_master where name not in ('image', 'todo') and name not like 'sqlite_autoindex_image%' order by name").all();
-  const [rows, tables] = [JSON.stringify(facts(store.db)).replace(`"value":"1"`, `"value":"2"`), schema(store.db)];
+  store.db.run(`drop table image; drop table todo; drop table find_${store.chat};
+    create virtual table find using fts5(text, chat unindexed, first unindexed, n unindexed, tokenize = 'unicode61 remove_diacritics 2');
+    insert into find (find, rank) values ('secure-delete', 1);
+    insert into find (text, chat, first, n) select text, chat, first, n from node order by first;
+    update meta set value = '1' where key = 'compat'; pragma user_version = 1`);
+  const facts = (db: any) => ["meta", "project", "chat", "msg", "node", "state", "log", "work"].map((t) => [t, db.query("select * from " + t).all()]);
+  const schema = (db: any) => db.query("select sql from sqlite_master where name not in ('image', 'todo') and name not like 'sqlite_autoindex_image%' and name not like 'find%' order by name").all();
+  const [rows, tables] = [JSON.stringify(facts(store.db)).replace(`"value":"1"`, `"value":"3"`), schema(store.db)];
   Store.close(store);
   const after = Store.open(DIR + "/v1", APP);
-  expect((after.db.query("pragma user_version").get() as any).user_version).toBe(2);
+  expect((after.db.query("pragma user_version").get() as any).user_version).toBe(3);
   expect(JSON.stringify(facts(after.db))).toBe(rows);
   expect(schema(after.db)).toEqual(tables);
+  expect(after.db.query("select name from sqlite_master where name = 'find'").get()).toBeNull();
+  expect(after.db.query(`select first, text from find_${after.chat} order by rowid`).all()).toEqual([{ first: 0, text: "user: a fact from version 1" }, { first: 1, text: "user: a second fact" }]);
+  expect(Store.search(after, ["second"], null).map((f) => f.first)).toEqual([1]);
   Store.image_put(after, "0123456789abcdef.png", new Uint8Array([1, 2, 3]), null);
   Store.todo_save(after, [{ text: "go on", status: "pending" }]);
   expect([Store.image(after, "0123456789abcdef.png")!.data, Store.todo(after)]).toEqual([new Uint8Array([1, 2, 3]), [{ text: "go on", status: "pending" }]]);
@@ -131,8 +142,22 @@ test("the projects, the one used last first, with their latest line; a search, a
   expect(where(Store.search(home, ["audio", "token"], [app.project])).sort()).toEqual(["app-k3f9x2 0+1", "app-k3f9x2 1+1"]);
   expect(where(Store.search(home, ["audio"], [site.project]))).toEqual(["site-7q2m0d 0+1"]);
   expect(Store.search(home, ['say "hi"'], null)).toEqual([]);
-  expect(Store.search(home, [], null)).toEqual([]);
+  expect(Store.search(home, ["—", ""], null)).toEqual([]);
   [home, app, site].forEach(Store.close);
+});
+
+test("a big chat: every match ranked however old; a word in most lines all along left out while a rarer one is in, one common only of late kept", () => {
+  const store = Store.open(DIR + "/big", APP);
+  const text = (k: number) => "user: the step " + k + (k % 2 === 0 ? " even" : "") + (k === 3 ? " even even even" : "") + (k === 5 ? " the ancient sqlite design" : "") + (k >= 39000 ? " recent" : "") + (k === 100 || k === 39500 ? " lock" : "");
+  Store.nodes(store, Array.from({ length: 40100 }, (_, k) => ({ first: k, n: 1, text: text(k) })));
+  const firsts = (words: string[]) => Store.search(store, words, null).map((f) => f.first);
+  expect(firsts(["even"])[0]).toBe(3);
+  expect(firsts(["the"])[0]).toBe(5);
+  expect(firsts(["the", "sqlite"])).toEqual([5]);
+  expect(firsts(["the", "step", "17"])).toEqual([17]);
+  expect(firsts(["recent", "lock"])).toEqual([39500]);
+  expect(firsts(["—", "the", "sqlite"])).toEqual([5]);
+  Store.close(store);
 });
 
 test("a project forgotten is gone from the file, its words too, its space given back, the images only it named said; the others stay", () => {
@@ -157,8 +182,10 @@ test("a project forgotten is gone from the file, its words too, its space given 
   expect([Store.pictures(home, app.project), Store.pictures(home, home.project)]).toEqual([2, 1]);
   Store.forget(home, app.project);
   expect(Store.projects(home).map((p) => p.name)).toEqual(["home"]);
+  expect([home.db.query("pragma auto_vacuum").get(), home.db.query("pragma freelist_count").get()]).toEqual([{ auto_vacuum: 2 }, { freelist_count: 0 }]);
   expect([Store.image(home, "bbbbbbbbbbbbbbbb.png")?.data.length, home.db.query("select count(*) as n from image").get(), home.db.query("select count(*) as n from todo").get()]).toEqual([6, { n: 1 }, { n: 0 }]);
   expect(Store.search(home, ["client"], null)).toEqual([]);
+  expect(home.db.query(`select name from sqlite_master where name like 'find_${app.chat}%'`).all()).toEqual([]);
   expect([Store.count(home), Store.msg(home, 0)!.text]).toEqual([1, "kept at home"]);
   expect(home.db.query("select text from later").all()).toEqual([{ text: "kept" }]);
   expect(home.db.query("select count(*) as n from work").get()).toEqual({ n: 0 });

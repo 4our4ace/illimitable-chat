@@ -26,13 +26,15 @@
 // One row a chat is written over: its state (the saved view, pick, goal,
 // work, cut...), never rebuilt from the facts (the cache holds by it);
 // and its to-do list (todo), the agent's, given whole each time.
-// Derived from node: find, the summary lines' words, for search (an FTS
-// table, which has no keys: deleted by hand, its words gone from its
-// index at once, secure-delete).
+// Derived from node: each chat's index of its summary lines' words, for
+// search (find_<chat>, an FTS table made with the chat): a search reads
+// only the chats it covers, and forgetting drops a chat's index whole,
+// its pages overwritten at once (lines deleted one by one from an index
+// of millions took milliseconds each).
 //
 // Durable as files were: each write is one transaction, in WAL mode at
 // synchronous NORMAL, so a crash never leaves half a write and no write
-// waits on the disk; the WAL goes to Disk.ts, whose flush (one syncfs) an
+// waits on the disk; the WAL goes to Disk.ts, whose flush (an fsync) an
 // act waits on. Closed, it checkpoints and leaves the one file. A file is
 // made with auto_vacuum incremental (only a new one can be: set before
 // WAL mode, which writes the file) and secure_delete, so what is forgotten
@@ -44,8 +46,10 @@
 // file; one that doesn't sets meta's compat to its version, and an illi
 // older than compat refuses the file. A table a STEP adds for a chat's
 // rows references chat (id) on delete cascade, so an older illi's forget
-// reaches it; one that names images elsewhere sets compat (an older
-// illi's forget would delete them).
+// reaches it. Those that moved where facts live set compat: 2 (images and
+// the to-do list into the file), 3 (the words into an index per chat,
+// which no key ties to its chat), as an older illi would look for them
+// where they were.
 
 import { Database } from "bun:sqlite";
 import * as fs from "node:fs";
@@ -91,8 +95,9 @@ export const HOME: Place = { key: "home", name: "home", path: "" };
 // the file's mark (application_id): "illi"
 const MARK = 0x696c6c69;
 
-// each moves the schema one version on: STEPS[k], from k to k + 1
-const STEPS = [`
+// each moves the schema one version on: STEPS[k], from k to k + 1 (its
+// SQL, or what runs it)
+const STEPS: Array<string | ((db: Database) => void)> = [`
 create table meta (key text primary key, value text not null) without rowid;
 insert into meta (key, value) values ('compat', '1');
 create table project (id integer primary key autoincrement, uid text not null unique, key text not null unique, name text not null unique, path text not null, made text not null,
@@ -118,10 +123,26 @@ create table image (id integer primary key autoincrement, chat integer not null 
   unique (chat, name));
 create table todo (chat integer primary key references chat (id) on delete cascade, list text not null);
 update meta set value = '2' where key = 'compat';
-`];
+`, (db: Database) => {
+  const chats = new Set((db.query("select id from chat").all() as Array<{ id: number }>).map(({ id }) => id));
+  chats.forEach((chat) => Store.words(db, chat));
+  for (const { chat, text, first, n } of db.query("select chat, text, first, n from find order by rowid").iterate() as IterableIterator<{ chat: number } & Line>) {
+    if (chats.has(chat)) {
+      db.query(`insert into find_${chat} (text, first, n) values (?, ?, ?)`).run(text, first, n);
+    }
+  }
+  db.run("drop table find; update meta set value = '3' where key = 'compat'");
+}];
 
 // the most lines a search gives
 const FOUND = 20;
+
+// a chat of more summary lines has its words' shares seen, a word in
+// most lines left out (Store.seek); one of fewer, every word as given
+const LARGE = 20000;
+
+// the lines of each stretch a word's share is seen in
+const SAMPLE = 1000;
 
 // how long a connection waits for another's lock, ms
 const WAIT = 10000;
@@ -184,7 +205,8 @@ export namespace Store {
     for (let k = version(); k < STEPS.length; k++) {
       db.transaction(() => {
         if (version() === k) {
-          db.run(STEPS[k]);
+          const step = STEPS[k]!;
+          typeof step === "string" ? db.run(step) : step(db);
           db.run("pragma user_version = " + (k + 1));
         }
       }).immediate();
@@ -205,9 +227,19 @@ export namespace Store {
       }
       const project = (db.query("select id from project where key = ?").get(place.key) as { id: number }).id;
       const known = db.query("select id from chat where project = ? order by id limit 1").get(project) as { id: number } | null;
-      const chat = known?.id ?? Number(db.query("insert into chat (uid, project, made) values (?, ?, ?)").run(crypto.randomUUID(), project, now).lastInsertRowid);
+      if (known !== null) {
+        return { project, chat: known.id };
+      }
+      const chat = Number(db.query("insert into chat (uid, project, made) values (?, ?, ?)").run(crypto.randomUUID(), project, now).lastInsertRowid);
+      Store.words(db, chat);
       return { project, chat };
     }).immediate();
+  }
+
+  // a chat's index of its summary lines' words (find_<chat>), made empty
+  export function words(db: Database, chat: number): void {
+    db.run(`create virtual table find_${chat} using fts5(text, first unindexed, n unindexed, tokenize = 'unicode61 remove_diacritics 2')`);
+    db.run(`insert into find_${chat} (find_${chat}, rank) values ('secure-delete', 1)`);
   }
 
   // checkpointed, its WAL gone: the one file left
@@ -281,11 +313,11 @@ export namespace Store {
   // lines built, logged in one write, their words found by search
   export function nodes(store: Store, lines: Line[]): void {
     const add  = store.db.query("insert into node (chat, first, n, text) values (?, ?, ?, ?) on conflict do nothing");
-    const find = store.db.query("insert into find (text, chat, first, n) values (?, ?, ?, ?)");
+    const find = store.db.query(`insert into find_${store.chat} (text, first, n) values (?, ?, ?)`);
     store.db.transaction(() => {
       for (const { first, n, text } of lines) {
         if (add.run(store.chat, first, n, text).changes === 1) {
-          find.run(text, store.chat, first, n);
+          find.run(text, first, n);
         }
       }
     })();
@@ -389,17 +421,17 @@ export namespace Store {
   // --------
 
   // every project, the one used last first (those with no message last):
-  // each chat's first and last message and its pages looked up by key, its
-  // latest line by index, never a scan of its rows; its messages, not
-  // pages, counted
+  // each chat's first and last message looked up by key, its pages and
+  // latest line by their indexes, named (the planner, without statistics,
+  // would scan the chat's rows instead); its messages, not pages, counted
   export function projects(store: Store): Project[] {
     const db    = store.db;
     const out   = (db.query("select id, name, path from project").all() as Array<Pick<Project, "id" | "name" | "path">>).map((p): Project => ({ ...p, first: null, last: null, count: 0, lately: "" }));
     const by    = new Map(out.map((p) => [p.id, p]));
     const start = db.query("select date from msg where chat = ? order by i limit 1");
     const end   = db.query("select i, date from msg where chat = ? order by i desc limit 1");
-    const pages = db.query("select count(*) as n from msg where chat = ? and more is not null");
-    const line  = db.query("select text from node where chat = ? order by first + n desc, n desc limit 1");
+    const pages = db.query("select count(*) as n from msg indexed by msg_page where chat = ? and more is not null");
+    const line  = db.query("select text from node indexed by node_end where chat = ? order by first + n desc, n desc limit 1");
     for (const c of db.query("select id, project from chat order by id").all() as Array<{ id: number; project: number }>) {
       const p = by.get(c.project);
       const e = end.get(c.id) as { i: number; date: string } | null;
@@ -428,19 +460,35 @@ export namespace Store {
   }
 
   // the summary lines holding all of the words (none: any of them), the
-  // best first, in the projects given (null: every one)
+  // best first, in the projects given (null: every one), each chat's from
+  // its own index (Store.seek)
   export function search(store: Store, words: string[], projects: number[] | null): Found[] {
-    const terms = words.map((w) => '"' + w.replace(/"/g, '""') + '"');
-    const where = projects === null ? "" : " and c.project in (" + projects.map(() => "?").join(", ") + ")";
-    const query = store.db.query(`select p.name as project, f.chat as chat, f.first as first, f.n as n, f.text as text
-      from find f join chat c on c.id = f.chat join project p on p.id = c.project
-      where find match ?${where} order by bm25(find) limit ${FOUND}`);
-    const ask = (match: string) => query.all(match, ...(projects ?? [])) as Found[];
+    const where = projects === null ? "" : " where c.project in (" + projects.map(() => "?").join(", ") + ")";
+    const chats = store.db.query("select c.id as chat, p.name as project from chat c join project p on p.id = c.project" + where).all(...(projects ?? [])) as Array<{ chat: number; project: string }>;
+    const terms = words.filter((w) => /[\p{L}\p{N}\p{Co}]/u.test(w));
+    const ask = (or: boolean) => chats.flatMap(({ chat, project }) => Store.seek(store.db, chat, terms, or).map((l) => ({ project, chat, ...l })))
+      .sort((a, b) => a.score - b.score).slice(0, FOUND).map(({ score, ...found }) => found);
     if (terms.length === 0) {
       return [];
     }
-    const all = ask(terms.join(" "));
-    return all.length > 0 || terms.length === 1 ? all : ask(terms.join(" OR "));
+    const all = ask(false);
+    return all.length > 0 || terms.length === 1 ? all : ask(true);
+  }
+
+  // one chat's best lines with the words (or: any), by bm25, with their
+  // scores: every match ranked, however old. In a chat of more lines than
+  // LARGE, a word in most lines all along (over half of each of three
+  // stretches of SAMPLE: the oldest, the middle, the newest) is left out
+  // while a rarer one is in: bm25 gives it next to no weight, so the
+  // ranking stays, and its lines are the most to read
+  export function seek(db: Database, chat: number, terms: string[], or: boolean): Array<Line & { score: number }> {
+    const table = "find_" + chat;
+    const quote = (words: string[]) => words.map((w) => '"' + w.replace(/"/g, '""') + '"').join(or ? " OR " : " ");
+    const lines = (db.query(`select rowid from ${table} order by rowid desc limit 1`).get() as { rowid: number } | null)?.rowid ?? 0;
+    const held = db.query(`select count(*) as n from (select 1 from ${table} where ${table} match ? and rowid >= ? and rowid < ?)`);
+    const most = (word: string) => lines > LARGE && [lines - SAMPLE + 1, Math.floor((lines - SAMPLE) / 2) + 1, 1].every((from) => (held.get(quote([word]), from, from + SAMPLE) as { n: number }).n > SAMPLE / 2);
+    const rare = terms.filter((w) => !most(w));
+    return db.query(`select first, n, text, bm25(${table}) as score from ${table} where ${table} match ? order by score limit ${FOUND}`).all(quote(rare.length > 0 ? rare : terms)) as Array<Line & { score: number }>;
   }
 
   // a project's chats
@@ -454,16 +502,24 @@ export namespace Store {
   }
 
   // a project forgotten: its row deleted, and with it all its chats'
-  // rows, their images too (foreign keys), find's by hand; overwritten
-  // (secure delete, in find's index too), its space given back
+  // rows, their images too (foreign keys), their indexes dropped whole;
+  // overwritten (secure delete), its space given back as it commits: in
+  // auto_vacuum full for it, which empties the free list whole, where
+  // incremental_vacuum looks each page up in it (quadratic: minutes for a
+  // big project)
   export function forget(store: Store, project: number): void {
     const db = store.db;
-    db.transaction(() => {
-      const chats = Store.chats(store, project);
-      db.query(`delete from find where chat in (${chats.map(() => "?").join(", ") || "null"})`).run(...chats);
-      db.query("delete from project where id = ?").run(project);
-    }).immediate();
-    db.run("pragma incremental_vacuum");
+    db.run("pragma auto_vacuum = full");
+    try {
+      db.transaction(() => {
+        for (const chat of Store.chats(store, project)) {
+          db.run(`drop table if exists find_${chat}`);
+        }
+        db.query("delete from project where id = ?").run(project);
+      }).immediate();
+    } finally {
+      db.run("pragma auto_vacuum = incremental");
+    }
     db.run("pragma wal_checkpoint(truncate)");
     Store.wrote(store);
   }
