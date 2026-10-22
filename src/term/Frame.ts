@@ -5,7 +5,8 @@
 // foot the commands suggested, else the picker, the cursor in its search
 // if it has one), the side beside it (Side.ts); the notes, the toast and
 // the jump to the end; the rule (what runs, the ∞ traced), the input,
-// the pages, the pick. A pipe gets text.
+// the pages, the pick; all of it grey while the leader waits for its key
+// (Commands.ts term_lead). A pipe gets text.
 
 import { term_asks, term_form_lines } from "./Asks.ts";
 import { term_suggest, term_suggested } from "./Commands.ts";
@@ -217,9 +218,10 @@ export function term_paint(t: Term): void {
   t.hover = t.sel?.held ? undefined : term_under(t, t.scr.point);
   term_tabs(t, h - 1, side === 0);
   const cursor = box?.at !== undefined ? { row: top + box.at.row, col: box.col + box.at.col } : input.at === null ? null : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
-  t.ruled ={ row: 2 + tall + above.length, w: iw, at: cursor, rows, side: box === null ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
+  const drawn  = t.lead ? rows.map((row) => row.map((p) => ({ ...p, line: p.line.map((r) => ({ ...r, s: { ...r.s, d: true, c: "", g: "" } })) }))) : rows;
+  t.ruled ={ row: 2 + tall + above.length, w: iw, at: cursor, rows: drawn, side: box === null ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
   t.scr.blink = idle || form !== null;
-  Screen.screen_paint(t.scr, rows, cursor);
+  Screen.screen_paint(t.scr, drawn, cursor);
   painted = Date.now();
 }
 
@@ -312,7 +314,7 @@ function term_tick(t: Term): void {
   if (t.due) {
     return;
   }
-  if (r === null || t.doing === null || t.sel !== null || t.choose?.middle !== undefined || !View.view_running(t.v)) {
+  if (r === null || t.doing === null || t.sel !== null || t.lead || t.choose?.middle !== undefined || !View.view_running(t.v)) {
     return term_paint(t);
   }
   const now  = Date.now();

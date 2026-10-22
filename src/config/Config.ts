@@ -172,13 +172,13 @@ export let SIDE_WIDTH = "";
 
 // the leader (Commands.ts term_lead), as a key's name ("Ctrl+X"), and the
 // shortcuts: a key after it (a character; a letter either case) and what
-// it runs (a /command with its words, or a key's name: Ctrl+Y), SHORTCUT's
+// it runs (a /command with its words, or a key's name: Ctrl+Y), illi's
 // with the user's over them ("" drops one). Not a key illi takes (the
 // input's editing keys take theirs first), nor one a terminal sends as
 // another (Ctrl+M is Enter, Ctrl+I Tab...)
 export let LEADER     = "";
 export let SHORTCUTS: Record<string, string> = {};
-const SHORTCUT: Record<string, string> = { a: "/agent", e: "/effort", h: "/help", l: "/projects", m: "/model", p: "/profile", s: "/settings", t: "/tab", y: "Ctrl+Y" };
+export const OWN_SHORTCUTS: Record<string, string> = { a: "/agent", e: "/effort", h: "/help", l: "/projects", m: "/model", p: "/profile", s: "/settings", t: "/tab", y: "Ctrl+Y" };
 export const TAKEN = ["Ctrl+A", "Ctrl+C", "Ctrl+D", "Ctrl+E", "Ctrl+F", "Ctrl+H", "Ctrl+I", "Ctrl+J", "Ctrl+K", "Ctrl+L", "Ctrl+M", "Ctrl+O", "Ctrl+P", "Ctrl+U", "Ctrl+V", "Ctrl+W", "Ctrl+Y", "Ctrl+Z", "Alt+B", "Alt+D", "Alt+F", "Alt+V"];
 
 // illi's own pick (a new chat's, and the chat's again after an agent);
@@ -369,7 +369,7 @@ function config_live(): void {
   CONTEXT_SET = String(config_value("context")).trim();
   CONTEXTS    = own ?? {};
   LEADER      = config_leader(String(config_value("leader")));
-  SHORTCUTS   = keys ?? SHORTCUT;
+  SHORTCUTS   = keys ?? OWN_SHORTCUTS;
 }
 
 // the leader as a key's name: ctrl+x as Ctrl+X
@@ -378,7 +378,7 @@ function config_leader(value: string): string {
   return mod.slice(0, 1).toUpperCase() + mod.slice(1).toLowerCase() + "+" + key.toUpperCase();
 }
 
-// `shortcuts` (an object, or its JSON) over SHORTCUT, each key in lower
+// `shortcuts` (an object, or its JSON) over OWN_SHORTCUTS, each key in lower
 // case; null: not one, or a key not one character, or what it runs not
 // text
 function config_shortcuts(value: unknown): Record<string, string> | null {
@@ -386,7 +386,7 @@ function config_shortcuts(value: unknown): Record<string, string> | null {
   if (got === null || Object.entries(got).some(([k, run]) => [...k].length !== 1 || k.trim() === "" || typeof run !== "string")) {
     return null;
   }
-  const all = { ...SHORTCUT };
+  const all = { ...OWN_SHORTCUTS };
   for (const [k, run] of Object.entries(got as Record<string, string>)) {
     if (run.trim() === "") {
       delete all[k.toLowerCase()];
@@ -395,6 +395,36 @@ function config_shortcuts(value: unknown): Record<string, string> | null {
     }
   }
   return all;
+}
+
+// the user's own shortcuts (as set: a variable's, else config.json's)
+function config_shortcuts_mine(): Record<string, string> {
+  return (config_object(config_raw("shortcuts")) ?? {}) as Record<string, string>;
+}
+
+// whether the user set a key after the leader (to what illi's isn't, or
+// to none)
+export function config_shortcut_mine(key: string): boolean {
+  return key.toLowerCase() in config_shortcuts_mine();
+}
+
+// a key after the leader set (run: a /command or a key's name; "": none;
+// null: illi's again, else none), kept in config.json; one set as illi's
+// has it, or to none where illi has none, is no change of the user's
+export function config_shortcut(key: string, run: string | null): void {
+  const mine = { ...config_shortcuts_mine() };
+  const k    = key.toLowerCase();
+  if (run === null) {
+    delete mine[k];
+  } else {
+    mine[k] = run;
+  }
+  for (const [x, r] of Object.entries(mine)) {
+    if (OWN_SHORTCUTS[x] === r || (r === "" && OWN_SHORTCUTS[x] === undefined)) {
+      delete mine[x];
+    }
+  }
+  config_set("shortcuts", Object.keys(mine).length === 0 ? null : mine);
 }
 
 // a setting that is an object (a variable's, or text, parsed as JSON);

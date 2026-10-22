@@ -80,7 +80,9 @@ import * as View from "../ui/View.ts";
 // painted, sel: the text chosen in one (null: none), hover: the button
 // under the pointer as last painted, drift: a drag's scrolling past an
 // area's edge; sug: the commands suggested as a /word is typed (null:
-// closed); dropped: the suggested reply typing dismissed ("": none)
+// closed); dropped: the suggested reply typing dismissed ("": none);
+// lead: the leader pressed, the next key its shortcut's (the screen grey
+// meanwhile: Frame.ts)
 export type Term = {
   v       : View.View;
   scr     : Screen.Screen;
@@ -119,6 +121,7 @@ export type Term = {
   drift   : { d: number; timer: Timer } | undefined;
   sug     : Sug | null;
   dropped : string;
+  lead    : boolean;
   asking  : { id: string; c: Chooser | null; done: boolean; form: Form | null } | null; // the question shown (Asks.ts): its picker or form, whether answered
 };
 
@@ -178,9 +181,7 @@ type Hit = { row: number; col: number; to: number; run: () => void };
 // aside: what shows at an option's right end, each (its keys, its value);
 // middle: the box in the screen's middle, over all else, this many
 // columns wide at most (none: over the chat's foot, Frame.ts); heads:
-// each option's group, a head over its first while nothing is searched;
-// type: what a character typed does instead of searching or going to
-// the input (the shortcuts': run the one on that key)
+// each option's group, a head over its first while nothing is searched
 export type Chooser = {
   title  : string;
   names  : string[];
@@ -197,7 +198,6 @@ export type Chooser = {
   at     : number;
   top    : number;
   keys   : (k: number, key: string) => boolean;
-  type?  : (ch: string) => void;
   foot   : (k: number) => string;
   ask    : { hint: string; done: (text: string) => string | null } | null;
 };
@@ -271,6 +271,7 @@ function term_new(chat: Chat | null, mem: () => Memory): Term {
     drift   : undefined,
     sug     : null,
     dropped : "",
+    lead    : false,
     asking  : null,
   };
   // the chat suggests replies to a screen that shows them, never a pipe
