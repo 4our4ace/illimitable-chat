@@ -5,7 +5,8 @@
 // project's own) and told to a view at once, and named in its calls'
 // messages; one with two items active, or an item without text or a
 // status, changes nothing; an empty one clears it; a restart reads it
-// back. What the views are told
+// back; one all done is let go (as a turn starts and ends, and at the
+// start), one still going kept. What the views are told
 // of the calls: the input the main agent's last request read. A caller in
 // Claude Code gets only the tools it lacks (?lean), and prompts that say
 // it works inside illi, the project's CLAUDE.md left to Claude Code. The
@@ -82,6 +83,16 @@ test("a restart reads the list back; an empty one clears it", async () => {
   expect(await todo([])).toEqual({ text: "The to-do list is cleared.", fail: false });
   expect([kept(), again()]).toEqual([[], []]);
   expect(Tools.at_work(chat.tools).text).not.toContain("to-do");
+});
+
+test("a list all done is let go, so it leaves the side; one with an item left is kept", async () => {
+  const going = [{ text: "Read", status: "done" }, { text: "Write", status: "pending" }];
+  expect(await todo(going)).toMatchObject({ fail: false });
+  Tools.todo_finished(chat.tools);
+  expect(kept()).toEqual(going);
+  expect(await todo(going.map((x) => ({ ...x, status: "done" })))).toMatchObject({ fail: false });
+  Tools.todo_finished(chat.tools);
+  expect([Tools.todo(chat.tools), kept()]).toEqual([[], []]);
 });
 
 test("the views are told the input the main agent's last request read, not an agent's", () => {

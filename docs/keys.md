@@ -179,5 +179,5 @@ Mouse and side panel
   makes one the main agent), the subagents at work, the sticky skills on
   (a click turns one off), the profiles once you have two (a click
   switches), a ChatGPT plan's use, the context and the memory, the MCP
-  servers (a click opens `/mcp`) and illi's to-do list. The `side` and
-  `side_width` settings place it.
+  servers (a click opens `/mcp`) and illi's to-do list, gone once every
+  item is done. The `side` and `side_width` settings place it.

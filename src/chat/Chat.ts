@@ -342,6 +342,7 @@ export namespace Chat {
       stuck = why !== "";
     };
     const work = mem.work;
+    Tools.todo_finished(tools);
     Memory.pump(mem);
     Chat.resume(chat, work).finally(() => Chat.change(chat)).catch((err) => console.error("illi: resume: " + (err?.message ?? err)));
     return chat;
@@ -441,10 +442,12 @@ export namespace Chat {
 
   // a turn: its calls, one after another while messages wait; one that
   // ends answered asks for a suggested reply. The messages sent as a
-  // stopped one wound down start a new one
+  // stopped one wound down start a new one. A to-do list all done goes as
+  // it starts and ends (Tools.todo_finished)
   export async function turn(chat: Chat): Promise<void> {
     chat.busy = true;
     Chat.unsuggest(chat);
+    Tools.todo_finished(chat.tools);
     try {
       let go = true;
       while (go && chat.wait.length > 0) {
@@ -462,6 +465,7 @@ export namespace Chat {
       chat.sent = [];
       chat.wait = chat.next.splice(0);
       chat.busy = false;
+      Tools.todo_finished(chat.tools);
       Chat.live(chat, null, []);
       Chat.after(chat);
       Chat.change(chat);

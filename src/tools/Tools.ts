@@ -735,6 +735,16 @@ export namespace Tools {
     return list;
   }
 
+  // a list with every item done let go (Chat.turn as a turn starts and
+  // ends, Chat.open): finished work leaves the side, rather than waiting
+  // for the model to write the next list, which it may never do
+  export function todo_finished(tools: Tools): void {
+    const list = Tools.todo(tools);
+    if (list.length > 0 && list.every((x) => x.status === "done")) {
+      Tools.todo_set(tools, []);
+    }
+  }
+
   // the list set: kept in the chat's file, and shown at once
   export function todo_set(tools: Tools, list: Todo[]): void {
     tools.todo = list;
