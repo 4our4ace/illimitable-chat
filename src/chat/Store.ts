@@ -52,10 +52,10 @@
 // STEP that moves much (3 rewrote every index) runs at the first open,
 // before the screen, and a second illi waits WAIT for it, then fails: a
 // later one moves each chat's at its first use. Those that moved where
-// facts live set compat: 2 (images and
-// the to-do list into the file), 3 (the words into an index per chat,
-// which no key ties to its chat), as an older illi would look for them
-// where they were.
+// facts live set compat: 2 (images and the to-do list into the file), 3
+// (the words into an index per chat, which no key ties to its chat), as
+// an older illi would look for them where they were. All of it, step by
+// step: docs/storage.md.
 
 import { Database } from "bun:sqlite";
 import * as fs from "node:fs";
