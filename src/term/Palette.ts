@@ -4,7 +4,8 @@
 // command palette, a box in the screen's middle, in groups (/help's, then
 // the settings) while nothing is searched: each command (term_groups:
 // its /name, else its first key), what it does (its first clause) and, at
-// the right, its keys (the others); then each setting (Config SETTINGS,
+// the right, its keys (the others, and the leader's shortcut to it, as
+// Ctrl+X m); then each setting (Config SETTINGS,
 // as `set <key>`), what it is and its value. A search finds a word in any
 // (what a command does, all of it): rows matched by name first, then the
 // rest, each the more picked here first (its own count, apart from the
@@ -40,8 +41,9 @@ export function term_palette(t: Term): void {
   const names = [...cmds.map(([use, keys]) => (use === "" ? keys.split(", ")[0] : use.split(" ")[0])), ...keys.map((key) => SET + key)];
   const whole = [...cmds.map(([, , text]) => text), ...keys.map((key) => config.SETTINGS[key].what)];
   const about = whole.map(palette_short);
+  const lead  = (name: string) => Object.keys(config.SHORTCUTS).filter((k) => config.SHORTCUTS[k] === name).map((k) => config.LEADER + " " + k);
   const aside = () => [
-    ...cmds.map(([use, keys]) => (use === "" ? keys.split(", ").slice(1).join(", ") : keys)),
+    ...cmds.map(([use, keys], k) => [...(use === "" ? keys.split(", ").slice(1) : keys.split(", ").filter((key) => key !== "")), ...lead(names[k])].join(", ")),
     ...keys.map((key) => palette_cut(setting_value(key))),
   ];
   const setting = (k: number) => (k >= cmds.length ? keys[k - cmds.length] : null);

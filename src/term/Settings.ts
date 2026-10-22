@@ -101,9 +101,9 @@ export function term_set(t: Term, arg: string): void {
     return term_note(t, key + ": " + setting_shown(key) + ". " + what[0].toUpperCase() + what.slice(1) + ". /set " + key + " <value> changes it; /set " + key + " default puts back " + setting_shown(key, def) + ".");
   }
   let value: unknown = text === "default" ? null : text;
-  // contexts as JSON; text that won't parse goes on as it is, for
-  // config_check to say why it won't do
-  if (key === "contexts" && value !== null) {
+  // contexts and shortcuts as JSON; text that won't parse goes on as it
+  // is, for config_check to say why it won't do
+  if ((key === "contexts" || key === "shortcuts") && value !== null) {
     try {
       value = JSON.parse(text);
     } catch {

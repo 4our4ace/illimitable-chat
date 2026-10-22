@@ -78,6 +78,8 @@ const TABLE = {
   tps        : { def: "on", values: ["on", "off"], now: true, what: "tokens a second while text streams", shape: ON_OFF },
   side       : { def: "right", values: ["right", "left", "off"], now: true, what: "where the side panel shows", shape: [/^(right|left|off)$/, "right, left or off"] },
   side_width : { def: "25%", values: ["20%", "25%", "30%", "35%", "40%"], now: true, what: "the side panel's width", shape: [/^\d+(\.\d+)?%?$/, "columns (40) or a share of the screen (30%)"] },
+  leader     : { def: "Ctrl+X", values: "text", now: true, what: "the key before a shortcut", shape: [/^(ctrl|alt)\+[a-z]$/i, "Ctrl or Alt and a letter, like Ctrl+X"] },
+  shortcuts  : { def: "", values: "text", now: true, what: "the keys after the leader, as JSON", none: "illi's own" },
   context    : { def: "auto", values: ["auto", "50%", "60%", "70%", "80%", "90%"], now: true, what: "chat sent before summarizing", shape: [/^(auto|\d+|\d+(\.\d+)?%)$/, "auto, tokens (350000) or a share of the window (60%)"] },
   contexts   : { def: "", values: "text", now: true, what: "context by model, as JSON" },
   rules      : { def: config_own("RULES.md"), values: "text", now: true, what: "your rules, every project", path: true },
@@ -167,6 +169,17 @@ export let TPS        = true;
 // wide (columns, or a share of the screen: "25%")
 export let SIDE       = "";
 export let SIDE_WIDTH = "";
+
+// the leader (Commands.ts term_lead), as a key's name ("Ctrl+X"), and the
+// shortcuts: a key after it (a character; a letter either case) and what
+// it runs (a /command with its words, or a key's name: Ctrl+Y), SHORTCUT's
+// with the user's over them ("" drops one). Not a key illi takes (the
+// input's editing keys take theirs first), nor one a terminal sends as
+// another (Ctrl+M is Enter, Ctrl+I Tab...)
+export let LEADER     = "";
+export let SHORTCUTS: Record<string, string> = {};
+const SHORTCUT: Record<string, string> = { a: "/agent", e: "/effort", h: "/help", l: "/projects", m: "/model", p: "/profile", s: "/settings", t: "/tab", y: "Ctrl+Y" };
+export const TAKEN = ["Ctrl+A", "Ctrl+C", "Ctrl+D", "Ctrl+E", "Ctrl+F", "Ctrl+H", "Ctrl+I", "Ctrl+J", "Ctrl+K", "Ctrl+L", "Ctrl+M", "Ctrl+O", "Ctrl+P", "Ctrl+U", "Ctrl+V", "Ctrl+W", "Ctrl+Y", "Ctrl+Z", "Alt+B", "Alt+D", "Alt+F", "Alt+V"];
 
 // illi's own pick (a new chat's, and the chat's again after an agent);
 // the picks each role names, by vendor (config_role)
@@ -341,7 +354,8 @@ function config_start(): void {
 function config_live(): void {
   const pick   = config_run("pick", config_value("pick"));
   const roles  = { agents: config_roles("agents", config_value("agents"), OFFER, false), compactor: config_roles("compactor", config_value("compactor"), OFFER, false) };
-  const own    = config_contexts(config_value("contexts"));
+  const own    = config_object(config_value("contexts"));
+  const keys   = config_shortcuts(config_value("shortcuts"));
   RULES       = config_place("rules");
   AFTER       = config_value("after");
   OFF         = [...new Set(config_list(config_value("off").toLowerCase()).filter((name) => name !== ""))];
@@ -354,11 +368,38 @@ function config_live(): void {
   ROLES       = roles;
   CONTEXT_SET = String(config_value("context")).trim();
   CONTEXTS    = own ?? {};
+  LEADER      = config_leader(String(config_value("leader")));
+  SHORTCUTS   = keys ?? SHORTCUT;
 }
 
-// `contexts` as an object (a variable's, or text, parsed as JSON); none:
-// {}; null: not one
-function config_contexts(value: unknown): Record<string, unknown> | null {
+// the leader as a key's name: ctrl+x as Ctrl+X
+function config_leader(value: string): string {
+  const [mod = "", key = ""] = value.trim().split("+");
+  return mod.slice(0, 1).toUpperCase() + mod.slice(1).toLowerCase() + "+" + key.toUpperCase();
+}
+
+// `shortcuts` (an object, or its JSON) over SHORTCUT, each key in lower
+// case; null: not one, or a key not one character, or what it runs not
+// text
+function config_shortcuts(value: unknown): Record<string, string> | null {
+  const got = config_object(value);
+  if (got === null || Object.entries(got).some(([k, run]) => [...k].length !== 1 || k.trim() === "" || typeof run !== "string")) {
+    return null;
+  }
+  const all = { ...SHORTCUT };
+  for (const [k, run] of Object.entries(got as Record<string, string>)) {
+    if (run.trim() === "") {
+      delete all[k.toLowerCase()];
+    } else {
+      all[k.toLowerCase()] = run.trim();
+    }
+  }
+  return all;
+}
+
+// a setting that is an object (a variable's, or text, parsed as JSON);
+// none: {}; null: not one
+function config_object(value: unknown): Record<string, unknown> | null {
   try {
     const got = typeof value === "string" ? (value.trim() === "" ? {} : JSON.parse(value)) : value ?? {};
     return typeof got === "object" && got !== null && !Array.isArray(got) ? got : null;
@@ -426,8 +467,14 @@ export function config_check(key: string, value: unknown, strict = true): string
   const text  = plain === null ? config_default(key as Key) : typeof plain === "string" ? plain.trim() : "";
   const get   = (k: Key) => (k === key ? text : config_value(k));
   const set   = (k: Key) => k === key || config_raw(k) !== undefined;
+  if (key === "shortcuts") {
+    return value === null || config_shortcuts(value) !== null ? null : "shortcuts takes each key after the leader and what it runs, like {\"m\": \"/model\"}.";
+  }
+  if (key === "leader" && typeof value === "string" && TAKEN.includes(config_leader(value))) {
+    return "leader takes a key illi doesn't take itself; " + config_leader(value) + " is one.";
+  }
   if (key === "contexts") {
-    const got = value === null ? {} : config_contexts(value);
+    const got = value === null ? {} : config_object(value);
     const bad = got === null || Object.values(got).some((v) => !SETTINGS.context.shape![0].test(String(v)));
     return bad ? "contexts takes each model's context, like {\"gpt-6.1-sol\": 350000}." : null;
   }
