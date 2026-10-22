@@ -3,9 +3,8 @@ The chat files
 
 Everything illi remembers lives in SQLite files, one per project. This
 page covers exactly how a file is laid out, who opens it, how a write
-reaches the disk, how version upgrades work, how the chats of an older
-illi's single file are moved out, how search and forgetting work, and
-what each costs. Each part names the function that does the work. If
+reaches the disk, how versions work, how search and forgetting work,
+and what each costs. Each part names the function that does the work. If
 this page and the code disagree, the code is right and this page needs
 fixing.
 
@@ -15,7 +14,6 @@ fixing.
 - [Who opens them](#who-opens-them)
 - [Opening, step by step](#opening-step-by-step)
 - [Versions and upgrades](#versions-and-upgrades)
-- [Moving from the one file](#moving-from-the-one-file)
 - [Writing and durability](#writing-and-durability)
 - [Project locks](#project-locks)
 - [The projects table](#the-projects-table)
@@ -47,22 +45,17 @@ only the `.sqlite` file is left. (A bun:sqlite connection only really
 closes once every statement it prepared is finalized; `Store.close` sees
 to that: [Close](#one-write).)
 
-`~/.illi/chat/memory.sqlite`, if there, is an older illi's single file,
-left as a small stub once its chats are moved out ([Moving from the one
-file](#moving-from-the-one-file)). A profile made by this illi never has
-one.
-
 What is in a file
 -----------------
 
 ### Tables
 
-Every project file has the same schema, created by `STEPS` in
+Every project file has the same schema, created by `SCHEMA` in
 `src/chat/Store.ts`.
 
 | Table      | One row is                                      | Key                     | Written                        |
 | ---------- | ----------------------------------------------- | ----------------------- | ------------------------------ |
-| `meta`     | a fact about the file (today only `compat`)     | `key`                   | by upgrades                    |
+| `meta`     | a fact about the file (today only `compat`)     | `key`                   | with the schema; by upgrades   |
 | `project`  | the place illi ran in (one row per file)        | `id`                    | once, at the first run there   |
 | `chat`     | the project's chat (one today, room for more)   | `id`                    | once, with its project         |
 | `msg`      | a message, or one page of a long message        | `(chat, i)`             | once; never changed            |
@@ -76,8 +69,7 @@ Every project file has the same schema, created by `STEPS` in
 
 The columns, by table:
 
-- **project**: `id` (1 in a new file; a project moved from the one file
-  keeps its old number), `uid` (a random UUID), `key` (`git:<repo's top
+- **project**: `id`, `uid` (a random UUID), `key` (`git:<repo's top
   folder>` or `home`), `name` (the file's name without `.sqlite`),
   `path` (`""` for home), `made` (ISO date), `extra` (a JSON object, `{}`,
   for later use).
@@ -188,28 +180,23 @@ Opening, step by step
 
 `Store.open(dir, place)` does this, in order:
 
-1. **`Store.move(dir)`:** if an older illi's `memory.sqlite` is there and
-   not moved yet, moves its chats out first
-   ([below](#moving-from-the-one-file)).
-2. Creates the `projects` folder if needed.
-3. Picks the file: `projects/<place's name>.sqlite`.
-4. **`Store.connect(file)`** opens or creates it, then sets
+1. Creates the `projects` folder if needed.
+2. Picks the file: `projects/<place's name>.sqlite`.
+3. **`Store.connect(file)`** opens or creates it, then sets
    `busy_timeout = 10000`, `foreign_keys = on` and `synchronous =
    normal`; `Store.wal` sets `journal_mode = wal` before anything is
    written, so a new file is in WAL mode from its first page (switching
    ignores `busy_timeout`, so it is retried every 10 ms for up to 10 s
    while another illi opening the file at the same moment holds it);
-   `Store.schema` brings the schema up to date
-   ([below](#versions-and-upgrades)).
-5. **`Store.place`**, in one write transaction: an empty file gets the
+   `Store.schema` gives a new file the schema, and refuses one that
+   needs a newer illi ([below](#versions-and-upgrades)).
+4. **`Store.place`**, in one write transaction: an empty file gets the
    project's row, named after the file. A file holding this place's key
    is the project's own. A file holding another place's key (two paths
    whose 6-character codes collide, a 1 in 2 billion chance) is someone
-   else's: the file is closed and step 3 tries `<name>-2.sqlite`, then
-   `-3`, and so on. The project's own file drops the move's mark if it
-   bears one (`moved_from`, [the move](#moving-from-the-one-file)): a file in
-   use is never a copy the move may make again. Then it finds the
-   project's first chat, or creates it with an empty `find_<chat>`.
+   else's: the file is closed and step 2 tries `<name>-2.sqlite`, then
+   `-3`, and so on. Then it finds the project's first chat, or creates it
+   with an empty `find_<chat>`.
 
 A file that won't open (not an SQLite file, say) stops illi at start
 with one line naming it: *illi: chat: app-k3f9x2.sqlite won't open: file
@@ -229,226 +216,47 @@ when the read throws.
 Versions and upgrades
 ---------------------
 
-### What "the format" means
-
 A file's format is its schema: which tables exist and what they hold.
-`user_version` says how many of the `STEPS` in `Store.ts` the file has
-been through. Every illi knows its own number (`STEPS.length`, now 3).
+`user_version` is the schema's version, and every illi knows its own
+(`VERSION` in `Store.ts`, now 3). At every connect, `Store.schema` reads
+the file's:
 
-| Step | Brings the file to | What it does | Sets `compat` |
-| ---- | ------------------ | ------------ | ------------- |
-| 1    | version 1 | creates everything: `meta`, `project`, `chat`, `msg`, `node`, `state`, `log`, `work`, and one shared search index `find` for every chat | 1 |
-| 2    | version 2 | adds `image` and `todo` (images and the to-do list used to be separate files) | 2 |
-| 3    | version 3 | gives each chat its own search index `find_<chat>`, copies every line into it from `find` in its original order, then drops `find` | 3 |
+- **0, a new file:** it gets the whole schema (`SCHEMA`) in one write
+  transaction (`begin immediate`), which also sets `user_version` and
+  `meta.compat` to 3. Inside the transaction illi checks the version
+  again, because another illi opening the same new file at that moment
+  may have just done it.
+- **The same:** nothing happens.
+- **Older (1 or 2):** illi refuses it: *illi: chat: app-k3f9x2.sqlite is
+  of an older illi this one can't open: move it away to start the
+  project fresh.* No such file is left: every one was brought to 3
+  before the steps that did so went.
+- **Newer:** illi reads `meta.compat`. If compat is at most its own
+  version, the newer illi only *added* things, and this illi opens the
+  file as it is. If compat is higher, illi refuses it: at start it stops
+  with *illi: chat: app-k3f9x2.sqlite is of a newer illi: update illi to
+  open it.*; the projects list leaves that project out and logs why.
 
-A new project file runs all three at once. Steps 2 and 3 move real data
-only in an older illi's single file, during [the move](#moving-from-the-one-file).
+`compat` is the lowest version that can still use the file safely.
 
-### When an upgrade runs
+### Rules for a later version
 
-At every connect, `Store.schema` compares the file's `user_version` with
-its own `STEPS.length`:
+A later schema raises `VERSION`, puts its change in `SCHEMA` for new
+files, and brings an older file up by steps, each in its own write
+transaction that also sets the new `user_version` (checked again inside,
+as above), so a crash mid-step rolls the step back whole.
 
-- **The file is older:** each missing step runs in its own write
-  transaction (`begin immediate`), which also sets the new
-  `user_version`. Inside the transaction it checks the version again,
-  because another illi may have just run the same step. A crash
-  mid-step rolls the step back whole, and it runs again at the next open.
-- **The file is the same:** nothing happens.
-- **The file is newer:** illi reads `meta.compat`. If compat is at most
-  its own number, the newer illi only *added* things, and this illi
-  opens the file as it is. If compat is higher, illi refuses it: at
-  start it stops with *illi: chat: app-k3f9x2.sqlite is of a newer illi:
-  update illi to open it.*; the projects list leaves that project out
-  and logs why.
-
-`compat` is the lowest version that can still use the file safely. A
-step that only adds (a table, an index, a column with a default) leaves
-it alone, so an older illi keeps working. A step that moves where facts
-live raises it, because an older illi would look for them in the old
-place.
-
-### Step 3 in detail
-
-1. It reads the ids of all chats.
-2. It creates an empty `find_<chat>` for each (`Store.words`).
-3. It reads every row of the old `find`, oldest first (rowid order), and
-   inserts it into its chat's new table. Rows of a chat that no longer
-   exists are skipped.
-4. It drops `find` and sets `compat` to 3.
-
-All of that is one transaction. It takes time linear in the number of
-summary lines: about 13.6 s for 400,000 lines, and milliseconds for files
-of a few MB.
-
-### Rules for later steps
-
-- A step only adds, or it raises `compat`.
+- A step only adds (a table, an index, a column with a default), so an
+  older illi keeps working; or it raises `compat`, as a step that moves
+  where facts live must, because an older illi would look for them in
+  the old place.
 - A table made for each chat (as `find_<chat>` is) has to be made by
   everything that makes a chat (`Store.place` calls `Store.words`). A
   step adding another such table must create it when a chat is first
   used, because an older illi may still be creating chats without it, or
   else raise `compat`.
-- [The move](#moving-from-the-one-file) copies rows with `select *`
-  between an older file and a new one at the same version, so a step
-  must give both the same columns in the same order (any step does, as
-  both run the same `STEPS`).
-
-Moving from the one file
-------------------------
-
-An older illi kept every project in one file, `chat/memory.sqlite`. The
-first start of this illi moves each project out to its own file
-(`Store.move`), then leaves the old file as a stub. It prints one line
-before the screen comes up, which stays in the terminal after illi quits:
-*illi: moving the chats to a file per project (once)*.
-
-```mermaid
-flowchart TD
-  A["Store.open"] --> B{"memory.sqlite there?"}
-  B -- no --> Z["open the project's file"]
-  B -- yes --> G["Store.gate: locks/move.lock, wait for another illi's move"]
-  G --> M{"meta says moved?"}
-  M -- yes --> Z
-  M -- no --> L["Store.alone: out of WAL mode, locked"]
-  L -- "another illi has it open" --> X["stop: quit it, then start illi again"]
-  L --> S["Store.schema, Store.mark"]
-  S --> P["Store.split, each project: projects/name.sqlite"]
-  P --> F["fsync the folder"]
-  F --> T["Store.stub: drop all but meta, mark moved, vacuum"]
-  T --> Z
-```
-
-### Step by step
-
-1. **`Store.gate`:** takes `move.lock` in the profile's `locks` folder
-   (beside the project locks, [below](#project-locks)): `begin
-   exclusive` on that empty file, which is never written, so it never
-   has a journal. Two illis starting at once both get here. The first
-   try waits 50 ms (`GLANCE`), as two trying at the same instant with no
-   wait could both be turned away. If another illi still holds the gate,
-   illi says *illi: another illi is moving the chats to a file per
-   project: waiting for it* and waits up to 10 minutes (`MOVING`), then
-   finds the move done. Past the 10 minutes it stops with *illi: chat:
-   another illi is still moving the chats to a file per project: start
-   illi again once it's done.* The OS releases the gate however the
-   process ends. The lock file is kept, like the project locks: one
-   deleted while another illi waits on it would leave that illi holding a
-   file that won't read. Every start whose chat folder has
-   `memory.sqlite` takes the gate (a fraction of a millisecond), because
-   nothing else may open the old file while a move might be running: any
-   other connection makes the move's step 3 refuse.
-2. **`Store.moved`:** `meta` has a `moved` row once the move is done.
-   Then the gate is let go and the project's file opened.
-3. **`Store.alone`:** sets `locking_mode = exclusive` on the old file,
-   then switches it out of WAL mode (`journal_mode = delete`). SQLite
-   refuses that switch while any other connection has the file open, so
-   an older illi still running makes illi stop with *illi: chat: the
-   chats move to a file per project once, but another illi has them
-   open: quit it, then start illi again.*, nothing done. Otherwise the
-   switch takes an exclusive lock, which exclusive locking keeps till the
-   connection closes (`begin exclusive`, `commit` takes it if the file
-   was out of WAL mode already): no other process can read or write the
-   old file during the move. Writes an older illi left in the WAL (it
-   crashed, say) are copied into the file by the switch.
-4. **`Store.schema`** brings the old file to version 3 if it isn't.
-   **`Store.mark`** reads this move's mark from the old file's `meta`
-   (`moving`), or writes a new random one at the move's first try. Every
-   project file the move copies bears it (`moved_from` in its `meta`)
-   until its first open as its project's file: `Store.place` drops it
-   then, so a mark always means "made by that move, never used since".
-5. **`Store.split`, for each project** (oldest first):
-   1. Picks the file: `projects/<name>.sqlite`. One there already that
-      bears this move's mark is the move's own copy from before a crash:
-      it is made again, because an older illi may have written to the old
-      file since. Any other file there (a project file in use, after the
-      old file was put back from a backup, say) is kept, and the copy goes
-      to the next free number, `<name>-2.sqlite`, then `-3`, as
-      `Store.open` numbers a file another place's. Nothing the old file
-      holds is ever dropped without being copied.
-   2. Deletes any `<file>-new` (with its `-wal` and `-shm`), the half of a
-      crashed copy.
-   3. Makes `<file>-new`: WAL mode first, `synchronous = off`, the
-      schema (`STEPS`), an empty `find_<chat>` for each of the project's
-      chats; closes it.
-   4. Attaches it to the old file's connection as `p`, with
-      `p.synchronous = off`, and copies in one transaction: the project's
-      row (its `name` set to the file's), its chats, and their `msg`,
-      `node`, `state`, `log`, `work`, `image` and `todo` rows (`COPY`, each
-      `insert into p.<table> select * …`), the move's mark, then each
-      chat's search index (`insert into p.find_<chat> (rowid, text, first,
-      n) select …`, which keeps every line's rowid, so the line count stays
-      right). Every number stays as it was.
-   5. Detaches it. That closes its last connection, which checkpoints the
-      WAL into the file and deletes it. If the WAL is still there, the
-      move stops with an error rather than leave its writes behind.
-   6. fsyncs the file, then renames it into place, over a crash's copy if
-      there was one. Nothing was synced while it was made aside, so this
-      one fsync is all it costs; the rename is atomic, so a project's file
-      is either whole or not there.
-6. **fsync the `projects` folder:** the renames are on disk before any
-   old row goes.
-7. **`Store.stub`:** in one transaction, drops every table but `meta`
-   (the search indexes first, their own tables with them), sets `compat`
-   and `user_version` to 4 (`MOVED`), drops the mark and adds `moved`
-   (the date) to `meta`; then `vacuum`, which cuts the file to 8 KB.
-8. Closes the old file, which leaves only `memory.sqlite`, then lets the
-   gate go.
-
-Any error on the way, the gate's included, stops illi with one line
-naming the move: *illi: chat: memory.sqlite couldn't move to a file per
-project: …* (a damaged old file says *file is not a database*). Nothing is dropped before step
-7, so starting again after fixing the cause goes on.
-
-An older illi that opens the stub refuses it (its version and `compat`
-are past any it knows) with its own message: *the chat (memory.sqlite)
-is of a newer illi: update illi to open it*. So a downgrade can't write
-to a file this illi no longer reads. This illi knows the stub by the
-`moved` row, not by its version, so a later step needn't raise `MOVED`.
-Keep the stub while an older illi might still run: without it, that
-illi would make a fresh `memory.sqlite`, which this illi would move at
-its next start, numbered beside the files already there (step 5.1).
-
-### If it stops partway
-
-| illi stops… | Result |
-| ----------- | ------ |
-| before the switch out of WAL mode | nothing changed; the next start moves |
-| during a project's copy | its `-new` file is deleted and made again at the next start |
-| between projects, or after the copies | the next start makes the move's copies again (they bear its mark) and copies the rest |
-| during the stub | its transaction rolls back; the next start makes the copies again (the mark is still there), then the stub |
-
-### An old file put back
-
-Put an older illi's `memory.sqlite` back after its move (from a backup,
-or from another machine), and the next start moves it again, with a new
-mark. Every project whose file is there already is copied beside it,
-numbered (`app-k3f9x2-2.sqlite`), so both stay: the file in use and the
-copy from the old file. `/projects` lists both; the place keeps opening
-its own file (the first by number with its key, or a new one if that is
-gone: the copy is never taken up in its place), and the copy can be
-searched, zoomed into or forgotten like any project. Forgotten from the
-illi running in its folder, it goes at once: no illi ever opens it as
-its chat, and this illi holds the folder's lock already. From another
-project, or from a view of this one, forgetting it takes its folder's
-lock, as forgetting any project does: quit illi in that folder first.
-
-This holds even for an old file saved midway through its move (a backup
-taken between a crash and the next start): its mark is still the one
-the move's copies bear, but every copy opened since has dropped it, so
-only copies never used are made again, from the same rows.
-
-### What it costs
-
-Measured on WSL2, ext4:
-
-| Old file | Move |
-| -------- | ---- |
-| 6 projects × 100,000 messages and 150,000 lines, 524 MB | 4.9 s |
-| 100 projects × 200 messages, 38 MB | 2.4 s, about 24 ms a project, mostly making its file |
-
-The project files take about the space the old file did; the old file
-becomes 8 KB.
+- A file made new and a file brought up by the steps end with the same
+  schema.
 
 Writing and durability
 ----------------------
@@ -520,7 +328,6 @@ One process at a time holds a project's chat. The lock lives in
 | ---- | -- |
 | `<code>.lock` | the lock. `<code>` is a 12-character hash of the project's folder, or `home` (`Projects.lock`) |
 | `<code>.sock` | the holder's socket (mode 0600), where a second terminal's view connects |
-| `move.lock` | the gate of the move from an older illi's one file ([Moving](#moving-from-the-one-file), step 1), made only in a profile that had that file |
 
 **Taking it** (`Chat.claim`, `Chat.grip`): illi opens the lock file as an
 SQLite database, sets `busy_timeout = 50` ms (`GRIP`) and `journal_mode
@@ -541,10 +348,7 @@ that isn't there (`Remote.ts MUTE`), and runs again.
 
 **Forgetting another project** takes that project's lock (without a
 socket) while it deletes the file, so no illi starts that project
-meanwhile. If an illi already has it open, illi refuses the forget. A
-numbered copy of the project this illi runs in (an old file put back,
-[below](#an-old-file-put-back)) takes no lock: this illi holds its
-folder's, and no illi opens the copy as its chat.
+meanwhile. If an illi already has it open, illi refuses the forget.
 
 The projects table
 ------------------
@@ -726,13 +530,6 @@ Forgetting a project
 3. It lets the lock go and says what was forgotten: *Forgot app-k3f9x2:
    1,204 messages and 3 images.*
 
-A numbered copy of the project you're in (`app-k3f9x2-2`, from [an old
-file put back](#an-old-file-put-back)) skips step 1 when forgotten from
-the illi that holds the project: it holds the folder's lock already,
-and no illi opens the copy as its chat. From a view, it says *open in
-another terminal* like any project: forget it in the holder's terminal,
-or once the holder quits.
-
 **The project you're in** (only from the illi that holds it; a view is
 told to forget it in the holder's terminal):
 
@@ -821,10 +618,6 @@ Known limits
   A worker that kept its connections open would avoid that.
 - **A search keeps a snapshot of a file for as long as it reads it,** so
   a checkpoint can't finish behind it.
-- **The move from the one file runs at the first start,** before the
-  screen: about 5 s for 500 MB, or 24 ms a project. An older illi still
-  running keeps it from starting at all, till it's quit. An illi started
-  while another moves says so and waits for it (up to 10 minutes).
 - **An illi started in a project just as another illi forgets it** finds
   the project's lock held, joins as a view, finds no chat to join and
   runs again on its own (`Term.ts term_gone`), as it does after a

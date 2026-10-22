@@ -8,14 +8,13 @@
 // empty (profile_new), the root's setup its own (Config.ts, Custom.ts,
 // Mcp.ts: the global layer), and may take the running one's chat along
 // (profile_move_chat); any but the default may be renamed or deleted. A
-// profile goes
-// out as one archive (tar.gz, by the
-// system's tar): its folder but the login (a login file its config names
-// too, wherever in it), the locks, the log (and, the default's, the other
-// profiles), its config.json and mcp.json with their secrets left out;
-// its chat's SQLite files (each project's, an older illi's one) as
-// snapshots SQLite takes (VACUUM INTO), whole though an illi writes to
-// them; the rest (agents, commands, skills, theme, rules) as it is.
+// profile goes out as one archive (tar.gz, by the system's tar): its
+// folder but the login (a login file its config names too, wherever in
+// it), the locks, the log (and, the default's, the other profiles), its
+// config.json and mcp.json with their secrets left out; its chat's
+// SQLite files (a project each) as snapshots SQLite takes (VACUUM INTO),
+// whole though an illi writes to them; the rest (agents, commands,
+// skills, theme, rules) as it is.
 // One comes in only as a new profile, its archive taken as untrusted:
 // each entry a file or a folder, inside it, checked before a byte is
 // unpacked; once unpacked, its config's keys that run a command or name a
@@ -256,7 +255,7 @@ export async function profile_export(root: string, name: string, file: string): 
     }
     const snap  = profile_snapshot(dir + "/chat", tmp + "/chat");
     const parts = fs.readdirSync(dir).filter((p) => !skip.includes(p) && !(snap && p === "chat")).map((p) => "./" + p);
-    const chat  = snap ? fs.readdirSync(dir + "/chat").filter((p) => !p.startsWith("memory.sqlite") && p !== "projects").map((p) => "./chat/" + p) : [];
+    const chat  = snap ? fs.readdirSync(dir + "/chat").filter((p) => p !== "projects").map((p) => "./chat/" + p) : [];
     const clean = fs.readdirSync(tmp).map((p) => "./" + p);
     await profile_tar(["-czhf", file, ...local, "-C", dir, ...parts, ...chat, "-C", tmp, ...clean]);
   } finally {
@@ -265,16 +264,16 @@ export async function profile_export(root: string, name: string, file: string): 
   return cut;
 }
 
-// a chat folder's SQLite files (projects/*.sqlite, an older illi's
-// memory.sqlite) copied whole into another folder, each as it is now,
-// though an illi writes to it; false: it has no folder
+// a chat folder's SQLite files (projects/*.sqlite) copied whole into
+// another folder, each as it is now, though an illi writes to it; false:
+// it has no folder
 function profile_snapshot(chat: string, into: string): boolean {
   if (!fs.existsSync(chat)) {
     return false;
   }
   const projects = fs.existsSync(chat + "/projects") ? fs.readdirSync(chat + "/projects").filter((f) => f.endsWith(".sqlite")).map((f) => "/projects/" + f) : [];
   fs.mkdirSync(into, { recursive: true });
-  for (const file of ["/memory.sqlite", ...projects].filter((f) => fs.existsSync(chat + f))) {
+  for (const file of projects) {
     fs.mkdirSync(path.dirname(into + file), { recursive: true });
     const db = new Database(chat + file, { readwrite: true });
     try {

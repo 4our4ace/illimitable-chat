@@ -146,12 +146,12 @@ test("an export: the folder but the login (one its config names in a subfolder t
   expect(tar(["-tzf", work]).trim()).toBe("./config.json");
 });
 
-test("an export takes the chat's SQLite files whole (each project's, an older illi's one), as snapshots, though an illi has them open and their last writes are in the WAL", async () => {
+test("an export takes the chat's SQLite files whole (a project each), as snapshots, though an illi has them open and their last writes are in the WAL", async () => {
   const { Database } = await import("bun:sqlite");
   const root = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-snap-");
   put(root + "/chat/docs/images/0123456789abcdef.png", "png");
   fs.mkdirSync(root + "/chat/projects");
-  const dbs = ["memory.sqlite", "projects/app-k3f9x2.sqlite"].map((name) => {
+  const dbs = ["projects/app-k3f9x2.sqlite", "projects/home.sqlite"].map((name) => {
     const db = new Database(root + "/chat/" + name);
     db.run("pragma journal_mode = wal");
     db.run("create table msg (text text)");
@@ -165,10 +165,10 @@ test("an export takes the chat's SQLite files whole (each project's, an older il
     dbs.forEach((db) => db.close());
   }
   const names = tar(["-tzf", file]).split("\n").filter((l) => l !== "").sort();
-  expect(names).toEqual(["./chat/", "./chat/docs/", "./chat/docs/images/", "./chat/docs/images/0123456789abcdef.png", "./chat/memory.sqlite", "./chat/projects/", "./chat/projects/app-k3f9x2.sqlite", "./config.json"]);
+  expect(names).toEqual(["./chat/", "./chat/docs/", "./chat/docs/images/", "./chat/docs/images/0123456789abcdef.png", "./chat/projects/", "./chat/projects/app-k3f9x2.sqlite", "./chat/projects/home.sqlite", "./config.json"]);
   fs.mkdirSync(TMP + "/snap");
   tar(["-xzf", file, "-C", TMP + "/snap"]);
-  for (const name of ["memory.sqlite", "projects/app-k3f9x2.sqlite"]) {
+  for (const name of ["projects/app-k3f9x2.sqlite", "projects/home.sqlite"]) {
     const back = new Database(TMP + "/snap/chat/" + name, { readonly: true });
     expect(back.query("select text from msg").all()).toEqual([{ text: "kept in " + name }]);
     back.close();
