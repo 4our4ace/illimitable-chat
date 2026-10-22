@@ -7,7 +7,7 @@
 
 import { term_form_key, term_form_type } from "./Asks.ts";
 import { Chat } from "../chat/Chat.ts";
-import { term_chooser_find, term_command, term_commands, term_main, term_suggest, term_suggest_key } from "./Commands.ts";
+import { term_after, term_chooser_find, term_command, term_commands, term_main, term_suggest, term_suggest_key } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Custom } from "../config/Custom.ts";
 import { term_draw } from "./Frame.ts";
@@ -36,15 +36,18 @@ const WHEEL = 3;
 // and skills are typed), and the rest never change
 let keyed: { leader: string; cmds: Map<string, Cmd> } | null = null;
 
-// a key ("": the input may have changed): the mouse, the wheel, the
-// terminal's background told (the chat laid out anew: diagrams draw over
-// it), or its line of term_groups. Text chosen is let go at a key not KEEP's
+// a key ("": the input may have changed): the mouse (a click lets the
+// leader go), the wheel, the terminal's background told (the chat laid
+// out anew: diagrams draw over it), or its line of term_groups. Text chosen is let go at a key not KEEP's
 // or at typing; Ctrl+C copies it again instead. Text in the input
 // dismisses the suggested reply
 export function term_press(t: Term, key: string): void {
   if (key === "Move") {
     term_hover(t);
     return;
+  }
+  if (key === "Press") {
+    t.lead = false;
   }
   if (t.scr.ed.text !== "") {
     t.dropped = t.v.suggest;
@@ -80,13 +83,23 @@ function term_keyed(key: string): Cmd | undefined {
   return keyed.cmds.get(key);
 }
 
-// a key while the commands suggested show, the picker, illi's question
-// or a pane is open: theirs first (true: taken). The commands move by Up
+// a key after the leader: its shortcut's (term_after; the wheel lets the
+// leader go and scrolls). A key while the commands suggested show, the
+// picker, illi's question or a pane is open: theirs first (true: taken).
+// The commands move by Up
 // and Down, fill one in by Tab, run it by Enter; the picker as
 // term_choose_key; the question as Asks.ts says; a pane scrolls by the
 // arrows, the pages and the wheel, Esc and Enter close it, and no
 // editing key reaches the input hidden under it
 export function term_grab(t: Term, key: string): boolean {
+  if (t.lead) {
+    if (key === "WheelUp" || key === "WheelDown") {
+      t.lead = false;
+      return false;
+    }
+    term_after(t, key);
+    return true;
+  }
   if (t.choose === null && term_form_key(t, key)) {
     return true;
   }
@@ -149,16 +162,16 @@ function term_choose_key(t: Term, c: Chooser, key: string): boolean {
   return true;
 }
 
-// text typed to a picker that takes characters (the shortcuts'): its
-// first to it, the rest as typed after; while the picker searches: to its
-// search, not the input; while illi asks, to its question (Asks.ts); over
-// a pane, to the input, the pane closed
+// text typed after the leader: its first character the shortcut's key,
+// the rest as typed after it; while the picker searches: to its search,
+// not the input; while illi asks, to its question (Asks.ts); over a pane,
+// to the input, the pane closed
 export function term_type(t: Term, text: string): boolean {
   const c = t.choose;
-  if (c?.type !== undefined) {
+  if (t.lead) {
     const ch   = [...text][0];
     const rest = text.slice(ch.length);
-    c.type(ch);
+    term_after(t, ch);
     if (rest !== "" && !term_type(t, rest)) {
       Screen.ed_type(t.scr.ed, rest);
       t.scr.typed = true;

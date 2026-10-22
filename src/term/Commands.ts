@@ -6,7 +6,8 @@
 // those it matches alike); the picker (/agent, /profile,
 // /model, /settings), the panes over the chat (/help, /agents, /mcp), the
 // pick, the login, the tabs, the blocks, the memory's exports; the
-// leader (Ctrl+X, as OpenCode's), then a key: a shortcut (term_lead).
+// leader (Ctrl+X, as OpenCode's), then a key: a shortcut (term_lead), each
+// listed and changed in /shortcuts.
 
 import type { Vendor } from "../ai/AskAI.ts";
 import { term_clip, term_image } from "./Attach.ts";
@@ -19,7 +20,7 @@ import { term_redraw } from "./Frame.ts";
 import { term_away, term_clear, term_cycle, term_enter, term_esc, term_next, term_page, term_shots, term_take, term_verbose } from "./Keys.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
 import { Memory } from "../chat/Memory.ts";
-import { term_note, term_notify, term_unnote, term_unnotify, type Notice } from "./Notices.ts";
+import { term_note, term_notify, term_toast, term_unnote, term_unnotify, type Notice } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_palette } from "./Palette.ts";
 import { type Model, type Move, Pick } from "../ai/Pick.ts";
@@ -77,7 +78,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["",                  "Ctrl+D",                  "clear the input; on an empty one, quit",         term_clear],
       ["",                  "Tab",                     "take the suggested reply",                       term_take],
       ["",                  "Ctrl+P",                  "all commands and settings in one list, typed to search", term_palette],
-      ["",                  config.LEADER,             "shortcuts: a key after it runs a command (m /model, p /profile, l /projects…); the list shows yours", term_lead],
+      ["",                  config.LEADER,             "the leader: the screen greys, and the next key runs its shortcut (/shortcuts lists them)", term_lead],
       ["/goal <message>",   "",                        "send a goal: illi goes on until it is met",      (t, a) => term_say(t, "/goal " + a)],
       ["/halt",             "",                        "drop the goal; the turn running ends as it would", (t) => term_say(t, "/halt")],
       ["/clear",            "",                        "an empty screen for a new topic; illi still remembers the chat before", (t) => term_say(t, "/clear")],
@@ -118,6 +119,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/login",            "",                        "sign in to ChatGPT (Plus or Pro) with a code; illi keeps the login and renews it", term_login],
       ["/logout",           "",                        "remove illi's own ChatGPT login (opencode's, if any, is used again)", term_logout],
       ["/settings",         "",                        "all the settings: type to search, Left, Right or Enter change one, Del puts its default back", (t) => term_settings(t)],
+      ["/shortcuts",        "",                        "the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one", (t) => term_shortcuts(t)],
       ["/set <key> [value]", "",                       "change a setting (default: back to its default); no value: says what it is", term_set],
       ["/mcp",              "",                        "your MCP servers: their tools, or why one failed", term_mcp],
     ]],
@@ -357,34 +359,90 @@ function term_agent_set(t: Term, arg: string): void {
 // option takes and what the foot says of it (the model picker's), what
 // shows at each option's right end, the screen's middle as its place and
 // each option's group (the palette's)
-export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; type?: Chooser["type"]; foot?: Chooser["foot"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; middle?: number; heads?: string[] } = {}): void {
+export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; middle?: number; heads?: string[] } = {}): void {
   const shown = Screen.ed_rank("", names);
-  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, middle: more.middle, heads: more.heads, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), type: more.type, foot: more.foot ?? (() => ""), ask: null };
+  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, middle: more.middle, heads: more.heads, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null };
   t.pane   = null;
 }
 
-// the leader pressed (config.LEADER): the shortcuts, a key each, in a
-// list (pressed again: closed). A key typed runs its own (none: the list
-// stays, saying so); Up, Down and Enter pick one, a click too, Esc closes
+// the leader pressed (config.LEADER): the screen greys till the next key,
+// which runs its shortcut (term_after); nothing else shows, a shortcut is
+// found by trying, or in /shortcuts
 export function term_lead(t: Term): void {
-  if (t.choose?.title === LEAD && t.choose.type !== undefined) {
-    t.choose = null;
+  t.lead = true;
+}
+
+// the key after the leader (a character typed, or a key's name): its
+// shortcut run; Esc or the leader again, none; a key with none says so
+export function term_after(t: Term, key: string): void {
+  t.lead = false;
+  const run = config.SHORTCUTS[key.toLowerCase()];
+  if (key === "Esc" || key === config.LEADER) {
     return;
   }
-  const keys  = Object.keys(config.SHORTCUTS).sort();
-  const runs  = keys.map((k) => config.SHORTCUTS[k]);
-  const about = runs.map((run) => run + " · " + term_does(run));
-  const pick  = (k: number) => term_shortcut(t, runs[k]);
-  const type  = (ch: string) => {
-    const k = keys.indexOf(ch.toLowerCase());
-    if (k < 0) {
-      t.choose!.foot = () => "No shortcut on " + ch + " · Esc closes";
-    } else {
-      t.choose = null;
-      pick(k);
+  if (run === undefined) {
+    return term_toast(t, "No shortcut on " + key + " · /shortcuts lists them");
+  }
+  term_shortcut(t, run);
+}
+
+// /shortcuts: the leader, then each key after it and what it runs (one
+// of illi's dropped: none), then a row to add one. Enter changes the lit
+// one in a line (a key's: what it runs; empty: none); Del puts back what
+// the user changed (the leader, one of illi's), else drops the key
+export function term_shortcuts(t: Term, at = 0): void {
+  const own   = config.OWN_SHORTCUTS;
+  const keys  = [...new Set([...Object.keys(config.SHORTCUTS), ...Object.keys(own)])].sort();
+  const names = ["leader", ...keys.map((k) => config.LEADER + " " + k), "add one"];
+  const about = [
+    config.LEADER + " · the key before a shortcut" + (config.LEADER === config.config_def("leader") ? "" : " (illi's: " + config.config_def("leader") + ")"),
+    ...keys.map((k) => {
+      const run = config.SHORTCUTS[k];
+      return run === undefined ? "none · illi's: " + own[k] : run + " · " + term_does(run) + (own[k] !== undefined && own[k] !== run ? " (illi's: " + own[k] + ")" : "");
+    }),
+    "a key and what it runs, like: c /compact",
+  ];
+  const edit = (k: number) => {
+    const key  = keys[k - 1];
+    const back = () => term_shortcuts(t, k);
+    if (k === 0) {
+      return term_ask(t, "Leader", "Ctrl or Alt and a letter", config.LEADER, "Enter keeps it · Esc", (text) => term_shortcut_set(() => config.config_set("leader", text), back));
     }
+    if (k === names.length - 1) {
+      return term_ask(t, "Add a shortcut", "a key, a space, then a /command or a key's name", "", "Enter adds it · Esc", (text) => {
+        const [ch = "", ...rest] = [...text.trim()];
+        const run = rest.join("").trim();
+        return ch === "" || run === "" || rest[0] !== " " ? "a key, a space, then what it runs: c /compact" : term_shortcut_set(() => config.config_shortcut(ch, run), back);
+      });
+    }
+    term_ask(t, config.LEADER + " " + key, "a /command with its words, or a key's name; empty: none", config.SHORTCUTS[key] ?? "", "Enter keeps it · Esc", (text) => term_shortcut_set(() => config.config_shortcut(key, text.trim()), back));
   };
-  term_chooser(t, LEAD, keys, about, -1, pick, { type, foot: () => "a key, or ↑↓ Enter · Esc" });
+  const del = (k: number, name: string) => {
+    if (name !== "Delete" || k === names.length - 1) {
+      return false;
+    }
+    const key = keys[k - 1];
+    term_shortcut_set(() => (k === 0 ? config.config_set("leader", null) : config.config_shortcut(key, config.config_shortcut_mine(key) ? null : "")), () => term_shortcuts(t, k));
+    return true;
+  };
+  const foot = (k: number) => {
+    const key = keys[k - 1];
+    return k === names.length - 1 ? "Enter add one" : "Enter change · Del " + (k === 0 || (config.config_shortcut_mine(key) && own[key] !== undefined) ? "illi's" : "drop it");
+  };
+  term_chooser(t, LEAD, names, about, -1, edit, { keys: del, foot });
+  t.choose!.at = Math.min(at, names.length - 1);
+}
+
+// a change to the shortcuts made, then `then` (the list again); why it
+// won't do instead, kept in the line asked for
+function term_shortcut_set(change: () => void, then: () => void): string | null {
+  try {
+    change();
+  } catch (err: any) {
+    return err.message;
+  }
+  then();
+  return null;
 }
 
 // what a shortcut does: its command's or key's first clause ("": none such)

@@ -15,7 +15,7 @@ Chat
 | Ctrl+D | clear the input; on an empty one, quit |
 | Tab | take the suggested reply |
 | Ctrl+P | all commands and settings in one list, typed to search |
-| Ctrl+X | shortcuts: a key after it runs a command (m /model, p /profile, l /projects…); the list shows yours ([below](#shortcuts)) |
+| Ctrl+X | the leader: the screen greys, and the next key runs its shortcut ([below](#shortcuts)) |
 | `/goal <message>` | send a goal: illi goes on until it is met |
 | `/halt` | drop the goal; the turn running ends as it would |
 | `/clear` | an empty screen for a new topic; illi still remembers the chat before |
@@ -72,6 +72,7 @@ Setup
 | `/login` | sign in to ChatGPT (Plus or Pro) with a code; illi keeps the login and renews it |
 | `/logout` | remove illi's own ChatGPT login (opencode's, if any, is used again) |
 | `/settings` | all the settings: type to search, Left, Right or Enter change one, Del puts its default back |
+| `/shortcuts` | the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one |
 | `/set <key> [value]` | change a setting (default: back to its default); no value: says what it is |
 | `/mcp` | your MCP servers: their tools, or why one failed |
 
@@ -87,9 +88,9 @@ Shortcuts
 ---------
 
 Press the leader, Ctrl+X, then a key, as in OpenCode: Ctrl+X then m opens
-the model list. The leader also shows a list of every shortcut: type its
-key, or pick one with Up, Down and Enter (or a click). Esc, or the
-leader again, closes the list. Letters work either case.
+the model list. While illi waits for that key the screen turns grey;
+Esc, the leader again, a click or the wheel lets it go, and a key with
+no shortcut says so. Letters work either case.
 
 | Key | Runs |
 | --- | ---- |
@@ -103,10 +104,12 @@ leader again, closes the list. Letters work either case.
 | t | `/tab` |
 | y | Ctrl+Y: copy illi's last reply |
 
-Ctrl+P shows each command's shortcut beside its keys. To change them, set
-`shortcuts` in `~/.illi/config.json` (or `/set shortcuts {...}`). A key
-maps to a command with its words, or to a key's name, and `""` drops one
-of illi's:
+`/shortcuts` lists the leader and every shortcut: Enter changes one, Del
+puts illi's back (or drops a key), and the last row adds one. Ctrl+P
+shows each command's shortcut beside its keys. They're kept in
+`~/.illi/config.json`, as `leader` and `shortcuts`; a key maps to a
+command with its words, or to a key's name, and `""` drops one of
+illi's:
 
 ```json
 {
