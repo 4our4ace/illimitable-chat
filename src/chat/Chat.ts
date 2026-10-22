@@ -142,7 +142,7 @@ const FIT        = 0.8;
 const REFITS     = 3;
 const ROOM       = 0.9;
 const REFIT      = "The chat outgrew #'s window: more of it is summarized now, each summary a zoom away. Go on where you were.";
-const NO_FIT     = "No reply: the chat won't fit #'s window even summarized. /clear starts a fresh screen, or /model picks a model with a bigger window.";
+const NO_FIT     = "No reply: the chat won't fit #'s window even summarized. /clear starts a new topic (the chat before it is kept, not sent), or /model picks a model with a bigger window.";
 
 // a new chat's first message, its node written with it, so no compactor
 // call summarizes it
@@ -936,7 +936,7 @@ export namespace Chat {
     if (chat.call !== null) {
       return chat.asked ? chat.model : "";
     }
-    const summing = chat.busy && chat.wait.length > 0 && Memory.first(chat.mem) < Chat.from(chat);
+    const summing = chat.busy && chat.wait.length > 0 && Memory.due(chat.mem) < Chat.from(chat);
     return summing ? SUMMARIES : "";
   }
 
@@ -1102,13 +1102,12 @@ export namespace Chat {
     return { error: "No act " + msg.$ + "." };
   }
 
-  // a fresh session (/clear): the cut at the chat's end, so every message
-  // so far folds into the view's lines (each a zoom away) and the next
-  // turn sends none whole; noted for the agent (the note itself whole);
-  // the screen starts anew from the note (the memory's `top`: what came
-  // before is only the memory's, a zoom away for the agent); the old
-  // topic's suggested reply gone; the views told the context it now
-  // holds. Not while a turn runs
+  // a fresh session (/clear): the cut, the screen's top and the view's
+  // first message at the chat's end, so a turn sends nothing of the chat
+  // so far, not even its lines: it is only the memory's, summarized on,
+  // a search or zoom away for the agent (the prompt says so); the screen
+  // empty; the old topic's suggested reply gone; the views told the
+  // context it now holds. Not while a turn runs
   export function clear(chat: Chat): Answer {
     const mem = chat.mem;
     if (chat.busy) {
@@ -1117,11 +1116,11 @@ export namespace Chat {
     if (mem.cut === mem.count) {
       return {};
     }
-    mem.cut = mem.show = mem.top = mem.count;
+    const before = mem.count;
+    mem.cut = mem.show = mem.top = mem.view.from = before;
     Memory.fit(mem);
     Memory.save(mem);
     Chat.unsuggest(chat);
-    Chat.note(chat, "New session, for a new topic. illi still remembers the chat before this note: it is in the summaries, and a zoom brings back any part of it.");
     chat.eye = Chat.eye(mem, mem.cut);
     chat.socks.forEach((sock) => Chat.show(chat, sock));
     Chat.change(chat);
@@ -1203,11 +1202,12 @@ export namespace Chat {
     return "Main agent: " + who + ", on " + Pick.shown(chat.pick) + ".";
   }
 
-  // what the screen shows: the view's lines before `from` (none of before
-  // the last /clear's top), then each message from it whole
+  // what the screen shows: the view's lines before `from` (the view holds
+  // none from before the last /clear's top), then each message from it
+  // whole
   export function eye(mem: Memory, from: number): Eye {
     const start = Math.max(from, mem.top);
-    const parts = Memory.before(mem.view.parts, start).filter((part) => Memory.span(part)[1] >= mem.top).map((part): Part => [Memory.span(part)[0], 2 ** part.l]);
+    const parts = Memory.before(mem.view.parts, start).map((part): Part => [Memory.span(part)[0], 2 ** part.l]);
     return { parts, from: start };
   }
 

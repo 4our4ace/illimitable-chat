@@ -17,12 +17,15 @@
 // build at once, in the order the messages came. A try cut after a line
 // keeps the best one.
 //
-// A view lists nodes covering the chat to its end, oldest first; each message
-// it reaches appends its node. Past `high` bytes, a batch merges the adjacent
-// siblings whose parent is built and most due (oldest since its last message,
-// to the view's end, in halves: detail fades with age) down to half, so a view
-// changes only at its end between batches. Two, each on its own: the chat's
-// (turns'), to the last message, and the compactions', to the first not built.
+// A view lists nodes covering the chat from its first message (`from`) to its
+// end, oldest first; each message it reaches appends its node. Past `high`
+// bytes, a batch merges the adjacent siblings whose parent is built and most
+// due (oldest since its last message, to the view's end, in halves: detail
+// fades with age) down to half, so a view changes only at its end between
+// batches. Two, each on its own: the chat's (turns'), from the last /clear to
+// the last message (what came before is never sent, not even as lines: it is
+// found by search and zoom), and the compactions', from the first message to
+// the first not built.
 // A call gets one in BLOCK-line blocks, the last whole one marked for the cache
 // (AskAI.ts); few lines, as those past it are read anew (a compaction's view
 // ends at its node, then its task, both unmarked).
@@ -56,8 +59,10 @@ export type Msg = { kind: Kind; text: string; date?: string; images?: string[]; 
 type Part = { l: number; i: number };
 
 // a view: its lines, the bytes of those built, a batch under way, the
-// bytes past which it merges to half
-type View = { parts: Part[]; size: number; batch: boolean; high: number };
+// bytes past which it merges to half, the first message it holds (the
+// chat's: the last /clear's top, as nothing before it is sent; the
+// compactions': 0)
+type View = { parts: Part[]; size: number; batch: boolean; high: number; from: number };
 
 // what a compaction shares with the chat's turns: all but the blocks
 export type Share = Omit<Ask, "blocks">;
@@ -78,9 +83,10 @@ type Saved = Kept & { seen?: Kept; pick: object | null; goal?: string | null; su
 // what ran, as last saved; cut: the first message a turn's call gets
 // whole (Memory.cutoff; those before, as the view's lines), show: the
 // first the screen shows whole (at the cut, or behind it, as /compact
-// leaves it: Memory.kept), top: the first it shows at all (the last
-// /clear's: older ones are only the memory's), tail: the bytes of those
-// from the cut, as last counted (Memory.fill); nodes: the
+// leaves it: Memory.kept), top: the first it shows at all, and the first
+// the chat's view holds (the last /clear's, `view.from`: older ones are
+// only the memory's, summarized on, a search or zoom away), tail: the
+// bytes of those from the cut, as last counted (Memory.fill); nodes: the
 // texts of the views' nodes
 // built and of those above them, by slot; agents: their logs' lengths,
 // logs: each name's log as now (a name freed takes a new one: agent_new);
@@ -198,7 +204,7 @@ export namespace Memory {
   export function read(dir: string, store: Store, share: Memory["share"], alone: boolean): Memory {
     const mem: Memory = {
       dir, store, cwd: "", count: Store.count(store), pick: null, goal: null, suggest: "", agent: null, work: [], cut: 0, show: 0, top: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), logs: new Map(), ready: [],
-      view: { parts: [], size: 0, batch: false, high: LINES }, seen: { parts: [], size: 0, batch: false, high: SEEN },
+      view: { parts: [], size: 0, batch: false, high: LINES, from: 0 }, seen: { parts: [], size: 0, batch: false, high: SEEN, from: 0 },
       busy: new Set(), calls: new Map(), hold: alone, done: alone, wait: new Set(), share,
     };
     // a field of another shape than illi writes: as if not saved
@@ -212,16 +218,17 @@ export namespace Memory {
     mem.work = Array.isArray(saved?.work) ? saved.work : [];
     mem.cut = Math.min(index(saved?.cut, 0), mem.count);
     mem.show = Math.min(index(saved?.show, mem.cut), mem.cut);
-    mem.top = index(saved?.top, 0);
+    mem.top = mem.view.from = Math.min(index(saved?.top, 0), mem.count);
     Memory.open(mem, mem.view, kept(saved));
     Memory.open(mem, mem.seen, kept(saved?.seen) ?? kept(saved));
     return mem;
   }
 
-  // a view as kept (none: the highest nodes built)
+  // a view as kept, from its first message (none kept: the highest nodes
+  // built)
   export function open(mem: Memory, view: View, kept: Kept | null): void {
     const keys = kept === null ? null : new Set(kept.parts.map(([l, i]) => Memory.slot(l, i)));
-    view.parts = Memory.roots(mem.count).flatMap((part) => Memory.down(mem, part, keys));
+    view.parts = Memory.roots(mem.count, view.from).flatMap((part) => Memory.down(mem, part, keys));
     view.size = view.parts.reduce((n, part) => n + Memory.size(mem, part), 0);
     view.batch = kept?.batch ?? false;
   }
@@ -232,7 +239,7 @@ export namespace Memory {
   export function glance(mem: Memory, store: Store): Memory {
     return {
       ...mem, store, count: Store.count(store), nodes: new Map(), agents: new Map(), logs: new Map(), ready: [], busy: new Set(), calls: new Map(), hold: true, done: true, wait: new Set(),
-      view: { parts: [], size: 0, batch: false, high: LINES }, seen: { parts: [], size: 0, batch: false, high: SEEN },
+      view: { parts: [], size: 0, batch: false, high: LINES, from: 0 }, seen: { parts: [], size: 0, batch: false, high: SEEN, from: 0 },
     };
   }
 
@@ -466,14 +473,18 @@ export namespace Memory {
     return mem.nodes.get(Memory.slot(part.l, part.i)) ?? Store.node(mem.store, part.i * 2 ** part.l, 2 ** part.l);
   }
 
-  // the tree's roots: a node per power of two in the count, largest first
-  export function roots(count: number): Part[] {
+  // the tree's roots from message `from` on: the largest nodes that tile
+  // [from, count), in order (from the first: a node per power of two in
+  // the count, largest first)
+  export function roots(count: number, from = 0): Part[] {
     const out: Part[] = [];
-    for (let l = 30, id = 0; l >= 0; l--) {
-      if (id + 2 ** l <= count) {
-        out.push({ l, i: id / 2 ** l });
-        id += 2 ** l;
+    for (let id = from; id < count; ) {
+      let l = 0;
+      while (id % 2 ** (l + 1) === 0 && id + 2 ** (l + 1) <= count) {
+        l += 1;
       }
+      out.push({ l, i: id / 2 ** l });
+      id += 2 ** l;
     }
     return out;
   }
@@ -512,6 +523,12 @@ export namespace Memory {
   // the message of the view's (k+1)th line not built, else the count
   export function first(mem: Memory, k = 0): number {
     return (mem.ready[0] ?? [])[k] ?? mem.count;
+  }
+
+  // the first message the chat's view sends not built, else the count:
+  // one before its `from` (a /clear) is never sent, so never waited on
+  export function due(mem: Memory): number {
+    return (mem.ready[0] ?? []).find((i) => i >= mem.view.from) ?? mem.count;
   }
 
   // a node ready (on), or no more (built)
@@ -656,7 +673,7 @@ export namespace Memory {
     for (const { l, i, text } of parts) {
       Memory.ready(mem, { l, i }, false);
       mem.nodes.set(Memory.slot(l, i), text);
-      [mem.view, mem.seen].forEach((view) => (view.size += l === 0 && i < Memory.end(view) ? Memory.bytes(text) : 0));
+      [mem.view, mem.seen].forEach((view) => (view.size += l === 0 && i >= view.from && i < Memory.end(view) ? Memory.bytes(text) : 0));
     }
     for (const { l, i } of parts) {
       const up = { l: l + 1, i: i >> 1 };
@@ -748,9 +765,13 @@ ${Memory.cut(line)}| ← LIMIT`;
     mem.wait.forEach((check) => check());
   }
 
-  // a view to message `end`: its lines from it dropped (the compactions',
-  // as loaded, past the first not built), the messages to it appended
+  // a view to message `end`, from its first: its lines before that dropped
+  // (a /clear's), its lines from `end` dropped (the compactions', as
+  // loaded, past the first not built), the messages to it appended
   export function reach(mem: Memory, view: View, end: number): void {
+    for (const part of view.parts.splice(0, Memory.cover(view, view.from))) {
+      view.size -= Memory.size(mem, part);
+    }
     for (const part of view.parts.splice(Memory.cover(view, end))) {
       view.size -= Memory.size(mem, part);
     }
@@ -760,9 +781,9 @@ ${Memory.cut(line)}| ← LIMIT`;
     }
   }
 
-  // the message after a view's last line
-  export function end({ parts }: View): number {
-    return parts.length === 0 ? 0 : Memory.span(parts[parts.length - 1])[1] + 1;
+  // the message after a view's last line (none: its first)
+  export function end({ parts, from }: View): number {
+    return parts.length === 0 ? from : Memory.span(parts[parts.length - 1])[1] + 1;
   }
 
   // the index of a view's line holding message id (past its end: none)
@@ -775,9 +796,13 @@ ${Memory.cut(line)}| ← LIMIT`;
     return a;
   }
 
-  // whether a view holds `part` or a node under it, or will (not there)
+  // whether a view holds `part` or a node under it, or will (not there);
+  // never one wholly before the view's `from`
   export function held(mem: Memory, part: Part): boolean {
     return [mem.view, mem.seen].some((view) => {
+      if (Memory.span(part)[1] < view.from) {
+        return false;
+      }
       const k = Memory.cover(view, Memory.span(part)[0]);
       return k === view.parts.length || view.parts[k].l <= part.l;
     });
@@ -844,11 +869,12 @@ ${Memory.cut(line)}| ← LIMIT`;
     return { parts: view.filter((part) => part !== null), size, gone };
   }
 
-  // once the chat's messages before `end` are built: null; else "Stopped." (signal aborted)
+  // once the messages the chat's view sends before `end` are built: null;
+  // else "Stopped." (signal aborted)
   export function settle(mem: Memory, end: number, signal: AbortSignal): Promise<string | null> {
     return new Promise((resolve) => {
       const check = () => {
-        const built = Memory.first(mem) >= end;
+        const built = Memory.due(mem) >= end;
         const why = signal.aborted ? "Stopped." : null;
         if (built || why !== null) {
           mem.wait.delete(check);

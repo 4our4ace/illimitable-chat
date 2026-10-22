@@ -165,7 +165,7 @@ export type Client =
   | { $: "say"; sizes: number[]; body: Body }
   | { $: "stop"; name?: string } // all work, or the agent named, or TURN
   | { $: "goal"; text: string | null } // the goal set (/goal), or none (/halt)
-  | { $: "clear" } // a fresh session: the chat so far folds into the view (/clear)
+  | { $: "clear" } // a fresh session: the chat so far leaves the view, kept for search and zoom (/clear)
   | { $: "compact" } // all but the last exchanges fold into the view, still shown (/compact)
   | { $: "pick"; to: Pick }
   | { $: "main"; name: string | null } // the main agent (/agent), or illi's own
@@ -680,8 +680,11 @@ export function view_pick(v: View): Knob[] {
   ];
 }
 
+// the chat's messages: to the end of the last part shown, and every one
+// before the first shown whole (the turn's: all of them after a /clear,
+// the screen empty)
 export function view_count(v: View): number {
-  return v.parts.reduce((end, [id, n]) => Math.max(end, id + n), 0);
+  return v.parts.reduce((end, [id, n]) => Math.max(end, id + n), v.turn);
 }
 
 function view_learn(v: View, pack: Pack): void {
