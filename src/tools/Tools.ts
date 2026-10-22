@@ -134,8 +134,9 @@ not what the user's last message says, since illi may have given you
 just part of the work. Your final reply is your report to illi. illi may
 send you more messages, even while you work: answer the last.`;
 
-const VIEW_DOC = `The view: the whole chat between illi and the user, oldest first, inside
-<chat> tags, as one-line summaries. Each line is
+const VIEW_DOC = `The view: the chat between illi and the user (since its last new session,
+if any: search finds what came before), oldest first, inside <chat> tags,
+as one-line summaries. Each line is
 
   id+n|text   the n messages from id on, summarized (newlines shown as spaces)
 

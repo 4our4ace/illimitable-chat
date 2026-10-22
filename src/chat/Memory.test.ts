@@ -11,7 +11,8 @@
 // of many pages once. An agent spawned as the user's is named after it;
 // a freed name is used again, each log its own; one named main, the
 // chat's own caller, is refused. A leaf's summary starts with its
-// message's kind, the compactor's or added.
+// message's kind, the compactor's or added. Past a /clear, the chat's
+// view waits on no summary before it, nor holds a node wholly before it.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -156,4 +157,18 @@ test("a leaf's summary starts with its message's kind, added where the compactor
   expect(Memory.bare("Line: done")).toBe("done");
   expect(Memory.bare("line 42: the bug")).toBe("line 42: the bug");
   expect(Memory.bare("user: Summary: none yet")).toBe("user: Summary: none yet");
+});
+
+test("past a /clear, the chat's view waits on no summary before it, nor holds a node wholly before it", async () => {
+  const mem = chat("clear", 16);
+  Memory.push(mem, [{ kind: "note", text: "a new session" }]);
+  expect(Memory.due(mem)).toBe(0);
+  mem.view.from = 16;
+  mem.view.parts = [{ l: 0, i: 16 }];
+  mem.seen.parts = [{ l: 4, i: 0 }, { l: 0, i: 16 }];
+  expect(Memory.due(mem)).toBe(16);
+  expect(await Memory.settle(mem, 16, new AbortController().signal)).toBeNull();
+  expect(Memory.held(mem, { l: 1, i: 0 })).toBe(false);
+  expect(Memory.held(mem, { l: 4, i: 0 })).toBe(true);
+  expect(Memory.held(mem, { l: 0, i: 16 })).toBe(true);
 });

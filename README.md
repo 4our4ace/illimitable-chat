@@ -77,9 +77,10 @@ flowchart TD
   summarized.
 - **Zoom.** illi can open any line back down to the original messages.
   `/compact` folds all but the last two exchanges, so turns get smaller
-  (the screen keeps showing them); `/clear` empties the screen for a
-  fresh topic, and illi still remembers it all. `/tree` writes yours
-  as a web page into the current folder.
+  (the screen keeps showing them); `/clear` starts a fresh topic: the
+  chat before isn't sent at all, yet stays kept and summarized, so
+  illi finds any of it by search or zoom. `/tree` writes yours as a
+  web page into the current folder.
 - **Tools.** Shell, file edits, subagents, a to-do list, MCP servers,
   questions with options you pick in the input, your answers kept in
   the chat.

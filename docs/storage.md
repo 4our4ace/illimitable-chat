@@ -95,7 +95,8 @@ The columns, by table:
 - **state**: `chat`, `saved` (JSON: the chat's view, `seen` (the
   compactions' view), the pick, the goal, the suggested reply (so it
   shows again after a restart), the main agent, what ran, the
-  cut, `show` and `top`). It is never rebuilt from the facts,
+  cut, `show` and `top`, the last `/clear`: the chat's view starts
+  there, so nothing before it is sent). It is never rebuilt from the facts,
   because the model's prompt cache depends on the saved view.
 - **log**: `id`, `chat`, `log`, `name`. **work**: `log` (references
   `log`), `i`, `kind`, `text`, `date`.

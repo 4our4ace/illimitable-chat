@@ -18,7 +18,7 @@ Chat
 | Ctrl+X | the leader: the screen greys, and the next key runs its shortcut ([below](#shortcuts)) |
 | `/goal <message>` | send a goal: illi goes on until it is met |
 | `/halt` | drop the goal; the turn running ends as it would |
-| `/clear` | an empty screen for a new topic; illi still remembers the chat before |
+| `/clear` | start a new topic: the chat before is kept and looked up when needed, not sent |
 | `/compact` | summarize all but the last two exchanges, so each turn sends less; the screen keeps them |
 | `/image <path>` | attach an image to the next message (or paste or drop the file) |
 | Alt+V, Ctrl+V | attach the clipboard's image (the terminal's own paste brings text) |

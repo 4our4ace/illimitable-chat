@@ -140,7 +140,7 @@ test("/compact folds all but the last two exchanges for the agent, the screen st
   expect(Memory.load(mem.dir, () => ({}) as any, HERE).show).toBe(shown);
 });
 
-test("/clear: the agent gets the chat so far as lines, and the screen starts anew from its note, also after a restart; the old topic's suggested reply goes", async () => {
+test("/clear: the agent gets nothing of the chat so far, not even its lines, and no note: the context empty, the screen too, also after a restart; the old topic's suggested reply goes; all of it still found by zoom", async () => {
   const mem = chat.mem;
   const before = mem.count;
   chat.suggest.text = mem.suggest = "Commit it";
@@ -149,14 +149,29 @@ test("/clear: the agent gets the chat so far as lines, and the screen starts ane
   chat.socks.add(sock);
   expect(Chat.clear(chat)).toEqual({});
   chat.socks.delete(sock);
-  expect(told.filter((m) => m.$ === "state").at(-1)?.use.fill.used).toBe(Math.round(Memory.fill(mem) / 4));
+  expect(told.filter((m) => m.$ === "state").at(-1)?.use.fill.used).toBe(0);
+  const seen = View.view_new();
+  told.forEach((m) => View.view_hear(seen, m));
+  expect([seen.parts, View.view_count(seen)]).toEqual([[], before]);
   expect(mem.cut).toBe(before);
   expect(mem.top).toBe(before);
   expect(chat.eye.parts).toEqual([]);
   expect(chat.eye.from).toBe(before);
-  expect(Memory.message(mem, before)!.kind).toBe("note");
-  expect(Memory.load(mem.dir, () => ({}) as any, HERE).top).toBe(before);
-  expect([chat.suggest.text, Memory.load(mem.dir, () => ({}) as any, HERE).suggest]).toEqual(["", ""]);
+  expect(mem.count).toBe(before);
+  expect(mem.view.parts).toEqual([]);
+  expect(Memory.view(mem, mem.cut).map((b) => b.text).join("")).toBe("<chat>\n</chat>\n");
+  expect(Memory.fill(mem)).toBe(0);
+  expect(Chat.clear(chat)).toEqual({});
+  expect(mem.count).toBe(before);
+  const again = Memory.load(mem.dir, () => ({}) as any, HERE);
+  expect([again.top, again.view.from, again.view.parts]).toEqual([before, before, []]);
+  expect([chat.suggest.text, again.suggest]).toEqual(["", ""]);
+  for (let k = 0; k < 9; k++) {
+    Memory.push(mem, [{ kind: "user", text: "after the clear " + k }]);
+  }
+  Memory.fit(mem);
+  expect(mem.view.parts.every((part) => Memory.span(part)[0] >= before)).toBe(true);
+  expect(Memory.zoom(mem, 0, 1, 0)).toContain(Memory.message(mem, 0)!.text);
 });
 
 test("a goal check and a message sent mid-run hold no more than the chat's model takes", () => {
@@ -283,7 +298,7 @@ test("a turn grown past its room goes on without shrinking; three refits in a ro
   const asked = await refitted([{ text: "" }, { text: "" }, { text: "" }, { text: "" }]);
   expect(asked).toHaveLength(4);
   const last = Memory.message(chat.mem, chat.mem.count - 1)!;
-  expect([last.kind, last.text]).toEqual(["note", "No reply: the chat won't fit " + chat.model + "'s window even summarized. /clear starts a fresh screen, or /model picks a model with a bigger window."]);
+  expect([last.kind, last.text]).toEqual(["note", "No reply: the chat won't fit " + chat.model + "'s window even summarized. /clear starts a new topic (the chat before it is kept, not sent), or /model picks a model with a bigger window."]);
   expect(chat.refits).toBe(0);
 });
 
