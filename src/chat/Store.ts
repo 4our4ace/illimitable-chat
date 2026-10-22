@@ -87,6 +87,9 @@ export type Project = { id: number; name: string; path: string; first: string | 
 // a summary line found: its project, chat, the messages it covers, text
 export type Found = { project: string; chat: number; first: number; n: number; text: string };
 
+// a project's lines a search found but left out (more: maybe more still)
+export type Cut = { n: number; more: boolean };
+
 // the file, its connection, the project and chat its rows are of
 export type Store = { file: string; db: Database; project: number; chat: number };
 
@@ -159,6 +162,7 @@ export const WAIT = 10000;
 export namespace Store {
 
   // the chat folder's file, made if new and moved on to this schema (in
+  // secure delete already, so what a step drops is overwritten; in
   // auto_vacuum incremental again, if a forget cut off left it full); the
   // chat of the project at `place`, made if new (null: none, the file
   // alone, for upkeep)
@@ -168,13 +172,13 @@ export namespace Store {
     const db = new Database(file, { create: true });
     db.run("pragma busy_timeout = " + WAIT);
     db.run("pragma foreign_keys = on");
+    db.run("pragma secure_delete = on");
     Store.schema(db);
     Store.wal(db);
     if ((db.query("pragma auto_vacuum").get() as { auto_vacuum: number }).auto_vacuum === 1) {
       db.run("pragma auto_vacuum = incremental");
     }
     db.run("pragma synchronous = normal");
-    db.run("pragma secure_delete = on");
     const { project, chat } = place === null ? { project: 0, chat: 0 } : Store.place(db, place);
     return { file, db, project, chat };
   }
@@ -475,8 +479,10 @@ export namespace Store {
   // forget meanwhile drops no index it's yet to read): each chat's best
   // first, the best of those first, then each one's second, and so on, as
   // one index's scores weigh its words by how rare they are in it, not in
-  // all, so a big chat's would crowd out every small one's
-  export function search(store: Store, words: string[], projects: number[] | null): Found[] {
+  // all, so a big chat's would crowd out every small one's. The lines
+  // past the FOUND given are counted in `cut`, by project (more: a chat
+  // of it had FOUND lines, its most, so it may hold more still)
+  export function search(store: Store, words: string[], projects: number[] | null, cut?: Map<string, Cut>): Found[] {
     const terms = words.filter((w) => /[\p{L}\p{N}\p{Co}]/u.test(w));
     if (terms.length === 0) {
       return [];
@@ -484,10 +490,15 @@ export namespace Store {
     return store.db.transaction(() => {
       const where = projects === null ? "" : " where c.project in (" + projects.map(() => "?").join(", ") + ")";
       const chats = store.db.query("select c.id as chat, p.name as project from chat c join project p on p.id = c.project" + where).all(...(projects ?? [])) as Array<{ chat: number; project: string }>;
-      const ask = (or: boolean) => chats.flatMap(({ chat, project }) => Store.seek(store.db, chat, terms, or).map((l, k) => ({ project, chat, k, ...l })))
-        .sort((a, b) => a.k - b.k || a.score - b.score).slice(0, FOUND).map(({ score, k, ...found }) => found);
-      const all = ask(false);
-      return all.length > 0 || terms.length === 1 ? all : ask(true);
+      const ask = (or: boolean) => chats.flatMap(({ chat, project }) => Store.seek(store.db, chat, terms, or).map((l, k, all) => ({ project, chat, k, full: all.length === FOUND, ...l })))
+        .sort((a, b) => a.k - b.k || a.score - b.score);
+      const and = ask(false);
+      const all = and.length > 0 || terms.length === 1 ? and : ask(true);
+      for (const { project, full } of all.slice(FOUND)) {
+        const was = cut?.get(project);
+        cut?.set(project, { n: (was?.n ?? 0) + 1, more: (was?.more ?? false) || full });
+      }
+      return all.slice(0, FOUND).map(({ score, k, full, ...found }) => found);
     })();
   }
 
@@ -523,8 +534,12 @@ export namespace Store {
   // file before any is cut off its end), then its space given back by a
   // commit in auto_vacuum full, which empties the free list whole, where
   // incremental_vacuum looks each page up in it (quadratic: minutes for a
-  // big project)
-  export function forget(store: Store, project: number): void {
+  // big project). Whether its space was given back: not while a reader
+  // keeps the zeros from the file till `wait` (ms) runs out (Store.settled),
+  // nor if the vacuum fails; then the free pages stay for new writes, and
+  // the zeros reach the file at a later checkpoint, as nothing was cut.
+  // Flushed (Disk.ts) however it ends
+  export function forget(store: Store, project: number, wait = WAIT): boolean {
     const db = store.db;
     db.transaction(() => {
       for (const chat of Store.chats(store, project)) {
@@ -532,11 +547,35 @@ export namespace Store {
       }
       db.query("delete from project where id = ?").run(project);
     }).immediate();
-    db.run("pragma wal_checkpoint(full)");
-    db.run("pragma auto_vacuum = full");
-    db.run("pragma auto_vacuum = incremental");
-    db.run("pragma wal_checkpoint(truncate)");
-    Store.wrote(store);
+    try {
+      if (!Store.settled(db, wait)) {
+        return false;
+      }
+      db.run("pragma auto_vacuum = full");
+      db.run("pragma auto_vacuum = incremental");
+      db.run("pragma wal_checkpoint(truncate)");
+      return true;
+    } catch (err: any) {
+      console.error("illi: forget: the space wasn't given back: " + (err?.message ?? err));
+      return false;
+    } finally {
+      Store.wrote(store);
+    }
+  }
+
+  // every page of the WAL copied into the file (a full checkpoint), tried
+  // again while another connection checkpoints, or a reader keeps an older
+  // snapshot (each try waits busy_timeout for readers), till `wait` (ms)
+  // runs out; whether it was
+  export function settled(db: Database, wait: number): boolean {
+    for (const until = Date.now() + wait; ; Bun.sleepSync(50)) {
+      if ((db.query("pragma wal_checkpoint(full)").get() as { busy: number }).busy === 0) {
+        return true;
+      }
+      if (Date.now() >= until) {
+        return false;
+      }
+    }
   }
 
 }

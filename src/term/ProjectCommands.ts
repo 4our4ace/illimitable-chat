@@ -80,7 +80,8 @@ function project_ask(t: Term, p: Project): void {
 }
 
 // a project forgotten, a copy exported first if asked; its lock held
-// meanwhile (none: it is open in another terminal, kept). This one: illi
+// meanwhile (none: it is open in another terminal, kept); said if its
+// space stays in the file (Store.forget couldn't give it back). This one: illi
 // runs again, the project's chat empty, its lock held till then (run in
 // another terminal, this one a view of it: kept, forgotten there)
 async function project_forget(t: Term, p: Project, copy: boolean): Promise<void> {
@@ -112,10 +113,11 @@ async function project_forget(t: Term, p: Project, copy: boolean): Promise<void>
     }, true);
   }
   const pics = Store.pictures(mem.store, p.id);
-  if (!(await project_held(p, () => Store.forget(mem.store, p.id)))) {
+  let back = true;
+  if (!(await project_held(p, () => void (back = Store.forget(mem.store, p.id))))) {
     return term_note(t, p.name + " is open in another terminal: quit illi there first, then forget it here.");
   }
-  term_note(t, "Forgot " + p.name + ": " + project_count(p) + (pics === 0 ? "" : " and " + pics + (pics === 1 ? " image" : " images")) + ".");
+  term_note(t, "Forgot " + p.name + ": " + project_count(p) + (pics === 0 ? "" : " and " + pics + (pics === 1 ? " image" : " images")) + "." + (back ? "" : " Its space stays in the file, for new messages: it was being read."));
 }
 
 // `step` done holding a project's lock, so no illi opens it meanwhile;

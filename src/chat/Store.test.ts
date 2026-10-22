@@ -1,20 +1,24 @@
 // Store test
 // ==========
 // `bun test Store.test.ts`. A new file gives space back as rows go and
-// bears illi's mark (a forget cut off undone at the next open); illis making it at once each get their project. A
-// newer illi's file opens while it only added; one that needs a newer
-// illi is refused. Each place is its own project with its own chat, home
-// outside repos, the same place the same chat; a name another's already,
-// numbered. The projects are listed the one used last first, with their
-// latest line, a message of two pages counted once; a search finds lines
-// with all the words (else any), in a project or all, every match ranked
-// however old, each chat's best first (a big chat's never crowd out a
-// small one's), as the file was when the search began; a big chat leaves out a word in most lines all along
-// while a rarer one is in, a word common only of late kept. A project
-// forgotten is gone from the file, its words (its index dropped), images
-// and to-do list too, its space given back, a later version's rows of
-// its chats too; the others stay, and no number is used again. A file of version 1 moves on to 3, its facts as they were, the
-// words moved to an index per chat.
+// bears illi's mark (a forget cut off undone at the next open); illis
+// making it at once each get their project. A newer illi's file opens
+// while it only added; one that needs a newer illi is refused. Each place
+// is its own project with its own chat, home outside repos, the same
+// place the same chat; a name another's already, numbered. The projects
+// are listed the one used last first, with their latest line, a message
+// of two pages counted once; a search finds lines with all the words
+// (else any), in a project or all, every match ranked however old, each
+// chat's best first (a big chat's never crowd out a small one's, the
+// projects with lines left out named), as the file was when the search
+// began; a big chat leaves out a word in most lines all along while a
+// rarer one is in, a word common only of late kept. A project forgotten
+// is gone from the file, its words (its index dropped), images and to-do
+// list too, its space given back, a later version's rows of its chats
+// too; the others stay, and no number is used again. One while a reader
+// holds an older snapshot keeps its space, its zeros in the file at a
+// later checkpoint. A file of version 1 moves on to 3, its facts as they
+// were, the words moved to an index per chat.
 
 import { afterAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -25,6 +29,7 @@ const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-store-");
 process.env.ILLI_DIR = DIR;
 
 const { HOME, Store } = await import("./Store.ts");
+const { Projects } = await import("./Projects.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
@@ -150,7 +155,7 @@ test("the projects, the one used last first, with their latest line; a search, a
   [home, app, site].forEach(Store.close);
 });
 
-test("a search of all: each chat's best first, so a big chat's many matches never crowd out a small one's; it reads the file as it began, an index dropped meanwhile", () => {
+test("a search of all: each chat's best first, so a big chat's many matches never crowd out a small one's, the projects with lines left out named; it reads the file as it began, an index dropped meanwhile", () => {
   const home = Store.open(DIR + "/fair");
   const app = Store.open(DIR + "/fair", APP);
   const site = Store.open(DIR + "/fair", SITE);
@@ -159,6 +164,11 @@ test("a search of all: each chat's best first, so a big chat's many matches neve
   const where = (found: any[]) => found.map((f) => f.project + " " + f.first);
   const fair = where(Store.search(home, ["needle"], null));
   expect([fair.length, fair[0], fair[1], fair.filter((f) => f.startsWith("site")).length]).toEqual([20, "app-k3f9x2 0", "site-7q2m0d 0", 1]);
+  const cut = new Map();
+  Store.search(home, ["needle"], null, cut);
+  expect([...cut]).toEqual([["app-k3f9x2", { n: 1, more: true }]]);
+  expect(Projects.search(home, "needle", "all").split("\n").slice(19)).toEqual(["app-k3f9x2 900+1|user: step 900 needle needle", "More lines in: app-k3f9x2 (1+); search with project to see them."]);
+  expect(Projects.search(home, "small needle", "all")).toBe("site-7q2m0d 0+1|user: a needle in a small project");
   const reader = { ...home, db: new Database(home.file, { readonly: true }) };
   const seek = Store.seek;
   Store.seek = (db, chat, terms, or) => {
@@ -190,6 +200,29 @@ test("a big chat: every match ranked however old; a word in most lines all along
   Store.close(store);
 });
 
+test("a forget while a reader holds an older snapshot keeps the file's space, and still overwrites: the zeros reach the file at a later checkpoint", () => {
+  const home = Store.open(DIR + "/held");
+  const app = Store.open(DIR + "/held", APP);
+  for (let k = 0; k < 200; k++) {
+    say(app, "held-secret-" + k + " " + "y".repeat(400));
+  }
+  home.db.run("pragma wal_checkpoint(truncate)");
+  say(home, "a line in the WAL, so the reader's snapshot is of it");
+  const reader = new Database(home.file, { readonly: true });
+  reader.run("begin");
+  reader.query("select count(*) from msg").get();
+  home.db.run("pragma busy_timeout = 50");
+  expect(Store.forget(home, app.project, 100)).toBe(false);
+  const free = (home.db.query("pragma freelist_count").get() as { freelist_count: number }).freelist_count;
+  expect([(home.db.query("pragma auto_vacuum").get() as any).auto_vacuum, free > 0, Store.projects(home).map((p) => p.name)]).toEqual([2, true, ["home"]]);
+  reader.run("commit");
+  reader.close();
+  home.db.run("pragma wal_checkpoint(truncate)");
+  expect(fs.readFileSync(DIR + "/held/memory.sqlite").includes("held-secret")).toBe(false);
+  Store.close(app);
+  Store.close(home);
+});
+
 test("a project forgotten is gone from the file, its words too, its space given back, the images only it named said; the others stay", () => {
   const home = Store.open(DIR + "/forget");
   const app = Store.open(DIR + "/forget", APP);
@@ -210,7 +243,7 @@ test("a project forgotten is gone from the file, its words too, its space given 
   home.db.run("pragma wal_checkpoint(truncate)");
   const before = fs.statSync(home.file).size;
   expect([Store.pictures(home, app.project), Store.pictures(home, home.project)]).toEqual([2, 1]);
-  Store.forget(home, app.project);
+  expect(Store.forget(home, app.project)).toBe(true);
   expect(Store.projects(home).map((p) => p.name)).toEqual(["home"]);
   expect([home.db.query("pragma auto_vacuum").get(), home.db.query("pragma freelist_count").get()]).toEqual([{ auto_vacuum: 2 }, { freelist_count: 0 }]);
   expect([Store.image(home, "bbbbbbbbbbbbbbbb.png")?.data.length, home.db.query("select count(*) as n from image").get(), home.db.query("select count(*) as n from todo").get()]).toEqual([6, { n: 1 }, { n: 0 }]);
