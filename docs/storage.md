@@ -159,6 +159,10 @@ Who opens it
 Several processes and threads can have the file open at once. SQLite
 allows any number of readers and one writer at a time. A writer that
 finds another writing waits up to `busy_timeout` (10 s) and then fails.
+A write that fails so, or for a full disk, is told on the screen: a
+command's (`/clear`, `/goal`...) as its answer; a save of the chat's
+state as a turn starts or ends (what ran, the suggested reply) as a
+note, illi going on.
 
 | Who | Connection | When | Code |
 | --- | --- | --- | --- |
