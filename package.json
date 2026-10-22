@@ -2,7 +2,9 @@
   "name": "illimitable-chat",
   "version": "0.1.0",
   "private": true,
-  "bin": { "illi": "src/main.ts" },
+  "bin": {
+    "illi": "src/main.ts"
+  },
   "scripts": {
     "start": "bun src/main.ts",
     "test": "ILLI_VENDORS=claude-api ILLI_PICK=claude-api:sonnet-5.5:medium:slow ILLI_COMPACTOR=claude-api:haiku-5.5:high:slow ILLI_JOBS=64 bun test --isolate",
@@ -12,5 +14,10 @@
   "devDependencies": {
     "@types/bun": "1.3.14",
     "typescript": "5.9.3"
+  },
+  "dependencies": {
+    "pele": "1.7.0",
+    "pelext": "github:4our4ace/pelext#v0.2.1",
+    "prismjs": "1.30.0"
   }
 }

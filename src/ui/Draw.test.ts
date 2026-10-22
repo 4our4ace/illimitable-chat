@@ -17,16 +17,17 @@ const text = (lines: Paint.Line[]) => lines.map((l) => l.map((r) => r.x).join(""
 const colors = (lines: Paint.Line[]) => new Set(lines.flatMap((l) => l.flatMap((r) => [r.s.c, r.s.g])).filter((c) => c.startsWith("#")));
 
 // what is loaded only as it is first needed: Prism at the first code not
-// a shell's, Pele and the box art at the first diagram
+// a shell's, Pele at the first diagram
 test("Prism loads at the first code it reads, Pele at the first diagram", () => {
-  const loaded = () => Object.keys(require.cache).filter((k) => /cellsmith[\\/](pele\.ts|vendor[\\/])/.test(k)).map((k) => k.split(/[\\/]/).pop()).sort();
+  const which = (k: string) => /node_modules[\\/](pelext|pele|prismjs)[\\/]/.exec(k)?.[1] ?? (/[\\/]ui[\\/]Prism\.ts$/.test(k) ? "Prism.ts" : null);
+  const loaded = () => [...new Set(Object.keys(require.cache).map(which).filter((k) => k !== null))].sort();
   expect(loaded()).toEqual([]);
   Draw.draw_code("bash", "ls -l");
   expect(loaded()).toEqual([]);
   Draw.draw_code("ts", "const x = 1;");
-  expect(loaded()).toEqual(["prism.js"]);
+  expect(loaded()).toEqual(["Prism.ts", "prismjs"]);
   Draw.draw_diagram(FLOW, 60);
-  expect(loaded()).toEqual(["mermaid-text.js", "pele.js", "pele.ts", "prism.js"]);
+  expect(loaded()).toEqual(["Prism.ts", "pele", "pelext", "prismjs"]);
 });
 
 test("a mermaid block whole is a diagram, in the width; streaming, its code", () => {
