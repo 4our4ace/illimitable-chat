@@ -18,6 +18,7 @@ import { Disk } from "../chat/Disk.ts";
 import { Machine } from "../tools/Machine.ts";
 import { Mcp } from "../tools/Mcp.ts";
 import { term_note } from "./Notices.ts";
+import { Update } from "../config/Update.ts";
 import * as Paint from "../ui/Paint.ts";
 import * as Profiles from "../config/Profiles.ts";
 import * as Screen from "../ui/Screen.ts";
@@ -134,9 +135,10 @@ export async function term_restart(t: Term, name: string, step?: () => void | Pr
 
 // all this illi holds let go, as a quit does, but waited on: the device
 // login let go, the chat stopped (what it cut goes on at its next start),
-// the agents' processes and the MCP servers ended, every write flushed,
-// the lock released (keep: kept, its views let go), the terminal as it
-// was
+// the agents' processes and the MCP servers ended, a new release's
+// download given up (its folder gone: the execve after fires no exit),
+// every write flushed, the lock released (keep: kept, its views let go),
+// the terminal as it was
 async function term_leave(t: Term, keep = false): Promise<void> {
   t.login?.abort();
   t.v.ws?.close();
@@ -144,6 +146,7 @@ async function term_leave(t: Term, keep = false): Promise<void> {
     Chat.close(t.chat, keep);
   }
   Machine.end();
+  Update.drop();
   await Promise.race([Mcp.stop(), Bun.sleep(LEAVE)]);
   await Disk.synced();
   Chat.unlock(keep);

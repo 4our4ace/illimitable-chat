@@ -3,9 +3,9 @@
 # $ILLI_INSTALL). The latest release's binary for this system, checked
 # against the release's SHA256SUMS; with none for it (or ILLI_SOURCE=1),
 # built from the source with Bun (installed first if missing), its
-# libraries as bun.lock pins them. A download
-# that fails (offline, a rate limit) stops it. Run again (or `illi
-# upgrade`), it replaces the one there.
+# libraries as bun.lock pins them. A download that fails (offline, a
+# rate limit) stops it. Run again, it replaces the one there; illi
+# updates itself from then on (`illi upgrade` at once).
 #
 #   curl -fsSL https://raw.githubusercontent.com/4our4ace/illimitable-chat/main/install.sh | bash
 

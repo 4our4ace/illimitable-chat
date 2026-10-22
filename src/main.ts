@@ -2,23 +2,18 @@
 // Main
 // ====
 // `illi`: the chat in this folder (term/Term.ts), or, by its argument,
-// `illi upgrade` (the latest in this one's place), `illi version`, `illi
-// help` (USAGE). The chat is imported only to run it, so an upgrade
-// works whatever its settings say; a setting that won't do stops it with
-// one line on why.
+// `illi upgrade` (the latest in this one's place: for the one file, the
+// update the chat runs once a day, config/Update.ts, run now; for a git
+// clone, a pull), `illi version`, `illi help` (USAGE). The chat is
+// imported only to run it, so an upgrade works whatever its settings
+// say; a setting that won't do stops it with one line on why.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import pkg from "../package.json" with { type: "json" };
+import { HERE, Update, VERSION } from "./config/Update.ts";
 
-// this illi's version
-const VERSION = pkg.version;
-
-// whether this illi is one file (bun build --compile: the installer's),
-// not run by bun from its source
-const COMPILED = /\$bunfs|~BUN/.test(import.meta.path);
-
-// the installer (install.sh), which `illi upgrade` runs again
+// the installer (install.sh), for an illi that is neither one file nor a
+// clone
 const INSTALLER = "https://raw.githubusercontent.com/4our4ace/illimitable-chat/main/install.sh";
 
 const ARGS    = process.argv.slice(2);
@@ -31,7 +26,7 @@ const ODD     = ARGS.find((a) => !["help", "--help", "-h", "version", "--version
 const LOGIN = /^-*(login|logout|signin|auth)$/i;
 
 const USAGE = `Usage: illi            the chat; its tools work in this folder
-       illi upgrade    the latest release in this one's place
+       illi upgrade    the latest release in this one's place, now
        illi version    this illi's version
        illi help       this
 First, run illi in a project folder and type /login to sign in with
@@ -39,22 +34,22 @@ your ChatGPT plan (Plus or Pro); your Claude plan and API keys work too
 (docs/providers.md). The chat and its settings are in ~/.illi
 (ILLI_DIR); docs/config.md lists them. Other profiles' are in
 ~/.illi/profiles: illi opens the one used last (ILLI_PROFILE names
-one). In the chat, /help lists every command and key.`;
+one). A new release installs itself, looked for once a day, and runs
+from the next start (autoupdate). In the chat, /help lists every
+command and key.`;
 
-// `illi upgrade`: one file, the installer run again into its folder (the
-// file replaced as a whole, so the one running goes on; a failed download
-// fails it; the API keys kept from it); from a git clone, a pull; the
-// exit code
+// `illi upgrade`: one file, the latest release installed in its place
+// (Update.upgrade: checked, then the file replaced as a whole, so the one
+// running goes on; a failed download changes nothing), each step said;
+// from a git clone, a pull; the exit code
 async function main_upgrade(): Promise<number> {
-  const run = (cmd: string[], env = process.env) => Bun.spawn(cmd, { env, stdio: ["inherit", "inherit", "inherit"] }).exited;
   console.log("illi " + VERSION + ": upgrading");
-  if (COMPILED) {
-    const { ANTHROPIC_API_KEY, OPENAI_API_KEY, ...env } = process.env;
-    return run(["bash", "-c", "set -o pipefail; curl -fsSL " + INSTALLER + " | bash"], { ...env, ILLI_INSTALL: path.dirname(process.execPath) });
+  if (HERE !== null) {
+    return Update.upgrade(HERE);
   }
   const clone = path.dirname(import.meta.dir);
   if (fs.existsSync(path.join(clone, ".git"))) {
-    return run(["git", "-C", clone, "pull", "--ff-only"]);
+    return Bun.spawn(["git", "-C", clone, "pull", "--ff-only"], { stdio: ["inherit", "inherit", "inherit"] }).exited;
   }
   console.error("illi: " + clone + " is no git clone: install the latest with\n  curl -fsSL " + INSTALLER + " | bash");
   return 1;
@@ -67,6 +62,9 @@ if (HELP || ODD !== undefined) {
   }
   console.log(USAGE);
 } else if (ASKED) {
+  // this line, exactly, is what an update checks a new file by before
+  // putting it in place (Update.install): it must stay so, and print
+  // before anything reads a setting
   console.log("illi " + VERSION);
 } else if (UPGRADE) {
   process.exit(await main_upgrade());

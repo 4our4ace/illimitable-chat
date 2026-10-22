@@ -11,7 +11,8 @@
 // provider's roles are its own: summaries on its small model or the one
 // set for it, subagents on the chat's pick or the one set for it; the start
 // tells of an API key set whose vendor isn't offered, and of the pick's
-// key missing. An unknown argument is named.
+// key missing. autoupdate's values (true and false too) as its mode. An
+// unknown argument is named.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -74,6 +75,7 @@ test("a setting that won't do stops illi at the start, one line on why", () => {
     [{ ILLI_JOBS: "abc" }, "illi: config: jobs takes a number, 1 or more. (ILLI_JOBS)"],
     [{ ILLI_PICK: "bogus" }, "illi: config: pick is no vendor:model:effort:speed offered here: bogus (ILLI_PICK)"],
     [{ ILLI_CONTEXTS: "[1]" }, "illi: config: contexts takes each model's context, like {\"gpt-6.1-sol\": 350000}. (ILLI_CONTEXTS)"],
+    [{ ILLI_AUTOUPDATE: "weekly" }, "illi: config: autoupdate takes on, notify or off. (ILLI_AUTOUPDATE)"],
   ] as const) {
     expect(start(env)).toMatchObject({ code: 1, err: why + "\n" });
   }
@@ -124,6 +126,19 @@ test("the start tells of an API key set whose vendor isn't offered, and of the p
   expect(config.config_tips(config.PICK, true)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer claude-api: /set vendors chatgpt,claude-api, then start illi again."]);
   const openai = { vendor: "openai-api", model: "gpt-6-luna", effort: "medium", speed: "slow" } as const;
   expect(config.config_tips(openai, true)).toContain("The chat runs on openai-api, but OPENAI_API_KEY isn't set: set it and start illi again, or /model picks another.");
+});
+
+test("autoupdate: on by default, notify, or off (true and false too, as config.json's)", () => {
+  expect(config.AUTOUPDATE).toBe("on");
+  for (const value of ["on", "notify", "off", "Notify", true, false, 0]) {
+    expect([value, config.config_check("autoupdate", value)]).toEqual([value, null]);
+  }
+  expect(config.config_check("autoupdate", "daily")).toBe("autoupdate takes on, notify or off.");
+  const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("ILLI_"))) as Record<string, string>;
+  for (const [value, mode] of [["false", "off"], ["0", "off"], ["NOTIFY", "notify"], ["true", "on"]]) {
+    const run = Bun.spawnSync(["bun", "-e", "console.log((await import(" + JSON.stringify(import.meta.dir + "/Config.ts") + ")).AUTOUPDATE)"], { env: { ...clean, ILLI_DIR: DIR, ILLI_AUTOUPDATE: value }, stdout: "pipe", stderr: "pipe" });
+    expect([value, run.stdout.toString().trim()]).toEqual([value, mode]);
+  }
 });
 
 test("an unknown argument is named; one meaning to sign in, told where", () => {

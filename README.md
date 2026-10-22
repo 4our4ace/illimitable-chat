@@ -41,10 +41,13 @@ Install
     curl -fsSL https://raw.githubusercontent.com/4our4ace/illimitable-chat/main/install.sh | bash
 
 Then run `illi` in any project folder. It goes in `~/.local/bin` (or
-`ILLI_INSTALL`); `illi upgrade` updates it, `illi version` says which it
-is. Linux and macOS; on Windows, use WSL. The installer checks the
-release against its SHA256SUMS; with no release for your system (or
-`ILLI_SOURCE=1`) it builds from the source.
+`ILLI_INSTALL`) and updates itself: once a day, as it starts or while
+it runs, it looks for a new release, downloads and checks it in the
+background, and runs it from the next start (`autoupdate` in [Config](docs/config.md) makes
+it only tell, or never look). `illi upgrade` updates it now, `illi
+version` says which it is. Linux and macOS; on Windows, use WSL. Each
+release is checked against its SHA256SUMS; with no release for your
+system (or `ILLI_SOURCE=1`) the installer builds from the source.
 
 From source, with [Bun](https://bun.sh): see
 [Development](docs/development.md).

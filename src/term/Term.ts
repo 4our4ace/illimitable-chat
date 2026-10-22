@@ -11,11 +11,14 @@
 // (Commands.ts, /help), a key's too (Keys.ts), and so is each of the
 // user's commands (Custom.ts) and skills; images attach by a path, a
 // drop or the clipboard (Attach.ts). The user's MCP servers start with
-// it (Mcp.ts). The agent's tools work in the folder illi starts in; all
-// they left running dies as illi quits. Started in a project whose chat
-// runs in another terminal, illi is one more view of it (Remote.ts): no
-// chat, agents or MCP servers of its own; as that illi quits, this one
-// runs again and holds the chat. Each profile (Profiles.ts) is its
+// it (Mcp.ts); on a terminal, so does the daily look for a new release
+// of illi, installed in the background or only told of (Update.ts,
+// `autoupdate`), its outcome a note. The agent's tools work in the
+// folder illi starts in; all they left running dies as illi quits.
+// Started in a project whose chat runs in another terminal, illi is one
+// more view of it (Remote.ts): no chat, agents or MCP servers of its
+// own; as that illi quits, this one runs again and holds the chat. Each
+// profile (Profiles.ts) is its
 // own chat and settings; /profile switches by letting all go, as a quit
 // does, and running illi again, in place, in the one chosen
 // (ProfileCommands.ts). From a pipe, each line is a message, and each
@@ -51,6 +54,7 @@ import * as Screen from "../ui/Screen.ts";
 import { CLOCK } from "./Side.ts";
 import { Store } from "../chat/Store.ts";
 import { THEME_TROUBLE } from "../ui/Theme.ts";
+import { AGAIN, HERE, Update } from "../config/Update.ts";
 import * as View from "../ui/View.ts";
 
 // the terminal: the chat, run here (null: another terminal's, this one a
@@ -502,7 +506,8 @@ function term_trouble(t: Term, told: Set<string>): void {
 // the chat of the working folder's project opened (its lock taken: one
 // illi a project), on the terminal (its log lines to LOG; a crash said, the
 // terminal left as found: term_crash) or a pipe; the MCP servers started
-// (a failure told: term_trouble); the models ChatGPT lists learned
+// (a failure told: term_trouble); the models ChatGPT lists learned; a new
+// release looked for (term_update)
 export async function term_start(): Promise<void> {
   process.on("uncaughtException", term_crash);
   process.on("unhandledRejection", term_crash);
@@ -532,6 +537,22 @@ export async function term_start(): Promise<void> {
   term_trouble(t, told);
   term_hints(t);
   term_models(t);
+  term_update(t);
+}
+
+// on a terminal, a new release of illi looked for in the background, at
+// the start and each Update.AGAIN after (Update.check: the compiled
+// file's, at most once a day, by `autoupdate`; the timer never keeps
+// illi running), what it did or found a note held as the start's are;
+// never from a pipe, whose output is a script's, nor where it never
+// looks (a source run, `autoupdate` off)
+function term_update(t: Term): void {
+  if (!t.scr.tty || HERE === null || config.AUTOUPDATE === "off") {
+    return;
+  }
+  const look = () => void Update.check(config.ROOT, config.AUTOUPDATE).then((note) => note !== "" && term_note(t, note, HOLD));
+  look();
+  setInterval(look, AGAIN).unref();
 }
 
 // the start's notes, held (HOLD): a pick set that gave way (config.NOTES);

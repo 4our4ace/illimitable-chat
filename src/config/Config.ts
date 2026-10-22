@@ -29,6 +29,7 @@ import * as path from "node:path";
 import type { Vendor } from "../ai/AskAI.ts";
 import { LABELS, VENDORS, Pick, type Offer } from "../ai/Pick.ts";
 import { profile_pick } from "./Profiles.ts";
+import type { Mode } from "./Update.ts";
 import { json_object } from "../tools/Clip.ts";
 
 // Constants
@@ -92,6 +93,7 @@ const TABLE = {
   theme      : { def: config_own("theme.json"), values: "text", now: false, what: "the theme file", path: true },
   mcp        : { def: DIR + "/mcp.json", values: "text", now: false, what: "the MCP servers' file", path: true },
   login      : { def: "", values: "text", now: false, what: "the ChatGPT login file", none: "illi's own", path: true },
+  autoupdate : { def: "on", values: ["on", "notify", "off"], now: false, what: "illi updating itself", shape: [/^(on|notify|off|true|false|0|1)$/i, "on, notify or off"] },
 } satisfies Record<string, Setting>;
 export type Key = keyof typeof TABLE;
 export const SETTINGS: Record<Key, Setting> = TABLE;
@@ -205,6 +207,11 @@ export const CONTEXT    = Number(CONTEXT_SET) > 0 ? Number(CONTEXT_SET) : AUTO_M
 // how many summaries of a side build at once (Memory.ts): few, so a
 // plan's rate limit holds them
 export const JOBS       = Number(config_value("jobs"));
+
+// what illi does with a new release of itself (Update.ts), looked for as
+// it starts: installs it ("on", true), only tells of it ("notify"), never
+// looks (off, false, 0)
+export const AUTOUPDATE: Mode = config_update(String(config_value("autoupdate")).trim().toLowerCase());
 
 // the ChatGPT login chatgpt runs on (ChatGPT.ts): the file `login` names,
 // else illi's own (/login makes it; the root's, so every profile's) or,
@@ -370,6 +377,12 @@ function config_live(): void {
   CONTEXTS    = own ?? {};
   LEADER      = config_leader(String(config_value("leader")));
   SHORTCUTS   = keys ?? OWN_SHORTCUTS;
+}
+
+// `autoupdate`'s value, in lower case, as a mode: off (false, 0), notify,
+// else on
+function config_update(value: string): Mode {
+  return OFFS.includes(value) ? "off" : value === "notify" ? "notify" : "on";
 }
 
 // the leader as a key's name: ctrl+x as Ctrl+X
