@@ -20,9 +20,9 @@
 // Down past its ends walk the messages sent. A long paste shows in it as
 // one token, [Pasted text #n +L lines], an attached image as [Image #n]:
 // each erased whole, a paste's text put back in its place as it's sent
-// (ed_expand). A lone /word is a command being typed, matched to the
-// commands' names (ed_slash, ed_rank: Term.ts lists them under the
-// input). A list open (grab) takes keys before the input does, and a
+// (ed_expand). A lone /word is a command being typed, and one the
+// cursor ends mid-message a skill's name, matched to the names (ed_slash,
+// ed_rank: Term.ts lists them under the input). A list open (grab) takes keys before the input does, and a
 // list searched (type) the text typed.
 
 import * as fs from "node:fs";
@@ -827,11 +827,20 @@ export function ed_set(ed: Ed, text: string): void {
   ed.pos  = text.length;
 }
 
-// the command the input is typed as: its text, a lone `/word` (a message
-// sent before, brought back by Up and not edited, is none: Up and Down
-// walk on); else null
-export function ed_slash(ed: Ed): string | null {
-  return /^\/\S*$/.test(ed.text) && ed.text !== ed.hist[ed.at] ? ed.text : null;
+// the /word being typed and where it starts: the input's text, a lone
+// `/word`; else one mid-message that the cursor ends, after a space or a
+// line's start, with no / after its first (a path is none). A message sent
+// before, brought back by Up and not edited, is none (Up and Down walk
+// on); null: none
+export function ed_slash(ed: Ed): { word: string; from: number } | null {
+  if (ed.text === ed.hist[ed.at]) {
+    return null;
+  }
+  if (/^\/\S*$/.test(ed.text)) {
+    return { word: ed.text, from: 0 };
+  }
+  const word = /(?:^|\s)(\/[^\s/]*)$/.exec(ed.text.slice(0, ed.pos))?.[1];
+  return word === undefined || /^\S/.test(ed.text.slice(ed.pos)) ? null : { word, from: ed.pos - word.length };
 }
 
 // the names a word matches, best first, case aside: those it starts (the

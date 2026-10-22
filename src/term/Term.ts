@@ -210,8 +210,10 @@ export type Item = [Paint.Line, (() => void) | null];
 // the word they're matched to, those it matches (best first), the one
 // lit, the first shown; how many fit as last shown (their descriptions
 // wrapped, up to Frame.ts SUGGEST lines); the word Esc closed it at
-// (null: none)
-export type Sug = { cmds: Cmd[]; word: string; found: Screen.Match[]; at: number; top: number; tall: number; off: string | null };
+// (null: none); mid: where the word starts in a message, the user's
+// skills alone suggested, a pick filling it in (null: the input is the
+// word alone)
+export type Sug = { cmds: Cmd[]; word: string; found: Screen.Match[]; at: number; top: number; tall: number; off: string | null; mid: number | null };
 
 // a line of /help: how it is typed ("": keys only), its keys, what it
 // does; it runs on its argument, or by a key on "" (or the key's name)
