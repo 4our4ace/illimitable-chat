@@ -9,7 +9,7 @@ Chat
 
 | Key or command | Does |
 | -------------- | ---- |
-| Enter | send; on an empty input, interrupt illi |
+| Enter | send |
 | Esc | close a list; else clear the notes, and twice: interrupt illi (agents go on) |
 | Ctrl+C | clear the input; on an empty one, interrupt illi (again: quit) |
 | Ctrl+D | clear the input; on an empty one, quit |
