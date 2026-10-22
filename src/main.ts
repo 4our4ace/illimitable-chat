@@ -74,9 +74,11 @@ if (HELP || ODD !== undefined) {
   await main_chat();
 }
 
-// the chat; a setting that won't do (Config.ts: "config: ...") said in
-// one line, no trace, and so is any other failure before the chat loads;
-// one after, a crash (Term.ts term_crash: its trace to the log)
+// the chat; a setting that won't do (Config.ts: "config: ...") or a chat
+// that won't open (Store.ts: "chat: ...") said in one line, no trace, on
+// the terminal (the log takes console's by then), and so is any other
+// failure before the chat loads; one after, a crash (Term.ts term_crash:
+// its trace to the log)
 async function main_chat(): Promise<void> {
   let crash: ((err: unknown) => void) | null = null;
   try {
@@ -85,8 +87,8 @@ async function main_chat(): Promise<void> {
     await term.term_start();
   } catch (err: any) {
     const why = String(err?.message ?? err);
-    if (crash === null || why.startsWith("config: ")) {
-      console.error("illi: " + why);
+    if (crash === null || why.startsWith("config: ") || why.startsWith("chat: ")) {
+      process.stderr.write("illi: " + why + "\n");
       process.exit(1);
     }
     crash(err);

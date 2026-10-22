@@ -6,12 +6,12 @@
 // Outside any, home. A project is named after its folder, with a code made
 // from its path (chechen-learning-app-k3f9x2), so two copies of one repo
 // are two projects, and a repo moved starts a new one. Each has its own
-// chat in the one file (Store.ts), and its own lock (Chat.lock).
+// chat in its own file (Store.ts), and its own lock (Chat.lock).
 //
 // A model looks across them by tools: first the table (Projects.table:
 // each project's folder, when it was used, its size, its latest line),
 // then a search of their summary lines (Projects.search, in a thread of
-// its own: Seeker.ts), then a zoom into one (Memory.glance).
+// its own: Seeker.ts), then a zoom into one (Tools.chat_of).
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -88,7 +88,7 @@ export namespace Projects {
   export function table(store: File): string {
     const day = (date: string | null) => date?.slice(0, 10) ?? "";
     const lines = Store.projects(store).map((p) => {
-      const head = [p.name + (p.id === store.project ? " (this chat's)" : ""), p.path || "outside any git repo"];
+      const head = [p.name + (p.file === store.file ? " (this chat's)" : ""), p.path || "outside any git repo"];
       const when = p.count === 0 ? ["no messages yet"] : [day(p.first) === day(p.last) ? day(p.last) : day(p.first) + " to " + day(p.last), p.count + (p.count === 1 ? " message" : " messages")];
       const lately = p.lately === "" ? "" : "\n  lately: " + Projects.clip(p.lately);
       return head.concat(when).join(" · ") + lately;
@@ -97,15 +97,15 @@ export namespace Projects {
   }
 
   // a search (Projects.search) in a thread of its own, on its own
-  // connection to the file, so however long it takes the screen goes on;
-  // one the thread can't run is run here
+  // connections to the files, so however long it takes the screen goes
+  // on; one the thread can't run is run here
   export function seek(store: File, words: string, project = ""): Promise<string> {
     return new Promise((done, fail) => {
       const id = ++ASKS;
       ASKED.set(id, { store, words, project, done, fail });
       try {
         SEEKER ??= Projects.seeker();
-        SEEKER.postMessage({ id, file: store.file, project: store.project, words, scope: project });
+        SEEKER.postMessage({ id, file: store.file, words, scope: project });
       } catch {
         Projects.here(id);
       }
@@ -152,13 +152,12 @@ export namespace Projects {
   // model can search in one for them
   export function search(store: File, words: string, project = ""): string {
     const terms = words.split(/\s+/).filter((w) => w !== "");
-    const named = project === "" || project === "all" ? null : Store.project(store, project);
-    if (project !== "" && project !== "all" && named === null) {
+    const file  = project === "" ? store.file : project === "all" ? null : Store.lookup(store, project);
+    if (project !== "" && project !== "all" && file === null) {
       return "No project " + project + ": projects lists them.";
     }
-    const scope = project === "all" ? null : [named?.project ?? store.project];
     const cut   = new Map<string, Cut>();
-    const found = Store.search(store, terms, scope, cut);
+    const found = Store.search(store, terms, file === null ? null : [file], cut);
     if (found.length === 0) {
       return "No summary line holds " + (terms.length === 1 ? "that word" : "those words") + (project === "all" ? " in any project." : " in " + (project || "this project") + ".");
     }

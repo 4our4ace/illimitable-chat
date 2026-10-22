@@ -1,19 +1,18 @@
 // Store
 // =====
-// The chats' facts in one SQLite file (bun:sqlite): memory.sqlite in the
-// profile's chat folder. It keeps what the memory tree (Memory.ts) reads
-// and writes, never how the tree works, so a change to the tree needs
-// none here.
+// The chats' facts in SQLite files (bun:sqlite), one a project, in the
+// profile's chat folder: projects/<name>.sqlite. It keeps what the memory
+// tree (Memory.ts) reads and writes, never how the tree works, so a change
+// to the tree needs none here.
 //
 // A project is where illi ran (Projects.ts): a git repo's top folder, by
-// its path, or home; its name is unique; it holds one chat for now, and
-// room for more. Each has a random uid beside its number (two files may
-// merge one day; numbers are never used again) and `extra`, a JSON object
-// for what may come.
+// its path, or home. Its file bears its name (another place's already, by
+// its key: numbered) and holds it alone: its row, with a random uid and
+// `extra`, a JSON object for what may come, and its chats, one for now
+// and room for more. Forgetting a project (Store.forget) deletes its
+// file: all of it goes at once, and its space with it.
 //
-// Facts are added once, never changed; only forgetting a project
-// (Store.forget) deletes them, by deleting its row: all of its chats'
-// rows go with it, by foreign keys (on delete cascade):
+// Facts are added once, never changed:
 // - msg: a message (a page), by its chat and index, with the folder illi
 //   ran in;
 // - node: a summary line, by the messages it covers (its first, how
@@ -27,42 +26,38 @@
 // work, cut...), never rebuilt from the facts (the cache holds by it);
 // and its to-do list (todo), the agent's, given whole each time.
 // Derived from node: each chat's index of its summary lines' words, for
-// search (find_<chat>, an FTS table made with the chat): a search reads
-// only the chats it covers, and forgetting drops a chat's index whole,
-// its pages overwritten at once (lines deleted one by one from an index
-// of millions took milliseconds each).
+// search (find_<chat>, an FTS table made with the chat).
 //
 // Durable as files were: each write is one transaction, in WAL mode at
 // synchronous NORMAL, so a crash never leaves half a write and no write
 // waits on the disk; the WAL goes to Disk.ts, whose flush (an fsync) an
-// act waits on. Closed, it checkpoints and leaves the one file. A file is
-// made with auto_vacuum incremental (only a new one can be: set before
-// WAL mode, which writes the file) and secure_delete, so what is forgotten
-// is overwritten and its space given back (Store.shrink: as it's
-// forgotten, else at the next open, a reader having held it back). The
-// WAL starting over is cut to what its first commit wrote (WAL_KEEP), so
-// no page from before stays in it, a forgotten project's neither, and a
-// big write (a forget, an upgrade) never leaves it big.
+// act waits on. Closed, it checkpoints and leaves the one file. An illi
+// reads other projects' files too (the projects, a search, a zoom), each
+// on a connection of its own, closed after (Store.visit); one deleted
+// meanwhile reads as it was, or not at all if not begun, and its close
+// leaves alone a new file by the same name (SQLite checks the file is
+// still the one it opened).
 //
 // The schema's version is user_version: an older one moves on by each
 // STEP in turn, in one transaction each. A STEP only adds (a table, an
 // index, a column with a default), so an older illi may still write the
 // file; one that doesn't sets meta's compat to its version, and an illi
-// older than compat refuses the file. A table a STEP adds for a chat's
-// rows references chat (id) on delete cascade, so an older illi's forget
-// reaches it; one for each chat (as find_<chat>) is made by all that make
-// a chat (Store.place: Store.words), so a STEP adding another makes it
-// at a chat's first use, for those an older illi made, or sets compat. A
-// STEP that moves much (3 rewrote every index) runs at the first open,
-// before the screen, and a second illi waits WAIT for it, then fails: a
-// later one moves each chat's at its first use. Those that moved where
-// facts live set compat: 2 (images and the to-do list into the file), 3
-// (the words into an index per chat, which no key ties to its chat), as
-// an older illi would look for them where they were. All of it, step by
-// step: docs/storage.md.
+// older than compat refuses the file. A table for each chat (as
+// find_<chat>) is made by all that make a chat (Store.place: Store.words),
+// so a STEP adding another makes it at a chat's first use, for those an
+// older illi made, or sets compat. Those that moved where facts live set
+// compat: 2 (images and the to-do list into the file), 3 (the words into
+// an index per chat), as an older illi would look for them where they
+// were.
+//
+// An older illi kept every project in one file, memory.sqlite: the first
+// open moves each project out to its own file (Store.move), then leaves
+// it a stub an older illi refuses. All of it, step by step:
+// docs/storage.md.
 
 import { Database, type Statement } from "bun:sqlite";
 import * as fs from "node:fs";
+import * as path from "node:path";
 import type { Kind } from "../ai/AskAI.ts";
 import { Disk } from "./Disk.ts";
 
@@ -84,9 +79,9 @@ export type Line = { first: number; n: number; text: string };
 // "home"), its name, its folder ("": none)
 export type Place = { key: string; name: string; path: string };
 
-// a project, for a model's first look: its name, folder, first and last
-// message (null: none yet), messages, its latest summary line
-export type Project = { id: number; name: string; path: string; first: string | null; last: string | null; count: number; lately: string };
+// a project, for a model's first look: its file, name, folder, first and
+// last message (null: none yet), messages, its latest summary line
+export type Project = { file: string; name: string; path: string; first: string | null; last: string | null; count: number; lately: string };
 
 // a summary line found: its project, chat, the messages it covers, text
 export type Found = { project: string; chat: number; first: number; n: number; text: string };
@@ -94,13 +89,21 @@ export type Found = { project: string; chat: number; first: number; n: number; t
 // a project's lines a search found but left out (more: maybe more still)
 export type Cut = { n: number; more: boolean };
 
-// the file, its connection, the project and chat its rows are of
+// a project's file, its connection, the project and chat its rows are of
 export type Store = { file: string; db: Database; project: number; chat: number };
 
 // Constants
 // =========
 
-export const FILE = "/memory.sqlite";
+// the projects' folder in the chat folder; an older illi's one file;
+// the move's gate, in the profile's locks folder beside the chat folder
+// (Chat.ts LOCKS)
+const PROJECTS = "/projects";
+const OLD      = "/memory.sqlite";
+const GATE     = "/../locks/move.lock";
+
+// a project's file's ending
+const SQLITE = ".sqlite";
 
 // the chats outside any git repo
 export const HOME: Place = { key: "home", name: "home", path: "" };
@@ -147,6 +150,22 @@ update meta set value = '2' where key = 'compat';
   db.run("drop table find; update meta set value = '3' where key = 'compat'");
 }];
 
+// an older illi's file, moved (Store.move): its version and compat, past
+// any an older illi knows, so it refuses the file; this illi knows the
+// stub by meta's `moved` (Store.moved), never by its version, so a later
+// STEP needn't raise it
+const MOVED = 4;
+
+// a project's rows in an older illi's file, each copied to the project's
+// own (attached as p) by the project's number: by their chat, a log's
+// entries by their log's
+const COPY = [
+  "insert into p.project select * from main.project where id = ?1",
+  "insert into p.chat select * from main.chat where project = ?1",
+  ...["msg", "node", "state", "log", "image", "todo"].map((t) => `insert into p.${t} select r.* from main.${t} r join main.chat c on c.id = r.chat where c.project = ?1`),
+  "insert into p.work select w.* from main.work w join main.log l on l.id = w.log join main.chat c on c.id = l.chat where c.project = ?1",
+];
+
 // the most lines a search gives
 const FOUND = 20;
 
@@ -158,18 +177,17 @@ const LARGE = 20000;
 const SAMPLE = 1000;
 
 // how long a connection waits for another's lock, ms
-export const WAIT = 10000;
+const WAIT = 10000;
 
-// the free pages an open gives back (Store.shrink); fewer are left for
-// new rows, as moving pages for them isn't worth it
-const SLACK = 256;
-
-// the bytes the WAL keeps, starting over, past what its first commit
-// wrote (journal_size_limit): none
-const WAL_KEEP = 0;
+// how long an illi waits for another's move (Store.move), ms; and how
+// long it tries the move's gate before saying it waits: two trying at
+// once at no wait may both be refused, SQLite's deadlock avoidance
+// letting one through only to one that waits (as Chat.grip)
+const MOVING = 600000;
+const GLANCE = 50;
 
 // a connection's statements, each prepared once, all finalized as it
-// closes (Store.close): bun:sqlite's own cache (db.query) keeps twenty,
+// closes (Store.shut): bun:sqlite's own cache (db.query) keeps twenty,
 // and one past them, left to the GC, keeps the connection open after
 // close(), so it never checkpoints nor leaves the one file
 const PREPARED = new WeakMap<Database, Map<string, Statement>>();
@@ -192,31 +210,67 @@ function query(db: Database, sql: string): Statement {
 
 export namespace Store {
 
-  // the chat folder's file, made if new and moved on to this schema (in
-  // secure delete already, so what a step drops is overwritten; in
-  // auto_vacuum incremental again, if a forget cut off left it full), its
-  // free pages given back if SLACK or more (a forget a reader held back);
-  // the chat of the project at `place`, made if new (null: none, the file
-  // alone, for upkeep)
-  export function open(dir: string, place: Place | null = HOME): Store {
-    fs.mkdirSync(dir, { recursive: true });
-    const file = dir + FILE;
-    const db = new Database(file, { create: true });
-    db.run("pragma busy_timeout = " + WAIT);
-    db.run("pragma foreign_keys = on");
-    db.run("pragma secure_delete = on");
-    Store.schema(db);
-    Store.wal(db);
-    if ((query(db, "pragma auto_vacuum").get() as { auto_vacuum: number }).auto_vacuum === 1) {
-      db.run("pragma auto_vacuum = incremental");
+  // the file of the project at `place`, made if new (a file another
+  // place's already: the next number's), an older illi's file moved first
+  // (Store.move); the project's first chat, made if new
+  export function open(dir: string, place: Place = HOME): Store {
+    Store.move(dir);
+    fs.mkdirSync(dir + PROJECTS, { recursive: true });
+    for (let k = 1; ; k++) {
+      const file = dir + PROJECTS + "/" + place.name + (k === 1 ? "" : "-" + k) + SQLITE;
+      const db = Store.connect(file, true);
+      try {
+        const at = Store.place(db, place, Store.name(file));
+        if (at !== null) {
+          return { file, db, ...at };
+        }
+      } catch (err) {
+        Store.shut(db);
+        throw err;
+      }
+      Store.shut(db);
     }
-    db.run("pragma synchronous = normal");
-    db.run("pragma journal_size_limit = " + WAL_KEEP);
-    if ((query(db, "pragma freelist_count").get() as { freelist_count: number }).freelist_count >= SLACK) {
-      Store.shrink({ file, db, project: 0, chat: 0 });
+  }
+
+  // another project's file (it must be there), its project and first
+  // chat (0: none), to read; closed by the caller (Store.close)
+  export function peek(file: string): Store {
+    const db = Store.connect(file, false);
+    try {
+      const at = query(db, "select p.id as project, coalesce(min(c.id), 0) as chat from project p left join chat c on c.project = p.id group by p.id order by p.id limit 1").get() as { project: number; chat: number } | null;
+      return { file, db, project: at?.project ?? 0, chat: at?.chat ?? 0 };
+    } catch (err) {
+      Store.shut(db);
+      throw err;
     }
-    const { project, chat } = place === null ? { project: 0, chat: 0 } : Store.place(db, place);
-    return { file, db, project, chat };
+  }
+
+  // a connection to a project's file (make: made if not there), in WAL
+  // mode before its first write, moved on to this schema; one that won't
+  // open, said by the file's name
+  export function connect(file: string, make: boolean): Database {
+    let db: Database | null = null;
+    try {
+      db = make ? new Database(file, { create: true }) : new Database(file, { readwrite: true });
+      db.run("pragma busy_timeout = " + WAIT);
+      db.run("pragma foreign_keys = on");
+      db.run("pragma synchronous = normal");
+      Store.wal(db);
+      Store.schema(db);
+      return db;
+    } catch (err) {
+      if (db !== null) {
+        Store.shut(db);
+      }
+      throw Store.why(path.basename(file) + " won't open", err);
+    }
+  }
+
+  // an error as a chat file's, said at start in one line (main.ts: "chat:
+  // ..."): what failed, then SQLite's words; one said so already, as is
+  export function why(what: string, err: any): Error {
+    const text = String(err?.message ?? err);
+    return text.startsWith("chat: ") ? err : new Error("chat: " + what + ": " + text, { cause: err });
   }
 
   // a connection's file in WAL mode, which it keeps once set: tried
@@ -236,21 +290,18 @@ export namespace Store {
     }
   }
 
-  // a connection's file moved on to this schema (a new file first made to
-  // give space back), each step in one transaction with its version,
-  // which another process may have taken it to meanwhile; one newer, kept
-  // as it is, unless it needs a newer illi
+  // a connection's file moved on to this schema, each step in one
+  // transaction with its version, which another process may have taken
+  // it to meanwhile; one newer, kept as it is, unless it needs a newer
+  // illi
   export function schema(db: Database): void {
     const version = () => (query(db, "pragma user_version").get() as { user_version: number }).user_version;
     if (version() > STEPS.length) {
       const compat = Number((query(db, "select value from meta where key = 'compat'").get() as { value: string } | null)?.value ?? Infinity);
       if (!(compat <= STEPS.length)) {
-        throw new Error("the chat (memory.sqlite) is of a newer illi: update illi to open it");
+        throw new Error("chat: " + path.basename(db.filename) + " is of a newer illi: update illi to open it.");
       }
       return;
-    }
-    if (version() === 0 && (query(db, "pragma page_count").get() as { page_count: number }).page_count === 0) {
-      db.run("pragma auto_vacuum = incremental");
     }
     for (let k = version(); k < STEPS.length; k++) {
       db.transaction(() => {
@@ -263,22 +314,21 @@ export namespace Store {
     }
   }
 
-  // the project at a place and its first chat, made if new (its name
-  // another's already: numbered)
-  export function place(db: Database, place: Place): { project: number; chat: number } {
+  // the project at a place, named `name`, and its first chat, made if new
+  // (the file empty); null: the file is another place's
+  export function place(db: Database, place: Place, name: string): { project: number; chat: number } | null {
     return db.transaction(() => {
       const now = new Date().toISOString();
-      if (query(db, "select 1 from project where key = ?").get(place.key) === null) {
-        let name = place.name;
-        for (let k = 2; query(db, "select 1 from project where name = ?").get(name) !== null; k++) {
-          name = place.name + "-" + k;
-        }
+      const known = query(db, "select id, key from project").all() as Array<{ id: number; key: string }>;
+      if (known.length === 0) {
         query(db, "insert into project (uid, key, name, path, made) values (?, ?, ?, ?, ?)").run(crypto.randomUUID(), place.key, name, place.path, now);
+      } else if (!known.some((p) => p.key === place.key)) {
+        return null;
       }
       const project = (query(db, "select id from project where key = ?").get(place.key) as { id: number }).id;
-      const known = query(db, "select id from chat where project = ? order by id limit 1").get(project) as { id: number } | null;
-      if (known !== null) {
-        return { project, chat: known.id };
+      const first = query(db, "select id from chat where project = ? order by id limit 1").get(project) as { id: number } | null;
+      if (first !== null) {
+        return { project, chat: first.id };
       }
       const chat = Number(query(db, "insert into chat (uid, project, made) values (?, ?, ?)").run(crypto.randomUUID(), project, now).lastInsertRowid);
       Store.words(db, chat);
@@ -287,19 +337,23 @@ export namespace Store {
   }
 
   // a chat's index of its summary lines' words (find_<chat>), made empty
-  // (no line leaves it but with it all, dropped)
   export function words(db: Database, chat: number): void {
     db.run(`create virtual table find_${chat} using fts5(text, first unindexed, n unindexed, tokenize = 'unicode61 remove_diacritics 2')`);
   }
 
+  // a store's connection closed (Store.shut)
+  export function close(store: Store): void {
+    Store.shut(store.db);
+  }
+
   // a connection closed, its statements finalized first so it closes at
   // once (the last: checkpointed, its WAL gone, the one file left)
-  export function close(store: Store): void {
-    for (const statement of PREPARED.get(store.db)?.values() ?? []) {
+  export function shut(db: Database): void {
+    for (const statement of PREPARED.get(db)?.values() ?? []) {
       statement.finalize();
     }
-    PREPARED.delete(store.db);
-    store.db.close();
+    PREPARED.delete(db);
+    db.close();
   }
 
   // written: its WAL flushed soon (Disk.ts)
@@ -307,12 +361,7 @@ export namespace Store {
     void Disk.wrote(store.file + "-wal");
   }
 
-  // the same file, read as another chat of it
-  export function as(store: Store, project: number, chat: number): Store {
-    return { ...store, project, chat };
-  }
-
-  // Messages
+// Messages
   // --------
 
   // the messages logged
@@ -431,6 +480,7 @@ export namespace Store {
     Store.wrote(store);
   }
 
+  // a log's number, by its name; null: no such log
   export function log_id(store: Store, log: string): number | null {
     return (query(store.db, "select id from log where chat = ? and log = ?").get(store.chat, log) as { id: number } | null)?.id ?? null;
   }
@@ -475,72 +525,126 @@ export namespace Store {
   // Projects
   // --------
 
-  // every project, the one used last first (those with no message last):
-  // each chat's first and last message looked up by key, its pages and
-  // latest line by their indexes, named (the planner, without statistics,
-  // would scan the chat's rows instead); its messages, not pages, counted
+  // a project's name: its file's
+  export function name(file: string): string {
+    return path.basename(file, SQLITE);
+  }
+
+  // every project's file, beside the store's
+  export function files(store: Store): string[] {
+    const folder = path.dirname(store.file);
+    return fs.readdirSync(folder).filter((f) => f.endsWith(SQLITE)).sort().map((f) => folder + "/" + f);
+  }
+
+  // a project's file by its name (a model's: only one there); null: none
+  export function lookup(store: Store, name: string): string | null {
+    return Store.files(store).find((file) => Store.name(file) === name) ?? null;
+  }
+
+  // what `read` gets of a project's file: the store's own, or another's
+  // opened for it, closed after however it ends
+  export function visit<T>(store: Store, file: string, read: (store: Store) => T): T {
+    if (file === store.file) {
+      return read(store);
+    }
+    const other = Store.peek(file);
+    try {
+      return read(other);
+    } finally {
+      Store.close(other);
+    }
+  }
+
+  // every project, the one used last first (those with no message last);
+  // one whose file won't read left out (logged), one gone meanwhile too
   export function projects(store: Store): Project[] {
-    const db    = store.db;
-    const out   = (query(db, "select id, name, path from project").all() as Array<Pick<Project, "id" | "name" | "path">>).map((p): Project => ({ ...p, first: null, last: null, count: 0, lately: "" }));
-    const by    = new Map(out.map((p) => [p.id, p]));
+    const out = Store.files(store).flatMap((file) => {
+      try {
+        return Store.visit(store, file, Store.about) ?? [];
+      } catch (err: any) {
+        if (fs.existsSync(file)) {
+          console.error("illi: the chat in " + file + " won't read: " + (err?.message ?? err));
+        }
+        return [];
+      }
+    });
+    const when = (p: Project) => p.last ?? "";
+    return out.sort((a, b) => (a.last === null ? 1 : 0) - (b.last === null ? 1 : 0) || (when(a) > when(b) ? -1 : when(a) < when(b) ? 1 : 0) || (a.name < b.name ? -1 : 1));
+  }
+
+  // the store's project (null: its file holds none yet): each chat's
+  // first and last message looked up by key, its pages and latest line by
+  // their indexes, named (the planner, without statistics, would scan the
+  // chat's rows instead); its messages, not pages, counted
+  export function about(store: Store): Project | null {
+    const db  = store.db;
+    const row = query(db, "select path from project where id = ?").get(store.project) as { path: string } | null;
+    if (row === null) {
+      return null;
+    }
+    const p: Project = { file: store.file, name: Store.name(store.file), path: row.path, first: null, last: null, count: 0, lately: "" };
     const start = query(db, "select date from msg where chat = ? order by i limit 1");
     const end   = query(db, "select i, date from msg where chat = ? order by i desc limit 1");
     const pages = query(db, "select count(*) as n from msg indexed by msg_page where chat = ? and more is not null");
     const line  = query(db, "select text from node indexed by node_end where chat = ? order by first + n desc, n desc limit 1");
-    for (const c of query(db, "select id, project from chat order by id").all() as Array<{ id: number; project: number }>) {
-      const p = by.get(c.project);
-      const e = end.get(c.id) as { i: number; date: string } | null;
-      if (p === undefined || e === null) {
+    for (const chat of Store.chats(store)) {
+      const e = end.get(chat) as { i: number; date: string } | null;
+      if (e === null) {
         continue;
       }
-      const first = (start.get(c.id) as { date: string }).date;
-      p.count += e.i + 1 - (pages.get(c.id) as { n: number }).n;
+      const first = (start.get(chat) as { date: string }).date;
+      p.count += e.i + 1 - (pages.get(chat) as { n: number }).n;
       p.first = p.first === null || first < p.first ? first : p.first;
       if (p.last === null || e.date > p.last) {
-        [p.last, p.lately] = [e.date, (line.get(c.id) as { text: string } | null)?.text ?? ""];
+        [p.last, p.lately] = [e.date, (line.get(chat) as { text: string } | null)?.text ?? ""];
       }
     }
-    const when = (p: Project) => p.last ?? "";
-    return out.sort((a, b) => (a.last === null ? 1 : 0) - (b.last === null ? 1 : 0) || (when(a) > when(b) ? -1 : when(a) < when(b) ? 1 : 0) || a.id - b.id);
+    return p;
   }
 
   // the store's project: its name and folder ("": home's none)
   export function named(store: Store): { name: string; path: string } {
-    return query(store.db, "select name, path from project where id = ?").get(store.project) as { name: string; path: string };
-  }
-
-  // a project by its name, and its first chat; null: none
-  export function project(store: Store, name: string): { project: number; chat: number } | null {
-    return query(store.db, "select p.id as project, min(c.id) as chat from project p join chat c on c.project = p.id where p.name = ? group by p.id").get(name) as { project: number; chat: number } | null;
+    return { name: Store.name(store.file), path: (query(store.db, "select path from project where id = ?").get(store.project) as { path: string }).path };
   }
 
   // the summary lines holding all of the words (none: any of them), in
-  // the projects given (null: every one), each chat's from its own index
-  // (Store.seek), as the file was when it began (one read transaction: a
-  // forget meanwhile drops no index it's yet to read): each chat's best
-  // first, the best of those first, then each one's second, and so on, as
-  // one index's scores weigh its words by how rare they are in it, not in
-  // all, so a big chat's would crowd out every small one's. The lines
-  // past the FOUND given are counted in `cut`, by project (more: a chat
-  // of it had FOUND lines, its most, so it may hold more still)
-  export function search(store: Store, words: string[], projects: number[] | null, cut?: Map<string, Cut>): Found[] {
+  // the projects' files given (null: every one), each chat's from its own
+  // index (Store.seek): each chat's best first, the best of those first,
+  // then each one's second, and so on, as one index's scores weigh its
+  // words by how rare they are in it, not in all, so a big chat's would
+  // crowd out every small one's. The lines past the FOUND given are
+  // counted in `cut`, by project (more: a chat of it had FOUND lines, its
+  // most, so it may hold more still)
+  export function search(store: Store, words: string[], files: string[] | null, cut?: Map<string, Cut>): Found[] {
     const terms = words.filter((w) => /[\p{L}\p{N}\p{Co}]/u.test(w));
     if (terms.length === 0) {
       return [];
     }
-    return store.db.transaction(() => {
-      const where = projects === null ? "" : " where c.project in (" + projects.map(() => "?").join(", ") + ")";
-      const chats = query(store.db, "select c.id as chat, p.name as project from chat c join project p on p.id = c.project" + where).all(...(projects ?? [])) as Array<{ chat: number; project: string }>;
-      const ask = (or: boolean) => chats.flatMap(({ chat, project }) => Store.seek(store.db, chat, terms, or).map((l, k, all) => ({ project, chat, k, full: all.length === FOUND, ...l })))
-        .sort((a, b) => a.k - b.k || a.score - b.score);
-      const and = ask(false);
-      const all = and.length > 0 || terms.length === 1 ? and : ask(true);
-      for (const { project, full } of all.slice(FOUND)) {
-        const was = cut?.get(project);
-        cut?.set(project, { n: (was?.n ?? 0) + 1, more: (was?.more ?? false) || full });
+    const ask = (or: boolean) => (files ?? Store.files(store)).flatMap((file) => Store.lines(store, file, terms, or)).sort((a, b) => a.k - b.k || a.score - b.score);
+    const and = ask(false);
+    const all = and.length > 0 || terms.length === 1 ? and : ask(true);
+    for (const { project, full } of all.slice(FOUND)) {
+      const was = cut?.get(project);
+      cut?.set(project, { n: (was?.n ?? 0) + 1, more: (was?.more ?? false) || full });
+    }
+    return all.slice(0, FOUND).map(({ score, k, full, ...found }) => found);
+  }
+
+  // a project's lines with the words (or: any), each chat's best
+  // (Store.seek) with its rank in it (k), as its file was when they began
+  // (one read transaction); another project's file that won't read (gone
+  // meanwhile): none
+  export function lines(store: Store, file: string, terms: string[], or: boolean): Array<Found & { score: number; k: number; full: boolean }> {
+    const project = Store.name(file);
+    const read = (s: Store) => s.db.transaction(() => Store.chats(s).flatMap((chat) => Store.seek(s.db, chat, terms, or).map((l, k, all) => ({ project, chat, k, full: all.length === FOUND, ...l }))))();
+    try {
+      return Store.visit(store, file, read);
+    } catch (err) {
+      if (file === store.file) {
+        throw err;
       }
-      return all.slice(0, FOUND).map(({ score, k, full, ...found }) => found);
-    })();
+      return [];
+    }
   }
 
   // one chat's best lines with the words (or: any), by bm25, with their
@@ -559,67 +663,235 @@ export namespace Store {
     return query(db, `select first, n, text, bm25(${table}) as score from ${table} where ${table} match ? order by score limit ${FOUND}`).all(quote(rare.length > 0 ? rare : terms)) as Array<Line & { score: number }>;
   }
 
-  // a project's chats
-  export function chats(store: Store, project: number): number[] {
-    return (query(store.db, "select id from chat where project = ?").all(project) as Array<{ id: number }>).map((c) => c.id);
+  // the store's project's chats
+  export function chats(store: Store): number[] {
+    return (query(store.db, "select id from chat where project = ? order by id").all(store.project) as Array<{ id: number }>).map((c) => c.id);
   }
 
-  // the images a project's chats hold
-  export function pictures(store: Store, project: number): number {
-    return (query(store.db, "select count(*) as n from image i join chat c on c.id = i.chat where c.project = ?").get(project) as { n: number }).n;
+  // the images the store's project's chats hold
+  export function pictures(store: Store): number {
+    return (query(store.db, "select count(*) as n from image i join chat c on c.id = i.chat where c.project = ?").get(store.project) as { n: number }).n;
   }
 
-  // a project forgotten: its row deleted, and with it all its chats'
-  // rows, their images too (foreign keys), their indexes dropped whole,
-  // in one transaction, all of it overwritten as it goes (secure delete);
-  // then its space given back (Store.shrink). Whether that was now (else
-  // at the next open)
-  export function forget(store: Store, project: number): boolean {
-    const db = store.db;
-    db.transaction(() => {
-      for (const chat of Store.chats(store, project)) {
-        db.run(`drop table if exists find_${chat}`);
-      }
-      query(db, "delete from project where id = ?").run(project);
-    }).immediate();
-    return Store.shrink(store);
+  // a project forgotten: its file deleted, its WAL and shared memory too
+  // (a crash's, or a reader's: one reading it goes on with it as it was),
+  // the file first, so none opens it after. A crash between leaves the
+  // WAL with no file: the next open there makes an empty file, and
+  // SQLite drops a WAL beside an empty file, never replays it
+  export function forget(file: string): void {
+    Store.remove(file);
+    Store.fsync(path.dirname(file));
   }
 
-  // the file's free pages given back, its end cut off: once every page of
-  // the WAL is in the file (Store.settled), so the zeros secure delete
-  // wrote are there before any page is cut off unwritten, a commit in
-  // auto_vacuum full moves the pages past the new end into the free ones
-  // (each once: incremental_vacuum looks each up in the free list,
-  // quadratic, minutes for a big project); then incremental again, so no
-  // other commit moves pages, and a passive checkpoint copies the move in
-  // and cuts the file (a reader just begun: the next checkpoint does).
-  // Never waits. Whether it ran: not while a reader holds an older
-  // snapshot (the next open tries again), nor if a step fails (logged).
-  // Flushed (Disk.ts) however it ends
-  export function shrink(store: Store): boolean {
-    const db = store.db;
-    try {
-      if (!Store.settled(db)) {
-        return false;
-      }
-      db.run("pragma auto_vacuum = full");
-      db.run("pragma auto_vacuum = incremental");
-      db.run("pragma wal_checkpoint(passive)");
-      return true;
-    } catch (err: any) {
-      console.error("illi: the chat file's free space wasn't given back: " + (err?.message ?? err));
-      return false;
-    } finally {
-      Store.wrote(store);
+  // a file deleted, its WAL and shared memory too, the file first
+  export function remove(file: string): void {
+    for (const end of ["", "-wal", "-shm"]) {
+      fs.rmSync(file + end, { force: true });
     }
   }
 
-  // whether every page of the WAL is in the file: a passive checkpoint
-  // (it never waits) copied them all; not while a reader keeps an older
-  // snapshot, nor while another connection checkpoints
-  export function settled(db: Database): boolean {
-    const done = query(db, "pragma wal_checkpoint(passive)").get() as { busy: number; log: number; checkpointed: number };
-    return done.busy === 0 && done.log === done.checkpointed;
+  // The move
+  // --------
+
+  // an older illi's one file (OLD), if there, moved: each project's rows
+  // copied to its own file (Store.split), then the file left a stub
+  // (Store.stub), once. Behind a gate (Store.gate), so an illi starting
+  // meanwhile waits, then finds it moved; with the file alone (another
+  // illi has it open, an older one: said, nothing done), held so till
+  // done. A crash midway: the next open goes on, its copies made again
+  // (Store.mark). An error, said as the move's (main.ts: "chat: ...")
+  export function move(dir: string): void {
+    const old = dir + OLD;
+    if (!fs.existsSync(old)) {
+      return;
+    }
+    const gate = Store.gate(path.normalize(dir + GATE));
+    try {
+      const db = new Database(old, { readwrite: true });
+      try {
+        db.run("pragma busy_timeout = " + WAIT);
+        if (!Store.moved(db)) {
+          Store.alone(db);
+          process.stderr.write("illi: moving the chats to a file per project (once)\n");
+          Store.schema(db);
+          const mark = Store.mark(db);
+          fs.mkdirSync(dir + PROJECTS, { recursive: true });
+          for (const project of query(db, "select id, name from project order by id").all() as Array<{ id: number; name: string }>) {
+            Store.split(db, dir + PROJECTS, project, mark);
+          }
+          Store.fsync(dir + PROJECTS);
+          Store.stub(db);
+        }
+      } finally {
+        Store.shut(db);
+      }
+    } catch (err) {
+      throw Store.why("memory.sqlite couldn't move to a file per project", err);
+    } finally {
+      gate.close();
+    }
+  }
+
+  // the move's gate: an exclusive transaction on an empty lock file
+  // (never written, so it never has a journal; kept, as the projects'
+  // locks are: one deleted while another illi waits on it would leave
+  // that illi a file that won't read), in a folder only its user opens;
+  // held by another illi, waited for (said) MOVING at most; the system
+  // lets it go however the process ends. Every start whose chat folder
+  // holds the old file takes it, as nothing else may open that file
+  // while a move might run (it would fail the move's Store.alone)
+  export function gate(file: string): Database {
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    const db = new Database(file, { create: true });
+    const take = (wait: number) => {
+      db.run("pragma busy_timeout = " + wait);
+      try {
+        db.run("begin exclusive");
+        return true;
+      } catch (err: any) {
+        if (err?.code !== "SQLITE_BUSY") {
+          throw err;
+        }
+        return false;
+      }
+    };
+    try {
+      if (take(GLANCE)) {
+        return db;
+      }
+      process.stderr.write("illi: another illi is moving the chats to a file per project: waiting for it\n");
+      if (take(MOVING)) {
+        return db;
+      }
+      throw new Error("chat: another illi is still moving the chats to a file per project: start illi again once it's done.");
+    } catch (err) {
+      db.close();
+      throw err;
+    }
+  }
+
+  // whether an older illi's file is moved already: its meta says when
+  export function moved(db: Database): boolean {
+    return query(db, "select 1 from sqlite_master where type = 'table' and name = 'meta'").get() !== null && query(db, "select 1 from meta where key = 'moved'").get() !== null;
+  }
+
+  // this move's mark, kept in the old file's meta (moving) from its first
+  // try on: each project's file it copies bears it (meta's moved_from),
+  // so a later try knows its own copies from any other file
+  export function mark(db: Database): string {
+    const known = query(db, "select value from meta where key = 'moving'").get() as { value: string } | null;
+    if (known !== null) {
+      return known.value;
+    }
+    const mark = crypto.randomUUID();
+    db.run("insert into meta (key, value) values ('moving', ?)", [mark]);
+    return mark;
+  }
+
+  // the move's mark a project's file bears; null: none, or it won't read
+  export function stamp(file: string): string | null {
+    let db: Database | null = null;
+    try {
+      db = new Database(file, { readwrite: true });
+      return (query(db, "select value from meta where key = 'moved_from'").get() as { value: string } | null)?.value ?? null;
+    } catch {
+      return null;
+    } finally {
+      if (db !== null) {
+        Store.shut(db);
+      }
+    }
+  }
+
+  // the file held alone till its connection closes: its locks kept
+  // (exclusive locking), out of WAL mode, which another connection's
+  // being open refuses (said), then locked for writing
+  export function alone(db: Database): void {
+    db.run("pragma main.locking_mode = exclusive");
+    try {
+      db.run("pragma journal_mode = delete");
+    } catch (err: any) {
+      if (err?.code === "SQLITE_BUSY") {
+        throw new Error("chat: the chats move to a file per project once, but another illi has them open: quit it, then start illi again.");
+      }
+      throw err;
+    }
+    db.run("begin exclusive");
+    db.run("commit");
+  }
+
+  // a project's rows copied from an older illi's file to its own file,
+  // by its name: one there already that this move made (its mark: before
+  // a crash) made again, as the old file may hold more since; any other
+  // kept, the copy numbered past it (as Store.open numbers a file another
+  // place's), so nothing the old file holds is dropped unread. Made aside,
+  // in WAL mode, at this schema, with each chat's index; the rows copied
+  // in one transaction (COPY, the file's name and the move's mark, then
+  // each chat's words); its WAL checkpointed as it's detached; then
+  // flushed once (made aside, nothing of it is synced till then: a
+  // crash's half is made again) and put in place
+  export function split(db: Database, folder: string, project: { id: number; name: string }, mark: string): void {
+    let file = "";
+    for (let k = 1; ; k++) {
+      file = folder + "/" + project.name + (k === 1 ? "" : "-" + k) + SQLITE;
+      if (!fs.existsSync(file) || Store.stamp(file) === mark) {
+        break;
+      }
+    }
+    const aside = file + "-new";
+    Store.remove(aside);
+    const chats = (query(db, "select id from chat where project = ? order by id").all(project.id) as Array<{ id: number }>).map((c) => c.id);
+    const made = new Database(aside, { create: true });
+    try {
+      made.run("pragma journal_mode = wal");
+      made.run("pragma synchronous = off");
+      Store.schema(made);
+      made.transaction(() => chats.forEach((chat) => Store.words(made, chat))).immediate();
+    } finally {
+      Store.shut(made);
+    }
+    db.run("attach ? as p", [aside]);
+    try {
+      db.run("pragma p.synchronous = off");
+      db.transaction(() => {
+        COPY.forEach((sql) => db.run(sql, [project.id]));
+        db.run("update p.project set name = ?", [Store.name(file)]);
+        db.run("insert into p.meta (key, value) values ('moved_from', ?)", [mark]);
+        chats.forEach((chat) => db.run(`insert into p.find_${chat} (rowid, text, first, n) select rowid, text, first, n from main.find_${chat}`));
+      })();
+    } finally {
+      db.run("detach p");
+    }
+    if (fs.existsSync(aside + "-wal")) {
+      throw new Error("chat: " + project.name + " couldn't move to its own file: its WAL stayed. Start illi again to try again.");
+    }
+    Store.fsync(aside);
+    fs.renameSync(aside, file);
+  }
+
+  // a file made durable, or a folder's entries (the files put in it)
+  export function fsync(file: string): void {
+    const fd = fs.openSync(file, "r");
+    try {
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+
+  // an older illi's file, moved, left a stub: every table dropped but
+  // meta (each chat's index first, its own tables with it), meta saying
+  // when, its version and compat MOVED, so an older illi refuses it; its
+  // space given back
+  export function stub(db: Database): void {
+    const tables = (virtual: number) => query(db, "select name from sqlite_master where type = 'table' and name <> 'meta' and name not like 'sqlite!_%' escape '!' and (sql like 'create virtual table%') = ?").all(virtual) as Array<{ name: string }>;
+    db.transaction(() => {
+      [1, 0].forEach((virtual) => tables(virtual).forEach(({ name }) => db.run(`drop table "${name.replace(/"/g, '""')}"`)));
+      db.run("delete from meta where key = 'moving'");
+      db.run("insert or replace into meta (key, value) values ('compat', ?), ('moved', ?)", [String(MOVED), new Date().toISOString()]);
+      db.run("pragma user_version = " + MOVED);
+    })();
+    db.run("vacuum");
   }
 
 }

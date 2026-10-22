@@ -5,10 +5,10 @@
 // name, its last day and its messages, its folder (last: the longest),
 // typed to search. Enter says more of one; Delete asks to forget it:
 // Cancel (lit), a copy exported first (./illi-project-<name>.json, never
-// over a file), or forget. A project forgotten is gone from the file,
-// its images too (Store.forget); its lock is held meanwhile, so one open
-// in another terminal is kept (quit it there first). This one,
-// forgotten, starts anew: illi runs again.
+// over a file), or forget. A project forgotten is gone, its file
+// deleted, its images with it (Store.forget); its lock is held
+// meanwhile, so one open in another terminal is kept (quit it there
+// first). This one, forgotten, starts anew: illi runs again.
 
 import * as fs from "node:fs";
 import { Chat } from "../chat/Chat.ts";
@@ -28,7 +28,7 @@ const WIDE = 72;
 export function term_projects(t: Term): void {
   const store = t.mem().store;
   const all   = Store.projects(store);
-  const list  = [...all.filter((p) => p.id === store.project), ...all.filter((p) => p.id !== store.project)];
+  const list  = [...all.filter((p) => p.file === store.file), ...all.filter((p) => p.file !== store.file)];
   const keys  = (k: number, key: string) => {
     if (key !== "Delete" || list[k] === undefined) {
       return false;
@@ -36,7 +36,7 @@ export function term_projects(t: Term): void {
     project_ask(t, list[k]);
     return true;
   };
-  const about = list.map((p) => project_about(p) + (p.id === store.project ? " · here" : ""));
+  const about = list.map((p) => project_about(p) + (p.file === store.file ? " · here" : ""));
   term_chooser(t, "Projects", list.map((p) => p.name), about, 0, (k) => project_more(t, list[k]), { find: true, keys, foot: () => "Enter more · Del forget", middle: WIDE });
 }
 
@@ -64,9 +64,14 @@ function project_more(t: Term, p: Project): void {
   term_note(t, p.name + " · " + project_where(p) + " · " + when + (p.lately === "" ? "." : ". Lately: " + Projects.clip(p.lately)));
 }
 
-// whether to forget a project, asked: Cancel lit
+// whether to forget a project, asked: Cancel lit (one gone meanwhile:
+// said)
 function project_ask(t: Term, p: Project): void {
-  const pics  = Store.pictures(t.mem().store, p.id);
+  const pics = project_pictures(t, p);
+  if (pics === null) {
+    t.choose = null;
+    return term_note(t, p.name + " is forgotten already.");
+  }
   const what  = project_count(p) + (pics === 0 ? "" : " and " + pics + (pics === 1 ? " image" : " images"));
   const names = ["Cancel", "Export a copy first, then forget", "Forget"];
   const about = ["keep it", "./illi-project-" + p.name + ".json, then forgotten", what + ", gone for good"];
@@ -85,9 +90,9 @@ function project_ask(t: Term, p: Project): void {
 // another terminal, this one a view of it: kept, forgotten there)
 async function project_forget(t: Term, p: Project, copy: boolean): Promise<void> {
   const mem  = t.mem();
-  const here = p.id === mem.store.project;
-  const of   = Store.project(mem.store, p.name);
-  if (of === null) {
+  const here = p.file === mem.store.file;
+  const pics = project_pictures(t, p);
+  if (pics === null) {
     return term_note(t, p.name + " is forgotten already.");
   }
   if (here && t.chat === null) {
@@ -98,24 +103,29 @@ async function project_forget(t: Term, p: Project, copy: boolean): Promise<void>
     if (fs.existsSync(out)) {
       return term_note(t, "Not forgotten: " + config.config_home(out) + " is there already. Move it away first.");
     }
-    await Bun.write(out, [...Memory.dump(here ? mem : Memory.glance(mem, of.project, of.chat))].join(""));
+    await Bun.write(out, Store.visit(mem.store, p.file, (store) => [...Memory.dump(here ? mem : Memory.glance(mem, store))].join("")));
     term_note(t, "A copy of " + p.name + " is in " + config.config_home(out) + ".");
   }
   if (here) {
-    return term_restart(t, config.PROFILE, () => {
-      const store = Store.open(mem.dir, null);
-      try {
-        Store.forget(store, p.id);
-      } finally {
-        Store.close(store);
-      }
-    }, true);
+    return term_restart(t, config.PROFILE, () => Store.forget(p.file), true);
   }
-  const pics = Store.pictures(mem.store, p.id);
-  if (!(await project_held(p, () => void Store.forget(mem.store, p.id)))) {
+  if (!(await project_held(p, () => Store.forget(p.file)))) {
     return term_note(t, p.name + " is open in another terminal: quit illi there first, then forget it here.");
   }
   term_note(t, "Forgot " + p.name + ": " + project_count(p) + (pics === 0 ? "" : " and " + pics + (pics === 1 ? " image" : " images")) + ".");
+}
+
+// the images a project holds; null: its file is gone (forgotten
+// meanwhile)
+function project_pictures(t: Term, p: Project): number | null {
+  try {
+    return Store.visit(t.mem().store, p.file, Store.pictures);
+  } catch (err) {
+    if (fs.existsSync(p.file)) {
+      throw err;
+    }
+    return null;
+  }
 }
 
 // `step` done holding a project's lock, so no illi opens it meanwhile;

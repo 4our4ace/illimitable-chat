@@ -3,7 +3,7 @@
 // `bun test ProjectCommands.test.ts`. /projects lists this project first,
 // then the one used last first, each with its last day, size and folder;
 // Enter says more. Delete asks first, Cancel lit: Cancel keeps it; Forget
-// drops it, its images too; a copy exported first goes to
+// drops it, its file deleted, its images with it; a copy exported first goes to
 // ./illi-project-<name>.json, never over a file there; one open in
 // another terminal is kept, and so is this one, its chat run in another
 // terminal (this one a view of it).
@@ -49,7 +49,7 @@ function project(place: any, day: string, images: string[]): void {
 }
 project(SITE, "2026-10-01", ["aaaaaaaaaaaaaaaa.png", "bbbbbbbbbbbbbbbb.png"]);
 project(APP, "2026-10-10", ["bbbbbbbbbbbbbbbb.png"]);
-const pictures = () => (mem.store.db.query("select count(*) as n from image").get() as { n: number }).n;
+const pictures = () => Store.files(mem.store).reduce((n, file) => n + Store.visit(mem.store, file, Store.pictures), 0);
 
 // a terminal with no screen, only its view, notes and chat (view: another
 // terminal's, this one a view of it)
@@ -89,7 +89,7 @@ test("Delete asks first, Cancel lit and keeping it; Forget drops it, its images 
   t.choose.pick(2);
   expect(await noted(t, "Forgot")).toBe("Forgot site-7q2m0d: 1 message and 2 images.");
   expect(Store.projects(mem.store).map((p) => p.name)).toEqual(["app-k3f9x2", HERE.name]);
-  expect(pictures()).toBe(1);
+  expect([pictures(), fs.readdirSync(DIR + "/chat/projects").filter((f) => f.startsWith("site"))]).toEqual([1, []]);
 });
 
 test("a copy exported first goes to ./illi-project-<name>.json, never over a file there; one open in another terminal is kept", async () => {

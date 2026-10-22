@@ -80,7 +80,7 @@ function png(w: number, h: number): Buffer {
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", head), chunk("IDAT", zlib.deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
 }
 
-test("closed, the chat is one file, its images in it: a model gets a big one's smaller copy, a small one whole; an export, each image itself", async () => {
+test("closed, the chat is its project's one file, its images in it: a model gets a big one's smaller copy, a small one whole; an export, each image itself", async () => {
   const mem = chat("closed", 1);
   const [small, big] = [png(4, 4), png(2400, 8)];
   const names = [await Memory.image_add(mem, small), await Memory.image_add(mem, big), await Memory.image_add(mem, small)];
@@ -96,7 +96,7 @@ test("closed, the chat is one file, its images in it: a model gets a big one's s
   const out = JSON.parse([...Memory.dump(mem)].join(""));
   expect(out.images).toEqual({ [names[0]!]: small.toString("base64"), [names[1]!]: big.toString("base64") });
   Memory.stop(mem);
-  expect(fs.readdirSync(DIR + "/closed")).toEqual(["memory.sqlite"]);
+  expect([fs.readdirSync(DIR + "/closed"), fs.readdirSync(DIR + "/closed/projects")]).toEqual([["projects"], ["home.sqlite"]]);
 });
 
 test("the screen folds with the cut as it moves on by itself, and stays behind a cut moved for it", () => {

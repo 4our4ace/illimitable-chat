@@ -6,7 +6,7 @@
 // shell, read, write and edit run here, on the user's computer, in the
 // working dir: where illi was started (each call's message names it, and
 // its project). A request dropped (its call stopped) stops its job.
-// zoom and date read the chat, or another project's (Memory.glance);
+// zoom and date read the chat, or another project's (Tools.chat_of);
 // projects and search look across them all (Projects.ts).
 // An agent (a subagent) has a name and a log (one spawned as a user's
 // subagent: that agent's name, numbered while another so named is at
@@ -322,15 +322,26 @@ export namespace Tools {
     return { text: "Working dir: " + tools.cwd + " on " + os.hostname() + " (" + process.platform + "), project " + project + "\n\n", mark: false };
   }
 
-  // the chat a tool reads: this one, or a project's by its name (a model
-  // got from projects); a string: why none
-  export function chat_of(mem: Memory, project: unknown): Memory | string {
+  // what a tool reads of a chat (`read`): this one, or a project's by its
+  // name (a model got from projects), its file open meanwhile; none (or
+  // forgotten since), why
+  export function chat_of(mem: Memory, project: unknown, read: (of: Memory) => Out): Out {
     const name = project === undefined || project === null ? "" : String(project);
-    const found = name === "" ? null : Store.project(mem.store, name);
-    if (name === "" || found?.chat === mem.store.chat) {
-      return mem;
+    const file = name === "" ? mem.store.file : Store.lookup(mem.store, name);
+    if (file === null) {
+      return { text: "No project " + name + ": projects lists them.", fail: true };
     }
-    return found === null ? "No project " + name + ": projects lists them." : Memory.glance(mem, found.project, found.chat);
+    if (file === mem.store.file) {
+      return read(mem);
+    }
+    try {
+      return Store.visit(mem.store, file, (store) => read(Memory.glance(mem, store)));
+    } catch (err) {
+      if (fs.existsSync(file)) {
+        throw err;
+      }
+      return { text: "No project " + name + ": projects lists them.", fail: true };
+    }
   }
 
   // a skill loaded: its folder, its instructions, the other files in its
@@ -478,19 +489,16 @@ export namespace Tools {
         const id = String(args.id);
         const n = Number(args.n ?? 1);
         const at = Number(args.at ?? 0);
-        const of = Tools.chat_of(mem, args.project);
-        if (typeof of === "string") {
-          return { text: of, fail: true };
-        }
-        if (/^[A-Za-z]/.test(id)) {
-          return { text: clip_page(Memory.agent_show(of, id), at), fail: false };
-        }
-        const imgs = n === 1 && at === 0 ? Memory.images(of, Number(id)) : [];
-        return { text: Memory.zoom(of, Number(id), n, at), fail: false, imgs };
+        return Tools.chat_of(mem, args.project, (of) => {
+          if (/^[A-Za-z]/.test(id)) {
+            return { text: clip_page(Memory.agent_show(of, id), at), fail: false };
+          }
+          const imgs = n === 1 && at === 0 ? Memory.images(of, Number(id)) : [];
+          return { text: Memory.zoom(of, Number(id), n, at), fail: false, imgs };
+        });
       }
       case "date": {
-        const of = Tools.chat_of(mem, args.project);
-        return typeof of === "string" ? { text: of, fail: true } : { text: Memory.date(of, Number(args.id)), fail: false };
+        return Tools.chat_of(mem, args.project, (of) => ({ text: Memory.date(of, Number(args.id)), fail: false }));
       }
       case "projects": {
         return { text: Projects.table(mem.store), fail: false };
