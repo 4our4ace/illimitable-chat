@@ -15,7 +15,8 @@
 // answered asks for the user's likely next message, on the cache
 // (Suggest.ask), shown till it is sent or a turn ends answered (a
 // message of the user's own leaves it, to send too, in the same turn), a
-// restart between kept (it is saved with the chat's state).
+// restart between kept (it is saved with the chat's state). /compact
+// takes the turn's place while illi writes its recap (Chat.compact).
 
 import * as fs from "node:fs";
 import { AskAI, type Call, type End, type Event, type Kind } from "../ai/AskAI.ts";
@@ -25,11 +26,11 @@ import { Compactor } from "./Compactor.ts";
 import { Lock } from "./Lock.ts";
 import { Logs } from "./Logs.ts";
 import { Suggest, type Suggested } from "./Suggest.ts";
-import { Memory, TOKEN, type Share } from "./Memory.ts";
+import { Memory, TOKEN, type Root, type Share } from "./Memory.ts";
 import { Pick } from "../ai/Pick.ts";
 import { Projects } from "./Projects.ts";
 import { MASTER, SEARCHES, Tools, type Agent, type Live, type Reply } from "../tools/Tools.ts";
-import { ANSWERED, IMAGES, live_push, SUMMARIES, TURN, type Answer, type Link, type Part, type Pipe, type Question, type Server as Out, type Wait } from "../ui/View.ts";
+import { ANSWERED, COMPACTING, IMAGES, live_push, SUMMARIES, TURN, type Answer, type Link, type Part, type Pipe, type Question, type Server as Out, type Wait } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
 
 // Types
@@ -59,7 +60,8 @@ type Check = { call: Call; goal: string };
 // main agent ran on when left, if not its own (by name, "": illi's);
 // suggest: the suggested reply; fit: the share of its context a turn
 // gets (Chat.refit makes it smaller, till illi starts again), refits: the
-// refits since a call was last answered
+// refits since a call was last answered; compacting: a /compact's recap
+// under way (Chat.compact), busy too
 export type Chat = {
   mem   : Memory;
   tools : Tools;
@@ -87,6 +89,7 @@ export type Chat = {
   fit   : number;
   refits: number;
   asks  : Asked[];
+  compacting: boolean;
 };
 
 // a question asked of the user (Chat.question), and what its answer does
@@ -95,7 +98,8 @@ type Asked = Question & { done: (reply: Reply) => void };
 // Constants
 // =========
 
-// a turn's head, as a summary's is "Compaction:": one prompt serves both
+// a turn's head, as a summary's is "Compaction:", a recap's "Recap:": one
+// prompt serves all
 const HEAD       = "Turn: the user's new message:\n\n";
 // a goal's check (Chat.check): its own system prompt (illi's, which says
 // a call is a turn or a compaction, made the model summarize the chat
@@ -125,6 +129,57 @@ const REFITS     = 3;
 const ROOM       = 0.9;
 const REFIT      = "The chat outgrew #'s window: more of it is summarized now, each summary a zoom away. Go on where you were.";
 const NO_FIT     = "No reply: the chat won't fit #'s window even summarized. /clear starts a new topic (the chat before it is kept, not sent), or /model picks a model with a bigger window.";
+
+// a recap (Chat.compact): its task, after the chat as a turn sends it (a
+// template of OpenCode's anchored summary's), what the user asked it to
+// keep after it; a message sent while it's written; why none came
+const RECAP      = `Recap: the user ran /compact. Write your recap of the chat so far: from now
+on, your view starts at it, and the chat before it leaves your view (kept and
+summarized: search and zoom still find it). Write it for yourself, to go on
+working from it alone, as well as if you remembered everything.
+
+Output exactly this Markdown, every section in this order, "(none)" for an
+empty one:
+
+## Objective
+- what the user is trying to accomplish, in a sentence or two
+
+## Instructions
+- the user's standing orders, constraints and preferences, close to verbatim
+
+## Important details
+- decisions and why, facts learned, the exact context needed to go on
+
+## Work state
+### Done
+- finished and verified work, changes made
+### Active
+- work under way, partial changes, the state of an investigation
+### Blocked
+- blockers, failing commands, unknowns
+
+## Next move
+1. the immediate concrete action
+2. the next one, if known
+
+## Relevant files
+- path: why it matters
+
+Rules:
+- Terse bullets, not paragraphs.
+- Copy names, paths, symbols, commands, errors, URLs, ids, numbers and
+  versions exactly.
+- Keep what the user pasted that still matters (logs, errors, config), its key
+  parts word for word.
+- Keep what was tried and ruled out, and the evidence.
+- An earlier recap in the chat: carry forward what still matters from it;
+  where later messages differ, they win.
+- Never make anything look further along than it was.
+- Don't mention the recap or the compaction.
+- Call no tools; output only the recap.`;
+const RECAP_KEEP = "\n\nThe user asked the recap to keep in particular: ";
+const RECAPPING  = "illi is writing its recap (/compact): send once it's done (Esc stops it).";
+const RECAP_STOP = "Compaction stopped; the chat is as it was.";
 
 // a new chat's first message, its node written with it, so no compactor
 // call summarizes it
@@ -157,7 +212,7 @@ export namespace Chat {
       mem, tools, pick, socks: new Set(), busy: false, call: null, model: "", asked: false, open: 0, sent: [], wait: [], next: [],
       halt: new AbortController(), live: [], calls: {}, eye: { parts: [], from: 0 }, after: Promise.resolve(),
       writes: Promise.resolve(), held: null, switched: false, was: null, picks: new Map(),
-      suggest: { on: false, due: false, text: mem.suggest, call: null, passed: false, unused: 0 }, fit: 1, refits: 0, asks: [],
+      suggest: { on: false, due: false, text: mem.suggest, call: null, passed: false, unused: 0 }, fit: 1, refits: 0, asks: [], compacting: false,
     };
     // a saved pick not offered gave way: told once
     const saved = mem.pick as Pick | null;
@@ -215,8 +270,13 @@ export namespace Chat {
   }
 
   // a message (its body: its images, sizes given, then its text), logged
-  // and taken
+  // and taken; none while a recap is written (it would come before it, so
+  // out of view: Chat.compact), asked again as it's logged (a /compact may
+  // have come between)
   export async function say(chat: Chat, sizes: number[], body: Buffer): Promise<Answer> {
+    if (chat.compacting) {
+      return { error: RECAPPING };
+    }
     const images: string[] = [];
     let at = 0;
     for (const size of sizes) {
@@ -229,8 +289,13 @@ export namespace Chat {
     }
     const text = body.subarray(at).toString("utf8");
     Suggest.used(chat, text);
-    await Chat.writing(chat, async () => Chat.take(chat, Chat.push(chat, null, "user", text, images)));
-    return {};
+    return Chat.writing(chat, async (): Promise<Answer> => {
+      if (chat.compacting) {
+        return { error: RECAPPING };
+      }
+      Chat.take(chat, Chat.push(chat, null, "user", text, images));
+      return {};
+    });
   }
 
   // a post's logging, after the chat's earlier ones, holding its other
@@ -345,17 +410,14 @@ export namespace Chat {
     const halt = (chat.halt = new AbortController());
     chat.suggest.due = false;
     Chat.change(chat);
-    let from = -1;
-    while (from !== Chat.cut(chat)) {
-      from = mem.cut;
-      const why = await Memory.settle(mem, from, halt.signal);
-      if (why !== null) {
-        if (!halt.signal.aborted) {
-          Chat.failed(chat, why);
-        }
-        return false;
+    const why = await Chat.settled(chat, halt.signal);
+    if (why !== null) {
+      if (!halt.signal.aborted) {
+        Chat.failed(chat, why);
       }
+      return false;
     }
+    const from = mem.cut;
     const msgs = (chat.sent = chat.wait.splice(0));
     const { view, text, imgs } = Memory.turn(mem, from, msgs);
     const server = Tools.at(chat.tools, "main");
@@ -370,6 +432,20 @@ export namespace Chat {
     const call = (chat.call = AskAI.ask(ask, (ev) => Chat.on(chat, null, ev)));
     Chat.change(chat);
     return Chat.ended(chat, call, halt);
+  }
+
+  // once the summaries a call sends at the cut (Chat.cut, fitted anew as
+  // they're built) are: null; else why not
+  export async function settled(chat: Chat, signal: AbortSignal): Promise<string | null> {
+    let from = -1;
+    while (from !== Chat.cut(chat)) {
+      from = chat.mem.cut;
+      const why = await Memory.settle(chat.mem, from, signal);
+      if (why !== null) {
+        return why;
+      }
+    }
+    return null;
   }
 
   // the turn's call ends; false: the turn ends
@@ -464,7 +540,7 @@ export namespace Chat {
   // a summary's try failed (Memory's stuck): why, as a note; how to stop
   // a turn waiting on it
   export function stuck(chat: Chat, why: string): void {
-    const turn = Chat.waits(chat) === SUMMARIES ? " (Esc stops this turn)" : "";
+    const turn = Chat.waits(chat) !== SUMMARIES ? "" : chat.compacting ? " (Esc stops the compaction)" : " (Esc stops this turn)";
     Chat.note(chat, "Summaries are stuck: " + why.replace(/\.$/, "") + "; retrying every minute" + turn + ".");
   }
 
@@ -486,11 +562,18 @@ export namespace Chat {
     if (note.length > 0) {
       [chat.switched, chat.was] = [false, null];
     }
-    const roots = Memory.push(chat.mem, [...note, { kind, text, images }]);
+    const roots = Chat.logged(chat, [...note, { kind, text, images }]);
+    return { id: roots[note.length].i, end: chat.mem.count };
+  }
+
+  // messages logged as they are (no switch noted first: a recap's, which
+  // the note follows), each told to every view
+  export function logged(chat: Chat, msgs: Array<{ kind: Kind; text: string; images?: string[] }>): Root[] {
+    const roots = Memory.push(chat.mem, msgs);
     for (const { i, kind, text, date, images } of roots) {
       Chat.all(chat, { $: "entry", id: i, kind, text, date, images });
     }
-    return { id: roots[note.length].i, end: chat.mem.count };
+    return roots;
   }
 
   // a message the call took was logged as it came
@@ -501,8 +584,7 @@ export namespace Chat {
       Chat.asks(chat, ev);
     }
     if (ev.$ === "Delta") {
-      live_push(at.live, ev.kind, ev.text, ev.fresh);
-      Chat.all(chat, { $: "delta", agent: name, kind: ev.kind, text: ev.text, fresh: ev.fresh });
+      Chat.delta(chat, agent, ev);
       return;
     }
     if (ev.kind === "tool" && ev.of !== undefined) {
@@ -512,7 +594,7 @@ export namespace Chat {
     } else if (ev.kind !== "user") {
       const call = ev.of === undefined ? undefined : at.calls[ev.of];
       delete at.calls[ev.of ?? ""];
-      Chat.hold(chat, () => {
+      Chat.logs(chat, agent, () => {
         if (call !== undefined) {
           Chat.push(chat, agent, "tool", call);
         }
@@ -520,6 +602,24 @@ export namespace Chat {
       });
     }
     Chat.live(chat, agent, Chat.waiting(at));
+  }
+
+  // a step that logs: an agent's at once (its log is its own, in no order
+  // with the chat's, so a recap holds none back), the chat's as Chat.hold
+  // has it
+  export function logs(chat: Chat, agent: Agent | null, step: () => void): void {
+    if (agent === null) {
+      Chat.hold(chat, step);
+    } else {
+      step();
+    }
+  }
+
+  // a piece streamed, to what streams for the chat (agent: null) or an
+  // agent, and told
+  export function delta(chat: Chat, agent: Agent | null, ev: Event & { $: "Delta" }): void {
+    live_push((agent ?? chat).live, ev.kind, ev.text, ev.fresh);
+    Chat.all(chat, { $: "delta", agent: agent?.name, kind: ev.kind, text: ev.text, fresh: ev.fresh });
   }
 
   // what streams once an entry came: the tool calls awaiting their
@@ -535,7 +635,7 @@ export namespace Chat {
     const at = agent ?? chat;
     const calls = Object.values(at.calls);
     at.calls = {};
-    Chat.hold(chat, () => calls.forEach((call) => Chat.push(chat, agent, "tool", call)));
+    Chat.logs(chat, agent, () => calls.forEach((call) => Chat.push(chat, agent, "tool", call)));
     Chat.live(chat, agent, []);
   }
 
@@ -597,14 +697,16 @@ export namespace Chat {
     await Promise.all(work.map((w) => (w === TURN ? Chat.take(chat, msg) : Tools.tell(chat.tools, w, text))));
   }
 
-  // what runs: illi's turn, the agents at work
+  // what runs: illi's turn (a recap is none: a quit drops it, so no start
+  // resumes it), the agents at work
   export function running(chat: Chat): string[] {
-    return [...(chat.busy ? [TURN] : []), ...Tools.working(chat.tools).map((a) => a.name)];
+    return [...(chat.busy && !chat.compacting ? [TURN] : []), ...Tools.working(chat.tools).map((a) => a.name)];
   }
 
-  // illi's turn only, with the spawns and tells it waits on (for the view:
-  // Tools.view, on chat.halt); agents go on. why: the note the turn's end
-  // logs (Chat.turn), so after the reply the stop cut; null: none
+  // illi's turn only (or the recap in its place: Chat.recap), with the
+  // spawns and tells it waits on (for the view: Tools.view, on chat.halt);
+  // agents go on. why: the note the turn's end logs (Chat.turn, Chat.unmade),
+  // so after the reply the stop cut; null: none
   export function interrupt(chat: Chat, why: string | null): void {
     chat.halt.abort(why);
     chat.call?.stop();
@@ -697,6 +799,9 @@ export namespace Chat {
   }
 
   export function waits(chat: Chat): Wait {
+    if (chat.compacting) {
+      return Memory.due(chat.mem) < chat.mem.cut ? SUMMARIES : COMPACTING;
+    }
     if (chat.call !== null) {
       return chat.asked ? chat.model : "";
     }
@@ -809,6 +914,9 @@ export namespace Chat {
       }
       case "stop": {
         const name = msg.name === undefined ? null : String(msg.name);
+        if (chat.compacting && (name === null || name === TURN)) {
+          Chat.interrupt(chat, RECAP_STOP);
+        }
         const what = Chat.running(chat).filter((w) => name === null || w === name);
         const why = "Stopped by the user: " + what.join(", ") + ".";
         const turn = what.includes(TURN);
@@ -847,7 +955,7 @@ export namespace Chat {
         return {};
       }
       case "compact": {
-        return Chat.compact(chat);
+        return Chat.compact(chat, typeof msg.focus === "string" ? msg.focus.trim() : "");
       }
       case "main": {
         return Chat.main(chat, msg.name == null ? null : String(msg.name));
@@ -891,31 +999,85 @@ export namespace Chat {
     return {};
   }
 
-  // the chat compacted (/compact): the cut moved on to Memory.kept, so
-  // all but the last exchanges fold into the view's lines (each a zoom
-  // away) and each turn sends less; the screen still shows them whole
-  // (the memory's `show` stays). Noted for the agent; not while a turn
-  // runs. The exchanges kept get a quarter of a call (Chat.cap tokens) at
-  // most
-  export function compact(chat: Chat): Answer {
+  // the chat compacted (/compact): illi's recap of it (Chat.recap)
+  // logged as a message of its own, the cut and the view's first message
+  // at it, so a turn sends the recap and what follows it, nothing older
+  // (as /clear: a search or zoom away); the screen keeps what it showed,
+  // a line across it at the recap. In the background, in the turn's place
+  // (the views see illi at work; Esc stops it), the suggested reply gone
+  // (one being asked would hold the recap's request back). Not while a
+  // turn runs, nor with nothing new since the view's start (a /clear, a
+  // recap; notes alone are nothing new). focus: what the user asked the
+  // recap to keep ("": nothing in particular)
+  export function compact(chat: Chat, focus: string): Answer {
     const mem = chat.mem;
     if (chat.busy) {
       return { error: "illi is at work: /compact once it's done (Esc interrupts it)." };
     }
-    const from = Memory.kept(mem, (Chat.cap(chat) * TOKEN) / 4);
-    if (from <= mem.cut) {
-      return { error: "Nothing to summarize: illi gets only the latest messages whole already." };
+    let i = mem.view.from;
+    while (i < mem.count && ["recap", "note"].includes(Memory.message(mem, i)!.kind)) {
+      i += 1;
     }
-    const folded = from - mem.cut;
-    mem.cut = from;
-    Memory.fit(mem);
-    Memory.save(mem);
-    const n = (k: number, what: string) => k + " " + what + (k === 1 ? "" : "s");
-    Chat.note(chat, "Summarized " + n(folded, "older message") + "; the latest " + n(mem.count - from, "message") + " still go whole. A zoom brings back any part of the summaries.");
-    chat.eye = Chat.eye(mem, mem.show);
-    chat.socks.forEach((sock) => Chat.show(chat, sock));
+    if (i === mem.count) {
+      return { error: "Nothing to compact: nothing was said since the last /clear or /compact." };
+    }
+    chat.busy = chat.compacting = true;
+    const halt = (chat.halt = new AbortController());
+    Suggest.drop(chat);
     Chat.change(chat);
+    Chat.writing(chat, () => Chat.recap(chat, focus, halt)).catch((err) => console.error("illi: compact: " + (err?.message ?? err)));
     return {};
+  }
+
+  // a recap written, by the chat's model, at the end of the chat as a
+  // turn's call would send it now (Chat.settled), its system prompt and
+  // tools too, so all but the task is read from the cache (not Claude
+  // Code's, run without tools), once (no tool runs), streamed to the
+  // views; then logged and the views moved on to it. Logging
+  // (Chat.writing) holds the chat's other entries meanwhile (an agent's
+  // report, a note; a message is refused), so they come after it, in
+  // view (an agent's own log goes on: Chat.logs). Failed
+  // or stopped: the chat as it was, noted (a stop's why: none as illi
+  // quits)
+  export async function recap(chat: Chat, focus: string, halt: AbortController): Promise<void> {
+    const mem = chat.mem;
+    try {
+      const why = await Chat.settled(chat, halt.signal);
+      if (why !== null) {
+        Chat.unmade(chat, halt, why);
+        return;
+      }
+      const task = { text: RECAP + (focus === "" ? "" : RECAP_KEEP + focus), mark: false };
+      const blocks = [...Memory.chat(mem, mem.cut, mem.count), Tools.here(chat.tools), Tools.at_work(chat.tools), task];
+      const ask = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server: Tools.at(chat.tools, "main"), blocks, once: true };
+      const call = AskAI.ask(ask, (ev) => ev.$ === "Delta" && Chat.delta(chat, null, ev));
+      halt.signal.addEventListener("abort", () => call.stop(), { once: true });
+      const end = await call.done;
+      const text = end.ok ? end.text.trim() : "";
+      if (halt.signal.aborted || text === "") {
+        Chat.unmade(chat, halt, end.ok ? "no recap came" : end.text);
+        return;
+      }
+      const [recap] = Chat.logged(chat, [{ kind: "recap", text }]);
+      mem.cut = mem.view.from = recap.i;
+      Memory.fit(mem);
+      Memory.save(mem);
+      chat.eye = Chat.eye(mem, mem.show);
+      chat.socks.forEach((sock) => Chat.show(chat, sock));
+    } finally {
+      chat.busy = chat.compacting = false;
+      Chat.live(chat, null, []);
+      Chat.change(chat);
+    }
+  }
+
+  // no recap: why, noted, the chat as it was; stopped, the stop's why
+  // (none as illi quits: Chat.close)
+  export function unmade(chat: Chat, halt: AbortController, why: string): void {
+    const said: unknown = halt.signal.aborted ? halt.signal.reason : "No compaction: " + why.replace(/\.$/, "") + ". The chat is as it was.";
+    if (typeof said === "string") {
+      Chat.note(chat, said);
+    }
   }
 
   // the main agent: a primary agent of the user's, by name (Custom.ts), or
@@ -967,8 +1129,9 @@ export namespace Chat {
   }
 
   // what the screen shows: the view's lines before `from` (none from
-  // before the last /clear: the view holds none), then each message from
-  // it whole
+  // before the last /clear or recap: the view holds none), then each
+  // message from it whole (after a /compact, those the screen showed
+  // before the recap too)
   export function eye(mem: Memory, from: number): Eye {
     const parts = Memory.before(mem.view.parts, from).map((part): Part => [Memory.span(part)[0], 2 ** part.l]);
     return { parts, from };

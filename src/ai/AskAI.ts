@@ -33,8 +33,9 @@ import type { Pick } from "./Pick.ts";
 // the user's, an agent's report ("[Name]\n...", a user turn to the
 // model), a thought (shown, never logged), a reply, a tool call, its
 // result, a note of illi's own (a stop, a goal met, a new session, a
-// main agent switch, a restart)
-export type Kind = "user" | "work" | "mind" | "illi" | "tool" | "echo" | "note";
+// main agent switch, a restart), illi's recap of the chat before it (the
+// user's /compact: Chat.compact)
+export type Kind = "user" | "work" | "mind" | "illi" | "tool" | "echo" | "note" | "recap";
 
 export type Vendor = "claude-api" | "openai-api" | "chatgpt" | "claude-code";
 
@@ -53,9 +54,10 @@ export type Say = { text: string; imgs: Img[] };
 export type Block = { text: string; mark: boolean };
 
 // searches: the most web searches it runs (0: no web tools); keep: its
-// last request is kept whole (AskAI.last: a turn's); from: the request it
-// goes on from, its blocks after that one's items and answer, naming its
-// tools but running none: one step, unanswered if it calls one (a
+// last request is kept whole (AskAI.last: a turn's); once: one step,
+// naming its tools but running none, unanswered if it calls one (a
+// recap's: Chat.compact, on the turn's cache); from: the request it goes
+// on from, its blocks after that one's items and answer, once (a
 // suggested reply's: Suggest.ask); max: the most tokens it writes, its
 // thinking's too (none: the model's cap); room: the most tokens a step
 // may read before the call ends `full` once its tools ran (a turn's:
@@ -69,6 +71,7 @@ export type Ask = Pick & {
   server    : string;
   patient?  : boolean;
   keep?     : boolean;
+  once?     : boolean;
   from?     : Last;
   max?      : number;
   room?     : number;

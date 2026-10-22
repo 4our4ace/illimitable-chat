@@ -9,8 +9,10 @@
 // thinking, the agents' reports: ACTIVITY) shows as one line per run
 // (an "Act" row: what was done, counted), opened by a click or all at
 // once (verbose: Ctrl+O); while closed, what streams of it shows only on
-// the line over the input (Term.ts). An agent's page is its log, kept
-// live, whole.
+// the line over the input (Term.ts). A recap (/compact) shows as a line
+// across the chat (a "Rule" row), the recap under it once opened the
+// same way; what the screen showed before it stays above. An agent's
+// page is its log, kept live, whole.
 
 import type { Kind, Vendor } from "../ai/AskAI.ts";
 import * as Call from "./Call.ts";
@@ -37,8 +39,10 @@ export type Page = { name: string; log: Entry[] | null; live: Live[] };
 
 // what a turn waits on while nothing streams: nothing (""), SUMMARIES,
 // or the first piece of the model it names (a request out, no tool
-// running; a running tool shows its call)
+// running; a running tool shows its call); COMPACTING: a recap being
+// written in the turn's place (/compact)
 export const SUMMARIES = "summaries";
+export const COMPACTING = "compaction";
 export type Wait = string;
 
 // what runs, in words (view_doing): the step it is at, about how many
@@ -165,7 +169,7 @@ export type Client =
   | { $: "stop"; name?: string } // all work, or the agent named, or TURN
   | { $: "goal"; text: string | null } // the goal set (/goal), or none (/halt)
   | { $: "clear" } // a fresh session: the chat so far leaves the view, kept for search and zoom (/clear)
-  | { $: "compact" } // all but the last exchanges fold into the view, still shown (/compact)
+  | { $: "compact"; focus?: string } // illi writes its recap, the turn's view starting at it, the screen kept (/compact); focus: what it should keep
   | { $: "pick"; to: Pick }
   | { $: "main"; name: string | null } // the main agent (/agent), or illi's own
   | { $: "zoom"; part: Part }
@@ -205,6 +209,7 @@ export type Row =
   | { $: "Sum"; id: number; n: number; text: string; call: Call.Call | null; kind: Kind | null }  // a block: nx, its summary (as written: drawn flat, Paint.ts; call: a tool call's, word for word; kind: its message's, of one known)
   | { $: "Box"; id: number; n: number; text: string; rows: Row[] }                              // a block open: its bar
   | { $: "Act"; id: number; text: string; open: boolean; rows: Row[] }                         // a run of work (ACTIVITY), from message id: what was done, its rows if open
+  | { $: "Rule"; id: number; text: string; open: boolean; rows: Row[] }                        // a recap (/compact), message id: a line across the chat naming it, the recap's rows if open
   | { $: "Msg"; id: number | null; kind: Kind; who: string; text: string; body: Md.Block[]; call: Call.Call | null; images: string[] } // a message whole: 0x (who: its speaker or "↳ result", named on its block; body: its blocks, none for illi's (drawn from its text); call: a tool call's, drawn as Call.ts reads it)
   | { $: "Cap"; text: string }                                                                  // a line about the page
 
@@ -238,6 +243,10 @@ const STEP  = 500;
 
 const WAIT = "compressing…";
 const SUMS = "compressing earlier messages…";
+const RECAPS = "writing the recap…";
+
+// the line across the chat at a recap (/compact)
+const RULE = "Compaction";
 
 // the kinds an image may be, each by its mark at a byte of its first HEAD
 const MARKS: Array<[string, number, string]> = [
@@ -256,7 +265,7 @@ const FOLD = "The whole chat, folded into the fewest blocks.";
 // the kinds of the work between the person's words and illi's, shown as
 // one line per run; a summary's kind, read off its line (Memory.plain)
 const ACTIVITY: Kind[] = ["tool", "echo", "mind", "work"];
-const KINDED   = /^(user|illi|tool|echo|mind|note|work): /;
+const KINDED   = /^(user|illi|tool|echo|mind|note|work|recap): /;
 
 // the name on the answers to illi's question
 const ANSWERS = "your answers";
@@ -426,7 +435,8 @@ export function view_act(v: View, act: Act): Client[] {
         return [{ $: "clear" }];
       }
       if (word === "/compact") {
-        return [{ $: "compact" }];
+        const focus = text.slice(word.length).trim();
+        return [focus === "" ? { $: "compact" } : { $: "compact", focus }];
       }
       if (goal === "") {
         v.notes.push("/goal needs one: /goal <message>.");
@@ -514,12 +524,17 @@ export function view_body(v: View): Row[] {
   return view_acts(v, view_rows(v, v.parts).flat());
 }
 
-// rows with each run of work (ACTIVITY) one Act row
+// rows with each run of work (ACTIVITY) one Act row, and each recap
+// (its pages) a Rule, open as a run of work is
 export function view_acts(v: View, rows: Row[]): Row[] {
   const out: Row[] = [];
   for (const row of rows) {
     const last = out[out.length - 1];
-    if (!row_busy(row)) {
+    if (row_recap(row) && last?.$ === "Rule") {
+      last.rows.push(row);
+    } else if (row_recap(row) && row.$ !== "Cap" && row.id !== null) {
+      out.push({ $: "Rule", id: row.id, text: RULE, open: v.verbose || v.acts.has(row.id), rows: [row] });
+    } else if (!row_busy(row)) {
       out.push(row);
     } else if (last?.$ === "Act") {
       last.rows.push(row);
@@ -529,6 +544,11 @@ export function view_acts(v: View, rows: Row[]): Row[] {
     }
   }
   return out.map((row) => (row.$ === "Act" ? { ...row, text: act_text(row.rows) } : row));
+}
+
+// whether a row is a recap's, whole or summed up
+function row_recap(row: Row): boolean {
+  return (row.$ === "Msg" || (row.$ === "Sum" && row.n === 1)) && row.kind === "recap";
 }
 
 // whether a row is work: a message of ACTIVITY's kinds, whole, summed up
@@ -577,7 +597,7 @@ function act_text(rows: Row[]): string {
   return named ? text : text[0].toUpperCase() + text.slice(1);
 }
 
-// a run of work opened, or closed
+// a run of work, or a recap, opened or closed (by its first message's id)
 export function view_toggle(v: View, id: number): void {
   if (v.acts.has(id)) {
     v.acts.delete(id);
@@ -603,7 +623,7 @@ export function view_tail(v: View, caption = true): Row[] {
   if (v.page !== null || rows.length > 0 || v.wait === "" || !caption) {
     return rows;
   }
-  return [Cap(v.wait === SUMMARIES ? SUMS : "waiting for " + v.wait + "…")];
+  return [Cap(v.wait === SUMMARIES ? SUMS : v.wait === COMPACTING ? RECAPS : "waiting for " + v.wait + "…")];
 }
 
 // what streams on the page shown
@@ -650,6 +670,7 @@ export function view_doing(v: View, now = Date.now()): Doing | null {
   const verb   =
     !v.busy ? "Waiting on agents"
     : v.asks.length > 0 ? "Waiting for your answer"
+    : v.wait === COMPACTING ? "Compacting the chat"
     : call !== null ? ("Running " + call.name).trim()
     : last?.kind === "mind" ? "Thinking"
     : last?.kind === "illi" ? "Writing"

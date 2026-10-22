@@ -9,10 +9,11 @@
 // is kept whole, with its answer (AskAI.last).
 // Each step sends every item and streams one output; tool calls run in
 // order, a message sent mid-run follows the next results, and the call
-// ends at a step with no tools and nothing sent. A call that goes on from
-// another's request (AskAI.ts `from`: a suggested reply) sends that one's
-// items and answer before its own, naming its tools but running none: it
-// takes one step, unanswered if it calls a tool. A request goes again,
+// ends at a step with no tools and nothing sent. A call `once` (a recap)
+// takes one step, naming its tools but running none, unanswered if it
+// calls one; so does one that goes on from another's request (AskAI.ts
+// `from`: a suggested reply), sending that one's items and answer before
+// its own. A request goes again,
 // TRIES times at most, after its retry-after or a doubling wait, for a
 // passing reason (`busy`: no connection, a retry status, a stream error,
 // cut short or silent for the wire's `idle`), dropping what it streamed;
@@ -222,7 +223,7 @@ export namespace Agent {
         end.cut   = step.entries.some((e) => e.kind === "illi");
         return;
       }
-      if (ask.from !== undefined && (step.stop !== "done" || step.entries.some((e) => e.kind === "tool"))) {
+      if ((ask.once || ask.from !== undefined) && (step.stop !== "done" || step.entries.some((e) => e.kind === "tool"))) {
         end.text = "it called a tool";
         return;
       }

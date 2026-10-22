@@ -143,7 +143,8 @@ as one-line summaries. Each line is
 
 A summary tags each item with its kind: user (the user's words), illi
 (illi's replies), tool (illi's tool calls), echo (their results), note
-(illi's own notices: a stop, a goal met, a new session, a restart), or
+(illi's own notices: a stop, a goal met, a new session, a restart),
+recap (illi's recap of the chat before it, at the user's /compact), or
 work (the report of an agent, starting "[Name]"). A short message is its own line, word for word. Recent lines
 cover one message each; the older the messages, the more a line covers.
 A message not summarized yet shows as "(not summarized yet: zoom it)".

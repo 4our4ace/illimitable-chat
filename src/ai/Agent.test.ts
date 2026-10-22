@@ -4,6 +4,7 @@
 // the model's window is told apart from any other; a call whose step
 // read past its room ends `full` once that step's tools ran, saying so
 // only if it was the first step (the request itself too long). A call
+// once (a recap) runs no tool: one that calls one ends unanswered. A call
 // going on from another's keeps its vendor's cache marks in all: the
 // other's count.
 
@@ -24,9 +25,10 @@ test("a refusal's body says the request is too long for the window, each vendor'
   expect(Agent.full('{"error":{"message":"Rate limit reached","code":"rate_limit_exceeded"}}')).toBe(false);
 });
 
-// a call run on scripted steps (each reading `read` tokens, the first n
-// calling a tool), its room `room`: how it ended, the tools it ran
-async function scripted(reads: number[], room: number) {
+// a call run on scripted steps (each reading `read` tokens, all but the
+// last calling a tool), its room `room`, maybe once: how it ended, the
+// tools it ran
+async function scripted(reads: number[], room?: number, once?: boolean) {
   const step = Agent.step;
   const use = Agent.use;
   const ran: string[] = [];
@@ -34,11 +36,12 @@ async function scripted(reads: number[], room: number) {
   Agent.step = async () => {
     const read = reads[k++];
     const uses = k < reads.length ? [{ id: "t" + k, name: "shell", input: {} }] : [];
-    return { out: [], uses, entries: [], stop: uses.length > 0 ? "tools" : "done", why: "", note: "", read } as any;
+    const entries = uses.length > 0 ? [{ kind: "tool", text: "shell" }] : [{ kind: "illi", text: "the recap" }];
+    return { out: [], uses, entries, stop: uses.length > 0 ? "tools" : "done", why: "", note: "", read } as any;
   };
   Agent.use = async (_run, _tools, u) => (ran.push(u.id), { text: "ok", fail: false });
   try {
-    const ask = { vendor: "chatgpt", model: "m", effort: "low", speed: "slow", system: "", blocks: [{ text: "hi", mark: false }], searches: 0, server: "", room } as any;
+    const ask = { vendor: "chatgpt", model: "m", effort: "low", speed: "slow", system: "", blocks: [{ text: "hi", mark: false }], searches: 0, server: "", room, once } as any;
     const run = { ask, on: () => {}, sent: [], abort: new AbortController(), end: AskAI.end("") };
     await Agent.loop({ auth: { token: async () => "", spoil: () => {} }, marks: () => 0 } as any, run);
     return { end: run.end, ran };
@@ -55,6 +58,13 @@ test("a step read past the call's room ends it full once its tools ran; saying w
   expect([grown.end.stop, grown.end.text, grown.ran]).toEqual(["full", "", ["t1", "t2", "t3"]]);
   const fits = await scripted([100, 200, 300], 400);
   expect([fits.end.ok, fits.end.stop, fits.ran]).toEqual([true, undefined, ["t1", "t2"]]);
+});
+
+test("a call once runs no tool: one calling a tool ends unanswered, one writing ends answered", async () => {
+  const tool = await scripted([10, 10], undefined, true);
+  expect([tool.end.ok, tool.end.text, tool.ran]).toEqual([false, "it called a tool", []]);
+  const text = await scripted([10], undefined, true);
+  expect([text.end.ok, text.end.text, text.ran]).toEqual([true, "the recap", []]);
 });
 
 test("a call going on from another's keeps its vendor's cache marks in all, the other's counted", async () => {

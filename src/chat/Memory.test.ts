@@ -7,8 +7,9 @@
 // recent messages come in blocks, one marked in place of the view's.
 // Closed, the chat is one file, its images in it too: a model gets each
 // one's copy if one was made (a big one, smaller, as JPEG), else the
-// image; an export, the image itself. /compact counts a user's message
-// of many pages once. An agent spawned as the user's is named after it;
+// image; an export, the image itself. The screen folds with a cut that
+// moves on by itself, and stays behind one moved for it (a /compact's
+// recap). An agent spawned as the user's is named after it;
 // a freed name is used again, each log its own; one named main, the
 // chat's own caller, is refused. A leaf's summary starts with its
 // message's kind, the compactor's or added. Past a /clear, the chat's
@@ -110,8 +111,7 @@ test("closed, the chat is its project's one file, its images in it: a model gets
 test("the screen folds with the cut as it moves on by itself, and stays behind a cut moved for it", () => {
   const mem  = chat("show", 40);
   const high = 20 * size(mem, 0, 1);
-  mem.cut    = Memory.kept(mem, Infinity);
-  expect(mem.cut).toBe(38);
+  mem.cut    = 38;
   expect(mem.show).toBe(0);
   expect(Memory.cutoff(mem, 1e9)).toBe(38);
   expect(mem.show).toBe(0);
@@ -119,15 +119,6 @@ test("the screen folds with the cut as it moves on by itself, and stays behind a
   const cut = Memory.cutoff(mem, high);
   expect(cut).toBeGreaterThan(38);
   expect(mem.show).toBe(cut);
-});
-
-test("/compact keeps a user's message of many pages whole, counting it once", () => {
-  const mem = chat("pages", 4);
-  Memory.push(mem, [{ kind: "user", text: "big ".repeat(20000) }, { kind: "illi", text: "read it" }]);
-  const first = mem.count - 4;
-  expect(Memory.message(mem, first)!.more).toBe(true);
-  expect(Memory.kept(mem, Infinity)).toBe(3);
-  expect(Memory.message(mem, first - 1)!.text).toStartWith("message 3");
 });
 
 test("an agent spawned as the user's is named after it, numbered while one so named is taken; a freed name is used again, each log its own; main is refused", () => {

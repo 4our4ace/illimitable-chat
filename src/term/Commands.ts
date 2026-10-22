@@ -84,7 +84,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/goal <message>",   "",                        "send a goal: illi goes on until it is met",      (t, a) => term_say(t, "/goal " + a)],
       ["/halt",             "",                        "drop the goal; the turn running ends as it would", (t) => term_say(t, "/halt")],
       ["/clear",            "",                        "start a new topic: the chat before is kept and looked up when needed, not sent", (t) => term_say(t, "/clear")],
-      ["/compact",          "",                        "summarize all but the last two exchanges, so each turn sends less; the screen keeps them", (t) => term_say(t, "/compact")],
+      ["/compact [focus]",  "",                        "illi writes a recap of the chat and goes on from it alone (the chat before is kept and looked up when needed, not sent); focus: what the recap should keep", (t, a) => term_say(t, ("/compact " + a).trim())],
       ["/image <path>",     "",                        "attach an image to the next message (or paste or drop the file)", term_image],
       ["",                  "Alt+V, Ctrl+V",           "attach the clipboard's image (the terminal's own paste brings text)", term_clip],
       ["/open #id",         "",                        "open block #id and keep it open (or click it)",  (t, a) => term_block(t, a, true)],

@@ -76,7 +76,7 @@ The columns, by table:
 - **chat**: `id`, `uid`, `project` (references `project`), `made`,
   `extra`.
 - **msg**: `chat`, `i` (its index in the chat: 0, 1, 2…), `kind` (`user`,
-  `illi`, `tool`…), `text`, `date`, `size` (bytes as models read it),
+  `illi`, `tool`…, `recap`: illi's recap at a `/compact`), `text`, `date`, `size` (bytes as models read it),
   `images` (a JSON list of image names, or null), `line` (its summary line
   if it was written with one), `more` (1 if the next row is the same
   message continued), `cwd` (the folder illi ran in). A message longer
@@ -95,9 +95,12 @@ The columns, by table:
 - **state**: `chat`, `saved` (JSON: the chat's view, `seen` (the
   compactions' view), the pick, the goal, the suggested reply (so it
   shows again after a restart), the main agent, what ran, the
-  cut, `show` and `top`, the last `/clear`: the chat's view starts
-  there, so nothing before it is sent; loaded, they are held to `top`
-  ≤ `show` ≤ `cut` ≤ the count, whatever was saved: `Memory.read`). It is
+  cut, `show` and `top`, the last `/clear` or `/compact` recap: the
+  chat's view starts there, so nothing before it is sent; `show`, where
+  the screen shows messages whole from, may be before `top` (a
+  `/compact` leaves the screen as it was); loaded, they are held to
+  `top` ≤ `cut` ≤ the count and `show` ≤ `cut`, whatever was saved:
+  `Memory.read`). It is
   never rebuilt from the facts, because the model's prompt cache depends
   on the saved view.
 - **log**: `id`, `chat`, `log`, `name`. **work**: `log` (references
