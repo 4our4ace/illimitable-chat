@@ -145,7 +145,7 @@ async function term_leave(t: Term, keep = false): Promise<void> {
   }
   Machine.end();
   await Promise.race([Mcp.stop(), Bun.sleep(LEAVE)]);
-  await Disk.end();
+  await Disk.synced();
   Chat.unlock(keep);
   await Screen.screen_leave(t.scr);
 }

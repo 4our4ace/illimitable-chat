@@ -1,8 +1,9 @@
 // Disk test
 // =========
-// `bun test Disk.test.ts`. The shell that flushes, killed: the next flush
-// never waits on it nor writes to it, but starts another, whether the
-// shell's end was seen first or not; nothing is told failed.
+// `bun test Disk.test.ts`. Writes made while a flush runs wait for the
+// next and share it: a file written five times at once is flushed twice;
+// a file gone since needs none; each write is answered once flushed, and
+// nothing is told failed.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -13,36 +14,24 @@ process.env.ILLI_DIR = DIR;
 
 const { Disk } = await import("./Disk.ts");
 
-// a file written and flushed, at most 5 s
-async function flushed(name: string): Promise<void> {
-  fs.writeFileSync(DIR + "/" + name, name);
-  const late = Bun.sleep(5000).then(() => "stuck");
-  expect(await Promise.race([Disk.wrote(DIR + "/" + name), late])).toBeUndefined();
-}
-
-test.skipIf(process.platform !== "linux")("a killed flush shell is let go and another started", async () => {
+test("writes made while a flush runs share the next; a file gone needs none; each answered once flushed", async () => {
   const errors: string[] = [];
   const error = console.error;
   console.error = (...args: unknown[]) => errors.push(args.join(" "));
+  const fsync = Disk.fsync;
+  const synced: string[] = [];
+  Disk.fsync = (file) => fsync(file).then(() => void synced.push(file.slice(DIR.length + 1)));
   try {
-    await flushed("a");
-    const first = Disk.flusher()!;
-    process.kill(first.pid, "SIGKILL");
-    await first.exited;
-    await flushed("b");
-    const second = Disk.flusher()!;
-    expect(second.pid).not.toBe(first.pid);
-
-    process.kill(second.pid, "SIGKILL");
-    await flushed("c");
-    await flushed("d");
-    const third = Disk.flusher()!;
-    expect(third.pid).not.toBe(second.pid);
-    await flushed("e");
-    expect(Disk.flusher()).toBe(third);
+    fs.writeFileSync(DIR + "/wal", "x");
+    const late = Bun.sleep(5000).then(() => "stuck");
+    const answers = Array.from({ length: 5 }, () => Disk.wrote(DIR + "/wal"));
+    expect(await Promise.race([Promise.all(answers), late])).toEqual([undefined, undefined, undefined, undefined, undefined]);
+    expect(synced).toEqual(["wal", "wal"]);
+    expect(await Promise.race([Disk.wrote(DIR + "/gone"), late])).toBeUndefined();
+    expect(await Promise.race([Disk.synced(), late])).toBeUndefined();
   } finally {
+    Disk.fsync = fsync;
     console.error = error;
-    await Disk.end();
   }
-  expect(errors).toEqual([]);
+  expect([synced.length, errors]).toEqual([3, []]);
 });
