@@ -13,7 +13,9 @@
 // at the side, where a click turns it off. The leader (Ctrl+X) greys
 // the screen, and the next key runs its shortcut; /shortcuts lists them
 // and the leader, to change; the leader is never a key illi takes
-// itself. A use counted weighs half as
+// itself. A skill named mid-message is suggested as it's typed, filled
+// in there, and illi told to use it as the message goes. A use counted
+// weighs half as
 // much 100 uses on, a name faded under a tenth forgotten. The side shows
 // any vendor's plan alike: each window's share used, its bar as full.
 
@@ -25,7 +27,7 @@ import type { Match } from "../ui/Screen.ts";
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-commands-");
 process.env.ILLI_DIR = DIR;
 
-const { term_chooser, term_command, term_commands, term_suggest, term_tally, term_tally_one } = await import("./Commands.ts");
+const { term_chooser, term_command, term_commands, term_named, term_suggest, term_tally, term_tally_one } = await import("./Commands.ts");
 const { term_grab, term_press, term_type } = await import("./Keys.ts");
 const { term_side } = await import("./Side.ts");
 const Paint = await import("../ui/Paint.ts");
@@ -201,7 +203,7 @@ test("/shortcuts: the leader and each key after it; Enter changes one, Del puts 
   const edits   = (key: string) => {
     const ed = Screen.ed_new();
     Screen.ed_set(ed, "one two three");
-    ed.at = 4;
+    ed.pos = 4;
     return Screen.ed_key(ed, key);
   };
   const own     = new Set(term_commands().flatMap(([, keys]) => keys.split(", ")).filter((k) => k !== config.LEADER));
@@ -335,6 +337,24 @@ test("the side shows any vendor's plan alike: each window's share used, a bar as
   expect(text(lines[at])).toBe("Usage · Claude Max");
   t.v.use.plan = null;
   expect(term_side(t, 30, 40).map(([line]) => text(line))).not.toContain("Usage");
+});
+
+test("a skill named mid-message: suggested as it's typed (skills alone, none shown till one matches), filled in there by Enter, and illi told to use it as the message goes", () => {
+  fs.mkdirSync(DIR + "/skills/imagegen", { recursive: true });
+  fs.writeFileSync(DIR + "/skills/imagegen/SKILL.md", "---\ndescription: Make images\n---\nDraw.");
+  const t = term();
+  Screen.ed_set(t.scr.ed, "use the /ima");
+  const sug = term_suggest(t)!;
+  expect([sug.mid, sug.cmds.map(([use]: any) => use), sug.cmds[sug.found[0].k][0]]).toEqual([8, ["/customize-illi [...]", "/imagegen [...]"], "/imagegen [...]"]);
+  term_grab(t, "Enter");
+  expect([t.scr.ed.text, t.scr.ed.pos, t.v.out]).toEqual(["use the /imagegen ", 18, []]);
+  Screen.ed_set(t.scr.ed, "see /usr");
+  expect(term_suggest(t)).toBeNull();
+  Screen.ed_set(t.scr.ed, "/ima");
+  expect(term_suggest(t)!.mid).toBeNull();
+  expect(term_named("Use the /imagegen skill, then /model and /usr/bin.")).toBe("Use the /imagegen skill, then /model and /usr/bin.\n\nUse your skill imagegen.");
+  expect(term_named("no skill here, /nope")).toBe("no skill here, /nope");
+  fs.rmSync(DIR + "/skills/imagegen", { recursive: true });
 });
 
 test("a sticky skill: its name alone turns it on, again off, each said; with words, on, then the words sent; on, at the side, where a click turns it off", () => {

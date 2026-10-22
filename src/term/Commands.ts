@@ -65,7 +65,7 @@ export const PICKED: Tally = { file: config.ROOT + "/picked.json", count: null }
 // each key; a command wins a skill's name)
 export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
   const cmds   = custom ? Custom.commands(process.cwd()) : [];
-  const skills = custom ? Custom.skills(process.cwd()).filter((s) => !cmds.some((c) => c.name === s.name)) : [];
+  const skills = custom ? term_skills(cmds) : [];
   const yours  = [
     ...cmds.map((c): Cmd => ["/" + c.name + " [...]", "", c.description || "your command (" + c.file + ")", (t, a) => term_custom(t, c, a, "/" + c.name)]),
     ...skills.map((s): Cmd => ["/" + s.name + " [...]", "", (!s.sticky ? "skill: " : config.config_sticky(s.name) ? "sticky skill, on: " : "sticky skill, off: ") + (s.description || s.dir), (t, a) => term_skill(t, s, a, "/" + s.name)]),
@@ -157,21 +157,44 @@ export function term_command(t: Term, text: string, typed = true): boolean {
 
 // the commands suggested, kept to the input: opened (all of them read)
 // as it becomes a /word, matched again as the word changes (the best
-// lit), closed as it is none; null while closed or closed by Esc
+// lit), closed as it is none; null while closed or closed by Esc. A
+// /word mid-message: the user's skills alone (no command runs there),
+// none shown till one matches
 export function term_suggest(t: Term): Sug | null {
-  const word = Screen.ed_slash(t.scr.ed);
-  if (word === null) {
+  const slash = Screen.ed_slash(t.scr.ed);
+  const mid   = slash === null || slash.word === t.scr.ed.text ? null : slash.from;
+  if (slash === null || (t.sug !== null && (t.sug.mid === null) !== (mid === null))) {
     t.sug = null;
+  }
+  if (slash === null) {
     return null;
   }
-  t.sug ??= { cmds: term_commands(true).filter(([use]) => use !== ""), word: "", found: [], at: 0, top: 0, tall: 1, off: null };
-  const sug = t.sug;
+  const skills = mid === null ? [] : term_skills().map((s) => "/" + s.name);
+  t.sug ??= { cmds: term_commands(true).filter(([use]) => use !== "" && (mid === null || skills.includes(use.split(" ")[0]))), word: "", found: [], at: 0, top: 0, tall: 1, off: null, mid };
+  const sug  = t.sug;
+  const word = slash.word;
+  sug.mid    = mid;
   if (sug.word !== word) {
     const names = sug.cmds.map(([use]) => use.split(" ")[0].slice(1));
     const count = term_tally(USED);
     Object.assign(sug, { word, found: Screen.ed_rank(word.slice(1), names, (k) => count["/" + names[k]] ?? 0), at: 0, top: 0, off: null });
   }
-  return sug.off === word ? null : sug;
+  return sug.off === word || (mid !== null && sug.found.length === 0) ? null : sug;
+}
+
+// the user's skills, but those a command of theirs takes the name of
+// (cmds: their commands, if read already)
+function term_skills(cmds = Custom.commands(process.cwd())): Skill[] {
+  return Custom.skills(process.cwd()).filter((s) => !cmds.some((c) => c.name === s.name));
+}
+
+// a message's skills named in it, each a /name as a word after a space or
+// a line's start (Use the /imagegen skill to…): illi told to use them, in
+// a line after it, as a /name that starts a message tells it (term_skill)
+export function term_named(text: string): string {
+  const skills = term_skills().map((s) => s.name);
+  const named  = [...new Set([...text.matchAll(/(?:^|\s)\/([^\s/.,;:!?()]+)(?=$|[\s.,;:!?)])/g)].map((m) => m[1]))].filter((name) => skills.includes(name));
+  return named.length === 0 ? text : text + "\n\nUse your skill" + (named.length === 1 ? " " : "s ") + named.join(", ") + ".";
 }
 
 // a tally's counts, read once
@@ -218,8 +241,17 @@ export function term_suggest_key(t: Term, sug: Sug, key: string): boolean {
 // a command suggested (as /help shows how it's typed), taken: run
 // (Enter, a click), unless it needs an argument (<path>, #id: not
 // [name]); else filled in, a space after it. Its words before the first
-// argument go whole
+// argument go whole. A skill's mid-message: its name filled in, there
 export function term_suggested(t: Term, use: string, run: boolean): void {
+  const mid = t.sug?.mid ?? null;
+  if (mid !== null) {
+    const ed   = t.scr.ed;
+    const name = use.split(" ")[0] + " ";
+    ed.text    = ed.text.slice(0, mid) + name + ed.text.slice(ed.pos).replace(/^ /, "");
+    ed.pos     = mid + name.length;
+    t.scr.typed = true;
+    return;
+  }
   const name = use.split(/ (?=[<[#])/)[0];
   const need = /^ +[^ []/.test(use.slice(name.length));
   Screen.ed_set(t.scr.ed, run && !need ? name : name + " ");

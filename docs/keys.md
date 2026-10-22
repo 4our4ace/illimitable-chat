@@ -137,6 +137,9 @@ Typing
 - `/` first lists the commands it matches: Up and Down choose, Tab fills
   one in, Enter runs it, Esc closes the list. Among those matched alike,
   the ones you run most come first.
+- `/` after a space, mid-message, lists your skills it matches (Tab or
+  Enter fills one in), and each skill a message names ("Use the
+  /imagegen skill to…") is one illi is told to use.
 
 In a list
 ---------

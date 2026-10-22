@@ -91,9 +91,10 @@ const RULE_HEAD = "── ";
 const OFF = "Read-only · Ctrl+PgUp back to ";
 
 // the commands suggested: the most lines shown, the keys said in its top
-// edge; the picker's widest
+// edge (a skill's name mid-message: NAMED's); the picker's widest
 const SUGGEST   = 10;
 const SUGGESTED = "Commands · ↑↓ · Tab fills in · Enter runs · Esc";
+const NAMED     = "Skills · ↑↓ · Tab or Enter fills in · Esc";
 const PICKER_W  = 72;
 
 // the box in the screen's middle (Chooser middle): the share of the
@@ -723,7 +724,7 @@ function term_suggestions(t: Term, sug: Sug, fw: number, room: number): Item[] {
   sug.tall    = end - sug.top + 1;
   const shown = all.slice(sug.top).flat().slice(0, rows);
   const items = [...shown, ...Array.from({ length: rows - shown.length }, (): Item => [[], null])];
-  const lines = Paint.frame(items.map(([line]) => line), fw, [Paint.Run(" " + SUGGESTED + " ", { ...Paint.DIM, b: true })]);
+  const lines = Paint.frame(items.map(([line]) => line), fw, [Paint.Run(" " + (sug.mid === null ? SUGGESTED : NAMED) + " ", { ...Paint.DIM, b: true })]);
   return lines.map((l, k) => [l, items[k - 1]?.[1] ?? null]);
 }
 

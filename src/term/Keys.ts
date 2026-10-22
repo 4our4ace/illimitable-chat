@@ -7,7 +7,7 @@
 
 import { term_form_key, term_form_type } from "./Asks.ts";
 import { Chat } from "../chat/Chat.ts";
-import { term_after, term_chooser_find, term_command, term_commands, term_main, term_suggest, term_suggest_key } from "./Commands.ts";
+import { term_after, term_chooser_find, term_command, term_commands, term_main, term_named, term_suggest, term_suggest_key } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Custom } from "../config/Custom.ts";
 import { term_draw } from "./Frame.ts";
@@ -239,7 +239,7 @@ export function term_enter(t: Term): void {
   if (term_command(t, text) || (text.trim() !== "" && term_away(t, text, typed))) {
     return;
   }
-  if (term_act(t, { $: "Send", text, images: term_shots(t, text) }).length > 0) {
+  if (term_act(t, { $: "Send", text: term_named(text), images: term_shots(t, text) }).length > 0) {
     term_unnote(t);
     t.scroll = 0;
     return;

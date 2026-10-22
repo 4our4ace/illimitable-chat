@@ -391,20 +391,29 @@ test("in a word, at a word's start first; characters in turn, the closest togeth
   expect(Screen.ed_rank("set", ["reset", "settings"], (k) => [9, 0][k]).map((m) => m.k)).toEqual([1, 0]);
 });
 
-test("a lone /word is a command typed; one sent before, brought back by Up, is none till edited", () => {
+test("a lone /word is a command typed, one mid-message that the cursor ends a skill's name; one sent before, brought back by Up, is none till edited", () => {
   const ed = Screen.ed_new();
   Screen.ed_history(ed, ["/help"]);
   Screen.ed_type(ed, "/he");
-  expect(Screen.ed_slash(ed)).toBe("/he");
+  expect(Screen.ed_slash(ed)).toEqual({ word: "/he", from: 0 });
   Screen.ed_type(ed, "lp me");
   expect(Screen.ed_slash(ed)).toBe(null);
   Screen.ed_set(ed, "");
   Screen.ed_key(ed, "Up");
   expect([ed.text, Screen.ed_slash(ed)]).toEqual(["/help", null]);
   Screen.ed_key(ed, "Backspace");
-  expect(Screen.ed_slash(ed)).toBe("/hel");
+  expect(Screen.ed_slash(ed)).toEqual({ word: "/hel", from: 0 });
   Screen.ed_set(ed, "say /help");
+  expect(Screen.ed_slash(ed)).toEqual({ word: "/help", from: 4 });
+  Screen.ed_set(ed, "use /ima now");
+  ed.pos = 8;
+  expect(Screen.ed_slash(ed)).toEqual({ word: "/ima", from: 4 });
+  ed.pos = 7;
   expect(Screen.ed_slash(ed)).toBe(null);
+  for (const text of ["see /usr/bin", "and/or", "a / b"]) {
+    Screen.ed_set(ed, text);
+    expect(Screen.ed_slash(ed)).toBe(null);
+  }
 });
 
 test("a paint writes only the rows that changed", () => {

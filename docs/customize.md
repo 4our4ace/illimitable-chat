@@ -12,7 +12,8 @@ skill, `customize-illi`, and writes these files itself.
   both. Each gets a color of its own; `color: "#rrggbb"` picks one.
 - `commands/*.md`: `/name` sends the file, `$ARGUMENTS` filled in.
 - `skills/<name>/SKILL.md`: skills, in Claude Code's format. illi loads
-  one when a task matches; `/name` asks for it. One with `sticky: true`
+  one when a task matches; `/name` asks for it, at a message's start or
+  anywhere in it ("Use the /imagegen skill to…"). One with `sticky: true`
   is for every reply (a tone, a format): `/name` turns it on and off, and
   while on it is in every turn's prompt, so no summary drops it.
   customize-illi suggests it when it installs a skill.
