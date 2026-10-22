@@ -23,6 +23,7 @@ import * as net from "node:net";
 import { AskAI, type Call, type End, type Event, type Kind, type Say } from "../ai/AskAI.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
+import { Compactor } from "./Compactor.ts";
 import { Memory, TOKEN, type Share } from "./Memory.ts";
 import { Pick } from "../ai/Pick.ts";
 import { Projects } from "./Projects.ts";
@@ -350,7 +351,7 @@ export namespace Chat {
     };
     const work = mem.work;
     Tools.todo_finished(tools);
-    Memory.pump(mem);
+    Compactor.pump(mem);
     Chat.resume(chat, work).finally(() => Chat.change(chat)).catch((err) => console.error("illi: resume: " + (err?.message ?? err)));
     return chat;
   }
