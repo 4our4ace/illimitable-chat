@@ -9,7 +9,7 @@ Development
                    second terminal's view (Remote.ts), the disk
     src/ai/        model vendors, the agent loop, picks, token usage
     src/tools/     shell and files, MCP servers, the prompts
-    src/config/    settings, profiles, your agents, commands and skills
+    src/config/    settings, profiles, your agents, commands and skills, updates
     src/skills/    the skills built into illi (customize-illi)
     test/          tests across modules; each module's own sit beside it
     vendor/        cellsmith's markdown parser and palettes
@@ -30,6 +30,17 @@ From source, without installing:
     git clone https://github.com/4our4ace/illimitable-chat
     cd illimitable-chat && bun install
     bun src/main.ts
+
+A release is a tag `vX.Y.Z` naming `package.json`'s version: the
+workflow (`.github/workflows/release.yml`) type-checks and tests it,
+builds one file per system (`illi-linux-x64`, `illi-linux-arm64`,
+`illi-darwin-x64`, `illi-darwin-arm64`) and publishes them with their
+`SHA256SUMS`. Every installed illi takes the latest within a day
+(`src/config/Update.ts`; `autoupdate` in [Config](config.md)): it
+checks the file against the sums, runs it with `--version`, which must
+print exactly `illi X.Y.Z` (main.ts), then renames it over itself. `bun
+run build`'s `./illi` is such a file and updates itself too
+(`ILLI_AUTOUPDATE=off` keeps it); a source run never does.
 
 The libraries illi is built with are three, each pinned to one version
 in `package.json` (`bun.lock` holds the exact commit or file hash) and

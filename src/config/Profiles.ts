@@ -52,9 +52,10 @@ const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
 
 // what a profile's folder holds that is never a profile's to give: the
 // login (the root's, shared), the locks, the log; the default's folder
-// also holds the others, and which was used last
+// also holds the others, which was used last, and when illi last looked
+// for a new release of itself (Update.ts)
 const OWN    = ["login.json", "locks", "illi.log"];
-const ROOTED = ["profiles", "profile"];
+const ROOTED = ["profiles", "profile", "update.json"];
 
 // the files that go out with their secrets left out, as JSON; config.json's
 // keys left out of an export (a file here), and dropped from an import (a

@@ -7,8 +7,8 @@ profile's own `config.json` goes over it, key by key; its `off` and
 
 - `/settings` changes them from inside illi (`/set <key> <value>` too);
   `/shortcuts` the leader and its shortcuts.
-- Most apply at once; `vendors`, `models`, `jobs`, `theme`, `mcp` and
-  `login` at the next start.
+- Most apply at once; `vendors`, `models`, `jobs`, `theme`, `mcp`,
+  `login` and `autoupdate` at the next start.
 - A key set by a variable stays as the variable says.
 - A relative path is taken from the folder of the config.json that names
   it (a variable's: the working folder).
@@ -37,6 +37,7 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `theme`      | `theme.json`: the profile's, else `~/.illi`'s | the theme's file                   |
 | `mcp`        | `mcp.json` in the profile's folder | the MCP servers' file; `~/.illi/mcp.json` is read too |
 | `login`      | `~/.illi/login.json`, opencode's  | the ChatGPT login file, which `/login` writes    |
+| `autoupdate` | `on`                              | a new release installs itself: looked for once a day (as illi starts, or within the hour while it runs), downloaded and checked in the background, it runs from the next start (a note says so); `notify` only tells; `off` never looks. The installer's one file only: a source clone never updates itself |
 
 API keys come from `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`. Other
 variables:
@@ -77,6 +78,7 @@ What else illi keeps in `~/.illi`:
 | `used.json`     | how often you ran each command: among those a `/word` matches alike, the most used come first; a use counts half as much 100 uses later, and a command you stopped using drops out (two illis at once each add theirs: [Storage](storage.md#usage-counts)) |
 | `picked.json`   | the same for what you pick in Ctrl+P's list, kept apart |
 | `profile`       | the profile used last                                 |
+| `update.json`   | when illi last looked for a new release (`autoupdate`), and the one it last said it couldn't install |
 | `locks/`        | a lock per project, held while its chat is open (by the system: a crash never leaves one held), and the socket a second terminal joins it by |
 | `illi.log`      | what went wrong (each profile's own)                  |
 
@@ -87,6 +89,15 @@ Troubleshooting
 
 - Something went wrong: illi logs it in its profile's folder,
   `~/.illi/illi.log` (another profile's: `~/.illi/profiles/<name>/illi.log`).
+- illi didn't update itself: it looks once a day (`update.json` says
+  when). A look that can't reach GitHub (offline) is tried again at
+  the next start or within the hour; a release it couldn't download or
+  check (a stalled download, not matching its SHA256SUMS) waits for the
+  next day's look. Both are logged in `illi.log`. `illi upgrade`
+  updates it now, saying each step.
+- "illi can't write <folder>": illi is installed where you can't write
+  (as with sudo into `/usr/local/bin`). Run `sudo illi upgrade`, or
+  install it again into a folder of yours (`ILLI_INSTALL`).
 - "<project> is open in another terminal, but it is another version"
   (or "it doesn't answer"): the illi there can't take a second screen,
   as after an update. Quit illi there (Ctrl+D), then start it here

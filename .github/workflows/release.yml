@@ -1,5 +1,5 @@
 # A tag v* builds illi as one file for each system and releases them,
-# which install.sh downloads (the latest) and `illi upgrade` runs again.
+# the latest of which install.sh downloads and illi updates itself to.
 # Only a tag that names package.json's version, on code whose type check
 # and tests pass, is built; only the release job may write.
 name: release

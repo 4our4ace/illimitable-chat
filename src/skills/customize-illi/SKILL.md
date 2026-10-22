@@ -144,6 +144,9 @@ one:
   else the global folder's; the global mcp.json is read too); login: the
   ChatGPT login file, if not {{root}}/login.json (the shared one /login
   makes) or else opencode's
+- autoupdate: on (the default: a new release of illi, looked for once a
+  day, installs itself and runs from the next start), notify (only
+  tells; `illi upgrade` installs it) or off (never looks)
 - a relative path is taken from the folder of the config.json naming it
 
 The user can change any of these with /settings, or /set <key> <value>,
@@ -189,7 +192,8 @@ palette's over it; glyph, tool, ansi and syntax entries too.
 - Keep JSON valid: parse a file after editing it (python3 -m json.tool
   FILE).
 - Keep secrets out of these files.
-- Leave illi's own state alone: login.json, models.json, chat/, profiles/.
+- Leave illi's own state alone: login.json, models.json, update.json,
+  chat/, profiles/.
 - Say when it applies: agents, commands, skills and the rules file's text
   at the next message; config.json, theme.json and mcp.json once illi
   starts again (Ctrl+D, then `illi`: the chat goes on where it was).
