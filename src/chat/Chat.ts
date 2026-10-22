@@ -24,6 +24,7 @@ import { AskAI, type Call, type End, type Event, type Kind, type Say } from "../
 import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
 import { Compactor } from "./Compactor.ts";
+import { Logs } from "./Logs.ts";
 import { Memory, TOKEN, type Share } from "./Memory.ts";
 import { Pick } from "../ai/Pick.ts";
 import { Projects } from "./Projects.ts";
@@ -717,7 +718,7 @@ export namespace Chat {
   // just before the message (the turn gets it among the recent ones)
   export function push(chat: Chat, agent: Agent | null, kind: Kind, text: string, images: string[] = []): Msg {
     if (agent !== null) {
-      const id = Memory.agent_push(chat.mem, agent.name, kind, text);
+      const id = Logs.push(chat.mem, agent.name, kind, text);
       Chat.all(chat, { $: "entry", agent: agent.name, id, kind, text });
       return { id, end: id + 1 };
     }
@@ -1024,7 +1025,7 @@ export namespace Chat {
       }
       case "agent": {
         const name = String(msg.name);
-        const log = Memory.agent(chat.mem, name);
+        const log = Logs.read(chat.mem, name);
         Chat.send(sock, { $: "agent", name, found: log !== null });
         log?.forEach(({ kind, text, date }) => Chat.send(sock, { $: "entry", agent: name, kind, text, date }));
         Chat.send(sock, { $: "live", agent: name, live: chat.tools.agents.get(name)?.live ?? [] });

@@ -34,7 +34,6 @@ import type { Ask, Block, Call, Img, Kind, Say } from "../ai/AskAI.ts";
 import { Compactor } from "./Compactor.ts";
 import { clip_page, clip_pages } from "../tools/Clip.ts";
 import * as config from "../config/Config.ts";
-import * as names from "./Names.ts";
 import { HOME, Store, type Place } from "./Store.ts";
 import { image_kind } from "../ui/View.ts";
 
@@ -43,7 +42,7 @@ import { image_kind } from "../ui/View.ts";
 
 // a message (a page): its index, kind, text, size, date, images, its
 // node (if written with it), whether it is logged as one with the next
-type Root = Msg & { i: number; size: number; date: string };
+export type Root = Msg & { i: number; size: number; date: string };
 
 // a message to log: a Root but its index and size; no date: now
 export type Msg = { kind: Kind; text: string; date?: string; images?: string[]; line?: string; more?: boolean };
@@ -82,7 +81,7 @@ type Saved = Kept & { seen?: Kept; pick: object | null; goal?: string | null; su
 // bytes of those from the cut, as last counted (Memory.fill); nodes: the
 // texts of the views' nodes
 // built and of those above them, by slot; agents: their logs' lengths,
-// logs: each name's log as now (a name freed takes a new one: agent_new);
+// logs: each name's log as now (a name freed takes a new one: Logs.start);
 // view: the chat's view; seen: the compactions'; ready: the nodes not
 // built whose halves are, by level, in order; busy: nodes building, by
 // slot; calls: those building's calls;
@@ -144,19 +143,10 @@ const IMAGE  = 2 ** 20;
 const PIXELS = 2 ** 28;
 
 // what an image's hash takes between turns of the event loop
-const PIECE = 2 ** 20;
+export const PIECE = 2 ** 20;
 
 const WAIT = "(not summarized yet: zoom it)";
 
-// an agent's name: a letter, then letters, digits, _ and -; its log's,
-// the name and a tag (one name, freed, is used again: each log its own),
-// the tag and the name back from a file
-const AGENT = /^[A-Za-z][A-Za-z0-9_-]*$/;
-const LOG   = /^([A-Za-z][A-Za-z0-9_-]*)(?:\.([0-9a-z]+))?$/;
-
-// the caller name of the chat's own agent (its tools URL's: Tools.ts),
-// never an agent's
-export const MAIN = "main";
 
 // Memory
 // ======
@@ -788,170 +778,6 @@ export namespace Memory {
   export function date(mem: Memory, id: number): string {
     const root = Memory.message(mem, id);
     return root === null ? "No message " + id + "." : new Date(root.date).toLocaleString("sv-SE");
-  }
-
-  // the tree's levels: as many as the count's bits
-  export function levels(mem: Memory): number[] {
-    return Array.from({ length: mem.count.toString(2).length }, (_, l) => l);
-  }
-
-  // level l's nodes built, in order
-  export function* level(mem: Memory, l: number): Generator<[Part, string]> {
-    for (let i = 0; (i + 1) * 2 ** l <= mem.count; i++) {
-      const text = Memory.node(mem, { l, i });
-      if (text !== null) {
-        yield [{ l, i }, text];
-      }
-    }
-  }
-
-  // /export: the chat's messages, summaries and agents' logs, then each
-  // image its messages name, its base64 read a PIECE at a time
-  export function* dump(mem: Memory): Generator<string> {
-    const pics = new Set<string>();
-    let sep = "\n";
-    yield '{"messages": [';
-    for (let i = 0; i < mem.count; i++) {
-      const { kind, text, date, images, more } = Memory.message(mem, i)!;
-      images?.forEach((name) => pics.add(name));
-      yield (i === 0 ? "\n" : ",\n") + JSON.stringify({ id: i, kind, text, date, images, more });
-    }
-    yield '],\n"summaries": [';
-    for (const l of Memory.levels(mem)) {
-      for (const [part, text] of Memory.level(mem, l)) {
-        yield sep + JSON.stringify({ id: Memory.span(part)[0], n: 2 ** l, text });
-        sep = ",\n";
-      }
-    }
-    yield '],\n"agents": {';
-    sep = "\n";
-    for (const log of Store.logs(mem.store)) {
-      const entries = Store.work(mem.store, log)!.map(({ i, kind, text, date }) => ({ id: i, kind, text, date }));
-      yield sep + JSON.stringify(log) + ": " + JSON.stringify(entries);
-      sep = ",\n";
-    }
-    yield '},\n"images": {';
-    sep = "\n";
-    for (const name of [...pics].sort()) {
-      const img = Store.image(mem.store, name);
-      if (img === null) {
-        continue;
-      }
-      const data = Buffer.from(img.data.buffer, img.data.byteOffset, img.data.byteLength);
-      yield sep + JSON.stringify(name) + ': "';
-      for (let at = 0; at < data.length; at += 3 * PIECE) {
-        yield data.subarray(at, at + 3 * PIECE).toString("base64");
-      }
-      yield '"';
-      sep = ",\n";
-    }
-    yield "}}\n";
-  }
-
-  // /tree: a section for the view, the messages and each level
-  export function* page(mem: Memory): Generator<string> {
-    const esc  = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
-    const item = (head: string[], text: string) => "<h4>" + esc(head.join(" · ")) + "</h4><pre>" + esc(text) + "</pre>";
-    const date = (id: number) => new Date(Memory.message(mem, id)!.date).toLocaleString("sv-SE");
-    const when = (a: number, b: number) => date(a) + (a === b ? "" : " – " + date(b));
-    const node = (part: Part, text: string) => {
-      const [a, b] = Memory.span(part);
-      const head = ["LVL" + part.l + " #" + a + "-" + b, when(a, b), Memory.bytes(text) + " B"];
-      return item(head, text);
-    };
-    const levels = Memory.levels(mem);
-    const menu = ["VIEW", "ROOT", ...levels.map((l) => "LVL" + l)].map((name) => `<a href="#${name}">${name}</a>`);
-    yield `<!doctype html><meta charset="utf-8"><title>illimitable memory</title>
-<style>
-body { font: 13px/1.4 ui-monospace, monospace; margin: 2em; } nav a { margin-right: 1em; }
-section { display: none; } section:target { display: block; }
-h4 { margin: .8em 0 .2em; color: #888; font-weight: normal; } pre { margin: 0; white-space: pre-wrap; font: inherit; }
-</style>
-<script>location.hash = location.hash || "VIEW";</script>
-<nav>${menu.join("")}</nav>
-<section id="VIEW">`;
-    yield mem.view.parts.map((part) => node(part, Memory.text(mem, part))).join("");
-    yield '</section>\n<section id="ROOT">';
-    for (let i = 0; i < mem.count; i++) {
-      const r = Memory.message(mem, i)!;
-      yield item(["ROOT #" + i, when(i, i), r.kind, r.size + " B"], r.text);
-    }
-    for (const l of levels) {
-      yield '</section>\n<section id="LVL' + l + '">';
-      for (const [part, text] of Memory.level(mem, l)) {
-        yield node(part, text);
-      }
-    }
-    yield "</section>\n";
-  }
-
-  // Agents
-  // ------
-
-  // read whole, by name (its log as now) or by log (a name and its tag,
-  // as a report names it: that one, though the name went on to another);
-  // never a path
-  export function agent(mem: Memory, name: string): Root[] | null {
-    const log  = LOG.test(name) ? (name.includes(".") ? name : Memory.agent_log(mem, name)) : null;
-    const work = log === null ? null : Store.work(mem.store, log);
-    return work?.map((e) => ({ ...e, size: Memory.bytes(Memory.plain({ ...e, size: 0 })) })) ?? null;
-  }
-
-  // a name's log as now: the one it last took (kept), else in the file
-  // the newest so named; none: null
-  export function agent_log(mem: Memory, name: string): string | null {
-    const known = mem.logs.get(name);
-    if (known !== undefined || !AGENT.test(name)) {
-      return known ?? null;
-    }
-    const log = Store.log_of(mem.store, name);
-    if (log !== null) {
-      mem.logs.set(name, log);
-    }
-    return log;
-  }
-
-  // a new agent's name, its log made: its user's agent's name (own), else
-  // numbered past those taken (own-2 on); none (or not a name): a random
-  // one (Names.ts) not taken. A name is taken while its agent is (taken
-  // tells: at work, or of this run); one freed is used again, with a log
-  // of its own (the name and a tag: the time). A user's agent named MAIN
-  // is refused: its calls would pass for the chat's own
-  export function agent_new(mem: Memory, own: string | null, taken: (name: string) => boolean): string {
-    if (own === MAIN) {
-      throw new Error("No agent can be named " + MAIN + ": that name is illi's own. Rename the agent's file (" + MAIN + ".md) to spawn it.");
-    }
-    const base = own !== null && AGENT.test(own) ? own : null;
-    for (let n = 1; ; n++) {
-      const name = base === null ? names.name_random() : n === 1 ? base : base + "-" + n;
-      for (let k = 0; !taken(name); k++) {
-        const log = name + "." + (Date.now() * 100 + k).toString(36);
-        if (!Store.log_new(mem.store, log, name)) {
-          continue;
-        }
-        mem.logs.set(name, log);
-        mem.agents.set(name, 0);
-        return name;
-      }
-    }
-  }
-
-  // its length read once, then counted (mem.agents)
-  export function agent_push(mem: Memory, name: string, kind: Kind, text: string): number {
-    const log = Memory.agent_log(mem, name) ?? name;
-    const n = mem.agents.get(name) ?? Store.work_count(mem.store, log);
-    const root = Memory.root(n, { kind, text });
-    Store.work_push(mem.store, log, name, root);
-    mem.agents.set(name, n + 1);
-    return root.i;
-  }
-
-  export function agent_show(mem: Memory, name: string): string {
-    return Memory.agent(mem, name)?.map(Memory.agent_line).join("\n\n") ?? "No agent " + name + ".";
-  }
-
-  export function agent_line(root: Root): string {
-    return root.i + "|" + Memory.plain(root);
   }
 
 }

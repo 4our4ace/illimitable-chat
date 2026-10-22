@@ -20,7 +20,7 @@ import { Custom, type Command, type Profile, type Skill } from "../config/Custom
 import { term_redraw } from "./Frame.ts";
 import { term_away, term_clear, term_cycle, term_enter, term_esc, term_next, term_page, term_shots, term_take, term_verbose } from "./Keys.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
-import { Memory } from "../chat/Memory.ts";
+import { Export } from "../chat/Export.ts";
 import { term_note, term_notify, term_toast, term_unnote, term_unnotify, type Notice } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_palette } from "./Palette.ts";
@@ -770,13 +770,13 @@ function term_copy(t: Term): void {
 // the memory, as JSON
 async function term_export(t: Term): Promise<void> {
   const file = process.cwd() + "/illi-memory.json";
-  await Bun.write(file, [...Memory.dump(t.mem())].join(""));
+  await Bun.write(file, [...Export.dump(t.mem())].join(""));
   term_note(t, "Your memory is in " + config.config_home(file) + ".");
 }
 
 // the memory tree, as a page
 async function term_tree(t: Term): Promise<void> {
   const file = process.cwd() + "/illi-tree.html";
-  await Bun.write(file, [...Memory.page(t.mem())].join(""));
+  await Bun.write(file, [...Export.page(t.mem())].join(""));
   term_note(t, "The memory tree is in " + config.config_home(file) + ".");
 }

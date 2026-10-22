@@ -41,7 +41,8 @@ import * as config from "../config/Config.ts";
 import { Custom, type Skill } from "../config/Custom.ts";
 import { INT, STR, TOOLS, Machine, spec, type Spec } from "./Machine.ts";
 import { Mcp } from "./Mcp.ts";
-import { MAIN, Memory } from "../chat/Memory.ts";
+import { Logs, MAIN } from "../chat/Logs.ts";
+import { Memory } from "../chat/Memory.ts";
 import PROMPT from "./prompt.txt" with { type: "text" };
 import { EFFORTS, Pick } from "../ai/Pick.ts";
 import { Projects } from "../chat/Projects.ts";
@@ -56,7 +57,7 @@ export type { Live };
 // at work, the view its calls get and its replies so far; its role: its
 // effort if spawned with one, the user's agent it runs as (null: none);
 // the run it was spawned in (Memory.run; -1: taken back from its log),
-// its log (Memory.agent_log: the name may go on to another agent)
+// its log (Logs.log: the name may go on to another agent)
 export type Agent = {
   name    : string;
   run     : number;
@@ -492,7 +493,7 @@ export namespace Tools {
         const at = Number(args.at ?? 0);
         return Tools.chat_of(mem, args.project, (of) => {
           if (/^[A-Za-z]/.test(id)) {
-            return { text: clip_page(Memory.agent_show(of, id), at), fail: false };
+            return { text: clip_page(Logs.show(of, id), at), fail: false };
           }
           const imgs = n === 1 && at === 0 ? Memory.images(of, Number(id)) : [];
           return { text: Memory.zoom(of, Number(id), n, at), fail: false, imgs };
@@ -587,11 +588,11 @@ export namespace Tools {
 
   export function start(tools: Tools, role: Agent["role"], task: string, view: Block[]): string {
     const run = Memory.run(tools.mem);
-    const name = Memory.agent_new(tools.mem, role.agent, (name) => {
+    const name = Logs.start(tools.mem, role.agent, (name) => {
       const was = tools.agents.get(name);
       return was !== undefined && (was.call !== null || was.run === run);
     });
-    const agent = { name, run, log: Memory.agent_log(tools.mem, name) ?? name, role, call: null, live: [], calls: {}, stop: false, view, replies: [] };
+    const agent = { name, run, log: Logs.log(tools.mem, name) ?? name, role, call: null, live: [], calls: {}, stop: false, view, replies: [] };
     tools.agents.set(name, agent);
     tools.hooks.push(agent, "note", SUB_NOTE + (role.agent === null ? "" : " " + role.agent) + (role.effort === null ? "" : SUB_AT + role.effort));
     tools.hooks.push(agent, "user", task);
@@ -604,12 +605,12 @@ export namespace Tools {
     if (name === MAIN) {
       return null;
     }
-    const log = tools.agents.has(name) ? null : Memory.agent(tools.mem, name);
+    const log = tools.agents.has(name) ? null : Logs.read(tools.mem, name);
     const note = log !== null && log.length > 0 && log[0].kind === "note" ? log[0].text : "";
     const sub = SUB_RE.exec(note);
     if (sub !== null) {
       const role = { $: "sub" as const, effort: sub[2] ?? null, agent: sub[1] ?? null };
-      tools.agents.set(name, { name, run: -1, log: Memory.agent_log(tools.mem, name) ?? name, role, call: null, live: [], calls: {}, stop: false, view: [], replies: [] });
+      tools.agents.set(name, { name, run: -1, log: Logs.log(tools.mem, name) ?? name, role, call: null, live: [], calls: {}, stop: false, view: [], replies: [] });
     }
     return tools.agents.get(name) ?? null;
   }
@@ -641,7 +642,7 @@ export namespace Tools {
   // pick of the chat's vendor, else the chat's pick (an agent's model not
   // offered gives way to them)
   export function ask(tools: Tools, agent: Agent): Ask {
-    const log = { text: Memory.agent_show(tools.mem, agent.name), mark: true };
+    const log = { text: Logs.show(tools.mem, agent.name), mark: true };
     const server = Tools.at(tools, agent.name);
     const profile = Custom.agent(tools.cwd, agent.role.agent);
     const base = config.config_role("agents", tools.hooks.pick());
