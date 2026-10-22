@@ -45,7 +45,7 @@ import PROMPT from "./prompt.txt" with { type: "text" };
 import { EFFORTS, Pick } from "../ai/Pick.ts";
 import { Projects } from "../chat/Projects.ts";
 import { Store } from "../chat/Store.ts";
-import type { Live, Query, Question, State, Todo } from "../ui/View.ts";
+import type { Live, Plan, Query, Question, State, Todo } from "../ui/View.ts";
 
 export type { Live };
 
@@ -110,6 +110,10 @@ export const SEARCHES = 10;
 
 // the chats' tools, by their secret; the server, once one is
 const CHATS = new Map<string, Tools>();
+
+// the vendors that tell a plan (View.Plan: its limits shown at the side),
+// each by how: one added here shows as the others do
+const PLANS: Partial<Record<Vendor, () => Plan | null>> = { chatgpt: ChatGPT.told };
 let HTTP: ReturnType<typeof Bun.serve> | null = null;
 
 // the master's prompt (a turn's and a compaction's): prompt.txt
@@ -697,10 +701,10 @@ export namespace Tools {
   // -----
 
   // what the views show of the tools (Chat.state): what the master's
-  // calls use (the input its last request read, the plan's limits and
-  // name), its to-do list
-  export function state(tools: Tools): { use: State["use"]; todo: Todo[] } {
-    return { use: { tokens: AskAI.held(Tools.at(tools, "main")), limits: ChatGPT.limits(), plan: ChatGPT.tier() }, todo: Tools.todo(tools) };
+  // calls use (the input its last request read, the plan of the vendor
+  // it's on), its to-do list
+  export function state(tools: Tools, vendor: Vendor): { use: State["use"]; todo: Todo[] } {
+    return { use: { tokens: AskAI.held(Tools.at(tools, "main")), plan: PLANS[vendor]?.() ?? null }, todo: Tools.todo(tools) };
   }
 
   // the master's to-do list: as last set, else as the chat's file keeps

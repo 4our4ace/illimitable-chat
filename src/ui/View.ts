@@ -55,11 +55,16 @@ export type Limit = { window: number; used: number; reset: number };
 // its oldest messages fold into the tree, its model's window
 export type Fill = { used: number; cap: number; window: number };
 
+// a plan, as its vendor tells it (ChatGPT.ts told): whose it is
+// (ChatGPT), which one (plus, pro…; "": not known), its limits (none:
+// not told)
+export type Plan = { brand: string; tier: string; limits: Limit[] };
+
 // what the main agent's calls use: the input its last request read,
-// cached tokens too (null: none yet); the plan's limits (none: not told)
-// and its name (plus, pro…; none: not known);
-// how full the chat is (null: not told yet)
-export type Use = { tokens: number | null; limits: Limit[]; plan?: string; fill?: Fill | null };
+// cached tokens too (null: none yet); the plan of the vendor picked
+// (null: none told, or a vendor that tells none); how full the chat is
+// (null: not told yet)
+export type Use = { tokens: number | null; plan: Plan | null; fill?: Fill | null };
 
 // an item of illi's to-do list (Tools.ts todo): what to do, how it stands
 export type Todo = { text: string; status: "pending" | "active" | "done" };
@@ -289,7 +294,7 @@ export function view_new(): View {
     agent     : null,
     vendors   : [],
     models    : LABELS,
-    use       : { tokens: null, limits: [] },
+    use       : { tokens: null, plan: null },
     todo      : [],
     suggest   : "",
     asks      : [],

@@ -76,7 +76,7 @@ test("the rows picked most rank first among matches as good, by their own count,
     const t = open("/profile");
     term_grab(t, "Enter");
   }
-  expect([lit(open("pro")), term_tally(PICKED)["/profile"], term_tally(USED)["/profile"] ?? 0]).toEqual(["/profile", 2, 0]);
+  expect([lit(open("pro")), Math.round(term_tally(PICKED)["/profile"]), term_tally(USED)["/profile"] ?? 0]).toEqual(["/profile", 2, 0]);
   term_command(open(), "/settings");
   expect([term_tally(USED)["/settings"], term_tally(PICKED)["/settings"] ?? 0]).toEqual([1, 0]);
   const t = open();

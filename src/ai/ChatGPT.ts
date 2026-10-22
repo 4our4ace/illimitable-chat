@@ -29,7 +29,7 @@ import type { Ask } from "./AskAI.ts";
 import { Agent, type Wire } from "./Agent.ts";
 import { OpenAI } from "./OpenAI.ts";
 import { Pick } from "./Pick.ts";
-import type { Limit } from "../ui/View.ts";
+import type { Limit, Plan } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
 
 // Types
@@ -415,16 +415,18 @@ export namespace ChatGPT {
     return minutes % 60 === 0 ? minutes / 60 + "-hour" : minutes + "-minute";
   }
 
-  // the plan's limits, as last told (none: not yet)
-  export function limits(): Limit[] {
-    return plan;
-  }
-
   // the plan the login in use is on, as its token says: plus, pro… ("":
   // none in use, or not told)
   export function tier(): string {
     const type = held === null ? "" : ChatGPT.claims(held.access).chatgpt_plan_type;
     return typeof type === "string" ? type : "";
+  }
+
+  // the plan as the views show it (null: neither its name nor its limits
+  // told yet)
+  export function told(): Plan | null {
+    const tier = ChatGPT.tier();
+    return tier === "" && plan.length === 0 ? null : { brand: "ChatGPT", tier, limits: plan };
   }
 
   // one stream event (OpenAI.read); the last, if its response lists no

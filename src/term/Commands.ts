@@ -41,9 +41,14 @@ const ARROWS: Record<string, Move> = { "Shift+Left": "prev", "Shift+Right": "nex
 
 // how often each was used, by its name, in a file of the root's (every
 // profile's): its counts, read once, at the first use, and kept KEEP
-// after the last (ms)
+// after the last (ms); a use weighs half as much HALF uses on (old habits
+// fade), and a name weighing under GONE is forgotten (the file holds
+// what's used, never what was)
 type Tally = { file: string; count: Record<string, number> | null; keep?: ReturnType<typeof setTimeout> };
 const KEEP = 2000;
+const HALF = 100;
+const FADE = 0.5 ** (1 / HALF);
+const GONE = 0.1;
 
 // the commands typed, by /word (their suggestions rank by it), and
 // apart, the palette's rows picked (Ctrl+P's search ranks by it)
@@ -167,13 +172,20 @@ export function term_tally(tally: Tally): Record<string, number> {
   return (tally.count ??= json_object(tally.file) ?? {});
 }
 
-// one more use counted; the counts kept once uses pause (never in the
+// one more use counted, the others faded (one under GONE, or no number,
+// gone); the counts kept, to a thousandth, once uses pause (never in the
 // way: written in the background, never holding illi open)
 export function term_tally_one(tally: Tally, name: string): void {
   const count = term_tally(tally);
+  for (const k of Object.keys(count)) {
+    count[k] *= FADE;
+    if (!(count[k] >= GONE)) {
+      delete count[k];
+    }
+  }
   count[name] = (count[name] ?? 0) + 1;
   clearTimeout(tally.keep);
-  tally.keep = setTimeout(() => void Bun.write(tally.file, JSON.stringify(count)).catch(() => {}), KEEP);
+  tally.keep = setTimeout(() => void Bun.write(tally.file, JSON.stringify(count, (_, n) => (typeof n === "number" ? Math.round(n * 1000) / 1000 : n))).catch(() => {}), KEEP);
   tally.keep.unref?.();
 }
 

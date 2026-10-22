@@ -10,7 +10,9 @@
 // by the main agent's name; the dead ends (/stop, /fold, /image, /mcp
 // with nothing to act on) say something. A sticky skill's name alone
 // turns it on and off; with words, on, the words sent; while on, it shows
-// at the side, where a click turns it off.
+// at the side, where a click turns it off. A use counted weighs half as
+// much 100 uses on, a name faded under a tenth forgotten. The side shows
+// any vendor's plan alike: each window's share used, its bar as full.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -20,7 +22,7 @@ import type { Match } from "../ui/Screen.ts";
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-commands-");
 process.env.ILLI_DIR = DIR;
 
-const { term_chooser, term_command, term_commands, term_suggest } = await import("./Commands.ts");
+const { term_chooser, term_command, term_commands, term_suggest, term_tally, term_tally_one } = await import("./Commands.ts");
 const { term_grab, term_type } = await import("./Keys.ts");
 const { term_side } = await import("./Side.ts");
 const Paint = await import("../ui/Paint.ts");
@@ -215,6 +217,38 @@ test("the commands suggested: those run most first among those a word matches al
   expect(top("/set")).toBe("/settings");
   await Bun.sleep(2100);
   expect(JSON.parse(fs.readFileSync(DIR + "/used.json", "utf8"))).toEqual({ "/settings": 1 });
+});
+
+test("a use weighs half as much 100 uses on; a name faded under a tenth, or no number, is forgotten; the file kept to a thousandth", async () => {
+  const tally = { file: DIR + "/faded.json", count: { "/broken": "x" } } as any;
+  term_tally_one(tally, "/old");
+  expect(term_tally(tally)).toEqual({ "/old": 1 });
+  const uses = (n: number) => Array.from({ length: n }, () => term_tally_one(tally, "/new"));
+  uses(100);
+  expect(term_tally(tally)["/old"]).toBeCloseTo(0.5, 9);
+  uses(232);
+  expect(term_tally(tally)["/old"]).toBeGreaterThan(0.1);
+  uses(1);
+  expect(Object.keys(term_tally(tally))).toEqual(["/new"]);
+  uses(5000);
+  expect(term_tally(tally)["/new"]).toBeLessThan(1 / (1 - 0.5 ** (1 / 100)));
+  await Bun.sleep(2100);
+  expect(JSON.parse(fs.readFileSync(DIR + "/faded.json", "utf8"))).toEqual({ "/new": Math.round(term_tally(tally)["/new"] * 1000) / 1000 });
+});
+
+test("the side shows any vendor's plan alike: each window's share used, a bar as full, yellow and red as it fills; one past its reset, none", () => {
+  const t = term();
+  Object.assign(t, { agents: [], profs: ["default"], since: Date.now() });
+  t.v.use.plan = { brand: "Claude", tier: "max", limits: [{ window: 300, used: 23, reset: Date.now() + 7200e3 }, { window: 10080, used: 95, reset: Date.now() + 3 * 86400e3 }, { window: 1440, used: 50, reset: Date.now() - 1 }] };
+  const lines = term_side(t, 30, 40).map(([line]) => line);
+  const at    = lines.findIndex((l) => l[0]?.x === "Usage");
+  const text  = (l: any[]) => l.map((r) => r.x).join("").trim();
+  const bar   = (l: any[]) => [l[0].x.length, l[1].x.length, l[0].s.c];
+  expect(lines.slice(at, at + 7).filter((_, k) => k % 2 === 1).map(text)).toEqual(["5h       23% · resets 2h", "Week     95% · resets 3d", "Day      0% · reset"]);
+  expect([0, 1, 2].map((k) => bar(lines[at + 2 + 2 * k]))).toEqual([[6, 18, "4"], [23, 1, "1"], [0, 24, "4"]]);
+  expect(text(lines[at])).toBe("Usage · Claude Max");
+  t.v.use.plan = null;
+  expect(term_side(t, 30, 40).map(([line]) => text(line))).not.toContain("Usage");
 });
 
 test("a sticky skill: its name alone turns it on, again off, each said; with words, on, then the words sent; on, at the side, where a click turns it off", () => {

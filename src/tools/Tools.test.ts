@@ -85,7 +85,7 @@ test("a restart reads the list back; an empty one clears it", async () => {
 });
 
 test("the views are told the input the main agent's last request read, not an agent's", () => {
-  expect(Chat.state(chat)).toMatchObject({ use: { tokens: null, limits: [] } });
+  expect(Chat.state(chat)).toMatchObject({ use: { tokens: null, plan: null } });
   AskAI.read(Tools.at(chat.tools, "main"), 41000);
   AskAI.read(Tools.at(chat.tools, "Ada"), 9);
   AskAI.read("", 7);
