@@ -315,7 +315,9 @@ export namespace Store {
   }
 
   // the project at a place, named `name`, and its first chat, made if new
-  // (the file empty); null: the file is another place's
+  // (the file empty); null: the file is another place's. A file in use
+  // bears no move's mark (Store.mark): an old file put back, saved
+  // midway through its move, so never takes it for a copy of its own
   export function place(db: Database, place: Place, name: string): { project: number; chat: number } | null {
     return db.transaction(() => {
       const now = new Date().toISOString();
@@ -325,6 +327,7 @@ export namespace Store {
       } else if (!known.some((p) => p.key === place.key)) {
         return null;
       }
+      query(db, "delete from meta where key = 'moved_from'").run();
       const project = (query(db, "select id from project where key = ?").get(place.key) as { id: number }).id;
       const first = query(db, "select id from chat where project = ? order by id limit 1").get(project) as { id: number } | null;
       if (first !== null) {
@@ -563,7 +566,8 @@ export namespace Store {
         return Store.visit(store, file, Store.about) ?? [];
       } catch (err: any) {
         if (fs.existsSync(file)) {
-          console.error("illi: the chat in " + file + " won't read: " + (err?.message ?? err));
+          const why = String(err?.message ?? err);
+          console.error("illi: " + (why.startsWith("chat: ") ? why : "the chat in " + file + " won't read: " + why));
         }
         return [];
       }
@@ -705,8 +709,9 @@ export namespace Store {
     if (!fs.existsSync(old)) {
       return;
     }
-    const gate = Store.gate(path.normalize(dir + GATE));
+    let gate: Database | null = null;
     try {
+      gate = Store.gate(path.normalize(dir + GATE));
       const db = new Database(old, { readwrite: true });
       try {
         db.run("pragma busy_timeout = " + WAIT);
@@ -728,7 +733,7 @@ export namespace Store {
     } catch (err) {
       throw Store.why("memory.sqlite couldn't move to a file per project", err);
     } finally {
-      gate.close();
+      gate?.close();
     }
   }
 

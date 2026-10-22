@@ -8,7 +8,8 @@
 // over a file), or forget. A project forgotten is gone, its file
 // deleted, its images with it (Store.forget); its lock is held
 // meanwhile, so one open in another terminal is kept (quit it there
-// first). This one, forgotten, starts anew: illi runs again.
+// first); a numbered copy of this one (an old file put back) goes at
+// once. This one, forgotten, starts anew: illi runs again.
 
 import * as fs from "node:fs";
 import { Chat } from "../chat/Chat.ts";
@@ -87,10 +88,14 @@ function project_ask(t: Term, p: Project): void {
 // a project forgotten, a copy exported first if asked; its lock held
 // meanwhile (none: it is open in another terminal, kept). This one: illi
 // runs again, the project's chat empty, its lock held till then (run in
-// another terminal, this one a view of it: kept, forgotten there)
+// another terminal, this one a view of it: kept, forgotten there).
+// Another file of this one's folder (a copy an old file put back made,
+// Store.split): no illi opens it as its chat, and this one holds the
+// folder's lock already, so it goes at once
 async function project_forget(t: Term, p: Project, copy: boolean): Promise<void> {
   const mem  = t.mem();
   const here = p.file === mem.store.file;
+  const twin = !here && t.chat !== null && p.path === Store.named(mem.store).path;
   const pics = project_pictures(t, p);
   if (pics === null) {
     return term_note(t, p.name + " is forgotten already.");
@@ -109,7 +114,9 @@ async function project_forget(t: Term, p: Project, copy: boolean): Promise<void>
   if (here) {
     return term_restart(t, config.PROFILE, () => Store.forget(p.file), true);
   }
-  if (!(await project_held(p, () => Store.forget(p.file)))) {
+  if (twin) {
+    Store.forget(p.file);
+  } else if (!(await project_held(p, () => Store.forget(p.file)))) {
     return term_note(t, p.name + " is open in another terminal: quit illi there first, then forget it here.");
   }
   term_note(t, "Forgot " + p.name + ": " + project_count(p) + (pics === 0 ? "" : " and " + pics + (pics === 1 ? " image" : " images")) + ".");

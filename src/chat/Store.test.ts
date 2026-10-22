@@ -19,7 +19,8 @@
 // to a file per project, each project's rows as they were, then is left
 // a stub an older illi refuses; not while another illi has it open; one
 // cut off midway goes on, its own copies made again; one brought back
-// after its move drops nothing, copied beside the files there; two illis
+// after its move drops nothing, copied beside the files there, even one
+// saved midway through its move (a file in use bears no mark); two illis
 // starting at once move it once. A file that won't open is named.
 
 import { afterAll, expect, test } from "bun:test";
@@ -172,7 +173,7 @@ test("a newer illi's file opens while it only added; one that needs a newer illi
   } finally {
     console.error = error;
   }
-  expect(logged).toEqual(["illi: the chat in " + store.file + " won't read: chat: home.sqlite is of a newer illi: update illi to open it."]);
+  expect(logged).toEqual(["illi: chat: home.sqlite is of a newer illi: update illi to open it."]);
   Store.close(app);
 });
 
@@ -360,6 +361,30 @@ test("an older illi's file brought back after its move (a backup put back) drops
   expect(said(() => (app = Store.open(dir, APP)))).toBe("illi: moving the chats to a file per project (once)\n");
   expect([app.file, Store.count(app)]).toEqual([dir + "/projects/app-k3f9x2.sqlite", 2]);
   expect(Store.projects(app).map((p) => p.name + " " + p.count + " " + Store.visit(app, p.file, (s) => Store.named(s).name)).sort()).toEqual(["app-k3f9x2 2 app-k3f9x2", "app-k3f9x2-2 1 app-k3f9x2-2", "home 1 home", "home-2 1 home-2"]);
+  Store.close(app);
+});
+
+test("an older illi's file saved midway through its move and put back later drops nothing: a file in use bears no move's mark, so it's copied beside; one never opened since is made again, the same", () => {
+  const dir = DIR + "/mid";
+  Store.shut(older(dir, [HOME, APP]).db);
+  const stub = Store.stub;
+  Store.stub = () => {
+    throw new Error("cut off");
+  };
+  try {
+    expect(() => said(() => Store.open(dir, APP))).toThrow("cut off");
+  } finally {
+    Store.stub = stub;
+  }
+  fs.copyFileSync(dir + "/memory.sqlite", DIR + "/mid-saved.sqlite");
+  let app: any;
+  said(() => (app = Store.open(dir, APP)));
+  say(app, "written after the move");
+  Store.close(app);
+  fs.copyFileSync(DIR + "/mid-saved.sqlite", dir + "/memory.sqlite");
+  said(() => (app = Store.open(dir, APP)));
+  expect([app.file, Store.count(app)]).toEqual([dir + "/projects/app-k3f9x2.sqlite", 2]);
+  expect(Store.projects(app).map((p) => p.name + " " + p.count).sort()).toEqual(["app-k3f9x2 2", "app-k3f9x2-2 1", "home 1"]);
   Store.close(app);
 });
 
