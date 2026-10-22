@@ -160,7 +160,7 @@ test("the leader greys the screen till the next key, which runs its shortcut; Es
   Screen.ed_set(t.scr.ed, "");
 });
 
-test("/shortcuts: the leader and each key after it; Enter changes one, Del puts illi's back or drops it, the last row adds one; the leader never a key illi takes", () => {
+test("/shortcuts: the leader and each key after it; Enter changes one, Del puts illi's back or drops it (one written in capitals too), the last row adds one; the leader never a key illi takes", () => {
   const config = require("../config/Config.ts");
   const t = term();
   const at = (name: string) => {
@@ -218,6 +218,13 @@ test("/shortcuts: the leader and each key after it; Enter changes one, Del puts 
   };
   const own     = new Set(term_commands().flatMap(([, keys]) => keys.split(", ")).filter((k) => k !== config.LEADER));
   expect(letters.filter((k) => (own.has(k) || edits(k)) && !config.TAKEN.includes(k))).toEqual([]);
+  config.config_set("shortcuts", { M: "/compact" });
+  run(t, "/shortcuts");
+  at("Ctrl+X m");
+  expect([config.SHORTCUTS.m, foot(t)]).toEqual(["/compact", "Enter change · Del illi's"]);
+  term_grab(t, "Delete");
+  expect([config.SHORTCUTS.m, JSON.parse(fs.readFileSync(DIR + "/config.json", "utf8")).shortcuts]).toEqual(["/model", undefined]);
+  t.choose = null;
   config.config_set("shortcuts", null);
   expect(Object.keys(config.SHORTCUTS).length).toBe(9);
 });
