@@ -12,7 +12,7 @@ Development
     src/config/    settings, profiles, your agents, commands and skills
     src/skills/    the skills built into illi (customize-illi)
     test/          tests across modules; each module's own sit beside it
-    vendor/        cellsmith's markdown parser and diagram engine
+    vendor/        cellsmith's markdown parser and palettes
     assets/        the README's banner and screenshots; logo.svg and
                    logo-on-dark.svg are the logo's source files, kept
                    for brand use though no page shows them
@@ -28,4 +28,16 @@ are described end to end in [storage.md](storage.md). After `bun install`:
 From source, without installing:
 
     git clone https://github.com/4our4ace/illimitable-chat
-    bun illimitable-chat/src/main.ts
+    cd illimitable-chat && bun install
+    bun src/main.ts
+
+The libraries illi is built with are three, each pinned to one version
+in `package.json` (`bun.lock` holds the exact commit or file hash) and
+compiled into the binary, so a user installs none of them: Pele lays out
+Mermaid diagrams, pelext draws them on the terminal's cell grid, and
+Prism reads code. To take a new release of one, name its version, then
+test and commit both files:
+
+    bun add --exact pelext@github:4our4ace/pelext#v0.2.2
+    bun add --exact pele@1.8.0
+    bun run test

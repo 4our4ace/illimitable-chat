@@ -1,12 +1,12 @@
 // Draw
 // ====
-// What cellsmith (cellsmith/, from github.com/4our4ace/cellsmith) draws
-// for Paint.ts. A ```mermaid block: a diagram on the terminal's cell grid
-// (Pele lays it out with each character one cell, cellsmith/pele.ts
-// draws the layout in box lines, block fills, braille and text), laid out
-// again narrower till it fits the width; else beautiful-mermaid's box
-// art; else none (its code shows). Code: Prism's tokens, by kind, and a
-// shell's own (its commands, flags, strings, comments).
+// What Paint.ts draws as cellsmith (github.com/4our4ace/cellsmith) does.
+// A ```mermaid block: a diagram on the terminal's cell grid (Pele lays it
+// out with each character one cell, pelext draws the layout in box lines,
+// block fills, braille and text), laid out again narrower till it fits
+// the width; else none (its code shows). Code: Prism's tokens
+// (Prism.ts), by kind, and a shell's own (its commands, flags, strings,
+// comments).
 //
 // A diagram's colors are a cellsmith palette (Theme.PALETTE) over the
 // terminal's background, which the terminal tells when asked (Screen.ts,
@@ -14,17 +14,17 @@
 // (a pipe, a terminal that never answers), draws in the terminal's own
 // ink, its series told apart by shades (▓▒░). Each drawing is made once
 // per width and palette. A reply's colors are the same palette's
-// (draw_theme). Pele, the box art and Prism are loaded only as the first
-// diagram or code is drawn (Prism alone takes tens of ms), so a start
+// (draw_theme). Pele and Prism are loaded only as the first diagram or
+// code is drawn (Prism alone takes tens of ms), so a start
 // that shows neither never loads them.
 //
 // An agent's mark has a color of its own (draw_agent): illi's is the
 // brand's; another's, the one its file pins, else one made for it as the
 // agents are read, from its name and theirs, so it holds while they do.
 
-import type { PelePalette } from "../../vendor/cellsmith/pele.ts";
+import type { PelePalette } from "pelext";
 import { CANVAS, PRESETS } from "../../vendor/cellsmith/presets.ts";
-import type { PrismToken } from "../../vendor/cellsmith/vendor/prism.js";
+import type { PrismToken } from "./Prism.ts";
 import * as Theme from "./Theme.ts";
 
 // Types
@@ -38,10 +38,10 @@ export type Cell = { text: string; fg?: string; bg?: string; bold?: boolean; inv
 // "": none)
 export type Token = { text: string; kind: string };
 
-// what draws a diagram: cellsmith's drawing of Pele's layout, Pele, the
-// box art; and what reads code
-type Art   = { cells: typeof import("../../vendor/cellsmith/pele.ts"); pele: typeof import("../../vendor/cellsmith/vendor/pele.js"); box: typeof import("../../vendor/cellsmith/vendor/mermaid-text.js") };
-type Prism = typeof import("../../vendor/cellsmith/vendor/prism.js");
+// what draws a diagram: pelext's drawing of Pele's layout, Pele (the
+// diagrams pelext draws); and what reads code
+type Art   = { cells: typeof import("pelext"); pele: typeof import("pelext/pele") };
+type Prism = typeof import("./Prism.ts");
 
 // Constants
 // =========
@@ -71,9 +71,6 @@ const RING = { dark: [[0.78, 0.15], [0.66, 0.15]], light: [[0.56, 0.15], [0.44, 
 const NEAR = 30;
 const OWN  = [["1", 29], ["3", 110], ["2", 142], ["4", 264], ["5", 328]] as const;
 
-// a flowchart that runs sideways, which the box art may stand up
-const SIDEWAYS = /^(\s*(?:flowchart|graph)[ \t]+)(LR|RL)\b/;
-
 // the shell's languages, and its pieces: a comment, a string, a flag, an
 // operator (a command follows), a word, a space
 const SHELLS = ["bash", "sh", "shell", "zsh", "fish", "console", "shell-session", "powershell", "ps1"];
@@ -86,11 +83,9 @@ const SHELL  = /(#.*)|('[^']*'?|"(?:\\.|[^"\\])*"?)|(--?\w[\w-]*)|(\|\||&&|[|;&]
 let canvas: string | null = null;
 let palette: { key: string; colors: PelePalette } | null = null;
 
-// what draws a diagram, and Prism, each loaded as it is first needed;
-// Pele, made at the first diagram (its 346 KB evaluated only then)
+// what draws a diagram, and Prism, each loaded as it is first needed
 let art: Art | null = null;
 let prism: Prism | null = null;
-let pele: ReturnType<Art["pele"]["loadPele"]> | null = null;
 
 const DRAWN = new Map<string, Cell[][] | null>();
 const LIT   = new Map<string, Token[][] | null>();
@@ -116,12 +111,8 @@ export function draw_diagram(source: string, w: number): Cell[][] | null {
   }
   const { key, colors } = draw_palette();
   return draw_kept(DRAWN, w + "\0" + key + "\0" + source, () => {
-    const drawn = draw_art().cells.drawPele((src, opts) => (pele ??= draw_art().pele.loadPele()).render(src, opts), source, colors, w);
-    if (drawn !== null && drawn.rows.length > 0 && drawn.width <= w) {
-      return drawn.rows;
-    }
-    const box = draw_box(source, w);
-    return box === null ? null : box.split("\n").map((text) => [{ text }]);
+    const drawn = draw_art().cells.drawPele(draw_art().pele.render, source, colors, w);
+    return drawn !== null && drawn.rows.length > 0 && drawn.width <= w ? drawn.rows : null;
   });
 }
 
@@ -132,9 +123,17 @@ function draw_palette(): { key: string; colors: PelePalette } {
   }
   const name = draw_name();
   const own    = Object.fromEntries(Object.entries(Theme.COLORS).filter(([, c]) => c.startsWith("#")));
-  const colors = draw_art().cells.pelePalette({ ...PRESETS[name], ...own }, canvas ?? CANVAS[name]);
+  const colors = draw_colors({ ...PRESETS[name], ...own }, canvas ?? CANVAS[name]);
   palette = { key: JSON.stringify(colors), colors };
   return palette;
+}
+
+// a reply's colors as a diagram's (cellsmith's mapping): its text, the
+// muted, its lines and borders, the accent, the critical and highlit,
+// and the series charts and nodes take in turn, over the canvas
+function draw_colors(theme: Partial<Record<string, string>>, canvas: string): PelePalette {
+  const series = [...new Set([theme.link, theme.number, theme.heading, theme.emphasis, theme.path, theme.codeFlag, theme.accent, theme.codeString].filter((c): c is string => !!c))];
+  return { canvas, text: theme.diagramText ?? theme.codeText, muted: theme.quote ?? theme.codeComment, line: theme.diagram, border: theme.diagram, accent: theme.accent, critical: theme.codeFlag, highlight: theme.emphasis ?? theme.accent, series, hues: series };
 }
 
 // the palette's name: the one named, else dark or light by the
@@ -247,22 +246,6 @@ export function draw_dark(hex: string): boolean {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.5;
 }
 
-// beautiful-mermaid's box art, w wide at most (a sideways flowchart stood
-// up if it's wider); null: none fits
-function draw_box(source: string, w: number): string | null {
-  for (const src of [source, source.replace(SIDEWAYS, "$1TD")]) {
-    try {
-      const box = draw_art().box.renderMermaidAscii(src, { colorMode: "none", paddingX: 3, paddingY: 1 }).replace(/[ \t]+$/gm, "").trimEnd();
-      if (box !== "" && box.split("\n").every((l) => Bun.stringWidth(l) <= w)) {
-        return box;
-      }
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
 // code's lines as tokens, by its language (a fence's first word); null: a
 // language not known
 export function draw_code(lang: string, text: string): Token[][] | null {
@@ -278,12 +261,12 @@ export function draw_code(lang: string, text: string): Token[][] | null {
 
 // what draws a diagram, loaded as the first is drawn
 function draw_art(): Art {
-  return (art ??= { cells: require("../../vendor/cellsmith/pele.ts"), pele: require("../../vendor/cellsmith/vendor/pele.js"), box: require("../../vendor/cellsmith/vendor/mermaid-text.js") });
+  return (art ??= { cells: require("pelext"), pele: require("pelext/pele") });
 }
 
 // Prism, loaded at the first code it reads
 function draw_prism(): Prism {
-  return (prism ??= require("../../vendor/cellsmith/vendor/prism.js"));
+  return (prism ??= require("./Prism.ts"));
 }
 
 // Prism's tokens, flat, each its kind: its own, an alias's, else the one

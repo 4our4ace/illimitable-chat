@@ -5,5 +5,7 @@ illimitable is a modified version of software by Higher Order Company
 (Copyright 2026 Higher Order Company), used under the Apache License,
 Version 2.0 (LICENSE). The changes are by 4our4ace.
 
-vendor/cellsmith/ and the libraries it bundles are under the MIT License:
-see vendor/cellsmith/LICENSE and vendor/cellsmith/THIRD_PARTY_NOTICES.md.
+vendor/cellsmith/ is under the MIT License: see vendor/cellsmith/LICENSE
+and vendor/cellsmith/THIRD_PARTY_NOTICES.md. The libraries compiled into
+illi (package.json's dependencies) are under the MIT License: see
+THIRD_PARTY_NOTICES.md.

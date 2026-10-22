@@ -2,7 +2,8 @@
 # illimitable's installer: `illi`, one file, into ~/.local/bin (or
 # $ILLI_INSTALL). The latest release's binary for this system, checked
 # against the release's SHA256SUMS; with none for it (or ILLI_SOURCE=1),
-# built from the source with Bun (installed first if missing). A download
+# built from the source with Bun (installed first if missing), its
+# libraries as bun.lock pins them. A download
 # that fails (offline, a rate limit) stops it. Run again (or `illi
 # upgrade`), it replaces the one there.
 #
@@ -78,6 +79,7 @@ else
     export PATH="$HOME/.bun/bin:$PATH"
   fi
   git clone --quiet --depth 1 "https://github.com/$REPO" "$tmp/repo"
+  (cd "$tmp/repo" && bun install --frozen-lockfile --production >/dev/null)
   bun build --compile --minify "$tmp/repo/src/main.ts" "$tmp/repo/src/chat/Seeker.ts" --outfile "$tmp/illi" >/dev/null
 fi
 

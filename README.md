@@ -136,5 +136,6 @@ Docs
 License
 -------
 
-Apache 2.0: LICENSE and NOTICE. `vendor/cellsmith/` and the libraries it
-bundles are MIT, licenses inside.
+Apache 2.0: LICENSE and NOTICE. `vendor/cellsmith/` and the libraries
+compiled in are MIT: their licenses are in `vendor/cellsmith/` and
+THIRD_PARTY_NOTICES.md.
