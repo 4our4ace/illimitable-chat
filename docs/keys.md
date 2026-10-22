@@ -141,7 +141,9 @@ Typing
 In a list
 ---------
 
-`/model`, `/settings`, `/profile`, Ctrl+P and the rest:
+`/model`, `/settings`, `/profile`, Ctrl+P and the rest. A list opens
+over the input (Ctrl+P's in the screen's middle), so the keys go to it
+alone; the input comes back as you left it when the list closes.
 
 - Type to search; the search edits as the input does. Up and Down (or
   Tab) move, Enter picks, Esc closes.

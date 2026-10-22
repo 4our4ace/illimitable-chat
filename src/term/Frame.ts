@@ -178,8 +178,10 @@ export function term_paint(t: Term): void {
   const above = notes.slice(-Math.floor(h / 4)).map((l) => [Paint.Run(" ".repeat(NOTE_IN)), ...l]);
   const tall  = Math.max(1, h - (paned ? 4 : 5) - input.lines.length - above.length);
   const mid   = t.choose?.middle !== undefined;
-  const box   = mid ? term_middle(t, full, h) : term_box(t, iw, Math.min(cw, PICKER_W), left + MARGIN, tall + 1 + above.length);
-  const top   = box === null ? Infinity : mid ? Math.floor((h - box.items.length) / 2) : 2 + tall + above.length - box.items.length;
+  const floor = 3 + tall + above.length + input.lines.length;
+  const box   = mid ? term_middle(t, full, h) : term_box(t, iw, Math.min(cw, PICKER_W), left + MARGIN, tall + 1 + above.length, floor);
+  const over  = box !== null && !mid && !box.wide;
+  const top   = box === null ? Infinity : mid ? Math.floor((h - box.items.length) / 2) : over ? floor + 1 - box.items.length : 2 + tall + above.length - box.items.length;
   const view  = term_view(t, cw, tall, 1, left + MARGIN);
   for (let r = top; r <= tall && !mid; r++) {
     view.lines[view.first + r - 1] = [];
@@ -210,6 +212,9 @@ export function term_paint(t: Term): void {
   for (const line of foot) {
     rows.push([{ col: MARGIN, w: iw, line }]);
   }
+  for (let r = Math.max(top, 1 + tall); over && r <= floor; r++) {
+    rows[r] = [];
+  }
   if (box !== null) {
     term_over(t, rows, box, top, mid);
   } else if (t.pane === null && t.scroll > 0) {
@@ -217,7 +222,7 @@ export function term_paint(t: Term): void {
   }
   t.hover = t.sel?.held ? undefined : term_under(t, t.scr.point);
   term_tabs(t, h - 1, side === 0);
-  const cursor = box?.at !== undefined ? { row: top + box.at.row, col: box.col + box.at.col } : input.at === null ? null : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
+  const cursor = box?.at !== undefined ? { row: top + box.at.row, col: box.col + box.at.col } : input.at === null || over ? null : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
   const drawn  = t.lead ? rows.map((row) => row.map((p) => ({ ...p, line: p.line.map((r) => ({ ...r, s: { ...r.s, d: true, c: "", g: "" } })) }))) : rows;
   t.ruled ={ row: 2 + tall + above.length, w: iw, at: cursor, rows: drawn, side: box === null ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
   t.scr.blink = idle || form !== null;
@@ -307,14 +312,14 @@ function term_wake(t: Term): void {
 // the ∞ whole: at each wake). With agents at work and their spinner
 // changed, the side's rows too (term_side_again). No paint, no layout of
 // the chat; a whole paint only once work ended, with text chosen (its
-// look may cover them) or the box in the middle open (the rule dimmed
-// under it); nothing while a paint is due
+// look may cover them), a picker open (over the rule, or the rule dimmed
+// under it) or the leader waiting (all grey); nothing while a paint is due
 function term_tick(t: Term): void {
   const r = t.ruled;
   if (t.due) {
     return;
   }
-  if (r === null || t.doing === null || t.sel !== null || t.lead || t.choose?.middle !== undefined || !View.view_running(t.v)) {
+  if (r === null || t.doing === null || t.sel !== null || t.lead || t.choose !== null || !View.view_running(t.v)) {
     return term_paint(t);
   }
   const now  = Date.now();
@@ -471,10 +476,12 @@ function term_view(t: Term, w: number, tall: number, row: number, col: number): 
 }
 
 // the box over the chat's foot, room lines at most: as a /word is typed,
-// the commands it matches, iw wide (wide: over the side too), else the
-// picker, pw wide at column col (none: null); at: the cursor's place in
-// it, if it takes the typing (a search)
-function term_box(t: Term, iw: number, pw: number, col: number, room: number): { items: Item[]; col: number; w: number; wide: boolean; at?: Screen.Spot } | null {
+// the commands it matches, iw wide (wide: over the side too), over the
+// chat's foot; else the picker, pw wide at column col, down over the
+// input, its last line on `floor` (the rule under the input), so it alone
+// has the focus (none: null); at: the cursor's place in it, if it takes
+// the typing (a search)
+function term_box(t: Term, iw: number, pw: number, col: number, room: number, floor: number): { items: Item[]; col: number; w: number; wide: boolean; at?: Screen.Spot } | null {
   const sug = t.asking?.form == null ? term_suggest(t) : null;
   if (sug !== null) {
     return { items: term_suggestions(t, sug, iw, room), col: MARGIN, w: iw, wide: true };
@@ -482,8 +489,8 @@ function term_box(t: Term, iw: number, pw: number, col: number, room: number): {
   if (t.choose === null) {
     return null;
   }
-  const { items, at } = term_picker(t, pw, room);
-  return { items: items.slice(0, room), col, w: pw, wide: false, at };
+  const { items, at } = term_picker(t, pw, floor);
+  return { items: items.slice(0, floor), col, w: pw, wide: false, at };
 }
 
 // the picker in the screen's middle (Chooser middle): as wide as it
