@@ -3,12 +3,13 @@
 // The search of the summary lines (Projects.search) in a thread of its
 // own, so however long one takes, the screen goes on. Each runs on a
 // connection of its own to the file, read-only (WAL: it reads beside the
-// writes), closed after it. Asked { id, file, project, words, scope };
+// writes), closed after it (Store.close: its statements finalized, so it
+// closes at once). Asked { id, file, project, words, scope };
 // answers { id, text }, or { id, error }.
 
 import { Database } from "bun:sqlite";
 import { Projects } from "./Projects.ts";
-import { WAIT } from "./Store.ts";
+import { Store, WAIT } from "./Store.ts";
 
 declare const self: Worker;
 
@@ -22,6 +23,8 @@ self.onmessage = (e: MessageEvent<{ id: number; file: string; project: number; w
   } catch (err: any) {
     self.postMessage({ id, error: String(err?.message ?? err) });
   } finally {
-    db?.close();
+    if (db !== null) {
+      Store.close({ file, db, project, chat: 0 });
+    }
   }
 };

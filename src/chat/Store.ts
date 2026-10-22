@@ -38,8 +38,11 @@
 // act waits on. Closed, it checkpoints and leaves the one file. A file is
 // made with auto_vacuum incremental (only a new one can be: set before
 // WAL mode, which writes the file) and secure_delete, so what is forgotten
-// is overwritten and its space given back (kept for new rows instead,
-// while a reader holds the checkpoint back past WAIT: Store.forget).
+// is overwritten and its space given back (Store.shrink: as it's
+// forgotten, else at the next open, a reader having held it back). The
+// WAL starting over is cut to what its first commit wrote (WAL_KEEP), so
+// no page from before stays in it, a forgotten project's neither, and a
+// big write (a forget, an upgrade) never leaves it big.
 //
 // The schema's version is user_version: an older one moves on by each
 // STEP in turn, in one transaction each. A STEP only adds (a table, an
@@ -58,7 +61,7 @@
 // an older illi would look for them where they were. All of it, step by
 // step: docs/storage.md.
 
-import { Database } from "bun:sqlite";
+import { Database, type Statement } from "bun:sqlite";
 import * as fs from "node:fs";
 import type { Kind } from "../ai/AskAI.ts";
 import { Disk } from "./Disk.ts";
@@ -134,11 +137,11 @@ create table image (id integer primary key autoincrement, chat integer not null 
 create table todo (chat integer primary key references chat (id) on delete cascade, list text not null);
 update meta set value = '2' where key = 'compat';
 `, (db: Database) => {
-  const chats = new Set((db.query("select id from chat").all() as Array<{ id: number }>).map(({ id }) => id));
+  const chats = new Set((query(db, "select id from chat").all() as Array<{ id: number }>).map(({ id }) => id));
   chats.forEach((chat) => Store.words(db, chat));
-  for (const { chat, text, first, n } of db.query("select chat, text, first, n from find order by rowid").iterate() as IterableIterator<{ chat: number } & Line>) {
+  for (const { chat, text, first, n } of query(db, "select chat, text, first, n from find order by rowid").iterate() as IterableIterator<{ chat: number } & Line>) {
     if (chats.has(chat)) {
-      db.query(`insert into find_${chat} (text, first, n) values (?, ?, ?)`).run(text, first, n);
+      query(db, `insert into find_${chat} (text, first, n) values (?, ?, ?)`).run(text, first, n);
     }
   }
   db.run("drop table find; update meta set value = '3' where key = 'compat'");
@@ -157,6 +160,33 @@ const SAMPLE = 1000;
 // how long a connection waits for another's lock, ms
 export const WAIT = 10000;
 
+// the free pages an open gives back (Store.shrink); fewer are left for
+// new rows, as moving pages for them isn't worth it
+const SLACK = 256;
+
+// the bytes the WAL keeps, starting over, past what its first commit
+// wrote (journal_size_limit): none
+const WAL_KEEP = 0;
+
+// a connection's statements, each prepared once, all finalized as it
+// closes (Store.close): bun:sqlite's own cache (db.query) keeps twenty,
+// and one past them, left to the GC, keeps the connection open after
+// close(), so it never checkpoints nor leaves the one file
+const PREPARED = new WeakMap<Database, Map<string, Statement>>();
+
+// a connection's statement, prepared at its first use
+function query(db: Database, sql: string): Statement {
+  let all = PREPARED.get(db);
+  if (all === undefined) {
+    PREPARED.set(db, (all = new Map()));
+  }
+  let statement = all.get(sql);
+  if (statement === undefined) {
+    all.set(sql, (statement = db.prepare(sql)));
+  }
+  return statement;
+}
+
 // Store
 // =====
 
@@ -164,8 +194,9 @@ export namespace Store {
 
   // the chat folder's file, made if new and moved on to this schema (in
   // secure delete already, so what a step drops is overwritten; in
-  // auto_vacuum incremental again, if a forget cut off left it full); the
-  // chat of the project at `place`, made if new (null: none, the file
+  // auto_vacuum incremental again, if a forget cut off left it full), its
+  // free pages given back if SLACK or more (a forget a reader held back);
+  // the chat of the project at `place`, made if new (null: none, the file
   // alone, for upkeep)
   export function open(dir: string, place: Place | null = HOME): Store {
     fs.mkdirSync(dir, { recursive: true });
@@ -176,10 +207,14 @@ export namespace Store {
     db.run("pragma secure_delete = on");
     Store.schema(db);
     Store.wal(db);
-    if ((db.query("pragma auto_vacuum").get() as { auto_vacuum: number }).auto_vacuum === 1) {
+    if ((query(db, "pragma auto_vacuum").get() as { auto_vacuum: number }).auto_vacuum === 1) {
       db.run("pragma auto_vacuum = incremental");
     }
     db.run("pragma synchronous = normal");
+    db.run("pragma journal_size_limit = " + WAL_KEEP);
+    if ((query(db, "pragma freelist_count").get() as { freelist_count: number }).freelist_count >= SLACK) {
+      Store.shrink({ file, db, project: 0, chat: 0 });
+    }
     const { project, chat } = place === null ? { project: 0, chat: 0 } : Store.place(db, place);
     return { file, db, project, chat };
   }
@@ -206,15 +241,15 @@ export namespace Store {
   // which another process may have taken it to meanwhile; one newer, kept
   // as it is, unless it needs a newer illi
   export function schema(db: Database): void {
-    const version = () => (db.query("pragma user_version").get() as { user_version: number }).user_version;
+    const version = () => (query(db, "pragma user_version").get() as { user_version: number }).user_version;
     if (version() > STEPS.length) {
-      const compat = Number((db.query("select value from meta where key = 'compat'").get() as { value: string } | null)?.value ?? Infinity);
+      const compat = Number((query(db, "select value from meta where key = 'compat'").get() as { value: string } | null)?.value ?? Infinity);
       if (!(compat <= STEPS.length)) {
         throw new Error("the chat (memory.sqlite) is of a newer illi: update illi to open it");
       }
       return;
     }
-    if (version() === 0 && (db.query("pragma page_count").get() as { page_count: number }).page_count === 0) {
+    if (version() === 0 && (query(db, "pragma page_count").get() as { page_count: number }).page_count === 0) {
       db.run("pragma auto_vacuum = incremental");
     }
     for (let k = version(); k < STEPS.length; k++) {
@@ -233,19 +268,19 @@ export namespace Store {
   export function place(db: Database, place: Place): { project: number; chat: number } {
     return db.transaction(() => {
       const now = new Date().toISOString();
-      if (db.query("select 1 from project where key = ?").get(place.key) === null) {
+      if (query(db, "select 1 from project where key = ?").get(place.key) === null) {
         let name = place.name;
-        for (let k = 2; db.query("select 1 from project where name = ?").get(name) !== null; k++) {
+        for (let k = 2; query(db, "select 1 from project where name = ?").get(name) !== null; k++) {
           name = place.name + "-" + k;
         }
-        db.query("insert into project (uid, key, name, path, made) values (?, ?, ?, ?, ?)").run(crypto.randomUUID(), place.key, name, place.path, now);
+        query(db, "insert into project (uid, key, name, path, made) values (?, ?, ?, ?, ?)").run(crypto.randomUUID(), place.key, name, place.path, now);
       }
-      const project = (db.query("select id from project where key = ?").get(place.key) as { id: number }).id;
-      const known = db.query("select id from chat where project = ? order by id limit 1").get(project) as { id: number } | null;
+      const project = (query(db, "select id from project where key = ?").get(place.key) as { id: number }).id;
+      const known = query(db, "select id from chat where project = ? order by id limit 1").get(project) as { id: number } | null;
       if (known !== null) {
         return { project, chat: known.id };
       }
-      const chat = Number(db.query("insert into chat (uid, project, made) values (?, ?, ?)").run(crypto.randomUUID(), project, now).lastInsertRowid);
+      const chat = Number(query(db, "insert into chat (uid, project, made) values (?, ?, ?)").run(crypto.randomUUID(), project, now).lastInsertRowid);
       Store.words(db, chat);
       return { project, chat };
     }).immediate();
@@ -257,8 +292,13 @@ export namespace Store {
     db.run(`create virtual table find_${chat} using fts5(text, first unindexed, n unindexed, tokenize = 'unicode61 remove_diacritics 2')`);
   }
 
-  // checkpointed, its WAL gone: the one file left
+  // a connection closed, its statements finalized first so it closes at
+  // once (the last: checkpointed, its WAL gone, the one file left)
   export function close(store: Store): void {
+    for (const statement of PREPARED.get(store.db)?.values() ?? []) {
+      statement.finalize();
+    }
+    PREPARED.delete(store.db);
     store.db.close();
   }
 
@@ -277,12 +317,12 @@ export namespace Store {
 
   // the messages logged
   export function count(store: Store): number {
-    return (store.db.query("select coalesce(max(i) + 1, 0) as n from msg where chat = ?").get(store.chat) as { n: number }).n;
+    return (query(store.db, "select coalesce(max(i) + 1, 0) as n from msg where chat = ?").get(store.chat) as { n: number }).n;
   }
 
   // message i; null: none
   export function msg(store: Store, i: number): Row | null {
-    const row = store.db.query("select i, kind, text, date, size, images, line, more from msg where chat = ? and i = ?").get(store.chat, i) as any;
+    const row = query(store.db, "select i, kind, text, date, size, images, line, more from msg where chat = ? and i = ?").get(store.chat, i) as any;
     return row === null ? null : Store.row(row);
   }
 
@@ -303,12 +343,12 @@ export namespace Store {
 
   // the latest message of a kind before `end`; -1: none
   export function last(store: Store, kind: Kind, end: number): number {
-    return (store.db.query("select max(i) as i from msg where chat = ? and kind = ? and i < ?").get(store.chat, kind, end) as { i: number | null }).i ?? -1;
+    return (query(store.db, "select max(i) as i from msg where chat = ? and kind = ? and i < ?").get(store.chat, kind, end) as { i: number | null }).i ?? -1;
   }
 
   // messages logged in one write, each with the folder illi runs in
   export function push(store: Store, rows: Row[], cwd: string): void {
-    const add = store.db.query("insert into msg (chat, i, kind, text, date, size, images, line, more, cwd) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    const add = query(store.db, "insert into msg (chat, i, kind, text, date, size, images, line, more, cwd) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     store.db.transaction(() => {
       for (const r of rows) {
         add.run(store.chat, r.i, r.kind, r.text, r.date, r.size, r.images?.length ? JSON.stringify(r.images) : null, r.line ?? null, r.more ? 1 : null, cwd || null);
@@ -322,13 +362,13 @@ export namespace Store {
 
   // the line over messages [first, first + n); null: not built
   export function node(store: Store, first: number, n: number): string | null {
-    return (store.db.query("select text from node where chat = ? and first = ? and n = ?").get(store.chat, first, n) as { text: string } | null)?.text ?? null;
+    return (query(store.db, "select text from node where chat = ? and first = ? and n = ?").get(store.chat, first, n) as { text: string } | null)?.text ?? null;
   }
 
   // lines built, logged in one write, their words found by search
   export function nodes(store: Store, lines: Line[]): void {
-    const add  = store.db.query("insert into node (chat, first, n, text) values (?, ?, ?, ?) on conflict do nothing");
-    const find = store.db.query(`insert into find_${store.chat} (text, first, n) values (?, ?, ?)`);
+    const add  = query(store.db, "insert into node (chat, first, n, text) values (?, ?, ?, ?) on conflict do nothing");
+    const find = query(store.db, `insert into find_${store.chat} (text, first, n) values (?, ?, ?)`);
     store.db.transaction(() => {
       for (const { first, n, text } of lines) {
         if (add.run(store.chat, first, n, text).changes === 1) {
@@ -344,13 +384,13 @@ export namespace Store {
 
   // the chat's state as last saved; null: none
   export function state(store: Store): any {
-    const row = store.db.query("select saved from state where chat = ?").get(store.chat) as { saved: string } | null;
+    const row = query(store.db, "select saved from state where chat = ?").get(store.chat) as { saved: string } | null;
     return row === null ? null : JSON.parse(row.saved);
   }
 
   // written over
   export function save(store: Store, saved: object): void {
-    store.db.query("insert into state (chat, saved) values (?, ?) on conflict (chat) do update set saved = excluded.saved").run(store.chat, JSON.stringify(saved));
+    query(store.db, "insert into state (chat, saved) values (?, ?) on conflict (chat) do update set saved = excluded.saved").run(store.chat, JSON.stringify(saved));
     Store.wrote(store);
   }
 
@@ -359,7 +399,7 @@ export namespace Store {
 
   // a log made, by its name (a name and a tag); false: there already
   export function log_new(store: Store, log: string, name: string): boolean {
-    const made = store.db.query("insert into log (chat, log, name) values (?, ?, ?) on conflict do nothing").run(store.chat, log, name).changes === 1;
+    const made = query(store.db, "insert into log (chat, log, name) values (?, ?, ?) on conflict do nothing").run(store.chat, log, name).changes === 1;
     if (made) {
       Store.wrote(store);
     }
@@ -368,37 +408,37 @@ export namespace Store {
 
   // the log a name took last; null: none
   export function log_of(store: Store, name: string): string | null {
-    return (store.db.query("select log from log where chat = ? and name = ? order by id desc limit 1").get(store.chat, name) as { log: string } | null)?.log ?? null;
+    return (query(store.db, "select log from log where chat = ? and name = ? order by id desc limit 1").get(store.chat, name) as { log: string } | null)?.log ?? null;
   }
 
   // every log, oldest first
   export function logs(store: Store): string[] {
-    return (store.db.query("select log from log where chat = ? order by id").all(store.chat) as Array<{ log: string }>).map((r) => r.log);
+    return (query(store.db, "select log from log where chat = ? order by id").all(store.chat) as Array<{ log: string }>).map((r) => r.log);
   }
 
   // a log's entries; null: no such log
   export function work(store: Store, log: string): Entry[] | null {
     const id = Store.log_id(store, log);
-    return id === null ? null : (store.db.query("select i, kind, text, date from work where log = ? order by i").all(id) as Entry[]);
+    return id === null ? null : (query(store.db, "select i, kind, text, date from work where log = ? order by i").all(id) as Entry[]);
   }
 
   // an entry logged (its log made, if not yet)
   export function work_push(store: Store, log: string, name: string, e: Entry): void {
     store.db.transaction(() => {
-      store.db.query("insert into log (chat, log, name) values (?, ?, ?) on conflict do nothing").run(store.chat, log, name);
-      store.db.query("insert into work (log, i, kind, text, date) values (?, ?, ?, ?, ?)").run(Store.log_id(store, log), e.i, e.kind, e.text, e.date);
+      query(store.db, "insert into log (chat, log, name) values (?, ?, ?) on conflict do nothing").run(store.chat, log, name);
+      query(store.db, "insert into work (log, i, kind, text, date) values (?, ?, ?, ?, ?)").run(Store.log_id(store, log), e.i, e.kind, e.text, e.date);
     })();
     Store.wrote(store);
   }
 
   export function log_id(store: Store, log: string): number | null {
-    return (store.db.query("select id from log where chat = ? and log = ?").get(store.chat, log) as { id: number } | null)?.id ?? null;
+    return (query(store.db, "select id from log where chat = ? and log = ?").get(store.chat, log) as { id: number } | null)?.id ?? null;
   }
 
   // the entries a log holds
   export function work_count(store: Store, log: string): number {
     const id = Store.log_id(store, log);
-    return id === null ? 0 : (store.db.query("select count(*) as n from work where log = ?").get(id) as { n: number }).n;
+    return id === null ? 0 : (query(store.db, "select count(*) as n from work where log = ?").get(id) as { n: number }).n;
   }
 
   // Images
@@ -407,14 +447,14 @@ export namespace Store {
   // an image put in, by its name, with its copy for models (null: none);
   // one there already kept
   export function image_put(store: Store, name: string, data: Uint8Array, fit: Uint8Array | null): void {
-    store.db.query("insert into image (chat, name, data, fit) values (?, ?, ?, ?) on conflict do nothing").run(store.chat, name, data, fit);
+    query(store.db, "insert into image (chat, name, data, fit) values (?, ?, ?, ?) on conflict do nothing").run(store.chat, name, data, fit);
     Store.wrote(store);
   }
 
   // an image's bytes and its copy for models (null: none); null: no such
   // image
   export function image(store: Store, name: string): { data: Uint8Array; fit: Uint8Array | null } | null {
-    return store.db.query("select data, fit from image where chat = ? and name = ?").get(store.chat, name) as { data: Uint8Array; fit: Uint8Array | null } | null;
+    return query(store.db, "select data, fit from image where chat = ? and name = ?").get(store.chat, name) as { data: Uint8Array; fit: Uint8Array | null } | null;
   }
 
   // To-do list
@@ -422,13 +462,13 @@ export namespace Store {
 
   // the chat's to-do list as last given; null: none
   export function todo(store: Store): unknown {
-    const row = store.db.query("select list from todo where chat = ?").get(store.chat) as { list: string } | null;
+    const row = query(store.db, "select list from todo where chat = ?").get(store.chat) as { list: string } | null;
     return row === null ? null : JSON.parse(row.list);
   }
 
   // written over
   export function todo_save(store: Store, list: unknown): void {
-    store.db.query("insert into todo (chat, list) values (?, ?) on conflict (chat) do update set list = excluded.list").run(store.chat, JSON.stringify(list));
+    query(store.db, "insert into todo (chat, list) values (?, ?) on conflict (chat) do update set list = excluded.list").run(store.chat, JSON.stringify(list));
     Store.wrote(store);
   }
 
@@ -441,13 +481,13 @@ export namespace Store {
   // would scan the chat's rows instead); its messages, not pages, counted
   export function projects(store: Store): Project[] {
     const db    = store.db;
-    const out   = (db.query("select id, name, path from project").all() as Array<Pick<Project, "id" | "name" | "path">>).map((p): Project => ({ ...p, first: null, last: null, count: 0, lately: "" }));
+    const out   = (query(db, "select id, name, path from project").all() as Array<Pick<Project, "id" | "name" | "path">>).map((p): Project => ({ ...p, first: null, last: null, count: 0, lately: "" }));
     const by    = new Map(out.map((p) => [p.id, p]));
-    const start = db.query("select date from msg where chat = ? order by i limit 1");
-    const end   = db.query("select i, date from msg where chat = ? order by i desc limit 1");
-    const pages = db.query("select count(*) as n from msg indexed by msg_page where chat = ? and more is not null");
-    const line  = db.query("select text from node indexed by node_end where chat = ? order by first + n desc, n desc limit 1");
-    for (const c of db.query("select id, project from chat order by id").all() as Array<{ id: number; project: number }>) {
+    const start = query(db, "select date from msg where chat = ? order by i limit 1");
+    const end   = query(db, "select i, date from msg where chat = ? order by i desc limit 1");
+    const pages = query(db, "select count(*) as n from msg indexed by msg_page where chat = ? and more is not null");
+    const line  = query(db, "select text from node indexed by node_end where chat = ? order by first + n desc, n desc limit 1");
+    for (const c of query(db, "select id, project from chat order by id").all() as Array<{ id: number; project: number }>) {
       const p = by.get(c.project);
       const e = end.get(c.id) as { i: number; date: string } | null;
       if (p === undefined || e === null) {
@@ -466,12 +506,12 @@ export namespace Store {
 
   // the store's project: its name and folder ("": home's none)
   export function named(store: Store): { name: string; path: string } {
-    return store.db.query("select name, path from project where id = ?").get(store.project) as { name: string; path: string };
+    return query(store.db, "select name, path from project where id = ?").get(store.project) as { name: string; path: string };
   }
 
   // a project by its name, and its first chat; null: none
   export function project(store: Store, name: string): { project: number; chat: number } | null {
-    return store.db.query("select p.id as project, min(c.id) as chat from project p join chat c on c.project = p.id where p.name = ? group by p.id").get(name) as { project: number; chat: number } | null;
+    return query(store.db, "select p.id as project, min(c.id) as chat from project p join chat c on c.project = p.id where p.name = ? group by p.id").get(name) as { project: number; chat: number } | null;
   }
 
   // the summary lines holding all of the words (none: any of them), in
@@ -490,7 +530,7 @@ export namespace Store {
     }
     return store.db.transaction(() => {
       const where = projects === null ? "" : " where c.project in (" + projects.map(() => "?").join(", ") + ")";
-      const chats = store.db.query("select c.id as chat, p.name as project from chat c join project p on p.id = c.project" + where).all(...(projects ?? [])) as Array<{ chat: number; project: string }>;
+      const chats = query(store.db, "select c.id as chat, p.name as project from chat c join project p on p.id = c.project" + where).all(...(projects ?? [])) as Array<{ chat: number; project: string }>;
       const ask = (or: boolean) => chats.flatMap(({ chat, project }) => Store.seek(store.db, chat, terms, or).map((l, k, all) => ({ project, chat, k, full: all.length === FOUND, ...l })))
         .sort((a, b) => a.k - b.k || a.score - b.score);
       const and = ask(false);
@@ -512,71 +552,74 @@ export namespace Store {
   export function seek(db: Database, chat: number, terms: string[], or: boolean): Array<Line & { score: number }> {
     const table = "find_" + chat;
     const quote = (words: string[]) => words.map((w) => '"' + w.replace(/"/g, '""') + '"').join(or ? " OR " : " ");
-    const lines = (db.query(`select rowid from ${table} order by rowid desc limit 1`).get() as { rowid: number } | null)?.rowid ?? 0;
-    const held = db.query(`select count(*) as n from (select 1 from ${table} where ${table} match ? and rowid >= ? and rowid < ?)`);
+    const lines = (query(db, `select rowid from ${table} order by rowid desc limit 1`).get() as { rowid: number } | null)?.rowid ?? 0;
+    const held = query(db, `select count(*) as n from (select 1 from ${table} where ${table} match ? and rowid >= ? and rowid < ?)`);
     const most = (word: string) => lines > LARGE && [lines - SAMPLE + 1, Math.floor((lines - SAMPLE) / 2) + 1, 1].every((from) => (held.get(quote([word]), from, from + SAMPLE) as { n: number }).n > SAMPLE / 2);
     const rare = terms.filter((w) => !most(w));
-    return db.query(`select first, n, text, bm25(${table}) as score from ${table} where ${table} match ? order by score limit ${FOUND}`).all(quote(rare.length > 0 ? rare : terms)) as Array<Line & { score: number }>;
+    return query(db, `select first, n, text, bm25(${table}) as score from ${table} where ${table} match ? order by score limit ${FOUND}`).all(quote(rare.length > 0 ? rare : terms)) as Array<Line & { score: number }>;
   }
 
   // a project's chats
   export function chats(store: Store, project: number): number[] {
-    return (store.db.query("select id from chat where project = ?").all(project) as Array<{ id: number }>).map((c) => c.id);
+    return (query(store.db, "select id from chat where project = ?").all(project) as Array<{ id: number }>).map((c) => c.id);
   }
 
   // the images a project's chats hold
   export function pictures(store: Store, project: number): number {
-    return (store.db.query("select count(*) as n from image i join chat c on c.id = i.chat where c.project = ?").get(project) as { n: number }).n;
+    return (query(store.db, "select count(*) as n from image i join chat c on c.id = i.chat where c.project = ?").get(project) as { n: number }).n;
   }
 
   // a project forgotten: its row deleted, and with it all its chats'
-  // rows, their images too (foreign keys), their indexes dropped whole;
-  // overwritten (secure delete: its pages zeroed, checkpointed into the
-  // file before any is cut off its end), then its space given back by a
-  // commit in auto_vacuum full, which empties the free list whole, where
-  // incremental_vacuum looks each page up in it (quadratic: minutes for a
-  // big project). Whether its space was given back: not while a reader
-  // keeps the zeros from the file till `wait` (ms) runs out (Store.settled),
-  // nor if the vacuum fails; then the free pages stay for new writes, and
-  // the zeros reach the file at a later checkpoint, as nothing was cut.
-  // Flushed (Disk.ts) however it ends
-  export function forget(store: Store, project: number, wait = WAIT): boolean {
+  // rows, their images too (foreign keys), their indexes dropped whole,
+  // in one transaction, all of it overwritten as it goes (secure delete);
+  // then its space given back (Store.shrink). Whether that was now (else
+  // at the next open)
+  export function forget(store: Store, project: number): boolean {
     const db = store.db;
     db.transaction(() => {
       for (const chat of Store.chats(store, project)) {
         db.run(`drop table if exists find_${chat}`);
       }
-      db.query("delete from project where id = ?").run(project);
+      query(db, "delete from project where id = ?").run(project);
     }).immediate();
+    return Store.shrink(store);
+  }
+
+  // the file's free pages given back, its end cut off: once every page of
+  // the WAL is in the file (Store.settled), so the zeros secure delete
+  // wrote are there before any page is cut off unwritten, a commit in
+  // auto_vacuum full moves the pages past the new end into the free ones
+  // (each once: incremental_vacuum looks each up in the free list,
+  // quadratic, minutes for a big project); then incremental again, so no
+  // other commit moves pages, and a passive checkpoint copies the move in
+  // and cuts the file (a reader just begun: the next checkpoint does).
+  // Never waits. Whether it ran: not while a reader holds an older
+  // snapshot (the next open tries again), nor if a step fails (logged).
+  // Flushed (Disk.ts) however it ends
+  export function shrink(store: Store): boolean {
+    const db = store.db;
     try {
-      if (!Store.settled(db, wait)) {
+      if (!Store.settled(db)) {
         return false;
       }
       db.run("pragma auto_vacuum = full");
       db.run("pragma auto_vacuum = incremental");
-      db.run("pragma wal_checkpoint(truncate)");
+      db.run("pragma wal_checkpoint(passive)");
       return true;
     } catch (err: any) {
-      console.error("illi: forget: the space wasn't given back: " + (err?.message ?? err));
+      console.error("illi: the chat file's free space wasn't given back: " + (err?.message ?? err));
       return false;
     } finally {
       Store.wrote(store);
     }
   }
 
-  // every page of the WAL copied into the file (a full checkpoint), tried
-  // again while another connection checkpoints, or a reader keeps an older
-  // snapshot (each try waits busy_timeout for readers), till `wait` (ms)
-  // runs out; whether it was
-  export function settled(db: Database, wait: number): boolean {
-    for (const until = Date.now() + wait; ; Bun.sleepSync(50)) {
-      if ((db.query("pragma wal_checkpoint(full)").get() as { busy: number }).busy === 0) {
-        return true;
-      }
-      if (Date.now() >= until) {
-        return false;
-      }
-    }
+  // whether every page of the WAL is in the file: a passive checkpoint
+  // (it never waits) copied them all; not while a reader keeps an older
+  // snapshot, nor while another connection checkpoints
+  export function settled(db: Database): boolean {
+    const done = query(db, "pragma wal_checkpoint(passive)").get() as { busy: number; log: number; checkpointed: number };
+    return done.busy === 0 && done.log === done.checkpointed;
   }
 
 }

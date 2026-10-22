@@ -35,7 +35,9 @@ files beside it: `memory.sqlite-wal` (new writes, see
 [Writing](#writing-and-durability)) and `memory.sqlite-shm` (an index into
 the WAL that the open connections share). When the last connection closes
 cleanly, SQLite copies the WAL into the file and deletes both, so only
-`memory.sqlite` is left.
+`memory.sqlite` is left. (A bun:sqlite connection only really closes once
+every statement it prepared is finalized; `Store.close` sees to that:
+[Close](#one-write).)
 
 One file holds every project of its profile: one project for each git
 repo illi ran in, plus `home` for everywhere outside a repo
@@ -142,6 +144,7 @@ The file's settings
 | `secure_delete`   | `on`                      | each connection     | deleted content is overwritten with zeros |
 | `foreign_keys`    | `on`                      | each connection     | deleting a project deletes everything below it |
 | `busy_timeout`    | `10000` ms                | each connection     | wait for another process's write instead of failing |
+| `journal_size_limit` | `0`                    | each connection     | the WAL, starting over, is cut to what its first commit wrote: no older page stays in it, and a big write never leaves it big |
 
 Defaults left as SQLite ships them: a page is 4,096 bytes, and
 `wal_autocheckpoint` is 1,000 pages (about 4 MB).
@@ -174,7 +177,7 @@ Opening, step by step
 `Store.open(dir, place)` does this, in order:
 
 1. Creates the folder, then opens or creates `memory.sqlite`.
-2. Sets `busy_timeout = 10000` and `foreign_keys = on`.
+2. Sets `busy_timeout = 10000`, `foreign_keys = on` and `secure_delete = on`.
 3. `Store.schema`: brings the schema up to date
    ([below](#versions-and-upgrades)). On a brand-new, empty file it first
    sets `auto_vacuum = incremental`.
@@ -184,8 +187,13 @@ Opening, step by step
 5. If `auto_vacuum` reads `1` (full), sets it back to `incremental`. Only
    a forget cut off between its two `auto_vacuum` pragmas can leave it at
    `full` ([Forgetting](#forgetting-a-project), step 4).
-6. Sets `synchronous = normal` and `secure_delete = on`.
-7. `Store.place` (skipped for upkeep): finds the project by its `key`,
+6. Sets `synchronous = normal` and `journal_size_limit = 0`.
+7. **Shrink, if worth it:** with 256 or more free pages (1 MB), it runs
+   `Store.shrink` ([Forgetting](#storeshrink-step-by-step)). That only
+   happens after a forget a reader held back, or after a lot of churn.
+   It never waits: with a reader still holding the WAL, it's skipped
+   until the next open.
+8. `Store.place` (skipped for upkeep): finds the project by its `key`,
    or creates it (if its name is taken, it adds `-2`, `-3`…), then its
    first chat, which it creates with an empty `find_<chat>` if new. This
    all runs in one write transaction.
@@ -310,8 +318,14 @@ sequenceDiagram
    SQLite fsyncs the WAL before copying and the file after. The WAL is
    then reused from its start. A checkpoint can't copy pages that a
    reader's snapshot still needs, so a long search can delay it.
-5. **Close.** The last connection to close checkpoints everything and
-   deletes the WAL.
+5. **Close.** `Store.close` finalizes every statement the connection
+   prepared, then closes it; the last connection to close checkpoints
+   everything and deletes the WAL. Store prepares its statements itself
+   (one per SQL text, kept for the connection's life) instead of using
+   bun:sqlite's `db.query`, whose cache keeps only 20: a statement past
+   those is left to the garbage collector, and until it's collected
+   `close()` leaves the connection open, so it never checkpoints and the
+   WAL stays beside the file.
 
 What this guarantees:
 
@@ -403,7 +417,7 @@ illi from quitting (`ref: false`). For each search the worker:
 1. opens `memory.sqlite` read-only, with `busy_timeout = 10000`;
 2. runs `Projects.search`, the same code the main thread would run;
 3. sends back the text, or the error;
-4. closes the connection.
+4. closes the connection (`Store.close`, so it really closes at once).
 
 The main thread never waits: during a 2.9 s search on a 2-million-line
 chat it kept drawing the screen (its longest gap was 14 ms). If the
@@ -541,22 +555,6 @@ told to forget it in the holder's terminal):
 
 ### Store.forget, step by step
 
-```mermaid
-sequenceDiagram
-  participant C as connection
-  participant W as WAL
-  participant F as memory.sqlite
-  C->>W: 1. one transaction: drop each find_chat, delete project (cascade); deleted content zeroed
-  W->>F: (automatic checkpoint at that commit, usually)
-  C->>F: 2. wal_checkpoint(full) till no reader holds it back (Store.settled)
-  Note over C: still held back after 10 s: stop here (false)
-  C->>W: 3. auto_vacuum = full: at its commit, live pages move down
-  W->>F: (checkpoint)
-  Note over F: the file's end is cut off
-  C->>C: 4. auto_vacuum = incremental again
-  C->>F: 5. wal_checkpoint(truncate): WAL emptied to 0 bytes
-```
-
 1. **Delete** (one `begin immediate` transaction):
    `drop table if exists find_<chat>` for each of the project's chats,
    then `delete from project where id = ?`. The foreign keys delete its
@@ -566,75 +564,87 @@ sequenceDiagram
    it deletes with zeros: freed pages entirely, and the bytes of deleted
    rows inside pages that stay in use. In `auto_vacuum = incremental`
    the freed pages go on the free list; nothing moves yet. The commit
-   writes the changed pages, zeros included, to the WAL. Usually the
-   automatic checkpoint at that same commit copies them into the file.
-2. **`pragma wal_checkpoint(full)`, till it lands** (`Store.settled`)
-   makes sure *every* page in the WAL, the zeros included, is copied
-   into the file. This must happen before step 3: the file's end gets
-   cut off there, and a checkpoint never writes a page that lies past the
-   file's new end. Without this step, a project stored at the end of the
-   file wouldn't be overwritten, only released with the end of the file,
-   its old bytes left on the disk.
+   writes the changed pages, zeros included, to the WAL. An error here
+   throws to the caller, and nothing is forgotten.
+2. **Shrink** (`Store.shrink`, below). `Store.forget` returns what it
+   returns: whether the file was shrunk now. When it wasn't, the next
+   open does it (opening, step 7). Either way `/projects` just says
+   *Forgot app-k3f9x2: 1,204 messages and 3 images.*
 
-   A reader still on a snapshot from before step 1 (a running search, or
-   another illi mid-read) holds the checkpoint back: it can't copy pages
-   that reader may still need from the WAL. The checkpoint doesn't
-   throw then; it returns `busy = 1`. `Store.settled` runs it again every
-   50 ms till it reports `busy = 0`, for up to 10 s (`WAIT`); each try
-   itself waits `busy_timeout` for the reader (10 s on illi's own
-   connection, so there one try is usually the whole wait, and illi's
-   screen holds still meanwhile). If it's
-   still held back, **forget stops here and returns `false`**: the
-   project is gone from the tables and its zeros are in the WAL, but the
-   file isn't shrunk. Nothing is cut off, so the zeros reach the file at
-   the next checkpoint that gets through once the reader is done: the
-   automatic one at a commit that finds the WAL past 1,000 pages (about
-   4 MB; a big forget's WAL already is), or the last connection's close.
-   The free pages are reused for new messages. `/projects` then adds: *Its space stays
-   in the file, for new messages: it was being read.*
-3. **`pragma auto_vacuum = full`** changes one flag in the file's header,
-   in a tiny transaction of its own. Because the mode is now `full`,
-   SQLite's commit runs its vacuum: it moves every live page that sits
+### Store.shrink, step by step
+
+```mermaid
+sequenceDiagram
+  participant C as connection
+  participant W as WAL
+  participant F as memory.sqlite
+  C->>F: 1. passive checkpoint: is every WAL page in the file?
+  Note over C: no (a reader holds some): stop, the next open tries again
+  C->>W: 2. auto_vacuum = full: at its commit, live pages move down
+  C->>C: 3. auto_vacuum = incremental again
+  C->>F: 4. passive checkpoint: the move copied in, the file's end cut off
+```
+
+1. **`pragma wal_checkpoint(passive)`** (`Store.settled`) copies the
+   WAL's pages into the file, never waiting for anyone, and reports how
+   many there were (`log`) and how many it copied (`checkpointed`). Only
+   when it copied them all (and `busy` is 0) does shrinking go on. This
+   must come first: step 2 cuts the file's end off, and a checkpoint
+   never writes a page past the file's new end. Without it, the zeros of
+   a project stored at the end of the file would never reach the file:
+   its end would be released with the old bytes still on the disk.
+
+   A reader still on a snapshot from before the delete (a running
+   search, or another illi mid-read) keeps the checkpoint from copying
+   pages it may still need. Then shrinking stops at once and returns
+   `false`: nothing is cut, the zeros reach the file at the next
+   checkpoint that gets through, and the next open shrinks the file. No
+   waiting, no message.
+2. **`pragma auto_vacuum = full`** changes one flag in the file's header,
+   in a tiny transaction of its own. In `full` mode SQLite vacuums at
+   every commit, this one included: it moves every live page that sits
    past the file's new end into a free page below it, updates the
-   pointers to it, and cuts the file's end off. Each free page is
-   handled once, so the cost is linear. (`pragma incremental_vacuum`
+   pointers to it, and cuts the free pages off the end. Each free page
+   is handled once, so the cost is linear. (`pragma incremental_vacuum`
    looks every page it moves up in the free list, which is quadratic:
    846 s instead of 28 s for a million-message project.)
-4. **`pragma auto_vacuum = incremental`** sets the flag back, so ordinary
-   commits never move pages. If illi stops between steps 3 and 4, or
-   step 4 itself fails, the file stays in `full` until the next open sets
-   it back (opening, step 5).
-5. **`pragma wal_checkpoint(truncate)`** copies the moved pages into the
-   file and empties the WAL to 0 bytes. Otherwise the WAL would stay as
-   big as the forgotten project, and the next message's commit would
-   pay for the whole checkpoint mid-turn.
-6. `Store.wrote` (in a `finally`, so on every path out, a stop at step 2
-   or an error too): the WAL is flushed like any write.
+3. **`pragma auto_vacuum = incremental`** sets the flag back, so ordinary
+   commits never move pages. If illi stops between steps 2 and 3, or
+   step 3 fails, the file stays in `full` until the next open sets it
+   back (opening, step 5).
+4. **`pragma wal_checkpoint(passive)`** copies the moved pages into the
+   file, which cuts the file to its new size. Step 2's commit started the
+   WAL over (every page of it was in the file), and `journal_size_limit
+   = 0` cut it to that commit's pages, so no page from before, the
+   forgotten project's included, is left in the WAL either. A reader
+   that began in the last moment can keep this checkpoint from finishing;
+   the next one does.
+5. `Store.wrote` (in a `finally`, on every path out): the WAL is flushed
+   like any write.
 
-`Store.forget` returns whether the space was given back. Only step 1
-throws to its caller (nothing forgotten then). An error in steps 2 to 5
-is logged (*illi: forget: the space wasn't given back: …*) and returns
-`false`, because the project is forgotten already.
+An error in steps 1 to 4 is logged (*illi: the chat file's free space
+wasn't given back: …*) and returns `false`; the next open tries again.
 
 ### If it stops partway
 
 | illi stops… | Result |
 | ----------- | ------ |
-| during step 1 | the transaction rolls back: nothing is forgotten |
-| after step 1, before step 3 | the project is forgotten and zeroed in the WAL, the zeros in the file by the next checkpoint; the file hasn't shrunk, and new writes reuse the free pages |
-| between steps 3 and 4 | forgotten and shrunk; the next open sets `auto_vacuum` back |
-| after step 4 | done; the WAL is emptied at the next checkpoint |
+| during the delete | the transaction rolls back: nothing is forgotten |
+| after the delete, before the shrink's step 2 | forgotten and zeroed (the zeros reach the file at the next checkpoint); the next open shrinks the file |
+| between the shrink's steps 2 and 3 | forgotten and shrunk; the next open sets `auto_vacuum` back |
+| after step 3 | done; the next checkpoint copies the rest in |
 
 ### What "overwritten" means, exactly
 
-After a forget that returned `true`, `memory.sqlite` and its WAL no
-longer contain the project's bytes: the test `a project forgotten is
-gone from the file…` searches the file for a planted secret. After one
-that returned `false` (a reader held step 2 back), the zeros are in the
-WAL and the old bytes are still in `memory.sqlite` until the next
-checkpoint gets through (step 2 says when); the test `a forget while a reader holds an older
-snapshot…` checks that they land then. Either way the promise covers
-the file itself. It can't reach:
+Once a forget has shrunk the file, `memory.sqlite` and its WAL no longer
+hold the project's bytes, even what wasn't checkpointed yet: the test
+`a project forgotten is gone from the file and its WAL at once…` plants a
+secret and searches both files for it. When a reader held the shrink
+back, the zeros are in the WAL, and the old bytes stay in
+`memory.sqlite` until the next checkpoint gets through, at the latest
+the next open; the test `a forget while a reader holds an older
+snapshot…` checks that. Either way the promise covers the files
+themselves. It can't reach:
 
 - **SSDs**, which write an overwritten block to a fresh physical place
   and erase the old one later, on their own schedule.
@@ -659,7 +669,7 @@ messages and its 200,000 summary lines (about 150 MB) from a 302 MB file:
 | final checkpoint           | 0.02 s         | 0.02 s         | 0.02 s         |
 | **total**                  | **1.27 s, 659 MB** | **1.04 s, 491 MB** | **1.15 s, 525 MB** |
 
-(Times and megabytes written. The full-checkpoint step wrote nothing
+(Times and megabytes written. The first checkpoint wrote nothing
 here, because the automatic checkpoint at the commit had already done
 it. The vacuum moved pages even for the project at the end: `msg` and
 `node` are each one tree for every project, so pages still in use, such
@@ -749,8 +759,8 @@ Known limits
   13.6 s for 400,000 lines, and a second illi opening meanwhile fails to
   start.
 - **A search keeps a snapshot for as long as it runs,** so a checkpoint
-  can't finish behind it. A forget waits for it up to 10 s, then leaves
-  the file unshrunk (step 2): the space is reused, not given back.
+  can't finish behind it. A forget during one doesn't wait: the file
+  shrinks at the next open instead.
 - **An `all` search gives 20 lines in all,** shared out across the
   projects with matches, so with many projects each gets a line or two.
   The rest are named, not shown (*More lines in: …*).
