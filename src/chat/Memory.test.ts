@@ -26,6 +26,7 @@ const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-memory-");
 process.env.ILLI_DIR = DIR;
 
 const { Memory } = await import("./Memory.ts");
+const { Compactor } = await import("./Compactor.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
@@ -152,14 +153,14 @@ test("an agent spawned as the user's is named after it, numbered while one so na
 });
 
 test("a leaf's summary starts with its message's kind, added where the compactor left it out; a merge's stays as it is", () => {
-  expect(Memory.tagged(0, "user: Notes for later: launch moves to April 14", "Project notes: launch Apr 14")).toBe("user: Project notes: launch Apr 14");
-  expect(Memory.tagged(0, "tool: shell {\"command\":\"ls\"}", "tool: shell ls")).toBe("tool: shell ls");
-  expect(Memory.tagged(0, "tool: Bash {}", "echo: no output")).toBe("echo: no output");
-  expect(Memory.tagged(1, "user: a\nilli: b", "a then b")).toBe("a then b");
-  expect(Memory.bare("Merged line: user asked for a file")).toBe("user asked for a file");
-  expect(Memory.bare("Line: done")).toBe("done");
-  expect(Memory.bare("line 42: the bug")).toBe("line 42: the bug");
-  expect(Memory.bare("user: Summary: none yet")).toBe("user: Summary: none yet");
+  expect(Compactor.tagged(0, "user: Notes for later: launch moves to April 14", "Project notes: launch Apr 14")).toBe("user: Project notes: launch Apr 14");
+  expect(Compactor.tagged(0, "tool: shell {\"command\":\"ls\"}", "tool: shell ls")).toBe("tool: shell ls");
+  expect(Compactor.tagged(0, "tool: Bash {}", "echo: no output")).toBe("echo: no output");
+  expect(Compactor.tagged(1, "user: a\nilli: b", "a then b")).toBe("a then b");
+  expect(Compactor.bare("Merged line: user asked for a file")).toBe("user asked for a file");
+  expect(Compactor.bare("Line: done")).toBe("done");
+  expect(Compactor.bare("line 42: the bug")).toBe("line 42: the bug");
+  expect(Compactor.bare("user: Summary: none yet")).toBe("user: Summary: none yet");
 });
 
 test("past a /clear, the chat's view waits on no summary before it, nor holds a node wholly before it", async () => {

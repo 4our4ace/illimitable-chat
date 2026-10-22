@@ -29,6 +29,7 @@ const { Agent } = await import("../src/ai/Agent.ts");
 const { Anthropic } = await import("../src/ai/Anthropic.ts");
 const { AskAI } = await import("../src/ai/AskAI.ts");
 const { Memory } = await import("../src/chat/Memory.ts");
+const { Compactor } = await import("../src/chat/Compactor.ts");
 const { MASTER } = await import("../src/tools/Tools.ts");
 
 const SHARE = { vendor: "claude-api" as const, model: "claude-opus-5-5", effort: "medium", speed: "slow", system: MASTER, searches: 1, server: "" };
@@ -103,7 +104,7 @@ async function completes(mem: any): Promise<void> {
   }
   const source = Memory.flat(Memory.source(mem, 0, REFUSED)!);
   for (const [{ l, i }, text] of nodes(mem)) {
-    expect(text).toEqual(l === 0 && i === REFUSED ? Memory.clip(source) : expect.stringMatching(/^([a-z]+: )?line for Compaction:/));
+    expect(text).toEqual(l === 0 && i === REFUSED ? Compactor.clip(source) : expect.stringMatching(/^([a-z]+: )?line for Compaction:/));
   }
   expect(logged.filter((line) => line.includes("clipped"))).toEqual(["compactor: node 0/" + REFUSED + ": the model declined to answer; clipped"]);
   Memory.stop(mem);
