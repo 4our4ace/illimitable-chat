@@ -6,7 +6,8 @@
 // drops it, its file deleted, its images with it; a copy exported first goes to
 // ./illi-project-<name>.json, never over a file there; one open in
 // another terminal is kept, and so is this one, its chat run in another
-// terminal (this one a view of it).
+// terminal (this one a view of it); a numbered copy of this one goes at
+// once.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -113,6 +114,19 @@ test("a copy exported first goes to ./illi-project-<name>.json, never over a fil
   t.choose.pick(1);
   expect(await noted(t, "Forgot")).toBe("Forgot app-k3f9x2: 1 message and 1 image.");
   expect(Object.keys(JSON.parse(fs.readFileSync(TMP + "/illi-project-app-k3f9x2.json", "utf8")).images)).toEqual(["bbbbbbbbbbbbbbbb.png"]);
+  expect(Store.projects(mem.store).map((p) => p.name)).toEqual([HERE.name]);
+});
+
+test("a numbered copy of this project (an old file put back) is forgotten at once, this illi holding its folder", async () => {
+  const twin = Store.connect(DIR + "/chat/projects/" + HERE.name + "-2.sqlite", true);
+  Store.place(twin, HERE, HERE.name + "-2");
+  Store.shut(twin);
+  const t = term();
+  term_projects(t);
+  const k = t.choose.names.indexOf(HERE.name + "-2");
+  t.choose.keys(k, "Delete");
+  t.choose.pick(2);
+  expect(await noted(t, "Forgot")).toBe("Forgot " + HERE.name + "-2: 0 messages.");
   expect(Store.projects(mem.store).map((p) => p.name)).toEqual([HERE.name]);
 });
 

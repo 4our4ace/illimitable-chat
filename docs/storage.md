@@ -206,8 +206,10 @@ Opening, step by step
    is the project's own. A file holding another place's key (two paths
    whose 6-character codes collide, a 1 in 2 billion chance) is someone
    else's: the file is closed and step 3 tries `<name>-2.sqlite`, then
-   `-3`, and so on. Then it finds the project's first chat, or creates it
-   with an empty `find_<chat>`.
+   `-3`, and so on. The project's own file drops the move's mark if it
+   bears one (`moved_from`, [the move](#moving-from-the-one-file)): a file in
+   use is never a copy the move may make again. Then it finds the
+   project's first chat, or creates it with an empty `find_<chat>`.
 
 A file that won't open (not an SQLite file, say) stops illi at start
 with one line naming it: *illi: chat: app-k3f9x2.sqlite won't open: file
@@ -352,7 +354,9 @@ flowchart TD
 4. **`Store.schema`** brings the old file to version 3 if it isn't.
    **`Store.mark`** reads this move's mark from the old file's `meta`
    (`moving`), or writes a new random one at the move's first try. Every
-   project file the move copies bears it (`moved_from` in its `meta`).
+   project file the move copies bears it (`moved_from` in its `meta`)
+   until its first open as its project's file: `Store.place` drops it
+   then, so a mark always means "made by that move, never used since".
 5. **`Store.split`, for each project** (oldest first):
    1. Picks the file: `projects/<name>.sqlite`. One there already that
       bears this move's mark is the move's own copy from before a crash:
@@ -391,9 +395,9 @@ flowchart TD
 8. Closes the old file, which leaves only `memory.sqlite`, then lets the
    gate go.
 
-Any error on the way stops illi with one line naming the move: *illi:
-chat: memory.sqlite couldn't move to a file per project: …* (a damaged
-old file says *file is not a database*). Nothing is dropped before step
+Any error on the way, the gate's included, stops illi with one line
+naming the move: *illi: chat: memory.sqlite couldn't move to a file per
+project: …* (a damaged old file says *file is not a database*). Nothing is dropped before step
 7, so starting again after fixing the cause goes on.
 
 An older illi that opens the stub refuses it (its version and `compat`
@@ -412,7 +416,7 @@ its next start, numbered beside the files already there (step 5.1).
 | before the switch out of WAL mode | nothing changed; the next start moves |
 | during a project's copy | its `-new` file is deleted and made again at the next start |
 | between projects, or after the copies | the next start makes the move's copies again (they bear its mark) and copies the rest |
-| during the stub | its transaction rolls back; the next start makes it |
+| during the stub | its transaction rolls back; the next start makes the copies again (the mark is still there), then the stub |
 
 ### An old file put back
 
@@ -421,8 +425,18 @@ or from another machine), and the next start moves it again, with a new
 mark. Every project whose file is there already is copied beside it,
 numbered (`app-k3f9x2-2.sqlite`), so both stay: the file in use and the
 copy from the old file. `/projects` lists both; the place keeps opening
-its own file (the first by number with its key), and the copy can be
-searched, zoomed into or forgotten like any project.
+its own file (the first by number with its key, or a new one if that is
+gone: the copy is never taken up in its place), and the copy can be
+searched, zoomed into or forgotten like any project. Forgotten from the
+illi running in its folder, it goes at once: no illi ever opens it as
+its chat, and this illi holds the folder's lock already. From another
+project, or from a view of this one, forgetting it takes its folder's
+lock, as forgetting any project does: quit illi in that folder first.
+
+This holds even for an old file saved midway through its move (a backup
+taken between a crash and the next start): its mark is still the one
+the move's copies bear, but every copy opened since has dropped it, so
+only copies never used are made again, from the same rows.
 
 ### What it costs
 
@@ -527,7 +541,10 @@ that isn't there (`Remote.ts MUTE`), and runs again.
 
 **Forgetting another project** takes that project's lock (without a
 socket) while it deletes the file, so no illi starts that project
-meanwhile. If an illi already has it open, illi refuses the forget.
+meanwhile. If an illi already has it open, illi refuses the forget. A
+numbered copy of the project this illi runs in (an old file put back,
+[below](#an-old-file-put-back)) takes no lock: this illi holds its
+folder's, and no illi opens the copy as its chat.
 
 The projects table
 ------------------
@@ -708,6 +725,13 @@ Forgetting a project
 2. It deletes the project's file (`Store.forget`).
 3. It lets the lock go and says what was forgotten: *Forgot app-k3f9x2:
    1,204 messages and 3 images.*
+
+A numbered copy of the project you're in (`app-k3f9x2-2`, from [an old
+file put back](#an-old-file-put-back)) skips step 1 when forgotten from
+the illi that holds the project: it holds the folder's lock already,
+and no illi opens the copy as its chat. From a view, it says *open in
+another terminal* like any project: forget it in the holder's terminal,
+or once the holder quits.
 
 **The project you're in** (only from the illi that holds it; a view is
 told to forget it in the holder's terminal):
