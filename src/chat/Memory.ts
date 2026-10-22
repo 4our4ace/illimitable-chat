@@ -347,6 +347,21 @@ export namespace Memory {
     return Memory.before(mem.view.parts, mem.cut).reduce((n, part) => n + Memory.size(mem, part), 0) + mem.tail.bytes;
   }
 
+  // what a turn sends of the chat, at its cut `from` (cutoff), for its
+  // new messages (each its pages [id, end)): its chat to the first of
+  // them (chat), and its new text: all logged from that one on, each new
+  // one as sent, any other entry between (a stop's note, a stopped
+  // agent's report) tagged with its kind; their images
+  export function turn(mem: Memory, from: number, msgs: Array<{ id: number; end: number }>): { view: Block[]; text: string; imgs: Img[] } {
+    const says: Say[] = [];
+    for (let i = Math.max(msgs[0].id, from); i < mem.count; ) {
+      const msg = msgs.find((m) => i >= m.id && i < m.end);
+      says.push(msg === undefined ? { text: Memory.plain(Memory.message(mem, i)!), imgs: [] } : Memory.say(mem, i, msg.end));
+      i = msg === undefined ? i + 1 : msg.end;
+    }
+    return { view: Memory.chat(mem, from, msgs[0].id), text: says.map((say) => say.text).join("\n\n"), imgs: says.flatMap((say) => say.imgs) };
+  }
+
   // a turn's chat: the view's lines before the cut `from`, then the
   // messages from it to its new ones (`end`) whole; each marked where its
   // cache entry is (a wire keeps the last its vendor takes: Wire.marks)
