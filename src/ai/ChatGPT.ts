@@ -364,15 +364,10 @@ export namespace ChatGPT {
     return out;
   }
 
-  // OpenAI.ts's body, its cache marks and search cap dropped (the backend
-  // refuses them), keyed by its session
+  // OpenAI.ts's body, keyed by its session, its cache mode and search cap
+  // dropped (the backend refuses them, and cache marks: Wire.marks, none)
   export function body(...args: Parameters<typeof OpenAI.body>): unknown {
     const body: any = OpenAI.body(...args);
-    for (const item of body.input) {
-      for (const part of Array.isArray(item.content) ? item.content : []) {
-        delete part.prompt_cache_breakpoint;
-      }
-    }
     return { ...body, prompt_cache_options: undefined, max_tool_calls: undefined, prompt_cache_key: ChatGPT.session(args[0]) };
   }
 
@@ -450,6 +445,7 @@ export namespace ChatGPT {
     heard   : (res) => ChatGPT.hear(res.headers),
     headers : (token, ask) => ChatGPT.headers(token, ask),
     body    : (...args) => ChatGPT.body(...args),
+    marks   : () => 0,
     start   : (ask) => ({ res: null, error: null, use: { input: 0, write: 0, read: 0, speed: ask.speed }, items: [] }),
     read    : (st, ev, on) => ChatGPT.read(st, ev, on),
     begun   : (ev) => ev.type === "response.output_item.added",

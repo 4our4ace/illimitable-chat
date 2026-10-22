@@ -53,7 +53,7 @@ test("the cut holds while the messages fit, then moves on till they fill half, a
   expect(Memory.load(DIR + "/cut", () => ({}) as any).cut).toBe(cut);
 });
 
-test("a turn's chat: the messages from the cut whole, in blocks, the last whole one marked instead of the view's", () => {
+test("a turn's chat: the messages from the cut whole, in blocks, the last whole one marked, and the view's", () => {
   const mem = chat("recent", 10);
   const blocks = Memory.chat(mem, 2, 9);
   const text = blocks.map((b) => b.text).join("");
@@ -61,9 +61,9 @@ test("a turn's chat: the messages from the cut whole, in blocks, the last whole 
   expect(text).toContain("8|user: message 8");
   expect(text).not.toContain("9|user");
   expect(text.endsWith("</recent>\n")).toBe(true);
-  expect(blocks.filter((b) => b.mark).length).toBe(1);
-  expect(blocks.find((b) => b.mark)!.text).toContain("5|user");
-  expect(Memory.chat(mem, 9, 9).filter((b) => b.mark).length).toBeLessThanOrEqual(1);
+  expect(blocks.filter((b) => b.mark).map((b) => b.text.slice(0, 7))).toEqual(["<chat>\n", "2|user:"]);
+  expect(blocks.findLast((b) => b.mark)!.text).toContain("5|user");
+  expect(Memory.chat(mem, 9, 9).filter((b) => b.mark).length).toBe(1);
 });
 
 // a PNG w x h, one grey, made by hand

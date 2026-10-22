@@ -387,18 +387,16 @@ export namespace Memory {
   }
 
   // a turn's chat: the view's lines before the cut `from`, then the
-  // messages from it to its new ones (`end`) whole
+  // messages from it to its new ones (`end`) whole; each marked where its
+  // cache entry is (a wire keeps the last its vendor takes: Wire.marks)
   export function chat(mem: Memory, from: number, end: number): Block[] {
-    const past = Memory.recent(mem, from, Math.max(from, end));
-    const view = Memory.view(mem, from);
-    return [...(past.some((b) => b.mark) ? view.map((b) => ({ ...b, mark: false })) : view), ...past];
+    return [...Memory.view(mem, from), ...Memory.recent(mem, from, Math.max(from, end))];
   }
 
   // messages [a, b) whole, as a turn's call gets the latest before its new
   // ones: each "id|kind: text" (an image named, a zoom away), in blocks of
-  // BLOCK from the cut, the last whole one marked for the cache in place of
-  // the view's (a turn adds a few, so the next finds it), the rest in the
-  // last block
+  // BLOCK from the cut, the last whole one marked for the cache (a turn
+  // adds a few, so the next finds it), the rest in the last block
   export function recent(mem: Memory, a: number, b: number): Block[] {
     const texts = Array.from({ length: Math.max(0, b - a) }, (_, k) => a + k + "|" + Memory.plain(Memory.message(mem, a + k)!) + "\n\n");
     const whole = Math.floor(texts.length / BLOCK);
@@ -919,9 +917,8 @@ ${Memory.clip(line)}| ← LIMIT`;
   }
 
   // the view's lines built before message `end`, in blocks (the last cut
-  // short), one marked: the last whole one, else the opening one. One
-  // mark only: a request takes four, and Anthropic.ts adds three (the
-  // system prompt's, a reply's end's, the top-level)
+  // short), one marked for the cache: the last whole one, else the
+  // opening one
   export function view(mem: Memory, end = mem.count, parts = mem.view.parts): Block[] {
     const lines = Memory.before(parts, end).filter((part) => Memory.built(mem, part.l, part.i)).map((part) => Memory.line(part, Memory.text(mem, part)) + "\n");
     const whole = Math.floor(lines.length / BLOCK);

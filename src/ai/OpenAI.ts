@@ -3,8 +3,8 @@
 // The wire of openai-api (Agent.ts): the Responses API, streamed, store
 // off. Reasoning keeps all turns (else a message sent mid-run drops it
 // and misses the cache); the speed is a service tier ("priority" is
-// fast). A marked block is an explicit breakpoint; the end is cached
-// implicitly only if marked (AskAI.tail). A failure its input caused
+// fast). A marked block is an explicit breakpoint (the latest BREAKS);
+// the end is cached implicitly only if marked (AskAI.tail). A failure its input caused
 // (INPUT), incomplete or refused fails (said in plain words); one too
 // long for the model's window (FULL) is full; a plan or quota used up is
 // down (Agent.spent); any other failure (a server error, a rate limit)
@@ -26,6 +26,10 @@ type State = { res: any; error: any; use: Usage };
 const TIERS: Record<string, string> = { slow: "default", fast: "fast", ultrafast: "ultrafast" };
 
 const MARK = { mode: "explicit" };
+
+// the explicit breakpoints a request writes: four, three when the end is
+// cached implicitly (that mode keeps a slot for its own)
+const BREAKS = 4;
 
 // the codes of a failed response (or an error event) its input caused:
 // asked again, it fails alike; too long for the model's window
@@ -210,6 +214,7 @@ export namespace OpenAI {
     url     : "https://api.openai.com/v1/responses",
     headers : (key) => ({ authorization: "Bearer " + key, "content-type": "application/json" }),
     body    : OpenAI.body,
+    marks   : (ask) => BREAKS - (AskAI.tail(ask) ? 1 : 0),
     start   : (ask) => ({ res: null, error: null, use: { input: 0, write: 0, read: 0, speed: ask.speed } }),
     read    : OpenAI.read,
     begun   : (ev) => ev.type === "response.output_item.added",

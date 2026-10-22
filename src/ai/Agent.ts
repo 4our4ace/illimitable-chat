@@ -105,6 +105,7 @@ export type Wire<S> = {
   heard?  : (res: Response) => void;
   headers : (key: string, ask: Ask) => Record<string, string>;
   body    : (ask: Ask, items: Item[], tools: Tool[], max: number) => unknown;
+  marks   : (ask: Ask) => number;
   start   : (ask: Ask) => S;
   read    : (st: S, ev: any, on: Emit) => boolean;
   begun   : (ev: any) => boolean;
@@ -202,7 +203,7 @@ export namespace Agent {
       return;
     }
     const tools = ask.from?.tools ?? (await Agent.server(run));
-    const parts = ask.blocks.filter((b) => b.text !== "");
+    const parts = AskAI.marks(ask.blocks.filter((b) => b.text !== ""), wire.marks(ask));
     const items: Item[] = [...(ask.from?.items ?? []), { $: "User", parts, imgs: ask.imgs ?? [] }];
     let steps = 0;
     while (!signal.aborted) {

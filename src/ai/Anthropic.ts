@@ -2,9 +2,10 @@
 // =========
 // The wire of claude-api (Agent.ts): the Messages API, streamed, with
 // adaptive thinking summarized and fast as `speed`. Outputs go back
-// whole, items of one role joined. A marked block gets cache_control, a
-// marked end (AskAI.tail) the top-level one too (which Anthropic counts
-// apart: a request takes four in all), and so does the system prompt:
+// whole, items of one role joined. A marked block gets cache_control (the
+// latest the request has room for), a marked end (AskAI.tail) the
+// top-level one too (a request takes BREAKS in all), and so does the
+// system prompt:
 // what every call shares (tools, system) stays cached whatever its view
 // does, so a view written anew writes only itself. A stream builds blocks
 // from pieces; tool_use and end_turn end a step, pause_turn asks again,
@@ -33,6 +34,10 @@ type State = {
 // =========
 
 const MARK  = { type: "ephemeral" };
+
+// the cache breakpoints a request takes: the system prompt's, the
+// top-level's (a marked end), the rest its blocks'
+const BREAKS = 4;
 const WEB   = { type: "web_search_20260318", name: "web_search" };
 const FAST  = "fast-mode-2026-02-01";
 
@@ -291,6 +296,7 @@ export namespace Anthropic {
     url     : "https://api.anthropic.com/v1/messages",
     headers : Anthropic.headers,
     body    : Anthropic.body,
+    marks   : (ask) => BREAKS - 1 - (AskAI.tail(ask) ? 1 : 0),
     start   : () => ({ blocks: [], json: [], stop: "", why: null, use: { input: 0, write: 0, read: 0, speed: "slow" }, error: null }),
     read    : Anthropic.read,
     begun   : (ev) => ev.type === "message_start",

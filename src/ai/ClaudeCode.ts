@@ -11,9 +11,9 @@
 // asked of the user at illi's screen (Tools.approve), and illi's prompt after
 // Claude Code's (from a file, so no argument limit); one without (a summary, a goal check) runs with none
 // of Claude Code's either, nor its MCP servers, commands or hooks. The
-// blocks go as one user message, each marked one but the last cached
-// for an hour (MARK: else a call re-writes the whole view to the cache,
-// though only its end changed), a message sent mid-run as another
+// blocks go as one user message, the last marked one before the last
+// cached for an hour (MARK: else a call re-writes the whole view to the
+// cache, though only its end changed), a message sent mid-run as another
 // (taken as Claude Code echoes it); the input ends at the first result,
 // so Claude Code ends once all it read is done, and a message sent after
 // is left. Its stream: the API's own events shown live (Anthropic.read),
@@ -62,9 +62,11 @@ type Run = {
 const OURS = "mcp__illi__";
 
 // a marked block's cache entry: an hour, as Claude Code's own are (one
-// of five minutes may not follow theirs); the last block Claude Code
-// marks itself, so a request holds its four marks at most
+// of five minutes may not follow theirs); one of a call's blocks, its
+// last marked (Claude Code marks the last block itself, and its own
+// prompt: a request holds its four marks at most)
 const MARK = { type: "ephemeral", ttl: "1h" };
+const MARKS = 1;
 
 // how long one call to illi's tools may take (ms): a subagent's work, a
 // question the user answers late. Claude Code's own limit for an HTTP
@@ -199,9 +201,11 @@ export namespace ClaudeCode {
   }
 
   // a user message as Claude Code reads it: its blocks' texts (none
-  // empty), each marked one but the last cached (MARK), then its images
+  // empty), the last marked one before the last cached (MARK, MARKS),
+  // then its images
   export function user(blocks: Block[], imgs: Img[]): unknown {
-    const texts = blocks.filter((b) => b.text !== "");
+    const all = blocks.filter((b) => b.text !== "");
+    const texts = [...AskAI.marks(all.slice(0, -1), MARKS), ...all.slice(-1)];
     const content = texts.map((b, k) => ({ type: "text", text: b.text, ...(b.mark && k < texts.length - 1 ? { cache_control: MARK } : {}) }));
     return { type: "user", message: { role: "user", content: [...content, ...imgs.map(Anthropic.image)] } };
   }
