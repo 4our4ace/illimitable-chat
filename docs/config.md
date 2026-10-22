@@ -53,13 +53,17 @@ Your chats
 
 Each project has its own chat: a git repo's, by its top folder (a copy
 elsewhere, or the repo moved, is another project), and home, for illi
-started outside any repo. They are all in one SQLite file,
-`~/.illi/chat/memory.sqlite`, every message kept: the messages, their
-summaries, the images, the agents' logs and each project's to-do list.
-A crash never leaves half a write. Back it up: copy the file while illi
-is closed, or export the profile (`/profile`, Ctrl+E), which copies the
-chats whole while illi runs. `/projects` lists them and forgets one: its
-messages and images are overwritten on disk, not just unlinked.
+started outside any repo. Each project's is one SQLite file in
+`~/.illi/chat/projects/`, named after it (`app-k3f9x2.sqlite`,
+`home.sqlite`), every message kept: the messages, their summaries, the
+images, the agents' logs and the project's to-do list. A crash never
+leaves half a write. Back them up: copy the folder while illi is closed,
+or export the profile (`/profile`, Ctrl+E), which copies the chats whole
+while illi runs. `/projects` lists them and forgets one: its file is
+deleted, all of it at once. An older illi kept every project in one
+file, `~/.illi/chat/memory.sqlite`; the first start moves each out to
+its own ([Storage](storage.md#moving-from-the-one-file)) and leaves
+that file as a small stub, which an older illi refuses: leave it be.
 
 A project's chat runs in one illi. Started in a second terminal in the
 same project, illi joins it as another screen: the same chat, either
@@ -90,3 +94,18 @@ Troubleshooting
   (or "it doesn't answer"): the illi there can't take a second screen,
   as after an update. Quit illi there (Ctrl+D), then start it here
   again.
+- "chat: the chats move to a file per project once, but another illi
+  has them open": an illi from before the update still runs, in some
+  terminal, in any project. Quit it, then start illi again.
+- "chat: another illi is still moving the chats to a file per project":
+  the first start after the update, in another terminal, is still
+  moving a big chat folder. Start illi again once it's done.
+- "chat: memory.sqlite couldn't move to a file per project": the older
+  illi's file is damaged, or the disk is full; the rest of the line says
+  which. Nothing was dropped: fix that, then start illi again.
+- "chat: <name>.sqlite won't open": that project's file in
+  `~/.illi/chat/projects/` is damaged or isn't illi's. Move it away (the
+  project then starts fresh), or restore it from a backup.
+- "chat: <name>.sqlite is of a newer illi": a newer illi wrote that
+  file (another install, or a profile imported from one). Update illi
+  to open it.

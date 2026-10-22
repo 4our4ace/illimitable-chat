@@ -27,7 +27,7 @@
 // (AskAI.ts); few lines, as those past it are read anew (a compaction's view
 // ends at its node, then its task, both unmarked).
 //
-// Kept in one SQLite file, memory.sqlite (Store.ts): the messages, each
+// Kept in the project's SQLite file (Store.ts): the messages, each
 // with the folder illi ran in, the nodes, the agents' logs, and the state
 // (the views, the chat's pick, goal and suggested reply...), written
 // over. A message's pages are logged in one write. Memory holds only the
@@ -226,10 +226,10 @@ export namespace Memory {
     view.batch = kept?.batch ?? false;
   }
 
-  // another chat of the same file, to read (zoom, date, images, an
-  // agent's log): no view, nothing built, saved or stopped
-  export function glance(mem: Memory, project: number, chat: number): Memory {
-    const store = Store.as(mem.store, project, chat);
+  // another project's chat, its file open (Store.visit), to read (zoom,
+  // date, images, an agent's log): no view, nothing built, saved or
+  // stopped
+  export function glance(mem: Memory, store: Store): Memory {
     return {
       ...mem, store, count: Store.count(store), nodes: new Map(), agents: new Map(), logs: new Map(), ready: [], busy: new Set(), calls: new Map(), hold: true, done: true, wait: new Set(),
       view: { parts: [], size: 0, batch: false, high: LINES }, seen: { parts: [], size: 0, batch: false, high: SEEN },

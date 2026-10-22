@@ -61,8 +61,9 @@ Export and import
   log.
 - It strips config.json and mcp.json of secrets: by key name, or shaped
   like a known key or token.
-- The rest goes as it is: the chat, agents, commands, skills, theme.json
-  and RULES.md.
+- The chat's SQLite files go as snapshots SQLite takes, whole even while
+  illi writes to them. The rest goes as it is: agents, commands, skills,
+  theme.json and RULES.md.
 - An import is treated as untrusted: its config's `after`, `rules`,
   `login`, `mcp` and `theme` are dropped and its MCP servers turned off.
 - Its agents, commands, skills, RULES.md and chat come in as they are, at

@@ -14,8 +14,8 @@ Development
     test/          tests across modules; each module's own sit beside it
     vendor/        cellsmith's markdown parser and diagram engine
 
-Each file starts with a comment on its design; the chat's SQLite file
-is described end to end in [storage.md](storage.md). After `bun install`:
+Each file starts with a comment on its design; the chat's SQLite files
+are described end to end in [storage.md](storage.md). After `bun install`:
 
     bun run test     the tests
     bun run check    the type check (unused code fails it too)
