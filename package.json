@@ -7,7 +7,7 @@
     "start": "bun src/main.ts",
     "test": "ILLI_VENDORS=claude-api ILLI_PICK=claude-api:sonnet-5.5:medium:slow ILLI_COMPACTOR=claude-api:haiku-5.5:high:slow ILLI_JOBS=64 bun test --isolate",
     "check": "tsc -p .",
-    "build": "bun build --compile --minify src/main.ts --outfile illi"
+    "build": "bun build --compile --minify src/main.ts src/chat/Seeker.ts --outfile illi"
   },
   "devDependencies": {
     "@types/bun": "1.3.14",
