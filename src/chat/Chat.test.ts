@@ -14,7 +14,10 @@
 // a save that fails is told, never thrown (a goal met still ends as
 // met). The suggested reply stays as a message of the user's own goes
 // (to send too) and as the chat closes (for the next start); sent, or a
-// turn answered, it goes.
+// turn answered, it goes. /compact asks the chat's model for a recap in
+// the turn's place, on its cache, and the agent's view starts at it, the
+// screen as it was; what is logged meanwhile comes after it; failed or
+// stopped, the chat is as it was, and a quit resumes nothing.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -119,7 +122,7 @@ test("one process at a time holds a project's chat, even many starting at once; 
   fs.rmSync(repo, { recursive: true, force: true });
 }, 20000);
 
-test("/compact folds all but the last two exchanges for the agent, the screen still showing them; again, nothing to fold", async () => {
+test("/compact: illi's recap, asked once on the turn's cache, starts the agent's view; the screen keeps what it showed; what's logged meanwhile comes after it (a main agent switch's note too), a message refused", async () => {
   await until(() => !chat.busy);
   const mem = chat.mem;
   const say = (kind: "user" | "illi" | "tool" | "echo", text: string) => Memory.push(mem, [{ kind, text }]);
@@ -129,17 +132,99 @@ test("/compact folds all but the last two exchanges for the agent, the screen st
     say("echo", "a.txt b.txt");
     say("illi", "answer " + k);
   }
-  const second = mem.count - 8;
   const shown = mem.show;
+  const before = mem.count;
   expect(View.view_act(View.view_new(), { $: "Send", text: "/compact" })).toEqual([{ $: "compact" }]);
-  expect(Chat.compact(chat)).toEqual({});
-  expect(mem.cut).toBe(second);
-  expect(Memory.message(mem, second)!.text).toBe("question 2");
-  expect(mem.show).toBe(shown);
-  expect(chat.eye.from).toBe(shown);
-  expect(Memory.message(mem, mem.count - 1)!.kind).toBe("note");
-  expect(Chat.compact(chat).error).toContain("Nothing to summarize");
-  expect(Memory.load(mem.dir, () => ({}) as any, HERE).show).toBe(shown);
+  expect(View.view_act(View.view_new(), { $: "Send", text: "/compact  keep the auth details " })).toEqual([{ $: "compact", focus: "keep the auth details" }]);
+  const ask = AskAI.ask;
+  let asked: any = null;
+  let go = () => {};
+  const held = new Promise<void>((ok) => (go = ok));
+  AskAI.ask = (a, on) => {
+    asked = a;
+    const [call, feed] = AskAI.tie(on, () => {}, () => {});
+    held.then(() => {
+      feed.on({ $: "Delta", kind: "illi", text: "## Objective" });
+      feed.end({ ok: true, text: "## Objective\n- answer the questions\n", left: [] });
+    });
+    return call;
+  };
+  try {
+    const tick = Chat.say(chat, [], Buffer.from("same tick"));
+    expect(Chat.compact(chat, "keep the auth details")).toEqual({});
+    expect([chat.busy, Chat.waits(chat), Chat.running(chat)]).toEqual([true, View.COMPACTING, []]);
+    expect((await tick).error).toContain("writing its recap");
+    expect((await Chat.say(chat, [], Buffer.from("too soon"))).error).toContain("writing its recap");
+    expect(Chat.compact(chat, "").error).toContain("at work");
+    Chat.note(chat, "a note meanwhile");
+    let logged = false;
+    Chat.logs(chat, { name: "explorer" } as any, () => (logged = true));
+    expect(logged).toBe(true);
+    await until(() => asked !== null);
+    expect([asked.once, asked.server !== "", asked.system]).toEqual([true, true, Chat.system(chat)]);
+    const task = asked.blocks.at(-1);
+    expect([task.text.startsWith("Recap: the user ran /compact."), task.text.endsWith("keep the auth details"), task.mark]).toEqual([true, true, false]);
+    expect(asked.blocks.map((b: any) => b.text).join("")).toContain(before - 1 + "|illi: answer 3");
+    expect(mem.count).toBe(before);
+    chat.switched = true;
+    go();
+    await until(() => !chat.busy);
+  } finally {
+    AskAI.ask = ask;
+  }
+  const recap = Memory.message(mem, before)!;
+  expect([recap.kind, recap.text]).toEqual(["recap", "## Objective\n- answer the questions"]);
+  expect(chat.wait).toEqual([]);
+  expect([before + 1, before + 2].map((i) => Memory.message(mem, i)!.text)).toEqual([Chat.switch_note(chat), "a note meanwhile"]);
+  expect([mem.view.from, mem.cut, mem.show, chat.eye.from]).toEqual([before, before, shown, shown]);
+  expect(chat.live).toEqual([]);
+  expect(Memory.chat(mem, mem.cut, mem.count).map((b) => b.text).join("")).not.toContain("answer 3");
+  const again = Memory.load(mem.dir, () => ({}) as any, HERE);
+  expect([again.view.from, again.cut, again.show]).toEqual([before, before, shown]);
+  Memory.stop(again);
+});
+
+test("/compact failed or stopped leaves the chat as it was, noted; stopped, a quit resumes nothing; right after a recap, nothing to compact", async () => {
+  const mem = chat.mem;
+  const ask = AskAI.ask;
+  const was = [mem.view.from, mem.cut, mem.show];
+  const notes = () => Array.from({ length: mem.count }, (_, i) => Memory.message(mem, i)!).filter((m) => m.kind === "note").map((m) => m.text);
+  try {
+    Memory.push(mem, [{ kind: "user", text: "more" }]);
+    AskAI.ask = (_, on) => {
+      const [call, feed] = AskAI.tie(on, () => {}, () => {});
+      queueMicrotask(() => feed.end({ ok: false, text: "the AI service is busy.", left: [] }));
+      return call;
+    };
+    expect(Chat.compact(chat, "")).toEqual({});
+    await until(() => !chat.busy);
+    expect(notes().at(-1)).toBe("No compaction: the AI service is busy. The chat is as it was.");
+    let [asked, stopped] = [false, false];
+    AskAI.ask = (_, on) => {
+      const [call, feed] = AskAI.tie(on, () => {}, () => ((stopped = true), feed.end({ ok: false, text: "Stopped.", stop: "lost", left: [] })));
+      asked = true;
+      return call;
+    };
+    expect(Chat.compact(chat, "")).toEqual({});
+    expect(mem.work).toEqual([]);
+    await until(() => asked);
+    await Chat.act(chat, { $: "stop", name: View.TURN });
+    await until(() => !chat.busy);
+    expect([stopped, notes().at(-1)]).toEqual([true, "Compaction stopped; the chat is as it was."]);
+    expect([mem.view.from, mem.cut, mem.show]).toEqual(was);
+    expect(Memory.message(mem, mem.view.from)!.kind).toBe("recap");
+    AskAI.ask = (_, on) => {
+      const [call, feed] = AskAI.tie(on, () => {}, () => {});
+      queueMicrotask(() => feed.end({ ok: true, text: "## Objective\n- more", left: [] }));
+      return call;
+    };
+    expect(Chat.compact(chat, "")).toEqual({});
+    await until(() => !chat.busy);
+    Chat.note(chat, "Goal met.");
+    expect(Chat.compact(chat, "").error).toBe("Nothing to compact: nothing was said since the last /clear or /compact.");
+  } finally {
+    AskAI.ask = ask;
+  }
 });
 
 test("/clear: the agent gets nothing of the chat so far, not even its lines, and no note: the context empty, the screen too, also after a restart; the old topic's suggested reply goes; all of it still found by zoom", async () => {

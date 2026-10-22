@@ -9,7 +9,9 @@
 // (Ask.server) adds illi's over MCP, those Claude Code lacks (Tools.list
 // `lean`), allowed to run (as `-p` asks no one), its permission prompts
 // asked of the user at illi's screen (Tools.approve), and illi's prompt after
-// Claude Code's (from a file, so no argument limit); one without (a summary, a goal check) runs with none
+// Claude Code's (from a file, so no argument limit); one without (a summary, a goal check), or
+// `once` (a recap: Claude Code can't name tools it won't run, so it reads
+// none of the turn's cache), runs with none
 // of Claude Code's either, nor its MCP servers, commands or hooks. The
 // blocks go as one user message, the last marked one before the last
 // cached for an hour (MARK: else a call re-writes the whole view to the
@@ -173,12 +175,12 @@ export namespace ClaudeCode {
 
   // a call's arguments: streamed both ways, on its pick, illi's prompt
   // after Claude Code's (its file); with tools, illi's (its MCP server,
-  // the lean list, allowed; illi's ask for Claude Code's own), else none,
-  // nor Claude Code's servers, commands or hooks
+  // the lean list, allowed; illi's ask for Claude Code's own), else (or
+  // once) none, nor Claude Code's servers, commands or hooks
   export function args(ask: Ask, file: string): string[] {
     const io = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--replay-user-messages", "--no-session-persistence"];
     const pick = ["--model", ask.model, "--effort", ask.effort, "--append-system-prompt-file", file];
-    if (ask.server === "") {
+    if (ask.server === "" || ask.once) {
       return [...io, ...pick, "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--settings", JSON.stringify({ disableAllHooks: true })];
     }
     const mcp = { mcpServers: { illi: { type: "http", url: ask.server + "?lean", timeout: WAIT } } };

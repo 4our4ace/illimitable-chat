@@ -216,7 +216,8 @@ export function term_click(t: Term): void {
   }
 }
 
-// Ctrl+O: every run of work shown whole, or each one line again
+// Ctrl+O: every run of work (and recap) shown whole, or each one line
+// again
 export function term_verbose(t: Term): void {
   t.v.verbose = !t.v.verbose;
   t.ver += 1;

@@ -151,7 +151,7 @@ export namespace Compactor {
   // item. A line tagged already, or a merge's, as it is
   export function tagged(l: number, source: string, line: string): string {
     const kind = l === 0 ? /^([a-z]+): /.exec(source)?.[1] : undefined;
-    const has = /^(user|work|mind|illi|tool|echo|note):/.test(line);
+    const has = /^(user|work|mind|illi|tool|echo|note|recap):/.test(line);
     return kind === undefined || has ? line : kind + ": " + line;
   }
 

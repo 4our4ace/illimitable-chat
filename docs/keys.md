@@ -10,7 +10,7 @@ Chat
 | Key or command | Does |
 | -------------- | ---- |
 | Enter | send |
-| Esc | close a list; else clear the notes, and twice: interrupt illi (agents go on) |
+| Esc | close a list; else clear the notes, and twice: interrupt illi (a `/compact` under way too; agents go on) |
 | Ctrl+C | clear the input; on an empty one, interrupt illi (again: quit) |
 | Ctrl+D | clear the input; on an empty one, quit |
 | Tab | take the suggested reply (it stays after a message of your own, to send as well, till illi answers) |
@@ -19,14 +19,14 @@ Chat
 | `/goal <message>` | send a goal: illi goes on until it is met |
 | `/halt` | drop the goal; the turn running ends as it would |
 | `/clear` | start a new topic: the chat before is kept and looked up when needed, not sent |
-| `/compact` | summarize all but the last two exchanges, so each turn sends less; the screen keeps them |
+| `/compact [focus]` | illi writes a recap of the chat and goes on from it alone (the chat before is kept and looked up when needed, not sent); focus: what the recap should keep |
 | `/image <path>` | attach an image to the next message (or paste or drop the file) |
 | Alt+V, Ctrl+V | attach the clipboard's image (the terminal's own paste brings text) |
 | `/open #id` | open block #id and keep it open (or click it) |
 | `/close #id` | close block #id and keep it closed (or click its top edge) |
 | `/fold`, Ctrl+F | fold the chat into the fewest blocks; again: unfold |
 | Ctrl+Y | copy illi's last reply (a drag copies the text it covers, a double click a word) |
-| Ctrl+O | show or hide the work between replies: tools, thinking, agents' reports |
+| Ctrl+O | show or hide the work between replies: tools, thinking, agents' reports, and the recaps under the "Compaction" lines (a click on one line opens it alone) |
 | `/export` | save this project's memory as ./illi-memory.json |
 | `/tree` | save this project's whole memory tree as ./illi-tree.html |
 | Ctrl+L | draw the screen again |

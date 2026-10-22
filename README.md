@@ -79,11 +79,12 @@ flowchart TD
   outgrows the model's window anyway goes on by itself, more of it
   summarized.
 - **Zoom.** illi can open any line back down to the original messages.
-  `/compact` folds all but the last two exchanges, so turns get smaller
-  (the screen keeps showing them); `/clear` starts a fresh topic: the
-  chat before isn't sent at all, yet stays kept and summarized, so
-  illi finds any of it by search or zoom. `/tree` writes yours as a
-  web page into the current folder.
+  `/compact` has illi write a recap of the chat and go on from it
+  alone, as other agents compact (the screen keeps the chat, a
+  "Compaction" line across it); `/clear` starts a fresh topic. Either
+  way the chat before isn't sent at all, yet stays kept and
+  summarized, so illi finds any of it by search or zoom. `/tree`
+  writes yours as a web page into the current folder.
 - **Tools.** Shell, file edits, subagents, a to-do list, MCP servers,
   questions with options you pick in the input, your answers kept in
   the chat.

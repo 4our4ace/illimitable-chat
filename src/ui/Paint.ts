@@ -13,7 +13,8 @@
 // (Reply.ts: its code, diagrams, tables, headings, lists and quotes, and
 // buttons that copy them); thinking and a note drawn so too, in their
 // look, without buttons. A run of work (View's Act) is one dim line,
-// ▸ what was done, or ▾ over its rows behind a dim bar. An open block
+// ▸ what was done, or ▾ over its rows behind a dim bar; a recap (View's
+// Rule) so too, its line across the chat, naming it. An open block
 // framed, its bar in the frame's top edge; a call's code framed on the
 // call's fill; a file's lines (a read, a diff) framed, the file on the
 // top edge, each numbered. Control characters never reach the terminal.
@@ -48,7 +49,7 @@ export type Line = Run[];
 
 // a block in lines laid out: its first line, the line past its last, its
 // first message's id and size, whether open (the line is its bar);
-// a run of work's (act: a click opens or closes it, n 0)
+// a run of work's or a recap's (act: a click opens or closes it, n 0)
 export type Mark = { from: number; to: number; id: number; n: number; open: boolean; act?: true };
 
 // rows laid out from the last up, only as far as asked (laid_up): the
@@ -284,7 +285,7 @@ export function rows_lines(rows: View.Row[], w: number, marks: Mark[] = [], at =
       out.push([]);
     }
     const from  = at + out.length;
-    const lines = row.$ === "Box" ? box_lines(row, w, marks, from) : row.$ === "Act" ? act_lines(row, w, marks, from) : row_cached(row, w);
+    const lines = row.$ === "Box" ? box_lines(row, w, marks, from) : row.$ === "Act" || row.$ === "Rule" ? act_lines(row, w, marks, from) : row_cached(row, w);
     if (row.$ === "Sum") {
       marks.push({ from, to: from + lines.length, id: row.id, n: row.n, open: false });
     }
@@ -339,7 +340,7 @@ export function laid_up(laid: Laid, need: number, top = laid.rows.length): numbe
 // the first of rows holding block (id, n): itself, or an open block or
 // run of work it is in; -1: none
 export function rows_find(rows: View.Row[], id: number, n: number): number {
-  return rows.findIndex((r) => ((r.$ === "Sum" || r.$ === "Box") && r.id === id && r.n === n) || ((r.$ === "Box" || r.$ === "Act") && rows_find(r.rows, id, n) >= 0));
+  return rows.findIndex((r) => ((r.$ === "Sum" || r.$ === "Box") && r.id === id && r.n === n) || ((r.$ === "Box" || r.$ === "Act" || r.$ === "Rule") && rows_find(r.rows, id, n) >= 0));
 }
 
 // a row's lines, laid out once per width: a message's and a summary's rows
@@ -377,9 +378,13 @@ function canvas_shade(hex: string): string {
 }
 
 // a run of work: one dim line saying what was done (▸; a click opens
-// it), or opened (▾) over its rows, a dim bar at their left
-function act_lines(row: View.Row & { $: "Act" }, w: number, marks: Mark[], at: number): Line[] {
-  const head = runs_wrap([Run((row.open ? "▾ " : "▸ ") + text_clean(row.text), DIM)], w, false)[0];
+// it), or opened (▾) over its rows, a dim bar at their left; a recap so
+// too, its line a rule across the chat, its name in the middle
+function act_lines(row: View.Row & { $: "Act" | "Rule" }, w: number, marks: Mark[], at: number): Line[] {
+  const text = (row.open ? "▾ " : "▸ ") + text_clean(row.text);
+  const fill = Math.max(0, w - text_width(text) - 2);
+  const line = row.$ === "Rule" ? "─".repeat(fill >> 1) + " " + text + " " + "─".repeat(fill - (fill >> 1)) : text;
+  const head = runs_wrap([Run(line, DIM)], w, false)[0];
   marks.push({ from: at, to: at + 1, id: row.id, n: 0, open: row.open, act: true });
   if (!row.open) {
     return [head];
@@ -407,8 +412,8 @@ function images_lines(row: View.Row): Line[] {
   return names.map((name) => [Run("  [image " + name + "]", DIM)]);
 }
 
-// a row's own lines (an open block's and a run of work's are made by
-// rows_lines, around their rows')
+// a row's own lines (an open block's, a run of work's and a recap's are
+// made by rows_lines, around their rows')
 function row_lines(row: View.Row, w: number): Line[] {
   switch (row.$) {
     case "Sum": {
@@ -417,7 +422,8 @@ function row_lines(row: View.Row, w: number): Line[] {
       return fill_lines(sum_lines(row.id, row.n, head, text, w - 2), w - 2);
     }
     case "Box":
-    case "Act": {
+    case "Act":
+    case "Rule": {
       return [];
     }
     case "Msg": {

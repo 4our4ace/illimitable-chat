@@ -17,6 +17,8 @@ test("a turn's wait names its model", () => {
   expect(tail(v)).toEqual(["waiting for claude-opus-5-5…"]);
   View.view_hear(v, { $: "state", ...v, wait: View.SUMMARIES });
   expect(tail(v)).toEqual(["compressing earlier messages…"]);
+  View.view_hear(v, { $: "state", ...v, wait: View.COMPACTING });
+  expect(tail(v)).toEqual(["writing the recap…"]);
   View.view_hear(v, { $: "state", ...v, wait: "" });
   expect(tail(v)).toEqual([]);
 });
@@ -50,6 +52,9 @@ test("what runs, in words", () => {
   View.view_hear(v, { $: "state", ...v, agents: [] });
   View.view_hear(v, { $: "state", ...v, busy: true });
   expect(View.view_doing(v)?.tokens).toBe(0);
+  View.view_hear(v, { $: "state", ...v, wait: View.COMPACTING });
+  View.view_hear(v, { $: "delta", kind: "illi", text: "## Objective" });
+  expect(View.view_doing(v)?.verb).toBe("Compacting the chat");
 });
 
 // the work between the person's words and illi's: one Act row per run,
@@ -80,6 +85,27 @@ test("each run of work is one line saying what was done", () => {
   expect(View.view_tail(v, false).map((r) => (r.$ === "Msg" ? r.kind : r.$))).toEqual(["illi"]);
   v.verbose = true;
   expect(View.view_tail(v, false).map((r) => (r.$ === "Msg" ? r.kind : r.$))).toEqual(["mind", "illi"]);
+});
+
+// a recap (/compact): a line across the chat, "Compaction", closed or
+// open as a run of work is; its pages one line, a run of work after it
+// its own
+test("a recap is a line across the chat, its text under it once opened", () => {
+  const v    = View.view_new();
+  const rows = [
+    ...View.entry_rows(1, "illi", "Done."),
+    ...View.entry_rows(2, "recap", "## Objective\n- ship it"),
+    ...View.entry_rows(3, "recap", "## Next move\n1. tag it"),
+    ...View.entry_rows(4, "tool", 'shell {"command":"git tag"}'),
+    ...View.entry_rows(5, "user", "go on"),
+  ];
+  const acts = View.view_acts(v, rows);
+  expect(acts.map((r) => r.$)).toEqual(["Msg", "Rule", "Act", "Msg"]);
+  expect(acts[1]).toMatchObject({ $: "Rule", id: 2, text: "Compaction", open: false });
+  expect((acts[1] as any).rows.map((r: any) => r.id)).toEqual([2, 3]);
+  View.view_toggle(v, 2);
+  expect(View.view_acts(v, rows)[1]).toMatchObject({ open: true });
+  expect(View.view_acts(v, [{ $: "Sum", id: 2, n: 1, text: "recap: ship it", call: null, kind: "recap" }])[0].$).toBe("Rule");
 });
 
 // the model picker's pick: model, effort and speed sent as one change,

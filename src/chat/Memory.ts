@@ -15,10 +15,10 @@
 // bytes, a batch merges the adjacent siblings whose parent is built and most
 // due (oldest since its last message, to the view's end, in halves: detail
 // fades with age) down to half, so a view changes only at its end between
-// batches. Two, each on its own: the chat's (turns'), from the last /clear to
-// the last message (what came before is never sent, not even as lines: it is
-// found by search and zoom), and the compactions', from the first message to
-// the first not built.
+// batches. Two, each on its own: the chat's (turns'), from the last /clear
+// (or the recap of the last /compact) to the last message (what came before
+// is never sent, not even as lines: it is found by search and zoom), and the
+// compactions', from the first message to the first not built.
 // A call gets one in BLOCK-line blocks, the last whole one marked for the
 // cache, and so are the messages from the cut (recent): a wire keeps the
 // last marks its vendor takes (AskAI.marks); few lines, as those past it
@@ -54,9 +54,9 @@ export type Part = { l: number; i: number };
 
 // a view: its lines, the bytes of those built, a batch under way, the
 // bytes past which it merges to half, the first message it holds (the
-// chat's: the last /clear's, as nothing before it is sent, nor shown;
-// older ones are only the memory's, summarized on, a search or zoom
-// away; the compactions': 0)
+// chat's: the last /clear's, or the last /compact's recap, as nothing
+// before it is sent; older ones are only the memory's, summarized on, a
+// search or zoom away; the compactions': 0)
 type View = { parts: Part[]; size: number; batch: boolean; high: number; from: number };
 
 // what a compaction shares with the chat's turns: all but the blocks
@@ -78,8 +78,8 @@ type Saved = Kept & { seen?: Kept; pick: object | null; goal?: string | null; su
 // agent's profile (Custom.ts; null: illi's own); work:
 // what ran, as last saved; cut: the first message a turn's call gets
 // whole (Memory.cutoff; those before, as the view's lines), show: the
-// first the screen shows whole (at the cut, or behind it, as /compact
-// leaves it: Memory.kept; never before the view's `from`), tail: the
+// first the screen shows whole (at the cut, or before it, as /compact
+// leaves it: the screen keeps what it showed above the recap), tail: the
 // bytes of those from the cut, as last counted (Memory.fill); nodes: the
 // texts of the views' nodes
 // built and of those above them, by slot; agents: their logs' lengths,
@@ -181,10 +181,10 @@ export namespace Memory {
     mem.suggest = typeof saved?.suggest === "string" ? saved.suggest : "";
     mem.agent = typeof saved?.agent === "string" ? saved.agent : null;
     mem.work = Array.isArray(saved?.work) ? saved.work : [];
-    // from <= show <= cut <= count, whatever was saved
+    // from <= cut <= count, show <= cut, whatever was saved
     mem.view.from = Math.min(index(saved?.top, 0), mem.count);
     mem.cut = Math.max(Math.min(index(saved?.cut, 0), mem.count), mem.view.from);
-    mem.show = Math.max(Math.min(index(saved?.show, mem.cut), mem.cut), mem.view.from);
+    mem.show = Math.min(index(saved?.show, mem.cut), mem.cut);
     Memory.open(mem, mem.view, kept(saved));
     Memory.open(mem, mem.seen, kept(saved?.seen) ?? kept(saved));
     return mem;
@@ -295,7 +295,8 @@ export namespace Memory {
   // zoom away. Never inside one of the view's lines (moved back to its
   // start). The view merges past half of `high` (a model's smaller window
   // makes it smaller); the messages get at least a quarter. The screen
-  // folds with it (show)
+  // folds with it (show), one a /compact left behind the view's start
+  // too: what it kept above the recap goes with the cut's first move
   export function cutoff(mem: Memory, high: number): number {
     const was  = mem.cut;
     const room = () => Math.max(high / 4, high - Memory.before(mem.view.parts, mem.cut).reduce((n, part) => n + Memory.size(mem, part), 0));
@@ -318,23 +319,6 @@ export namespace Memory {
   // the run, as a number: the latest message the user sent (-1: none)
   export function run(mem: Memory): number {
     return Store.last(mem.store, "user", mem.count);
-  }
-
-  // where /compact has the chat go whole from (its rule of thumb): the
-  // user's second-to-last message, the last two exchanges with their tool
-  // steps; past `most` bytes, the user's last; past it too, the latest
-  // messages that fit. A user's message is counted from its first page
-  export function kept(mem: Memory, most: number): number {
-    const users: number[] = [];
-    for (let i = mem.count - 1; i >= mem.cut && users.length < 2; i--) {
-      if (Memory.message(mem, i)!.kind === "user") {
-        while (i > 0 && Memory.message(mem, i - 1)!.more) {
-          i -= 1;
-        }
-        users.unshift(i);
-      }
-    }
-    return users.find((from) => Memory.whole(mem, from, most, Infinity) === from) ?? Memory.whole(mem, mem.cut, most, Infinity);
   }
 
   // the bytes of the chat the next turn sends (none of its new messages
@@ -506,7 +490,8 @@ export namespace Memory {
   }
 
   // the first message the chat's view sends not built, else the count:
-  // one before its `from` (a /clear) is never sent, so never waited on
+  // one before its `from` (a /clear, a recap) is never sent, so never
+  // waited on
   export function due(mem: Memory): number {
     return (mem.ready[0] ?? []).find((i) => i >= mem.view.from) ?? mem.count;
   }

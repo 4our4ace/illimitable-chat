@@ -3,11 +3,12 @@
 // `bun test request.test.ts`. What a turn's request holds, as the vendor
 // gets it: the real Chat, Memory, AskAI and Agent loop against a fake
 // Anthropic that answers every call and keeps each request's body (no
-// network but illi's own tools server, a fake key). A chat that fits goes whole; /compact sends all
-// but the last exchanges as the view's lines, each message in one place
-// only; /clear sends nothing of the chat before it, not even a line, also
-// once the chat is opened again; no request marks more than the four
-// cache breakpoints Anthropic takes.
+// network but illi's own tools server, a fake key). A chat that fits goes whole; /compact asks
+// for a recap on the turn's prefix (its system prompt, tools and blocks,
+// so on its cache), then a turn sends the recap and what follows, nothing
+// older, not even a line; /clear sends nothing of the chat before it,
+// also once the chat is opened again; no request marks more than the
+// four cache breakpoints Anthropic takes.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -28,6 +29,9 @@ const { Memory } = await import("../src/chat/Memory.ts");
 // asked), one fact among them
 const OLD = Array.from({ length: 24 }, (_, k) => ({ kind: (k % 2 === 0 ? "user" : "illi") as "user" | "illi", text: "old " + k + (k === 6 ? ": the codename is PELICAN" : "") }));
 
+// the recap the model writes at /compact
+const RECAP = "## Objective\n- keep the codename in mind";
+
 // each request's body, as sent
 const bodies: any[] = [];
 const real = globalThis.fetch;
@@ -41,7 +45,7 @@ globalThis.fetch = (async (url: string, init: any) => {
   const body = JSON.parse(init.body);
   bodies.push(body);
   const task = body.messages[0].content.at(-1).text as string;
-  return answer(task.startsWith("Compaction:") ? "line for " + task.split("\n")[0] : "OK");
+  return answer(task.startsWith("Compaction:") ? "line for " + task.split("\n")[0] : task.startsWith("Recap:") ? RECAP : "OK");
 }) as any;
 
 afterAll(() => {
@@ -87,7 +91,12 @@ async function turn(chat: any, text: string): Promise<{ lines: number[]; ends: n
   return { lines: ids(view, /^(\d+)\+\d+\|/gm), ends, whole: ids(recent, /^(\d+)\|/gm), text: all, marks: JSON.stringify(body).split('"cache_control"').length - 1 };
 }
 
-test("a chat that fits goes whole; /compact sends all but the last exchanges as lines; /clear sends nothing before it, opened again too", async () => {
+// a request's blocks' texts and tools, as a cache keys them (no marks)
+function prefix(body: any): { system: string; tools: string[]; texts: string[] } {
+  return { system: JSON.stringify(body.system.map((b: any) => b.text)), tools: (body.tools ?? []).map((t: any) => t.name), texts: body.messages[0].content.map((c: any) => c.text) };
+}
+
+test("a chat that fits goes whole; /compact's recap goes on the turn's prefix, then starts the turns' chat; /clear sends nothing before it, opened again too", async () => {
   let chat = Chat.open(process.cwd());
   const mem = chat.mem;
   Memory.push(mem, OLD);
@@ -98,13 +107,23 @@ test("a chat that fits goes whole; /compact sends all but the last exchanges as 
   expect(fits.whole).toEqual(Array.from({ length: OLD.length + 1 }, (_, k) => k));
   expect(fits.text).toContain("PELICAN");
 
-  expect(Chat.compact(chat)).toEqual({});
-  const cut = mem.cut;
+  const first = bodies.findLast((b) => b.messages[0].content.at(-1).text.endsWith("first question"))!;
+  expect(Chat.compact(chat, "")).toEqual({});
+  await until(() => !chat.busy);
+  const asked = bodies.find((b) => b.messages[0].content.at(-1).text.startsWith("Recap:"))!;
+  const [was, now] = [prefix(first), prefix(asked)];
+  const upto = first.messages[0].content.findLastIndex((c: any, k: number, all: any[]) => c.cache_control && k < all.length - 1);
+  expect(upto).toBeGreaterThan(0);
+  expect([now.system, now.tools, now.texts.slice(0, upto + 1)]).toEqual([was.system, was.tools, was.texts.slice(0, upto + 1)]);
+  expect(now.tools.length).toBeGreaterThan(0);
+  const recap = mem.cut;
+  expect([Memory.message(mem, recap)!.kind, Memory.message(mem, recap)!.text, mem.view.from]).toEqual(["recap", RECAP, recap]);
   const compact = await turn(chat, "second question");
-  expect(Memory.message(mem, cut)!.text).toBe("old 22");
-  expect(compact.lines.length).toBeGreaterThan(0);
-  expect(compact.whole[0]).toBe(cut);
-  expect(Math.max(...compact.ends)).toBeLessThanOrEqual(cut);
+  expect([compact.lines, compact.whole[0]]).toEqual([[], recap]);
+  expect(compact.text).toContain("recap: " + RECAP);
+  for (const gone of ["PELICAN", "old 22", "first question"]) {
+    expect(compact.text).not.toContain(gone);
+  }
 
   const before = mem.count;
   expect(Chat.clear(chat)).toEqual({});

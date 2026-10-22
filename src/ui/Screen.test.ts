@@ -560,6 +560,18 @@ test("each block's lines are marked: a summary's all, an open one's top edge", (
   expect(lines[marks[2].from].map((r) => r.x).join("")).toContain("/open #4+2");
 });
 
+test("a recap's line spans the width, its name in the middle; a click on it toggles it, its text under a bar once open", () => {
+  const msg = View.entry_rows(7, "recap", "## Objective")[0];
+  for (const open of [false, true]) {
+    const marks: Paint.Mark[] = [];
+    const lines = Paint.rows_lines([{ $: "Rule", id: 7, text: "Compaction", open, rows: [msg] }], 40, marks);
+    const head = lines[0].map((r) => r.x).join("");
+    expect([Paint.text_width(head), head]).toEqual([40, "─".repeat(13) + (open ? " ▾ " : " ▸ ") + "Compaction " + "─".repeat(13)]);
+    expect(marks[0]).toMatchObject({ id: 7, act: true, open });
+    expect(lines.length > 1).toBe(open);
+  }
+});
+
 test("a line cut at columns: a wide character either cuts taken whole, a button's runs still copying", () => {
   const copy = () => "x";
   const line: Paint.Line = [Paint.Run("ab"), Paint.Run("界c"), { ...Paint.Run("[ ⧉ go ]"), copy }];

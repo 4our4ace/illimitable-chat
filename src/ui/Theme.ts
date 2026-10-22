@@ -67,6 +67,7 @@ export const KIND: Record<Kind, Look> = {
   echo : { dim: true, it: false },
   note : { dim: true, it: true },
   mind : { dim: true, it: true },
+  recap: { dim: false, it: false },
 };
 
 // the kinds filled (the machine's); framed (the user's, an agent's); the
