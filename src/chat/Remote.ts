@@ -1,7 +1,7 @@
 // Remote
 // ======
 // Another terminal on a project's running chat. The illi that holds the
-// project (Chat.lock) serves views on its lock's socket too: another illi
+// project (Lock.take) serves views on its lock's socket too: another illi
 // started in that project joins as one more view, the screens alike, each
 // able to do what the other can. The pipe is Chat.link's, in JSON lines
 // over the socket: the chat's messages one way, the person's acts the

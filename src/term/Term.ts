@@ -33,6 +33,7 @@
 import * as fs from "node:fs";
 import { term_paste } from "./Attach.ts";
 import { Chat } from "../chat/Chat.ts";
+import { Lock } from "../chat/Lock.ts";
 import { ChatGPT } from "../ai/ChatGPT.ts";
 import { term_models } from "./Commands.ts";
 import * as config from "../config/Config.ts";
@@ -328,7 +329,7 @@ export function term_primaries(t: Term): void {
 // terminal's (Remote.ts; it gone, term_gone)
 function term_connect(t: Term): void {
   const hear = (msg: View.Server) => term_hear(t, msg);
-  const file = Chat.socket(Projects.lock(Projects.place(process.cwd()).path));
+  const file = Lock.socket(Projects.lock(Projects.place(process.cwd()).path));
   View.link_open(t.v, t.chat !== null ? Chat.link(t.chat, hear) : Remote.link(file, hear, (why, heard) => term_gone(t, why, heard)));
 }
 
@@ -511,7 +512,7 @@ function term_trouble(t: Term, told: Set<string>): void {
 export async function term_start(): Promise<void> {
   process.on("uncaughtException", term_crash);
   process.on("unhandledRejection", term_crash);
-  const holds = await Chat.lock(process.cwd(), Remote.serve).catch((err) => {
+  const holds = await Lock.take(process.cwd(), Remote.serve).catch((err) => {
     console.error("illi: " + err.message);
     process.exit(1);
   });

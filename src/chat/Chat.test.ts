@@ -25,6 +25,7 @@ process.env.ILLI_DIR = DIR;
 
 const { AskAI } = await import("../ai/AskAI.ts");
 const { Chat } = await import("./Chat.ts");
+const { Lock } = await import("./Lock.ts");
 const { Memory } = await import("./Memory.ts");
 const { Projects } = await import("./Projects.ts");
 
@@ -88,10 +89,10 @@ test("a turn's wait names the model it runs on, not one picked since", async () 
 });
 
 test("one process at a time holds a project's chat, even many starting at once; its lock only its user's to reach, let go however a process ends; those held elsewhere counted", async () => {
-  expect(await Chat.lock()).toBe(true);
+  expect(await Lock.take()).toBe(true);
   expect(fs.statSync(DIR + "/locks").mode & 0o777).toBe(0o700);
   const env = { ...process.env, ILLI_DIR: DIR };
-  const code = (after = "", at = 0) => `const { Chat } = await import(${JSON.stringify(import.meta.dir + "/Chat.ts")}); while (Date.now() < ${at}) {} console.log(await Chat.lock()); ${after}`;
+  const code = (after = "", at = 0) => `const { Lock } = await import(${JSON.stringify(import.meta.dir + "/Lock.ts")}); while (Date.now() < ${at}) {} console.log(await Lock.take()); ${after}`;
   const proc = Bun.spawn([process.execPath, "-e", code()], { env, stdout: "pipe" });
   expect(await new Response(proc.stdout).text()).toBe("false\n");
   const repo = fs.realpathSync(fs.mkdtempSync(os.tmpdir() + "/illi-chat-repo-"));
@@ -103,15 +104,15 @@ test("one process at a time holds a project's chat, even many starting at once; 
   expect(said.sort()).toEqual(["false\n", "false\n", "false\n", "false\n", "false\n", "true\n"]);
   const gone = Bun.spawn([process.execPath, "-e", code("process.exit(0);")], { cwd: repo, env, stdout: "pipe" });
   expect(await new Response(gone.stdout).text()).toBe("true\n");
-  expect(Chat.others(DIR)).toBe(0);
+  expect(Lock.others(DIR)).toBe(0);
   const open = Bun.spawn([process.execPath, "-e", code("await Bun.sleep(60000);")], { cwd: repo, env, stdout: "pipe" });
   const reader = open.stdout.getReader();
   expect(new TextDecoder().decode((await reader.read()).value)).toBe("true\n");
-  expect([Chat.others(DIR), await Chat.claim(name)]).toEqual([1, null]);
+  expect([Lock.others(DIR), await Lock.claim(name)]).toEqual([1, null]);
   open.kill("SIGKILL");
   await open.exited;
-  expect(Chat.others(DIR)).toBe(0);
-  const after = await Chat.claim(name);
+  expect(Lock.others(DIR)).toBe(0);
+  const after = await Lock.claim(name);
   expect(after).not.toBeNull();
   after!.stop();
   fs.rmSync(repo, { recursive: true, force: true });

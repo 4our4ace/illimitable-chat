@@ -11,7 +11,7 @@
 // first). This one, forgotten, starts anew: illi runs again.
 
 import * as fs from "node:fs";
-import { Chat } from "../chat/Chat.ts";
+import { Lock } from "../chat/Lock.ts";
 import { term_chooser } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Export } from "../chat/Export.ts";
@@ -132,7 +132,7 @@ function project_pictures(t: Term, p: Project): number | null {
 // `step` done holding a project's lock, so no illi opens it meanwhile;
 // false: one has it open, nothing done
 async function project_held(p: Project, step: () => void): Promise<boolean> {
-  const lock = await Chat.claim(Projects.lock(p.path));
+  const lock = await Lock.claim(Projects.lock(p.path));
   if (lock === null) {
     return false;
   }
