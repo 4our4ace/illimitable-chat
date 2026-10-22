@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/logo-on-dark.svg">
-    <img src="assets/logo.svg" alt="illimitable's logo: an infinity sign with an i at its crossing and a chat bubble's tail" width="120">
+    <img src="assets/logo.svg" alt="illimitable's logo: an infinity sign with an i at its crossing" width="120">
   </picture>
 </p>
 
