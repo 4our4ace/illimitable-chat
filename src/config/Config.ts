@@ -397,9 +397,11 @@ function config_shortcuts(value: unknown): Record<string, string> | null {
   return all;
 }
 
-// the user's own shortcuts (as set: a variable's, else config.json's)
+// the user's own shortcuts (as set: a variable's, else config.json's),
+// each key in lower case, as config_shortcuts reads them
 function config_shortcuts_mine(): Record<string, string> {
-  return (config_object(config_raw("shortcuts")) ?? {}) as Record<string, string>;
+  const mine = (config_object(config_raw("shortcuts")) ?? {}) as Record<string, string>;
+  return Object.fromEntries(Object.entries(mine).map(([k, run]) => [k.toLowerCase(), run]));
 }
 
 // whether the user set a key after the leader (to what illi's isn't, or

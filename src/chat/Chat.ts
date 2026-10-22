@@ -13,7 +13,8 @@
 // primary agent of the user's, Custom.ts: Shift+Tab, /agent; none: illi's own). A quit cuts what runs;
 // the next start resumes it (Chat.resume), told so. A turn that ends
 // answered asks for the user's likely next message, on the cache
-// (Chat.suggest), shown till a message or the next turn.
+// (Chat.suggest), shown till a message or the next turn, a restart
+// between kept (it is saved with the chat's state).
 
 import { Database } from "bun:sqlite";
 import * as fs from "node:fs";
@@ -619,7 +620,7 @@ export namespace Chat {
         s.call = null;
         s.text = end.ok ? Chat.line(end.text) : "";
         chat.mem.suggest = s.text;
-        Memory.save(chat.mem);
+        Chat.save(chat);
         Chat.change(chat);
       }
     });
@@ -640,7 +641,7 @@ export namespace Chat {
     chat.suggest.text = "";
     if (chat.mem.suggest !== "") {
       chat.mem.suggest = "";
-      Memory.save(chat.mem);
+      Chat.save(chat);
     }
   }
 
@@ -929,14 +930,20 @@ export namespace Chat {
     const work = Chat.running(chat);
     if (String(work) !== String(chat.mem.work)) {
       chat.mem.work = work;
-      try {
-        Memory.save(chat.mem);
-      } catch (err: any) {
-        console.error("illi: saving the chat: " + err.message);
-        Chat.all(chat, { $: "note", text: "Can't save the chat: " + Chat.unsaved(err) + " (" + chat.mem.dir + ")." });
-      }
+      Chat.save(chat);
     }
     Chat.all(chat, Chat.state(chat));
+  }
+
+  // the chat's state saved; a save that fails is told to the views, never
+  // thrown (nothing stops for it: what ran, the suggested reply)
+  export function save(chat: Chat): void {
+    try {
+      Memory.save(chat.mem);
+    } catch (err: any) {
+      console.error("illi: saving the chat: " + err.message);
+      Chat.all(chat, { $: "note", text: "Can't save the chat: " + Chat.unsaved(err) + " (" + chat.mem.dir + ")." });
+    }
   }
 
   // why a file won't write, in plain words (its own, or SQLite's)
@@ -1083,8 +1090,9 @@ export namespace Chat {
   // so far folds into the view's lines (each a zoom away) and the next
   // turn sends none whole; noted for the agent (the note itself whole);
   // the screen starts anew from the note (the memory's `top`: what came
-  // before is only the memory's, a zoom away for the agent); the views
-  // told the context it now holds. Not while a turn runs
+  // before is only the memory's, a zoom away for the agent); the old
+  // topic's suggested reply gone; the views told the context it now
+  // holds. Not while a turn runs
   export function clear(chat: Chat): Answer {
     const mem = chat.mem;
     if (chat.busy) {
@@ -1096,6 +1104,7 @@ export namespace Chat {
     mem.cut = mem.show = mem.top = mem.count;
     Memory.fit(mem);
     Memory.save(mem);
+    Chat.unsuggest(chat);
     Chat.note(chat, "New session, for a new topic. illi still remembers the chat before this note: it is in the summaries, and a zoom brings back any part of it.");
     chat.eye = Chat.eye(mem, mem.cut);
     chat.socks.forEach((sock) => Chat.show(chat, sock));

@@ -29,10 +29,10 @@
 //
 // Kept in one SQLite file, memory.sqlite (Store.ts): the messages, each
 // with the folder illi ran in, the nodes, the agents' logs, and the state
-// (the views, the chat's pick, goal and suggested reply...), written over. A message's
-// pages are logged in one write. Memory holds only the view's nodes and
-// those built above them; any other is read from the file, and so are
-// images, by their hash.
+// (the views, the chat's pick, goal and suggested reply...), written
+// over. A message's pages are logged in one write. Memory holds only the
+// view's nodes and those built above them; any other is read from the
+// file, and so are images, by their hash.
 
 import { AskAI, type Ask, type Block, type Call, type Img, type Kind, type Say } from "../ai/AskAI.ts";
 import { clip_page, clip_pages } from "../tools/Clip.ts";
@@ -72,8 +72,9 @@ type Saved = Kept & { seen?: Kept; pick: object | null; goal?: string | null; su
 // each message ("": unknown); count: the pages logged; pick: the chat's,
 // as last set;
 // goal: the user's (/goal; null: none), till met or halted (Chat.ts);
-// suggest: the suggested reply shown as the last turn ended (Chat.suggest;
-// "": none), so a start shows it again; agent: the main agent's profile (Custom.ts; null: illi's own); work:
+// suggest: the suggested reply shown as the last turn ended
+// (Chat.suggest; "": none), so a start shows it again; agent: the main
+// agent's profile (Custom.ts; null: illi's own); work:
 // what ran, as last saved; cut: the first message a turn's call gets
 // whole (Memory.cutoff; those before, as the view's lines), show: the
 // first the screen shows whole (at the cut, or behind it, as /compact

@@ -138,9 +138,10 @@ test("/compact folds all but the last two exchanges for the agent, the screen st
   expect(Memory.load(mem.dir, () => ({}) as any, HERE).show).toBe(shown);
 });
 
-test("/clear: the agent gets the chat so far as lines, and the screen starts anew from its note, also after a restart", async () => {
+test("/clear: the agent gets the chat so far as lines, and the screen starts anew from its note, also after a restart; the old topic's suggested reply goes", async () => {
   const mem = chat.mem;
   const before = mem.count;
+  chat.suggest.text = mem.suggest = "Commit it";
   const told: any[] = [];
   const sock = { data: { seen: new Set<string>() }, send: (text: string) => told.push(JSON.parse(text)), close: () => {} };
   chat.socks.add(sock);
@@ -153,6 +154,7 @@ test("/clear: the agent gets the chat so far as lines, and the screen starts ane
   expect(chat.eye.from).toBe(before);
   expect(Memory.message(mem, before)!.kind).toBe("note");
   expect(Memory.load(mem.dir, () => ({}) as any, HERE).top).toBe(before);
+  expect([chat.suggest.text, Memory.load(mem.dir, () => ({}) as any, HERE).suggest]).toEqual(["", ""]);
 });
 
 test("a goal check and a message sent mid-run hold no more than the chat's model takes", () => {
@@ -311,7 +313,7 @@ test("summaries stuck are told once, again only after one is built", () => {
   expect(count()).toBe(was + 2);
 });
 
-test("a save that fails is told to the views, never thrown, in plain words (SQLite's too)", () => {
+test("a save that fails is told to the views, never thrown (what ran, the suggested reply), in plain words (SQLite's too)", () => {
   const got: any[] = [];
   const sock: any = { data: { seen: new Set() }, send: (text: string) => got.push(JSON.parse(text)), close: () => {} };
   const save = Memory.save;
@@ -322,6 +324,9 @@ test("a save that fails is told to the views, never thrown, in plain words (SQLi
   try {
     chat.mem.work = ["changed"];
     expect(() => Chat.change(chat)).not.toThrow();
+    chat.mem.suggest = chat.suggest.text = "Commit it";
+    expect(() => Chat.unsuggest(chat)).not.toThrow();
+    expect(got.filter((m) => m.$ === "note").length).toBe(2);
   } finally {
     Memory.save = save;
     chat.socks.delete(sock);

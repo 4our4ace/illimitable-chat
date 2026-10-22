@@ -88,9 +88,10 @@ Shortcuts
 ---------
 
 Press the leader, Ctrl+X, then a key, as in OpenCode: Ctrl+X then m opens
-the model list. While illi waits for that key the screen turns grey;
-Esc, the leader again, a click or the wheel lets it go, and a key with
-no shortcut says so. Letters work either case.
+the model list. A list open (a picker, or the commands matched as you
+type a `/word`) closes first. While illi waits for that key the screen
+turns grey; Esc, the leader again, a click or the wheel lets it go, and
+a key with no shortcut says so. Letters work either case.
 
 | Key | Runs |
 | --- | ---- |

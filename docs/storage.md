@@ -316,8 +316,10 @@ sequenceDiagram
 4. **Checkpoint.** When the WAL passes 1,000 pages, the commit that
    crosses that mark also copies the WAL's pages into `memory.sqlite`.
    SQLite fsyncs the WAL before copying and the file after. The WAL is
-   then reused from its start. A checkpoint can't copy pages that a
-   reader's snapshot still needs, so a long search can delay it.
+   then reused from its start, and the first commit after that cuts it
+   to its own pages (`journal_size_limit = 0`), so no older page stays
+   in it. A checkpoint can't copy pages that a reader's snapshot still
+   needs, so a long search can delay it.
 5. **Close.** `Store.close` finalizes every statement the connection
    prepared, then closes it; the last connection to close checkpoints
    everything and deletes the WAL. Store prepares its statements itself
