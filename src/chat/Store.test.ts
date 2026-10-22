@@ -1,19 +1,19 @@
 // Store test
 // ==========
 // `bun test Store.test.ts`. A new file gives space back as rows go and
-// bears illi's mark; illis making it at once each get their project. A
+// bears illi's mark (a forget cut off undone at the next open); illis making it at once each get their project. A
 // newer illi's file opens while it only added; one that needs a newer
 // illi is refused. Each place is its own project with its own chat, home
 // outside repos, the same place the same chat; a name another's already,
 // numbered. The projects are listed the one used last first, with their
 // latest line, a message of two pages counted once; a search finds lines
 // with all the words (else any), in a project or all, every match ranked
-// however old; a big chat leaves out a word in most lines all along
+// however old, each chat's best first (a big chat's never crowd out a
+// small one's), as the file was when the search began; a big chat leaves out a word in most lines all along
 // while a rarer one is in, a word common only of late kept. A project
-// forgotten is gone from the file, its words (its index
-// dropped), images and to-do list too, its space given back, a later
-// version's rows of its chats too; the others stay, and no number is used
-// again. A file of version 1 moves on to 3, its facts as they were, the
+// forgotten is gone from the file, its words (its index dropped), images
+// and to-do list too, its space given back, a later version's rows of
+// its chats too; the others stay, and no number is used again. A file of version 1 moves on to 3, its facts as they were, the
 // words moved to an index per chat.
 
 import { afterAll, expect, test } from "bun:test";
@@ -39,11 +39,15 @@ function say(store: any, text: string, images?: string[]): void {
   Store.nodes(store, [{ first: i, n: 1, text: "user: " + text }]);
 }
 
-test("a new file gives space back as rows go and bears illi's mark", () => {
+test("a new file gives space back as rows go and bears illi's mark; one a forget cut off left in auto_vacuum full opens incremental again", () => {
   const store = Store.open(DIR + "/new");
-  const get = (pragma: string) => Object.values(store.db.query("pragma " + pragma).get() as object)[0];
+  const get = (pragma: string, s = store) => Object.values(s.db.query("pragma " + pragma).get() as object)[0];
   expect([get("auto_vacuum"), get("application_id"), get("journal_mode"), get("user_version")]).toEqual([2, 0x696c6c69, "wal", 3]);
+  store.db.run("pragma auto_vacuum = full");
   Store.close(store);
+  const again = Store.open(DIR + "/new");
+  expect(get("auto_vacuum", again)).toBe(2);
+  Store.close(again);
 });
 
 test("a file of version 1 moves on to 3: its facts as they were, an image and a to-do table added, the words in an index per chat, compat 3", () => {
@@ -143,6 +147,32 @@ test("the projects, the one used last first, with their latest line; a search, a
   expect(where(Store.search(home, ["audio"], [site.project]))).toEqual(["site-7q2m0d 0+1"]);
   expect(Store.search(home, ['say "hi"'], null)).toEqual([]);
   expect(Store.search(home, ["—", ""], null)).toEqual([]);
+  [home, app, site].forEach(Store.close);
+});
+
+test("a search of all: each chat's best first, so a big chat's many matches never crowd out a small one's; it reads the file as it began, an index dropped meanwhile", () => {
+  const home = Store.open(DIR + "/fair");
+  const app = Store.open(DIR + "/fair", APP);
+  const site = Store.open(DIR + "/fair", SITE);
+  Store.nodes(app, Array.from({ length: 2000 }, (_, k) => ({ first: k, n: 1, text: "user: step " + k + (k % 50 === 0 ? " needle needle" : "") })));
+  say(site, "a needle in a small project");
+  const where = (found: any[]) => found.map((f) => f.project + " " + f.first);
+  const fair = where(Store.search(home, ["needle"], null));
+  expect([fair.length, fair[0], fair[1], fair.filter((f) => f.startsWith("site")).length]).toEqual([20, "app-k3f9x2 0", "site-7q2m0d 0", 1]);
+  const reader = { ...home, db: new Database(home.file, { readonly: true }) };
+  const seek = Store.seek;
+  Store.seek = (db, chat, terms, or) => {
+    if (chat === home.chat) {
+      home.db.run(`drop table find_${site.chat}`);
+    }
+    return seek(db, chat, terms, or);
+  };
+  try {
+    expect(where(Store.search(reader, ["needle"], null))).toEqual(fair);
+  } finally {
+    Store.seek = seek;
+  }
+  reader.db.close();
   [home, app, site].forEach(Store.close);
 });
 

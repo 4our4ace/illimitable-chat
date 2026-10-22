@@ -122,7 +122,7 @@ export async function term_restart(t: Term, name: string, step?: () => void | Pr
     to = config.PROFILE;
   }
   Profiles.profile_keep(config.ROOT, to);
-  const self = process.argv[1]?.startsWith("/$bunfs/") ? [] : [...process.execArgv, process.argv[1]];
+  const self = /\$bunfs|~BUN/.test(import.meta.path) ? [] : [...process.execArgv, process.argv[1]];
   const env  = { ...config.config_env(), ILLI_PROFILE: to, ...(process.env.ILLI_DIR === undefined ? {} : { ILLI_DIR: config.ROOT }) };
   try {
     process.execve!(process.execPath, [process.execPath, ...self, ...process.argv.slice(2)], env);

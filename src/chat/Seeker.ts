@@ -8,11 +8,9 @@
 
 import { Database } from "bun:sqlite";
 import { Projects } from "./Projects.ts";
+import { WAIT } from "./Store.ts";
 
 declare const self: Worker;
-
-// how long its connection waits for another's lock, ms
-const WAIT = 10000;
 
 self.onmessage = (e: MessageEvent<{ id: number; file: string; project: number; words: string; scope: string }>) => {
   const { id, file, project, words, scope } = e.data;

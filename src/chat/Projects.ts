@@ -122,11 +122,11 @@ export namespace Projects {
       e.data.text === undefined ? ask?.fail(new Error(e.data.error)) : ask?.done(e.data.text);
     };
     worker.onerror = () => {
+      worker.terminate();
       if (SEEKER === worker) {
         SEEKER = null;
+        [...ASKED.keys()].forEach(Projects.here);
       }
-      worker.terminate();
-      [...ASKED.keys()].forEach(Projects.here);
     };
     return worker;
   }
