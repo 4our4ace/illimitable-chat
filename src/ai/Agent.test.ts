@@ -38,7 +38,7 @@ async function scripted(reads: number[], room: number) {
   try {
     const ask = { vendor: "chatgpt", model: "m", effort: "low", speed: "slow", system: "", blocks: [{ text: "hi", mark: false }], searches: 0, server: "", room } as any;
     const run = { ask, on: () => {}, sent: [], abort: new AbortController(), end: AskAI.end("") };
-    await Agent.loop({ auth: { token: async () => "", spoil: () => {} } } as any, run);
+    await Agent.loop({ auth: { token: async () => "", spoil: () => {} }, marks: () => 0 } as any, run);
     return { end: run.end, ran };
   } finally {
     Agent.step = step;

@@ -3,7 +3,10 @@
 // `bun test OpenAI.test.ts`. A failed response, or an error event, its
 // input caused fails (asked again, it fails alike), one too long for the
 // model's window is full (the chat refits); any other, a rate limit as a
-// server error, is busy, so it is asked again.
+// server error, is busy, so it is asked again. A request keeps the
+// latest cache marks its vendor writes: OpenAI four (three with the end
+// cached implicitly), Anthropic's room beside its system prompt and
+// end, the ChatGPT backend none.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -34,4 +37,16 @@ test("an error event is read alike", () => {
   const event = (code: string) => OpenAI.step({ res: null, error: { type: "error", code, message: code }, use: {} as any }, ASK).stop;
   expect(event("rate_limit_exceeded")).toBe("busy");
   expect(event("context_length_exceeded")).toBe("full");
+});
+
+test("a request keeps the latest cache marks its vendor writes", async () => {
+  const { AskAI } = await import("./AskAI.ts");
+  const { Anthropic } = await import("./Anthropic.ts");
+  const { ChatGPT } = await import("./ChatGPT.ts");
+  const blocks = ["a", "b", "c", "d", "e"].map((text) => ({ text, mark: true }));
+  const ask = (end: boolean) => ({ blocks: [...blocks, { text: "z", mark: end }] }) as any;
+  const kept = (wire: any, end: boolean) => AskAI.marks(ask(end).blocks, wire.marks(ask(end))).filter((b: any) => b.mark).map((b: any) => b.text).join("");
+  expect([kept(OpenAI.wire, false), kept(OpenAI.wire, true)]).toEqual(["bcde", "dez"]);
+  expect([kept(Anthropic.wire, false), kept(Anthropic.wire, true)]).toEqual(["cde", "ez"]);
+  expect([kept(ChatGPT.wire, false), kept(ChatGPT.wire, true)]).toEqual(["", ""]);
 });

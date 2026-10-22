@@ -213,6 +213,13 @@ export namespace AskAI {
     return LAST.get(server) ?? null;
   }
 
+  // blocks with only their last `most` marks (a vendor's cache
+  // breakpoints are few: each wire says how many it takes, Wire.marks)
+  export function marks(blocks: Block[], most: number): Block[] {
+    let left = most;
+    return blocks.toReversed().map((b) => (b.mark && left-- > 0 ? b : { ...b, mark: false })).reverse();
+  }
+
   // whether a call's end is cached: its last block is marked; one that
   // goes on from another's request (Ask.from), as that one's was
   export function tail(ask: Ask): boolean {
