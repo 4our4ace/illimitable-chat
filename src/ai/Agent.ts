@@ -5,9 +5,8 @@
 // (Anthropic.ts, OpenAI.ts, ChatGPT.ts) shapes requests and reads streams,
 // signed with its API key or, chatgpt's, a login's token it renews (one
 // the vendor refused, renewed, is asked again); a response's headers are
-// its wire's to read (chatgpt's plan limits), and the input each caller's
-// last request read is kept (AskAI.held: the context the view shows), a
-// turn's whole, with its answer (AskAI.last).
+// its wire's to read (chatgpt's plan limits), and a turn's last request
+// is kept whole, with its answer (AskAI.last).
 // Each step sends every item and streams one output; tool calls run in
 // order, a message sent mid-run follows the next results, and the call
 // ends at a step with no tools and nothing sent. A call that goes on from
@@ -419,7 +418,6 @@ export namespace Agent {
     if (res?.ok && read.done) {
       const use = wire.usage(st);
       step.read = use.input + use.write + use.read;
-      AskAI.read(run.ask.server, step.read);
     }
     return { res, step };
   }

@@ -103,7 +103,7 @@ async function completes(mem: any): Promise<void> {
   }
   const source = Memory.flat(Memory.source(mem, 0, REFUSED)!);
   for (const [{ l, i }, text] of nodes(mem)) {
-    expect(text).toEqual(l === 0 && i === REFUSED ? Memory.cut(source) : expect.stringMatching(/^([a-z]+: )?line for Compaction:/));
+    expect(text).toEqual(l === 0 && i === REFUSED ? Memory.clip(source) : expect.stringMatching(/^([a-z]+: )?line for Compaction:/));
   }
   expect(logged.filter((line) => line.includes("clipped"))).toEqual(["compactor: node 0/" + REFUSED + ": the model declined to answer; clipped"]);
   Memory.stop(mem);

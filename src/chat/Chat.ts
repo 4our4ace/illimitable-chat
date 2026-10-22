@@ -23,7 +23,7 @@ import * as net from "node:net";
 import { AskAI, type Call, type End, type Event, type Kind, type Say } from "../ai/AskAI.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
-import { Memory, type Share } from "./Memory.ts";
+import { Memory, TOKEN, type Share } from "./Memory.ts";
 import { Pick } from "../ai/Pick.ts";
 import { Projects } from "./Projects.ts";
 import { MASTER, SEARCHES, Tools, type Agent, type Live, type Reply } from "../tools/Tools.ts";
@@ -337,7 +337,8 @@ export namespace Chat {
     if (mem.count === 0) {
       Memory.push(mem, [{ kind: "illi", text: HELLO, line: HELLO_LINE }]);
     }
-    chat.eye = Chat.eye(mem, Math.min(mem.show, Chat.from(chat)));
+    Chat.cut(chat);
+    chat.eye = Chat.eye(mem, mem.show);
     mem.made = (l, i) => Chat.made(chat, l, i);
     // summaries stuck: told once till one is built again ("")
     let stuck = false;
@@ -432,7 +433,7 @@ export namespace Chat {
   // winds down, to a new turn after it
   export function take(chat: Chat, msg: Msg): void {
     const mem  = chat.mem;
-    const high = Chat.cap(chat) * 4;
+    const high = Chat.cap(chat) * TOKEN;
     if (chat.busy && chat.halt.signal.aborted) {
       chat.next.push(msg);
       return;
@@ -490,11 +491,12 @@ export namespace Chat {
     }
   }
 
-  // where a call's messages go whole from (Memory.cutoff; a message
-  // meanwhile may move it): as many of the chat's tokens as its model
-  // takes (config_context), 4 bytes each
-  export function from(chat: Chat): number {
-    return Memory.cutoff(chat.mem, Chat.cap(chat) * 4);
+  // the cut fitted to the chat's model now (Memory.cutoff: it may move
+  // and is saved), where a call's messages go whole from: as many of the
+  // chat's tokens as its model takes (config_context), TOKEN bytes each. A
+  // read of where it is (mem.cut) moves nothing
+  export function cut(chat: Chat): number {
+    return Memory.cutoff(chat.mem, Chat.cap(chat) * TOKEN);
   }
 
   // the tokens of the chat a turn sends on the chat's model, its share as
@@ -512,8 +514,8 @@ export namespace Chat {
     chat.suggest.due = false;
     Chat.change(chat);
     let from = -1;
-    while (from !== Chat.from(chat)) {
-      from = Chat.from(chat);
+    while (from !== Chat.cut(chat)) {
+      from = mem.cut;
       const why = await Memory.settle(mem, from, halt.signal);
       if (why !== null) {
         if (!halt.signal.aborted) {
@@ -526,7 +528,7 @@ export namespace Chat {
     const says: Say[] = [];
     for (let i = Math.max(msgs[0].id, from); i < mem.count; ) {
       const msg = msgs.find((m) => i >= m.id && i < m.end);
-      says.push(msg === undefined ? { text: Memory.show(Memory.message(mem, i)!), imgs: [] } : Memory.say(mem, i, msg.end));
+      says.push(msg === undefined ? { text: Memory.plain(Memory.message(mem, i)!), imgs: [] } : Memory.say(mem, i, msg.end));
       i = msg === undefined ? i + 1 : msg.end;
     }
     const view = Memory.chat(mem, from, msgs[0].id);
@@ -573,10 +575,10 @@ export namespace Chat {
   }
 
   // the user's goal (/goal), asked of the chat's model, without tools, on
-  // the chat as it is now, as much of it whole as a turn gets (Chat.from)
+  // the chat as it is now, as much of it whole as a turn gets (Chat.cut)
   export function check(chat: Chat, goal: string): Check {
     const mem  = chat.mem;
-    const at   = Chat.from(chat);
+    const at   = Chat.cut(chat);
     const tail = Array.from({ length: mem.count - at }, (_, k) => at + k).map((i) => {
       const msg = Memory.message(mem, i)!;
       return Memory.line({ l: 0, i }, msg.kind + ": " + msg.text) + "\n";
@@ -675,7 +677,7 @@ export namespace Chat {
   // at its first step: the chat's text is more tokens than its bytes
   // told), a turn's share made FIT smaller; either way a note says so,
   // and the turn goes on from it, the chat as it now is, more of it as
-  // summary lines (Chat.from moves on). Past REFITS in a row, the turn
+  // summary lines (Chat.cut moves on). Past REFITS in a row, the turn
   // ends, saying why. false: the turn ends
   export function refit(chat: Chat, shrink: boolean): boolean {
     chat.refits += 1;
@@ -900,7 +902,7 @@ export namespace Chat {
   export function state(chat: Chat): Out {
     const agents = Tools.working(chat.tools).map((a) => a.name);
     const tools  = Tools.state(chat.tools, chat.pick.vendor);
-    const fill   = { used: Math.round(Memory.fill(chat.mem) / 4), cap: Chat.cap(chat), window: Pick.window(chat.pick) ?? config.GUESS };
+    const fill   = { used: Math.round(Memory.fill(chat.mem) / TOKEN), cap: Chat.cap(chat), window: Pick.window(chat.pick) ?? config.GUESS };
     const asks   = chat.asks.map(({ done, ...q }) => q);
     return { $: "state", busy: chat.busy, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, ...tools, use: { ...tools.use, fill }, suggest: chat.suggest.on ? chat.suggest.text : "", asks };
   }
@@ -936,7 +938,7 @@ export namespace Chat {
     if (chat.call !== null) {
       return chat.asked ? chat.model : "";
     }
-    const summing = chat.busy && chat.wait.length > 0 && Memory.due(chat.mem) < Chat.from(chat);
+    const summing = chat.busy && chat.wait.length > 0 && Memory.due(chat.mem) < chat.mem.cut;
     return summing ? SUMMARIES : "";
   }
 
@@ -1117,7 +1119,7 @@ export namespace Chat {
       return {};
     }
     const before = mem.count;
-    mem.cut = mem.show = mem.top = mem.view.from = before;
+    mem.cut = mem.show = mem.view.from = before;
     Memory.fit(mem);
     Memory.save(mem);
     Chat.unsuggest(chat);
@@ -1131,14 +1133,14 @@ export namespace Chat {
   // all but the last exchanges fold into the view's lines (each a zoom
   // away) and each turn sends less; the screen still shows them whole
   // (the memory's `show` stays). Noted for the agent; not while a turn
-  // runs. A call holds Chat.cap tokens, 4 bytes each: the exchanges kept
-  // get a quarter at most
+  // runs. The exchanges kept get a quarter of a call (Chat.cap tokens) at
+  // most
   export function compact(chat: Chat): Answer {
     const mem = chat.mem;
     if (chat.busy) {
       return { error: "illi is at work: /compact once it's done (Esc interrupts it)." };
     }
-    const from = Memory.kept(mem, Chat.cap(chat));
+    const from = Memory.kept(mem, (Chat.cap(chat) * TOKEN) / 4);
     if (from <= mem.cut) {
       return { error: "Nothing to summarize: illi gets only the latest messages whole already." };
     }
@@ -1202,13 +1204,12 @@ export namespace Chat {
     return "Main agent: " + who + ", on " + Pick.shown(chat.pick) + ".";
   }
 
-  // what the screen shows: the view's lines before `from` (the view holds
-  // none from before the last /clear's top), then each message from it
-  // whole
+  // what the screen shows: the view's lines before `from` (none from
+  // before the last /clear: the view holds none), then each message from
+  // it whole
   export function eye(mem: Memory, from: number): Eye {
-    const start = Math.max(from, mem.top);
-    const parts = Memory.before(mem.view.parts, start).map((part): Part => [Memory.span(part)[0], 2 ** part.l]);
-    return { parts, from: start };
+    const parts = Memory.before(mem.view.parts, from).map((part): Part => [Memory.span(part)[0], 2 ** part.l]);
+    return { parts, from };
   }
 
   // what the agent saw: the eye's parts, then each message after them

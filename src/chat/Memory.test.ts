@@ -93,7 +93,7 @@ test("closed, the chat is its project's one file, its images in it: a model gets
   expect(got.map((g) => g.type)).toEqual(["image/png", "image/jpeg"]);
   expect(got[0].data).toBe(small.toString("base64"));
   expect(Buffer.from(got[1].data, "base64").subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
-  expect(Memory.show(Memory.message(mem, 1)!)).toBe("user: two screenshots\n[image " + names[0] + "]\n[image " + names[1] + "]");
+  expect(Memory.plain(Memory.message(mem, 1)!)).toBe("user: two screenshots\n[image " + names[0] + "]\n[image " + names[1] + "]");
   const out = JSON.parse([...Memory.dump(mem)].join(""));
   expect(out.images).toEqual({ [names[0]!]: small.toString("base64"), [names[1]!]: big.toString("base64") });
   Memory.stop(mem);

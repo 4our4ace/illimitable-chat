@@ -40,8 +40,8 @@ import { live_push } from "../ui/View.ts";
 // a call as it runs: the message streaming (its stream read so far,
 // null between messages; what it showed), the messages sent mid-run
 // written but not echoed yet, whether the call's own was, whether a
-// reply came, the tokens its last request read, the last result, when a
-// plan's limit resets (ms; 0: none told), whether the input ended
+// reply came, the last result, when a plan's limit resets (ms; 0: none
+// told), whether the input ended
 type Run = {
   ask    : Ask;
   on     : (ev: Event) => void;
@@ -50,7 +50,6 @@ type Run = {
   sent   : Say[];
   own    : boolean;
   said   : boolean;
-  read   : number;
   result : any;
   reset  : number;
   shut   : boolean;
@@ -109,7 +108,7 @@ export namespace ClaudeCode {
       fs.rmSync(file, { force: true });
       return none(/ENOENT|not found/i.test(String(err?.message)) ? NO_CLAUDE : String(err?.message ?? err), "down");
     }
-    const run: Run = { ask, on, st: null, seen: [], sent: [], own: false, said: false, read: 0, result: null, reset: 0, shut: false };
+    const run: Run = { ask, on, st: null, seen: [], sent: [], own: false, said: false, result: null, reset: 0, shut: false };
     let stopped = false;
     // a line to Claude Code's input; false: it ended (it exited)
     const write = (msg: unknown) => {
@@ -161,9 +160,6 @@ export namespace ClaudeCode {
       shut();
       const code = await proc.exited;
       fs.rmSync(file, { force: true });
-      if (run.read > 0) {
-        AskAI.read(ask.server, run.read);
-      }
       if (stopped) {
         Agent.fail("stopped", run.st === null ? [] : run.seen).entries.forEach((e) => on({ $: "Entry", ...e }));
         return { ...end, text: "stopped", stop: "lost", left: [...run.sent, ...left] } as End;
@@ -220,8 +216,6 @@ export namespace ClaudeCode {
         return ClaudeCode.live(run, ClaudeCode.named(m.event));
       }
       case "assistant": {
-        const u = m.message?.usage ?? {};
-        run.read = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) || run.read;
         const entries = Anthropic.entries((m.message?.content ?? []).map(ClaudeCode.named));
         run.said ||= entries.some((e) => e.kind === "illi");
         entries.forEach((e) => run.on({ $: "Entry", ...e }));

@@ -60,8 +60,9 @@ type Part = { l: number; i: number };
 
 // a view: its lines, the bytes of those built, a batch under way, the
 // bytes past which it merges to half, the first message it holds (the
-// chat's: the last /clear's top, as nothing before it is sent; the
-// compactions': 0)
+// chat's: the last /clear's, as nothing before it is sent, nor shown;
+// older ones are only the memory's, summarized on, a search or zoom
+// away; the compactions': 0)
 type View = { parts: Part[]; size: number; batch: boolean; high: number; from: number };
 
 // what a compaction shares with the chat's turns: all but the blocks
@@ -70,7 +71,8 @@ export type Share = Omit<Ask, "blocks">;
 // a view as saved
 type Kept = { parts: Array<[number, number]>; batch: boolean };
 
-// the state: the chat's view, the compactions' (none: the chat's)
+// the state: the chat's view, the compactions' (none: the chat's); top:
+// the chat's view's first message (`from`)
 type Saved = Kept & { seen?: Kept; pick: object | null; goal?: string | null; suggest?: string; work?: string[]; agent?: string | null; cut?: number; show?: number; top?: number };
 
 // store: its file (Store.ts); cwd: the folder illi runs in, logged with
@@ -83,9 +85,7 @@ type Saved = Kept & { seen?: Kept; pick: object | null; goal?: string | null; su
 // what ran, as last saved; cut: the first message a turn's call gets
 // whole (Memory.cutoff; those before, as the view's lines), show: the
 // first the screen shows whole (at the cut, or behind it, as /compact
-// leaves it: Memory.kept), top: the first it shows at all, and the first
-// the chat's view holds (the last /clear's, `view.from`: older ones are
-// only the memory's, summarized on, a search or zoom away), tail: the
+// leaves it: Memory.kept; never before the view's `from`), tail: the
 // bytes of those from the cut, as last counted (Memory.fill); nodes: the
 // texts of the views' nodes
 // built and of those above them, by slot; agents: their logs' lengths,
@@ -109,7 +109,6 @@ export type Memory = {
   work   : string[];
   cut    : number;
   show   : number;
-  top    : number;
   tail   : { cut: number; count: number; bytes: number };
   nodes  : Map<number, string>;
   agents : Map<string, number>;
@@ -133,13 +132,16 @@ export type Memory = {
 const NODE  = 512;
 export const JOBS = config.JOBS;
 const TRIES = 5;
-// a turn's call gets config.CONTEXT tokens of the chat (HIGH bytes, 4 a
-// token: 1.6 MB at the default 400k; less for a model's smaller window):
+// the bytes a token is taken for (UTF-8 text's rough mean): sizes here
+// are bytes, a model's limits tokens
+export const TOKEN = 4;
+// a turn's call gets config.CONTEXT tokens of the chat (HIGH bytes:
+// 1.6 MB at the default 400k; less for a model's smaller window):
 // its latest messages whole, the view's lines before them (Memory.cutoff).
 // A view past its `high` merges to half: the chat's LINES, half a call's
 // (so its lines leave the messages at least half), the compactions'
 // 16-32 KB (24 KB)
-const HIGH  = config.CONTEXT * 4;
+const HIGH  = config.CONTEXT * TOKEN;
 const LINES = HIGH / 2;
 const SEEN  = 32000;
 const BLOCK = 4;
@@ -203,7 +205,7 @@ export namespace Memory {
   // (Remote.ts), never saved, nothing built
   export function read(dir: string, store: Store, share: Memory["share"], alone: boolean): Memory {
     const mem: Memory = {
-      dir, store, cwd: "", count: Store.count(store), pick: null, goal: null, suggest: "", agent: null, work: [], cut: 0, show: 0, top: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), logs: new Map(), ready: [],
+      dir, store, cwd: "", count: Store.count(store), pick: null, goal: null, suggest: "", agent: null, work: [], cut: 0, show: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), logs: new Map(), ready: [],
       view: { parts: [], size: 0, batch: false, high: LINES, from: 0 }, seen: { parts: [], size: 0, batch: false, high: SEEN, from: 0 },
       busy: new Set(), calls: new Map(), hold: alone, done: alone, wait: new Set(), share,
     };
@@ -216,9 +218,10 @@ export namespace Memory {
     mem.suggest = typeof saved?.suggest === "string" ? saved.suggest : "";
     mem.agent = typeof saved?.agent === "string" ? saved.agent : null;
     mem.work = Array.isArray(saved?.work) ? saved.work : [];
-    mem.cut = Math.min(index(saved?.cut, 0), mem.count);
-    mem.show = Math.min(index(saved?.show, mem.cut), mem.cut);
-    mem.top = mem.view.from = Math.min(index(saved?.top, 0), mem.count);
+    // from <= show <= cut <= count, whatever was saved
+    mem.view.from = Math.min(index(saved?.top, 0), mem.count);
+    mem.cut = Math.max(Math.min(index(saved?.cut, 0), mem.count), mem.view.from);
+    mem.show = Math.max(Math.min(index(saved?.show, mem.cut), mem.cut), mem.view.from);
     Memory.open(mem, mem.view, kept(saved));
     Memory.open(mem, mem.seen, kept(saved?.seen) ?? kept(saved));
     return mem;
@@ -250,7 +253,7 @@ export namespace Memory {
       return;
     }
     const [chat, seen] = [mem.view, mem.seen].map((view): Kept => ({ parts: view.parts.map((part) => [part.l, part.i]), batch: view.batch }));
-    Store.save(mem.store, { ...chat, seen, pick: mem.pick, goal: mem.goal, suggest: mem.suggest, agent: mem.agent, work: mem.work, cut: mem.cut, show: mem.show, top: mem.top });
+    Store.save(mem.store, { ...chat, seen, pick: mem.pick, goal: mem.goal, suggest: mem.suggest, agent: mem.agent, work: mem.work, cut: mem.cut, show: mem.show, top: mem.view.from });
   }
 
   export function slot(l: number, i: number): number {
@@ -265,12 +268,13 @@ export namespace Memory {
     const date   = msg.date ?? new Date().toISOString();
     const images = msg.images?.length ? msg.images : undefined;
     const root: Root = { ...msg, text: msg.text.toWellFormed(), i, size: 0, date, images };
-    root.size = Memory.bytes(Memory.show(root));
+    root.size = Memory.bytes(Memory.plain(root));
     return root;
   }
 
-  // a message as models read it, tagged by its kind
-  export function show(root: Root): string {
+  // a message as plain text, as models read it: its kind, then its text
+  // (its images named)
+  export function plain(root: Root): string {
     const pics = (root.images ?? []).map((name) => "\n[image " + name + "]");
     return root.kind + ": " + root.text + pics.join("");
   }
@@ -396,7 +400,7 @@ export namespace Memory {
   // the view's (a turn adds a few, so the next finds it), the rest in the
   // last block
   export function recent(mem: Memory, a: number, b: number): Block[] {
-    const texts = Array.from({ length: Math.max(0, b - a) }, (_, k) => a + k + "|" + Memory.show(Memory.message(mem, a + k)!) + "\n\n");
+    const texts = Array.from({ length: Math.max(0, b - a) }, (_, k) => a + k + "|" + Memory.plain(Memory.message(mem, a + k)!) + "\n\n");
     const whole = Math.floor(texts.length / BLOCK);
     if (texts.length === 0) {
       return [];
@@ -510,7 +514,7 @@ export namespace Memory {
   export function source(mem: Memory, l: number, i: number): string | null {
     if (l === 0) {
       const root = Memory.message(mem, i);
-      return root === null ? null : root.line ?? Memory.show(root);
+      return root === null ? null : root.line ?? Memory.plain(root);
     }
     const [a, b] = Memory.halves({ l, i }).map((half) => Memory.node(mem, half));
     return a === null || b === null ? null : Memory.flat(a) + "\n" + Memory.flat(b);
@@ -549,7 +553,7 @@ export namespace Memory {
   export function pump(mem: Memory): void {
     let built = false;
     for (let free = Memory.starts(mem); free.length > 0 && !mem.done; free = Memory.starts(mem)) {
-      Memory.store(mem, free);
+      Memory.keep(mem, free);
       built = true;
     }
     if (built) {
@@ -647,8 +651,8 @@ export namespace Memory {
     if (lines.length === 0) {
       console.error("compactor: node " + l + "/" + i + ": " + (end.ok ? "an empty line" : end.text) + "; clipped");
     }
-    const line = lines.length === 0 ? Memory.cut(Memory.flat(text)) : lines.reduce((a, b) => (Memory.bytes(b) < Memory.bytes(a) ? b : a));
-    Memory.store(mem, [{ l, i, text: line }]);
+    const line = lines.length === 0 ? Memory.clip(Memory.flat(text)) : lines.reduce((a, b) => (Memory.bytes(b) < Memory.bytes(a) ? b : a));
+    Memory.keep(mem, [{ l, i, text: line }]);
     mem.stuck?.("");
   }
 
@@ -668,7 +672,7 @@ export namespace Memory {
   }
 
   // nodes built: logged in one write, kept
-  export function store(mem: Memory, parts: Array<Part & { text: string }>): void {
+  export function keep(mem: Memory, parts: Array<Part & { text: string }>): void {
     Store.nodes(mem.store, parts.map(({ l, i, text }) => ({ first: i * 2 ** l, n: 2 ** l, text })));
     for (const { l, i, text } of parts) {
       Memory.ready(mem, { l, i }, false);
@@ -706,7 +710,7 @@ export namespace Memory {
   }
 
   // a text's first NODE bytes
-  export function cut(text: string): string {
+  export function clip(text: string): string {
     return Buffer.from(text, "utf8").subarray(0, NODE).toString("utf8").replace(/\uFFFD+$/, "");
   }
 
@@ -714,7 +718,7 @@ export namespace Memory {
     return `Too long: your last line for this <input> was ${Memory.bytes(line)} bytes,
 over the ${NODE}-byte limit. Write the whole line again, cutting just
 enough of the least valuable items to fit before this cut:
-${Memory.cut(line)}| ← LIMIT`;
+${Memory.clip(line)}| ← LIMIT`;
   }
 
   // View
@@ -946,7 +950,7 @@ ${Memory.cut(line)}| ← LIMIT`;
     }
     if (root !== null) {
       const images = at === 0 ? root.images : undefined;
-      return id + "+0|" + Memory.show({ ...root, text: clip_page(root.text, at), images });
+      return id + "+0|" + Memory.plain({ ...root, text: clip_page(root.text, at), images });
     }
     return Memory.halves(part).map((half) => Memory.line(half, Memory.node(mem, half) ?? WAIT)).join("\n");
   }
@@ -1060,7 +1064,7 @@ h4 { margin: .8em 0 .2em; color: #888; font-weight: normal; } pre { margin: 0; w
   export function agent(mem: Memory, name: string): Root[] | null {
     const log  = LOG.test(name) ? (name.includes(".") ? name : Memory.agent_log(mem, name)) : null;
     const work = log === null ? null : Store.work(mem.store, log);
-    return work?.map((e) => ({ ...e, size: Memory.bytes(Memory.show({ ...e, size: 0 })) })) ?? null;
+    return work?.map((e) => ({ ...e, size: Memory.bytes(Memory.plain({ ...e, size: 0 })) })) ?? null;
   }
 
   // a name's log as now: the one it last took (kept), else in the file
@@ -1117,7 +1121,7 @@ h4 { margin: .8em 0 .2em; color: #888; font-weight: normal; } pre { margin: 0; w
   }
 
   export function agent_line(root: Root): string {
-    return root.i + "|" + Memory.show(root);
+    return root.i + "|" + Memory.plain(root);
   }
 
 }
