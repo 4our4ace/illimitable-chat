@@ -1,14 +1,20 @@
 // Plugins
 // =======
-// Code of the user's that runs inside illi, with all illi's rights (as
-// OpenCode's plugins do): a TS or JS module in a plugins folder, global
+// What the user adds to illi, from a plugins folder: global
 // (config.ROOT/plugins: every profile's), the profile's own
 // (config.DIR/plugins) or the project's (.illi/plugins), the project's
-// only for a folder trusted (the `trusted` load is given: its code comes
-// with the repository, so a clone would run it as it opened). A plugin is
-// a file (name.ts, .js, .mjs) or a folder holding an index.ts, .js or
-// .mjs; by name, the later folder's wins, and one named in the `off`
-// setting is left out. Its default export is a function, called once as
+// only for a folder trusted (the `trusted` load is given: what it runs
+// comes with the repository, so a clone would run it as it opened). A
+// plugin is a file (name.ts, .js, .mjs) of code, or a folder: a bundle
+// (Bundle.ts), in Claude Code's plugin layout, of skills, commands,
+// agents, hooks and MCP servers (Custom.ts, Hooks.ts and Mcp.ts read
+// those, from the plugins found at the load: bundles()), and code
+// (illi.ts; an index.ts alone, as a plugin folder always was). By name,
+// the later folder's wins, and one named in the `off` setting is left
+// out, all of it. Which plugins there are is read once, as illi starts
+// (find); a project's new or changed since illi last started there is
+// said (Seen.ts). Code runs inside illi, with all illi's rights (as
+// OpenCode's plugins do). Its default export is a function, called once as
 // illi starts with what it may use (Api): hooks on what the chat does
 // (Hooks: illi's start and quit, a turn's start and end, a message
 // logged; context for the model in every call of the run; a message of
@@ -49,7 +55,9 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { pathToFileURL } from "node:url";
+import { Bundle, type Scope } from "./Bundle.ts";
 import * as config from "./Config.ts";
+import { Seen } from "./Seen.ts";
 import type { Spec } from "../tools/Machine.ts";
 import * as Theme from "../ui/Theme.ts";
 import { VERSION } from "./Update.ts";
@@ -145,9 +153,15 @@ export type Api = {
 // the user's, a paint
 export type Screen = { note: (text: string) => void; send: (text: string) => void; redraw: () => void };
 
-// a plugin found: its name, its file (a folder's index), whether off
-// (the `off` setting) and, once loaded, whether it runs
-export type Found = { name: string; file: string; off: boolean; runs: boolean };
+// a plugin found: its name, its code's file ("": none), its folder ("":
+// a file plugin), where it is, its bundle as read at the load (null: a
+// file plugin), whether off (the `off` setting) and, once loaded,
+// whether its code runs (one with none: true)
+export type Found = { name: string; file: string; dir: string; scope: Scope; bundle: Bundle | null; off: boolean; runs: boolean };
+
+// a folder in a plugins folder that is no plugin, though it looks meant
+// as one: where, why
+export type Misfit = { dir: string; why: string };
 
 // a plugin loaded: its name and file, as notes and the chat name it
 // (said), whether it runs (false: it failed to load), whether its
@@ -195,6 +209,7 @@ const QUIT = 1500;
 
 // the plugins found at the load, and those loaded, in their order
 let FOUND: Found[] = [];
+let MISFITS: Misfit[] = [];
 let LOADED: Plugin[] = [];
 
 // the screen (null: not yet: notes wait for it), the notes waiting; the
@@ -224,22 +239,48 @@ export namespace Plugins {
   // earlier's, in the order they load (by folder, then name); those off
   // too, marked
   export function find(cwd: string, trusted: (cwd: string) => boolean): Found[] {
-    const out = new Map<string, { file: string; at: number }>();
+    const out = new Map<string, Found & { at: number }>();
+    MISFITS = [];
     Plugins.dirs(cwd, trusted).forEach((dir, at) => {
-      for (const [name, file] of plugin_files(dir)) {
-        out.set(name, { file, at });
+      const scope: Scope = dir === path.join(cwd, ".illi", "plugins") ? "project" : config.DIR !== config.ROOT && dir === path.join(config.DIR, "plugins") ? "profile" : "global";
+      for (const found of plugin_files(dir, scope)) {
+        out.set(found.name, { ...found, at });
       }
     });
-    return [...out].sort(([a, x], [b, y]) => x.at - y.at || a.localeCompare(b)).map(([name, { file }]) => ({ name, file, off: config.config_off(name), runs: false }));
+    return [...out.values()].sort((x, y) => x.at - y.at || x.name.localeCompare(y.name)).map(({ at, ...found }) => found);
+  }
+
+  // the bundles of the plugins found at the load, not off, in order, each
+  // read anew (its parts as they are now; one gone since, left out)
+  export function bundles(): Bundle[] {
+    return FOUND.filter((f) => !f.off && f.bundle !== null).flatMap((f) => Bundle.read(f.dir, f.name, f.scope) ?? []);
+  }
+
+  // the real folders of the bundles found at the load, but those off (as
+  // they were then: a set fixed at the start, read at each tool's call)
+  export function roots(): string[] {
+    return FOUND.filter((f) => !f.off && f.bundle !== null).map((f) => f.bundle!.dir);
+  }
+
+  // the folders found at the load that are no plugins, and why
+  export function misfits(): Misfit[] {
+    return MISFITS;
   }
 
   // the plugins loaded, each one's function called (SLOW at most), one
   // after another; the project's only if trusted(cwd), so a repository's
   // code runs only in a folder the user trusts. One that won't load is
-  // told and left out, all it gave with it
+  // told and left out, all it gave with it; what of a bundle won't read
+  // is told, the rest of it applying
   export async function load(cwd: string, trusted: (cwd: string) => boolean): Promise<void> {
     FOUND = Plugins.find(cwd, trusted);
+    FOUND.filter((f) => !f.off && f.scope === "project").forEach(plugin_seen);
+    FOUND.filter((f) => !f.off).forEach((f) => f.bundle?.troubles.forEach((t) => plugin_say("The plugin " + f.name + ": " + t + " (/agents lists it).")));
     for (const found of FOUND.filter((f) => !f.off)) {
+      if (found.file === "") {
+        found.runs = true;
+        continue;
+      }
       const p: Plugin = { name: found.name, file: found.file, said: "the plugin " + found.name, runs: true, ready: false, slow: SLOW, hooks: [], commands: [], tools: [], sides: [], statuses: [], themes: [] };
       LOADED.push(p);
       try {
@@ -512,6 +553,7 @@ export namespace Plugins {
   // told (a test's start)
   export function reset(): void {
     FOUND   = [];
+    MISFITS = [];
     LOADED  = [];
     SCREEN  = null;
     WAITING = [];
@@ -523,24 +565,59 @@ export namespace Plugins {
 
 }
 
-// the plugins in a folder, by name: each file of FILES (not a .d.ts), each
-// folder holding an index of them, as named; none if the folder isn't
-function plugin_files(dir: string): Array<[string, string]> {
+// the plugins in a folder, by name: each file of FILES (not a .d.ts), and
+// each folder that is a bundle (Bundle.read: its code, if any, is the
+// plugin's file); a folder meant as one that isn't, kept as a misfit;
+// none if the folder isn't one. Off by the `off` setting
+function plugin_files(dir: string, scope: Scope): Found[] {
   let names: string[] = [];
   try {
     names = fs.readdirSync(dir).sort();
   } catch {
     return [];
   }
-  return names.flatMap((entry): Array<[string, string]> => {
+  return names.flatMap((entry): Found[] => {
     const file = path.join(dir, entry);
     const ext  = FILES.find((x) => entry.endsWith(x) && !entry.endsWith(".d.ts"));
-    if (ext !== undefined && NAME.test(entry.slice(0, -ext.length)) && fs.statSync(file).isFile()) {
-      return [[entry.slice(0, -ext.length), file]];
+    const kind = plugin_kind(file);
+    if (ext !== undefined && NAME.test(entry.slice(0, -ext.length)) && kind === "file") {
+      const name = entry.slice(0, -ext.length);
+      return [{ name, file, dir: "", scope, bundle: null, off: config.config_off(name), runs: false }];
     }
-    const index = FILES.map((x) => path.join(file, "index" + x)).find((f) => fs.existsSync(f));
-    return ext === undefined && NAME.test(entry) && index !== undefined && fs.statSync(file).isDirectory() ? [[entry, index]] : [];
+    if (kind !== "dir") {
+      return [];
+    }
+    const bundle = NAME.test(entry) ? Bundle.read(file, entry, scope) : null;
+    if (bundle === null) {
+      const why = Bundle.misfit(file, entry);
+      if (why !== null) {
+        MISFITS.push({ dir: file, why });
+      }
+      return [];
+    }
+    return [{ name: entry, file: bundle.code ?? "", dir: file, scope, bundle, off: config.config_off(entry), runs: false }];
   });
+}
+
+// what a path is: a file, a folder, or neither (gone, a broken link)
+function plugin_kind(file: string): "file" | "dir" | null {
+  try {
+    const st = fs.statSync(file);
+    return st.isFile() ? "file" : st.isDirectory() ? "dir" : null;
+  } catch {
+    return null;
+  }
+}
+
+// a project's plugin new or changed since illi last started here: said,
+// if it runs anything as you work (code, hooks, MCP servers)
+function plugin_seen(found: Found): void {
+  const b = found.bundle;
+  const runs = [found.file !== "" ? "code" : "", (b?.hooks.length ?? 0) > 0 ? "hooks" : "", (b?.mcp.length ?? 0) > 0 ? "MCP servers" : ""].filter(Boolean);
+  const files = [found.file, ...(b === null ? [] : [path.join(b.dir, ".claude-plugin", "plugin.json"), ...b.hooks.map((h) => h.file), ...b.mcp.map((m) => m.file)])].filter(Boolean);
+  if (runs.length > 0 && Seen.changed("plugin " + (found.dir || found.file), files)) {
+    plugin_say("This project's plugin " + found.name + " is new or changed since illi last started here: its " + runs.join(" and ").replace(/ and (?=.* and )/, ", ") + " run as you work (/agents lists it).");
+  }
 }
 
 // what a plugin may use (Api), all it adds kept in its record; once it

@@ -26,7 +26,7 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `contexts`   |                                   | per model: `{ "gpt-6.1-sol": 350000 }`           |
 | `rules`      | `RULES.md`: the profile's, else `~/.illi`'s | your rules for every project (none: no rules) |
 | `after`      |                                   | a shell command run after each turn              |
-| `off`        |                                   | skills, agents, commands, MCP servers and plugins turned off, by name (`hooks.json`: all hooks); `/settings` lists them to turn on and off |
+| `off`        |                                   | skills, agents, commands, MCP servers and plugins turned off, by name (a plugin's part as `plugin:name` too; `hooks.json`: all hooks); `/settings` lists them to turn on and off |
 | `sticky`     |                                   | sticky skills on, by name; `/name` turns one on and off ([Customize](customize.md)) |
 | `mode`       | `auto`                            | what runs without asking: `auto` (reads, and changes inside the project; a risky call is asked about, saying why), `ask` (every change asked), `read-only` (changes refused), `yolo` (everything, but what your rules refuse or ask); `/mode` switches it for a session ([Permissions](permissions.md)) |
 | `permissions` | `permissions.json` in the profile's folder | your permission rules (`allow`, `ask` or `deny`, by pattern, for `shell`, `read`, `write` and `mcp`) and, per project, the grants "don't ask again" keeps ([Permissions](permissions.md)) |
@@ -38,7 +38,7 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `tps`        | `on`                              | tokens a second (tok/s) on the line over the input while text streams; `off` |
 | `jobs`       | `8`                               | summaries built at once                          |
 | `theme`      | `theme.json`: the profile's, else `~/.illi`'s | the theme's file                   |
-| `mcp`        | `mcp.json` in the profile's folder | the MCP servers' file; `~/.illi/mcp.json` is read too |
+| `mcp`        | `mcp.json` in the profile's folder | the MCP servers' file; `~/.illi/mcp.json` is read too, and a trusted project's `.illi/mcp.json` |
 | `login`      | `~/.illi/login.json`, opencode's  | the ChatGPT login file, which `/login` writes    |
 | `autoupdate` | `on`                              | a new release installs itself: looked for once a day (as illi starts, or within the hour while it runs), downloaded and checked in the background, it runs from the next start (a note says so); `notify` only tells; `off` never looks. The installer's one file only: a source clone never updates itself |
 
@@ -81,7 +81,8 @@ What else illi keeps in `~/.illi`:
 | `used.json`     | how often you ran each command: among those a `/word` matches alike, the most used come first; a use counts half as much 100 uses later, and a command you stopped using drops out (two illis at once each add theirs: [Storage](storage.md#usage-counts)) |
 | `picked.json`   | the same for what you pick in Ctrl+P's list, kept apart |
 | `profile`       | the profile used last                                 |
-| `hooks-seen.json` | the projects' hooks files as illi last saw them (each one's hash), so one new or changed is said at the start |
+| `seen.json`     | what of each project runs as you work (its `hooks.json`, `mcp.json` and plugins), as illi last saw it (each one's hash), so one new or changed is said at the start |
+| `plugin-data/`  | each plugin's own folder (`CLAUDE_PLUGIN_DATA`), kept across its updates; a profile's plugins' in the profile's folder ([Plugins](customize.md#plugins)) |
 | `trust.json`    | the folders you trust illi in (a repo's top covers the repo), every profile's: the question at the start asks only for others; edit or delete it to trust less |
 | `update.json`   | when illi last looked for a new release (`autoupdate`), and the one it last said it couldn't install |
 | `locks/`        | a lock per project, held while its chat is open (by the system: a crash never leaves one held), and the socket a second terminal joins it by |

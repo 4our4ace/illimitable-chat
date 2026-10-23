@@ -150,7 +150,7 @@ export function setting_open(t: Term, key: config.Key): void {
 
 // Enter on `off`: each skill, agent, command, MCP server and plugin, what
 // it is and where it's from (built in, global, the profile, the
-// project), on or off; Enter, Left or Right turns the lit one on or off,
+// project, a plugin: its part by the name it is listed by), on or off; Enter, Left or Right turns the lit one on or off,
 // kept in `off` at once (a server or plugin starts or stops at the next
 // start). In a
 // profile, one off globally stays off: a note says where to turn it on
@@ -159,13 +159,12 @@ function setting_off(t: Term): void {
   const cwd   = process.cwd();
   const own   = config.DIR !== config.ROOT;
   const where = (file: string) => (file === "" ? "built in" : own && file.startsWith(config.DIR + "/") ? config.PROFILE : file.startsWith(config.ROOT + "/") ? "global" : "project");
-  const mine  = Mcp.file(config.MCP);
   const rows  = [
-    ...Custom.skills(cwd, true).map((s) => [s.name, "skill · " + where(s.dir)]),
-    ...[...Custom.files(cwd, "agents", true)].map(([name, file]) => [name, "agent · " + where(file)]),
-    ...[...Custom.files(cwd, "commands", true)].map(([name, file]) => [name, "command · " + where(file)]),
-    ...Object.keys(Mcp.read(true)).map((name) => [name, "MCP server · " + (own && name in mine ? config.PROFILE : "global")]),
-    ...Plugins.found().map((p) => [p.name, "plugin · " + where(p.file)]),
+    ...Custom.skills(cwd, true).map((s) => [s.name, "skill · " + (s.plugin == null ? where(s.dir) : "plugin " + s.plugin)]),
+    ...Custom.parts(cwd, "agents", true).map((p) => [p.name, "agent · " + (p.plugin === null ? where(p.file) : "plugin " + p.plugin.name)]),
+    ...Custom.parts(cwd, "commands", true).map((p) => [p.name, "command · " + (p.plugin === null ? where(p.file) : "plugin " + p.plugin.name)]),
+    ...Object.entries(Mcp.read(cwd, true)).map(([name, f]) => [name, "MCP server · " + (f.plugin !== null ? "plugin " + f.plugin : where(f.file))]),
+    ...Plugins.found().map((p) => [p.name, "plugin · " + where(p.dir || p.file)]),
   ];
   const global = (name: string) => own && config.config_names("off", true).includes(name.toLowerCase());
   const aside  = () => rows.map(([name]) => (!config.config_off(name) ? "on" : global(name) ? "off globally" : "off"));

@@ -69,7 +69,7 @@ function hooks(file: string, events: Record<string, Array<[string, string, objec
 
 // an entry as a file gives it, for answer's tests
 function entry(event: Entry["event"], fail?: "block" | "continue"): Entry {
-  return { event, match: "", matcher: null, command: "x.sh", timeout: 1000, fail: fail ?? (event === "PreToolUse" ? "block" : "continue"), file: "" };
+  return { event, match: "", matcher: null, command: "x.sh", timeout: 1000, fail: fail ?? (event === "PreToolUse" ? "block" : "continue"), file: "", plugin: null, vars: {} };
 }
 
 // a run's result, for answer's tests

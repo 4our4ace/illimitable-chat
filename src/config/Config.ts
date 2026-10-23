@@ -91,7 +91,7 @@ const TABLE = {
   contexts   : { def: "", values: "text", now: true, what: "context by model, as JSON" },
   rules      : { def: config_own("RULES.md"), values: "text", now: true, what: "your rules, every project", path: true },
   after      : { def: "", values: "text", now: true, what: "a command after each turn" },
-  off        : { def: "", values: "text", now: true, what: "skills, agents, commands, MCP servers turned off", none: "none" },
+  off        : { def: "", values: "text", now: true, what: "skills, agents, commands, MCP servers, plugins (or a plugin's part, as plugin:name) and hooks.json turned off", none: "none" },
   sticky     : { def: "", values: "text", now: true, what: "sticky skills on, in every turn", none: "none" },
   mode       : { def: "auto", values: ["auto", "ask", "read-only", "yolo"], now: true, what: "what runs without asking", shape: [/^(read-only|ask|auto|yolo)$/, "read-only, ask, auto or yolo"] },
   permissions: { def: DIR + "/permissions.json", values: "text", now: false, what: "your permission rules and grants", path: true },

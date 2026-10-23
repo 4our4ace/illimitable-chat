@@ -47,8 +47,8 @@ test("a project's own agents, commands and skills load only in a trusted folder"
   fs.mkdirSync(app + "/.illi/commands", { recursive: true });
   fs.writeFileSync(app + "/.illi/commands/hello.md", "Say hello.\n");
   expect(Custom.dirs(app, "commands")).not.toContain(app + "/.illi/commands");
-  expect([...Custom.files(app, "commands").keys()]).not.toContain("hello");
+  expect(Custom.commands(app).map((c) => c.name)).not.toContain("hello");
   Trusted.trust(app);
   expect(Custom.dirs(app, "commands")).toContain(app + "/.illi/commands");
-  expect([...Custom.files(app, "commands").keys()]).toContain("hello");
+  expect(Custom.commands(app).map((c) => c.name)).toContain("hello");
 });

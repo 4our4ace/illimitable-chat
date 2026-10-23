@@ -9,14 +9,14 @@ illi is customized with plain files, which you write with your tools:
 - illi's folder, this profile's own: {{illi}} (the same, in the default
   profile; a profile's agents, commands, skills and MCP servers go beside
   the global ones, and win by name)
-- This project's: {{project}} (agents, commands, skills, plugins and
-  hooks only; by name, a project's win over the others; its hooks add to
-  the user's)
+- This project's: {{project}} (agents, commands, skills, plugins, hooks
+  and mcp.json only; by name, a project's win over the others; its hooks
+  and MCP servers add to the user's)
 
 Write to illi's folder unless the user asks for every profile (the global
 folder) or this project only. /agents shows the user every agent, command,
 skill, plugin and hook, and where their files go; the `off` setting turns
-one off (hooks.json: all hooks).
+one off (a plugin's part as plugin:name; hooks.json: all hooks).
 
 # What goes where
 
@@ -91,8 +91,9 @@ You review code changes. ...
 ## MCP servers: mcp.json, in illi's folder or the global one
 
 {{root}}/mcp.json is every profile's; a profile's own goes over it by
-name. A project's is never read: a server is a program, and a repository's would
-run on opening it. The shape is Claude Code's, so entries copy over:
+name, and a trusted project's .illi/mcp.json adds its own (said at the
+start when new or changed). The shape is Claude Code's, so entries copy
+over:
 
 ```json
 { "mcpServers": {
@@ -122,7 +123,8 @@ one:
   number, or a share like "60%"); contexts: per model
 - rules: the rules file, RULES.md in illi's folder (else the global
   folder's) unless set; after: a shell command run after each turn
-- off: skills, agents, commands and MCP servers turned off, by name,
+- off: skills, agents, commands, MCP servers and plugins turned off, by
+  name (a plugin's part as plugin:name; hooks.json: all hooks),
   comma-separated; a profile's adds to the global list (one off globally
   is off in every profile)
 - sticky: the sticky skills on, by name, the same way; /<name> keeps it
@@ -206,16 +208,28 @@ github-light, one-dark, solarized-dark, solarized-light, mono, or auto
 palette's slots over it; glyph, tool, ansi and syntax entries too. The
 accent setting goes over the file's accent.
 
-## Plugins: plugins/<name>.ts
+## Plugins: plugins/<name>/
 
-Code that runs inside illi as the user, with hooks on what it does (a
-turn's start and end, each message, a message before it is sent, a turn
-ending of itself, the user waited on, a tool's call before and after it
-runs), commands, tools, side lines, a piece of the bottom line and
-colors; illi's docs/customize.md lists the API. Write one only when the
-user asks for a plugin, and say first what it will do: it runs with all
-illi's rights. A project's load only in a folder the user trusts. They
-load as illi starts.
+A plugin is a folder in Claude Code's plugin layout, so a Claude Code
+plugin copies in as it is (or `git clone <url> plugins/<name>`):
+commands/*.md, skills/<name>/SKILL.md, agents/*.md, hooks/hooks.json,
+.mcp.json, an optional .claude-plugin/plugin.json ({ "name",
+"description", "version" }), and illi.ts for code. Its parts join the
+user's by name (the user's win; a hidden one is plugin:name); its hook
+commands and MCP servers get ${CLAUDE_PLUGIN_ROOT} (its folder) and
+${CLAUDE_PLUGIN_DATA} (its own kept folder).
+
+For "make a plugin that adds commands/skills/agents" (to share or keep
+together): a folder of those files, no code. Write illi.ts only when the
+user asks for behavior a file can't give: code that runs inside illi as
+the user, with hooks on what it does (a turn's start and end, each
+message, a message before it is sent, a turn ending of itself, the user
+waited on, a tool's call before and after it runs), commands, tools,
+side lines, a piece of the bottom line and colors; illi's
+docs/customize.md lists the API. Say first what code will do: it runs
+with all illi's rights. A project's plugins load only in a folder the
+user trusts. Code, hooks and MCP servers load as illi starts; commands,
+skills and agents at once.
 
 ## Hooks: hooks.json
 
@@ -234,7 +248,8 @@ Events: PreToolUse (refuse, change, allow or ask a tool's call; exit 2
 refuses, stderr why), PostToolUse, UserPromptSubmit, Stop, Notification,
 SessionStart, SessionEnd. Matchers and tool inputs are illi's, not Claude
 Code's: shell {command}, read/write {path, ...}, edit {edits: [{path, old,
-new}]}; `Bash` matches nothing. A command gets the event as JSON on stdin;
+new}]}; `Bash` takes shell too (told tool_name "Bash"), Claude Code's
+other names match nothing. A command gets the event as JSON on stdin;
 docs/customize.md lists the fields and answers. Say what a hook will run
 before writing it: it runs as the user, on every matching event. The user
 is asked before you write the file, whatever the mode.

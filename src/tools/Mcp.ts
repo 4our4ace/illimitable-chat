@@ -3,14 +3,19 @@
 // The user's MCP servers, their tools beside illi's own (Tools.ts), each
 // named mcp__<server>__<tool> as the vendors take it, numbered if two
 // come out alike (get.user and get_user: mcp__s__get_user_2), and called
-// by that name at its server. The servers are in config.MCPS
-// (~/.illi/mcp.json, global; in a profile, its own mcp.json too, whose
-// servers go over the global ones by name; one named in the `off`
-// setting is left out), in the shape Claude Code's and Claude Desktop's
-// take, so an entry copies over. A server is a command (stdio: a JSON-RPC
-// message a line, each way) or a URL (Streamable HTTP: a POST each
-// message, answered as JSON or as an event stream). `${VAR}` (or
-// `${VAR:-default}`) in a server's fields is the variable's value.
+// by that name at its server. The servers are the plugins' (each
+// bundle's .mcp.json and its manifest's mcpServers: Bundle.ts), then
+// the user's files (Mcp.files): config.MCPS (~/.illi/mcp.json, global;
+// in a profile, its own mcp.json too) and, in a trusted folder, the
+// project's .illi/mcp.json, each over the ones before by name (the
+// user's over a plugin's); one named in the `off` setting is left out,
+// a plugin's by plugin:name too. They are in the shape Claude Code's and
+// Claude Desktop's take, so an entry copies over. A server is a command
+// (stdio: a JSON-RPC message a line, each way) or a URL (Streamable
+// HTTP: a POST each message, answered as JSON or as an event stream).
+// `${VAR}` (or `${VAR:-default}`) in a server's fields is the variable's
+// value: a plugin's own (CLAUDE_PLUGIN_ROOT, CLAUDE_PLUGIN_DATA and their
+// ILLI_ spellings) first, given to its command's environment too.
 //
 //     { "mcpServers": {
 //         "github": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-github"],
@@ -24,13 +29,19 @@
 // /mcp, a note (Term.ts) and the log, its tools gone; one whose tools change is listed
 // again; each change is told (the side panel shows how each is: Term.ts).
 // A call stopped is cancelled at its server; the servers end with illi.
-// The project's own servers are never read: a server is a program, and a
-// repository's would run on opening it.
+// A project's servers (its mcp.json, its plugins') are programs, so they
+// run only in a folder the user trusts (Trusted.ts), and its mcp.json new
+// or changed is said once at the start (Seen.ts).
 
 import * as fs from "node:fs";
+import * as path from "node:path";
 import type { Out } from "../ai/Agent.ts";
 import { clip, stream_events, stream_lines } from "./Clip.ts";
+import { Bundle } from "../config/Bundle.ts";
 import * as config from "../config/Config.ts";
+import { Plugins } from "../config/Plugins.ts";
+import { Seen } from "../config/Seen.ts";
+import { Trusted } from "../config/Trusted.ts";
 import type { Hints } from "./Guard.ts";
 import type { Spec } from "./Machine.ts";
 
@@ -50,6 +61,11 @@ type Def = {
   disabled? : boolean;
 };
 
+// a server as found: as its file says, that file (a plugin's .mcp.json
+// or manifest), its plugin (null: the user's own) and what its fields
+// are filled from before the environment (its plugin's: Bundle.vars)
+export type Found = { def: Def; file: string; plugin: string | null; vars: Record<string, string> };
+
 // the way to a server: a request (its result; its error thrown), a
 // notification, its end (answered once its process is gone)
 type Link = {
@@ -58,11 +74,14 @@ type Link = {
   close : () => Promise<unknown> | void;
 };
 
-// a server: its name, how it is (why: what failed), its tools as illi
-// names them, each one's name at the server and what the server says it
-// does (its annotations: only reads, may destroy; Guard.ts), its link
+// a server: its name, where it is from (its file, its plugin: Found),
+// how it is (why: what failed), its tools as illi names them, each one's
+// name at the server and what the server says it does (its annotations:
+// only reads, may destroy; Guard.ts), its link
 export type Server = {
-  name  : string;
+  name   : string;
+  file   : string;
+  plugin : string | null;
   state : "starting" | "ready" | "failed";
   why   : string;
   tools : Spec[];
@@ -91,19 +110,27 @@ const NAMED   = /[^A-Za-z0-9_-]/g;
 
 const SERVERS = new Map<string, Server>();
 
-// the servers' start, settled; what was wrong with the file ("": none);
-// what a server's change (started, failed, its tools listed) calls
+// each file that won't read, why; the servers' start, settled; what a
+// server's change (started, failed, its tools listed) calls
+const TROUBLES = new Map<string, string>();
+
 let started: Promise<void> = Promise.resolve();
-let trouble = "";
 let told    = () => {};
 
 export namespace Mcp {
 
-  // starts the user's servers, in the background, each change told
+  // starts the servers, in the background, each change told; the
+  // project's mcp.json new or changed since illi last started here said
   export function start(cwd: string, change: () => void = () => {}): void {
     told = change;
-    const runs = Object.entries(Mcp.read()).filter(([, def]) => def.disabled !== true).map(([name, def]) => Mcp.open(name, def, cwd));
+    const found = Object.entries(Mcp.read(cwd));
+    const runs = found.filter(([, f]) => f.def.disabled !== true).map(([name, f]) => Mcp.open(name, f, cwd));
     started = Promise.race([Promise.all(runs).then(() => {}), Bun.sleep(SETTLE)]);
+    const project = path.join(cwd, ".illi", "mcp.json");
+    const n = found.filter(([, f]) => f.file === project).length;
+    if (n > 0 && Seen.changed("mcp " + project, [project])) {
+      Plugins.say("This project's " + config.config_home(project) + " is new or changed since illi last started here: its " + (n === 1 ? "MCP server runs" : n + " MCP servers run") + " as you work (/mcp lists them).");
+    }
   }
 
   // once the servers starting have answered or failed (at most SETTLE)
@@ -111,33 +138,57 @@ export namespace Mcp {
     return started;
   }
 
-  // the servers in the files, by name, the profile's over the global
-  // ones; but those turned off (all: those too)
-  export function read(all = false): Record<string, Def> {
-    const defs: Record<string, Def> = Object.assign({}, ...config.MCPS.map(Mcp.file));
-    return Object.fromEntries(Object.entries(defs).filter(([name]) => all || !config.config_off(name)));
+  // the user's files of servers: config.MCPS, then a trusted project's
+  // .illi/mcp.json
+  export function files(cwd: string): string[] {
+    return [...config.MCPS, ...(Trusted.has(Trusted.folder(cwd)) ? [path.join(cwd, ".illi", "mcp.json")] : [])];
   }
 
-  // the servers in a file, by name; one that won't read is told
-  export function file(path: string): Record<string, Def> {
-    if (!fs.existsSync(path)) {
+  // the servers by name: the plugins' (Plugins.bundles), then those in
+  // the user's files, each over one before of its name; but those turned
+  // off, by name or a plugin's by plugin:name (all: those too)
+  export function read(cwd: string, all = false): Record<string, Found> {
+    const found: Record<string, Found> = {};
+    for (const b of Plugins.bundles().filter((b) => b.mcp.length > 0)) {
+      const vars = Bundle.vars(b);
+      for (const source of b.mcp) {
+        for (const [name, def] of Object.entries(source.data !== undefined ? mcp_servers(source.file, source.data, true) : Mcp.file(source.file, true))) {
+          found[name] = { def, file: source.file, plugin: b.name, vars };
+        }
+      }
+    }
+    for (const file of Mcp.files(cwd)) {
+      for (const [name, def] of Object.entries(Mcp.file(file))) {
+        found[name] = { def, file, plugin: null, vars: {} };
+      }
+    }
+    return Object.fromEntries(Object.entries(found).filter(([name, f]) => all || !(config.config_off(name) || (f.plugin !== null && config.config_off(f.plugin + ":" + name)))));
+  }
+
+  // the servers in a file, by name (bare: a plugin's, its mcpServers
+  // wrapper optional); one that won't read kept as trouble (status) and
+  // logged
+  export function file(file: string, bare = false): Record<string, Def> {
+    if (!fs.existsSync(file)) {
+      TROUBLES.delete(file);
       return {};
     }
+    let data: unknown;
     try {
-      return JSON.parse(fs.readFileSync(path, "utf8")).mcpServers ?? {};
+      data = JSON.parse(fs.readFileSync(file, "utf8"));
     } catch (err: any) {
-      trouble = path + ": " + err.message;
-      console.error("illi: mcp " + trouble);
-      return {};
+      return mcp_trouble(file, String(err?.message ?? err));
     }
+    return mcp_servers(file, data, bare);
   }
 
   // a server started: its link, its start, its tools; or why it failed
-  export async function open(name: string, def: Def, cwd: string): Promise<void> {
-    const server: Server = { name, state: "starting", why: "", tools: [], own: new Map(), hints: new Map(), link: null };
+  export async function open(name: string, found: Found, cwd: string): Promise<void> {
+    const { def, vars } = found;
+    const server: Server = { name, file: found.file, plugin: found.plugin, state: "starting", why: "", tools: [], own: new Map(), hints: new Map(), link: null };
     SERVERS.set(name, server);
     try {
-      server.link = def.url !== undefined ? Mcp.http(def) : Mcp.stdio(server, def, cwd);
+      server.link = def.url !== undefined ? Mcp.http(def, vars) : Mcp.stdio(server, def, cwd, vars);
       const hello = { protocolVersion: VERSION, capabilities: { roots: { listChanged: false } }, clientInfo: { name: "illi", version: "1" } };
       await server.link.ask("initialize", hello, AbortSignal.timeout(START));
       server.link.tell("notifications/initialized", {});
@@ -247,10 +298,10 @@ export namespace Mcp {
     return { text: kept.text(), fail: res?.isError === true, imgs };
   }
 
-  // each server: how it is, its tools' count, why it failed; what was
-  // wrong with the file
-  export function status(): { servers: Server[]; trouble: string; files: string[] } {
-    return { servers: [...SERVERS.values()], trouble, files: config.MCPS };
+  // each server: how it is, its tools' count, why it failed; each file
+  // that won't read, why; where the user's go (none there yet: config.MCPS)
+  export function status(): { servers: Server[]; troubles: string[]; files: string[] } {
+    return { servers: [...SERVERS.values()], troubles: [...TROUBLES].map(([file, why]) => config.config_home(file) + ": " + why), files: config.MCPS };
   }
 
   // ends every server; answers once each command's process is gone
@@ -261,13 +312,13 @@ export namespace Mcp {
   // Transports
   // ----------
 
-  // a command's server: a message a line on its stdin and stdout; its
-  // stderr to the log; its own requests answered (Mcp.serve); its end
-  // fails it
-  export function stdio(server: Server, def: Def, cwd: string): Link {
-    const env  = { ...process.env, ...Object.fromEntries(Object.entries(def.env ?? {}).map(([k, v]) => [k, Mcp.expand(String(v))])) };
-    const proc = Bun.spawn([Mcp.expand(def.command ?? ""), ...(def.args ?? []).map((a) => Mcp.expand(String(a)))], {
-      cwd: def.cwd === undefined ? cwd : Mcp.expand(def.cwd), env, stdin: "pipe", stdout: "pipe", stderr: "pipe",
+  // a command's server (its plugin's variables in its environment): a
+  // message a line on its stdin and stdout; its stderr to the log; its
+  // own requests answered (Mcp.serve); its end fails it
+  export function stdio(server: Server, def: Def, cwd: string, vars: Record<string, string> = {}): Link {
+    const env  = { ...process.env, ...vars, ...Object.fromEntries(Object.entries(def.env ?? {}).map(([k, v]) => [k, Mcp.expand(String(v), vars)])) };
+    const proc = Bun.spawn([Mcp.expand(def.command ?? "", vars), ...(def.args ?? []).map((a) => Mcp.expand(String(a), vars))], {
+      cwd: def.cwd === undefined ? cwd : Mcp.expand(def.cwd, vars), env, stdin: "pipe", stdout: "pipe", stderr: "pipe",
     });
     const wait = new Map<number, (msg: any) => void>();
     let id   = 0;
@@ -340,9 +391,9 @@ export namespace Mcp {
   // a URL's server: each message POSTed (its session's id and protocol
   // version once known), its answer JSON or an event stream; a request
   // stopped is told cancelled
-  export function http(def: Def): Link {
-    const url     = Mcp.expand(def.url ?? "");
-    const headers = Object.fromEntries(Object.entries(def.headers ?? {}).map(([k, v]) => [k, Mcp.expand(String(v))]));
+  export function http(def: Def, vars: Record<string, string> = {}): Link {
+    const url     = Mcp.expand(def.url ?? "", vars);
+    const headers = Object.fromEntries(Object.entries(def.headers ?? {}).map(([k, v]) => [k, Mcp.expand(String(v), vars)]));
     let session: string | null = null;
     let version: string | null = null;
     let id = 0;
@@ -404,9 +455,10 @@ export namespace Mcp {
     }
   }
 
-  // ${VAR} and ${VAR:-default}, the variables' values
-  export function expand(text: string): string {
-    return text.replace(/\$\{(\w+)(?::-([^}]*))?\}/g, (_, name: string, def?: string) => process.env[name] ?? def ?? "");
+  // ${VAR} and ${VAR:-default}, the variables' values (those given
+  // first, then the environment's)
+  export function expand(text: string, vars: Record<string, string> = {}): string {
+    return text.replace(/\$\{(\w+)(?::-([^}]*))?\}/g, (_, name: string, def?: string) => vars[name] ?? process.env[name] ?? def ?? "");
   }
 
   // each line a stream's bytes make, as it comes (blank ones left out)
@@ -416,4 +468,30 @@ export namespace Mcp {
     }
   }
 
+}
+
+// a file's servers, from what it holds (bare: as a plugin's may, the
+// servers with no mcpServers wrapper); what isn't servers kept as
+// trouble (status)
+function mcp_servers(file: string, data: any, bare: boolean): Record<string, Def> {
+  const got = typeof data === "object" && data !== null && "mcpServers" in data ? data.mcpServers : bare ? data : {};
+  if (typeof got !== "object" || got === null || Array.isArray(got)) {
+    return mcp_trouble(file, "its mcpServers isn't an object");
+  }
+  const servers = Object.entries(got).filter(([, def]) => typeof def === "object" && def !== null && !Array.isArray(def));
+  if (servers.length < Object.keys(got).length) {
+    return mcp_trouble(file, "a server in it isn't an object");
+  }
+  TROUBLES.delete(file);
+  return Object.fromEntries(servers) as Record<string, Def>;
+}
+
+// a file that won't read, kept as trouble and logged (once a why): none
+// of its servers
+function mcp_trouble(file: string, why: string): Record<string, Def> {
+  if (TROUBLES.get(file) !== why) {
+    console.error("illi: mcp " + file + ": " + why);
+  }
+  TROUBLES.set(file, why);
+  return {};
 }

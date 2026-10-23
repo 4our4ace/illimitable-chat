@@ -244,8 +244,8 @@ test("the root is global: a profile has its skills, agents, commands and MCP ser
   expect(Custom.skills(TMP, true).map((s) => s.name)).toContain("adhd");
   expect([Custom.agent(TMP, "reviewer")?.description, Custom.commands(TMP).map((c) => c.name)]).toEqual(["mine", ["ship"]]);
   expect(config.MCPS).toEqual([ROOT + "/mcp.json", own + "/mcp.json"]);
-  expect(Object.keys(Mcp.read())).toEqual(["docs", "off"]);
-  expect([Mcp.read().docs.url, Object.keys(Mcp.read(true))]).toEqual(["https://example.com/mine", ["github", "docs", "off"]]);
+  expect(Object.keys(Mcp.read(TMP))).toEqual(["docs", "off"]);
+  expect([Mcp.read(TMP).docs.def.url, Mcp.read(TMP).docs.file, Object.keys(Mcp.read(TMP, true))]).toEqual(["https://example.com/mine", own + "/mcp.json", ["github", "docs", "off"]]);
   expect([config.config_from("side"), config.config_from("tps")]).toEqual(["copy", "global"]);
 });
 

@@ -3,11 +3,11 @@ Customize
 
 All in `~/.illi/`, for every profile; a profile may add its own
 ([Profiles](profiles.md)). A project's `.illi/` may hold agents, commands,
-skills and plugins too, which win by name, and hooks, which add to
-yours, once you trust its folder (the question illi asks at its first
-start there; a run from a pipe or a script is never asked, so it loads
-them only for a folder trusted before); the rest is read only from
-yours.
+skills and plugins too, which win by name, and hooks and MCP servers,
+which add to yours, once you trust its folder (the question illi asks at
+its first start there; a run from a pipe or a script is never asked, so
+it loads them only for a folder trusted before); the rest is read only
+from yours.
 [`examples/`](../examples) has samples. Or ask illi: it comes with a
 skill, `customize-illi`, and writes these files itself.
 
@@ -22,12 +22,12 @@ skill, `customize-illi`, and writes these files itself.
   while on it is in every turn's prompt, so no summary drops it.
   customize-illi suggests it when it installs a skill.
 - `mcp.json`: MCP servers, in Claude Code's `mcpServers` shape (below).
-  Only yours is read, never a project's.
 - `theme.json`: the accent, the other colors, the palette and glyphs
   ([Theme](#theme), below). The `accent` setting alone recolors
   everything, at once: `/settings`, or `/set accent cyan`.
-- `plugins/`: TS or JS modules that run inside illi, with hooks on what
-  it does ([Plugins](#plugins), below).
+- `plugins/`: plugins, each a folder of commands, skills, agents, hooks
+  and MCP servers (a Claude Code plugin as it is), and code that runs
+  inside illi ([Plugins](#plugins), below).
 - `hooks.json`: shell commands run at what illi does, in Claude Code's
   hook format ([Hooks](#hooks), below).
 - `RULES.md`: your rules for every project, in every prompt. illi writes
@@ -61,8 +61,12 @@ MCP servers
 
 Secrets go in as `${VAR}`, read from the environment, never in the file.
 A server may also have a `cwd`, and `"disabled": true` keeps it from
-starting (the `off` setting does too, by name). A change applies at
-illi's next start; `/mcp` lists the servers and
+starting (the `off` setting does too, by name). A trusted project's
+`.illi/mcp.json` adds its servers (said at the start when it is new or
+changed since illi last started there), and a plugin's come under
+yours: by name, a profile's take the place of the global ones, a
+project's of both, and any of yours of a plugin's. A change applies at
+illi's next start; `/mcp` lists the servers, where each is from, and
 their tools.
 
 Theme
@@ -120,17 +124,94 @@ the setting applies at once.
 Plugins
 -------
 
-A plugin is code of yours that runs inside illi: a `.ts`, `.js` or
-`.mjs` file in `~/.illi/plugins/` (every profile), a profile's
-`plugins/` or a project's `.illi/plugins/`, or a folder there with an
-`index.ts`. A project's load only in a folder you trust; by name, a
-profile's wins over a global one and a project's over both; the `off`
-setting turns one off. They load as illi starts, before the chat
-opens; `/agents` lists them, and one that fails says why.
+A plugin is a folder in `~/.illi/plugins/` (every profile), a profile's
+`plugins/` or a project's `.illi/plugins/`, laid out as Claude Code's,
+so a Claude Code plugin works copied in as it is:
 
-A plugin runs as you, with all illi can do: it reads files, runs
-programs and changes what the model is told. Install only code you
-trust.
+    review/
+      .claude-plugin/plugin.json   { "name": "review", "description": "...", "version": "1.0.0" }
+      commands/review.md           /review
+      skills/check/SKILL.md        a skill
+      agents/reviewer.md           an agent
+      hooks/hooks.json             hooks, as a hooks.json's
+      .mcp.json                    MCP servers (the "mcpServers" wrapper optional)
+      illi.ts                      code that runs inside illi (below)
+
+Each part is optional; one `SKILL.md` at the folder's top makes the
+plugin that one skill. Install one by copying or cloning it in:
+
+    git clone https://github.com/someone/review ~/.illi/plugins/review
+
+- Its parts join yours by name: yours win, then a later plugin over an
+  earlier (global, profile, project; by name), and none takes the name
+  of one of illi's own commands. A part another hides is listed as
+  `plugin:name` (`/review:check`), and every plugin's part answers to
+  that too. The `off` setting turns a plugin off by its name, or one
+  part as `plugin:name`. By name, a profile's plugin takes the place of
+  a global one, a project's of both.
+- The manifest is optional, and read as Claude Code reads it: its
+  `commands` and `agents` (paths) replace those folders, `skills` adds
+  to them, `hooks` and `mcpServers` (a path, or the block itself) add
+  to the files. A path starts with `./` and stays in the folder; one
+  leading out (a link too) is left out, said.
+- Its [hooks](#hooks) run before yours, so your checks see what they
+  changed; its `disableAllHooks` is passed over. Its hook commands and
+  MCP servers get `CLAUDE_PLUGIN_ROOT` (its folder) and
+  `CLAUDE_PLUGIN_DATA` (a folder of its own under
+  `~/.illi/plugin-data/`, kept across updates), and illi's spellings
+  `ILLI_PLUGIN_ROOT` and `ILLI_PLUGIN_DATA`; MCP fields and its parts'
+  text get them filled in (`${CLAUDE_PLUGIN_ROOT}`), a skill's
+  `${CLAUDE_SKILL_DIR}` too. Its commands take `$1`..`$9` (the words
+  given) beside `$ARGUMENTS`.
+- `/agents` lists each plugin: what it gives, its version, what illi
+  doesn't use of it, and what won't read (said at the start too); and a
+  folder that looks meant as one but isn't (a marketplace, a name with
+  a space).
+- A project's plugins load only in a folder you trust; one new or
+  changed since illi last started there is said at the start. Commands,
+  skills and agents are read as they're used, so a new one works at
+  once; code, hooks and MCP servers from the next start.
+
+A plugin runs as you: its code, hooks and MCP servers run on your
+computer with all illi can do. Install only what you trust. illi reads
+a plugin's folder without asking, as a skill's (but its `.mcp.json`,
+`settings.json`, manifest and secrets), runs its scripts as a
+project's, and asks before it writes there.
+
+### Claude Code plugins
+
+Skills, commands, agents, hooks, MCP servers and the variables carry
+over. What differs:
+
+- An agent's `tools:` take Claude Code's names, read as illi's: `Read`
+  read, `Write` write, `Edit` and `MultiEdit` edit, `Bash` shell, `Task`
+  spawn, `TodoWrite` todo; `Glob`, `Grep` and `LS` shell, if `Bash`,
+  `Write` or `Edit` is listed too (else it can't search, said in
+  `/agents`). `model: inherit` is your pick; `sonnet`, `opus`, `haiku`
+  or `fable` alone the newest of it offered, else your pick. (Your own
+  agents are read so too.)
+- Hooks: a `Bash` matcher takes illi's `shell` ([Beside Claude
+  Code's](#beside-claude-codes)); one naming only Claude Code's other
+  tools runs only on `claude-code`'s own calls, said at the start.
+- Its own MCP servers' tools are `mcp__<server>__<tool>`: Claude Code's
+  `mcp__plugin_<plugin>_<server>__` is read as that, in its agents and
+  matchers.
+- Not done: a command's `` !`cmd` `` lines and `@file` references (said
+  in `/agents`), `${user_config.*}` (empty: illi has no userConfig),
+  `bin/` on your PATH, output styles, LSP servers, themes, monitors.
+- A root `index.js` beside other parts is often its MCP server, so illi
+  never imports it: illi's code goes in `illi.ts`.
+- On `claude-code`, Claude Code still loads its own enabled plugins
+  inside its calls.
+
+### Code
+
+A plugin's code (`illi.ts`, `.js` or `.mjs` in its folder; or a `.ts`,
+`.js` or `.mjs` file alone in a plugins folder, or a folder with only an
+`index.ts`) runs inside illi: it reads files, runs programs and changes
+what the model is told. It loads as illi starts, before the chat opens;
+code that fails to load says why, and the rest of its plugin still
+applies.
 
 ```ts
 // ~/.illi/plugins/guard.ts
@@ -183,7 +264,8 @@ own, so it doesn't see theirs).
 
 - Hooks run one after another: the plugins in the order they load
   (global, profile, project; by name), each one's in the order it gave
-  them, then your [hooks](#hooks). `start`, the turns, messages and
+  them, then the [hooks](#hooks) files' commands (the plugins', then
+  yours). `start`, the turns, messages and
   waits come in order, and illi never waits for them; each hook gets
   30 s.
 - `tool.before` hooks run before you're asked to allow a call, so you
@@ -212,11 +294,12 @@ Shell commands run at what illi does, in Claude Code's hook format: a
 `hooks.json` holds its `hooks` block, so one written for Claude Code
 pastes in. Each of `~/.illi/hooks.json` (every profile), a profile's
 own and a project's `.illi/hooks.json` (once you trust its folder)
-applies, in that order; a command given twice runs once. They're read as
-illi starts, and `/agents` lists them. A project's file that is new, or
-changed since illi last started there, is said at the start.
-`"disableAllHooks": true` in any of them, or the `off` setting naming
-`hooks.json`, turns them all off.
+applies, in that order, after the [plugins'](#plugins) (so yours see
+the input as theirs left it); a command given twice runs once. They're
+read as illi starts, and `/agents` lists them. A project's file that is
+new, or changed since illi last started there, is said at the start.
+`"disableAllHooks": true` in any of yours (a plugin's is passed over),
+or the `off` setting naming `hooks.json`, turns them all off.
 
 A hook runs as you, like a plugin: a project's hooks file runs its
 commands on your computer as you work there. illi asks before it writes
@@ -267,7 +350,9 @@ whole, from `/`), `zoom`, `date`, `spawn`, `tell`, `todo`, `skill`,
 ### What a command gets
 
 It runs in `sh`, in the folder illi started in, with `ILLI_PROJECT_DIR`
-set to the project's top, and gets JSON on its input:
+and `CLAUDE_PROJECT_DIR` set to the project's top (a plugin's, its
+`CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA` too), and gets JSON on
+its input:
 
 | Field | Events |
 | ----- | ------ |
@@ -312,7 +397,8 @@ set to the project's top, and gets JSON on its input:
 
 ### How they run
 
-- After your plugins, one after another: each `PreToolUse` sees the input
+- After your plugins' code, one after another, the plugins' before
+  yours: each `PreToolUse` sees the input
   as the one before left it, and decisions fold as plugins' do (a
   refusal is final; then an ask; then an allow, taken back by a later
   change of the input). An allow runs the call as `yolo` mode would:
@@ -333,9 +419,12 @@ set to the project's top, and gets JSON on its input:
 
 ### Beside Claude Code's
 
-- illi's tool names and inputs (above), not Claude Code's: a matcher
-  `Bash` matches nothing here. On `claude-code`, its own tools come under
-  their names as they ask leave (`shell|Bash` covers both); illi turns
+- illi's tool names and inputs (above), not Claude Code's. A matcher
+  naming `Bash` takes illi's `shell` too (its input is alike,
+  `{ command }`), and the command is told `tool_name: "Bash"`; one
+  naming only Claude Code's other tools (`Write|Edit`: their inputs
+  differ) is said at the start. On `claude-code`, its own tools come
+  under their names as they ask leave; illi turns
   your `~/.claude` hooks off inside it, so `hooks.json` is the one file
   that runs, and only `PreToolUse`'s refusal, input and decision reach
   those tools (Claude Code runs them, so `PostToolUse` doesn't see them).

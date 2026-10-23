@@ -156,7 +156,7 @@ function term_bar(f: number, w: number, c: string): Item {
 // (in the theme's success; its tools counted), ✗ failed (its error), ◌
 // starting; a file that won't read; a click on any: /mcp
 function term_side_mcp(t: Term): Item[] {
-  const { servers, trouble } = Mcp.status();
+  const { servers, troubles } = Mcp.status();
   const wide = Math.max(0, ...servers.map((s) => Paint.text_width(s.name)));
   const tone = Draw.draw_tokens();
   const red  = { ...Paint.INK, c: tone.error };
@@ -167,7 +167,7 @@ function term_side_mcp(t: Term): Item[] {
       : s.state === "failed" ? [Paint.Run("✗ ", red), Paint.Run(name, Paint.DIM), Paint.Run("  failed", { ...Paint.DIM, c: tone.error })]
       : [Paint.Run("◌ " + name + "  starting", Paint.DIM)];
   };
-  const file = trouble === "" ? [] : [[Paint.Run("✗ ", red), Paint.Run("mcp.json won't read", Paint.DIM)]];
+  const file = troubles.length === 0 ? [] : [[Paint.Run("✗ ", red), Paint.Run((troubles.length === 1 ? "an MCP file" : troubles.length + " MCP files") + " won't read", Paint.DIM)]];
   return [...servers.map(line), ...file].map((l): Item => [l, () => term_mcp(t)]);
 }
 
