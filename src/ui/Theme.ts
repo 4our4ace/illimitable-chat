@@ -24,11 +24,12 @@
 // of a kind alike: the accent (copy buttons, the side's bars, the
 // spinner and the ∞, a pane's title, a list's matches, the profile's
 // name, a pasted text's chip, the text chosen), you (the frame round the
-// user's words: the accent's, unless set), a reply's links, success,
-// warning and error, and the secondary text (dim). Draw.ts makes each
-// one's color (draw_tokens): the accent and the links by the palette, the
-// rest the terminal's own; an accent asked for is the palette's accent
-// and bullets too. The user's theme (config.THEME, a JSON file) may set
+// user's words: the accent, softer, unless set), a reply's links,
+// success, warning and error, and the secondary text (dim). Draw.ts
+// makes each one's color (draw_tokens): the accent illi's aqua (a named
+// palette's own accent), the links the palette's, the rest the
+// terminal's own; an accent not the palette's own is its accent and
+// bullets too. The user's theme (config.THEME, a JSON file) may set
 // any entry of ANSI, GLYPH, TOOL and SYNTAX, the PALETTE, any of its
 // colors (COLORS) and any token (its accent the one-word way, `accent`);
 // a plugin's theme goes over the file's (theme_plug), the `accent`
@@ -93,11 +94,12 @@ const OWN = theme_read();
 export const ANSI: Record<string, string | undefined> = { block: "", ink: "", ...OWN.ansi };
 
 // each token's color as the theme asks it: a color, a color's name
-// (NAMED, illi), another token's name (it follows that one), or "" (the
-// accent and links: the palette's; the rest: the terminal's own, its
-// ink, dim its faint). The user's frame is the accent's, unless the
-// theme's ansi sets it (as an older theme does)
-export const TOKENS: Record<Token, string> = { accent: "", you: OWN.ansi?.you ?? "accent", link: "", success: "2", warning: "3", error: "1", dim: "", ...OWN.tokens };
+// (NAMED, illi), another token's name (it follows that one), or "" (its
+// default, Draw.ts: the accent illi's aqua, or a named palette's own;
+// the links the palette's; the user's frame the accent, softer; the
+// rest the terminal's own, its ink, dim its faint). The theme's ansi
+// sets the user's frame too, as an older theme does
+export const TOKENS: Record<Token, string> = { accent: "", you: OWN.ansi?.you ?? "", link: "", success: "2", warning: "3", error: "1", dim: "", ...OWN.tokens };
 
 // what a message is, named on its top (a report's frame edge, a note's
 // first line; a result names itself on its frame's edge; a report: its agent's name, else this; a

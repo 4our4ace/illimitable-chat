@@ -21,6 +21,7 @@ import { term_chooser, term_model_pick } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Custom } from "../config/Custom.ts";
 import { Mcp } from "../tools/Mcp.ts";
+import { Plugins } from "../config/Plugins.ts";
 import { term_note } from "./Notices.ts";
 import { Pick } from "../ai/Pick.ts";
 import * as Screen from "../ui/Screen.ts";
@@ -146,10 +147,11 @@ export function setting_open(t: Term, key: config.Key): void {
   t.scr.typed = true;
 }
 
-// Enter on `off`: each skill, agent, command and MCP server, what it is
-// and where it's from (built in, global, the profile, the project), on
-// or off; Enter, Left or Right turns the lit one on or off, kept in
-// `off` at once (a server starts or stops at the next start). In a
+// Enter on `off`: each skill, agent, command, MCP server and plugin, what
+// it is and where it's from (built in, global, the profile, the
+// project), on or off; Enter, Left or Right turns the lit one on or off,
+// kept in `off` at once (a server or plugin starts or stops at the next
+// start). In a
 // profile, one off globally stays off: a note says where to turn it on
 // (Config ADDS)
 function setting_off(t: Term): void {
@@ -162,6 +164,7 @@ function setting_off(t: Term): void {
     ...[...Custom.files(cwd, "agents", true)].map(([name, file]) => [name, "agent · " + where(file)]),
     ...[...Custom.files(cwd, "commands", true)].map(([name, file]) => [name, "command · " + where(file)]),
     ...Object.keys(Mcp.read(true)).map((name) => [name, "MCP server · " + (own && name in mine ? config.PROFILE : "global")]),
+    ...Plugins.found().map((p) => [p.name, "plugin · " + where(p.file)]),
   ];
   const global = (name: string) => own && config.config_names("off", true).includes(name.toLowerCase());
   const aside  = () => rows.map(([name]) => (!config.config_off(name) ? "on" : global(name) ? "off globally" : "off"));
@@ -181,7 +184,7 @@ function setting_off(t: Term): void {
     }
     return true;
   };
-  const foot = (k: number) => "Enter on/off · " + (rows[k][1].startsWith("MCP") ? "at the next start" : "applies now");
+  const foot = (k: number) => "Enter on/off · " + (/^(MCP|plugin)/.test(rows[k][1]) ? "at the next start" : "applies now");
   term_chooser(t, "Turned off" + (own ? " in " + config.PROFILE : ""), rows.map(([name]) => name), rows.map(([, about]) => about), -1, () => {}, { find: true, keys, foot, aside: aside() });
 }
 

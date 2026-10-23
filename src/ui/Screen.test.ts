@@ -10,6 +10,7 @@
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
+import * as Draw from "./Draw.ts";
 import * as Paint from "./Paint.ts";
 import * as Reply from "./Reply.ts";
 import * as Screen from "./Screen.ts";
@@ -78,7 +79,7 @@ test("a message sent shows each paste whole, as pasted; its history, read again,
   expect(shown.join("\n")).toContain("row 3 [FireAnt]\n");
   expect(shown.join("\n")).not.toContain("[Pasted text");
   expect(shown).toContain("fix [Image #4]");
-  const chips = Paint.rows_lines(View.entry_rows(1, "user", sent), 60).flat().filter((r) => r.s.c === "6").map((r) => r.x);
+  const chips = Paint.rows_lines(View.entry_rows(1, "user", sent), 60).flat().filter((r) => r.s.c === Draw.draw_tokens().accent && !/[│─╭╮╰╯]/.test(r.x)).map((r) => r.x);
   expect(chips).toEqual(["[Image #4]"]);
   const later = Screen.ed_new();
   Screen.ed_history(later, ["hi", sent]);

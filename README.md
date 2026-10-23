@@ -135,7 +135,7 @@ Docs
 - [Providers](docs/providers.md): ChatGPT, your Claude plan through
   Claude Code, API keys, and which models do what.
 - [Customize](docs/customize.md): agents, commands, skills, MCP servers,
-  theme and rules.
+  plugins, the theme and its accent, rules.
 - [Profiles](docs/profiles.md): separate chats on one global setup, e.g.
   work and home.
 - [Config](docs/config.md): every setting and variable, the files illi

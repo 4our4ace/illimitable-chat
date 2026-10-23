@@ -19,14 +19,16 @@
 // that shows neither never loads them.
 //
 // The theme's tokens (Theme.TOKENS) are made here, as they take the
-// palette's colors (draw_tokens): the accent its accent (untold, the
-// terminal's magenta), the links its links (blue), the rest as the theme
-// asks; a token naming another takes that one's. An accent asked for (the
-// setting, the theme's, a plugin's) is the palette's accent and bullets
-// too, so a reply's buttons, quotes and lists follow it; links asked
-// for, its links. All of it is made once per look (draw_stamp: the
-// background told, the theme changed), so a new accent recolors all at
-// once.
+// palette's colors and the background (draw_tokens): the accent illi's
+// aqua under "auto" (a named palette: its own accent), the links the
+// palette's (blue), the frame round the user's words the accent mixed
+// toward the background, the rest as the theme asks; a token naming
+// another takes that one's. An accent that isn't the palette's own (one
+// asked for: the setting, the theme's, a plugin's; auto's aqua) is the
+// palette's accent and bullets too, so a reply's buttons, quotes and
+// lists follow it; links asked for, its links. All of it is made once
+// per look (draw_stamp: the background told, the theme changed), so a
+// new accent recolors all at once.
 //
 // An agent's mark has a color of its own (draw_agent): illi's is the
 // brand's; another's, the one its file pins, else one made for it as the
@@ -70,6 +72,10 @@ const KEPT = 64;
 // deeper), and the terminal's own, untold; its hue (OKLCH)
 const BRAND     = { dark: "#81f8fb", light: "#0c9297", own: "6" };
 const BRAND_HUE = 198;
+
+// how far the frame round the user's words (the you token, unset) is
+// mixed from the accent toward the background: the accent's hue, calmer
+const SOFT = 0.4;
 
 // the other agents' colors, made: HUES hues round the wheel (OKLCH), a
 // step apart from the brand's, then a ring of deeper ones between them,
@@ -196,9 +202,10 @@ function draw_own(): Record<string, string> {
 }
 
 // the theme for the look now, made once per look: each token's color
-// (draw_token), and a reply's palette: the theme's own, an accent asked
-// for in its accent and bullets, links asked for in its links (but where
-// the user's colors name those slots)
+// (draw_token), and a reply's palette: the theme's own, its accent and
+// bullets in the accent where that isn't the palette's own accent (one
+// asked for; auto's, illi's aqua), its links in the links where those
+// aren't its own; but where the user's colors name those slots
 function draw_made(): { theme: Record<string, string>; tokens: Record<Theme.Token, string> } {
   const now = draw_stamp();
   if (made !== null && made.look === now) {
@@ -210,7 +217,7 @@ function draw_made(): { theme: Record<string, string>; tokens: Record<Theme.Toke
   const tokens = Object.fromEntries((Object.keys(asked) as Theme.Token[]).map((t) => [t, draw_token(t, asked, own, [])])) as Record<Theme.Token, string>;
   const theme  = { ...own };
   for (const [t, slots] of [["link", ["link"]], ["accent", ["accent", "bullet"]]] as const) {
-    for (const slot of draw_asked(asked[t]) ? slots.filter((x) => !(x in colors)) : []) {
+    for (const slot of tokens[t] !== own[t] ? slots.filter((x) => !(x in colors)) : []) {
       theme[slot] = tokens[t];
     }
   }
@@ -225,9 +232,10 @@ function draw_asked(value: string): boolean {
 
 // a token's color: the one it asks for (a color; a color's name, the
 // terminal's own; illi, the brand's; another token's name, that one's,
-// a loop of them none), else its default: the accent and links the
-// theme's own (the palette's, the user's colors over it; none: the
-// terminal's magenta and blue), the rest none
+// a loop of them none), else its default: the accent the user's colors'
+// accent, else auto's illi's aqua (the brand's), a named palette's its
+// own (none: the terminal's magenta); the links the palette's (blue);
+// the user's frame the accent, softer (draw_soft); the rest none
 function draw_token(t: Theme.Token, asked: Record<Theme.Token, string>, own: Record<string, string>, seen: Theme.Token[]): string {
   const value = asked[t];
   if (Theme.theme_named(value)) {
@@ -236,7 +244,33 @@ function draw_token(t: Theme.Token, asked: Record<Theme.Token, string>, own: Rec
   if (draw_asked(value)) {
     return value === "illi" ? draw_brand() : Theme.NAMED[value] ?? value;
   }
-  return t === "accent" ? own.accent ?? "5" : t === "link" ? own.link ?? "4" : "";
+  switch (t) {
+    case "accent": {
+      return "accent" in Theme.theme_colors() || Theme.PALETTE in PRESETS ? own.accent ?? "5" : draw_brand();
+    }
+    case "link": {
+      return own.link ?? "4";
+    }
+    case "you": {
+      return seen.includes("accent") ? "" : draw_soft(draw_token("accent", asked, own, [...seen, t]));
+    }
+    default: {
+      return "";
+    }
+  }
+}
+
+// a color made softer: SOFT of the way toward the background, its hue
+// kept; as it is where either isn't #rrggbb (the background untold, a
+// terminal's own color)
+function draw_soft(c: string): string {
+  return c.startsWith("#") && canvas !== null ? draw_mix(c, canvas, SOFT) : c;
+}
+
+// a color f of the way to another (#rrggbb)
+export function draw_mix(a: string, b: string, f: number): string {
+  const at = (hex: string, k: number) => parseInt(hex.slice(k, k + 2), 16);
+  return "#" + [1, 3, 5].map((k) => Math.round(at(a, k) + (at(b, k) - at(a, k)) * f).toString(16).padStart(2, "0")).join("");
 }
 
 // the brand's color (BRAND), as the background has it

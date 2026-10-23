@@ -32,6 +32,7 @@ process.env.ILLI_DIR = DIR;
 const { term_chooser, term_command, term_commands, term_named, term_suggest, term_tally, term_tally_keep, term_tally_one } = await import("./Commands.ts");
 const { term_grab, term_press, term_type } = await import("./Keys.ts");
 const { term_side } = await import("./Side.ts");
+const Draw = await import("../ui/Draw.ts");
 const Paint = await import("../ui/Paint.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
@@ -391,7 +392,7 @@ test("two illis counting at once each keep their uses over the other's: the file
   expect([fs.statSync(DIR + "/blocked.json").isDirectory(), fs.readdirSync(DIR).filter((f) => f.startsWith("blocked.json."))]).toEqual([true, []]);
 });
 
-test("the side shows any vendor's plan alike: each window's share used, a bar as full, yellow and red as it fills; one past its reset, none", () => {
+test("the side shows any vendor's plan alike: each window's share used, a bar as full, in the accent, the theme's error as it fills; one past its reset, none", () => {
   const t = term();
   Object.assign(t, { agents: [], profs: ["default"], since: Date.now() });
   t.v.use.plan = { brand: "Claude", tier: "max", limits: [{ window: 300, used: 23, reset: Date.now() + 7200e3 }, { window: 10080, used: 95, reset: Date.now() + 3 * 86400e3 }, { window: 1440, used: 50, reset: Date.now() - 1 }] };
@@ -400,7 +401,8 @@ test("the side shows any vendor's plan alike: each window's share used, a bar as
   const text  = (l: any[]) => l.map((r) => r.x).join("").trim();
   const bar   = (l: any[]) => [l[0].x.length, l[1].x.length, l[0].s.c];
   expect(lines.slice(at, at + 7).filter((_, k) => k % 2 === 1).map(text)).toEqual(["5h       23% · resets 2h", "Week     95% · resets 3d", "Day      0% · reset"]);
-  expect([0, 1, 2].map((k) => bar(lines[at + 2 + 2 * k]))).toEqual([[6, 18, "4"], [23, 1, "1"], [0, 24, "4"]]);
+  const { accent, error } = Draw.draw_tokens();
+  expect([0, 1, 2].map((k) => bar(lines[at + 2 + 2 * k]))).toEqual([[6, 18, accent], [23, 1, error], [0, 24, accent]]);
   expect(text(lines[at])).toBe("Usage · Claude Max");
   t.v.use.plan = null;
   expect(term_side(t, 30, 40).map(([line]) => text(line))).not.toContain("Usage");
