@@ -26,7 +26,7 @@ import * as Screen from "../ui/Screen.ts";
 import { term_area, term_under } from "./Select.ts";
 import { term_side, term_side_drawn, term_side_width, term_tokens } from "./Side.ts";
 import { status_rows } from "./Status.ts";
-import { term_act, type Area, type Item, type Pane, type Sug, type Term } from "./Term.ts";
+import { term_act, type Area, type Chooser, type Item, type Pane, type Sug, type Term } from "./Term.ts";
 import { GLYPH } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
 
@@ -116,7 +116,8 @@ let titled: { cwd: string; name: string } | null = null;
 const OFF = "Read-only · Ctrl+PgUp back to ";
 
 // the commands suggested: the most lines shown, the keys said in its top
-// edge (a skill's name mid-message: NAMED's); the picker's widest
+// edge (a skill's name mid-message: NAMED's); the picker's width (wider
+// as its options need, the screen allowing: term_box)
 const SUGGEST   = 10;
 const SUGGESTED = "Commands · ↑↓ · Tab fills in · Enter runs · Esc";
 const NAMED     = "Skills · ↑↓ · Tab or Enter fills in · Esc";
@@ -209,8 +210,9 @@ export function term_paint(t: Term): void {
   const tall  = Math.max(1, h - (paned ? 4 : 5) - input.lines.length - above.length - status.length);
   const mid   = t.choose?.middle !== undefined;
   const floor = 3 + tall + above.length + input.lines.length;
-  const box   = mid ? term_middle(t, full, h) : term_box(t, iw, Math.min(cw, PICKER_W), left + MARGIN, tall + 1 + above.length, floor);
+  const box   = mid ? term_middle(t, full, h) : term_box(t, iw, Math.min(cw, PICKER_W), left + MARGIN, tall + 1 + above.length, floor, full - MARGIN);
   const over  = box !== null && !mid && !box.wide;
+  const covers = box !== null && !mid && (left > 0 ? box.col < left : box.col + box.w > full - side);
   const top   = box === null ? Infinity : mid ? Math.floor((h - box.items.length) / 2) : over ? floor + 1 - box.items.length : 2 + tall + above.length - box.items.length;
   const view  = term_view(t, cw, tall, 1, left + MARGIN);
   for (let r = top; r <= tall && !mid; r++) {
@@ -234,7 +236,7 @@ export function term_paint(t: Term): void {
   rows.push([{ col: 0, w: full, line: head[0] }]);
   for (let k = 0; k < tall; k++) {
     const row: Screen.Piece[] = [{ col: left + MARGIN, w: cw, line: shown[k] }];
-    if (sides[k] !== undefined && !(box?.wide && 1 + k >= top)) {
+    if (sides[k] !== undefined && !(covers && 1 + k >= top)) {
       row.push({ col: at, w: side, line: term_side_line(sided[k], sw, left > 0) });
       with_.push(k);
     }
@@ -533,11 +535,12 @@ function term_view(t: Term, w: number, tall: number, row: number, col: number): 
 
 // the box over the chat's foot, room lines at most: as a /word is typed,
 // the commands it matches, iw wide (wide: over the side too), over the
-// chat's foot; else the picker, pw wide at column col, down over the
+// chat's foot; else the picker, pw wide (wider as its options need, to
+// column end at most: term_picker_need) at column col, down over the
 // input, its last line on `floor` (the rule under the input), so it alone
 // has the focus (none: null); at: the cursor's place in it, if it takes
 // the typing (a search)
-function term_box(t: Term, iw: number, pw: number, col: number, room: number, floor: number): { items: Item[]; col: number; w: number; wide: boolean; at?: Screen.Spot } | null {
+function term_box(t: Term, iw: number, pw: number, col: number, room: number, floor: number, end: number): { items: Item[]; col: number; w: number; wide: boolean; at?: Screen.Spot } | null {
   const sug = t.asking?.form == null ? term_suggest(t) : null;
   if (sug !== null) {
     return { items: term_suggestions(t, sug, iw, room), col: MARGIN, w: iw, wide: true };
@@ -545,8 +548,16 @@ function term_box(t: Term, iw: number, pw: number, col: number, room: number, fl
   if (t.choose === null) {
     return null;
   }
-  const { items, at } = term_picker(t, pw, floor);
-  return { items: items.slice(0, floor), col, w: pw, wide: false, at };
+  const w = Math.max(pw, Math.min(end - col, term_picker_need(t.choose)));
+  const { items, at } = term_picker(t, w, floor);
+  return { items: items.slice(0, floor), col, w, wide: false, at };
+}
+
+// the columns a picker needs for each option's name whole: its frame,
+// the lit one's mark, the chosen one's (where one is), the name, the
+// gap after it
+function term_picker_need(c: Chooser): number {
+  return 4 + 2 + (c.here < 0 ? 0 : 2) + Math.max(0, ...c.names.map((name) => Paint.text_width(name))) + 2;
 }
 
 // the picker in the screen's middle (Chooser middle): as wide as it
