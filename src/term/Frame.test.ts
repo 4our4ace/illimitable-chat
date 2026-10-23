@@ -4,7 +4,8 @@
 // never in its middle; asked for again within a frame, it waits for the
 // frame's end, all asked for meanwhile in one paint. The terminal's
 // title names illi and the project, a small ∞ traced in the ∞'s place
-// while work runs.
+// while work runs. A picker grows to show its options whole, the side
+// stepping aside where it covers it.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -123,4 +124,31 @@ test("the title's ∞ while work runs: 3 braille cells, a trail of 4 dots a step
   expect([term_loop(12), term_loop(-1)]).toEqual([frames[0], frames[11]]);
   const whole = [0, 1, 2].map((c) => String.fromCharCode(0x2800 | frames.reduce((b, f) => b | (f.charCodeAt(c) - 0x2800), 0))).join("");
   expect(whole).toBe("⢎⠶⡱");
+});
+
+test("a picker grows to show its longest option whole, the screen allowing; the side steps aside on the rows it covers", async () => {
+  const { term_chooser } = await import("./Commands.ts");
+  const cols = Object.getOwnPropertyDescriptor(process.stdout, "columns");
+  Object.defineProperty(process.stdout, "columns", { value: 160, configurable: true });
+  try {
+    const t    = term();
+    const long = "Yes, and don't ask again for git -C /home/someone/work/a/project/with/a/long/path push origin main in this project";
+    term_chooser(t, "Allow Bash?", ["Yes", long, "No"], ["", "", ""], -1, () => {});
+    await written(async () => term_paint(t));
+    const text = (row: any[]) => {
+      const cells = Array(160).fill(" ");
+      for (const p of row) {
+        [...p.line.map((r: any) => r.x).join("")].slice(0, p.w).forEach((ch, k) => (cells[p.col + k] = ch));
+      }
+      return cells.join("");
+    };
+    const rows = t.ruled.rows.map(text);
+    const at   = rows.findIndex((r: string) => r.includes(long));
+    expect(at).toBeGreaterThan(0);
+    const box  = rows.filter((r: string) => r.includes("Allow Bash?") || r.includes(long) || r.includes("› Yes") || r.includes("  No"));
+    expect(box.every((r: string) => !r.slice(125).includes("│"))).toBe(true);
+    expect(rows.slice(1, 4).some((r: string) => r.includes("│"))).toBe(true);
+  } finally {
+    Object.defineProperty(process.stdout, "columns", cols ?? { value: undefined, configurable: true });
+  }
 });
