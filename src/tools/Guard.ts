@@ -20,19 +20,21 @@
 //
 // Flags: the danger list (root, deleting trees, wiping disks, losing git
 // work, sending data off, connecting out, publishing, changing the
-// system or infrastructure, assignments that change what runs, code
-// piped into a shell); paths (outside the project, secrets anywhere,
+// system, infrastructure or the cloud, assignments that change what
+// runs, code fed into a shell from elsewhere, programs that run a command
+// they're given); paths (outside the project, secrets anywhere,
 // protected files inside, devices and network sockets); what is known
 // only as the command runs (a variable, a command's output, a folder
-// after a cd to one, a glob as a command's name); a program or script
-// from outside the project; what Shell.ts can't read. Whatever the checks
-// can't be sure of is asked, never run silently.
+// after a cd to one, a glob as a command's name); a program, script or
+// makefile from outside the project, a project tool run outside it; what
+// Shell.ts can't read. Whatever the checks can't be sure of is asked,
+// never run silently.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as config from "../config/Config.ts";
-import { Shell, type Part, type Word } from "./Shell.ts";
+import { Shell, type Part, type Redir, type Word } from "./Shell.ts";
 
 // Types
 // =====
@@ -114,16 +116,53 @@ const WRITERS = new Set([
 ]);
 const COPIERS = new Set(["cp", "ln", "install", "rsync", "scp"]);
 
-// the shells, and the interpreters, that run a script or code given them
+// the shells, and the interpreters, that run a script or code given them;
+// the shells whose language isn't bash's (their scripts can't be read)
 const SHELLS = new Set(["sh", "bash", "dash", "zsh", "ksh", "ash", "mksh", "fish", "csh", "tcsh", "nu", "pwsh", "xonsh"]);
 const INTERPS = /^(python[\d.]*|pypy[\d.]*|node|nodejs|bun|deno|perl|ruby|php|lua|luajit|Rscript|osascript|tclsh|wish|groovy|julia|elixir|erl|ts-node|tsx)$/;
+const ODD = new Set(["fish", "csh", "tcsh", "nu", "pwsh", "xonsh"]);
 
-// an interpreter's options giving its code inline
-const INLINE = new Set(["-c", "-e", "-E", "--eval", "-p", "--print", "-r", "--exec", "eval"]);
+// an interpreter's long options giving its code inline (node --eval=x,
+// erl -eval x); its short ones are by interpreter (inline_letters)
+const INLINE = /^(--eval|--print|--exec|-eval)(=|$)/;
 
 // inline code (python -c, node -e, a heredoc into an interpreter) that
-// names what can run a program, change files or reach the network: asked
-const RISKY = /\b(system|popen|spawn\w*|exec\w*|eval|subprocess|child_process|shutil|rmtree|unlink\w*|remove|rmdir|rename\w*|chmod|chown|kill|socket|urllib|requests|httpx?|fetch|curl|wget|writeFile\w*|appendFile\w*|write_text|write_bytes|__import__|getattr|importlib|compile|ctypes|Deno\.\w+|Bun\.(spawn\w*|write|file|\$)|fs\.\w+|os\.\w+|open\s*\([^)]*['"][wax+])/;
+// names what can run a program, change files, reach the network or read
+// a secret: asked
+const RISKY = /\b(system|popen|spawn\w*|exec\w*|eval|subprocess|child_process|shutil|rmtree|unlink\w*|remove|rmdir|rename\w*|chmod|chown|kill|socket|urllib|requests|httpx?|fetch|curl|wget|writeFile\w*|appendFile\w*|write_text|write_bytes|__import__|getattr|importlib|compile|ctypes|Deno\.\w+|Bun\.(spawn\w*|write|file|\$)|fs\.\w+|os\.\w+|open\s*\([^)]*['"][wax+])|\bimport\s*\(|\brequire\s*\(\s*['"](node:)?(fs|child_process|net|https?|http2|dgram|dns|tls|vm|worker_threads|cluster|inspector)\b|\bfrom\s+['"](node:)?(fs|child_process|net|https?|dgram|vm|worker_threads)\b|%x[^\w\s]|\bqx\s*[^\w\s]|\bSystem\.\w+|\bFile\.(rm|write|cp|rename|chmod)\w*|\brm\s*\(|(?<![\w)$])\.(env|ssh|aws|netrc|gnupg|git-credentials)\b|\bid_(rsa|dsa|ecdsa|ed25519)\b|\bcredentials\b|\.(pem|key)['"]/;
+
+// the interpreters whose backticks run a command (perl -e 'print `id`')
+const TICKS = /^(perl|ruby|php|julia)/;
+
+// the programs that run a command given in their words (flock f cmd,
+// strace cmd, parallel ...): asked, as illi doesn't read what they run;
+// tmux's, screen's, perf's and direnv's listings only read (RUNS_READ)
+const RUNNERS = new Set([
+  "flock", "chrt", "taskset", "numactl", "firejail", "bwrap", "systemd-run", "xvfb-run", "dbus-run-session", "dbus-launch",
+  "script", "runuser", "chroot", "nsenter", "unshare", "strace", "ltrace", "valgrind", "gdb", "lldb", "perf", "entr",
+  "watchexec", "nodemon", "parallel", "sem", "busybox", "toybox", "expect", "tmux", "screen", "sg", "newgrp",
+  "caffeinate", "proxychains", "proxychains4", "torsocks", "torify", "faketime", "direnv", "rlwrap", "cpulimit",
+  "prlimit", "systemd-inhibit", "cgexec", "ssh-agent",
+]);
+const RUNS_READ: Record<string, RegExp> = {
+  tmux   : /^(ls|list-\w+|has-session|has|capture-pane|capturep|display-message|display|show-\w+|show|info)$/,
+  perf   : /^(report|list|annotate|diff|evlist|help)$/,
+  direnv : /^(status|version|help)$/,
+};
+
+// the programs that run a folder's own code (its Makefile, package.json's
+// scripts, build.rs, ...): run in a folder outside the project, asked
+const BUILDS = new Set([
+  "make", "gmake", "just", "npm", "pnpm", "yarn", "bun", "npx", "bunx", "cargo", "go", "gradle", "mvn", "rake", "mix",
+  "composer", "poetry", "uv", "pytest", "tox", "nox", "deno", "dotnet", "swift",
+]);
+
+// the cloud CLIs: their verbs that only read (aws ec2 describe-instances,
+// gcloud config list), and those that act; one with no verb that reads,
+// or any that acts, is asked (bare vercel deploys)
+const CLOUDS = new Set(["aws", "gcloud", "az", "doctl", "fly", "flyctl", "vercel", "netlify", "heroku", "firebase", "wrangler", "serverless", "sls", "railway"]);
+const CLOUD_READ = /^(describe|list|ls|get|show|logs?|status|whoami|info|inspect|view|search|wait|head|help|version|find|history|tail|check|validate|explain|print|cat|query|dev)(-[\w-]*)?$/;
+const CLOUD_ACTS = /^(create|delete|deploy|destroy|put|update|remove|rm|terminate|stop|start|restart|reboot|set|unset|apply|scale|cp|mv|sync|release|promote|rollback|add|up|down|run|invoke|exec|ssh|scp|login|logout|auth|configure|publish|attach|detach|import|purge|enable|disable|modify|reset|revoke|grant|tag|untag|copy|move|upload|mb|rb|send|submit|cancel|resize|replace|patch|associate|disassociate|register|deregister|link|unlink|init|open|secrets?|env)(-[\w-]*)?$/;
 
 // the folders inside a project rebuilt by its tools: deleted whole freely
 const REBUILT = new Set([
@@ -267,22 +306,29 @@ export namespace Guard {
   }
 
   // whether a pattern matches a text: * anything, \* a star; a pattern
-  // ending in " *" matches the text without its words too
-  export function matches(pattern: string, text: string): boolean {
-    const body = pattern.replace(/\\\*|\*|[.+?^${}()|[\]\\]/g, (c) => (c === "*" ? "[\\s\\S]*" : c === "\\*" ? "\\*" : "\\" + c));
-    const re = pattern.endsWith(" *") && !pattern.endsWith("\\ *") ? body.slice(0, -" [\\s\\S]*".length) + "(?: [\\s\\S]*)?" : body;
+  // ending in " *" matches the text without its words too. Strict: a *
+  // covers no ; | & newline ` ( ) < or >, so it can't reach into another
+  // command, a command's output or a redirection
+  export function matches(pattern: string, text: string, strict = false): boolean {
+    const star = strict ? "[^;|&\\n`()<>]*" : "[\\s\\S]*";
+    const body = pattern.replace(/\\\*|\*|[.+?^${}()|[\]\\]/g, (c) => (c === "*" ? star : c === "\\*" ? "\\*" : "\\" + c));
+    const re = pattern.endsWith(" *") && !pattern.endsWith("\\ *") ? body.slice(0, -(" " + star).length) + "(?: " + star + ")?" : body;
     return new RegExp("^" + re + "$").test(text);
   }
 
-  // a command as an exact grant names it: root marked, its assignments
-  // and words unquoted, joined by spaces, quoted again where needed; a
-  // word that expands (a variable, a command's output, a ~) as written,
-  // so the grant reads as typed and holds no value of the environment
-  // (wrappers such as timeout left out: they don't change what runs)
-  export function norm(part: Part): string {
+  // a command as an exact grant names it: root marked, its assignments,
+  // words and output redirections unquoted, joined by spaces, quoted
+  // again where needed; a word that expands (a variable, a command's
+  // output, a ~) as written, so the grant reads as typed and holds no
+  // value of the environment (wrappers such as timeout left out: they
+  // don't change what runs). Given the folder it is judged from, one a cd
+  // moved it from is named too (cd /x && git push --force)
+  export function norm(part: Part, cwd?: string): string {
     const word = (w: Word) => (w.dynamic || w.alts.length !== 1 || /[$`]|^~/.test(w.raw) ? w.raw : quote(w.alts[0]));
     const env = part.env.map((e) => e.name + "=" + word(e.value));
-    return [...(part.root ? ["sudo"] : []), ...env, ...part.argv.map(word)].join(" ");
+    const outs = part.redirs.filter((r) => !r.op.startsWith("<")).map((r) => (r.num ?? "") + r.op + word(r.target));
+    const run = [...(part.root ? ["sudo"] : []), ...env, ...part.argv.map(word), ...outs].join(" ");
+    return cwd === undefined || part.cwd === null || part.cwd === cwd ? run : "cd " + quote(part.cwd) + " && " + run;
   }
 
 }
@@ -290,7 +336,10 @@ export namespace Guard {
 // Verdicts
 // ========
 
-// what is left after the rules and grants, by the mode
+// what is left after the rules and grants, by the mode. "Don't ask
+// again" keeps a family or folder only when every flag offers one: by a
+// dangerous flag beside an outside folder's, the exact command alone, so
+// a yes to it doesn't let the folder be written freely after
 function verdict(where: Where, look: Look): Verdict {
   if (look.denied.length > 0) {
     return { $: "deny", why: uniq(look.denied).join("; "), rule: true, exact: [] };
@@ -306,7 +355,7 @@ function verdict(where: Where, look: Look): Verdict {
   if (all.length === 0) {
     return { $: "allow" };
   }
-  const always = rules.length > 0 ? [] : uniq(all.map((f) => f.wide?.grant ?? f.kind + "=" + f.subject));
+  const always = rules.length > 0 ? [] : all.some((f) => f.wide === null) ? exact(all) : uniq(all.map((f) => f.wide!.grant));
   return { $: "ask", why: uniq(all.map((f) => f.why)).join("; "), always, exact: exact(all) };
 }
 
@@ -326,10 +375,11 @@ function granted(where: Where, f: Flag): boolean {
 
 // the user's rule for a subject, of those of a kind: deny, then ask, then
 // allow (null: none). Deny and ask match any of `any`; allow only `own`
-// (a root command's own text names its sudo)
-function rule_of(where: Where, kind: Kind, any: string[], own: string[]): Rule | null {
+// (a root command's own text names its sudo), strictly if asked (a
+// command illi can't read: Guard.matches)
+function rule_of(where: Where, kind: Kind, any: string[], own: string[], strict = false): Rule | null {
   const rules = Object.entries(where.rules[kind] ?? {}).map(([p, r]) => [kind === "read" || kind === "write" ? rule_path(p, where.top) : p, r] as const);
-  const hit = (r: Rule, texts: string[]) => rules.some(([p, x]) => x === r && texts.some((t) => Guard.matches(p, t)));
+  const hit = (r: Rule, texts: string[]) => rules.some(([p, x]) => x === r && texts.some((t) => Guard.matches(p, t, r === "allow" && strict)));
   return hit("deny", any) ? "deny" : hit("ask", any) ? "ask" : hit("allow", own) ? "allow" : null;
 }
 
@@ -341,10 +391,13 @@ function rule_path(p: string, top: string): string {
 // Shell
 // =====
 
+// a shell command: the user's rules on it whole first (deny refuses it;
+// one illi can't read is asked, but an allow rule whose stars cover no
+// other command lets it run), then each of its parts
 function look_shell(where: Where, look: Look, command: string): void {
   const parts = Shell.parse(command, where.cwd);
   const text = command.trim();
-  const rule = rule_of(where, "shell", [text], [text]);
+  const rule = rule_of(where, "shell", [text], [text], true);
   if (rule === "deny") {
     look.denied.push("your rules refuse " + clip(text));
     return;
@@ -362,28 +415,32 @@ function look_shell(where: Where, look: Look, command: string): void {
   parts.forEach((part) => look_part(where, look, part, 0));
 }
 
-// a part's flags and change: by the user's rules first, then each value
-// its command's name can take (a loop's), its redirections, assignments
-// and files. An exact grant names the part (git push --force, wherever
-// it is written), but one whose input comes from elsewhere (a pipe,
-// xargs, a file or heredoc read in) names the whole command: `sh` alone
-// would let any code piped into it run
+// a part's flags and change: by the user's rules first (an allow rule
+// covers the command itself, not what its assignments set or its
+// redirections write), then each value its command's name can take (a
+// loop's), its redirections, assignments and files. An exact grant names
+// the part as it runs (Guard.norm: git push --force, and the folder a cd
+// moved it to), but one whose input comes from elsewhere (a pipe, xargs,
+// a file or heredoc read in), whose words expand as it runs ($x, $(...),
+// <(...)) or whose folder is known only then names the whole command:
+// `sh` alone would let any code piped into it run, `rm -rf $x` any folder
 function look_part(where: Where, look: Look, part: Part, depth: number): void {
-  const exact = part.piped || part.fed || part.redirs.some((r) => r.op.startsWith("<")) ? look.whole : Guard.norm(part);
+  const words = [...part.argv, ...part.env.map((e) => e.value), ...part.redirs.map((r) => r.target)];
+  const whole = part.piped || part.fed || part.cwd === null || part.redirs.some((r) => r.op.startsWith("<")) || words.some((w) => w.dynamic || w.fd || /[$`]/.test(w.raw));
+  const exact = whole ? look.whole : Guard.norm(part, where.cwd);
+  const bare = Guard.norm(part);
   const plain = part.text;
-  const rule = rule_of(where, "shell", [plain, exact], part.root ? [exact] : [plain, exact]);
+  const rule = rule_of(where, "shell", [plain, bare, exact, ...by_name(part)], part.root ? [bare, exact] : [plain, bare, exact]);
   if (rule === "deny") {
-    look.denied.push("your rules refuse " + clip(exact));
+    look.denied.push("your rules refuse " + clip(bare));
     return;
   }
-  if (rule === "allow") {
-    return;
-  }
+  const own = rule !== "allow";
   const flag = (why: string, wide: Flag["wide"] = null) => look.flags.push({ why, kind: "shell", subject: exact, wide });
   if (rule === "ask") {
     look.flags.push({ why: "your rules ask about " + clip(plain), kind: "shell", subject: exact, wide: null, rule: true });
   }
-  if (part.root) {
+  if (part.root && own) {
     flag(clip(plain) + " runs as root");
   }
   for (const e of part.env) {
@@ -392,7 +449,7 @@ function look_part(where: Where, look: Look, part: Part, depth: number): void {
   const uses: Use[] = part.redirs.flatMap((r) => redir_use(r, part.cwd));
   let change = uses.some((u) => u.write && !DEVS.test(u.word.alts[0]));
   const head = part.argv[0];
-  if (head !== undefined) {
+  if (head !== undefined && own) {
     const heads = head.dynamic || head.glob ? null : head.alts;
     if (heads === null) {
       flag("the command " + head.raw + " is named only as it runs");
@@ -411,6 +468,18 @@ function look_part(where: Where, look: Look, part: Part, depth: number): void {
     const pattern = "shell:" + prefix(part);
     look.changes.push({ why: where.mode === "read-only" ? clip(plain) + " may change things" : "ask mode asks before " + clip(plain), kind: "shell", subject: exact, wide: where.mode === "ask" ? { kind: "shell", subject: exact, grant: pattern } : null });
   }
+}
+
+// a part's texts with its program's path cut to its name (/bin/rm -rf x
+// as rm -rf x), so a deny or ask rule on a program holds wherever it lives
+function by_name(part: Part): string[] {
+  const head = part.argv[0];
+  if (head === undefined || head.dynamic || head.alts.length !== 1 || !head.alts[0].includes("/")) {
+    return [];
+  }
+  const base = path.basename(head.alts[0]);
+  const text = part.text.startsWith(head.raw) ? [base + part.text.slice(head.raw.length)] : [];
+  return [...text, Guard.norm({ ...part, argv: [Shell.lit(base), ...part.argv.slice(1)] })];
 }
 
 // an assignment that changes what runs (PATH, LD_PRELOAD, a pager that
@@ -476,8 +545,13 @@ function look_command(where: Where, look: Look, part: Part, uses: Use[], flag: (
     return true;
   }
   if (COPIERS.has(base)) {
-    const pos = positional(args);
-    pos.forEach((w, k) => use(w, base === "mv" || k === pos.length - 1));
+    const into = copier_into(args);
+    const dirs = base === "install" && args.some((a) => /^(-d|--directory)$/.test(a.alts[0]));
+    const pos = positional(args).filter((w) => w !== into);
+    if (into !== null) {
+      use(into, true);
+    }
+    pos.forEach((w, k) => use(w, dirs || (into === null && k === pos.length - 1)));
     return true;
   }
   args_use(args, false, use);
@@ -494,7 +568,20 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
   const short = (c: string) => xs.some((x) => /^-[a-zA-Z]+$/.test(x) && x.includes(c));
   const pos = positional(args);
   const sub = pos[0]?.alts[0] ?? "";
+  const asks = xs.length === 1 && /^(--version|--help|-h|-V|version|help)$/.test(xs[0]);
+  const given = asks ? null : runs_given(base, sub, xs, has);
+  if (given !== null) {
+    flag(text + given);
+  }
+  if (BUILDS.has(base) && !asks && (part.cwd === null || !under(real(part.cwd), where.top))) {
+    flag(text + " runs the code of " + (part.cwd === null ? "a folder known only as it runs" : shown(real(part.cwd), where.top)));
+  }
   switch (DISKS.test(base) ? "mkfs" : base) {
+    case "make":
+    case "gmake": {
+      make_look(where, part, args, flag);
+      return null;
+    }
     case "git": {
       return git_look(part, args, use, flag);
     }
@@ -602,6 +689,7 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
       return net_look(part, base, args, use, flag);
     }
     case "ssh":
+    case "ssh-copy-id":
     case "mosh":
     case "sftp":
     case "ftp":
@@ -634,7 +722,14 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
       if (has("--privileged") || xs.some((x) => /^(\/|\/var\/run\/docker\.sock)(:|$)/.test(x))) {
         flag(text + " gives a container the whole computer");
       }
-      if (verb === "push") {
+      for (const m of mounts(args, xs)) {
+        const files = named(m, part.cwd);
+        const out = files?.find((f) => !under(f, where.top) && !SCRATCH.some((d) => under(f, d)));
+        if (files === null || out !== undefined) {
+          flag(text + " gives a container " + (files === null ? "a folder known only as it runs" : shown(out!, where.top)));
+        }
+      }
+      if (verb === "push" || (/^(image|manifest|buildx)$/.test(verb) && pos[1]?.alts[0] === "push") || (pos.some((w) => w.alts[0] === "build") && has("--push"))) {
         flag(text + " publishes an image");
       }
       return true;
@@ -651,28 +746,25 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
       }
       return !reads;
     }
-    case "aws":
-    case "gcloud":
-    case "az":
-    case "doctl":
-    case "fly":
-    case "flyctl":
-    case "vercel":
-    case "netlify":
-    case "heroku": {
-      const acts = xs.some((x) => /^(create|delete|deploy|destroy|put|update|remove|rm|terminate|stop|start|set|apply|scale|--prod|cp|mv|sync|release|promote|rollback)/.test(x));
-      if (acts) {
-        flag(text + " changes cloud resources");
-      }
-      return true;
-    }
     case "gh": {
       const verb = pos[1]?.alts[0] ?? "";
-      if (sub === "api" ? has("-X", "--method", "-f", "-F", "--field", "--raw-field", "--input") : /^(create|merge|close|delete|edit|comment|review|reopen|ready|run|set|remove|upload|rename|archive|transfer|fork|sync|deploy|enable|disable|cancel|rerun|lock|unlock|pin|unpin)$/.test(verb)) {
+      if (sub === "auth" && (verb === "token" || has("--show-token", "-t"))) {
+        flag(text + " prints your GitHub token");
+      } else if (sub === "api" ? has("-X", "--method", "-f", "-F", "--field", "--raw-field", "--input") || xs.some((x) => /^-X./.test(x)) : /^(create|merge|close|delete|edit|comment|review|reopen|ready|run|set|remove|upload|rename|archive|transfer|fork|sync|deploy|enable|disable|cancel|rerun|lock|unlock|pin|unpin|install|upgrade|login|logout|refresh|setup-git|ssh)$/.test(verb)) {
         flag(text + " acts on GitHub as you", { kind: "shell", subject: Guard.norm(part), grant: "shell:" + prefix(part) });
       }
       return true;
     }
+  }
+  if (CLOUDS.has(base)) {
+    const verbs = pos.map((w) => (w.dynamic ? "" : w.alts[0]));
+    const reads = asks || (verbs.some((x) => CLOUD_READ.test(x)) && !verbs.some((x) => CLOUD_ACTS.test(x)));
+    if (!reads) {
+      flag(text + " changes cloud resources");
+    } else if (verbs.some((x) => /secret|token|password|credential/i.test(x))) {
+      flag(text + " may print a secret");
+    }
+    return !reads;
   }
   if (publishes(base, sub, xs)) {
     flag(text + " publishes for everyone");
@@ -847,9 +939,33 @@ function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => vo
       flag(text + " sends email", { kind: "shell", subject: Guard.norm(part), grant: "shell:git send-email *" });
       break;
     }
+    case "rebase": {
+      if (has("-x", "--exec") || xs.some((x) => /^-x./.test(x))) {
+        flag(text + " runs a command at each commit");
+      }
+      break;
+    }
+    case "bisect": {
+      if (first === "run") {
+        flag(text + " runs a command at each step");
+      }
+      break;
+    }
+    case "difftool": {
+      if (has("-x", "--extcmd") || xs.some((x) => /^-x./.test(x))) {
+        flag(text + " runs a program on each change");
+      }
+      break;
+    }
   }
-  pos.forEach((w) => use(w, !read));
-  return !read;
+  if (has("--upload-pack", "--receive-pack", "--exec") || ((sub === "clone" || sub === "ls-remote") && (has("-u") || xs.some((x) => /^-u./.test(x))))) {
+    flag(text + " runs a program it's given");
+  }
+  const o = sub === "format-patch" || sub === "archive";
+  const outs = rest.flatMap((a, j) => (xs[j] === "--output" || xs[j] === "--output-directory" || (o && xs[j] === "-o") ? rest.slice(j + 1, j + 2) : /^--output(-directory)?=/.test(xs[j]) ? [Shell.cut(a, xs[j].indexOf("=") + 1)] : o && /^-o./.test(xs[j]) ? [Shell.cut(a, 2)] : []));
+  outs.forEach((w) => use(w, true));
+  pos.filter((w) => !outs.includes(w)).forEach((w) => use(w, !read));
+  return !read || outs.length > 0;
 }
 
 // curl and wget: data sent to a host that isn't this computer flagged;
@@ -898,35 +1014,37 @@ function net_look(part: Part, base: string, args: Word[], use: (w: Word, write: 
   return writes || (base === "curl" && args.some((a) => a.alts[0] === "-O" || a.alts[0] === "--remote-name"));
 }
 
-// a shell, an interpreter, source: its script (from outside the project:
-// flagged), its inline code (naming what can run, write or reach out:
-// flagged), code from a pipe (flagged), a heredoc's commands into a shell
-// (read as commands of their own)
+// a shell, an interpreter, source: its inline code (naming what can run,
+// write, reach out or read a secret: flagged; perl -pi's files written),
+// its script (from outside the project: flagged), or, with neither, the
+// code it reads from its input (stdin_look; a pipe's: flagged)
 function runner_look(where: Where, look: Look, part: Part, base: string, args: Word[], use: (w: Word, write: boolean) => void, flag: (why: string) => void, depth: number): boolean {
   const text = clip(part.text);
   const sourced = base === "source" || base === ".";
-  const inline = args.findIndex((a) => !a.dynamic && INLINE.has(a.alts[0]));
-  if (inline >= 0 && !sourced) {
-    const code = args[inline + 1];
-    if (SHELLS.has(base) || code === undefined || code.dynamic || RISKY.test(code.alts.join("\n"))) {
+  const inline = sourced ? null : inline_code(base, args);
+  if (inline !== null) {
+    if (SHELLS.has(base) || inline.some((w) => w.dynamic || risky(base, w.alts.join("\n")))) {
       flag(text + " runs code illi can't check");
+    }
+    const inplace = /^(perl|ruby)/.test(base) && args.some((a) => !a.dynamic && /^-[A-Za-z]*i/.test(a.alts[0]));
+    positional(args).filter((w) => !inline.includes(w)).forEach((w) => use(w, inplace));
+    return true;
+  }
+  const module = /^(python|pypy)/.test(base) ? args.findIndex((a) => a.alts[0] === "-m") : -1;
+  if (module >= 0) {
+    const rest = args.slice(module + 2);
+    const xs = rest.map((a) => (a.dynamic ? "" : a.alts[0]));
+    const has = (...names: string[]) => xs.some((x) => names.includes(x) || names.some((n) => n.startsWith("--") && x.startsWith(n + "=")));
+    if (/^pip3?$/.test(args[module + 1]?.alts[0] ?? "") && installs("pip", positional(rest)[0]?.alts[0] ?? "", xs, has)) {
+      flag(text + " installs or removes software for the whole computer");
     }
     return true;
   }
-  const script = sourced ? args[0] : args.find((a) => a.dynamic || !a.alts[0].startsWith("-") || a.alts[0] === "-");
-  const fed = part.redirs.find((r) => r.body !== undefined);
-  if (script === undefined || script.alts[0] === "-") {
-    if (fed !== undefined && SHELLS.has(base) && !["fish", "csh", "tcsh", "nu", "pwsh", "xonsh"].includes(base) && depth < 8) {
-      const inner = Shell.parse(fed.body!, part.cwd ?? where.cwd);
-      if (typeof inner === "string") {
-        flag(text + " runs a script illi can't follow: " + inner);
-      } else {
-        inner.forEach((p) => look_part(where, look, p, depth + 1));
-      }
-    } else if (fed !== undefined) {
-      if (RISKY.test(fed.body!) || !INTERPS.test(base)) {
-        flag(text + " runs code illi can't check");
-      }
+  const script = sourced ? args[0] : SHELLS.has(base) ? shell_file(args) : interp_file(base, args);
+  if (script === undefined || (!script.dynamic && script.alts[0] === "-")) {
+    const input = part.redirs.filter((r) => r.op.startsWith("<") && (r.num === undefined || r.num === "0")).at(-1);
+    if (input !== undefined) {
+      stdin_look(where, look, part, base, input, flag, depth);
     } else if (part.piped) {
       flag(text + " runs code that comes through a pipe");
     }
@@ -936,9 +1054,6 @@ function runner_look(where: Where, look: Look, part: Part, base: string, args: W
     flag(text + " runs code a command writes");
     return true;
   }
-  if (["fish", "csh", "tcsh", "nu", "pwsh", "xonsh"].includes(base) && args.some((a) => a.alts[0] === "-c")) {
-    flag(text + " runs a script illi can't read");
-  }
   const files = named(script, part.cwd);
   if (files === null || files.some((f) => !under(f, where.top))) {
     flag(text + " runs a script from " + (files === null ? "a place known only as it runs" : shown(path.dirname(files.find((f) => !under(f, where.top))!), where.top)));
@@ -946,6 +1061,228 @@ function runner_look(where: Where, look: Look, part: Part, base: string, args: W
   use(script, false);
   args.filter((a) => a !== script && !a.alts[0].startsWith("-")).forEach((a) => use(a, false));
   return true;
+}
+
+// a shell's or interpreter's code from its input: a heredoc's or a
+// here-string's text (a shell's read as commands of their own, an
+// interpreter's checked by its words; made as it runs, as an expanding
+// heredoc's $x is: flagged), a file (a script: from outside the project,
+// flagged), a command's output (< <(curl ...)) or a descriptor's: flagged
+function stdin_look(where: Where, look: Look, part: Part, base: string, r: Redir, flag: (why: string) => void, depth: number): void {
+  const text = clip(part.text);
+  if (r.body === undefined) {
+    if (r.op === "<&" || r.target.fd) {
+      if (r.target.fd || !/^(-|0)$/.test(r.target.alts[0])) {
+        flag(text + " runs code a command writes");
+      }
+      return;
+    }
+    const files = named(r.target, part.cwd);
+    const out = files?.find((f) => f !== "/dev/null" && !under(f, where.top));
+    if (files === null || out !== undefined) {
+      flag(text + " runs a script from " + (files === null ? "a place known only as it runs" : shown(path.dirname(out!), where.top)));
+    }
+    return;
+  }
+  if (r.made === true) {
+    flag(text + " runs code made as it runs");
+  } else if (SHELLS.has(base) && !ODD.has(base) && depth < 8) {
+    const inner = Shell.parse(r.body, part.cwd ?? where.cwd);
+    if (typeof inner === "string") {
+      flag(text + " runs a script illi can't follow: " + inner);
+    } else {
+      inner.forEach((p) => look_part(where, look, p, depth + 1));
+    }
+  } else if (!INTERPS.test(base) || risky(base, r.body)) {
+    flag(text + " runs code illi can't check");
+  }
+}
+
+// a runner's inline code, each word it may be (null: none given inline):
+// a long option's (--eval=x, --eval x, deno eval x), or a short one's of
+// its letters (python -c, perl -e, node -p): in a cluster (-Bc) the rest
+// of it if that isn't only letters, else that and the next word. Every
+// one is found, so a cluster that only looks like one can't hide another
+function inline_code(base: string, args: Word[]): Word[] | null {
+  const letters = inline_letters(base);
+  const none: Word = { alts: [""], raw: "", dynamic: true, glob: false, fd: false };
+  const out: Word[] = [];
+  let found = false;
+  args.forEach((a, k) => {
+    const x = a.dynamic ? "" : a.alts[0];
+    const next = args[k + 1] ?? none;
+    const long = INLINE.exec(x);
+    if (long !== null || (base === "deno" && k === 0 && x === "eval")) {
+      found = true;
+      out.push(long?.[2] === "=" ? Shell.cut(a, long[0].length) : next);
+      return;
+    }
+    const short = letters === "" || x.startsWith("--") ? null : new RegExp("^-[A-Za-z]*?[" + letters + "]").exec(x);
+    if (short !== null) {
+      found = true;
+      const rest = Shell.cut(a, short[0].length);
+      if (/[^A-Za-z]/.test(rest.alts[0])) {
+        out.push(rest);
+      } else {
+        out.push(...(rest.alts[0] === "" ? [] : [rest]), next);
+      }
+    }
+  });
+  return found ? out : null;
+}
+
+// the letters of a runner's short options giving its code inline
+function inline_letters(base: string): string {
+  return SHELLS.has(base) || /^(python|pypy)/.test(base) ? "c" : /^perl/.test(base) ? "eE" : /^(node|nodejs|bun|ts-node|tsx)$/.test(base) ? "ep" : /^php/.test(base) ? "r" : /^(deno|tclsh|wish|erl)$/.test(base) ? "" : "e";
+}
+
+// whether inline code names what can run a program, change files, reach
+// out or read a secret (RISKY; perl's, ruby's, php's and julia's
+// backticks run a command); AppleScript can drive any app: always
+function risky(base: string, code: string): boolean {
+  return RISKY.test(code) || (TICKS.test(base) && code.includes("`")) || base === "osascript";
+}
+
+// a shell's script, past its options (-o's and --rcfile's values too);
+// undefined: none, its commands from its input (no word, or -s)
+function shell_file(args: Word[]): Word | undefined {
+  for (let k = 0; k < args.length; k++) {
+    const x = args[k].alts[0];
+    if (args[k].dynamic || !/^[-+]/.test(x) || x === "-") {
+      return args[k];
+    }
+    if (x === "--") {
+      return args[k + 1];
+    }
+    if (/^[-+][oO]$/.test(x) || x === "--rcfile" || x === "--init-file") {
+      k++;
+    } else if (/^-[A-Za-z]+$/.test(x) && x.includes("s")) {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+// an interpreter's script, past its options and the values of those that
+// take the next word (python -W x, ruby -r x, node --require x); php's -f
+// and julia's -L name it; undefined: none, its code from its input
+function interp_file(base: string, args: Word[]): Word | undefined {
+  const short = /^(python|pypy)/.test(base) ? "WX" : /^(node|nodejs|bun|ts-node|tsx|deno)$/.test(base) ? "rC" : /^perl/.test(base) ? "I" : /^ruby/.test(base) ? "IrCE" : /^php/.test(base) ? "cdzt" : /^(lua|luajit)$/.test(base) ? "l" : base === "julia" ? "pt" : base === "elixir" ? "rS" : base === "osascript" ? "ls" : "";
+  for (let k = 0; k < args.length; k++) {
+    const x = args[k].alts[0];
+    if (args[k].dynamic || !x.startsWith("-") || x === "-") {
+      return args[k];
+    }
+    if (x === "--" || (/^php/.test(base) && x === "-f") || (base === "julia" && x === "-L")) {
+      return args[k + 1];
+    }
+    if ((x.length === 2 && short.includes(x[1])) || /^--(require|import|loader|experimental-loader|conditions|env-file|cp|classpath)$/.test(x) || x === "-cp") {
+      k++;
+    }
+  }
+  return undefined;
+}
+
+// a program that runs a command it's given, in its words (RUNNERS) or an
+// option's value (tar --to-command, rsync -e, fd -x, sort
+// --compress-program, zip -TT): why, or null
+function runs_given(base: string, sub: string, xs: string[], has: (...names: string[]) => boolean): string | null {
+  if (RUNNERS.has(base) && !RUNS_READ[base]?.test(sub) && !(base === "screen" && has("-ls", "-list"))) {
+    return " runs a command given in its words";
+  }
+  const short = (re: RegExp) => xs.some((x) => /^-[A-Za-z]/.test(x) && re.test(x));
+  switch (base) {
+    case "fd":
+    case "fdfind": {
+      return has("-x", "--exec", "-X", "--exec-batch") ? " runs a command on each file it finds" : null;
+    }
+    case "tar": {
+      const old = /^[A-Za-z]*[IF][A-Za-z]*$/.test(xs[0] ?? "");
+      return has("--to-command", "--use-compress-program", "--checkpoint-action", "--info-script", "--new-volume-script", "--rsh-command") || short(/^-[A-Za-z]*[IF]/) || old ? " runs a program it's given" : null;
+    }
+    case "sort": {
+      return has("--compress-program") ? " runs a program it's given" : null;
+    }
+    case "rsync": {
+      return has("--rsh", "--rsync-path") || short(/^-[A-Za-z]*e/) ? " runs a program it's given" : null;
+    }
+    case "zip": {
+      return has("--unzip-command") || xs.some((x) => x.startsWith("-TT")) ? " runs a program it's given" : null;
+    }
+    case "vi":
+    case "vim":
+    case "nvim":
+    case "ex":
+    case "view": {
+      return has("-c", "--cmd", "-S") || xs.some((x) => x.startsWith("+")) ? " runs editor commands it's given" : null;
+    }
+  }
+  return null;
+}
+
+// make: a makefile from outside the project (-f, or the folder's own
+// where -C or a cd takes it) flagged: its recipes run as written
+function make_look(where: Where, part: Part, args: Word[], flag: (why: string) => void): void {
+  const text = clip(part.text);
+  const value = (k: number, long: RegExp, short: string) => {
+    const x = args[k].dynamic ? "" : args[k].alts[0];
+    return x === short || long.test(x) && !x.includes("=") ? args[k + 1] ?? null : long.test(x) ? Shell.cut(args[k], x.indexOf("=") + 1) : x.startsWith(short) && x.length > 2 ? Shell.cut(args[k], 2) : undefined;
+  };
+  let dir: string | null = part.cwd;
+  const files: (Word | null)[] = [];
+  for (let k = 0; k < args.length; k++) {
+    const d = value(k, /^--directory(=|$)/, "-C");
+    const f = value(k, /^--(file|makefile)(=|$)/, "-f");
+    if (d !== undefined) {
+      dir = d === null || d.dynamic || d.alts.length !== 1 || dir === null ? null : path.resolve(dir, d.alts[0]);
+    } else if (f !== undefined) {
+      files.push(f);
+    }
+  }
+  const places = files.length === 0 ? [dir] : files.map((f) => (f === null || dir === null ? null : named(f, dir)?.[0] ?? null));
+  const out = places.find((f) => f === null || !under(real(f), where.top));
+  if (out !== undefined) {
+    flag(text + " runs a makefile from " + (out === null ? "a place known only as it runs" : shown(real(out), where.top)));
+  }
+}
+
+// a container's host folders (docker -v src:dst, --mount source=src):
+// those named by a path, not a volume's name
+function mounts(args: Word[], xs: string[]): Word[] {
+  const out: Word[] = [];
+  args.forEach((a, k) => {
+    const v = xs[k] === "-v" || xs[k] === "--volume" || xs[k] === "--mount" ? args[k + 1] : /^--(volume|mount)=/.test(xs[k]) ? Shell.cut(a, xs[k].indexOf("=") + 1) : /^-v./.test(xs[k]) ? Shell.cut(a, 2) : undefined;
+    if (v === undefined) {
+      return;
+    }
+    if (v.dynamic) {
+      out.push(v);
+      return;
+    }
+    const x = v.alts[0];
+    const src = x.includes("=") ? /(?:^|,)(?:source|src)=([^,]*)/.exec(x)?.[1] : x.split(":")[0];
+    if (src !== undefined && /^[/.~]/.test(src)) {
+      out.push(Shell.lit(src.startsWith("~") ? HOME + src.slice(1) : src));
+    }
+  });
+  return out;
+}
+
+// a copier's folder named by -t (cp -t dir a b, -rt dir, -tdir,
+// --target-directory=dir), or null; a cluster's letters before its t
+// take no value (not install's -o, -g, -m, nor cp's -S)
+function copier_into(args: Word[]): Word | null {
+  for (let k = 0; k < args.length; k++) {
+    const x = args[k].dynamic ? "" : args[k].alts[0];
+    if (x === "--") {
+      break;
+    }
+    const m = /^(?:--target-directory=?|-(?:(?![ogmS])[A-Za-z])*?t)(.*)$/s.exec(x);
+    if (m !== null) {
+      return m[1] !== "" ? Shell.cut(args[k], x.length - m[1].length) : args[k + 1] ?? null;
+    }
+  }
+  return null;
 }
 
 // find, fd, sed, sort, awk: read-only unless an option or a script makes
@@ -968,9 +1305,13 @@ function reader_look(where: Where, part: Part, base: string, args: Word[], use: 
       (starts.length === 0 ? [Shell.lit(".")] : starts).forEach((w) => use(w, deletes));
       writes.forEach((w) => use(w, true));
       if (deletes) {
-        const files = (starts.length === 0 ? [Shell.lit(".")] : starts).flatMap((w) => named(w, part.cwd) ?? [null]);
-        if (files.some((f) => f === null || vital_of(where, f))) {
-          flag(text + " deletes everything it finds in a folder that matters");
+        const from = starts.length === 0 ? [Shell.lit(".")] : starts;
+        const files = from.flatMap((w) => named(w, part.cwd) ?? [null]);
+        const vital = files.find((f): f is string => f !== null && vital_of(where, f));
+        if (vital !== undefined || files.includes(null)) {
+          flag(text + " deletes what it finds in " + (vital === undefined ? "a folder known only as it runs" : shown(vital, where.top) + ", a folder that matters"));
+        } else if (!from.every((w) => rebuilt(where, w, part.cwd))) {
+          flag(text + " deletes what it finds in " + from.map((w) => w.raw).join(" ") + " and below");
         }
       }
       return deletes || writes.length > 0;
@@ -1042,7 +1383,8 @@ function installs(base: string, sub: string, xs: string[], has: (...names: strin
     || (/^(pipx|cargo|go|gem)$/.test(base) && /^(install|uninstall)$/.test(sub))
     || (base === "uv" && sub === "tool" && /^(install|uninstall|upgrade)$/.test(xs[1] ?? ""))
     || (/^(brew|apt|apt-get|dnf|yum|zypper|apk|snap|flatpak|port|choco|winget|nix-env)$/.test(base) && verbs.test(sub))
-    || (base === "pacman" && xs.some((x) => /^-[SRU]/.test(x)));
+    || (base === "pacman" && xs.some((x) => /^-[SRU]/.test(x)))
+    || (base === "nix-env" && xs.some((x) => /^-[A-Za-z]*[ieu]/.test(x) && !x.startsWith("--") || /^--(install|uninstall|upgrade|set)$/.test(x)));
 }
 
 // MCP
@@ -1100,9 +1442,7 @@ function look_file(where: Where, look: Look, file: unknown, write: boolean): voi
   }
   const why = path_why(where, abs, write);
   if (why !== null) {
-    const folder = !write && fs.statSync(abs, { throwIfNoEntry: false })?.isDirectory() === true;
-    const dir = folder ? abs : path.dirname(abs);
-    look.flags.push({ why: why.why, kind, subject: abs, wide: why.wide ? { kind, subject: folder ? abs + "/" : abs, grant: kind + ":" + dir + "/*" } : null });
+    look.flags.push({ why: why.why, kind, subject: abs, wide: why.wide ? folder_wide(kind, abs) : null });
   }
   if (write) {
     look.changes.push({ why: where.mode === "read-only" ? "changing " + shown(abs, where.top) : "ask mode asks before changing " + shown(abs, where.top), kind, subject: abs, wide: where.mode === "ask" ? { kind, subject: abs, grant: "write:" + where.top + "/*" } : null });
@@ -1128,10 +1468,24 @@ function use_look(where: Where, look: Look, use: Use, flag: (why: string, wide?:
     } else if (rule !== "allow") {
       const why = path_why(where, file, use.write);
       if (why !== null) {
-        flag(why.why, why.wide ? { kind, subject: file, grant: kind + ":" + path.dirname(file) + "/*" } : null);
+        flag(why.why, why.wide ? folder_wide(kind, file) : null);
       }
     }
   }
+}
+
+// what "don't ask again" keeps for a file outside the project: its
+// folder (a folder named, itself); none for home, or / or a folder above
+// home, as that would cover all of home
+function folder_wide(kind: Kind, file: string): Flag["wide"] {
+  let folder = false;
+  try {
+    folder = fs.statSync(file, { throwIfNoEntry: false })?.isDirectory() === true;
+  } catch {
+    // one this user can't look at (/root): taken as a file
+  }
+  const dir = folder ? file : path.dirname(file);
+  return under(HOME, dir) ? null : { kind, subject: folder ? file + "/" : file, grant: kind + ":" + dir + "/*" };
 }
 
 // the user's rule for a file: its kind's (a read also by write rules)

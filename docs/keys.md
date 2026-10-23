@@ -175,6 +175,16 @@ in place of the input, a tab each:
 - The last tab, Review, shows all your answers: Enter sends them, Esc
   skips the questions. Your answers then show in the chat as yours.
 
+A call the permission checks stop ([Permissions](permissions.md)) asks
+in a list over the input: what it would do and why, then Yes; Yes, and
+don't ask again (only where it keeps something, which it names); No;
+No, and say why (a line typed, which illi reads). Up and Down move,
+Enter picks, Esc is No. A subagent's question names it.
+
+The first time illi starts in a folder, it asks full screen whether you
+trust it: Up, Down and Tab move between No and Yes, Enter takes the lit
+one, `y` and `n` pick one, Esc (or Ctrl+C) exits.
+
 Mouse and side panel
 --------------------
 

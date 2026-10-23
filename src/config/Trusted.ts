@@ -3,9 +3,10 @@
 // The folders the user trusts illi in (Trust.ts asks, at the start on a
 // terminal): each kept by its project's folder (its git repo's top, else
 // the folder itself; either one's subfolders trusted with it) in
-// trust.json in illi's own folder, every profile's; home's own folder is
-// trusted only for the run it was answered in, never kept, as keeping it
-// would trust every folder under it. What a project brings that runs or
+// trust.json in illi's own folder, every profile's; home's own folder,
+// and each above it (/home, /), is trusted only for the run it was
+// answered in, never kept, as keeping it would trust every folder under
+// it. What a project brings that runs or
 // instructs (its .illi agents, commands and skills: Custom.ts) loads only
 // in a trusted folder, so a pipe (never asked) runs a folder's own only
 // once a terminal trusted it.
@@ -21,8 +22,8 @@ import { Projects } from "../chat/Projects.ts";
 
 const FILE = config.ROOT + "/trust.json";
 
-// the folders trusted for this run only (home's), and the kept ones as
-// last read (null: not read yet)
+// the folders trusted for this run only (home's, or one above it), and
+// the kept ones as last read (null: not read yet)
 const RUN = new Set<string>();
 let KEPT: string[] | null = null;
 
@@ -37,9 +38,11 @@ export namespace Trusted {
     return place.path !== "" ? place.path : Projects.real(cwd);
   }
 
-  // whether it is home's own folder: trusted for a run, never kept
+  // whether it is home's own folder, or one above it (/home, /): trusted
+  // for a run, never kept
   export function home(folder: string): boolean {
-    return folder === Projects.real(os.homedir());
+    const home = Projects.real(os.homedir());
+    return home === folder || home.startsWith(folder.endsWith(path.sep) ? folder : folder + path.sep);
   }
 
   // whether a folder, or one it is in, is trusted
@@ -48,12 +51,13 @@ export namespace Trusted {
     return RUN.has(folder) || Trusted.kept().some(under);
   }
 
-  // the folders kept (none, or a file of another shape: none)
+  // the folders kept (none, or a file of another shape: none; home or
+  // one above it, kept by an older illi: not)
   export function kept(): string[] {
     if (KEPT === null) {
       try {
         const got = JSON.parse(fs.readFileSync(FILE, "utf8"))?.folders;
-        KEPT = Array.isArray(got) ? got.filter((f): f is string => typeof f === "string") : [];
+        KEPT = Array.isArray(got) ? got.filter((f): f is string => typeof f === "string" && !Trusted.home(f)) : [];
       } catch {
         KEPT = [];
       }
@@ -62,8 +66,8 @@ export namespace Trusted {
   }
 
   // a folder trusted from now on: kept (the file written whole and then
-  // put in place, so a crash between leaves the old one), or, home's,
-  // for this run
+  // put in place, so a crash between leaves the old one), or, home's or
+  // one above it, for this run
   export function trust(folder: string): void {
     RUN.add(folder);
     if (Trusted.home(folder)) {
