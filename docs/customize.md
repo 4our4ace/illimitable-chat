@@ -120,11 +120,18 @@ the full accent).
   bullets too; links set, its links.
 - `colors`: any of the palette's slots (`heading`, `inlineCode`, `path`,
   `number`, `codeString`...), over it.
-- `glyph`, `tool` (a mark before a tool's name, by tool: none by
-  default), `syntax` (code by kind, while the
-  terminal's background is unknown) and `ansi` (`block`, `ink`: the tool
-  calls' fill and its text; `you`, `add`, `del`: the frame and a diff's
-  lines, over their tokens) as before.
+- `glyph`: illi's marks, by name ([Design language](design.md)):
+  `input` (`> `, before what you type), `lit` (`>`, a list's or a
+  question's lit row), `open` and `shut` (`[-]`, `[+]`: what a click
+  shuts or opens: a run of work, a message in it, the to-do), `tab` and
+  `here` (`◯`, `●`: one of a set, the one in use: the chats' tabs, a
+  list's rows, the side's agents, skills and profiles), `find` (`⌕ `,
+  before a list's search), `pending`, `active` and `done` (`□`, `>`,
+  `■`: the to-do's items). Control characters are left out.
+- `tool` (a mark before a tool's name, by tool: none by default),
+  `syntax` (code by kind, while the terminal's background is unknown)
+  and `ansi` (`block`, `ink`: the tool calls' fill and its text; `you`,
+  `add`, `del`: the frame and a diff's lines, over their tokens).
 
 What wins, lowest first: the defaults, `theme.json`, a plugin's theme,
 the `accent` setting (unless `auto`). The file is read as illi starts;
@@ -205,7 +212,8 @@ python3 -c 'import json,sys; d=json.load(sys.stdin); print("\033[36m%s\033[0m %s
   again. A failure (it can't start, exits otherwise, runs past its time,
   prints too much) is said once, and logged in `illi.log` each time.
 - Every terminal's illi runs its own, a second terminal's view too; a
-  pipe has none.
+  pipe has none, nor a profile running hidden ([Profiles](profiles.md))
+  till it shows again.
 
 Plugins
 -------

@@ -11,7 +11,7 @@ Chat
 | -------------- | ---- |
 | Enter | send |
 | Esc | close a list; else clear the notes, and twice: interrupt illi (a `/compact` under way too; agents go on) |
-| Ctrl+C | clear the input; on an empty one, interrupt illi (again: quit) |
+| Ctrl+C | clear the input; on an empty one, interrupt illi (again: quit); text chosen: copy it again |
 | Ctrl+D | clear the input; on an empty one, quit, every profile open in this terminal too (while background jobs run, subagents or another profile are at work, it says what a quit stops: again to quit) |
 | Tab | take the suggested reply (it stays after a message of your own, to send as well, till illi answers) |
 | Ctrl+P | all commands and settings in one list, typed to search |
@@ -167,26 +167,26 @@ Lists and questions
 
 `/model`, `/settings`, `/profile`, Ctrl+P and every other list, and
 each question illi asks, open in one box in the middle of the screen,
-as wide as their options (none is ever cut), the rest of the screen
+as wide as their options (no name is ever cut), the rest of the screen
 dimmed. While one is open it has the keys and the mouse; the chat, the
-side, a pane and the input under it stay as they are, and the input
-comes back as you left it when the box closes.
+side and the input under it stay as they are, and the input comes back
+as you left it when the box closes.
 
 | Key | Does |
 | --- | ---- |
-| Up, Down (or Tab) | move |
+| Up, Down (or Tab, Shift+Tab) | move |
 | PgUp, PgDn | a page |
 | Ctrl+Home, Ctrl+End | the first, the last (Home and End too, where you can't type) |
 | Enter | pick |
 | Esc (or Ctrl+C, Ctrl+D) | close; a question: No |
-| typing | search, where the list has one, by name and by the words of what each row does (as `/` does); it edits as the input does, and a paste goes there as one line |
+| typing | search, where the list has one, by name (Ctrl+P's by the words of what each row does too, as `/` does); it edits as the input does, and a paste goes there as one line |
 
 - The wheel scrolls the list; the row under the pointer lights as it
   moves; a click does what Enter does; a click outside closes a list
   (a question stays till you answer). Shift+drag selects text in it,
   as the terminal does.
 - Ctrl+L, Ctrl+Z and the leader work as ever; Ctrl+P opens the commands
-  in a list's place.
+  in a list's place (in its own, closes it).
 - `/model`: Left and Right change the effort (Shift+Up and Shift+Down
   too), Tab the speed; Shift+Left and Shift+Right step the lit model's
   auto compact by 5%, its gauge under the list ("auto compact at", a bar
@@ -199,7 +199,8 @@ comes back as you left it when the box closes.
 Panes (`/help`, `/agents`, `/mcp`) open in the chat's place,
 on a background of their own: Esc or Enter closes one, the arrows and
 the pages scroll it, and typing closes it and goes to the input. A list
-or a question opens over a pane, which waits under it.
+(and a permission question) opens in a pane's place, closing it; illi's
+own questions open over a pane, which waits under them.
 
 When illi asks
 --------------
@@ -259,9 +260,9 @@ Mouse and side panel
 --------------------
 
 - A click on a block opens it; a click anywhere in an open block's frame
-  closes it. A drag copies the text it covers, a double click a word; a
-  reply's code has a copy button. Copying uses OSC 52, so the terminal
-  (and tmux) must allow it.
+  closes it. A drag copies the text it covers, a double click a word,
+  three a line; a reply's code has a copy button. Copying uses OSC 52,
+  so the terminal (and tmux) must allow it.
 - The work between replies (tool calls, results, thinking, agents'
   reports): a click on a run's line, or anywhere down the bar at its
   left, opens or closes the whole run. Inside an open run, a click on a
@@ -271,9 +272,10 @@ Mouse and side panel
   lands lower, as the chat can't scroll past its end).
 - A click on a word waits a moment before it acts, so a double click
   still copies the word. Past a line's end, on a blank line or a frame's
-  edge, on `[+]` or `[-]`, on a block's `/open` or an open block's top
-  edge, it acts at once. A second click on the same spot right after
-  does nothing, so a slow double click never undoes the fold.
+  edge, on a run's line or its bar, on a folded message's `[+]`, on a
+  block's `/open` or an open block's top edge, it acts at once. A second
+  click on the same spot right after does nothing, so a slow double
+  click never undoes the fold.
 - What a click would act on lights as the pointer moves over it: a run's
   line and its whole bar, heavier; a message's bar beside it (and a
   folded one's `[+]`); a block's `/open`, an open block's top edge. It
@@ -291,7 +293,8 @@ Mouse and side panel
 - From 100 columns on, a side panel shows the primary agents by name (a
   click makes one the main agent) and beside them your sticky skills,
   each on (●) or off (◯), a click turning it on or off (under the agents
-  when a name won't fit whole beside them), the subagents at work, the background jobs (a click
+  when a name won't fit whole beside them), the subagents of this run,
+  at work or done (a click shows one's tab), the background jobs (a click
   opens `/background`), the profiles once you have two (a click
   switches; one open in this terminal shows a spinner while it works,
   `?` while it asks you something, `● 2` while only its background jobs
@@ -304,5 +307,6 @@ Mouse and side panel
   it, the background jobs are counted when the side panel doesn't show
   them.
 - The terminal's title says `∞ illi · <project>`, one cell of dots
-  going round in the ∞'s place while illi works (`⠋`); the
-  `title` setting turns it off.
+  going round in the ∞'s place while illi works (`⠋`), `?` while a
+  question waits on you (here or in another profile open in this
+  terminal); the `title` setting turns it off.

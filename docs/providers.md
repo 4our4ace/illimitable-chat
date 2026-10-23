@@ -93,15 +93,16 @@ next start:
 
 | Vendor        | What it tells                                                    | When                                   |
 | ------------- | ---------------------------------------------------------------- | -------------------------------------- |
-| `chatgpt`     | the models your account may use, each one's window, efforts and speeds | at start, after `/login` and `/logout`, when the account changes |
+| `chatgpt`     | the models your account may use, each one's window, efforts and speeds | at start, after `/login` and `/logout`, when the account changes; every 5 minutes while it doesn't answer |
 | `claude-api`  | each model's window (Anthropic's Models API)                     | at start                               |
 | `claude-code` | the window of the model a reply ran on                           | after each reply                       |
 | `openai-api`  | nothing: its windows are built in (1.05M)                        |                                        |
 
 On ChatGPT the list is your account's own: a model it adds is offered
-at once, one it drops is gone. A model's window is exactly what Codex's
-model list says is the most your account may use (`max_context_window`,
-else `context_window`), and the share of it a request may fill is its
+at once (unless `models` names those offered), one it drops is gone. A
+model's window is exactly what Codex's model list says is the most your
+account may use (`max_context_window`, else `context_window`), and the
+share of it a request may fill is its
 `effective_context_window_percent` (95% where the list leaves it out,
 as Codex takes it): illi has no ChatGPT window of its
 own and never guesses one. Nothing is folded at the start till the

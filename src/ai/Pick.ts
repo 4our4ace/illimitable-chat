@@ -36,7 +36,7 @@ export type Move = "next" | "prev" | "model" | "up" | "down" | "effort" | "speed
 // vendor names them (none told: EFFORTS); the service tier each speed
 // sends (none: OpenAI.body's own names); room: the share of its window a
 // request may fill, as its vendor tells it (ChatGPT's
-// effective_context_window_percent; none: config.ROOM)
+// effective_context_window_percent, else Codex's 95%; none: config.ROOM)
 export type Model = { label: string; id: string; speeds: string[]; window?: number; standard?: number; efforts?: string[]; tiers?: Record<string, string>; room?: number };
 
 // what a server offers: vendors, and models by label
@@ -48,7 +48,8 @@ export type Offer = { vendors: Vendor[]; models: string[] };
 export const VENDORS: Vendor[] = ["claude-api", "openai-api", "chatgpt", "claude-code"];
 
 // each vendor's models as built in, each window as its vendor states it
-// (Anthropic's Models API and the catalogs tell them anew: learn)
+// (ChatGPT's catalog tells them anew: learn; Anthropic's Models API and
+// Claude Code's results, each window: told)
 const OPUS  : Model = { label: "opus-5.5",   id: "claude-opus-5-5",   speeds: ["slow", "fast"], window: 1000000 };
 const SONNET: Model = { label: "sonnet-5.5", id: "claude-sonnet-5-5", speeds: ["slow"],         window: 1000000 };
 const HAIKU : Model = { label: "haiku-5.5",  id: "claude-haiku-5-5",  speeds: ["slow"],         window: 1000000 };

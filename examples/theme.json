@@ -2,6 +2,6 @@
   "accent": "#7dcfff",
   "tokens": { "you": "accent", "dim": "8" },
   "ansi": { "block": "8" },
-  "glyph": { "input": "❯ ", "here": "◆", "tab": "◇" },
+  "glyph": { "input": "$ ", "here": "◆", "tab": "◇" },
   "tool": { "shell": "$" }
 }

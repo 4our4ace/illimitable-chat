@@ -153,7 +153,8 @@ export namespace Lock {
     return LOCKS + "/" + name + ".sock";
   }
 
-  // lets the chat go (its close, a profile's switch): the views' socket
+  // lets the chat go (its close; a run again in place, as a switch with
+  // illi alone: ProfileCommands.ts term_leave): the views' socket
   // closed and gone, then the lock, so the next illi in this project
   // takes it at once. keep: the lock kept, till illi runs again or ends
   // (this project forgotten meanwhile: no illi opens it)

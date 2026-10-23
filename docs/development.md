@@ -8,8 +8,10 @@ Development
                    (PermCommands.ts), the status line (Status.ts), the window
                    that owns a terminal for every profile's illi (Window.ts;
                    their wire, Wire.ts; a profile's end, Member.ts)
-    src/ui/        the chat's view, markdown, replies, diagrams, the screen and
-                   the terminal's modes (Modes.ts)
+    src/ui/        the chat's view, replies drawn from their markdown (its parser,
+                   Markdown.ts; the palettes, Palettes.ts; code's languages,
+                   Prism.ts), diagrams, the screen and the terminal's modes
+                   (Modes.ts)
     src/chat/      the chat's turns (Chat.ts), its memory tree and views (Memory.ts),
                    the summaries written (Compactor.ts), its SQLite file (Store.ts),
                    its lock (Lock.ts), suggested replies (Suggest.ts), agents' logs
@@ -27,6 +29,8 @@ Development
                    the folders you trust (Trusted.ts)
     src/skills/    the skills built into illi (customize-illi)
     test/          tests across modules; each module's own sit beside it
+    examples/      agents, a command, hooks, a plugin and a theme to copy
+                   (customize.md)
     assets/        the README's banner and screenshots; logo.svg and
                    logo-on-dark.svg are the logo's source files, kept
                    for brand use though no page shows them

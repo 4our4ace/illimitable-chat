@@ -1,11 +1,12 @@
 // Draw
 // ====
-// What Paint.ts draws in color: a ```mermaid block: a diagram on the terminal's cell grid (Pele lays it
-// out with each character one cell, pelext draws the layout in box lines,
-// block fills, braille and text), laid out again narrower till it fits
-// the width; else none (its code shows). Code: Prism's tokens
-// (Prism.ts), by kind, and a shell's own (its commands, flags, strings,
-// comments).
+// What Paint.ts draws in color, in parts as prismantis does
+// (THIRD_PARTY_NOTICES.md). A ```mermaid block: a diagram on the
+// terminal's cell grid (Pele lays it out with each character one cell,
+// pelext draws the layout in box lines, block fills, braille and text),
+// laid out again narrower till it fits the width; else none (its code
+// shows). Code: Prism's tokens (Prism.ts), by kind, and a shell's own
+// (its commands, flags, strings, comments).
 //
 // A diagram's colors are a palette (Palettes.ts, Theme.PALETTE) over the
 // terminal's background, which the terminal tells when asked (Screen.ts,

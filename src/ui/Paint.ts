@@ -735,6 +735,14 @@ export function ends_line(left: Line, right: string, w: number): Line {
   return room < 1 ? left : [...left, Run(" ".repeat(room) + right, DIM)];
 }
 
+// a row's lead in a list or a question: the lit one's mark
+// (Theme.GLYPH.lit) and a space, any other as many spaces, so the rows
+// line up whatever the theme makes the mark
+export function lit_lead(lit: boolean): string {
+  const mark = Theme.GLYPH.lit + " ";
+  return lit ? mark : " ".repeat(text_width(mark));
+}
+
 // a rule, w wide
 export function rule(w: number): Line {
   return [Run("─".repeat(Math.max(0, w)), DIM)];

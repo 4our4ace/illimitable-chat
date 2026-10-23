@@ -221,7 +221,11 @@ catppuccin-latte, dracula, nord, tokyo-night, gruvbox-dark,
 gruvbox-light, rose-pine, rose-pine-dawn, everforest, github-dark,
 github-light, one-dark, solarized-dark, solarized-light, mono, or auto
 (the default: by the terminal's background); colors: any of the
-palette's slots over it; glyph, tool, ansi and syntax entries too. The
+palette's slots over it; glyph: illi's marks by name, input ("> ",
+before what the user types), lit (">", a list's lit row), open and shut
+("[-]", "[+]"), tab and here ("◯", "●": one of a set, the one in use),
+find ("⌕ "), pending, active and done ("□", ">", "■": the to-do); tool:
+a mark before a tool's name, by tool; ansi and syntax entries too. The
 accent setting goes over the file's accent.
 
 ## Plugins: plugins/<name>/

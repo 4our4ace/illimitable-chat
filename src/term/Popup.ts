@@ -261,12 +261,13 @@ function popup_form_row(body: Array<[Paint.Line, Target | null]>, at: Screen.Spo
 // its groups' heads and gaps as unsearched, and the lit one's detail
 // after a blank line, as tall as any option's
 function popup_measure(c: Chooser): Measure {
+  const lw    = Paint.text_width(Paint.lit_lead(true));
   const mark  = c.here < 0 ? 0 : 2;
   const wide  = Math.max(0, ...c.names.map((name) => popup_name_width(c, name)));
   const whole = c.names.map((_, k) => {
     const about = Paint.text_width(Paint.text_clean(c.about[k]));
     const side  = Paint.text_width(Paint.text_clean(c.aside?.[k] ?? ""));
-    return 2 + mark + wide + (about === 0 ? 0 : 2 + about) + (side === 0 ? 0 : 2 + side);
+    return lw + mark + wide + (about === 0 ? 0 : 2 + about) + (side === 0 ? 0 : 2 + side);
   });
   const title = Paint.text_width(popup_title(c, Infinity)) + 3;
   const foot  = popup_foot(c);
@@ -280,7 +281,7 @@ function popup_measure(c: Chooser): Measure {
     const more = c.ask !== null || c.detail === undefined ? 0 : Math.max(0, ...c.names.map((_, k) => c.detail!(k, iw).length));
     return 2 + popup_lead(c, iw).length + (c.find === null ? 0 : 1) + list + (more === 0 ? 0 : 1 + more);
   };
-  return { names: 4 + 2 + mark + wide + 2, wants, least: c.ask !== null ? ASK_MIN : POP_MIN, tall, stays: c.stays === true };
+  return { names: 4 + lw + mark + wide + 2, wants, least: c.ask !== null ? ASK_MIN : POP_MIN, tall, stays: c.stays === true };
 }
 
 // the picker's title, its keys after it, as fits in w columns: its keys
@@ -325,7 +326,7 @@ function popup_name_width(c: Chooser, name: string): number {
 // too wide, wrapped at its words (a word too long at its characters),
 // whole
 function popup_name_lines(c: Chooser, name: string, iw: number, ink = Paint.INK, lit = Paint.INK, at: number[] = []): Paint.Line[] {
-  const room = iw - 2 - (c.here < 0 || popup_act(c, name) ? 0 : 2);
+  const room = iw - Paint.text_width(Paint.lit_lead(true)) - (c.here < 0 || popup_act(c, name) ? 0 : 2);
   const runs: Paint.Line = [];
   [...name].forEach((ch, j) => {
     const s    = at.includes(j) ? lit : ink;
@@ -550,7 +551,7 @@ function popup_entry(c: Chooser, e: string | number, iw: number, wide: number): 
   const name  = c.names[m.k];
   const here  = e === c.at;
   const act   = popup_act(c, name);
-  const marks = [Paint.Run(here ? GLYPH.lit + " " : "  ", bold), ...(c.here < 0 || act ? [] : [Paint.Run((m.k === c.here ? GLYPH.here : GLYPH.tab) + " ", Paint.DIM)])];
+  const marks = [Paint.Run(Paint.lit_lead(here), bold), ...(c.here < 0 || act ? [] : [Paint.Run((m.k === c.here ? GLYPH.here : GLYPH.tab) + " ", Paint.DIM)])];
   const lines = popup_name_lines(c, name, iw, here ? bold : Paint.INK, lit, m.hay === true ? [] : m.at);
   const aim: Target = { $: "option", k: m.k };
   const pad   = Paint.Run(" ".repeat(Paint.line_width(marks)));
@@ -560,7 +561,7 @@ function popup_entry(c: Chooser, e: string | number, iw: number, wide: number): 
   const head  = [...marks, ...lines[0]];
   const side  = Paint.text_clean(c.aside?.[m.k] ?? "");
   const keep  = side !== "" && Paint.line_width(head) + 2 + Paint.text_width(side) <= iw;
-  const from  = 2 + (c.here < 0 ? 0 : 2) + wide + 2;
+  const from  = Paint.text_width(Paint.lit_lead(true)) + (c.here < 0 ? 0 : 2) + wide + 2;
   const space = iw - from - (keep ? Paint.text_width(side) + 2 : 0);
   const about = space < 1 ? "" : popup_about(Paint.text_clean(c.about[m.k]), space);
   const line  = about === "" ? head : [...head, Paint.Run(" ".repeat(Math.max(0, from - Paint.line_width(head)))), Paint.Run(about, Paint.DIM)];

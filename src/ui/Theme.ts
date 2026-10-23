@@ -17,7 +17,8 @@
 // it fills. Code's tokens are in the palette too (SYNTAX). illi's replies
 // and diagrams paint true color (Reply.ts, Draw.ts): a palette
 // (PALETTE, Palettes.ts) over the terminal's own background, or, the
-// background untold, the terminal's palette (REPLY).
+// background untold, the terminal's palette (REPLY); those parts as
+// prismantis has them (THIRD_PARTY_NOTICES.md).
 //
 // Every colored part of the screen takes its color from one of a few
 // tokens (TOKENS), never a color of its own, so one change recolors all
@@ -127,12 +128,12 @@ export const FRAMED: Kind[] = ["user", "work"];
 export const TOOL: Record<string, string> = { ...OWN.tool };
 
 export const GLYPH = {
-  tab     : "◯",  // a chat's tab
-  here    : "●",  // the tab of the chat shown
+  tab     : "◯",  // one of a set: a chat's tab, a list's row, the side's agents, skills, profiles
+  here    : "●",  // the one in use: the tab shown, the model, agent or profile picked, a skill on
   input   : "> ", // before the message typed (its other lines indented as far)
-  find    : "⌕ ", // before a list's search (the model picker's)
-  open    : "[-]", // an open run's head, a fold's bar (a click shuts it)
-  shut    : "[+]", // a shut run's head, a message folded (a click opens it)
+  find    : "⌕ ", // before a list's search
+  open    : "[-]", // an open run's head, the side's to-do shown whole (a click shuts it)
+  shut    : "[+]", // a shut run's head, a message folded, the side's to-do folded (a click opens it)
   lit     : ">",  // the lit row of a list or a question
   pending : "□",  // a to-do item not begun
   active  : ">",  // the one at work

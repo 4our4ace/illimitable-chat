@@ -32,24 +32,26 @@ Marks
 
 | Mark | Means | Where |
 | ---- | ----- | ----- |
-| `[+]` | shut: a click opens it (`GLYPH.shut`) | a run of work's head, a message folded in a run, the side's to-do |
-| `[-]` | open: a click shuts it (`GLYPH.open`) | the same |
+| `[+]` | shut: a click opens it (`GLYPH.shut`) | a run of work's head, a recap's line, a message folded in a run, the side's to-do folded |
+| `[-]` | open: a click shuts it (`GLYPH.open`) | an open run's head, an open recap's line, the side's to-do shown whole |
 | `>` | the lit row: Enter picks it (`GLYPH.lit`) | lists, questions, the trust question, the commands suggested |
-| `> ` | the message you type (`GLYPH.input`) | the input |
+| `> ` | the message you type (`GLYPH.input`) | the input, your words in a question, a line a list asks for |
 | `>` | the to-do item at work (`GLYPH.active`) | the side's to-do, the todo tool |
 | `□` `■` | to do, done; an option among several | the to-do; a question that takes several |
-| `○` `●` | an option, the one picked | a question that takes one |
-| `◯` `●` | a tab, the one shown | chats and profiles in a list |
+| `○` `●` | an option, the one picked | a question that takes one; the picks on the questions' Review tab |
+| `◯` `●` | one of a set, the one in use (`GLYPH.tab`, `GLYPH.here`) | the tabs; the model, agent, profile, mode or project in use in a list; the side's agents, sticky skills (on, off) and profiles |
 | `●` | running (success) | background jobs, MCP servers ready |
-| `✓` `✗` | done, failed | agents at the side, MCP servers, refused requests |
+| `◌` | starting | MCP servers at the side |
+| `✓` `✗` | done, failed | `✓` a subagent at the side, a question answered (its tab); `✗` an MCP server, a refused request |
 | `<-` | back | the side's way back from an agent's page |
 | `·` | between the parts of one line | everywhere |
 | `…` | cut here | any text cut to fit |
 | `│` | an open run's rows (lit, `┃`: a click there opens or closes the run) | the chat |
-| `─ ╭ ╮ ╰ ╯` | frames and rules | popups, panes, the input |
-| `█ ▌ ░` | a gauge: full, half, empty | the context at the side, the auto compact in `/model` |
+| `─ ╭ ╮ ╰ ╯` | frames and rules | popups, the commands suggested, messages and open blocks in the chat; panes and the input between rules |
+| `█ ▌ ░` | a gauge: full, half, empty | the auto compact in `/model` |
+| `█` | a bar: the share used (in the accent; warning past 70%, error past 90%), the rest dim | the side's context and plan use |
 | `∞` traced in braille dots | illi at work | the work line |
-| a braille cell, its dots going round | illi at work | the title, the side's agents |
+| a braille cell, its dots going round | illi at work | the title, the side's subagents and profiles at work |
 | `⌕` | search | a list's search line |
 | `↓` | the chat's end; tokens written | Jump to Bottom; the work line |
 

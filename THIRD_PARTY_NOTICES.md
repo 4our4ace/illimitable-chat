@@ -2,8 +2,8 @@ Third-party notices
 ===================
 
 The libraries compiled into illi (`package.json`'s dependencies, pinned in
-`bun.lock`), each under the MIT License, and the code adapted from
-prismantis (at the end), under the MIT License too.
+`bun.lock`), each under the MIT License (one icon in Pele under ISC), and
+the code adapted from prismantis (at the end), under the MIT License too.
 
 ## Pele
 

@@ -25,7 +25,6 @@ import { term_profile_pick } from "./ProfileCommands.ts";
 import { DEFAULT } from "../config/Profiles.ts";
 import { Projects } from "../chat/Projects.ts";
 import * as Screen from "../ui/Screen.ts";
-import { GLYPH } from "../ui/Theme.ts";
 import { term_area, term_light, term_under } from "./Select.ts";
 import { term_side, term_side_drawn, term_side_width, term_tokens } from "./Side.ts";
 import { status_rows } from "./Status.ts";
@@ -631,14 +630,14 @@ function term_suggestions(sug: Sug, fw: number, room: number): Array<[Paint.Line
   const w    = fw - 4;
   const lit  = { ...Paint.INK, c: Draw.draw_tokens().accent };
   const bold = { ...lit, b: true };
-  const wide = Math.min(Math.max(0, ...sug.found.map((m) => Paint.text_width(sug.cmds[m.k][0]))), Math.floor(w / 2)) + 4;
+  const wide = Math.min(Math.max(0, ...sug.found.map((m) => Paint.text_width(sug.cmds[m.k][0]))), Math.floor(w / 2)) + Paint.text_width(Paint.lit_lead(true)) + 2;
   const item = (m: Screen.Match, k: number): Array<[Paint.Line, Target | null]> => {
     const [use, , text, , , about] = sug.cmds[m.k];
     const from = use.indexOf(sug.names[m.k]);
     const end  = from + sug.names[m.k].length;
     const here = k === sug.at;
     const head = [
-      Paint.Run(here ? GLYPH.lit + " " : "  ", bold),
+      Paint.Run(Paint.lit_lead(here), bold),
       ...[...use.slice(0, end)].map((c, i) => Paint.Run(c, here || (m.hay !== true && m.at.includes(i - from)) ? bold : Paint.INK)),
       Paint.Run(use.slice(end), here ? lit : Paint.DIM),
     ];
