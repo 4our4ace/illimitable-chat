@@ -21,6 +21,7 @@ import { term_profile_pick } from "./ProfileCommands.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_area, term_under } from "./Select.ts";
 import { term_side, term_side_width, term_tokens } from "./Side.ts";
+import { status_rows } from "./Status.ts";
 import { term_act, type Area, type Item, type Pane, type Sug, type Term } from "./Term.ts";
 import { GLYPH } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
@@ -29,7 +30,10 @@ import * as View from "../ui/View.ts";
 const HERE = config.config_home(process.cwd());
 
 // the margin left and right of the chat and the input
-const MARGIN = 2;
+export const MARGIN = 2;
+
+// the chat's rows the status line's leave at least (Status.ts)
+const STATUS_ROOM = 3;
 
 // a note's indent: its text starts where the rule's does
 const NOTE_IN = 3;
@@ -181,7 +185,8 @@ export function term_paint(t: Term): void {
   const roomy = last !== undefined && NOTE_IN + Paint.line_width(last) + 1 + Paint.text_width(said.toast) <= left + cw;
   const lead  = roomy ? [Paint.Run(" ".repeat(NOTE_IN)), ...notes.pop()!] : [];
   const above = notes.slice(-Math.floor(h / 4)).map((l) => [Paint.Run(" ".repeat(NOTE_IN)), ...l]);
-  const tall  = Math.max(1, h - (paned ? 4 : 5) - input.lines.length - above.length);
+  const status = status_rows(t, iw, h - (paned ? 4 : 5) - input.lines.length - above.length - STATUS_ROOM);
+  const tall  = Math.max(1, h - (paned ? 4 : 5) - input.lines.length - above.length - status.length);
   const mid   = t.choose?.middle !== undefined;
   const floor = 3 + tall + above.length + input.lines.length;
   const box   = mid ? term_middle(t, full, h) : term_box(t, iw, Math.min(cw, PICKER_W), left + MARGIN, tall + 1 + above.length, floor);
@@ -198,7 +203,7 @@ export function term_paint(t: Term): void {
   const sided = term_area(t, { key: "side", lines: sides.map((s) => s[0]), first: 0, row: 1, col: left > 0 ? 1 : at + 2, w: sw, tall: sides.length });
   const lit   = { ...Paint.INK, c: Draw.draw_tokens().accent };
   const toast = box !== null ? [] : [...lead, Paint.Run(" ".repeat(Math.max(1, left + cw - Paint.line_width(lead) - Paint.text_width(said.toast)))), Paint.Run(said.toast, lit)];
-  const lines = [...above, toast, term_rule(t, iw, ruled), ...input.lines, ...(paned ? [] : [Paint.rule(iw)]), Paint.tabs_line(t.v, iw, side === 0)];
+  const lines = [...above, toast, term_rule(t, iw, ruled), ...input.lines, ...(paned ? [] : [Paint.rule(iw)]), ...status, Paint.tabs_line(t.v, iw, side === 0)];
   const foot  = term_area(t, { key: "foot", lines, first: 0, row: 1 + tall, col: MARGIN, w: iw, tall: lines.length });
   const head  = term_area(t, { key: "head", lines: [term_head(t, full)], first: 0, row: 0, col: 0, w: full, tall: 1 });
   const rows  = ROWS;

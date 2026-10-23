@@ -26,6 +26,7 @@ import { Plugins } from "../config/Plugins.ts";
 import { term_note } from "./Notices.ts";
 import { Pick } from "../ai/Pick.ts";
 import * as Screen from "../ui/Screen.ts";
+import { status_set } from "./Status.ts";
 import { term_act, term_send, type Term } from "./Term.ts";
 
 // the widest a value shows in the picker, so what it is fits beside it
@@ -105,12 +106,22 @@ export function term_set(t: Term, arg: string): void {
   }
   let value: unknown = text === "default" ? null : text;
   // contexts and shortcuts as JSON; text that won't parse goes on as it
-  // is, for config_check to say why it won't do
+  // is, for config_check to say why it won't do. statusline's only when
+  // it is Claude Code's statusLine (an object with a command): else a
+  // command, whatever it holds
   if ((key === "contexts" || key === "shortcuts") && value !== null) {
     try {
       value = JSON.parse(text);
     } catch {
       value = text;
+    }
+  }
+  if (key === "statusline" && text.startsWith("{")) {
+    try {
+      const got = JSON.parse(text);
+      value = typeof got?.command === "string" ? got : text;
+    } catch {
+      // a command
     }
   }
   if (setting_set(t, key, value)) {
@@ -242,6 +253,9 @@ export function setting_set(t: Term, key: config.Key, value: unknown): boolean {
   if (key === "mode") {
     term_send(t, { $: "mode", mode: config.config_value("mode") as Mode });
   }
+  if (key === "statusline") {
+    status_set(t);
+  }
   return true;
 }
 
@@ -250,7 +264,7 @@ export function setting_set(t: Term, key: config.Key, value: unknown): boolean {
 // instead; a path in illi's folder by its name, else from ~
 function setting_shown(key: config.Key, value?: string): string {
   const s    = config.SETTINGS[key];
-  const raw  = value ?? (config.config_value(key) as unknown);
+  const raw  = value ?? (key === "statusline" ? config.STATUSLINE?.command ?? "" : (config.config_value(key) as unknown));
   const text = typeof raw === "string" ? raw.trim() : JSON.stringify(raw);
   if (text === "") {
     return s.none ?? "none";

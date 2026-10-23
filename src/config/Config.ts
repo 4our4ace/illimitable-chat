@@ -82,6 +82,7 @@ const TABLE = {
   compactor  : { def: "", values: "pick", now: true, what: "what writes the summaries, by provider", none: "each provider's small model" },
   suggest    : { def: "on", values: ["on", "off"], now: true, what: "suggested replies (Tab)", shape: ON_OFF },
   tps        : { def: "on", values: ["on", "off"], now: true, what: "tokens a second while text streams", shape: ON_OFF },
+  statusline : { def: "", values: "text", now: true, what: "a command drawing lines at the foot", none: "none" },
   side       : { def: "right", values: ["right", "left", "off"], now: true, what: "where the side panel shows", shape: [/^(right|left|off)$/, "right, left or off"] },
   side_width : { def: "25%", values: ["20%", "25%", "30%", "35%", "40%"], now: true, what: "the side panel's width", shape: [/^\d+(\.\d+)?%?$/, "columns (40) or a share of the screen (30%)"] },
   accent     : { def: "auto", values: ACCENTS, now: true, what: "the color everything is themed in", shape: [new RegExp("^(" + ACCENTS.join("|") + "|#[0-9a-f]{6}|25[0-5]|2[0-4]\\d|1?\\d?\\d)$", "i"), "auto, illi (its aqua), a color's name (" + ACCENTS.slice(2).join(", ") + "), a palette index (0-255) or #rrggbb"] },
@@ -182,6 +183,13 @@ export let SUGGEST    = true;
 // (tok/s, Frame.ts): on, unless off (or false, 0)
 export let TPS        = true;
 
+// the status line (Status.ts): a shell command of the user's drawing rows
+// at the screen's foot, the spaces before each, how often it runs again
+// of itself (s; 0: only as what it is told changes); null: none
+export type Statusline = { command: string; padding: number; refresh: number };
+const REFRESH_MOST = 86400;
+export let STATUSLINE: Statusline | null = null;
+
 // the side panel (Term.ts): where it shows ("right", "left", "off"), how
 // wide (columns, or a share of the screen: "25%")
 export let SIDE       = "";
@@ -221,6 +229,9 @@ let CONTEXT_SET         = "";
 let CONTEXTS: Record<string, unknown> = {};
 config_start();
 config_live();
+if (STATUSLINE === null && String(config_raw("statusline") ?? "").trim() !== "") {
+  NOTES.push("statusline isn't a command or Claude Code's statusLine object (" + config_where("statusline") + "), so there is none: /set statusline <command> sets one.");
+}
 export const CONTEXT    = Number(CONTEXT_SET) > 0 ? Number(CONTEXT_SET) : AUTO_MOST;
 
 // how many summaries of a side build at once (Memory.ts): few, so a
@@ -388,6 +399,7 @@ function config_live(): void {
   STICKY      = [...new Set(config_list(config_value("sticky").toLowerCase()).filter((name) => name !== ""))];
   SUGGEST     = !OFFS.includes(String(config_value("suggest")).trim().toLowerCase());
   TPS         = !OFFS.includes(String(config_value("tps")).trim().toLowerCase());
+  STATUSLINE  = config_statusline(config_raw("statusline"));
   SIDE        = config_value("side");
   SIDE_WIDTH  = config_value("side_width");
   ACCENT      = String(config_value("accent")).trim();
@@ -409,6 +421,22 @@ function config_update(value: string): Mode {
 function config_leader(value: string): string {
   const [mod = "", key = ""] = value.trim().split("+");
   return mod.slice(0, 1).toUpperCase() + mod.slice(1).toLowerCase() + "+" + key.toUpperCase();
+}
+
+// `statusline` as Status.ts runs it: a command, or Claude Code's
+// statusLine object (or its JSON; text that won't parse is a command,
+// as `{ a; b; }` is): { type: "command" (or none), command, padding (0 at
+// least), refreshInterval (s, 1 to REFRESH_MOST; another value: none) },
+// its other keys passed over; null: none (unset, empty), or not one
+export function config_statusline(value: unknown): Statusline | null {
+  const text = typeof value === "string" ? value.trim() : null;
+  const got  = (text === null ? config_object(value) : text.startsWith("{") ? config_object(text) : null) ?? (text === null ? null : { command: text });
+  if (got === null || typeof got.command !== "string" || got.command.trim() === "" || (got.type !== undefined && got.type !== "command")) {
+    return null;
+  }
+  const number = (x: unknown) => (typeof x === "number" && Number.isFinite(x) ? x : 0);
+  const every = number(got.refreshInterval);
+  return { command: got.command.trim(), padding: Math.max(0, Math.floor(number(got.padding))), refresh: every > 0 ? Math.min(REFRESH_MOST, Math.max(1, every)) : 0 };
 }
 
 // `shortcuts` (an object, or its JSON) over OWN_SHORTCUTS, each key in lower
@@ -540,6 +568,9 @@ export function config_check(key: string, value: unknown, strict = true): string
   }
   if (key === "leader" && typeof value === "string" && TAKEN.includes(config_leader(value))) {
     return "leader takes a key illi doesn't take itself; " + config_leader(value) + " is one.";
+  }
+  if (key === "statusline") {
+    return value === null || (typeof plain === "string" && plain.trim() === "") || config_statusline(value) !== null || !strict ? null : "statusline takes a command, or Claude Code's statusLine, like {\"type\": \"command\", \"command\": \"~/.illi/statusline.sh\", \"refreshInterval\": 5}.";
   }
   if (key === "contexts") {
     const got = value === null ? {} : config_object(value);

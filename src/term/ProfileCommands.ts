@@ -21,8 +21,11 @@ import { Mcp } from "../tools/Mcp.ts";
 import { term_note } from "./Notices.ts";
 import { Update } from "../config/Update.ts";
 import * as Paint from "../ui/Paint.ts";
+import { Plugins } from "../config/Plugins.ts";
 import * as Profiles from "../config/Profiles.ts";
+import { Run } from "../config/Run.ts";
 import * as Screen from "../ui/Screen.ts";
+import { status_end } from "./Status.ts";
 import type { Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
@@ -134,19 +137,24 @@ export async function term_restart(t: Term, name: string, step?: () => void | Pr
   }
 }
 
-// all this illi holds let go, as a quit does, but waited on: the device
-// login let go, the chat stopped (what it cut goes on at its next start),
-// the agents' processes and the MCP servers ended, a new release's
-// download given up (its folder gone: the execve after fires no exit),
-// every write flushed, the lock released (keep: kept, its views let go),
-// the terminal as it was
+// all this illi holds let go, as a quit does, but waited on (the
+// execve after fires no exit): the plugins told it quits (their quit
+// hooks, SessionEnd's commands), the device login let go, the chat
+// stopped (what it cut goes on at its next start), the agents' processes,
+// the hooks' and status line's commands and the MCP servers ended, a new
+// release's download given up (its folder gone), every write flushed,
+// the lock released (keep: kept, its views let go), the terminal as it
+// was
 async function term_leave(t: Term, keep = false): Promise<void> {
+  await Plugins.quit(process.cwd(), "other");
+  status_end(t);
   t.login?.abort();
   t.v.ws?.close();
   if (t.chat !== null) {
     Chat.close(t.chat, keep);
   }
   Machine.end();
+  Run.end();
   Update.drop();
   await Promise.race([Mcp.stop(), Bun.sleep(LEAVE)]);
   await Disk.synced();

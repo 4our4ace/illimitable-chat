@@ -158,6 +158,12 @@ one:
 - suggest: on or off, a suggested reply after each turn
 - tps: on or off, tokens a second (tok/s) on the line over the input while
   text streams
+- statusline: a shell command drawing up to 3 rows at the screen's foot
+  from what illi tells it as JSON on stdin (the model, folder, context,
+  mode...), or Claude Code's statusLine object pasted as it is
+  ({ "type": "command", "command": "...", "refreshInterval": 5 });
+  docs/customize.md lists the fields. A script goes in illi's folder
+  (statusline.sh, made executable); applies at once
 - theme, mcp: where those files are, if not in illi's folder (theme:
   else the global folder's; the global mcp.json is read too); login: the
   ChatGPT login file, if not {{root}}/login.json (the shared one /login

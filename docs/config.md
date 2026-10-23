@@ -36,6 +36,7 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `shortcuts`  | illi's own                        | the keys after the leader: `{ "c": "/compact", "o": "Ctrl+O", "t": "" }`, over illi's own (`""` drops one; a key in capitals is the lower-case one); `/shortcuts` edits them |
 | `suggest`    | `on`                              | a suggested reply after each turn, shown till you send it or illi answers, kept across a restart; `off` |
 | `tps`        | `on`                              | tokens a second (tok/s) on the line over the input while text streams; `off` |
+| `statusline` |                                   | a shell command drawing up to 3 rows at the screen's foot from what illi tells it, or Claude Code's `statusLine` object as it is ([Status line](customize.md#status-line)) |
 | `jobs`       | `8`                               | summaries built at once                          |
 | `theme`      | `theme.json`: the profile's, else `~/.illi`'s | the theme's file                   |
 | `mcp`        | `mcp.json` in the profile's folder | the MCP servers' file; `~/.illi/mcp.json` is read too, and a trusted project's `.illi/mcp.json` |
