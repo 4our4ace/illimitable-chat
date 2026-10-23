@@ -74,7 +74,7 @@ Setup
 | `/logout` | remove illi's own ChatGPT login (opencode's, if any, is used again) |
 | `/settings` | all the settings: type to search, Left, Right or Enter change one, Del puts its default back |
 | `/shortcuts` | the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one |
-| `/set <key> [value]` | change a setting (default: back to its default); no value: says what it is |
+| `/set <key> [value]` | change a setting (default: back to its default); no value: opens `/settings` at it. A `/word` finds every setting too, by its key or what it does |
 | `/mcp` | your MCP servers: their tools, or why one failed |
 | `/mode [mode]` | what runs without asking, this session: `auto`, `ask`, `read-only` or `yolo`; no mode: opens a list (or click it on the bottom line) |
 | `/permissions` | the requests refused (Enter allows one again, this session), the grants kept (Del removes one), your rules |
@@ -149,7 +149,10 @@ Typing
   its letters in turn. Up and Down choose, Tab fills one in, Enter runs
   it (one found by its description is filled in first, so a second
   Enter runs what shows), Esc closes the list. Among those matched
-  alike, the ones you run most come first.
+  alike, the ones you run most come first. After the commands come the
+  settings it matches, by key or by what they do, as `/set <key>`:
+  Enter opens `/settings` at one, Tab fills it in to type a value
+  (`/sid` finds `/set side`).
 - `/` after a space, mid-message, lists your skills it matches (Tab or
   Enter fills one in), and each skill a message names ("Use the
   /imagegen skill to…") is one illi is told to use.

@@ -767,12 +767,13 @@ function term_suggestions(t: Term, sug: Sug, fw: number, room: number): Item[] {
   const wide = Math.min(Math.max(0, ...sug.found.map((m) => Paint.text_width(sug.cmds[m.k][0]))), Math.floor(w / 2)) + 4;
   const item = (m: Screen.Match, k: number): Item[] => {
     const [use, , text, , , about] = sug.cmds[m.k];
-    const name = use.split(" ")[0];
+    const from = use.indexOf(sug.names[m.k]);
+    const end  = from + sug.names[m.k].length;
     const here = k === sug.at;
     const head = [
       Paint.Run(here ? "› " : "  ", bold),
-      ...[...name].map((c, i) => Paint.Run(c, here || (m.hay !== true && m.at.includes(i - 1)) ? bold : Paint.INK)),
-      Paint.Run(use.slice(name.length), here ? lit : Paint.DIM),
+      ...[...use.slice(0, end)].map((c, i) => Paint.Run(c, here || (m.hay !== true && m.at.includes(i - from)) ? bold : Paint.INK)),
+      Paint.Run(use.slice(end), here ? lit : Paint.DIM),
     ];
     const cut  = Paint.line_cut(head, 0, wide - 2)[1];
     const pad  = Paint.Run(" ".repeat(wide - Paint.line_width(cut)));

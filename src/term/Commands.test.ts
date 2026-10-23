@@ -21,7 +21,8 @@
 // counted weighs half as much 100 uses on, a name faded under a tenth
 // forgotten; two illis counting at once each keep theirs over the
 // other's. The side shows any vendor's plan alike: each window's share
-// used, its bar as full.
+// used, its bar as full. A /word finds every setting too, by its key or
+// what it does, as `/set <key>`.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -482,6 +483,27 @@ test("a sticky skill: its name alone turns it on, again off, each said; with wor
   expect([config.STICKY, note(t)]).toEqual([[], "terse is off."]);
   expect(side().map(([text]) => text)).toEqual(expect.not.arrayContaining([expect.stringContaining("Sticky")]));
   fs.rmSync(DIR + "/skills/terse", { recursive: true });
+});
+
+test("/ finds every setting once a word is typed, by its key or what it does: /set <key>, its value now; Enter opens /settings at it, Tab fills it in for a value", () => {
+  const t = term();
+  const found = (word: string) => {
+    Screen.ed_set(t.scr.ed, word);
+    const sug = term_suggest(t)!;
+    return sug.found.map((m) => sug.cmds[m.k][0] + (m.hay ? "*" : ""));
+  };
+  expect(found("/").some((use) => use.startsWith("/set side"))).toBe(false);
+  expect(found("/sid")[0]).toBe("/set side [value]");
+  expect(found("/mode")).toEqual(expect.arrayContaining(["/mode [mode]", "/set mode [value]"]));
+  expect(found("/panel")).toEqual(expect.arrayContaining(["/set side [value]*", "/set side_width [value]*"]));
+  expect(term_suggest(t)!.cmds.find(([use]) => use === "/set side_width [value]")![2]).toBe("the side panel's width (now 25%)");
+  Screen.ed_set(t.scr.ed, "/sid");
+  term_grab(t, "Tab");
+  expect(t.scr.ed.text).toBe("/set side ");
+  Screen.ed_set(t.scr.ed, "/sid");
+  term_grab(t, "Enter");
+  expect([t.choose.title, t.choose.names[t.choose.at]]).toEqual(["Settings", "side"]);
+  expect(term_commands(true).some(([use]) => use.startsWith("/side"))).toBe(false);
 });
 
 test("each command and key is in docs/keys.md", () => {

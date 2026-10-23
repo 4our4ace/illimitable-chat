@@ -140,7 +140,7 @@ test("Enter on one typed in puts /set in the input; /set checks the value, then 
   run(t, "/set", "nope 1");
   expect(note(t)).toMatch(/^No setting nope\./);
   run(t, "/set", "side");
-  expect(note(t)).toBe("side: right. Where the side panel shows. /set side <value> changes it; /set side default puts back right.");
+  expect([t.choose.title, t.choose.names[t.choose.at]]).toEqual(["Settings", "side"]);
 });
 
 test("the pick set while illi's own agent is the main one is the chat's at once; under another agent, only kept", () => {

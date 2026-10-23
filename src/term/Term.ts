@@ -232,14 +232,17 @@ export type Chooser = {
 export type Item = [Paint.Line, (() => void) | null, { col: number; run: (() => void) | null }?];
 
 // the commands suggested as a `/word` is typed, as in Claude Code: all
-// of them (the user's too, read as the list opened: never at each key),
-// the word they're matched to, those it matches (best first), the one
+// of them (the user's too, read as the list opened: never at each key)
+// and after them the settings, each by the name it is matched by (a
+// setting's: its key), how many are commands (the settings shown only
+// once a word is typed); the word they're matched to, those it matches
+// (best first), the one
 // lit, the first shown; how many fit as last shown (their descriptions
 // wrapped, up to Frame.ts SUGGEST lines); the word Esc closed it at
 // (null: none); mid: where the word starts in a message, the user's
 // skills alone suggested, a pick filling it in (null: the input is the
 // word alone)
-export type Sug = { cmds: Cmd[]; word: string; found: Screen.Match[]; at: number; top: number; tall: number; off: string | null; mid: number | null };
+export type Sug = { cmds: Cmd[]; names: string[]; commands: number; word: string; found: Screen.Match[]; at: number; top: number; tall: number; off: string | null; mid: number | null };
 
 // a line of /help: how it is typed ("": keys only), its keys, what it
 // does; it runs on its argument, or by a key on "" (or the key's name);
