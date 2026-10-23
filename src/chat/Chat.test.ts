@@ -20,7 +20,8 @@
 // turn answered, it goes. /compact asks the chat's model for a recap in
 // the turn's place, on its cache, and the agent's view starts at it, the
 // screen as it was; what is logged meanwhile comes after it; failed or
-// stopped, the chat is as it was, and a quit resumes nothing. A view
+// stopped, the chat is as it was, and a quit resumes nothing. /clear
+// empties the to-do list beside the chat, whatever was said. A view
 // switches this session's mode; a refused request allowed again is told
 // to illi in the user's name, its grants this session's; a grant goes. A
 // message passes the plugins' and hooks' checks (kept back, told more;
@@ -298,6 +299,19 @@ test("/clear: the agent gets nothing of the chat so far, not even its lines, and
   Memory.fit(mem);
   expect(mem.view.parts.every((part) => Memory.span(part)[0] >= before)).toBe(true);
   expect(Memory.zoom(mem, 0, 1, 0)).toContain(Memory.message(mem, 0)!.text);
+});
+
+test("/clear empties the to-do list beside the chat, so after a restart too, even with nothing said since the last /clear", () => {
+  const list = [{ text: "the old topic's step", status: "active" as const }];
+  Tools.todo_set(chat.tools, list);
+  expect(Chat.clear(chat)).toEqual({});
+  expect(Tools.todo(chat.tools)).toEqual([]);
+  chat.tools.todo = undefined;
+  expect(Tools.todo(chat.tools)).toEqual([]);
+  Tools.todo_set(chat.tools, list);
+  expect(chat.mem.cut).toBe(chat.mem.count);
+  expect(Chat.clear(chat)).toEqual({});
+  expect(Tools.todo(chat.tools)).toEqual([]);
 });
 
 test("a goal check and a message sent mid-run hold no more than the chat's model takes", () => {

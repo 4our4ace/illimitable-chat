@@ -1259,12 +1259,16 @@ export namespace Chat {
   // first message at the chat's end, so a turn sends nothing of the chat
   // so far, not even its lines: it is only the memory's, summarized on,
   // a search or zoom away for the agent (the prompt says so); the screen
-  // empty; the old topic's suggested reply gone; the views told the
-  // context it now holds. Not while a turn runs
+  // empty; the old topic's suggested reply and to-do list gone (the list
+  // even with nothing said since: one may outlive an earlier /clear); the
+  // views told the context it now holds. Not while a turn runs
   export function clear(chat: Chat): Answer {
     const mem = chat.mem;
     if (chat.busy) {
       return { error: "illi is at work: /clear once it's done (Esc interrupts it)." };
+    }
+    if (Tools.todo(chat.tools).length > 0) {
+      Tools.todo_set(chat.tools, []);
     }
     if (mem.cut === mem.count) {
       return {};
