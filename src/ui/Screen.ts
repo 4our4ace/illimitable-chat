@@ -29,6 +29,7 @@ import * as fs from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import * as Draw from "./Draw.ts";
 import * as Md from "./Md.ts";
+import { ASK, BLINK, CLEAR, HIDE, MODES_OFF, MODES_ON, PASTE_OFF, PASTE_ON, SHOW, STEADY, SYNC_OFF, SYNC_ON, TITLE_AGAIN, TITLE_END, TITLE_NONE, TITLE_POP, TITLE_SET } from "./Modes.ts";
 import * as Paint from "./Paint.ts";
 import * as Theme from "./Theme.ts";
 
@@ -128,9 +129,6 @@ export const EDITING = "Arrows, Home, End, Ctrl+A, E, U, K, W, Alt+B, F, D, as i
 // a shorter one would find most
 const HAY = 3;
 
-const PASTE_ON  = "\x1b[200~";
-const PASTE_OFF = "\x1b[201~";
-
 // a paste longer than these (lines, characters) shows as a token; a
 // token in the input (as a split keeps it); a pasted one's number
 const LONG_LINES = 5;
@@ -138,42 +136,9 @@ const LONG_CHARS = 500;
 const TOKEN  = /(\[(?:Pasted text #\d+[^\]\n]*|Image #\d+)\])/g;
 const PASTED = /\[Pasted text #(\d+)[^\]\n]*\]/g;
 
-// a write the terminal shows at once; the screen cleared; the cursor
-// hidden, shown
-const SYNC_ON  = "\x1b[?2026h";
-const SYNC_OFF = "\x1b[?2026l";
-const CLEAR    = "\x1b[2J";
-const HIDE     = "\x1b[?25l";
-const SHOW     = "\x1b[?25h";
-
-// the cursor's look: a block, as terminals draw it, blinking while illi
-// waits (scr.blink), else steady (as opencode's: its own default); the
-// terminal's own again
-const BLINK  = "\x1b[1 q";
-const STEADY = "\x1b[2 q";
-const PLAIN  = "\x1b[0 q";
-
-// the window's title (OSC 0) set; saved on the terminal's stack
-// (XTWINOPS) and put back from it; one emptied, so a terminal without
-// the stack falls back to its own, not to illi's
-const TITLE_SET  = "\x1b]0;";
-const TITLE_END  = "\x07";
-const TITLE_PUSH = "\x1b[22;0t";
-const TITLE_POP  = "\x1b[23;0t";
-const TITLE_NONE = TITLE_SET + TITLE_END;
-
-// the alternate screen, bracketed paste, the mouse's clicks, wheel and
-// every move as SGR reports, kitty's keys at flag 1 (popped before
-// pushed: each screen keeps its own flags), the flags asked (a kitty
-// terminal answers CSI ? flags u), the window's title saved (TITLE_PUSH);
-// off, in turn (screen_off)
-const MODES_ON  = "\x1b[?1049h\x1b[?2004h\x1b[?1000h\x1b[?1003h\x1b[?1006h\x1b[<u\x1b[>1u\x1b[?u" + TITLE_PUSH;
-const MODES_OFF = "\x1b[<u\x1b[?1006l\x1b[?1003l\x1b[?1000l\x1b[?2004l\x1b[?1049l" + SHOW + PLAIN;
-
-// the background asked; its answer (OSC 11 ; rgb:r/g/b, ended by BEL or
-// ST) and one cut by a read's end; how long it is awaited (ms): a bare
-// ESC ] then is Alt+]
-const ASK      = "\x1b]11;?\x1b\\";
+// the background's answer (OSC 11 ; rgb:r/g/b, ended by BEL or ST) and
+// one cut by a read's end; how long it is awaited (ms): a bare ESC ] then
+// is Alt+]
 const OSC      = /^\x1b\](\d+);([^\x07\x1b]*)(?:\x07|\x1b\\)/;
 const OSC_CUT  = /^\x1b\](?:\d+(?:;[^\x07\x1b]*)?)?\x1b?$/;
 const RGB      = /^rgba?:([0-9a-f]{1,4})\/([0-9a-f]{1,4})\/([0-9a-f]{1,4})/i;
@@ -523,7 +488,7 @@ export function screen_title(scr: Screen, text: string | null): void {
   }
   if (text === null) {
     if (scr.titled) {
-      process.stdout.write(TITLE_NONE + TITLE_POP + TITLE_PUSH);
+      process.stdout.write(TITLE_AGAIN);
     }
     [scr.title, scr.titled] = [undefined, false];
     return;
