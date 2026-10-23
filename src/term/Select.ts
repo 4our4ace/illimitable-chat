@@ -7,11 +7,12 @@
 // scrolls. Empty space is chosen too, as in Claude Code: past a line's
 // text and on a blank line, the choice lights to its end (or the area's
 // width); what's copied drops each line's end spaces. A reply's button
-// under the pointer lights, and a click copies what it holds. The right
+// under the pointer lights, and a click copies what it holds; buttons
+// are no text, so what's copied or quoted leaves them out. The right
 // button dragged over the chat chooses the same way (not while a picker
-// has the focus), and as it's let go the text is quoted in the input, to
-// reply to it (not on an agent's read-only page); a right click soon
-// after takes the quote out again.
+// has the focus, nor from a button), and as it's let go the text is
+// quoted in the input, to reply to it (not on an agent's read-only page);
+// a right click soon after takes the quote out again.
 
 import * as Draw from "../ui/Draw.ts";
 import { term_draw } from "./Frame.ts";
@@ -57,13 +58,14 @@ function term_button(line: Paint.Line, col: number): (() => string) | undefined 
 // comes first); dragged, the choice follows the pointer (a chat scrolls
 // while it's past an edge); let go, the text chosen is copied, else it
 // was a click. The right button: the same in the chat, a character at a
-// time, the text chosen quoted as it's let go (term_quote), else it was a
-// right click, which takes a quote just made out (term_unquote)
+// time (never from a reply's button), the text chosen quoted as it's let
+// go (term_quote), else it was a right click, which takes a quote just
+// made out (term_unquote)
 export function term_mouse(t: Term, key: string): void {
   const p = t.scr.point;
   if (key === "RightPress") {
     const area = term_area_at(t, p);
-    const at   = area?.key === "chat" && t.choose === null ? term_cell(area, p) : null;
+    const at   = area?.key === "chat" && t.choose === null && term_under(t, p) === undefined ? term_cell(area, p) : null;
     t.sel      = area !== undefined && at !== null ? { key: area.key, a: at, b: at, held: true, moved: false, unit: 1, root: [at, at] } : null;
   } else if (key === "RightRelease") {
     term_drift(t, 0);
@@ -171,7 +173,9 @@ function term_span(sel: Sel, n: number): [number, number] | null {
   return n < a.line || n > b.line ? null : [n === a.line ? a.col : 0, n === b.line ? b.col + 1 : Infinity];
 }
 
-// the text chosen: each line's columns chosen, their ends' spaces dropped
+// the text chosen: each line's columns chosen, their ends' spaces
+// dropped; a reply's buttons are no text (a line of buttons alone is
+// left out whole)
 export function term_selected(t: Term): string {
   const sel  = t.sel;
   const area = t.areas.find((a) => a.key === sel?.key);
@@ -182,7 +186,11 @@ export function term_selected(t: Term): string {
   const out: string[] = [];
   for (let n = a.line; n <= b.line; n++) {
     const [from, to] = term_span(sel, n)!;
-    out.push(Paint.line_cut(area.lines[n] ?? [], from, to)[1].map((r) => r.x).join("").trimEnd());
+    const runs = Paint.line_cut(area.lines[n] ?? [], from, to)[1];
+    const text = runs.filter((r) => r.copy === undefined).map((r) => r.x).join("").trimEnd();
+    if (text !== "" || !runs.some((r) => r.copy !== undefined)) {
+      out.push(text);
+    }
   }
   return out.join("\n");
 }

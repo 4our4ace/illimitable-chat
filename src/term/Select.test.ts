@@ -5,8 +5,9 @@
 // line's whole width, it may start or end in empty space, and what it
 // copies drops each line's end spaces (a blank line an empty one). A
 // right drag over the chat quotes what it covers in the input (not under
-// a picker, nor into an agent's read-only page), and a right click soon
-// after takes the quote out.
+// a picker, nor into an agent's read-only page; a reply's buttons left
+// out, none started on one), and a right click soon after takes the
+// quote out.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -93,6 +94,27 @@ test("a right drag over the chat quotes what it covers at the input's end, a lin
   t.v.page = "reviewer";
   quote([0, 0], [0, 4]);
   expect([t.scr.ed.text, t.notices.at(-1).text]).toEqual(["my reply\n> hello\n", "Not quoted: this page's input is read-only"]);
+});
+
+test("a reply's buttons are never quoted: a right drag over them leaves them out (a line of buttons alone whole), and none starts on one", () => {
+  const t    = { ...term(), v: View.view_new(), notices: [], quoted: null, choose: null, scr: { point: { row: 0, col: 0 }, clicks: 1, ed: Screen.ed_new() } } as any;
+  const btn  = (x: string) => ({ ...Paint.Run(x), copy: () => "the code" });
+  const area = { ...AREA, lines: [[Paint.Run("── ts       "), btn("⧉ copy")], [Paint.Run("let x = 1")], [Paint.Run("  "), btn("⧉ copy"), Paint.Run("  "), btn("⧉ art")]] };
+  const quote = (from: [number, number], to: [number, number]) => {
+    t.areas = [];
+    term_area(t, area);
+    t.scr.point = { row: from[0], col: from[1] };
+    term_mouse(t, "RightPress");
+    t.scr.point = { row: to[0], col: to[1] };
+    term_mouse(t, "RightDrag");
+    term_mouse(t, "RightRelease");
+  };
+  quote([0, 0], [2, 19]);
+  expect(t.scr.ed.text).toBe("> ── ts\n> let x = 1\n");
+  Screen.ed_set(t.scr.ed, "");
+  t.quoted = null;
+  quote([0, 12], [1, 8]);
+  expect(t.scr.ed.text).toBe("");
 });
 
 test("a choice may start and end in empty space", () => {
