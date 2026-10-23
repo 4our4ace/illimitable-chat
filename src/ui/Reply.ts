@@ -1,6 +1,7 @@
 // Reply
 // =====
-// illi's replies drawn from their markdown: Markdown.ts reads the text,
+// illi's replies drawn from their markdown, as prismantis draws them
+// (THIRD_PARTY_NOTICES.md): Markdown.ts reads the text,
 // and each block draws in Paint's lines, in a palette (Palettes.ts,
 // Draw.draw_theme: the one named, or by
 // the terminal's background; the terminal's own colors while untold):
