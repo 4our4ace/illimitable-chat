@@ -439,11 +439,13 @@ export function term_take(t: Term): void {
   }
 }
 
-// Esc: the notes cleared; while illi's turn runs, it says Esc again
-// interrupts it, and a second within AGAIN does, so a stray one never
+// Esc: the notes cleared; while work runs (illi's turn, its subagents),
+// it says Esc again stops it, and a second within AGAIN does, all of it,
+// so a stray one never: a stop leaves no agent to ask or report after it
+// (background jobs go on: /background)
 export function term_esc(t: Term): void {
   term_unnote(t);
-  if (!t.v.busy) {
+  if (!View.view_running(t.v)) {
     return;
   }
   if (Date.now() - t.esc < AGAIN) {
@@ -452,11 +454,11 @@ export function term_esc(t: Term): void {
     return;
   }
   t.esc = Date.now();
-  term_toast(t, "Esc again to interrupt", AGAIN);
+  term_toast(t, "Esc again to stop", AGAIN);
 }
 
-// Ctrl+C or Ctrl+D: clears the input; on an empty one, Ctrl+C interrupts
-// illi's turn and says how to quit, a second within AGAIN quits; Ctrl+D
+// Ctrl+C or Ctrl+D: clears the input; on an empty one, Ctrl+C stops the
+// work running (as Esc twice) and says how to quit, a second within AGAIN quits; Ctrl+D
 // quits, but while a quit would stop more than a turn (term_stops) it
 // says what first, as Ctrl+C does, and a second within AGAIN quits; a
 // quit under way (waiting on hooks), at once

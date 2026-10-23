@@ -109,7 +109,7 @@ Keys and commands
 
 | Key or command       | Does                                  |
 | -------------------- | ------------------------------------- |
-| Enter / Esc twice    | send / interrupt                      |
+| Enter / Esc twice    | send / stop                           |
 | Tab                  | take the suggested reply              |
 | `/`                  | command list                          |
 | Ctrl+P               | every command and setting, searchable |

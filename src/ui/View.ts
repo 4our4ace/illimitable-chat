@@ -565,7 +565,7 @@ export function view_act(v: View, act: Act): Client[] {
       return act.on ? [{ $: "root" }] : [];
     }
     case "Stop": {
-      return v.busy ? [{ $: "stop", name: TURN }] : [];
+      return view_running(v) ? [{ $: "stop" }] : [];
     }
     case "Goto": {
       if (act.name === null) {
