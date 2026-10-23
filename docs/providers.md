@@ -9,8 +9,12 @@ ChatGPT plan
 ------------
 
 In the chat, type `/login` to sign in with ChatGPT Plus or Pro: illi
-shows a code to enter on OpenAI's page, then keeps and renews the login
-itself. An existing [opencode](https://opencode.ai) login is picked up
+opens OpenAI's page in your browser and shows a code to enter there (it
+is in your clipboard too), then keeps and renews the login itself. The
+browser is your system's: on WSL Windows' default, asked through
+`rundll32.exe url.dll,FileProtocolHandler` (which some security tools
+flag); `BROWSER` picks another, and `BROWSER=none` opens none. Over SSH,
+or with no display, the link is only shown. An existing [opencode](https://opencode.ai) login is picked up
 as it is. `chatgpt` is the default vendor.
 
 Claude plan
