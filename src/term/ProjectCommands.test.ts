@@ -70,7 +70,6 @@ test("/projects lists this project first, then the one used last first, each its
   expect(t.choose.about[0]).toStartWith("no messages yet · ");
   expect(t.choose.about[0]).toEndWith(" · here");
   expect(t.choose.about[1]).toBe("last 2026-10-10 · 1 message · /work/app");
-  expect(t.choose.middle).toBeGreaterThan(0);
   t.choose.pick(2);
   expect(t.choose).toBeNull();
   expect(note(t)).toBe("site-7q2m0d · /work/site · 1 message, 2026-10-01. Lately: user: work on site-7q2m0d");

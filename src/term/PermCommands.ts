@@ -30,9 +30,6 @@ const ABOUT: Record<Mode, string> = {
   "yolo"      : "everything runs, but what your rules refuse or ask",
 };
 
-// the most columns the list takes, the screen's width allowing
-const WIDE = 90;
-
 // the rules' shape, as /permissions shows it
 const SHAPE = `{
   "rules": {
@@ -50,7 +47,7 @@ export function term_mode(t: Term, arg: string): void {
     return MODES.includes(mode as Mode) ? mode_set(t, mode as Mode) : term_note(t, "No mode " + arg.trim() + ": auto, ask, read-only or yolo.");
   }
   const aside = ORDER.map((m) => (m === t.v.perm.set ? "the setting's" : ""));
-  term_chooser(t, "Mode, this session", ORDER, ORDER.map((m) => ABOUT[m]), ORDER.indexOf(t.v.perm.mode), (k) => mode_set(t, ORDER[k]), { aside, foot: () => "Enter switch · /settings changes the default", middle: WIDE });
+  term_chooser(t, "Mode, this session", ORDER, ORDER.map((m) => ABOUT[m]), ORDER.indexOf(t.v.perm.mode), (k) => mode_set(t, ORDER[k]), { aside, foot: () => "Enter switch · /settings changes the default" });
 }
 
 // a mode for this session (the setting's: follow it again), said
@@ -77,7 +74,7 @@ export function term_permissions(t: Term, lit = ""): void {
     return true;
   };
   const foot    = (k: number) => (k < refused.length ? refused_foot(refused[k]) : k < refused.length + grants.length ? "Enter or Del remove it" : "Enter where they are, and their shape");
-  term_chooser(t, "Permissions", names, about, -1, pick, { keys, foot, heads, middle: WIDE });
+  term_chooser(t, "Permissions", names, about, -1, pick, { keys, foot, heads });
   t.choose!.at = Math.max(0, refused.findIndex((r) => r.id === lit));
 }
 
@@ -103,7 +100,7 @@ function refused_pick(t: Term, r: Refused): void {
   }
   const names = ["Allow just this, this session", "Switch to ask mode"];
   const about = ["and tell " + r.who + " it may run it again", "every change asked about, this session"];
-  term_chooser(t, "Read-only mode refused it", names, about, -1, (k) => (k === 0 ? refused_allow(t, r) : mode_set(t, "ask")), { lead: [[Paint.Run(one_line(r.what), { ...Paint.INK, b: true })]], middle: WIDE });
+  term_chooser(t, "Read-only mode refused it", names, about, -1, (k) => (k === 0 ? refused_allow(t, r) : mode_set(t, "ask")), { lead: [[Paint.Run(one_line(r.what), { ...Paint.INK, b: true })]] });
 }
 
 // a refused request allowed for this session, the one who asked told

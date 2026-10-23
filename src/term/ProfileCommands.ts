@@ -36,10 +36,8 @@ import { status_end } from "./Status.ts";
 import { term_after, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
-// how long a profile's switch waits for the MCP servers to end (ms); the
-// width of its question while background jobs run
+// how long a profile's switch waits for the MCP servers to end (ms)
 const LEAVE = 2000;
-const WIDE  = 72;
 
 // the picker's rows that make a new profile, and bring one in
 const NEW    = "+ new profile";
@@ -147,7 +145,7 @@ export async function term_restart(t: Term, name: string, step?: () => void | Pr
         void term_restart(t, name, step, keep, t.v.background.every((j) => shown.has(j.id)));
       }
     };
-    term_chooser(t, "Switch to " + name + "?", ["Stay", "Switch and stop " + them], ["keeps " + them + " running", "gone for good"], -1, pick, { lead: [[Paint.Run(lead)]], foot: (k) => (k === 0 ? "Enter or Esc stay" : "/background shows " + them), middle: WIDE });
+    term_chooser(t, "Switch to " + name + "?", ["Stay", "Switch and stop " + them], ["keeps " + them + " running", "gone for good"], -1, pick, { lead: [[Paint.Run(lead)]], foot: (k) => (k === 0 ? "Enter or Esc stay" : "/background shows " + them) });
     return;
   }
   await term_leave(t, keep);
