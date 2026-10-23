@@ -12,11 +12,12 @@
 // it works inside illi, the project's CLAUDE.md left to Claude Code. Its
 // permission prompt, and illi's own shell, files and MCP tools, pass the
 // checks (Guard.ts): a risk asked with why, the question given the
-// command whole (a note and the refused list, cut short), a refusal
-// recorded and told to the model; a plugin's hooks come before them and
-// after the tool. The
-// projects: their table, a search across them, a zoom into another's
-// chat. A subagent's view fits its model: the oldest lines left out.
+// command whole up to 32,000 characters, how many more left out (a note
+// and the refused list, cut short), what don't ask again keeps by its
+// ends past 1,000; a refusal recorded and told to the model; a plugin's
+// hooks come before them and after the tool. The projects: their table,
+// a search across them, a zoom into another's chat. A subagent's view
+// fits its model: the oldest lines left out.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -165,6 +166,15 @@ test("Claude Code's permission prompt is judged as illi's own calls: routine wor
   await cut;
   await until(() => v.asks.length === 0);
   expect(chat.tools.perm.refused.at(-1)!.what).toHaveLength(400);
+  const doc  = "cat <<'EOF' | git push --force origin main\n" + Array.from({ length: 4000 }, (_, k) => "line " + k + " of a file").join("\n") + "\nEOF";
+  const huge = approve("Bash", { command: doc });
+  await until(() => v.asks.length === 1);
+  const q = v.asks[0];
+  expect([q.whole!.length, q.more, q.whole + doc.slice(32000) === doc]).toEqual([32000, doc.length - 32000, true]);
+  expect([q.keep!.length <= 1003, q.keep!.startsWith("cat <<'EOF' | git push --force origin main\nline 0 of a file"), q.keep!.includes(" … "), q.keep!.endsWith("line 3999 of a file\nEOF")]).toEqual([true, true, true, true]);
+  await answer(false, false);
+  await huge;
+  await until(() => v.asks.length === 0);
   const always = approve("Bash", { command: "git push origin main" });
   await until(() => v.asks.length === 1);
   expect(v.asks[0].keep).toBe("git push *");
@@ -292,7 +302,15 @@ test("what a tool would do: a command, a file, a URL or a query, else the input;
   expect(Tools.what({ pattern: "TODO" })).toBe("TODO");
   expect(Tools.what({ n: 1 })).toBe('{"n":1}');
   expect(Tools.what({ command: "x".repeat(1000) })).toHaveLength(400);
-  expect(Tools.whole({ command: "x".repeat(1000) })).toHaveLength(1000);
+  expect(Tools.whole({ command: "x".repeat(1000) })).toEqual({ whole: "x".repeat(1000), more: 0 });
+  expect(Tools.whole({ command: "x".repeat(40000) })).toEqual({ whole: "x".repeat(32000), more: 8000 });
+  expect(Tools.whole({ command: "x".repeat(31999) + "😀" + "x".repeat(10) })).toEqual({ whole: "x".repeat(31999), more: 12 });
+});
+
+test("a long text by its ends: whole up to the most, else its start and its end about an ellipsis, a surrogate pair kept whole", () => {
+  expect(Tools.ends("abcdef", 6)).toBe("abcdef");
+  expect(Tools.ends("abcdefgh", 6)).toBe("abc … fgh");
+  expect(Tools.ends("ab😀cdefgh😀ij", 6)).toBe("ab … 😀ij");
 });
 
 test("a subagent's view within its model's budget: the oldest lines left out, said so; the opening and the newest kept", () => {

@@ -5,9 +5,10 @@
 // (Question.ts), as it comes: Yes; Yes, and don't ask again for what it
 // keeps, in this project (offered only when it keeps something); No (Esc
 // too); No, and say why (a line typed, for the model). Why it was asked
-// and what it would do (a command whole, by its lines) show over the
-// answers, once: no note says them again (a pipe, with no answers to
-// show, notes them, cut short).
+// and what it would do (a command whole, by its lines, up to the most
+// the question is given: Tools.whole, a dim line saying how much more)
+// show over the answers, once: no note says them again (a pipe, with no
+// answers to show, notes them, cut short).
 // illi's own questions (ask) show at the input too (Question.ts), as a
 // form, a tab each: the question, its options (one to pick, or several),
 // and a row for words of the user's own, which they may type beside the
@@ -252,7 +253,8 @@ function form_tabs(tabs: Paint.Run[], w: number): { tabs: Paint.Line[]; spans: S
 // only where it keeps something (named on one line, as a list shows a
 // command); over them why it asks, then what it would do, whole, bold,
 // by its lines (a command's blank ones left out), so a long command cut
-// to fit never hides the why
+// to fit never hides the why; past what the question is given of it
+// (Tools.whole), a dim line saying how much more was left out
 function term_ask_open(t: Term, q: Question): void {
   const keep  = q.keep ?? "";
   const names = ["Yes", ...(keep === "" ? [] : ["Yes, and don't ask again for " + Paint.text_line(keep) + " in this project"]), "No", "No, and say why"];
@@ -275,7 +277,9 @@ function term_ask_open(t: Term, q: Question): void {
   };
   const title = "Allow " + q.tool + (q.who === "illi" ? "" : " for " + q.who) + "?";
   const what  = (q.whole ?? q.what).split("\n").map((l) => Paint.text_clean(l).trimEnd()).filter((l) => l.trim() !== "");
-  const lead  = [...(q.why === undefined || q.why === "" ? [] : [[Paint.Run("Why: ", Paint.DIM), Paint.Run(Paint.text_clean(q.why))]]), ...what.map((l) => [Paint.Run(l, { ...Paint.INK, b: true })])];
+  const more  = q.more ?? 0;
+  const left  = more === 0 ? [] : [[Paint.Run("… " + more.toLocaleString("en-US") + (more === 1 ? " more character" : " more characters") + " not shown", Paint.DIM)]];
+  const lead  = [...(q.why === undefined || q.why === "" ? [] : [[Paint.Run("Why: ", Paint.DIM), Paint.Run(Paint.text_clean(q.why))]]), ...what.map((l) => [Paint.Run(l, { ...Paint.INK, b: true })]), ...left];
   term_question(t, title, names, names.map(() => ""), pick, { keys, lead, foot: () => "Esc no" });
   t.asking!.c = t.question;
 }

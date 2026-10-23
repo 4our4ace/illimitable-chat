@@ -178,7 +178,8 @@ own questions, a confirmation (switch profiles and stop the background
 jobs? delete a profile? forget a project?) and a line asked for (a
 name, a path, why not). The rule over it says what it asks and its keys
 (`── Allow shell? · ↑↓ Enter · Esc no ──`), the rule under it stays, and
-it takes half the screen's rows at most, the chat keeping the rest.
+it takes half the screen's rows at most (fewer on a short screen), the
+chat keeping the rest.
 Nothing is dimmed: the chat, the side and the notes stay as they are,
 and what you were typing comes back once you answer.
 
@@ -198,7 +199,8 @@ and what you were typing comes back once you answer.
   Enter does. What leads its answers (a command, why it is asked) shows
   whole up to half the screen, then cut, a dim line saying how much more
   (`… 212 more lines · wheel, PgUp/PgDn`): the wheel over it or PgUp,
-  PgDn scroll it; the answers always show. Everywhere else the mouse
+  PgDn scroll it; the answers always show (on a screen too short for
+  both, what leads them gives way). Everywhere else the mouse
   works as with no question: the wheel scrolls the chat, text is
   selected and copied (Ctrl+C with text selected copies it, and doesn't
   answer), the side and the tabs answer; a click outside never answers.

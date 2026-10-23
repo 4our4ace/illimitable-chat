@@ -30,7 +30,13 @@
 // tabs and keys hold and its lines scroll, by the keys (the lit row kept
 // in view) and by the wheel over it (the lit row held while it shows,
 // else the nearest; the one under the pointer lit). A theme's lit mark
-// of any width leads every row as wide.
+// of any width leads every row as wide. Never a row past the screen's
+// last, from 7 rows up, whatever else shows (the side, work running,
+// many notes, a status line), and no control character from a lead; too
+// short for its lead and its answers, the lead gives way whole (one row
+// free: it says how many lines it has); too short for its answers, a
+// line each, as many as fit about the lit one. A paste never answers it:
+// the line asked takes it as one line.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -39,7 +45,7 @@ import * as os from "node:os";
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-question-");
 process.env.ILLI_DIR = DIR;
 
-const { term_question } = await import("./Commands.ts");
+const { term_ask, term_question } = await import("./Commands.ts");
 const { term_paint } = await import("./Frame.ts");
 const { term_grab, term_press, term_type } = await import("./Keys.ts");
 const Paint = await import("../ui/Paint.ts");
@@ -319,7 +325,7 @@ test("a confirmation at the input: a double click on an answer picks once, its s
     const picked: number[] = [];
     term_question(t, "Delete profile work?", ["Cancel", "Delete"], ["", ""], (k) => picked.push(k));
     paint(t);
-    expect(asked(t, 80)[0]).toStartWith("── Delete profile work? · ↑↓ Enter ──");
+    expect(asked(t, 80)[0]).toStartWith("── Delete profile work? · ↑↓ Enter · Esc ──");
     const r = row_of(t, "Delete");
     click(t, r, COL);
     paint(t);
@@ -498,4 +504,100 @@ test("a lit mark wider than >: the form's options and words lead as wide, the cu
   } finally {
     Theme.GLYPH.lit = was;
   }
+});
+
+test("never a row past the screen's last: a question of any kind, the side left, right or off, work running or not, many notes and a status line, from 7 rows up; every row drawn once, no control character (a lead's neither), the rules round it, every answer shown from 10 rows, the cursor in it where it takes typing", () => {
+  const many  = { text: "Which one?", head: "One", options: Array.from({ length: 20 }, (_, k) => ({ label: "o" + k, about: "" })), multi: false };
+  const kinds: Record<string, (t: any) => void> = {
+    tall    : (t) => (t.v.asks = [{ id: "q1", who: "illi", tool: "shell", what: TALL, why: "it deletes \x1b[31mfiles\x07", keep: TALL }]),
+    confirm : (t) => term_question(t, "Delete profile work?", ["Keep it", "Delete it"], ["", "its chat and setup, gone for good"], () => {}, { lead: [[Paint.Run("a lead with \x1b[1m control \x07 characters\r")]] }),
+    line    : (t) => term_ask(t, "New profile", "its name", "a name", "letters, digits", () => null),
+    form    : (t) => own(t, [DB, many]),
+  };
+  for (const [cols, rows] of [[200, 50], [80, 24], [80, 18], [40, 12], [40, 10], [30, 8], [20, 7]]) {
+    for (const place of ["right", "left", "off"]) {
+      for (const busy of [false, true]) {
+        for (const [kind, make] of Object.entries(kinds)) {
+          sized(cols, rows, () => {
+            const t = term();
+            t.side.place = place;
+            if (busy) {
+              [t.v.busy, t.v.live] = [true, [{ kind: "illi", text: "words streaming" }]];
+            }
+            t.notices = Array.from({ length: 8 }, (_, k) => ({ text: "note " + k + " long enough to wrap on a narrow screen", until: Date.now() + 60000, toast: false }));
+            [t.status.held, t.status.rows] = [3, [[Paint.Run("one")], [Paint.Run("two")], [Paint.Run("three")]]];
+            Screen.ed_set(t.scr.ed, "my draft");
+            make(t);
+            paint(t);
+            clearTimeout(t.spin);
+            const drawn = t.ruled.rows;
+            const said  = cols + "x" + rows + " " + place + (busy ? " busy " : " idle ") + kind;
+            expect([said, drawn.length]).toEqual([said, rows]);
+            for (const row of drawn) {
+              const pieces = [...row].sort((a: any, b: any) => a.col - b.col);
+              pieces.forEach((p: any, k: number) => expect([said, p.col + p.w <= (pieces[k + 1]?.col ?? cols)]).toEqual([said, true]));
+              expect([said, row.flatMap((p: any) => p.line).filter((r: any) => /[\x00-\x1f\x7f-\x9f]/.test(r.x))]).toEqual([said, []]);
+            }
+            const lines = asked(t, cols);
+            expect([said, lines[0].startsWith("── "), /^─+$/.test(lines.at(-1)), drawn.some((r: any[]) => text(r, cols).includes("my draft"))]).toEqual([said, true, true, false]);
+            if (kind === "tall" || kind === "confirm") {
+              const shown = new Set(t.box.rows.filter((aim: any) => aim?.$ === "option").map((aim: any) => aim.k));
+              expect([said, rows < 10 || shown.size === t.question.names.length, lines.slice(1, -1).includes("")]).toEqual([said, true, false]);
+              expect([said, t.ruled.at]).toEqual([said, null]);
+            } else if (kind === "line") {
+              expect([said, t.ruled.at.row >= t.box.row && t.ruled.at.row < t.box.row + t.box.h]).toEqual([said, true]);
+            }
+          });
+        }
+      }
+    }
+  }
+}, 30000);
+
+test("too short for its lead and its answers, the lead gives way whole (one row free: that row alone says how many lines it has, the wheel and the pages leaving it be); too short for its answers, they show a line each, as many as fit, moving with the lit one", () => {
+  sized(80, 12, () => {
+    const t = term();
+    ask(t, TALL, "rm -r ./no-such-folder-here");
+    armed(t);
+    expect(asked(t, 80).slice(1, -1)).toEqual(["Why: it deletes files", "… 300 more lines · wheel, PgUp/PgDn", "> Yes", "  Yes, and don't ask again for rm -r ./no-such-folder-here in this project", "  No", "  No, and say why"]);
+  });
+  sized(80, 11, () => {
+    const t = term();
+    ask(t, TALL, "rm -r ./no-such-folder-here");
+    armed(t);
+    expect(asked(t, 80).slice(1, -1)).toEqual(["… 301 more lines", "> Yes", "  Yes, and don't ask again for rm -r ./no-such-folder-here in this project", "  No", "  No, and say why"]);
+    wheel(t, t.box.row + 2, COL);
+    term_grab(t, "PgDn");
+    paint(t);
+    expect([t.question.past ?? 0, lit(t)]).toEqual([0, "No, and say why"]);
+  });
+  sized(80, 8, () => {
+    const t = term();
+    ask(t, TALL, "rm -r ./no-such-folder-here");
+    armed(t);
+    expect(asked(t, 80).slice(1, -1)).toEqual(["> Yes", "  Yes, and don't ask again for rm -r ./no-such-folder-here in this project"]);
+    term_grab(t, "Down");
+    term_grab(t, "Down");
+    paint(t);
+    expect(asked(t, 80).slice(1, -1)).toEqual(["  Yes, and don't ask again for rm -r ./no-such-folder-here in this project", "> No"]);
+    click(t, row_of(t, "Yes, and don't ask again for rm -r ./no-such-folder-here in this project"), COL);
+    expect(sent(t)).toEqual([{ ask: "q1", yes: true, always: true, said: "" }]);
+  });
+});
+
+test("a paste never answers a question: on the permission question it goes nowhere, the input as typed kept, even one ending in a new line; on the line asked it goes in as one line, waiting for Enter", async () => {
+  const { term_paste } = await import("./Attach.ts");
+  sized(80, 24, () => {
+    const t = term();
+    t.scr.paste = (x: string) => term_paste(t, x);
+    Screen.ed_set(t.scr.ed, "half a thought");
+    ask(t, "ls");
+    armed(t);
+    Screen.screen_feed(t.scr, "\x1b[200~yes\n\x1b[201~");
+    expect([sent(t), t.question.title, t.scr.ed.text]).toEqual([[], "Allow shell?", "half a thought"]);
+    term_grab(t, "Up");
+    term_grab(t, "Enter");
+    Screen.screen_feed(t.scr, "\x1b[200~too\nrisky\n\x1b[201~");
+    expect([sent(t), t.question.title, t.question.find.text, t.scr.ed.text]).toEqual([[], "Why not shell?", "too risky ", "half a thought"]);
+  });
 });

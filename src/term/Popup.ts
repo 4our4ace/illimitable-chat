@@ -171,7 +171,7 @@ function popup_measure(c: Chooser): Measure {
   const wants = Math.max(title, foot === "" ? 0 : Paint.text_width(foot) + 5, ...[...whole, hint, ...more].map((x) => x + 4));
   const heads = c.heads === undefined ? 0 : 2 * new Set(c.heads).size - 1;
   const tall  = (iw: number) => {
-    const list = heads + c.names.reduce((n, name) => n + popup_name_lines(c, name, iw).length, 0);
+    const list = heads + c.names.reduce((n, name) => n + popup_name_tall(c, name, iw), 0);
     const more = c.detail === undefined ? 0 : Math.max(0, ...c.names.map((_, k) => c.detail!(k, iw).length));
     return 2 + (c.find === null ? 0 : 1) + list + (more === 0 ? 0 : 1 + more);
   };
@@ -209,16 +209,24 @@ function popup_name_width(c: Chooser, name: string): number {
   return Paint.text_width(Paint.text_clean(name)) - (popup_act(c, name) ? 2 : 0);
 }
 
+// the lines an option's name takes within iw columns after its marks
+// (popup_name_lines): one where it fits, unwrapped
+function popup_name_tall(c: Chooser, name: string, iw: number): number {
+  const room = iw - Paint.text_width(Paint.lit_lead(true)) - (c.here < 0 || popup_act(c, name) ? 0 : 2);
+  return Paint.text_width(Paint.text_clean(name)) <= room ? 1 : popup_name_lines(c, name, iw).length;
+}
+
 // an option's name as its rows show it, in ink (the characters at `at`
 // lit; none: plain), within iw columns after its marks: one line, or,
 // too wide, wrapped at its words (a word too long at its characters),
 // whole. No control character reaches the screen (a new line written
 // there would draw the rest of the row over the rows under it): each
-// cleaned as text is (Paint.text_clean), where the search counts it
+// cleaned as text is (Paint.text_clean), where the search counts it (none
+// lit: the name cleaned in one piece, a long one as fast as a short)
 function popup_name_lines(c: Chooser, name: string, iw: number, ink = Paint.INK, lit = Paint.INK, at: number[] = []): Paint.Line[] {
   const room = iw - Paint.text_width(Paint.lit_lead(true)) - (c.here < 0 || popup_act(c, name) ? 0 : 2);
   const runs: Paint.Line = [];
-  [...name].forEach((ch, j) => {
+  (at.length === 0 ? [name] : [...name]).forEach((ch, j) => {
     const s    = at.includes(j) ? lit : ink;
     const x    = Paint.text_clean(ch);
     const last = runs.at(-1);
@@ -245,7 +253,7 @@ export function popup_entries(c: Chooser): Array<string | number> {
 // the lines each of the picker's entries takes at inner width iw (an
 // option's name may wrap)
 function popup_heights(c: Chooser, list: Array<string | number>, iw: number): number[] {
-  return list.map((e) => (typeof e === "string" ? 1 : popup_name_lines(c, c.names[c.shown[e].k], iw).length));
+  return list.map((e) => (typeof e === "string" ? 1 : popup_name_tall(c, c.names[c.shown[e].k], iw)));
 }
 
 // a list's box, w by h: its lines, framed, and what each stands for
@@ -270,7 +278,7 @@ function popup_list(c: Chooser, w: number, h: number): Omit<Laid, "place"> {
   const text  = c.find?.text ?? "";
   const typed = Paint.text_width(text) <= fits ? text : "…" + Paint.text_graphemes(text).slice(1 - fits).join("");
   const find  = c.find === null ? [] : [[Paint.Run(GLYPH.find, Paint.DIM), typed === "" ? Paint.Run("type to search", Paint.DIM) : Paint.Run(typed)]];
-  const all   = (c.heads === undefined ? 0 : 2 * new Set(c.heads).size - 1) + c.names.reduce((n, name) => n + popup_name_lines(c, name, iw).length, 0);
+  const all   = (c.heads === undefined ? 0 : 2 * new Set(c.heads).size - 1) + c.names.reduce((n, name) => n + popup_name_tall(c, name, iw), 0);
   const more  = c.detail === undefined || c.shown.length === 0 ? [] : c.detail(c.shown[c.at].k, iw);
   const keep  = Math.min(all, KEEP, Math.max(0, room - find.length));
   const under = more.length > 0 && room - find.length - keep >= more.length + 1 ? [[], ...more] : [];
@@ -278,7 +286,7 @@ function popup_list(c: Chooser, w: number, h: number): Omit<Laid, "place"> {
   const list  = popup_entries(c);
   const tall  = popup_heights(c, list, iw);
   const view  = c.shown.length === 0 ? [] : popup_view(c, list, tall, rows);
-  const shown = c.shown.length === 0 ? [[[Paint.Run("  Nothing matches " + Paint.text_clean(text), Paint.DIM)], null] as [Paint.Line, null]] : popup_rows(c, list, view, iw);
+  const shown = c.shown.length === 0 ? [[[Paint.Run("  Nothing matches " + Paint.text_clean(text), Paint.DIM)], null] as [Paint.Line, null]] : popup_rows(c, list, view, iw).flat();
   const blank = (n: number) => Array.from({ length: Math.max(0, n) }, (): [Paint.Line, null] => [[], null]);
   const items = [...find.map((l): [Paint.Line, null] => [l, null]), ...shown, ...blank(rows - shown.length), ...under.map((l): [Paint.Line, null] => [l, null])];
   const said  = popup_foot(c);
@@ -291,17 +299,18 @@ function popup_list(c: Chooser, w: number, h: number): Omit<Laid, "place"> {
 }
 
 // the picker's entries in view (view: their indices in list), laid out
-// iw wide (popup_entry), each with what it stands for: what an option is
-// from the column after the widest name on one line
-export function popup_rows(c: Chooser, list: Array<string | number>, view: number[], iw: number): Array<[Paint.Line, Target | null]> {
-  const wide = Math.max(0, ...c.names.filter((n) => popup_name_lines(c, n, iw).length === 1).map((n) => popup_name_width(c, n)));
-  return view.flatMap((e) => popup_entry(c, list[e], iw, wide));
+// iw wide (popup_entry), each its lines, each line with what it stands
+// for: what an option is from the column after the widest name on one
+// line (its names measured once, however many entries)
+export function popup_rows(c: Chooser, list: Array<string | number>, view: number[], iw: number): Array<Array<[Paint.Line, Target | null]>> {
+  const wide = Math.max(0, ...c.names.filter((n) => popup_name_tall(c, n, iw) === 1).map((n) => popup_name_width(c, n)));
+  return view.map((e) => popup_entry(c, list[e], iw, wide));
 }
 
 // the entries of the picker's list in view (their indices), rows lines at
 // most, each whole: from the first in view (Chooser top), moved to keep
 // the lit one in it (going up to the first of a group, its head too)
-function popup_view(c: Chooser, list: Array<string | number>, tall: number[], rows: number): number[] {
+export function popup_view(c: Chooser, list: Array<string | number>, tall: number[], rows: number): number[] {
   const lit  = list.indexOf(c.at);
   const span = (from: number, to: number) => tall.slice(from, to + 1).reduce((n, x) => n + x, 0);
   let top    = Math.max(0, Math.min(c.top, lit - (typeof list[lit - 1] === "string" ? 1 : 0)));
@@ -323,12 +332,13 @@ function popup_fit(tall: number[], top: number, rows: number): number[] {
 }
 
 // a turn of the wheel in the picker (d -1: up), as last painted (none
-// yet: nothing): a question's lead scrolled, while it is cut (Question.ts;
-// its answers, all shown, never move); else its list scrolled STEP
-// entries (a third of those shown, on a short one), stopping at its ends
-// (it never goes round; one shown whole never moves). The list moved:
-// with the pointer on an option, that option lit; else, the lit one gone
-// from view, the nearest still in it, so Enter picks what shows
+// yet: nothing): a question's lead scrolled, while it is cut, some of it
+// showing (Question.ts; its answers never move by the wheel); else its
+// list scrolled STEP entries (a third of those shown, on a short one),
+// stopping at its ends (it never goes round; one shown whole never
+// moves). The list moved: with the pointer on an option, that option
+// lit; else, the lit one gone from view, the nearest still in it, so
+// Enter picks what shows
 export function popup_wheel(t: Term, c: Chooser, d: number): void {
   const box = t.box?.of === c ? t.box : null;
   if (box === null) {
@@ -336,7 +346,9 @@ export function popup_wheel(t: Term, c: Chooser, d: number): void {
   }
   const step = (n: number) => Math.max(1, Math.min(STEP, Math.floor(n / 3)));
   if (c === question_of(t)) {
-    c.past = Math.max(0, Math.min(box.lead - box.ahead, (c.past ?? 0) + d * step(box.ahead)));
+    if (box.ahead > 0) {
+      c.past = Math.max(0, Math.min(box.lead - box.ahead, (c.past ?? 0) + d * step(box.ahead)));
+    }
     return;
   }
   const list = popup_entries(c);
@@ -367,15 +379,15 @@ export function popup_wheel(t: Term, c: Chooser, d: number): void {
   }
 }
 
-// PgUp, PgDn in the picker: a question's lead a page, while it is cut
-// (as last painted); else the lit option a page (those shown, less one),
-// stopping at the ends. Ctrl+Home, Ctrl+End (and Home, End where nothing
-// is typed): the first option, the last
+// PgUp, PgDn in the picker: a question's lead a page, while it is cut,
+// some of it showing (as last painted); else the lit option a page
+// (those shown, less one), stopping at the ends. Ctrl+Home, Ctrl+End (and
+// Home, End where nothing is typed): the first option, the last
 export function popup_page(t: Term, c: Chooser, key: string): void {
   const box = t.box?.of === c ? t.box : null;
   const n   = c.shown.length;
   const d   = key === "PgUp" ? -1 : key === "PgDn" ? 1 : 0;
-  if (d !== 0 && box !== null && box.ahead < box.lead) {
+  if (d !== 0 && box !== null && box.ahead > 0 && box.ahead < box.lead) {
     c.past = Math.max(0, Math.min(box.lead - box.ahead, (c.past ?? 0) + d * Math.max(1, box.ahead - 1)));
   } else if (d !== 0) {
     c.at = Math.max(0, Math.min(n - 1, c.at + d * Math.max(1, (box?.tall ?? n) - 1)));
