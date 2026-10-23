@@ -4,8 +4,11 @@ Development
     src/main.ts    the illi command
     src/term/      the terminal app: keys, selection, commands, side panel, the
                    trust question at the start (Trust.ts), /mode and
-                   /permissions (PermCommands.ts), the status line (Status.ts)
-    src/ui/        the chat's view, markdown, replies, diagrams, the screen
+                   /permissions (PermCommands.ts), the status line (Status.ts),
+                   the window that owns a terminal for every profile's illi
+                   (Window.ts; their wire, Wire.ts; a profile's end, Member.ts)
+    src/ui/        the chat's view, markdown, replies, diagrams, the screen and
+                   the terminal's modes (Modes.ts)
     src/chat/      the chat's turns (Chat.ts), its memory tree and views (Memory.ts),
                    the summaries written (Compactor.ts), its SQLite file (Store.ts),
                    its lock (Lock.ts), suggested replies (Suggest.ts), agents' logs
@@ -30,7 +33,18 @@ Development
 
 Each file starts with a comment on its design; the chat's SQLite files
 are described end to end in [storage.md](storage.md), and what a new
-model vendor needs in [new-provider.md](new-provider.md). After `bun install`:
+model vendor needs in [new-provider.md](new-provider.md).
+
+On a terminal, `illi` is a window (`src/term/Window.ts`): a small process
+that owns the terminal (raw mode, its modes, its size, the signals) and
+runs each profile's illi on a PTY of its own, copying the shown one's
+output to the screen and the keys to it. They talk in band, over each
+PTY (`Wire.ts`); the window reads no setting, so it never takes the API
+keys out of the environment its profiles start with. A profile's illi is
+a session leader on its PTY: the window's death, however it comes, hangs
+it up. From a pipe, or with `ILLI_WINDOW=off`, illi runs alone.
+
+After `bun install`:
 
     bun run test     the tests
     bun run check    the type check (unused code fails it too)
