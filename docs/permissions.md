@@ -100,15 +100,18 @@ asked.
 The question
 ------------
 
+It shows in the screen's middle, the rest of the screen dimmed, every
+answer whole:
+
 ```
-╭─ Allow shell? · ↑↓ Enter · Esc ───────────────────────────────╮
-│ git push --force origin main                                  │
-│ Why: git push --force origin main rewrites or deletes history │
-│ › Yes                                                         │
-│   Yes, and don't ask again for git push --force origin main…  │
-│   No                                                          │
-│   No, and say why                                             │
-╰─ Esc no ──────────────────────────────────────────────────────╯
+╭─ Allow shell? · ↑↓ Enter · Esc ─────────────────────────────────────────────────╮
+│ git push --force origin main                                                    │
+│ Why: git push --force origin main rewrites or deletes history                   │
+│ › ● Yes                                                                         │
+│   ◯ Yes, and don't ask again for git push --force origin main in this project   │
+│   ◯ No                                                                          │
+│   ◯ No, and say why                                                             │
+╰─ Esc no ────────────────────────────────────────────────────────────────────────╯
 ```
 
 - "Don't ask again" says what it keeps, for this project: a family
@@ -124,6 +127,9 @@ The question
   command you saw.
 - No tells illi you refused, with your words if you say why; Esc is No.
   A subagent's question names it.
+- A click picks as Enter does; a click outside leaves the question
+  open. For half a second after it appears it takes no Enter or click,
+  so a key meant for the chat doesn't answer it; Esc works at once.
 - With no one at the screen (a pipe), a call that would be asked is
   refused, saying so.
 

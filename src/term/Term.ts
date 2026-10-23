@@ -85,8 +85,8 @@ import * as View from "../ui/View.ts";
 // lines as laid
 // out at one; find: a block to scroll to; pane: a text over the chat
 // (/help, /agents); agents: the user's primary agents, as last read; choose: the
-// picker (null: closed); profs: the profiles, as last read; hits: what a
-// click on the screen does;
+// picker, a popup (Popup.ts; null: closed); profs: the profiles, as last
+// read; hits: what a click on the screen does;
 // since: when the work running began, spin: the spinner's clock,
 // ruled: the screen as last painted, for the clock to write the rule and
 // the side's rows again alone (null: none yet): the rule's row and width,
@@ -227,8 +227,8 @@ type Hit = { row: number; col: number; to: number; run: () => void };
 // /profile, /model, /settings, Ctrl+P and the rest):
 // its title, its options' names and what each is, the one marked as now
 // (-1: none), what picking option k does; find: the search typed, an
-// input as the chat's, its editing keys too (null: none, typing goes to
-// the input), shown: the options it matches
+// input as the chat's, its editing keys too (null: none, typing goes
+// nowhere), shown: the options it matches
 // (Screen.ed_rank), best first, at: the one lit among them, top: the
 // first in view; keys: what else the lit option k takes (true: taken; the
 // model picker's effort and speed, a setting's steps), foot: what the
@@ -240,10 +240,11 @@ type Hit = { row: number; col: number; to: number; run: () => void };
 // how often an option was picked (a search ranks the more used first);
 // aside: what shows at an option's right end, each (its keys, its value);
 // heads: each option's group, a head over its first while nothing is
-// searched; stays: a question illi asks (its box may take all but two
-// of the screen's rows); key: the key that opened it, which closes it
-// (Ctrl+P's); past: the lines leading it scrolled past;
-// lead: lines over the options (a question's what and why), wrapped;
+// searched; stays: a question illi asks (a click outside leaves it; its
+// box may take all but two of the screen's rows); key: the key that
+// opened it, which closes it (Ctrl+P's); past: the lines leading it
+// scrolled past; lead: lines over the options (a question's what and
+// why), wrapped;
 // detail: lines under them of the lit option k, made for w columns (the
 // model picker's autocompact gauge)
 export type Chooser = {

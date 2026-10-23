@@ -41,6 +41,9 @@ Scroll
 | PgUp, PgDn | a page up, down (or the wheel); at the end, the chat follows what comes |
 | Ctrl+Home, Ctrl+End | the chat's top, its end |
 
+While a list or a question is open, these keys and the wheel move in it
+instead; the chat stays where it was.
+
 Pick
 ----
 
@@ -92,9 +95,10 @@ Shortcuts
 
 Press the leader, Ctrl+X, then a key, as in OpenCode: Ctrl+X then m opens
 the model list. A list open (a picker, or the commands matched as you
-type a `/word`) closes first. While illi waits for that key the screen
-turns grey; Esc, the leader again, a click or the wheel lets it go, and
-a key with no shortcut says so. Letters work either case.
+type a `/word`) closes first; a question illi asks shows again once the
+shortcut has run. While illi waits for that key the screen turns grey;
+Esc, the leader again, a click or the wheel lets it go, and a key with
+no shortcut says so. Letters work either case.
 
 | Key | Runs |
 | --- | ---- |
@@ -148,8 +152,9 @@ Typing
   word lit (`/new` lists `/clear`, "start a new topic"), then names with
   its letters in turn. Up and Down choose, Tab fills one in, Enter runs
   it (one found by its description is filled in first, so a second
-  Enter runs what shows), Esc closes the list. Among those matched
-  alike, the ones you run most come first. After the commands come the
+  Enter runs what shows), a click on one does what Enter does, Esc
+  closes the list. Among those matched alike, the ones you run most
+  come first. After the commands come the
   settings it matches, by key or by what they do, as `/set <key>`:
   Enter opens `/settings` at one, Tab fills it in to type a value
   (`/sid` finds `/set side`).
@@ -157,16 +162,31 @@ Typing
   Enter fills one in), and each skill a message names ("Use the
   /imagegen skill to…") is one illi is told to use.
 
-In a list
----------
+Lists and questions
+-------------------
 
-`/model`, `/settings`, `/profile`, Ctrl+P and the rest. A list opens
-over the input (Ctrl+P's in the screen's middle), so the keys go to it
-alone; the input comes back as you left it when the list closes.
+`/model`, `/settings`, `/profile`, Ctrl+P and every other list, and
+each question illi asks, open in one box in the middle of the screen,
+as wide as their options (none is ever cut), the rest of the screen
+dimmed. While one is open it has the keys and the mouse; the chat, the
+side, a pane and the input under it stay as they are, and the input
+comes back as you left it when the box closes.
 
-- Type to search, by name and by the words of what each row does (as
-  `/` does); the search edits as the input does. Up and Down (or Tab)
-  move, Enter picks, Esc closes.
+| Key | Does |
+| --- | ---- |
+| Up, Down (or Tab) | move |
+| PgUp, PgDn | a page |
+| Ctrl+Home, Ctrl+End | the first, the last (Home and End too, where you can't type) |
+| Enter | pick |
+| Esc (or Ctrl+C, Ctrl+D) | close; a question: No |
+| typing | search, where the list has one, by name and by the words of what each row does (as `/` does); it edits as the input does, and a paste goes there as one line |
+
+- The wheel scrolls the list; the row under the pointer lights as it
+  moves; a click does what Enter does; a click outside closes a list
+  (a question stays till you answer). Shift+drag selects text in it,
+  as the terminal does.
+- Ctrl+L, Ctrl+Z and the leader work as ever; Ctrl+P opens the commands
+  in a list's place.
 - `/model`: Left and Right change the effort (Shift+Up and Shift+Down
   too), Tab the speed; Shift+Left and Shift+Right step the lit model's
   auto compact by 5%, its gauge under the list ("auto compact at", a bar
@@ -178,27 +198,38 @@ alone; the input comes back as you left it when the list closes.
 
 Panes (`/help`, `/agents`, `/mcp`) open in the chat's place,
 on a background of their own: Esc or Enter closes one, the arrows and
-the pages scroll it, and typing closes it and goes to the input.
+the pages scroll it, and typing closes it and goes to the input. A list
+or a question opens over a pane, which waits under it.
 
 When illi asks
 --------------
 
 illi may ask you questions with options, up to four at once. They show
-in place of the input, a tab each:
+in the screen's middle, as every list does, a tab each, the input you
+were typing left under them:
 
 - Up and Down move, Space picks an option (one, or several where the
   question says "pick any"), and typing writes words of your own: beside
   the options picked, or instead of them.
 - Enter picks the option you're on and goes to the next question; Tab
-  and Shift+Tab (Left and Right, off your words) switch tabs.
+  and Shift+Tab (Left and Right, off your words) switch tabs. PgUp and
+  Ctrl+Home go to the first option, PgDn and Ctrl+End to your words.
+- A click on an option picks it (one: and goes on; several: on or off),
+  on a tab goes there, on your words' row puts you there.
 - The last tab, Review, shows all your answers: Enter sends them, Esc
-  skips the questions. Your answers then show in the chat as yours.
+  (or Ctrl+C, Ctrl+D) skips the questions. Your answers then show in
+  the chat as yours.
 
 A call the permission checks stop ([Permissions](permissions.md)) asks
-in a list over the input: what it would do and why, then Yes; Yes, and
+in the screen's middle: what it would do and why, then Yes; Yes, and
 don't ask again (only where it keeps something, which it names); No;
 No, and say why (a line typed, which illi reads). Up and Down move,
-Enter picks, Esc is No. A subagent's question names it.
+Enter or a click picks, Esc is No; a click outside leaves it open. A
+subagent's question names it.
+
+A question that has just appeared takes no Enter, Space or click for
+half a second, so a key or a click meant for the chat doesn't answer it;
+Esc works at once.
 
 The first time illi starts in a folder, it asks full screen whether you
 trust it: Up, Down and Tab move between No and Yes, Enter takes the lit
@@ -235,7 +266,10 @@ Mouse and side panel
   your message, each line after `> `, to reply to it; a right click
   within 5 seconds takes the quote out again. A reply's buttons are left
   out of what's quoted or copied, and a right drag never starts on one.
-- The wheel scrolls the chat or a pane.
+- The wheel scrolls the chat, a pane, or the list or question open.
+- In a list or a question, the click that only brings the terminal's
+  window to the front does nothing (in tmux, with `set -g focus-events
+  on`).
 - From 100 columns on, a side panel shows the primary agents by name (a
   click makes one the main agent) and beside them your sticky skills,
   each on (●) or off (◯), a click turning it on or off (under the agents

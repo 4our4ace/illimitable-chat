@@ -2,11 +2,12 @@ Development
 ===========
 
     src/main.ts    the illi command
-    src/term/      the terminal app: keys, selection, commands, side panel, the
-                   trust question at the start (Trust.ts), /mode and
-                   /permissions (PermCommands.ts), the status line (Status.ts),
-                   the window that owns a terminal for every profile's illi
-                   (Window.ts; their wire, Wire.ts; a profile's end, Member.ts)
+    src/term/      the terminal app: keys, selection, commands, side panel,
+                   every list and question in one popup (Popup.ts), the trust
+                   question at the start (Trust.ts), /mode and /permissions
+                   (PermCommands.ts), the status line (Status.ts), the window
+                   that owns a terminal for every profile's illi (Window.ts;
+                   their wire, Wire.ts; a profile's end, Member.ts)
     src/ui/        the chat's view, markdown, replies, diagrams, the screen and
                    the terminal's modes (Modes.ts)
     src/chat/      the chat's turns (Chat.ts), its memory tree and views (Memory.ts),
