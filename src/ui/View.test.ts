@@ -1,7 +1,8 @@
 // View test
 // =========
-// `bun test View.test.ts`. What a view draws of the server's messages;
-// what streams made anew only as it grows.
+// `bun test View.test.ts`. What a view draws of the server's messages:
+// runs of work, each keyed apart (a thought-led one too), open as a
+// click or the mode says; what streams made anew only as it grows.
 
 import { expect, test } from "bun:test";
 import type { Pick } from "../ai/Pick.ts";
@@ -85,6 +86,31 @@ test("each run of work is one line saying what was done", () => {
   expect(View.view_tail(v, false).map((r) => (r.$ === "Msg" ? r.kind : r.$))).toEqual(["illi"]);
   v.verbose = true;
   expect(View.view_tail(v, false).map((r) => (r.$ === "Msg" ? r.kind : r.$))).toEqual(["mind", "illi"]);
+});
+
+// runs led by a thought (never logged: no id) each keyed by the message
+// the thought follows, so one opens alone and keeps its key as its first
+// call comes; in verbose mode a toggle shuts that one run, and Ctrl+O
+// forgets the runs toggled by hand
+test("each run of work has its own key, a thought-led one too; verbose mode shuts the run toggled, Ctrl+O forgets them", () => {
+  const v = View.view_new();
+  for (const [id, kind, text] of [[1, "user", "a"], [2, "tool", 'shell {"command":"ls"}'], [3, "illi", "done"], [4, "user", "b"], [5, "tool", 'shell {"command":"pwd"}'], [6, "illi", "here"]] as const) {
+    View.view_hear(v, { $: "entry", id, kind, text, at: id } as any);
+  }
+  const rows = () => View.view_acts(v, [...View.view_rows(v, [[1, 1], [2, 1], [3, 1], [4, 1], [5, 1], [6, 1]] as any).flat()]);
+  v.minds.set(1, ["think on a"]);
+  v.minds.set(4, ["think on b"]);
+  v.turn = 0;
+  const keys = () => rows().filter((r) => r.$ === "Act").map((r: any) => [r.id, r.open]);
+  expect(keys()).toEqual([[-3, false], [-6, false]]);
+  View.view_toggle(v, -6);
+  expect(keys()).toEqual([[-3, false], [-6, true]]);
+  View.view_verbose(v);
+  expect(keys()).toEqual([[-3, true], [-6, true]]);
+  View.view_toggle(v, -3);
+  expect(keys()).toEqual([[-3, false], [-6, true]]);
+  View.view_verbose(v);
+  expect([v.verbose, v.acts.size, keys()]).toEqual([false, 0, [[-3, false], [-6, false]]]);
 });
 
 // a recap (/compact): a line across the chat, "Compaction", closed or
