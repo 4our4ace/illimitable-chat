@@ -28,9 +28,11 @@ illi then runs Claude Code itself, as it ships, on your login:
   messages to them, the to-do list and skills.
 - **Your token stays with Claude Code.** illi never sees it, and its
   turns stay out of Claude Code's session history.
-- **Your Claude Code setup applies**: its permission rules, hooks, MCP
-  servers and plugins. A project's `CLAUDE.md` is Claude Code's to read,
-  so illi doesn't add it again.
+- **Your Claude Code setup applies**: its permission rules, MCP servers
+  and plugins. Its hooks are turned off inside illi's calls: your
+  `~/.illi/hooks.json` is the one that runs
+  ([Customize](customize.md#hooks)). A project's `CLAUDE.md` is Claude
+  Code's to read, so illi doesn't add it again.
 - **Permission prompts come to illi.** When Claude Code wants to run
   something its settings don't allow, illi checks it as it checks its
   own calls ([Permissions](permissions.md)): routine work runs, a risky

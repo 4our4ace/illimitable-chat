@@ -59,7 +59,7 @@ Agents
 | -------------- | ---- |
 | Shift+Tab | illi runs as the next primary agent (or click one at the side) |
 | `/agent [name]` | illi runs as that primary agent (illi: its own); no name: opens a list |
-| `/agents` | your agents, commands and skills, and where their files go |
+| `/agents` | your agents, commands, skills, plugins and hooks, and where their files go |
 | Ctrl+PgDn, Ctrl+PgUp | the next tab, the one before: the chat's, each subagent's at work |
 | `/tab [name]` | go to that agent's tab; no name: lists the tabs |
 | `/stop [name]` | stop all work, agents too; a name: only that agent |

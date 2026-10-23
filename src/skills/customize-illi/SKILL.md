@@ -254,8 +254,9 @@ Events: PreToolUse (refuse, change, allow or ask a tool's call; exit 2
 refuses, stderr why), PostToolUse, UserPromptSubmit, Stop, Notification,
 SessionStart, SessionEnd. Matchers and tool inputs are illi's, not Claude
 Code's: shell {command}, read/write {path, ...}, edit {edits: [{path, old,
-new}]}; `Bash` takes shell too (told tool_name "Bash"), Claude Code's
-other names match nothing. A command gets the event as JSON on stdin;
+new}]}; `Bash` takes shell too (told tool_name "Bash"); Claude Code's
+other names (Write, Edit...) match only Claude Code's own calls on the
+claude-code vendor, said at the start. A command gets the event as JSON on stdin;
 docs/customize.md lists the fields and answers. Say what a hook will run
 before writing it: it runs as the user, on every matching event. The user
 is asked before you write the file, whatever the mode.
@@ -273,8 +274,9 @@ is asked before you write the file, whatever the mode.
 - Keep secrets out of these files.
 - Leave illi's own state alone: login.json, models.json, update.json,
   chat/, profiles/.
-- Say when it applies: agents, commands, skills and the rules file's text
-  at the next message; config.json, theme.json, mcp.json, plugins and
-  hooks.json once illi starts again (Ctrl+D, then `illi`: the chat goes on where it was).
+- Say when it applies: agents, commands, skills (a plugin's too) and the
+  rules file's text at the next message; config.json, theme.json,
+  mcp.json, hooks.json, a plugin's code, hooks and MCP servers, and a new
+  plugin, once illi starts again (Ctrl+D, then `illi`: the chat goes on where it was).
 - Then tell the user how to use it: /<name>, Shift+Tab, or that the skill loads
   when a task matches.

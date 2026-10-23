@@ -299,9 +299,11 @@ async function term_profile_import(t: Term, file: string, name: string): Promise
     const off = [
       ...got.keys,
       ...(got.servers === 0 ? [] : [got.servers + " MCP server" + (got.servers === 1 ? "" : "s")]),
+      ...(got.plugins.length === 0 ? [] : ["the plugin" + (got.plugins.length === 1 ? " " : "s ") + got.plugins.join(", ") + " (/settings, off, turns one on)"]),
     ];
+    const aside = got.aside.length === 0 ? "" : " Kept aside: " + got.aside.map((f) => f + " as " + f + ".imported").join(", ") + " (rename one back to use it).";
     t.profs = Profiles.profile_list(config.ROOT);
-    term_note(t, "Imported profile " + name + "." + (off.length === 0 ? "" : " Turned off, as untrusted: " + off.join(", ") + ".") + " Its agents, commands, skills and RULES.md came as they were: look at them before you switch.");
+    term_note(t, "Imported profile " + name + "." + (off.length === 0 ? "" : " Turned off, as untrusted: " + off.join(", ") + ".") + aside + " Its agents, commands, skills and RULES.md came as they were: look at them before you switch.");
   } catch (err: any) {
     term_note(t, "Not imported. " + err.message);
   }

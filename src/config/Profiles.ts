@@ -14,13 +14,15 @@
 // config.json and mcp.json with their secrets left out; its chat's
 // SQLite files (a project each) as snapshots SQLite takes (VACUUM INTO),
 // whole though an illi writes to them; the rest (agents, commands,
-// skills, theme, rules) as it is.
+// skills, plugins, hooks, permissions, theme, rules) as it is.
 // One comes in only as a new profile, its archive taken as untrusted:
 // each entry a file or a folder, inside it, checked before a byte is
-// unpacked; once unpacked, its config's keys that run a command or name a
-// file here (after, rules, login, mcp, theme) dropped, its MCP servers
-// off till the person turns them on. Its agents, commands, skills,
-// RULES.md and chat are the profile's at once.
+// unpacked; once unpacked, nothing of it runs a command till the person
+// turns it on: its config's keys that run one or name a file here (after,
+// rules, login, mcp, theme, permissions, statusline) dropped, its MCP
+// servers and plugins off, its hooks.json and permissions.json kept aside
+// (as <file>.imported). Its agents, commands, skills, RULES.md and chat
+// are the profile's at once.
 
 import { Database } from "bun:sqlite";
 import * as fs from "node:fs";
@@ -35,8 +37,9 @@ import { json_object } from "../tools/Clip.ts";
 export type Picked = { root: string; name: string; dir: string };
 
 // what an import left out as untrusted: config.json's keys, the MCP
-// servers turned off
-export type Imported = { keys: string[]; servers: number };
+// servers turned off, the plugins turned off (in its `off`), the files
+// kept aside (each as <file>.imported)
+export type Imported = { keys: string[]; servers: number; plugins: string[]; aside: string[] };
 
 // Constants
 // =========
@@ -60,10 +63,15 @@ const ROOTED = ["profiles", "profile", "update.json"];
 // the files that go out with their secrets left out, as JSON; config.json's
 // keys left out of an export (a file here), and dropped from an import (a
 // command run, or a file here read: the rules sent to the model, another
-// login, other servers, another theme)
+// login, other servers, another theme, another permissions file, a
+// status line's command); an import's files that run commands or allow
+// calls, kept aside as <file>.imported (its hooks, its permission rules
+// and grants), and its plugins' folder, each plugin turned off
 const CLEANED = ["config.json", "mcp.json"];
 const LOCAL   = ["login"];
-const UNSAFE  = ["after", "rules", "login", "mcp", "theme"];
+const UNSAFE  = ["after", "rules", "login", "mcp", "theme", "permissions", "statusline"];
+const ASIDE   = ["hooks.json", "permissions.json"];
+const PLUGINS = "plugins";
 
 // a key that names a secret, and a value shaped as a known key or token
 const SECRET_KEY   = /key|token|secret|passw(or)?d|auth|credential|cookie|bearer/i;
@@ -291,7 +299,8 @@ function profile_snapshot(chat: string, into: string): boolean {
 // listed and checked first, unpacked aside, checked again on disk (files
 // and folders only, none linked), what is never a profile's taken out,
 // then moved in place; config.json's UNSAFE keys dropped, its MCP servers
-// turned off (said back: Imported)
+// and plugins turned off, its ASIDE files kept aside (said back:
+// Imported): nothing of it runs a command till the user turns it on
 export async function profile_import(root: string, file: string, name: string): Promise<Imported> {
   const names = (await profile_tar(["-tzf", file])).split("\n").filter((l) => l !== "");
   const types = (await profile_tar(["-tvzf", file])).split("\n").filter((l) => l !== "").map((l) => l[0]);
@@ -309,9 +318,14 @@ export async function profile_import(root: string, file: string, name: string): 
     }
     const conf = json_object(tmp + "/config.json");
     const [kept, keys] = profile_omit(conf, UNSAFE);
-    if (fs.existsSync(tmp + "/config.json")) {
-      fs.writeFileSync(tmp + "/config.json", JSON.stringify(kept, null, 2) + "\n");
+    const plugins = profile_plugins(tmp + "/" + PLUGINS);
+    const off = [...new Set([...String(kept.off ?? "").split(",").map((x) => x.trim()).filter(Boolean), ...plugins])];
+    const config = plugins.length === 0 ? kept : { ...kept, off: off.join(", ") };
+    if (fs.existsSync(tmp + "/config.json") || plugins.length > 0) {
+      fs.writeFileSync(tmp + "/config.json", JSON.stringify(config, null, 2) + "\n");
     }
+    const aside = ASIDE.filter((f) => fs.existsSync(tmp + "/" + f));
+    aside.forEach((f) => fs.renameSync(tmp + "/" + f, tmp + "/" + f + ".imported"));
     const mcp  = json_object(tmp + "/mcp.json");
     const defs = typeof mcp?.mcpServers === "object" && mcp.mcpServers !== null ? Object.values<any>(mcp.mcpServers).filter((d) => typeof d === "object" && d !== null) : [];
     const on   = defs.filter((d) => d.disabled !== true);
@@ -324,11 +338,18 @@ export async function profile_import(root: string, file: string, name: string): 
       throw new Error(why);
     }
     fs.renameSync(tmp, profile_dir(root, name));
-    return { keys, servers: on.length };
+    return { keys, servers: on.length, plugins, aside };
   } catch (err) {
     fs.rmSync(tmp, { recursive: true, force: true });
     throw err;
   }
+}
+
+// the plugins in a plugins folder, by the names `off` takes: each
+// folder's, each code file's without its extension (Plugins.ts)
+function profile_plugins(dir: string): string[] {
+  const entries = fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }) : [];
+  return [...new Set(entries.filter((e) => !e.name.startsWith(".")).flatMap((e) => (e.isDirectory() ? [e.name] : /\.(ts|js|mjs)$/.test(e.name) ? [e.name.replace(/\.(ts|js|mjs)$/, "")] : [])))].sort();
 }
 
 // why an archive's listing won't unpack as a profile (null: it will):

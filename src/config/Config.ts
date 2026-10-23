@@ -153,9 +153,10 @@ if (config_value("mode") === "yolo") {
   NOTES.push("mode is yolo: every call runs unasked, but what your permission rules refuse or ask. /mode switches it for this session.");
 }
 
-// the skills, agents, commands and MCP servers turned off, and the sticky
-// skills on, by name, in lower case (Custom.ts, Mcp.ts); each the root's
-// list and the profile's together (ADDS)
+// the skills, agents, commands, MCP servers, plugins and hooks turned
+// off, and the sticky skills on, by name, in lower case (Custom.ts,
+// Mcp.ts, Plugins.ts, Hooks.ts); each the root's list and the profile's
+// together (ADDS)
 export let OFF: string[] = [];
 export let STICKY: string[] = [];
 
