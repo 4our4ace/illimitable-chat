@@ -3,8 +3,10 @@
 // illi's profiles, each its own chat and settings. The root ($ILLI_DIR,
 // default ~/.illi) is the default profile's folder, and holds each other
 // one's: <root>/profiles/<name>. illi opens the one asked
-// ($ILLI_PROFILE), else the one used last (<root>/profile, a line), else
-// the default; Config.ts takes its folder as DIR. A profile is made
+// ($ILLI_PROFILE), else the one used last in the project
+// (<root>/project-profiles.json, kept at each start: profile_here_keep),
+// else the one used last anywhere (<root>/profile, a line), else the
+// default; Config.ts takes its folder as DIR. A profile is made
 // empty (profile_new), the root's setup its own (Config.ts, Custom.ts,
 // Mcp.ts: the global layer), and may take the running one's chat along
 // (profile_move_chat); any but the default may be renamed or deleted. A
@@ -28,6 +30,7 @@ import { Database } from "bun:sqlite";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { Projects } from "../chat/Projects.ts";
 import { json_object } from "../tools/Clip.ts";
 
 // Types
@@ -58,7 +61,11 @@ const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
 // also holds the others, which was used last, and when illi last looked
 // for a new release of itself (Update.ts)
 const OWN    = ["login.json", "locks", "illi.log"];
-const ROOTED = ["profiles", "profile", "update.json"];
+const ROOTED = ["profiles", "profile", "project-profiles.json", "update.json"];
+
+// the profile used last in each project, by its key (Projects.place),
+// kept in the root
+const HERE = "project-profiles.json";
 
 // the files that go out with their secrets left out, as JSON; config.json's
 // keys left out of an export (a file here), and dropped from an import (a
@@ -80,17 +87,18 @@ const SECRET_VALUE = /\b(sk-|sk_|ghp_|gho_|ghu_|ghs_|github_pat_|glpat-|xox[abpr
 // Profiles
 // ========
 
-// the profile running, for $ILLI_DIR (dir) and $ILLI_PROFILE (asked): a
-// dir that is a profile's own folder (<root>/profiles/<name>, its root
-// illi's) is that profile, in that root; else the one asked, else the one
-// used last (if it's still there), else the default. One asked must be
-// there
-export function profile_pick(dir: string, asked?: string): Picked {
+// the profile running, for $ILLI_DIR (dir), $ILLI_PROFILE (asked) and
+// the folder illi runs in (cwd): a dir that is a profile's own folder
+// (<root>/profiles/<name>, its root illi's) is that profile, in that
+// root; else the one asked, else the one used last in cwd's project,
+// else the one used last anywhere (each if it's still there), else the
+// default. One asked must be there
+export function profile_pick(dir: string, asked?: string, cwd = process.cwd()): Picked {
   const bare  = dir.replace(/(.)\/+$/, "$1");
   const is    = FOLDER.exec(bare);
   const owned = is !== null && profile_rooted(is[1]);
   const root  = owned ? is[1] : bare;
-  const last  = profile_last(root);
+  const last  = profile_here(root, cwd);
   const name  = asked !== undefined && asked !== "" ? asked : owned ? is[2] : last;
   if (name !== DEFAULT && (!NAME.test(name) || !fs.existsSync(profile_dir(root, name)))) {
     throw new Error("config: no profile " + JSON.stringify(name) + " in " + root + ": start illi without ILLI_PROFILE, then /profile makes it.");
@@ -108,6 +116,34 @@ function profile_rooted(root: string): boolean {
 function profile_last(root: string): string {
   const name = fs.existsSync(root + "/profile") ? fs.readFileSync(root + "/profile", "utf8").trim() : DEFAULT;
   return NAME.test(name) && fs.existsSync(profile_dir(root, name)) ? name : DEFAULT;
+}
+
+// the profile used last in cwd's project, if it's still there; else the
+// one used last anywhere
+function profile_here(root: string, cwd: string): string {
+  const name = json_object(root + "/" + HERE)?.[Projects.place(cwd).key];
+  return typeof name === "string" && NAME.test(name) && fs.existsSync(profile_dir(root, name)) ? name : profile_last(root);
+}
+
+// the profile running kept as the one used last in cwd's project (the
+// other projects' kept; written whole, then moved over)
+export function profile_here_keep(root: string, cwd: string, name: string): void {
+  profile_here_set(root, (all) => ({ ...all, [Projects.place(cwd).key]: name }));
+}
+
+// the projects' profiles changed: each project's name given to `change`,
+// its answer kept (null: the project's dropped)
+function profile_here_set(root: string, change: (all: Record<string, string>) => Record<string, string | null>): void {
+  const file = root + "/" + HERE;
+  const was  = (json_object(file) ?? {}) as Record<string, string>;
+  const next = Object.fromEntries(Object.entries(change(was)).filter(([, name]) => name !== null));
+  if (JSON.stringify(next) === JSON.stringify(was)) {
+    return;
+  }
+  fs.mkdirSync(root, { recursive: true });
+  const tmp = file + "." + process.pid;
+  fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + "\n");
+  fs.renameSync(tmp, file);
 }
 
 // a profile's folder: the root itself for the default
@@ -164,21 +200,24 @@ export function profile_new(root: string, name: string): void {
 }
 
 // a profile renamed (never the default: its folder is the root), and the
-// one used last with it
+// one used last with it, anywhere and in each project
 export function profile_rename(root: string, from: string, to: string): void {
   fs.renameSync(profile_dir(root, from), profile_dir(root, to));
   if (profile_used(root) === from) {
     profile_keep(root, to);
   }
+  profile_here_set(root, (all) => Object.fromEntries(Object.entries(all).map(([key, name]) => [key, name === from ? to : name])));
 }
 
 // a profile gone, its folder and all in it (never the default); the one
-// used last, if it was, the default again
+// used last, if it was, the default again; the projects it was last used
+// in forget it
 export function profile_delete(root: string, name: string): void {
   fs.rmSync(profile_dir(root, name), { recursive: true, force: true });
   if (profile_used(root) === name) {
     profile_keep(root, DEFAULT);
   }
+  profile_here_set(root, (all) => Object.fromEntries(Object.entries(all).map(([key, was]) => [key, was === name ? null : was])));
 }
 
 // a profile's chat moved into a new one's folder (from, to: their

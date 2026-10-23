@@ -1,14 +1,16 @@
 // Profiles test
 // =============
 // `bun test Profiles.test.ts`. Which profile runs: the one asked, else
-// the one used last, else the default (the root itself); a folder that
-// is a profile's is that one, in its root. Config.ts on a profile: its
-// folder as DIR, its config.json over the root's, the root's login, the
-// keys put back for a switch; the root as the global layer: its skills,
-// agents, commands and MCP servers beside the profile's (whose win by
-// name), each setting said to come from the profile or global, the
-// profile's `off` leaving some out, its lists (off, sticky) added to the
-// root's; a shortcut of the root's dropped in a profile stays dropped.
+// the one used last in the project, else the one used last anywhere,
+// else the default (the root itself), each followed through a rename
+// and a delete; a folder that is a profile's is that one, in its root.
+// Config.ts on a profile: its folder as DIR, its config.json over the
+// root's, the root's login, the keys put back for a switch; the root as
+// the global layer: its skills, agents, commands and MCP servers beside
+// the profile's (whose win by name), each setting said to come from the
+// profile or global, the profile's `off` leaving some out, its lists
+// (off, sticky) added to the root's; a shortcut of the root's dropped in
+// a profile stays dropped.
 // Names a profile takes. Secrets left out of a JSON file. An export: no
 // login, locks, log or update.json, its config stripped; an import: a
 // new profile only, its config's commands dropped, its MCP servers off;
@@ -87,6 +89,29 @@ test("the one asked, else the one used last (if still there), else the default",
   fs.writeFileSync(ROOT + "/profile", "../../etc\n");
   expect(Profiles.profile_pick(ROOT).name).toBe("default");
   Profiles.profile_keep(ROOT, "default");
+});
+
+test("a project opens in the profile used last there (still there), over the one used last anywhere; the one asked over both; renamed and deleted with it", () => {
+  const root = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-here-");
+  const [app, web, loose] = ["app", "web", "loose"].map((name) => fs.mkdtempSync(TMP + "/" + name + "-"));
+  fs.mkdirSync(app + "/.git");
+  fs.mkdirSync(web + "/.git");
+  fs.mkdirSync(app + "/src");
+  ["dev", "work"].forEach((name) => Profiles.profile_new(root, name));
+  Profiles.profile_keep(root, "work");
+  Profiles.profile_here_keep(root, app + "/src", "dev");
+  expect([Profiles.profile_pick(root, undefined, app).name, Profiles.profile_pick(root, undefined, app + "/src").name]).toEqual(["dev", "dev"]);
+  expect(Profiles.profile_pick(root, undefined, web).name).toBe("work");
+  expect(Profiles.profile_pick(root, "default", app).name).toBe("default");
+  Profiles.profile_here_keep(root, loose, "dev");
+  expect(Object.values(JSON.parse(fs.readFileSync(root + "/project-profiles.json", "utf8")))).toEqual(["dev", "dev"]);
+  Profiles.profile_rename(root, "dev", "development");
+  expect(Profiles.profile_pick(root, undefined, app).name).toBe("development");
+  Profiles.profile_delete(root, "development");
+  expect([Profiles.profile_pick(root, undefined, app).name, fs.readFileSync(root + "/project-profiles.json", "utf8").trim()]).toEqual(["work", "{}"]);
+  fs.writeFileSync(root + "/project-profiles.json", "not json");
+  expect(Profiles.profile_pick(root, undefined, app).name).toBe("work");
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("a folder that is a profile's is that one, in its root; one only named so is a root", () => {

@@ -575,6 +575,11 @@ export async function term_start(): Promise<void> {
     console.error("illi: " + err.message);
     process.exit(1);
   });
+  try {
+    Profiles.profile_here_keep(config.ROOT, process.cwd(), config.PROFILE);
+  } catch (err: any) {
+    console.error("illi: the project's profile wasn't kept: " + err.message);
+  }
   // on a terminal, what the agent logs goes to LOG, never over the screen
   if (process.stdout.isTTY) {
     const log = (...args: unknown[]) => fs.appendFileSync(LOG, new Date().toISOString() + " " + args.map(String).join(" ") + "\n");
