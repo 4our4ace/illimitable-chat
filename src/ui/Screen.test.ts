@@ -249,6 +249,24 @@ test("a legacy Alt+[ or Alt+Shift+O, alone, is a key after a moment, never the s
   expect(scr.ed.text).toBe("a");
 });
 
+test("a bare ESC from a kitty terminal is Esc after a moment, never held till the next key; the rest of a cut sequence come in time, the key it is; one never ended, dropped", async () => {
+  const { scr, keys } = screen();
+  Screen.screen_feed(scr, "\x1b");
+  expect(keys).toEqual([]);
+  await Bun.sleep(80);
+  expect(keys).toEqual(["Esc"]);
+  Screen.screen_feed(scr, "\x1b");
+  await Bun.sleep(10);
+  Screen.screen_feed(scr, "[27u");
+  await Bun.sleep(80);
+  expect(keys).toEqual(["Esc", "Esc"]);
+  Screen.screen_feed(scr, "\x1b[<35;4");
+  await Bun.sleep(1100);
+  Screen.screen_feed(scr, "a");
+  expect(keys).toEqual(["Esc", "Esc"]);
+  expect(scr.ed.text).toBe("a");
+});
+
 test("a word move goes over a decomposed letter whole", () => {
   const ed = Screen.ed_new();
   Screen.ed_type(ed, "cafe\u0301 noir");
