@@ -12,15 +12,18 @@
 //   auto       all runs but auto's flags (the default)
 //   yolo       all runs
 //
-// auto's flags: a file changed, deleted or moved outside the project,
-// or read there (once per folder, a folder grant: the system's folders,
-// scratch, the dependency caches and illi's skills free); a change whose
-// file is known only as it runs ($X, $(...), what xargs adds); root,
-// disks, the system's services and settings, power; a secret through the
-// read tool (.env), or in a key or credential store; Claude Code's
-// settings and illi's own config; what Shell.ts can't read. The network,
-// pushes, inline code, project scripts and MCP tools run, as everything
-// in the project does.
+// auto's flags: a file changed, deleted or moved outside the project, or
+// read there by a command that may change things (a script, a build, a
+// program illi doesn't know), once per folder (a folder grant; scratch,
+// the system's folders, the dependency caches and illi's skills free); a
+// folder there holding a secret store read (home, for its .ssh); a
+// change whose file is known only as it runs ($X, $(...), what xargs
+// adds); root, disks, the system's services and settings, power; a
+// secret, through any tool (as in every mode but yolo); Claude Code's
+// settings and illi's own config; what Shell.ts can't read. Other reads
+// outside the project run (cat, grep, find, the read tool), as the
+// network, pushes, inline code, project scripts, MCP tools and
+// everything in the project do.
 //
 // careful's, the long list: the danger list (root, deleting trees,
 // wiping disks, losing git work, sending data off, connecting out,
@@ -176,6 +179,11 @@ const INLINE = /^(--eval|--print|--exec|-eval)(=|$)/;
 // a URL's http://)
 const RISKY = /\b(system|popen|spawn\w*|exec(?:Sync|File\w*|[lv]\w*|a\w*)?|eval|subprocess|child_process|shutil|rmtree|unlink\w*|remove|rmdir|rename\w*|chmod|chown|kill|socket|urllib\d?|requests|httpx?|fetch|curl|wget|writeFile\w*|appendFile\w*|write_text|write_bytes|__import__|getattr|importlib|compile|ctypes)\b(?!:\/\/)|\b(Deno\.\w+|Bun\.(spawn\w*|write|file|\$)|fs\.\w+|os\.\w+|open\s*\([^)]*['"][wax+])|\bimport\s*\(|\brequire\s*\(\s*['"](node:)?(fs|child_process|net|https?|http2|dgram|dns|tls|vm|worker_threads|cluster|inspector)\b|\bfrom\s+['"](node:)?(fs|child_process|net|https?|dgram|vm|worker_threads)\b|%x[^\w\s]|\bqx\s*[^\w\s]|\bSystem\.\w+|\bFile\.(rm|write|cp|rename|chmod)\w*|\brm\s*\(|(?<![\w)$])\.(env|ssh|aws|netrc|gnupg|git-credentials)\b|\bid_(rsa|dsa|ecdsa|ed25519)\b|\bcredentials\b|\.(pem|key)['"]/;
 
+// inline code that names a secret (.env but its examples, a key or
+// credential store, a key file): asked in every mode but yolo, as
+// reading it any other way is
+const SECRET_CODE = /(?<![\w)$])\.(env(?!\.(example|sample|template)\b)|ssh|aws|netrc|gnupg|git-credentials)\b|\bid_(rsa|dsa|ecdsa|ed25519)\b|\bcredentials\b|\.(pem|key)['"]/;
+
 // the interpreters whose backticks run a command (perl -e 'print `id`')
 const TICKS = /^(perl|ruby|php|julia)/;
 
@@ -242,22 +250,35 @@ const DEPS_PARTS = new Set(["site-packages", "dist-packages", "node_modules"]);
 // pasted (its MCP servers, its settings, its manifest's folder)
 const PLUGIN_KEPT = [".mcp.json", "settings.json", ".claude-plugin"];
 
-// secrets: files by name anywhere (.env files, keys, logins, and those
-// named for the credentials, token or secrets they hold, but code and
-// docs: tokens.ts, secrets.md), key and credential stores and browser
-// profiles under home, files of the system, and illi's logins (its
-// login.json; its mcp.json, whose servers' tokens may be pasted in)
-const SECRET_NAME = /^(\.env(\.(?!(example|sample|template|dist)$)[^/]+)?|\.netrc|\.pgpass|\.git-credentials|\.npmrc|\.pypirc|\.vault-token|auth\.json|id_(rsa|dsa|ecdsa|ed25519)(_sk)?|.+\.(pem|key|p12|pfx|keystore|jks|kdbx))$/;
+// secrets: files by name anywhere (.env files but the examples, keys,
+// logins, and those named for the credentials, token or secrets they
+// hold, but code and docs: tokens.ts, secrets.md), key and credential
+// stores, other agents' logins (Claude Code's, Codex's, opencode's: by
+// their place) and browser profiles under home, files of the system, and
+// illi's logins (its login.json; its mcp.json, whose servers' tokens may
+// be pasted in)
+const SECRET_NAME = /^(\.env(\.(?!(example|sample|template)$)[^/]+)?|\.netrc|\.pgpass|\.git-credentials|\.npmrc|\.pypirc|\.vault-token|auth\.json|id_(rsa|dsa|ecdsa|ed25519)(_sk)?|.+\.(pem|key|p12|pfx|keystore|jks|kdbx))$/;
 const SECRET_WORD = /(^|[._-])(credentials?|token|secrets?)([._-]|$)/i;
 const CODE = /\.(m?[jt]sx?|c[jt]s|py|rs|go|java|kt|rb|php|c|cc|cpp|h|hpp|cs|swift|scala|lua|exs?|md|mdx|rst|html?|css|scss|vue|svelte|sh|snap|map)$/i;
 const SECRET_HOME = [
   ".ssh", ".aws", ".gnupg", ".kube", ".docker", ".azure", ".config/gh/hosts.yml", ".config/gcloud", ".config/hub", ".config/op",
   ".config/sops", ".claude.json", ".password-store", ".cargo/credentials", ".cargo/credentials.toml", ".terraform.d", ".gem/credentials",
   ".mozilla", ".thunderbird", ".config/google-chrome", ".config/chromium", ".config/BraveSoftware", "Library/Keychains",
-  "Library/Application Support/Google/Chrome",
+  "Library/Application Support/Google/Chrome", ".claude/.credentials.json", ".codex/auth.json", ".local/share/opencode/auth.json",
 ];
 const SECRET_SYSTEM = ["/etc/shadow", "/etc/gshadow", "/etc/sudoers", "/etc/sudoers.d", "/etc/ssh"];
 const SECRET_ILLI = /^(login|mcp)\.json$/;
+
+// home's secret stores, each where it is named and where a link there
+// leads (~/.ssh linked to another disk, ~/.config/gh to dotfiles)
+const HOME_STORES = [...new Set(SECRET_HOME.flatMap((d) => [path.join(HOME, d), real(path.join(HOME, d))]))];
+
+// the secret stores a folder outside the project may hold: home's, the
+// other agents' logins (opencode's where its data is), illi's logins
+const STORES = [
+  ...HOME_STORES, real(config.OPENCODE_LOGIN), real(config.OWN_LOGIN), ...config.MCPS.map(real),
+  ...(config.LOGIN_SET === null ? [] : [real(config.LOGIN_SET)]),
+];
 
 // protected inside the project (asked before a write): folders and
 // files that configure tools that run code, or what illi reads; and,
@@ -501,9 +522,12 @@ function look_shell(where: Where, look: Look, command: string): void {
 // a part's flags and change: by the user's rules first (an allow rule
 // covers the command itself, not what its assignments set or its
 // redirections write), then each value its command's name can take (a
-// loop's), its redirections, assignments and files, and, in auto, the
-// folder it runs in (one outside the project is read: cd ~/x && npm test
-// runs that folder's code; said only if nothing else is). An exact grant names
+// loop's), its redirections, assignments and files (what a command that
+// may change things reads may be what it writes: use_look), and the
+// folder it runs in: a secret store (cd ~/.ssh && ls), and, in auto, one
+// outside the project read by a command that may change things (cd ~/x
+// && npm test runs that folder's code) or one holding a secret store
+// read by any (said only if nothing else is). An exact grant names
 // the part as it runs (Guard.norm: git push --force, and the folder a cd
 // moved it to), but one whose input comes from elsewhere (a pipe, xargs,
 // a file or heredoc read in), whose words expand as it runs ($x, $(...),
@@ -533,28 +557,29 @@ function look_part(where: Where, look: Look, part: Part, depth: number): void {
     env_flag(e.name, e.value, flag);
   }
   const uses: Use[] = part.redirs.flatMap((r) => redir_use(r, part.cwd));
-  let change = uses.some((u) => u.write && !DEVS.test(u.word.alts[0]));
+  const writes = uses.some((u) => u.write && !DEVS.test(u.word.alts[0]));
+  let acts = false;
   const head = part.argv[0];
   if (head !== undefined && own) {
     const heads = head.dynamic || head.glob ? null : head.alts;
     if (heads === null) {
       flag("the command " + head.raw + " is named only as it runs", null, "all");
-      change = true;
+      acts = true;
     } else {
       for (const name of heads) {
         const one = { ...part, argv: [{ ...head, alts: [name] }, ...part.argv.slice(1)] };
-        change = look_command(where, look, one, uses, flag, depth) || change;
+        acts = look_command(where, look, one, uses, flag, depth) || acts;
       }
     }
   }
   for (const use of uses) {
-    use_look(where, look, use, flag);
+    use_look(where, look, use, flag, acts);
   }
   if (head !== undefined && own && part.cwd !== null && !look.flags.slice(before).some((f) => f.tier === "all")) {
     const dir = real(part.cwd);
-    path_why(where, dir, false).filter((r) => r.tier === "all").forEach((r) => flag(r.why, r.wide ? folder_wide("read", dir) : null, "auto"));
+    path_why(where, dir, false, acts, true).filter((r) => r.tier !== "careful").forEach((r) => flag(r.why, r.wide ? folder_wide("read", dir) : null, r.wide ? "auto" : r.tier));
   }
-  if (change) {
+  if (acts || writes) {
     const pattern = "shell:" + prefix(part);
     look.changes.push({ why: where.mode === "read-only" ? clip(plain) + " may change things" : "ask mode asks before " + clip(plain), kind: "shell", subject: exact, wide: where.mode === "ask" ? { kind: "shell", subject: exact, grant: pattern } : null, tier: "careful" });
   }
@@ -850,7 +875,7 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
     case "gh": {
       const verb = pos[1]?.alts[0] ?? "";
       if (sub === "auth" && (verb === "token" || has("--show-token", "-t"))) {
-        flag(text + " prints your GitHub token");
+        flag(text + " prints your GitHub token: its output may hold secrets", null, "all");
       } else if (sub === "api" ? has("-X", "--method", "-f", "-F", "--field", "--raw-field", "--input") || xs.some((x) => /^-X./.test(x)) : /^(create|merge|close|delete|edit|comment|review|reopen|ready|run|set|remove|upload|rename|archive|transfer|fork|sync|deploy|enable|disable|cancel|rerun|lock|unlock|pin|unpin|install|upgrade|login|logout|refresh|setup-git|ssh)$/.test(verb)) {
         flag(text + " acts on GitHub as you", { kind: "shell", subject: Guard.norm(part), grant: "shell:" + prefix(part) });
       }
@@ -1120,7 +1145,8 @@ function net_look(part: Part, base: string, args: Word[], use: (w: Word, write: 
 }
 
 // a shell, an interpreter, source: its inline code (naming what can run,
-// write, reach out or read a secret: flagged; perl -pi's files written),
+// write, reach out or read a secret: flagged; an interpreter's naming a
+// secret, in every mode but yolo; perl -pi's files written),
 // its script (from outside the project: flagged), or, with neither, the
 // code it reads from its input (stdin_look; a pipe's: flagged)
 function runner_look(where: Where, look: Look, part: Part, base: string, args: Word[], use: (w: Word, write: boolean) => void, flag: Flagger, depth: number): boolean {
@@ -1130,6 +1156,9 @@ function runner_look(where: Where, look: Look, part: Part, base: string, args: W
   if (inline !== null) {
     if (SHELLS.has(base) || inline.some((w) => w.dynamic || risky(base, w.alts.join("\n")))) {
       flag(text + " runs code illi can't check", null, "careful", true);
+    }
+    if (!SHELLS.has(base) && inline.some((w) => SECRET_CODE.test(w.alts.join("\n")))) {
+      flag(text + " names a file that may hold secrets", null, "all", true);
     }
     const inplace = /^(perl|ruby)/.test(base) && args.some((a) => !a.dynamic && /^-[A-Za-z]*i/.test(a.alts[0]));
     positional(args).filter((w) => !inline.includes(w)).forEach((w) => use(w, inplace));
@@ -1171,7 +1200,8 @@ function runner_look(where: Where, look: Look, part: Part, base: string, args: W
 
 // a shell's or interpreter's code from its input: a heredoc's or a
 // here-string's text (a shell's read as commands of their own, an
-// interpreter's checked by its words; made as it runs, as an expanding
+// interpreter's checked by its words, one naming a secret asked in
+// every mode but yolo; made as it runs, as an expanding
 // heredoc's $x is: flagged), a file (a script: from outside the project,
 // flagged), a command's output (< <(curl ...)) or a descriptor's: flagged
 function stdin_look(where: Where, look: Look, part: Part, base: string, r: Redir, flag: Flagger, depth: number): void {
@@ -1201,6 +1231,9 @@ function stdin_look(where: Where, look: Look, part: Part, base: string, r: Redir
     }
   } else if (!INTERPS.test(base) || risky(base, r.body)) {
     flag(text + " runs code illi can't check", null, "careful", true);
+  }
+  if (r.made !== true && INTERPS.test(base) && SECRET_CODE.test(r.body)) {
+    flag(text + " names a file that may hold secrets", null, "all", true);
   }
 }
 
@@ -1641,7 +1674,7 @@ function look_file(where: Where, look: Look, file: unknown, write: boolean): voi
   if (rule === "ask") {
     look.flags.push({ why: "your rules ask about " + shown(abs, where.top), kind, subject: abs, wide: null, tier: "all", rule: true });
   }
-  for (const r of path_why(where, abs, write, true)) {
+  for (const r of path_why(where, abs, write)) {
     look.flags.push({ why: r.why, kind, subject: abs, wide: r.wide ? folder_wide(kind, abs) : null, tier: r.tier });
   }
   if (write) {
@@ -1650,11 +1683,12 @@ function look_file(where: Where, look: Look, file: unknown, write: boolean): voi
 }
 
 // a file a part reads or writes, judged: the user's path rules, then
-// where it is (outside the project, a secret, protected, a device); one
-// known only as it runs asked (in auto, a write's; one xargs gives, a
-// write's alone: its reads are its program's, look_command). A glob's
-// entries outside are said by their folder, once
-function use_look(where: Where, look: Look, use: Use, flag: Flagger): void {
+// where it is (outside the project, a secret, protected, a device; a
+// read by a command that may change things, acts, as one that may be a
+// write); one known only as it runs asked (in auto, a write's; one xargs
+// gives, a write's alone: its reads are its program's, look_command). A
+// glob's entries outside are said by their folder, once
+function use_look(where: Where, look: Look, use: Use, flag: Flagger, acts: boolean): void {
   const files = named(use.word, use.cwd);
   if (files === null) {
     if (use.write || use.word.input !== true) {
@@ -1671,7 +1705,7 @@ function use_look(where: Where, look: Look, use: Use, flag: Flagger): void {
     } else if (rule === "ask") {
       look.flags.push({ why: "your rules ask about " + shown(file, where.top), kind: "shell", subject: "", wide: null, tier: "all", rule: true });
     } else if (rule !== "allow") {
-      for (const r of path_why(where, file, use.write)) {
+      for (const r of path_why(where, file, use.write, acts)) {
         if (!(r.wide && use.word.glob && said.has(path.dirname(file)))) {
           flag(r.why, r.wide ? folder_wide(kind, file) : null, r.tier);
           said.add(r.wide ? file : "");
@@ -1718,30 +1752,34 @@ function path_rule(where: Where, file: string, write: boolean): Rule | null {
 }
 
 // why a file is asked about, each reason with the modes that ask it:
-// illi's own config (in every mode); a secret (one kept in a secret
-// folder, or one by its name through the read tool, in auto too: else
-// careful's); a device written; inside the project, a protected file
-// written (careful's, but in home: homely; Claude Code's settings, what
-// it runs unasked, in auto too); outside it, any but scratch, or the
-// system's folders read
-// (a dependency cache read: careful's). None: it isn't asked
-function path_why(where: Where, file: string, write: boolean, tool = false): Reason[] {
+// illi's own config written (in every mode); a secret, read or written
+// through any tool (in every mode but yolo), before the folders read
+// freely (illi's skills', a plugin's); a device written; inside the
+// project, a protected file written (careful's, but in home: homely;
+// Claude Code's settings, what it runs unasked, in auto too); outside
+// it, any but scratch, or the system's folders read: a change in every
+// mode but yolo, a read careful's (in auto too if maybe, by a command
+// that may change things: but in a dependency cache), and a folder
+// holding a secret store read, in auto (careful asks it as outside).
+// The folder a command runs in is a secret's by its place alone, not
+// its name (a project named secrets). None: it isn't asked
+function path_why(where: Where, file: string, write: boolean, maybe = false, folder = false): Reason[] {
   const at = shown(file, where.top);
   if (NET.test(file)) {
     return [{ why: at + " opens a network connection", wide: false, tier: "careful" }];
   }
-  if (DEVS.test(file) || (!write && (where.reads.some((d) => under(file, d)) || where.plugins.some((d) => plugin_open(file, d))))) {
+  if (DEVS.test(file)) {
     return [];
   }
   if (write && (under(file, Projects_real(config.ROOT)) || under(file, path.join(where.top, ".illi")))) {
     return [{ why: at + " is illi's own config (what it runs and is told)", wide: false, tier: "self" }];
   }
-  const outside = !under(file, where.top) && !SCRATCH.some((d) => under(file, d)) && !(!write && SYSTEM.some((d) => under(file, d)));
-  const away: Reason = { why: at + " is outside the project", wide: true, tier: !write && deps(file) ? "careful" : "all" };
   const kept = where.plugins.some((d) => plugin_kept(file, d)) ? "kept" : secret(file, where.top);
-  if (kept !== null) {
-    const tier = kept === "kept" || (tool && !write) ? "all" : "careful";
-    return [{ why: at + " may hold secrets", wide: false, tier }, ...(tier === "careful" && outside && away.tier === "all" ? [{ ...away, tier: "auto" as const }] : [])];
+  if (kept === "kept" || (kept === "name" && !folder)) {
+    return [{ why: at + " may hold secrets", wide: false, tier: "all" }];
+  }
+  if (!write && (where.reads.some((d) => under(file, d)) || where.plugins.some((d) => under(file, d)))) {
+    return [];
   }
   if (file.startsWith("/dev/") && write) {
     return [{ why: at + " is a device", wide: false, tier: "all" }];
@@ -1750,19 +1788,16 @@ function path_why(where: Where, file: string, write: boolean, tool = false): Rea
     const claude = /^\.claude\/settings(\.local)?\.json$/.test(path.relative(where.top, file));
     return !write ? [] : claude ? [{ why: at + " sets what Claude Code runs unasked", wide: false, tier: "all" }] : guarded(file, where.top) ? [{ why: at + " configures tools or illi (protected)", wide: false, tier: homely(where) }] : [];
   }
-  return outside ? [away] : [];
+  if (SCRATCH.some((d) => under(file, d)) || (!write && SYSTEM.some((d) => under(file, d)))) {
+    return [];
+  }
+  const away: Reason = { why: at + " is outside the project", wide: true, tier: write || (maybe && !deps(file)) ? "all" : "careful" };
+  return !write && STORES.some((s) => s !== file && under(s, file)) ? [{ why: at + " may hold secrets", wide: false, tier: "auto" }, away] : [away];
 }
 
 // whether a file is in a dependency cache
 function deps(file: string): boolean {
   return DEPS.some((d) => under(file, d)) || file.split(path.sep).some((p) => DEPS_PARTS.has(p));
-}
-
-// whether a plugin's file is free to read, its folder given: anything in
-// it but what may hold the user's tokens (plugin_kept) or a secret by
-// its name
-function plugin_open(file: string, dir: string): boolean {
-  return under(file, dir) && !plugin_kept(file, dir) && !secret_name(path.basename(file));
 }
 
 // whether a plugin's file may hold the user's tokens, its folder given:
@@ -1772,15 +1807,16 @@ function plugin_kept(file: string, dir: string): boolean {
   return under(file, dir) && PLUGIN_KEPT.some((k) => rel === k || rel.startsWith(k + path.sep));
 }
 
-// whether a file may hold secrets: kept in a secret store of home's or
-// the system's, or one of illi's logins, unless the project is inside
-// that store and the file inside the project (a repo kept in ~/.aws: its
-// files are the project's, the store's others still secret); else by its
-// name anywhere; null: neither
+// whether a file may hold secrets: kept in a secret store of home's
+// (where it is named or a link there leads) or the system's, opencode's
+// login where its data is, or one of illi's logins, unless the project
+// is inside that store and the file inside the project (a repo kept in
+// ~/.aws: its files are the project's, the store's others still
+// secret); else by its name anywhere; null: neither
 function secret(file: string, top: string): "kept" | "name" | null {
   const held = (dir: string) => under(file, dir) && !(under(top, dir) && under(file, top));
   const login = (held(Projects_real(config.ROOT)) && SECRET_ILLI.test(path.basename(file))) || (config.LOGIN_SET !== null && file === real(config.LOGIN_SET));
-  return SECRET_HOME.some((d) => held(path.join(HOME, d))) || SECRET_SYSTEM.some(held) || login ? "kept" : secret_name(path.basename(file)) ? "name" : null;
+  return HOME_STORES.some(held) || SECRET_SYSTEM.some(held) || held(real(config.OPENCODE_LOGIN)) || login ? "kept" : secret_name(path.basename(file)) ? "name" : null;
 }
 
 // whether a file's name is a secret's

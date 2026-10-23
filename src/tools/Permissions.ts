@@ -13,7 +13,8 @@
 // rules are the user's, written by hand (Guard.Rules); granted, by
 // project (its folder: Trusted.folder), illi's, kept by a question's
 // "don't ask again" (Guard's grants: in auto mostly a folder outside the
-// project, read:/x/*; in careful a family too). Read again whenever the
+// project, write:/x/*, or read:/x/* for what a script or build reads
+// there; in careful a family too). Read again whenever the
 // file changes, so a hand edit counts at the next call. A file that
 // won't read, or a rule that isn't allow, ask or deny, is said, never
 // taken as no rules: the caller asks about everything then (Tools.guard). A save
