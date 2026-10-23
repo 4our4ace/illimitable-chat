@@ -119,7 +119,7 @@ Keys and commands
 | `/login`             | sign in with your ChatGPT plan        |
 | `/model`             | pick the model, its effort, speed and autocompact |
 | `/settings`          | change any setting                    |
-| `/profile`           | switch, make or export a profile      |
+| `/profile`           | switch (the one left runs on), make or export a profile |
 | `/tree`, `/export`   | the memory as a page, as JSON, written into the current folder |
 | Ctrl+O               | show tool calls and thinking          |
 | Drag, double-click   | copy text                             |

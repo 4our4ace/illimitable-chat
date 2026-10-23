@@ -215,10 +215,10 @@ line counts them (`● 2 in background`, a click opens `/background`).
 `/background` lists each one, who started it and how long it has run:
 Enter or Del stops it.
 
-They live only while illi does. A quit stops them, so Ctrl+D (or a
-second Ctrl+C) first says how many it stops, and so does a profile
-switch, which asks before it goes; illi is told they were stopped, so
-it starts them again if it needs them. A process that left its group
+They live only while illi does. A profile switch keeps them running,
+hidden with their profile ([Profiles](profiles.md)); a quit stops them,
+so Ctrl+D (or a second Ctrl+C) first says how many it stops; illi is
+told they were stopped, so it starts them again if it needs them. A process that left its group
 (`setsid`, a daemon) isn't listed but is stopped at the quit all the
 same. On the `claude-code` provider, Claude Code runs the shell, so its
 background jobs don't show here.
