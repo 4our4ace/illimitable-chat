@@ -576,10 +576,11 @@ function term_agent_set(t: Term, arg: string): void {
 // option's hay; with `used`, the more used first among matches as good),
 // what else the lit option takes and what the foot says of it (the model
 // picker's), what shows at each option's right end, each option's group
-// (the palette's) and the lines leading the options
-export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; detail?: Chooser["detail"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; heads?: string[]; lead?: Chooser["lead"] } = {}): void {
+// (the palette's), the lines leading the options, and whether it is a
+// question illi asks (stays)
+export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; detail?: Chooser["detail"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; heads?: string[]; lead?: Chooser["lead"]; stays?: boolean } = {}): void {
   const shown = Screen.ed_rank("", names);
-  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, heads: more.heads, lead: more.lead, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), detail: more.detail, ask: null };
+  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, heads: more.heads, lead: more.lead, stays: more.stays, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), detail: more.detail, ask: null };
   t.pane   = null;
 }
 
