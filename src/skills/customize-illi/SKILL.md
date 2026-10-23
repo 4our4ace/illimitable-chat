@@ -208,7 +208,7 @@ asks: they belong to the project.
 
 ```json
 { "accent": "#7dcfff", "tokens": { "you": "accent", "dim": "8" },
-  "palette": "nord", "colors": { "heading": "#ff9e64" }, "glyph": { "input": "❯ " } }
+  "palette": "nord", "colors": { "heading": "#ff9e64" }, "glyph": { "input": "$ " } }
 ```
 
 Every colored part of the screen takes one of these tokens: accent

@@ -668,7 +668,7 @@ test("a recap's line spans the width, its name in the middle; a click on it togg
     const marks: Paint.Mark[] = [];
     const lines = Paint.rows_lines([{ $: "Rule", id: 7, text: "Compaction", open, rows: [msg] }], 40, marks);
     const head = lines[0].map((r) => r.x).join("");
-    expect([Paint.text_width(head), head]).toEqual([40, "─".repeat(13) + (open ? " ▾ " : " ▸ ") + "Compaction " + "─".repeat(13)]);
+    expect([Paint.text_width(head), head]).toEqual([40, "─".repeat(12) + (open ? " [-] " : " [+] ") + "Compaction " + "─".repeat(12)]);
     expect(marks[0]).toMatchObject({ id: 7, act: true, open });
     expect(lines.length > 1).toBe(open);
   }

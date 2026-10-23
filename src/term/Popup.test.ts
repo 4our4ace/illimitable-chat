@@ -172,7 +172,7 @@ test("a name is never cut: the longest shows whole past POP_CAP; what options sa
     term_chooser(u, "Projects", ["here", "app"], ["last 2026-10-10 · " + "x".repeat(150), "short"], -1, () => {});
     term_paint(u);
     expect(u.box.w).toBe(96);
-    expect(inside(u, 160)[0]).toMatch(/^› here  last 2026-10-10 · x+…$/);
+    expect(inside(u, 160)[0]).toMatch(/^> here  last 2026-10-10 · x+…$/);
   });
 });
 
@@ -224,7 +224,7 @@ test("a question takes all but two rows at most: its answers show whole, a long 
     term_paint(t);
     const rows = inside(t, 100);
     expect(t.box.h).toBe(22);
-    expect(rows.slice(-3).map((r: string) => r.trim())).toEqual(["› Yes", "No", "No, and say why"]);
+    expect(rows.slice(-3).map((r: string) => r.trim())).toEqual(["> Yes", "No", "No, and say why"]);
     expect(rows[0].trim()).toBe("line 0 of a long command");
     expect(rows.at(-4).trim()).toBe("line 16 of a long command…");
   });
@@ -248,7 +248,7 @@ test("the wheel scrolls a long list three entries a turn, stopping at its ends, 
       turn("WheelDown");
     }
     expect([t.choose.top, t.choose.at, t.scroll]).toEqual([28, 28, 0]);
-    expect(inside(t, 100)[0].trim()).toBe("› o28");
+    expect(inside(t, 100)[0].trim()).toBe("> o28");
     const u = term();
     term_chooser(u, "List", ["a", "b", "c"], ["", "", ""], -1, () => {});
     term_paint(u);
@@ -272,7 +272,7 @@ test("a question's lead cut scrolls by the wheel and the pages, its answers stay
     term_paint(t);
     const rows = inside(t, 100);
     expect([rows[0].trim(), rows.at(-4).trim(), t.choose.at]).toEqual(["line 23 of a long command", "line 39 of a long command", 0]);
-    expect(rows.slice(-3).map((r: string) => r.trim())).toEqual(["› Yes", "No", "No, and say why"]);
+    expect(rows.slice(-3).map((r: string) => r.trim())).toEqual(["> Yes", "No", "No, and say why"]);
   });
 });
 
@@ -500,7 +500,7 @@ test("illi's questions show in the popup, the room's full width, who asks its ti
     const { row, col, w, h } = t.box;
     expect([col, w, h]).toEqual([2, 105, 9]);
     expect(text(t.ruled.rows[row], 110).slice(col)).toStartWith("╭─ illi asks ─");
-    expect(inside(t, 110).map((l: string) => l.trimEnd())).toEqual([" Database   Cache   Review", "Which database?  pick one", "› ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
+    expect(inside(t, 110).map((l: string) => l.trimEnd())).toEqual([" Database   Cache   Review", "Which database?  pick one", "> ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
     expect(t.ruled.rows.slice(t.ruled.row + 1).map((r: any[]) => text(r, 110)).join("\n")).toContain("my draft");
     expect([t.ruled.at, t.scr.blink]).toEqual([{ row: row + 6, col: col + 6 }, true]);
     for (const key of ["Tab", "Tab"]) {
@@ -571,7 +571,7 @@ test("illi's form taller than the screen: its tabs and keys hold, its lines scro
     }
     paint(t);
     const shown = inside(t, 100).map((l: string) => l.trim());
-    expect([f.top, shown[0], shown[1], shown.at(-2), shown.at(-1)]).toEqual([4, "One   Review", "○ o3", "› ○ o10", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
+    expect([f.top, shown[0], shown[1], shown.at(-2), shown.at(-1)]).toEqual([4, "One   Review", "○ o3", "> ○ o10", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
     const turn = (key: string) => {
       term_grab(t, key);
       paint(t);

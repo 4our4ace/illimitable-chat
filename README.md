@@ -146,6 +146,7 @@ Docs
   work and home.
 - [Config](docs/config.md): every setting and variable, the files illi
   keeps, troubleshooting.
+- [Design language](docs/design.md): illi's marks, keys and words (a draft).
 - [Development](docs/development.md) and what is [Planned](docs/planned.md).
 
 License

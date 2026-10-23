@@ -153,7 +153,7 @@ test("illi's question shows as a form: who asks, its tabs, the question, its opt
   own(t);
   expect([t.choose, t.notices]).toEqual([null, []]);
   expect(term_form_lines(t, 80, 4)!.who).toBe("illi");
-  expect(text(t)).toEqual([" Database   Review", "Which database?  pick one", "› ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
+  expect(text(t)).toEqual([" Database   Review", "Which database?  pick one", "> ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
   expect(term_form_lines(t, 80, 4)!.at).toEqual({ row: 4, col: 4 });
 });
 
@@ -164,7 +164,7 @@ test("one question: Space picks one, typing goes to the words, Enter goes on to 
   term_type(t, " ");
   term_grab(t, "Down");
   term_type(t, " ");
-  expect(text(t).slice(2, 5)).toEqual(["  ○ Postgres  you know it", "  ○ SQLite", "› ● MySQL"]);
+  expect(text(t).slice(2, 5)).toEqual(["  ○ Postgres  you know it", "  ○ SQLite", "> ● MySQL"]);
   term_type(t, "with replicas");
   term_grab(t, "Ctrl+W");
   term_type(t, "backups");
@@ -184,7 +184,7 @@ test("several questions, a tab each: Enter on an option picks it and goes on; se
   term_grab(t, "Down");
   term_grab(t, "Enter");
   expect(text(t)[0]).toBe(" ✓ Database   Cache   Tests   Review");
-  expect(text(t).slice(1, 4)).toEqual(["Which caches?  pick any", "› □ Redis", "  □ Memcached"]);
+  expect(text(t).slice(1, 4)).toEqual(["Which caches?  pick any", "> □ Redis", "  □ Memcached"]);
   term_type(t, " ");
   term_grab(t, "Down");
   term_type(t, " ");

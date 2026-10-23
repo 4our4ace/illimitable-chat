@@ -22,6 +22,7 @@ import { term_note } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { popup_held } from "./Popup.ts";
 import * as Screen from "../ui/Screen.ts";
+import { GLYPH } from "../ui/Theme.ts";
 import { term_send, type Form, type Span, type Target, type Term } from "./Term.ts";
 import type { Query, Question } from "../ui/View.ts";
 
@@ -207,7 +208,7 @@ export function term_form_lines(t: Term, w: number, max: number, tab?: number): 
     return { who: q.who, ...tabs, body: each.map(plain), keys: keys(SEND), at: null };
   }
   const query  = q.queries[shown];
-  const lead   = (k: number) => Paint.Run(k === e.at ? "› " : "  ", bold);
+  const lead   = (k: number) => Paint.Run(k === e.at ? GLYPH.lit + " " : "  ", bold);
   const marks  = query.multi ? ["□ ", "■ "] : ["○ ", "● "];
   const option = (o: { label: string; about: string }, k: number) => {
     const runs = [Paint.Run(Paint.text_clean(o.label), k === e.at ? bold : Paint.INK), ...(o.about === "" ? [] : [Paint.Run("  " + Paint.text_clean(o.about), Paint.DIM)])];

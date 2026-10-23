@@ -277,7 +277,7 @@ function term_side_todo(t: Term, w: number): Item[] {
     return lines.map((l, k): Item => [[Paint.Run(k === 0 ? mark + " " : "  ", x.status === "active" ? ink : Paint.DIM), ...l], null]);
   };
   return [
-    [folds ? Paint.ends_line(title, t.todo ? "▴" : "▾", w) : title, toggle],
+    [folds ? Paint.ends_line(title, t.todo ? GLYPH.open : GLYPH.shut, w) : title, toggle],
     ...shown.flatMap(item),
     ...(more > 0 ? [[[Paint.Run("… " + more + " more", Paint.DIM)], toggle] as Item] : []),
   ];
@@ -322,7 +322,7 @@ function term_side_subs(t: Term): Item[] {
   const c     = Draw.draw_tokens().accent;
   const spin  = term_spinner(Date.now() - t.since);
   const names = shown === null || t.subs.has(shown) ? [...t.subs] : [...t.subs, [shown, t.v.agents.includes(shown)] as [string, boolean]];
-  const back  = shown === null ? [] : [[[Paint.Run("‹ " + (t.v.agent ?? View.MAIN), Paint.DIM)], () => term_act(t, { $: "Goto", name: null })] as Item];
+  const back  = shown === null ? [] : [[[Paint.Run("<- " + (t.v.agent ?? View.MAIN), Paint.DIM)], () => term_act(t, { $: "Goto", name: null })] as Item];
   const subs  = names.map(([name, working]): Item => [
     [Paint.Run((working ? spin : "✓") + " ", working ? { ...Paint.INK, c, b: true } : { ...Paint.INK, c: Draw.draw_tokens().success }), Paint.Run(name, name === shown ? { ...Paint.INK, b: true } : working ? Paint.INK : Paint.DIM)],
     () => term_act(t, { $: "Goto", name }),

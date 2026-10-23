@@ -85,7 +85,7 @@ test("an open run of work marks its head and each message in it, a folded one as
   const text  = (l: Paint.Line) => l.map((r) => r.x).join("");
   expect(marks.map((m) => [m.act ?? false, m.fold ?? "", m.open, m.to - m.from])).toEqual([[true, "", true, 1], [false, "#3", true, 3], [false, "#4", false, 1]]);
   expect([marks[1].from, marks[2].from - marks[1].to]).toEqual([1, 1]);
-  expect(text(lines[marks[2].from])).toBe("│ ▸ result · 1,204 lines");
+  expect(text(lines[marks[2].from])).toBe("│ [+] result · 1,204 lines");
   View.view_fold(v, "#4");
   expect(Paint.rows_lines(View.view_acts(v, rows), 60).length).toBeGreaterThan(10);
 });

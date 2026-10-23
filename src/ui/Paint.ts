@@ -15,7 +15,8 @@
 // (Reply.ts: its code, diagrams, tables, headings, lists and quotes, and
 // buttons that copy them); thinking and a note drawn so too, in their
 // look, without buttons. A run of work (View's Act) is one dim line,
-// ▸ what was done, or ▾ over its rows behind a dim bar; a recap (View's
+// [+] what was done, or [-] over its rows behind a dim bar (Theme's
+// GLYPH.shut, GLYPH.open); a recap (View's
 // Rule) so too, its line across the chat, naming it. An open block
 // framed, its bar in the frame's top edge; a call's code framed on the
 // call's fill; a file's lines (a read, a diff) framed, the file on the
@@ -394,12 +395,12 @@ function canvas_shade(hex: string): string {
   return "#" + rgb.map((v) => Math.round(dark ? v + (255 - v) * SHADE_DARK : v * (1 - SHADE_LIGHT)).toString(16).padStart(2, "0")).join("");
 }
 
-// a run of work: one dim line saying what was done (▸; a click opens
-// it), or opened (▾) over its rows, a dim bar at their left, each
-// message marked (a click folds it to a line, ▸, and back); a recap so
+// a run of work: one dim line saying what was done ([+]; a click opens
+// it), or opened ([-]) over its rows, a dim bar at their left, each
+// message marked (a click folds it to a line, [+], and back); a recap so
 // too, its line a rule across the chat, its name in the middle
 function act_lines(row: View.Row & { $: "Act" | "Rule" }, w: number, marks: Mark[], at: number): Line[] {
-  const text = (row.open ? "▾ " : "▸ ") + text_clean(row.text);
+  const text = (row.open ? Theme.GLYPH.open : Theme.GLYPH.shut) + " " + text_clean(row.text);
   const fill = Math.max(0, w - text_width(text) - 2);
   const line = row.$ === "Rule" ? "─".repeat(fill >> 1) + " " + text + " " + "─".repeat(fill - (fill >> 1)) : text;
   const head = runs_wrap([Run(line, DIM)], w, false)[0];
@@ -448,7 +449,7 @@ function row_lines(row: View.Row, w: number): Line[] {
       return row.call !== null ? fill_lines(call_lines(row.call, w - 2), w - 2) : row.kind === "illi" ? reply_lines(row.text, w) : msg_lines(row.kind, row.who, row.body, row.text, w);
     }
     case "Fold": {
-      return runs_wrap([Run("▸ " + text_clean(row.text), DIM)], w, false).slice(0, 1);
+      return runs_wrap([Run(Theme.GLYPH.shut + " " + text_clean(row.text), DIM)], w, false).slice(0, 1);
     }
     case "Cap": {
       return runs_wrap([Run(text_clean(row.text), { ...DIM, i: true })], w, false);

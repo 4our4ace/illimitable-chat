@@ -550,7 +550,7 @@ function popup_entry(c: Chooser, e: string | number, iw: number, wide: number): 
   const name  = c.names[m.k];
   const here  = e === c.at;
   const act   = popup_act(c, name);
-  const marks = [Paint.Run(here ? "› " : "  ", bold), ...(c.here < 0 || act ? [] : [Paint.Run((m.k === c.here ? GLYPH.here : GLYPH.tab) + " ", Paint.DIM)])];
+  const marks = [Paint.Run(here ? GLYPH.lit + " " : "  ", bold), ...(c.here < 0 || act ? [] : [Paint.Run((m.k === c.here ? GLYPH.here : GLYPH.tab) + " ", Paint.DIM)])];
   const lines = popup_name_lines(c, name, iw, here ? bold : Paint.INK, lit, m.hay === true ? [] : m.at);
   const aim: Target = { $: "option", k: m.k };
   const pad   = Paint.Run(" ".repeat(Paint.line_width(marks)));

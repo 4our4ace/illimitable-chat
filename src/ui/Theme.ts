@@ -38,7 +38,7 @@
 // once the screen is up (THEME_TROUBLE):
 //
 //     { "accent": "#7dcfff", "tokens": { "you": "accent", "dim": "8" },
-//       "ansi": { "block": "7", "ink": "0" }, "glyph": { "input": "❯ " },
+//       "ansi": { "block": "7", "ink": "0" }, "glyph": { "input": "$ " },
 //       "tool": { "shell": "$" }, "syntax": { "keyword": "4" },
 //       "palette": "nord", "colors": { "heading": "#ff9e64" } }
 
@@ -131,9 +131,11 @@ export const GLYPH = {
   here    : "●",  // the tab of the chat shown
   input   : "> ", // before the message typed (its other lines indented as far)
   find    : "⌕ ", // before a list's search (the model picker's)
-  open    : "▾",  // an open block's bar
+  open    : "[-]", // an open run's head, a fold's bar (a click shuts it)
+  shut    : "[+]", // a shut run's head, a message folded (a click opens it)
+  lit     : ">",  // the lit row of a list or a question
   pending : "□",  // a to-do item not begun
-  active  : "▸",  // the one at work
+  active  : ">",  // the one at work
   done    : "■",  // one done
   ...OWN.glyph,
 };
