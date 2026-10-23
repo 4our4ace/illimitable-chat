@@ -17,6 +17,11 @@ import { expect, test } from "bun:test";
 import * as Draw from "./Draw.ts";
 import * as Paint from "./Paint.ts";
 import * as View from "./View.ts";
+import * as Theme from "./Theme.ts";
+
+// a run's marks, open and shut, as the theme draws them
+const OPEN = Theme.GLYPH.open + " ";
+const SHUT = Theme.GLYPH.shut + " ";
 
 test("the background told again as it was lays nothing out anew; another, all", () => {
   const rows: View.Row[] = [{ $: "Sum", id: 7, n: 2, text: "read the logs", call: null, kind: null }];
@@ -101,9 +106,9 @@ test("an open run of work is marked whole, each message in it with its gap, a fo
     ["#3", false, true, true, 1, 5, "r3"],
     ["#4", false, true, false, 5, 6, "r3"],
   ]);
-  expect(lines[0].map((r) => [r.x, r.mark])).toEqual([["[-] ", { key: "r3", as: "glyph" }], ["Ran a command", { key: "r3", as: "label" }]]);
+  expect(lines[0].map((r) => [r.x, r.mark])).toEqual([[OPEN, { key: "r3", as: "glyph" }], ["Ran a command", { key: "r3", as: "label" }]]);
   expect(lines.slice(1).map((l) => l[0].mark)).toEqual(Array(5).fill({ key: "r3", as: "bar" }));
-  expect(text(lines[5])).toBe("│ [+] result · 1,204 lines");
+  expect(text(lines[5])).toBe("│ " + SHUT + "result · 1,204 lines");
   expect(lines[5][1].mark).toEqual({ key: "#4", as: "glyph" });
   View.view_fold(v, "#4");
   expect(Paint.rows_lines(View.view_acts(v, rows), 60).length).toBeGreaterThan(10);
@@ -133,7 +138,7 @@ test("a recap's pages fold to a line by their key", () => {
   const marks: Paint.Mark[] = [];
   const lines = Paint.rows_lines(View.view_acts(v, rows), 60, marks);
   expect(marks.map((m) => m.key)).toEqual(["r9", "#9"]);
-  expect(lines[1].map((r) => r.x).join("")).toBe("│ [+] recap · 3 lines");
+  expect(lines[1].map((r) => r.x).join("")).toBe("│ " + SHUT + "recap · 3 lines");
 });
 
 // lit by its tags alone: a run's glyph in the accent, its label in the
@@ -149,9 +154,9 @@ test("a mark lit lights its tagged runs alone: a run's glyph, label and heavier 
   const [run, , msg] = marks;
   const c     = Draw.draw_tokens().accent;
   const head  = Paint.line_lit(lines[0], run, false);
-  expect(head.map((r) => [r.x, r.s.d, r.s.c])).toEqual([["[-] ", false, c], ["Ran a command", false, ""]]);
+  expect(head.map((r) => [r.x, r.s.d, r.s.c])).toEqual([[OPEN, false, c], ["Ran a command", false, ""]]);
   const fold  = lines[msg.from];
-  expect(Paint.line_lit(fold, run, false).map((r) => r.x).join("")).toBe("┃ [+] result · 2 lines");
+  expect(Paint.line_lit(fold, run, false).map((r) => r.x).join("")).toBe("┃ " + SHUT + "result · 2 lines");
   const own   = Paint.line_lit(fold, msg, true);
-  expect(own.map((r) => [r.x, r.s.d, r.s.c, r.s.v])).toEqual([["│ ", false, c, true], ["[+] ", false, c, true], ["result · 2 lines", true, "", false]]);
+  expect(own.map((r) => [r.x, r.s.d, r.s.c, r.s.v])).toEqual([["│ ", false, c, true], [SHUT, false, c, true], ["result · 2 lines", true, "", false]]);
 });
