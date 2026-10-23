@@ -7,15 +7,16 @@
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
-import * as os from "node:os";
+import { temp_dir } from "./repo.ts";
 
-process.env.ILLI_DIR = fs.mkdtempSync(os.tmpdir() + "/illi-crash-");
+process.env.ILLI_DIR = temp_dir("illi-crash-");
 
 const { Tools } = await import("../src/tools/Tools.ts");
 
 test("an agent whose run throws still reports", async () => {
   let told = "";
   const tools: any = {
+    perm: { calls: new Map() },
     hooks: {
       change: () => {
         throw new Error("boom");
@@ -33,7 +34,7 @@ test("an agent whose run throws still reports", async () => {
 
 test("an agent cut by the vendor out of reach reports unanswered; one refused, answered", async () => {
   const told: boolean[] = [];
-  const tools: any = { hooks: { change: () => {}, on: () => {}, report: (_agent: unknown, _text: string, stopped: boolean) => told.push(stopped) } };
+  const tools: any = { perm: { calls: new Map() }, hooks: { change: () => {}, on: () => {}, report: (_agent: unknown, _text: string, stopped: boolean) => told.push(stopped) } };
   const away: any = { done: Promise.resolve({ ok: false, text: "can't reach api.anthropic.com: check your connection", left: [], stop: "down", again: true }) };
   await Tools.run(tools, { name: "Probe", call: null, replies: [], stop: false } as any, away);
   const refused: any = { done: Promise.resolve({ ok: false, text: "HTTP 400: bad", left: [], stop: "down" }) };
@@ -42,7 +43,7 @@ test("an agent cut by the vendor out of reach reports unanswered; one refused, a
 });
 
 test("a crash says one line on why and where its trace is, logged; exit code 1", async () => {
-  const dir = fs.mkdtempSync(os.tmpdir() + "/illi-crashed-");
+  const dir = temp_dir("illi-crashed-");
   const term = new URL("../src/term/Term.ts", import.meta.url).pathname;
   const code = "const { term_crash } = await import(" + JSON.stringify(term) + "); term_crash(new Error(\"boom\"));";
   const proc = Bun.spawn(["bun", "-e", code], { env: { ...process.env, ILLI_DIR: dir }, stdout: "pipe", stderr: "pipe" });

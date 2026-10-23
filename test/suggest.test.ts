@@ -12,11 +12,12 @@
 // nothing, thanks or praise, or in illi's voice, is none.
 
 import { expect, test } from "bun:test";
-import * as fs from "node:fs";
-import * as os from "node:os";
+import { temp_dir, temp_repo } from "./repo.ts";
 
-const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-suggest-");
-const CWD = fs.mkdtempSync(os.tmpdir() + "/illi-suggest-cwd-");
+const DIR = temp_dir("illi-suggest-");
+// the project the chat is opened in: a throwaway repository, never this
+// checkout
+const CWD = temp_repo("illi-suggest-cwd-");
 process.env.ILLI_DIR = DIR;
 process.env.ILLI_VENDORS = "claude-api";
 process.env.ILLI_PICK = "claude-api:sonnet-5.5:medium:slow";

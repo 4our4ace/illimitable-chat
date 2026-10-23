@@ -12,10 +12,9 @@
 // kept first, a line in each place; the items themselves untouched.
 
 import { expect, test } from "bun:test";
-import * as fs from "node:fs";
-import * as os from "node:os";
+import { temp_dir } from "../../test/repo.ts";
 
-process.env.ILLI_DIR = fs.mkdtempSync(os.tmpdir() + "/illi-agent-");
+process.env.ILLI_DIR = temp_dir("illi-agent-");
 
 const { Agent } = await import("./Agent.ts");
 const { AskAI } = await import("./AskAI.ts");

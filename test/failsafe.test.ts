@@ -14,10 +14,9 @@
 // is marked once. Timers run 1000 times fast.
 
 import { expect, test } from "bun:test";
-import * as fs from "node:fs";
-import * as os from "node:os";
+import { temp_dir } from "./repo.ts";
 
-const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-failsafe-");
+const DIR = temp_dir("illi-failsafe-");
 
 process.env.ILLI_DIR = DIR;
 

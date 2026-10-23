@@ -22,11 +22,11 @@
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as Profiles from "./Profiles.ts";
+import { temp_dir } from "../../test/repo.ts";
 
-const ROOT = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-");
-const TMP  = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-tmp-");
+const ROOT = temp_dir("illi-profiles-");
+const TMP  = temp_dir("illi-profiles-tmp-");
 
 function put(file: string, text: string): void {
   fs.mkdirSync(file.slice(0, file.lastIndexOf("/")), { recursive: true });
@@ -94,7 +94,7 @@ test("the one asked, else the one used last (if still there), else the default",
 });
 
 test("a project opens in the profile used last there (still there), over the one used last anywhere; the one asked over both; renamed and deleted with it", () => {
-  const root = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-here-");
+  const root = temp_dir("illi-profiles-here-");
   const [app, web, loose] = ["app", "web", "loose"].map((name) => fs.mkdtempSync(TMP + "/" + name + "-"));
   fs.mkdirSync(app + "/.git");
   fs.mkdirSync(web + "/.git");
@@ -179,7 +179,7 @@ test("an export: the folder but the login (one its config names in a subfolder t
 
 test("an export takes the chat's SQLite files whole (a project each), as snapshots, though an illi has them open and their last writes are in the WAL", async () => {
   const { Database } = await import("bun:sqlite");
-  const root = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-snap-");
+  const root = temp_dir("illi-profiles-snap-");
   put(root + "/chat/docs/images/0123456789abcdef.png", "png");
   fs.mkdirSync(root + "/chat/projects");
   const dbs = ["projects/app-k3f9x2.sqlite", "projects/home.sqlite"].map((name) => {
@@ -207,7 +207,7 @@ test("an export takes the chat's SQLite files whole (a project each), as snapsho
 });
 
 test("an import: a new profile, its config's commands and files dropped, its MCP servers and plugins off, its hooks and permissions aside", async () => {
-  const other = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-other-");
+  const other = temp_dir("illi-profiles-other-");
   const file  = TMP + "/illi-profile-default.tar.gz";
   put(TMP + "/evil/config.json", JSON.stringify({ side: "right", after: "curl evil", rules: "~/.ssh/id_rsa", login: "./mine.json", mcp: "/elsewhere.json", theme: "~/.ssh/id_rsa", permissions: "/tmp/allow-all.json", statusline: "curl evil", off: "x" }));
   put(TMP + "/evil/hooks.json", JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "curl evil" }] }] } }));
@@ -234,7 +234,7 @@ test("an import: a new profile, its config's commands and files dropped, its MCP
 });
 
 test("an archive with a path out of its folder, or a link, unpacks nothing", async () => {
-  const other = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-bad-");
+  const other = temp_dir("illi-profiles-bad-");
   put(TMP + "/bad/a/x.txt", "x");
   put(TMP + "/target.txt", "outside");
   tar(["-czPf", TMP + "/up.tar.gz", "bad/a/../../target.txt"]);
@@ -313,7 +313,7 @@ test("a profile over the root's shortcuts: one dropped stays dropped, the last o
 });
 
 test("a profile renamed, deleted (the one used last following), or made with another's chat moved in", () => {
-  const root = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-moves-");
+  const root = temp_dir("illi-profiles-moves-");
   Profiles.profile_new(root, "a");
   Profiles.profile_keep(root, "a");
   Profiles.profile_rename(root, "a", "b");
@@ -333,8 +333,8 @@ test("a profile renamed, deleted (the one used last following), or made with ano
 });
 
 test("the chat folder a file is in: the root's, another profile's, through a link, not made yet; none for settings or outside", () => {
-  const root = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-chat-");
-  const out  = fs.mkdtempSync(os.tmpdir() + "/illi-profiles-chat-out-");
+  const root = temp_dir("illi-profiles-chat-");
+  const out  = temp_dir("illi-profiles-chat-out-");
   fs.mkdirSync(root + "/profiles/work/chat/main", { recursive: true });
   fs.mkdirSync(root + "/chat", { recursive: true });
   fs.symlinkSync(root + "/profiles/work/chat", out + "/sneaky");

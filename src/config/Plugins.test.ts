@@ -18,11 +18,14 @@
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
+import { temp_repo } from "../../test/repo.ts";
 
 const DIR  = fs.realpathSync(fs.mkdtempSync(os.tmpdir() + "/illi-plugins-"));
 const ROOT = DIR + "/illi";
 const OWN  = ROOT + "/profiles/work";
-const REPO = DIR + "/repo";
+// the project the plugins run in: a throwaway repository, never this
+// checkout
+const REPO = temp_repo("illi-plugins-repo-");
 fs.mkdirSync(ROOT + "/plugins", { recursive: true });
 fs.mkdirSync(OWN + "/plugins/c", { recursive: true });
 fs.mkdirSync(REPO + "/.illi/plugins", { recursive: true });

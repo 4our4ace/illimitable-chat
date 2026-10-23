@@ -94,7 +94,7 @@ test("words expand as far as known: variables, loops, tildes, braces; globs and 
   expect(parts("g='*.ts'; ls $g \"$g\"")).toEqual(["g=*.ts @/w", "ls **.ts *.ts @/w"]);
 });
 
-test("a [ without its ] is itself, not a glob; $(pwd) and $(git rev-parse --show-toplevel) are the folder while known; flock runs its command", () => {
+test("a [ without its ] is itself, not a glob; $(pwd) and $(git rev-parse --show-toplevel) are the folder while known (not while GIT_DIR or GIT_WORK_TREE, set before illi started, may point git elsewhere); flock runs its command", () => {
   expect(parts("[ -f a ] && ls x[ab] [c")).toEqual(["[ -f a ] @/w", "ls *x[ab] [c @/w"]);
   expect(parts("echo $(pwd)/x `pwd -P`; cd $X; echo $(pwd)")).toEqual(["pwd @/w", "pwd -P @/w", "echo /w/x /w @/w", "cd ~ @/w", "pwd @null", "echo ~ @null"]);
   fs.mkdirSync(REPO + "/sub/deep", { recursive: true });
@@ -102,6 +102,14 @@ test("a [ without its ] is itself, not a glob; $(pwd) and $(git rev-parse --show
   const top = (command: string) => (Shell.parse(command, REPO + "/sub/deep") as Part[]).at(-1)!.argv.map((w) => (w.dynamic ? "~" : w.alts[0]));
   expect(top("rm -rf \"$(git rev-parse --show-toplevel)/dist\"")).toEqual(["rm", "-rf", REPO + "/sub/dist"]);
   expect(top("PATH=/x; rm -rf \"$(git rev-parse --show-toplevel)/dist\"")).toEqual(["rm", "-rf", "~"]);
+  for (const name of ["GIT_DIR", "GIT_WORK_TREE"]) {
+    process.env[name] = REPO + "/elsewhere";
+    try {
+      expect(top("rm -rf \"$(git rev-parse --show-toplevel)/dist\"")).toEqual(["rm", "-rf", "~"]);
+    } finally {
+      delete process.env[name];
+    }
+  }
   expect(top("source env.sh; echo $(pwd)")).toEqual(["echo", "~"]);
   expect(parts("flock -n /tmp/l rm x; flock -w 5 /tmp/l -c 'cd /tmp && ls'")).toEqual(["rm x @/w", "cd /tmp @/w", "ls @/tmp"]);
   expect(parts("flock --bogus /tmp/l rm x")).toBe("flock --bogus: an option illi doesn't know");

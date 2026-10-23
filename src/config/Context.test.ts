@@ -23,12 +23,15 @@
 // account not asked yet. A model kept or listed with no window has none
 // (a kept one that isn't one too): a call on it says so, never guessing.
 
-import { afterAll, expect, test } from "bun:test";
+import { expect, test } from "bun:test";
 import * as fs from "node:fs";
-import * as os from "node:os";
+import { temp_dir, temp_repo } from "../../test/repo.ts";
 
-const DIR  = fs.mkdtempSync(os.tmpdir() + "/illi-context-");
-const DATA = fs.mkdtempSync(os.tmpdir() + "/illi-context-data-");
+const DIR  = temp_dir("illi-context-");
+const DATA = temp_dir("illi-context-data-");
+// the project a chat is opened in: a throwaway repository, never this
+// checkout
+const REPO = temp_repo("illi-context-work-");
 process.env.ILLI_DIR = DIR;
 process.env.XDG_DATA_HOME = DATA;
 process.env.ILLI_VENDORS = "claude-api,chatgpt";
@@ -66,10 +69,6 @@ async function fetching<T>(answer: (url: string) => unknown, fn: () => Promise<T
   }
 }
 
-afterAll(() => {
-  fs.rmSync(DIR, { recursive: true, force: true });
-  fs.rmSync(DATA, { recursive: true, force: true });
-});
 
 test("a model's own, else the share the old `context` names (its \"auto\" none: 60%); at most 70% of the window, less what a request takes beside the chat", () => {
   expect(config.config_context("gpt-6.1-sol", 500000)).toBe(350000);
@@ -210,7 +209,7 @@ test("a chat on ChatGPT folds nothing on the windows kept last as a login or a p
   // no model asked meanwhile (the compactor's summaries): none past here
   AskAI.ask = (_, on) => AskAI.tie(on, () => {}, () => {})[0];
   Pick.learn("chatgpt", [{ label: "gpt-6.1-sol", id: "gpt-6.1-sol", speeds: ["slow"], window: 272000 }], "replace");
-  const chat = Chat.open(process.cwd());
+  const chat = Chat.open(REPO);
   try {
     expect(await Chat.act(chat, { $: "pick", to: { vendor: "chatgpt", model: "gpt-6.1-sol", effort: "medium", speed: "slow" } })).toEqual({});
     Memory.push(chat.mem, Array.from({ length: 10 }, (_, k) => ({ kind: "user" as const, text: String(k).repeat(100000), line: "user: " + k })));

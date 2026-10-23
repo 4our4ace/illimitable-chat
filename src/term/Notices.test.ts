@@ -4,7 +4,8 @@
 // clock: a note goes by itself once its time is up, said again it shows
 // once, a third pushes the oldest out (a held one stays; while work runs,
 // a second does), Esc takes the notes (a toast stays its time), the view's notes
-// come in as notes, and a pipe gets each note once.
+// come in as notes, and a pipe gets each note once. A mode of auto (the
+// default) is said once ever, on a terminal: what auto asks now.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -13,7 +14,8 @@ import * as os from "node:os";
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-notices-");
 process.env.ILLI_DIR = DIR;
 
-const { term_note, term_toast, term_unnote, term_shown } = await import("./Notices.ts");
+const { term_note, term_once, term_toast, term_unnote, term_shown } = await import("./Notices.ts");
+const config = await import("../config/Config.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
@@ -64,4 +66,20 @@ test("a pipe gets each note once", () => {
   term_note(t, "said once");
   expect(term_shown(t).notes).toEqual(["said once"]);
   expect(term_shown(t).notes).toEqual([]);
+});
+
+test("a mode of auto is said once ever, on a terminal only (a pipe spends none): what auto asks now, careful the old rules", () => {
+  expect(config.config_value("mode")).toBe("auto");
+  expect(config.AUTO_NOTE).toBe("mode is auto: it now asks only before a change outside the project, remote destruction (a force push, a delete), root, your secrets and illi's own config. /mode careful keeps the old rules for this session, /set mode careful for good.");
+  const pipe = term(false);
+  term_once(pipe, 60000);
+  expect(pipe.notices).toEqual([]);
+  const t = term();
+  term_once(t, 60000);
+  expect(term_shown(t).notes).toEqual([config.AUTO_NOTE]);
+  const again = term();
+  term_once(again, 60000);
+  expect(again.notices).toEqual([]);
+  expect(JSON.parse(fs.readFileSync(DIR + "/seen.json", "utf8"))["note auto 0.3.1"]).toBe("seen");
+  clearTimeout(t.expire);
 });

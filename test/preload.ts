@@ -10,10 +10,33 @@
 // (Browser.ts: BROWSER none), whatever a test does. The vendors are the
 // test script's while none are set (a file run alone runs as in the
 // suite: on claude-api, whose windows are built in; a file on ChatGPT sets
-// its own, and its models' windows, as its catalog would)
+// its own, and its models' windows, as its catalog would).
+// git can't reach another repository nor leave the machine: its
+// repository variables (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, ...: what
+// `git rev-parse --local-env-vars` lists, set as a git hook runs the
+// suite) are cleared, so a test's git acts on the folder it runs in (a
+// throwaway repository: repo.ts), and GIT_ALLOW_PROTOCOL allows only
+// file://, so no push, fetch or clone goes over the network, even from a
+// real repository. Bun gives a child the environment it started with
+// unless the spawn passes `env`: illi's shell tool, hooks and MCP servers
+// pass process.env, so these reach them (test/repo.test.ts)
 
 import * as fs from "node:fs";
 import * as os from "node:os";
+
+// git's repository variables (git rev-parse --local-env-vars, and those
+// older gits had), and a config given by count (GIT_CONFIG_KEY_0, ...)
+const GIT_LOCAL = [
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "GIT_OBJECT_DIRECTORY", "GIT_DIR",
+  "GIT_WORK_TREE", "GIT_IMPLICIT_WORK_TREE", "GIT_GRAFT_FILE", "GIT_INDEX_FILE", "GIT_NO_REPLACE_OBJECTS", "GIT_REPLACE_REF_BASE",
+  "GIT_PREFIX", "GIT_SHALLOW_FILE", "GIT_COMMON_DIR", "GIT_INTERNAL_SUPER_PREFIX",
+];
+for (const name of Object.keys(process.env)) {
+  if (GIT_LOCAL.includes(name) || /^GIT_CONFIG_(KEY|VALUE)_\d+$/.test(name)) {
+    delete process.env[name];
+  }
+}
+process.env.GIT_ALLOW_PROTOCOL = "file";
 
 const TEMP = os.tmpdir();
 const DIR  = TEMP + "/illi-test-" + process.pid;

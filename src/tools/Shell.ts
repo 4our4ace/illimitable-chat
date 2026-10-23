@@ -634,12 +634,14 @@ function var_put(s: Scan, b: Build, name: string, split = false): void {
 // a command's output put in a word: the folder for pwd (-L, -P), the
 // repository's top (the nearest folder up holding .git) for git rev-parse
 // --show-toplevel; else, or once a source or an assignment (PATH,
-// GIT_DIR) may have changed what they'd say, known only as it runs.
+// GIT_DIR) may have changed what they'd say, or while the environment's
+// GIT_DIR or GIT_WORK_TREE points git elsewhere, known only as it runs.
 // Split as var_put's
 function output(s: Scan, b: Build, inner: string, split = false): void {
   const cmd = inner.trim().replace(/\s+/g, " ");
   const odd = s.cwd === null || s.wild || ["PATH", "GIT_DIR", "GIT_WORK_TREE"].some((n) => s.vars.has(n));
-  const known = odd ? null : /^pwd( -[LP])?$/.test(cmd) ? s.cwd : cmd === "git rev-parse --show-toplevel" && process.env.GIT_DIR === undefined ? git_top(s.cwd!) : null;
+  const git = cmd === "git rev-parse --show-toplevel" && process.env.GIT_DIR === undefined && process.env.GIT_WORK_TREE === undefined;
+  const known = odd ? null : /^pwd( -[LP])?$/.test(cmd) ? s.cwd : git ? git_top(s.cwd!) : null;
   if (known === null || (split && /[ \t\n]/.test(known))) {
     b.dynamic = true;
     return;

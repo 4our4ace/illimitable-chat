@@ -38,8 +38,10 @@
 // yolo mode would, one it asks about asked whatever): run, asked about
 // with why, or refused, each refusal recorded for the side panel and
 // /permissions. In auto every call, illi's own too, passes the loop
-// guard: the same call as its caller's two before it is asked. What a
-// call that ran answers goes to the plugins last (after_tool).
+// guard: the same call as its caller's two before it in its turn is
+// asked (a yes, the caller's next turn and a name used again start the
+// count fresh). What a call that ran answers goes to the plugins last
+// (after_tool).
 // The plugins' own tools are theirs to run (plugin__...).
 
 import * as fs from "node:fs";
@@ -287,7 +289,7 @@ const KEPT  = 1000;
 const REFUSALS = 50;
 
 // the loop guard (Tools.guard): in auto, a call the same (tool and input)
-// as its caller's LOOP before it is asked, saying why
+// as its caller's LOOP before it, in its turn, is asked, saying why
 const LOOP = 2;
 const LOOPED = "the same call a third time in a row";
 
@@ -698,9 +700,11 @@ export namespace Tools {
 
   // calls while a message waits in its log (told too late for the call
   // before); then its report, unanswered if stopped or the vendor was busy
-  // or out of reach (End.again). Detached: a throw ends it as a failed
-  // reply, still reported
+  // or out of reach (End.again). Its run is its turn: the loop guard starts
+  // it fresh (Tools.fresh), a name used again too. Detached: a throw ends
+  // it as a failed reply, still reported
   export async function run(tools: Tools, agent: Agent, call: Call | null = null): Promise<void> {
+    Tools.fresh(tools, agent.name);
     let away = false;
     try {
       for (let more = true; more; call = null) {
@@ -783,8 +787,9 @@ export namespace Tools {
   // is told. One a hook allowed is judged as in yolo mode (the user's
   // rules still hold); one it asks about is asked, its why first, with no
   // "don't ask again". In auto, one the same as its caller's two before
-  // it (illi's own tools too: a skill loaded again and again) is asked,
-  // saying so first, so a model stuck in a loop stops. The question is
+  // it in its turn (illi's own tools too: a skill loaded again and again)
+  // is asked, saying so first, so a model stuck in a loop stops; a yes
+  // starts that caller's count again (Tools.looped). The question is
   // given what the call would do and why, WHOLE characters of each at
   // most, and what "don't ask again" keeps by its ends past KEPT. One
   // asked runs on the user's yes, "don't ask again" keeping its grants for
@@ -813,6 +818,7 @@ export namespace Tools {
     if (!reply.yes) {
       return Tools.refuse(tools, { ...asked, how: "no", said: reply.said, exact: verdict.exact }, !signal.aborted);
     }
+    Tools.fresh(tools, who);
     const unsaved = reply.always && verdict.always.length > 0 ? Permissions.grant(config.PERMISSIONS, folder, verdict.always) : null;
     if (unsaved !== null) {
       verdict.always.forEach((g) => tools.perm.granted.add(g));
@@ -822,12 +828,20 @@ export namespace Tools {
   }
 
   // whether a call is the same (tool and input) as its caller's LOOP
-  // before it; it is kept as the latest
+  // before it; it is kept as the latest. A different call between starts
+  // the count again, as does a yes to a question (Tools.guard), the
+  // caller's next turn (Chat.turn, Tools.run) and a name used again
   export function looped(tools: Tools, who: string, tool: string, input: unknown): boolean {
     const call = String(Bun.hash(tool + "\0" + JSON.stringify(input ?? null)));
     const last = tools.perm.calls.get(who) ?? [];
     tools.perm.calls.set(who, [...last, call].slice(-LOOP));
     return last.length === LOOP && last.every((c) => c === call);
+  }
+
+  // a caller's calls forgotten by the loop guard: its turn starts, or a
+  // question about its call was answered yes
+  export function fresh(tools: Tools, who: string): void {
+    tools.perm.calls.delete(who);
   }
 
   // the mode now: /mode's for this run, else the setting's

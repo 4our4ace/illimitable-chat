@@ -14,10 +14,12 @@
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
-import * as os from "node:os";
+import { temp_dir, temp_repo } from "../../test/repo.ts";
 
-const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-custom-");
-const CWD = fs.mkdtempSync(os.tmpdir() + "/illi-project-");
+const DIR = temp_dir("illi-custom-");
+// the project the chat is opened in: a throwaway repository, never this
+// checkout
+const CWD = temp_repo("illi-project-");
 process.env.ILLI_DIR = DIR;
 process.env.ILLI_VENDORS = "chatgpt,claude-api";
 process.env.ILLI_PICK = "chatgpt:gpt-6.1-sol:medium:slow";
@@ -206,7 +208,7 @@ test("a skill: its folder's SKILL.md, the project's over theirs; listed and load
 
 test("skills shared with other agents: ~/.agents/skills under illi's global ones, a trusted project's .agents/skills from its top down under its .illi; global for the on/off lists", () => {
   const shared = config.AGENTS_DIR + "/skills";
-  const top    = fs.mkdtempSync(os.tmpdir() + "/illi-tree-");
+  const top    = temp_dir("illi-tree-");
   const cwd    = top + "/pkg";
   put(top + "/.git/HEAD", "ref: refs/heads/main\n");
   put(shared + "/pdf/SKILL.md", "---\ndescription: shared pdf\n---\nShared.");

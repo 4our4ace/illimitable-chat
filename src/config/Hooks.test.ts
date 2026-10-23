@@ -19,11 +19,14 @@
 import { beforeEach, afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
+import { temp_repo } from "../../test/repo.ts";
 
 const DIR  = fs.realpathSync(fs.mkdtempSync(os.tmpdir() + "/illi-hooks-"));
 const ROOT = DIR + "/illi";
 const OWN  = ROOT + "/profiles/work";
-const REPO = DIR + "/repo";
+// the project the hooks run in: a throwaway repository, never this
+// checkout
+const REPO = temp_repo("illi-hooks-repo-");
 const BIN  = DIR + "/bin";
 fs.mkdirSync(OWN, { recursive: true });
 fs.mkdirSync(REPO + "/.illi", { recursive: true });
@@ -161,9 +164,9 @@ test("a JSON answer as Claude Code's fields say, read on any exit but 2: decisio
   expect(json("SessionStart", { hookSpecificOutput: { additionalContext: "on main" }, systemMessage: "hello" })).toEqual({ note: "hello", context: "on main" });
 });
 
-test("a command runs in sh with its input on stdin and the project's top named; its time limit and a stop end it; its output is cut; a job it leaves isn't waited for", async () => {
-  const echo = sh("echo.sh", "cat; echo; echo \"$ILLI_PROJECT_DIR\" >&2");
-  expect(await Hooks.run(echo, { a: 1 }, REPO, "/top", 5000)).toEqual({ code: 0, why: "", out: "{\"a\":1}\n\n", err: "/top\n" });
+test("a command runs in sh with its input on stdin and the project's top named, in illi's environment (the test preload's GIT_ALLOW_PROTOCOL too: Bun gives a child only what its spawn passes); its time limit and a stop end it; its output is cut; a job it leaves isn't waited for", async () => {
+  const echo = sh("echo.sh", "cat; echo; echo \"$ILLI_PROJECT_DIR $GIT_ALLOW_PROTOCOL\" >&2");
+  expect(await Hooks.run(echo, { a: 1 }, REPO, "/top", 5000)).toEqual({ code: 0, why: "", out: "{\"a\":1}\n\n", err: "/top file\n" });
   const slow = sh("slow.sh", "sleep 5");
   let at = Date.now();
   expect(await Hooks.run(slow, {}, REPO, REPO, 300)).toMatchObject({ code: null, why: "ran past its 0.3 s" });
