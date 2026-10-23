@@ -145,7 +145,8 @@ export type State = {
 // fold: the tops shown (null: not folded); nodes and whole: the summaries
 // ("id+n") and messages known; open: the blocks opened (true) or shut by
 // hand; acts: the runs of work opened or shut by hand, against the
-// mode, by their key (row_key); verbose: every run open (Ctrl+O); minds: the thoughts after each message; pages: the agents' asked
+// mode, by their key (row_key); folds: the messages folded in open runs,
+// by their key (row_fold); verbose: every run open (Ctrl+O); minds: the thoughts after each message; pages: the agents' asked
 // for; page: the one shown (null: illi's); made: the characters the
 // models streamed (replies, thoughts, calls) since work began; flow:
 // the last RATE ms of them (when, how many); the Link's: acts not
@@ -158,6 +159,7 @@ export type View = State & {
   whole : Map<number, Entry>;
   open  : Map<string, boolean>;
   acts  : Set<number>;
+  folds : Set<string>;
   verbose: boolean;
   made  : number;
   flow  : Array<[number, number]>;
@@ -248,7 +250,8 @@ export type Row =
   | { $: "Box"; id: number; n: number; text: string; rows: Row[] }                              // a block open: its bar
   | { $: "Act"; id: number; text: string; open: boolean; rows: Row[] }                         // a run of work (ACTIVITY), from message id: what was done, its rows if open
   | { $: "Rule"; id: number; text: string; open: boolean; rows: Row[] }                        // a recap (/compact), message id: a line across the chat naming it, the recap's rows if open
-  | { $: "Msg"; id: number | null; kind: Kind; who: string; text: string; body: Md.Block[]; call: Call.Call | null; images: string[]; after?: number } // a message whole: 0x (who: its speaker or "↳ result", named on its block; body: its blocks, none for illi's (drawn from its text); call: a tool call's, drawn as Call.ts reads it; after: a thought's, the message it follows)
+  | { $: "Msg"; id: number | null; kind: Kind; who: string; text: string; body: Md.Block[]; call: Call.Call | null; images: string[]; after?: number; nth?: number } // a message whole: 0x (who: its speaker or "↳ result", named on its block; body: its blocks, none for illi's (drawn from its text); call: a tool call's, drawn as Call.ts reads it; after, nth: a thought's, the message it follows and which of its thoughts)
+  | { $: "Fold"; key: string; text: string }                                                    // a message of an open run of work folded by a click (key: View.row_fold): one dim line saying what it is
   | { $: "Cap"; text: string }                                                                  // a line about the page
 
 // a tab: its page (null: the chat), whether it's shown, its mark, its
@@ -366,6 +369,7 @@ export function view_new(): View {
     whole     : new Map(),
     open      : new Map(),
     acts      : new Set(),
+    folds     : new Set(),
     verbose   : false,
     made      : 0,
     flow      : [],
@@ -587,7 +591,7 @@ export function view_acts(v: View, rows: Row[]): Row[] {
     const last = out[out.length - 1];
     if (row_recap(row) && last?.$ === "Rule") {
       last.rows.push(row);
-    } else if (row_recap(row) && row.$ !== "Cap" && row.id !== null) {
+    } else if (row_recap(row) && row.$ !== "Cap" && row.$ !== "Fold" && row.id !== null) {
       out.push({ $: "Rule", id: row.id, text: RULE, open: v.verbose !== v.acts.has(row.id), rows: [row] });
     } else if (!row_busy(row)) {
       out.push(row);
@@ -598,7 +602,33 @@ export function view_acts(v: View, rows: Row[]): Row[] {
       out.push({ $: "Act", id, text: "", open: v.verbose !== v.acts.has(id), rows: [row] });
     }
   }
-  return out.map((row) => (row.$ === "Act" ? { ...row, text: act_text(row.rows) } : row));
+  return out.map((row) => (row.$ === "Act" ? { ...row, text: act_text(row.rows), rows: row.rows.map((r) => row_folded(v, r)) } : row));
+}
+
+// a message's key as a click folds it in an open run: a logged one's
+// "#id", a thought's "m" + the message it follows + "." + which of its
+// thoughts; null: none (a summary, a block)
+export function row_fold(row: Row): string | null {
+  return row.$ !== "Msg" ? null : row.id !== null ? "#" + row.id : row.after !== undefined ? "m" + row.after + "." + (row.nth ?? 0) : null;
+}
+
+// a run's row as shown: a message folded by a click, one Fold line saying
+// what it is (a call as its line, else its kind and how long it is)
+function row_folded(v: View, row: Row): Row {
+  const key = row_fold(row);
+  if (key === null || !v.folds.has(key) || row.$ !== "Msg") {
+    return row;
+  }
+  const lines = row.text.split("\n").length.toLocaleString("en-US") + (row.text.includes("\n") ? " lines" : " line");
+  const name  = row.kind === "echo" ? "result" : row.kind === "mind" ? "thought" : row.kind === "work" && row.who !== "" ? row.who + " reported" : row.who || row.kind;
+  return { $: "Fold", key, text: row.call !== null ? Call.call_line(row.call) : name + " · " + lines };
+}
+
+// a message of an open run folded, or unfolded (by its key: row_fold)
+export function view_fold(v: View, key: string): void {
+  if (!v.folds.delete(key)) {
+    v.folds.add(key);
+  }
 }
 
 // the key of a run of work led by a row: its message's id; a thought's
@@ -606,7 +636,7 @@ export function view_acts(v: View, rows: Row[]): Row[] {
 // message 0), so it holds as the run's first call arrives and no two
 // runs share one
 function row_key(row: Row): number {
-  return row.$ === "Cap" ? -1 : row.id !== null ? row.id : row.$ === "Msg" && row.after !== undefined ? -2 - row.after : -1;
+  return row.$ === "Cap" || row.$ === "Fold" ? -1 : row.id !== null ? row.id : row.$ === "Msg" && row.after !== undefined ? -2 - row.after : -1;
 }
 
 // whether a row is a recap's, whole or summed up
@@ -660,7 +690,6 @@ function act_text(rows: Row[]): string {
   return named ? text : text[0].toUpperCase() + text.slice(1);
 }
 
-// a run of work, or a recap, opened or closed (by its first message's id)
 // verbose (Ctrl+O): every run of work open, or none but those opened
 // alone; the runs opened or shut by hand forgotten, so each shows as the
 // mode says
@@ -669,6 +698,7 @@ export function view_verbose(v: View): void {
   v.acts.clear();
 }
 
+// a run of work, or a recap, opened or closed (by its key: row_key)
 export function view_toggle(v: View, id: number): void {
   if (v.acts.has(id)) {
     v.acts.delete(id);
@@ -883,7 +913,7 @@ function part_rows(v: View, id: number, n: number, t: number, talk: boolean): Ro
   const half  = n / 2;
   if (n === 1 && id >= t && entry !== undefined) {
     const minds = v.minds.get(id) ?? [];
-    const after = minds.flatMap((x) => entry_rows(null, "mind", x).map((row) => ({ ...row, after: id })));
+    const after = minds.flatMap((x, nth) => entry_rows(null, "mind", x).map((row) => ({ ...row, after: id, nth })));
     return [...whole_rows(id, entry), ...after];
   }
   const open  = talk && n === 1 && ["user", "illi"].includes(entry?.kind ?? "");

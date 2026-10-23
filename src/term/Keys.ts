@@ -200,7 +200,7 @@ export function term_click(t: Term): void {
   const hit  = t.hits.find((h) => h.row === row && col >= h.col && col < h.to);
   const s    = t.seen;
   const line = s.first + row - s.row;
-  const mark = row >= s.row && row < s.row + s.tall && col >= s.col && col < s.end ? s.marks.find((m) => m.from <= line && line < m.to) : undefined;
+  const mark = row >= s.row && row < s.row + s.tall && col >= s.col && col < s.end ? s.marks.find((m) => m.from <= line && line < m.to && m.fold === undefined) : undefined;
   const copy = term_under(t, t.scr.click);
   if (hit !== undefined) {
     hit.run();
