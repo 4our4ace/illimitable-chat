@@ -172,7 +172,9 @@ one that tells none (the OpenAI API), the ones its docs state.
 -------------------------
 
 For a plan login, the side shows the plan's name and how much of each
-limit is used (`View.ts` `Plan`, `Limit`):
+limit is used (`View.ts` `Plan`, `Limit`), once at least one limit is
+told: a vendor that tells none shows no Usage at all, not even the
+plan's name.
 
 - `told()`: the account's plan now (`brand`, `tier`, its `limits`: each
   window's minutes, share used and reset time), or null. Register it in

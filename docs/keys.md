@@ -298,11 +298,11 @@ Mouse and side panel
   opens `/background`), the profiles once you have two (a click
   switches; one open in this terminal shows a spinner while it works,
   `?` while it asks you something, `● 2` while only its background jobs
-  run), a ChatGPT plan's use, the context and the memory, the MCP
-  servers (a click opens `/mcp`), the latest requests refused (a click
-  opens `/permissions` on one) and illi's to-do list, gone once every
-  item is done or on `/clear`. The `side` and `side_width` settings
-  place it.
+  run), a ChatGPT plan's use (once ChatGPT has told it), the context
+  and the memory, the MCP servers (a click opens `/mcp`), the latest
+  requests refused (a click opens `/permissions` on one) and illi's
+  to-do list, gone once every item is done or on `/clear`. The `side`
+  and `side_width` settings place it.
 - The bottom line ends with the mode (a click opens `/mode`):
   `read-only` in the warning color, `yolo` in the error color. Before
   it, the background jobs are counted when the side panel doesn't show
