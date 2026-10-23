@@ -483,7 +483,8 @@ function canvas_shade(hex: string): string {
   return "#" + rgb.map((v) => Math.round(dark ? v + (255 - v) * SHADE_DARK : v * (1 - SHADE_LIGHT)).toString(16).padStart(2, "0")).join("");
 }
 
-// a run of work: one dim line saying what was done (after GLYPH.shut),
+// a run of work: one dim line saying what was done (after GLYPH.shut; cut
+// to the width, "…" where),
 // its calls under it (act_calls), or opened (GLYPH.open) over its rows, a
 // dim bar at their left, each message marked (a click folds it to a line,
 // and back); a click on the line, a call's or the bar opens or closes the
@@ -496,7 +497,7 @@ function act_lines(row: View.Row & { $: "Act" | "Rule" }, w: number, marks: Mark
   const label = Run(text_clean(row.text), DIM, { key, as: "label" });
   const fill  = Math.max(0, w - text_width(glyph.x + label.x) - 2);
   const line  = row.$ === "Rule" ? [Run("─".repeat(fill >> 1) + " ", DIM), glyph, label, Run(" " + "─".repeat(fill - (fill >> 1)), DIM)] : [glyph, label];
-  const head  = runs_wrap(line, w, false)[0];
+  const head  = line_width(line) <= w ? line : [...line_cut(line, 0, Math.max(0, w - 1))[1], Run("…", DIM, { key, as: "label" })];
   if (!row.open) {
     return row.$ === "Act" ? [head, ...act_calls(row.calls, key, text_width(glyph.x), w)] : [head];
   }
