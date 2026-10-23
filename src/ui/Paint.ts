@@ -2,7 +2,9 @@
 // =====
 // The terminal's emitter: View's rows, pick and tabs as lines of
 // styled runs, and a line as ANSI (Theme's ink as the text, any other
-// dimmed; fills and diffs in the terminal's own palette, Theme.ANSI).
+// dimmed; fills in the terminal's own palette, Theme.ANSI; every other
+// color a token's, Draw.draw_tokens: the user's frame, a diff's lines, a
+// chip, the profile's name).
 // `rows_lines` lays rows out as the site: what the machine wrote
 // filled (Theme.FILLED), half blocks rounding the fill's top and
 // bottom: a block, its level in a gutter, its summary and its first
@@ -29,6 +31,7 @@ import * as Call from "./Call.ts";
 import * as config from "../config/Config.ts";
 import * as Draw from "./Draw.ts";
 import * as Md from "./Md.ts";
+import { Plugins, type Piece } from "../config/Plugins.ts";
 import { DEFAULT } from "../config/Profiles.ts";
 import * as Reply from "./Reply.ts";
 import * as Theme from "./Theme.ts";
@@ -63,19 +66,15 @@ export type Laid = { rows: View.Row[]; from: number; at: number; w: number; look
 export const INK: Ink = { d: false, b: false, i: false, u: false, v: false, t: false, k: "", c: "", g: "" };
 export const DIM: Ink = { ...INK, d: true };
 
-// a diff line's ink, by its mark
-const MARK: Record<Md.Line["s"], Ink> = { " ": DIM, "-": { ...INK, c: Theme.ANSI.del }, "+": { ...INK, c: Theme.ANSI.add } };
-
 // the gutter of a block: its level, and the space after it
 const GUTTER = 7;
 
 const GRAPHEMES = new Intl.Segmenter("en", { granularity: "grapheme" });
 
 // each row's lines, at the width and look they were laid out at
-// (row_cached); the look, counted up as the colors change; the
-// terminal's background, as told (null: not yet)
+// (row_cached; the look: Draw.draw_stamp, counted up as the colors
+// change); the terminal's background, as told (null: not yet)
 const LAID = new WeakMap<View.Row, { w: number; look: number; lines: Line[] }>();
-let LOOK = 0;
 let CANVAS: string | null = null;
 
 // the reply last laid out, as far as it was finished (Reply.reply_grow),
@@ -87,7 +86,7 @@ let GROWN: { look: number; grown: Reply.Grown } | null = null;
 // "": none)
 const SHADE_DARK  = 0.08;
 const SHADE_LIGHT = 0.06;
-let FILL = Theme.ANSI.block;
+let FILL = Theme.ANSI.block ?? "";
 
 // Constructors
 // ============
@@ -210,13 +209,16 @@ export function line_ansi(l: Line): string {
   return (was?.g || was?.v ? out : out.trimEnd()) + ink_ansi(was, INK);
 }
 
-// the codes that change ink was (null: a line's start) to s
+// the codes that change ink was (null: a line's start) to s; dim text
+// of no color of its own in the theme's dim, if it has one (else the
+// terminal's faint)
 function ink_ansi(was: Ink | null, s: Ink): string {
   if (was !== null && was.d === s.d && was.b === s.b && was.i === s.i && was.u === s.u && was.v === s.v && was.t === s.t && was.k === s.k && was.c === s.c && was.g === s.g) {
     return "";
   }
+  const dim  = s.d && s.c === "" ? Draw.draw_tokens().dim : "";
   const end  = was !== null && was.k !== "" ? "\x1b]8;;\x1b\\" : "";
-  const sgr  = "\x1b[0" + (s.b ? ";1" : "") + (s.i ? ";3" : "") + (s.u ? ";4" : "") + (s.d ? ";2" : "") + (s.v ? ";7" : "") + (s.t ? ";9" : "") + color_sgr(38, s.c) + color_sgr(48, s.g) + "m";
+  const sgr  = "\x1b[0" + (s.b ? ";1" : "") + (s.i ? ";3" : "") + (s.u ? ";4" : "") + (s.d && dim === "" ? ";2" : "") + (s.v ? ";7" : "") + (s.t ? ";9" : "") + color_sgr(38, s.c || dim) + color_sgr(48, s.g) + "m";
   const link = s.k === "" ? "" : "\x1b]8;;" + s.k + "\x1b\\";
   return end + sgr + link;
 }
@@ -248,7 +250,7 @@ function fill_lines(body: Line[], iw: number): Line[] {
   }
   const pad  = { ...INK, g };
   const edge = (c: string) => [Run(c.repeat(Math.max(0, iw + 2)), { ...INK, c: g })];
-  const ink  = (r: Run) => Run(r.x, { ...r.s, g, c: r.s.c || Theme.ANSI.ink });
+  const ink  = (r: Run) => Run(r.x, { ...r.s, g, c: r.s.c || (Theme.ANSI.ink ?? "") });
   const mid  = body.map((l) => [Run(" ", pad), ...l.map(ink), Run(" ".repeat(Math.max(0, iw - line_width(l))) + " ", pad)]);
   return [edge("▄"), ...mid, edge("▀")];
 }
@@ -296,12 +298,12 @@ export function rows_lines(rows: View.Row[], w: number, marks: Mark[] = [], at =
 
 // rows to lay out, w wide, as from line `at` on: none yet
 export function laid_new(rows: View.Row[], w: number, at = 0): Laid {
-  return { rows, from: rows.length, at, w, look: LOOK, lines: [], marks: [] };
+  return { rows, from: rows.length, at, w, look: Draw.draw_stamp(), lines: [], marks: [] };
 }
 
 // whether rows laid out are at another width or look than now
 export function laid_stale(laid: Laid, w: number): boolean {
-  return laid.w !== w || laid.look !== LOOK;
+  return laid.w !== w || laid.look !== Draw.draw_stamp();
 }
 
 // more of the rows laid out, up from the first laid out, till they have
@@ -348,25 +350,25 @@ export function rows_find(rows: View.Row[], id: number, n: number): number {
 // is new; an open block's are made anew, around its rows' own
 function row_cached(row: View.Row, w: number): Line[] {
   const known = LAID.get(row);
-  if (known?.w === w && known.look === LOOK) {
+  const look  = Draw.draw_stamp();
+  if (known?.w === w && known.look === look) {
     return known.lines;
   }
   const lines = row_lines(row, w);
-  LAID.set(row, { w, look: LOOK, lines });
+  LAID.set(row, { w, look, lines });
   return lines;
 }
 
 // the terminal told its background: diagrams draw in a new palette, so
-// every row is laid out anew; told the one it was, nothing changes
-// (false)
+// every row is laid out anew (the look moves: Draw.draw_stamp); told the
+// one it was, nothing changes (false)
 export function paint_canvas(hex: string): boolean {
   if (hex === CANVAS) {
     return false;
   }
   CANVAS = hex;
   Draw.draw_canvas(hex);
-  FILL = Theme.ANSI.block === "" ? canvas_shade(hex) : FILL;
-  LOOK += 1;
+  FILL = (Theme.ANSI.block ?? "") === "" ? canvas_shade(hex) : FILL;
   return true;
 }
 
@@ -438,8 +440,9 @@ function row_lines(row: View.Row, w: number): Line[] {
 // illi's reply, from its finished blocks on if it grew from the last one
 // laid out (GROWN): a stream's text grows a piece each paint
 function reply_lines(text: string, w: number): Line[] {
-  const [lines, grown] = Reply.reply_grow(text, w, GROWN?.look === LOOK ? GROWN.grown : null);
-  GROWN = { look: LOOK, grown };
+  const look = Draw.draw_stamp();
+  const [lines, grown] = Reply.reply_grow(text, w, GROWN?.look === look ? GROWN.grown : null);
+  GROWN = { look, grown };
   return lines;
 }
 
@@ -461,7 +464,8 @@ function sum_lines(id: number, n: number, head: Line, text: string, w: number): 
 // illi's replies are (Reply.ts) in its kind's look (a note and thinking
 // dim and italic); a call filled; a result bare, its lines framed as a
 // file's, the frame naming them; a person's words (the user's, a report)
-// framed in ink (the user's in blue), named on its top; thinking bare,
+// framed in ink (the user's in the theme's you: the accent's, unless
+// set), named on its top; thinking bare,
 // its name over it; all at the left, the column's width; none framed
 // nor filled without text (images alone)
 function msg_lines(kind: Kind, who: string, body: Md.Block[], text: string, w: number): Line[] {
@@ -475,7 +479,7 @@ function msg_lines(kind: Kind, who: string, body: Md.Block[], text: string, w: n
     return fill_lines(own(w - 2), w - 2);
   }
   if (Theme.FRAMED.includes(kind)) {
-    const edge = kind === "user" ? { ...INK, c: Theme.ANSI.you } : INK;
+    const edge = kind === "user" ? { ...INK, c: Draw.draw_tokens().you } : INK;
     return frame_lines(own(w - 4), w - 4, edge, who === "" ? [] : [Run(" " + who + " ", { ...edge, b: true })]);
   }
   const name = who === "" ? [] : [[Run(who, { ...DIM, b: true })]];
@@ -534,17 +538,25 @@ export function cells_line(row: Draw.Cell[]): Line {
 
 // a diff: framed, its file and its lines added and dropped in the top
 // edge; each line its number (dimmed), its mark and its text in the
-// mark's ink, hung after the number; a ⋯ between hunks
+// mark's ink (diff_marks), hung after the number; a ⋯ between hunks
 function diff_lines(file: string, hunks: Md.Line[][], w: number): Line[] {
   const all   = hunks.flat();
   const adds  = all.filter((l) => l.s === "+").length;
   const dels  = all.filter((l) => l.s === "-").length;
   const nw    = all.reduce((w, l) => Math.max(w, String(l.n).length), 0);
-  const title = [Run(" " + text_clean(file) + " ", { ...INK, b: true }), Run("+" + adds, MARK["+"]), Run(" "), Run("-" + dels, MARK["-"]), Run(" ")];
-  const line  = (l: Md.Line) => runs_wrap([Run(text_clean(l.x), MARK[l.s])], w - nw - 7, true).map((r, k) => [Run((k === 0 ? String(l.n) : "").padStart(nw) + " ", DIM), Run((k === 0 ? l.s : " ") + " ", MARK[l.s]), ...r]);
+  const mark  = diff_marks();
+  const title = [Run(" " + text_clean(file) + " ", { ...INK, b: true }), Run("+" + adds, mark["+"]), Run(" "), Run("-" + dels, mark["-"]), Run(" ")];
+  const line  = (l: Md.Line) => runs_wrap([Run(text_clean(l.x), mark[l.s])], w - nw - 7, true).map((r, k) => [Run((k === 0 ? String(l.n) : "").padStart(nw) + " ", DIM), Run((k === 0 ? l.s : " ") + " ", mark[l.s]), ...r]);
   const gap   = [[Run(" ".repeat(nw) + " ⋯", DIM)]];
   const body  = hunks.flatMap((h, k) => [...(k === 0 ? [] : gap), ...h.flatMap(line)]);
   return frame_lines(body, w - 4, DIM, title);
+}
+
+// a diff line's ink, by its mark: kept dim, added in the theme's success
+// (its ansi.add, if set), dropped in its error (ansi.del)
+function diff_marks(): Record<Md.Line["s"], Ink> {
+  const tokens = Draw.draw_tokens();
+  return { " ": DIM, "-": { ...INK, c: Theme.ANSI.del ?? tokens.error }, "+": { ...INK, c: Theme.ANSI.add ?? tokens.success } };
 }
 
 // a read's lines: framed as a diff is, the lines shown in the top edge;
@@ -580,7 +592,7 @@ function span_run(s: Md.Span, ink: Ink): Run {
       return Run("[" + x + "]", { ...ink, b: true, u: true });
     }
     case "Chip": {
-      return Run(x, { ...ink, c: "6" });
+      return Run(x, { ...ink, c: Draw.draw_tokens().accent });
     }
   }
 }
@@ -603,19 +615,27 @@ export function rule(w: number): Line {
 // runs as) and each agent at work (or the shown alone: all false, the
 // side lists them), each mark in its agent's color (illi's own: the
 // brand's; else Draw.draw_agent), the shown bold, then the profile
-// running (tabs_profile), then the pick (cut at the end; the standard
-// speed left out); with agents, the keys that move along them, if they
-// fit
+// running (tabs_profile), then the pick (the standard speed left out),
+// then the plugins' pieces (Plugins.status), all cut at the end; with
+// agents, the keys that move along them, if they fit
 export function tabs_line(v: View.View, w: number, all = true): Line {
   const tabs  = View.view_tabs(v).filter((tab) => all || tab.here).map((tab) => [Run(tab.mark, { ...INK, c: tab.agent === View.MAIN ? Draw.draw_brand() : Draw.draw_agent(tab.agent) }), Run(tab.text.slice(tab.mark.length), tab.here ? { ...INK, b: true } : DIM)]);
   const knobs = View.view_pick(v).map((knob) => knob.text).filter((text) => text !== "");
-  const line  = [...tabs.flatMap((r, k) => (k === 0 ? r : [Run("  "), ...r])), ...tabs_profile(all), ...(knobs.length === 0 ? [] : [Run(" · " + knobs.join(" · "), DIM)])];
+  const plugs = Plugins.status().flatMap((l) => [Run(" · ", DIM), ...pieces_line(l)]);
+  const line  = [...tabs.flatMap((r, k) => (k === 0 ? r : [Run("  "), ...r])), ...tabs_profile(all), ...(knobs.length === 0 ? [] : [Run(" · " + knobs.join(" · "), DIM)]), ...plugs];
   const hint  = [Run("  · Ctrl+PgDn to cycle", DIM)];
   return tabs.length > 1 && line_width([...line, ...hint]) <= w ? [...line, ...hint] : runs_wrap(line, w, true)[0] ?? [];
+}
+
+// a plugin's line as runs: each piece's text cleaned, in its token's
+// color (none: the ink), bold, dim
+export function pieces_line(pieces: Piece[]): Line {
+  const tokens = Draw.draw_tokens();
+  return pieces.map((x) => Run(text_clean(x.text), { ...INK, c: x.tone === undefined ? "" : tokens[x.tone], b: x.bold === true, d: x.dim === true }));
 }
 
 // the profile running, after the last line's tabs, in the accent: none
 // for the default, nor beside the side panel (all false: it lists them)
 export function tabs_profile(all: boolean): Line {
-  return !all || config.PROFILE === DEFAULT ? [] : [Run(" · ", DIM), Run(config.PROFILE, { ...INK, c: Draw.draw_theme().accent ?? "5" })];
+  return !all || config.PROFILE === DEFAULT ? [] : [Run(" · ", DIM), Run(config.PROFILE, { ...INK, c: Draw.draw_tokens().accent })];
 }

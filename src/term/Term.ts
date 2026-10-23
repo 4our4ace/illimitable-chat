@@ -17,7 +17,10 @@
 // folder illi starts in; all they left running dies as illi quits.
 // Started in a project whose chat runs in another terminal, illi is one
 // more view of it (Remote.ts): no chat, agents or MCP servers of its
-// own; as that illi quits, this one runs again and holds the chat. Each
+// own; as that illi quits, this one runs again and holds the chat. The
+// user's plugins (Plugins.ts) load as it starts, before the chat opens,
+// so their hooks see all it does; a project's only in a folder trusted
+// (Trusted.ts). Each
 // profile (Profiles.ts) is its
 // own chat and settings; /profile switches by letting all go, as a quit
 // does, and running illi again, in place, in the one chosen
@@ -44,6 +47,7 @@ import { term_enter, term_grab, term_press, term_type } from "./Keys.ts";
 import { Machine } from "../tools/Machine.ts";
 import { Mcp } from "../tools/Mcp.ts";
 import { Memory } from "../chat/Memory.ts";
+import { Plugins } from "../config/Plugins.ts";
 import { term_note, term_notify, term_unnotify, type Notice } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_restart } from "./ProfileCommands.ts";
@@ -307,6 +311,7 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
   });
   process.stdout.on("resize", () => term_resize(t));
   process.on("exit", () => {
+    Plugins.quit(process.cwd());
     if (chat !== null) {
       Chat.close(chat);
     }
@@ -509,13 +514,15 @@ function term_trouble(t: Term, told: Set<string>): void {
 
 // the chat of the working folder's project opened (its lock taken: one
 // illi a project), on the terminal (its log lines to LOG; a crash said, the
-// terminal left as found: term_crash) or a pipe; the MCP servers started
-// (a failure told: term_trouble); the models ChatGPT lists learned; a new
-// release looked for (term_update). First of all, on a terminal, the
-// folder trusted (Trust.ts): not, illi leaves as it came, saying so. The
-// screen is taken here only on a terminal, for that question; a pipe's
-// is made where the chat's is (term_new), so its input's end, which can
-// come at once, finds Term listening
+// terminal left as found: term_crash) or a pipe; the user's plugins loaded
+// before it (their start told; a project's only in a trusted folder) and
+// given the screen once it is up; the MCP servers started (a failure
+// told: term_trouble); the models ChatGPT lists learned; a new release
+// looked for (term_update). First of all, on a terminal, the folder
+// trusted (Trust.ts): not, illi leaves as it came, saying so. The screen
+// is taken here only on a terminal, for that question; a pipe's is made
+// where the chat's is (term_new), so its input's end, which can come at
+// once, finds Term listening
 export async function term_start(): Promise<void> {
   process.on("uncaughtException", term_crash);
   process.on("unhandledRejection", term_crash);
@@ -538,8 +545,11 @@ export async function term_start(): Promise<void> {
   if (holds) {
     delete process.env.ILLI_REJOIN;
   }
+  await Plugins.load(process.cwd(), (cwd) => Trusted.has(Trusted.folder(cwd)));
+  void Plugins.emit("start", { cwd: process.cwd(), profile: config.PROFILE, chat: holds });
   const chat = holds ? Chat.open(process.cwd()) : null;
   const t = term_new(chat, chat !== null ? () => chat.mem : term_reader(), scr ?? Screen.screen_new(() => {}));
+  Plugins.attach({ note: (text) => term_note(t, text), send: (text) => term_send(t, { $: "say", sizes: [], body: () => new Blob([text]) }), redraw: () => term_draw(t) });
   const told = new Set<string>();
   if (chat !== null) {
     Remote.share(chat);

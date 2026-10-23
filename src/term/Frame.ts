@@ -143,7 +143,7 @@ export function term_draw(t: Term): void {
 // around it, its last line on the lower rule, the input's cursor hidden
 // (at the chat's left; the palette's in the screen's middle, all else
 // dimmed under it); a row with, at the chat's right
-// end, a toast in the theme's blue (its links'); a rule (what runs,
+// end, a toast in the accent; a rule (what runs,
 // while it does), the input, a rule, the pages, the agent
 // and the pick. The notes, however the chat is scrolled, end over the
 // input: the newest in the rule, the one before it, faded, in the row
@@ -195,8 +195,8 @@ export function term_paint(t: Term): void {
   const at    = left > 0 ? 0 : full - side;
   const sides = side === 0 ? [] : term_side(t, sw, tall);
   const sided = term_area(t, { key: "side", lines: sides.map((s) => s[0]), first: 0, row: 1, col: left > 0 ? 1 : at + 2, w: sw, tall: sides.length });
-  const blue  = { ...Paint.INK, c: Draw.draw_theme().link ?? "4" };
-  const toast = box !== null ? [] : [...lead, Paint.Run(" ".repeat(Math.max(1, left + cw - Paint.line_width(lead) - Paint.text_width(said.toast)))), Paint.Run(said.toast, blue)];
+  const lit   = { ...Paint.INK, c: Draw.draw_tokens().accent };
+  const toast = box !== null ? [] : [...lead, Paint.Run(" ".repeat(Math.max(1, left + cw - Paint.line_width(lead) - Paint.text_width(said.toast)))), Paint.Run(said.toast, lit)];
   const lines = [...above, toast, term_rule(t, iw, ruled), ...input.lines, ...(paned ? [] : [Paint.rule(iw)]), Paint.tabs_line(t.v, iw, side === 0)];
   const foot  = term_area(t, { key: "foot", lines, first: 0, row: 1 + tall, col: MARGIN, w: iw, tall: lines.length });
   const head  = term_area(t, { key: "head", lines: [term_head(t, full)], first: 0, row: 0, col: 0, w: full, tall: 1 });
@@ -222,7 +222,7 @@ export function term_paint(t: Term): void {
   if (box !== null) {
     term_over(t, rows, box, top, mid);
   } else if (t.pane === null && t.scroll > 0) {
-    term_jump(t, rows, tall, left + MARGIN, cw, blue);
+    term_jump(t, rows, tall, left + MARGIN, cw, lit);
   }
   t.hover = t.sel?.held ? undefined : term_under(t, t.scr.point);
   term_tabs(t, h - 1, side === 0);
@@ -247,15 +247,15 @@ function term_notes(notes: string[], w: number): Paint.Line[] {
 }
 
 // the jump to the chat's end, floating over its foot (JUMP_UP rows over
-// its last), in its middle: reversed, in the theme's blue, a space clear
+// its last), in its middle: reversed, in the accent, a space clear
 // on each side; a click goes there, as Ctrl+End does. Too narrow: its
 // arrow alone
-function term_jump(t: Term, rows: Screen.Piece[][], tall: number, col: number, w: number, blue: typeof Paint.INK): void {
+function term_jump(t: Term, rows: Screen.Piece[][], tall: number, col: number, w: number, lit: typeof Paint.INK): void {
   const said = JUMP.length + 2 <= w ? JUMP : " ↓ ";
   const bw   = said.length + 2;
   const row  = 1 + Math.max(0, tall - 1 - JUMP_UP);
   const at   = col + Math.max(0, Math.floor((w - bw) / 2));
-  rows[row].push({ col: at, w: bw, line: [Paint.Run(" "), Paint.Run(said, { ...blue, v: true, b: true }), Paint.Run(" ")] });
+  rows[row].push({ col: at, w: bw, line: [Paint.Run(" "), Paint.Run(said, { ...lit, v: true, b: true }), Paint.Run(" ")] });
   term_hit(t, row, at, at + bw, () => (t.scroll = 0));
 }
 
@@ -277,7 +277,7 @@ function term_rule(t: Term, w: number, note?: Paint.Line): Paint.Line {
 // models wrote (once any) and how fast they write now (while they do,
 // unless the tps setting is off), cut to the width
 function term_working(t: Term, doing: View.Doing, w: number, now: number): Paint.Line {
-  const c    = Draw.draw_theme().accent ?? "5";
+  const c    = Draw.draw_tokens().accent;
   const head = [Paint.Run(RULE_HEAD, Paint.DIM), ...term_trace(now - t.since, c, t.scr.canvas), Paint.Run(" "), Paint.Run(doing.verb, { ...Paint.INK, c, b: true })];
   const tail = [term_elapsed(now - t.since), doing.tokens > 0 ? "↓ " + term_tokens(doing.tokens) + " tokens" : "", doing.rate > 0 && config.TPS ? doing.rate + " tok/s" : ""].filter((x) => x !== "").join(" · ");
   const room = w - Paint.line_width(head) - 6;
@@ -357,7 +357,7 @@ function term_tick(t: Term): void {
 // again made Bun's collector run more, not less (each wake allocating
 // next to nothing, it collects again and again, finding nothing)
 function term_traced(t: Term, head: number, was: number): Screen.Piece[] {
-  const c      = Draw.draw_theme().accent ?? "5";
+  const c      = Draw.draw_tokens().accent;
   const cells  = term_trace(head * TRACE, c, t.scr.canvas);
   const before = was < 0 ? [] : term_trace(was * TRACE, c, t.scr.canvas);
   const col    = MARGIN + Paint.text_width(RULE_HEAD);
@@ -599,7 +599,7 @@ function term_paned(t: Term, pane: Pane, w: number, tall: number): [Paint.Line[]
   const body  = pane.lines.slice(pane.scroll, pane.scroll + room);
   const rule  = (said: Paint.Line) => [Paint.Run("─ ", Paint.DIM), ...said, Paint.Run(" " + "─".repeat(Math.max(0, w - 3 - Paint.line_width(said))), Paint.DIM)];
   const keys  = [Paint.Run("Esc", { ...Paint.INK, b: true }), Paint.Run(" close" + (pane.lines.length > room ? " · ↑↓ PgUp PgDn scroll" : "") + " · typing goes back to the chat", Paint.DIM)];
-  const lines = [rule([Paint.Run(pane.title, { ...Paint.INK, b: true, c: Draw.draw_theme().accent ?? "5" })]), ...body.map((l) => [Paint.Run(" "), ...l]), ...Array.from({ length: room - body.length }, (): Paint.Line => []), rule(keys)];
+  const lines = [rule([Paint.Run(pane.title, { ...Paint.INK, b: true, c: Draw.draw_tokens().accent })]), ...body.map((l) => [Paint.Run(" "), ...l]), ...Array.from({ length: room - body.length }, (): Paint.Line => []), rule(keys)];
   const panel = term_off(t.scr.canvas, PANEL);
   const pad   = (l: Paint.Line): Paint.Line => [...l, Paint.Run(" ".repeat(Math.max(0, w - Paint.line_width(l))))];
   return [panel === undefined ? lines : lines.map((l) => pad(l).map((r) => ({ ...r, s: { ...r.s, g: r.s.g || panel } }))), 0];
@@ -622,7 +622,7 @@ function term_paned(t: Term, pane: Pane, w: number, tall: number): [Paint.Line[]
 function term_picker(t: Term, w: number, room: number): { items: Item[]; at?: Screen.Spot } {
   const c     = t.choose!;
   const bold  = { ...Paint.INK, b: true };
-  const lit   = { ...bold, c: Draw.draw_theme().accent ?? "5" };
+  const lit   = { ...bold, c: Draw.draw_tokens().accent };
   const act   = (name: string) => c.here >= 0 && name.startsWith("+ ");
   const wide  = Math.max(...c.names.map((name) => Paint.text_width(name) - (act(name) ? 2 : 0)));
   const glyph = c.ask === null ? GLYPH.find : GLYPH.input;
@@ -694,7 +694,7 @@ function term_about(text: string, w: number): string {
 // most (blank past them). None matching, a note says so
 function term_suggestions(t: Term, sug: Sug, fw: number, room: number): Item[] {
   const w    = fw - 4;
-  const lit  = { ...Paint.INK, c: Draw.draw_theme().accent ?? "5" };
+  const lit  = { ...Paint.INK, c: Draw.draw_tokens().accent };
   const bold = { ...lit, b: true };
   const wide = Math.min(Math.max(0, ...sug.found.map((m) => Paint.text_width(sug.cmds[m.k][0]))), Math.floor(w / 2)) + 4;
   const item = (m: Screen.Match, k: number): Item[] => {

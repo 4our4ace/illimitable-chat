@@ -17,13 +17,27 @@
 // it fills. Code's tokens are in the palette too (SYNTAX). illi's replies
 // and diagrams paint true color, as cellsmith does (Reply.ts, Draw.ts): a
 // cellsmith palette (PALETTE) over the terminal's own background, or, the
-// background untold, the terminal's palette (REPLY). The user's theme
-// (config.THEME, a JSON file) may set any entry of ANSI, GLYPH, TOOL and
-// SYNTAX, the PALETTE, and any of its colors (COLORS); a color that won't
-// do is left out, a glyph's control characters too (theme_check); a file
-// that won't read is told once the screen is up (THEME_TROUBLE):
+// background untold, the terminal's palette (REPLY).
 //
-//     { "ansi": { "block": "7", "ink": "0" }, "glyph": { "input": "❯ " },
+// Every colored part of the screen takes its color from one of a few
+// tokens (TOKENS), never a color of its own, so one change recolors all
+// of a kind alike: the accent (copy buttons, the side's bars, the
+// spinner and the ∞, a pane's title, a list's matches, the profile's
+// name, a pasted text's chip, the text chosen), you (the frame round the
+// user's words: the accent's, unless set), a reply's links, success,
+// warning and error, and the secondary text (dim). Draw.ts makes each
+// one's color (draw_tokens): the accent and the links by the palette, the
+// rest the terminal's own; an accent asked for is the palette's accent
+// and bullets too. The user's theme (config.THEME, a JSON file) may set
+// any entry of ANSI, GLYPH, TOOL and SYNTAX, the PALETTE, any of its
+// colors (COLORS) and any token (its accent the one-word way, `accent`);
+// a plugin's theme goes over the file's (theme_plug), the `accent`
+// setting over both. A color that won't do is left out, a glyph's
+// control characters too (theme_check); a file that won't read is told
+// once the screen is up (THEME_TROUBLE):
+//
+//     { "accent": "#7dcfff", "tokens": { "you": "accent", "dim": "8" },
+//       "ansi": { "block": "7", "ink": "0" }, "glyph": { "input": "❯ " },
 //       "tool": { "shell": "$" }, "syntax": { "keyword": "4" },
 //       "palette": "nord", "colors": { "heading": "#ff9e64" } }
 
@@ -38,8 +52,31 @@ import * as config from "../config/Config.ts";
 // italics
 type Look = { dim: boolean; it: boolean };
 
+// a token: the color every part of the screen of its kind takes (TOKENS)
+export type Token = "accent" | "you" | "link" | "success" | "warning" | "error" | "dim";
+
+// a theme's entries, as read (theme_check)
+type Own = {
+  ansi?   : Record<string, string>;
+  glyph?  : Record<string, string>;
+  tool?   : Record<string, string>;
+  syntax? : Record<string, string>;
+  palette?: string;
+  colors? : Record<string, string>;
+  tokens? : Partial<Record<Token, string>>;
+};
+
 // Constants
 // =========
+
+// the tokens' names
+const NAMES: Token[] = ["accent", "you", "link", "success", "warning", "error", "dim"];
+
+// the colors a token may name, the terminal's own (its palette's
+// indexes), so they read on its background, light or dark; "illi" names
+// illi's aqua too (Draw.ts). The accent setting offers these
+// (config.SETTINGS)
+export const NAMED: Record<string, string> = { red: "1", green: "2", yellow: "3", blue: "4", magenta: "5", cyan: "6" };
 
 // why the user's theme file won't read ("": it does, or there is none),
 // for the screen to say once it is up (Term.ts)
@@ -49,10 +86,18 @@ export let THEME_TROUBLE = "";
 const OWN = theme_read();
 
 // the fill and the text on it ("": a shade of the terminal's background,
-// its own ink; "7", "0": its light gray, its black), a diff's lines ("2":
-// its green, "1": its red), the user's frame, as ANSI palette colors, so
-// they follow the terminal's theme
-export const ANSI: Record<string, string> = { block: "", ink: "", add: "2", del: "1", you: "4", ...OWN.ansi };
+// its own ink; "7", "0": its light gray, its black), as ANSI palette
+// colors, so they follow the terminal's theme; a diff's lines (add, del)
+// and the user's frame (you) if the theme sets them, else their tokens'
+// (success, error, you)
+export const ANSI: Record<string, string | undefined> = { block: "", ink: "", ...OWN.ansi };
+
+// each token's color as the theme asks it: a color, a color's name
+// (NAMED, illi), another token's name (it follows that one), or "" (the
+// accent and links: the palette's; the rest: the terminal's own, its
+// ink, dim its faint). The user's frame is the accent's, unless the
+// theme's ansi sets it (as an older theme does)
+export const TOKENS: Record<Token, string> = { accent: "", you: OWN.ansi?.you ?? "accent", link: "", success: "2", warning: "3", error: "1", dim: "", ...OWN.tokens };
 
 // what a message is, named on its top (a report's frame edge, a note's
 // first line; a result names itself on its frame's edge; a report: its agent's name, else this; a
@@ -162,15 +207,62 @@ export const REPLY: Record<string, string> = {
 
 // the user's colors over the palette's, by slot: #rrggbb, or a palette
 // index ("0"-"255")
-export const COLORS: Record<string, string> = theme_entries(OWN.colors, theme_color);
+const COLORS: Record<string, string> = theme_entries(OWN.colors, theme_color);
+
+// what plugins set over the theme file's (theme_plug): tokens and colors;
+// the changes counted (theme_changes), and the accent setting as last
+// seen
+const PLUGGED: { tokens: Partial<Record<Token, string>>; colors: Record<string, string> } = { tokens: {}, colors: {} };
+let changes = 0;
+let accent  = config.ACCENT;
 
 export function tool_glyph(name: string): string {
   return TOOL[name] ?? TOOL_ANY;
 }
 
+// each token as asked now: the theme file's, a plugin's over them, the
+// accent setting over all (but "auto": the theme's)
+export function theme_tokens(): Record<Token, string> {
+  const set = theme_token(config.ACCENT);
+  return { ...TOKENS, ...PLUGGED.tokens, ...(set === null || set === "auto" || set === "" ? {} : { accent: set }) };
+}
+
+// the user's colors over the palette's, by slot: the theme file's, a
+// plugin's over them
+export function theme_colors(): Record<string, string> {
+  return { ...COLORS, ...PLUGGED.colors };
+}
+
+// a plugin's theme (Plugins.ts) over the file's: its accent, tokens and
+// colors, each checked as the file's are (theme_check); those it leaves
+// out stay as they were
+export function theme_plug(over: unknown): void {
+  const o   = typeof over === "object" && over !== null ? (over as Record<string, unknown>) : {};
+  const own = theme_check({ accent: o.accent, tokens: o.tokens });
+  Object.assign(PLUGGED.tokens, own.tokens);
+  Object.assign(PLUGGED.colors, theme_entries(o.colors, theme_color));
+  changes += 1;
+}
+
+// the theme's changes counted: a plugin's theme, the accent setting
+// changed (config_set). What is drawn in the theme is made anew as the
+// count moves (Draw.draw_stamp)
+export function theme_changes(): number {
+  if (accent !== config.ACCENT) {
+    accent  = config.ACCENT;
+    changes += 1;
+  }
+  return changes;
+}
+
+// whether a value names a token
+export function theme_named(x: string): x is Token {
+  return (NAMES as string[]).includes(x);
+}
+
 // the user's theme file, read once, each entry checked (theme_check);
 // one that won't parse is kept to say (THEME_TROUBLE)
-function theme_read(): { ansi?: Record<string, string>; glyph?: Record<string, string>; tool?: Record<string, string>; syntax?: Record<string, string>; palette?: string; colors?: Record<string, string> } {
+function theme_read(): Own {
   if (!fs.existsSync(config.THEME)) {
     return {};
   }
@@ -185,11 +277,14 @@ function theme_read(): { ansi?: Record<string, string>; glyph?: Record<string, s
 // a theme's entries that will do: colors a palette index ("0"-"255") or
 // #rrggbb ("": the terminal's own, for ANSI's), glyphs and tools' emoji
 // text without control characters (an imported profile's theme could
-// otherwise send the terminal escapes); any other left out
-export function theme_check(own: any): ReturnType<typeof theme_read> {
+// otherwise send the terminal escapes), tokens as theme_token takes them
+// (`accent` alone the accent's, under `tokens` its own); any other left
+// out
+export function theme_check(own: any): Own {
   const text  = (x: unknown) => (typeof x === "string" ? x.replace(/[\x00-\x1f\x7f-\x9f]/g, "") : null);
   const name  = (x: unknown) => (typeof x === "string" ? x : undefined);
   const color = (x: unknown) => (x === "" ? "" : theme_color(x));
+  const asked = { ...(own?.accent === undefined ? {} : { accent: own.accent }), ...(typeof own?.tokens === "object" ? own.tokens : {}) };
   return {
     ansi     : theme_entries(own?.ansi, color),
     glyph    : theme_entries(own?.glyph, text),
@@ -197,7 +292,20 @@ export function theme_check(own: any): ReturnType<typeof theme_read> {
     syntax   : theme_entries(own?.syntax, theme_color),
     palette  : name(own?.palette),
     colors   : own?.colors,
+    tokens   : Object.fromEntries(Object.entries(theme_entries(asked, theme_token)).filter(([k]) => theme_named(k))),
   };
+}
+
+// a token's value as a theme gives it: a color (theme_color), a color's
+// name (NAMED, illi; "auto", the accent setting's own), another token's
+// name, or "" (its default's); names in small letters; null: none of
+// these
+export function theme_token(x: unknown): string | null {
+  if (typeof x !== "string") {
+    return null;
+  }
+  const word = x.trim().toLowerCase();
+  return word === "" || word === "illi" || word === "auto" || word in NAMED || theme_named(word) ? word : theme_color(x.trim());
 }
 
 // a color as a theme gives it: a palette index (0-255) or #rrggbb; null:

@@ -27,6 +27,7 @@
 
 import * as fs from "node:fs";
 import { StringDecoder } from "node:string_decoder";
+import * as Draw from "./Draw.ts";
 import * as Md from "./Md.ts";
 import * as Paint from "./Paint.ts";
 import * as Theme from "./Theme.ts";
@@ -721,9 +722,11 @@ export function screen_input(scr: Screen, w: number, max: number, hint: string, 
   return { lines: text, at: { row: spot.row - top, col: spot.col + mw } };
 }
 
-// a row of the input: its tokens in the palette's cyan, the rest in ink
+// a row of the input: its chips (a pasted text, an image) in the
+// theme's accent, the rest in ink
 function input_runs(row: string, ink: Paint.Run["s"]): Paint.Line {
-  return row.split(TOKEN).map((x, k) => Paint.Run(x, k % 2 === 1 ? { ...ink, c: "6" } : ink)).filter((r) => r.x !== "");
+  const chip = { ...ink, c: Draw.draw_tokens().accent };
+  return row.split(TOKEN).map((x, k) => Paint.Run(x, k % 2 === 1 ? chip : ink)).filter((r) => r.x !== "");
 }
 
 // Ed

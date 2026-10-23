@@ -247,7 +247,7 @@ function term_marked(t: Term, area: Area, k: number): Paint.Line {
   const hex    = (...cs: (string | undefined)[]) => canvas.startsWith("#") && cs.every((c) => c?.startsWith("#"));
   let line     = area.lines[n] ?? [];
   if (span !== null) {
-    const c    = theme.accent;
+    const c    = Draw.draw_tokens().accent;
     const room = Math.min(span[1], area.w) - Paint.line_width(line);
     line = room > 0 ? [...line, Paint.Run(" ".repeat(room))] : line;
     line = Paint.line_mark(line, span[0], span[1], hex(c) ? (s) => ({ ...s, g: term_mix(canvas, c!, SELECT), v: false }) : (s) => ({ ...s, v: !s.v }));

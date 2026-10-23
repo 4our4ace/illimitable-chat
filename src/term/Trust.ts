@@ -113,7 +113,7 @@ export namespace Trust {
   export function rows(asked: Asked, { w, h }: { w: number; h: number }): Screen.Piece[][] {
     const bw     = Math.max(10, Math.min(WIDE, w - 4));
     const bold   = { ...Paint.INK, b: true };
-    const accent = { ...bold, c: Draw.draw_theme().accent ?? "5" };
+    const accent = { ...bold, c: Draw.draw_tokens().accent };
     const wrap   = (runs: Paint.Line) => Paint.runs_wrap(runs, bw, false);
     const option = (text: string, k: number) => [Paint.Run(k === asked.at ? "❯ " : "  ", accent), Paint.Run(text, k === asked.at ? accent : Paint.INK)];
     const lines  = [

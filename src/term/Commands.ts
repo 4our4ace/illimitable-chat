@@ -21,6 +21,7 @@ import { term_redraw } from "./Frame.ts";
 import { term_away, term_clear, term_cycle, term_enter, term_esc, term_next, term_page, term_shots, term_take, term_verbose } from "./Keys.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
 import { Export } from "../chat/Export.ts";
+import { Plugins, type Command as Plugged } from "../config/Plugins.ts";
 import { term_note, term_notify, term_toast, term_unnote, term_unnotify, type Notice } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_palette } from "./Palette.ts";
@@ -64,15 +65,16 @@ export const PICKED: Tally = { file: config.ROOT + "/picked.json", count: null }
 
 // all a person can do here, by group (the editing keys are Screen's);
 // with `custom`, the user's commands and skills too (read anew: never at
-// each key; a command wins a skill's name)
+// each key; a command wins a skill's name), then the plugins' commands
+// (Plugins.ts), but those a command before them names
 export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
   const cmds   = custom ? Custom.commands(process.cwd()) : [];
   const skills = custom ? term_skills(cmds) : [];
-  const yours  = [
+  const mine   = [
     ...cmds.map((c): Cmd => ["/" + c.name + " [...]", "", c.description || "your command (" + c.file + ")", (t, a) => term_custom(t, c, a, "/" + c.name)]),
     ...skills.map((s): Cmd => ["/" + s.name + " [...]", "", (!s.sticky ? "skill: " : config.config_sticky(s.name) ? "sticky skill, on: " : "sticky skill, off: ") + (s.description || s.dir), (t, a) => term_skill(t, s, a, "/" + s.name)]),
   ];
-  return [
+  const groups: [group: string, cmds: Cmd[]][] = [
     ["Chat", [
       ["",                  "Enter",                   "send",                                           term_enter],
       ["",                  "Esc",                     "close a list; else clear the notes, and twice: interrupt illi (agents go on)", term_esc],
@@ -129,12 +131,24 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/projects",         "",                        "your projects, each a git repo with its own chat (outside any: home), this one first: Enter says more, Del forgets one", term_projects],
       ["/profile [name]",   "",                        "switch to that profile (its own chats, on the global setup; one login for all); no name: opens a list to make, rename, export, import or delete one", term_profile],
     ]],
-    ...(yours.length === 0 ? [] : [["Yours", yours] as [string, Cmd[]]]),
   ];
+  const taken = new Set([...groups.flatMap(([, own]) => own), ...mine].map(([use]) => use.split(" ")[0]));
+  const plugs = (custom ? Plugins.commands() : []).filter((c) => !taken.has("/" + c.name)).map((c): Cmd => ["/" + c.name + " [...]", "", c.about || "plugin " + c.plugin + "'s command", (t, a) => term_plugged(t, c, a)]);
+  const yours = [...mine, ...plugs];
+  return [...groups, ...(yours.length === 0 ? [] : [["Yours", yours] as [string, Cmd[]]])];
 }
 
 export function term_commands(custom = false): Cmd[] {
   return term_groups(custom).flatMap(([, cmds]) => cmds);
+}
+
+// a plugin's command, on the words after its name: what it answers, a
+// note
+async function term_plugged(t: Term, cmd: Plugged, arg: string): Promise<void> {
+  const said = await cmd.run(arg);
+  if (said !== "") {
+    term_note(t, said);
+  }
 }
 
 // a command (`/name arg`): runs it (pending while it works on), counted

@@ -1,7 +1,7 @@
 // Notices
 // =======
 // Everything the terminal tells the person for a while, one list with one
-// clock: a toast (one line at the chat's right end, in the theme's blue:
+// clock: a toast (one line at the chat's right end, in the accent:
 // a copy, Ctrl+C's quit hint; a new one takes the last one's place) or a
 // note (in the rule over the input: what a command did, what was
 // refused). Every one goes by itself once its time is up: a toast's

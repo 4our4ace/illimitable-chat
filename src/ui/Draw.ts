@@ -18,6 +18,16 @@
 // code is drawn (Prism alone takes tens of ms), so a start
 // that shows neither never loads them.
 //
+// The theme's tokens (Theme.TOKENS) are made here, as they take the
+// palette's colors (draw_tokens): the accent its accent (untold, the
+// terminal's magenta), the links its links (blue), the rest as the theme
+// asks; a token naming another takes that one's. An accent asked for (the
+// setting, the theme's, a plugin's) is the palette's accent and bullets
+// too, so a reply's buttons, quotes and lists follow it; links asked
+// for, its links. All of it is made once per look (draw_stamp: the
+// background told, the theme changed), so a new accent recolors all at
+// once.
+//
 // An agent's mark has a color of its own (draw_agent): illi's is the
 // brand's; another's, the one its file pins, else one made for it as the
 // agents are read, from its name and theirs, so it holds while they do.
@@ -79,9 +89,17 @@ const SHELL  = /(#.*)|('[^']*'?|"(?:\\.|[^"\\])*"?)|(--?\w[\w-]*)|(\|\||&&|[|;&]
 // Draw
 // ====
 
-// the terminal's background (#rrggbb), once told; the palette drawn in
+// the terminal's background (#rrggbb), once told; the palette drawn in,
+// at the look it was made at
 let canvas: string | null = null;
-let palette: { key: string; colors: PelePalette } | null = null;
+let palette: { key: string; colors: PelePalette; look: number } | null = null;
+
+// the look: counted up as the colors change (draw_stamp), with what it
+// was made of (the background, the theme's changes); the theme made for
+// it (draw_made: a reply's palette, each token's color)
+let look = 0;
+let looked: { canvas: string | null; theme: number } = { canvas: null, theme: 0 };
+let made: { look: number; theme: Record<string, string>; tokens: Record<Theme.Token, string> } | null = null;
 
 // what draws a diagram, and Prism, each loaded as it is first needed
 let art: Art | null = null;
@@ -100,8 +118,19 @@ const HUED    = new Map<string, string>();
 
 // the terminal's background, as told: the palette made anew
 export function draw_canvas(hex: string): void {
-  canvas  = hex;
-  palette = null;
+  canvas = hex;
+}
+
+// the look now: counted up as the background is told or the theme
+// changes (Theme.theme_changes: a plugin's, the accent setting), so what
+// was drawn in the old one is made anew (Paint.ts lays rows out again)
+export function draw_stamp(): number {
+  const theme = Theme.theme_changes();
+  if (looked.canvas !== canvas || looked.theme !== theme) {
+    looked = { canvas, theme };
+    look  += 1;
+  }
+  return look;
 }
 
 // a diagram's rows, at most w wide; null: it can't be drawn
@@ -116,15 +145,17 @@ export function draw_diagram(source: string, w: number): Cell[][] | null {
   });
 }
 
-// the palette: the one named, or by the background (auto); its key
+// the palette: the one named, or by the background (auto), the theme's
+// true colors over it (draw_theme: the user's, the accent's); its key
 function draw_palette(): { key: string; colors: PelePalette } {
-  if (palette !== null) {
+  const now = draw_stamp();
+  if (palette !== null && palette.look === now) {
     return palette;
   }
-  const name = draw_name();
-  const own    = Object.fromEntries(Object.entries(Theme.COLORS).filter(([, c]) => c.startsWith("#")));
+  const name   = draw_name();
+  const own    = Object.fromEntries(Object.entries(draw_theme()).filter(([, c]) => c.startsWith("#")));
   const colors = draw_colors({ ...PRESETS[name], ...own }, canvas ?? CANVAS[name]);
-  palette = { key: JSON.stringify(colors), colors };
+  palette = { key: JSON.stringify(colors), colors, look: now };
   return palette;
 }
 
@@ -144,10 +175,68 @@ function draw_name(): keyof typeof PRESETS {
 }
 
 // a reply's colors by cellsmith's slots (Reply.ts): the palette's, or the
-// terminal's own (Theme.REPLY) while "auto" is untold; the user's over them
+// terminal's own (Theme.REPLY) while "auto" is untold; the user's over
+// them; an accent or links asked for over theirs (draw_made)
 export function draw_theme(): Record<string, string> {
+  return draw_made().theme;
+}
+
+// each token's color now (Theme.TOKENS), as draw_made makes it: a
+// palette's #rrggbb, an ANSI palette index, or "" (the terminal's own:
+// its ink; dim, its faint)
+export function draw_tokens(): Record<Theme.Token, string> {
+  return draw_made().tokens;
+}
+
+// the palette's own slots, the user's colors over them (theme.json's, a
+// plugin's): the theme before its tokens
+function draw_own(): Record<string, string> {
   const name = draw_name();
-  return { ...(name === "mono" && !(Theme.PALETTE in PRESETS) ? Theme.REPLY : (PRESETS[name] as Record<string, string>)), ...Theme.COLORS };
+  return { ...(name === "mono" && !(Theme.PALETTE in PRESETS) ? Theme.REPLY : (PRESETS[name] as Record<string, string>)), ...Theme.theme_colors() };
+}
+
+// the theme for the look now, made once per look: each token's color
+// (draw_token), and a reply's palette: the theme's own, an accent asked
+// for in its accent and bullets, links asked for in its links (but where
+// the user's colors name those slots)
+function draw_made(): { theme: Record<string, string>; tokens: Record<Theme.Token, string> } {
+  const now = draw_stamp();
+  if (made !== null && made.look === now) {
+    return made;
+  }
+  const own    = draw_own();
+  const asked  = Theme.theme_tokens();
+  const colors = Theme.theme_colors();
+  const tokens = Object.fromEntries((Object.keys(asked) as Theme.Token[]).map((t) => [t, draw_token(t, asked, own, [])])) as Record<Theme.Token, string>;
+  const theme  = { ...own };
+  for (const [t, slots] of [["link", ["link"]], ["accent", ["accent", "bullet"]]] as const) {
+    for (const slot of draw_asked(asked[t]) ? slots.filter((x) => !(x in colors)) : []) {
+      theme[slot] = tokens[t];
+    }
+  }
+  made = { look: now, theme, tokens };
+  return made;
+}
+
+// whether a token's value asks for a color ("", auto: its default)
+function draw_asked(value: string): boolean {
+  return value !== "" && value !== "auto";
+}
+
+// a token's color: the one it asks for (a color; a color's name, the
+// terminal's own; illi, the brand's; another token's name, that one's,
+// a loop of them none), else its default: the accent and links the
+// theme's own (the palette's, the user's colors over it; none: the
+// terminal's magenta and blue), the rest none
+function draw_token(t: Theme.Token, asked: Record<Theme.Token, string>, own: Record<string, string>, seen: Theme.Token[]): string {
+  const value = asked[t];
+  if (Theme.theme_named(value)) {
+    return seen.includes(value) || value === t ? "" : draw_token(value, asked, own, [...seen, t]);
+  }
+  if (draw_asked(value)) {
+    return value === "illi" ? draw_brand() : Theme.NAMED[value] ?? value;
+  }
+  return t === "accent" ? own.accent ?? "5" : t === "link" ? own.link ?? "4" : "";
 }
 
 // the brand's color (BRAND), as the background has it
@@ -235,9 +324,10 @@ function draw_oklch(l: number, c: number, h: number): string {
 }
 
 // the colors to draw in: the palette's on a dark background or a light
-// one, else the terminal's own
+// one, else the terminal's own (the theme's own accent tells which: one
+// asked for never does)
 function draw_tone(): "dark" | "light" | "own" {
-  return !draw_theme().accent?.startsWith("#") ? "own" : draw_dark(canvas ?? CANVAS[draw_name()]) ? "dark" : "light";
+  return !draw_own().accent?.startsWith("#") ? "own" : draw_dark(canvas ?? CANVAS[draw_name()]) ? "dark" : "light";
 }
 
 // whether a background is dark: its luminance under half

@@ -17,6 +17,8 @@
 // message of the user's own leaves it, to send too, in the same turn), a
 // restart between kept (it is saved with the chat's state). /compact
 // takes the turn's place while illi writes its recap (Chat.compact).
+// The user's plugins are told each turn's start and end and each message
+// logged (Plugins.emit), never waited for.
 
 import * as fs from "node:fs";
 import { AskAI, type Call, type End, type Event, type Kind } from "../ai/AskAI.ts";
@@ -28,6 +30,7 @@ import { Logs } from "./Logs.ts";
 import { Suggest, type Suggested } from "./Suggest.ts";
 import { Memory, TOKEN, type Root, type Share } from "./Memory.ts";
 import { Pick } from "../ai/Pick.ts";
+import { Plugins } from "../config/Plugins.ts";
 import { Projects } from "./Projects.ts";
 import { MASTER, SEARCHES, Tools, type Agent, type Live, type Reply } from "../tools/Tools.ts";
 import { ANSWERED, COMPACTING, IMAGES, live_push, SUMMARIES, TURN, type Answer, type Link, type Part, type Pipe, type Question, type Server as Out, type Wait } from "../ui/View.ts";
@@ -350,9 +353,11 @@ export namespace Chat {
   // ends answered lets the suggested reply go (counted unused if the user
   // passed it over; one still being asked, stopped) and asks for the
   // next. The messages sent as a stopped one wound down start a new one.
-  // A to-do list all done goes as it starts and ends (Tools.todo_finished)
+  // A to-do list all done goes as it starts and ends (Tools.todo_finished).
+  // The plugins are told it starts and ends (why it stopped, if it did)
   export async function turn(chat: Chat): Promise<void> {
     chat.busy = true;
+    void Plugins.emit("turn.start", { cwd: chat.tools.cwd });
     Tools.todo_finished(chat.tools);
     try {
       let go = true;
@@ -374,6 +379,7 @@ export namespace Chat {
       Tools.todo_finished(chat.tools);
       Chat.live(chat, null, []);
       Chat.after(chat);
+      void Plugins.emit("turn.end", { cwd: chat.tools.cwd, stopped: why });
       const answered = why === null && chat.suggest.due;
       if (answered) {
         chat.suggest.unused += chat.suggest.passed ? 1 : 0;
@@ -549,13 +555,15 @@ export namespace Chat {
     Chat.hold(chat, () => Chat.push(chat, null, "note", text));
   }
 
-  // to the chat (in pages), or an agent's log; each told to every view. A
-  // main agent switch not noted yet is noted first, an entry of its own
-  // just before the message (the turn gets it among the recent ones)
+  // to the chat (in pages), or an agent's log; each told to every view,
+  // and to the plugins. A main agent switch not noted yet is noted first,
+  // an entry of its own just before the message (the turn gets it among
+  // the recent ones)
   export function push(chat: Chat, agent: Agent | null, kind: Kind, text: string, images: string[] = []): Msg {
     if (agent !== null) {
       const id = Logs.push(chat.mem, agent.name, kind, text);
       Chat.all(chat, { $: "entry", agent: agent.name, id, kind, text });
+      void Plugins.emit("message", { id, kind, text, agent: agent.name });
       return { id, end: id + 1 };
     }
     const note = chat.switched ? [{ kind: "note" as Kind, text: Chat.switch_note(chat) }] : [];
@@ -567,11 +575,12 @@ export namespace Chat {
   }
 
   // messages logged as they are (no switch noted first: a recap's, which
-  // the note follows), each told to every view
+  // the note follows), each told to every view and to the plugins
   export function logged(chat: Chat, msgs: Array<{ kind: Kind; text: string; images?: string[] }>): Root[] {
     const roots = Memory.push(chat.mem, msgs);
     for (const { i, kind, text, date, images } of roots) {
       Chat.all(chat, { $: "entry", id: i, kind, text, date, images });
+      void Plugins.emit("message", { id: i, kind, text, agent: null });
     }
     return roots;
   }
