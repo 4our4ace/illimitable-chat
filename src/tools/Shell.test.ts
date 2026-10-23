@@ -3,8 +3,9 @@
 // `bun test Shell.test.ts`. A command reads as bash reads it: every
 // simple command found wherever it sits (lists, pipelines, subshells,
 // substitutions, heredoc bodies, loops, bash -c, eval, trap, watch, find
-// -exec), wrappers taken off, cd followed, variables and braces expanded
-// as far as known (an unquoted one split and globbed as bash would),
+// -exec, flock), wrappers taken off, cd followed, variables, braces and
+// the folder's own outputs ($(pwd)) expanded as far as known (an
+// unquoted one split and globbed as bash would; a [ without its ] not),
 // redirections with their descriptors and whether the text they feed is
 // made as it runs; what bash would read in a way this can't follow is
 // refused with why, never guessed. Then bash itself, told to list the
@@ -18,7 +19,8 @@ import * as os from "node:os";
 import { Shell, type Part } from "./Shell.ts";
 
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-shell-");
-afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
+const REPO = fs.mkdtempSync(os.tmpdir() + "/illi-shell-repo-");
+afterAll(() => [DIR, REPO].forEach((d) => fs.rmSync(d, { recursive: true, force: true })));
 
 // a part as a line: its program, its words' values (~: known only as it
 // runs, then its known head; *: a glob; |: several values), its folder,
@@ -89,6 +91,19 @@ test("words expand as far as known: variables, loops, tildes, braces; globs and 
   expect(parts("echo $'\\x72m' \"a$HOME\"")).toEqual(["echo rm a" + HOME + " @/w"]);
   expect(parts("x=\"rm -rf src\"; $x; \"$x\"; y=$x")).toEqual(["x=rm -rf src @/w", "~ @/w", "rm -rf src @/w", "y=rm -rf src @/w"]);
   expect(parts("g='*.ts'; ls $g \"$g\"")).toEqual(["g=*.ts @/w", "ls **.ts *.ts @/w"]);
+});
+
+test("a [ without its ] is itself, not a glob; $(pwd) and $(git rev-parse --show-toplevel) are the folder while known; flock runs its command", () => {
+  expect(parts("[ -f a ] && ls x[ab] [c")).toEqual(["[ -f a ] @/w", "ls *x[ab] [c @/w"]);
+  expect(parts("echo $(pwd)/x `pwd -P`; cd $X; echo $(pwd)")).toEqual(["pwd @/w", "pwd -P @/w", "echo /w/x /w @/w", "cd ~ @/w", "pwd @null", "echo ~ @null"]);
+  fs.mkdirSync(REPO + "/sub/deep", { recursive: true });
+  fs.mkdirSync(REPO + "/sub/.git");
+  const top = (command: string) => (Shell.parse(command, REPO + "/sub/deep") as Part[]).at(-1)!.argv.map((w) => (w.dynamic ? "~" : w.alts[0]));
+  expect(top("rm -rf \"$(git rev-parse --show-toplevel)/dist\"")).toEqual(["rm", "-rf", REPO + "/sub/dist"]);
+  expect(top("PATH=/x; rm -rf \"$(git rev-parse --show-toplevel)/dist\"")).toEqual(["rm", "-rf", "~"]);
+  expect(top("source env.sh; echo $(pwd)")).toEqual(["echo", "~"]);
+  expect(parts("flock -n /tmp/l rm x; flock -w 5 /tmp/l -c 'cd /tmp && ls'")).toEqual(["rm x @/w", "cd /tmp @/w", "ls @/tmp"]);
+  expect(parts("flock --bogus /tmp/l rm x")).toBe("flock --bogus: an option illi doesn't know");
 });
 
 test("redirections keep the descriptor written before them; fed text made as it runs is marked", () => {

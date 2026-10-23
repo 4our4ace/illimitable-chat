@@ -39,9 +39,11 @@ What is asked about
 
 A shell command is read as bash reads it: each command in it, wherever
 it sits (pipes, `&&`, subshells, `$(...)`, heredocs, `bash -c`, `eval`,
-`xargs`, `find -exec`), wrappers such as `sudo`, `timeout` and `env`
-taken off, `cd` followed, variables filled in where known. The shell
-tool runs bash, so what illi reads is what runs. Each command is asked
+`xargs`, `find -exec`), wrappers such as `sudo`, `timeout`, `env` and
+`flock` taken off, `cd` followed, variables filled in where known (and
+`$(pwd)`, `$(git rev-parse --show-toplevel)`: the folder). A program on
+your `PATH` named by its path (`~/.cargo/bin/cargo`) is that program.
+The shell tool runs bash, so what illi reads is what runs. Each command is asked
 about when it:
 
 - runs as root (`sudo`, `doas`), wipes disks, or changes a whole tree's
@@ -64,7 +66,7 @@ about when it:
   runs inline code that starts programs, changes files, reaches the
   network or reads a secret (`python -c`, `perl -e`, `node -p`)
 - runs a command given in its words or options, which illi doesn't read
-  (`flock`, `strace`, `parallel`, `tmux new`, `fd -x`,
+  (`strace`, `parallel`, `tmux new`, `fd -x`,
   `tar --to-command`, `git rebase -x`, `rsync -e`)
 - runs a program or script from outside the project (`bash /tmp/x.sh`,
   `make -f /tmp/x.mk`; a loaded plugin's own run as the project's), or
