@@ -20,7 +20,7 @@ import { term_note, term_toast, term_unnote } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { popup_form_wheel, popup_held, popup_mouse, popup_page, popup_wheel, term_popup } from "./Popup.ts";
 import * as Screen from "../ui/Screen.ts";
-import { term_copied, term_hover, term_mouse, term_selected, term_under } from "./Select.ts";
+import { term_copied, term_hover, term_mouse, term_selected, term_target } from "./Select.ts";
 import { term_act, term_primaries, term_quit, type Chooser, type Cmd, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
@@ -243,25 +243,34 @@ export function term_type(t: Term, text: string): boolean {
 }
 
 // a click (never under a popup, nor on the commands suggested: Popup.ts
-// has those): what was drawn there does its own (the side, the tabs, a
-// reply's button copies); in the chat, a run of work opens or closes, a
-// block opens, an open one's top edge shuts it
+// has those), on what's under it (Select.ts term_target): what was drawn
+// there does its own (the side, the tabs, the jump, a reply's button
+// copies); in the chat, a run of work's head or its bar opens or closes
+// the whole run; inside an open one, a message folds to a line, or
+// unfolds; a block opens, and an open one shuts from any line of its
+// frame (the innermost thing holding the line acts)
 export function term_click(t: Term): void {
-  const { row, col } = t.scr.click;
-  const hit  = t.hits.find((h) => h.row === row && col >= h.col && col < h.to);
-  const s    = t.seen;
-  const line = s.first + row - s.row;
-  const mark = row >= s.row && row < s.row + s.tall && col >= s.col && col < s.end ? s.marks.find((m) => m.from <= line && line < m.to && m.fold === undefined) : undefined;
-  const copy = term_under(t, t.scr.click);
-  if (hit !== undefined) {
-    hit.run();
-  } else if (copy !== undefined) {
-    term_copied(t, copy());
-  } else if (t.pane === null && mark?.act === true) {
-    View.view_toggle(t.v, mark.id);
+  const aim = term_target(t, t.scr.click);
+  if (aim.$ === "hit") {
+    aim.hit.run();
+  } else if (aim.$ === "copy") {
+    term_copied(t, aim.copy());
+  } else if (aim.$ === "mark") {
+    term_fold(t, aim.mark);
+  }
+}
+
+// a mark acted on by a click: a run of work (or a recap) opened or
+// closed, a message in one folded or unfolded, a block opened or shut
+function term_fold(t: Term, m: Paint.Mark): void {
+  if (m.act === true) {
+    View.view_toggle(t.v, m.id);
     t.ver += 1;
-  } else if (t.pane === null && mark !== undefined) {
-    term_act(t, { $: mark.open ? "Shut" : "Open", id: mark.id, n: mark.n });
+  } else if (m.fold === true) {
+    View.view_fold(t.v, m.key);
+    t.ver += 1;
+  } else {
+    term_act(t, { $: m.open ? "Shut" : "Open", id: m.id, n: m.n });
   }
 }
 
