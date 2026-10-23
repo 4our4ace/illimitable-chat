@@ -148,14 +148,18 @@ const NO_ANSWER  = "No one is at illi's screen to answer: decide yourself, or as
 // the context made this much smaller, when the request itself was too
 // long; the most refits in a row; the note the turn goes on from (#: the
 // model; an account found to take less of its window: CAPPED_NOTE, #
-// that window, $ the model), the one it ends with
+// that window, $ the model), its last words (GO_ON) the user's instead
+// with autocontinue off (STAY), the turn ending there; the one it ends
+// with
 const FIT        = 0.8;
 const REFITS     = 3;
 // how far within a model's whole window a refusal must come to teach
 // that the account takes only its standard one (Chat.capped)
 const CAPPED     = 0.75;
-const REFIT      = "The chat outgrew #'s window: more of it is summarized now, each summary a zoom away. Go on where you were.";
-const CAPPED_NOTE = "This ChatGPT account takes at most # of $'s window, kept from now on: more of the chat is summarized now, each summary a zoom away. Go on where you were.";
+const GO_ON      = "Go on where you were.";
+const STAY       = "Send a message to go on (autocontinue is off).";
+const REFIT      = "The chat outgrew #'s window: more of it is summarized now, each summary a zoom away. " + GO_ON;
+const CAPPED_NOTE = "This ChatGPT account takes at most # of $'s window, kept from now on: more of the chat is summarized now, each summary a zoom away. " + GO_ON;
 const NO_FIT     = "No reply: the chat won't fit #'s window even summarized. /clear starts a new topic (the chat before it is kept, not sent), or /model picks a model with a bigger window.";
 
 // the most turns hooks may make go on in a row, with no message of the
@@ -709,7 +713,9 @@ export namespace Chat {
   // told), a turn's share made FIT smaller; either way a note says so,
   // and the turn goes on from it, the chat as it now is, more of it as
   // summary lines (Chat.cut moves on); why: the note it goes on from.
-  // Past REFITS in a row, the turn ends, saying why. false: the turn ends
+  // Past REFITS in a row, the turn ends, saying why; with autocontinue
+  // off, it ends at once, the note saying a message goes on, and the
+  // next turn sends the chat fitted as here. false: the turn ends
   export function refit(chat: Chat, shrink: boolean, why = REFIT.replace("#", chat.model)): boolean {
     chat.refits += 1;
     if (chat.refits > REFITS) {
@@ -718,6 +724,11 @@ export namespace Chat {
       return false;
     }
     chat.fit *= shrink ? FIT : 1;
+    if (!config.AUTOCONTINUE) {
+      chat.refits = 0;
+      Chat.note(chat, why.replace(GO_ON, STAY));
+      return false;
+    }
     Chat.hold(chat, () => Chat.take(chat, Chat.push(chat, null, "note", why)));
     return true;
   }

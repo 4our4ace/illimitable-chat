@@ -98,6 +98,7 @@ const TABLE = {
   shortcuts  : { def: "", values: "text", now: true, what: "the keys after the leader, as JSON", none: "illi's own" },
   autocompact : { def: "60%", values: ["40%", "50%", "60%", "70%"], now: true, what: "chat sent before older messages fold, of the model's window", shape: [/^(\d+(\.\d+)?k?|\d+(\.\d+)?%)$/i, "a share of the window (60%) or tokens (400000, 400k)"] },
   autocompacts: { def: "", values: "text", now: true, what: "auto compact by model, as JSON" },
+  autocontinue: { def: "on", values: ["on", "off"], now: true, what: "a turn going on by itself when its chat outgrows the window", shape: ON_OFF },
   rules      : { def: config_own("RULES.md"), values: "text", now: true, what: "your rules, every project", path: true },
   after      : { def: "", values: "text", now: true, what: "a command after each turn" },
   off        : { def: "", values: "text", now: true, what: "skills, agents, commands, MCP servers, plugins (or a plugin's part, as plugin:name) and hooks.json turned off", none: "none" },
@@ -195,6 +196,11 @@ export let TPS        = true;
 // the terminal's title (Frame.ts term_title): on, unless off (or false,
 // 0)
 export let TITLE      = true;
+
+// a turn whose chat outgrew its model's window mid-run going on by
+// itself, more of the chat summarized (Chat.refit): on, unless off (or
+// false, 0), when it ends, saying so, till the user's next message
+export let AUTOCONTINUE = true;
 
 // the status line (Status.ts): a shell command of the user's drawing rows
 // at the screen's foot, the spaces before each, how often it runs again
@@ -430,6 +436,7 @@ function config_live(): void {
   SUGGEST     = !OFFS.includes(String(config_value("suggest")).trim().toLowerCase());
   TPS         = !OFFS.includes(String(config_value("tps")).trim().toLowerCase());
   TITLE       = !OFFS.includes(String(config_value("title")).trim().toLowerCase());
+  AUTOCONTINUE = !OFFS.includes(String(config_value("autocontinue")).trim().toLowerCase());
   STATUSLINE  = config_statusline(config_raw("statusline"));
   SIDE        = config_value("side");
   SIDE_WIDTH  = config_value("side_width");
