@@ -10,7 +10,10 @@
 // fails refusing it) and its output changed by tool.after. Their
 // tools, commands, side lines and pieces of the bottom line are given;
 // a maker that fails is dropped, said once. The types for authors name
-// every hook and member, and the sample plugin loads.
+// every hook and member, and the sample plugin loads. The run's context,
+// a message's check and a turn's end take each hook's say, whose; a
+// later hook's change to a call takes an earlier allow back; the quit is
+// told once, with why, and waited for.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -161,4 +164,31 @@ test("a trusted project's plugins load after the rest; an unknown hook refuses t
   expect(Plugins.found().map((p) => p.name)).toEqual(["a", "b", "broken", "skipped", "c", "dup", "project", "wrong"]);
   expect(seen).toContain("project:load");
   expect(Plugins.found().find((p) => p.name === "wrong")!.runs).toBe(false);
+});
+
+test("context, a message's check, a turn's end and a quit: each hook's say, whose; an allow taken back by a later hook's change; the quit told once, with why, waited for", async () => {
+  Plugins.reset();
+  const quits: string[] = [];
+  Plugins.own("one", "", "the plugin one", [
+    { hook: "context", run: () => ({ context: "on main" }) },
+    { hook: "message.before", run: (ev: any) => (ev.text === "no" ? { block: "" } : { context: "it's Friday" }) },
+    { hook: "turn.stop", run: (ev: any) => (ev.again ? undefined : { continue: "  " }) },
+    { hook: "tool.before", run: (call: any) => ({ allow: true, context: "one saw " + call.input.command }) },
+    { hook: "quit", run: async (ev: any) => (await new Promise((done) => setTimeout(done, 50)), quits.push(ev.reason)) },
+  ]);
+  Plugins.own("two", "", "the plugin two", [
+    { hook: "context", run: () => undefined },
+    { hook: "tool.before", run: (call: any) => (call.input.command === "make" ? { input: { command: "make all" } } : undefined) },
+  ]);
+  expect(await Plugins.context({ cwd: REPO })).toEqual(["From the plugin one:\non main"]);
+  expect(await Plugins.before_message({ text: "no", cwd: REPO })).toEqual({ block: "The plugin one kept your message back." });
+  expect(await Plugins.before_message({ text: "hi", cwd: REPO })).toEqual({ context: ["From the plugin one:\nit's Friday"] });
+  expect(await Plugins.before_stop({ cwd: REPO, again: false, reply: "done" })).toBe("From the plugin one:\nGo on.");
+  expect(await Plugins.before_stop({ cwd: REPO, again: true, reply: "done" })).toBeNull();
+  expect(await Plugins.before_tool({ tool: "shell", input: { command: "ls" }, agent: null, cwd: REPO })).toEqual({ input: { command: "ls" }, allow: true, context: ["From the plugin one:\none saw ls"] });
+  expect(await Plugins.before_tool({ tool: "shell", input: { command: "make" }, agent: null, cwd: REPO })).toEqual({ input: { command: "make all" }, context: ["From the plugin one:\none saw make"] });
+  await Plugins.quit(REPO, "prompt_input_exit");
+  expect(quits).toEqual(["prompt_input_exit"]);
+  await Plugins.quit(REPO, "other");
+  expect(quits).toEqual(["prompt_input_exit"]);
 });

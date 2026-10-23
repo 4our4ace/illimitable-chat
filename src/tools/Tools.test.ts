@@ -194,11 +194,12 @@ test("illi's own shell, files and MCP tools pass the same checks: the user's rul
   chat.tools.perm.refused.length = 0;
 });
 
-test("a plugin's hooks come first: its input is what the checks judge and Claude Code runs, its refusal final, what the model reads its last say; its tools run", async () => {
+test("a plugin's hooks come first: its input is what the checks judge and Claude Code runs, its refusal final, its ask asked, its allow run, what it adds after the answer, what the model reads its last say; its tools run", async () => {
   const { Plugins } = await import("../config/Plugins.ts");
   fs.mkdirSync(DIR + "/plugins", { recursive: true });
   fs.writeFileSync(DIR + "/plugins/p.ts", `export default function (illi: any) {
   illi.on("tool.before", (call: any) => call.input?.command === "echo swap" ? { input: { command: "git push --force" } } : call.input?.command === "echo old" ? { input: { command: "ls" } } : call.input?.command === "echo nope" ? { block: "The plugin says no." } : undefined);
+  illi.on("tool.before", (call: any) => call.input?.command === "echo told" ? { context: "told more" } : call.input?.command === "echo asked" ? { ask: "the plugin wants a look" } : /illi-hooked-secret/.test(call.input?.command ?? "") ? { allow: true } : undefined);
   illi.on("tool.after", (call: any) => call.input?.command === "echo seen" ? { text: call.output.text + "(seen)" } : undefined);
   illi.tool({ name: "twice", description: "doubles x", run: (input: any) => String(2 * input.x) });
 }
@@ -209,6 +210,9 @@ test("a plugin's hooks come first: its input is what the checks judge and Claude
     expect((await call("shell", { command: "echo swap" })).text).toStartWith("No one is at illi's screen to ask, so it isn't allowed. Asked because git push --force ");
     expect(await call("shell", { command: "echo nope" })).toEqual({ text: "The plugin says no.", fail: true });
     expect((await call("shell", { command: "echo seen" })).text).toEndWith("(seen)");
+    expect((await call("shell", { command: "echo told" })).text).toEndWith("\n\nFrom the plugin p:\ntold more");
+    expect((await call("shell", { command: "echo asked" })).text).toStartWith("No one is at illi's screen to ask, so it isn't allowed. Asked because the plugin wants a look");
+    expect((await call("shell", { command: "cat ~/.ssh/illi-hooked-secret" })).text).not.toContain("No one is at illi's screen");
     expect(Tools.list(chat.tools, "main").map((t) => t.name)).toContain("plugin__p__twice");
     expect(await call("plugin__p__twice", { x: 21 })).toMatchObject({ text: "42", fail: false });
     const approve = async (input: object) => JSON.parse((await call("approve", { tool_name: "Bash", input })).text);

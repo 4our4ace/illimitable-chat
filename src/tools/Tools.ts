@@ -28,14 +28,16 @@
 // tools: it gets the tools Claude Code lacks (a `lean` list: no shell or
 // files), and prompts that say it works inside illi (Tools.hosted), the
 // project's CLAUDE.md left to Claude Code, which reads it itself.
-// Every call goes first to the user's plugins (Plugins.before_tool: they
-// may refuse it or change its input), then, for shell, read, write, edit
-// or an MCP tool, and as Claude Code asks leave for one of its own
-// (approve), it is judged on that input (Tools.guard: Guard.ts, by the
-// user's rules and grants in Permissions.ts and the mode): run, asked
-// about with why, or refused, each refusal recorded for the side panel
-// and /permissions; what it answers goes to the plugins last
-// (after_tool). The plugins' own tools are theirs to run (plugin__...).
+// Every call goes first to the user's plugins and hooks
+// (Plugins.before_tool: they may refuse it, change its input, allow it,
+// have it asked or add to what the model reads after it), then, for
+// shell, read, write, edit or an MCP tool, and as Claude Code asks leave
+// for one of its own (approve), it is judged on that input (Tools.guard: Guard.ts, by the user's rules and grants in
+// Permissions.ts and the mode; one a hook allowed as yolo mode would,
+// one it asks about asked whatever): run, asked about with why, or
+// refused, each refusal recorded for the side panel and /permissions;
+// what a call that ran answers goes to the plugins last (after_tool).
+// The plugins' own tools are theirs to run (plugin__...).
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -510,8 +512,10 @@ export namespace Tools {
     return Custom.allow(Custom.agent(tools.cwd, tools.agents.get(who)?.role.agent ?? null), [...OWN, ...here, ...user]);
   }
 
-  // a call, past the plugins' hooks (approve: Claude Code's, which judges
-  // its own)
+  // a call, past the plugins' hooks, then judged (Tools.guard: illi's own
+  // tools run, unless a hook asks of them), run, its answer past the
+  // plugins' hooks again, then what the first hooks added for the model
+  // after it (approve: Claude Code's, which judges its own)
   export async function call(tools: Tools, who: string, name: string, args: any, signal: AbortSignal): Promise<Out> {
     if (name === "approve") {
       return Tools.approve(tools, who, String(args.tool_name ?? ""), args.input ?? {}, signal);
@@ -521,11 +525,17 @@ export namespace Tools {
     if ("block" in told) {
       return { text: told.block, fail: true };
     }
-    return Plugins.after_tool({ ...call, input: told.input }, await Tools.handle(tools, who, name, told.input as any, signal));
+    const stop = await Tools.guard(tools, who, name, told.input, signal, undefined, told);
+    if (stop !== null) {
+      return stop;
+    }
+    const out = await Plugins.after_tool({ ...call, input: told.input }, await Tools.handle(tools, who, name, told.input as any, signal));
+    return told.context === undefined ? out : { ...out, text: out.text + "\n\n" + told.context.join("\n\n") };
   }
 
-  // a call run: illi's own tools here; shell, files and MCP tools once
-  // judged (Tools.guard); a plugin's by its plugin
+  // a call run (judged already: Tools.call): illi's own tools here; shell,
+  // files and MCP tools on the machine or their server; a plugin's by its
+  // plugin
   export async function handle(tools: Tools, who: string, name: string, args: any, signal: AbortSignal): Promise<Out> {
     const mem = tools.mem;
     switch (name) {
@@ -592,10 +602,6 @@ export namespace Tools {
         return { text: Tools.todo_said(list), fail: false };
       }
       default: {
-        const stop = await Tools.guard(tools, who, name, args, signal);
-        if (stop !== null) {
-          return stop;
-        }
         if (name.startsWith("plugin__")) {
           return Plugins.run({ tool: name, input: args, agent: who === MAIN ? null : who, cwd: tools.cwd, signal });
         }
@@ -712,7 +718,7 @@ export namespace Tools {
   export async function approve(tools: Tools, who: string, tool: string, input: unknown, signal: AbortSignal): Promise<Out> {
     const told = await Plugins.before_tool({ tool, input, agent: who === MAIN ? null : who, cwd: tools.cwd, signal });
     const used = "block" in told ? undefined : told.input;
-    const stop = "block" in told ? { text: told.block, fail: true } : await Tools.guard(tools, who, tool, used, signal, (where) => Guard.hosted(where, tool, used));
+    const stop = "block" in told ? { text: told.block, fail: true } : await Tools.guard(tools, who, tool, used, signal, (where) => Guard.hosted(where, tool, used), told);
     const answer = stop === null ? { behavior: "allow", updatedInput: used } : { behavior: "deny", message: stop.text };
     return { text: JSON.stringify(answer), fail: false };
   }
@@ -724,17 +730,20 @@ export namespace Tools {
   // an MCP tool by what its server says of it; any other runs), by the
   // user's rules and the grants kept for the project (Permissions.ts),
   // those given this run, and the mode: null runs it, else what the model
-  // is told. One asked runs on the user's yes, "don't ask again" keeping
-  // its grants for the project (one that can't be saved: for this run).
-  // A rules file that won't read leaves nothing run unasked
-  export async function guard(tools: Tools, who: string, tool: string, input: unknown, signal: AbortSignal, judge = (where: Where) => Guard.check(where, tool, input, Mcp.hints(tool))): Promise<Out | null> {
+  // is told. One a hook allowed is judged as in yolo mode (the user's
+  // rules still hold); one it asks about is asked, its why first, with no
+  // "don't ask again". One asked runs on the user's yes, "don't ask again"
+  // keeping its grants for the project (one that can't be saved: for this
+  // run). A rules file that won't read leaves nothing run unasked
+  export async function guard(tools: Tools, who: string, tool: string, input: unknown, signal: AbortSignal, judge = (where: Where) => Guard.check(where, tool, input, Mcp.hints(tool)), hooked: { allow?: boolean; ask?: string } = {}): Promise<Out | null> {
     const folder = Trusted.folder(tools.cwd);
     const perms  = Permissions.read(config.PERMISSIONS, folder);
     const ok     = typeof perms !== "string";
     const grants = new Set([...(ok ? perms.granted : []), ...tools.perm.granted]);
-    const got    = judge({ mode: Tools.mode(tools), cwd: Projects.real(tools.cwd), top: folder, rules: ok ? perms.rules : {}, grants, reads: Custom.dirs(tools.cwd, "skills") });
+    const got    = judge({ mode: hooked.allow === true ? "yolo" : Tools.mode(tools), cwd: Projects.real(tools.cwd), top: folder, rules: ok ? perms.rules : {}, grants, reads: Custom.dirs(tools.cwd, "skills") });
     const broken = "illi can't read your permission rules (" + perms + ")";
-    const verdict: Verdict = ok || got.$ === "deny" ? got : { $: "ask", why: got.$ === "ask" ? got.why + "; " + broken : broken, always: [], exact: got.$ === "ask" ? got.exact : [] };
+    const judged: Verdict = ok || got.$ === "deny" ? got : { $: "ask", why: got.$ === "ask" ? got.why + "; " + broken : broken, always: [], exact: got.$ === "ask" ? got.exact : [] };
+    const verdict: Verdict = hooked.ask === undefined || judged.$ === "deny" ? judged : { $: "ask", why: judged.$ === "ask" ? hooked.ask + "; " + judged.why : hooked.ask, always: [], exact: judged.$ === "ask" ? judged.exact : [] };
     if (verdict.$ === "allow") {
       return null;
     }

@@ -174,14 +174,17 @@ export namespace ClaudeCode {
   }
 
   // a call's arguments: streamed both ways, on its pick, illi's prompt
-  // after Claude Code's (its file); with tools, illi's (its MCP server,
-  // the lean list, allowed; illi's ask for Claude Code's own), else (or
-  // once) none, nor Claude Code's servers, commands or hooks
+  // after Claude Code's (its file), never Claude Code's hooks (illi's own
+  // hooks file is the one that runs, and a repository's .claude settings
+  // would run its hooks in a folder never trusted: -p trusts any); with
+  // tools, illi's (its MCP server, the lean list, allowed; illi's ask for
+  // Claude Code's own), else (or once) none, nor Claude Code's servers or
+  // commands
   export function args(ask: Ask, file: string): string[] {
     const io = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--replay-user-messages", "--no-session-persistence"];
-    const pick = ["--model", ask.model, "--effort", ask.effort, "--append-system-prompt-file", file];
+    const pick = ["--model", ask.model, "--effort", ask.effort, "--append-system-prompt-file", file, "--settings", JSON.stringify({ disableAllHooks: true })];
     if (ask.server === "" || ask.once) {
-      return [...io, ...pick, "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--settings", JSON.stringify({ disableAllHooks: true })];
+      return [...io, ...pick, "--tools", "", "--strict-mcp-config", "--disable-slash-commands"];
     }
     const mcp = { mcpServers: { illi: { type: "http", url: ask.server + "?lean", timeout: WAIT } } };
     return [...io, ...pick, "--mcp-config", JSON.stringify(mcp), "--allowedTools", "mcp__illi", "--disallowedTools", "AskUserQuestion", "--permission-prompt-tool", "mcp__illi__approve"];

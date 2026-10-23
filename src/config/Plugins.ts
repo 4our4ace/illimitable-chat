@@ -11,10 +11,15 @@
 // setting is left out. Its default export is a function, called once as
 // illi starts with what it may use (Api): hooks on what the chat does
 // (Hooks: illi's start and quit, a turn's start and end, a message
-// logged; a tool's call before it runs, to refuse it or change its
-// input, and after, to change what the model reads), commands, tools of
-// its own, lines in the side panel, a piece of the bottom line, the
-// theme's colors (Theme.theme_plug), notes and messages.
+// logged; context for the model in every call of the run; a message of
+// the user's before it is sent, to keep it back or add context; a turn
+// ending of itself, to make it go on; the user waited on a while; a
+// tool's call before it runs, to refuse it, change its input, allow it,
+// have it asked or add to what the model reads, and after, to change what
+// it reads), commands, tools of its own, lines in the side panel, a piece
+// of the bottom line, the theme's colors (Theme.theme_plug), notes and
+// messages. illi's own hooks file (Hooks.ts) runs as one more, after the
+// user's (own).
 //
 // Hooks run one after another: the plugins in the order they loaded
 // (global, profile, project; by name within each), each one's in the
@@ -26,8 +31,11 @@
 // refused: a hook that guards never lets a call through by failing.
 //
 // Where illi calls them: Term.ts loads them (load), gives them the screen
-// (attach) and tells the start and the quit; Chat.ts tells a turn's
-// start and end and each message logged (emit); Commands.ts, Side.ts and
+// (attach) and the chat (attach_chat) and tells the start and the quit
+// (waiting for the quit a while); Chat.ts asks the run's context as the
+// chat opens (context), tells a turn's start and end, each message logged
+// and the user waited on (emit), and asks before a message is sent and a
+// turn ends (before_message, before_stop); Commands.ts, Side.ts and
 // Paint.ts show their commands, lines and pieces. The tool hooks and
 // tools are Tools.ts's to call at each tool's call (before_tool,
 // after_tool; tools, run).
@@ -58,23 +66,44 @@ export type ToolCall = { tool: string; input: any; agent: string | null; cwd: st
 export type Output = { text: string; fail: boolean };
 
 // what a tool's check decides: refused, and why (the model reads it), or
-// run on this input
-export type Verdict = { block: string } | { input: unknown };
+// run on this input: allowed (illi's own checks passed over, the user's
+// rules kept: Tools.guard), or asked of the user whatever they find
+// (why); with what the model reads after its answer (each, whose)
+export type Verdict = { block: string } | { input: unknown; allow?: boolean; ask?: string; context?: string[] };
+
+// what a hook may answer before a tool's call: refuse it, run it on
+// other input, allow it, have it asked, add to what the model reads
+// after it (the input with any of those). An allow vouches for the input
+// it was given: a later hook's change to it takes the allow back
+export type Before = { block: string } | { input?: unknown; allow?: boolean; ask?: string; context?: string };
+
+// how illi waits on the user: a question for leave to run a call, or its
+// question tool's, unanswered a while; a reply left a while with no
+// message after it
+export type Wait = "permission_prompt" | "question" | "idle_prompt";
 
 // each hook: what it is given, what it may answer
 export type Hooks = {
-  "start"      : [{ cwd: string; profile: string; chat: boolean }, void];
-  "quit"       : [{ cwd: string }, void];
-  "turn.start" : [{ cwd: string }, void];
-  "turn.end"   : [{ cwd: string; stopped: string | null }, void];
-  "message"    : [{ id: number; kind: string; text: string; agent: string | null }, void];
-  "tool.before": [ToolCall, Verdict | void];
-  "tool.after" : [ToolCall & { output: Output }, Partial<Output> | void];
+  "start"         : [{ cwd: string; profile: string; chat: boolean }, void];
+  "quit"          : [{ cwd: string; reason: "prompt_input_exit" | "other" }, void];
+  "context"       : [{ cwd: string }, { context: string } | void];
+  "turn.start"    : [{ cwd: string }, void];
+  "turn.end"      : [{ cwd: string; stopped: string | null }, void];
+  "turn.stop"     : [{ cwd: string; again: boolean; reply: string; signal?: AbortSignal }, { continue: string } | void];
+  "message"       : [{ id: number; kind: string; text: string; agent: string | null }, void];
+  "message.before": [{ text: string; cwd: string; signal?: AbortSignal }, { block: string } | { context: string } | void];
+  "notify"        : [{ cwd: string; type: Wait; text: string }, void];
+  "tool.before"   : [ToolCall, Before | void];
+  "tool.after"    : [ToolCall & { output: Output }, Partial<Output> | void];
 };
 export type Hook = keyof Hooks;
 
 // the hooks that only tell what happened, in order (emit)
-type Told = "start" | "turn.start" | "turn.end" | "message";
+type Told = "start" | "turn.start" | "turn.end" | "message" | "notify";
+
+// what the chat does for plugins (Term.ts, where the chat runs): the mode
+// its tools are judged in now; its turn stopped, why noted
+export type ChatSink = { mode: () => string; halt: (why: string) => void };
 
 // a piece of a plugin's line: its text, the theme's token it is colored
 // in (none: the ink), bold, dim; a line as a plugin gives it: text, a
@@ -120,15 +149,19 @@ export type Screen = { note: (text: string) => void; send: (text: string) => voi
 // (the `off` setting) and, once loaded, whether it runs
 export type Found = { name: string; file: string; off: boolean; runs: boolean };
 
-// a plugin loaded: its name and file, whether it runs (false: it failed
-// to load), whether its function returned; what it gave: hooks,
-// commands, tools (named plugin__<plugin>__<tool>), side and bottom
-// line makers, themes (applied once it has loaded)
+// a plugin loaded: its name and file, as notes and the chat name it
+// (said), whether it runs (false: it failed to load), whether its
+// function returned, how long a hook of it is waited for (0: no end, as
+// illi's own hooks file's commands keep their own); what it gave: hooks,
+// commands, tools (named plugin__<plugin>__<tool>), side and bottom line
+// makers, themes (applied once it has loaded)
 type Plugin = {
   name     : string;
   file     : string;
+  said     : string;
   runs     : boolean;
   ready    : boolean;
+  slow     : number;
   hooks    : Array<{ hook: Hook; run: (ev: any) => any }>;
   commands : Command[];
   tools    : Array<Spec & { run: Tool["run"] }>;
@@ -153,19 +186,25 @@ const FILES = [".ts", ".js", ".mjs"];
 export const API = 1;
 
 // the hooks there are
-export const HOOKS: Hook[] = ["start", "quit", "turn.start", "turn.end", "message", "tool.before", "tool.after"];
+export const HOOKS: Hook[] = ["start", "quit", "context", "turn.start", "turn.end", "turn.stop", "message", "message.before", "notify", "tool.before", "tool.after"];
 
-// the longest a plugin's function or a hook is waited for (ms)
+// the longest a plugin's function or a hook is waited for, and a quit
+// hook as illi quits (ms)
 const SLOW = 30000;
+const QUIT = 1500;
 
 // the plugins found at the load, and those loaded, in their order
 let FOUND: Found[] = [];
 let LOADED: Plugin[] = [];
 
-// the screen (null: not yet: notes wait for it), the notes waiting, those
-// told once (by plugin and what failed), what is told, in order (emit)
+// the screen (null: not yet: notes wait for it), the notes waiting; the
+// chat (null: not yet, or not in this illi); those told once (by plugin
+// and what failed), what is told, in order (emit); whether the quit was
+// told
 let SCREEN: Screen | null = null;
 let WAITING: string[] = [];
+let CHAT: ChatSink | null = null;
+let QUITTED = false;
 let TOLD = new Set<string>();
 let QUEUE: Promise<void> = Promise.resolve();
 
@@ -201,7 +240,7 @@ export namespace Plugins {
   export async function load(cwd: string, trusted: (cwd: string) => boolean): Promise<void> {
     FOUND = Plugins.find(cwd, trusted);
     for (const found of FOUND.filter((f) => !f.off)) {
-      const p: Plugin = { name: found.name, file: found.file, runs: true, ready: false, hooks: [], commands: [], tools: [], sides: [], statuses: [], themes: [] };
+      const p: Plugin = { name: found.name, file: found.file, said: "the plugin " + found.name, runs: true, ready: false, slow: SLOW, hooks: [], commands: [], tools: [], sides: [], statuses: [], themes: [] };
       LOADED.push(p);
       try {
         const mod = await import(pathToFileURL(found.file).href);
@@ -221,15 +260,44 @@ export namespace Plugins {
     }
   }
 
+  // a plugin of illi's own (Hooks.ts: the hooks file's commands), after
+  // the user's: its name, file, its name in notes and the chat (said), its
+  // hooks, each keeping its own time limit
+  export function own(name: string, file: string, said: string, hooks: Array<{ hook: Hook; run: (ev: any) => any }>): void {
+    LOADED.push({ name, file, said, runs: true, ready: true, slow: 0, hooks, commands: [], tools: [], sides: [], statuses: [], themes: [] });
+  }
+
   // the plugins found at the load, those off and those that failed too
   export function found(): Found[] {
     return FOUND;
+  }
+
+  // a note on the screen (illi's own plugin's), or, till it's up, kept
+  export function say(text: string): void {
+    plugin_say(text);
+  }
+
+  // the mode the chat's tools are judged in now (no chat here: the
+  // setting's)
+  export function mode(): string {
+    return CHAT?.mode() ?? config.config_value("mode");
+  }
+
+  // the chat's turn stopped (illi's own plugin's: a hook said not to go
+  // on), why noted; none here, nothing
+  export function halt(why: string): void {
+    CHAT?.halt(why);
   }
 
   // the screen, once it is up: the notes waiting said
   export function attach(screen: Screen): void {
     SCREEN = screen;
     WAITING.splice(0).forEach((text) => screen.note(text));
+  }
+
+  // the chat, where it runs, once open
+  export function attach_chat(chat: ChatSink): void {
+    CHAT = chat;
   }
 
   // what happened told to each plugin's hook of it, in order: after all
@@ -245,7 +313,7 @@ export namespace Plugins {
     QUEUE = QUEUE.then(async () => {
       for (const [p, run] of runs) {
         try {
-          await plugin_wait(run(given), SLOW);
+          await plugin_wait(run(given), p.slow);
         } catch (err) {
           plugin_trouble(p, hook, err);
         }
@@ -254,42 +322,129 @@ export namespace Plugins {
     return QUEUE;
   }
 
-  // illi quitting, told at once: its process ends, so a hook's promise
-  // is never waited for
-  export function quit(cwd: string): void {
-    for (const [p, run] of plugin_hooks("quit")) {
+  // illi quitting, told once, each hook at once; done when all are (QUIT
+  // at most each; illi's own keeps its own limits), so illi quits after.
+  // From the process's exit (a crash, or a quit not told yet), the same,
+  // though nothing can wait then
+  export function quit(cwd: string, reason: Hooks["quit"][0]["reason"]): Promise<void> {
+    if (QUITTED) {
+      return Promise.resolve();
+    }
+    QUITTED = true;
+    const given = Object.freeze({ cwd, reason });
+    return Promise.all(plugin_hooks("quit").map(async ([p, run]) => {
       try {
-        Promise.resolve(run(Object.freeze({ cwd }))).catch(() => {});
+        await plugin_wait(run(given), p.slow === 0 ? 0 : QUIT);
       } catch (err) {
         console.error("illi: plugin " + p.name + ": quit: " + String((err as any)?.message ?? err));
       }
+    })).then(() => {});
+  }
+
+  // what the model is told in every call of this run, asked of each
+  // context hook once, as the chat opens: each one's, whose, in order. A
+  // hook that fails is told and passed over
+  export async function context(ev: Hooks["context"][0]): Promise<string[]> {
+    const out: string[] = [];
+    for (const [p, run] of plugin_hooks("context")) {
+      try {
+        const said = await plugin_wait(run(Object.freeze({ ...ev })), p.slow);
+        if (typeof said === "object" && said !== null && typeof said.context === "string" && said.context.trim() !== "") {
+          out.push("From " + p.said + ":\n" + said.context.trim());
+        }
+      } catch (err) {
+        plugin_trouble(p, "context", err);
+      }
     }
+    return out;
   }
 
   // a tool's call checked by each tool.before hook, before it runs (and
   // before the user is asked to allow it, so they're asked of what will
   // run): refused by the first that refuses it, else run on the input as
-  // the hooks changed it (each given the one before's). A hook that fails
-  // refuses it, saying why; a call stopped meanwhile is refused so
+  // the hooks changed it (each given the one before's), asked about if
+  // any asks (the first one's why), else allowed if any allows. A hook
+  // that fails refuses it, saying why; a call stopped meanwhile is
+  // refused so
   export async function before_tool(call: ToolCall): Promise<Verdict> {
     let input = call.input;
+    let ask: string | undefined;
+    let allow = false;
+    const context: string[] = [];
     for (const [p, run] of plugin_hooks("tool.before")) {
       try {
-        const said = await plugin_wait(run(Object.freeze({ ...call, input })), SLOW, call.signal);
-        if (typeof said === "object" && said !== null && "block" in said) {
-          return { block: String(said.block ?? "").trim() || "The plugin " + p.name + " refused this call." };
+        const said = await plugin_wait(run(Object.freeze({ ...call, input })), p.slow, call.signal);
+        if (typeof said !== "object" || said === null) {
+          continue;
         }
-        if (typeof said === "object" && said !== null && "input" in said) {
-          input = said.input;
+        if ("block" in said) {
+          return { block: String(said.block ?? "").trim() || capital(p.said) + " refused this call." };
+        }
+        if (said.input !== undefined && said.input !== input) {
+          [input, allow] = [said.input, false];
+        }
+        if (typeof said.ask === "string") {
+          ask ??= said.ask.trim() || p.said + " asks";
+        }
+        allow ||= said.allow === true;
+        if (typeof said.context === "string" && said.context.trim() !== "") {
+          context.push("From " + p.said + ":\n" + said.context.trim());
         }
       } catch (err) {
         if (call.signal?.aborted) {
           return { block: "Stopped." };
         }
-        return { block: "The plugin " + p.name + " couldn't check this call (" + plugin_trouble(p, "tool.before", err) + "), so it was refused." };
+        return { block: capital(p.said) + " couldn't check this call (" + plugin_trouble(p, "tool.before", err) + "), so it was refused." };
       }
     }
-    return { input };
+    return { input, ...(ask !== undefined ? { ask } : allow ? { allow } : {}), ...(context.length > 0 ? { context } : {}) };
+  }
+
+  // a message of the user's checked by each message.before hook, before
+  // it is logged and sent: kept back by the first that keeps it (why,
+  // said to the user), else sent, with what each adds for the model (a
+  // note after it: whose, and what). A hook that fails is told and passed
+  // over
+  export async function before_message(ev: Hooks["message.before"][0]): Promise<{ block: string } | { context: string[] }> {
+    const context: string[] = [];
+    for (const [p, run] of plugin_hooks("message.before")) {
+      try {
+        const said = await plugin_wait(run(Object.freeze({ ...ev })), p.slow, ev.signal);
+        if (typeof said === "object" && said !== null && "block" in said) {
+          return { block: String(said.block ?? "").trim() || capital(p.said) + " kept your message back." };
+        }
+        if (typeof said === "object" && said !== null && typeof (said as any).context === "string" && (said as any).context.trim() !== "") {
+          context.push("From " + p.said + ":\n" + (said as any).context.trim());
+        }
+      } catch (err) {
+        if (ev.signal?.aborted) {
+          return { block: "Stopped." };
+        }
+        plugin_trouble(p, "message.before", err);
+      }
+    }
+    return { context };
+  }
+
+  // a turn ending of itself, asked of each turn.stop hook: the first that
+  // says go on, its why (whose, and what), for the model; null: it ends.
+  // A hook that fails is told and passed over; a stop ends it
+  export async function before_stop(ev: Hooks["turn.stop"][0]): Promise<string | null> {
+    const signal = ev.signal;
+    for (const [p, run] of plugin_hooks("turn.stop")) {
+      try {
+        const said = await plugin_wait(run(Object.freeze({ ...ev })), p.slow, signal);
+        if (typeof said === "object" && said !== null && typeof said.continue === "string") {
+          return "From " + p.said + ":\n" + (said.continue.trim() || "Go on.");
+        }
+      } catch (err) {
+        if (signal?.aborted) {
+          return null;
+        }
+        plugin_trouble(p, "turn.stop", err);
+      }
+    }
+    return null;
   }
 
   // a tool's output, as each tool.after hook changes it (its text, whether
@@ -299,7 +454,7 @@ export namespace Plugins {
     let now = out;
     for (const [p, run] of plugin_hooks("tool.after")) {
       try {
-        const said = await plugin_wait(run(Object.freeze({ ...call, output: { text: now.text, fail: now.fail } })), SLOW, call.signal);
+        const said = await plugin_wait(run(Object.freeze({ ...call, output: { text: now.text, fail: now.fail } })), p.slow, call.signal);
         if (typeof said === "object" && said !== null) {
           now = { ...now, ...(typeof said.text === "string" ? { text: said.text } : {}), ...(typeof said.fail === "boolean" ? { fail: said.fail } : {}) };
         }
@@ -353,12 +508,15 @@ export namespace Plugins {
     return LOADED.flatMap((p) => plugin_made(p, p.statuses, "status", (make) => [make()]).flat().map(plugin_pieces)).filter((l) => l.some((x) => x.text !== ""));
   }
 
-  // all let go: none loaded, no screen, nothing waiting (a test's start)
+  // all let go: none loaded, no screen nor chat, nothing waiting, no quit
+  // told (a test's start)
   export function reset(): void {
     FOUND   = [];
     LOADED  = [];
     SCREEN  = null;
     WAITING = [];
+    CHAT    = null;
+    QUITTED = false;
     TOLD    = new Set();
     QUEUE   = Promise.resolve();
   }
@@ -528,6 +686,11 @@ function plugin_trouble(p: Plugin, what: string, err: unknown): string {
     plugin_say("The plugin " + p.name + (what === "loading" ? " didn't load" : " failed in " + what) + ": " + why + " (illi.log has more).");
   }
   return why;
+}
+
+// a text with its first letter a capital
+function capital(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 // a note on the screen, or, till it's up, kept for it

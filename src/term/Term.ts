@@ -45,10 +45,11 @@ import * as Draw from "../ui/Draw.ts";
 import { term_draw, term_paint, term_print, term_resize } from "./Frame.ts";
 import { term_enter, term_grab, term_press, term_type } from "./Keys.ts";
 import { Machine } from "../tools/Machine.ts";
+import { Hooks } from "../config/Hooks.ts";
 import { Mcp } from "../tools/Mcp.ts";
 import { Memory } from "../chat/Memory.ts";
 import { Plugins } from "../config/Plugins.ts";
-import { term_note, term_notify, term_unnotify, type Notice } from "./Notices.ts";
+import { term_note, term_notify, term_toast, term_unnotify, type Notice } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_restart } from "./ProfileCommands.ts";
 import * as Profiles from "../config/Profiles.ts";
@@ -58,6 +59,7 @@ import * as Reply from "../ui/Reply.ts";
 import * as Screen from "../ui/Screen.ts";
 import { CLOCK } from "./Side.ts";
 import { Store } from "../chat/Store.ts";
+import { Tools } from "../tools/Tools.ts";
 import { THEME_TROUBLE } from "../ui/Theme.ts";
 import { Trust } from "./Trust.ts";
 import { Trusted } from "../config/Trusted.ts";
@@ -251,6 +253,10 @@ let hint: Notice | null = null;
 const GONE   = 600;
 const REJOIN = 20;
 
+// how long a quit waits on the plugins and hooks told of it before a
+// toast says so, ms
+const SLOW_QUIT = 300;
+
 function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Term {
   const t: Term = {
     v       : View.view_new(),
@@ -313,7 +319,8 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
   });
   process.stdout.on("resize", () => term_resize(t));
   process.on("exit", () => {
-    Plugins.quit(process.cwd());
+    void Plugins.quit(process.cwd(), "other");
+    Hooks.end();
     if (chat !== null) {
       Chat.close(chat);
     }
@@ -472,18 +479,26 @@ export function term_idle(t: Term): void {
   }
 }
 
-// quits, its work cut (the next start resumes it), once all painted is
+// quits, its work cut (the next start resumes it), once the plugins and
+// hooks told of it are done (Plugins.quit: a while at most; a toast says
+// so if they take one, and a second quit doesn't wait) and all painted is
 // out (a write's callback comes after those before it), with exitCode
 export function term_quit(t: Term): void {
   t.v.ws?.close();
   term_paint(t);
-  process.stdout.write("", () => process.exit());
+  const told = Plugins.quit(process.cwd(), "prompt_input_exit");
+  const slow = setTimeout(() => term_toast(t, "Quitting once your hooks are done · Ctrl+D quits now", HOLD), SLOW_QUIT);
+  void told.then(() => {
+    clearTimeout(slow);
+    process.stdout.write("", () => process.exit());
+  });
 }
 
-// quits at a signal (the terminal may be gone: nothing painted)
+// quits at a signal (the terminal may be gone: nothing painted), once the
+// plugins and hooks told of it are done (a second signal doesn't wait)
 function term_bye(t: Term): void {
   t.v.ws?.close();
-  process.exit(0);
+  void Plugins.quit(process.cwd(), "other").then(() => process.exit(0));
 }
 
 // a crash (an error nothing caught): its stack to LOG, the terminal left
@@ -548,8 +563,12 @@ export async function term_start(): Promise<void> {
     delete process.env.ILLI_REJOIN;
   }
   await Plugins.load(process.cwd(), (cwd) => Trusted.has(Trusted.folder(cwd)));
+  Hooks.load(process.cwd(), (cwd) => Trusted.has(Trusted.folder(cwd)));
   void Plugins.emit("start", { cwd: process.cwd(), profile: config.PROFILE, chat: holds });
   const chat = holds ? Chat.open(process.cwd()) : null;
+  if (chat !== null) {
+    Plugins.attach_chat({ mode: () => Tools.mode(chat.tools), halt: (why) => Chat.stop(chat, why) });
+  }
   const t = term_new(chat, chat !== null ? () => chat.mem : term_reader(), scr ?? Screen.screen_new(() => {}));
   Plugins.attach({ note: (text) => term_note(t, text), send: (text) => term_send(t, { $: "say", sizes: [], body: () => new Blob([text]) }), redraw: () => term_draw(t) });
   const told = new Set<string>();

@@ -3,7 +3,7 @@
 // `bun test Guard.test.ts`. Routine work runs unasked in auto; each risk
 // is asked about with why (every bypass the reviews found among them);
 // read-only refuses changes, ask asks them, yolo runs all but what the
-// user's rules refuse or ask; the user's rules come first (deny, ask,
+// user's rules refuse or ask and a write to illi's own config; the user's rules come first (deny, ask,
 // allow; a root command's allow names its sudo; deny and ask by a
 // program's name, wherever it lives; allow over the command, not its
 // redirections; strictly on a command illi can't follow); grants clear
@@ -188,6 +188,18 @@ test("read-only refuses changes, ask asks them (offering the family), yolo runs 
   expect(judge("rm -rf ~", { mode: "yolo" })).toBe("run");
   expect(judge("git push", { mode: "yolo", rules: { shell: { "git push *": "deny" } } })).toBe("deny: your rules refuse git push");
   expect(Guard.check(where({ mode: "yolo", rules: { shell: { "ls *": "ask" } } }), "shell", { command: "ls -la" })).toMatchObject({ $: "ask", always: [] });
+});
+
+test("a write to illi's own config (its folder, a project's .illi) is asked in every mode, yolo too, unless granted exactly; reading it runs", () => {
+  const hooks = TOP + "/.illi/hooks.json";
+  const write = (path: string, over: Partial<Where> = {}) => Guard.check(where({ mode: "yolo", ...over }), "write", { path, content: "{}" });
+  expect(write(hooks)).toMatchObject({ $: "ask", why: ".illi/hooks.json is illi's own config (what it runs and is told)", always: ["write=" + hooks] });
+  expect(write(process.env.ILLI_DIR + "/hooks.json")).toMatchObject({ $: "ask" });
+  expect(judge("echo x > .illi/hooks.json", { mode: "yolo" })).toBe("ask: .illi/hooks.json is illi's own config (what it runs and is told)");
+  expect(write(hooks, { grants: new Set(["write=" + hooks]) })).toEqual({ $: "allow" });
+  expect(write(hooks, { grants: new Set(["write:" + TOP + "/.illi/*"]) })).toMatchObject({ $: "ask" });
+  expect(Guard.check(where({ mode: "yolo" }), "read", { path: hooks })).toEqual({ $: "allow" });
+  expect(write(TOP + "/src/a.ts")).toEqual({ $: "allow" });
 });
 
 test("the user's rules come first; a root command's allow must name its sudo; deny and ask by a program's name wherever it lives; allow covers the command, not its redirections or assignments, and on a command illi can't follow only strictly", () => {

@@ -1,6 +1,6 @@
 ---
 name: customize-illi
-description: Customize illi itself - add or change its agents, slash commands, skills, MCP servers, plugins, theme and accent color, settings, or the rules added to its prompt. Use when the user asks illi to change how it works or looks, remember a workflow as a skill or a command, add an agent, connect a tool server, write a plugin, or change a setting.
+description: Customize illi itself - add or change its agents, slash commands, skills, MCP servers, plugins, hooks, theme and accent color, settings, or the rules added to its prompt. Use when the user asks illi to change how it works or looks, remember a workflow as a skill or a command, add an agent, connect a tool server, write a plugin or a hook, run a command whenever illi does something, or change a setting.
 ---
 
 illi is customized with plain files, which you write with your tools:
@@ -9,13 +9,14 @@ illi is customized with plain files, which you write with your tools:
 - illi's folder, this profile's own: {{illi}} (the same, in the default
   profile; a profile's agents, commands, skills and MCP servers go beside
   the global ones, and win by name)
-- This project's: {{project}} (agents, commands, skills and plugins
-  only; by name, a project's win over the others)
+- This project's: {{project}} (agents, commands, skills, plugins and
+  hooks only; by name, a project's win over the others; its hooks add to
+  the user's)
 
 Write to illi's folder unless the user asks for every profile (the global
 folder) or this project only. /agents shows the user every agent, command,
-skill and plugin, and where their files go; the `off` setting turns one
-off.
+skill, plugin and hook, and where their files go; the `off` setting turns
+one off (hooks.json: all hooks).
 
 # What goes where
 
@@ -208,12 +209,35 @@ accent setting goes over the file's accent.
 ## Plugins: plugins/<name>.ts
 
 Code that runs inside illi as the user, with hooks on what it does (a
-turn's start and end, each message, a tool's call before and after it
+turn's start and end, each message, a message before it is sent, a turn
+ending of itself, the user waited on, a tool's call before and after it
 runs), commands, tools, side lines, a piece of the bottom line and
 colors; illi's docs/customize.md lists the API. Write one only when the
 user asks for a plugin, and say first what it will do: it runs with all
 illi's rights. A project's load only in a folder the user trusts. They
 load as illi starts.
+
+## Hooks: hooks.json
+
+Shell commands run at what illi does, in Claude Code's hook format: the
+file holds its `hooks` block, so a Claude Code user's pastes in. For "run
+X whenever illi edits a file", "notify me when illi waits", "never let it
+touch Y": a hook, not a plugin.
+
+```json
+{ "hooks": {
+    "PostToolUse": [{ "matcher": "write|edit",
+                      "hooks": [{ "type": "command", "command": "jq -r '.tool_input.path // .tool_input.edits[].path' | xargs bunx prettier --write" }] }] } }
+```
+
+Events: PreToolUse (refuse, change, allow or ask a tool's call; exit 2
+refuses, stderr why), PostToolUse, UserPromptSubmit, Stop, Notification,
+SessionStart, SessionEnd. Matchers and tool inputs are illi's, not Claude
+Code's: shell {command}, read/write {path, ...}, edit {edits: [{path, old,
+new}]}; `Bash` matches nothing. A command gets the event as JSON on stdin;
+docs/customize.md lists the fields and answers. Say what a hook will run
+before writing it: it runs as the user, on every matching event. The user
+is asked before you write the file, whatever the mode.
 
 # Doing it cleanly
 
@@ -229,7 +253,7 @@ load as illi starts.
 - Leave illi's own state alone: login.json, models.json, update.json,
   chat/, profiles/.
 - Say when it applies: agents, commands, skills and the rules file's text
-  at the next message; config.json, theme.json, mcp.json and plugins once
-  illi starts again (Ctrl+D, then `illi`: the chat goes on where it was).
+  at the next message; config.json, theme.json, mcp.json, plugins and
+  hooks.json once illi starts again (Ctrl+D, then `illi`: the chat goes on where it was).
 - Then tell the user how to use it: /<name>, Shift+Tab, or that the skill loads
   when a task matches.

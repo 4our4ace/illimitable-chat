@@ -3,10 +3,11 @@ Customize
 
 All in `~/.illi/`, for every profile; a profile may add its own
 ([Profiles](profiles.md)). A project's `.illi/` may hold agents, commands,
-skills and plugins too, which win by name, once you trust its folder (the
-question illi asks at its first start there; a run from a pipe or a
-script is never asked, so it loads them only for a folder trusted
-before); the rest is read only from yours.
+skills and plugins too, which win by name, and hooks, which add to
+yours, once you trust its folder (the question illi asks at its first
+start there; a run from a pipe or a script is never asked, so it loads
+them only for a folder trusted before); the rest is read only from
+yours.
 [`examples/`](../examples) has samples. Or ask illi: it comes with a
 skill, `customize-illi`, and writes these files itself.
 
@@ -27,6 +28,8 @@ skill, `customize-illi`, and writes these files itself.
   everything, at once: `/settings`, or `/set accent cyan`.
 - `plugins/`: TS or JS modules that run inside illi, with hooks on what
   it does ([Plugins](#plugins), below).
+- `hooks.json`: shell commands run at what illi does, in Claude Code's
+  hook format ([Hooks](#hooks), below).
 - `RULES.md`: your rules for every project, in every prompt. illi writes
   it when you ask ("add that to my rules"), never on its own. A
   project's own `AGENTS.md` (else `CLAUDE.md`) is read too, from the
@@ -163,11 +166,15 @@ it follows the theme) or a list of those.
 | Hook | Given | May return |
 | ---- | ----- | ---------- |
 | `start` | `{ cwd, profile, chat }` (`chat`: this illi runs the chat, not a second terminal's view of it) | |
-| `quit` | `{ cwd }` (illi doesn't wait for it) | |
+| `quit` | `{ cwd, reason }` (`prompt_input_exit`: you quit; `other`: a signal, a crash); illi waits 1.5 s at most | |
+| `context` | `{ cwd }`, once, as the chat opens | `{ context }`: text the model reads in every call of this run |
 | `turn.start` | `{ cwd }` | |
 | `turn.end` | `{ cwd, stopped }` (why it stopped; `null`: it ended) | |
+| `turn.stop` | `{ cwd, again, reply, signal }`: a turn ending of itself (`again`: a hook made it go on since your last message; `reply`: illi's last reply) | `{ continue: "why" }`: it goes on, the model reading why |
 | `message` | `{ id, kind, text, agent }`, each message logged (`agent`: `null` for the chat's) | |
-| `tool.before` | `{ tool, input, agent, cwd }` | `{ block: "why" }` to refuse the call, `{ input }` to run it on other input |
+| `message.before` | `{ text, cwd, signal }`: a message of yours, before it is sent | `{ block: "why" }`: kept back, why said, the text back in your input; `{ context }`: a note after it, which the model reads |
+| `notify` | `{ cwd, type, text }`: illi waits on you (`permission_prompt`: a question for leave, unanswered 6 s; `question`: its question tool's; `idle_prompt`: a reply left 60 s) | |
+| `tool.before` | `{ tool, input, agent, cwd, signal }` | `{ block: "why" }` to refuse the call; `{ input }` to run it on other input; `{ allow: true }` to run it without illi's own checks; `{ ask: "why" }` to have it asked; `{ context }` to add to what the model reads after its answer |
 | `tool.after` | the same, and `output: { text, fail }` | `{ text, fail }`: what the model reads |
 
 `tool.before` sees every tool call, Claude Code's own tools too (as
@@ -176,15 +183,164 @@ own, so it doesn't see theirs).
 
 - Hooks run one after another: the plugins in the order they load
   (global, profile, project; by name), each one's in the order it gave
-  them. `start`, the turns and messages come in order, and illi never
-  waits for them; each hook gets 30 s.
+  them, then your [hooks](#hooks). `start`, the turns, messages and
+  waits come in order, and illi never waits for them; each hook gets
+  30 s.
 - `tool.before` hooks run before you're asked to allow a call, so you
   are asked about what will run; each sees the input as the one before
-  left it, and the first refusal is final. One that fails or takes over
+  left it. The first refusal is final; else an ask is asked (the first
+  one's why, with no "don't ask again"); else an allow runs it as `yolo`
+  mode would (your rules and illi's own config are still asked:
+  [Permissions](permissions.md)). An allow vouches for the input it saw:
+  a later hook's change takes it back. One that fails or takes over
   30 s refuses the call: a check never lets one through by failing.
+- `turn.stop` makes a turn go on 8 times in a row at most with no tool
+  call between; then it ends, saying so. `message.before` and
+  `turn.stop` get the turn's `signal`: Esc stops them (a message stopped
+  goes back to your input, unsent).
 - A plugin that won't load, or a hook that fails, is said once and
   logged in `illi.log`; illi goes on without it. A side or bottom-line
   maker that fails is dropped till illi starts again.
 - Each illi loads them: a second terminal's view runs their commands,
   lines and pieces; the chat's hooks run where the chat does.
 - A change applies at the next start.
+
+Hooks
+-----
+
+Shell commands run at what illi does, in Claude Code's hook format: a
+`hooks.json` holds its `hooks` block, so one written for Claude Code
+pastes in. Each of `~/.illi/hooks.json` (every profile), a profile's
+own and a project's `.illi/hooks.json` (once you trust its folder)
+applies, in that order; a command given twice runs once. They're read as
+illi starts, and `/agents` lists them. A project's file that is new, or
+changed since illi last started there, is said at the start.
+`"disableAllHooks": true` in any of them, or the `off` setting naming
+`hooks.json`, turns them all off.
+
+A hook runs as you, like a plugin: a project's hooks file runs its
+commands on your computer as you work there. illi asks before it writes
+one (any file in `~/.illi` or a project's `.illi`), even in `yolo` mode.
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "shell", "hooks": [{ "type": "command", "command": "~/.illi/hooks/guard.sh" }] }
+    ],
+    "PostToolUse": [
+      { "matcher": "write|edit", "hooks": [{ "type": "command", "command": "jq -r '.tool_input.path // .tool_input.edits[].path' | xargs bunx prettier --write" }] }
+    ],
+    "Notification": [
+      { "hooks": [{ "type": "command", "command": "notify-send illi \"$(jq -r .message)\"" }] }
+    ]
+  }
+}
+```
+
+[`examples/hooks.json`](../examples/hooks.json) and
+[`examples/hooks/guard.sh`](../examples/hooks/guard.sh) are a start.
+
+### Events
+
+| Event | When | Matcher on | A command may |
+| ----- | ---- | ---------- | ------------- |
+| `PreToolUse` | before a tool's call, before illi checks it | the tool's name | refuse it, change its input, allow it, have it asked, add to what the model reads after it |
+| `PostToolUse` | after a call that ran without failing | the tool's name | add to what the model reads |
+| `UserPromptSubmit` | a message of yours, before it is sent | | keep it back (it goes back to your input), add a note the model reads |
+| `Stop` | a turn ends of itself (not stopped by you) | | make illi go on, the model reading why |
+| `Notification` | illi waits on you: a question for leave unanswered 6 s, its question tool's, a reply left 60 s | `permission_prompt`, `question`, `idle_prompt` | tell you (a sound, a desktop notice) |
+| `SessionStart` | the chat opens | `startup` | add context the model reads in every call of this run |
+| `SessionEnd` | illi quits | `prompt_input_exit` (you quit), `other` | |
+
+A matcher that is none, `""` or `*` takes all; one of only letters,
+digits, `_`, `-`, spaces, `|` and commas takes those names exactly
+(`write|edit`); anything else is a regular expression found anywhere in
+the name (`mcp__.*`).
+
+Tool names and inputs are illi's: `shell` `{ command }`, `read`
+`{ path, offset, limit, at }`, `write` `{ path, content }`, `edit`
+`{ edits: [{ path, old, new, all }] }` (the file tools' paths given
+whole, from `/`), `zoom`, `date`, `spawn`, `tell`, `todo`, `skill`,
+`ask`, `mcp__<server>__<tool>`, `plugin__<plugin>__<tool>`.
+
+### What a command gets
+
+It runs in `sh`, in the folder illi started in, with `ILLI_PROJECT_DIR`
+set to the project's top, and gets JSON on its input:
+
+| Field | Events |
+| ----- | ------ |
+| `hook_event_name`, `cwd`, `permission_mode` (illi's mode: `auto`, `ask`, `read-only`, `yolo`) | all |
+| `tool_name`, `tool_input` | `PreToolUse`, `PostToolUse` |
+| `agent_id`, `agent_type` (the subagent's name) | the same, on a subagent's call |
+| `tool_response`: `{ text, fail }` | `PostToolUse` |
+| `prompt` | `UserPromptSubmit` |
+| `stop_hook_active` (a hook made this turn go on already), `last_assistant_message` | `Stop` |
+| `message`, `title`, `notification_type` | `Notification` |
+| `source` (`startup`) | `SessionStart` |
+| `reason` | `SessionEnd` |
+
+### What it answers
+
+- Exit 0: output that is a JSON object is read (below); other output is
+  context for `UserPromptSubmit` and `SessionStart`, and passed over
+  elsewhere.
+- Exit 2 blocks, its error output saying why: a tool's call is refused
+  (the model reads why), `PostToolUse` tells the model, a message is
+  kept back, a turn goes on; elsewhere it is said to you.
+- Any other exit: JSON on its output is still read; with none, it
+  failed.
+- A command that fails (it can't start or run, runs past its time,
+  exits otherwise with no JSON, or gives JSON that won't parse) is said
+  once and logged in `illi.log` each time, and illi goes on without it;
+  but a `PreToolUse` one refuses the call. `"onFailure": "block"` or
+  `"continue"` beside a command sets it.
+
+| JSON field | Events | Means |
+| ---------- | ------ | ----- |
+| `systemMessage` | all | a note to you |
+| `continue: false`, `stopReason` | `PreToolUse`, `PostToolUse` | the turn stops, why said (the call refused) |
+| | `UserPromptSubmit` | the message kept back, why said |
+| | elsewhere | why said |
+| `hookSpecificOutput.permissionDecision` | `PreToolUse` | `deny`, `ask` or `allow` (Claude Code's older `decision: "block"` / `"approve"` too) |
+| `hookSpecificOutput.permissionDecisionReason` | `PreToolUse` | why: a deny's for the model, an ask's for you |
+| `hookSpecificOutput.updatedInput` | `PreToolUse` | the input the call runs on |
+| `hookSpecificOutput.additionalContext` | `PreToolUse`, `PostToolUse`, `UserPromptSubmit`, `SessionStart` | what the model reads (after the call's answer, after the message, in every call) |
+| | `Stop` | the turn goes on, the model reading it |
+| `decision: "block"`, `reason` | `PostToolUse`, `UserPromptSubmit`, `Stop` | as exit 2, `reason` why |
+
+### How they run
+
+- After your plugins, one after another: each `PreToolUse` sees the input
+  as the one before left it, and decisions fold as plugins' do (a
+  refusal is final; then an ask; then an allow, taken back by a later
+  change of the input). An allow runs the call as `yolo` mode would:
+  your rules and illi's own config are still asked.
+- `timeout` beside a command, in seconds; illi's own: 60 s, 30 s for
+  `UserPromptSubmit`, 1.5 s for `SessionEnd` (at most 60: illi waits for
+  them as it quits). Past it a command is asked to end, then killed 2 s
+  after; Esc kills a tool's, a message's or a turn's end's at once, and
+  quitting kills any still running (but `SessionEnd`'s).
+- Its output is read up to 64 KB; what the model is told from one
+  event's commands, up to 10,000 characters. A job it leaves in the
+  background isn't waited for.
+- `Stop` makes a turn go on 8 times in a row at most with no tool call
+  between. `Notification`'s commands are started, not waited for.
+- Every illi reads them, but the chat's events fire only where the chat
+  runs, not in a second terminal's view of it. A change applies at the
+  next start.
+
+### Beside Claude Code's
+
+- illi's tool names and inputs (above), not Claude Code's: a matcher
+  `Bash` matches nothing here. On `claude-code`, its own tools come under
+  their names as they ask leave (`shell|Bash` covers both); illi turns
+  your `~/.claude` hooks off inside it, so `hooks.json` is the one file
+  that runs, and only `PreToolUse`'s refusal, input and decision reach
+  those tools (Claude Code runs them, so `PostToolUse` doesn't see them).
+- No `session_id` or `transcript_path`: one chat per project, which `cwd`
+  names. `permission_mode` holds illi's modes.
+- Only `command` hooks, and the seven events above.
+- They run one after another, not at once, and illi's time limits are
+  shorter (60 s, not 10 minutes).

@@ -34,6 +34,9 @@ sessions.
   through your own Claude Code.
 - **Crash-proof.** A message is on disk before illi answers. Quit or
   crash mid-turn, and the next start goes on where it was.
+- **Yours to change.** Agents, commands and skills in Claude Code's
+  format, MCP servers, plugins in TypeScript, and shell hooks in Claude
+  Code's hook format ([Customize](docs/customize.md)).
 
 Install
 -------
@@ -137,7 +140,7 @@ Docs
 - [Providers](docs/providers.md): ChatGPT, your Claude plan through
   Claude Code, API keys, and which models do what.
 - [Customize](docs/customize.md): agents, commands, skills, MCP servers,
-  plugins, the theme and its accent, rules.
+  plugins, hooks, the theme and its accent, rules.
 - [Profiles](docs/profiles.md): separate chats on one global setup, e.g.
   work and home.
 - [Config](docs/config.md): every setting and variable, the files illi

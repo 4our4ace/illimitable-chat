@@ -22,7 +22,7 @@ Modes
 | `auto` (default) | run | run | asked |
 | `ask` | run | asked | asked |
 | `read-only` | run | refused | asked |
-| `yolo` | run | run | run |
+| `yolo` | run | run | run (but a write to illi's own config) |
 
 - `/mode` switches it for this session, or click it at the bottom
   line's right end (`read-only` in the warning color, `yolo` in the
@@ -30,7 +30,9 @@ Modes
 - The `mode` setting ([Config](config.md)) is the default; `yolo` set
   there is said at the start. `ILLI_MODE=yolo` runs a script unasked.
 - Your rules hold in every mode: deny refuses and ask asks, even in
-  `yolo`.
+  `yolo`. So does one check of illi's own: a write to its config (any
+  file in `~/.illi`, or a project's `.illi`: what it runs and is told,
+  hooks and plugins among them) is asked, until you grant that file.
 
 What is asked about
 -------------------
@@ -85,8 +87,12 @@ On `claude-code`, Claude Code's own settings apply first (your
 about comes to illi and is checked the same way, `Bash` as the shell,
 `Read`, `Grep` and `Glob` as reads, `Write` and `Edit` as changes.
 
-Plugins' `tool.before` hooks run before the check, so it judges the
-input they leave ([Customize](customize.md#plugins)).
+Plugins' `tool.before` hooks and your `PreToolUse` hooks run before the
+check, so it judges the input they leave
+([Customize](customize.md#hooks)). One may refuse the call; have it
+asked (its why first, with no "don't ask again"); or allow it, so it is
+judged as in `yolo` mode: your rules and illi's own config are still
+asked.
 
 The question
 ------------

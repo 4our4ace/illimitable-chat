@@ -19,7 +19,11 @@
 // screen as it was; what is logged meanwhile comes after it; failed or
 // stopped, the chat is as it was, and a quit resumes nothing. A view
 // switches this session's mode; a refused request allowed again is told
-// to illi in the user's name, its grants this session's; a grant goes.
+// to illi in the user's name, its grants this session's; a grant goes. A
+// message passes the plugins' and hooks' checks (kept back, told more;
+// slow ones waited on in the views' sight, a stop sending it back); their
+// turn.stop makes a turn go on before its goal is checked, 8 times in a
+// row at most; what they tell every call comes after where illi works.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -545,6 +549,91 @@ test("a turn answered counts the suggested reply unused only if the user passed 
   await turn();
   expect([stopped, chat.suggest.call, chat.suggest.unused]).toEqual([true, null, 1]);
   chat.suggest.unused = 0;
+});
+
+// the chat's last n messages, as kind: text
+const lasts = (n: number) => Array.from({ length: n }, (_, k) => Memory.message(chat.mem, chat.mem.count - n + k)!).map((m) => m.kind + ": " + m.text);
+
+test("a message past the plugins' and hooks' checks: kept back, why said; sent with what they add, a note after it; while slow ones run the views wait on them, and a stop sends it back unsent", async () => {
+  const { Plugins } = await import("../config/Plugins.ts");
+  await until(() => !chat.busy);
+  Plugins.own("test", "", "the test", [{ hook: "message.before", run: (ev: any) => ev.text === "no" ? { block: "Not that." } : ev.text === "slow" ? new Promise((done) => ev.signal.addEventListener("abort", () => done(undefined))) : { context: "It's Friday." } }]);
+  try {
+    const count = chat.mem.count;
+    expect(await Chat.say(chat, [], Buffer.from("no"))).toEqual({ error: "Not that." });
+    expect(chat.mem.count).toBe(count);
+    expect(await Chat.say(chat, [], Buffer.from("yes"))).toEqual({});
+    await until(() => !chat.busy);
+    expect(lasts(3)).toEqual(["user: yes", "note: From the test:\nIt's Friday.", "illi: hello back"]);
+    const slow = Chat.say(chat, [], Buffer.from("slow"));
+    await Bun.sleep(400);
+    expect(Chat.state(chat)).toMatchObject({ busy: true, wait: "your hooks" });
+    await Chat.act(chat, { $: "stop" });
+    expect(await slow).toEqual({ error: "Stopped before it was sent: your message is back in the input." });
+    expect([chat.checking, Chat.state(chat)]).toMatchObject([null, { busy: false, wait: "" }]);
+    expect(lasts(1)).toEqual(["illi: hello back"]);
+  } finally {
+    Plugins.reset();
+  }
+});
+
+test("a turn ending of itself: a turn.stop hook, given the reply, makes it go on from its note, before the goal is checked; past 8 in a row with no tool call it ends, saying so", async () => {
+  const { Plugins } = await import("../config/Plugins.ts");
+  await until(() => !chat.busy);
+  const ask = AskAI.ask;
+  const calls: string[] = [];
+  const seen: Array<[boolean, string]> = [];
+  let goes = 1;
+  AskAI.ask = (a, on) => {
+    const goal = a.system.startsWith("You check a goal");
+    calls.push(goal ? "goal" : "turn");
+    const [call, feed] = AskAI.tie(on, () => {}, () => {});
+    queueMicrotask(() => {
+      feed.on({ $: "Entry", kind: "illi", text: goal ? "yes" : "done " + calls.length });
+      feed.end({ ok: true, text: goal ? "yes" : "done " + calls.length, left: [] });
+    });
+    return call;
+  };
+  Plugins.own("test", "", "the test", [{ hook: "turn.stop", run: (ev: any) => (seen.push([ev.again, ev.reply]), goes-- > 0 ? { continue: "Run the tests." } : undefined) }]);
+  try {
+    chat.mem.goal = "ship it";
+    expect(await Chat.say(chat, [], Buffer.from("go"))).toEqual({});
+    await until(() => !chat.busy && chat.mem.goal === null);
+    expect(calls).toEqual(["turn", "turn", "goal"]);
+    expect(seen).toEqual([[false, "done 1"], [true, "done 2"]]);
+    expect(lasts(5)).toEqual(["user: go", "illi: done 1", "note: From the test:\nRun the tests.", "illi: done 2", "note: Goal met."]);
+    [goes, calls.length, seen.length] = [100, 0, 0];
+    expect(await Chat.say(chat, [], Buffer.from("again"))).toEqual({});
+    await until(() => !chat.busy && lasts(1)[0].startsWith("note: Hooks asked"));
+    expect([calls.length, seen[0][0], seen[1][0]]).toEqual([9, false, true]);
+    expect(lasts(1)).toEqual(["note: Hooks asked illi to go on 8 times in a row: it stops here till your next message."]);
+    chat.goings = 5;
+    Chat.on(chat, null, { $: "Entry", kind: "tool", text: "shell ls", of: "t1" });
+    expect(chat.goings).toBe(0);
+    delete chat.calls.t1;
+    Chat.live(chat, null, []);
+  } finally {
+    AskAI.ask = ask;
+    chat.mem.goal = null;
+    Plugins.reset();
+  }
+});
+
+test("what the plugins and hooks tell every call of the run comes after where illi works, out of the cache's mark", async () => {
+  await until(() => !chat.busy);
+  const ask = AskAI.ask;
+  let blocks: any[] = [];
+  AskAI.ask = (a, on) => ((blocks = a.blocks), ask(a, on));
+  chat.context = Promise.resolve(["From your hooks:\nOn branch main."]);
+  try {
+    expect(await Chat.say(chat, [], Buffer.from("where am I"))).toEqual({});
+    await until(() => blocks.length > 0 && !chat.busy);
+  } finally {
+    AskAI.ask = ask;
+    chat.context = Promise.resolve([]);
+  }
+  const at = blocks.findIndex((b) => b.text.startsWith("Working dir: "));
+  expect(blocks[at + 1]).toEqual({ text: "From your hooks:\nOn branch main.\n\n", mark: false });
 });
 
 test("the suggested reply stays as the chat closes, so the next start shows it (a screen that asks for none, none); let go, saved so", async () => {
