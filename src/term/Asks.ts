@@ -5,7 +5,8 @@
 // don't ask again for what it keeps, in this project (offered only when
 // it keeps something); No (Esc too); No, and say why (a line typed, for
 // the model). What it would do and why it was asked show over the
-// answers, and as a note.
+// answers, once: no note says them again (a pipe, with no answers to
+// show, notes them).
 // illi's own questions (ask) show in the popup too, as a form (Popup.ts:
 // over a pane too, the input as typed left under it), a tab each: the
 // question, its options (one to pick, or several), and a row for words
@@ -14,7 +15,7 @@
 // send. Esc skips them all.
 // One answered elsewhere, or dropped (a stop), closes its picker; one
 // that comes while another picker is open waits for it to close. A
-// pipe has no one to ask: no, at once.
+// pipe has no one to ask: a note says what was asked, and no, at once.
 
 import { term_ask, term_chooser } from "./Commands.ts";
 import * as Draw from "../ui/Draw.ts";
@@ -48,10 +49,10 @@ export function term_asks(t: Term): void {
   }
   if (t.asking === null) {
     t.asking = { id: q.id, c: null, done: false, form: q.queries === undefined ? null : { tab: 0, top: 0, each: q.queries.map(() => ({ ed: Screen.ed_new(), at: 0, picked: [] })) }, shown: null };
-    if (q.queries === undefined) {
-      term_note(t, q.who + " asks to use " + q.tool + (q.what === "" ? "" : ": " + q.what) + (q.why === undefined || q.why === "" ? "." : ". Why: " + q.why));
-    }
     if (!t.scr.tty) {
+      if (q.queries === undefined) {
+        term_note(t, q.who + " asks to use " + q.tool + (q.what === "" ? "" : ": " + q.what) + (q.why === undefined || q.why === "" ? "." : ". Why: " + q.why));
+      }
       return term_answer(t, q, false, false, "");
     }
   }
