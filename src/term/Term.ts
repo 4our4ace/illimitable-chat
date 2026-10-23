@@ -106,7 +106,8 @@ import * as View from "../ui/View.ts";
 // lead: the leader pressed, the next key its shortcut's (the screen grey
 // meanwhile: Frame.ts); quoted: the quote a right drag put in the input
 // last, when and what it added (Select.ts; null: none); box: the popup
-// as last painted (Popup.ts; null: none, or a new size since)
+// as last painted (Popup.ts; null: none, or a new size since), aim: the
+// mouse as it saw it
 export type Term = {
   v       : View.View;
   scr     : Screen.Screen;
@@ -151,7 +152,16 @@ export type Term = {
   quoted  : { at: number; add: string } | null;
   asking  : { id: string; c: Chooser | null; done: boolean; form: Form | null; shown: number | null } | null; // the question shown (Asks.ts): its picker or form, whether answered, when it showed (Popup.ts popup_shown; null: not since it last opened)
   box     : PopBox | null;
+  aim     : Aim;
 };
+
+// the mouse as the popup saw it (Popup.ts popup_mouse): the pointer's
+// row as last seen, and whether it was in the box; the press it took
+// (none: null), in the box painted for what (null: one let go: a box
+// stale, a click again), and what it landed on (a row's target, the box,
+// outside); what was open at the last first press (a popup's picker,
+// none: null), for the presses again after it
+export type Aim = { row: number; in: boolean; press: { of: object | null; on: Target | "box" | "out" | null } | null; first: object | null };
 
 // a popup as last painted (Popup.ts): what it was painted for (the
 // picker), its place and size, what each of its rows stands for, top
@@ -339,6 +349,7 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
     quoted  : null,
     asking  : null,
     box     : null,
+    aim     : { row: -1, in: false, press: null, first: null },
   };
   // the chat suggests replies to a screen that shows them, never a pipe
   if (chat !== null) {

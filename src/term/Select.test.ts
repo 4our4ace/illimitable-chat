@@ -4,10 +4,10 @@
 // Code: a drag lights the cells past a short line's text and a blank
 // line's whole width, it may start or end in empty space, and what it
 // copies drops each line's end spaces (a blank line an empty one). A
-// right drag over the chat quotes what it covers in the input (not under
-// a picker, nor into an agent's read-only page; a reply's buttons left
-// out, none started on one), and a right click soon after takes the
-// quote out.
+// right drag over the chat quotes what it covers in the input (not into
+// an agent's read-only page; a reply's buttons left out, none started on
+// one), and a right click soon after takes the quote out. (Under a popup
+// the mouse is the popup's: Popup.test.ts.)
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -60,7 +60,7 @@ test("a choice lights a short line past its text and a blank line whole; it copi
   expect(term_selected(t)).toBe("world\n\nhi");
 });
 
-test("a right drag over the chat quotes what it covers at the input's end, a line each; a right click soon after takes it out, later not; none under a picker or into an agent's read-only page", () => {
+test("a right drag over the chat quotes what it covers at the input's end, a line each; a right click soon after takes it out, later not; none into an agent's read-only page", () => {
   const t = { ...term(), v: View.view_new(), notices: [], quoted: null, choose: null, scr: { point: { row: 0, col: 0 }, clicks: 1, ed: Screen.ed_new() } } as any;
   const quote = (from: [number, number], to: [number, number], area = AREA) => {
     t.areas = [];
@@ -87,10 +87,6 @@ test("a right drag over the chat quotes what it covers at the input's end, a lin
   expect(t.scr.ed.text).toBe("my reply\n> hello\n");
   quote([0, 0], [0, 4], { ...AREA, key: "side" });
   expect(t.scr.ed.text).toBe("my reply\n> hello\n");
-  t.choose = { title: "Model" };
-  quote([0, 0], [0, 4]);
-  expect(t.scr.ed.text).toBe("my reply\n> hello\n");
-  t.choose = null;
   t.v.page = "reviewer";
   quote([0, 0], [0, 4]);
   expect([t.scr.ed.text, t.notices.at(-1).text]).toEqual(["my reply\n> hello\n", "Not quoted: this page's input is read-only"]);

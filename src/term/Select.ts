@@ -9,16 +9,18 @@
 // width); what's copied drops each line's end spaces. A reply's button
 // under the pointer lights, and a click copies what it holds; buttons
 // are no text, so what's copied or quoted leaves them out. The right
-// button dragged over the chat chooses the same way (not while a picker
-// has the focus, nor from a button), and as it's let go the text is
-// quoted in the input, to reply to it (not on an agent's read-only page);
-// a right click soon after takes the quote out again.
+// button dragged over the chat chooses the same way (not from a button),
+// and as it's let go the text is quoted in the input, to reply to it (not
+// on an agent's read-only page); a right click soon after takes the quote
+// out again. Under a popup the mouse is its alone (Popup.ts popup_mouse,
+// before all of this): nothing is chosen there, and no button lights.
 
 import * as Draw from "../ui/Draw.ts";
 import { term_draw } from "./Frame.ts";
 import { term_click } from "./Keys.ts";
 import { term_toast } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
+import { term_popup } from "./Popup.ts";
 import * as Screen from "../ui/Screen.ts";
 import type { Area, Cell, Ink, Sel, Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
@@ -65,7 +67,7 @@ export function term_mouse(t: Term, key: string): void {
   const p = t.scr.point;
   if (key === "RightPress") {
     const area = term_area_at(t, p);
-    const at   = area?.key === "chat" && t.choose === null && term_under(t, p) === undefined ? term_cell(area, p) : null;
+    const at   = area?.key === "chat" && term_under(t, p) === undefined ? term_cell(area, p) : null;
     t.sel      = area !== undefined && at !== null ? { key: area.key, a: at, b: at, held: true, moved: false, unit: 1, root: [at, at] } : null;
   } else if (key === "RightRelease") {
     term_drift(t, 0);
@@ -130,6 +132,13 @@ function term_unit(area: Area, at: Cell, n: number): [Cell, Cell] {
 // whether a cell comes after another
 function term_after(x: Cell, y: Cell): boolean {
   return x.line > y.line || (x.line === y.line && x.col > y.col);
+}
+
+// a choice let go unfinished (a popup opened under a drag): nothing
+// copied, its scrolling past the edge stopped
+export function term_let_go(t: Term): void {
+  term_drift(t, 0);
+  t.sel = null;
 }
 
 // a drag past its area's edge: it scrolls a line each DRIFT ms, up (d
@@ -218,10 +227,10 @@ function term_word(line: Paint.Line, col: number): [number, number] {
   return [cells[i].at, cells[j].at + cells[j].w];
 }
 
-// the button under a spot (none: no button there)
+// the button under a spot (none: no button there, or a popup over all)
 export function term_under(t: Term, p: Screen.Spot): (() => string) | undefined {
   const area = t.areas.find((a) => p.row >= a.row && p.row < a.row + a.tall && p.col >= a.col && p.col < a.col + a.w);
-  return area === undefined ? undefined : term_button(area.lines[area.first + p.row - area.row] ?? [], p.col - area.col);
+  return area === undefined || term_popup(t) !== null ? undefined : term_button(area.lines[area.first + p.row - area.row] ?? [], p.col - area.col);
 }
 
 // the pointer moved: painted again only if it's over another button
@@ -245,7 +254,8 @@ export function term_area(t: Term, area: Area): Paint.Line[] {
 // an area's row k: the cells chosen in it on the chosen fill (else
 // reversed), past its text too (to the choice's end, at most the area's
 // width), the button under the pointer lit, as Claude Code lights one:
-// in the background's color on a fill near the text's (else reversed)
+// in the background's color on a fill near the text's (else reversed);
+// none under a popup
 function term_marked(t: Term, area: Area, k: number): Paint.Line {
   const n      = area.first + k;
   const span   = t.sel?.key === area.key && t.sel.moved ? term_span(t.sel, n) : null;
@@ -260,7 +270,7 @@ function term_marked(t: Term, area: Area, k: number): Paint.Line {
     line = room > 0 ? [...line, Paint.Run(" ".repeat(room))] : line;
     line = Paint.line_mark(line, span[0], span[1], hex(c) ? (s) => ({ ...s, g: Draw.draw_mix(canvas, c!, SELECT), v: false }) : (s) => ({ ...s, v: !s.v }));
   }
-  const copy = t.sel?.held || p.row !== area.row + k ? undefined : term_button(line, p.col - area.col);
+  const copy = t.sel?.held || p.row !== area.row + k || term_popup(t) !== null ? undefined : term_button(line, p.col - area.col);
   if (copy !== undefined) {
     const runs  = line.filter((r) => r.copy === copy);
     const from  = Paint.line_width(line.slice(0, line.indexOf(runs[0])));

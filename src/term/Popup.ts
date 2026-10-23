@@ -17,17 +17,24 @@
 // what an option is gives way first, then its aside, and on a screen too
 // narrow for it the name wraps, under itself. While it is open it has
 // every key (Keys.ts), the wheel and the pages moving in it
-// (popup_wheel, popup_page): nothing reaches the chat, the side, the
-// tabs or the input under it, and a paste goes to its search, if any.
+// (popup_wheel, popup_page), and the whole mouse (popup_mouse): the
+// pointer moving to a row lights it (one lit row, shared with the keys),
+// a click on an option does what Enter does there, a click outside
+// closes a list (a question stays); nothing reaches the chat, the side,
+// the tabs or the input under it (no button lights, no text is chosen),
+// and a paste goes to its search, if any.
 // A question illi asks (the permission question, its form) holds Enter,
 // Space and a click for ARM after it first shows (popup_held), so the key
 // that ended a sentence never answers it; Esc, its no, never waits. The
 // commands suggested as a /word is typed stay at the input, and panes in
 // the chat's place (Frame.ts).
 
+import { term_asks } from "./Asks.ts";
 import * as Draw from "../ui/Draw.ts";
-import { MARGIN } from "./Frame.ts";
+import { MARGIN, term_draw } from "./Frame.ts";
+import { term_choose_key } from "./Keys.ts";
 import * as Paint from "../ui/Paint.ts";
+import { term_let_go } from "./Select.ts";
 import type * as Screen from "../ui/Screen.ts";
 import type { Chooser, PopBox, Target, Term } from "./Term.ts";
 import { GLYPH } from "../ui/Theme.ts";
@@ -65,6 +72,10 @@ const STEP = 3;
 // less than it takes to read it
 const ARM = 500;
 
+// what the pointer is on in a popup, as painted: a row's target, the box
+// (its frame, a head, a blank), or outside it
+type Pointed = Target | "box" | "out";
+
 // a popup's place on the screen: its top row, its first column, its
 // width and height
 type Place = { row: number; col: number; w: number; h: number };
@@ -84,6 +95,11 @@ type Measure = { names: number; wants: number; least: number; tall: (iw: number)
 // the popup open: the picker (a list, or a line asked for); none: null
 export function term_popup(t: Term): "list" | null {
   return t.choose !== null ? "list" : null;
+}
+
+// what the popup open is (its picker; none: null), as its box keeps it
+function popup_of(t: Term): object | null {
+  return t.choose;
 }
 
 // whether the question open (its picker, or illi's form, form: drawn now)
@@ -131,7 +147,8 @@ export function popup_size(m: Measure, w: number, h: number, was = 0): Place {
 // else re-inked in one ink near the background (the backdrop; dim, the
 // background not told), the box on a background of its own, at its
 // place (popup_size; as wide as it was painted last, if it is still the
-// one open); kept as painted (t.box). The cursor's spot in it, if it
+// one open); kept as painted (t.box), the pointer's row seen as it first
+// shows (it lights a row once it moves). The cursor's spot in it, if it
 // takes the typing (null: none)
 export function popup_paint(t: Term, rows: Screen.Piece[][], w: number, h: number): Screen.Spot | null {
   const c     = t.choose!;
@@ -146,15 +163,12 @@ export function popup_paint(t: Term, rows: Screen.Piece[][], w: number, h: numbe
   box.lines.forEach((line, k) => {
     rows[at.row + k].push({ col: at.col, w: at.w, line: panel === undefined ? line : line.map((r) => ({ ...r, s: { ...r.s, g: panel } })) });
   });
+  const first = t.box?.of !== c;
   t.box = { of: c, ...at, rows: box.rows, ...box.shape };
-  box.rows.forEach((aim, k) => {
-    if (aim !== null) {
-      t.hits.push({ row: at.row + k, col: at.col, to: at.col + at.w, run: () => {
-        t.choose = null;
-        c.pick(aim.k);
-      } });
-    }
-  });
+  if (first) {
+    t.aim.row = t.scr.point.row;
+    t.aim.in  = popup_at(t.box, t.scr.point) !== "out";
+  }
   return box.at === undefined ? null : { row: at.row + box.at.row, col: at.col + box.at.col };
 }
 
@@ -449,4 +463,110 @@ function popup_about(text: string, w: number): string {
   const end = [...text.matchAll(/ {2,}/g)].map((m) => m.index + m[0].length).reverse().find((e) => Paint.text_width(text.slice(0, e)) <= w);
   const cut = end === undefined || w - Paint.text_width(text.slice(0, end)) > CUT;
   return cut ? (w < 2 ? "" : Paint.line_cut([Paint.Run(text)], 0, w - 1)[1].map((r) => r.x).join("") + "…") : text.slice(0, end).trimEnd();
+}
+
+// a mouse report (Keys.ts term_press, before all else; true: taken).
+// While a popup is open every report is its, wherever the pointer is
+// (none but its own: a drag begun before it opened is let go, nothing
+// copied): a move to another row, or into the box, lights the option
+// there, a paint only as the lit one changes (popup_hover); a press arms
+// what it lands on (an option, the box, outside) and a release on the
+// same takes it (popup_click), so a slip never picks; a drag, the right
+// button, nothing. A press the popup took keeps its release, though the
+// popup be gone since; a press again (a double or triple click) goes
+// nowhere if a popup opened or closed since the first; a report for a
+// box no longer open (a new size, a question answered elsewhere: asked
+// again first) does nothing. No popup: not taken (Select.ts)
+export function popup_mouse(t: Term, key: string): boolean {
+  const aim = t.aim;
+  if (key === "Press" || key === "Release") {
+    term_asks(t);
+  }
+  const of  = popup_of(t);
+  const box = t.box !== null && t.box.of === of ? t.box : null;
+  if (key === "Press") {
+    const again = t.scr.clicks > 1 && aim.first !== of;
+    aim.first   = t.scr.clicks === 1 ? of : aim.first;
+    aim.press   = again ? { of: null, on: null } : of === null ? null : { of: box === null ? null : of, on: box === null ? null : popup_at(box, t.scr.point) };
+    if (again) {
+      return true;
+    }
+  }
+  if (of === null) {
+    const took = aim.press !== null && (key === "Drag" || key === "Release");
+    aim.press  = key === "Release" ? null : aim.press;
+    return took;
+  }
+  if (t.sel?.held) {
+    term_let_go(t);
+  }
+  if (key === "Move") {
+    popup_hover(t, box);
+  } else if (key === "Release") {
+    const press = aim.press;
+    aim.press   = null;
+    const at    = box === null ? null : popup_at(box, t.scr.point);
+    if (press?.of === of && at !== null && popup_same(press.on, at)) {
+      popup_click(t, at);
+    }
+  }
+  return true;
+}
+
+// what a spot of the screen is in a popup as painted
+function popup_at(box: PopBox, p: Screen.Spot): Pointed {
+  const inside = p.row >= box.row && p.row < box.row + box.h && p.col >= box.col && p.col < box.col + box.w;
+  return !inside ? "out" : box.rows[p.row - box.row] ?? "box";
+}
+
+// whether two spots are one: the same place, or what they stand for
+function popup_same(a: Pointed | null, b: Pointed): boolean {
+  return typeof a === "object" && a !== null && typeof b === "object" ? a.$ === b.$ && a.k === b.k : a === b;
+}
+
+// the pointer moved, in a popup as painted (none: nothing): to another
+// row, or into the box, the option there lit (a head, a gap, the lead,
+// the frame: none); along its row, or at rest, the keys' lit row kept;
+// leaving the box leaves it lit. A paint only as it changes
+function popup_hover(t: Term, box: PopBox | null): void {
+  if (box === null) {
+    return;
+  }
+  const p     = t.scr.point;
+  const at    = popup_at(box, p);
+  const moved = p.row !== t.aim.row || (at !== "out" && !t.aim.in);
+  t.aim.row   = p.row;
+  t.aim.in    = at !== "out";
+  if (moved && typeof at === "object" && popup_light(t, at)) {
+    term_draw(t);
+  }
+}
+
+// a target lit in the popup open, if it still shows (true: it changed)
+function popup_light(t: Term, at: Target): boolean {
+  const c = t.choose!;
+  const i = c.shown.findIndex((m) => m.k === at.k);
+  if (i < 0 || i === c.at) {
+    return false;
+  }
+  c.at = i;
+  return true;
+}
+
+// a click in the popup open, pressed and let go on one spot: an option
+// (still shown), lit, then what Enter does there, its list's own keys
+// first (a setting stepped, a toggle, a question's answer; held as Enter
+// is, just shown); outside, a list closes as Esc closes it (a question
+// stays: a click never answers for you; the line asked why goes back to
+// its question); the box, nothing
+function popup_click(t: Term, at: Pointed): void {
+  const c = t.choose!;
+  if (at === "out" && c.stays !== true) {
+    term_choose_key(t, c, "Esc");
+  } else if (typeof at === "object") {
+    popup_light(t, at);
+    if (c.shown[c.at]?.k === at.k) {
+      term_choose_key(t, c, "Enter");
+    }
+  }
 }
