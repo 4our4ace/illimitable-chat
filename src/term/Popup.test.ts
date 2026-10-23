@@ -25,7 +25,10 @@
 // nothing; a double click picks once; a box no longer open (a new size,
 // a question answered elsewhere) does nothing; a question just shown
 // holds a click as it holds Enter; the click that only focuses the
-// terminal's window picks nothing and closes nothing.
+// terminal's window picks nothing and closes nothing. The commands
+// suggested as a /word is typed: a click on one does what Enter does
+// there, a press on them chooses no text; a drag from elsewhere goes on
+// over them.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -436,5 +439,35 @@ test("the click that only focuses the terminal picks nothing and closes nothing:
     t.scr.gained -= 200;
     click(t, r, c);
     expect(picked).toEqual([1]);
+  });
+});
+
+test("the commands suggested: a click on one does what Enter does there (found by what it does: filled in; by name: run), a press on them chooses no text; a drag begun in the chat goes on over them", () => {
+  sized(120, 30, () => {
+    const t = term();
+    Screen.ed_set(t.scr.ed, "/new");
+    paint(t);
+    expect(t.box.of).toBe(t.sug);
+    const first = t.box.row + t.box.rows.findIndex((aim: any) => aim?.$ === "command" && aim.k === 0);
+    click(t, first, 10);
+    expect([t.scr.ed.text, t.v.out]).toEqual(["/clear ", []]);
+    Screen.ed_set(t.scr.ed, "/hel");
+    paint(t);
+    const help = t.box.row + 1;
+    press(t, help, 10);
+    drag(t, help, 30);
+    expect(t.sel).toBeNull();
+    let_go(t, help, 30);
+    expect(t.pane?.title).toBe("Help");
+    const u = term();
+    paint(u);
+    u.areas.push({ key: "chat", lines: [[Paint.Run("some words in the chat")], [], [], [], []], first: 0, row: 20, col: 2, w: 60, tall: 5 });
+    press(u, 20, 2);
+    Screen.ed_set(u.scr.ed, "/hel");
+    paint(u);
+    u.areas.push({ key: "chat", lines: [[Paint.Run("some words in the chat")], [], [], [], []], first: 0, row: 20, col: 2, w: 60, tall: 5 });
+    drag(u, u.box.row + 1, 12);
+    let_go(u, u.box.row + 1, 12);
+    expect([u.pane, u.sel?.key]).toEqual([null, "chat"]);
   });
 });

@@ -229,8 +229,8 @@ export function term_type(t: Term, text: string): boolean {
   return term_form_type(t, text);
 }
 
-// a click (never under a popup: Popup.ts has those): what was drawn
-// there does its own (the side, the commands suggested, the tabs, a
+// a click (never under a popup, nor on the commands suggested: Popup.ts
+// has those): what was drawn there does its own (the side, the tabs, a
 // reply's button copies); in the chat, a run of work opens or closes, a
 // block opens, an open one's top edge shuts it
 export function term_click(t: Term): void {
