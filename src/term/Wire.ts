@@ -78,6 +78,7 @@ const ST  = "\x1b\\";
 // a frame with no end past this many bytes is given up, as bytes
 export const CAP = 65536;
 
+// ILLI_WINDOW's shape: the version, the nonce, how the member starts
 const HOW = /^(\d+):([0-9a-f]{32}):(shown|switch|hidden)$/;
 
 // Wire
@@ -105,11 +106,16 @@ export function wire_frame(msg: Up | Down, nonce: string): string {
   return APC + "illi:" + nonce + ":" + json + ST;
 }
 
+// a frame's start, up to its JSON, for this nonce
+export function wire_head(nonce: string): string {
+  return APC + "illi:" + nonce + ":";
+}
+
 // a frame of this nonce at data's start: its message (null: its JSON
 // unreadable, the frame dropped) and length; 0: one cut short by data's
 // end (the rest awaited); null: none
 export function wire_take(data: string, nonce: string): { msg: object | null; n: number } | 0 | null {
-  const head = APC + "illi:" + nonce + ":";
+  const head = wire_head(nonce);
   if (data.length < head.length) {
     return head.startsWith(data) ? 0 : null;
   }

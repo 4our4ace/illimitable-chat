@@ -2,15 +2,15 @@
 // ===========
 // `bun test Member.test.ts`. illi as one profile of a window: ILLI_WINDOW
 // is gone from its environment once it loads, and back for a restart in
-// place, shown or hidden as it is; it says who it is, and its state only
-// as it changes; hidden for a switch, it paints nothing, its status line
-// stopped and a login let go, then says `hide`; Ctrl+Z hides it too, the
-// login kept, and says `suspend`; shown by a switch, it is up, paints
-// whole and is kept as the profile used last (anywhere, and in the
-// project); the roster notes another's question and its work done, once
-// each, and the window's own note (one told while it started, once it's
-// up); the person's quit tells the window once; `end` leaves a quit
-// under way alone.
+// place, shown or hidden as it is (alone, `off` as found, so illi stays
+// alone); it says who it is, and its state only as it changes; hidden
+// for a switch, it paints nothing, its status line stopped and a login
+// let go, then says `hide`; Ctrl+Z hides it too, the login kept, and says
+// `suspend`; shown by a switch, it is up, paints whole and is kept as the
+// profile used last (anywhere, and in the project); the roster notes
+// another's question and its work done, once each, and the window's own
+// note (one told while it started, once it's up); the person's quit
+// tells the window once; `end` leaves a quit under way alone.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -57,6 +57,12 @@ test("ILLI_WINDOW is gone from the environment once illi loads, and back for a r
   expect(process.env.ILLI_WINDOW).toBeUndefined();
   expect([WIN?.how, WIN?.shown]).toEqual(["shown", true]);
   expect(member_env()).toEqual({ ILLI_WINDOW: "1:" + NONCE + ":shown" });
+});
+
+test("alone (ILLI_WINDOW=off), ILLI_WINDOW is gone from the environment too, and back as found for a restart in place, so illi stays alone", () => {
+  const code = "const { WIN, member_env } = await import(" + JSON.stringify(new URL("./Member.ts", import.meta.url).pathname) + "); console.log(JSON.stringify([WIN, member_env(), process.env.ILLI_WINDOW ?? null]));";
+  const run  = Bun.spawnSync([process.execPath, "-e", code], { env: { ...process.env, ILLI_DIR: DIR, ILLI_WINDOW: "off" } });
+  expect(JSON.parse(run.stdout.toString())).toEqual([null, { ILLI_WINDOW: "off" }, null]);
 });
 
 test("it says who it is; its state only as it changes", () => {

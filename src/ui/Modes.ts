@@ -57,9 +57,9 @@ export const MODES_END = TITLE_NONE + TITLE_POP + MODES_OFF;
 
 // what a profile's illi may have left on the terminal (cut off mid-paint,
 // or crashed) put right before another is shown: a synchronized write
-// ended, the ink plain, the scroll region the whole screen, the cursor
-// shown
-export const RESET = SYNC_OFF + "\x1b[0m\x1b[r" + SHOW;
+// ended, a link (OSC 8) closed, the ink plain, the scroll region the
+// whole screen, the cursor shown
+export const RESET = SYNC_OFF + "\x1b]8;;\x1b\\\x1b[0m\x1b[r" + SHOW;
 
 // the background asked (OSC 11)
 export const ASK = "\x1b]11;?\x1b\\";

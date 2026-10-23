@@ -151,6 +151,7 @@ const UPDATED = "illi was updated meanwhile: quit illi and start it again to swi
 // Window
 // ======
 
+// a window of this nonce, before its first member
 export function window_new(nonce: string): Window {
   return { nonce, members: [], shown: null, pending: null, came: null, last: null, on: false, queue: "", notes: [], ending: false, code: 0, lines: [], suspended: false, root: "", ids: 0, shows: 0 };
 }
@@ -468,6 +469,8 @@ export function window_run(self = window_self()): void {
       seen.timer = setTimeout(() => ended(id, { pty: true }), EOF_WAIT);
     }
   };
+  // a member started on a PTY of the terminal's size, its output and
+  // end heard; one that can't start, an end saying why
   const spawn = (id: number, profile: string, how: How) => {
     const env = { ...process.env, ILLI_WINDOW: wire_env(w.nonce, how), ...(profile === "" ? {} : { ILLI_PROFILE: profile }), ...(process.env.ILLI_DIR !== undefined && w.root !== "" ? { ILLI_DIR: w.root } : {}) };
     try {
@@ -499,6 +502,8 @@ export function window_run(self = window_self()): void {
       step({ $: "resumed", dropped });
     }
   };
+  // the end: every PTY closed, the terminal cooked once all written, the
+  // lines said, the exit (EOF_WAIT at most for the terminal)
   const finish = (code: number, lines: string[]) => {
     procs.forEach((p) => p.terminal?.close());
     const said = lines.map((l) => l + "\n").join("");
@@ -511,6 +516,7 @@ export function window_run(self = window_self()): void {
     });
     setTimeout(() => process.exit(code), EOF_WAIT).unref();
   };
+  // an effect of window_step, done
   const act = (f: Effect): void => {
     switch (f.$) {
       case "spawn":   return spawn(f.id, f.profile, f.how);

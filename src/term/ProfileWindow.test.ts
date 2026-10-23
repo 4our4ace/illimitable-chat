@@ -4,7 +4,8 @@
 // switch hides this illi at once, whatever runs (a turn, background
 // jobs), and nothing asks; a fresh profile is made and switched to at
 // once; a profile open hidden in the window can't be renamed or deleted;
-// a pipe still runs in one profile. The side marks the profiles open
+// a pipe still runs in one profile; one hidden that runs again in place
+// isn't kept as the profile used last. The side marks the profiles open
 // hidden here as they are, the title asks for one's question, and a
 // quit says which at work it ends.
 
@@ -139,4 +140,21 @@ test("a quit says which profiles open hidden here at work it ends too; those at 
   roster(t, [open("work", { working: true, jobs: 1 }), open("home", { jobs: 2 }), open("idle")]);
   term_clear(t, "Ctrl+D");
   expect(t.notices.at(-1).text).toBe("Ctrl+D again to quit · also ends profile work (at work, 1 background job) · also ends profile home (2 background jobs)");
+});
+
+test("a profile hidden here that runs again in place (its chat's holder gone) isn't kept as the profile used last", async () => {
+  const { term_restart } = await import("./ProfileCommands.ts");
+  const t = { ...term(), chat: null };
+  await said(() => term_profile_go(t, "work"));
+  fs.writeFileSync(DIR + "/profile", "work\n");
+  const [execve, pause] = [process.execve, process.stdin.pause];
+  let ran: string[] = [];
+  process.execve = ((_path: string, args: string[]) => void (ran = args)) as any;
+  process.stdin.pause = (() => process.stdin) as any;
+  try {
+    await said(() => term_restart(t, "default"));
+  } finally {
+    [process.execve, process.stdin.pause] = [execve, pause];
+  }
+  expect([ran.length > 0, fs.readFileSync(DIR + "/profile", "utf8")]).toEqual([true, "work\n"]);
 });
