@@ -218,9 +218,9 @@ Enter or Del stops it.
 They live only while illi does. A profile switch keeps them running,
 hidden with their profile ([Profiles](profiles.md)); a quit stops them,
 so Ctrl+D (or a second Ctrl+C) first says how many it stops; illi is
-told they were stopped, so it starts them again if it needs them. A process that left its group
-(`setsid`, a daemon) isn't listed but is stopped at the quit all the
-same. On the `claude-code` provider, Claude Code runs the shell, so its
+told they were stopped, so it starts them again if it needs them. A
+process that left its group (`setsid`, a daemon) isn't listed but is
+stopped at the quit all the same. On the `claude-code` provider, Claude Code runs the shell, so its
 background jobs don't show here.
 
 Mouse and side panel

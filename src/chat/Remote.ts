@@ -12,7 +12,9 @@
 // The view's illi runs no chat of its own, nor agents, nor MCP servers;
 // what it reads itself (an export, the tree, the projects) it reads from
 // the file. When the chat's illi quits, the view's runs again (Term.ts):
-// it holds the chat then, or joins one that got there first.
+// it holds the chat then, or joins one that got there first. The illi
+// holding a project may be a profile left running hidden in a window
+// (Window.ts): it serves its views all the same.
 
 import * as net from "node:net";
 import { Chat, type Chat as Running } from "./Chat.ts";

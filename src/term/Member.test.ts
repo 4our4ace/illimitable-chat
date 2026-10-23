@@ -5,11 +5,12 @@
 // place, shown or hidden as it is; it says who it is, and its state only
 // as it changes; hidden for a switch, it paints nothing, its status line
 // stopped and a login let go, then says `hide`; Ctrl+Z hides it too, the
-// login kept, and says `suspend`; shown by a switch, it is
-// up, paints whole and is kept as the profile used last (anywhere, and in
-// the project); the roster notes another's question and its work done,
-// once each, and the window's own note; the person's quit tells the
-// window once; `end` leaves a quit under way alone.
+// login kept, and says `suspend`; shown by a switch, it is up, paints
+// whole and is kept as the profile used last (anywhere, and in the
+// project); the roster notes another's question and its work done, once
+// each, and the window's own note (one told while it started, once it's
+// up); the person's quit tells the window once; `end` leaves a quit
+// under way alone.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -109,6 +110,15 @@ test("the roster notes another profile's question and its work done, once each, 
   expect(told([work({ working: true, asks: true })])).toEqual([]);
   expect(told([work({ working: false })])).toEqual(["illi in profile work is done."]);
   expect(told([work({ working: false })], "illi in profile home ended.")).toEqual(["illi in profile home ended."]);
+});
+
+test("the others open, told while it started, are heard once its terminal is up: a question waiting noted", () => {
+  const t = term();
+  WIN!.t = null;
+  Screen.screen_feed(t.scr, wire_frame({ $: "roster", open: [{ profile: "work", asks: true, working: true, jobs: 0, holds: true }] }, NONCE));
+  expect(notes(t)).toEqual([]);
+  member_attach(t);
+  expect(notes(t)).toEqual(["illi in profile work asks you something: /profile work answers it."]);
 });
 
 test("the person's quit tells the window once; `end` leaves a quit under way alone", () => {
