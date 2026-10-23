@@ -11,8 +11,9 @@
 // rest, each the more picked here first (its own count, apart from the
 // commands typed: picked.json). Enter runs a command, but
 // one that needs words after it (<...>, #id) goes in the input to finish;
-// a setting's row takes what /settings does (Left, Right and Enter step
-// it, Enter on a pick or a text opens it, Delete puts its default back).
+// a setting's row takes what /settings does (Left, Right, Enter and
+// Shift+Enter step it, Enter on a pick or a text opens it, Delete puts
+// its default back).
 
 import { PICKED, term_chooser, term_command, term_groups, term_tally, term_tally_one } from "./Commands.ts";
 import * as config from "../config/Config.ts";

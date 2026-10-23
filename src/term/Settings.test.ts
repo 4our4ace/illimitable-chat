@@ -66,7 +66,7 @@ test("/settings lists each setting, its value and what it does; one a variable s
   expect([lit(t), foot(t)]).toEqual(["jobs", "◂ ▸ Enter change · Del default · at the next start"]);
 });
 
-test("Left, Right and Enter step a setting, kept in config.json at once; Delete puts its default back", () => {
+test("Left, Right, Enter and Shift+Enter step a setting, kept in config.json at once; Delete puts its default back", () => {
   const t = term();
   run(t, "/settings");
   term_type(t, "side_w");
@@ -79,6 +79,9 @@ test("Left, Right and Enter step a setting, kept in config.json at once; Delete 
   expect(config.SIDE_WIDTH).toBe("20%");
   term_grab(t, "Enter");
   expect([config.SIDE_WIDTH, t.choose?.title]).toEqual(["25%", "Settings"]);
+  term_grab(t, "Shift+Enter");
+  expect([file().side_width, config.SIDE_WIDTH, t.choose.find.text]).toEqual(["20%", "20%", "side_w"]);
+  term_grab(t, "Enter");
   term_grab(t, "Delete");
   expect(file().side_width).toBeUndefined();
   expect(config.SIDE_WIDTH).toBe("25%");
