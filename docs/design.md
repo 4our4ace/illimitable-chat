@@ -54,6 +54,22 @@ Marks
 | a braille cell, its dots going round | illi at work | the title, the side's subagents and profiles at work |
 | `⌕` | search | a list's search line |
 | `↓` | the chat's end; tokens written | Jump to Bottom; the work line |
+| `[ ⧉ copy ]` | a button: a click copies (`⧉ md`, `⧉ art`, `⧉ source`, `⧉ copy reply`) | over or beside a reply's lists, tables, code, diagrams, quotes and alerts; a reply's end |
+| `•` `◦` | a list's item, one nested deeper | replies |
+| `[✓]` `[ ]` | a task done, to do | replies' lists |
+
+Replies
+-------
+
+illi's replies are markdown drawn (`src/ui/Reply.ts`): headings boxed
+or ruled, lists hung under their bullets, tables boxed (too narrow for
+a box, a record a row), alerts in a round box of their color, quotes
+behind a bar, Mermaid diagrams drawn (one that won't draw stays code),
+tables and diagrams side by side while they fit. Code is read in 40
+languages (Prism; a shell's by illi), every kind of token colored: by
+the palette's slots, or, the terminal's background unknown, by its own
+colors (`syntax` in [Customize](customize.md)); a diff's lines green and
+red, as every diff's.
 
 Keys
 ----

@@ -51,13 +51,14 @@ test("each slot not faint reads on its palette's background", () => {
   expect(low).toEqual([]);
 });
 
-// the faint ones still differ from their background
-test("faint slots are not their background", () => {
+// the faint ones still differ from their background; those that are
+// text (a comment, a quote's prose, the code's header) read at 2.3:1
+test("faint slots are not their background; faint text still reads", () => {
   for (const [name, slots] of Object.entries(PALETTES)) {
     for (const slot of FAINT) {
       const color = (slots as Record<string, string>)[slot];
       if (color !== undefined) {
-        expect(contrast(color, CANVAS[name as keyof typeof CANVAS])).toBeGreaterThan(1.2);
+        expect(contrast(color, CANVAS[name as keyof typeof CANVAS])).toBeGreaterThan(["codeComment", "quote"].includes(slot) ? 2.3 : 1.2);
       }
     }
   }

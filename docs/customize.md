@@ -132,9 +132,10 @@ the full accent).
   `syntax` (code's colors by the kinds Prism names: `keyword`,
   `string`, `function`, `comment`, `class-name`, `tag`..., any of them,
   `operator` and `punctuation` too; while replies draw in the
-  terminal's own colors: `auto`, its background unknown) and `ansi`
-  (`block`, `ink`: the tool calls' fill and its text; `you`, `add`,
-  `del`: the frame and a diff's lines, over their tokens).
+  terminal's own colors: `auto`, its background unknown; a palette
+  colors code by its slots) and `ansi` (`block`, `ink`: the tool calls'
+  fill and its text; `you`, `add`, `del`: the frame and a diff's lines,
+  a reply's `diff` code's too in a palette, over their tokens).
 
 What wins, lowest first: the defaults, `theme.json`, a plugin's theme,
 the `accent` setting (unless `auto`). The file is read as illi starts;

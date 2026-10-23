@@ -1,10 +1,12 @@
 // Markdown test
 // =============
 // `bun test Markdown.test.ts`. A reply's markdown read into blocks and
-// marks: each block its own lines, a fence never closed holding the rest;
-// a table on one dash, a quote's lines joined, a heading's closing hashes
-// only when apart; marks nested as written, code's padding dropped, TeX
-// written as text and money left as it is, numbers and paths as asked.
+// marks: each block its own lines, a fence never closed holding the rest,
+// one under a list's item a block of its own; a table on one dash, a
+// quote's lines joined, a heading's closing hashes only when apart; a
+// list past its blank lines; marks nested as written, escapes, code's
+// padding dropped, TeX written as text and money left as it is, numbers
+// and paths as asked.
 
 import { expect, test } from "bun:test";
 import * as Markdown from "./Markdown.ts";
@@ -68,4 +70,45 @@ test("text as copied and as shown", () => {
   const inline = marks("**a** `b` [c](d)");
   expect(Markdown.markdown_text(inline)).toBe("a b c");
   expect(Markdown.markdown_shown(inline)).toBe("a b c (d)");
+});
+
+// a fence under a list's item ends the list, its code without the
+// fence's indent; a backtick run with a backtick after it is no fence
+// (inline code); the language is the info's first word, C# whole
+test("a fence under an item, inline backticks, a language's whole name", () => {
+  const blocks = read("1. Install:\n   ```bash\n   npm i\n     x\n   ```\n2. Run");
+  expect(blocks.map((b) => b.kind)).toEqual(["list", "code", "list"]);
+  expect(blocks[1]).toMatchObject({ lang: "bash", lines: ["npm i", "  x"] });
+  expect(read("Run ```npm i``` now.\n\nmore").map((b) => b.kind)).toEqual(["paragraph", "paragraph"]);
+  expect(read("```c# title\nclass A {}\n```")[0]).toMatchObject({ kind: "code", lang: "c#" });
+});
+
+// a list goes on past a blank line to an item or an indented paragraph
+// (its owner's), keeping the gap; an item of the other kind ends it; a
+// line indented short of an item's text goes to the last item; depth by
+// the items open, however far each is indented
+test("a list past blank lines, its paragraphs, owners and depths", () => {
+  const list = (s: string) => read(s)[0] as Extract<Markdown.Block, { kind: "list" }>;
+  const items = (s: string) => list(s).items.map((i) => [i.marker, i.depth, i.gap ?? false, Markdown.markdown_text(i.inline)]);
+  expect(read("- a\n\n- b\n\n  more b\n\nafter").map((b) => b.kind)).toEqual(["list", "paragraph"]);
+  expect(items("- a\n\n- b\n\n  more b")).toEqual([["-", 0, false, "a"], ["-", 0, true, "b"], ["", 0, true, "more b"]]);
+  expect(read("1. a\n\n- b").map((b) => b.kind)).toEqual(["list", "list"]);
+  expect(items("1. one\n2. two\n  more")).toEqual([["1.", 0, false, "one"], ["2.", 0, false, "two more"]]);
+  expect(items("- a\n    - b\n        - c\n    - d\n- e").map((i) => i[1])).toEqual([0, 1, 2, 1, 0]);
+});
+
+// a backslash before ASCII punctuation: the character, no mark (money
+// written \$5 too); no mark closes on one escaped; italics hold bold
+test("escapes, and bold inside italics", () => {
+  expect(Markdown.markdown_text(marks("\\$5 and \\*not\\* a \\| b snake\\_case"))).toBe("$5 and *not* a | b snake_case");
+  expect(marks("\\*not\\*").some((m) => m.kind !== "text")).toBe(false);
+  expect(marks("*a\\*").some((m) => m.kind === "emphasis")).toBe(false);
+  expect(marks("`a\\*b`")).toEqual([{ kind: "code", text: "a\\*b" }]);
+  expect(marks("*a **b** c*")).toEqual([{ kind: "emphasis", children: [{ kind: "text", text: "a " }, { kind: "strong", children: [{ kind: "text", text: "b" }] }, { kind: "text", text: " c" }] }]);
+  expect(marks("a * b * c")).toEqual([{ kind: "text", text: "a * b * c" }]);
+});
+
+// a separator row of a count other than the header's: no table
+test("a table's separator as many cells as its header", () => {
+  expect(read("a | b\n---").map((b) => b.kind)).toEqual(["paragraph", "rule"]);
 });

@@ -4,7 +4,8 @@
 // block whole as a diagram, in the width, in the terminal's ink till its
 // background is told, then in a palette over it; one still streaming as
 // its code, one too long as its code; code's tokens by kind, a shell's
-// too, each kind's color the terminal's own till a palette colors it.
+// too, a language by its common names, each kind's color the terminal's
+// own till a palette colors it.
 // Prism and Pele are loaded only as they are first needed.
 
 import { expect, test } from "bun:test";
@@ -96,6 +97,12 @@ test("Prism's languages by name; plain text plain; none for the rest", () => {
   expect(Draw.draw_code("text", "if (a) { b }")).toEqual([[{ text: "if (a) { b }", kind: "" }]]);
   expect(["constructor", "toString", "__proto__", "extend"].map((n) => Draw.draw_code(n, "x"))).toEqual([null, null, null, null]);
   expect(Draw.draw_code("go", "func f() {}")).toBe(Draw.draw_code("go", "func f() {}"));
+});
+
+// names code is often given that Prism knows by another: C#, C++, rs
+test("a language's common names", () => {
+  expect(["c#", "C++", "rs", "golang", "tf"].filter((n) => Draw.draw_code(n, "x") === null)).toEqual([]);
+  expect(Draw.draw_code("c#", "class A {}")![0][0]).toEqual({ text: "class", kind: "keyword" });
 });
 
 // a diagram too long to draw at once is none: its code shows instead

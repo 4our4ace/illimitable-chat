@@ -149,9 +149,9 @@ schemes' published palettes, each under the MIT License.
 | --- | --- | --- |
 | `catppuccin-mocha`, `catppuccin-latte` | [catppuccin/palette](https://github.com/catppuccin/palette) | Copyright (c) 2021 Catppuccin |
 | `dracula` | [draculatheme.com/spec](https://draculatheme.com/spec) (Classic), [dracula/dracula-theme](https://github.com/dracula/dracula-theme) | Copyright (c) 2023 Dracula Theme |
-| `nord` | [nordtheme/nord](https://github.com/nordtheme/nord) | Copyright (c) 2016-present Sven Greb |
+| `nord` | [nordtheme/nord](https://github.com/nordtheme/nord); its comments' tone from [nordtheme/vim](https://github.com/nordtheme/vim) | Copyright (c) 2016-present Sven Greb |
 | `tokyo-night` | [tokyo-night/tokyo-night-vscode-theme](https://github.com/tokyo-night/tokyo-night-vscode-theme) | Copyright (c) 2018-present Enkia |
-| `gruvbox-dark`, `gruvbox-light` | [morhetz/gruvbox](https://github.com/morhetz/gruvbox) | Pavel Pertsev, MIT/X11 as stated in its README |
+| `gruvbox-dark`, `gruvbox-light` | [morhetz/gruvbox](https://github.com/morhetz/gruvbox), its colors as [gruvbox-contrib](https://github.com/morhetz/gruvbox-contrib)'s `color.table` lists them | Pavel Pertsev, MIT/X11 as stated in its README |
 | `rose-pine`, `rose-pine-dawn` | [rosepinetheme.com/palette](https://rosepinetheme.com/palette), [rose-pine/rose-pine-palette](https://github.com/rose-pine/rose-pine-palette) | Copyright (c) mvllow |
 | `everforest` | [sainnhe/everforest](https://github.com/sainnhe/everforest) (palette.md, dark, medium contrast) | Copyright (c) 2019 sainnhe |
 | `github-dark`, `github-light` | [primer/primitives](https://github.com/primer/primitives) 7.10.0 via [primer/github-vscode-theme](https://github.com/primer/github-vscode-theme) | Copyright (c) 2018 GitHub Inc. |

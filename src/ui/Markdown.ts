@@ -8,14 +8,18 @@
 // ***, ___), a table (a line holding | over a row of dashes), a quote or
 // a GitHub alert (> [!NOTE]), a list (-, *, +, 1., 1)), else a
 // paragraph, whose lines join with spaces till another block starts.
+// A list goes on past a blank line while an item or an indented line
+// follows, but ends at a fence (code under an item is a block of its
+// own, its fence's indent taken off its lines).
 // Every block keeps its own lines (raw), so a reply streaming can tell
 // where a block ends (Reply.reply_grow) and a button can copy it.
 //
 // Inline marks are found left to right, the first to start winning (a
-// tie: the earlier in MARKS): code, a link, bold, struck, italics, a
-// bare url, inline math (TeX, written as text: $\alpha$, α; money,
-// $5, stays as it is). Between them, file paths and numbers are marked
-// as asked (Highlight). A line too long to read is left as text.
+// tie: the earlier in MARKS): a character escaped (\*, \$: itself, no
+// mark), code, a link, bold, struck, italics, a bare url, inline math
+// (TeX, written as text: $\alpha$, α; money, $5, stays as it is).
+// Between them, file paths and numbers are marked as asked (Highlight).
+// A line too long to read is left as text.
 
 // Types
 // =====
@@ -23,12 +27,14 @@
 export type Inline =
   | { kind: "text"; text: string }
   | { kind: "strong" | "emphasis" | "strike"; children: Inline[] }
-  | { kind: "code" | "math" | "number" | "path" | "dim"; text: string }
+  | { kind: "code" | "math" | "number" | "path"; text: string }
   | { kind: "link"; text: string; href: string };
 
-// a list's item: its marker as written, its depth (its indent over two),
-// whether a task done (none: no task)
-export type Item = { marker: string; depth: number; task?: boolean; inline: Inline[] };
+// a list's item: its marker as written ("": a paragraph of the item
+// before it at its depth, after a blank line), its depth (how many items
+// it is indented under), whether a task done (none: no task), whether a
+// blank line is before it (gap)
+export type Item = { marker: string; depth: number; task?: boolean; gap?: true; inline: Inline[] };
 
 export type AlertLevel = "note" | "tip" | "important" | "warning" | "caution";
 
@@ -53,17 +59,21 @@ type Align = "left" | "right" | "center";
 // a block read at a line, and the line after it
 type Read = [Block, number];
 
+// a list's item as read: the column its text starts at, its marker's
+type Listed = { item: Item; at: number; indent: number };
+
 // Constants
 // =========
 
 // the longest line read for marks (UTF-16 code units)
 const LONGEST = 4000;
 
-// a fence: its run, the language after it; a heading; a rule; a
+// a fence: its run (a backtick one with no backtick after it), the
+// language after it (its first word); a heading; a rule; a
 // separator row's cell (GitHub's: one dash will do); a quoted line; a
 // list's item (its indent, its marker, its text); a task; an alert's
 // first line; a continuation line (indented, holding text)
-const FENCE  = /^\s*(`{3,}|~{3,})\s*([A-Za-z0-9_+-]*)/;
+const FENCE  = /^\s*(`{3,}(?!.*`)|~{3,})\s*([^\s`]*)/;
 const HEAD   = /^(#{1,6})\s+(.*)$/;
 const RULE   = /^\s*([-*_])(?:\s*\1){2,}\s*$/;
 const DASHES = /^:?-+:?$/;
@@ -73,23 +83,29 @@ const TASK   = /^\[([ xX])\]\s+(.*)$/;
 const ALERT  = /^\[!(note|tip|important|warning|caution)\]/i;
 const MORE   = /^\s{2,}\S/;
 
-// the inline marks, in the order they win a tie: code (a run of
-// backticks, closed by a run exactly as long), a link, bold (***x***
-// bold and italic), struck, italics, a bare url (trailing punctuation
-// left out), inline math (not after \, $ or a word, nor spaced inside
-// its dollars)
+// the inline marks, in the order they win a tie: an ASCII punctuation
+// character escaped, code (a run of backticks, closed by a run exactly
+// as long), a link, bold (***x*** bold and italic), struck, italics
+// (bold inside them too), a bare url (trailing punctuation left out),
+// inline math (not after \, $ or a word, nor spaced inside its
+// dollars). No mark but code closes on a character escaped
 const MARKS = new RegExp([
+  /\\(?<escaped>[!-/:-@[-`{-~])/.source,
   /(?<ticks>`+)(?!`)(?<code>[\s\S]+?)(?<!`)\k<ticks>(?!`)/.source,
   /\[(?<label>[^\]]+)\]\((?<href>[^)\s]+)\)/.source,
-  /\*\*\*(?<both>[^*]+)\*\*\*/.source,
-  /\*\*(?!\*)(?<bold>(?:[^*]|\*(?!\*))+?)\*\*/.source,
-  /(?<!\w)__(?!_)(?<under>(?:[^_]|_(?!_))+?)__(?!\w)/.source,
-  /~~(?<struck>[^~]+)~~/.source,
-  /(?<![\w*])\*(?<star>[^\s*][^*]*)\*(?![\w*])/.source,
-  /(?<!\w)_(?<low>[^\s_][^_]*)_(?!\w)/.source,
+  /\*\*\*(?<both>[^*]+)(?<!\\)\*\*\*/.source,
+  /\*\*(?!\*)(?<bold>(?:[^*]|\*(?!\*))+?)(?<!\\)\*\*/.source,
+  /(?<!\w)__(?!_)(?<under>(?:[^_]|_(?!_))+?)(?<!\\)__(?!\w)/.source,
+  /~~(?<struck>[^~]+)(?<!\\)~~/.source,
+  /(?<![\w*])\*(?![\s*])(?<star>(?:[^*]|\*\*(?![\s*])[^*]+?\*\*)+?)(?<![\s\\])\*(?![\w*])/.source,
+  /(?<!\w)_(?<low>[^\s_][^_]*)(?<!\\)_(?!\w)/.source,
   /(?<url>https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/.source,
   /(?<![\\$\w])\$(?![\s$])(?<math>(?:\\\$|[^$\n])*?(?:\\\$|[^\s$\\]))\$(?![\w$])/.source,
 ].join("|"), "g");
+
+// what text holds for a mark to start in it (MARKS: each mark's first
+// character, a url's scheme), so text without it is read no further
+const MARKED = /[\\`[*_~$]|https?:/;
 
 // a file path (/, ~/, ./, ../, then ASCII names; not inside a word, a
 // path or a url); a number (v1.2.3, 2.796, 1,000, 12:30, a unit glued
@@ -174,18 +190,21 @@ function block_starts(lines: string[], i: number): boolean {
 }
 
 // a fence's code: its lines till a run of its own character as long or
-// longer alone on a line; none: to the end, still open
+// longer alone on a line (none: to the end, still open), each without as
+// much of its indent as the fence has (code under a list's item)
 function fence_read(lines: string[], i: number): Read | null {
   const open = FENCE.exec(lines[i]);
   if (open === null) {
     return null;
   }
-  const close = new RegExp("^\\s*" + open[1][0] + "{" + open[1].length + ",}\\s*$");
-  const end   = lines.findIndex((l, k) => k > i && close.test(l));
+  const close  = new RegExp("^\\s*" + open[1][0] + "{" + open[1].length + ",}\\s*$");
+  const end    = lines.findIndex((l, k) => k > i && close.test(l));
+  const indent = /^\s*/.exec(lines[i])![0].length;
+  const code   = (xs: string[]) => (indent === 0 ? xs : xs.map((x) => x.slice(Math.min(indent, /^\s*/.exec(x)![0].length))));
   if (end < 0) {
-    return [{ kind: "code", lang: open[2], lines: lines.slice(i + 1), isOpen: true, raw: lines.slice(i).join("\n") }, lines.length];
+    return [{ kind: "code", lang: open[2], lines: code(lines.slice(i + 1)), isOpen: true, raw: lines.slice(i).join("\n") }, lines.length];
   }
-  return [{ kind: "code", lang: open[2], lines: lines.slice(i + 1, end), raw: lines.slice(i, end + 1).join("\n") }, end + 1];
+  return [{ kind: "code", lang: open[2], lines: code(lines.slice(i + 1, end)), raw: lines.slice(i, end + 1).join("\n") }, end + 1];
 }
 
 // display math as code named "math": $$x$$ on a line, or from a line
@@ -252,13 +271,14 @@ function table_read(lines: string[], i: number, hl: Highlight): Read | null {
 }
 
 // a table's alignments, by its separator row's cells (:-: centered, -:
-// right, any other left), if line i holds | and the next is one
+// right, any other left), if line i holds | and the next is one, as many
+// cells as it (GitHub's rule)
 function table_align(lines: string[], i: number): Align[] | null {
   if (!lines[i].includes("|") || i + 1 >= lines.length || !lines[i + 1].includes("-")) {
     return null;
   }
   const cells = table_cells(lines[i + 1]);
-  if (!cells.every((c) => DASHES.test(c))) {
+  if (!cells.every((c) => DASHES.test(c)) || cells.length !== table_cells(lines[i]).length) {
     return null;
   }
   return cells.map((c) => (c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : "left"));
@@ -295,43 +315,71 @@ function quote_read(lines: string[], i: number, hl: Highlight): Read | null {
   return [{ kind: "quote", inline: text(said), raw }, end];
 }
 
-// a list: items (a marker, a space, its text), and lines indented two or
-// more holding text, each added to the last item whose text starts at or
-// left of it (else the first); a blank line, or any other, ends it.
-// Ordered by its first item's marker
+// a list: items (a marker, a space, its text), each as deep as the
+// items open left of its indent; and lines indented two or more holding
+// text, each added to its owner: the last item whose text starts at or
+// left of it, else the last whose marker is left of it, else the last.
+// A blank line goes on to an item after it (at the first item's indent,
+// one ordered as it is) or an indented line, that starts a paragraph of
+// its owner; else it ends the list, as any other line does, a fence too
+// (a rule isn't an item). Ordered by its first item's marker
 function list_read(lines: string[], i: number, hl: Highlight): Read | null {
   if (!ITEM.test(lines[i])) {
     return null;
   }
-  const items: { item: Item; at: number }[] = [];
-  let end = i;
-  for (; end < lines.length; end++) {
-    const line = lines[end];
-    const m    = RULE.test(line) ? null : ITEM.exec(line);
-    if (m !== null) {
-      items.push(list_item(m, hl));
-    } else if (MORE.test(line)) {
-      const indent = list_indent(/^\s*/.exec(line)![0]);
-      const owner  = items.findLast((x) => x.at <= indent) ?? items[0];
-      owner.item.inline.push({ kind: "text", text: " " }, ...markdown_inline(line.trim(), hl));
+  const items   : Listed[] = [];
+  const open    : number[] = [];
+  const first   = ITEM.exec(lines[i])!;
+  const base    = list_indent(first[1]);
+  const ordered = /\d/.test(first[2]);
+  let [end, gap] = [i, false];
+  for (let k = i; k < lines.length; k++) {
+    const line = lines[k];
+    if (line.trim() === "") {
+      gap = true;
+      continue;
+    }
+    const m      = RULE.test(line) || FENCE.test(line) ? null : ITEM.exec(line);
+    const indent = list_indent(/^\s*/.exec(line)![0]);
+    if (m !== null && !(gap && indent <= base && /\d/.test(m[2]) !== ordered)) {
+      items.push(list_item(m, open, gap, hl));
+    } else if (m === null && MORE.test(line) && !FENCE.test(line)) {
+      const owner = items.findLast((x) => x.at <= indent) ?? items.findLast((x) => x.indent < indent) ?? items[items.length - 1];
+      if (gap) {
+        items.push({ item: { marker: "", depth: owner.item.depth, gap: true, inline: markdown_inline(line.trim(), hl) }, at: owner.at, indent: owner.indent });
+      } else {
+        owner.item.inline.push({ kind: "text", text: " " }, ...markdown_inline(line.trim(), hl));
+      }
     } else {
       break;
     }
+    [end, gap] = [k + 1, false];
   }
-  return [{ kind: "list", ordered: /\d/.test(items[0].item.marker), items: items.map((x) => x.item), raw: lines.slice(i, end).join("\n") }, end];
+  return [{ kind: "list", ordered, items: items.map((x) => x.item), raw: lines.slice(i, end).join("\n") }, end];
 }
 
-// an item as read, and the column its text starts at; [ ] or [x] and a
-// space before its text: a task
-function list_item(m: RegExpExecArray, hl: Highlight): { item: Item; at: number } {
+// an item as read, its depth the count of the items open (their
+// indents, outermost first) left of its own, which it closes those
+// right of; the column its text starts at, its marker's. [ ] or [x] and
+// a space before its text: a task
+function list_item(m: RegExpExecArray, open: number[], gap: boolean, hl: Highlight): Listed {
   const indent = list_indent(m[1]);
-  const task   = TASK.exec(m[3]);
-  const text   = (task === null ? m[3] : task[2]).trimEnd();
-  const item   : Item = { marker: m[2], depth: Math.floor(indent / 2), inline: markdown_inline(text, hl) };
+  while (open.length > 0 && open[open.length - 1] > indent) {
+    open.pop();
+  }
+  if (open.length === 0 || open[open.length - 1] < indent) {
+    open.push(indent);
+  }
+  const task = TASK.exec(m[3]);
+  const text = (task === null ? m[3] : task[2]).trimEnd();
+  const item : Item = { marker: m[2], depth: open.length - 1, inline: markdown_inline(text, hl) };
   if (task !== null) {
     item.task = task[1] !== " ";
   }
-  return { item, at: indent + m[2].length + 1 };
+  if (gap) {
+    item.gap = true;
+  }
+  return { item, at: indent + m[2].length + 1, indent };
 }
 
 // an indent's width: a tab two columns
@@ -359,6 +407,9 @@ export function markdown_inline(text: string, hl: Highlight): Inline[] {
   if (text.length > LONGEST) {
     return [{ kind: "text", text }];
   }
+  if (!MARKED.test(text)) {
+    return inline_plain(text, hl);
+  }
   const out: Inline[] = [];
   let at = 0;
   for (const m of text.matchAll(MARKS)) {
@@ -371,8 +422,12 @@ export function markdown_inline(text: string, hl: Highlight): Inline[] {
   return [...out, ...inline_plain(text.slice(at), hl)];
 }
 
-// a mark as its groups tell; null: math that isn't TeX (money), text
+// a mark as its groups tell (a character escaped: itself, as text);
+// null: math that isn't TeX (money), text
 function inline_mark(g: Record<string, string | undefined>, hl: Highlight): Inline | null {
+  if (g.escaped !== undefined) {
+    return { kind: "text", text: g.escaped };
+  }
   if (g.code !== undefined) {
     const spaced = g.code.startsWith(" ") && g.code.endsWith(" ") && g.code.trim() !== "";
     return { kind: "code", text: spaced ? g.code.slice(1, -1) : g.code };
@@ -406,7 +461,7 @@ function inline_plain(text: string, hl: Highlight): Inline[] {
   if (text === "") {
     return [];
   }
-  if (!hl.paths) {
+  if (!hl.paths || !text.includes("/")) {
     return inline_numbers(text, hl);
   }
   const out: Inline[] = [];
@@ -420,7 +475,7 @@ function inline_plain(text: string, hl: Highlight): Inline[] {
 
 // text, its numbers marked if asked
 function inline_numbers(text: string, hl: Highlight): Inline[] {
-  if (text === "" || !hl.numbers) {
+  if (text === "" || !hl.numbers || !/\d/.test(text)) {
     return text === "" ? [] : [{ kind: "text", text }];
   }
   const out: Inline[] = [];
