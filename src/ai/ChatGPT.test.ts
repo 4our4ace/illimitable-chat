@@ -8,7 +8,8 @@
 // and when it resets. A login file that won't parse says so. The plan and
 // its usage are one record of the account they are of: a new login
 // drops the old one's at once; the usage endpoint tells both together;
-// an answer or a reply for an account since left changes nothing.
+// an answer or a reply for an account since left changes nothing. A login
+// made while a renewal is asked wins over the renewal.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -34,9 +35,11 @@ function write(access: string, expires: number): void {
   fs.writeFileSync(FILE, JSON.stringify({ anthropic: { type: "api", key: "kept" }, openai }));
 }
 
-// fetch stood in for: each renewal it was asked, and the tokens it gives;
-// the usage endpoint answering as `usage` says
+// fetch stood in for: each renewal it was asked, what happens while it
+// is (during), and the tokens it gives; the usage endpoint answering as
+// `usage` says
 const asked: URLSearchParams[] = [];
+let during = () => {};
 let usage: () => Promise<Response> = async () => new Response("down", { status: 503 });
 const real = globalThis.fetch;
 globalThis.fetch = (async (url: string, init: any) => {
@@ -45,6 +48,7 @@ globalThis.fetch = (async (url: string, init: any) => {
   }
   asked.push(new URLSearchParams(String(init.body)));
   await Bun.sleep(20);
+  during();
   const access = jwt({ ...ACCOUNT, n: asked.length });
   return Response.json({ access_token: access, refresh_token: "r-" + asked.length, id_token: jwt(ACCOUNT), expires_in: 864000 });
 }) as typeof fetch;
@@ -241,4 +245,16 @@ test("a login with no account id is keyed by its user; one with neither shows no
   write(jwt({}), Date.now() + 3600e3);
   ChatGPT.sync();
   expect(ChatGPT.told()).toBeNull();
+});
+
+test("a /login made while a renewal is asked wins over it, on disk too", async () => {
+  write(jwt(ACCOUNT), Date.now() + 60e3);
+  ChatGPT.sync();
+  let b = "";
+  during = () => {
+    b = login("acct-b", "pro");
+    during = () => {};
+  };
+  expect(await ChatGPT.token()).toBe(b);
+  expect(JSON.parse(fs.readFileSync(FILE, "utf8")).openai.access).toBe(b);
 });

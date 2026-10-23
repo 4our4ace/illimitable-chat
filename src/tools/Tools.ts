@@ -416,10 +416,11 @@ export namespace Tools {
     return on.length === 0 ? "" : "\n\n" + STUCK + on.map((s) => "\n\n" + Tools.skill(s)).join("");
   }
 
-  // the master's agents at work now, and its to-do list if any, at the
-  // start of each of its calls' messages: read from their calls (the
-  // list from its file), so neither is kept apart nor drifts from the
-  // truth, and a restart's call goes on with the list
+  // the master's agents at work now, the background jobs running
+  // (Machine.background: whose, and for how long) and its to-do list if
+  // any, at the start of each of its calls' messages: read from their
+  // calls (the list from its file), so none is kept apart nor drifts
+  // from the truth, and a restart's call goes on with the list
   export function at_work(tools: Tools): Block {
     const names = Tools.working(tools).map((a) => a.name);
     const list  = Tools.todo(tools);
