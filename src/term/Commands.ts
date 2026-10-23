@@ -19,6 +19,7 @@ import { Chat } from "../chat/Chat.ts";
 import { ChatGPT } from "../ai/ChatGPT.ts";
 import { json_object } from "../tools/Clip.ts";
 import * as config from "../config/Config.ts";
+import * as Draw from "../ui/Draw.ts";
 import { Custom, type Command, type Profile, type Skill } from "../config/Custom.ts";
 import { term_redraw } from "./Frame.ts";
 import { term_away, term_clear, term_cycle, term_enter, term_esc, term_next, term_page, term_shots, term_take, term_verbose } from "./Keys.ts";
@@ -51,6 +52,13 @@ const ARROWS: Record<string, Move> = { "Shift+Left": "prev", "Shift+Right": "nex
 
 // the shortcuts' list's title (term_shortcuts)
 const LEAD = "Shortcuts";
+
+// the /model gauge: a model's autocompact as set (as written), its
+// tokens, the most it may be, the model's window and standard one; the
+// gauge's bar at most GAUGE columns, stepped STEP points of the window
+type Gauge = { set: string; tokens: number; most: number; window: number; standard?: number };
+const GAUGE = 20;
+const STEP  = 5;
 
 // how often each was used, by its name, in a file of the root's (every
 // profile's, every illi's): its counts, read once, at the first use; the
@@ -111,10 +119,9 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
     ["Pick", [
       ["",                  "Shift+Left, Shift+Right", "the model before, the next",                     (t, k) => term_move(t, ARROWS[k])],
       ["",                  "Shift+Up, Shift+Down",    "more effort, less",                              (t, k) => term_move(t, ARROWS[k])],
-      ["/model [name]",     "",                        "model, effort and speed in one list (Left and Right: effort, Tab: speed); a name: that model", term_model],
+      ["/model [name]",     "",                        "model, effort, speed and autocompact in one list (Left and Right: effort, Tab: speed, Shift+Left and Shift+Right: autocompact); a name: that model", term_model],
       ["/effort [level]",   "",                        "set the effort; no level: lists them",           (t, a) => term_pick(t, "effort", a)],
       ["/autocompact [value]", "",                     "how much of the chat a turn sends before older messages fold, for the chat's model: a share of its window (50%), a size (300k) or default; no value: says it", term_autocompact],
-      ["/speed [speed]",    "",                        "set the speed; no speed: lists them",            (t, a) => term_pick(t, "speed", a)],
     ]],
     ["Agents", [
       ["",                  "Shift+Tab",               "illi runs as the next primary agent (or click one at the side)", term_next],
@@ -570,9 +577,9 @@ function term_agent_set(t: Term, arg: string): void {
 // option takes and what the foot says of it (the model picker's), what
 // shows at each option's right end, the screen's middle as its place and
 // each option's group (the palette's)
-export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; middle?: number; heads?: string[]; lead?: Chooser["lead"] } = {}): void {
+export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; detail?: Chooser["detail"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; middle?: number; heads?: string[]; lead?: Chooser["lead"] } = {}): void {
   const shown = Screen.ed_rank("", names);
-  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, middle: more.middle, heads: more.heads, lead: more.lead, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null };
+  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, middle: more.middle, heads: more.heads, lead: more.lead, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), detail: more.detail, ask: null };
   t.pane   = null;
 }
 
@@ -874,26 +881,39 @@ function term_model(t: Term, arg: string): void {
   if (arg !== "" || t.v.pick === null || rows.length === 0) {
     return term_pick(t, "model", arg);
   }
-  term_model_pick(t, rows);
+  term_model_pick(t, rows, undefined, undefined, undefined, true);
 }
 
 // the model picker: each model offered (its vendor too, if more than one
 // is; its window, if known), the pick's marked and lit; the one lit takes
-// its effort by Left and Right (stopping at the ends), its speed by Tab
-// (round its speeds: one alone stays), the foot saying both; Enter, or a
-// click, sets the three as one pick. The effort and speed asked go along
-// as another model is lit (one lacking the speed takes its fastest below).
-// From another pick than the chat's, the choice goes to `done` (a
-// setting's: Settings.ts)
-export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "Model", from = View.view_asked(t.v)!, done = (p: Pick): unknown => term_act(t, { $: "Pick", to: p })): void {
+// its effort by Left and Right (Shift+Down and Shift+Up too; stopping at
+// the ends), its speed by Tab (round its speeds: one alone stays), the
+// foot saying both; Enter, or a click, sets the three as one pick. The
+// effort and speed asked go along as another model is lit (one lacking
+// the speed takes its fastest below). With the gauge (/model's), the lit
+// model's autocompact under the list (term_gauge), stepped by Shift+Left
+// and Shift+Right and kept per model while the picker is open: Enter
+// sends each one changed with the pick, Esc drops them. From another pick
+// than the chat's, the choice goes to `done` (a setting's: Settings.ts)
+export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "Model", from = View.view_asked(t.v)!, done = (p: Pick): unknown => term_act(t, { $: "Pick", to: p }), gauge = false): void {
   let want    = from;
   const many  = t.v.vendors.length > 1;
   const vw    = Math.max(...rows.map(([vendor]) => vendor.length));
   const about = rows.map(([vendor, m]) => [many ? vendor.padEnd(vw) : "", m.window === undefined ? "" : term_tokens(m.window) + " context"].filter((x) => x !== "").join("  "));
   const here  = rows.findIndex(([vendor, m]) => vendor === want.vendor && m.label === want.model);
   const pick  = (k: number) => Pick.on(want, rows[k][0], rows[k][1]);
+  const moved = new Map<string, number>();
   const keys  = (k: number, key: string) => {
-    const move = ({ Left: "down", Right: "up", Tab: "speed" } as Record<string, Move>)[key];
+    if (key === "Shift+Left" || key === "Shift+Right") {
+      const now = term_autocompact_at(t, rows[k], moved);
+      if (gauge && now !== null) {
+        const top = Math.floor((now.most / now.window) * 20) * 5;
+        const at  = Math.round((now.tokens / now.window) * 20) * 5;
+        moved.set(rows[k][1].label, Math.max(STEP, Math.min(top, at + (key === "Shift+Right" ? STEP : -STEP))));
+      }
+      return true;
+    }
+    const move = ({ Left: "down", Right: "up", "Shift+Down": "down", "Shift+Up": "up", Tab: "speed" } as Record<string, Move>)[key];
     if (move === undefined) {
       return false;
     }
@@ -910,7 +930,63 @@ export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "
     const speed   = speeds < 2 ? "no fast mode" : "Tab speed: " + Pick.speed(p.speed);
     return "effort: " + (e > 0 ? "◂ " : "") + p.effort + (e < efforts.length - 1 ? " ▸" : "") + " · " + speed;
   };
-  term_chooser(t, title, rows.map(([, m]) => m.label), about, here, (k) => done(pick(k)), { find: true, keys, foot });
+  const detail = (k: number, w: number) => {
+    const now = term_autocompact_at(t, rows[k], moved);
+    return now === null ? [] : term_gauge(now, w);
+  };
+  const chosen = (k: number) => {
+    done(pick(k));
+    moved.forEach((share, label) => term_send(t, { $: "autocompact", label, value: share + "%" }));
+  };
+  term_chooser(t, title, rows.map(([, m]) => m.label), about, here, chosen, { find: true, keys, foot, detail: gauge ? detail : undefined });
+}
+
+// a model's autocompact as the picker shows it: its share stepped while
+// the picker is open (moved), else as set (its own, else the global
+// one); its tokens (at most `most`: MOST of its window, less what a
+// request takes beside the chat on the chat's own model), its window and
+// standard one; null: the chat's process told none yet
+function term_autocompact_at(t: Term, [vendor, m]: [Vendor, Model], moved: Map<string, number>): Gauge | null {
+  const fill = t.v.use.fill ?? null;
+  if (fill === null) {
+    return null;
+  }
+  const window = m.window ?? config.GUESS;
+  const chat   = t.v.pick?.vendor === vendor && t.v.pick.model === m.label;
+  const most   = chat ? fill.most : config.config_most(window);
+  const step   = moved.get(m.label);
+  const set    = step !== undefined ? step + "%" : fill.sets[m.label] ?? fill.global;
+  const tokens = Math.max(1, Math.min(config.config_tokens(set, window) ?? config.config_tokens(config.SETTINGS.autocompact.def, window)!, most));
+  return { set, tokens, most, window, standard: m.standard };
+}
+
+// the autocompact gauge, for w columns: `autocompact ▕██████▌░░░░░▏ 60% ·
+// 523k of 872k ⇧◂▸`, a tick at the standard window (the fill past it in
+// the warning color, and a line saying the plan drains faster there, if
+// it fits); narrower, `autocompact 60% · 523k ⇧◂▸`, then `60%`
+export function term_gauge(g: Gauge, w: number): Paint.Line[] {
+  const tokens = Draw.draw_tokens();
+  const past   = g.standard !== undefined && g.tokens > g.standard;
+  const ink    = { ...Paint.INK, c: past ? tokens.warning : tokens.accent };
+  const share  = Math.round((g.tokens / g.window) * 100) + "%";
+  const keys   = Paint.Run("  ⇧◂▸", Paint.DIM);
+  const said   = Paint.Run(" " + share + " · " + term_tokens(g.tokens) + " of " + term_tokens(g.window), Paint.INK);
+  const name   = Paint.Run("autocompact ", Paint.DIM);
+  const bw     = Math.min(GAUGE, w - Paint.line_width([name, said, keys]) - 2);
+  const warn   = past ? [[Paint.Run("past " + term_tokens(g.standard!) + " your plan's usage drains faster", { ...Paint.INK, c: tokens.warning })]] : [];
+  const fits   = warn.filter((l) => Paint.line_width(l) <= w);
+  if (bw >= GAUGE / 2) {
+    const halves = Math.round((g.tokens / g.window) * bw * 2);
+    const tick   = g.standard === undefined ? bw : Math.min(bw - 1, Math.floor((g.standard / g.window) * bw));
+    const cells  = Array.from({ length: bw }, (_, i): Paint.Run => {
+      const fill = halves >= 2 * (i + 1) ? "█" : halves === 2 * i + 1 ? "▌" : "";
+      const on   = { ...Paint.INK, c: i >= tick ? tokens.warning : tokens.accent };
+      return fill !== "" ? Paint.Run(fill, on) : i === tick ? Paint.Run("┊", Paint.DIM) : Paint.Run("░", Paint.DIM);
+    });
+    return [[name, Paint.Run("▕", Paint.DIM), ...cells, Paint.Run("▏", Paint.DIM), said, keys], ...fits];
+  }
+  const short = [name, Paint.Run(share + " · " + term_tokens(g.tokens), past ? ink : Paint.INK), keys];
+  return [Paint.line_width(short) <= w ? short : [Paint.Run(share, past ? ink : Paint.INK)], ...fits];
 }
 
 // /autocompact: the chat's model's autocompact said (no value), or set
@@ -936,17 +1012,16 @@ function term_autocompact(t: Term, arg: string): void {
   term_note(t, "Autocompact for " + model + ": " + said + ".");
 }
 
-// a part of the pick: to the value given (a speed as shown: standard
-// is slow), or, none, the values it may take, the pick's marked
+// a part of the pick (its model, its effort): to the value given, or,
+// none, the values it may take, the pick's marked
 function term_pick(t: Term, move: Move, arg: string): void {
   const knob = View.view_pick(t.v).find((k) => k.move === move);
   if (arg !== "" || knob === undefined || t.v.pick === null) {
-    term_act(t, { $: "Move", move, to: move === "speed" && arg.toLowerCase() === "standard" ? "slow" : arg });
+    term_act(t, { $: "Move", move, to: arg });
     return;
   }
-  const now   = move === "speed" ? t.v.pick.speed : knob.text;
   const parts = [...new Set(Pick.options(t.v.pick, move, t.v).map(([part]) => part))];
-  const list  = parts.map((part) => (move === "speed" ? Pick.speed(part) : part) + (part === now ? " (now)" : ""));
+  const list  = parts.map((part) => part + (part === knob.text ? " (now)" : ""));
   term_note(t, move[0].toUpperCase() + move.slice(1) + "s: " + list.join(", ") + ". Pick one with /" + move + " <" + move + ">.");
 }
 

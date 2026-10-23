@@ -18,7 +18,7 @@ import type { Kind, Vendor } from "../ai/AskAI.ts";
 import type { Mode } from "../tools/Guard.ts";
 import * as Call from "./Call.ts";
 import * as Md from "./Md.ts";
-import { LABELS, type Move, Pick } from "../ai/Pick.ts";
+import { LABELS, type Model, type Move, Pick } from "../ai/Pick.ts";
 import { GLYPH, WHO } from "./Theme.ts";
 
 // Types
@@ -61,8 +61,9 @@ export type Limit = { window: number; used: number; reset: number };
 // its model's window; the autocompact set for the model (set: as written,
 // "60%" or "400k"; own: the model's own, else the global one), the most
 // it may be (tokens) and the window past which the plan drains faster
-// (none: no such one)
-export type Fill = { used: number; cap: number; window: number; set: string; own: boolean; most: number; standard?: number };
+// (none: no such one); the global autocompact and each model's own, by
+// label (the /model gauge's)
+export type Fill = { used: number; cap: number; window: number; set: string; own: boolean; most: number; standard?: number; global: string; sets: Record<string, string> };
 
 // a plan, as its vendor tells it (ChatGPT.ts told): whose it is
 // (ChatGPT), which one (plus, pro…; "": not known), its limits (none:
@@ -132,6 +133,7 @@ export type State = {
   agent   : string | null;
   vendors : Vendor[];
   models  : string[];
+  catalog : Partial<Record<Vendor, Model[]>>;
   use     : Use;
   todo    : Todo[];
   background: Background[];
@@ -330,6 +332,17 @@ export function Cap(text: string): Row {
 // View
 // ====
 
+// each vendor's models as the chat's process knows them (its catalogs
+// told: ChatGPT's list, the windows), learned here as they change, so a
+// view in another process offers and shows the same
+function view_catalog(was: View["catalog"], now: View["catalog"] | undefined): void {
+  for (const [vendor, models] of Object.entries(now ?? {}) as Array<[Vendor, Model[]]>) {
+    if (JSON.stringify(models) !== JSON.stringify(was[vendor]) && JSON.stringify(models) !== JSON.stringify(Pick.list(vendor))) {
+      Pick.learn(vendor, models, "replace");
+    }
+  }
+}
+
 export function view_new(): View {
   return {
     busy      : false,
@@ -339,6 +352,7 @@ export function view_new(): View {
     agent     : null,
     vendors   : [],
     models    : LABELS,
+    catalog   : {},
     use       : { plan: null },
     todo      : [],
     background: [],
@@ -411,6 +425,7 @@ export function view_hear(v: View, msg: Server): Client[] {
     case "state": {
       const { $, ...state } = msg;
       const was = view_running(v);
+      view_catalog(v.catalog, state.catalog);
       Object.assign(v, state);
       if (!was && view_running(v)) {
         [v.made, v.flow] = [0, []];

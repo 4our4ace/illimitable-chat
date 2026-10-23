@@ -548,6 +548,13 @@ export function config_autocompact_of(label: string): { set: string; own: boolea
   return own === undefined || config_tokens(String(own), 1) === null ? { set: AUTOCOMPACT_SET || SETTINGS.autocompact.def, own: false } : { set: String(own), own: true };
 }
 
+// the global autocompact as set, and each model's own (by label), as
+// written: what every view's /model gauge shows
+export function config_autocompacts(): { global: string; sets: Record<string, string> } {
+  const sets = Object.entries(AUTOCOMPACTS).filter(([, v]) => config_tokens(String(v), 1) !== null).map(([k, v]) => [k, String(v)]);
+  return { global: AUTOCOMPACT_SET || SETTINGS.autocompact.def, sets: Object.fromEntries(sets) };
+}
+
 // the most a model's autocompact may be: MOST of its window, and a turn
 // at it starting under ROOM of it beside what else a request takes
 // (overhead)
