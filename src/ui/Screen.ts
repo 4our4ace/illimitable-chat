@@ -38,8 +38,8 @@ import * as Theme from "./Theme.ts";
 // the input: its text, cursor, the messages sent before, the one Up and
 // Down are at (hist.length: the new one), the new one meanwhile, whether
 // Left or Right moved the cursor, the width its rows wrap at; the long
-// pastes by their token's number, the last number given; its rows as
-// last laid out, and for what text and width (ed_layout)
+// pastes by their token's number, the last number given; its layout as
+// last made (ed_layout)
 export type Ed = {
   text  : string;
   pos   : number;
@@ -50,8 +50,18 @@ export type Ed = {
   w     : number;
   pastes: Map<number, string>;
   n     : number;
-  laid? : { text: string; w: number; rows: string[]; places: Place[] };
+  laid? : Laid;
 };
+
+// a line of the input (between newlines) wrapped (ed_wrap): its rows,
+// each place of the cursor in it (pos and row from the line's start)
+type Wrap = { rows: string[]; places: Place[] };
+
+// the input laid out (ed_layout): for what text and width, its rows,
+// each line's first character and first row, and its wrap; the wraps by
+// line, for the next layout at that width (a key changes one line: only
+// it is wrapped again, so a long text costs a key little)
+type Laid = { text: string; w: number; rows: string[]; lines: { pos: number; row: number; wrap: Wrap }[]; wraps: Map<string, Wrap> };
 
 // where the cursor shows: a row, a column
 export type Spot = { row: number; col: number };
@@ -774,10 +784,10 @@ export function screen_input(scr: Screen, w: number, max: number, hint: string, 
   const ed   = scr.ed;
   const mw   = Paint.text_width(Theme.GLYPH.input);
   ed.w = w - mw;
-  const { rows, places, at } = ed_layout(ed);
-  const spot = places[at];
+  const laid = ed_layout(ed);
+  const spot = ed_place(laid, ed.pos);
   const top  = Math.max(0, spot.row - Math.max(1, max) + 1);
-  const seen = rows.slice(top, top + Math.max(1, max));
+  const seen = laid.rows.slice(top, top + Math.max(1, max));
   const text = ed.text === "" ? [[mark, Paint.Run(Paint.text_clean(hint), Paint.DIM)]] : seen.map((x, k) => [top + k === 0 ? mark : pad, ...input_runs(x, ink)]);
   return { lines: text, at: { row: spot.row - top, col: spot.col + mw } };
 }
@@ -796,10 +806,21 @@ export function ed_new(): Ed {
   return { text: "", pos: 0, hist: [], at: 0, draft: "", moved: false, w: 80, pastes: new Map(), n: 0 };
 }
 
-// a paste: a long one kept, its token typed; a short one typed
+// a paste: a long one kept, its token typed; a short one typed. A long
+// one pasted again while its token is in the input shows whole: the
+// token becomes its text, the cursor at its end
 export function ed_paste(ed: Ed, text: string): void {
-  if (text.replace(/\n$/, "").split("\n").length <= LONG_LINES && text.length <= LONG_CHARS) {
+  const body = text.replace(/\n$/, "");
+  if (body.split("\n").length <= LONG_LINES && text.length <= LONG_CHARS) {
     return ed_type(ed, text);
+  }
+  const same = [...ed.text.matchAll(PASTED)].findLast((m) => ed.pastes.get(Number(m[1]))?.replace(/\n$/, "") === body);
+  if (same !== undefined) {
+    const at = same.index!;
+    ed.pastes.delete(Number(same[1]));
+    ed.text = ed.text.slice(0, at) + body + ed.text.slice(at + same[0].length);
+    ed.pos  = at + body.length;
+    return;
   }
   ed.pastes.set(++ed.n, text);
   ed_type(ed, Md.paste_label(ed.n, text));
@@ -836,35 +857,51 @@ function ed_token(text: string, pos: number, d: number): number {
   return hit === undefined ? 0 : hit[0].length;
 }
 
-// the rows' texts, wrapped at ed.w columns (ed_wrap); each place of the
-// cursor; the cursor's. Laid out anew only as the text or the width
-// changes: a key that moves the cursor, and the paint after any key,
-// take the last
-function ed_layout(ed: Ed): { rows: string[]; places: Place[]; at: number } {
-  if (ed.laid?.text !== ed.text || ed.laid.w !== ed.w) {
-    ed.laid = { text: ed.text, w: ed.w, ...ed_wrap(ed.text, ed.w) };
+// the input's rows, wrapped at ed.w columns, line by line (ed_wrap; a
+// line as last wrapped at that width taken as it was). Laid out anew
+// only as the text or the width changes: a key that moves the cursor,
+// and the paint after any key, take the last
+function ed_layout(ed: Ed): Laid {
+  if (ed.laid?.text === ed.text && ed.laid.w === ed.w) {
+    return ed.laid;
   }
-  const { rows, places } = ed.laid;
-  return { rows, places, at: places.findIndex((p) => p.pos >= ed.pos) };
+  const was   = ed.laid?.w === ed.w ? ed.laid.wraps : new Map<string, Wrap>();
+  const wraps = new Map<string, Wrap>();
+  const sized = new Map<string, [string, number]>();
+  const rows: string[] = [];
+  const lines: Laid["lines"] = [];
+  const texts = ed.text.split("\n");
+  let pos = 0;
+  for (const [k, text] of texts.entries()) {
+    const key  = k === texts.length - 1 ? "\n" + text : text;
+    const wrap = wraps.get(key) ?? was.get(key) ?? ed_wrap(text, ed.w, k === texts.length - 1, sized);
+    wraps.set(key, wrap);
+    lines.push({ pos, row: rows.length, wrap });
+    for (const row of wrap.rows) {
+      rows.push(row);
+    }
+    pos += text.length + 1;
+  }
+  return (ed.laid = { text: ed.text, w: ed.w, rows, lines, wraps });
 }
 
-// a text's rows, wrapped at w columns (a character at a time), and each
-// place of the cursor (before each character, and the end); each
-// character cleaned and measured once
-function ed_wrap(text: string, w: number): { rows: string[]; places: Place[] } {
+// a line's rows, wrapped at w columns (a character at a time), and each
+// place of the cursor (before each character, and the end: the last
+// line's on a row of its own once its last row is full); each character
+// cleaned and measured once (sized: those measured)
+function ed_wrap(text: string, w: number, last: boolean, sized: Map<string, [string, number]>): Wrap {
   const rows = [""];
   const places: Place[] = [];
-  const sized = new Map<string, [string, number]>();
   let col = 0;
   let pos = 0;
   for (const g of Paint.text_graphemes(text)) {
     let shown = sized.get(g);
     if (shown === undefined) {
-      const x = g === "\n" ? "" : Paint.text_clean(g);
+      const x = Paint.text_clean(g);
       sized.set(g, (shown = [x, Paint.text_width(x)]));
     }
     const [x, cw] = shown;
-    if (g !== "\n" && col + cw > w) {
+    if (col + cw > w) {
       rows.push("");
       col = 0;
     }
@@ -872,17 +909,56 @@ function ed_wrap(text: string, w: number): { rows: string[]; places: Place[] } {
     pos += g.length;
     rows[rows.length - 1] += x;
     col += cw;
-    if (g === "\n") {
-      rows.push("");
-      col = 0;
-    }
   }
-  if (col >= w) {
+  if (last && col >= w) {
     rows.push("");
     col = 0;
   }
   places.push({ pos, row: rows.length - 1, col });
   return { rows, places };
+}
+
+// the index of the last line ok holds for (ok: true up to some line,
+// false after it), by halves
+function ed_line(laid: Laid, ok: (line: Laid["lines"][number]) => boolean): number {
+  let [lo, hi] = [0, laid.lines.length - 1];
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    [lo, hi] = ok(laid.lines[mid]) ? [mid, hi] : [lo, mid - 1];
+  }
+  return lo;
+}
+
+// the place of the cursor at pos (the first at or after it, in its line)
+function ed_place(laid: Laid, pos: number): Place {
+  const line = laid.lines[ed_line(laid, (l) => l.pos <= pos)];
+  const ps   = line.wrap.places;
+  const p    = ps.find((p) => line.pos + p.pos >= pos) ?? ps[ps.length - 1];
+  return { pos: line.pos + p.pos, row: line.row + p.row, col: p.col };
+}
+
+// where the cursor goes from pos a place back (d < 0) or on: over a line's
+// end to the next's start; at the text's ends, stays
+function ed_step(laid: Laid, pos: number, d: number): number {
+  const i    = ed_line(laid, (l) => l.pos <= pos);
+  const line = laid.lines[i];
+  const ps   = line.wrap.places;
+  const k    = ps.findIndex((p) => line.pos + p.pos >= pos);
+  const j    = (k < 0 ? ps.length - 1 : k) + d;
+  const to   = laid.lines[i + d];
+  if (j >= 0 && j < ps.length) {
+    return line.pos + ps[j].pos;
+  }
+  return to === undefined ? line.pos + ps[j < 0 ? 0 : ps.length - 1].pos : to.pos + to.wrap.places[d < 0 ? to.wrap.places.length - 1 : 0].pos;
+}
+
+// the places of the cursor on row r (none: past the ends)
+function ed_row(laid: Laid, r: number): Place[] {
+  if (r < 0 || r >= laid.rows.length) {
+    return [];
+  }
+  const line = laid.lines[ed_line(laid, (l) => l.row <= r)];
+  return line.wrap.places.filter((p) => p.row === r - line.row).map((p) => ({ pos: line.pos + p.pos, row: r, col: p.col }));
 }
 
 // text typed or pasted, at the cursor
@@ -987,9 +1063,9 @@ function ed_closest(have: string[], want: string[]): number[] | null {
 // an editing key: a new line, a move, a character or word erased;
 // whether key is one
 export function ed_key(ed: Ed, key: string): boolean {
-  const { places, at } = ed_layout(ed);
-  const back = places[Math.max(0, at - 1)].pos;
-  const next = places[Math.min(places.length - 1, at + 1)].pos;
+  const laid = ed_layout(ed);
+  const back = ed_step(laid, ed.pos, -1);
+  const next = ed_step(laid, ed.pos, 1);
   const word_back = ed_word(ed.text, ed.pos, -1);
   const word_next = ed_word(ed.text, ed.pos, 1);
   const move: Record<string, number> = {
@@ -1022,7 +1098,7 @@ export function ed_key(ed: Ed, key: string): boolean {
     }
     case "Up":
     case "Down": {
-      ed_vert(ed, places, places[at], key === "Up" ? -1 : 1);
+      ed_vert(ed, laid, ed_place(laid, ed.pos), key === "Up" ? -1 : 1);
       return true;
     }
   }
@@ -1047,8 +1123,8 @@ function ed_word(text: string, pos: number, d: number): number {
 // Up (d < 0) or Down: a row, at the nearest column; past the ends (unless
 // Left or Right moved the cursor in a typed input), the message sent
 // before/after
-function ed_vert(ed: Ed, places: Place[], at: Place, d: number): void {
-  const row = places.filter((p) => p.row === at.row + d);
+function ed_vert(ed: Ed, laid: Laid, at: Place, d: number): void {
+  const row = ed_row(laid, at.row + d);
   if (row.length > 0) {
     ed.pos = (row.filter((p) => p.col <= at.col).pop() ?? row[0]).pos;
     return;

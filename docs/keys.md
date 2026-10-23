@@ -135,9 +135,10 @@ Typing
   shell.
 - Shift+Enter or Ctrl+J: a new line. Up and Down past the ends: the
   messages sent before.
-- A long paste shows as one token; Alt+V (or Ctrl+V) attaches the
-  clipboard's image: Linux needs `wl-paste` or `xclip`, WSL uses
-  `powershell.exe`, macOS `osascript`.
+- A long paste shows as one token; pasted again while its token is in
+  the input, it shows whole in the token's place. Alt+V (or Ctrl+V)
+  attaches the clipboard's image: Linux needs `wl-paste` or `xclip`, WSL
+  uses `powershell.exe`, macOS `osascript`.
 - `/` first lists the commands it matches: by name first, then (from
   three letters on) those whose description has a word it starts, that
   word lit (`/new` lists `/clear`, "start a new topic"), then names with
