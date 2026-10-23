@@ -14,6 +14,8 @@ illi's docs
 - [Config](config.md): every setting and variable, the files illi keeps,
   troubleshooting.
 - [Development](development.md): the code's layout and its tests.
+- [Adding a provider](new-provider.md): what a new vendor needs, from
+  the request and the login to its plan, models and windows.
 - [The chat files](storage.md): how the memory is stored, a file per
   project, upgraded, searched and forgotten, step by step, with what
   each costs.

@@ -29,7 +29,8 @@ Development
                    for brand use though no page shows them
 
 Each file starts with a comment on its design; the chat's SQLite files
-are described end to end in [storage.md](storage.md). After `bun install`:
+are described end to end in [storage.md](storage.md), and what a new
+model vendor needs in [new-provider.md](new-provider.md). After `bun install`:
 
     bun run test     the tests
     bun run check    the type check (unused code fails it too)
