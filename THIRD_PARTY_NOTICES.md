@@ -112,10 +112,12 @@ THE SOFTWARE.
 
 ## prismantis
 
-[prismantis](https://github.com/NahumLitvin/prismantis) 0.14.0: illi's
-markdown parser (`src/ui/Markdown.ts`) and its palettes
-(`src/ui/Palettes.ts`) are adapted from its `hooks/markdown.ts` and
-`hooks/presets.ts`.
+[prismantis](https://github.com/NahumLitvin/prismantis) 0.14.0: how illi
+draws a reply is adapted from its `hooks/` (`markdown.ts`, `presets.ts`,
+`render.tsx`, `mermaid.tsx`): the markdown parser (`src/ui/Markdown.ts`),
+the palettes (`src/ui/Palettes.ts`), the languages Prism loads
+(`src/ui/Prism.ts`), most of `src/ui/Reply.ts`, and parts of
+`src/ui/Draw.ts` and `src/ui/Theme.ts`.
 
 ```
 MIT License
