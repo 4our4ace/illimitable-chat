@@ -139,7 +139,7 @@ test("Ctrl+Z stops the window, the shown member hidden; back, the modes on and t
   expect(read(window_step(w, { $: "resumed", dropped: false }))).toEqual([{ $: "term", data: WINDOW_ON }, { send: 1, got: [{ $: "show" }] }]);
   expect(out(w, 1, { $: "up" })).toContainEqual({ $: "send", id: 1, data: "a" });
   out(w, 1, { $: "suspend" });
-  expect(read(window_step(w, { $: "resumed", dropped: true }))[1]).toEqual({ send: 1, got: [{ $: "show", note: "Ctrl+Z can't suspend illi here: it leads this terminal's session." }] });
+  expect(read(window_step(w, { $: "resumed", dropped: true }))[1]).toEqual({ send: 1, got: [{ $: "show", note: "Ctrl+Z can't suspend illi here: no shell is there to bring it back with fg." }] });
 });
 
 test("a member of another wire version is let go, and the one before shown again, saying why", () => {

@@ -20,7 +20,9 @@
 // own; as that illi quits, this one runs again and holds the chat. The
 // user's plugins (Plugins.ts) load as it starts, before the chat opens,
 // so their hooks see all it does; a project's only in a folder trusted
-// (Trusted.ts). Each
+// (Trusted.ts). On a terminal, illi runs under a window (Window.ts), one
+// process that owns the terminal for every profile's illi under it; this
+// one's end of it is Member.ts. Each
 // profile (Profiles.ts) is its
 // own chat and settings; /profile switches by letting all go, as a quit
 // does, and running illi again, in place, in the one chosen
@@ -45,6 +47,7 @@ import * as Draw from "../ui/Draw.ts";
 import { term_draw, term_paint, term_print, term_resize } from "./Frame.ts";
 import { term_enter, term_grab, term_press, term_type } from "./Keys.ts";
 import { Machine } from "../tools/Machine.ts";
+import { WIN, member_attach, member_hello, member_keep, member_quit, member_say, member_screen, member_state } from "./Member.ts";
 import { Hooks } from "../config/Hooks.ts";
 import { Mcp } from "../tools/Mcp.ts";
 import { Memory } from "../chat/Memory.ts";
@@ -323,6 +326,7 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
   }
   term_primaries(t);
   Reply.reply_buttons(t.scr.tty);
+  member_attach(t);
   t.scr.on    = (key) => term_press(t, key);
   t.scr.grab  = (key) => term_grab(t, key);
   t.scr.type  = (text) => term_type(t, text);
@@ -387,7 +391,7 @@ function term_gone(t: Term, why: string, heard: boolean): void {
     return;
   }
   const name = Store.named(t.mem().store).name;
-  process.on("exit", () => process.stderr.write("illi: " + name + " is open in another terminal, but " + (why || "it can't be reached") + ": quit illi there, then start it here again.\n"));
+  term_after("illi: " + name + " is open in another terminal, but " + (why || "it can't be reached") + ": quit illi there, then start it here again.");
   process.exit(1);
 }
 
@@ -432,6 +436,7 @@ function term_hear(t: Term, msg: View.Server): void {
     status_hear(t);
     term_idle(t);
   }
+  member_state(t);
 }
 
 // an act of the person: to the view; the messages it sends the chat
@@ -504,8 +509,10 @@ export function term_idle(t: Term): void {
 // quits, its work cut (the next start resumes it), once the plugins and
 // hooks told of it are done (Plugins.quit: a while at most; a toast says
 // so if they take one, and a second quit doesn't wait) and all painted is
-// out (a write's callback comes after those before it), with exitCode
+// out (a write's callback comes after those before it), with exitCode.
+// In a window, the window is told first: it ends the other profiles
 export function term_quit(t: Term): void {
+  member_quit();
   t.quitting = true;
   t.v.ws?.close();
   term_paint(t);
@@ -532,8 +539,19 @@ export function term_crash(err: unknown): void {
   try {
     fs.appendFileSync(LOG, new Date().toISOString() + " illi: crashed: " + (e.stack ?? e.message) + "\n");
   } catch {}
-  process.on("exit", () => process.stderr.write("illi: crashed: " + e.message + " (details in " + LOG + ")\n"));
+  term_after("illi: crashed: " + e.message + " (details in " + LOG + ")");
   process.exit(1);
+}
+
+// a line said once illi has left the screen: on the terminal as illi
+// exits (after the screen's own exit handler puts it back); in a window,
+// to the window, which prints it as it ends (or notes it, another
+// profile shown)
+export function term_after(text: string): void {
+  if (WIN !== null) {
+    return member_say(text);
+  }
+  process.on("exit", () => process.stderr.write(text + "\n"));
 }
 
 // what went wrong before the screen was up, or out of sight, said once
@@ -568,15 +586,16 @@ function term_trouble(t: Term, told: Set<string>): void {
 export async function term_start(): Promise<void> {
   process.on("uncaughtException", term_crash);
   process.on("unhandledRejection", term_crash);
+  member_hello();
   const tty = process.stdin.isTTY === true && process.stdout.isTTY === true;
-  const scr = tty ? Screen.screen_new(() => {}) : null;
+  const scr = tty ? Screen.screen_new(() => {}, member_screen()) : null;
   if (scr !== null && !(await Trust.check(scr, process.cwd()))) {
     await Screen.screen_leave(scr);
-    process.stderr.write("illi: not started: " + Trusted.folder(process.cwd()) + " isn't trusted.\n");
+    term_after("illi: not started: " + Trusted.folder(process.cwd()) + " isn't trusted.");
     process.exit(1);
   }
   const holds = await Lock.take(process.cwd(), Remote.serve).catch((err) => {
-    console.error("illi: " + err.message);
+    term_after("illi: " + err.message);
     process.exit(1);
   });
   // on a terminal, what the agent logs goes to LOG, never over the screen
@@ -585,13 +604,10 @@ export async function term_start(): Promise<void> {
     console.log = console.warn = console.error = log;
   }
   // the profile a person works in here, kept for the project's next start
-  // (a script's run through a pipe changes nothing)
-  if (tty) {
-    try {
-      Profiles.profile_here_keep(config.ROOT, process.cwd(), config.PROFILE);
-    } catch (err: any) {
-      console.error("illi: the project's profile wasn't kept: " + err.message);
-    }
+  // (a script's run through a pipe changes nothing; one hidden in a
+  // window, once shown); started by a window's switch, the one used last
+  if (tty && WIN?.how !== "hidden") {
+    member_keep(WIN?.how === "switch");
   }
   if (holds) {
     delete process.env.ILLI_REJOIN;

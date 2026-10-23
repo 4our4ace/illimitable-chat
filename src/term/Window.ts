@@ -33,9 +33,10 @@
 // the terminal back, prints the lines said and exits with the shown
 // member's code. Ctrl+Z (the shown member's `suspend`) hides it, puts
 // the terminal back and stops the window alone: every profile's work
-// goes on, and `fg` shows that member again. Where the stop is dropped
-// (illi leads the terminal's session: no shell to come back to), the
-// screen comes back at once, with a note.
+// goes on, and `fg` shows that member again. Where the kernel drops the
+// stop (an orphaned process group: no shell with job control to come
+// back to, as under `tmux new-window illi`), the screen comes back at
+// once, with a note.
 //
 // window_step is the window as a pure step, an event in, effects out
 // (tested without a terminal); window_run runs it. The window imports
@@ -142,7 +143,7 @@ const ESCAPES = /\x1b(?:\[[0-?]*[ -\/]*[@-~]|[\]_P^][^\x07\x1b]*(?:\x07|\x1b\\)?
 const IDLE: State = { asks: false, working: false, jobs: 0, holds: false };
 
 // said where Ctrl+Z can't stop the window
-const DROPPED = "Ctrl+Z can't suspend illi here: it leads this terminal's session.";
+const DROPPED = "Ctrl+Z can't suspend illi here: no shell is there to bring it back with fg.";
 
 // said where a profile's illi is of another version (updated meanwhile)
 const UPDATED = "illi was updated meanwhile: quit illi and start it again to switch profiles.";

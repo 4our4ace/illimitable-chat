@@ -17,6 +17,7 @@ import { term_ask, term_chooser } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Disk } from "../chat/Disk.ts";
 import { Machine } from "../tools/Machine.ts";
+import { member_env } from "./Member.ts";
 import { Mcp } from "../tools/Mcp.ts";
 import { term_note } from "./Notices.ts";
 import { Update } from "../config/Update.ts";
@@ -26,7 +27,7 @@ import * as Profiles from "../config/Profiles.ts";
 import { Run } from "../config/Run.ts";
 import * as Screen from "../ui/Screen.ts";
 import { status_end } from "./Status.ts";
-import type { Term } from "./Term.ts";
+import { term_after, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
 // how long a profile's switch waits for the MCP servers to end (ms); the
@@ -116,7 +117,8 @@ function term_profile_busy(t: Term, what: string): boolean {
 // this illi holds let go (term_leave), `step` done (a rename, a chat
 // moved: what needs this one let go; if it fails, illi runs again where
 // it was, saying why), and illi runs in its place, on the same terminal
-// and folder; the API keys it took out of the environment go back in.
+// and folder (in a window, the same PTY, shown or hidden as it is); the
+// API keys it took out of the environment go back in, and ILLI_WINDOW.
 // keep: the project's lock kept through the step (this project
 // forgotten: no illi opens it meanwhile), let go as illi runs again.
 // Background jobs running (this illi runs the chat) stop with it, so it
@@ -142,16 +144,16 @@ export async function term_restart(t: Term, name: string, step?: () => void | Pr
   try {
     await step?.();
   } catch (err: any) {
-    process.stderr.write("illi: " + err.message + "\n");
+    term_after("illi: " + err.message);
     to = config.PROFILE;
   }
   Profiles.profile_keep(config.ROOT, to);
   const self = /\$bunfs|~BUN/.test(import.meta.path) ? [] : [...process.execArgv, process.argv[1]];
-  const env  = { ...config.config_env(), ILLI_PROFILE: to, ...(process.env.ILLI_DIR === undefined ? {} : { ILLI_DIR: config.ROOT }) };
+  const env  = { ...config.config_env(), ...member_env(), ILLI_PROFILE: to, ...(process.env.ILLI_DIR === undefined ? {} : { ILLI_DIR: config.ROOT }) };
   try {
     process.execve!(process.execPath, [process.execPath, ...self, ...process.argv.slice(2)], env);
   } catch (err: any) {
-    process.stderr.write("illi: can't run again in profile " + to + ": " + err.message + "\n");
+    term_after("illi: can't run again in profile " + to + ": " + err.message);
     process.exit(1);
   }
 }

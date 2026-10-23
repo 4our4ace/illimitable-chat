@@ -74,21 +74,25 @@ if (HELP || ODD !== undefined) {
 
 // the chat; a setting that won't do (Config.ts: "config: ...") or a chat
 // that won't open (Store.ts: "chat: ...") said in one line, no trace, on
-// the terminal (the log takes console's by then), and so is any other
-// failure before the chat loads; one after, a crash (Term.ts term_crash:
-// its trace to the log)
+// the terminal (the log takes console's by then; once the screen is up,
+// as illi has left it: Term.ts term_after), and so is any other failure
+// before the chat loads; one after, a crash (Term.ts term_crash: its
+// trace to the log)
 async function main_chat(): Promise<void> {
-  let crash: ((err: unknown) => void) | null = null;
+  let term: typeof import("./term/Term.ts") | null = null;
   try {
-    const term = await import("./term/Term.ts");
-    crash = term.term_crash;
+    term = await import("./term/Term.ts");
     await term.term_start();
   } catch (err: any) {
     const why = String(err?.message ?? err);
-    if (crash === null || why.startsWith("config: ") || why.startsWith("chat: ")) {
-      process.stderr.write("illi: " + why + "\n");
+    if (term === null || why.startsWith("config: ") || why.startsWith("chat: ")) {
+      if (term === null) {
+        process.stderr.write("illi: " + why + "\n");
+      } else {
+        term.term_after("illi: " + why);
+      }
       process.exit(1);
     }
-    crash(err);
+    term.term_crash(err);
   }
 }
