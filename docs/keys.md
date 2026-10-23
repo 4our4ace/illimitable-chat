@@ -138,9 +138,13 @@ Typing
 - A long paste shows as one token; Alt+V (or Ctrl+V) attaches the
   clipboard's image: Linux needs `wl-paste` or `xclip`, WSL uses
   `powershell.exe`, macOS `osascript`.
-- `/` first lists the commands it matches: Up and Down choose, Tab fills
-  one in, Enter runs it, Esc closes the list. Among those matched alike,
-  the ones you run most come first.
+- `/` first lists the commands it matches: by name first, then (from
+  three letters on) those whose description has a word it starts, that
+  word lit (`/new` lists `/clear`, "start a new topic"), then names with
+  its letters in turn. Up and Down choose, Tab fills one in, Enter runs
+  it (one found by its description is filled in first, so a second
+  Enter runs what shows), Esc closes the list. Among those matched
+  alike, the ones you run most come first.
 - `/` after a space, mid-message, lists your skills it matches (Tab or
   Enter fills one in), and each skill a message names ("Use the
   /imagegen skill to…") is one illi is told to use.
@@ -152,8 +156,9 @@ In a list
 over the input (Ctrl+P's in the screen's middle), so the keys go to it
 alone; the input comes back as you left it when the list closes.
 
-- Type to search; the search edits as the input does. Up and Down (or
-  Tab) move, Enter picks, Esc closes.
+- Type to search, by name and by the words of what each row does (as
+  `/` does); the search edits as the input does. Up and Down (or Tab)
+  move, Enter picks, Esc closes.
 - `/model`: Left and Right change the effort, Tab the speed.
 - `/settings`: Left, Right and Enter change a setting, Del puts its
   default back (in a profile: the global value).
