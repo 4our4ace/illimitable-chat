@@ -34,9 +34,9 @@ sessions.
   through your own Claude Code.
 - **Crash-proof.** A message is on disk before illi answers. Quit or
   crash mid-turn, and the next start goes on where it was.
-- **Yours to change.** Agents, commands and skills in Claude Code's
-  format, MCP servers, plugins in TypeScript, and shell hooks in Claude
-  Code's hook format ([Customize](docs/customize.md)).
+- **Yours to change.** Agents, commands, skills, MCP servers and shell
+  hooks in Claude Code's formats, its plugins as they are, and plugins
+  of your own in TypeScript ([Customize](docs/customize.md)).
 
 Install
 -------

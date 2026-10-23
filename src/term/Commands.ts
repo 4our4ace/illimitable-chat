@@ -12,6 +12,7 @@
 import * as fs from "node:fs";
 import type { Vendor } from "../ai/AskAI.ts";
 import { term_clip, term_image } from "./Attach.ts";
+import { Bundle } from "../config/Bundle.ts";
 import { Chat } from "../chat/Chat.ts";
 import { ChatGPT } from "../ai/ChatGPT.ts";
 import { json_object } from "../tools/Clip.ts";
@@ -66,17 +67,15 @@ const GONE = 0.1;
 export const USED: Tally = { file: config.ROOT + "/used.json", count: null };
 export const PICKED: Tally = { file: config.ROOT + "/picked.json", count: null };
 
+// a command or skill of the user's or a plugin's, as / takes it: its
+// word, its plugin's winner's other name (plugin:name; null: none)
+type Yours = { word: string; also: string | null; command: Command | null; skill: Skill | null };
+
 // all a person can do here, by group (the editing keys are Screen's);
-// with `custom`, the user's commands and skills too (read anew: never at
-// each key; a command wins a skill's name), then the plugins' commands
-// (Plugins.ts), but those a command before them names
+// with `custom`, the user's commands and skills too, theirs and the
+// plugins' (read anew: never at each key; term_yours), then the plugins'
+// code's commands (Plugins.ts), but those a command before them names
 export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
-  const cmds   = custom ? Custom.commands(process.cwd()) : [];
-  const skills = custom ? term_skills(cmds) : [];
-  const mine   = [
-    ...cmds.map((c): Cmd => ["/" + c.name + " [...]", "", c.description || "your command (" + c.file + ")", (t, a) => term_custom(t, c, a, "/" + c.name)]),
-    ...skills.map((s): Cmd => ["/" + s.name + " [...]", "", (!s.sticky ? "skill: " : config.config_sticky(s.name) ? "sticky skill, on: " : "sticky skill, off: ") + (s.description || s.dir), (t, a) => term_skill(t, s, a, "/" + s.name)]),
-  ];
   const groups: [group: string, cmds: Cmd[]][] = [
     ["Chat", [
       ["",                  "Enter",                   "send",                                           term_enter],
@@ -137,6 +136,9 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/profile [name]",   "",                        "switch to that profile (its own chats, on the global setup; one login for all); no name: opens a list to make, rename, export, import or delete one", term_profile],
     ]],
   ];
+  const mine  = (custom ? term_yours(term_builtin(groups)) : []).map(({ word, also, command: c, skill: s }): Cmd => (c !== null
+    ? ["/" + word + " [...]", "", c.description || (c.plugin == null ? "your command (" : "plugin " + c.plugin + "'s command (") + c.file + ")", (t, a) => term_custom(t, c, a, "/" + word), also ?? undefined]
+    : ["/" + word + " [...]", "", (!s!.sticky ? "skill: " : config.config_sticky(s!.name) ? "sticky skill, on: " : "sticky skill, off: ") + (s!.description || s!.dir), (t, a) => term_skill(t, s!, a, "/" + word), also ?? undefined]));
   const taken = new Set([...groups.flatMap(([, own]) => own), ...mine].map(([use]) => use.split(" ")[0]));
   const plugs = (custom ? Plugins.commands() : []).filter((c) => !taken.has("/" + c.name)).map((c): Cmd => ["/" + c.name + " [...]", "", c.about || "plugin " + c.plugin + "'s command", (t, a) => term_plugged(t, c, a)]);
   const yours = [...mine, ...plugs];
@@ -161,7 +163,8 @@ async function term_plugged(t: Term, cmd: Plugged, arg: string): Promise<void> {
 // is none
 export function term_command(t: Term, text: string, typed = true): boolean {
   const word = text.trim().split(/\s+/)[0];
-  const cmd = word.startsWith("/") ? term_commands(true).find(([use]) => use !== "" && use.split(" ")[0] === word) : undefined;
+  const all = word.startsWith("/") ? term_commands(true) : [];
+  const cmd = all.find(([use]) => use !== "" && use.split(" ")[0] === word) ?? all.find(([, , , , also]) => also !== undefined && "/" + also.toLowerCase() === word.toLowerCase());
   if (cmd !== undefined && typed) {
     term_tally_one(USED, word);
   }
@@ -191,7 +194,7 @@ export function term_suggest(t: Term): Sug | null {
     return null;
   }
   if (t.sug === null) {
-    const skills = mid === null ? [] : term_skills().map((s) => "/" + s.name);
+    const skills = mid === null ? [] : term_skills().map((y) => "/" + y.word);
     t.sug = { cmds: term_commands(true).filter(([use]) => use !== "" && (mid === null || skills.includes(use.split(" ")[0]))), word: "", found: [], at: 0, top: 0, tall: 1, off: null, mid };
   }
   const sug  = t.sug;
@@ -205,18 +208,56 @@ export function term_suggest(t: Term): Sug | null {
   return sug.off === word || (mid !== null && sug.found.length === 0) ? null : sug;
 }
 
-// the user's skills, but those a command of theirs takes the name of
-// (cmds: their commands, if read already)
-function term_skills(cmds = Custom.commands(process.cwd())): Skill[] {
-  return Custom.skills(process.cwd()).filter((s) => !cmds.some((c) => c.name === s.name));
+// the names illi's own commands take (groups: as term_groups has them,
+// if made already), without their /
+function term_builtin(groups: [group: string, cmds: Cmd[]][] = term_groups()): Set<string> {
+  return new Set(groups.flatMap(([, cmds]) => cmds).filter(([use]) => use !== "").map(([use]) => use.split(" ")[0].slice(1).toLowerCase()));
 }
 
-// a message's skills named in it, each a /name as a word after a space or
-// a line's start (Use the /imagegen skill to…): illi told to use them, in
-// a line after it, as a /name that starts a message tells it (term_skill)
+// the commands and skills / takes, by origin: the user's commands, their
+// skills (illi's own among them), the plugins' commands, the plugins'
+// skills (in each kind, one a part before it hides is plugin:name
+// already: Custom.parts); the first of a name, in any case, takes it
+// from those after: a plugin's is then plugin:name, one of the user's is
+// left out (a command over a skill), and none takes the name of one of
+// illi's own commands (taken). A plugin's that keeps its name answers to
+// plugin:name too
+function term_yours(taken: Set<string>): Yours[] {
+  const cwd    = process.cwd();
+  const cmds   = Custom.commands(cwd);
+  const skills = Custom.skills(cwd);
+  const all: Yours[] = [
+    ...cmds.filter((c) => c.plugin == null).map((c) => ({ word: c.name, also: null, command: c, skill: null })),
+    ...skills.filter((s) => s.plugin == null).map((s) => ({ word: s.name, also: null, command: null, skill: s })),
+    ...cmds.filter((c) => c.plugin != null).map((c) => ({ word: c.name, also: c.plugin + ":" + c.own, command: c, skill: null })),
+    ...skills.filter((s) => s.plugin != null).map((s) => ({ word: s.name, also: s.plugin + ":" + s.own, command: null, skill: s })),
+  ];
+  return all.flatMap((y): Yours[] => {
+    const word = y.word.toLowerCase();
+    if (!taken.has(word)) {
+      taken.add(word);
+      return [{ ...y, also: y.also?.toLowerCase() === word ? null : y.also }];
+    }
+    if (y.also === null || taken.has(y.also.toLowerCase())) {
+      return [];
+    }
+    taken.add(y.also.toLowerCase());
+    return [{ ...y, word: y.also, also: null }];
+  });
+}
+
+// the skills / takes (term_yours)
+function term_skills(): Yours[] {
+  return term_yours(term_builtin()).filter((y) => y.skill !== null);
+}
+
+// a message's skills named in it, each a /name (a plugin's as
+// /plugin:name too) as a word after a space or a line's start (Use the
+// /imagegen skill to…): illi told to use them, in a line after it, as a
+// /name that starts a message tells it (term_skill)
 export function term_named(text: string): string {
-  const skills = term_skills().map((s) => s.name);
-  const named  = [...new Set([...text.matchAll(/(?:^|\s)\/([^\s/.,;:!?()]+)(?=$|[\s.,;:!?)])/g)].map((m) => m[1]))].filter((name) => skills.includes(name));
+  const skills = term_skills().flatMap((y) => [y.word, ...(y.also === null ? [] : [y.also])]);
+  const named  = [...new Set([...text.matchAll(/(?:^|\s)\/([^\s/.,;:!?()]+(?::[^\s/.,;:!?()]+)?)(?=$|[\s.,;:!?)])/g)].map((m) => m[1]))].filter((name) => skills.includes(name));
   return named.length === 0 ? text : text + "\n\nUse your skill" + (named.length === 1 ? " " : "s ") + named.join(", ") + ".";
 }
 
@@ -389,46 +430,74 @@ function term_skill(t: Term, skill: Skill, arg: string, word: string): void {
   }
 }
 
-// the user's MCP servers: each one's tools, or how it is; the files (none
-// yet: where they go)
+// the MCP servers: each one's tools, or how it is, and where it is from;
+// the files that won't read; the user's files (none yet: where they go)
 export function term_mcp(t: Term): void {
-  const { servers, trouble, files } = Mcp.status();
+  const { servers, troubles, files } = Mcp.status();
   const where  = files.map((f, k) => config.config_home(f) + (files.length === 1 ? "" : k === 0 ? " (every profile)" : " (this profile's)")).join(" or ");
-  const server = (s: Server) => "- **" + s.name + "**: " + (s.state === "ready" ? s.own.size + " tools: " + [...s.own.values()].join(", ") : s.state === "starting" ? "starting…" : "failed: " + s.why);
+  const from   = (s: Server) => (s.plugin !== null ? "plugin " + s.plugin : config.config_home(s.file));
+  const server = (s: Server) => "- **" + s.name + "** (" + from(s) + "): " + (s.state === "ready" ? s.own.size + " tools: " + [...s.own.values()].join(", ") : s.state === "starting" ? "starting…" : "failed: " + s.why);
   const text = [
     servers.length === 0 ? "No MCP servers yet. Add them to " + where + ", as Claude Code's mcpServers (illi's docs/customize.md shows the shape); they run from illi's next start." : "MCP servers (their tools are named mcp__<server>__<tool>):", ...servers.map(server),
-    ...(trouble === "" ? [] : ["", "The file won't read: " + trouble]),
+    ...(troubles.length === 0 ? [] : ["", "Won't read:", ...troubles.map((x) => "- " + x)]),
     ...(servers.length === 0 ? [] : ["", "They are in " + where + ", as Claude Code's mcpServers; illi's docs/customize.md shows the shape. A change there applies at illi's next start."]),
   ];
   term_pane_text(t, "MCP", text.join("\n"));
 }
 
 // the user's agents, primary (the main one marked) and subagents, their
-// commands, skills, plugins (off, or failed to load, said so) and hooks
-// (all off, said why), and the dirs of all
+// commands and skills (as / takes them: term_yours), plugins (each
+// one's parts, what illi doesn't use of it, what to know; off, or its
+// code failed, said so), folders that look meant as plugins and aren't,
+// hooks (all off, said why), and the dirs of all; a plugin's part says
+// so
 function term_agents(t: Term): void {
   const cwd   = process.cwd();
-  const agent = (a: Profile) => "- **" + a.name + "**" + (a.name === t.v.agent ? " (main)" : "") + (a.description === "" ? "" : ": " + a.description) + [a.model, a.effort].filter(Boolean).map((x) => " · " + x).join("") + (a.tools === null ? "" : " · tools: " + a.tools.join(", "));
-  const cmd   = (c: Command) => "- **/" + c.name + "**" + (c.description === "" ? "" : ": " + c.description);
+  const from  = (plugin: string | null | undefined) => (plugin == null ? "" : " (plugin " + plugin + ")");
+  const agent = (a: Profile) => ["- **" + a.name + "**" + (a.name === t.v.agent ? " (main)" : "") + from(a.plugin) + (a.description === "" ? "" : ": " + a.description) + [a.model, a.effort].filter(Boolean).map((x) => " · " + x).join("") + (a.tools === null ? "" : " · tools: " + a.tools.join(", ")), ...(a.notes ?? []).map((n) => "  - " + n)];
+  const yours = term_yours(term_builtin());
+  const about = (description: string) => (description === "" ? "" : ": " + description);
   const list  = (title: string, xs: string[]) => ["", title + (xs.length === 0 ? ": none yet." : ":"), ...xs];
   const dirs  = (kind: "agents" | "commands" | "skills") => Custom.dirs(cwd, kind).map(config.config_home).join(" or ");
-  const plugin = (p: Found) => "- **" + p.name + "**" + (p.off ? " (off)" : p.runs ? "" : " (didn't load: illi.log says why)") + " · " + config.config_home(p.file);
   const plugins = Plugins.dirs(cwd, (dir) => Trusted.has(Trusted.folder(dir))).map(config.config_home).join(" or ");
   const line  = (cmd: string) => (cmd.includes("`") ? cmd : "`" + cmd + "`");
-  const hook  = (e: Entry) => "- **" + e.event + "**" + (e.match === "" ? "" : " " + e.match) + " · " + line(e.command.replace(/\s+/g, " ").trim()) + " · " + config.config_home(e.file);
+  const hook  = (e: Entry) => "- **" + e.event + "**" + (e.match === "" ? "" : " " + e.match) + " · " + line(e.command.replace(/\s+/g, " ").trim()) + " · " + (e.plugin === null ? config.config_home(e.file) : "plugin " + e.plugin);
   const hooks = Hooks.files(cwd, (dir) => Trusted.has(Trusted.folder(dir))).map(config.config_home).join(" or ");
   term_primaries(t);
   const text  = [
     "Main agent: " + (t.v.agent === null ? "illi's own" : t.v.agent) + ". Shift+Tab runs illi as the next primary agent; so does a click at the side, and /agent <name>.",
-    ...list("Primary agents (illi runs as them)", t.agents.map(agent)),
-    ...list("Subagents (only an agent spawns them)", Custom.subagents(cwd).map(agent)),
-    ...list("Commands", Custom.commands(cwd).map(cmd)),
-    ...list("Skills (the agent loads one when a task matches; /name asks for it)", Custom.skills(cwd).map((s) => "- **" + s.name + "**" + (s.description === "" ? "" : ": " + s.description))),
-    ...list("Plugins (code that runs inside illi, loaded as it starts)", Plugins.found().map(plugin)),
+    ...list("Primary agents (illi runs as them)", t.agents.flatMap(agent)),
+    ...list("Subagents (only an agent spawns them)", Custom.subagents(cwd).flatMap(agent)),
+    ...list("Commands", yours.flatMap(({ word, command: c }) => (c === null ? [] : ["- **/" + word + "**" + from(c.plugin) + about(c.description)]))),
+    ...list("Skills (the agent loads one when a task matches; /name asks for it)", yours.flatMap(({ word, skill: s }) => (s === null ? [] : ["- **" + word + "**" + from(s.plugin) + about(s.description)]))),
+    ...list("Plugins (commands, skills, agents, hooks, MCP servers and code, read as illi starts)", Plugins.found().flatMap(term_plugin)),
+    ...(Plugins.misfits().length === 0 ? [] : list("Not plugins (in a plugins folder, though they look meant as one)", Plugins.misfits().map((m) => "- " + config.config_home(m.dir) + ": " + m.why))),
     ...(Hooks.off() !== "" ? ["", "Hooks: off (" + Hooks.off() + ")."] : list("Hooks (shell commands run at what illi does, read as it starts)", Hooks.entries().map(hook))),
-    "", "An agent is a markdown file in " + dirs("agents") + " (the project's wins); its mode is primary, subagent, or all (both, the default). A command is one in " + dirs("commands") + ", a skill a folder with a SKILL.md in " + dirs("skills") + ", a plugin a .ts or .js file in " + plugins + ", hooks in " + hooks + ". illi's docs/customize.md shows their shape.",
+    "", "An agent is a markdown file in " + dirs("agents") + " (the project's wins); its mode is primary, subagent, or all (both, the default). A command is one in " + dirs("commands") + ", a skill a folder with a SKILL.md in " + dirs("skills") + ", hooks in " + hooks + ". A plugin is a folder of those (a Claude Code plugin as it is), or a .ts or .js file of code, in " + plugins + "; a plugin's part answers to plugin:name too, and the off setting takes either. illi's docs/customize.md shows their shape.",
   ];
   term_pane_text(t, "Agents", text.join("\n"));
+}
+
+// a plugin as /agents lists it: its name, version, what it gives (its
+// parts as read now; off: as it was at the start), its folder (a file
+// plugin: its file); off, or its code that failed, said so; its
+// description; what illi doesn't use of it, what to know, what won't
+// read
+export function term_plugin(p: Found): string[] {
+  const b = p.bundle === null ? null : (Bundle.read(p.dir, p.name, p.scope) ?? p.bundle);
+  const n = (count: number, one: string) => (count === 0 ? [] : [count + " " + one + (count === 1 ? "" : "s")]);
+  const gives = b === null ? ["code"] : [
+    ...(b.code === null ? [] : ["code"]), ...n(b.skills.length, "skill"), ...n(b.commands.length, "command"), ...n(b.agents.length, "agent"),
+    ...(b.hooks.length === 0 ? [] : ["hooks"]), ...(b.mcp.length === 0 ? [] : ["MCP servers"]),
+  ];
+  const state = p.off ? " (off)" : p.file !== "" && !p.runs ? " (its code didn't load: illi.log says why)" : "";
+  const head  = "- **" + p.name + "**" + (b?.version ? " " + b.version : "") + state + " · " + [...gives, config.config_home(p.dir || p.file)].join(" · ");
+  const more  = b === null ? [] : [
+    ...(b.about === "" ? [] : [b.about]),
+    ...(b.unused.length === 0 ? [] : ["illi doesn't use its " + b.unused.join(", ")]),
+    ...b.notes, ...Bundle.inspect(b), ...b.troubles,
+  ];
+  return [head, ...more.map((x) => "  - " + x)];
 }
 
 // the main agent: the primary agent named (illi: illi's own); none opens

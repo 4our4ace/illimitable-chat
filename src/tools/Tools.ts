@@ -297,9 +297,28 @@ function rules_read(file: string): string | null {
 
 // the skill tool, listing the user's skills (none: no tool)
 function skill_tools(cwd: string): Spec[] {
-  const skills = Custom.skills(cwd);
+  const skills = Custom.skills(cwd).filter((s) => s.model !== false);
   const list = skills.map((s) => "- " + s.name + (s.sticky ? " (sticky)" : "") + (s.description === "" ? "" : ": " + s.description)).join("\n");
   return skills.length === 0 ? [] : [spec("skill", SKILL + "\n\n" + list, { name: { type: "string", enum: skills.map((s) => s.name) }, on: ON }, ["name"])];
+}
+
+// a skill's files but its SKILL.md, each a path in its folder: none
+// under a hidden folder or node_modules, none that won't read
+function skill_files(dir: string): string[] {
+  let all: string[] = [];
+  try {
+    all = fs.readdirSync(dir, { recursive: true }) as string[];
+  } catch {
+    return [];
+  }
+  const file = (f: string) => {
+    try {
+      return fs.statSync(path.join(dir, f)).isFile();
+    } catch {
+      return false;
+    }
+  };
+  return all.filter((f) => f !== "SKILL.md" && !f.split(path.sep).some((x) => x.startsWith(".") || x === "node_modules") && file(f)).sort();
 }
 
 // the master's tools: spawn, with the user's subagents to run tasks as,
@@ -378,12 +397,14 @@ export namespace Tools {
   }
 
   // a skill loaded: its folder, its instructions, the other files in its
-  // folder (at most FILES), to read as it says; one built in, none
+  // folder (at most FILES; none hidden, nor a package's: a skill cloned
+  // with its .git, its node_modules), to read as it says; one built in,
+  // none
   export function skill(skill: Skill): string {
     if (skill.dir === "") {
       return "Skill " + skill.name + ": its instructions, whole, below (built into illi)\n\n" + skill.body;
     }
-    const all   = (fs.readdirSync(skill.dir, { recursive: true }) as string[]).filter((f) => f !== "SKILL.md" && fs.statSync(skill.dir + "/" + f).isFile()).sort();
+    const all   = skill_files(skill.dir);
     const files = all.length === 0 ? "" : "\n\nIts files, in its folder: " + all.slice(0, FILES).join(", ") + (all.length > FILES ? ", and " + (all.length - FILES) + " more." : ".");
     return "Skill " + skill.name + ": its SKILL.md's instructions, whole, below; its folder: " + skill.dir + "\n\n" + skill.body + files;
   }
@@ -578,8 +599,9 @@ export namespace Tools {
         return { text: await Tools.tell(tools, String(args.name), String(args.message)), fail: false };
       }
       case "skill": {
-        const skill = Custom.skill(tools.cwd, String(args.name));
-        const names = Custom.skills(tools.cwd).map((s) => s.name).join(", ") || "none";
+        const found = Custom.skill(tools.cwd, String(args.name));
+        const skill = found?.model === false ? null : found;
+        const names = Custom.skills(tools.cwd).filter((s) => s.model !== false).map((s) => s.name).join(", ") || "none";
         if (skill === null || typeof args.on !== "boolean") {
           return skill === null ? { text: "No skill " + args.name + "; the skills: " + names + ".", fail: true } : { text: Tools.skill(skill), fail: false };
         }
@@ -740,7 +762,7 @@ export namespace Tools {
     const perms  = Permissions.read(config.PERMISSIONS, folder);
     const ok     = typeof perms !== "string";
     const grants = new Set([...(ok ? perms.granted : []), ...tools.perm.granted]);
-    const got    = judge({ mode: hooked.allow === true ? "yolo" : Tools.mode(tools), cwd: Projects.real(tools.cwd), top: folder, rules: ok ? perms.rules : {}, grants, reads: Custom.dirs(tools.cwd, "skills") });
+    const got    = judge({ mode: hooked.allow === true ? "yolo" : Tools.mode(tools), cwd: Projects.real(tools.cwd), top: folder, rules: ok ? perms.rules : {}, grants, reads: Custom.dirs(tools.cwd, "skills").map(Projects.real), plugins: Plugins.roots() });
     const broken = "illi can't read your permission rules (" + perms + ")";
     const judged: Verdict = ok || got.$ === "deny" ? got : { $: "ask", why: got.$ === "ask" ? got.why + "; " + broken : broken, always: [], exact: got.$ === "ask" ? got.exact : [] };
     const verdict: Verdict = hooked.ask === undefined || judged.$ === "deny" ? judged : { $: "ask", why: judged.$ === "ask" ? hooked.ask + "; " + judged.why : hooked.ask, always: [], exact: judged.$ === "ask" ? judged.exact : [] };

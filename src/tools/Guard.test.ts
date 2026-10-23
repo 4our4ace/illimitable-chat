@@ -33,7 +33,7 @@ afterAll(() => fs.rmSync(TMP, { recursive: true, force: true }));
 const HOME = fs.realpathSync(os.homedir());
 
 function where(over: Partial<Where> = {}): Where {
-  return { mode: "auto", cwd: TOP, top: TOP, rules: {}, grants: new Set(), reads: [], ...over };
+  return { mode: "auto", cwd: TOP, top: TOP, rules: {}, grants: new Set(), reads: [], plugins: [], ...over };
 }
 
 // a shell command's verdict, short: run, ask: why, deny: why
@@ -258,6 +258,18 @@ test("a project kept inside a secret folder (illi's own, ~/.claude) is the proje
   expect(Guard.check(where({ cwd: top, top }), "read", { path: "SKILL.md" })).toEqual({ $: "allow" });
   expect(Guard.check(where({ cwd: top, top }), "read", { path: "../login.json" })).toMatchObject({ $: "ask", why: TMP + "/illi/login.json may hold secrets" });
   expect(Guard.check(where(), "read", { path: TMP + "/illi/skills-repo/SKILL.md" })).toMatchObject({ $: "ask" });
+});
+
+test("a plugin's folder reads unasked, as a skill's, but its .mcp.json, settings.json, manifest and secrets; its scripts run as the project's; a write there asked", () => {
+  const kit = TMP + "/illi/plugins/kit";
+  fs.mkdirSync(kit + "/scripts", { recursive: true });
+  fs.writeFileSync(kit + "/scripts/check.sh", "#!/bin/sh\n");
+  const read = (p: string, plugins = [kit]) => Guard.check(where({ plugins }), "read", { path: kit + "/" + p }).$;
+  expect([read("skills/check/SKILL.md"), read("skills/check/SKILL.md", [])]).toEqual(["allow", "ask"]);
+  expect([read(".mcp.json"), read("settings.json"), read(".claude-plugin/plugin.json"), read(".env")]).toEqual(["ask", "ask", "ask", "ask"]);
+  expect(Guard.check(where({ plugins: [kit] }), "write", { path: kit + "/skills/check/SKILL.md", content: "x" }).$).toBe("ask");
+  expect([judge(kit + "/scripts/check.sh", { plugins: [kit] }), judge("sh " + kit + "/scripts/check.sh", { plugins: [kit] })]).toEqual(["run", "run"]);
+  expect(judge(kit + "/scripts/check.sh")).toStartWith("ask: ");
 });
 
 test("file tools: reads anywhere but secrets and outside, writes inside but protected; MCP by its hints, once per tool", () => {

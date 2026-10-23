@@ -59,7 +59,7 @@ export type Hints = { read: boolean; destructive: boolean };
 // where a call is judged: the mode, the working dir, the project's top,
 // the user's rules, the grants (kind=subject, kind:pattern), the folders
 // read freely besides (illi's skills')
-export type Where = { mode: Mode; cwd: string; top: string; rules: Rules; grants: Set<string>; reads: string[] };
+export type Where = { mode: Mode; cwd: string; top: string; rules: Rules; grants: Set<string>; reads: string[]; plugins: string[] };
 
 // a verdict: run; ask (why; the grants a "don't ask again" keeps, none
 // for the user's own ask rules; the exact grants that clear it); refuse
@@ -184,6 +184,10 @@ const SYSTEM = ["/usr", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/libx32", 
 
 // secrets: files by name anywhere, folders and files under home, files
 // of the system
+// a plugin's files read only on asking: where the user's tokens may be
+// pasted (its MCP servers, its settings, its manifest's folder)
+const PLUGIN_KEPT = [".mcp.json", "settings.json", ".claude-plugin"];
+
 const SECRET_NAME = /^(\.env(\.(?!(example|sample|template|dist)$)[^/]+)?|\.netrc|\.pgpass|\.git-credentials|\.npmrc|\.pypirc|\.vault-token|id_(rsa|dsa|ecdsa|ed25519)(_sk)?|.+\.(pem|key|p12|pfx|keystore|jks|kdbx))$/;
 const SECRET_HOME = [
   ".ssh", ".aws", ".gnupg", ".kube", ".docker", ".azure", ".config/gh", ".config/gcloud", ".config/hub", ".config/op",
@@ -519,7 +523,7 @@ function look_command(where: Where, look: Look, part: Part, uses: Use[], flag: F
   const use = (w: Word, write: boolean) => uses.push({ word: w, write, cwd: part.cwd });
   if (alt.includes("/")) {
     const file = part.cwd === null && !path.isAbsolute(alt) ? null : real(path.resolve(part.cwd ?? "/", alt));
-    if (file === null || (!under(file, where.top) && name === "")) {
+    if (file === null || (!under(file, where.top) && !where.plugins.some((d) => under(file, d)) && name === "")) {
       flag(text + " runs a program from " + (file === null ? "a folder known only as it runs" : shown(path.dirname(file), where.top)));
     }
   }
@@ -1060,8 +1064,9 @@ function runner_look(where: Where, look: Look, part: Part, base: string, args: W
     return true;
   }
   const files = named(script, part.cwd);
-  if (files === null || files.some((f) => !under(f, where.top))) {
-    flag(text + " runs a script from " + (files === null ? "a place known only as it runs" : shown(path.dirname(files.find((f) => !under(f, where.top))!), where.top)));
+  const away = (f: string) => !under(f, where.top) && !where.plugins.some((d) => under(f, d));
+  if (files === null || files.some(away)) {
+    flag(text + " runs a script from " + (files === null ? "a place known only as it runs" : shown(path.dirname(files.find(away)!), where.top)));
   }
   use(script, false);
   args.filter((a) => a !== script && !a.alts[0].startsWith("-")).forEach((a) => use(a, false));
@@ -1511,6 +1516,9 @@ function path_why(where: Where, file: string, write: boolean): { why: string; wi
   if (!write && where.reads.some((d) => under(file, d))) {
     return null;
   }
+  if (!write && where.plugins.some((d) => plugin_open(file, d))) {
+    return null;
+  }
   if (write && (under(file, Projects_real(config.ROOT)) || under(file, path.join(where.top, ".illi")))) {
     return { why: at + " is illi's own config (what it runs and is told)", wide: false, self: true };
   }
@@ -1527,6 +1535,14 @@ function path_why(where: Where, file: string, write: boolean): { why: string; wi
     return null;
   }
   return { why: at + " is outside the project", wide: true };
+}
+
+// whether a plugin's file is free to read, its folder given: anything in
+// it but what may hold the user's tokens (its MCP servers' file, its
+// settings, its manifest's folder) or a secret by its name
+function plugin_open(file: string, dir: string): boolean {
+  const rel = path.relative(dir, file);
+  return under(file, dir) && !PLUGIN_KEPT.some((k) => rel === k || rel.startsWith(k + path.sep)) && !SECRET_NAME.test(path.basename(file));
 }
 
 // whether a file may hold secrets: by its name anywhere; in a secret

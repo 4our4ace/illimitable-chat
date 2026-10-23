@@ -11,8 +11,8 @@ you've said you trust it (the full-screen question at its first start
 there, kept for the whole repo in `trust.json`; your home folder, and
 any folder above it, is asked at every start). The checks below presume a trusted folder. A run
 from a pipe is never asked: it runs, but a project's own `.illi` agents,
-commands, skills and plugins load only if a terminal trusted the folder
-before ([Customize](customize.md)).
+commands, skills, plugins, hooks and MCP servers load only if a terminal
+trusted the folder before ([Customize](customize.md)).
 
 Modes
 -----
@@ -67,13 +67,16 @@ about when it:
   (`flock`, `strace`, `parallel`, `tmux new`, `fd -x`,
   `tar --to-command`, `git rebase -x`, `rsync -e`)
 - runs a program or script from outside the project (`bash /tmp/x.sh`,
-  `make -f /tmp/x.mk`), or a project tool in a folder outside it
-  (`cd /x && npm test` runs that folder's scripts)
-- touches a file outside the project (reading the system's folders and
-  `/tmp`, and writing `/tmp`, are free), a secret anywhere (`.env`, keys,
-  `~/.ssh`, `~/.aws`, illi's own folder), or a protected file in the
-  project on writing (`.git`, `.illi`, `.claude`, `.vscode`, `.husky`,
-  shell rc files, `bunfig.toml`, ...)
+  `make -f /tmp/x.mk`; a loaded plugin's own run as the project's), or
+  a project tool in a folder outside it (`cd /x && npm test` runs that
+  folder's scripts)
+- touches a file outside the project (reading the system's folders,
+  `/tmp`, your skills' folders and a loaded plugin's, and writing
+  `/tmp`, are free; but a plugin's `.mcp.json`, `settings.json` and
+  manifest), a secret anywhere (`.env`, keys, `~/.ssh`, `~/.aws`,
+  illi's own folder), or a protected file in the project on writing
+  (`.git`, `.illi`, `.claude`, `.vscode`, `.husky`, shell rc files,
+  `bunfig.toml`, ...)
 - holds what is known only as it runs (`$CMD` as a command, a path made
   by `$(...)`), or what illi can't follow (`case`, functions, arrays):
   asked, never guessed.

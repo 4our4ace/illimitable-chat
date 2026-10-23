@@ -8,12 +8,20 @@
 // it back, add context), a turn ending of itself (Stop: go on), the user
 // waited on a while (Notification), the chat opening (SessionStart:
 // context for every call of the run) and illi quitting (SessionEnd).
-// Read once as illi starts, from the global hooks.json, the profile's
-// and, in a trusted folder, the project's .illi/hooks.json, all in that
-// order, a command given twice running once (read); none if any of them
-// says disableAllHooks, or the `off` setting names hooks.json. They run
-// as a plugin of illi's own, after the user's plugins (Plugins.own), so
-// they share their order, failure rules and call sites.
+// Read once as illi starts: the plugins' (each bundle's hooks/hooks.json
+// and its manifest's hooks: Bundle.ts), then the global hooks.json, the
+// profile's and, in a trusted folder, the project's .illi/hooks.json, all
+// in that order (the user's last, so their check sees the input as the
+// plugins left it), a command given twice running once (read); none if
+// one of the user's files says disableAllHooks (a plugin's can't), or
+// the `off` setting names hooks.json. A plugin's commands are given its
+// folder and data folder (CLAUDE_PLUGIN_ROOT, CLAUDE_PLUGIN_DATA, and
+// ILLI_ spellings), and its notes name it. A matcher naming Claude
+// Code's Bash takes illi's shell too (its input alike: { command }); one
+// naming only Claude Code's other tools is said, as illi's inputs differ.
+// They run as a plugin of illi's own, after the user's code plugins
+// (Plugins.own), so they share their order, failure rules and call
+// sites.
 //
 // A command runs in sh, in the project's folder, given the event as JSON
 // on its input (run); it answers as Claude Code's do (answer): exit 2
@@ -29,11 +37,12 @@
 //         "PreToolUse": [{ "matcher": "shell",
 //                          "hooks": [{ "type": "command", "command": "~/.illi/hooks/guard.sh" }] }] } }
 
-import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { Bundle } from "./Bundle.ts";
 import * as config from "./Config.ts";
 import { Plugins, type Output, type ToolCall, type Wait } from "./Plugins.ts";
+import { Seen } from "./Seen.ts";
 import { Trusted } from "./Trusted.ts";
 
 // Types
@@ -43,8 +52,10 @@ export type Event = "PreToolUse" | "PostToolUse" | "UserPromptSubmit" | "Stop" |
 
 // a command to run at an event: the event, its matcher as written and
 // what it takes (null: all), the command, its time limit (ms), what its
-// failure does (block: as exit 2; continue: nothing), the file it is in
-export type Entry = { event: Event; match: string; matcher: ((what: string) => boolean) | null; command: string; timeout: number; fail: "block" | "continue"; file: string };
+// failure does (block: as exit 2; continue: nothing), the file it is in,
+// its plugin (null: the user's own) and what it is given of it (its
+// variables: Bundle.vars)
+export type Entry = { event: Event; match: string; matcher: ((what: string) => boolean) | null; command: string; timeout: number; fail: "block" | "continue"; file: string; plugin: string | null; vars: Record<string, string> };
 
 // a command's run: its exit code (null: no answer, why), its output and
 // its errors' (each cut at CAP)
@@ -68,6 +79,10 @@ export const NAME = "hooks.json";
 // the events whose matcher is matched, and against what: a tool's name,
 // what started the session, the kind of wait, why the session ended
 const MATCHED: Partial<Record<Event, true>> = { PreToolUse: true, PostToolUse: true, SessionStart: true, Notification: true, SessionEnd: true };
+
+// Claude Code's tool names a matcher may name: Bash, whose input is
+// illi's shell's, taken for it; the others, whose inputs differ, said
+const CLAUDE_TOOLS = ["Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "LS", "WebFetch", "WebSearch", "NotebookEdit", "TodoWrite", "Task"];
 
 // the events whose output, as text, is context for the model
 const CONTEXT: Partial<Record<Event, true>> = { UserPromptSubmit: true, SessionStart: true };
@@ -130,6 +145,7 @@ export namespace Hooks {
       return;
     }
     hooks_seen(path.join(cwd, ".illi", "hooks.json"));
+    hooks_claude();
     const at = (event: Event) => ENTRIES.some((e) => e.event === event);
     Plugins.own(NAME, entries[0].file, "your hooks", [
       { hook: "start", run: hooks_start },
@@ -150,23 +166,37 @@ export namespace Hooks {
     return [...own, path.join(config.DIR, "hooks.json"), ...(trusted(cwd) ? [path.join(cwd, ".illi", "hooks.json")] : [])];
   }
 
-  // the commands in those files, in order, one given twice (its event,
-  // matcher and command alike) kept once; what won't do, each said why (a
-  // file that won't read: none of its own run; an entry that won't do:
-  // left out); the file that turns them all off, if any
+  // the commands of the plugins' hooks (Plugins.bundles), then of those
+  // files, in order, one given twice (its event, matcher, command and
+  // plugin alike) kept once; what won't do, each said why (a file that
+  // won't read: none of its own run; an entry that won't do: left out);
+  // the user's file that turns them all off, if any
   export function read(cwd: string, trusted: (cwd: string) => boolean): { entries: Entry[]; troubles: string[]; off: string | null } {
     const entries: Entry[] = [];
     const troubles: string[] = [];
     let off: string | null = null;
+    const take = (got: { entries: Entry[]; troubles: string[] }, said: string) => {
+      entries.push(...got.entries.filter((e) => !entries.some((x) => x.event === e.event && x.match === e.match && x.command === e.command && x.plugin === e.plugin)));
+      troubles.push(...got.troubles.map((t) => said + ": " + t));
+    };
+    for (const b of Plugins.bundles()) {
+      for (const source of b.hooks) {
+        const got = source.data !== undefined ? hooks_of_map(source.data, source.file, b) : file_read(source.file, b);
+        if (typeof got === "string") {
+          troubles.push("The plugin " + b.name + "'s " + config.config_home(source.file) + " won't read: " + got + "; its hooks are off till illi starts again.");
+          continue;
+        }
+        take(got, "The plugin " + b.name + "'s " + config.config_home(source.file));
+      }
+    }
     for (const file of Hooks.files(cwd, trusted)) {
-      const got = file_read(file);
+      const got = file_read(file, null);
       if (typeof got === "string") {
         troubles.push(config.config_home(file) + " won't read: " + got + "; its hooks are off till illi starts again.");
         continue;
       }
       off ??= got.off ? file : null;
-      entries.push(...got.entries.filter((e) => !entries.some((x) => x.event === e.event && x.match === e.match && x.command === e.command)));
-      troubles.push(...got.troubles.map((t) => config.config_home(file) + ": " + t));
+      take(got, config.config_home(file));
     }
     return { entries, troubles, off };
   }
@@ -182,23 +212,24 @@ export namespace Hooks {
   }
 
   // whether an entry's matcher takes what its event is about (a tool's
-  // name, what started the session, the kind of wait, why it ended); the
-  // events that match none take all
+  // name, what started the session, the kind of wait, why it ended; illi's
+  // shell as Claude Code's Bash too); the events that match none take all
   export function matches(entry: Entry, what: string): boolean {
-    return entry.matcher === null || !MATCHED[entry.event] || entry.matcher(what);
+    return entry.matcher === null || !MATCHED[entry.event] || entry.matcher(what) || (what === "shell" && entry.matcher("Bash"));
   }
 
   // a command run, in sh, in a folder, the project's top in
-  // ILLI_PROJECT_DIR, given its input as JSON: its exit code, output and
-  // errors. In its own process group, so its time limit (and a stop) ends
+  // ILLI_PROJECT_DIR (and CLAUDE_PROJECT_DIR, as pasted Claude Code hooks
+  // read it), more variables given, its input as JSON: its exit code,
+  // output and errors. In its own process group, so its time limit (and a stop) ends
   // all it started: asked to end, then killed GRACE after. Once it ends,
   // its output is waited for SETTLE at most (a job it left in the
   // background may hold the pipe, and is left to run). One not tracked
   // (SessionEnd's) outlives illi's quit (end)
-  export async function run(command: string, input: object, cwd: string, top: string, timeout: number, signal?: AbortSignal, tracked = true): Promise<Ran> {
+  export async function run(command: string, input: object, cwd: string, top: string, timeout: number, signal?: AbortSignal, tracked = true, vars: Record<string, string> = {}): Promise<Ran> {
     let proc: Bun.Subprocess<Blob, "pipe", "pipe">;
     try {
-      proc = Bun.spawn(["/bin/sh", "-c", command], { cwd, env: { ...process.env, ILLI_PROJECT_DIR: top }, stdin: new Blob([JSON.stringify(input) + "\n"]), stdout: "pipe", stderr: "pipe", detached: true });
+      proc = Bun.spawn(["/bin/sh", "-c", command], { cwd, env: { ...process.env, ILLI_PROJECT_DIR: top, CLAUDE_PROJECT_DIR: top, ...vars }, stdin: new Blob([JSON.stringify(input) + "\n"]), stdout: "pipe", stderr: "pipe", detached: true });
     } catch (err: any) {
       return { code: null, why: "couldn't start (" + String(err?.message ?? err) + ")", out: "", err: "" };
     }
@@ -238,7 +269,9 @@ export namespace Hooks {
   export function answer(e: Entry, ran: Ran): Said {
     const short = clip(e.command);
     const first = ran.err.trim().split("\n")[0];
-    const failed = (why: string): Said => (e.fail === "block" ? { ...blocked(e.event, "Your " + e.event + " hook " + short + " " + why + (e.event === "PreToolUse" ? ", so the call was refused." : ".")), fail: why } : { fail: why });
+    const own = hooks_whose(e, true) + " " + e.event + " hook " + short;
+    const off = e.plugin === null ? "" : " (the off setting turns the plugin " + e.plugin + " off)";
+    const failed = (why: string): Said => (e.fail === "block" ? { ...blocked(e.event, own + " " + why + (e.event === "PreToolUse" ? ", so the call was refused" + off + "." : ".")), fail: why } : { fail: why });
     if (ran.code === null) {
       return failed(ran.why);
     }
@@ -246,12 +279,12 @@ export namespace Hooks {
       return failed("couldn't run (exit " + ran.code + (first === "" ? "" : ": " + first) + ")");
     }
     if (ran.code === 2) {
-      return blocked(e.event, ran.err.trim() || "Your " + e.event + " hook " + short + " said no.");
+      return blocked(e.event, ran.err.trim() || own + " said no.");
     }
     const text = ran.out.trim();
     if (text.startsWith("{")) {
       const json = json_parse(text);
-      return json === null ? failed("gave output that isn't JSON") : decided(e.event, short, json);
+      return json === null ? failed("gave output that isn't JSON") : decided(e.event, own, json);
     }
     if (ran.code !== 0) {
       return failed("exited " + ran.code + (first === "" ? "" : ": " + first));
@@ -316,7 +349,7 @@ async function hooks_before(call: ToolCall): Promise<{ block: string } | { input
   let allow = false;
   const context: string[] = [];
   for (const e of hooks_of("PreToolUse", call.tool)) {
-    const said = await hooks_one(e, { ...hooks_agent(call), tool_name: call.tool, tool_input: hooks_paths(call, input) }, call.signal);
+    const said = await hooks_one(e, { ...hooks_agent(call), tool_name: hooks_tool(e, call.tool), tool_input: hooks_paths(call, input) }, call.signal);
     if (call.signal?.aborted) {
       return { block: "Stopped." };
     }
@@ -343,7 +376,7 @@ async function hooks_after(call: ToolCall & { output: Output }): Promise<{ text:
   }
   const more: string[] = [];
   for (const e of hooks_of("PostToolUse", call.tool)) {
-    const said = await hooks_one(e, { ...hooks_agent(call), tool_name: call.tool, tool_input: hooks_paths(call, call.input), tool_response: call.output }, call.signal);
+    const said = await hooks_one(e, { ...hooks_agent(call), tool_name: hooks_tool(e, call.tool), tool_input: hooks_paths(call, call.input), tool_response: call.output }, call.signal);
     if (call.signal?.aborted) {
       return;
     }
@@ -403,6 +436,17 @@ function hooks_of(event: Event, what: string): Entry[] {
   return ENTRIES.filter((e) => e.event === event && Hooks.matches(e, what));
 }
 
+// a tool's name as an entry is told it: Bash where it took illi's shell
+// as Claude Code's (its matcher names Bash, not shell)
+function hooks_tool(e: Entry, tool: string): string {
+  return tool === "shell" && e.matcher !== null && !e.matcher("shell") ? "Bash" : tool;
+}
+
+// whose an entry is, as a note names it: the user's, or its plugin's
+function hooks_whose(e: Entry, capital: boolean): string {
+  return e.plugin === null ? (capital ? "Your" : "your") : (capital ? "The" : "the") + " plugin " + e.plugin + "'s";
+}
+
 // who calls a tool, as Claude Code says it: a subagent's name, else none
 function hooks_agent(call: ToolCall): object {
   return call.agent === null ? {} : { agent_id: call.agent, agent_type: call.agent };
@@ -427,7 +471,7 @@ function hooks_paths(call: ToolCall, input: any): unknown {
 // it)
 async function hooks_one(e: Entry, more: object, signal?: AbortSignal, tracked = true): Promise<Said> {
   const input = { hook_event_name: e.event, cwd: CWD, permission_mode: Plugins.mode(), ...more };
-  const ran = await Hooks.run(e.command, input, CWD, TOP, e.timeout, signal, tracked);
+  const ran = await Hooks.run(e.command, input, CWD, TOP, e.timeout, signal, tracked, e.vars);
   const said = Hooks.answer(e, ran);
   if (said.note !== undefined) {
     Plugins.say(said.note);
@@ -437,46 +481,40 @@ async function hooks_one(e: Entry, more: object, signal?: AbortSignal, tracked =
   }
   if (said.fail !== undefined && !signal?.aborted) {
     console.error("illi: hook " + e.event + " " + e.command + " (" + e.file + "): " + said.fail + (ran.err.trim() === "" ? "" : "\n" + ran.err.trim()));
-    if (!TOLD.has(e.event + "\0" + e.command)) {
-      TOLD.add(e.event + "\0" + e.command);
-      Plugins.say("Your " + e.event + " hook " + clip(e.command) + " failed: " + said.fail + (said.block === undefined ? "" : ", so it said no") + " (illi.log has more).");
+    const key = e.event + "\0" + e.command + "\0" + (e.plugin ?? "");
+    if (!TOLD.has(key)) {
+      TOLD.add(key);
+      Plugins.say(hooks_whose(e, true) + " " + e.event + " hook " + clip(e.command) + " failed: " + said.fail + (said.block === undefined ? "" : ", so it said no") + " (illi.log has more).");
     }
   }
   return said;
 }
 
-// a project's hooks file new or changed since illi last started with it:
-// said once (it runs from now on), and kept as seen (in illi's folder,
-// out of the repository's reach)
+// a project's hooks file new or changed since illi last started with it
+// (Seen.ts): said once (it runs from now on)
 function hooks_seen(file: string): void {
   const n = ENTRIES.filter((e) => e.file === file).length;
-  if (n === 0) {
-    return;
+  if (n > 0 && Seen.changed("hooks " + file, [file])) {
+    Plugins.say("This project's " + config.config_home(file) + " is new or changed since illi last started here: its " + (n === 1 ? "hook runs" : n + " hooks run") + " as you work (/agents lists them).");
   }
-  const seen_file = path.join(config.ROOT, "hooks-seen.json");
-  let hash = "";
-  let seen: Record<string, string> = {};
-  try {
-    hash = crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
-    seen = JSON.parse(fs.readFileSync(seen_file, "utf8")) ?? {};
-  } catch {
-    // none seen yet
-  }
-  if (seen[file] === hash) {
-    return;
-  }
-  Plugins.say("This project's " + config.config_home(file) + " is new or changed since illi last started here: its " + (n === 1 ? "hook runs" : n + " hooks run") + " as you work (/agents lists them).");
-  try {
-    fs.writeFileSync(seen_file + ".tmp", JSON.stringify({ ...seen, [file]: hash }, null, 2) + "\n");
-    fs.renameSync(seen_file + ".tmp", seen_file);
-  } catch (err: any) {
-    console.error("illi: " + seen_file + ": " + String(err?.message ?? err));
+}
+
+// each tool hook whose matcher names only Claude Code's tools that illi
+// doesn't take for its own (all but Bash): said once, as it runs only on
+// claude-code's own calls
+function hooks_claude(): void {
+  for (const e of ENTRIES.filter((e) => e.event === "PreToolUse" || e.event === "PostToolUse")) {
+    const names = /^[A-Za-z0-9_\- ,|]+$/.test(e.match) ? e.match.split(/[|,]/).map((x) => x.trim()).filter(Boolean) : [];
+    if (names.length > 0 && names.every((n) => CLAUDE_TOOLS.includes(n))) {
+      Plugins.say(hooks_whose(e, true) + " " + e.event + " hook " + clip(e.command) + " matches " + names.join("|") + ", Claude Code's tools: illi's are shell, read, write, edit..., whose input differs, so it runs only on claude-code's own calls.");
+    }
   }
 }
 
 // a hooks file's commands, whether it turns all hooks off, and what in it
-// won't do; why it won't read (none: no file, nothing)
-function file_read(file: string): { entries: Entry[]; troubles: string[]; off: boolean } | string {
+// won't do; why it won't read (none: no file, nothing). A plugin's,
+// its variables given
+function file_read(file: string, b: Bundle | null): { entries: Entry[]; troubles: string[]; off: boolean } | string {
   let data: any;
   try {
     data = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -486,12 +524,21 @@ function file_read(file: string): { entries: Entry[]; troubles: string[]; off: b
   if (typeof data !== "object" || data === null || Array.isArray(data)) {
     return "it isn't a JSON object";
   }
-  const hooks = data.hooks ?? {};
+  const got = hooks_of_map(data.hooks ?? {}, file, b);
+  return typeof got === "string" ? got : { ...got, off: b === null && data.disableAllHooks === true };
+}
+
+// an event map's commands (a hooks file's "hooks", or a plugin
+// manifest's inline hooks), and what in it won't do; why it won't (not
+// an object). A plugin's matchers name its own MCP servers as illi does
+// (mcp__plugin_<plugin>_<server>: mcp__<server>)
+function hooks_of_map(hooks: unknown, file: string, b: Bundle | null): { entries: Entry[]; troubles: string[] } | string {
   if (typeof hooks !== "object" || hooks === null || Array.isArray(hooks)) {
     return "its \"hooks\" isn't an object";
   }
   const entries: Entry[] = [];
   const troubles: string[] = [];
+  const vars = b === null ? {} : Bundle.vars(b);
   for (const [event, list] of Object.entries(hooks)) {
     if (!EVENTS.includes(event as Event)) {
       troubles.push("no event " + event + " (illi's: " + EVENTS.join(", ") + ")");
@@ -502,10 +549,11 @@ function file_read(file: string): { entries: Entry[]; troubles: string[]; off: b
       continue;
     }
     for (const group of list) {
-      const match = typeof group?.matcher === "string" ? group.matcher : "";
+      const given = typeof group?.matcher === "string" ? group.matcher : "";
+      const match = b === null ? given : given.split("mcp__plugin_" + b.name + "_").join("mcp__");
       const matcher = matcher_of(match);
       if (typeof matcher === "string") {
-        troubles.push(event + "'s matcher " + JSON.stringify(match) + " won't do: " + matcher);
+        troubles.push(event + "'s matcher " + JSON.stringify(given) + " won't do: " + matcher);
         continue;
       }
       for (const hook of Array.isArray(group?.hooks) ? group.hooks : []) {
@@ -515,11 +563,11 @@ function file_read(file: string): { entries: Entry[]; troubles: string[]; off: b
         }
         const secs = typeof hook.timeout === "number" && hook.timeout > 0 ? hook.timeout : TIMEOUTS[event as Event];
         const fail = hook.onFailure === "block" || hook.onFailure === "continue" ? hook.onFailure : event === "PreToolUse" ? "block" : "continue";
-        entries.push({ event: event as Event, match, matcher, command: hook.command, timeout: Math.min(secs, event === "SessionEnd" ? SPAN : Infinity) * 1000, fail, file });
+        entries.push({ event: event as Event, match, matcher, command: hook.command, timeout: Math.min(secs, event === "SessionEnd" ? SPAN : Infinity) * 1000, fail, file, plugin: b?.name ?? null, vars });
       }
     }
   }
-  return { entries, troubles, off: data.disableAllHooks === true };
+  return { entries, troubles };
 }
 
 // what a matcher takes, as Claude Code reads one: "", * or none, all;
@@ -569,7 +617,7 @@ function blocked(event: Event, why: string): Said {
 // approve or block); a block (decision block, its reason); context
 // (additionalContext: a Stop's makes the turn go on). A field of the
 // wrong type is passed over
-function decided(event: Event, short: string, json: any): Said {
+function decided(event: Event, label: string, json: any): Said {
   const own = typeof json.hookSpecificOutput === "object" && json.hookSpecificOutput !== null ? json.hookSpecificOutput : {};
   const text = (x: unknown) => (typeof x === "string" && x.trim() !== "" ? x.trim() : undefined);
   const said: Said = {};
@@ -578,7 +626,7 @@ function decided(event: Event, short: string, json: any): Said {
     said.note = note;
   }
   if (json.continue === false) {
-    const why = text(json.stopReason) ?? "Your " + event + " hook " + short + " stopped illi.";
+    const why = text(json.stopReason) ?? label + " stopped illi.";
     return STOPS[event] ? { ...said, stop: why } : { note: said.note === undefined ? why : said.note + "\n" + why };
   }
   const context = text(own.additionalContext);
@@ -586,10 +634,10 @@ function decided(event: Event, short: string, json: any): Said {
     const decision = own.permissionDecision ?? (json.decision === "approve" ? "allow" : json.decision === "block" ? "deny" : undefined);
     const why = text(own.permissionDecisionReason) ?? text(json.reason);
     if (decision === "deny") {
-      return { ...said, block: why ?? "Your PreToolUse hook " + short + " refused this call." };
+      return { ...said, block: why ?? label + " refused this call." };
     }
     if (decision === "ask") {
-      said.ask = why ?? "your PreToolUse hook " + short + " asks";
+      said.ask = why ?? label.charAt(0).toLowerCase() + label.slice(1) + " asks";
     } else if (decision === "allow") {
       said.allow = true;
     }
@@ -598,7 +646,7 @@ function decided(event: Event, short: string, json: any): Said {
     }
     return context === undefined ? said : { ...said, context };
   }
-  const block = json.decision === "block" ? text(json.reason) ?? (event === "Stop" ? "Your Stop hook " + short + " asks you to go on." : "Your " + event + " hook " + short + " said no.") : undefined;
+  const block = json.decision === "block" ? text(json.reason) ?? (event === "Stop" ? label + " asks you to go on." : label + " said no.") : undefined;
   switch (event) {
     case "PostToolUse": {
       const more = [block, context].filter((x) => x !== undefined).join("\n\n");

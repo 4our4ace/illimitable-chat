@@ -236,7 +236,7 @@ export type Sug = { cmds: Cmd[]; word: string; found: Screen.Match[]; at: number
 
 // a line of /help: how it is typed ("": keys only), its keys, what it
 // does; it runs on its argument, or by a key on "" (or the key's name)
-export type Cmd = [use: string, keys: string, text: string, run: (t: Term, arg: string) => void | Promise<void>];
+export type Cmd = [use: string, keys: string, text: string, run: (t: Term, arg: string) => void | Promise<void>, also?: string];
 
 // where the agent's log lines go on a terminal
 const LOG = config.DIR + "/illi.log";
@@ -514,13 +514,14 @@ export function term_crash(err: unknown): void {
 }
 
 // what went wrong before the screen was up, or out of sight, said once
-// it is: a theme file that won't read; the MCP servers' file that won't,
-// and each server that fails to start (once a session; /mcp says more)
+// it is: a theme file that won't read; each MCP servers' file that
+// won't, and each server that fails to start (once a session; /mcp says
+// more)
 function term_trouble(t: Term, told: Set<string>): void {
-  const { servers, trouble } = Mcp.status();
+  const { servers, troubles } = Mcp.status();
   const says: Array<[key: string, text: string]> = [
     ["theme", THEME_TROUBLE],
-    ["mcp", trouble === "" ? "" : "The MCP servers' file won't read (" + trouble + "): /mcp says more."],
+    ...troubles.map((x): [string, string] => ["mcp file " + x, "An MCP servers' file won't read (" + x + "): /mcp says more."]),
     ...servers.filter((s) => s.state === "failed").map((s): [string, string] => ["mcp " + s.name, "The MCP server " + s.name + " didn't start: " + s.why.replace(/\.$/, "") + " (/mcp says more)."]),
   ];
   for (const [key, text] of says.filter(([key, text]) => text !== "" && !told.has(key))) {
