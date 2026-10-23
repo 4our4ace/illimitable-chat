@@ -1,11 +1,11 @@
 // Side
 // ====
-// The side panel, on a wide screen: the primary agents, the subagents of
-// this run, the background jobs, the sticky skills on, the profiles (two
-// or more), a ChatGPT plan's use, the chat's (the context, the memory),
-// the MCP servers, the requests refused, the plugins' lines, a hint for
-// the keys or illi's to-do list; the side and side_width settings place
-// it.
+// The side panel, on a wide screen: the primary agents and the sticky
+// skills on beside them, the subagents of this run, the background jobs,
+// the profiles (two or more), a ChatGPT plan's use, the chat's (the
+// context, the memory), the MCP servers, the requests refused, the
+// plugins' lines, a hint for the keys or illi's to-do list; the side and
+// side_width settings place it.
 
 import { term_background, term_choose, term_mcp } from "./Commands.ts";
 import * as config from "../config/Config.ts";
@@ -44,15 +44,20 @@ const REFUSED    = 5;
 const BACKGROUND = 3;
 export const CLOCK   = 60000;
 
+// the sticky skills' head; the columns between them and the agents
+// when beside them
+const STICKY = "Sticky skills";
+const GAP    = 3;
+
 // the side, w wide and tall: illi and the primary agents (a click makes
-// one the main agent), the tabs (a click shows one), the background jobs
-// (a click: /background), the sticky skills on (a click turns one off),
-// the profiles, once there are two (a click on the head: /profile), a
-// ChatGPT plan's use, the chat's (its context, the memory), the MCP
-// servers (a click: /mcp), the requests refused (a click: /permissions on
-// it), each plugin's lines (Plugins.side); at its foot illi's to-do list,
-// which, longer than the room, pushes the rest up (its head stays); with
-// none, a faint hint for the keys (HINT), if it fits
+// one the main agent), the sticky skills on beside them (a click turns
+// one off), the tabs (a click shows one), the background jobs (a click:
+// /background), the profiles, once there are two (a click on the head:
+// /profile), a ChatGPT plan's use, the chat's (its context, the memory),
+// the MCP servers (a click: /mcp), the requests refused (a click:
+// /permissions on it), each plugin's lines (Plugins.side); at its foot
+// illi's to-do list, which, longer than the room, pushes the rest up (its
+// head stays); with none, a faint hint for the keys (HINT), if it fits
 export function term_side(t: Term, w: number, tall: number): Item[] {
   return term_side_drawn(t, w, tall).items;
 }
@@ -64,12 +69,7 @@ export function term_side_drawn(t: Term, w: number, tall: number): { items: Item
   const bold  = { ...Paint.INK, b: true };
   const head  = (text: string, run: (() => void) | null = null): Item => [[Paint.Run(text, bold)], run];
   const item  = (here: boolean, text: string, run: () => void): Item => [[Paint.Run((here ? GLYPH.here : GLYPH.tab) + " " + text, here ? Paint.INK : Paint.DIM)], run];
-  const about = (k: number) => (k === 0 ? "" : t.agents[k - 1].description);
-  const mains = [null, ...t.agents.map((a) => a.name)].map((name, k): Item => {
-    const [line, run] = item(name === t.v.agent, name ?? View.MAIN, () => term_choose(t, name));
-    const room = w - Paint.line_width(line) - 2;
-    return [room >= 12 && about(k) !== "" ? [...line, Paint.Run("  " + about(k), Paint.DIM)] : line, run];
-  });
+  const mains = [null, ...t.agents.map((a) => a.name)].map((name): Item => item(name === t.v.agent, name ?? View.MAIN, () => term_choose(t, name)));
   const subs  = term_side_subs(t);
   const bg    = term_side_background(t, w);
   const mcp   = term_side_mcp(t);
@@ -79,7 +79,7 @@ export function term_side_drawn(t: Term, w: number, tall: number): { items: Item
   const gap   = [[], null] as Item;
   const fill  = (n: number) => Array.from({ length: n }, (): Item => [[], null]);
   const plan  = term_side_plan(t, w);
-  const top   = [head("Agents"), ...mains, gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...(bg.length === 0 ? [] : [...bg, gap]), ...term_side_sticky(t), ...term_side_profiles(t), ...(plan.length === 0 ? [] : [...plan, gap]), head("Chat"), ...term_side_use(t, w), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp]), ...(nos.length === 0 ? [] : [gap, head("Refused", () => term_permissions(t)), ...nos]), ...term_side_plugins(w)];
+  const top   = [...term_side_beside([head("Agents"), ...mains], (room, whole) => term_side_sticky(t, room, whole), w), gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...(bg.length === 0 ? [] : [...bg, gap]), ...term_side_profiles(t), ...(plan.length === 0 ? [] : [...plan, gap]), head("Chat"), ...term_side_use(t, w), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp]), ...(nos.length === 0 ? [] : [gap, head("Refused", () => term_permissions(t)), ...nos]), ...term_side_plugins(w)];
   const foot  = todo.length === 0 ? keys : todo;
   const room  = tall - top.length - foot.length;
   const items = room > 0 ? [...top, ...fill(room), ...foot]
@@ -87,7 +87,24 @@ export function term_side_drawn(t: Term, w: number, tall: number): { items: Item
     : todo.length < tall ? [...top, gap, ...todo].slice(-tall)
     : todo;
   const kept  = items.slice(0, tall);
-  return { items: kept.map(([line, run]) => [Paint.runs_wrap(line, w, true)[0], run]), background: bg.every((x) => kept.includes(x)) };
+  return { items: kept.map(([line, run, aside]) => [Paint.runs_wrap(line, w, true)[0], run, aside]), background: bg.every((x) => kept.includes(x)) };
+}
+
+// two lists, w wide: the second beside the first, GAP after the first's
+// widest line, each of its lines a click of its own (Item's aside), when
+// it shows whole in the room left (second, w columns and whole: null if
+// it won't), else under it, a gap between (none: the first alone)
+function term_side_beside(first: Item[], second: (w: number, whole: boolean) => Item[] | null, w: number): Item[] {
+  const col   = Math.max(...first.map(([line]) => Paint.line_width(line))) + GAP;
+  const right = second(w - col, true);
+  if (right === null) {
+    const under = second(w, false) ?? [];
+    return under.length === 0 ? first : [...first, [[], null], ...under];
+  }
+  return Array.from({ length: Math.max(first.length, right.length) }, (_, k): Item => {
+    const [line, run] = first[k] ?? [[], null];
+    return right[k] === undefined ? [line, run] : [[...line, Paint.Run(" ".repeat(col - Paint.line_width(line))), ...right[k][0]], run, { col, run: right[k][1] }];
+  });
 }
 
 // the background jobs (Machine.ts), w wide (none: nothing): a head, then
@@ -309,17 +326,23 @@ function term_side_subs(t: Term): Item[] {
   return [...back, ...subs];
 }
 
-// the sticky skills on, each a click turning it off (its head: the list
-// of them, /settings); none: nothing. Read anew only once the settings
+// the sticky skills on, w wide (beside the agents, or under them), each
+// a click turning it off (its head, Sticky where Sticky skills won't
+// fit: the list of them, /settings), a name too long cut; none: nothing;
+// whole, null if a name won't fit. Read anew only once the settings
 // change (new lists), never at a paint
 let stuck: { on: string[]; off: string[]; skills: Skill[] } | null = null;
-function term_side_sticky(t: Term): Item[] {
+function term_side_sticky(t: Term, w: number, whole: boolean): Item[] | null {
   if (stuck?.on !== config.STICKY || stuck.off !== config.OFF) {
     stuck = { on: config.STICKY, off: config.OFF, skills: config.STICKY.length === 0 ? [] : Custom.stuck(process.cwd()) };
   }
+  if (whole && stuck.skills.some((s) => 2 + Paint.text_width(s.name) > w)) {
+    return null;
+  }
   const off   = (s: Skill) => () => term_note(t, Custom.stick(s, false) ?? s.name + " is off.");
-  const items = stuck.skills.map((s): Item => [[Paint.Run(GLYPH.here + " " + s.name)], off(s)]);
-  return items.length === 0 ? [] : [[[Paint.Run("Sticky skills", { ...Paint.INK, b: true })], () => setting_open(t, "sticky")], ...items, [[], null]];
+  const items = stuck.skills.map((s): Item => [[Paint.Run(GLYPH.here + " " + term_side_cut(s.name, w - 2))], off(s)]);
+  const name  = Paint.text_width(STICKY) <= w ? STICKY : "Sticky";
+  return items.length === 0 ? [] : [[[Paint.Run(name, { ...Paint.INK, b: true })], () => setting_open(t, "sticky")], ...items];
 }
 
 // the side's profiles, once there are two: a head (a click: /profile's

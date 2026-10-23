@@ -241,7 +241,10 @@ export function term_paint(t: Term): void {
       with_.push(k);
     }
     rows.push(row);
-    term_hit(t, 1 + k, at, at + side, row.length === 1 ? null : sides[k][1]);
+    const aside = row.length === 1 ? undefined : sides[k][2];
+    const split = aside === undefined ? at + side : at + (left > 0 ? 1 : 2) + aside.col;
+    term_hit(t, 1 + k, at, split, row.length === 1 ? null : sides[k][1]);
+    term_hit(t, 1 + k, split, at + side, aside?.run ?? null);
   }
   for (const line of foot) {
     rows.push([{ col: MARGIN, w: iw, line }]);

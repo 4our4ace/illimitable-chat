@@ -229,13 +229,13 @@ Mouse and side panel
   within 5 seconds takes the quote out again.
 - The wheel scrolls the chat or a pane.
 - From 100 columns on, a side panel shows the primary agents (a click
-  makes one the main agent), the subagents at work, the background jobs
-  (a click opens `/background`), the sticky skills on
-  (a click turns one off), the profiles once you have two (a click
-  switches), a ChatGPT plan's use, the context and the memory, the MCP
-  servers (a click opens `/mcp`), the latest requests refused (a click
-  opens `/permissions` on one) and illi's to-do list, gone once every
-  item is done. The `side` and `side_width` settings place it.
+  makes one the main agent) and beside them the sticky skills on (a
+  click turns one off; under them when the panel is narrow), the
+  subagents at work, the background jobs (a click opens `/background`),
+  the profiles once you have two (a click switches), a ChatGPT plan's
+  use, the context and the memory, the MCP servers (a click opens
+  `/mcp`), the latest requests refused (a click opens `/permissions` on
+  one) and illi's to-do list, gone once every item is done. The `side` and `side_width` settings place it.
 - The bottom line ends with the mode (a click opens `/mode`):
   `read-only` in the warning color, `yolo` in the error color. Before
   it, the background jobs are counted when the side panel doesn't show

@@ -226,8 +226,10 @@ export type Chooser = {
   ask    : { hint: string; done: (text: string) => string | null } | null;
 };
 
-// a line drawn and what a click on it does (null: nothing)
-export type Item = [Paint.Line, (() => void) | null];
+// a line drawn and what a click on it does (null: nothing); a second
+// column in it (the side's: Side.term_side_beside): where it starts,
+// columns into the line, and what a click from there on does
+export type Item = [Paint.Line, (() => void) | null, { col: number; run: (() => void) | null }?];
 
 // the commands suggested as a `/word` is typed, as in Claude Code: all
 // of them (the user's too, read as the list opened: never at each key),

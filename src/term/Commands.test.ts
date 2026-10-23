@@ -38,6 +38,7 @@ const Draw = await import("../ui/Draw.ts");
 const Paint = await import("../ui/Paint.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
+const { GLYPH } = await import("../ui/Theme.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
@@ -456,7 +457,7 @@ test("a skill named mid-message: suggested as it's typed (skills alone, none sho
   fs.rmSync(DIR + "/skills/imagegen", { recursive: true });
 });
 
-test("a sticky skill: its name alone turns it on, again off, each said; with words, on, then the words sent; on, at the side, where a click turns it off", () => {
+test("a sticky skill: its name alone turns it on, again off, each said; with words, on, then the words sent; on, at the side beside the agents (under them when narrow), where a click turns it off", () => {
   fs.mkdirSync(DIR + "/skills/terse", { recursive: true });
   fs.writeFileSync(DIR + "/skills/terse/SKILL.md", "---\ndescription: Short replies\nsticky: true\n---\nBe terse.");
   const config = require("../config/Config.ts");
@@ -471,13 +472,15 @@ test("a sticky skill: its name alone turns it on, again off, each said; with wor
   term_command(t, "/terse and again");
   expect(config.STICKY).toEqual(["terse"]);
   Object.assign(t, { agents: [], profs: ["default"], since: Date.now() });
-  const side = () => term_side(t, 30, 40).map(([line, run]) => [line.map((r) => r.x).join("").trim(), run] as const).filter(([text]) => text !== "");
+  const side = (w = 30) => term_side(t, w, 40).map(([line, run, aside]) => [line.map((r) => r.x).join("").trim(), run, aside] as const).filter(([text]) => text !== "");
+  expect(side(15).slice(0, 4).map(([text]) => text)).toEqual(["Agents", GLYPH.here + " " + View.MAIN, "Sticky skills", GLYPH.here + " terse"]);
+  expect(side(16).slice(0, 2).map(([text]) => text)).toEqual(["Agents   Sticky", GLYPH.here + " " + View.MAIN + "   " + GLYPH.here + " terse"]);
   const on   = side();
-  const at   = on.findIndex(([text]) => text === "Sticky skills");
-  expect(on[at + 1][0]).toEndWith(" terse");
-  on[at + 1][1]!();
+  expect(on.slice(0, 2).map(([text]) => text)).toEqual(["Agents   Sticky skills", GLYPH.here + " " + View.MAIN + "   " + GLYPH.here + " terse"]);
+  expect(on[1][2]!.col).toBe(9);
+  on[1][2]!.run!();
   expect([config.STICKY, note(t)]).toEqual([[], "terse is off."]);
-  expect(side().map(([text]) => text)).not.toContain("Sticky skills");
+  expect(side().map(([text]) => text)).toEqual(expect.not.arrayContaining([expect.stringContaining("Sticky")]));
   fs.rmSync(DIR + "/skills/terse", { recursive: true });
 });
 
