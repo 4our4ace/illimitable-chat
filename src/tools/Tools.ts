@@ -59,7 +59,7 @@ import PROMPT from "./prompt.txt" with { type: "text" };
 import { EFFORTS, Pick } from "../ai/Pick.ts";
 import { Projects } from "../chat/Projects.ts";
 import { Store } from "../chat/Store.ts";
-import type { Live, Plan, Query, Question, Refused, State, Todo } from "../ui/View.ts";
+import type { Live, Perms, Plan, Query, Question, Refused, State, Todo } from "../ui/View.ts";
 
 export type { Live };
 
@@ -754,11 +754,48 @@ export namespace Tools {
     return null;
   }
 
-  // the mode now: /mode's for this run, else the `mode` setting's (one
-  // not known: ask)
+  // the mode now: /mode's for this run, else the setting's
   export function mode(tools: Tools): Mode {
-    const mode = tools.perm.mode ?? config.config_value("mode");
+    return tools.perm.mode ?? Tools.mode_set();
+  }
+
+  // the `mode` setting's (one not known: ask)
+  export function mode_set(): Mode {
+    const mode = config.config_value("mode");
     return MODES.includes(mode as Mode) ? (mode as Mode) : "ask";
+  }
+
+  // the permissions as the views show them: the grants kept for the
+  // project (none while the file won't read), then this run's
+  export function perms(tools: Tools): Perms {
+    const folder = Trusted.folder(tools.cwd);
+    const read   = Permissions.read(config.PERMISSIONS, folder);
+    const saved  = typeof read === "string" ? [] : read.granted;
+    const grants = [...saved.map((grant) => ({ grant, saved: true })), ...[...tools.perm.granted].filter((g) => !saved.includes(g)).map((grant) => ({ grant, saved: false }))];
+    return { mode: Tools.mode(tools), set: Tools.mode_set(), refused: tools.perm.refused, grants: grants.map((g) => ({ ...g, said: Guard.said(g.grant, folder) })), file: config.PERMISSIONS, broken: typeof read === "string" ? read : "" };
+  }
+
+  // a refused request allowed for this run (/permissions): its exact
+  // grants given, and every refusal they now clear taken off the list;
+  // null: none such, or one only the user's rules can allow
+  export function allow(tools: Tools, id: string): Refused | null {
+    const refused = tools.perm.refused.find((r) => r.id === id);
+    if (refused === undefined || refused.exact.length === 0) {
+      return null;
+    }
+    refused.exact.forEach((g) => tools.perm.granted.add(g));
+    tools.perm.refused = tools.perm.refused.filter((r) => r.exact.length === 0 || !r.exact.every((g) => tools.perm.granted.has(g)));
+    tools.hooks.change();
+    return refused;
+  }
+
+  // a grant let go (/permissions): this run's, and the project's kept
+  // one; null: done, else why the file wasn't changed
+  export function revoke(tools: Tools, grant: string): string | null {
+    tools.perm.granted.delete(grant);
+    const why = Permissions.revoke(config.PERMISSIONS, Trusted.folder(tools.cwd), grant);
+    tools.hooks.change();
+    return why;
   }
 
   // a refusal, recorded for the side panel and /permissions (kept: a
@@ -822,8 +859,8 @@ export namespace Tools {
 
   // what the views show of the tools (Chat.state): the plan of the vendor
   // the master is on, its to-do list
-  export function state(tools: Tools, vendor: Vendor): { use: State["use"]; todo: Todo[] } {
-    return { use: { plan: PLANS[vendor]?.() ?? null }, todo: Tools.todo(tools) };
+  export function state(tools: Tools, vendor: Vendor): { use: State["use"]; todo: Todo[]; perm: Perms } {
+    return { use: { plan: PLANS[vendor]?.() ?? null }, todo: Tools.todo(tools), perm: Tools.perms(tools) };
   }
 
   // the master's to-do list: as last set, else as the chat's file keeps

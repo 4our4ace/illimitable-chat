@@ -3,8 +3,8 @@
 // The side panel, on a wide screen: the primary agents, the subagents of
 // this run, the sticky skills on, the profiles (two or more), a ChatGPT
 // plan's use, the chat's (the context, the memory), the MCP servers, the
-// plugins' lines, a hint for the keys or illi's to-do list; the side and
-// side_width settings place it.
+// requests refused, the plugins' lines, a hint for the keys or illi's
+// to-do list; the side and side_width settings place it.
 
 import { term_choose, term_mcp } from "./Commands.ts";
 import * as config from "../config/Config.ts";
@@ -15,6 +15,7 @@ import { Mcp, type Server } from "../tools/Mcp.ts";
 import * as Paint from "../ui/Paint.ts";
 import { Plugins } from "../config/Plugins.ts";
 import { term_note } from "./Notices.ts";
+import { term_permissions } from "./PermCommands.ts";
 import { term_profile_go, term_profile_pick } from "./ProfileCommands.ts";
 import { setting_open } from "./Settings.ts";
 import { term_act, type Item, type Term } from "./Term.ts";
@@ -31,19 +32,22 @@ const WIDE  = 100;
 const HINT = "/help for all keys";
 
 // the side's: the width of its labels (Context, 5h, Week, Memory); its
-// bars' widest, every one alike; the to-do items a folded list shows;
+// bars' widest, every one alike; the to-do items a folded list shows; the
+// refused requests it shows;
 // how often its clocks (a plan window's reset) move (ms)
 const LABEL   = 9;
 const BAR     = 24;
 const FOLDED  = 3;
+const REFUSED = 5;
 export const CLOCK   = 60000;
 
 // the side, w wide and tall: illi and the primary agents (a click makes
 // one the main agent), the tabs (a click shows one), the sticky skills on
 // (a click turns one off), the profiles, once there are two (a click on
 // the head: /profile), a ChatGPT plan's use, the chat's (its context, the
-// memory), the MCP servers (a click: /mcp), each plugin's lines
-// (Plugins.side); at its foot illi's to-do
+// memory), the MCP servers (a click: /mcp), the requests refused (a
+// click: /permissions on it), each plugin's lines (Plugins.side); at its
+// foot illi's to-do
 // list, which, longer than the room, pushes the rest up (its head stays);
 // with none, a faint hint for the keys (HINT), if it fits
 export function term_side(t: Term, w: number, tall: number): Item[] {
@@ -58,12 +62,13 @@ export function term_side(t: Term, w: number, tall: number): Item[] {
   });
   const subs  = term_side_subs(t);
   const mcp   = term_side_mcp(t);
+  const nos   = term_side_refused(t);
   const todo  = term_side_todo(t, w);
   const keys  = [[[Paint.Run(HINT, Paint.DIM)], null] as Item];
   const gap   = [[], null] as Item;
   const fill  = (n: number) => Array.from({ length: n }, (): Item => [[], null]);
   const plan  = term_side_plan(t, w);
-  const top   = [head("Agents"), ...mains, gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...term_side_sticky(t), ...term_side_profiles(t), ...(plan.length === 0 ? [] : [...plan, gap]), head("Chat"), ...term_side_use(t, w), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp]), ...term_side_plugins(w)];
+  const top   = [head("Agents"), ...mains, gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...term_side_sticky(t), ...term_side_profiles(t), ...(plan.length === 0 ? [] : [...plan, gap]), head("Chat"), ...term_side_use(t, w), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp]), ...(nos.length === 0 ? [] : [gap, head("Refused", () => term_permissions(t)), ...nos]), ...term_side_plugins(w)];
   const foot  = todo.length === 0 ? keys : todo;
   const room  = tall - top.length - foot.length;
   const items = room > 0 ? [...top, ...fill(room), ...foot]
@@ -164,6 +169,13 @@ function term_side_mcp(t: Term): Item[] {
   };
   const file = trouble === "" ? [] : [[Paint.Run("✗ ", red), Paint.Run("mcp.json won't read", Paint.DIM)]];
   return [...servers.map(line), ...file].map((l): Item => [l, () => term_mcp(t)]);
+}
+
+// the requests refused, the latest REFUSED, newest first, a line each:
+// ✗ (in the theme's error), what, why (dim); a click: /permissions on it
+function term_side_refused(t: Term): Item[] {
+  const red = { ...Paint.INK, c: Draw.draw_tokens().error };
+  return t.v.perm.refused.slice(-REFUSED).reverse().map((r): Item => [[Paint.Run("✗ ", red), Paint.Run(r.what.replace(/\s+/g, " ").trim() || r.tool, Paint.DIM), Paint.Run(" · " + r.why, Paint.DIM)], () => term_permissions(t, r.id)]);
 }
 
 // each plugin's lines, w wide, a gap before each plugin's (its first line

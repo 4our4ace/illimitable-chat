@@ -69,6 +69,9 @@ export const DIM: Ink = { ...INK, d: true };
 // the gutter of a block: its level, and the space after it
 const GUTTER = 7;
 
+// the narrowest last line the mode shows on (tabs_mode)
+const MODE_ROOM = 50;
+
 const GRAPHEMES = new Intl.Segmenter("en", { granularity: "grapheme" });
 
 // each row's lines, at the width and look they were laid out at
@@ -616,9 +619,26 @@ export function rule(w: number): Line {
 // side lists them), each mark in its agent's color (illi's own: the
 // brand's; else Draw.draw_agent), the shown bold, then the profile
 // running (tabs_profile), then the pick (the standard speed left out),
-// then the plugins' pieces (Plugins.status), all cut at the end; with
-// agents, the keys that move along them, if they fit
+// then the plugins' pieces (Plugins.status), all cut before the mode at
+// the right end (tabs_mode; none on a line too narrow); with agents, the
+// keys that move along them, if they fit
 export function tabs_line(v: View.View, w: number, all = true): Line {
+  const mode = tabs_mode(v, w);
+  const room = w - line_width(mode);
+  const left = tabs_left(v, mode.length === 0 ? w : room - 2, all);
+  return mode.length === 0 ? left : [...left, Run(" ".repeat(Math.max(2, room - line_width(left)))), ...mode];
+}
+
+// the mode (Guard.ts), as the last line ends: dim, read-only in the
+// theme's warning, yolo bold in its error; none on a line under MODE_ROOM
+export function tabs_mode(v: View.View, w: number): Line {
+  const tone = Draw.draw_tokens();
+  const mode = v.perm.mode;
+  return w < MODE_ROOM ? [] : [Run(mode + " mode", mode === "yolo" ? { ...INK, b: true, c: tone.error } : mode === "read-only" ? { ...INK, c: tone.warning } : DIM)];
+}
+
+// the last line but the mode, w wide
+function tabs_left(v: View.View, w: number, all: boolean): Line {
   const tabs  = View.view_tabs(v).filter((tab) => all || tab.here).map((tab) => [Run(tab.mark, { ...INK, c: tab.agent === View.MAIN ? Draw.draw_brand() : Draw.draw_agent(tab.agent) }), Run(tab.text.slice(tab.mark.length), tab.here ? { ...INK, b: true } : DIM)]);
   const knobs = View.view_pick(v).map((knob) => knob.text).filter((text) => text !== "");
   const plugs = Plugins.status().flatMap((l) => [Run(" · ", DIM), ...pieces_line(l)]);

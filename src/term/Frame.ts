@@ -16,6 +16,7 @@ import * as Draw from "../ui/Draw.ts";
 import { term_hint } from "./Keys.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_shown } from "./Notices.ts";
+import { term_mode } from "./PermCommands.ts";
 import { term_profile_pick } from "./ProfileCommands.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_area, term_under } from "./Select.ts";
@@ -225,7 +226,7 @@ export function term_paint(t: Term): void {
     term_jump(t, rows, tall, left + MARGIN, cw, lit);
   }
   t.hover = t.sel?.held ? undefined : term_under(t, t.scr.point);
-  term_tabs(t, h - 1, side === 0);
+  term_tabs(t, h - 1, side === 0, iw);
   const cursor = box?.at !== undefined ? { row: top + box.at.row, col: box.col + box.at.col } : input.at === null || over ? null : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
   const drawn  = t.lead ? rows.map((row) => row.map((p) => ({ ...p, line: p.line.map((r) => ({ ...r, s: { ...r.s, d: true, c: "", g: "" } })) }))) : rows;
   t.ruled ={ row: 2 + tall + above.length, w: iw, at: cursor, rows: drawn, side: box === null ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
@@ -609,8 +610,9 @@ function term_paned(t: Term, pane: Pane, w: number, tall: number): [Paint.Line[]
 // blank line before each but the first): as many lines as fit from the
 // first in view (moved to keep the lit one in it), the box as tall as all
 // of them would be (blank past those shown; none: a note says so), and at its right end what it has aside (its keys, its
-// value). Its foot says what the lit one takes besides; a click on one
-// picks it. A line asked for (Chooser ask) is its one line, as the input
+// value). Lines it leads with (a question's what and why) go over all
+// of it, wrapped. Its foot says what the lit one takes besides; a click
+// on one picks it. A line asked for (Chooser ask) is its one line, as the input
 // shows a message typed, its hint while empty; a search or a line too
 // long shows its end
 function term_picker(t: Term, w: number, room: number): { items: Item[]; at?: Screen.Spot } {
@@ -624,9 +626,10 @@ function term_picker(t: Term, w: number, room: number): { items: Item[]; at?: Sc
   const text  = c.find?.text ?? "";
   const typed = Paint.text_width(text) <= fits ? text : "…" + Paint.text_graphemes(text).slice(1 - fits).join("");
   const find  = c.find === null ? [] : [[Paint.Run(glyph, Paint.DIM), typed === "" ? Paint.Run(c.ask?.hint ?? "type to search", Paint.DIM) : Paint.Run(typed)]];
+  const lead  = (c.lead ?? []).flatMap((l) => Paint.runs_wrap(l, Math.max(1, w - 4), false)).slice(0, Math.max(0, room - 3 - find.length));
   const group = c.heads !== undefined && text === "";
   const heads = group ? 2 * new Set(c.heads).size - 1 : 0;
-  const rows  = c.ask !== null ? 0 : Math.max(1, Math.min(c.names.length + heads, room - 2 - find.length));
+  const rows  = c.ask !== null ? 0 : Math.max(1, Math.min(c.names.length + heads, room - 2 - find.length - lead.length));
   const pick  = (k: number) => {
     t.choose = null;
     c.pick(k);
@@ -655,13 +658,13 @@ function term_picker(t: Term, w: number, room: number): { items: Item[]; at?: Sc
   const line  = (e: string | number): Item => (typeof e === "number" ? item(c.shown[e], e) : [[Paint.Run(e, lit)], null]);
   const none  = [[Paint.Run("  Nothing matches " + Paint.text_clean(text), Paint.DIM)], null] as Item;
   const shown = c.ask !== null ? [] : c.shown.length === 0 ? [none] : list.slice(c.top, c.top + rows).map(line);
-  const items = [...find.map((l): Item => [l, null]), ...shown, ...Array.from({ length: rows - shown.length }, (): Item => [[], null])];
+  const items = [...lead.map((l): Item => [l, null]), ...find.map((l): Item => [l, null]), ...shown, ...Array.from({ length: rows - shown.length }, (): Item => [[], null])];
   const title = [Paint.Run(" " + c.title + (c.ask === null ? " · ↑↓ Enter · Esc " : " · Enter · Esc "), { ...Paint.DIM, b: true })];
   const said  = c.ask !== null ? c.foot(-1) : c.shown.length === 0 ? "" : c.foot(c.shown[c.at].k);
   const foot  = said === "" ? [] : [Paint.Run(" " + said + " ", { ...Paint.DIM, b: true })];
   const lines = Paint.frame(items.map(([l]) => Paint.runs_wrap(l, w - 4, true)[0]), w, title, foot);
   const after = Paint.text_width(text.slice(c.find?.pos ?? 0));
-  const at    = c.find === null ? undefined : { row: 1, col: Math.min(w - 3, 2 + Paint.text_width(glyph) + Math.max(0, Paint.text_width(typed) - after)) };
+  const at    = c.find === null ? undefined : { row: 1 + lead.length, col: Math.min(w - 3, 2 + Paint.text_width(glyph) + Math.max(0, Paint.text_width(typed) - after)) };
   return { items: lines.map((l, k) => [l, items[k - 1]?.[1] ?? null]), at };
 }
 
@@ -725,10 +728,11 @@ function term_suggestions(t: Term, sug: Sug, fw: number, room: number): Item[] {
   return lines.map((l, k) => [l, items[k - 1]?.[1] ?? null]);
 }
 
-// the pages' line at screen row `row` (all of them, or the one shown
-// alone: the side lists them), then the profile's name, if shown: a click
-// on a page shows it, on the name opens the profiles
-function term_tabs(t: Term, row: number, all: boolean): void {
+// the pages' line at screen row `row`, w wide (all of them, or the one
+// shown alone: the side lists them), then the profile's name, if shown,
+// the mode at its end: a click on a page shows it, on the name opens the
+// profiles, on the mode /mode
+function term_tabs(t: Term, row: number, all: boolean, w: number): void {
   let col = MARGIN;
   for (const tab of View.view_tabs(t.v).filter((tab) => all || tab.here)) {
     const tw = Paint.text_width(tab.text);
@@ -738,5 +742,9 @@ function term_tabs(t: Term, row: number, all: boolean): void {
   const pw = Paint.line_width(Paint.tabs_profile(all));
   if (pw > 0) {
     term_hit(t, row, col + 1, col - 2 + pw, () => term_profile_pick(t));
+  }
+  const mw = Paint.line_width(Paint.tabs_mode(t.v, w));
+  if (mw > 0) {
+    term_hit(t, row, MARGIN + w - mw, MARGIN + w, () => term_mode(t, ""));
   }
 }

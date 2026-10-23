@@ -33,6 +33,7 @@ import { Pick } from "../ai/Pick.ts";
 import { Plugins } from "../config/Plugins.ts";
 import { Projects } from "./Projects.ts";
 import { MASTER, SEARCHES, Tools, type Agent, type Live, type Reply } from "../tools/Tools.ts";
+import { MODES, type Mode } from "../tools/Guard.ts";
 import { ANSWERED, COMPACTING, IMAGES, live_push, SUMMARIES, TURN, type Answer, type Link, type Part, type Pipe, type Question, type Server as Out, type Wait } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
 
@@ -182,6 +183,11 @@ Rules:
 - Call no tools; output only the recap.`;
 const RECAP_KEEP = "\n\nThe user asked the recap to keep in particular: ";
 const RECAPPING  = "illi is writing its recap (/compact): send once it's done (Esc stops it).";
+
+// a refused request allowed again (/permissions): what the one who asked
+// is told, in the user's name (#: what it was); none to allow
+const ALLOWED    = "I allowed `#` (/permissions): run it again if you still need it.";
+const NO_ALLOW   = "Nothing to allow: it's gone, or only your permission rules can allow it.";
 const RECAP_STOP = "Compaction stopped; the chat is as it was.";
 
 // a new chat's first message, its node written with it, so no compactor
@@ -969,6 +975,22 @@ export namespace Chat {
       case "main": {
         return Chat.main(chat, msg.name == null ? null : String(msg.name));
       }
+      case "mode": {
+        const mode = msg.mode === null ? null : String(msg.mode);
+        if (mode !== null && !MODES.includes(mode as Mode)) {
+          return { error: "No mode " + mode + ": " + MODES.join(", ") + "." };
+        }
+        chat.tools.perm.mode = mode as Mode | null;
+        Chat.change(chat);
+        return {};
+      }
+      case "allow": {
+        return Chat.allow(chat, String(msg.refused));
+      }
+      case "revoke": {
+        const why = Tools.revoke(chat.tools, String(msg.grant));
+        return why === null ? {} : { error: why };
+      }
       case "pick": {
         const pick = Pick.read(msg.to, config.OFFER);
         if (pick === null) {
@@ -981,6 +1003,30 @@ export namespace Chat {
       }
     }
     return { error: "No act " + msg.$ + "." };
+  }
+
+  // a refused request allowed for this run (Tools.allow), and the one who
+  // asked told it may run it again: a subagent by tell, illi by a message
+  // in the user's name, between its tool calls if it works, else starting
+  // a turn (none while a recap is written, as Chat.say)
+  export async function allow(chat: Chat, id: string): Promise<Answer> {
+    const asked = chat.tools.perm.refused.find((r) => r.id === id);
+    if (asked?.who === "illi" && chat.compacting) {
+      return { error: RECAPPING };
+    }
+    const refused = Tools.allow(chat.tools, id);
+    if (refused === null) {
+      return { error: NO_ALLOW };
+    }
+    const text = ALLOWED.replace("#", () => refused.what);
+    if (refused.who !== "illi") {
+      await Tools.tell(chat.tools, refused.who, text);
+      return {};
+    }
+    return Chat.writing(chat, async (): Promise<Answer> => {
+      Chat.take(chat, Chat.push(chat, null, "user", text, []));
+      return {};
+    });
   }
 
   // a fresh session (/clear): the cut, the screen's top and the view's

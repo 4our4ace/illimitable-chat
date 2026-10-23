@@ -75,6 +75,8 @@ Setup
 | `/shortcuts` | the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one |
 | `/set <key> [value]` | change a setting (default: back to its default); no value: says what it is |
 | `/mcp` | your MCP servers: their tools, or why one failed |
+| `/mode [mode]` | what runs without asking, this session: `auto`, `ask`, `read-only` or `yolo`; no mode: opens a list (or click it on the bottom line) |
+| `/permissions` | the requests refused (Enter allows one again, this session), the grants kept (Del removes one), your rules |
 
 Projects and profiles
 ---------------------
@@ -188,5 +190,8 @@ Mouse and side panel
   makes one the main agent), the subagents at work, the sticky skills on
   (a click turns one off), the profiles once you have two (a click
   switches), a ChatGPT plan's use, the context and the memory, the MCP
-  servers (a click opens `/mcp`) and illi's to-do list, gone once every
+  servers (a click opens `/mcp`), the latest requests refused (a click
+  opens `/permissions` on one) and illi's to-do list, gone once every
   item is done. The `side` and `side_width` settings place it.
+- The bottom line ends with the mode (a click opens `/mode`):
+  `read-only` in the warning color, `yolo` in the error color.
