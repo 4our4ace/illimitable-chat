@@ -50,7 +50,7 @@ const said = async (run: () => unknown) => {
 const term = (tty = true) => {
   const scr: any = { tty, kitty: false, ed: Screen.ed_new(), rest: "", shown: [], click: { row: 0, col: 0 }, clicks: 0, pressed: 0, point: { row: 0, col: 0 }, typed: false, grab: null, on: () => {}, win: member_screen() };
   const v = { ...View.view_new(), busy: true, background: [{ id: 1, command: "npm run dev", agent: "illi", since: 0 }] };
-  const t: any = { v, scr, chat: { busy: true }, status: status_new(), login: null, sel: null, lead: false, drift: undefined, notices: [], due: true, choose: null, pane: null, sug: null, profs: [], quitting: false, ver: 0 };
+  const t: any = { v, scr, chat: { busy: true }, status: status_new(), login: null, sel: null, lead: false, drift: undefined, notices: [], due: true, choose: null, pane: null, sug: null, profs: [], quitting: false, ver: 0, asking: null, box: null, aim: { row: -1, in: false, press: null, first: null } };
   member_attach(t);
   return t;
 };

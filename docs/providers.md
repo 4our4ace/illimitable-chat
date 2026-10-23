@@ -103,14 +103,17 @@ at once, one it drops is gone. A model's window is exactly what Codex's
 model list says is the most your account may use (`max_context_window`,
 else `context_window`), and the share of it a request may fill is its
 `effective_context_window_percent`: illi has no ChatGPT window of its
-own and never guesses one. Until the list answers, nothing is folded,
-and a turn waits for it (one that can't get it says so and sends
-nothing). Past a model's usual window (`context_window`) a plan may
-count usage differently; that's yours to weigh. If your account refuses
-a chat that long at a turn's start, illi keeps to the usual window for
-that model from then on. A pick whose effort or speed the model doesn't
-have runs at the nearest one it has. The other vendors' windows are
-built in until they tell (Claude Code's: 200k).
+own and never guesses one. Nothing is folded at the start till the
+list answers. A turn (or a subagent) waits a few seconds for it, then
+goes on the windows it told last (kept in `models.json`); on a model it
+never told a window for, it waits for the list longer, and if there is
+still none, it says so and sends nothing. Past a model's usual window
+(`context_window`) a plan may count usage differently; that's yours to
+weigh. If your account refuses a chat that long at a turn's start, illi
+keeps to the usual window for that model from then on. A pick whose
+effort or speed the model doesn't have runs at the nearest one it has.
+The other vendors' windows are built in until they tell (Claude Code's:
+200k).
 
 How much of the window a turn sends is each model's auto compact
 ([Config](config.md)): `/autocompact` sets it for the chat's model, and

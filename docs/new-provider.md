@@ -135,8 +135,10 @@ A model's `window` sets how much of the chat a turn sends: its auto
 compact (default 60%, at most 70%, and its `room` less what a request
 takes beside the chat: `config_context`). A wrong window costs either
 memory (too small) or failed turns (too big). A vendor that tells its
-windows gets none built in: until it answers, nothing is folded and a
-turn fails saying why (chatgpt's `NO_WINDOW`). A vendor that tells none
+windows gets none built in: until it answers, nothing is folded, and a
+turn or a subagent waits for it, then fails saying why (chatgpt's
+`ChatGPT.ready`). No window is ever guessed (`config_context` takes one,
+always). A vendor that tells none
 (the OpenAI API) gets a cautious built-in one.
 
 6. The plan and its usage

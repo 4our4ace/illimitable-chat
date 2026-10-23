@@ -34,7 +34,8 @@
 // it's shown again (asking the kitty flags and the background then, so
 // the answers reach the screen that uses them); hidden, it paints
 // nothing and keeps reading (only frames count then: keys that reach it,
-// sent as it hid, are dropped); frames in its input are the window's,
+// sent as it hid, are dropped, the focus told too, so shown again it
+// takes the focus as had); frames in its input are the window's,
 // cut out before keys wherever they fall (in a key, a paste) and awaited
 // however slow; Ctrl+Z goes to the window; the PTY lost (its read fails
 // or ends) means the window is gone.
@@ -540,12 +541,15 @@ export function screen_hide(scr: Screen): void {
 }
 
 // in a window, the screen shown again: up (the kitty flags and the
-// background asked again), then every row written anew
+// background asked again), then every row written anew. The focus as it
+// was told before is stale (a hidden screen hears no report): taken as
+// had, as at the start, so a loss told before it hid never makes every
+// press a focus click
 export function screen_show(scr: Screen): void {
   if (scr.win === undefined || scr.left) {
     return;
   }
-  scr.hidden = false;
+  [scr.hidden, scr.away] = [false, false];
   screen_wipe(scr);
   screen_ask(scr, scr.win.up() + FLAGS_ASK);
   scr.on("");

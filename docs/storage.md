@@ -625,7 +625,8 @@ Models
 `~/.illi/models.json` keeps what the vendors told of their models, for
 the next start (`Config.ts config_models_keep`):
 `{ at, vendors: { <vendor>: [model…] }, account?, capped? }`, a model
-being `{ label, id, speeds, window, standard?, efforts?, tiers?, room? }`.
+being `{ label, id, speeds, window?, standard?, efforts?, tiers?, room? }`
+(chatgpt's `window` only where its catalog told one).
 
 1. `chatgpt`'s list is the account's catalog as it last answered
    (`ChatGPT.ts models`); `account` names whose it is, and `capped` the
@@ -640,10 +641,11 @@ being `{ label, id, speeds, window, standard?, efforts?, tiers?, room? }`.
    list, told again at the next answer.
 3. At the start (`config_models`), the chatgpt list is taken whole,
    whatever its account (the login isn't read yet), until the catalog
-   answers; the other vendors' entries only set the windows of the
-   models illi has built in. A file that won't read is none: the
-   built-in windows hold (ChatGPT's models have none: their windows wait
-   for the catalog).
+   answers; a window or a share in it that isn't one (not a count above
+   0, a `room` past 1) is none, never a wrong one. The other vendors'
+   entries only set the windows of the models illi has built in. A file
+   that won't read is none: the built-in windows hold (ChatGPT's models
+   have none: their windows wait for the catalog).
 
 Known limits
 ------------

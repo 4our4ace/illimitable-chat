@@ -191,13 +191,19 @@ function member_suspend(): void {
 }
 
 // the terminal hidden: nothing painted, the status line's command
-// stopped, text chosen and the leader let go
+// stopped, text chosen, the leader and a press a popup took let go; a
+// question shown shows anew once this one is shown again, holding Enter
+// and a click again (Popup.ts popup_held), as it pops up then
 function member_rest(t: Term): void {
   WIN!.shown = false;
   member_spin(t);
   status_end(t);
-  t.sel  = null;
-  t.lead = false;
+  t.sel       = null;
+  t.lead      = false;
+  t.aim.press = null;
+  if (t.asking !== null) {
+    t.asking.shown = null;
+  }
   clearTimeout(t.drift?.timer);
   t.drift = undefined;
   Screen.screen_hide(t.scr);

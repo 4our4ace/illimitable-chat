@@ -9,7 +9,8 @@
 // winds down is answered, and what was logged between waiting messages
 // reaches the turn. What a turn's first request read beyond the chat
 // lowers the chat's budget; a view sets its model's autocompact; a model
-// whose window no one told moves no cut, its turn saying why. A call too long for the model's window makes the
+// whose window no one told moves no cut, its turn saying why (a stop
+// while it waits for the catalog ends it at once). A call too long for the model's window makes the
 // chat refit and the turn go on from a note, unasked; three in a row end
 // it, saying why. A failed turn asks to try again only when a later try
 // may answer, and says a reply was cut off; summaries stuck are told once;
@@ -406,7 +407,7 @@ async function refitted(ends: Array<{ text: string }>) {
 
 test("what a turn's first request read beyond the chat it carried lowers the chat's budget; a view's autocompact act sets its model's, taken back by none", async () => {
   const real   = AskAI.ask;
-  const window = Pick.window(chat.pick) ?? config.GUESS;
+  const window = Pick.window(chat.pick)!;
   AskAI.ask = (_, on) => {
     const [call, feed] = AskAI.tie(on, () => {}, () => {});
     const first = Math.round(Memory.fill(chat.mem) / 4) + window / 2;
@@ -463,7 +464,7 @@ function last(): string {
   return Memory.message(chat.mem, chat.mem.count - 1)!.text;
 }
 
-test("a model whose window no one told (ChatGPT's before its catalog answers) moves no cut and shows no fill; its turn says why instead of guessing one", async () => {
+test("a model whose window no one told (ChatGPT's before its catalog answers) moves no cut, takes no tokens and shows no fill; its turn says why instead of guessing one, a stop while it waits ending it at once", async () => {
   await until(() => !chat.busy);
   const [was, listed, models] = [chat.pick, ChatGPT.listed, ChatGPT.models];
   ChatGPT.listed = async () => {};
@@ -472,11 +473,19 @@ test("a model whose window no one told (ChatGPT's before its catalog answers) mo
   try {
     expect(Pick.window(chat.pick)).toBeUndefined();
     const cut = chat.mem.cut;
-    expect([Chat.cut(chat), (Chat.state(chat) as any).use.fill]).toEqual([cut, null]);
+    expect([Chat.cut(chat), Chat.cap(chat), (Chat.state(chat) as any).use.fill]).toEqual([cut, 0, null]);
+    expect((Chat.state(chat) as any).use.compacts).toEqual({ global: expect.any(String), sets: expect.any(Object) });
     Chat.take(chat, Chat.push(chat, null, "user", "how big is your window?"));
     await until(() => !chat.busy && last().startsWith("No reply"));
     expect(last()).toBe("No reply: ChatGPT hasn't told gpt-6-luna's context window (its model list didn't answer), and illi never guesses one. Send a message to try again.");
     expect(chat.mem.cut).toBe(cut);
+    ChatGPT.models = () => new Promise(() => {});
+    Chat.take(chat, Chat.push(chat, null, "user", "and now?"));
+    await until(() => chat.busy);
+    await Bun.sleep(20);
+    Chat.stop(chat, null);
+    await until(() => !chat.busy);
+    expect(last()).toBe("and now?");
   } finally {
     [chat.pick, ChatGPT.listed, ChatGPT.models] = [was, listed, models];
   }

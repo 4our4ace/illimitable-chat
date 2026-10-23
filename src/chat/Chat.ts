@@ -148,17 +148,13 @@ const NO_ANSWER  = "No one is at illi's screen to answer: decide yourself, or as
 // the context made this much smaller, when the request itself was too
 // long; the most refits in a row; the note the turn goes on from (#: the
 // model; an account found to take less of its window: CAPPED_NOTE, #
-// that window, $ the model), the one it ends with; why a turn on a model
-// whose window no one told can't start (NO_WINDOW)
+// that window, $ the model), the one it ends with
 const FIT        = 0.8;
 const REFITS     = 3;
-// how long a turn waits on ChatGPT's catalog being asked (ms), and how
-// far within a model's whole window a refusal must come to teach that the
-// account takes only its standard one (Chat.capped)
-const LISTED     = 3000;
+// how far within a model's whole window a refusal must come to teach
+// that the account takes only its standard one (Chat.capped)
 const CAPPED     = 0.75;
 const REFIT      = "The chat outgrew #'s window: more of it is summarized now, each summary a zoom away. Go on where you were.";
-const NO_WINDOW  = "ChatGPT hasn't told #'s context window (its model list didn't answer), and illi never guesses one";
 const CAPPED_NOTE = "This ChatGPT account takes at most # of $'s window, kept from now on: more of the chat is summarized now, each summary a zoom away. Go on where you were.";
 const NO_FIT     = "No reply: the chat won't fit #'s window even summarized. /clear starts a new topic (the chat before it is kept, not sent), or /model picks a model with a bigger window.";
 
@@ -522,29 +518,30 @@ export namespace Chat {
 
   // the tokens of the chat a turn sends on the chat's model (its
   // autocompact, room left for what a request takes beside the chat), its
-  // share as the chat's refits left it (fit)
+  // share as the chat's refits left it (fit); none while its window isn't
+  // known (never guessed: a message waits for the next turn, which says
+  // why it can't start)
   export function cap(chat: Chat): number {
+    const window = Pick.window(chat.pick);
     const beside = chat.beside.get(chat.pick.vendor + ":" + chat.pick.model) ?? 0;
-    return Math.round(config.config_context(chat.pick.model, Pick.window(chat.pick), beside, Pick.room(chat.pick)) * chat.fit);
+    return window === undefined ? 0 : Math.round(config.config_context(chat.pick.model, window, beside, Pick.room(chat.pick)) * chat.fit);
   }
 
-  // a turn's call, once the summaries it sends are built: the chat as
-  // Memory.turn gives it, where illi works, what the plugins and hooks
-  // tell every call (Plugins.context), its agents at work, then the new
-  // text. false: the turn ends
+  // a turn's call, once the summaries it sends are built (on ChatGPT, its
+  // model's window told first: ChatGPT.ready, else the turn ends saying
+  // why): the chat as Memory.turn gives it, where illi works, what the
+  // plugins and hooks tell every call (Plugins.context), its agents at
+  // work, then the new text. false: the turn ends
   export async function call(chat: Chat): Promise<boolean> {
     const mem = chat.mem;
     const halt = (chat.halt = new AbortController());
     chat.suggest.due = false;
     Chat.change(chat);
-    if (chat.pick.vendor === "chatgpt") {
-      await ChatGPT.listed(LISTED);
-    }
-    if (chat.pick.vendor === "chatgpt" && Pick.window(chat.pick) === undefined) {
-      await ChatGPT.models();
-    }
-    if (Pick.window(chat.pick) === undefined && !halt.signal.aborted) {
-      Chat.failed(chat, NO_WINDOW.replace("#", chat.pick.model));
+    const unready = chat.pick.vendor === "chatgpt" ? await ChatGPT.ready(chat.pick.model, halt.signal) : null;
+    if (unready !== null) {
+      if (!halt.signal.aborted) {
+        Chat.failed(chat, unready);
+      }
       return false;
     }
     const why = await Chat.settled(chat, halt.signal);
@@ -968,10 +965,10 @@ export namespace Chat {
     const tools  = Tools.state(chat.tools, chat.pick.vendor);
     const window = Pick.window(chat.pick);
     const beside = chat.beside.get(chat.pick.vendor + ":" + chat.pick.model) ?? 0;
-    const fill   = window === undefined ? null : { used: Math.round(Memory.fill(chat.mem) / TOKEN), cap: Chat.cap(chat), window, ...config.config_autocompact_of(chat.pick.model), most: config.config_most(window, beside, Pick.room(chat.pick)), ...config.config_autocompacts() };
+    const fill   = window === undefined ? null : { used: Math.round(Memory.fill(chat.mem) / TOKEN), cap: Chat.cap(chat), window, ...config.config_autocompact_of(chat.pick.model), most: config.config_most(window, beside, Pick.room(chat.pick)) };
     const asks   = chat.asks.map(({ done, ...q }) => q);
     const catalog = Object.fromEntries(config.OFFER.vendors.map((v) => [v, Pick.list(v)]));
-    return { $: "state", busy: chat.busy || chat.checking !== null, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, catalog, ...tools, use: { ...tools.use, fill }, suggest: chat.suggest.on ? chat.suggest.text : "", asks };
+    return { $: "state", busy: chat.busy || chat.checking !== null, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, catalog, ...tools, use: { ...tools.use, fill, compacts: config.config_autocompacts() }, suggest: chat.suggest.on ? chat.suggest.text : "", asks };
   }
 
   // a reply left with no message after it: the hooks hear the user is

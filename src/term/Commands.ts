@@ -948,17 +948,19 @@ export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "
 // one); its tokens (at most `most`: MOST of its window, less what a
 // request takes beside the chat on the chat's own model), its window;
 // null: the chat's process told none yet, or the model's window isn't
-// known (its vendor hasn't told it: none is guessed)
+// known (its vendor hasn't told it: none is guessed). Another model's
+// shows whatever the chat's model's window
 function term_autocompact_at(t: Term, [vendor, m]: [Vendor, Model], moved: Map<string, number>): Gauge | null {
   const fill   = t.v.use.fill ?? null;
+  const told   = t.v.use.compacts;
   const window = m.window;
-  if (fill === null || window === undefined) {
+  const chat   = t.v.pick?.vendor === vendor && t.v.pick.model === m.label;
+  if (told === undefined || window === undefined || (chat && fill === null)) {
     return null;
   }
-  const chat   = t.v.pick?.vendor === vendor && t.v.pick.model === m.label;
-  const most   = chat ? fill.most : config.config_most(window, 0, m.room);
+  const most   = chat ? fill!.most : config.config_most(window, 0, m.room);
   const step   = moved.get(m.label);
-  const set    = step !== undefined ? step + "%" : fill.sets[m.label] ?? fill.global;
+  const set    = step !== undefined ? step + "%" : told.sets[m.label] ?? told.global;
   const tokens = Math.max(1, Math.min(config.config_tokens(set, window) ?? config.config_tokens(config.SETTINGS.autocompact.def, window)!, most));
   return { set, tokens, most, window };
 }

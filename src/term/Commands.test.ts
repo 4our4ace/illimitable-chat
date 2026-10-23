@@ -316,7 +316,7 @@ test("/help: Ctrl+C and Ctrl+D a row each, the setup commands in a group of thei
 
 test("/model's gauge: the lit model's autocompact, stepped 5 points by Shift+Right and Shift+Left (at most its cap), kept per model and sent with the pick by Enter; Esc drops them; Shift+Up and Shift+Down move the effort", () => {
   const t = term();
-  t.v.use = { ...t.v.use, fill: { used: 0, cap: 600000, window: 1000000, set: "60%", own: false, most: 700000, global: "60%", sets: { "opus-5.5": "50%" } } };
+  t.v.use = { ...t.v.use, fill: { used: 0, cap: 600000, window: 1000000, set: "60%", own: false, most: 700000 }, compacts: { global: "60%", sets: { "opus-5.5": "50%" } } };
   model(t);
   const gauge = () => t.choose.detail(t.choose.shown[t.choose.at].k, 76).map((l: any) => l.map((r: any) => r.x).join(""));
   expect(gauge()).toEqual(["auto compact at ████████████░░░░░░░░  60% · 600k of 1M   Shift + <-/->"]);
@@ -337,6 +337,23 @@ test("/model's gauge: the lit model's autocompact, stepped 5 points by Shift+Rig
   expect(t.v.out).toHaveLength(2);
 });
 
+test("the gauge with no fill told for the chat's model (its window not known: ChatGPT's before its list answers): none for it, Shift steps nothing there; another model's shows and steps as ever; /autocompact says why", () => {
+  const t = term();
+  t.v.use = { ...t.v.use, fill: null, compacts: { global: "60%", sets: { "opus-5.5": "50%" } } };
+  model(t);
+  const gauge = () => t.choose.detail(t.choose.shown[t.choose.at].k, 76).map((l: any) => l.map((r: any) => r.x).join(""));
+  expect([lit(t), gauge()]).toEqual(["sonnet-5.5", []]);
+  term_grab(t, "Shift+Right");
+  term_grab(t, "Up");
+  expect([lit(t), gauge()]).toEqual(["opus-5.5", ["auto compact at ██████████░░░░░░░░░░  50% · 500k of 1M   Shift + <-/->"]]);
+  term_grab(t, "Shift+Right");
+  expect(gauge()[0]).toEndWith("  55% · 550k of 1M   Shift + <-/->");
+  term_grab(t, "Enter");
+  expect(t.v.out.map((p: any) => p.msg).filter((m: any) => m.$ === "autocompact")).toEqual([{ id: expect.any(String), $: "autocompact", label: "opus-5.5", value: "55%" }]);
+  run(t, "/autocompact");
+  expect(note(t)).toBe("sonnet-5.5's window isn't known yet: its vendor hasn't told it.");
+});
+
 test("the gauge fits its width: a bar of the window, the share and tokens, the keys in words; narrow, the share and tokens, then the share", () => {
   const g    = { set: "60%", tokens: 523200, most: 610400, window: 872000 };
   const text = (w: number) => term_gauge(g, w).map((l: any) => l.map((r: any) => r.x).join(""));
@@ -350,7 +367,7 @@ test("the gauge fits its width: a bar of the window, the share and tokens, the k
 test("/autocompact says the chat's model's; a change is said once the chat takes it, a refusal only says why; a value it won't take is said at once", () => {
   const t    = term();
   const said = "Auto compact for sonnet-5.5 at 60% (the global one): 600k of its 1M window. /autocompact 50%, 300k or default changes it; in /model, Shift + <-/->.";
-  t.v.use = { ...t.v.use, fill: { used: 0, cap: 600000, window: 1000000, set: "60%", own: false, most: 700000, global: "60%", sets: {} } };
+  t.v.use = { ...t.v.use, fill: { used: 0, cap: 600000, window: 1000000, set: "60%", own: false, most: 700000 }, compacts: { global: "60%", sets: {} } };
   run(t, "/autocompact");
   expect(note(t)).toBe(said);
   run(t, "/autocompact", "80%");

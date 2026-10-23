@@ -5,7 +5,8 @@
 // command's arguments; an agent's model as a pick; /agent makes a primary
 // agent the main agent (its model, instructions and tools), noted before
 // the next message, each keeping its pick; spawn's agent runs a subagent
-// as it. A skill: its folder's SKILL.md (a folded description), the
+// as it (none on a ChatGPT model whose window isn't told: never guessed).
+// A skill: its folder's SKILL.md (a folded description), the
 // project's over theirs, listed by the skill tool and loaded by it; a
 // sticky one turned on and off by it, while on in every turn's prompt;
 // those shared with other agents (.agents/skills) under illi's own. The
@@ -50,6 +51,8 @@ const { Trusted } = await import("./Trusted.ts");
 const { Logs } = await import("../chat/Logs.ts");
 const { Memory } = await import("../chat/Memory.ts");
 const { Tools } = await import("../tools/Tools.ts");
+const { ChatGPT } = await import("../ai/ChatGPT.ts");
+const { Pick } = await import("../ai/Pick.ts");
 
 // the project's own agents, commands and skills load only once it is trusted
 Trusted.trust(Trusted.folder(CWD));
@@ -168,6 +171,24 @@ test("spawn's agent runs a subagent as it, and names the user's agents", async (
   chat.tools.agents.delete(name);
   expect(Tools.agent(chat.tools, name)!.role).toEqual({ $: "sub", effort: null, agent: "reviewer" });
   await until(() => !chat.busy);
+});
+
+test("a subagent on a ChatGPT model whose window isn't told starts on no guess: spawn says why, no model asked; its view, if asked, its opening and last block alone", async () => {
+  const luna = Pick.model("chatgpt", "gpt-6-luna")!;
+  const [window, listed, models] = [luna.window, ChatGPT.listed, ChatGPT.models];
+  ChatGPT.listed = async () => {};
+  ChatGPT.models = async () => null;
+  luna.window = undefined;
+  asks.length = 0;
+  try {
+    const out = await Tools.call(chat.tools, "main", "spawn", { tasks: ["review it"], agent: "reviewer" }, new AbortController().signal);
+    expect(out.text).toBe("Not started: ChatGPT hasn't told gpt-6-luna's context window (its model list didn't answer), and illi never guesses one.");
+    expect(Tools.ask(chat.tools, { name: "x", run: 0, log: "x", role: { $: "sub", effort: null, agent: "reviewer" }, call: null, live: [], calls: {}, stop: false, view: [{ text: "first\n", mark: false }, { text: "middle\n", mark: false }, { text: "last\n", mark: false }], replies: [] } as any).blocks.map((b: any) => b.text).join("")).toStartWith("first\n(older lines left out to fit your model: zoom and search find them)\nlast\n");
+    await Bun.sleep(20);
+    expect(asks).toEqual([]);
+  } finally {
+    [luna.window, ChatGPT.listed, ChatGPT.models] = [window, listed, models];
+  }
 });
 
 test("a skill: its folder's SKILL.md, the project's over theirs; listed and loaded by the skill tool", async () => {

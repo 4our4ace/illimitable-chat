@@ -20,7 +20,8 @@
 // tells the built-in models' windows. A chat on ChatGPT folds nothing on
 // the windows kept last as a login or a plan is told, only once the
 // account's catalog tells its own; a turn's wait asks the catalog of an
-// account not asked yet.
+// account not asked yet. A model kept or listed with no window has none
+// (a kept one that isn't one too): a call on it says so, never guessing.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -34,7 +35,7 @@ process.env.ILLI_VENDORS = "claude-api,chatgpt";
 delete process.env.ILLI_CONTEXT;
 delete process.env.ILLI_MODELS;
 fs.writeFileSync(DIR + "/config.json", JSON.stringify({ context: "60%", contexts: { "gpt-6.1-sol": 350000, big: 990000, auto: "auto", kilo: "400k" } }));
-fs.writeFileSync(DIR + "/models.json", JSON.stringify({ vendors: { chatgpt: [{ label: "gpt-7-kept", id: "gpt-7-kept", speeds: ["slow"], window: 400000 }], "claude-code": [{ label: "opus-5.5", id: "claude-opus-5-5", speeds: ["slow", "fast"], window: 1000000 }, { label: "opus-4.1", id: "claude-opus-4-1", speeds: ["slow"], window: 200000 }] } }));
+fs.writeFileSync(DIR + "/models.json", JSON.stringify({ vendors: { chatgpt: [{ label: "gpt-7-kept", id: "gpt-7-kept", speeds: ["slow"], window: 400000, room: 0.95 }, { label: "gpt-7-bare", id: "gpt-7-bare", speeds: ["slow"] }, { label: "gpt-7-bad", id: "gpt-7-bad", speeds: ["slow"], window: "lots", standard: -1, room: 7 }], "claude-code": [{ label: "opus-5.5", id: "claude-opus-5-5", speeds: ["slow", "fast"], window: 1000000 }, { label: "opus-4.1", id: "claude-opus-4-1", speeds: ["slow"], window: 200000 }] } }));
 fs.mkdirSync(DATA + "/opencode");
 // a ChatGPT account's access token (its id the claim), and the login
 // opencode keeps, of one
@@ -76,7 +77,6 @@ test("a model's own, else the share the old `context` names (its \"auto\" none: 
   expect(config.config_context("big", 272000)).toBe(190400);
   expect(config.config_context("kilo", 872000)).toBe(400000);
   expect(config.config_context("auto", 872000)).toBe(523200);
-  expect(config.config_context("auto")).toBe(76800);
   expect(config.config_context("auto", 1000000, 250000)).toBe(600000);
   expect(config.config_context("auto", 1000000, 400000)).toBe(500000);
   expect(config.config_tokens("400k", 1)).toBe(400000);
@@ -109,9 +109,11 @@ test("a model's autocompact set goes into the file that sets autocompacts; a var
   config.config_autocompact("gpt-6-luna", null);
 });
 
-test("the models kept from the last start are offered, their windows known; another vendor's only tell the windows of those built in", () => {
+test("the models kept from the last start are offered, their windows known (none kept, or none that is one: none, never a guess); another vendor's only tell the windows of those built in", () => {
+  const at = (model: string) => ({ vendor: "chatgpt" as const, model, effort: "low", speed: "slow" });
   expect(config.OFFER.models).toContain("gpt-7-kept");
-  expect(Pick.window({ vendor: "chatgpt", model: "gpt-7-kept", effort: "low", speed: "slow" })).toBe(400000);
+  expect([Pick.window(at("gpt-7-kept")), Pick.room(at("gpt-7-kept"))]).toEqual([400000, 0.95]);
+  expect([Pick.window(at("gpt-7-bare")), Pick.window(at("gpt-7-bad")), Pick.model("chatgpt", "gpt-7-bad")!.standard, Pick.room(at("gpt-7-bad"))]).toEqual([undefined, undefined, undefined, undefined]);
   expect([Pick.model("claude-code", "opus-5.5"), Pick.model("claude-code", "opus-4.1")]).toEqual([{ label: "opus-5.5", id: "claude-opus-5-5", speeds: ["slow"], window: 1000000 }, undefined]);
 });
 
@@ -230,4 +232,11 @@ test("a turn's wait asks the catalog of an account not asked yet (a turn resumed
   const other = { models: CATALOG.models.map((m) => (m.slug === "gpt-6.1-sol" ? { ...m, max_context_window: 500000 } : m)) };
   await fetching(() => other, () => ChatGPT.listed(2000));
   expect(Pick.window({ vendor: "chatgpt", model: "gpt-6.1-sol", effort: "low", speed: "slow" })).toBe(500000);
+});
+
+test("a call made ready waits on the catalog: a model it tells a window runs; one it lists with none doesn't, saying so, never on a guess", async () => {
+  const bare = { models: [...CATALOG.models, { slug: "gpt-6-bare", visibility: "list", priority: 3 }] };
+  expect(await fetching(() => bare, () => ChatGPT.ready("gpt-6.1-sol"))).toBeNull();
+  expect(Pick.window({ vendor: "chatgpt", model: "gpt-6-bare", effort: "low", speed: "slow" })).toBeUndefined();
+  expect(await fetching(() => bare, () => ChatGPT.ready("gpt-6-bare"))).toBe("ChatGPT's model list tells no context window for gpt-6-bare, and illi never guesses one");
 });
