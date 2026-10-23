@@ -53,7 +53,7 @@ afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 const term = () => {
   const v = View.view_new();
   View.view_hear(v, { $: "state", ...v, vendors: ["claude-api", "openai-api"], pick: { vendor: "claude-api", model: "sonnet-5.5", effort: "medium", speed: "slow" } });
-  return { v, scr: { tty: true, ed: Screen.ed_new() }, choose: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], subs: new Map(), seen: { tall: 20 }, due: true } as any;
+  return { v, scr: { tty: true, ed: Screen.ed_new() }, choose: null, wait: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], subs: new Map(), seen: { tall: 20 }, due: true } as any;
 };
 
 // /model typed with no name

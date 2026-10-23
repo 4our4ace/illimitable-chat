@@ -32,7 +32,7 @@ afterAll(() => {
 });
 
 // a terminal with no screen, only its view and notes
-const term = () => ({ v: View.view_new(), scr: { tty: true, ed: Screen.ed_new() }, choose: null, pane: null, notices: [], due: true, ver: 0 }) as any;
+const term = () => ({ v: View.view_new(), scr: { tty: true, ed: Screen.ed_new() }, choose: null, wait: null, pane: null, notices: [], due: true, ver: 0 }) as any;
 const note = (t: any) => t.notices.at(-1)?.text ?? "";
 
 // the last note, once one starting so has come (an export, an import)

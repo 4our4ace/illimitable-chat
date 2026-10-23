@@ -40,7 +40,7 @@ afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 const term = () => {
   const v = View.view_new();
   View.view_hear(v, { $: "state", ...v, vendors: ["claude-api"], pick: { vendor: "claude-api", model: "sonnet-5.5", effort: "medium", speed: "slow" } });
-  return { v, scr: { tty: true, ed: Screen.ed_new() }, side: { place: "right", width: "25%" }, choose: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], due: true } as any;
+  return { v, scr: { tty: true, ed: Screen.ed_new() }, side: { place: "right", width: "25%" }, choose: null, wait: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], due: true } as any;
 };
 
 // a command typed, by its name

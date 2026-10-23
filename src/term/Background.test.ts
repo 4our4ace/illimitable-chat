@@ -33,7 +33,7 @@ const MIN = 60000;
 // terminal's: chat null), the jobs given running; a paint always due
 const term = (jobs: Background[], chat: object | null = { busy: false }) => {
   const v = { ...View.view_new(), background: jobs };
-  return { v, chat, scr: { tty: true, ed: Screen.ed_new() }, choose: null, pane: null, sug: null, notices: [], agents: [], profs: ["default"], subs: new Map(), since: Date.now(), todo: false, quit: 0, due: true, ver: 0 } as any;
+  return { v, chat, scr: { tty: true, ed: Screen.ed_new() }, choose: null, wait: null, pane: null, sug: null, notices: [], agents: [], profs: ["default"], subs: new Map(), since: Date.now(), todo: false, quit: 0, due: true, ver: 0 } as any;
 };
 
 // a job, started `ago` ms back

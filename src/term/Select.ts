@@ -22,7 +22,7 @@
 
 import * as Draw from "../ui/Draw.ts";
 import { term_draw } from "./Frame.ts";
-import { term_click } from "./Keys.ts";
+import { term_click, term_unwait } from "./Keys.ts";
 import { term_toast } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_popup } from "./Popup.ts";
@@ -67,9 +67,10 @@ function term_button(line: Paint.Line, col: number): (() => string) | undefined 
 // the left button: pressed, a drag starts choosing text in the area under
 // it (twice in a row there: from the word under it, a word at a time;
 // three times: from its line, a line at a time; a button's own click
-// comes first); dragged, the choice follows the pointer (a chat scrolls
+// comes first, and a press that acts on nothing chooses no word:
+// term_dead); dragged, the choice follows the pointer (a chat scrolls
 // while it's past an edge); let go, the text chosen is copied, else it
-// was a click. The right button: the same in the chat, a character at a
+// was a click (none from a press that acts on nothing). The right button: the same in the chat, a character at a
 // time (never from a reply's button), the text chosen quoted as it's let
 // go (term_quote), else it was a right click, which takes a quote just
 // made out (term_unquote)
@@ -93,9 +94,10 @@ export function term_mouse(t: Term, key: string): void {
   } else if (key === "Press") {
     const area = term_area_at(t, p);
     const at   = area === undefined ? null : term_cell(area, p);
+    const dead = term_dead(t, true);
     t.sel = null;
     if (area !== undefined && at !== null) {
-      const unit = term_under(t, p) === undefined ? t.scr.clicks : 1;
+      const unit = term_under(t, p) === undefined && !dead ? t.scr.clicks : 1;
       const root = term_unit(area, at, unit);
       t.sel = { key: area.key, a: root[0], b: root[1], held: true, moved: unit > 1 && !term_after(root[0], root[1]), unit, root };
     }
@@ -112,9 +114,25 @@ export function term_mouse(t: Term, key: string): void {
       term_copied(t, term_selected(t));
     } else if (sel === null || sel.held) {
       t.sel = null;
-      term_click(t);
+      if (!term_dead(t)) {
+        term_click(t);
+      }
     }
   }
+}
+
+// whether the left press down acts on nothing as a click, nor chooses a
+// word or a line (a drag from it still chooses text): it only focused the
+// window (Screen.ts focusing), or it is swallowed, again on the cell
+// whose click just acted, within TWICE of it (t.acted; a press there
+// holds the cell TWICE more)
+function term_dead(t: Term, press = false): boolean {
+  const a     = t.acted;
+  const again = a !== null && t.scr.click.row === a.at.row && t.scr.click.col === a.at.col && t.scr.pressed < a.until;
+  if (again && press) {
+    a!.until = t.scr.pressed + Screen.TWICE;
+  }
+  return again || t.scr.focusing === true;
 }
 
 // a held choice grown to the pointer, inside its area: from the first it
@@ -214,15 +232,21 @@ export function term_selected(t: Term): string {
   return out.join("\n");
 }
 
-// the word at column col of a line, its columns from to to: a run of
-// WORDY characters (a path, a link, an address, a number each one), its
-// end's punctuation dropped; else the one character there
-function term_word(line: Paint.Line, col: number): [number, number] {
+// a line's characters, each its column and width
+function term_cells(line: Paint.Line): Array<{ g: string; at: number; w: number }> {
   const cells: { g: string; at: number; w: number }[] = [];
   for (const g of Paint.text_graphemes(line.map((r) => r.x).join(""))) {
     const at = cells.length === 0 ? 0 : cells[cells.length - 1].at + cells[cells.length - 1].w;
     cells.push({ g, at, w: Paint.text_width(g) });
   }
+  return cells;
+}
+
+// the word at column col of a line, its columns from to to: a run of
+// WORDY characters (a path, a link, an address, a number each one), its
+// end's punctuation dropped; else the one character there
+function term_word(line: Paint.Line, col: number): [number, number] {
+  const cells = term_cells(line);
   const k = cells.findIndex((c) => col >= c.at && col < c.at + Math.max(1, c.w));
   if (k < 0) {
     return [col, col];
@@ -235,6 +259,17 @@ function term_word(line: Paint.Line, col: number): [number, number] {
   while (j < cells.length - 1 && WORDY.test(cells[j + 1].g)) j++;
   while (j > k && ENDING.test(cells[j].g)) j--;
   return [cells[i].at, cells[j].at + cells[j].w];
+}
+
+// whether a word is under a spot as last painted (a double click there
+// would choose it): none past a line's end, on a blank line, on a frame's
+// edge or a space, nor on a mark's glyph (Paint.Tag)
+export function term_wordy(t: Term, p: Screen.Spot): boolean {
+  const area = t.areas.find((a) => p.row >= a.row && p.row < a.row + a.tall && p.col >= a.col && p.col < a.col + a.w);
+  const line = area === undefined ? [] : area.lines[area.first + p.row - area.row] ?? [];
+  const col  = p.col - (area?.col ?? 0);
+  const cell = term_cells(line).find((c) => col >= c.at && col < c.at + Math.max(1, c.w));
+  return cell !== undefined && WORDY.test(cell.g) && term_run(line, col)?.mark?.as !== "glyph";
 }
 
 // the button under a spot (none: no button there, or a popup over all)
@@ -281,45 +316,53 @@ function term_boxed(box: PopBox, p: Screen.Spot): boolean {
 // the pointer moved: painted again only if it's over another button,
 // or another mark would light (told apart by their keys)
 export function term_hover(t: Term): void {
-  if (!t.sel?.held && (term_under(t, t.scr.point) !== t.hover || (term_lit(t)?.key ?? null) !== t.lit)) {
+  if (!t.sel?.held && (term_under(t, t.scr.point) !== t.hover || (term_lit(t)?.mark.key ?? null) !== t.lit)) {
     term_draw(t);
   }
 }
 
 // the chat's rows as painted (rows: the screen's, the chat's piece first
 // on each), once every hit is placed: what a click would act on lit
-// (Paint.line_lit), kept as lit (t.lit)
+// (Paint.line_lit; one waiting on a click, pressed), kept as lit (t.lit)
 export function term_light(t: Term, rows: Screen.Piece[][]): void {
   const lit  = term_lit(t);
   const area = t.areas.find((a) => a.key === "chat");
-  t.lit      = lit?.key ?? null;
+  t.lit      = lit?.mark.key ?? null;
   if (lit === undefined || area === undefined) {
     return;
   }
+  const { mark, pressed } = lit;
   for (let k = 0; k < area.tall; k++) {
     const piece = rows[area.row + k]?.[0];
-    if (area.first + k >= lit.from && area.first + k < lit.to && piece !== undefined) {
-      piece.line = Paint.line_lit(piece.line, lit, false);
+    if (area.first + k >= mark.from && area.first + k < mark.to && piece !== undefined) {
+      piece.line = Paint.line_lit(piece.line, mark, pressed);
     }
   }
 }
 
-// what lights (none: undefined): the mark under the pointer
+// what lights (none: undefined): the mark a click's fold waits on,
+// pressed (Keys.ts term_wait); else the mark under the pointer
 // (term_target), once the pointer's place is known (t.pointed: it moved,
 // pressed or let go since the chat last moved by itself, a key, the focus
 // lost), the window focused, no drag choosing text
-function term_lit(t: Term): Paint.Mark | undefined {
+function term_lit(t: Term): { mark: Paint.Mark; pressed: boolean } | undefined {
+  const waits = t.wait === null ? undefined : t.seen.marks.find((m) => m.key === t.wait!.key);
+  if (waits !== undefined) {
+    return { mark: waits, pressed: true };
+  }
   if (!t.pointed || t.scr.away === true || (t.sel?.held === true && t.sel.moved)) {
     return undefined;
   }
   const at = term_target(t, t.scr.point);
-  return at.$ === "mark" ? at.mark : undefined;
+  return at.$ === "mark" ? { mark: at.mark, pressed: false } : undefined;
 }
 
 // a key pressed or text typed (Keys.ts, Attach.ts), as the mouse takes
-// it: the light out till the pointer moves again (but by the wheel, which
-// moves the chat under the pointer: what's under it lights)
+// it: a click's fold waiting given up; the light out till the pointer
+// moves again (but by the wheel, which moves the chat under the pointer:
+// what's under it lights)
 export function term_typing(t: Term, key: string): void {
+  term_unwait(t);
   if (key !== "WheelUp" && key !== "WheelDown") {
     t.pointed = false;
   }

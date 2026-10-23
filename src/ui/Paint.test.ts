@@ -124,7 +124,7 @@ test("an open block is marked over its whole frame, the blocks in it with their 
   const [box, a, b] = marks;
   expect([box.key, box.from, box.to, lines.length]).toEqual(["b4+2", 0, lines.length, lines.length]);
   expect([a.key, a.from, b.key, b.from - a.to, b.to]).toEqual(["b4+1", 1, "b5+1", 0, lines.length - 1]);
-  expect(lines[0].find((r) => r.mark !== undefined)?.mark).toEqual({ key: "b4+2", as: "glyph" });
+  expect(lines[0].find((r) => r.mark !== undefined)?.mark).toEqual({ key: "b4+2", as: "text" });
   const tagged = lines[a.from + 1].filter((r) => r.mark?.key === "b4+1").map((r) => r.x.trim());
   expect(tagged).toEqual(["1x", "/open #4"]);
 });
