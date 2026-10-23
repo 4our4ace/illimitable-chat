@@ -232,7 +232,8 @@ Mouse and side panel
   allow it.
 - A drag with the right button over the chat quotes what it covers in
   your message, each line after `> `, to reply to it; a right click
-  within 5 seconds takes the quote out again.
+  within 5 seconds takes the quote out again. A reply's buttons are left
+  out of what's quoted or copied, and a right drag never starts on one.
 - The wheel scrolls the chat or a pane.
 - From 100 columns on, a side panel shows the primary agents by name (a
   click makes one the main agent) and beside them your sticky skills,
