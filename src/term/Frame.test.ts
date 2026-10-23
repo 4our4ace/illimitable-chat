@@ -5,7 +5,8 @@
 // frame's end, all asked for meanwhile in one paint. The terminal's
 // title names illi and the project, a small ∞ traced in the ∞'s place
 // while work runs. A picker grows to show its options whole, the side
-// stepping aside where it covers it.
+// stepping aside where it covers it. A click on the side's second column
+// (the sticky skills beside the agents) hits what it shows.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -150,5 +151,31 @@ test("a picker grows to show its longest option whole, the screen allowing; the 
     expect(rows.slice(1, 4).some((r: string) => r.includes("│"))).toBe(true);
   } finally {
     Object.defineProperty(process.stdout, "columns", cols ?? { value: undefined, configurable: true });
+  }
+});
+
+test("the side's sticky skills beside its agents: a click on one hits it, not the agent on its row", async () => {
+  const { Custom } = await import("../config/Custom.ts");
+  const config = await import("../config/Config.ts");
+  fs.mkdirSync(DIR + "/skills/terse", { recursive: true });
+  fs.writeFileSync(DIR + "/skills/terse/SKILL.md", "---\ndescription: Short replies\nsticky: true\n---\nBe terse.");
+  Custom.stick(Custom.skill(process.cwd(), "terse")!, true);
+  const cols = Object.getOwnPropertyDescriptor(process.stdout, "columns");
+  Object.defineProperty(process.stdout, "columns", { value: 160, configurable: true });
+  try {
+    const t = term();
+    await written(async () => term_paint(t));
+    const line = (row: any[]) => row.map((p) => p.line.map((r: any) => r.x).join("")).join("");
+    const row  = t.ruled.rows.findIndex((r: any[]) => line(r).includes(" terse"));
+    const side = t.ruled.rows[row].at(-1);
+    const col  = side.col + side.line.map((r: any) => r.x).join("").indexOf("terse");
+    const hits = t.hits.filter((h: any) => h.row === row);
+    expect(hits).toHaveLength(2);
+    expect(hits[0].to).toBe(hits[1].col);
+    hits.find((h: any) => col >= h.col && col < h.to).run();
+    expect(config.STICKY).toEqual([]);
+  } finally {
+    Object.defineProperty(process.stdout, "columns", cols ?? { value: undefined, configurable: true });
+    fs.rmSync(DIR + "/skills/terse", { recursive: true });
   }
 });
