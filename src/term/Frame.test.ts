@@ -16,7 +16,7 @@ import * as path from "node:path";
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-frame-");
 process.env.ILLI_DIR = DIR;
 
-const { term_draw, term_loop, term_paint, term_title } = await import("./Frame.ts");
+const { term_draw, term_orbit, term_paint, term_title } = await import("./Frame.ts");
 const { Projects } = await import("../chat/Projects.ts");
 const Screen = await import("../ui/Screen.ts");
 const { status_new } = await import("./Status.ts");
@@ -114,17 +114,17 @@ test("the terminal's title names illi and the project, written as it changes: a 
   const spun = titles.slice(1, -3);
   expect([titles[0], ...titles.slice(-3)]).toEqual([osc("∞"), osc("?"), osc("∞"), osc("∞")]);
   expect(spun.length).toBeGreaterThanOrEqual(2);
-  expect(spun.every((s, k) => /^\x1b\]0;[⠀-⣿]{3} illi · /.test(s) && s !== titles[k])).toBe(true);
+  expect(spun.every((s, k) => /^\x1b\]0;[⠀-⣿] illi · /.test(s) && s !== titles[k])).toBe(true);
 });
 
-test("the title's ∞ while work runs: 3 braille cells, a trail of 4 dots a step along the ∞, all its 12 steps apart; the trail's every place, the ∞ whole", () => {
-  const frames = Array.from({ length: 12 }, (_, k) => term_loop(k));
-  const dots   = (s: string) => [...s].reduce((n, c) => n + (c.charCodeAt(0) - 0x2800).toString(2).replaceAll("0", "").length, 0);
-  expect(new Set(frames).size).toBe(12);
-  expect(frames.map(dots)).toEqual(Array(12).fill(4));
-  expect([term_loop(12), term_loop(-1)]).toEqual([frames[0], frames[11]]);
-  const whole = [0, 1, 2].map((c) => String.fromCharCode(0x2800 | frames.reduce((b, f) => b | (f.charCodeAt(c) - 0x2800), 0))).join("");
-  expect(whole).toBe("⢎⠶⡱");
+test("the title's mark while work runs: one braille cell, a trail of 3 dots a step round its edge, all its 8 steps apart; the trail's every place, the cell's edge whole", () => {
+  const frames = Array.from({ length: 8 }, (_, k) => term_orbit(k));
+  const dots   = (s: string) => (s.charCodeAt(0) - 0x2800).toString(2).replaceAll("0", "").length;
+  expect(frames.every((f) => [...f].length === 1)).toBe(true);
+  expect(new Set(frames).size).toBe(8);
+  expect(frames.map(dots)).toEqual(Array(8).fill(3));
+  expect([term_orbit(8), term_orbit(-1)]).toEqual([frames[0], frames[7]]);
+  expect(String.fromCharCode(0x2800 | frames.reduce((b, f) => b | (f.charCodeAt(0) - 0x2800), 0))).toBe("⣿");
 });
 
 for (const place of ["right", "left"]) {

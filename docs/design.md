@@ -48,7 +48,8 @@ Marks
 | `│` | an open run's rows | the chat |
 | `─ ╭ ╮ ╰ ╯` | frames and rules | popups, panes, the input |
 | `█ ▌ ░` | a gauge: full, half, empty | the context at the side, the auto compact in `/model` |
-| `∞` traced in braille dots | illi at work | the title, the work line, the side's agents |
+| `∞` traced in braille dots | illi at work | the work line |
+| a braille cell, its dots going round | illi at work | the title, the side's agents |
 | `⌕` | search | a list's search line |
 | `↓` | the chat's end; tokens written | Jump to Bottom; the work line |
 
