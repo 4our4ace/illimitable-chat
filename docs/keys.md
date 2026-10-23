@@ -301,7 +301,8 @@ Mouse and side panel
   run), a ChatGPT plan's use, the context and the memory, the MCP
   servers (a click opens `/mcp`), the latest requests refused (a click
   opens `/permissions` on one) and illi's to-do list, gone once every
-  item is done. The `side` and `side_width` settings place it.
+  item is done or on `/clear`. The `side` and `side_width` settings
+  place it.
 - The bottom line ends with the mode (a click opens `/mode`):
   `read-only` in the warning color, `yolo` in the error color. Before
   it, the background jobs are counted when the side panel doesn't show
