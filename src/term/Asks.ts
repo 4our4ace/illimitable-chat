@@ -247,10 +247,11 @@ function form_tabs(tabs: Paint.Run[], w: number): { tabs: Paint.Line[]; spans: S
 }
 
 // the picker for a question, which stays (Chooser stays): its answers,
-// "don't ask again" only where it keeps something
+// "don't ask again" only where it keeps something (named on one line, as
+// a list shows a command)
 function term_ask_open(t: Term, q: Question): void {
   const keep  = q.keep ?? "";
-  const names = ["Yes", ...(keep === "" ? [] : ["Yes, and don't ask again for " + keep + " in this project"]), "No", "No, and say why"];
+  const names = ["Yes", ...(keep === "" ? [] : ["Yes, and don't ask again for " + Paint.text_line(keep) + " in this project"]), "No", "No, and say why"];
   const [always, no, why] = keep === "" ? [-1, 1, 2] : [1, 2, 3];
   const keys  = (_k: number, key: string) => {
     if (key !== "Esc") {

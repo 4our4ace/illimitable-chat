@@ -287,9 +287,10 @@ function popup_measure(c: Chooser): Measure {
 // the picker's title, its keys after it, as fits in w columns: its keys
 // go first, then the title is cut, an ellipsis at its end
 function popup_title(c: Chooser, w: number): string {
-  const keys = c.ask === null ? " · ↑↓ Enter · Esc " : " · Enter · Esc ";
-  const all  = " " + c.title + keys;
-  return Paint.text_width(all) <= w ? all : popup_cut(" " + c.title + " ", w);
+  const title = Paint.text_clean(c.title);
+  const keys  = c.ask === null ? " · ↑↓ Enter · Esc " : " · Enter · Esc ";
+  const all   = " " + title + keys;
+  return Paint.text_width(all) <= w ? all : popup_cut(" " + title + " ", w);
 }
 
 // what the picker's foot says of the lit option ("": nothing; a line
@@ -318,23 +319,26 @@ function popup_act(c: Chooser, name: string): boolean {
 // the columns an option's name takes after the marks (one that makes
 // something new: its "+" in the mark's place)
 function popup_name_width(c: Chooser, name: string): number {
-  return Paint.text_width(name) - (popup_act(c, name) ? 2 : 0);
+  return Paint.text_width(Paint.text_clean(name)) - (popup_act(c, name) ? 2 : 0);
 }
 
 // an option's name as its rows show it, in ink (the characters at `at`
 // lit; none: plain), within iw columns after its marks: one line, or,
 // too wide, wrapped at its words (a word too long at its characters),
-// whole
+// whole. No control character reaches the screen (a new line written
+// there would draw the rest of the row over the rows under it): each
+// cleaned as text is (Paint.text_clean), where the search counts it
 function popup_name_lines(c: Chooser, name: string, iw: number, ink = Paint.INK, lit = Paint.INK, at: number[] = []): Paint.Line[] {
   const room = iw - Paint.text_width(Paint.lit_lead(true)) - (c.here < 0 || popup_act(c, name) ? 0 : 2);
   const runs: Paint.Line = [];
   [...name].forEach((ch, j) => {
     const s    = at.includes(j) ? lit : ink;
+    const x    = Paint.text_clean(ch);
     const last = runs.at(-1);
     if (last !== undefined && last.s === s) {
-      last.x += ch;
-    } else {
-      runs.push(Paint.Run(ch, s));
+      last.x += x;
+    } else if (x !== "") {
+      runs.push(Paint.Run(x, s));
     }
   });
   return Paint.line_width(runs) <= room ? [runs] : Paint.runs_wrap(runs, Math.max(1, room), false);

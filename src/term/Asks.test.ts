@@ -2,13 +2,12 @@
 // =========
 // `bun test Asks.test.ts`. A question the chat asks shows in the picker,
 // what it would do and why over its answers, no note saying them again:
-// Yes allows; "don't ask again"
-// names what it keeps (offered only when it keeps something); Esc says
-// no; "No, and say why" asks a line (Esc: back to the
-// picker). One gone before it is answered closes its picker; the next
-// shows once the one before is gone. A pipe notes what was asked and
-// answers no at once. illi's
-// own questions (ask) show as a form (in the popup: Popup.test), a tab
+// Yes allows; "don't ask again" names what it keeps, on one line
+// (offered only when it keeps something); Esc says no; "No, and say why"
+// asks a line (Esc: back to the picker). One gone before it is answered
+// closes its picker; the next shows once the one before is gone. A pipe
+// notes what was asked and answers no at once. illi's own questions
+// (ask) show as a form (in the popup: Popup.test), a tab
 // each (the tabs wrapped, each where it is), who asks its title: Up and
 // Down move, Space picks (one; several with multi), typing goes to the
 // words of the user's own, Enter picks the lit option and goes on; PgUp
@@ -99,6 +98,12 @@ test("don't ask again keeps what it names; one that keeps nothing isn't offered;
   term_grab(t, "Esc");
   expect(sent(t)).toEqual([{ ask: "q1", yes: true, always: true, said: "" }, { ask: "q2", yes: false, always: false, said: "" }, { ask: "q3", yes: false, always: false, said: "" }]);
   expect(t.choose).toBeNull();
+});
+
+test("don't ask again names a command of several lines on one line, as a list shows a command", () => {
+  const t = term();
+  asks(t, ["q1", "Bash", "python3 <<'EOF'\n\timport os\n\tos.remove('a')\nEOF"]);
+  expect(t.choose.names[1]).toBe("Yes, and don't ask again for python3 <<'EOF' import os os.remove('a') EOF in this project");
 });
 
 test("No, and say why asks a line for the model; Esc there goes back to the picker", () => {
