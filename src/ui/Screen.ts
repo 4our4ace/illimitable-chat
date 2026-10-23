@@ -278,7 +278,7 @@ const DRAG  = 32;
 const NONE  = 3;
 const RIGHT = 2;
 const SHIFT = 4 | 8 | 16;
-const TWICE = 400;
+export const TWICE = 400;
 
 // Screen
 // ======

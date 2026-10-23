@@ -35,7 +35,7 @@ const View = await import("../ui/View.ts");
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
 // a terminal with no screen, only its view and notes
-const term = (tty = true) => ({ v: View.view_new(), scr: { tty, ed: Screen.ed_new() }, choose: null, pane: null, notices: [], due: true, ver: 0, asking: null }) as any;
+const term = (tty = true) => ({ v: View.view_new(), scr: { tty, ed: Screen.ed_new() }, choose: null, wait: null, pane: null, notices: [], due: true, ver: 0, asking: null }) as any;
 const note = (t: any) => t.notices.at(-1)?.text ?? "";
 
 // the answers sent, without their message ids

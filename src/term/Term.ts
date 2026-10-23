@@ -113,7 +113,10 @@ import * as View from "../ui/View.ts";
 // (what a click would act on: Select.ts term_light; null: none),
 // pointed: whether the pointer's place is known to light it (it moved,
 // pressed or let go since the chat last moved by itself while followed,
-// a key, or the focus lost)
+// a key, or the focus lost); wait: a click's fold waiting out a double
+// click, the mark's key and its clock (Keys.ts term_click; null: none);
+// acted: the cell whose click acted last, and till when a press there
+// acts on nothing (null: none)
 export type Term = {
   v       : View.View;
   scr     : Screen.Screen;
@@ -162,6 +165,8 @@ export type Term = {
   pin     : { key: string; row: number } | null;
   lit     : string | null;
   pointed : boolean;
+  wait    : { key: string; timer: Timer } | null;
+  acted   : { at: Screen.Spot; until: number } | null;
 };
 
 // the mouse as the popup saw it (Popup.ts popup_mouse): the pointer's
@@ -377,6 +382,8 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
     pin     : null,
     lit     : null,
     pointed : false,
+    wait    : null,
+    acted   : null,
   };
   // the chat suggests replies to a screen that shows them, never a pipe
   if (chat !== null) {

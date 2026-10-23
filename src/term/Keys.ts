@@ -20,7 +20,7 @@ import { term_note, term_toast, term_unnote } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { popup_form_wheel, popup_held, popup_mouse, popup_page, popup_wheel, term_popup } from "./Popup.ts";
 import * as Screen from "../ui/Screen.ts";
-import { term_copied, term_hover, term_mouse, term_selected, term_target, term_typing } from "./Select.ts";
+import { term_copied, term_hover, term_mouse, term_selected, term_target, term_typing, term_wordy } from "./Select.ts";
 import { term_act, term_primaries, term_quit, type Chooser, type Cmd, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
@@ -71,6 +71,7 @@ export function term_press(t: Term, key: string): void {
   }
   if (key === "Press" || key === "RightPress") {
     t.lead = false;
+    term_unwait(t);
   }
   if (MOUSE.includes(key) && popup_mouse(t, key)) {
     if (key !== "Move") {
@@ -258,30 +259,60 @@ export function term_type(t: Term, text: string): boolean {
 }
 
 // a click (never under a popup, nor on the commands suggested: Popup.ts
-// has those), on what's under it (Select.ts term_target): what was drawn
-// there does its own (the side, the tabs, the jump, a reply's button
-// copies); in the chat, a run of work's head or its bar opens or closes
-// the whole run; inside an open one, a message folds to a line, or
-// unfolds; a block opens, and an open one shuts from any line of its
-// frame (the innermost thing holding the line acts); whatever it acted
-// on keeps its place under the pointer
+// has those; never the press that focused the window, nor one again on
+// what a click just acted on: Select.ts), on what's under it (Select.ts
+// term_target): what was drawn there does its own (the side, the tabs,
+// the jump, a reply's button copies); in the chat, a run of work's head
+// or its bar opens or closes the whole run, at once; inside an open one,
+// a message folds to a line, or unfolds; a block opens, and an open one
+// shuts from any line of its frame (the innermost thing holding the line
+// acts). Those wait till TWICE after the press (term_wait), so a double
+// click still chooses the word under it; where no word is (past a line's
+// end, a blank line, a frame's edge, a glyph), at once. Whatever a click
+// acted on keeps its place under the pointer
 export function term_click(t: Term): void {
-  const aim = term_target(t, t.scr.click);
+  const at  = t.scr.click;
+  const aim = term_target(t, at);
   if (aim.$ === "hit") {
     aim.hit.run();
   } else if (aim.$ === "copy") {
     term_copied(t, aim.copy());
+  } else if (aim.$ === "mark" && (aim.mark.act === true || !term_wordy(t, at))) {
+    term_fold(t, aim.mark, at);
   } else if (aim.$ === "mark") {
-    term_fold(t, aim.mark, t.scr.click);
+    term_wait(t, aim.mark, at);
+  }
+}
+
+// a click's fold waiting out a double click: done at the press's TWICE
+// (the screen painted), unless a press, the wheel or a key comes first
+// (term_unwait); meanwhile what it acts on shows pressed (Select.ts)
+function term_wait(t: Term, m: Paint.Mark, at: Screen.Spot): void {
+  term_unwait(t);
+  const timer = setTimeout(() => {
+    t.wait = null;
+    term_fold(t, m, at);
+    term_draw(t);
+  }, Math.max(0, t.scr.pressed + Screen.TWICE - Date.now()));
+  t.wait = { key: m.key, timer };
+}
+
+// a click's fold waiting given up (none: nothing)
+export function term_unwait(t: Term): void {
+  if (t.wait !== null) {
+    clearTimeout(t.wait.timer);
+    t.wait = null;
   }
 }
 
 // a mark acted on by a click at a spot: a run of work (or a recap)
 // opened or closed, a message in one folded or unfolded, a block opened
 // or shut; its first line kept on the row clicked (t.pin), so what was
-// under the pointer stays there
+// under the pointer stays there, and a press on that cell within TWICE
+// acts on nothing (t.acted: a slow double click never undoes it)
 function term_fold(t: Term, m: Paint.Mark, at: Screen.Spot): void {
-  t.pin = { key: m.key, row: at.row };
+  t.pin   = { key: m.key, row: at.row };
+  t.acted = { at, until: Date.now() + Screen.TWICE };
   if (m.act === true) {
     View.view_toggle(t.v, m.id);
     t.ver += 1;

@@ -44,7 +44,7 @@ const GRANTS = [{ grant: "shell=ls", said: "ls", saved: false }, { grant: "shell
 const term = (mode = "auto") => {
   const v = View.view_new();
   v.perm = { mode: mode as any, set: "auto", refused: [...REFUSED] as any, grants: GRANTS, file: DIR + "/permissions.json", broken: "" };
-  return { v, scr: { tty: true, ed: Screen.ed_new() }, choose: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], subs: new Map(), seen: { tall: 20 }, due: true, agents: [], profs: ["default"], since: 0 } as any;
+  return { v, scr: { tty: true, ed: Screen.ed_new() }, choose: null, wait: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], subs: new Map(), seen: { tall: 20 }, due: true, agents: [], profs: ["default"], since: 0 } as any;
 };
 const note = (t: any) => t.notices.at(-1)?.text ?? "";
 const lit  = (t: any) => t.choose.names[t.choose.shown[t.choose.at].k];

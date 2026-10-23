@@ -56,11 +56,12 @@ export type Ink = { d: boolean; b: boolean; i: boolean; u: boolean; v: boolean; 
 export type Run = { x: string; s: Ink; copy?: () => string; mark?: Tag };
 
 // a run's part in the mark it lights with, by the mark's key (line_lit):
-// its glyph (a run of work's mark, open or shut: Theme.GLYPH; a folded
-// message's; a block's gutter and /open, an open block's bar), a run of
-// work's label, or its
-// bar down the left of its rows (a click on it is the run's: Term.ts)
-export type Tag = { key: string; as: "glyph" | "label" | "bar" };
+// its glyph (a run of work's mark, open or shut, a folded message's:
+// Theme.GLYPH; no word, so a click there acts at once: Term.ts), a run
+// of work's label, its bar down the left of its rows (a click on it is
+// the run's), or a block's text that lights (its gutter and /open, an
+// open block's bar)
+export type Tag = { key: string; as: "glyph" | "label" | "bar" | "text" };
 
 export type Line = Run[];
 
@@ -503,7 +504,7 @@ function act_lines(row: View.Row & { $: "Act" | "Rule" }, w: number, marks: Mark
 // an open block: its rows framed, its bar on the top edge, tagged to
 // light (a click anywhere in the frame shuts it: but on a block inside)
 function box_lines(row: View.Row & { $: "Box" }, w: number, marks: Mark[], at: number): Line[] {
-  const bar = [Run(" " + row.n + "x · /close " + View.block_name(row.id, row.n) + " ", { ...DIM, b: true }, { key: block_key(row.id, row.n), as: "glyph" })];
+  const bar = [Run(" " + row.n + "x · /close " + View.block_name(row.id, row.n) + " ", { ...DIM, b: true }, { key: block_key(row.id, row.n), as: "text" })];
   return frame_lines(rows_lines(row.rows, w - 4, marks, at + 1, null, true), w - 4, DIM, bar);
 }
 
@@ -577,7 +578,7 @@ function reply_lines(text: string, w: number): Line[] {
 // to light (line_lit)
 function sum_lines(id: number, n: number, head: Line, text: string, w: number): Line[] {
   const room = w - GUTTER - 2;
-  const tag  = { key: block_key(id, n), as: "glyph" } as const;
+  const tag  = { key: block_key(id, n), as: "text" } as const;
   const cmd  = Run("/open " + View.block_name(id, n), DIM, tag);
   const rows = runs_wrap([...head, Run(text_clean(text))], room, false);
   const last = rows.pop() ?? [];

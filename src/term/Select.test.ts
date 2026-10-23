@@ -27,7 +27,7 @@ afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 // a terminal with no screen, one area of three lines 20 wide (its middle
 // blank) at the screen's top left; a paint always due
 const AREA = { key: "chat", lines: [[Paint.Run("hello world")], [], [Paint.Run("hi")]], first: 0, row: 0, col: 0, w: 20, tall: 3 };
-const term = () => ({ areas: [], sel: null, due: true, scr: { point: { row: 0, col: 0 }, clicks: 1 } }) as any;
+const term = () => ({ areas: [], sel: null, due: true, acted: null, scr: { point: { row: 0, col: 0 }, clicks: 1 } }) as any;
 
 // a drag from one spot to another; the area's rows as then shown
 function drag(t: any, from: [number, number], to: [number, number]): Line[] {
