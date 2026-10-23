@@ -197,12 +197,6 @@ function popup_cut(text: string, w: number): string {
   return Paint.text_width(text) <= w ? text : w < 1 ? "" : Paint.line_cut([Paint.Run(text)], 0, w - 1)[1].map((r) => r.x).join("") + "…";
 }
 
-// the lines leading a question's answers (why it asks, what it would
-// do), wrapped to iw columns
-export function popup_lead(c: Chooser, iw: number): Paint.Line[] {
-  return (c.lead ?? []).flatMap((l) => Paint.runs_wrap(l, Math.max(1, iw), false));
-}
-
 // whether an option's name makes something new ("+ ..."), its "+" in the
 // mark's place (only where one is marked)
 function popup_act(c: Chooser, name: string): boolean {

@@ -22,7 +22,7 @@ import { PANEL, popup_paint, term_popup } from "./Popup.ts";
 import { term_shown } from "./Notices.ts";
 import { term_mode } from "./PermCommands.ts";
 import { term_profile_pick } from "./ProfileCommands.ts";
-import { question_kept, question_laid, question_shown } from "./Question.ts";
+import { question_kept, question_laid, question_of, question_shown } from "./Question.ts";
 import { DEFAULT } from "../config/Profiles.ts";
 import { Projects } from "../chat/Projects.ts";
 import * as Screen from "../ui/Screen.ts";
@@ -375,16 +375,16 @@ function term_wake(t: Term): void {
 // the ∞ whole: at each wake); none while a question has the rule (no
 // doing kept). With agents at work and their spinner changed, the side's
 // rows too (term_side_again). No paint, no layout of the chat; a whole
-// paint only once work ended, with text chosen (its look may cover
-// them), a popup open (the rule dimmed under it) or the leader waiting
-// (all grey); nothing while a paint is due
+// paint only once work ended, before the rule shows what runs, with text
+// chosen (its look may cover them), a popup open (the rule dimmed under
+// it) or the leader waiting (all grey); nothing while a paint is due
 function term_tick(t: Term): void {
   const r = t.ruled;
   if (t.due) {
     return;
   }
   term_title(t);
-  if (r === null || t.sel !== null || t.lead || term_popup(t) || !View.view_running(t.v)) {
+  if (r === null || (t.doing === null && question_of(t) === null) || t.sel !== null || t.lead || term_popup(t) || !View.view_running(t.v)) {
     return term_paint(t);
   }
   const now  = Date.now();

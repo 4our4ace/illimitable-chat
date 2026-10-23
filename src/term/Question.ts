@@ -38,7 +38,7 @@
 
 import { term_form, term_form_lines } from "./Asks.ts";
 import * as Paint from "../ui/Paint.ts";
-import { STEP, popup_at, popup_entries, popup_foot, popup_lead, popup_rows } from "./Popup.ts";
+import { STEP, popup_at, popup_entries, popup_foot, popup_rows } from "./Popup.ts";
 import * as Screen from "../ui/Screen.ts";
 import type { Box, Chooser, Form, Target, Term } from "./Term.ts";
 
@@ -47,12 +47,12 @@ import type { Box, Chooser, Form, Target, Term } from "./Term.ts";
 const ARM = 500;
 
 // the most lines an answer takes: one taller (one naming what it keeps
-// by a long command, which the lead shows whole) shows its first lines
-// and its last, its scope, an ellipsis before the gap
+// by a long command, which the lead shows) shows its first lines and,
+// after an ellipsis, how it ends (its scope)
 const ANSWER = 3;
 
 // a question laid out at the input: what it was laid out for (its
-// picker), the rule over it, its lines and what each stands for (Box
+// picker, illi's form), the rule over it, its lines and what each stands for (Box
 // rows), the cursor's spot in them (null: hidden), its answers and lead
 // as laid out (Box's)
 export type Asked = { of: object; rule: Paint.Line; lines: Paint.Line[]; rows: Box["rows"]; at: Screen.Spot | null; shape: Pick<Box, "list" | "lines" | "tall" | "ahead" | "lead"> };
@@ -73,8 +73,7 @@ function question_illi(t: Term): boolean {
 // a paint: the chat's question shown stamped as it first shows
 // (t.asking.shown), the stamp kept while it shows (the line asked why,
 // another of the form's tabs too); hidden (a list over it, another
-// question in its place, the permission question closed while the
-// leader's key is awaited, another profile shown in the window:
+// question in its place, another profile shown in the window:
 // Member.ts), it shows anew after
 export function question_shown(t: Term): void {
   if (t.asking != null) {
@@ -90,8 +89,9 @@ export function question_held(t: Term): boolean {
   return question_illi(t) && (a!.shown == null || Date.now() - a!.shown < ARM);
 }
 
-// the most lines a question takes on a screen h rows tall (its answers
-// whole past them), and of them the most a line typed takes
+// the most lines a question takes on a screen h rows tall (more only for
+// more answers than that, a line each), and of them the most a line
+// typed takes
 function question_most(h: number): number {
   return Math.max(1, Math.floor(h / 2));
 }
@@ -108,19 +108,20 @@ export function question_laid(t: Term, w: number, h: number): Asked | null {
 }
 
 // a question's picker laid out w wide, on a screen h rows tall: over its
-// answers (or the line asked) the lines leading them, wrapped (Popup.ts
-// popup_lead), from those scrolled past (Chooser past), as many as leave
-// its answers room in question_most (a line at least); cut, a dim line
-// after them says how many more follow (none: how many are above) and
-// how they scroll. Its answers as a list's options are (Popup.ts
-// popup_rows), all of them, the lit one marked, each whole up to
-// question_cap's lines (past them: question_cut); a line asked, as the
-// input shows a message typed (its hint while empty), question_words at
-// most (its cursor's and those before), the cursor in it. Its rule: its
-// title, then its keys (where it has answers) and what the lit one takes
-// besides (its foot; a line's: what it takes, or why it won't do)
+// answers (or the line asked) the lines leading them (Chooser lead: why
+// it asks, what it would do), wrapped, from those scrolled past (Chooser
+// past), as many as leave its answers room in question_most (a line at
+// least); cut, a dim line after them says how many more follow (none:
+// how many are above) and how they scroll. Its answers as a list's
+// options are (Popup.ts popup_rows), all of them, the lit one marked,
+// each whole up to question_cap's lines (past them: question_cut); a line
+// asked, as the input shows a message typed (its hint while empty),
+// question_words at most (its cursor's and those before), the cursor in
+// it. Its rule: its title, then its keys (where it has answers) and what
+// the lit one takes besides (its foot; a line's: what it takes, or why it
+// won't do)
 function question_picker(t: Term, c: Chooser, w: number, h: number): Asked {
-  const lead  = popup_lead(c, w);
+  const lead  = (c.lead ?? []).flatMap((l) => Paint.runs_wrap(l, Math.max(1, w), false));
   const list  = popup_entries(c);
   const most  = question_most(h);
   const each  = c.ask !== null ? [] : list.map((_, e) => popup_rows(c, list, [e], w));
