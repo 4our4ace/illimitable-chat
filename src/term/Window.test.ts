@@ -60,11 +60,15 @@ test("the first member's output before it's up prints as it comes; its up turns 
   expect(window_step(w, { $: "resize", cols: 100, rows: 30 })).toEqual([{ $: "resize", cols: 100, rows: 30 }]);
 });
 
-test("the first member ending before it's up ends the window with its code, no modes to turn off", () => {
+test("the first member ending before it's up ends the window with its code, no modes to turn off; Ctrl+C meanwhile interrupts it", () => {
   const w = window_new(NONCE);
   window_step(w, { $: "start" });
   out(w, 1, "illi: config: nope\r\n");
   expect(window_step(w, { $: "exit", id: 1, code: 1 })).toEqual([{ $: "exit", code: 1, lines: [] }]);
+  const slow = window_new(NONCE);
+  window_step(slow, { $: "start" });
+  expect(window_step(slow, { $: "in", data: "\x03" })).toEqual([{ $: "kill", id: 1, signal: "SIGINT" }]);
+  expect(window_step(slow, { $: "exit", id: 1, code: 130 })).toEqual([{ $: "exit", code: 130, lines: [] }]);
 });
 
 test("a switch to a profile not open starts it, its output reaching no screen till it's up, keys waiting for it; then the title saved comes back", () => {
@@ -108,7 +112,7 @@ test("a hidden profile's state and end reach the one shown; the shown one's own 
 test("the shown member ending unasked shows the one shown before it; none left, the window ends with its code and lines", () => {
   const w = two();
   out(w, 2, { $: "say", text: "illi: not started: ~/x isn't trusted." });
-  expect(read(window_step(w, { $: "exit", id: 2, code: 1 }))).toEqual([{ send: 1, got: [{ $: "show", note: "illi in profile work ended: not started: ~/x isn't trusted." }] }]);
+  expect(read(window_step(w, { $: "exit", id: 2, code: 1 }))).toEqual([{ send: 1, got: [{ $: "show", switch: true, note: "illi in profile work ended: not started: ~/x isn't trusted." }] }]);
   out(w, 1, { $: "up" });
   out(w, 1, { $: "say", text: "illi: crashed: boom" });
   expect(window_step(w, { $: "exit", id: 1, code: 1 })).toEqual([{ $: "term", data: MODES_END }, { $: "exit", code: 1, lines: ["illi: crashed: boom"] }]);
