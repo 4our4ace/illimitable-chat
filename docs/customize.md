@@ -166,7 +166,7 @@ width its rows may take), `LINES`, `ILLI_PROJECT_DIR` and
 | `context_window.summarize_at` | illi's: the tokens past which old messages fold into the memory tree |
 | `agent.name` | the main agent, when not illi's own |
 | `permission_mode` | illi's mode: `auto`, `ask`, `read-only`, `yolo` |
-| `rate_limits.five_hour`, `seven_day` | the plan's limits as its vendor tells them: `used_percentage`, `resets_at` (epoch seconds); only when told |
+| `rate_limits.five_hour`, `seven_day` | the plan's limits as its vendor tells them, for the account in use: `used_percentage`, `resets_at` (epoch seconds); only when told |
 | `profile`, `busy`, `agents` | illi's: the profile, whether a turn runs, the subagents at work |
 
 Not given: `transcript_path`, `cost`, `output_style`, `vim`, `worktree`.

@@ -725,7 +725,7 @@ async function term_login(t: Term): Promise<void> {
     await done;
     term_unhint(t);
     term_note(t, "Signed in to ChatGPT. illi keeps the login in " + ChatGPT.own() + (config.LOGIN_SET === null ? "" : " (the file `login` names)") + " and renews it there.");
-    term_models(t);
+    term_account(t);
   } catch (err: any) {
     if (!stop.signal.aborted) {
       term_notify(t, "Login failed: " + err.message + ".", false, LOGIN_FAILED);
@@ -738,12 +738,20 @@ async function term_login(t: Term): Promise<void> {
   }
 }
 
-// the models ChatGPT lists, learned (ChatGPT.ts models; signed in): a
-// new one offered, each one's window known; the chat tells its views
-// (one run in another terminal learns them there)
-export function term_models(t: Term): void {
+// the ChatGPT account as it is now (ChatGPT.ts; signed in, and run
+// here, not in another terminal's view): its plan and usage asked
+// together, the login followed for a change of account, and the models
+// it lists learned (a new one offered, each one's window known); the
+// chat tells its views
+export function term_account(t: Term): void {
   const chat = t.chat;
-  if (chat !== null && config.OFFER.vendors.includes("chatgpt") && ChatGPT.signed()) {
+  if (chat === null || !config.OFFER.vendors.includes("chatgpt")) {
+    return;
+  }
+  ChatGPT.sync();
+  ChatGPT.follow();
+  if (ChatGPT.signed()) {
+    void ChatGPT.usage();
     void ChatGPT.models().then((fresh) => fresh !== null && Chat.change(chat));
   }
 }
@@ -757,6 +765,7 @@ function term_logout(t: Term): void {
   const gone = ChatGPT.logout();
   const left = ChatGPT.signed() ? " Now on opencode's login." : " /login signs in again.";
   term_note(t, (gone ? "Signed out of ChatGPT." : "illi has no login of its own.") + left);
+  term_account(t);
 }
 
 // stops all that runs, or the agent named; nothing running, says so

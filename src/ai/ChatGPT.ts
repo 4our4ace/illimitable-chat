@@ -15,9 +15,14 @@
 // opencode's other tools take on its file, and written back, so opencode
 // stays signed in. A response with web search ends with no output items
 // (the backend's quirk): they are taken as they streamed. Its usage is
-// the plan's, never billed; each response's headers tell how much of the
-// plan's rate limits (its 5-hour and weekly windows) is used (`limits`,
-// for the view). The backend lists its models (`models`): each one shown
+// the plan's, never billed. What the account's plan is and how much of
+// its rate limits (its 5-hour and weekly windows) is used are one record,
+// kept for the account they are of (`told`, for the view): asked of the
+// usage endpoint together (`usage`: at start, after /login and /logout,
+// when the login changes on disk, as another terminal or opencode may
+// change it: `sync`, `follow`), and kept current by each response's
+// headers. A change of account drops the old record at once, so no view
+// shows one account's plan with another's usage. The backend lists its models (`models`): each one shown
 // is offered, a new one too, its context window known (Pick.ts), kept in
 // config.MODELS_FILE for the next start.
 
@@ -45,6 +50,10 @@ type State = { res: any; error: any; use: any; items: any[] };
 // =========
 
 const URL    = "https://chatgpt.com/backend-api/codex/responses";
+// the account's plan and its rate limits, as Codex's /status asks them
+const USAGE  = "https://chatgpt.com/backend-api/wham/usage";
+// how often the login file is looked at for a change of account (ms)
+const FOLLOW = 5000;
 // the models' list, as a Codex client this new asks it
 const LIST   = "https://chatgpt.com/backend-api/codex/models?client_version=1.0.0";
 const AUTH   = "https://auth.openai.com";
@@ -75,25 +84,153 @@ const UN = 8;
 // is none: in 2026-10, a plan's primary was its week, its secondary none)
 const WINDOWS = ["primary", "secondary"];
 
-// the login in use; the token the backend refused; the renewal running;
-// the plan's limits, as the last response that told them did
+// the login in use, and its file as it was when read (sync); the token
+// the backend refused; the renewal running; how many changes of account
+// so far (an answer asked before one is dropped); the account's plan as
+// last told (its key: the account it is of; state: asking it now, or
+// told by the usage endpoint); what to call as it changes (Chat.change);
+// whether a failed ask was logged; the login file followed
 let held: Login | null = null;
+let seen = "";
 let spoiled = "";
 let renewing: Promise<Login> | null = null;
-let plan: Limit[] = [];
+let epoch = 0;
+let record: { key: string; tier: string; limits: Limit[]; state?: "asking" | "told" } | null = null;
+let watcher: () => void = () => {};
+let logged = false;
+let following: ReturnType<typeof setInterval> | undefined;
 
 // ChatGPT
 // =======
 
 export namespace ChatGPT {
 
-  // a token good for a request
+  // a token good for a request (the login as on disk now: sync); a login
+  // made while it renewed wins over the renewal
   export async function token(): Promise<string> {
+    ChatGPT.sync();
     if (held === null || !ChatGPT.good(held)) {
+      const at = epoch;
       renewing ??= ChatGPT.renew().finally(() => (renewing = null));
-      held = await renewing;
+      const got = await renewing;
+      if (epoch !== at) {
+        return ChatGPT.token();
+      }
+      held = got;
     }
     return held.access;
+  }
+
+  // the login file looked at (a stat; read again only once it changed:
+  // its path, inode, size or times): the login in it held; a change of
+  // account drops the old account's record and tells the watcher (true:
+  // it changed). A rewrite for the same account (a renewal, illi's or
+  // opencode's) keeps the record
+  export function sync(): boolean {
+    const file = ChatGPT.file();
+    let now = "";
+    try {
+      const st = fs.statSync(file);
+      now = [file, st.ino, st.size, st.mtimeMs, st.ctimeMs].join(" ");
+    } catch {}
+    if (now === seen) {
+      return false;
+    }
+    seen = now;
+    const was = ChatGPT.key();
+    try {
+      held = now === "" ? null : ChatGPT.login(ChatGPT.entry(file).entry);
+    } catch {
+      held = null;
+    }
+    if (ChatGPT.key() === was) {
+      return false;
+    }
+    epoch += 1;
+    record = null;
+    watcher();
+    return true;
+  }
+
+  // the login file followed while illi runs (each FOLLOW): a change of
+  // account asks the new one's plan (usage)
+  export function follow(): void {
+    following ??= setInterval(() => ChatGPT.sync() && void ChatGPT.usage(), FOLLOW);
+    following.unref?.();
+  }
+
+  // what to call as the plan or the account changes (one: the chat's)
+  export function watch(fn: () => void): void {
+    watcher = fn;
+  }
+
+  // the account a token is of ("": none known), and the one in use: its
+  // account id, else its user
+  export function key(token = held?.access ?? ""): string {
+    if (token === "") {
+      return "";
+    }
+    const claims = ChatGPT.claims(token);
+    return ChatGPT.account_id(token) || claims.chatgpt_user_id || claims.sub || "";
+  }
+
+  // the account id a token's requests name: the login's, if it is the one
+  // held, else its own claim
+  export function account_id(token: string): string {
+    return (token === held?.access ? held.account : "") || ChatGPT.claims(token).chatgpt_account_id || "";
+  }
+
+  // the account's plan and rate limits asked of the usage endpoint
+  // together, while the account it asks for is still the one in use
+  // (true: told). A failure leaves the record untold (logged once), and
+  // never spoils the token
+  export async function usage(): Promise<boolean> {
+    const at = epoch;
+    if (ChatGPT.key() !== "" && record === null) {
+      record = { key: ChatGPT.key(), tier: "", limits: [], state: "asking" };
+      watcher();
+    }
+    try {
+      const token = await ChatGPT.token();
+      const res   = await fetch(USAGE, { headers: { authorization: "Bearer " + token, "chatgpt-account-id": ChatGPT.account_id(token), originator: "illi", "user-agent": "illi" }, signal: AbortSignal.timeout(15e3) });
+      const told  = res.ok && (res.headers.get("content-type") ?? "").includes("json") ? ChatGPT.told_by(await res.json(), Date.now()) : null;
+      if (told === null) {
+        throw new Error("HTTP " + res.status);
+      }
+      if (epoch !== at || ChatGPT.key(token) !== ChatGPT.key()) {
+        return false;
+      }
+      record = { key: ChatGPT.key(token), ...told, state: "told" };
+      watcher();
+      return true;
+    } catch (err: any) {
+      if (!logged) {
+        logged = true;
+        console.error("chatgpt: the plan's usage wasn't told: " + err?.message);
+      }
+      if (epoch === at && record?.state === "asking") {
+        record = { ...record, state: undefined };
+        watcher();
+      }
+      return false;
+    }
+  }
+
+  // the usage endpoint's answer as a plan: its type, each window it tells
+  // (its share used, its length, when it starts anew); null: no plan in it
+  export function told_by(body: any, now: number): { tier: string; limits: Limit[] } | null {
+    if (typeof body?.plan_type !== "string") {
+      return null;
+    }
+    const limits = [body.rate_limit?.primary_window, body.rate_limit?.secondary_window].flatMap((w: any): Limit[] => {
+      const used   = Number(w?.used_percent);
+      const length = Number(w?.limit_window_seconds);
+      const after  = Number(w?.reset_after_seconds);
+      const at     = Number(w?.reset_at);
+      const reset  = Number.isFinite(after) ? now + after * 1000 : Number.isFinite(at) ? at * 1000 : now;
+      return Number.isFinite(used) && length > 0 ? [{ window: Math.round(length / 60), used, reset }] : [];
+    });
+    return { tier: body.plan_type, limits };
   }
 
   // the backend refused this token: the next request renews it
@@ -236,7 +373,7 @@ export namespace ChatGPT {
       const file = ChatGPT.own();
       const kept = json_object(file) ?? {};
       ChatGPT.keep(file, kept, {}, await tokens.json(), null);
-      held = null;
+      ChatGPT.sync();
       return;
     }
     throw new Error("the code expired after 15 minutes: /login for another");
@@ -249,7 +386,7 @@ export namespace ChatGPT {
       return false;
     }
     fs.rmSync(config.OWN_LOGIN);
-    held = null;
+    ChatGPT.sync();
     return true;
   }
 
@@ -326,8 +463,7 @@ export namespace ChatGPT {
   export async function models(): Promise<string[] | null> {
     try {
       const token  = await ChatGPT.token();
-      const claims = ChatGPT.claims(token);
-      const init   = { headers: { authorization: "Bearer " + token, "chatgpt-account-id": held?.account || claims.chatgpt_account_id || "", originator: "illi" }, signal: AbortSignal.timeout(15e3) };
+      const init   = { headers: { authorization: "Bearer " + token, "chatgpt-account-id": ChatGPT.account_id(token), originator: "illi" }, signal: AbortSignal.timeout(15e3) };
       const res    = await fetch(LIST, init);
       const list: any[] = res.ok ? ((await res.json()) as any).models ?? [] : [];
       const shown  = list.filter((m) => m?.visibility === "list" && typeof m.slug === "string").sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99));
@@ -350,7 +486,7 @@ export namespace ChatGPT {
     const claims = ChatGPT.claims(token);
     const out: Record<string, string> = {
       authorization        : "Bearer " + token,
-      "chatgpt-account-id" : held?.account || claims.chatgpt_account_id || "",
+      "chatgpt-account-id" : ChatGPT.account_id(token),
       originator           : "illi",
       "user-agent"         : "illi",
       session_id           : ChatGPT.session(ask),
@@ -373,8 +509,13 @@ export namespace ChatGPT {
 
   // the plan's limits a response's headers tell: each window's share
   // used, its length, when it starts anew; one that tells none keeps
-  // those known
-  export function hear(headers: Headers): void {
+  // those known. Only a response to the account in use (its token's) is
+  // heard: one from an account since left changes nothing
+  export function hear(headers: Headers, token: string): void {
+    const key = ChatGPT.key(token);
+    if (key === "" || key !== ChatGPT.key()) {
+      return;
+    }
     const now  = Date.now();
     const told = WINDOWS.flatMap((w): Limit[] => {
       const num    = (name: string) => Number(headers.get("x-codex-" + w + "-" + name) ?? NaN);
@@ -385,7 +526,10 @@ export namespace ChatGPT {
       const reset  = Number.isFinite(after) ? now + after * 1000 : Number.isFinite(at) ? at * 1000 : now;
       return Number.isFinite(used) && window > 0 ? [{ window, used, reset }] : [];
     });
-    plan = told.length > 0 ? told : plan;
+    if (told.length > 0) {
+      record = { key, tier: record?.key === key ? record.tier : "", limits: told, state: record?.key === key ? record.state : undefined };
+      watcher();
+    }
   }
 
   // a plan's limit used up (the backend's usage_limit_reached): which
@@ -393,7 +537,7 @@ export namespace ChatGPT {
   // error tells (resets_at, resets_in_seconds), else as that window does
   export function spent(err: any): string {
     const now  = Date.now();
-    const full = [...plan].sort((a, b) => b.used - a.used || b.reset - a.reset)[0];
+    const full = [...(ChatGPT.told()?.limits ?? [])].sort((a, b) => b.used - a.used || b.reset - a.reset)[0];
     const at   = Number(err?.resets_at) > 0 ? Number(err.resets_at) * 1000 : Number(err?.resets_in_seconds) > 0 ? now + Number(err.resets_in_seconds) * 1000 : full?.reset ?? 0;
     const name = full === undefined ? "usage" : ChatGPT.window(full.window);
     return "your ChatGPT plan's " + name + " limit is used up" + (at > now ? "; it resets at " + Agent.when(at) : "");
@@ -417,11 +561,16 @@ export namespace ChatGPT {
     return typeof type === "string" ? type : "";
   }
 
-  // the plan as the views show it (null: neither its name nor its limits
-  // told yet)
+  // the plan of the account in use as the views show it: its record's
+  // (the usage endpoint's type over the token's), else the token's alone
+  // with no limits (never another account's); null: no account in use
   export function told(): Plan | null {
-    const tier = ChatGPT.tier();
-    return tier === "" && plan.length === 0 ? null : { brand: "ChatGPT", tier, limits: plan };
+    const key = ChatGPT.key();
+    if (key === "") {
+      return null;
+    }
+    const own = record?.key === key ? record : null;
+    return { brand: "ChatGPT", tier: own?.tier || ChatGPT.tier(), limits: own?.limits ?? [], ...(own?.state === undefined ? {} : { state: own.state }) };
   }
 
   // one stream event (OpenAI.read); the last, if its response lists no
@@ -442,7 +591,7 @@ export namespace ChatGPT {
     idle    : 1200e3,
     url     : URL,
     auth    : { token: () => ChatGPT.token(), spoil: (token) => ChatGPT.spoil(token) },
-    heard   : (res) => ChatGPT.hear(res.headers),
+    heard   : (res, token) => ChatGPT.hear(res.headers, token),
     headers : (token, ask) => ChatGPT.headers(token, ask),
     body    : (...args) => ChatGPT.body(...args),
     marks   : () => 0,

@@ -22,6 +22,7 @@
 
 import * as fs from "node:fs";
 import { AskAI, type Call, type End, type Event, type Kind } from "../ai/AskAI.ts";
+import { ChatGPT } from "../ai/ChatGPT.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
 import { Compactor } from "./Compactor.ts";
@@ -259,6 +260,7 @@ export namespace Chat {
     };
     chat.context = Plugins.context({ cwd });
     Machine.watch(() => Chat.change(chat));
+    ChatGPT.watch(() => Chat.change(chat));
     // a saved pick not offered gave way: told once
     const saved = mem.pick as Pick | null;
     if (saved !== null && Pick.label(saved) !== Pick.label(pick)) {

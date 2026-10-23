@@ -5,7 +5,10 @@
 // used as it is; one near its end, or refused, is renewed once however many
 // ask, and written back with the file's other entries kept. The plan's
 // limits, as a response's headers tell them; a limit used up says which
-// and when it resets. A login file that won't parse says so.
+// and when it resets. A login file that won't parse says so. The plan and
+// its usage are one record of the account they are of: a new login
+// drops the old one's at once; the usage endpoint tells both together;
+// an answer or a reply for an account since left changes nothing.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -31,10 +34,15 @@ function write(access: string, expires: number): void {
   fs.writeFileSync(FILE, JSON.stringify({ anthropic: { type: "api", key: "kept" }, openai }));
 }
 
-// fetch stood in for: each renewal it was asked, and the tokens it gives
+// fetch stood in for: each renewal it was asked, and the tokens it gives;
+// the usage endpoint answering as `usage` says
 const asked: URLSearchParams[] = [];
+let usage: () => Promise<Response> = async () => new Response("down", { status: 503 });
 const real = globalThis.fetch;
-globalThis.fetch = (async (_url: string, init: any) => {
+globalThis.fetch = (async (url: string, init: any) => {
+  if (String(url).endsWith("/wham/usage")) {
+    return usage();
+  }
   asked.push(new URLSearchParams(String(init.body)));
   await Bun.sleep(20);
   const access = jwt({ ...ACCOUNT, n: asked.length });
@@ -56,7 +64,6 @@ test("a good token is used as it is, its account read from it", async () => {
 
 test("a token near its end is renewed once, however many ask, and written back", async () => {
   write(jwt(ACCOUNT), Date.now() + 60e3);
-  ChatGPT.spoil(await ChatGPT.token().catch(() => ""));
   asked.length = 0;
   const tokens = await Promise.all([ChatGPT.token(), ChatGPT.token(), ChatGPT.token()]);
   expect(new Set(tokens).size).toBe(1);
@@ -91,12 +98,14 @@ test("renewal waits for another program's lock on the file", async () => {
 
 test("no login file says how to sign in", async () => {
   fs.rmSync(FILE);
-  ChatGPT.spoil(await ChatGPT.token());
   await expect(ChatGPT.token()).rejects.toThrow("opencode auth login");
 });
 
 test("a response's headers tell the plan's limits, a window 0 minutes long none; one telling none keeps them", () => {
-  const now = Date.now();
+  const now    = Date.now();
+  const access = jwt(ACCOUNT);
+  write(access, now + 3600e3);
+  ChatGPT.sync();
   ChatGPT.hear(new Headers({
     "x-codex-primary-used-percent"        : "23",
     "x-codex-primary-window-minutes"      : "300",
@@ -104,15 +113,15 @@ test("a response's headers tell the plan's limits, a window 0 minutes long none;
     "x-codex-secondary-used-percent"      : "61",
     "x-codex-secondary-window-minutes"    : "10080",
     "x-codex-secondary-reset-at"          : String(Math.round(now / 1000) + 3 * 86400),
-  }));
+  }), access);
   const [hours, week] = ChatGPT.told()!.limits;
   expect(hours).toMatchObject({ window: 300, used: 23 });
   expect(Math.abs(hours.reset - (now + 7800e3))).toBeLessThan(1000);
   expect(week).toMatchObject({ window: 10080, used: 61 });
   expect(Math.abs(week.reset - (now + 3 * 86400e3))).toBeLessThan(1000);
-  ChatGPT.hear(new Headers({ "content-type": "text/event-stream" }));
+  ChatGPT.hear(new Headers({ "content-type": "text/event-stream" }), access);
   expect(ChatGPT.told()!.limits).toHaveLength(2);
-  ChatGPT.hear(new Headers({ "x-codex-primary-used-percent": "1", "x-codex-primary-window-minutes": "10080", "x-codex-primary-reset-after-seconds": "588282", "x-codex-secondary-used-percent": "0", "x-codex-secondary-window-minutes": "0" }));
+  ChatGPT.hear(new Headers({ "x-codex-primary-used-percent": "1", "x-codex-primary-window-minutes": "10080", "x-codex-primary-reset-after-seconds": "588282", "x-codex-secondary-used-percent": "0", "x-codex-secondary-window-minutes": "0" }), access);
   expect(ChatGPT.told()).toMatchObject({ brand: "ChatGPT", limits: [{ window: 10080, used: 1, reset: expect.any(Number) }] });
 });
 
@@ -126,7 +135,10 @@ test("a login file that won't parse says which, and that /login replaces it", as
 });
 
 test("a plan's usage limit used up is no busy service: it says which limit and when it resets", () => {
-  const now = Date.now();
+  const now    = Date.now();
+  const access = jwt(ACCOUNT);
+  write(access, now + 3600e3);
+  ChatGPT.sync();
   ChatGPT.hear(new Headers({
     "x-codex-primary-used-percent"        : "100",
     "x-codex-primary-window-minutes"      : "300",
@@ -134,7 +146,7 @@ test("a plan's usage limit used up is no busy service: it says which limit and w
     "x-codex-secondary-used-percent"      : "40",
     "x-codex-secondary-window-minutes"    : "10080",
     "x-codex-secondary-reset-after-seconds": "86400",
-  }));
+  }), access);
   const body = { type: "usage_limit_reached", message: "The usage limit has been reached", plan_type: "plus" };
   expect(Agent.spent("chatgpt", 429, body)).toBe("your ChatGPT plan's 5-hour limit is used up; it resets at " + Agent.when(now + 600e3));
   const told = { ...body, resets_at: Math.round(now / 1000) + 1200 };
@@ -156,4 +168,77 @@ test("a failed request's why shows the API's message, short; an HTML page none",
   const long = Agent.reason(JSON.stringify({ items: "x".repeat(5000) }));
   expect(long.length).toBe(200);
   expect(long.endsWith("…")).toBe(true);
+});
+
+// a login of account `id` on plan `tier`, written over the file (another
+// size each, as a new login's is): its token
+function login(id: string, tier: string, user = ""): string {
+  const access = jwt({ "https://api.openai.com/auth": { chatgpt_account_id: id, chatgpt_plan_type: tier, ...(user === "" ? {} : { chatgpt_user_id: user }) } });
+  write(access, Date.now() + 3600e3);
+  return access;
+}
+
+// headers telling a 5-hour window used this much
+const used = (n: number) => new Headers({ "x-codex-primary-used-percent": String(n), "x-codex-primary-window-minutes": "300", "x-codex-primary-reset-after-seconds": "60" });
+
+// the usage endpoint's answer: a plan, its week used this much
+const plan = (tier: string, n: number) => Response.json({ plan_type: tier, rate_limit: { allowed: true, limit_reached: false, primary_window: { used_percent: n, limit_window_seconds: 604800, reset_after_seconds: 3600, reset_at: 0 }, secondary_window: null } });
+
+test("the plan and its usage are one record of the account they are of: a new login drops the old one's usage at once, told once; the usage endpoint tells both together", async () => {
+  let told = 0;
+  ChatGPT.watch(() => told++);
+  const a = login("acct-a", "plus");
+  ChatGPT.sync();
+  ChatGPT.hear(used(40), a);
+  expect(ChatGPT.told()).toEqual({ brand: "ChatGPT", tier: "plus", limits: [{ window: 300, used: 40, reset: expect.any(Number) }] });
+  told = 0;
+  login("acct-b", "pro");
+  expect(ChatGPT.sync()).toBe(true);
+  expect([ChatGPT.told(), told]).toEqual([{ brand: "ChatGPT", tier: "pro", limits: [] }, 1]);
+  ChatGPT.hear(used(90), a);
+  expect(ChatGPT.told()!.limits).toEqual([]);
+  usage = async () => plan("prolite", 7);
+  expect(await ChatGPT.usage()).toBe(true);
+  expect(ChatGPT.told()).toEqual({ brand: "ChatGPT", tier: "prolite", limits: [{ window: 10080, used: 7, reset: expect.any(Number) }], state: "told" });
+  ChatGPT.watch(() => {});
+});
+
+test("a renewal or any rewrite for the same account keeps its record; an answer asked before a change of account is dropped; a failed ask leaves it untold", async () => {
+  const b = login("acct-b", "pro");
+  ChatGPT.sync();
+  usage = async () => plan("pro", 12);
+  await ChatGPT.usage();
+  login("acct-b", "pro");
+  expect(ChatGPT.sync()).toBe(false);
+  expect(ChatGPT.told()!.limits).toHaveLength(1);
+  let answer = (_r: Response) => {};
+  usage = () => new Promise<Response>((ok) => (answer = ok));
+  const asking = ChatGPT.usage();
+  await Bun.sleep(10);
+  const c = login("acct-c", "plus");
+  ChatGPT.sync();
+  answer(plan("pro", 99));
+  expect(await asking).toBe(false);
+  expect(ChatGPT.told()).toEqual({ brand: "ChatGPT", tier: "plus", limits: [] });
+  usage = async () => new Response("<html>", { status: 200, headers: { "content-type": "text/html" } });
+  const states: unknown[] = [];
+  ChatGPT.watch(() => states.push(ChatGPT.told()?.state));
+  expect(await ChatGPT.usage()).toBe(false);
+  expect(states).toEqual(["asking", undefined]);
+  expect(ChatGPT.headers(c, { model: "m", system: "s" } as any)["chatgpt-account-id"]).toBe("acct-c");
+  expect(ChatGPT.headers(b, { model: "m", system: "s" } as any)["chatgpt-account-id"]).toBe("acct-b");
+  ChatGPT.watch(() => {});
+});
+
+test("a login with no account id is keyed by its user; one with neither shows no plan, never another's", () => {
+  login("", "plus", "user-1");
+  ChatGPT.sync();
+  ChatGPT.hear(used(5), jwt({ "https://api.openai.com/auth": { chatgpt_user_id: "user-1" } }));
+  expect(ChatGPT.told()!.limits).toHaveLength(1);
+  login("", "plus", "user-2");
+  ChatGPT.sync();
+  expect(ChatGPT.told()!.limits).toEqual([]);
+  write(jwt({}), Date.now() + 3600e3);
+  ChatGPT.sync();
+  expect(ChatGPT.told()).toBeNull();
 });

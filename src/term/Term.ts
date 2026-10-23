@@ -38,7 +38,7 @@ import { term_paste } from "./Attach.ts";
 import { Chat } from "../chat/Chat.ts";
 import { Lock } from "../chat/Lock.ts";
 import { ChatGPT } from "../ai/ChatGPT.ts";
-import { term_models } from "./Commands.ts";
+import { term_account } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import * as Draw from "../ui/Draw.ts";
@@ -599,7 +599,7 @@ export async function term_start(): Promise<void> {
   term_trouble(t, told);
   term_hints(t);
   status_set(t);
-  term_models(t);
+  term_account(t);
   term_update(t);
 }
 

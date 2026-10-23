@@ -125,8 +125,9 @@ export function term_age(ms: number): string {
 // or nothing told yet: nothing): its head, the plan named (ChatGPT Pro;
 // as Pro, else not at all, if it won't fit), then each of its windows, a
 // label a line: the share used and when it starts anew, a bar under it
-// (in the accent, as the context's: term_bar); none told yet, a line
-// says when it will be. What won't fit says less
+// (in the accent, as the context's: term_bar); none told, a line says
+// why: being asked, a plan with no limits, else that a reply tells them.
+// What won't fit says less
 function term_side_plan(t: Term, w: number): Item[] {
   const told  = t.v.use.plan;
   if (told === null) {
@@ -142,7 +143,8 @@ function term_side_plan(t: Term, w: number): Item[] {
     const used  = term_pct(share, c);
     return [term_row(w, term_window(l.window), [used, Paint.Run(left > 0 ? " · resets " + term_left(left) : " · reset", Paint.DIM)], [used]), term_bar(share, w, c)];
   });
-  return [head, ...(shown.length > 0 ? shown : [[[Paint.Run("shown after a reply", Paint.DIM)], null] as Item])];
+  const none  = told.state === "asking" ? "asking…" : told.state === "told" ? "no limits" : "shown after a reply";
+  return [head, ...(shown.length > 0 ? shown : [[[Paint.Run(none, Paint.DIM)], null] as Item])];
 }
 
 // what the calls use, w wide, a label a line: how full the chat a turn
