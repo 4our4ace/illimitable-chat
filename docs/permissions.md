@@ -107,10 +107,10 @@ what you were typing comes back once you answer:
 ── Allow shell? · ↑↓ Enter · Esc no ───────────────────────────────────────────
 Why: git push --force origin main rewrites or deletes history
 git push --force origin main
-> Yes
-  Yes, and don't ask again for git push --force origin main in this project
-  No
-  No, and say why
+> ○ Yes
+  ○ Yes, and don't ask again for git push --force origin main in this project
+  ○ No
+  ○ No, and say why
 ───────────────────────────────────────────────────────────────────────────────
 ● illi                                                                auto mode
 ```

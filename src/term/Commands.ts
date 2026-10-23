@@ -593,7 +593,7 @@ export function term_chooser(t: Term, title: string, names: string[], about: str
 // question's Esc), what its rule says of the lit one, the lines leading
 // the answers (why it asks, what it would do)
 export function term_question(t: Term, title: string, names: string[], about: string[], pick: (k: number) => void, more: { keys?: Chooser["keys"]; foot?: Chooser["foot"]; lead?: Chooser["lead"] } = {}): void {
-  t.question = { title, names, about, lead: more.lead, here: -1, pick, find: null, shown: Screen.ed_rank("", names), at: 0, top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null };
+  t.question = { title, names, about, lead: more.lead, answers: true, here: -1, pick, find: null, shown: Screen.ed_rank("", names), at: 0, top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null };
   t.choose   = null;
 }
 

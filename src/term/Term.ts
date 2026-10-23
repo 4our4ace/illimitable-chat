@@ -276,7 +276,8 @@ export type Under = { $: "popup" } | { $: "hit"; hit: Hit } | { $: "copy"; copy:
 // searched; key: the key that opened it, which closes it (Ctrl+P's);
 // past: the lines leading it scrolled past; lead: lines over a
 // question's answers (why it asks, what it would do), wrapped and
-// cleaned as laid out (Question.ts);
+// cleaned as laid out (Question.ts); answers: a question's options, each
+// marked an answer (GLYPH.option) as nothing is picked yet;
 // detail: lines under them of the lit option k, made for w columns (the
 // model picker's autocompact gauge)
 export type Chooser = {
@@ -290,6 +291,7 @@ export type Chooser = {
   key?   : string;
   past?  : number;
   lead?  : Paint.Line[];
+  answers?: boolean;
   here   : number;
   pick   : (k: number) => void;
   find   : Screen.Ed | null;

@@ -157,7 +157,7 @@ function popup_picker(c: Chooser, w: number, h: number, was: number): Laid {
 // the lit one's detail after a blank line, as tall as any option's
 function popup_measure(c: Chooser): Measure {
   const lw    = Paint.text_width(Paint.lit_lead(true));
-  const mark  = c.here < 0 ? 0 : 2;
+  const mark  = popup_dotted(c) ? 2 : 0;
   const wide  = Math.max(0, ...c.names.map((name) => popup_name_width(c, name)));
   const whole = c.names.map((_, k) => {
     const about = Paint.text_width(Paint.text_clean(c.about[k]));
@@ -203,6 +203,22 @@ function popup_act(c: Chooser, name: string): boolean {
   return c.here >= 0 && name.startsWith("+ ");
 }
 
+// whether the options carry a dot after the lit mark: a list with one in
+// use (GLYPH.here on it, GLYPH.tab on the rest), a question's answers
+// (GLYPH.option each); with the columns it takes, before an option's name
+// (none for one that makes something new: its "+" in the dot's place)
+function popup_dotted(c: Chooser): boolean {
+  return c.here >= 0 || c.answers === true;
+}
+
+function popup_dot(c: Chooser, k: number): string | null {
+  return !popup_dotted(c) || popup_act(c, c.names[k]) ? null : c.here >= 0 ? (k === c.here ? GLYPH.here : GLYPH.tab) : GLYPH.option;
+}
+
+function popup_dot_width(c: Chooser, name: string): number {
+  return popup_dotted(c) && !popup_act(c, name) ? 2 : 0;
+}
+
 // the columns an option's name takes after the marks (one that makes
 // something new: its "+" in the mark's place)
 function popup_name_width(c: Chooser, name: string): number {
@@ -212,7 +228,7 @@ function popup_name_width(c: Chooser, name: string): number {
 // the lines an option's name takes within iw columns after its marks
 // (popup_name_lines): one where it fits, unwrapped
 function popup_name_tall(c: Chooser, name: string, iw: number): number {
-  const room = iw - Paint.text_width(Paint.lit_lead(true)) - (c.here < 0 || popup_act(c, name) ? 0 : 2);
+  const room = iw - Paint.text_width(Paint.lit_lead(true)) - popup_dot_width(c, name);
   return Paint.text_width(Paint.text_clean(name)) <= room ? 1 : popup_name_lines(c, name, iw).length;
 }
 
@@ -224,7 +240,7 @@ function popup_name_tall(c: Chooser, name: string, iw: number): number {
 // cleaned as text is (Paint.text_clean), where the search counts it (none
 // lit: the name cleaned in one piece, a long one as fast as a short)
 function popup_name_lines(c: Chooser, name: string, iw: number, ink = Paint.INK, lit = Paint.INK, at: number[] = []): Paint.Line[] {
-  const room = iw - Paint.text_width(Paint.lit_lead(true)) - (c.here < 0 || popup_act(c, name) ? 0 : 2);
+  const room = iw - Paint.text_width(Paint.lit_lead(true)) - popup_dot_width(c, name);
   const runs: Paint.Line = [];
   (at.length === 0 ? [name] : [...name]).forEach((ch, j) => {
     const s    = at.includes(j) ? lit : ink;
@@ -398,8 +414,9 @@ export function popup_page(t: Term, c: Chooser, key: string): void {
 
 // an entry of the picker's list as its lines, iw wide, each with what it
 // stands for: a group's head (in the accent) or the blank before it;
-// else an option (its index among those shown): its name (its first
-// line after the marks, the rest indented under it), what it is from the
+// else an option (its index among those shown): its marks (the lit one's
+// GLYPH.lit, then its dot: popup_dot), its name (its first line after
+// the marks, the rest indented under it), what it is from the
 // column after the widest name on one line (wide), cut first
 // (popup_about), and at its right end its aside, which gives way next; a
 // name too wide for a line wraps, without the rest
@@ -412,8 +429,8 @@ function popup_entry(c: Chooser, e: string | number, iw: number, wide: number): 
   const m     = c.shown[e];
   const name  = c.names[m.k];
   const here  = e === c.at;
-  const act   = popup_act(c, name);
-  const marks = [Paint.Run(Paint.lit_lead(here), bold), ...(c.here < 0 || act ? [] : [Paint.Run((m.k === c.here ? GLYPH.here : GLYPH.tab) + " ", Paint.DIM)])];
+  const dot   = popup_dot(c, m.k);
+  const marks = [Paint.Run(Paint.lit_lead(here), bold), ...(dot === null ? [] : [Paint.Run(dot + " ", Paint.DIM)])];
   const lines = popup_name_lines(c, name, iw, here ? bold : Paint.INK, lit, m.hay === true ? [] : m.at);
   const aim: Target = { $: "option", k: m.k };
   const pad   = Paint.Run(" ".repeat(Paint.line_width(marks)));
@@ -423,7 +440,7 @@ function popup_entry(c: Chooser, e: string | number, iw: number, wide: number): 
   const head  = [...marks, ...lines[0]];
   const side  = Paint.text_clean(c.aside?.[m.k] ?? "");
   const keep  = side !== "" && Paint.line_width(head) + 2 + Paint.text_width(side) <= iw;
-  const from  = Paint.text_width(Paint.lit_lead(true)) + (c.here < 0 ? 0 : 2) + wide + 2;
+  const from  = Paint.text_width(Paint.lit_lead(true)) + (popup_dotted(c) ? 2 : 0) + wide + 2;
   const space = iw - from - (keep ? Paint.text_width(side) + 2 : 0);
   const about = space < 1 ? "" : popup_about(Paint.text_clean(c.about[m.k]), space);
   const line  = about === "" ? head : [...head, Paint.Run(" ".repeat(Math.max(0, from - Paint.line_width(head)))), Paint.Run(about, Paint.DIM)];
