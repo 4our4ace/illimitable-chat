@@ -52,8 +52,10 @@ export type Line = Run[];
 
 // a block in lines laid out: its first line, the line past its last, its
 // first message's id and size, whether open (the line is its bar);
-// a run of work's or a recap's (act: a click opens or closes it, n 0)
-export type Mark = { from: number; to: number; id: number; n: number; open: boolean; act?: true };
+// a run of work's or a recap's (act: a click opens or closes it, n 0); a
+// message inside an open run, whole or folded (fold: its key, View.row_fold:
+// a click folds or unfolds it, n 0)
+export type Mark = { from: number; to: number; id: number; n: number; open: boolean; act?: true; fold?: string };
 
 // rows laid out from the last up, only as far as asked (laid_up): the
 // rows, the first of them laid out, their lines as from line `at` on,
@@ -288,8 +290,9 @@ function lines_join<T>(xs: T[], f: (x: T) => Line[]): Line[] {
 
 // rows a blank line apart: one block per message, in its order; each
 // block's lines marked, as laid out from line `at` on (a click opens or
-// shuts it: Term.ts)
-export function rows_lines(rows: View.Row[], w: number, marks: Mark[] = [], at = 0): Line[] {
+// shuts it: Term.ts); in an open run of work (`run`), each message's
+// lines too, whole or folded (a click folds or unfolds it)
+export function rows_lines(rows: View.Row[], w: number, marks: Mark[] = [], at = 0, run = false): Line[] {
   const out: Line[] = [];
   for (const [k, row] of rows.entries()) {
     if (k > 0) {
@@ -297,8 +300,11 @@ export function rows_lines(rows: View.Row[], w: number, marks: Mark[] = [], at =
     }
     const from  = at + out.length;
     const lines = row.$ === "Box" ? box_lines(row, w, marks, from) : row.$ === "Act" || row.$ === "Rule" ? act_lines(row, w, marks, from) : row_cached(row, w);
+    const fold  = row.$ === "Fold" ? row.key : run ? View.row_fold(row) : null;
     if (row.$ === "Sum") {
       marks.push({ from, to: from + lines.length, id: row.id, n: row.n, open: false });
+    } else if (fold !== null) {
+      marks.push({ from, to: from + lines.length, id: row.$ === "Msg" ? row.id ?? -1 : -1, n: 0, open: row.$ === "Msg", fold });
     }
     out.push(...lines, ...images_lines(row));
   }
@@ -389,7 +395,8 @@ function canvas_shade(hex: string): string {
 }
 
 // a run of work: one dim line saying what was done (▸; a click opens
-// it), or opened (▾) over its rows, a dim bar at their left; a recap so
+// it), or opened (▾) over its rows, a dim bar at their left, each
+// message marked (a click folds it to a line, ▸, and back); a recap so
 // too, its line a rule across the chat, its name in the middle
 function act_lines(row: View.Row & { $: "Act" | "Rule" }, w: number, marks: Mark[], at: number): Line[] {
   const text = (row.open ? "▾ " : "▸ ") + text_clean(row.text);
@@ -400,7 +407,7 @@ function act_lines(row: View.Row & { $: "Act" | "Rule" }, w: number, marks: Mark
   if (!row.open) {
     return [head];
   }
-  return [head, ...rows_lines(row.rows, w - 2, marks, at + 1).map((l) => [Run("│ ", DIM), ...l])];
+  return [head, ...rows_lines(row.rows, w - 2, marks, at + 1, true).map((l) => [Run("│ ", DIM), ...l])];
 }
 
 // an open block: its rows framed, its bar on the top edge (a click shuts
@@ -439,6 +446,9 @@ function row_lines(row: View.Row, w: number): Line[] {
     }
     case "Msg": {
       return row.call !== null ? fill_lines(call_lines(row.call, w - 2), w - 2) : row.kind === "illi" ? reply_lines(row.text, w) : msg_lines(row.kind, row.who, row.body, row.text, w);
+    }
+    case "Fold": {
+      return runs_wrap([Run("▸ " + text_clean(row.text), DIM)], w, false).slice(0, 1);
     }
     case "Cap": {
       return runs_wrap([Run(text_clean(row.text), { ...DIM, i: true })], w, false);

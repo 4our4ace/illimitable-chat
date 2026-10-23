@@ -4,7 +4,8 @@
 // and look: the background told again as it was lays nothing out anew,
 // another lays all of it out again. A chat laid out from its last row
 // up, a few rows at a time, is the chat laid out whole; a block asked
-// for is laid out with all under it.
+// for is laid out with all under it. An open run of work marks its head
+// and each message in it (a folded one as its one line).
 
 import { expect, test } from "bun:test";
 import * as Paint from "./Paint.ts";
@@ -68,4 +69,23 @@ test("a block's row is found, and the rows laid out as far as it", () => {
   expect(laid.marks.find((m) => m.id === 0 && m.n === 4)).toBeDefined();
   expect(Paint.laid_stale(laid, 60)).toBe(false);
   expect(Paint.laid_stale(laid, 61)).toBe(true);
+});
+
+test("an open run of work marks its head and each message in it, a folded one as its one line", () => {
+  const v    = View.view_new();
+  const rows = [
+    ...View.entry_rows(3, "tool", 'shell {"command":"npm test"}'),
+    ...View.entry_rows(4, "echo", "ok\n".repeat(1204).trimEnd()),
+  ];
+  View.view_toggle(v, 3);
+  View.view_fold(v, "#4");
+  const run   = View.view_acts(v, rows);
+  const marks: Paint.Mark[] = [];
+  const lines = Paint.rows_lines(run, 60, marks);
+  const text  = (l: Paint.Line) => l.map((r) => r.x).join("");
+  expect(marks.map((m) => [m.act ?? false, m.fold ?? "", m.open, m.to - m.from])).toEqual([[true, "", true, 1], [false, "#3", true, 3], [false, "#4", false, 1]]);
+  expect([marks[1].from, marks[2].from - marks[1].to]).toEqual([1, 1]);
+  expect(text(lines[marks[2].from])).toBe("│ ▸ result · 1,204 lines");
+  View.view_fold(v, "#4");
+  expect(Paint.rows_lines(View.view_acts(v, rows), 60).length).toBeGreaterThan(10);
 });
