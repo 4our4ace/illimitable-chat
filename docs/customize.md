@@ -18,8 +18,10 @@ skill, `customize-illi`, and writes these files itself.
 - `skills/<name>/SKILL.md`: skills, in Claude Code's format. illi loads
   one when a task matches; `/name` asks for it, at a message's start or
   anywhere in it ("Use the /imagegen skill to…"). One with `sticky: true`
-  is for every reply (a tone, a format): `/name` turns it on and off, and
-  while on it is in every turn's prompt, so no summary drops it.
+  is for every reply (a tone, a format): `/name` turns it on and off (so
+  does a click on it in the side panel, which lists each one, on or
+  off), and while on it is in every turn's prompt, so no summary drops
+  it.
   customize-illi suggests it when it installs a skill. Skills shared with
   other agents (opencode's, Codex's) load too: `~/.agents/skills`, under
   yours of the same name, and a trusted project's `.agents/skills`, from

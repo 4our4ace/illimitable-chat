@@ -429,6 +429,14 @@ function term_custom(t: Term, cmd: Command, arg: string, word: string): void {
   }
 }
 
+// a sticky skill turned on or off (Custom.stick), said (again: what
+// turns it off once on); why it wasn't (null: it was)
+export function term_stick(t: Term, skill: Skill, on: boolean, again: string): string | null {
+  const why = Custom.stick(skill, on);
+  term_note(t, why ?? (on ? skill.name + " is on: every reply follows it (" + (Custom.global(skill) ? "global" : config.PROFILE) + "). " + again + " turns it off." : skill.name + " is off."));
+  return why;
+}
+
 // the user's skill (typed as `word`): illi told to use it, for the words
 // after its name. A sticky one is turned on or off by its name alone
 // (Custom.stick), on by its name with words, then the words sent
@@ -438,9 +446,7 @@ function term_skill(t: Term, skill: Skill, arg: string, word: string): void {
   }
   const on = config.config_sticky(skill.name);
   if (arg === "" || !on) {
-    const why = Custom.stick(skill, !on);
-    term_note(t, why ?? (on ? skill.name + " is off." : skill.name + " is on: every reply follows it (" + (Custom.global(skill) ? "global" : config.PROFILE) + "). " + word + " again turns it off."));
-    if (why !== null) {
+    if (term_stick(t, skill, !on, word + " again") !== null) {
       return;
     }
   }
