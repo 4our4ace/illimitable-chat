@@ -214,7 +214,7 @@ export namespace Agent {
     while (!signal.aborted) {
       const step = await Agent.step(wire, run, key, (max) => wire.body(ask, Agent.thin(items), tools, max));
       steps += 1;
-      if (steps === 1 && step.read !== undefined) {
+      if (steps === 1 && (step.read ?? 0) > 0) {
         end.first = step.read;
       }
       for (const entry of step.entries) {

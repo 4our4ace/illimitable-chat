@@ -167,10 +167,10 @@ alone; the input comes back as you left it when the list closes.
 - Type to search, by name and by the words of what each row does (as
   `/` does); the search edits as the input does. Up and Down (or Tab)
   move, Enter picks, Esc closes.
-- `/model`: Left and Right change the effort, Tab the speed; Shift+Left
-  and Shift+Right step the lit model's autocompact, its gauge under the
-  list (a tick where your plan starts to drain faster). Enter keeps it
-  with the pick, Esc drops it.
+- `/model`: Left and Right change the effort (Shift+Up and Shift+Down
+  too), Tab the speed; Shift+Left and Shift+Right step the lit model's
+  autocompact by 5%, its gauge under the list (a tick where your plan
+  starts to drain faster). Enter keeps it with the pick, Esc drops it.
 - `/settings` (and a setting in Ctrl+P): Enter or Right steps a setting
   to its next value, Shift+Enter or Left back; Del puts its default back
   (in a profile: the global value).

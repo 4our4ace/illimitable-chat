@@ -7,7 +7,9 @@
 // and Tab moves in them. /help fits a narrow pane, a row a key, the setup
 // commands their own group; /agents' lists have no copy buttons (a pane
 // is no reply). /model's gauge steps the lit model's autocompact (Enter
-// sends it, Esc drops it) and fits its width; /tab finds the chat's tab
+// sends it, Esc drops it) and fits its width; /autocompact says the chat's
+// model's, and a change once the chat took it (refused: only why); /tab
+// finds the chat's tab
 // by the main agent's name; the dead ends (/stop, /fold, /image, /mcp
 // with nothing to act on) say something. A sticky skill's name alone
 // turns it on and off; with words, on, the words sent; it shows at the
@@ -340,6 +342,25 @@ test("the gauge fits its width: past the standard window the fill turns the warn
   expect(text(40)).toEqual(["autocompact 60% · 523k  ⇧◂▸"]);
   expect(text(20)).toEqual(["60%"]);
   expect(term_gauge({ ...g, tokens: 200000 }, 96).map((l: any) => l.map((r: any) => r.x).join(""))).toEqual(["autocompact ▕████▌░┊░░░░░░░░░░░░░▏ 23% · 200k of 872k  ⇧◂▸"]);
+});
+
+test("/autocompact says the chat's model's; a change is said once the chat takes it, a refusal only says why; a value it won't take is said at once", () => {
+  const t    = term();
+  const said = "Autocompact for sonnet-5.5: 60% (the global one), 600k of its 1M window. /autocompact 50%, 300k or default changes it; in /model, Shift+Left and Shift+Right.";
+  t.v.use = { ...t.v.use, fill: { used: 0, cap: 600000, window: 1000000, set: "60%", own: false, most: 700000, global: "60%", sets: {} } };
+  run(t, "/autocompact");
+  expect(note(t)).toBe(said);
+  run(t, "/autocompact", "80%");
+  expect([t.v.out.at(-1).msg, note(t)]).toEqual([{ id: expect.any(String), $: "autocompact", label: "sonnet-5.5", value: "80%" }, said]);
+  t.v.out.at(-1).done({});
+  expect(note(t)).toBe("Autocompact for sonnet-5.5: 80%, held to 700k of its 1M window.");
+  run(t, "/autocompact", "default");
+  expect(t.v.out.at(-1).msg).toMatchObject({ $: "autocompact", label: "sonnet-5.5", value: null });
+  t.v.out.at(-1).done({ error: "autocompacts is set by ILLI_AUTOCOMPACTS: unset it to change a model's autocompact here." });
+  expect([note(t), t.notices.some((n: any) => n.text.includes("back to the global one"))]).toEqual(["autocompacts is set by ILLI_AUTOCOMPACTS: unset it to change a model's autocompact here.", false]);
+  run(t, "/autocompact", "1e5");
+  expect(note(t)).toBe("/autocompact takes a share of the window (50%), a size (300k) or default.");
+  expect(t.v.out).toHaveLength(2);
 });
 
 test("/tab finds the chat's tab by the main agent's name, or illi's; none lists the tabs", () => {

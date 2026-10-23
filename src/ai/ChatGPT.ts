@@ -23,13 +23,14 @@
 // change it: `sync`, `follow`), and kept current by each response's
 // headers. A change of account drops the old record at once, so no view
 // shows one account's plan with another's usage. The account's catalog
-// (`models`: at start, after /login and /logout, on a change of account)
-// is the chatgpt list: each model shown offered, a new one too, one it
-// drops gone; its window the most the account may set, its usual one
-// (standard: past it the plan drains faster), its efforts and its speeds
-// (each a service tier: priority is fast), kept in config.MODELS_FILE for
-// the next start, naming the account. A request refused as too long past
-// a model's usual window makes that its whole one for the account.
+// (`models`: at start, after /login and /logout, on a change of account,
+// by a turn that finds it not asked: `listed`) is the chatgpt list: each
+// model shown offered, a new one too, one it drops gone; its window the
+// most the account may set, its usual one (standard: past it the plan
+// drains faster), its efforts and its speeds (each a service tier:
+// priority is fast), kept in config.MODELS_FILE for the next start,
+// naming the account. A turn's first request refused as too long past a
+// model's usual window makes that its whole one for the account.
 
 import * as fs from "node:fs";
 import { json_object } from "../tools/Clip.ts";
@@ -104,9 +105,11 @@ let record: { key: string; tier: string; limits: Limit[]; state?: "asking" | "to
 let watcher: () => void = () => {};
 let logged = false;
 let following: ReturnType<typeof setInterval> | undefined;
-// the account whose catalog was last asked, and the ask running
+// the account whose catalog was last asked, the ask running, and the
+// account whose catalog last answered
 let asked = "";
 let listing: Promise<string[] | null> | null = null;
+let answered = "";
 
 // ChatGPT
 // =======
@@ -517,6 +520,7 @@ export namespace ChatGPT {
         config.OFFER.models.push(...fresh.filter((label) => !config.OFFER.models.includes(label)));
       }
       config.config_models_keep("chatgpt", kept, { account: key, capped });
+      answered = key;
       watcher();
       return fresh;
     } catch {
@@ -548,13 +552,25 @@ export namespace ChatGPT {
     };
   }
 
-  // the catalog asked now, waited on at most `ms` (a turn's first cut
+  // the account's catalog, waited on at most `ms` (a turn's first cut
   // waits on it: the windows kept last may be smaller, and a cut never
-  // moves back)
+  // moves back); asked now if the account in use wasn't yet (a turn
+  // resumed at the start comes before the terminal asks it)
   export async function listed(ms: number): Promise<void> {
+    ChatGPT.sync();
+    if (asked !== ChatGPT.key() && ChatGPT.key() !== "") {
+      void ChatGPT.models();
+    }
     if (listing !== null) {
       await Promise.race([listing, Bun.sleep(ms)]);
     }
+  }
+
+  // whether the catalog of the account in use answered this run, so the
+  // windows known are its own, not those kept last (a cut fitted to
+  // smaller ones would fold the chat for good)
+  export function catalogued(): boolean {
+    return answered !== "" && answered === ChatGPT.key();
   }
 
   // a model this account refused as too long past its standard window:

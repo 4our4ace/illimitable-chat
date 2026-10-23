@@ -177,10 +177,16 @@ export namespace Pick {
     }
   }
 
+  // a pick a step on (the next model or the one before, round; more
+  // effort or less, stopping at the ends; the next speed), or to the part
+  // `to` names (one it alone holds will do), stepped from where it runs
+  // (fit: an effort the model lacks steps from the nearest it has, never
+  // from the list's start); null: none such
   export function move(pick: Pick, move: Move, offer: Offer, to?: string): Pick | null {
     const list = Pick.options(pick, move, offer);
     const n    = list.length;
-    const at   = list.findIndex(([, p]) => Pick.label(p) === Pick.label(pick));
+    const runs = Pick.label(Pick.fit(pick));
+    const at   = list.findIndex(([, p]) => Pick.label(Pick.fit(p)) === runs);
     const d    = move === "prev" || move === "down" ? -1 : 1;
     const ends = move === "up" || move === "down";
     const next = ends ? Math.max(0, Math.min(n - 1, at + d)) : (at + d + n) % n;

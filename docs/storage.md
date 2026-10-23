@@ -20,6 +20,7 @@ fixing.
 - [Search](#search)
 - [Forgetting a project](#forgetting-a-project)
 - [Usage counts](#usage-counts)
+- [Models](#models)
 - [Known limits](#known-limits)
 
 Where they are
@@ -617,6 +618,31 @@ Usage counts
    Uses queued when illi quits within those 2 s are not kept.
 
 Fading counts uses, not days: a month away from illi changes nothing.
+
+Models
+------
+
+`~/.illi/models.json` keeps what the vendors told of their models, for
+the next start (`Config.ts config_models_keep`):
+`{ at, vendors: { <vendor>: [model…] }, account?, capped? }`, a model
+being `{ label, id, speeds, window, standard?, efforts?, tiers? }`.
+
+1. `chatgpt`'s list is the account's catalog as it last answered
+   (`ChatGPT.ts models`); `account` names whose it is, and `capped` the
+   models that account refused past their usual window, which keep that
+   window as their whole one. `claude-api`'s and `claude-code`'s hold
+   the windows Anthropic's Models API and Claude Code told.
+2. Each write is one vendor's list: illi reads the file as it is now,
+   puts that vendor's list in, leaves the others' as they are, writes
+   the whole to `models.json.<pid>.tmp` and renames it over the file,
+   so no reader sees half a file and one vendor's learning never drops
+   another's. Two illis writing in the same instant can still lose one's
+   list, told again at the next answer.
+3. At the start (`config_models`), the chatgpt list is taken whole,
+   whatever its account (the login isn't read yet), until the catalog
+   answers; the other vendors' entries only set the windows of the
+   models illi has built in. A file that won't read is none: the
+   built-in windows hold.
 
 Known limits
 ------------
