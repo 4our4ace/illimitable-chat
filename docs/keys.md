@@ -234,9 +234,11 @@ rule over them, the input you were typing kept for after them:
   and Shift+Tab (Left and Right, off your words) switch tabs. PgUp and
   Ctrl+Home go to the first option, PgDn and Ctrl+End to your words.
 - A click on an option picks it (one: and goes on; several: on or off),
-  on a tab goes there, on your words' row puts you there. Taller than
-  half the screen, the tabs and keys stay and the rest scrolls, with the
-  option you're on, or by the wheel over it.
+  on a tab goes there, on your words' row puts you there.
+- They keep one height, their tallest tab's, so the chat stays put as
+  you switch tabs. Taller than half the screen, the tabs and keys stay
+  and the rest scrolls, with the option you're on, or by the wheel over
+  it.
 - The last tab, Review, shows all your answers: Enter sends them, Esc
   (or Ctrl+C, Ctrl+D) skips the questions. Your answers then show in
   the chat as yours.

@@ -22,7 +22,8 @@
 // question; closed, the question is back, held again as it shows anew.
 // illi's form takes the input's place too, who asks in the rule: its
 // tabs, the question, its options, its words and its keys, as tall as
-// the tab shown, the cursor in the words; over a pane, typing and a
+// its tallest tab (a shorter one blank over its keys: tabbing never
+// moves the chat), the cursor in the words; over a pane, typing and a
 // paste going to the words. A click on an option picks it (one to pick:
 // and goes on; of any: toggled), on a tab goes there, on the words
 // lights them, outside does nothing. Taller than half the screen, its
@@ -375,7 +376,7 @@ test("Ctrl+P's palette pops up over a question, which keeps its place; closed, t
   });
 });
 
-test("illi's form takes the input's place, its full width, who asks in the rule: tabs, question, options, words, keys, as tall as the tab shown; the cursor in the words; the input as typed back once it is skipped", () => {
+test("illi's form takes the input's place, its full width, who asks in the rule: tabs, question, options, words, keys; as tall as its tallest tab, a shorter one blank over its keys, so tabbing moves nothing; the cursor in the words; the input as typed back once it is skipped", () => {
   sized(110, 34, () => {
     const t = term();
     Screen.ed_set(t.scr.ed, "my draft");
@@ -385,11 +386,16 @@ test("illi's form takes the input's place, its full width, who asks in the rule:
     expect(asked(t, 110)).toEqual(["── illi asks " + "─".repeat(92), " Database   Cache   Review", "Which database?  pick one", "> ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip", "─".repeat(105)]);
     expect(t.ruled.rows.some((r: any[]) => text(r, 110).includes("my draft"))).toBe(false);
     expect([t.ruled.at, t.scr.blink]).toEqual([{ row: t.box.row + 5, col: 2 + 4 }, true]);
-    term_grab(t, "Tab");
+    const chat = (u: any) => u.ruled.rows.slice(0, u.box.row - 1).map((r: any[]) => text(r, 110));
+    const was  = [chat(t), t.box.row, t.box.h];
     term_grab(t, "Tab");
     paint(t);
-    expect(asked(t, 110).slice(1, -1)).toEqual([" Database   Cache   Review", "Which database?", "  no answer", "Which caches?", "  no answer", "Enter send · Shift+Tab back · Esc skip"]);
-    expect(t.ruled.at).toBeNull();
+    expect(asked(t, 110).slice(2, -1)).toEqual(["Which caches?  pick any", "> □ Redis", "  □ Memcached", "  > Something else: type your own", "", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
+    expect([chat(t), t.box.row, t.box.h]).toEqual(was);
+    term_grab(t, "Tab");
+    paint(t);
+    expect(asked(t, 110).slice(1, -1)).toEqual([" Database   Cache   Review", "Which database?", "  no answer", "Which caches?", "  no answer", "", "Enter send · Shift+Tab back · Esc skip"]);
+    expect([chat(t), t.box.row, t.box.h, t.ruled.at]).toEqual([...was, null]);
     term_grab(t, "Esc");
     paint(t);
     expect([sent(t).length, t.box, text(t.ruled.rows[31], 110).trimEnd()]).toEqual([1, null, "  > my draft"]);

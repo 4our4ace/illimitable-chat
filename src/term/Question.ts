@@ -20,9 +20,10 @@
 // dim line after it saying how much more, and scrolls by the wheel over
 // it and PgUp, PgDn; its answers always show, each whole (one taller
 // than ANSWER, naming what it keeps by a long command: its start and its
-// end); the form's lines between its tabs and its keys scroll, the lit
-// row kept in view. Each row is one line, drawn once, no control
-// character in it (Popup.ts popup_name_lines). Nothing is dimmed, and
+// end); the form, as tall as its tallest tab (tabbing never moves the
+// chat), its lines between its tabs and its keys scrolling, the lit row
+// kept in view. Each row is one line, drawn once, no control character
+// in it (Popup.ts popup_name_lines). Nothing is dimmed, and
 // the input as typed is kept under it, back once it is answered. It has
 // every key but Ctrl+L, Ctrl+Z, Ctrl+P and the leader (Keys.ts); Esc,
 // Ctrl+C and Ctrl+D close it (the permission question's No, the form's
@@ -172,27 +173,31 @@ function question_cut(lines: Array<[Paint.Line, Target | null]>, name: string, c
 }
 
 // illi's form laid out w wide, on a screen h rows tall (Asks.ts
-// term_form_lines, the words question_words at most): as tall as the tab
-// shown, question_most at most; its tabs hold at its top and its keys at
-// its foot (the room allowing), its lines between scroll (Form top),
-// kept to show the lit row (question_row; the answers have none: only
-// the wheel scrolls them). The cursor in the words, while they show. Its
-// rule: who asks
+// term_form_lines, the words question_words at most): as tall as its
+// tallest tab (the answers' too), question_most at most, so going from
+// tab to tab moves nothing; its tabs hold at its top and its keys at its
+// foot (the room allowing), its lines between scroll (Form top), kept to
+// show the lit row (question_row; the answers have none: only the wheel
+// scrolls them), a shorter tab's blank under them. The cursor in the
+// words, while they show. Its rule: who asks
 function question_form(t: Term, f: Form, w: number, h: number): Asked {
-  const laid = term_form_lines(t, w, question_words(h))!;
-  const most = question_most(h);
-  const head = laid.tabs.slice(0, most);
-  const keys = laid.keys.slice(0, Math.max(0, most - head.length - 1));
-  const room = Math.max(0, Math.min(laid.body.length, most - head.length - keys.length));
+  const max  = question_words(h);
+  const tabs = Array.from({ length: f.each.length + 1 }, (_, k) => term_form_lines(t, w, max, k)!);
+  const tall = Math.min(question_most(h), Math.max(...tabs.map((e) => e.tabs.length + e.body.length + e.keys.length)));
+  const laid = tabs[f.tab];
+  const head = laid.tabs.slice(0, tall);
+  const keys = laid.keys.slice(0, Math.max(0, tall - head.length - 1));
+  const room = Math.max(0, tall - head.length - keys.length);
   const e    = f.each[f.tab];
   const keep = e === undefined ? null : question_row(laid.body, laid.at, e.at);
   const top  = Math.max(0, Math.min(f.top, laid.body.length - room));
   f.top      = keep === null ? top : Math.max(0, Math.min(keep[0], Math.max(top, keep[1] - room + 1)));
   const view = laid.body.slice(f.top, f.top + room);
+  const pad  = Array.from({ length: room - view.length }, (): [Paint.Line, null] => [[], null]);
   const cur  = laid.at;
   const at   = cur === null || cur.row < f.top || cur.row >= f.top + room ? null : { row: head.length + cur.row - f.top, col: cur.col };
-  const rows = [...laid.spans.slice(0, head.length), ...view.map(([, aim]) => aim), ...keys.map(() => null)];
-  return { of: f, rule: question_rule(w, laid.who + " asks", []), lines: [...head, ...view.map(([l]) => l), ...keys], rows, at, shape: { list: head.length, lines: room, tall: laid.body.length, ahead: 0, lead: 0 } };
+  const rows = [...laid.spans.slice(0, head.length), ...[...view, ...pad].map(([, aim]) => aim), ...keys.map(() => null)];
+  return { of: f, rule: question_rule(w, laid.who + " asks", []), lines: [...head, ...[...view, ...pad].map(([l]) => l), ...keys], rows, at, shape: { list: head.length, lines: room, tall: laid.body.length, ahead: 0, lead: 0 } };
 }
 
 // the lines row k of illi's form takes in its lines as laid out (body,
