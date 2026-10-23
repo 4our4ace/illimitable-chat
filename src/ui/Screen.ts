@@ -15,7 +15,8 @@
 // and each move (SGR), for Term.ts to choose text and light buttons;
 // Shift and a drag still select as the terminal's own. The terminal tells
 // as its window gains and loses the focus, so a press that only focuses
-// it is marked (focusing): no key, no paint. The terminal is asked its
+// it is marked (focusing): no key, no paint; the focus lost is told
+// (Away), so what the pointer lit goes out. The terminal is asked its
 // background (OSC 11), which diagrams draw over (Draw.ts); its answer
 // comes as input, and is never typed. The input (Ed) draws as rows
 // starting `> ` and takes its editing keys (ed_key, EDITING) here; Up and
@@ -781,11 +782,13 @@ function screen_mouse(scr: Screen, params: string, down: boolean): void {
 }
 
 // the terminal's window gained the focus (in), or lost it: kept, never
-// a key
+// a key; lost, told (Away: what the pointer lit goes out)
 function screen_focus(scr: Screen, on: boolean): void {
   scr.away = !on;
   if (on) {
     scr.gained = Date.now();
+  } else {
+    scr.on("Away");
   }
 }
 

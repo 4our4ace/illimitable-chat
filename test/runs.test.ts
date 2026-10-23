@@ -10,7 +10,12 @@
 // acted on keeps its first line on the row clicked, the chat scrolled up
 // or at its end (an open there leaves the end, the jump to it shown; a
 // close there lands lower, as the chat never scrolls past its end). The
-// live tail takes no click.
+// live tail takes no click. What a click would act on lights, one thing
+// at a time, once the pointer has moved: a run's head and its whole bar
+// (heavier), a message's bar beside it, a folded line's glyph, a
+// summary's gutter and /open, an open block's bar; never under a hit
+// (the jump to the end); gone as the pointer leaves, as the chat moves
+// by itself while followed, at a key, as the window loses the focus.
 
 import { expect, test } from "bun:test";
 import { term_paint } from "../src/term/Frame.ts";
@@ -52,7 +57,7 @@ function term(v: View.View): any {
     scroll: 0, seen: { total: 0, marks: [], row: 0, first: 0, tall: 1, col: 0, end: 0 }, ver: 0, body: null, find: null, pane: null, agents: [],
     choose: null, profs: [], hits: [], since: 0, spin: undefined, ruled: null, doing: null, subs: new Map(), side: { place: "off", width: "" }, status: status_new(),
     todo: false, login: null, areas: [], sel: null, hover: undefined, drift: undefined, sug: null, dropped: "", lead: false, quoted: null, asking: null, box: null,
-    aim: { row: -1, in: false, press: null, first: null }, pin: null,
+    aim: { row: -1, in: false, press: null, first: null }, pin: null, lit: null, pointed: false,
   };
   t.scr = { tty: true, kitty: false, ed: Screen.ed_new(), rest: "", shown: [], click: { row: 0, col: 0 }, clicks: 0, pressed: 0, point: { row: 0, col: 0 }, typed: false, left: true };
   [t.scr.grab, t.scr.on, t.scr.type] = [(k: string) => term_grab(t, k), (k: string) => term_press(t, k), (x: string) => term_type(t, x)];
@@ -86,6 +91,11 @@ const click = (t: any, row: number, col: number) => {
   t.scr.pressed = 0;
   Screen.screen_feed(t.scr, sgr(0, row, col) + sgr(0, row, col, "m"));
 };
+const move  = (t: any, row: number, col: number) => Screen.screen_feed(t.scr, sgr(35, row, col));
+
+// the runs lit as last painted (a tagged run drawn undimmed): each its
+// screen row and text
+const lit = (t: any): Array<[number, string]> => t.ruled.rows.flatMap((r: any[], row: number) => (r[0]?.line ?? []).filter((x: Paint.Run) => x.mark !== undefined && !x.s.d).map((x: Paint.Run) => [row, x.x]));
 
 // the mark keyed `key` as last painted; the screen row of its line k
 // (from its first; below 0, from the line past its last), and the column
@@ -228,4 +238,87 @@ test("the live tail takes no click", () => {
   const ver  = t.ver;
   click(t, area.row + area.tall - 2, left(t) + 3);
   expect([t.ver, t.v.acts.size, t.v.folds.size, t.v.open.size]).toEqual([ver, 0, 0, 0]);
+});
+
+test("what a click would act on lights once the pointer moves: a message's bar beside it, a run's head and its whole bar heavier, a folded line's glyph", () => {
+  const t = term(chat());
+  View.view_toggle(t.v, 2);
+  t.scroll = Infinity;
+  paint(t);
+  t.scr.point = { row: row_of(t, "#3", 3), col: left(t) + 8 };
+  paint(t);
+  expect(lit(t)).toEqual([]);
+  move(t, row_of(t, "#3", 3), left(t) + 8);
+  paint(t);
+  const area = t.areas.find((a: any) => a.key === "chat");
+  const rows = (key: string) => Array.from({ length: mark(t, key).to - mark(t, key).from }, (_, k) => row_of(t, key, k)).filter((r) => r < area.row + area.tall);
+  expect(lit(t)).toEqual(rows("#3").map((r) => [r, "│ "]));
+  move(t, row_of(t, "r2"), left(t) + 30);
+  paint(t);
+  expect(lit(t)).toEqual([[row_of(t, "r2"), "[-] "], [row_of(t, "r2"), "Ran 2 commands"], ...rows("r2").slice(1).map((r): [number, string] => [r, "┃ "])]);
+  click(t, row_of(t, "#2"), left(t) + 4);
+  paint(t);
+  expect(lit(t)).toEqual([[row_of(t, "#2"), "│ "], [row_of(t, "#2"), "[+] "], [row_of(t, "#2", 1), "│ "]]);
+});
+
+test("a summary lights its gutter and /open, an open block its bar, each its bar in the run beside it; nothing over a line no click acts on", () => {
+  const t = term(chat(11));
+  View.view_toggle(t.v, 2);
+  paint(t);
+  const sum = Paint.block_key(4, 1);
+  move(t, row_of(t, sum), left(t) + 12);
+  paint(t);
+  expect(lit(t)).toEqual([[row_of(t, sum), "│ "], [row_of(t, sum), " 1x     "], [row_of(t, sum), "/open #4"], [row_of(t, sum, 1), "│ "]]);
+  click(t, row_of(t, sum), left(t) + 2);
+  paint(t);
+  const box = lit(t);
+  expect(box[1]).toEqual([row_of(t, sum), " 1x · /close #4 "]);
+  expect(box.filter(([, x]) => x !== "│ ").length).toBe(1);
+  t.v.open.set("1+1", false);
+  t.ver += 1;
+  paint(t);
+  move(t, row_of(t, Paint.block_key(1, 1)), left(t) + 12);
+  paint(t);
+  expect(lit(t)).toEqual([[row_of(t, Paint.block_key(1, 1)), " 1x     "], [row_of(t, Paint.block_key(1, 1)), "/open #1"]]);
+  move(t, 0, 4);
+  paint(t);
+  expect(lit(t)).toEqual([]);
+});
+
+test("the light goes as the chat moves by itself while followed, at a key, as the focus is lost; and never under the jump to the end", () => {
+  const t = term(chat());
+  View.view_toggle(t.v, 8);
+  paint(t);
+  const at = () => move(t, row_of(t, "#9", -3), left(t) + 8);
+  at();
+  paint(t);
+  expect(lit(t).length).toBeGreaterThan(0);
+  View.view_hear(t.v, { $: "entry", id: 11, kind: "user", text: "One more" });
+  t.ver += 1;
+  paint(t);
+  expect(lit(t)).toEqual([]);
+  at();
+  paint(t);
+  expect(lit(t).length).toBeGreaterThan(0);
+  Screen.screen_feed(t.scr, "x");
+  paint(t);
+  expect(lit(t)).toEqual([]);
+  at();
+  paint(t);
+  Screen.screen_feed(t.scr, "\x1b[O");
+  paint(t);
+  expect(lit(t)).toEqual([]);
+  Screen.screen_feed(t.scr, "\x1b[I");
+  paint(t);
+  expect(lit(t)).toEqual([]);
+  t.scroll = 5;
+  paint(t);
+  const area = t.areas.find((a: any) => a.key === "chat");
+  const jump = t.hits.find((h: any) => h.row >= area.row && h.row < area.row + area.tall);
+  move(t, jump.row, jump.col - 2);
+  paint(t);
+  expect(lit(t).length).toBeGreaterThan(0);
+  move(t, jump.row, jump.col + 2);
+  paint(t);
+  expect(lit(t)).toEqual([]);
 });

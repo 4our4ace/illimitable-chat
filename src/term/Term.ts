@@ -109,7 +109,11 @@ import * as View from "../ui/View.ts";
 // as last painted (Popup.ts; null: none, or a new size since), aim: the
 // mouse as it saw it; pin: a mark a click acted on, by its key, and the
 // screen row clicked, where the next paint puts its first line (Frame.ts
-// term_chat; null: none)
+// term_chat; null: none); lit: the mark lit as last painted, by its key
+// (what a click would act on: Select.ts term_light; null: none),
+// pointed: whether the pointer's place is known to light it (it moved,
+// pressed or let go since the chat last moved by itself while followed,
+// a key, or the focus lost)
 export type Term = {
   v       : View.View;
   scr     : Screen.Screen;
@@ -156,6 +160,8 @@ export type Term = {
   box     : PopBox | null;
   aim     : Aim;
   pin     : { key: string; row: number } | null;
+  lit     : string | null;
+  pointed : boolean;
 };
 
 // the mouse as the popup saw it (Popup.ts popup_mouse): the pointer's
@@ -193,10 +199,10 @@ export type Span = { col: number; to: number; aim: Target };
 // words'), the options picked
 export type Form = { tab: number; top: number; each: Array<{ ed: Screen.Ed; at: number; picked: number[] }> };
 
-// the chat as last painted: its lines, its blocks in them, the screen
+// the chat as last painted: its lines, its marks in them, the screen
 // row of its first line shown and that line, the rows it had, its first
-// column and the one past its right end
-type Seen = { total: number; marks: Paint.Mark[]; row: number; first: number; tall: number; col: number; end: number };
+// column and the one past its right end, how far it was scrolled up
+type Seen = { total: number; marks: Paint.Mark[]; row: number; first: number; tall: number; col: number; end: number; scroll: number };
 
 // a part of the screen a drag chooses text in: which (chat, pane, side,
 // head, foot), its lines, the first shown (at screen row `row`, column
@@ -339,7 +345,7 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
     notices : [],
     expire  : undefined,
     scroll  : 0,
-    seen    : { total: 0, marks: [], row: 0, first: 0, tall: 1, col: 0, end: 0 },
+    seen    : { total: 0, marks: [], row: 0, first: 0, tall: 1, col: 0, end: 0, scroll: 0 },
     ver     : 0,
     body    : null,
     find    : null,
@@ -369,6 +375,8 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
     box     : null,
     aim     : { row: -1, in: false, press: null, first: null },
     pin     : null,
+    lit     : null,
+    pointed : false,
   };
   // the chat suggests replies to a screen that shows them, never a pipe
   if (chat !== null) {

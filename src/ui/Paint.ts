@@ -505,6 +505,23 @@ function box_lines(row: View.Row & { $: "Box" }, w: number, marks: Mark[], at: n
   return frame_lines(rows_lines(row.rows, w - 4, marks, at + 1, null, true), w - 4, DIM, bar);
 }
 
+// a line of a mark lit (Term.ts: what a click would act on), by its
+// tags: a run of work's (act) glyph in the accent, its label in the
+// ink, its bar in the accent and heavier (┃); any other's own runs in the
+// accent, and beside it its run's bar (up). Pressed (a click waiting on
+// it), reversed too
+export function line_lit(l: Line, m: Mark, pressed: boolean): Line {
+  const c = Draw.draw_tokens().accent;
+  return l.map((r) => {
+    const tag = r.mark;
+    if (tag === undefined || (tag.key !== m.key && !(tag.key === m.up && tag.as === "bar"))) {
+      return r;
+    }
+    const s = tag.as === "label" ? { ...r.s, d: false } : { ...r.s, d: false, c };
+    return { ...r, x: m.act === true && tag.as === "bar" ? r.x.replace("│", "┃") : r.x, s: pressed ? { ...s, v: !s.v } : s };
+  });
+}
+
 // lines framed w columns wide, dim, a title on the top edge, a foot on
 // the bottom one (Term's lists)
 export function frame(body: Line[], w: number, title: Line, foot: Line = []): Line[] {

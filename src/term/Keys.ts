@@ -20,7 +20,7 @@ import { term_note, term_toast, term_unnote } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { popup_form_wheel, popup_held, popup_mouse, popup_page, popup_wheel, term_popup } from "./Popup.ts";
 import * as Screen from "../ui/Screen.ts";
-import { term_copied, term_hover, term_mouse, term_selected, term_target } from "./Select.ts";
+import { term_copied, term_hover, term_mouse, term_selected, term_target, term_typing } from "./Select.ts";
 import { term_act, term_primaries, term_quit, type Chooser, type Cmd, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
@@ -51,12 +51,24 @@ const WHEEL = 3;
 let keyed: { leader: string; cmds: Map<string, Cmd> } | null = null;
 
 // a key ("": the input may have changed): the mouse (a click lets the
-// leader go; a popup's first: Popup.ts), the wheel, the terminal's
-// background told (the chat laid out anew: diagrams draw over it), or its
-// line of term_groups. Text chosen is let go at a key not KEEP's or at
-// typing; Ctrl+C copies it again instead. Text in the input dismisses the
+// leader go; a popup's first: Popup.ts; a move, a press or a release
+// tells the pointer's place, to light what's under it), the window's
+// focus lost (Away: the light goes), the wheel, the terminal's background
+// told (the chat laid out anew: diagrams draw over it), or its line of
+// term_groups. Text chosen is let go at a key not KEEP's or at typing;
+// Ctrl+C copies it again instead. Text in the input dismisses the
 // suggested reply
 export function term_press(t: Term, key: string): void {
+  if (key === "Away") {
+    t.pointed = false;
+    if (t.lit !== null) {
+      term_draw(t);
+    }
+    return;
+  }
+  if (key === "Move" || key === "Press" || key === "Release") {
+    t.pointed = true;
+  }
   if (key === "Press" || key === "RightPress") {
     t.lead = false;
   }
@@ -113,8 +125,10 @@ function term_keyed(key: string): Cmd | undefined {
 // them: Popup.ts); the commands move by Up and Down, fill one in by Tab,
 // run it by Enter; a pane scrolls by the arrows, the pages and the
 // wheel, Esc and Enter close it, and no editing key reaches the input
-// hidden under it
+// hidden under it. Any key puts the pointer's light out first (but the
+// wheel: Select.ts term_typing)
 export function term_grab(t: Term, key: string): boolean {
+  term_typing(t, key);
   if (t.lead && key !== "WheelUp" && key !== "WheelDown") {
     term_after(t, key);
     return true;
@@ -215,9 +229,10 @@ export function term_choose_key(t: Term, c: Chooser, press: string): boolean {
 // the rest as typed after it; while the picker is open: to its search,
 // none: nowhere, never the input; while illi asks, to its question
 // (Asks.ts; a pane under it stays); over a pane, to the input, the pane
-// closed
+// closed. The pointer's light goes out first, as at a key
 export function term_type(t: Term, text: string): boolean {
   const c = t.choose;
+  term_typing(t, "");
   if (t.lead) {
     const ch   = [...text][0];
     const rest = text.slice(ch.length);

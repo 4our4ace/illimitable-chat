@@ -12,8 +12,13 @@
 // button dragged over the chat chooses the same way (not from a button),
 // and as it's let go the text is quoted in the input, to reply to it (not
 // on an agent's read-only page); a right click soon after takes the quote
-// out again. Under a popup the mouse is its alone (Popup.ts popup_mouse,
-// before all of this): nothing is chosen there, and no button lights.
+// out again. What's under a point is told once for a click and the light
+// (term_target): in the chat, what a click would act on lights (a run of
+// work, a message in it, a block: term_light), one thing at a time, once
+// the pointer itself has moved; it goes as the chat moves by itself while
+// followed, at a key, as the window loses the focus. Under a popup the
+// mouse is its alone (Popup.ts popup_mouse, before all of this): nothing
+// is chosen there, and nothing lights.
 
 import * as Draw from "../ui/Draw.ts";
 import { term_draw } from "./Frame.ts";
@@ -273,10 +278,50 @@ function term_boxed(box: PopBox, p: Screen.Spot): boolean {
   return p.row >= box.row && p.row < box.row + box.h && p.col >= box.col && p.col < box.col + box.w;
 }
 
-// the pointer moved: painted again only if it's over another button
+// the pointer moved: painted again only if it's over another button,
+// or another mark would light (told apart by their keys)
 export function term_hover(t: Term): void {
-  if (!t.sel?.held && term_under(t, t.scr.point) !== t.hover) {
+  if (!t.sel?.held && (term_under(t, t.scr.point) !== t.hover || (term_lit(t)?.key ?? null) !== t.lit)) {
     term_draw(t);
+  }
+}
+
+// the chat's rows as painted (rows: the screen's, the chat's piece first
+// on each), once every hit is placed: what a click would act on lit
+// (Paint.line_lit), kept as lit (t.lit)
+export function term_light(t: Term, rows: Screen.Piece[][]): void {
+  const lit  = term_lit(t);
+  const area = t.areas.find((a) => a.key === "chat");
+  t.lit      = lit?.key ?? null;
+  if (lit === undefined || area === undefined) {
+    return;
+  }
+  for (let k = 0; k < area.tall; k++) {
+    const piece = rows[area.row + k]?.[0];
+    if (area.first + k >= lit.from && area.first + k < lit.to && piece !== undefined) {
+      piece.line = Paint.line_lit(piece.line, lit, false);
+    }
+  }
+}
+
+// what lights (none: undefined): the mark under the pointer
+// (term_target), once the pointer's place is known (t.pointed: it moved,
+// pressed or let go since the chat last moved by itself, a key, the focus
+// lost), the window focused, no drag choosing text
+function term_lit(t: Term): Paint.Mark | undefined {
+  if (!t.pointed || t.scr.away === true || (t.sel?.held === true && t.sel.moved)) {
+    return undefined;
+  }
+  const at = term_target(t, t.scr.point);
+  return at.$ === "mark" ? at.mark : undefined;
+}
+
+// a key pressed or text typed (Keys.ts, Attach.ts), as the mouse takes
+// it: the light out till the pointer moves again (but by the wheel, which
+// moves the chat under the pointer: what's under it lights)
+export function term_typing(t: Term, key: string): void {
+  if (key !== "WheelUp" && key !== "WheelDown") {
+    t.pointed = false;
   }
 }
 

@@ -8,9 +8,13 @@
 // whole, each message in it too (a folded one as its one line), a gap
 // line the block's above it; its glyph, label and bar tagged with its
 // key. An open block is marked over its whole frame, the innermost mark
-// the smaller. A recap's pages fold as a run's messages do.
+// the smaller. A recap's pages fold as a run's messages do. A mark lit
+// lights its tagged runs: a run's glyph in the accent, its label in the
+// ink, its bar heavier; a message its own and its run's bar beside it;
+// pressed, reversed.
 
 import { expect, test } from "bun:test";
+import * as Draw from "./Draw.ts";
 import * as Paint from "./Paint.ts";
 import * as View from "./View.ts";
 
@@ -130,4 +134,24 @@ test("a recap's pages fold to a line by their key", () => {
   const lines = Paint.rows_lines(View.view_acts(v, rows), 60, marks);
   expect(marks.map((m) => m.key)).toEqual(["r9", "#9"]);
   expect(lines[1].map((r) => r.x).join("")).toBe("│ [+] recap · 3 lines");
+});
+
+// lit by its tags alone: a run's glyph in the accent, its label in the
+// ink, its bar heavier in the accent, nothing else; a message in it, its
+// glyph and its run's bar beside it (the bar as it was), pressed reversed
+test("a mark lit lights its tagged runs alone: a run's glyph, label and heavier bar; a message's glyph and its run's bar, pressed reversed", () => {
+  const v = View.view_new();
+  View.view_toggle(v, 3);
+  View.view_fold(v, "#4");
+  const marks: Paint.Mark[] = [];
+  const rows  = [...View.entry_rows(3, "tool", 'shell {"command":"ls"}'), ...View.entry_rows(4, "echo", "a\nb")];
+  const lines = Paint.rows_lines(View.view_acts(v, rows), 60, marks);
+  const [run, , msg] = marks;
+  const c     = Draw.draw_tokens().accent;
+  const head  = Paint.line_lit(lines[0], run, false);
+  expect(head.map((r) => [r.x, r.s.d, r.s.c])).toEqual([["[-] ", false, c], ["Ran a command", false, ""]]);
+  const fold  = lines[msg.from];
+  expect(Paint.line_lit(fold, run, false).map((r) => r.x).join("")).toBe("┃ [+] result · 2 lines");
+  const own   = Paint.line_lit(fold, msg, true);
+  expect(own.map((r) => [r.x, r.s.d, r.s.c, r.s.v])).toEqual([["│ ", false, c, true], ["[+] ", false, c, true], ["result · 2 lines", true, "", false]]);
 });
