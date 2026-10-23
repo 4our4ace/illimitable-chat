@@ -196,7 +196,8 @@ type Hit = { row: number; col: number; to: number; run: () => void };
 // aside: what shows at an option's right end, each (its keys, its value);
 // middle: the box in the screen's middle, over all else, this many
 // columns wide at most (none: down over the input, Frame.ts); heads:
-// each option's group, a head over its first while nothing is searched
+// each option's group, a head over its first while nothing is searched;
+// lead: lines over the options (a question's what and why), wrapped
 export type Chooser = {
   title  : string;
   names  : string[];
@@ -206,6 +207,7 @@ export type Chooser = {
   aside? : string[];
   middle?: number;
   heads? : string[];
+  lead?  : Paint.Line[];
   here   : number;
   pick   : (k: number) => void;
   find   : Screen.Ed | null;

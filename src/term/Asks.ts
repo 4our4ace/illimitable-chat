@@ -4,8 +4,8 @@
 // checks stopped, Tools.guard) in the picker, as it comes: Yes; Yes, and
 // don't ask again for what it keeps, in this project (offered only when
 // it keeps something); No (Esc too); No, and say why (a line typed, for
-// the model). What it would do shows at its foot, and with why it was
-// asked as a note.
+// the model). What it would do and why it was asked show over the
+// answers, and as a note.
 // illi's own questions (ask) show in place of the input instead (its
 // form), a tab each: the question, its options (one to pick, or
 // several), and a row for words of the user's own, which they may type
@@ -226,7 +226,8 @@ function term_ask_open(t: Term, q: Question): void {
     term_answer(t, q, k !== no, k === always, "");
   };
   const title = "Allow " + q.tool + (q.who === "illi" ? "" : " for " + q.who) + "?";
-  term_chooser(t, title, names, names.map(() => ""), 0, pick, { keys, foot: () => q.what === "" ? "Esc no" : q.what });
+  const lead  = [...(q.what === "" ? [] : [[Paint.Run(Paint.text_clean(q.what), { ...Paint.INK, b: true })]]), ...(q.why === undefined || q.why === "" ? [] : [[Paint.Run("Why: ", Paint.DIM), Paint.Run(Paint.text_clean(q.why))]])];
+  term_chooser(t, title, names, names.map(() => ""), 0, pick, { keys, lead, foot: () => "Esc no" });
   t.asking!.c = t.choose;
 }
 

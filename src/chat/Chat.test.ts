@@ -17,7 +17,9 @@
 // turn answered, it goes. /compact asks the chat's model for a recap in
 // the turn's place, on its cache, and the agent's view starts at it, the
 // screen as it was; what is logged meanwhile comes after it; failed or
-// stopped, the chat is as it was, and a quit resumes nothing.
+// stopped, the chat is as it was, and a quit resumes nothing. A view
+// switches this session's mode; a refused request allowed again is told
+// to illi in the user's name, its grants this session's; a grant goes.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -38,6 +40,7 @@ const HERE = Projects.place(process.cwd());
 const { Pick } = await import("../ai/Pick.ts");
 const config = await import("../config/Config.ts");
 const View = await import("../ui/View.ts");
+const { Tools } = await import("../tools/Tools.ts");
 
 // the model: answers `reply` to a call that sees the user's message, after
 // `hold` resolves
@@ -74,6 +77,33 @@ test("a view over the pipe sends a message and hears the reply", async () => {
   expect(kinds).toEqual(["illi", "user", "illi"]);
   expect(Memory.message(chat.mem, 1)!.text).toBe("hi");
   await until(() => !chat.busy);
+  v.ws!.close();
+});
+
+test("permissions over the pipe: the mode switched for this session (the setting's again with none); a refused request allowed again, illi told in the user's name; a grant let go", async () => {
+  const v = View.view_new();
+  View.link_open(v, Chat.link(chat, (msg) => View.view_hear(v, msg).forEach((out) => View.link_send(v, out))));
+  await until(() => v.up);
+  expect(v.perm).toMatchObject({ mode: "auto", set: "auto", refused: [], grants: [], file: config.PERMISSIONS, broken: "" });
+  View.link_send(v, { $: "mode", mode: "read-only" });
+  await until(() => v.perm.mode === "read-only");
+  const out = await Tools.call(chat.tools, "main", "write", { path: "x-illi-test.txt", content: "x" }, new AbortController().signal);
+  expect(out.text).toBe("Not run: illi is in read-only mode: changing x-illi-test.txt. The user can switch with /mode, or allow just this in /permissions.");
+  await until(() => v.perm.refused.length === 1);
+  const refused = v.perm.refused[0];
+  expect(refused).toMatchObject({ who: "illi", tool: "write", what: "x-illi-test.txt", how: "mode" });
+  View.link_send(v, { $: "allow", refused: refused.id });
+  await until(() => v.perm.refused.length === 0 && v.perm.grants.length === 1);
+  expect(v.perm.grants).toEqual([{ grant: refused.exact[0], said: "changing x-illi-test.txt", saved: false }]);
+  const told = "I allowed `x-illi-test.txt` (/permissions): run it again if you still need it.";
+  await until(() => Array.from({ length: chat.mem.count }, (_, i) => Memory.message(chat.mem, i)!).some((m) => m.kind === "user" && m.text === told));
+  await until(() => !chat.busy);
+  expect(await Tools.guard(chat.tools, "main", "write", { path: "x-illi-test.txt" }, new AbortController().signal)).toBeNull();
+  View.link_send(v, { $: "revoke", grant: refused.exact[0] });
+  await until(() => v.perm.grants.length === 0);
+  View.link_send(v, { $: "mode", mode: null });
+  await until(() => v.perm.mode === "auto");
+  expect(fs.existsSync("x-illi-test.txt")).toBe(false);
   v.ws!.close();
 });
 

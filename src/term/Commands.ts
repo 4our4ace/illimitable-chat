@@ -26,6 +26,7 @@ import { term_note, term_notify, term_toast, term_unnote, term_unnotify, type No
 import * as Paint from "../ui/Paint.ts";
 import { term_palette } from "./Palette.ts";
 import { type Model, type Move, Pick } from "../ai/Pick.ts";
+import { term_mode, term_permissions } from "./PermCommands.ts";
 import { term_profile } from "./ProfileCommands.ts";
 import { term_projects } from "./ProjectCommands.ts";
 import * as Reply from "../ui/Reply.ts";
@@ -127,6 +128,8 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/shortcuts",        "",                        "the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one", (t) => term_shortcuts(t)],
       ["/set <key> [value]", "",                       "change a setting (default: back to its default); no value: says what it is", term_set],
       ["/mcp",              "",                        "your MCP servers: their tools, or why one failed", term_mcp],
+      ["/mode [mode]",      "",                        "what runs without asking, this session: auto, ask, read-only or yolo; no mode: opens a list (or click it on the bottom line)", term_mode],
+      ["/permissions",      "",                        "the requests refused (Enter allows one again, this session), the grants kept (Del removes one), your rules", (t) => term_permissions(t)],
     ]],
     ["Projects and profiles", [
       ["/projects",         "",                        "your projects, each a git repo with its own chat (outside any: home), this one first: Enter says more, Del forgets one", term_projects],
@@ -315,7 +318,7 @@ function term_pane(t: Term, title: string, make: (w: number) => Paint.Line[]): v
 
 // a pane of markdown, drawn as illi's words are but without a reply's
 // copy buttons (a pane is no reply)
-function term_pane_text(t: Term, title: string, text: string): void {
+export function term_pane_text(t: Term, title: string, text: string): void {
   const rows = View.entry_rows(null, "illi", text);
   term_pane(t, title, (w) => {
     Reply.reply_buttons(false);
@@ -441,9 +444,9 @@ function term_agent_set(t: Term, arg: string): void {
 // option takes and what the foot says of it (the model picker's), what
 // shows at each option's right end, the screen's middle as its place and
 // each option's group (the palette's)
-export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; middle?: number; heads?: string[] } = {}): void {
+export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; middle?: number; heads?: string[]; lead?: Chooser["lead"] } = {}): void {
   const shown = Screen.ed_rank("", names);
-  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, middle: more.middle, heads: more.heads, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null };
+  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, middle: more.middle, heads: more.heads, lead: more.lead, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null };
   t.pane   = null;
 }
 

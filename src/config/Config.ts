@@ -145,8 +145,12 @@ export const THEME    = config_place("theme");
 export const MCP      = config_place("mcp");
 export const MCPS     = DIR === ROOT ? [MCP] : [...new Set([ROOT + "/mcp.json", MCP])];
 
-// the user's permission rules and the grants kept (Permissions.ts)
+// the user's permission rules and the grants kept (Permissions.ts); a
+// mode of yolo set is said at the start, as nothing is asked then
 export const PERMISSIONS = config_place("permissions");
+if (config_value("mode") === "yolo") {
+  NOTES.push("mode is yolo: every call runs unasked, but what your permission rules refuse or ask. /mode switches it for this session.");
+}
 
 // the skills, agents, commands and MCP servers turned off, and the sticky
 // skills on, by name, in lower case (Custom.ts, Mcp.ts); each the root's

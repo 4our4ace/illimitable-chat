@@ -20,12 +20,13 @@ import { Suggest } from "../chat/Suggest.ts";
 import { term_chooser, term_model_pick } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Custom } from "../config/Custom.ts";
+import type { Mode } from "../tools/Guard.ts";
 import { Mcp } from "../tools/Mcp.ts";
 import { Plugins } from "../config/Plugins.ts";
 import { term_note } from "./Notices.ts";
 import { Pick } from "../ai/Pick.ts";
 import * as Screen from "../ui/Screen.ts";
-import { term_act, type Term } from "./Term.ts";
+import { term_act, term_send, type Term } from "./Term.ts";
 
 // the widest a value shows in the picker, so what it is fits beside it
 const WIDE = 24;
@@ -238,6 +239,9 @@ export function setting_set(t: Term, key: config.Key, value: unknown): boolean {
   }
   if (key === "pick" && t.v.agent === null) {
     term_act(t, { $: "Pick", to: config.PICK });
+  }
+  if (key === "mode") {
+    term_send(t, { $: "mode", mode: config.config_value("mode") as Mode });
   }
   return true;
 }

@@ -15,6 +15,7 @@
 // page is its log, kept live, whole.
 
 import type { Kind, Vendor } from "../ai/AskAI.ts";
+import type { Mode } from "../tools/Guard.ts";
 import * as Call from "./Call.ts";
 import * as Md from "./Md.ts";
 import { LABELS, type Move, Pick } from "../ai/Pick.ts";
@@ -86,6 +87,16 @@ export type Question = { id: string; who: string; tool: string; what: string; wh
 // only the user's rules can)
 export type Refused = { id: string; who: string; tool: string; what: string; why: string; how: "no" | "mode" | "rule"; said: string; at: number; exact: string[] };
 
+// the permissions (Tools.perms): the mode now and the one the setting
+// gives, the requests refused (newest last), the grants (kept for the
+// project, or this run's), the rules file and why it won't read ("": it
+// reads)
+export type Perms = { mode: Mode; set: Mode; refused: Refused[]; grants: Grant[]; file: string; broken: string };
+
+// a grant: as kept (Guard: kind=subject, kind:pattern), as said, whether
+// kept in the file (else for this run only)
+export type Grant = { grant: string; said: string; saved: boolean };
+
 // one of illi's questions: what it asks, its tab's label, the options it
 // offers, whether several may be picked
 export type Query = { text: string; head: string; options: Option[]; multi: boolean };
@@ -102,7 +113,7 @@ export const ANSWERED = "The user answered at illi's screen:\n";
 // vendors and models: those offered; use: what its calls use; todo:
 // illi's to-do list; suggest: the user's likely next message, asked as
 // the last turn ended (Suggest.ask; "": none); asks: the questions
-// waiting for an answer, the first shown
+// waiting for an answer, the first shown; perm: the permissions
 export type State = {
   busy    : boolean;
   wait    : Wait;
@@ -115,6 +126,7 @@ export type State = {
   todo    : Todo[];
   suggest : string;
   asks    : Question[];
+  perm    : Perms;
 };
 
 // fold: the tops shown (null: not folded); nodes and whole: the summaries
@@ -183,7 +195,10 @@ export type Client =
   | { $: "zoom"; part: Part }
   | { $: "root" }
   | { $: "agent"; name: string }
-  | { $: "answer"; ask: string; yes: boolean; always: boolean; said?: string }; // a question (State asks, its id) answered; said: a no's reason, or the answer to illi's own
+  | { $: "answer"; ask: string; yes: boolean; always: boolean; said?: string } // a question (State asks, its id) answered; said: a no's reason, or the answer to illi's own
+  | { $: "mode"; mode: Mode | null } // the mode for this run (/mode), or back to the setting's
+  | { $: "allow"; refused: string } // a refused request (State perm, by its id) allowed for this run, the one who asked told (/permissions)
+  | { $: "revoke"; grant: string }; // a grant let go, kept or this run's (/permissions)
 
 // an act not answered: with its id, whether it was sent, what its
 // answer does
@@ -315,6 +330,7 @@ export function view_new(): View {
     todo      : [],
     suggest   : "",
     asks      : [],
+    perm      : { mode: "auto", set: "auto", refused: [], grants: [], file: "", broken: "" },
     parts     : [],
     turn      : Infinity,
     fold      : null,
