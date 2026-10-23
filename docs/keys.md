@@ -135,6 +135,10 @@ Typing
   shell.
 - Shift+Enter or Ctrl+J: a new line. Up and Down past the ends: the
   messages sent before.
+- illi sees an image file it reads (png, jpeg, gif or webp, up to 20 MB;
+  scaled to 1568 px on its longest side), in that tool result only: the
+  chat keeps the line saying what it was, so a later turn reads it again
+  to look. A request carries at most 20 images, the newest.
 - A long paste shows as one token; pasted again while its token is in
   the input, it shows whole in the token's place. Alt+V (or Ctrl+V)
   attaches the clipboard's image: Linux needs `wl-paste` or `xclip`, WSL

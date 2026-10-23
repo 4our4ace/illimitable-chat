@@ -1,14 +1,16 @@
 // Machine test
 // ============
 // `bun test Machine.test.ts`. The device tools' answers at their edges;
-// the background jobs a shell call leaves; no read, write or edit in a
-// chat's folder, any profile's.
+// an image read, seen (fitted: scaled, its see-through kept, a broken
+// one, a huge one or one too large refused); the background jobs a shell
+// call leaves; no read, write or edit in a chat's folder, any profile's.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as config from "../config/Config.ts";
 import { Machine } from "./Machine.ts";
+import { png } from "../../test/png.ts";
 
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-machine-");
 
@@ -22,12 +24,45 @@ async function soon(ok: () => boolean): Promise<boolean> {
   return ok();
 }
 
-test("a read past a file's end says so, never an empty range", () => {
+test("a read past a file's end says so, never an empty range", async () => {
   const file = DIR + "/three";
   fs.writeFileSync(file, "a\nb\nc\n");
-  expect(Machine.read(file, 3, Infinity, 0)).toEqual({ text: "c\n[lines 3-3 of 3]", fail: false });
-  expect(Machine.read(file, 9, Infinity, 0)).toEqual({ text: "No lines from line 9: the file has 3.", fail: true });
-  expect(Machine.read(file, 2, 0, 0)).toEqual({ text: "No lines from line 2: the file has 3.", fail: true });
+  expect(await Machine.read(file, 3, Infinity, 0)).toEqual({ text: "c\n[lines 3-3 of 3]", fail: false });
+  expect(await Machine.read(file, 9, Infinity, 0)).toEqual({ text: "No lines from line 9: the file has 3.", fail: true });
+  expect(await Machine.read(file, 2, 0, 0)).toEqual({ text: "No lines from line 2: the file has 3.", fail: true });
+});
+
+test("an image read is seen: itself (a small one), scaled to fit (a big one), see-through kept; the text says it comes with this result only; offset ignored", async () => {
+  fs.writeFileSync(DIR + "/dot.txt", png(4, 3));
+  const small = await Machine.read(DIR + "/dot.txt", 5, 1, 0);
+  expect(small.text).toMatch(/^Image dot\.txt \(png, 4×3, \d+ B\), attached to this result only: read it again to see it later\.$/);
+  expect([small.fail, small.imgs!.length, small.imgs![0].type]).toEqual([false, 1, "image/webp"]);
+  const lines = new Bun.Image(Buffer.from(small.imgs![0].data, "base64"));
+  expect([(await lines.metadata()).width, (await lines.metadata()).height]).toEqual([4, 3]);
+  fs.writeFileSync(DIR + "/wide.png", png(3136, 40, true));
+  const big = await Machine.read(DIR + "/wide.png", 1, Infinity, 0);
+  expect(big.text).toContain("(png, 3136×40, ");
+  expect(big.text).toContain(", sent scaled to 1568×20), attached");
+  const seen = await new Bun.Image(Buffer.from(big.imgs![0].data, "base64")).metadata();
+  expect([seen.width, seen.height, seen.format]).toEqual([1568, 20, "webp"]);
+});
+
+test("an image that won't do is refused, saying why: cut short, too many pixels, too large; any other binary says what read takes", async () => {
+  const whole = png(64, 64);
+  fs.writeFileSync(DIR + "/cut.png", whole.subarray(0, whole.length - 30));
+  expect(await Machine.read(DIR + "/cut.png", 1, Infinity, 0)).toEqual({ text: "Image cut.png: a png that won't decode (cut short or broken).", fail: true });
+  const huge = png(1, 1);
+  huge.writeUInt32BE(20000, 16);
+  huge.writeUInt32BE(20000, 20);
+  fs.writeFileSync(DIR + "/huge.png", huge);
+  expect(await Machine.read(DIR + "/huge.png", 1, Infinity, 0)).toEqual({ text: "Image huge.png: a png of more than 67 million pixels, too many to decode.", fail: true });
+  const fd = fs.openSync(DIR + "/large.png", "w");
+  fs.writeSync(fd, png(1, 1));
+  fs.ftruncateSync(fd, 21 * 2 ** 20);
+  fs.closeSync(fd);
+  expect(await Machine.read(DIR + "/large.png", 1, Infinity, 0)).toEqual({ text: "Image large.png: 21.0 MB, too large to read (20 MB at most).", fail: true });
+  fs.writeFileSync(DIR + "/blob", Buffer.from([1, 0, 2]));
+  expect(await Machine.read(DIR + "/blob", 1, Infinity, 0)).toEqual({ text: "A binary file of 3 bytes: read takes text, and images. Images are png, jpeg, gif or webp.", fail: true });
 });
 
 test("a shell's output is decoded whole: a char split over writes, a broken one at its end", async () => {

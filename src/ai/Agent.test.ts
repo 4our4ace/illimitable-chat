@@ -6,7 +6,9 @@
 // only if it was the first step (the request itself too long). A call
 // once (a recap) runs no tool: one that calls one ends unanswered. A call
 // going on from another's keeps its vendor's cache marks in all: the
-// other's count.
+// other's count. A request carries at most PICS images, the oldest left
+// out by halves (so its prefix holds for steps), the newest results'
+// kept first, a line in each place; the items themselves untouched.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -86,4 +88,24 @@ test("a call going on from another's keeps its vendor's cache marks in all, the 
   } finally {
     Agent.step = step;
   }
+});
+
+test("a request carries at most 20 images: the oldest left out by halves, the same for steps; the last results' kept first; a line in each place, the items untouched", () => {
+  const img  = (n: number) => ({ type: "image/png", data: "p" + n });
+  const back = (from: number, n: number) => ({ $: "Back" as const, backs: Array.from({ length: n }, (_, k) => ({ id: "c" + (from + k), out: { text: "read " + (from + k), fail: false, imgs: [img(from + k)] } })) });
+  const user = { $: "User" as const, parts: [{ text: "look", mark: false }], imgs: [img(0), img(1), img(2)] };
+  const kept = (items: any[]) => items.flatMap((i) => (i.$ === "User" ? i.imgs : i.$ === "Back" ? i.backs.flatMap((b: any) => b.out.imgs ?? []) : [])).map((x: any) => x.data);
+  const few  = [user, back(3, 5)];
+  expect(Agent.thin(few)).toBe(few);
+  const items = [user, back(3, 10), { $: "Turn" as const, out: [] }, back(13, 8)];
+  const thin  = Agent.thin(items);
+  expect(kept(thin)).toEqual(["p10", "p11", "p12", ...Array.from({ length: 8 }, (_, k) => "p" + (13 + k))]);
+  expect((thin[0] as any).parts.at(-1).text).toBe("[image left out of this request (at most 20 go in one): ask for it again to see it]");
+  expect((thin[1] as any).backs[0].out.text).toBe("read 3\n[image left out of this request (at most 20 go in one): ask for it again to see it]");
+  expect((thin[1] as any).backs[7].out.text).toBe("read 10");
+  expect(kept(items).length).toBe(21);
+  const next = Agent.thin([...items, back(21, 1)]);
+  expect(JSON.stringify(next.slice(0, 4))).toBe(JSON.stringify(thin));
+  const many = Agent.thin([user, back(3, 25)]);
+  expect(kept(many)).toEqual(Array.from({ length: 20 }, (_, k) => "p" + (8 + k)));
 });

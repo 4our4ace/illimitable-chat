@@ -37,6 +37,7 @@ import { Compactor } from "./Compactor.ts";
 import { clip_page, clip_pages } from "../tools/Clip.ts";
 import * as config from "../config/Config.ts";
 import { HOME, Store, type Place } from "./Store.ts";
+import { FIT, IMAGE, PICS, PIXELS, image_fit } from "../ai/Image.ts";
 import { image_kind } from "../ui/View.ts";
 
 // Types
@@ -137,12 +138,6 @@ const LINES = HIGH / 2;
 const SEEN  = 32000;
 const BLOCK = 4;
 
-// Anthropic takes 32 MB a request, 20 images at full size: 20 of IMAGE
-// bytes, in base64; PIXELS, the most decoded: a larger image goes as is
-const PICS   = 20;
-const FIT    = 1568;
-const IMAGE  = 2 ** 20;
-const PIXELS = 2 ** 28;
 
 // what an image's hash takes between turns of the event loop
 export const PIECE = 2 ** 20;
@@ -385,7 +380,8 @@ export namespace Memory {
   // ------
 
   // an image's bytes kept in the chat's file, by their hash, with its
-  // copy for models (smaller) if one is made; hashed and scaled off the
+  // copy for models (Image.ts) if it is larger than they take (FIT,
+  // IMAGE; one of more than PIXELS goes as is); hashed and scaled off the
   // event loop; null: no image kind or unreadable
   export async function image_add(mem: Memory, bytes: Buffer): Promise<string | null> {
     const kind = image_kind(bytes);
@@ -403,15 +399,15 @@ export namespace Memory {
       await new Promise((ok) => setImmediate(ok));
     }
     const name = hash.digest("hex").slice(0, 16) + "." + kind.split("/")[1];
-    const k = Math.min(1, FIT / Math.max(size.width, size.height));
-    const fit = (k < 1 || bytes.length > IMAGE) && size.width * size.height <= PIXELS;
-    const out = fit ? await img.resize(Math.round(size.width * k), Math.round(size.height * k)).jpeg({ quality: 85 }).bytes() : null;
-    Store.image_put(mem.store, name, bytes, out);
+    const big = Math.max(size.width, size.height) > FIT || bytes.length > IMAGE;
+    const fit = big ? await image_fit(bytes, PIXELS) : null;
+    Store.image_put(mem.store, name, bytes, fit === null || typeof fit === "string" ? null : fit.bytes);
     return name;
   }
 
-  // what models get of message id's images: their copies, if any (one
-  // not kept: left out)
+  // what models get of message id's images: their copies, if any (a
+  // JPEG, or a WebP: by its bytes), else themselves (one not kept: left
+  // out)
   export function images(mem: Memory, id: number): Img[] {
     const names = Memory.message(mem, id)?.images ?? [];
     return names.flatMap((name) => {
@@ -420,7 +416,7 @@ export namespace Memory {
         return [];
       }
       const data = Buffer.from(img.fit ?? img.data).toString("base64");
-      return [{ type: img.fit !== null ? "image/jpeg" : "image/" + name.split(".")[1], data }];
+      return [{ type: img.fit !== null ? image_kind(img.fit) ?? "image/jpeg" : "image/" + name.split(".")[1], data }];
     });
   }
 

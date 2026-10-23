@@ -13,15 +13,18 @@
 // the environment the shells inherit. No read, write or edit reaches into
 // a chat's folder, any profile's (CHAT): illi's own memory is zoomed, and
 // another profile's chat is never its to touch. The shell isn't held so
-// (the prompt asks it); a sandbox would be.
+// (the prompt asks it); a sandbox would be. A read of a png, jpeg, gif or
+// webp file answers with the image itself (Image.ts fits it), which the
+// model sees in that result only: the text logged says so.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Out } from "../ai/Agent.ts";
+import { LARGEST, image_fit } from "../ai/Image.ts";
 import { CAP, clip, clip_end } from "./Clip.ts";
 import * as config from "../config/Config.ts";
 import { profile_chat } from "../config/Profiles.ts";
-import type { Background } from "../ui/View.ts";
+import { HEAD, IMAGES, image_kind, type Background } from "../ui/View.ts";
 
 // Types
 // =====
@@ -86,7 +89,7 @@ const EDIT = { type: "object", properties: { path: STR, old: STR, new: STR, all:
 
 export const TOOLS: Spec[] = [
   spec("shell", "Run a command with bash (bash -c), stdout and stderr together, and return its output, then its exit code and time, as (exit 0 in 0.4 s); output past " + CAP + " characters keeps its head and tail. Each call is a new shell. The call waits until the command and everything holding its output end, so give a background job its own output file (cmd > file.log 2>&1 &). A background job shows to the user, who may stop it, and lives only while illi is open: quitting it kills every process the calls started.", { command: STR }, ["command"]),
-  spec("read", "Read a text file. offset: the first line to show (from 1); limit: how many lines; at: the character of the first line to start from. It ends saying the lines shown, as [lines 4-7 of 15]; output past " + CAP + " characters comes in pages, saying where to go on.", { path: STR, offset: INT, limit: INT, at: INT }, ["path"]),
+  spec("read", "Read a text file, or look at an image (png, jpeg, gif, webp: you see it, in this result only). offset: the first line to show (from 1); limit: how many lines; at: the character of the first line to start from. It ends saying the lines shown, as [lines 4-7 of 15]; output past " + CAP + " characters comes in pages, saying where to go on. To look at an image on the web, download it with shell (curl -o) and read the file.", { path: STR, offset: INT, limit: INT, at: INT }, ["path"]),
   spec("write", "Write a whole file, making its directories. Answers a unified diff of what changed (a new file: all its lines added).", { path: STR, content: STR }, ["path", "content"]),
   spec("edit", "Replace text in files: the edits in order, each on its file as the edits before it left it. old must match exactly, whitespace included, and only once, unless all is true, which replaces every match. If any edit fails, no file is changed. Answers a unified diff of each file.", { edits: { type: "array", items: EDIT, minItems: 1 } }, ["edits"]),
 ];
@@ -122,7 +125,7 @@ export namespace Machine {
           return await Machine.shell(cwd, String(input.command), signal, job.agent);
         }
         case "read": {
-          return Machine.read(file, Number(input.offset ?? 1), Number(input.limit ?? Infinity), Number(input.at ?? 0));
+          return await Machine.read(file, Number(input.offset ?? 1), Number(input.limit ?? Infinity), Number(input.at ?? 0));
         }
         case "write": {
           return Machine.write(file, String(input.path), String(input.content));
@@ -276,11 +279,15 @@ export namespace Machine {
   }
 
   // `limit` lines from line `offset`, from its character `at`: a page of
-  // them (Clip.ts), and past it where to go on; failed if there are none
-  export function read(file: string, offset: number, limit: number, at: number): Out {
+  // them (Clip.ts), and past it where to go on; failed if there are none.
+  // An image (by its first bytes) answers as one instead (Machine.image)
+  export async function read(file: string, offset: number, limit: number, at: number): Promise<Out> {
+    if (image_kind(Machine.head(file)) !== null) {
+      return await Machine.image(file);
+    }
     const data = fs.readFileSync(file);
     if (data.includes(0)) {
-      return { text: "A binary file of " + data.length + " bytes.", fail: true };
+      return { text: "A binary file of " + data.length + " bytes: read takes text, and images. " + IMAGES, fail: true };
     }
     const lines = data.toString("utf8").replace(/\n$/, "").split("\n");
     const from  = Math.max(1, offset);
@@ -299,6 +306,49 @@ export namespace Machine {
     const shown = "\n[lines " + from + "-" + last + " of " + lines.length + go + "]";
     return { text: text.slice(at, end).replace(/\n$/, "") + shown, fail: false };
   }
+
+  // an image file read: itself, fitted (Image.ts), and a line saying what
+  // it is and that it comes with this result only; one too large, or one
+  // that won't do, failed, saying why
+  export async function image(file: string): Promise<Out> {
+    const name = path.basename(file);
+    const fd   = fs.openSync(file, "r");
+    let bytes: Buffer;
+    try {
+      const size = fs.fstatSync(fd).size;
+      if (size > LARGEST) {
+        return { text: "Image " + name + ": " + Machine.size(size) + ", too large to read (" + LARGEST / 2 ** 20 + " MB at most).", fail: true };
+      }
+      bytes = Buffer.alloc(size);
+      bytes = bytes.subarray(0, fs.readSync(fd, bytes, 0, size, 0));
+    } finally {
+      fs.closeSync(fd);
+    }
+    const fit = await image_fit(bytes);
+    if (typeof fit === "string") {
+      return { text: "Image " + name + ": " + fit + ".", fail: true };
+    }
+    const scaled = fit.sent.w === fit.w && fit.sent.h === fit.h ? "" : ", sent scaled to " + fit.sent.w + "×" + fit.sent.h;
+    const text   = "Image " + name + " (" + fit.kind.split("/")[1] + ", " + fit.w + "×" + fit.h + ", " + Machine.size(bytes.length) + scaled + "), attached to this result only: read it again to see it later.";
+    return { text, fail: false, imgs: [{ type: fit.type, data: Buffer.from(fit.bytes).toString("base64") }] };
+  }
+
+  // a size in bytes, in words: 812 B, 92 KB, 2.1 MB
+  export function size(n: number): string {
+    return n < 1024 ? n + " B" : n < 2 ** 20 ? Math.round(n / 1024) + " KB" : (n / 2 ** 20).toFixed(1) + " MB";
+  }
+
+  // a file's first HEAD bytes (fewer: all it has)
+  export function head(file: string): Uint8Array {
+    const fd = fs.openSync(file, "r");
+    try {
+      const buf = new Uint8Array(HEAD);
+      return buf.subarray(0, fs.readSync(fd, buf, 0, HEAD, 0));
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+
 
   // a file (named as given: shown) written whole: its diff (a new one's,
   // all its lines added), so a write reads as an edit

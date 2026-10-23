@@ -446,7 +446,7 @@ its input:
 | `hook_event_name`, `cwd`, `permission_mode` (illi's mode: `auto`, `ask`, `read-only`, `yolo`) | all |
 | `tool_name`, `tool_input` | `PreToolUse`, `PostToolUse` |
 | `agent_id`, `agent_type` (the subagent's name) | the same, on a subagent's call |
-| `tool_response`: `{ text, fail }` | `PostToolUse` |
+| `tool_response`: `{ text, fail }` (an image a tool gives, as a read of one, isn't in it) | `PostToolUse` |
 | `prompt` | `UserPromptSubmit` |
 | `stop_hook_active` (a hook made this turn go on already), `last_assistant_message` | `Stop` |
 | `message`, `title`, `notification_type` | `Notification` |
