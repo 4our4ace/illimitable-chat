@@ -65,7 +65,7 @@ const text = (t: any) => {
   return [...f.tabs, ...f.body.map(([l]: any) => l), ...f.keys].map((l: any) => l.map((r: any) => r.x).join("").trimEnd());
 };
 
-test("a question shows in the picker with a note; Enter on Yes allows it, once", () => {
+test("a question shows in the picker with a note, no answer marked as chosen, Yes lit; Enter on Yes allows it, once", () => {
   const t = term();
   asks(t, ["q1", "Bash", "rm -r build"]);
   expect(note(t)).toBe("illi asks to use Bash: rm -r build. Why: it is risky");
@@ -73,6 +73,7 @@ test("a question shows in the picker with a note; Enter on Yes allows it, once",
   expect(t.choose.names).toEqual(["Yes", "Yes, and don't ask again for rm -r build in this project", "No", "No, and say why"]);
   expect(t.choose.lead.map((l: any) => l.map((r: any) => r.x).join(""))).toEqual(["rm -r build", "Why: it is risky"]);
   expect(t.choose.foot(0)).toBe("Esc no");
+  expect([t.choose.here, t.choose.at]).toEqual([-1, 0]);
   term_grab(t, "Enter");
   expect(sent(t)).toEqual([{ ask: "q1", yes: true, always: false, said: "" }]);
   expect(t.choose).toBeNull();

@@ -269,7 +269,7 @@ function term_ask_open(t: Term, q: Question): void {
   };
   const title = "Allow " + q.tool + (q.who === "illi" ? "" : " for " + q.who) + "?";
   const lead  = [...(q.what === "" ? [] : [[Paint.Run(Paint.text_clean(q.what), { ...Paint.INK, b: true })]]), ...(q.why === undefined || q.why === "" ? [] : [[Paint.Run("Why: ", Paint.DIM), Paint.Run(Paint.text_clean(q.why))]])];
-  term_chooser(t, title, names, names.map(() => ""), 0, pick, { keys, lead, foot: () => "Esc no", stays: true });
+  term_chooser(t, title, names, names.map(() => ""), -1, pick, { keys, lead, foot: () => "Esc no", stays: true });
   t.asking!.c = t.choose;
 }
 
