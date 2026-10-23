@@ -7,8 +7,8 @@
 // the vendor refused, renewed, is asked again); a response's headers are
 // its wire's to read (chatgpt's plan limits), and a turn's last request
 // is kept whole, with its answer (AskAI.last).
-// Each step sends every item and streams one output; tool calls run in
-// order, a message sent mid-run follows the next results, and the call
+// Each step sends every item (at most PICS images: Agent.thin) and
+// streams one output; tool calls run in order, a message sent mid-run follows the next results, and the call
 // ends at a step with no tools and nothing sent. A call `once` (a recap)
 // takes one step, naming its tools but running none, unanswered if it
 // calls one; so does one that goes on from another's request (AskAI.ts
@@ -46,6 +46,7 @@ import { live_push } from "../ui/View.ts";
 import { stream_events } from "../tools/Clip.ts";
 import { Machine, type Spec } from "../tools/Machine.ts";
 import * as config from "../config/Config.ts";
+import { PICS } from "./Image.ts";
 
 // Types
 // =====
@@ -211,7 +212,7 @@ export namespace Agent {
     const items: Item[] = [...(ask.from?.items ?? []), { $: "User", parts, imgs: ask.imgs ?? [] }];
     let steps = 0;
     while (!signal.aborted) {
-      const step = await Agent.step(wire, run, key, (max) => wire.body(ask, items, tools, max));
+      const step = await Agent.step(wire, run, key, (max) => wire.body(ask, Agent.thin(items), tools, max));
       steps += 1;
       for (const entry of step.entries) {
         on({ $: "Entry", ...entry });
@@ -585,6 +586,46 @@ export namespace Agent {
       const why = run.abort.signal.aborted ? "(stopped)" : err.message;
       return { text: why, fail: true };
     }
+  }
+
+  // the items as a request carries them: at most PICS images, the newest
+  // (the user's or a tool's). Past PICS the oldest are left out by halves
+  // (down to half of PICS, then each half more), so a turn's requests
+  // keep one prefix for many steps (the vendors' caches), a suggestion's
+  // (Suggest.ts, the same items) too; the last tool results', not seen
+  // yet, are kept before any other. One left out leaves a line in its
+  // place. The items given are left as they are
+  export function thin(items: Item[]): Item[] {
+    const all: string[] = [];
+    const last = items.findLastIndex((item) => item.$ === "Back");
+    let fresh = 0;
+    items.forEach((item, i) => {
+      const imgs = item.$ === "User" ? [item.imgs] : item.$ === "Back" ? item.backs.map((b) => b.out.imgs ?? []) : [];
+      imgs.forEach((list, j) => list.forEach((_, k) => all.push(i + "." + j + "." + k)));
+      fresh += i === last ? imgs.flat().length : 0;
+    });
+    if (all.length <= PICS) {
+      return items;
+    }
+    const half  = PICS / 2;
+    const older = all.length - fresh;
+    const drop  = fresh >= PICS ? all.length - PICS : Math.min(older, half * Math.floor((all.length - half) / half));
+    const gone  = new Set(all.slice(0, drop));
+    const left  = "[image left out of this request (at most " + PICS + " go in one): ask for it again to see it]";
+    return items.map((item, i): Item => {
+      if (item.$ === "User") {
+        const imgs = item.imgs.filter((_, k) => !gone.has(i + ".0." + k));
+        return imgs.length === item.imgs.length ? item : { ...item, imgs, parts: [...item.parts, { text: left, mark: false }] };
+      }
+      if (item.$ === "Back") {
+        const backs = item.backs.map((b, j) => {
+          const imgs = (b.out.imgs ?? []).filter((_, k) => !gone.has(i + "." + j + "." + k));
+          return imgs.length === (b.out.imgs ?? []).length ? b : { ...b, out: { ...b.out, text: b.out.text + "\n" + left, imgs } };
+        });
+        return { ...item, backs };
+      }
+      return item;
+    });
   }
 
   export async function server(run: Run): Promise<Tool[]> {

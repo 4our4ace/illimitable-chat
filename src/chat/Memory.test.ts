@@ -22,7 +22,7 @@
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
-import * as zlib from "node:zlib";
+import { png } from "../../test/png.ts";
 
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-memory-");
 process.env.ILLI_DIR = DIR;
@@ -71,24 +71,6 @@ test("a turn's chat: the messages from the cut whole, in blocks, the last whole 
   expect(Memory.chat(mem, 9, 9).filter((b) => b.mark).length).toBe(1);
 });
 
-// a PNG w x h, one grey, made by hand
-function png(w: number, h: number): Buffer {
-  const chunk = (type: string, data: Buffer) => {
-    const body = Buffer.concat([Buffer.from(type), data]);
-    const out = Buffer.alloc(12 + data.length);
-    out.writeUInt32BE(data.length, 0);
-    body.copy(out, 4);
-    out.writeUInt32BE(Bun.hash.crc32(body), 8 + data.length);
-    return out;
-  };
-  const head = Buffer.alloc(13);
-  head.writeUInt32BE(w, 0);
-  head.writeUInt32BE(h, 4);
-  head.set([8, 2, 0, 0, 0], 8);
-  const rows = Buffer.concat(Array.from({ length: h }, () => Buffer.concat([Buffer.from([0]), Buffer.alloc(3 * w, 0x80)])));
-  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", head), chunk("IDAT", zlib.deflateSync(rows)), chunk("IEND", Buffer.alloc(0))]);
-}
-
 test("closed, the chat is its project's one file, its images in it: a model gets a big one's smaller copy, a small one whole; an export, each image itself", async () => {
   const mem = chat("closed", 1);
   const [small, big] = [png(4, 4), png(2400, 8)];
@@ -98,9 +80,9 @@ test("closed, the chat is its project's one file, its images in it: a model gets
   expect(await Memory.image_add(mem, Buffer.from("no image"))).toBeNull();
   Memory.push(mem, [{ kind: "user", text: "two screenshots", images: [names[0]!, names[1]!] }]);
   const got = Memory.images(mem, 1);
-  expect(got.map((g) => g.type)).toEqual(["image/png", "image/jpeg"]);
+  expect(got.map((g) => g.type)).toEqual(["image/png", "image/webp"]);
   expect(got[0].data).toBe(small.toString("base64"));
-  expect(Buffer.from(got[1].data, "base64").subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]));
+  expect(Buffer.from(got[1].data, "base64").subarray(8, 12).toString()).toBe("WEBP");
   expect(Memory.plain(Memory.message(mem, 1)!)).toBe("user: two screenshots\n[image " + names[0] + "]\n[image " + names[1] + "]");
   const out = JSON.parse([...Export.dump(mem)].join(""));
   expect(out.images).toEqual({ [names[0]!]: small.toString("base64"), [names[1]!]: big.toString("base64") });

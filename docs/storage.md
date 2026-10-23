@@ -108,7 +108,9 @@ The columns, by table:
   name freed goes on to a new agent, with a log of its own (the name and
   a tag).
 - **image**: `id`, `chat`, `name` (its hash, so an image pasted twice is
-  kept once), `data` (bytes), `fit` (a smaller copy for models, or null).
+  kept once), `data` (bytes), `fit` (a smaller copy for models, or null:
+  a JPEG's a JPEG, any other's a WebP). Images illi reads with its tools
+  aren't kept: only the line saying what each was.
 - **todo**: `chat`, `list` (JSON).
 - **find_\<chat\>**: an FTS5 table with `text` (the line), `first` and `n`
   (stored but not indexed). Its tokenizer is `unicode61 remove_diacritics

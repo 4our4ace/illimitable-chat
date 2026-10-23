@@ -6,7 +6,8 @@
 // server error, is busy, so it is asked again. A request keeps the
 // latest cache marks its vendor writes: OpenAI four (three with the end
 // cached implicitly), Anthropic's room beside its system prompt and
-// end, the ChatGPT backend none.
+// end, the ChatGPT backend none. A tool result's image goes in its
+// function_call_output's list.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -49,4 +50,9 @@ test("a request keeps the latest cache marks its vendor writes", async () => {
   expect([kept(OpenAI.wire, false), kept(OpenAI.wire, true)]).toEqual(["bcde", "dez"]);
   expect([kept(Anthropic.wire, false), kept(Anthropic.wire, true)]).toEqual(["cde", "ez"]);
   expect([kept(ChatGPT.wire, false), kept(ChatGPT.wire, true)]).toEqual(["", ""]);
+});
+
+test("a tool's result with an image goes as its function_call_output's list: its text, then the image as a data URL", () => {
+  const item = { $: "Back" as const, backs: [{ id: "c1", out: { text: "Image a.png", fail: false, imgs: [{ type: "image/webp", data: "UklG" }] } }] };
+  expect(OpenAI.input(item)).toEqual([{ type: "function_call_output", call_id: "c1", output: [{ type: "input_text", text: "Image a.png" }, { type: "input_image", image_url: "data:image/webp;base64,UklG" }] }]);
 });
