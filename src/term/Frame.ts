@@ -443,8 +443,6 @@ function term_side_again(t: Term): void {
   }
 }
 
-// a subagent's spinner, ms into the work: ORBIT_TRAIL dots round one
-// braille cell, a dot each 2 TRACE
 // the title's ∞ at a step of its trace: its 3 cells, the trail's dots on
 // LOOP, the head at the step's
 export function term_loop(step: number): string {
@@ -456,6 +454,8 @@ export function term_loop(step: number): string {
   return bits.map((b) => String.fromCharCode(0x2800 + b)).join("");
 }
 
+// a subagent's spinner, ms into the work: ORBIT_TRAIL dots round one
+// braille cell, a dot each 2 TRACE
 export function term_spinner(ms: number): string {
   const head = Math.floor(ms / (2 * TRACE)) % ORBIT.length;
   let bits = 0;

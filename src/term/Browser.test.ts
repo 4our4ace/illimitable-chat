@@ -5,11 +5,11 @@
 // words, quotes holding one together; the link for %s, else last; a
 // console browser left out; `none`: nothing at all), even over SSH; then
 // the system's but over SSH: WSL's Windows handler, macOS' open, xdg-open
-// only on a display; never a link that isn't http(s), and the link
-// normalized. A program run for real (never a browser: the preload sets
-// BROWSER none, and SSH_TTY keeps the system's out): its arguments as
-// given, from its own folder, in a session of its own, its output
-// dropped; a failure, a kill, one not found said in plain words; one
+// only on a display (on WSL too, after Windows'); never a link that isn't
+// http(s), and the link normalized. A program run for real (never a
+// browser: the preload sets BROWSER none, and SSH_TTY keeps the system's
+// out): its arguments as given, from its own folder, in a session of its
+// own, its output dropped; a failure, a kill, one not found said in plain words; one
 // still running taken as opened; the next tried after one that fails.
 // /login's notice: true whether the browser opens or not, and put right
 // in place when it didn't.
@@ -53,8 +53,9 @@ test("$BROWSER's entries found come first, in turn (one found whole, spaces and 
   expect(pick({ BROWSER: "None" }, "darwin", false, ["open"])).toEqual([]);
 });
 
-test("the system's after them: WSL's Windows handler, macOS' open, xdg-open on a display; none over SSH or without a display", () => {
-  expect(pick({ DISPLAY: ":0" }, "linux", true, ["rundll32.exe", "xdg-open", "wslview"])).toEqual([["rundll32.exe", "url.dll,FileProtocolHandler", URL]]);
+test("the system's after them: WSL's Windows handler, then xdg-open on a display (WSLg's too), macOS' open; none over SSH or without a display", () => {
+  expect(pick({ DISPLAY: ":0" }, "linux", true, ["rundll32.exe", "xdg-open", "wslview"])).toEqual([["rundll32.exe", "url.dll,FileProtocolHandler", URL], ["xdg-open", URL]]);
+  expect(pick({ DISPLAY: ":0" }, "linux", true, ["xdg-open"])).toEqual([["xdg-open", URL]]);
   expect(pick({}, "linux", true, [])).toEqual([]);
   expect(pick({}, "darwin", false, ["open"])).toEqual([["open", URL]]);
   expect(pick({ WAYLAND_DISPLAY: "wayland-0" }, "linux", false, ["xdg-open"])).toEqual([["xdg-open", URL]]);

@@ -34,7 +34,7 @@ const CONSOLE = new Set(["w3m", "lynx", "links", "links2", "elinks", "www-browse
 // program, a path with spaces too, else its words, quotes holding one
 // together; `%s` is the link, else the link goes last; a console browser
 // left out), then, but over SSH, the system's (wsl: WSL with Windows'
-// programs in reach)
+// programs in reach, tried before its own display's)
 export function browser_commands(url: string, env: Record<string, string | undefined>, platform: string, wsl: boolean, which: (program: string) => string | null): string[][] {
   const link = browser_link(url);
   const set  = (env.BROWSER ?? "").trim();
@@ -45,9 +45,10 @@ export function browser_commands(url: string, env: Record<string, string | undef
   if (env.SSH_CONNECTION || env.SSH_CLIENT || env.SSH_TTY) {
     return own;
   }
-  const found  = (run: string[]) => (which(run[0]) === null ? [] : [run]);
-  const system = wsl ? found(["rundll32.exe", "url.dll,FileProtocolHandler", link]) : platform === "darwin" ? found(["open", link]) : env.DISPLAY || env.WAYLAND_DISPLAY ? found(["xdg-open", link]) : [];
-  return [...own, ...system];
+  const found   = (run: string[]) => (which(run[0]) === null ? [] : [run]);
+  const display = env.DISPLAY || env.WAYLAND_DISPLAY ? found(["xdg-open", link]) : [];
+  const windows = wsl ? found(["rundll32.exe", "url.dll,FileProtocolHandler", link]) : [];
+  return [...own, ...(platform === "darwin" ? found(["open", link]) : [...windows, ...display])];
 }
 
 // url opened in the browser, each program browser_commands gives tried

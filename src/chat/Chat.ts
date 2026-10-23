@@ -319,11 +319,13 @@ export namespace Chat {
   }
 
   // the background jobs running as illi quits, noted in the chat
-  // (Machine.end stops them next), so a resumed turn knows they're gone
+  // (Machine.end stops them next), so a resumed turn knows they're gone:
+  // logged at once, never held behind a message in its checks (Chat.hold),
+  // which illi quits before logging
   export function leaving(chat: Chat): void {
     const jobs = Machine.background();
     if (jobs.length > 0) {
-      Chat.note(chat, "illi quit, stopping its background jobs: " + jobs.map((j) => j.command + " (" + j.agent + "'s)").join(", ") + ".");
+      Chat.push(chat, null, "note","illi quit, stopping its background jobs: " + jobs.map((j) => j.command + " (" + j.agent + "'s)").join(", ") + ".");
     }
   }
 

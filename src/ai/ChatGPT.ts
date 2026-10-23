@@ -152,10 +152,16 @@ export namespace ChatGPT {
     return true;
   }
 
-  // the login file followed while illi runs (each FOLLOW): a change of
-  // account asks the new one's plan (usage)
+  // the login file followed while illi runs (each FOLLOW): an account
+  // whose plan nothing told yet (a change of account, seen here or by a
+  // request's token) asks it (usage)
   export function follow(): void {
-    following ??= setInterval(() => ChatGPT.sync() && void ChatGPT.usage(), FOLLOW);
+    following ??= setInterval(() => {
+      ChatGPT.sync();
+      if (record === null && ChatGPT.key() !== "") {
+        void ChatGPT.usage();
+      }
+    }, FOLLOW);
     following.unref?.();
   }
 
@@ -244,7 +250,9 @@ export namespace ChatGPT {
 
   // the login on disk, renewed under its lock if it nears its end (another
   // tool may have renewed it meanwhile), and written back to the file it
-  // was read from (looked up once: a /login meanwhile may change which)
+  // was read from (looked up once: a /login meanwhile may change which),
+  // unless the file changed while the renewal was asked (a /login there,
+  // which takes no lock): the file's login wins
   export async function renew(): Promise<Login> {
     const file = ChatGPT.file();
     const disk = ChatGPT.login(ChatGPT.entry(file).entry);
@@ -263,7 +271,8 @@ export namespace ChatGPT {
         throw new Error("ChatGPT login renewal failed (HTTP " + res.status + "): sign in again with /login");
       }
       const got: any = await res.json();
-      return ChatGPT.keep(file, data, entry, got, now);
+      const since = ChatGPT.entry(file).entry;
+      return since.access === entry.access ? ChatGPT.keep(file, data, entry, got, now) : ChatGPT.login(since);
     });
   }
 
