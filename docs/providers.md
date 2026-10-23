@@ -31,12 +31,11 @@ illi then runs Claude Code itself, as it ships, on your login:
 - **Your Claude Code setup applies**: its permission rules, hooks, MCP
   servers and plugins. A project's `CLAUDE.md` is Claude Code's to read,
   so illi doesn't add it again.
-- **Permission prompts come to illi's screen.** When Claude Code wants to
-  run something its settings don't allow, illi asks: yes, yes for that
-  tool until illi quits, no, or no with a reason the model reads. The
-  picker's bottom line shows what it would run.
-
-  ![Claude Code asking leave to run a command, answered at illi's screen](../assets/screens/permission.webp)
+- **Permission prompts come to illi.** When Claude Code wants to run
+  something its settings don't allow, illi checks it as it checks its
+  own calls ([Permissions](permissions.md)): routine work runs, a risky
+  call is asked about at illi's screen, saying why, and your rules and
+  grants apply.
 - **Summaries run with nothing extra**: `claude -p` calls with no tools,
   MCP servers, commands or hooks.
 - **Plan limits are said plainly**: when your plan's limit is reached,

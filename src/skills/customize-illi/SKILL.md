@@ -129,7 +129,8 @@ one:
 - mode: what runs without asking: auto (the default: reads, and changes
   inside the project; a risky call is asked about, saying why), ask
   (every change asked), read-only (changes refused), yolo (everything,
-  but what the user's rules refuse or ask)
+  but what the user's rules refuse or ask); /mode switches it for a
+  session, /permissions lists what was refused and the grants kept
 - permissions: the permission file, permissions.json in illi's folder
   unless set: the user's rules ({"rules": {"shell": {"git push *":
   "ask"}}}: allow, ask or deny by pattern, for shell, read, write and
