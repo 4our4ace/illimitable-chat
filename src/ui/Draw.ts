@@ -1,14 +1,13 @@
 // Draw
 // ====
-// What Paint.ts draws as cellsmith (github.com/4our4ace/cellsmith) does.
-// A ```mermaid block: a diagram on the terminal's cell grid (Pele lays it
+// What Paint.ts draws in color: a ```mermaid block: a diagram on the terminal's cell grid (Pele lays it
 // out with each character one cell, pelext draws the layout in box lines,
 // block fills, braille and text), laid out again narrower till it fits
 // the width; else none (its code shows). Code: Prism's tokens
 // (Prism.ts), by kind, and a shell's own (its commands, flags, strings,
 // comments).
 //
-// A diagram's colors are a cellsmith palette (Theme.PALETTE) over the
+// A diagram's colors are a palette (Palettes.ts, Theme.PALETTE) over the
 // terminal's background, which the terminal tells when asked (Screen.ts,
 // draw_canvas): "auto" picks a dark or light palette by it, and, untold
 // (a pipe, a terminal that never answers), draws in the terminal's own
@@ -35,7 +34,7 @@
 // agents are read, from its name and theirs, so it holds while they do.
 
 import type { PelePalette } from "pelext";
-import { CANVAS, PRESETS } from "../../vendor/cellsmith/presets.ts";
+import { CANVAS, PALETTES, type PaletteName } from "./Palettes.ts";
 import type { PrismToken } from "./Prism.ts";
 import * as Theme from "./Theme.ts";
 
@@ -58,7 +57,7 @@ type Prism = typeof import("./Prism.ts");
 // Constants
 // =========
 
-// the longest diagram drawn (characters, lines: cellsmith's), the longest
+// the longest diagram drawn (characters, lines), the longest
 // code highlighted
 const LONGEST = 8000;
 const LINES   = 80;
@@ -160,12 +159,12 @@ function draw_palette(): { key: string; colors: PelePalette } {
   }
   const name   = draw_name();
   const own    = Object.fromEntries(Object.entries(draw_theme()).filter(([, c]) => c.startsWith("#")));
-  const colors = draw_colors({ ...PRESETS[name], ...own }, canvas ?? CANVAS[name]);
+  const colors = draw_colors({ ...PALETTES[name], ...own }, canvas ?? CANVAS[name]);
   palette = { key: JSON.stringify(colors), colors, look: now };
   return palette;
 }
 
-// a reply's colors as a diagram's (cellsmith's mapping): its text, the
+// a reply's colors as a diagram's: its text, the
 // muted, its lines and borders, the accent, the critical and highlit,
 // and the series charts and nodes take in turn, over the canvas
 function draw_colors(theme: Partial<Record<string, string>>, canvas: string): PelePalette {
@@ -175,12 +174,12 @@ function draw_colors(theme: Partial<Record<string, string>>, canvas: string): Pe
 
 // the palette's name: the one named, else dark or light by the
 // background, mono untold
-function draw_name(): keyof typeof PRESETS {
+function draw_name(): PaletteName {
   const auto = canvas === null ? "mono" : draw_dark(canvas) ? "catppuccin-mocha" : "catppuccin-latte";
-  return (Theme.PALETTE in PRESETS ? Theme.PALETTE : auto) as keyof typeof PRESETS;
+  return (Theme.PALETTE in PALETTES ? Theme.PALETTE : auto) as PaletteName;
 }
 
-// a reply's colors by cellsmith's slots (Reply.ts): the palette's, or the
+// a reply's colors by the palette's slots (Reply.ts): the palette's, or the
 // terminal's own (Theme.REPLY) while "auto" is untold; the user's over
 // them; an accent or links asked for over theirs (draw_made)
 export function draw_theme(): Record<string, string> {
@@ -198,7 +197,7 @@ export function draw_tokens(): Record<Theme.Token, string> {
 // plugin's): the theme before its tokens
 function draw_own(): Record<string, string> {
   const name = draw_name();
-  return { ...(name === "mono" && !(Theme.PALETTE in PRESETS) ? Theme.REPLY : (PRESETS[name] as Record<string, string>)), ...Theme.theme_colors() };
+  return { ...(name === "mono" && !(Theme.PALETTE in PALETTES) ? Theme.REPLY : (PALETTES[name] as Record<string, string>)), ...Theme.theme_colors() };
 }
 
 // the theme for the look now, made once per look: each token's color
@@ -246,7 +245,7 @@ function draw_token(t: Theme.Token, asked: Record<Theme.Token, string>, own: Rec
   }
   switch (t) {
     case "accent": {
-      return "accent" in Theme.theme_colors() || Theme.PALETTE in PRESETS ? own.accent ?? "5" : draw_brand();
+      return "accent" in Theme.theme_colors() || Theme.PALETTE in PALETTES ? own.accent ?? "5" : draw_brand();
     }
     case "link": {
       return own.link ?? "4";

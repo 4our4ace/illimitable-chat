@@ -98,8 +98,7 @@ flowchart TD
   the chat.
   `/goal <message>` keeps it working until the goal is met.
 - **Drawn replies.** Mermaid diagrams, highlighted code and boxed tables,
-  the way [cellsmith](https://github.com/4our4ace/cellsmith) draws them
-  in Claude Code.
+  in one of 15 palettes or your terminal's own colors.
 
 Two subagents at work side by side, then illi merging what they found:
 
@@ -152,6 +151,6 @@ Docs
 License
 -------
 
-Apache 2.0: LICENSE and NOTICE. `vendor/cellsmith/` and the libraries
-compiled in are MIT: their licenses are in `vendor/cellsmith/` and
+Apache 2.0: LICENSE and NOTICE. The libraries compiled in and the code
+adapted from prismantis are MIT: their licenses are in
 THIRD_PARTY_NOTICES.md.

@@ -15,8 +15,8 @@
 // little lighter (a dark one) or darker (a light one), once the terminal
 // tells it (Paint.ts), and none while it doesn't: a dim bar marks what
 // it fills. Code's tokens are in the palette too (SYNTAX). illi's replies
-// and diagrams paint true color, as cellsmith does (Reply.ts, Draw.ts): a
-// cellsmith palette (PALETTE) over the terminal's own background, or, the
+// and diagrams paint true color (Reply.ts, Draw.ts): a palette
+// (PALETTE, Palettes.ts) over the terminal's own background, or, the
 // background untold, the terminal's palette (REPLY).
 //
 // Every colored part of the screen takes its color from one of a few
@@ -175,14 +175,14 @@ export const SYNTAX: Record<string, string> = {
 // the kinds of a comment, drawn dim
 export const COMMENTS = ["comment", "prolog", "doctype", "cdata"];
 
-// the palette replies and diagrams draw in: one of cellsmith's
-// (cellsmith/presets.ts), "mono" (the terminal's ink: bold and dim, shades
+// the palette replies and diagrams draw in: one of Palettes.ts's, "mono"
+// (the terminal's ink: bold and dim, shades
 // for a diagram's series), or "auto": a dark or light one by the
 // terminal's background; untold, replies in REPLY, diagrams mono
 export const PALETTE = OWN.palette ?? "auto";
 
 // a reply's colors in the terminal's own palette, for "auto" untold:
-// cellsmith's slots (Reply.ts); a slot left out is the ink (a comment, a
+// the palettes' slots (Reply.ts); a slot left out is the ink (a comment, a
 // rule, a quote dimmed)
 export const REPLY: Record<string, string> = {
   accent     : "5",

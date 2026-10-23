@@ -1,9 +1,8 @@
 // Reply
 // =====
-// illi's replies drawn as cellsmith draws Claude Code's (cellsmith/, from
-// github.com/4our4ace/cellsmith): its parser (cellsmith/markdown.ts) reads
-// the text, and each block draws as its renderer draws it, in Paint's
-// lines, in a cellsmith palette (Draw.draw_theme: the one named, or by
+// illi's replies drawn from their markdown: Markdown.ts reads the text,
+// and each block draws in Paint's lines, in a palette (Palettes.ts,
+// Draw.draw_theme: the one named, or by
 // the terminal's background; the terminal's own colors while untold):
 //
 // - code: a header (`── lang`, a copy button at its right) over its lines,
@@ -31,7 +30,7 @@
 // so their lines are kept and only the text after is read and laid out
 // again (but after a figure: the next may sit beside it).
 
-import { displayText, inlineText, parse, type Block, type Inline } from "../../vendor/cellsmith/markdown.ts";
+import { markdown_parse, markdown_shown, markdown_text, type Block, type Inline } from "./Markdown.ts";
 import * as Draw from "./Draw.ts";
 import * as Paint from "./Paint.ts";
 import type { Token } from "./Theme.ts";
@@ -60,7 +59,7 @@ export type Grown = { text: string; n: number; lines: Line[]; w: number; copy: b
 // Constants
 // =========
 
-// a code token's palette slot by its kind (cellsmith's; Draw.ts names a
+// a code token's palette slot by its kind (Draw.ts names a
 // shell's command a function, its flag a keyword); none: the code's own
 const SLOT: Record<string, string> = {
   comment: "codeComment", prolog: "codeComment", doctype: "codeComment", cdata: "codeComment",
@@ -108,7 +107,7 @@ export function reply_grow(text: string, w: number, was: Grown | null, copy = tr
     const src    = text.includes("\r") ? text.replace(/\r\n?/g, "\n") : text;
     const from   = was !== null && was.w === w && was.copy === buttons && src.startsWith(was.text) ? was : { text: "", n: 0, lines: [], w, copy: buttons };
     const rest   = src.slice(from.text.length);
-    const blocks = parse(rest, { numbers: true, paths: true });
+    const blocks = markdown_parse(rest, { numbers: true, paths: true });
     const drawn  = blocks.map((b) => block_drawn(pal, b, w));
     const [k, at] = reply_done(rest, blocks, drawn);
     const head   = lines_after(from.lines, from.n, reply_join(drawn.slice(0, k), w), k);
@@ -214,7 +213,7 @@ function heading_lines(pal: Pal, level: number, inline: Inline[], w: number): Li
     return lines_boxed(Paint.runs_wrap(inline_runs(pal, inline, ink), Math.max(1, w - 4), false), { ...Paint.INK, c }, "┏━┓┃┗┛");
   }
   const rows = Paint.runs_wrap(inline_runs(pal, inline, ink), w, false);
-  return level === 2 ? [...rows, [Paint.Run("━".repeat(Math.min(w, Paint.text_width(inlineText(inline)))), { ...Paint.INK, c })]] : rows;
+  return level === 2 ? [...rows, [Paint.Run("━".repeat(Math.min(w, Paint.text_width(markdown_text(inline)))), { ...Paint.INK, c })]] : rows;
 }
 
 // a quote: the accent's bar, its text italic in the quote's color
@@ -289,12 +288,12 @@ function diagram_lines(pal: Pal, source: string, art: Draw.Cell[][], w: number):
 // says, its width fit to w (column_widths), each cell wrapped in it
 function table_lines(pal: Pal, t: Table, w: number): Line[] {
   const rows    = [t.header, ...t.rows];
-  const widths  = column_widths(table_widths(rows, (x) => inlineText(x), Paint.text_width), w - 4, 3, table_widths(rows, (x) => inlineText(x), longest_word));
+  const widths  = column_widths(table_widths(rows, markdown_text, Paint.text_width), w - 4, 3, table_widths(rows, markdown_text, longest_word));
   const rule    = tone(pal, "tableRule");
   const head    = { ...Paint.INK, b: true, c: pal.tableHeader ?? "" };
   const edge    = (c: string): Line => [Paint.Run(c[0] + widths.map((cw) => c[1].repeat(cw + 2)).join(c[2]) + c[3], rule)];
   const row     = (cells: Inline[][], top: boolean): Line[] => {
-    const wrapped = widths.map((cw, c) => Paint.runs_wrap(top ? [Paint.Run(Paint.text_clean(inlineText(cells[c] ?? [])), head)] : inline_runs(pal, cells[c] ?? [], Paint.INK), cw, false));
+    const wrapped = widths.map((cw, c) => Paint.runs_wrap(top ? [Paint.Run(Paint.text_clean(markdown_text(cells[c] ?? [])), head)] : inline_runs(pal, cells[c] ?? [], Paint.INK), cw, false));
     const tall    = Math.max(...wrapped.map((x) => x.length));
     return Array.from({ length: tall }, (_, k) => [
       Paint.Run("│ ", rule),
@@ -314,8 +313,8 @@ function table_widths(rows: Inline[][][], text: (cell: Inline[]) => string, meas
 // chat pastes it as is)
 function table_art(t: Table): string {
   const rows   = [t.header, ...t.rows];
-  const cells  = rows.map((r) => t.header.map((_, c) => displayText(r[c] ?? [])));
-  const widths = column_widths(table_widths(rows, displayText, Paint.text_width), ART - 4, 3, table_widths(rows, displayText, longest_word));
+  const cells  = rows.map((r) => t.header.map((_, c) => markdown_shown(r[c] ?? [])));
+  const widths = column_widths(table_widths(rows, markdown_shown, Paint.text_width), ART - 4, 3, table_widths(rows, markdown_shown, longest_word));
   const rule   = (l: string, m: string, r: string) => l + widths.map((cw) => "─".repeat(cw + 2)).join(m) + r;
   const row    = (r: string[], top: boolean) => {
     const wrapped = r.map((x, c) => Paint.runs_wrap([Paint.Run(x)], widths[c], false).map((l) => l.map((run) => run.x).join("")));
@@ -330,7 +329,7 @@ function table_art(t: Table): string {
 // columns' widths in `room` columns, `gap` between each two: each its
 // natural width if all fit; else the narrow whole and the rest sharing
 // what is left, none under its longest word while those fit, the widest
-// cut till they fit (cellsmith's columnWidths)
+// cut till they fit
 function column_widths(natural: number[], room: number, gap: number, words: number[]): number[] {
   const free = Math.max(natural.length, room - gap * (natural.length - 1));
   if (natural.reduce((a, b) => a + b, 0) <= free) {

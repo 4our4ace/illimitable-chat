@@ -3,7 +3,7 @@
 // Prism (prismjs) with the languages a reply's code is colored in, which
 // Draw.ts loads as it first reads code: Prism's core, made global, as
 // each language expects it, then the languages, each after those it
-// builds on (the 24 cellsmith colors).
+// builds on.
 
 // a token: plain text, or a kind of text holding more
 export type PrismToken = string | { type: string; alias?: string | string[]; content: PrismToken | PrismToken[] };
