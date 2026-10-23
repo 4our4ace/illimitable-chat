@@ -15,6 +15,6 @@ illi's docs
 - [The chat files](storage.md): how the memory is stored, a file per
   project, upgraded, searched and forgotten, step by step, with what
   each costs.
-- [Planned](planned.md): permissions, a sandbox, project trust.
+- [Planned](planned.md): permissions, a sandbox.
 
 The start and install are in the [README](../README.md).

@@ -13,7 +13,5 @@ to, as you: use it where you'd let it.
 - **Sandbox.** Shell commands in a bubblewrap sandbox: only the project
   and `/tmp` writable, secrets hidden, network off. illi asks before
   anything leaves it, so work inside it needs no prompts.
-- **Project trust.** A project's own `.illi` agents, commands and skills
-  load only once you trust the folder.
 - **An AI reviewer.** Optionally, a small model approves routine requests
   to leave the sandbox, so you're asked less.

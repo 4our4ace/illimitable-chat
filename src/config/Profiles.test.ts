@@ -230,7 +230,9 @@ test("the root is global: a profile has its skills, agents, commands and MCP ser
   const config = await import("./Config.ts");
   const { Custom } = await import("./Custom.ts");
   const { Mcp } = await import("../tools/Mcp.ts");
+  const { Trusted } = await import("./Trusted.ts");
   const own = ROOT + "/profiles/copy";
+  Trusted.trust(Trusted.folder(TMP));
   put(ROOT + "/skills/adhd/SKILL.md", "---\ndescription: global\n---\nG.");
   put(ROOT + "/skills/notes/SKILL.md", "---\ndescription: global\n---\nG.");
   put(own + "/skills/notes/SKILL.md", "---\ndescription: mine\n---\nM.");

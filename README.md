@@ -40,7 +40,11 @@ Install
 
     curl -fsSL https://raw.githubusercontent.com/4our4ace/illimitable-chat/main/install.sh | bash
 
-Then run `illi` in any project folder. It goes in `~/.local/bin` (or
+Then run `illi` in any project folder. The first time in a folder, it
+asks, full screen, whether you trust it: illi reads, edits and runs
+files there and follows its `AGENTS.md` or `CLAUDE.md`. A yes is kept
+for the whole repo; your home folder is asked at every start. It goes
+in `~/.local/bin` (or
 `ILLI_INSTALL`) and updates itself: once a day, as it starts or while
 it runs, it looks for a new release, downloads and checks it in the
 background, and runs it from the next start (`autoupdate` in [Config](docs/config.md) makes

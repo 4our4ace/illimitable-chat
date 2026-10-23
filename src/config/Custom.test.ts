@@ -8,6 +8,7 @@
 // as it. A skill: its folder's SKILL.md (a folded description), the
 // project's over theirs, listed by the skill tool and loaded by it; a
 // sticky one turned on and off by it, while on in every turn's prompt.
+// The project is trusted first: only then do its own files load.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -41,9 +42,13 @@ put(DIR + "/skills/notes/README.md", "no SKILL.md: no skill");
 const { AskAI } = await import("../ai/AskAI.ts");
 const { Chat } = await import("../chat/Chat.ts");
 const { Custom } = await import("./Custom.ts");
+const { Trusted } = await import("./Trusted.ts");
 const { Logs } = await import("../chat/Logs.ts");
 const { Memory } = await import("../chat/Memory.ts");
 const { Tools } = await import("../tools/Tools.ts");
+
+// the project's own agents, commands and skills load only once it is trusted
+Trusted.trust(Trusted.folder(CWD));
 const config = await import("./Config.ts");
 
 // the model: the asks it got, each answered "done" at once
