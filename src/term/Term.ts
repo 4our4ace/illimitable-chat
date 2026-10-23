@@ -22,15 +22,16 @@
 // so their hooks see all it does; a project's only in a folder trusted
 // (Trusted.ts). On a terminal, illi runs under a window (Window.ts), one
 // process that owns the terminal for every profile's illi under it; this
-// one's end of it is Member.ts. Each
-// profile (Profiles.ts) is its
-// own chat and settings; /profile switches by letting all go, as a quit
-// does, and running illi again, in place, in the one chosen
-// (ProfileCommands.ts). From a pipe, each line is a message, and each
-// message the chat logs prints as text. As a turn ends, the reply the
-// chat suggests shows in the empty input, dim (Suggest.ask; none from a
-// pipe): Tab takes it, typing dismisses it, a message of your own leaves
-// it, to send as well, till illi answers (Keys.ts).
+// one's end of it is Member.ts. Each profile (Profiles.ts) is its own
+// chat and settings; /profile switches (ProfileCommands.ts): in a window,
+// at once, this illi running on hidden till the window closes or illi
+// quits; alone, by letting all go, as a quit does, and running illi
+// again, in place, in the one chosen. From a pipe, each line is a
+// message, and each message the chat logs prints as text. As a turn
+// ends, the reply the chat suggests shows in the empty input, dim
+// (Suggest.ask; none from a pipe): Tab takes it, typing dismisses it, a
+// message of your own leaves it, to send as well, till illi answers
+// (Keys.ts).
 //
 // This file: the terminal's state (Term), its link to the chat, and
 // what every part shares (notes, toasts, quitting).

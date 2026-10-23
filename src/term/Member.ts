@@ -100,10 +100,14 @@ export function member_screen(): Screen.Windowed | undefined {
   };
 }
 
-// the terminal up: the window's messages reach it from now on
+// the terminal up: the window's messages reach it from now on, and the
+// others open, as told while it started, are heard again by it (a
+// question waiting noted, the side's spinner moving)
 export function member_attach(t: Term): void {
   if (WIN !== null) {
-    WIN.t = t;
+    const open = WIN.open;
+    [WIN.t, WIN.open] = [t, []];
+    member_roster(open, "");
   }
 }
 

@@ -36,11 +36,13 @@ question waits on you, `● 2` while only its background jobs run; a note
 says when one asks you something or is done, and the title's mark turns
 `?` for a question in any of them. Ctrl+D (or a second Ctrl+C) quits
 every profile open in the terminal, first saying which at work it ends
-too. Behind it, `illi` on a
-terminal is a small window process that runs each profile's illi on a
-pseudo-terminal of its own ([development](development.md)); with
-`ILLI_WINDOW=off`, or from a pipe, illi runs alone, and a switch quits
-it and starts it again in the other profile, never while it works.
+too; Ctrl+Z hands the terminal back while all of them go on.
+
+Behind it, `illi` on a terminal is a small window process that runs
+each profile's illi on a pseudo-terminal of its own
+([development](development.md)). With `ILLI_WINDOW=off`, or from a
+pipe, illi runs alone, and a switch quits it and starts it again in the
+other profile, never while it works.
 
 Global and a profile's own
 --------------------------
