@@ -109,7 +109,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/export",           "",                        "save this project's memory as ./illi-memory.json",          term_export],
       ["/tree",             "",                        "save this project's whole memory tree as ./illi-tree.html", term_tree],
       ["",                  "Ctrl+L",                  "draw the screen again",                          term_redraw],
-      ["",                  "Ctrl+Z",                  "suspend; fg brings it back",                     (t) => Screen.screen_suspend(t.scr)],
+      ["",                  "Ctrl+Z",                  "back to the shell, illi's work going on; fg brings it back", (t) => Screen.screen_suspend(t.scr)],
       ["/help",             "",                        "this list",                                      term_help],
     ]],
     ["Scroll", [

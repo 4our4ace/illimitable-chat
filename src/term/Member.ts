@@ -10,8 +10,10 @@
 // waits, at work, its background jobs, whether it holds its chat) each
 // time it changes. Hidden (member_hide: a switch; member_suspend: Ctrl+Z,
 // the window stopping), it paints nothing (Screen.ts, and no paint is
-// even laid out: Frame.ts term_draw), runs no status line command and
-// lets a device login waiting go; all else runs on: its turn, subagents,
+// even laid out: Frame.ts term_draw) and runs no status line command; a
+// switch lets a device login waiting go too (its code is on the screen
+// left; Ctrl+Z keeps it, for a sign-in in the shell meanwhile). All else
+// runs on: its turn, subagents,
 // jobs, MCP servers, hooks and plugins, a question waiting for the person.
 // Shown again (`show`), it paints whole; shown by a switch, it is kept as
 // the profile used last (anywhere, and in this project). Shown, it hears
@@ -167,13 +169,14 @@ export function member_keep(switched: boolean): void {
 // line's command stopped, a device login waiting let go, text chosen and
 // the leader let go
 export function member_hide(t: Term, to: string): void {
+  t.login?.abort();
   member_rest(t);
   member_send({ $: "hide", to });
 }
 
-// Ctrl+Z: hidden as for a switch, and the window told, which puts the
-// terminal back and stops itself (this illi's work goes on); shown again
-// as the window comes back
+// Ctrl+Z: hidden (a device login waiting kept), and the window told,
+// which puts the terminal back and stops itself (this illi's work goes
+// on); shown again as the window comes back
 function member_suspend(): void {
   const t = WIN?.t;
   if (t !== null && t !== undefined) {
@@ -182,12 +185,12 @@ function member_suspend(): void {
   }
 }
 
-// the terminal hidden (member_hide)
+// the terminal hidden: nothing painted, the status line's command
+// stopped, text chosen and the leader let go
 function member_rest(t: Term): void {
   WIN!.shown = false;
   member_spin(t);
   status_end(t);
-  t.login?.abort();
   t.sel  = null;
   t.lead = false;
   clearTimeout(t.drift?.timer);
