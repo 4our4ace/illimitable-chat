@@ -37,7 +37,7 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `suggest`    | `on`                              | a suggested reply after each turn, shown till you send it or illi answers, kept across a restart; `off` |
 | `tps`        | `on`                              | tokens a second (tok/s) on the line over the input while text streams; `off` |
 | `statusline` |                                   | a shell command drawing up to 3 rows at the screen's foot from what illi tells it, or Claude Code's `statusLine` object as it is ([Status line](customize.md#status-line)) |
-| `title`      | `on`                              | the terminal's title: `∞ illi · <project>` (the profile after it, but for the default), the ∞ a spinner while illi works and `?` while a question waits on you; the title before comes back as illi quits; `off` |
+| `title`      | `on`                              | the terminal's title: `∞ illi · <project>` (the profile after it, but for the default), the ∞ traced small (`⢎⠶⡱`) while illi works and `?` while a question waits on you; the title before comes back as illi quits; `off` |
 | `jobs`       | `8`                               | summaries built at once                          |
 | `theme`      | `theme.json`: the profile's, else `~/.illi`'s | the theme's file                   |
 | `mcp`        | `mcp.json` in the profile's folder | the MCP servers' file; `~/.illi/mcp.json` is read too, and a trusted project's `.illi/mcp.json` |

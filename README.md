@@ -4,9 +4,6 @@ A terminal AI agent with one chat that never ends. illi (short for
 illimitable) folds old messages into a memory tree it can zoom back
 into, so it forgets nothing.
 
-Written mostly by AI agents: expect bugs. illi runs shell commands and
-edits files without asking, so use it where you'd let it.
-
 ![illi on a Claude plan, answering with a sequence diagram and a table](assets/screens/hero.webp)
 
 Why illi

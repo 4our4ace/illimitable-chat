@@ -3,8 +3,8 @@
 // `bun test Frame.test.ts`. A paint comes as the work at hand is done,
 // never in its middle; asked for again within a frame, it waits for the
 // frame's end, all asked for meanwhile in one paint. The terminal's
-// title names illi and the project, a spinner in the ∞'s place while
-// work runs.
+// title names illi and the project, a small ∞ traced in the ∞'s place
+// while work runs.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -14,7 +14,7 @@ import * as path from "node:path";
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-frame-");
 process.env.ILLI_DIR = DIR;
 
-const { term_draw, term_paint, term_title } = await import("./Frame.ts");
+const { term_draw, term_loop, term_paint, term_title } = await import("./Frame.ts");
 const { Projects } = await import("../chat/Projects.ts");
 const Screen = await import("../ui/Screen.ts");
 const { status_new } = await import("./Status.ts");
@@ -112,5 +112,15 @@ test("the terminal's title names illi and the project, written as it changes: a 
   const spun = titles.slice(1, -3);
   expect([titles[0], ...titles.slice(-3)]).toEqual([osc("∞"), osc("?"), osc("∞"), osc("∞")]);
   expect(spun.length).toBeGreaterThanOrEqual(2);
-  expect(spun.every((s, k) => /^\x1b\]0;[⠀-⣿] illi · /.test(s) && s !== titles[k])).toBe(true);
+  expect(spun.every((s, k) => /^\x1b\]0;[⠀-⣿]{3} illi · /.test(s) && s !== titles[k])).toBe(true);
+});
+
+test("the title's ∞ while work runs: 3 braille cells, a trail of 4 dots a step along the ∞, all its 12 steps apart; the trail's every place, the ∞ whole", () => {
+  const frames = Array.from({ length: 12 }, (_, k) => term_loop(k));
+  const dots   = (s: string) => [...s].reduce((n, c) => n + (c.charCodeAt(0) - 0x2800).toString(2).replaceAll("0", "").length, 0);
+  expect(new Set(frames).size).toBe(12);
+  expect(frames.map(dots)).toEqual(Array(12).fill(4));
+  expect([term_loop(12), term_loop(-1)]).toEqual([frames[0], frames[11]]);
+  const whole = [0, 1, 2].map((c) => String.fromCharCode(0x2800 | frames.reduce((b, f) => b | (f.charCodeAt(c) - 0x2800), 0))).join("");
+  expect(whole).toBe("⢎⠶⡱");
 });
