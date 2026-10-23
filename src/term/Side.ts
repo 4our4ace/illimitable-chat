@@ -1,12 +1,13 @@
 // Side
 // ====
 // The side panel, on a wide screen: the primary agents, the subagents of
-// this run, the sticky skills on, the profiles (two or more), a ChatGPT
-// plan's use, the chat's (the context, the memory), the MCP servers, the
-// requests refused, the plugins' lines, a hint for the keys or illi's
-// to-do list; the side and side_width settings place it.
+// this run, the background jobs, the sticky skills on, the profiles (two
+// or more), a ChatGPT plan's use, the chat's (the context, the memory),
+// the MCP servers, the requests refused, the plugins' lines, a hint for
+// the keys or illi's to-do list; the side and side_width settings place
+// it.
 
-import { term_choose, term_mcp } from "./Commands.ts";
+import { term_background, term_choose, term_mcp } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Custom, type Skill } from "../config/Custom.ts";
 import * as Draw from "../ui/Draw.ts";
@@ -33,24 +34,33 @@ const HINT = "/help for all keys";
 
 // the side's: the width of its labels (Context, 5h, Week, Memory); its
 // bars' widest, every one alike; the to-do items a folded list shows; the
-// refused requests it shows;
-// how often its clocks (a plan window's reset) move (ms)
-const LABEL   = 9;
-const BAR     = 24;
-const FOLDED  = 3;
-const REFUSED = 5;
+// refused requests it shows; the background jobs it shows before folding
+// the rest into a count;
+// how often its clocks (a plan window's reset, a job's age) move (ms)
+const LABEL      = 9;
+const BAR        = 24;
+const FOLDED     = 3;
+const REFUSED    = 5;
+const BACKGROUND = 3;
 export const CLOCK   = 60000;
 
 // the side, w wide and tall: illi and the primary agents (a click makes
-// one the main agent), the tabs (a click shows one), the sticky skills on
-// (a click turns one off), the profiles, once there are two (a click on
-// the head: /profile), a ChatGPT plan's use, the chat's (its context, the
-// memory), the MCP servers (a click: /mcp), the requests refused (a
-// click: /permissions on it), each plugin's lines (Plugins.side); at its
-// foot illi's to-do
-// list, which, longer than the room, pushes the rest up (its head stays);
-// with none, a faint hint for the keys (HINT), if it fits
+// one the main agent), the tabs (a click shows one), the background jobs
+// (a click: /background), the sticky skills on (a click turns one off),
+// the profiles, once there are two (a click on the head: /profile), a
+// ChatGPT plan's use, the chat's (its context, the memory), the MCP
+// servers (a click: /mcp), the requests refused (a click: /permissions on
+// it), each plugin's lines (Plugins.side); at its foot illi's to-do list,
+// which, longer than the room, pushes the rest up (its head stays); with
+// none, a faint hint for the keys (HINT), if it fits
 export function term_side(t: Term, w: number, tall: number): Item[] {
+  return term_side_drawn(t, w, tall).items;
+}
+
+// the side, as term_side, and whether its background jobs show whole
+// (none running: yes); not (a long to-do list pushed them out, or a short
+// screen cut them), the last line counts them (Paint.tabs_line)
+export function term_side_drawn(t: Term, w: number, tall: number): { items: Item[]; background: boolean } {
   const bold  = { ...Paint.INK, b: true };
   const head  = (text: string, run: (() => void) | null = null): Item => [[Paint.Run(text, bold)], run];
   const item  = (here: boolean, text: string, run: () => void): Item => [[Paint.Run((here ? GLYPH.here : GLYPH.tab) + " " + text, here ? Paint.INK : Paint.DIM)], run];
@@ -61,6 +71,7 @@ export function term_side(t: Term, w: number, tall: number): Item[] {
     return [room >= 12 && about(k) !== "" ? [...line, Paint.Run("  " + about(k), Paint.DIM)] : line, run];
   });
   const subs  = term_side_subs(t);
+  const bg    = term_side_background(t, w);
   const mcp   = term_side_mcp(t);
   const nos   = term_side_refused(t);
   const todo  = term_side_todo(t, w);
@@ -68,14 +79,46 @@ export function term_side(t: Term, w: number, tall: number): Item[] {
   const gap   = [[], null] as Item;
   const fill  = (n: number) => Array.from({ length: n }, (): Item => [[], null]);
   const plan  = term_side_plan(t, w);
-  const top   = [head("Agents"), ...mains, gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...term_side_sticky(t), ...term_side_profiles(t), ...(plan.length === 0 ? [] : [...plan, gap]), head("Chat"), ...term_side_use(t, w), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp]), ...(nos.length === 0 ? [] : [gap, head("Refused", () => term_permissions(t)), ...nos]), ...term_side_plugins(w)];
+  const top   = [head("Agents"), ...mains, gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...(bg.length === 0 ? [] : [...bg, gap]), ...term_side_sticky(t), ...term_side_profiles(t), ...(plan.length === 0 ? [] : [...plan, gap]), head("Chat"), ...term_side_use(t, w), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp]), ...(nos.length === 0 ? [] : [gap, head("Refused", () => term_permissions(t)), ...nos]), ...term_side_plugins(w)];
   const foot  = todo.length === 0 ? keys : todo;
   const room  = tall - top.length - foot.length;
   const items = room > 0 ? [...top, ...fill(room), ...foot]
     : todo.length === 0 ? top
     : todo.length < tall ? [...top, gap, ...todo].slice(-tall)
     : todo;
-  return items.slice(0, tall).map(([line, run]) => [Paint.runs_wrap(line, w, true)[0], run]);
+  const kept  = items.slice(0, tall);
+  return { items: kept.map(([line, run]) => [Paint.runs_wrap(line, w, true)[0], run]), background: bg.every((x) => kept.includes(x)) };
+}
+
+// the background jobs (Machine.ts), w wide (none: nothing): a head, then
+// a line each, BACKGROUND of them at most and how many more: ● (in the
+// theme's success), its command cut to fit, how long it has run (dim); a
+// click on any line: /background
+function term_side_background(t: Term, w: number): Item[] {
+  const jobs = t.v.background;
+  if (jobs.length === 0) {
+    return [];
+  }
+  const open  = () => term_background(t);
+  const ok    = { ...Paint.INK, c: Draw.draw_tokens().success };
+  const shown = jobs.length - BACKGROUND > 1 ? jobs.slice(0, BACKGROUND) : jobs;
+  const line  = (j: View.Background): Item => {
+    const age = "  " + term_age(Date.now() - j.since);
+    return [[Paint.Run("● ", ok), Paint.Run(term_side_cut(Paint.text_line(j.command), w - 2 - Paint.text_width(age))), Paint.Run(age, Paint.DIM)], open];
+  };
+  const more  = jobs.length - shown.length;
+  return [[[Paint.Run("Background", { ...Paint.INK, b: true })], open], ...shown.map(line), ...(more > 0 ? [[[Paint.Run("… " + more + " more", Paint.DIM)], open] as Item] : [])];
+}
+
+// a text cut to w columns, an ellipsis ending it if cut
+function term_side_cut(text: string, w: number): string {
+  return Paint.text_width(text) <= w ? text : w < 2 ? "" : Paint.line_cut([Paint.Run(text)], 0, w - 1)[1].map((r) => r.x).join("") + "…";
+}
+
+// how long something has run, ms, in its largest unit: <1m, 12m, 3h, 2d
+export function term_age(ms: number): string {
+  const m = Math.floor(ms / 60000);
+  return m < 1 ? "<1m" : m < 60 ? m + "m" : m < 1440 ? Math.floor(m / 60) + "h" : Math.floor(m / 1440) + "d";
 }
 
 // the plan's use, w wide, any vendor's alike (a vendor that tells none,

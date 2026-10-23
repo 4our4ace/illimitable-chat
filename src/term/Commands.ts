@@ -35,7 +35,7 @@ import * as Reply from "../ui/Reply.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_set, term_settings } from "./Settings.ts";
 import { Trusted } from "../config/Trusted.ts";
-import { term_tokens } from "./Side.ts";
+import { term_age, term_tokens } from "./Side.ts";
 import { term_act, term_idle, term_primaries, term_send, term_unhint, type Chooser, type Cmd, type Sug, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
@@ -120,6 +120,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["",                  "Ctrl+PgDn, Ctrl+PgUp",    "the next tab, the one before: the chat's, each subagent's at work", term_cycle],
       ["/tab [name]",       "",                        "go to that agent's tab; no name: lists the tabs", term_tab],
       ["/stop [name]",      "",                        "stop all work, agents too; a name: only that agent", term_stop],
+      ["/background",       "",                        "the background jobs: what a shell call left running (a dev server, a watcher); Enter or Del stops one", term_background],
     ]],
     ["Setup", [
       ["/login",            "",                        "sign in to ChatGPT (Plus or Pro) with a code; illi keeps the login and renews it", term_login],
@@ -443,6 +444,31 @@ export function term_mcp(t: Term): void {
     ...(servers.length === 0 ? [] : ["", "They are in " + where + ", as Claude Code's mcpServers; illi's docs/customize.md shows the shape. A change there applies at illi's next start."]),
   ];
   term_pane_text(t, "MCP", text.join("\n"));
+}
+
+// the background jobs (Machine.ts), each its command, who started it and
+// how long it has run; Enter or Del stops the lit one; none: what they
+// are
+export function term_background(t: Term): void {
+  const jobs = t.v.background;
+  if (jobs.length === 0) {
+    return term_note(t, "No background jobs: a shell call that leaves a process running (a dev server, a watcher) shows here, and it stops when illi quits.");
+  }
+  const stop = (k: number) => {
+    term_send(t, { $: "background", stop: jobs[k].id });
+    term_note(t, "Stopped: " + Paint.text_line(jobs[k].command) + ".");
+  };
+  const keys = (k: number, key: string) => {
+    if (key !== "Delete") {
+      return false;
+    }
+    t.choose = null;
+    stop(k);
+    return true;
+  };
+  const names = jobs.map((j) => Paint.text_line(j.command));
+  const about = jobs.map((j) => j.agent + " · " + term_age(Date.now() - j.since));
+  term_chooser(t, "Background jobs", names, about, -1, stop, { keys, foot: () => "Enter or Del stop it; all stop when illi quits" });
 }
 
 // the user's agents, primary (the main one marked) and subagents, their

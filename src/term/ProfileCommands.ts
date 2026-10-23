@@ -29,8 +29,10 @@ import { status_end } from "./Status.ts";
 import type { Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
-// how long a profile's switch waits for the MCP servers to end (ms)
+// how long a profile's switch waits for the MCP servers to end (ms); the
+// width of its question while background jobs run
 const LEAVE = 2000;
+const WIDE  = 72;
 
 // the picker's rows that make a new profile, and bring one in
 const NEW    = "+ new profile";
@@ -116,8 +118,25 @@ function term_profile_busy(t: Term, what: string): boolean {
 // it was, saying why), and illi runs in its place, on the same terminal
 // and folder; the API keys it took out of the environment go back in.
 // keep: the project's lock kept through the step (this project
-// forgotten: no illi opens it meanwhile), let go as illi runs again
-export async function term_restart(t: Term, name: string, step?: () => void | Promise<void>, keep = false): Promise<void> {
+// forgotten: no illi opens it meanwhile), let go as illi runs again.
+// Background jobs running (this illi runs the chat) stop with it, so it
+// asks first in a picker, Stay lit, unless the caller asked already
+// (asked); a switch taken is checked again (a turn begun meanwhile
+// refuses it, jobs begun meanwhile are asked about)
+export async function term_restart(t: Term, name: string, step?: () => void | Promise<void>, keep = false, asked = false): Promise<void> {
+  const jobs = t.chat === null || asked ? [] : t.v.background;
+  if (jobs.length > 0) {
+    const them = jobs.length === 1 ? "it" : "them";
+    const lead = (jobs.length === 1 ? "A background job runs" : jobs.length + " background jobs run") + ", and a switch stops " + them + ": " + jobs.map((j) => Paint.text_line(j.command)).join(", ");
+    const shown = new Set(jobs.map((j) => j.id));
+    const pick  = (k: number) => {
+      if (k === 1 && !term_profile_busy(t, "switch to " + name)) {
+        void term_restart(t, name, step, keep, t.v.background.every((j) => shown.has(j.id)));
+      }
+    };
+    term_chooser(t, "Switch to " + name + "?", ["Stay", "Switch and stop " + them], ["keeps " + them + " running", "gone for good"], -1, pick, { lead: [[Paint.Run(lead)]], foot: (k) => (k === 0 ? "Enter or Esc stay" : "/background shows " + them), middle: WIDE });
+    return;
+  }
   await term_leave(t, keep);
   let to = name;
   try {
@@ -175,14 +194,19 @@ function term_profile_new(t: Term, name: string): void {
 }
 
 // a new profile made, and switched to (move: with this chat, moved as
-// this illi lets it go)
+// this illi lets it go); made as this illi lets go, so a switch not made
+// (background jobs kept running: term_restart) makes none
 async function term_profile_make(t: Term, name: string, move: boolean): Promise<void> {
   if (term_profile_busy(t, "make " + name) || (move && (await term_profile_elsewhere(t, config.PROFILE, "moving its chat")))) {
     return;
   }
-  Profiles.profile_new(config.ROOT, name);
   const dir = Profiles.profile_dir(config.ROOT, name);
-  return term_restart(t, name, move ? () => Profiles.profile_move_chat(config.DIR, dir) : undefined);
+  return term_restart(t, name, () => {
+    Profiles.profile_new(config.ROOT, name);
+    if (move) {
+      Profiles.profile_move_chat(config.DIR, dir);
+    }
+  });
 }
 
 // a profile renamed, its new name asked for (starting as its old);

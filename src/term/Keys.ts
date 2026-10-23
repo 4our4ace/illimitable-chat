@@ -307,17 +307,35 @@ export function term_esc(t: Term): void {
 
 // Ctrl+C or Ctrl+D: clears the input; on an empty one, Ctrl+C interrupts
 // illi's turn and says how to quit, a second within AGAIN quits; Ctrl+D
-// quits
+// quits, but while a quit would stop more than a turn (term_stops) it
+// says what first, as Ctrl+C does, and a second within AGAIN quits; a
+// quit under way (waiting on hooks), at once
 export function term_clear(t: Term, key: string): void {
+  const stops = term_stops(t);
   if (t.scr.ed.text !== "") {
     Screen.ed_take(t.scr.ed);
-  } else if (key === "Ctrl+D" || Date.now() - t.quit < AGAIN) {
+  } else if (t.quitting || Date.now() - t.quit < AGAIN || (key === "Ctrl+D" && stops === "")) {
     term_quit(t);
   } else {
     t.quit = Date.now();
-    term_act(t, { $: "Stop" });
-    term_toast(t, "Ctrl+C again to quit · what runs stops, and goes on at the next start", AGAIN);
+    if (key === "Ctrl+C") {
+      term_act(t, { $: "Stop" });
+    }
+    term_toast(t, key + " again to quit · " + (stops || "what runs stops, and goes on at the next start"), AGAIN);
   }
+}
+
+// what a quit stops besides a turn, said (nothing, or a view of another
+// terminal's chat, whose quit stops nothing: ""): the background jobs,
+// gone for good, and the subagents at work, which go on at the next start
+function term_stops(t: Term): string {
+  const jobs = t.chat === null ? 0 : t.v.background.length;
+  const subs = t.chat === null ? 0 : t.v.agents.length;
+  const said = [
+    jobs === 0 ? "" : "stops " + jobs + (jobs === 1 ? " background job" : " background jobs") + " (/background)",
+    subs === 0 ? "" : subs + (subs === 1 ? " subagent pauses" : " subagents pause") + " till the next start",
+  ];
+  return said.filter((x) => x !== "").join(" · ");
 }
 
 // Shift+Tab: illi runs as the next primary agent that can run (illi's own

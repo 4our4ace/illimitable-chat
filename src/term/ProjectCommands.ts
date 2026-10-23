@@ -74,8 +74,10 @@ function project_ask(t: Term, p: Project): void {
     return term_note(t, p.name + " is forgotten already.");
   }
   const what  = project_count(p) + (pics === 0 ? "" : " and " + pics + (pics === 1 ? " image" : " images"));
+  const jobs  = p.file === t.mem().store.file && t.chat !== null ? t.v.background.length : 0;
+  const stops = jobs === 0 ? "" : "; stops " + jobs + (jobs === 1 ? " background job" : " background jobs");
   const names = ["Cancel", "Export a copy first, then forget", "Forget"];
-  const about = ["keep it", "./illi-project-" + p.name + ".json, then forgotten", what + ", gone for good"];
+  const about = ["keep it", "./illi-project-" + p.name + ".json, then forgotten" + stops, what + ", gone for good" + stops];
   const pick  = (k: number) => {
     t.choose = null;
     if (k > 0) {
@@ -108,7 +110,7 @@ async function project_forget(t: Term, p: Project, copy: boolean): Promise<void>
     term_note(t, "A copy of " + p.name + " is in " + config.config_home(out) + ".");
   }
   if (here) {
-    return term_restart(t, config.PROFILE, () => Store.forget(p.file), true);
+    return term_restart(t, config.PROFILE, () => Store.forget(p.file), true, true);
   }
   if (!(await project_held(p, () => Store.forget(p.file)))) {
     return term_note(t, p.name + " is open in another terminal: quit illi there first, then forget it here.");
