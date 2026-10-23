@@ -5,8 +5,9 @@
 // place, shown or hidden as it is (alone, `off` as found, so illi stays
 // alone); it says who it is, and its state only as it changes; hidden
 // for a switch, it paints nothing, its status line stopped and a login
-// let go (a press a popup took too; a question shown holds its keys anew
-// once shown again), then says `hide`; Ctrl+Z hides it too, the login kept, and says
+// let go (a press a popup took too, the pointer's place and a click
+// waiting; a question shown holds its keys anew once shown again), then
+// says `hide`; Ctrl+Z hides it too, the login kept, and says
 // `suspend`; shown by a switch, it is up, paints whole and is kept as the
 // profile used last (anywhere, and in the project); the roster notes
 // another's question and its work done, once each, and the window's own
@@ -48,7 +49,7 @@ const said = (run: () => void) => {
 // a terminal with a screen in the window, no paint due
 const term = () => {
   const scr: any = { tty: true, kitty: false, ed: Screen.ed_new(), rest: "", shown: [], click: { row: 0, col: 0 }, clicks: 0, pressed: 0, point: { row: 0, col: 0 }, typed: false, grab: null, on: () => {}, win: member_screen() };
-  const t: any = { v: View.view_new(), scr, chat: {}, status: status_new(), login: new AbortController(), sel: { key: "chat" }, lead: true, drift: undefined, notices: [], due: true, quitting: false, asking: { id: "q", c: null, done: false, form: null, shown: 1 }, aim: { row: 0, in: true, press: { of: null, on: "box" }, first: null } };
+  const t: any = { v: View.view_new(), scr, chat: {}, status: status_new(), login: new AbortController(), sel: { key: "chat" }, lead: true, drift: undefined, pointed: true, wait: null, notices: [], due: true, quitting: false, asking: { id: "q", c: null, done: false, form: null, shown: 1 }, aim: { row: 0, in: true, press: { of: null, on: "box" }, first: null } };
   member_attach(t);
   return t;
 };
@@ -76,13 +77,16 @@ test("it says who it is; its state only as it changes", () => {
   expect(said(() => member_state(t)).msgs).toEqual([{ $: "state", asks: false, working: true, jobs: 1, holds: true }]);
 });
 
-test("hidden for a switch, it paints nothing, its status line stopped and a login let go, then says hide; shown by a switch, it is up, paints whole and is kept as the profile used last", () => {
+test("hidden for a switch, it paints nothing, its status line stopped and a login let go, then says hide; shown by a switch, it is up, paints whole and is kept as the profile used last", async () => {
   const t = term();
   const login = t.login;
   t.status.set = { command: "x" };
+  t.wait = { key: "#3", timer: setTimeout(() => (t.folded = true), 0) };
   expect(said(() => member_hide(t, "work")).msgs).toEqual([{ $: "hide", to: "work" }]);
   expect([t.scr.hidden, t.status.set, login.signal.aborted, t.sel, t.lead, WIN?.shown]).toEqual([true, null, true, null, false, false]);
-  expect([t.aim.press, t.asking.shown]).toEqual([null, null]);
+  expect([t.aim.press, t.asking.shown, t.pointed, t.wait]).toEqual([null, null, false, null]);
+  await Bun.sleep(5);
+  expect(t.folded).toBeUndefined();
   expect(member_env()).toEqual({ ILLI_WINDOW: "1:" + NONCE + ":hidden" });
   let painted = 0;
   t.scr.on = () => painted++;

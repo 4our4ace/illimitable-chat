@@ -269,14 +269,17 @@ Mouse and side panel
   1,204 lines`), wherever you are in it; a click on that line unfolds it.
   What you clicked stays under the pointer (at the chat's end a close
   lands lower, as the chat can't scroll past its end).
-- A click on a word waits a moment before it folds, so a double click
-  still copies the word; past a line's end, on a blank line or a frame's
-  edge it folds at once. A second click on the same spot right after
+- A click on a word waits a moment before it acts, so a double click
+  still copies the word. Past a line's end, on a blank line or a frame's
+  edge, on `[+]` or `[-]`, on a block's `/open` or an open block's top
+  edge, it acts at once. A second click on the same spot right after
   does nothing, so a slow double click never undoes the fold.
 - What a click would act on lights as the pointer moves over it: a run's
-  line and its whole bar, heavier; a message's bar beside it; a block's
-  `/open`, an open block's top edge. It goes as you type, as the chat
-  moves on by itself, and as the window loses the focus.
+  line and its whole bar, heavier; a message's bar beside it (and a
+  folded one's `[+]`); a block's `/open`, an open block's top edge. It
+  goes as you type, as the chat moves on by itself, and as the window
+  loses the focus. While text you chose shows, nothing lights: a click
+  then only lets the text go, and folds nothing.
 - A drag with the right button over the chat quotes what it covers in
   your message, each line after `> `, to reply to it; a right click
   within 5 seconds takes the quote out again. A reply's buttons are left

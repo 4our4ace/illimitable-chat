@@ -262,21 +262,25 @@ export function term_type(t: Term, text: string): boolean {
 // has those; never the press that focused the window, nor one again on
 // what a click just acted on: Select.ts), on what's under it (Select.ts
 // term_target): what was drawn there does its own (the side, the tabs,
-// the jump, a reply's button copies); in the chat, a run of work's head
-// or its bar opens or closes the whole run, at once; inside an open one,
-// a message folds to a line, or unfolds; a block opens, and an open one
-// shuts from any line of its frame (the innermost thing holding the line
-// acts). Those wait till TWICE after the press (term_wait), so a double
-// click still chooses the word under it; where no word is (past a line's
-// end, a blank line, a frame's edge, a glyph), at once. Whatever a click
-// acted on keeps its place under the pointer
-export function term_click(t: Term): void {
+// the jump, a reply's button copies); in the chat (marks false: nothing,
+// the click let text chosen go), a run of work's head or its bar opens or
+// closes the whole run, at once; inside an open one, a message folds to
+// a line, or unfolds; a block opens, and an open one shuts from any line
+// of its frame (the innermost thing holding the line acts). Those wait
+// till TWICE after the press (term_wait), so a double click still
+// chooses the word under it; where no word is (past a line's end, a
+// blank line, a frame's edge, a mark's own control: its glyph, a
+// summary's gutter and /open, an open block's bar), at once. Whatever a
+// click acted on keeps its place under the pointer
+export function term_click(t: Term, marks = true): void {
   const at  = t.scr.click;
   const aim = term_target(t, at);
   if (aim.$ === "hit") {
     aim.hit.run();
   } else if (aim.$ === "copy") {
     term_copied(t, aim.copy());
+  } else if (aim.$ === "mark" && !marks) {
+    return;
   } else if (aim.$ === "mark" && (aim.mark.act === true || !term_wordy(t, at))) {
     term_fold(t, aim.mark, at);
   } else if (aim.$ === "mark") {
@@ -286,12 +290,19 @@ export function term_click(t: Term): void {
 
 // a click's fold waiting out a double click: done at the press's TWICE
 // (the screen painted), unless a press, the wheel or a key comes first
-// (term_unwait); meanwhile what it acts on shows pressed (Select.ts)
+// (term_unwait); meanwhile what it acts on shows pressed (Select.ts).
+// Done on the mark by its key as painted then, if it still is and
+// nothing came over the chat (a popup, a pane): what changed by itself
+// meanwhile (a turn's end summing its messages up) is never acted on
+// stale
 function term_wait(t: Term, m: Paint.Mark, at: Screen.Spot): void {
   term_unwait(t);
   const timer = setTimeout(() => {
-    t.wait = null;
-    term_fold(t, m, at);
+    t.wait    = null;
+    const now = t.seen.marks.find((x) => x.key === m.key);
+    if (now !== undefined && term_popup(t) === null && t.pane === null) {
+      term_fold(t, now, at);
+    }
     term_draw(t);
   }, Math.max(0, t.scr.pressed + Screen.TWICE - Date.now()));
   t.wait = { key: m.key, timer };

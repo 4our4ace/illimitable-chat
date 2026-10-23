@@ -57,10 +57,10 @@ export type Run = { x: string; s: Ink; copy?: () => string; mark?: Tag };
 
 // a run's part in the mark it lights with, by the mark's key (line_lit):
 // its glyph (a run of work's mark, open or shut, a folded message's:
-// Theme.GLYPH; no word, so a click there acts at once: Term.ts), a run
-// of work's label, its bar down the left of its rows (a click on it is
-// the run's), or a block's text that lights (its gutter and /open, an
-// open block's bar)
+// Theme.GLYPH), a run of work's label, its bar down the left of its rows
+// (a click on it is the run's), or a block's text that lights (its
+// gutter and /open, an open block's bar). Each is the mark's own
+// control, no word: a click on one acts at once (Select.ts term_wordy)
 export type Tag = { key: string; as: "glyph" | "label" | "bar" | "text" };
 
 export type Line = Run[];

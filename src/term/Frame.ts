@@ -547,10 +547,12 @@ function term_over(t: Term, rows: Screen.Piece[][], box: { sug: Sug; lines: Arra
 // laid out again, as with text chosen at the same width), and about in
 // place at a new width; a block asked for (/open, /close) shows at the
 // top; a mark a click acted on (t.pin) has its first line on the row
-// clicked: an open while the chat's end is followed leaves it (the jump
-// to the end shows), and a close there lands lower, as the chat never
-// scrolls past its end. The chat moving by itself while followed (more
-// came, or a new size) puts the pointer's light out till it moves
+// clicked (held inside the chat, which a new size may have made
+// shorter since): an open while the chat's end is followed leaves it
+// (the jump to the end shows), and a close there lands lower, as the
+// chat never scrolls past its end. The chat moving by itself while
+// followed (more came, or a new size) puts the pointer's light out till
+// it moves
 function term_chat(t: Term, w: number, tall: number, row: number, col: number): [Paint.Line[], number] {
   const was   = t.body;
   const body  = was !== null && was.ver === t.ver && !Paint.laid_stale(was, w) ? was : { ver: t.ver, ...Paint.laid_new(View.view_body(t.v), w, 1) };
@@ -571,7 +573,7 @@ function term_chat(t: Term, w: number, tall: number, row: number, col: number): 
   const up    = Paint.laid_up(body, 0, at < 0 ? Infinity : at);
   const kept  = aim === null ? undefined : body.marks.find((m) => m.key === aim.key);
   if (kept !== undefined) {
-    t.scroll = 1 + body.lines.length + below - tall - kept.from + aim!.row - row;
+    t.scroll = 1 + body.lines.length + below - tall - kept.from + Math.max(0, Math.min(tall - 1, aim!.row - row));
   }
   [t.find, t.pin] = [null, null];
   term_chosen(t, up + Paint.laid_up(body, t.scroll + 2 * tall - 1 - below));

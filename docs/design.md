@@ -45,7 +45,7 @@ Marks
 | `<-` | back | the side's way back from an agent's page |
 | `·` | between the parts of one line | everywhere |
 | `…` | cut here | any text cut to fit |
-| `│` | an open run's rows | the chat |
+| `│` | an open run's rows (lit, `┃`: a click there opens or closes the run) | the chat |
 | `─ ╭ ╮ ╰ ╯` | frames and rules | popups, panes, the input |
 | `█ ▌ ░` | a gauge: full, half, empty | the context at the side, the auto compact in `/model` |
 | `∞` traced in braille dots | illi at work | the work line |

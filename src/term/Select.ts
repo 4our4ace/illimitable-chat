@@ -16,9 +16,13 @@
 // (term_target): in the chat, what a click would act on lights (a run of
 // work, a message in it, a block: term_light), one thing at a time, once
 // the pointer itself has moved; it goes as the chat moves by itself while
-// followed, at a key, as the window loses the focus. A click on a word
-// there waits out a double click (Keys.ts term_click), so a second press
-// still chooses the word; a press again soon on the cell whose click just
+// followed, at a key, as the window loses the focus, and while text
+// chosen shows: the press that lets that go acts on nothing in the chat
+// (term_showing), so a click to clear it never folds what it lands on. A
+// click on a word there waits out a double click (Keys.ts term_click), so
+// a second press still chooses the word; on a mark's own control (its
+// glyph, a summary's gutter and /open, an open block's bar: term_wordy)
+// it acts at once. A press again soon on the cell whose click just
 // acted, or one that only focused the window, clicks nothing and chooses
 // no word (term_dead). Under a popup the mouse is its alone (Popup.ts
 // popup_mouse, before all of this): nothing is chosen there, and nothing
@@ -74,10 +78,12 @@ function term_button(line: Paint.Line, col: number): (() => string) | undefined 
 // comes first, and a press that acts on nothing chooses no word:
 // term_dead); dragged, the choice follows the pointer (a chat scrolls
 // while it's past an edge); let go, the text chosen is copied, else it
-// was a click (none from a press that acts on nothing). The right button: the same in the chat, a character at a
-// time (never from a reply's button), the text chosen quoted as it's let
-// go (term_quote), else it was a right click, which takes a quote just
-// made out (term_unquote)
+// was a click (none from a press that acts on nothing; none on the chat's
+// marks from one that let text chosen go: term_showing). The right
+// button: the same in the chat, a character at a time (never from a
+// reply's button), the text chosen quoted as it's let go (term_quote),
+// else it was a right click, which takes a quote just made out
+// (term_unquote)
 export function term_mouse(t: Term, key: string): void {
   const p = t.scr.point;
   if (key === "RightPress") {
@@ -99,11 +105,12 @@ export function term_mouse(t: Term, key: string): void {
     const area = term_area_at(t, p);
     const at   = area === undefined ? null : term_cell(area, p);
     const dead = term_dead(t, true);
+    const drop = term_showing(t) ? { drop: true as const } : {};
     t.sel = null;
     if (area !== undefined && at !== null) {
       const unit = term_under(t, p) === undefined && !dead ? t.scr.clicks : 1;
       const root = term_unit(area, at, unit);
-      t.sel = { key: area.key, a: root[0], b: root[1], held: true, moved: unit > 1 && !term_after(root[0], root[1]), unit, root };
+      t.sel = { key: area.key, a: root[0], b: root[1], held: true, moved: unit > 1 && !term_after(root[0], root[1]), unit, root, ...drop };
     }
   } else if ((key === "Drag" || key === "RightDrag") && t.sel?.held) {
     const area = t.areas.find((a) => a.key === t.sel!.key);
@@ -119,10 +126,23 @@ export function term_mouse(t: Term, key: string): void {
     } else if (sel === null || sel.held) {
       t.sel = null;
       if (!term_dead(t)) {
-        term_click(t);
+        term_click(t, sel?.drop !== true);
       }
     }
   }
+}
+
+// whether text chosen shows: dragged, or let go and on a row its area
+// shows (scrolled away, it is no longer seen). While it does, nothing in
+// the chat lights, and the press that lets it go clicks nothing there
+function term_showing(t: Term): boolean {
+  const sel  = t.sel;
+  const area = t.areas.find((a) => a.key === sel?.key);
+  if (sel === null || !sel.moved || area === undefined) {
+    return false;
+  }
+  const [a, b] = term_ends(sel);
+  return sel.held || (b.line >= area.first && a.line < area.first + area.tall);
 }
 
 // whether the left press down acts on nothing as a click, nor chooses a
@@ -267,13 +287,14 @@ function term_word(line: Paint.Line, col: number): [number, number] {
 
 // whether a word is under a spot as last painted (a double click there
 // would choose it): none past a line's end, on a blank line, on a frame's
-// edge or a space, nor on a mark's glyph (Paint.Tag)
+// edge or a space, nor on a mark's own control, tagged to light with it
+// (Paint.Tag: a glyph, a summary's gutter and /open, an open block's bar)
 export function term_wordy(t: Term, p: Screen.Spot): boolean {
   const area = t.areas.find((a) => p.row >= a.row && p.row < a.row + a.tall && p.col >= a.col && p.col < a.col + a.w);
   const line = area === undefined ? [] : area.lines[area.first + p.row - area.row] ?? [];
   const col  = p.col - (area?.col ?? 0);
   const cell = term_cells(line).find((c) => col >= c.at && col < c.at + Math.max(1, c.w));
-  return cell !== undefined && WORDY.test(cell.g) && term_run(line, col)?.mark?.as !== "glyph";
+  return cell !== undefined && WORDY.test(cell.g) && term_run(line, col)?.mark === undefined;
 }
 
 // the button under a spot (none: no button there, or a popup over all)
@@ -348,13 +369,14 @@ export function term_light(t: Term, rows: Screen.Piece[][]): void {
 // pressed (Keys.ts term_wait); else the mark under the pointer
 // (term_target), once the pointer's place is known (t.pointed: it moved,
 // pressed or let go since the chat last moved by itself, a key, the focus
-// lost), the window focused, no drag choosing text
+// lost), the window focused, no text chosen showing (a click would only
+// let it go: term_showing)
 function term_lit(t: Term): { mark: Paint.Mark; pressed: boolean } | undefined {
   const waits = t.wait === null ? undefined : t.seen.marks.find((m) => m.key === t.wait!.key);
   if (waits !== undefined) {
     return { mark: waits, pressed: true };
   }
-  if (!t.pointed || t.scr.away === true || (t.sel?.held === true && t.sel.moved)) {
+  if (!t.pointed || t.scr.away === true || term_showing(t)) {
     return undefined;
   }
   const at = term_target(t, t.scr.point);
