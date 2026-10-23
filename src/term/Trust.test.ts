@@ -33,7 +33,7 @@ test("the question stands in the screen's middle, the folder and both options on
   const used = lines.map((l, k) => [l, k] as const).filter(([l]) => l !== "");
   expect(rows.length).toBe(30);
   expect(lines).toContain("/work/app");
-  expect(lines).toContain("❯ No, exit");
+  expect(lines).toContain("> No, exit");
   expect(lines).toContain("  Yes, I trust this folder");
   const top = used[0][1];
   const bottom = 29 - used.at(-1)![1];

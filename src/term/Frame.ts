@@ -25,6 +25,7 @@ import { term_profile_pick } from "./ProfileCommands.ts";
 import { DEFAULT } from "../config/Profiles.ts";
 import { Projects } from "../chat/Projects.ts";
 import * as Screen from "../ui/Screen.ts";
+import { GLYPH } from "../ui/Theme.ts";
 import { term_area, term_under } from "./Select.ts";
 import { term_side, term_side_drawn, term_side_width, term_tokens } from "./Side.ts";
 import { status_rows } from "./Status.ts";
@@ -514,7 +515,7 @@ function term_hit(t: Term, row: number, col: number, to: number, run: (() => voi
 // title, else what works
 function term_head(t: Term, w: number): Paint.Line {
   const bold  = { ...Paint.INK, b: true };
-  const page  = t.v.page === null ? [] : [Paint.Run(" › " + t.v.page.name, bold)];
+  const page  = t.v.page === null ? [] : [Paint.Run(" > " + t.v.page.name, bold)];
   const left  = [Paint.Run(" " + View.NAME, bold), ...page, Paint.Run("  " + HERE, Paint.DIM)];
   const work  = t.v.agents.length === 0 ? "" : t.v.agents.length + " at work";
   return Paint.ends_line(left, work === "" ? "" : work + " ", w);
@@ -635,7 +636,7 @@ function term_suggestions(sug: Sug, fw: number, room: number): Array<[Paint.Line
     const end  = from + sug.names[m.k].length;
     const here = k === sug.at;
     const head = [
-      Paint.Run(here ? "› " : "  ", bold),
+      Paint.Run(here ? GLYPH.lit + " " : "  ", bold),
       ...[...use.slice(0, end)].map((c, i) => Paint.Run(c, here || (m.hay !== true && m.at.includes(i - from)) ? bold : Paint.INK)),
       Paint.Run(use.slice(end), here ? lit : Paint.DIM),
     ];

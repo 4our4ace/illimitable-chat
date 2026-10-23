@@ -13,6 +13,7 @@
 import * as Draw from "../ui/Draw.ts";
 import * as Paint from "../ui/Paint.ts";
 import * as Screen from "../ui/Screen.ts";
+import { GLYPH } from "../ui/Theme.ts";
 import { Trusted } from "../config/Trusted.ts";
 
 // Types
@@ -115,7 +116,7 @@ export namespace Trust {
     const bold   = { ...Paint.INK, b: true };
     const accent = { ...bold, c: Draw.draw_tokens().accent };
     const wrap   = (runs: Paint.Line) => Paint.runs_wrap(runs, bw, false);
-    const option = (text: string, k: number) => [Paint.Run(k === asked.at ? "❯ " : "  ", accent), Paint.Run(text, k === asked.at ? accent : Paint.INK)];
+    const option = (text: string, k: number) => [Paint.Run(k === asked.at ? GLYPH.lit + " " : "  ", accent), Paint.Run(text, k === asked.at ? accent : Paint.INK)];
     const lines  = [
       ...wrap([Paint.Run("Do you trust this folder?", bold)]),
       [],

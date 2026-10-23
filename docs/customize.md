@@ -105,7 +105,7 @@ the full accent).
   "tokens": { "you": "accent", "dim": "8" },
   "palette": "nord",
   "colors": { "heading": "#ff9e64" },
-  "glyph": { "input": "❯ " }
+  "glyph": { "input": "$ " }
 }
 ```
 
