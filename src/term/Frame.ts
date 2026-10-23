@@ -147,9 +147,10 @@ export function term_redraw(t: Term): void {
 
 // a paint, unless one is due: as soon as the work at hand is done (a
 // key's and all it set off, in one paint); within FRAME of the last
-// one's end, once that frame is up (all asked for meanwhile in it)
+// one's end, once that frame is up (all asked for meanwhile in it). None
+// while hidden in a window (Member.ts): shown, it paints whole
 export function term_draw(t: Term): void {
-  if (t.due) {
+  if (t.due || t.scr.hidden) {
     return;
   }
   t.due = true;

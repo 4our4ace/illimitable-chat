@@ -134,9 +134,9 @@ export type Screen = {
 };
 
 // a screen in a window (Member.ts): the wire's nonce; whether it starts
-// hidden; a message heard from the window; the frame that says the screen
-// is up; Ctrl+Z; the PTY lost (the window gone)
-export type Windowed = { nonce: string; hidden: boolean; heard: (msg: object) => void; up: () => string; suspend: () => void; lost: () => void };
+// hidden; a message heard from the window (by this screen); the frame
+// that says the screen is up; Ctrl+Z; the PTY lost (the window gone)
+export type Windowed = { nonce: string; hidden: boolean; heard: (msg: object, scr: Screen) => void; up: () => string; suspend: () => void; lost: () => void };
 
 // Constants
 // =========
@@ -629,7 +629,7 @@ function screen_key(scr: Screen, data: string): number {
   const frame = scr.win !== undefined && data.startsWith("\x1b_") ? wire_take(data, scr.win.nonce) : null;
   if (frame !== null) {
     if (frame !== 0 && frame.msg !== null) {
-      scr.win!.heard(frame.msg);
+      scr.win!.heard(frame.msg, scr);
     }
     return frame === 0 ? 0 : frame.n;
   }
@@ -782,7 +782,7 @@ function screen_paste(scr: Screen, data: string): number {
   let text = data.slice(PASTE_ON.length, end);
   if (scr.win !== undefined) {
     const { parts, carry } = wire_cut("", text, scr.win.nonce);
-    parts.forEach((p) => typeof p !== "string" && scr.win!.heard(p));
+    parts.forEach((p) => typeof p !== "string" && scr.win!.heard(p, scr));
     text = parts.filter((p) => typeof p === "string").join("") + carry;
   }
   text = text.replace(/\r\n?/g, "\n");
