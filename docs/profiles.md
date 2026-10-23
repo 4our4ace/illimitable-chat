@@ -19,7 +19,9 @@ happens there:
 | + import a profile  | asks for an archive                          |
 
 `/profile work` switches straight away; `ILLI_PROFILE=<name> illi` starts
-in one. A profile that illi has open in another terminal (in any
+in one. Otherwise illi opens a project in the profile you last used
+there, and a project it hasn't run in yet in the one you used last
+anywhere. A profile that illi has open in another terminal (in any
 project) can't be renamed, deleted or have its chats moved: quit illi
 there first.
 
