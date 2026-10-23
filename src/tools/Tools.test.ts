@@ -11,8 +11,10 @@
 // Claude Code gets only the tools it lacks (?lean), and prompts that say
 // it works inside illi, the project's CLAUDE.md left to Claude Code. Its
 // permission prompt, and illi's own shell, files and MCP tools, pass the
-// checks (Guard.ts): a risk asked with why, a refusal recorded and told
-// to the model; a plugin's hooks come before them and after the tool. The
+// checks (Guard.ts): a risk asked with why, the question given the
+// command whole (a note and the refused list, cut short), a refusal
+// recorded and told to the model; a plugin's hooks come before them and
+// after the tool. The
 // projects: their table, a search across them, a zoom into another's
 // chat. A subagent's view fits its model: the oldest lines left out.
 
@@ -130,7 +132,7 @@ test("a caller in Claude Code gets only the tools it lacks, served at ?lean; its
   }
 });
 
-test("Claude Code's permission prompt is judged as illi's own calls: routine work unasked, a risk asked with why; yes, no with a reason, don't ask again kept for the project; stopped or no one there, no", async () => {
+test("Claude Code's permission prompt is judged as illi's own calls: routine work unasked, a risk asked with why, the command whole for the question; yes, no with a reason, don't ask again kept for the project; stopped or no one there, no", async () => {
   const v = View.view_new();
   View.link_open(v, Chat.link(chat, (msg) => void View.view_hear(v, msg)));
   await until(() => v.up);
@@ -155,6 +157,14 @@ test("Claude Code's permission prompt is judged as illi's own calls: routine wor
   expect(said).toEndWith(AGAIN);
   await until(() => v.asks.length === 0);
   expect(chat.tools.perm.refused.at(-1)).toMatchObject({ who: "illi", tool: "Bash", what: "git reset --hard", how: "no", said: "The user said no, asked at illi's screen: use the clean script", exact: ["shell=git reset --hard"] });
+  const long = "git reset --hard && echo " + "abcdefghij".repeat(200);
+  const cut  = approve("Bash", { command: long });
+  await until(() => v.asks.length === 1);
+  expect([v.asks[0].what.length, v.asks[0].whole]).toEqual([400, long]);
+  await answer(false, false);
+  await cut;
+  await until(() => v.asks.length === 0);
+  expect(chat.tools.perm.refused.at(-1)!.what).toHaveLength(400);
   const always = approve("Bash", { command: "git push origin main" });
   await until(() => v.asks.length === 1);
   expect(v.asks[0].keep).toBe("git push *");
@@ -275,13 +285,14 @@ test("projects: the table, this chat's marked; a search in this project, another
   Store.close(other);
 });
 
-test("what a question shows: a command, a file, a URL or a query, else the input, cut short", () => {
+test("what a tool would do: a command, a file, a URL or a query, else the input; whole for the question, cut short elsewhere", () => {
   expect(Tools.what({ command: "git status", description: "x" })).toBe("git status");
   expect(Tools.what({ file_path: "src/a.ts", old_string: "a" })).toBe("src/a.ts");
   expect(Tools.what({ url: "https://example.com", prompt: "p" })).toBe("https://example.com");
   expect(Tools.what({ pattern: "TODO" })).toBe("TODO");
   expect(Tools.what({ n: 1 })).toBe('{"n":1}');
   expect(Tools.what({ command: "x".repeat(1000) })).toHaveLength(400);
+  expect(Tools.whole({ command: "x".repeat(1000) })).toHaveLength(1000);
 });
 
 test("a subagent's view within its model's budget: the oldest lines left out, said so; the opening and the newest kept", () => {

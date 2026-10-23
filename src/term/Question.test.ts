@@ -9,7 +9,8 @@
 // drawn twice, no control character written, no blank row between its
 // rules, the cursor hidden; its lead cut, a dim line saying how much
 // more. The lead scrolls by the wheel over it and by PgUp, PgDn, its
-// answers staying; the wheel elsewhere scrolls the chat. A line asked
+// answers staying, the command whole to its end (a note's is cut
+// short); the wheel elsewhere scrolls the chat. A line asked
 // for has the cursor in its words. The input as typed is kept under a
 // question, typing going nowhere meanwhile, and comes back once it is
 // answered. The pointer moving onto an answer lights it; a click does
@@ -185,6 +186,23 @@ for (const [what, said] of [[LONG, "a 2,000-character command on one line"], [TA
     });
   }
 }
+
+test("the permission question shows the command whole, not cut short as a note shows it: a 2,000-character one read to its end, page by page", () => {
+  sized(80, 24, () => {
+    const t = term();
+    t.v.asks = [{ id: "q1", who: "illi", tool: "shell", what: LONG.slice(0, 399) + "…", whole: LONG, why: "it deletes files", keep: "rm -r ./no-such-folder-here" }];
+    paint(t);
+    const read: string[] = [];
+    for (let k = 0; k < 30; k++) {
+      asked(t, 80).slice(1, 1 + t.box.ahead).forEach((l: string, j: number) => (read[t.question.past + j] = l));
+      term_grab(t, "PgDn");
+      paint(t);
+    }
+    expect(read.length).toBe(t.box.lead);
+    expect([read[0], read.slice(1).join("")]).toEqual(["Why: it deletes files", LONG]);
+    expect(asked(t, 80)[1 + t.box.ahead]).toBe("… " + (t.box.lead - t.box.ahead) + " lines above · wheel, PgUp/PgDn");
+  });
+});
 
 test("a question takes the input's full width with the side left or right, nothing dimmed: the head and the side as with none, only the chat's rows fewer", () => {
   for (const place of ["left", "right"]) {
