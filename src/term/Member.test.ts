@@ -4,7 +4,8 @@
 // is gone from its environment once it loads, and back for a restart in
 // place, shown or hidden as it is; it says who it is, and its state only
 // as it changes; hidden for a switch, it paints nothing, its status line
-// stopped and a login let go, then says `hide`; shown by a switch, it is
+// stopped and a login let go, then says `hide`; Ctrl+Z hides it too, the
+// login kept, and says `suspend`; shown by a switch, it is
 // up, paints whole and is kept as the profile used last (anywhere, and in
 // the project); the roster notes another's question and its work done,
 // once each, and the window's own note; the person's quit tells the
@@ -82,6 +83,16 @@ test("hidden for a switch, it paints nothing, its status line stopped and a logi
   expect([t.scr.hidden, WIN?.shown, painted > 0, notes(t)]).toEqual([false, true, true, ["Not switched: x."]]);
   expect(fs.readFileSync(DIR + "/profile", "utf8")).toBe("default\n");
   expect(Object.values(JSON.parse(fs.readFileSync(DIR + "/project-profiles.json", "utf8")))).toEqual(["default"]);
+});
+
+test("Ctrl+Z hides it, a device login waiting kept, and tells the window, which shows it again as it comes back", () => {
+  const t = term();
+  const login = t.login;
+  t.status.set = { command: "x" };
+  expect(said(() => Screen.screen_suspend(t.scr)).msgs).toEqual([{ $: "suspend" }]);
+  expect([t.scr.hidden, t.status.set, login.signal.aborted, WIN?.shown]).toEqual([true, null, false, false]);
+  expect(said(() => Screen.screen_feed(t.scr, wire_frame({ $: "show" }, NONCE))).msgs).toEqual([{ $: "up" }]);
+  expect([t.scr.hidden, WIN?.shown]).toEqual([false, true]);
 });
 
 test("the roster notes another profile's question and its work done, once each, and the window's own note", () => {
