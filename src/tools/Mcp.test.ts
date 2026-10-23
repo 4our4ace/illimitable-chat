@@ -5,7 +5,8 @@
 // stopped and cancelled at it), a URL's (its session, an answer in an
 // event stream), one that dies, one that is no program, one disabled;
 // their tools beside illi's, named apart, and an agent's allowing them by
-// server.
+// server; what a server says of a tool (only reads) kept, so that one
+// runs unasked and another is asked first (Tools.guard).
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -17,13 +18,13 @@ const CANCELLED = DIR + "/cancelled";
 process.env.ILLI_DIR = DIR;
 process.env.MCP_TEST_TOKEN = "t0k";
 
-// a stdio server: echo (text and an image), fail.me, slow (answers
-// never; its cancel written down), fail_me (named as fail.me is); its
-// tools in two pages
+// a stdio server: echo (text and an image; only reads, it says),
+// fail.me, slow (answers never; its cancel written down), fail_me (named
+// as fail.me is); its tools in two pages
 fs.writeFileSync(DIR + "/fake.ts", `
 const fs = require("node:fs");
 const tools = [
-  { name: "echo", description: "Echo it", inputSchema: { $schema: "http://json-schema.org/draft-07/schema#", type: "object", properties: { text: { type: "string" } } } },
+  { name: "echo", description: "Echo it", annotations: { readOnlyHint: true }, inputSchema: { $schema: "http://json-schema.org/draft-07/schema#", type: "object", properties: { text: { type: "string" } } } },
   { name: "fail.me", description: "Fails" },
   { name: "slow", description: "Waits" },
   { name: "fail_me", description: "Underscored" },
@@ -87,7 +88,10 @@ afterAll(() => {
   web.stop(true);
 });
 
-const tools = { mem: null as any, agents: new Map(), allowed: new Set<string>(), key: "k", url: "", cwd: CWD, hooks: { main: () => null } as any };
+// the tools of a chat no one is at: a question is a no, at once
+const asked: string[] = [];
+const ask   = async (q: { tool: string }) => (asked.push(q.tool), { yes: false, always: false, said: "No one is at illi's screen to ask, so it isn't allowed." });
+const tools = { mem: null as any, agents: new Map(), perm: { mode: null, granted: new Set<string>(), refused: [] }, url: "", cwd: CWD, hooks: { main: () => null, ask, change: () => {} } as any };
 
 test("each server's tools, named by it, in pages, beside illi's", async () => {
   await Mcp.settle();
@@ -104,6 +108,15 @@ test("a call: its text and images, run in the working dir with its env; a failur
   expect(out).toEqual({ text: "echo: hi in " + fs.realpathSync(CWD) + " with t0k", fail: false, imgs: [{ type: "image/png", data: "aGk=" }] });
   expect(await Mcp.call("mcp__fake__fail_me", {}, new AbortController().signal)).toMatchObject({ text: "bad", fail: true });
   expect(await Mcp.call("mcp__fake__gone", {}, new AbortController().signal)).toMatchObject({ fail: true });
+});
+
+test("what a server says of a tool is kept: one that only reads runs unasked, another is asked first", async () => {
+  expect(Mcp.hints("mcp__fake__echo")).toEqual({ read: true, destructive: false });
+  expect(Mcp.hints("mcp__web__add")).toEqual({ read: false, destructive: false });
+  expect(Mcp.hints("mcp__fake__gone")).toBeUndefined();
+  const out = await Tools.call(tools, "main", "mcp__web__add", { a: 2, b: 3 }, new AbortController().signal);
+  expect(out.text).toStartWith("No one is at illi's screen to ask, so it isn't allowed. Asked because mcp__web__add isn't marked by its server as only reading.");
+  expect(asked).toEqual(["mcp__web__add"]);
 });
 
 test("names alike after sanitising or cutting are numbered, and each called at its own tool", async () => {

@@ -28,6 +28,11 @@
 // tools: it gets the tools Claude Code lacks (a `lean` list: no shell or
 // files), and prompts that say it works inside illi (Tools.hosted), the
 // project's CLAUDE.md left to Claude Code, which reads it itself.
+// Before shell, read, write, edit or an MCP tool runs, and as Claude
+// Code asks leave for one of its own (approve), the call is judged
+// (Tools.guard: Guard.ts, by the user's rules and grants in
+// Permissions.ts and the mode): run, asked about with why, or refused;
+// each refusal recorded for the side panel and /permissions.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -39,6 +44,9 @@ import { ChatGPT } from "../ai/ChatGPT.ts";
 import { clip_page } from "./Clip.ts";
 import * as config from "../config/Config.ts";
 import { Custom, type Skill } from "../config/Custom.ts";
+import { Trusted } from "../config/Trusted.ts";
+import { Guard, MODES, type Mode, type Verdict, type Where } from "./Guard.ts";
+import { Permissions } from "./Permissions.ts";
 import { INT, STR, TOOLS, Machine, spec, type Spec } from "./Machine.ts";
 import { Mcp } from "./Mcp.ts";
 import { Logs, MAIN } from "../chat/Logs.ts";
@@ -47,7 +55,7 @@ import PROMPT from "./prompt.txt" with { type: "text" };
 import { EFFORTS, Pick } from "../ai/Pick.ts";
 import { Projects } from "../chat/Projects.ts";
 import { Store } from "../chat/Store.ts";
-import type { Live, Plan, Query, Question, State, Todo } from "../ui/View.ts";
+import type { Live, Plan, Query, Question, Refused, State, Todo } from "../ui/View.ts";
 
 export type { Live };
 
@@ -76,8 +84,8 @@ export type Agent = {
 // pick: the chat's pick; halt: what stops its turn; main: the master's
 // agent, null: none)
 // a question's answer (Hooks ask): yes (illi's own: answered), and
-// whether for the rest of the chat's run; what the user said, for the
-// model: a no's reason, the answer to illi's own
+// whether not to ask again (its grants kept: Tools.guard); what the user
+// said, for the model: a no's reason, the answer to illi's own
 export type Reply = { yes: boolean; always: boolean; said: string };
 
 type Hooks = {
@@ -92,17 +100,21 @@ type Hooks = {
 };
 
 // the tools: their URL (a secret in it), the working dir, the main agent's to-do
-// list (none: not read yet), the tools Claude Code may use unasked for
-// the rest of this run (approve)
+// list (none: not read yet), the permissions of this run (Perm)
 export type Tools = {
   mem    : Memory;
   agents : Map<string, Agent>;
-  allowed: Set<string>;
+  perm   : Perm;
   url    : string;
   cwd    : string;
   hooks  : Hooks;
   todo?  : Todo[];
 };
+
+// the permissions of this run (Tools.guard): the mode /mode set (null:
+// the `mode` setting's), the grants /permissions gave (exact, for this
+// run only), the requests refused (the latest REFUSALS, oldest first)
+export type Perm = { mode: Mode | null; granted: Set<string>; refused: Refused[] };
 
 // Constants
 // =========
@@ -248,6 +260,18 @@ const FILES = 50;
 // the most characters of what a tool would do that a question shows
 const WHAT = 400;
 
+// the most refused requests kept (Perm)
+const REFUSALS = 50;
+
+// what the model is told of a call refused (Tools.refuse): after the
+// user's no (or no one there to ask), why it was asked; the mode's
+// refusal; the user's rules'
+const REFUSED = {
+  no   : "Asked because #. Don't run it again as is: ask the user, or do it another way. They can allow it in /permissions.",
+  mode : "Not run: illi is in #. The user can switch with /mode, or allow just this in /permissions.",
+  rule : "Not run: the user's permission rules refuse it (#). Don't run it, nor anything that does the same: ask the user if you need it.",
+};
+
 // the most bytes of a rules file sent (a longer one cut, saying so), and
 // a project's rules files, in each folder the first there
 const RULES_MOST = 40000;
@@ -289,7 +313,7 @@ export namespace Tools {
   export function serve(mem: Memory, hooks: Hooks, cwd: string): Tools {
     const key = crypto.randomUUID();
     const url = Tools.base() + key + "/";
-    const tools: Tools = { mem, agents: new Map(), allowed: new Set(), url, cwd, hooks };
+    const tools: Tools = { mem, agents: new Map(), perm: { mode: null, granted: new Set(), refused: [] }, url, cwd, hooks };
     CHATS.set(key, tools);
     return tools;
   }
@@ -551,6 +575,10 @@ export namespace Tools {
         return { text: Tools.todo_said(list), fail: false };
       }
       default: {
+        const stop = await Tools.guard(tools, who, name, args, signal);
+        if (stop !== null) {
+          return stop;
+        }
         return name.startsWith("mcp__") ? Mcp.call(name, args, signal) : Machine.run({ name, input: args, cwd: tools.cwd }, signal);
       }
     }
@@ -655,17 +683,71 @@ export namespace Tools {
     return { ...run, effort, system, blocks, searches: SEARCHES, server };
   }
 
-  // Claude Code asking leave to use a tool (its permission prompt): yes
-  // at once for one the user allowed for the rest of the run, else the
-  // user's answer (a dropped request: no). Its answer as Claude Code
-  // reads it: the input as it was, or a no with its reason
+  // Claude Code asking leave to use a tool (its permission prompt): its
+  // tool judged as illi's own would be (Guard.hosted), so the same rules,
+  // grants and mode hold there. Its answer as Claude Code reads it: the
+  // input as it was, or a no with what the model is told
   export async function approve(tools: Tools, who: string, tool: string, input: unknown, signal: AbortSignal): Promise<Out> {
-    const reply = tools.allowed.has(tool) ? { yes: true, always: true, said: "" } : await tools.hooks.ask({ who: who === MAIN ? "illi" : who, tool, what: Tools.what(input) }, signal);
-    if (reply.yes && reply.always) {
-      tools.allowed.add(tool);
-    }
-    const answer = reply.yes ? { behavior: "allow", updatedInput: input } : { behavior: "deny", message: reply.said };
+    const stop = await Tools.guard(tools, who, tool, input, signal, (where) => Guard.hosted(where, tool, input));
+    const answer = stop === null ? { behavior: "allow", updatedInput: input } : { behavior: "deny", message: stop.text };
     return { text: JSON.stringify(answer), fail: false };
+  }
+
+  // Permissions
+  // -----------
+
+  // a call judged before it runs (Guard.check: shell, read, write, edit,
+  // an MCP tool by what its server says of it; any other runs), by the
+  // user's rules and the grants kept for the project (Permissions.ts),
+  // those given this run, and the mode: null runs it, else what the model
+  // is told. One asked runs on the user's yes, "don't ask again" keeping
+  // its grants for the project (one that can't be saved: for this run).
+  // A rules file that won't read leaves nothing run unasked
+  export async function guard(tools: Tools, who: string, tool: string, input: unknown, signal: AbortSignal, judge = (where: Where) => Guard.check(where, tool, input, Mcp.hints(tool))): Promise<Out | null> {
+    const folder = Trusted.folder(tools.cwd);
+    const perms  = Permissions.read(config.PERMISSIONS, folder);
+    const ok     = typeof perms !== "string";
+    const grants = new Set([...(ok ? perms.granted : []), ...tools.perm.granted]);
+    const got    = judge({ mode: Tools.mode(tools), cwd: Projects.real(tools.cwd), top: folder, rules: ok ? perms.rules : {}, grants, reads: Custom.dirs(tools.cwd, "skills") });
+    const broken = "illi can't read your permission rules (" + perms + ")";
+    const verdict: Verdict = ok || got.$ === "deny" ? got : { $: "ask", why: got.$ === "ask" ? got.why + "; " + broken : broken, always: [], exact: got.$ === "ask" ? got.exact : [] };
+    if (verdict.$ === "allow") {
+      return null;
+    }
+    const asked = { who: who === MAIN ? "illi" : who, tool, what: Tools.what(input), why: verdict.why };
+    if (verdict.$ === "deny") {
+      return Tools.refuse(tools, { ...asked, how: verdict.rule ? "rule" : "mode", said: "", exact: verdict.exact });
+    }
+    const reply = await tools.hooks.ask({ ...asked, keep: verdict.always.map((g) => Guard.said(g, folder)).join(", ") }, signal);
+    if (!reply.yes) {
+      return Tools.refuse(tools, { ...asked, how: "no", said: reply.said, exact: verdict.exact }, !signal.aborted);
+    }
+    const unsaved = reply.always && verdict.always.length > 0 ? Permissions.grant(config.PERMISSIONS, folder, verdict.always) : null;
+    if (unsaved !== null) {
+      verdict.always.forEach((g) => tools.perm.granted.add(g));
+      console.error("illi: a grant kept for this run only: " + unsaved);
+    }
+    return null;
+  }
+
+  // the mode now: /mode's for this run, else the `mode` setting's (one
+  // not known: ask)
+  export function mode(tools: Tools): Mode {
+    const mode = tools.perm.mode ?? config.config_value("mode");
+    return MODES.includes(mode as Mode) ? (mode as Mode) : "ask";
+  }
+
+  // a refusal, recorded for the side panel and /permissions (kept: a
+  // stopped request's isn't), and what the model is told
+  export function refuse(tools: Tools, refused: Omit<Refused, "id" | "at">, kept = true): Out {
+    if (kept) {
+      tools.perm.refused.push({ ...refused, id: crypto.randomUUID(), at: Date.now() });
+      tools.perm.refused.splice(0, Math.max(0, tools.perm.refused.length - REFUSALS));
+      tools.hooks.change();
+    }
+    const said = refused.said === "" || /[.!?]$/.test(refused.said) ? refused.said : refused.said + ".";
+    const told = REFUSED[refused.how].replace("#", () => refused.why);
+    return { text: refused.how === "no" ? said + " " + told : told, fail: true };
   }
 
   // the ask tool's questions, each its text, its tab's label (none: its
@@ -683,10 +765,12 @@ export namespace Tools {
     return bad ? "Ask 1 to " + QUERIES + " questions, each with its text and 2 to " + OPTIONS + " options, each with a label." : each;
   }
 
-  // what a tool would do, as a question shows it: a command, a file, a
-  // URL or a query, else its input, WHAT characters at most
+  // what a tool would do, as a question shows it: a command, a file (an
+  // edit's files), a URL or a query, else its input, WHAT characters at
+  // most
   export function what(input: any): string {
-    const one = input?.command ?? input?.file_path ?? input?.url ?? input?.query ?? input?.pattern;
+    const edits = Array.isArray(input?.edits) && input?.file_path === undefined ? [...new Set(input.edits.map((e: any) => String(e?.path ?? "")))].join(", ") : undefined;
+    const one = input?.command ?? input?.file_path ?? input?.notebook_path ?? input?.path ?? edits ?? input?.url ?? input?.query ?? input?.pattern;
     const text = typeof one === "string" ? one : JSON.stringify(input ?? {});
     return text.length > WHAT ? text.slice(0, WHAT - 1) + "…" : text;
   }

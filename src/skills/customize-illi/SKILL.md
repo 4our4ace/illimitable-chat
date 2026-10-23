@@ -126,6 +126,15 @@ one:
   is off in every profile)
 - sticky: the sticky skills on, by name, the same way; /<name> keeps it
   for the user
+- mode: what runs without asking: auto (the default: reads, and changes
+  inside the project; a risky call is asked about, saying why), ask
+  (every change asked), read-only (changes refused), yolo (everything,
+  but what the user's rules refuse or ask)
+- permissions: the permission file, permissions.json in illi's folder
+  unless set: the user's rules ({"rules": {"shell": {"git push *":
+  "ask"}}}: allow, ask or deny by pattern, for shell, read, write and
+  mcp) and the grants "don't ask again" keeps per project. Changing it
+  is always asked: offer the rule, and let the user say yes
 - side: right, left or off; side_width: "25%" or columns; jobs: summaries
   built at once
 - accent: the color everything on the screen is themed in, at once: auto

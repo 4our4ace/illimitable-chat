@@ -1,10 +1,11 @@
 // Asks
 // ====
-// A question the chat asks (View Question: Claude Code asking leave to
-// use a tool, Tools.approve) in the picker, as it comes: Yes; Yes, and
-// not again for that tool this run; No (Esc too); No, and say why (a
-// line typed, for the model). What it would do shows at its foot, and
-// as a note.
+// A question the chat asks (View Question: leave to run a call the
+// checks stopped, Tools.guard) in the picker, as it comes: Yes; Yes, and
+// don't ask again for what it keeps, in this project (offered only when
+// it keeps something); No (Esc too); No, and say why (a line typed, for
+// the model). What it would do shows at its foot, and with why it was
+// asked as a note.
 // illi's own questions (ask) show in place of the input instead (its
 // form), a tab each: the question, its options (one to pick, or
 // several), and a row for words of the user's own, which they may type
@@ -22,8 +23,6 @@ import * as Screen from "../ui/Screen.ts";
 import { term_send, type Form, type Term } from "./Term.ts";
 import type { Query, Question } from "../ui/View.ts";
 
-// the answers, in the picker's order
-const YES = 0, ALWAYS = 1, NO = 2, WHY = 3;
 
 // the form's keys, at its foot: a question's, the answers'
 const KEYS = "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip";
@@ -47,7 +46,7 @@ export function term_asks(t: Term): void {
   if (t.asking === null) {
     t.asking = { id: q.id, c: null, done: false, form: q.queries === undefined ? null : { tab: 0, each: q.queries.map(() => ({ ed: Screen.ed_new(), at: 0, picked: [] })) } };
     if (q.queries === undefined) {
-      term_note(t, q.who + " asks to use " + q.tool + (q.what === "" ? "." : ": " + q.what));
+      term_note(t, q.who + " asks to use " + q.tool + (q.what === "" ? "" : ": " + q.what) + (q.why === undefined || q.why === "" ? "." : ". Why: " + q.why));
     }
     if (!t.scr.tty) {
       return term_answer(t, q, false, false, "");
@@ -204,9 +203,12 @@ export function term_form_lines(t: Term, w: number, max: number): { lines: Paint
   return { lines, at: { row: head.length + ask.length + opts.length + words.at.row, col: 2 + words.at.col } };
 }
 
-// the picker for a question
+// the picker for a question: its answers, "don't ask again" only where
+// it keeps something
 function term_ask_open(t: Term, q: Question): void {
-  const names = ["Yes", "Yes, and don't ask again for " + q.tool + " this run", "No", "No, and say why"];
+  const keep  = q.keep ?? "";
+  const names = ["Yes", ...(keep === "" ? [] : ["Yes, and don't ask again for " + keep + " in this project"]), "No", "No, and say why"];
+  const [always, no, why] = keep === "" ? [-1, 1, 2] : [1, 2, 3];
   const keys  = (_k: number, key: string) => {
     if (key !== "Esc" && key !== "Ctrl+C") {
       return false;
@@ -216,15 +218,15 @@ function term_ask_open(t: Term, q: Question): void {
     return true;
   };
   const pick = (k: number) => {
-    if (k === WHY) {
+    if (k === why) {
       term_ask(t, "Why not " + q.tool + "?", "your reason, for the model", "", "Enter send · Esc back", (why) => (term_answer(t, q, false, false, why), null));
       t.asking!.c = t.choose;
       return;
     }
-    term_answer(t, q, k !== NO, k === ALWAYS, "");
+    term_answer(t, q, k !== no, k === always, "");
   };
   const title = "Allow " + q.tool + (q.who === "illi" ? "" : " for " + q.who) + "?";
-  term_chooser(t, title, names, names.map(() => ""), YES, pick, { keys, foot: () => q.what === "" ? "Esc no" : q.what });
+  term_chooser(t, title, names, names.map(() => ""), 0, pick, { keys, foot: () => q.what === "" ? "Esc no" : q.what });
   t.asking!.c = t.choose;
 }
 

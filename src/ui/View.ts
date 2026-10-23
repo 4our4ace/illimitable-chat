@@ -73,10 +73,18 @@ export type Use = { plan: Plan | null; fill?: Fill | null };
 export type Todo = { text: string; status: "pending" | "active" | "done" };
 
 // a question the chat asks the user, answered by a view: who asks
-// (illi, an agent), the tool, what it would do: Claude Code asking leave
-// to use a tool (Tools.ts approve); or illi's own (ask: its queries, one
-// or more, answered at once)
-export type Question = { id: string; who: string; tool: string; what: string; queries?: Query[] };
+// (illi, an agent), the tool, what it would do: leave to run a call the
+// checks stopped (Tools.guard: why they did; what a "don't ask again"
+// keeps, as said, "": none offered); or illi's own (ask: its queries,
+// one or more, answered at once)
+export type Question = { id: string; who: string; tool: string; what: string; why?: string; keep?: string; queries?: Query[] };
+
+// a request refused (Tools.guard): its id, who asked (illi, an agent),
+// the tool, what (a command, a file), why; how: the user said no (or no
+// one was there to), the mode refused it, the user's rules did; what the
+// user said, when (ms), the exact grants that would let it run (none:
+// only the user's rules can)
+export type Refused = { id: string; who: string; tool: string; what: string; why: string; how: "no" | "mode" | "rule"; said: string; at: number; exact: string[] };
 
 // one of illi's questions: what it asks, its tab's label, the options it
 // offers, whether several may be picked
