@@ -39,7 +39,7 @@ function chat(): View.Row[] {
   const sum = (id: number, n: number): View.Row => ({ $: "Sum", id, n, text: "a summary of what was said " + id, call: null, kind: null });
   const out: View.Row[] = [View.Cap("The whole chat."), sum(0, 4)];
   for (let id = 4; id < 40; id += 4) {
-    out.push({ $: "Box", id, n: 2, text: "", rows: [sum(id, 1), sum(id + 1, 1)] });
+    out.push({ $: "Box", id, n: 2, rows: [sum(id, 1), sum(id + 1, 1)] });
     out.push({ $: "Act", id: id + 2, text: "Ran a command", open: id % 8 === 0, rows: [sum(id + 2, 1)] });
     out.push(...View.entry_rows(id + 3, id % 8 === 0 ? "user" : "illi", "Words " + id + "\n\n- one\n- two", id === 8 ? ["a.png"] : []));
   }
@@ -120,7 +120,7 @@ test("an open run of work is marked whole, each message in it with its gap, a fo
 test("an open block is marked over its whole frame, the blocks in it with their gaps; bars, gutters and /open tagged", () => {
   const sum = (id: number): View.Row => ({ $: "Sum", id, n: 1, text: "said " + id, call: null, kind: null });
   const marks: Paint.Mark[] = [];
-  const lines = Paint.rows_lines([{ $: "Box", id: 4, n: 2, text: "", rows: [sum(4), sum(5)] }], 60, marks);
+  const lines = Paint.rows_lines([{ $: "Box", id: 4, n: 2, rows: [sum(4), sum(5)] }], 60, marks);
   const [box, a, b] = marks;
   expect([box.key, box.from, box.to, lines.length]).toEqual(["b4+2", 0, lines.length, lines.length]);
   expect([a.key, a.from, b.key, b.from - a.to, b.to]).toEqual(["b4+1", 1, "b5+1", 0, lines.length - 1]);

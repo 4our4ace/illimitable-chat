@@ -652,7 +652,7 @@ test("a fill, the background untold, is a dim bar; told, a shade of it, never th
 
 test("each block's lines are marked: a summary's all, an open one's whole frame, a gap in it the block's above", () => {
   const sum = (id: number, n: number): View.Row => ({ $: "Sum", id, n, text: "a summary", call: null, kind: null });
-  const box: View.Row = { $: "Box", id: 4, n: 4, text: "", rows: [sum(4, 2), sum(6, 2)] };
+  const box: View.Row = { $: "Box", id: 4, n: 4, rows: [sum(4, 2), sum(6, 2)] };
   const marks: Paint.Mark[] = [];
   const lines = Paint.rows_lines([sum(0, 4), box], 60, marks, 1);
   const at = (m: Paint.Mark) => lines[m.from - 1].map((r) => r.x).join("");

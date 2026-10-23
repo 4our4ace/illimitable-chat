@@ -61,7 +61,8 @@ const GAUGE = 20;
 const STEP  = 5;
 
 // how often each was used, by its name, in a file of the root's (every
-// profile's, every illi's): its counts, read once, at the first use; the
+// profile's, every illi's): its counts, read once, as first needed (a
+// use, the order of the commands suggested, Ctrl+P's); the
 // uses since, kept KEEP after the last (ms), played over the file as it
 // is then (term_tally_keep); a use weighs half as much HALF uses on (old
 // habits fade), and a name weighing under GONE is forgotten (the file
@@ -945,8 +946,9 @@ export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "
 
 // a model's auto compact as the picker shows it: its share stepped while
 // the picker is open (moved), else as set (its own, else the global
-// one); its tokens (at most `most`: MOST of its window, less what a
-// request takes beside the chat on the chat's own model), its window;
+// one); its tokens (at most `most`: MOST of its window, and its room
+// less what a request takes beside the chat on the chat's own model:
+// config_most), its window;
 // null: the chat's process told none yet, or the model's window isn't
 // known (its vendor hasn't told it: none is guessed). Another model's
 // shows whatever the chat's model's window

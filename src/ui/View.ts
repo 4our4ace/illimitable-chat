@@ -253,7 +253,7 @@ export type Act =
 // what a page draws, top to bottom
 export type Row =
   | { $: "Sum"; id: number; n: number; text: string; call: Call.Call | null; kind: Kind | null }  // a block: nx, its summary (as written: drawn flat, Paint.ts; call: a tool call's, word for word; kind: its message's, of one known)
-  | { $: "Box"; id: number; n: number; text: string; rows: Row[] }                              // a block open: its bar
+  | { $: "Box"; id: number; n: number; rows: Row[] }                                            // a block open: its rows (its bar Paint's: nx · /close #id)
   | { $: "Act"; id: number; text: string; open: boolean; rows: Row[] }                         // a run of work (ACTIVITY), from message id: what was done, its rows if open
   | { $: "Rule"; id: number; text: string; open: boolean; rows: Row[] }                        // a recap (/compact), message id: a line across the chat naming it, the recap's rows if open
   | { $: "Msg"; id: number | null; kind: Kind; who: string; text: string; body: Md.Block[]; call: Call.Call | null; images: string[]; after?: number; nth?: number } // a message whole: 0x (who: its speaker or "↳ result", named on its block; body: its blocks, none for illi's (drawn from its text); call: a tool call's, drawn as Call.ts reads it; after, nth: a thought's, the message it follows and which of its thoughts)
@@ -933,13 +933,12 @@ function part_rows(v: View, id: number, n: number, t: number, talk: boolean): Ro
   if (open && v.open.get(key) === undefined && entry !== undefined) {
     return whole_rows(id, entry);
   }
-  const text = n === 1 ? "fold" : GLYPH.open + " " + n + "x · fold";
   if (n > 1) {
     const rows = [...part_rows(v, id, half, t, talk), ...part_rows(v, id + half, half, t, talk)];
-    return [{ $: "Box", id, n, text, rows }];
+    return [{ $: "Box", id, n, rows }];
   }
   const rows = entry === undefined ? [] : whole_rows(id, entry);
-  return [{ $: "Box", id, n, text, rows }];
+  return [{ $: "Box", id, n, rows }];
 }
 
 // a message's rows, or a summary's block, made once: neither changes once

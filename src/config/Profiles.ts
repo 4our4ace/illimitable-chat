@@ -4,7 +4,8 @@
 // default ~/.illi) is the default profile's folder, and holds each other
 // one's: <root>/profiles/<name>. illi opens the one asked
 // ($ILLI_PROFILE), else the one used last in the project
-// (<root>/project-profiles.json, kept at each start: profile_here_keep),
+// (<root>/project-profiles.json, kept as a terminal's illi starts shown
+// and as a switch shows one: Member.ts member_keep),
 // else the one used last anywhere (<root>/profile, a line), else the
 // default; Config.ts takes its folder as DIR. A profile is made
 // empty (profile_new), the root's setup its own (Config.ts, Custom.ts,
@@ -57,12 +58,15 @@ export const NAMED   = "a-z, 0-9, - and _, a letter or digit first";
 const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
 
 // what a profile's folder holds that is never a profile's to give: the
-// login (the root's, shared), the locks, the log; the default's folder
-// also holds the others, which was used last (anywhere, and in each
-// project: HERE), and when illi last looked for a new release of itself
-// (Update.ts)
-const OWN    = ["login.json", "locks", "illi.log"];
-const ROOTED = ["profiles", "profile", "project-profiles.json", "update.json"];
+// login (the root's, shared) and its lock, the locks, the log; the
+// default's folder also holds the others, which was used last
+// (anywhere, and in each project: HERE), when illi last looked for a new
+// release of itself (Update.ts), and the state every profile shares: the
+// models the vendors told (models.json, naming the ChatGPT account), the
+// folders trusted (Trusted.ts), the project files seen (Seen.ts), the
+// commands run and picked (Commands.ts USED, PICKED)
+const OWN    = ["login.json", "login.json.lock", "locks", "illi.log"];
+const ROOTED = ["profiles", "profile", "project-profiles.json", "update.json", "models.json", "trust.json", "seen.json", "used.json", "picked.json"];
 
 // the profile used last in each project, by its key (Projects.place),
 // kept in the root
@@ -89,9 +93,9 @@ const SECRET_VALUE = /\b(sk-|sk_|ghp_|gho_|ghu_|ghs_|github_pat_|glpat-|xox[abpr
 // ========
 
 // the profile running, for $ILLI_DIR (dir), $ILLI_PROFILE (asked) and
-// the folder illi runs in (cwd): a dir that is a profile's own folder
-// (<root>/profiles/<name>, its root illi's) is that profile, in that
-// root; else the one asked, else the one used last in cwd's project,
+// the folder illi runs in (cwd): the root is dir, or, a dir that is a
+// profile's own folder (<root>/profiles/<name>), its root; the one asked,
+// else that folder's profile, else the one used last in cwd's project,
 // else the one used last anywhere (each if it's still there), else the
 // default. One asked must be there
 export function profile_pick(dir: string, asked?: string, cwd = process.cwd()): Picked {

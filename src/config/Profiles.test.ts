@@ -12,7 +12,8 @@
 // (off, sticky) added to the root's; a shortcut of the root's dropped in
 // a profile stays dropped.
 // Names a profile takes. Secrets left out of a JSON file. An export: no
-// login, locks, log or update.json, its config stripped; an import: a
+// login, locks, log, update.json nor the state every profile shares
+// (models.json, trust.json, the counts), its config stripped; an import: a
 // new profile only, its config's commands dropped, its MCP servers off;
 // an archive with a path out of its folder, or a link, is refused before
 // anything is unpacked. An export's chat is a snapshot,
@@ -158,7 +159,10 @@ test("an archive's paths: inside its folder, files and folders only", () => {
   expect(Profiles.profile_unsafe(["a", "b"], ["-", "h"])).toContain("link");
 });
 
-test("an export: the folder but the login (one its config names in a subfolder too), the locks, the log, the other profiles, the profiles used last, the look for a release; secrets left out", async () => {
+test("an export: the folder but the login (one its config names in a subfolder too) and its lock, the locks, the log, the other profiles, the profiles used last, the look for a release, the state every profile shares (the models told, naming the account; the folders trusted; what was seen, run and picked); secrets left out", async () => {
+  for (const part of ["login.json.lock", "models.json", "trust.json", "seen.json", "used.json", "picked.json"]) {
+    put(ROOT + "/" + part, JSON.stringify(part === "models.json" ? { account: "acct-1", vendors: {} } : {}));
+  }
   const file = TMP + "/illi-profile-default.tar.gz";
   const cut  = await Profiles.profile_export(ROOT, "default", file);
   expect(cut).toBe(4);

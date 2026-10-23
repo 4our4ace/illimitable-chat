@@ -1,12 +1,12 @@
 The chat files
 ==============
 
-Everything illi remembers lives in SQLite files, one per project. This
-page covers exactly how a file is laid out, who opens it, how a write
-reaches the disk, how versions work, how search and forgetting work,
-and what each costs. Each part names the function that does the work. If
-this page and the code disagree, the code is right and this page needs
-fixing.
+Every chat illi keeps lives in SQLite files, one per project in each
+profile. This page covers exactly how a file is laid out, who opens
+it, how a write reaches the disk, how versions work, how search and
+forgetting work, and what each costs. Each part names the function that
+does the work. If this page and the code disagree, the code is right and
+this page needs fixing.
 
 - [Where they are](#where-they-are)
 - [What is in a file](#what-is-in-a-file)
@@ -31,7 +31,10 @@ Where they are
 | default         | `~/.illi/chat/projects/`                       |
 | any other       | `~/.illi/profiles/<name>/chat/projects/`       |
 
-`ILLI_DIR` moves `~/.illi`. The folder holds one file per project: one
+`ILLI_DIR` moves `~/.illi`. The profile is `ILLI_PROFILE`'s, else the
+one used last in the project, else the one used last anywhere, else
+the default (`Profiles.profile_pick`, [Profiles](profiles.md)). The
+folder holds one file per project: one
 for each git repo illi ran in, plus `home` for everywhere outside a repo
 (`Projects.place`). A file is named after its project, such as
 `app-k3f9x2.sqlite` (the repo folder's name plus a 6-character code from
@@ -82,7 +85,7 @@ The columns, by table:
   if it was written with one), `more` (1 if the next row is the same
   message continued), `cwd` (the folder illi ran in). A message longer
   than 30,000 characters (`Clip.ts CAP`), or with more than 20 images
-  (`Memory.ts PICS`), is stored as several rows, its pages. Only the last
+  (`Image.ts PICS`), is stored as several rows, its pages. Only the last
   page has `more` null. A partial index `msg_page` on `(chat) where more
   is not null` lists the continued pages, so a chat's count of whole
   messages costs nothing.
@@ -173,8 +176,8 @@ note, illi going on.
 
 | Who | Connection | When | Code |
 | --- | --- | --- | --- |
-| **The holder**: the illi that holds a project's lock and runs its chat (shown, or a profile left running hidden in a window) | read-write to its project's file, kept open until illi quits | always, one per project being used | `Memory.load` → `Store.open(dir, place)` |
-| **A view**: a second terminal in the same project | read-write to the same file | to read exports, the tree and the projects list; the chat itself comes from the holder over a socket | `Term.ts term_reader` |
+| **The holder**: the illi that holds a project's lock and runs its chat (shown, or a profile left running hidden in a window) | read-write to its project's file, kept open until illi quits | always, one per project and profile in use | `Memory.load` → `Store.open(dir, place)` |
+| **A view**: an illi started where another holds the project's chat, in the same profile (a second terminal's, a pipe's) | read-write to the same file, kept open until illi quits | to read exports, the tree and the projects list; the chat itself comes from the holder over a socket | `Term.ts term_reader` |
 | **A look at other projects**: the projects list, a zoom or date into another project, an export of one, the image count before a forget | read-write to that project's file, opened for the read and closed right after | each time | `Store.visit` → `Store.peek` |
 | **The search thread** (`Seeker.ts`) | its own connections, to each file a search covers, each closed after | each `search` the model calls | `Projects.seek` |
 | **A profile export** | read-write to each file, for a snapshot | `/profile` export | `Profiles.ts profile_snapshot` |
@@ -303,8 +306,11 @@ sequenceDiagram
    during a flush wait for the next one, so a burst of writes costs one
    or two fsyncs (group commit). A file gone since (`ENOENT`) needs none.
 3. **Answer.** An act of the person's (a message sent, a pick, a
-   setting) is answered only once the flush covering it is done. Quitting
-   waits for it too (`Disk.synced` in `term_leave`).
+   setting) is answered only once the flush covering it is done. Running
+   again in place (a switch with illi alone, a rename, a chat moved, the
+   project forgotten) waits for it too (`Disk.synced` in
+   `ProfileCommands.ts term_leave`); a quit doesn't, its close
+   checkpointing (and so fsyncing) a file it is the last to close.
 4. **Checkpoint.** When the WAL passes 1,000 pages, the commit that
    crosses that mark also copies the WAL's pages into the file. SQLite
    fsyncs the WAL before copying and the file after. The WAL is then
@@ -332,27 +338,38 @@ What this guarantees:
 Project locks
 -------------
 
-One process at a time holds a project's chat. The lock lives in
-`~/.illi/locks/` (a folder only you can open, mode 0700):
+One process at a time holds a project's chat in a profile. The lock
+lives in the profile's `locks/` (`~/.illi/locks/`, another profile's
+`~/.illi/profiles/<name>/locks/`; a folder only you can open, mode
+0700):
 
 | File | Is |
 | ---- | -- |
 | `<code>.lock` | the lock. `<code>` is a 12-character hash of the project's folder, or `home` (`Projects.lock`) |
 | `<code>.sock` | the holder's socket (mode 0600), where a second terminal's view connects |
 
+Each profile's illi takes it as it starts (`Term.ts term_start`): on a
+terminal, the members under the window, shown or hidden; alone
+(`ILLI_WINDOW=off`) or from a pipe, illi itself. The window process
+(`Window.ts`) holds no lock and writes no file: it copies bytes between
+the terminal and its members' pseudo-terminals.
+
 **Taking it** (`Lock.claim`, `Lock.grip`, src/chat/Lock.ts): illi opens the lock file as an
 SQLite database, sets `busy_timeout = 50` ms (`GRIP`) and `journal_mode
 = memory` (no journal file is left behind), and runs `begin exclusive`.
-If that succeeds, the transaction stays open as long as the process
-lives. The OS releases it however the process ends, so a crash never
-leaves a stale lock.
+If that succeeds, the transaction stays open while this illi holds the
+chat: till it quits, or lets go to run again in place (`Lock.release`);
+a profile switched away from in a window holds on, hidden. The OS
+releases it however the process ends, so a crash never leaves a stale
+lock.
 
 **Why wait 50 ms:** without a wait, several illis starting at the same
 moment each took a shared lock and then all failed to take it
 exclusively, so nobody won. With a short wait, SQLite's deadlock
 avoidance lets exactly one through. On a very busy machine the window
-can be missed. Then every illi becomes a view, waits 15 s for a holder
-that isn't there (`Remote.ts MUTE`), and runs again.
+can be missed. Then every illi becomes a view, finds no holder's
+socket, and runs again 600 ms later (`Term.ts term_gone`), 20 times in
+a row at most (`REJOIN`).
 
 **If another illi holds it:** this one becomes a view of that chat
 (`Remote.ts`), connected over the socket.
@@ -360,6 +377,12 @@ that isn't there (`Remote.ts MUTE`), and runs again.
 **Forgetting another project** takes that project's lock (without a
 socket) while it deletes the file, so no illi starts that project
 meanwhile. If an illi already has it open, illi refuses the forget.
+
+**Renaming or deleting a profile, or moving its chat into a new one,**
+first tries each lock in that profile's `locks/` and lets it go at once
+(`Lock.others`); one held refuses it (*illi runs in profile work in
+another terminal*), as a profile running hidden in this window is
+refused a rename or delete.
 
 The projects table
 ------------------
@@ -539,7 +562,7 @@ Forgetting a project
    it stops: *open in another terminal: quit illi there first*.
 2. It deletes the project's file (`Store.forget`).
 3. It lets the lock go and says what was forgotten: *Forgot app-k3f9x2:
-   1,204 messages and 3 images.*
+   1204 messages and 3 images.*
 
 **The project you're in** (only from the illi that holds it; a view is
 told to forget it in the holder's terminal):
@@ -605,8 +628,9 @@ Usage counts
    used once and never again disappears after 333 other uses.
 3. The used name gets +1. A name used every single time levels off near
    145, so no weight grows without end.
-4. Each illi reads the file once, at its first use, and counts in
-   memory from then on. Its uses are also queued.
+4. Each illi reads the file once, when first needed (a `/` typed,
+   Ctrl+P opened, a use), and counts in memory from then on. Its uses
+   are also queued.
 5. 2 s after the last use (a timer that never holds illi open,
    `term_tally_keep`), it reads the file again, as another illi may have
    written it meanwhile, and replays its queued uses over it (fade, +1,
@@ -638,7 +662,9 @@ being `{ label, id, speeds, window?, standard?, efforts?, tiers?, room? }`
    the whole to `models.json.<pid>.tmp` and renames it over the file,
    so no reader sees half a file and one vendor's learning never drops
    another's. Two illis writing in the same instant can still lose one's
-   list, told again at the next answer.
+   list: chatgpt's comes back at the catalog's next answer, claude-api's
+   and claude-code's at a later illi's start (each writes only windows
+   new to it).
 3. At the start (`config_models`), the chatgpt list is taken whole,
    whatever its account (the login isn't read yet), until the catalog
    answers; a window or a share in it that isn't one (not a count above
@@ -662,4 +688,5 @@ Known limits
   runs again on its own (`Term.ts term_gone`), as it does after a
   holder quits; once the forget is done it starts the project fresh.
 - **Two illis starting at the same moment on a very busy machine** can
-  both miss the 50 ms lock window; both then wait 15 s and run again.
+  both miss the 50 ms lock window; both then become views, find no
+  holder, and run again 600 ms later.

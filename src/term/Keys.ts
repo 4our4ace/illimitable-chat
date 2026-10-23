@@ -174,7 +174,7 @@ export function term_grab(t: Term, key: string): boolean {
 // here (neither interrupts, clears the input nor quits); the key that
 // opened it closes it (Ctrl+P's); a question just shown holds Enter
 // (Popup.ts popup_held); the lit option's own keys first (the model
-// picker's effort and speed); then Up and Down (or Tab) move round
+// picker's effort and speed); then Up and Down (or Tab, Shift+Tab) move round
 // the options shown, PgUp and PgDn a page, Ctrl+Home and Ctrl+End to the
 // first and the last (Home and End too, with nothing to type in), the
 // wheel scrolls (Popup.ts), Enter picks the lit one (none matching the

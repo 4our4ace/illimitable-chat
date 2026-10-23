@@ -2,8 +2,8 @@
 // ======
 // The wire of openai-api (Agent.ts): the Responses API, streamed, store
 // off. Reasoning keeps all turns (else a message sent mid-run drops it
-// and misses the cache); the speed is a service tier ("priority" is
-// fast). A marked block is an explicit breakpoint (the latest BREAKS);
+// and misses the cache); the speed is a service tier (fast sent as
+// "fast", told back as "priority"). A marked block is an explicit breakpoint (the latest BREAKS);
 // the end is cached implicitly only if marked (AskAI.tail). A failure its input caused
 // (INPUT), incomplete or refused fails (said in plain words); one too
 // long for the model's window (FULL) is full; a plan or quota used up is

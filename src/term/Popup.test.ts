@@ -37,7 +37,8 @@
 // the words lights them, outside does nothing. Taller than the screen,
 // its tabs and keys hold and its lines scroll, by the keys (the lit row
 // kept in view) and by the wheel (the lit row held while it shows, else
-// the nearest; the one under the pointer lit).
+// the nearest; the one under the pointer lit). A theme's lit mark of any
+// width leads every row as wide, lists, forms and commands alike.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -54,6 +55,7 @@ const { term_under } = await import("./Select.ts");
 const Paint = await import("../ui/Paint.ts");
 const Screen = await import("../ui/Screen.ts");
 const { status_new } = await import("./Status.ts");
+const Theme = await import("../ui/Theme.ts");
 const View = await import("../ui/View.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
@@ -601,4 +603,36 @@ test("the wheel over a group's head scrolls on: the lit option gone from view, t
     }
     expect([t.choose.top, lit(t)]).toEqual([6, "o5"]);
   });
+});
+
+// a theme's own mark for the lit row, wider than >: every row leads as
+// wide (Paint.lit_lead), so a list's names and what they are, a form's
+// options and its words, the commands suggested and what they do, stay
+// in line, the cursor after the mark
+test("a lit mark wider than >: every row leads as wide, a list's names and what they are in line, a form's options and words, the commands suggested; the cursor after them", () => {
+  const was = Theme.GLYPH.lit;
+  Theme.GLYPH.lit = "->";
+  try {
+    sized(160, 40, () => {
+      const t = term();
+      term_chooser(t, "Agent", ["illi", "reviewer"], ["illi's own", "reviews"], 0, () => {});
+      term_paint(t);
+      const rows = inside(t, 160).filter((r: string) => /illi|reviewer/.test(r));
+      expect(rows.map((r: string) => r.trimEnd())).toEqual(["-> ● illi      illi's own", "   ◯ reviewer  reviews"]);
+      const u = term();
+      own(u, [DB]);
+      paint(u);
+      const { row, col } = u.box;
+      expect(inside(u, 160).slice(2, 6).map((l: string) => l.trimEnd())).toEqual(["-> ○ Postgres  you know it", "   ○ SQLite", "   ○ MySQL", "   > Something else: type your own"]);
+      expect(u.ruled.at).toEqual({ row: row + 6, col: col + 7 });
+      const v = term();
+      Screen.ed_set(v.scr.ed, "/cl");
+      paint(v);
+      const [a, b] = inside(v, 160);
+      expect([a.slice(0, 10), b.slice(0, 10)]).toEqual(["-> /clear ", "   /close "]);
+      expect(a.indexOf("start a new topic")).toBe(b.indexOf("close block"));
+    });
+  } finally {
+    Theme.GLYPH.lit = was;
+  }
 });

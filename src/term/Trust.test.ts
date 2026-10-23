@@ -2,8 +2,9 @@
 // ==========
 // `bun test Trust.test.ts`. The question takes its keys (No lit first,
 // Enter takes the lit option, y and n, Esc exits; grabbed before the
-// input's editing) and stands in the screen's middle; home's says it
-// asks each time. What is kept is Trusted.test.ts's.
+// input's editing) and stands in the screen's middle, its options in
+// line whatever the lit mark's width; home's says it asks each time.
+// What is kept is Trusted.test.ts's.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -13,6 +14,7 @@ const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-trust-");
 process.env.ILLI_DIR = DIR + "/illi";
 
 const { Trust } = await import("./Trust.ts");
+const Theme = await import("../ui/Theme.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
@@ -49,4 +51,17 @@ test("the question grabs its keys before the input's editing, and lets go once a
   expect(scr.grab("Enter")).toBe(true);
   expect(await yes).toBe(true);
   expect([scr.grab, scr.type]).toEqual([null, undefined]);
+});
+
+test("a lit mark wider than >: the other option leads as wide, in line", () => {
+  const text = (rows: any[]) => rows.map((r) => r.map((p: any) => p.line.map((x: any) => x.x).join("")).join(""));
+  const was = Theme.GLYPH.lit;
+  Theme.GLYPH.lit = "->";
+  try {
+    const lines = text(Trust.rows({ folder: "/work/app", kept: true, at: 0 }, { w: 100, h: 30 }));
+    expect(lines).toContain("-> No, exit");
+    expect(lines).toContain("   Yes, I trust this folder");
+  } finally {
+    Theme.GLYPH.lit = was;
+  }
 });

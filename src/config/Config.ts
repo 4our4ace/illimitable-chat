@@ -1,6 +1,6 @@
 // Config
 // ======
-// illi's settings. Its DIR holds config.json, the lock and the chat
+// illi's settings. Its DIR holds config.json, the locks (locks/) and the chat
 // (chat/): the folder of the profile running (Profiles.ts), the ROOT
 // itself ($ILLI_DIR, default ~/.illi) for the default. The root is the
 // global layer, every profile's: a profile's config.json goes over the
