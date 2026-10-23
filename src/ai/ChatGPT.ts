@@ -108,15 +108,15 @@ const WINDOWS = ["primary", "secondary"];
 // the login in use, and its file as it was when read (sync); the token
 // the backend refused; the renewal running; how many changes of account
 // so far (an answer asked before one is dropped); the account's plan as
-// last told (its key: the account it is of; state: asking it now, or
-// told by the usage endpoint); what to call as it changes (Chat.change);
+// last told (its key: the account it is of); what to call as it changes
+// (Chat.change);
 // whether a failed ask was logged; the login file followed
 let held: Login | null = null;
 let seen = "";
 let spoiled = "";
 let renewing: Promise<Login> | null = null;
 let epoch = 0;
-let record: { key: string; tier: string; limits: Limit[]; state?: "asking" | "told" } | null = null;
+let record: { key: string; tier: string; limits: Limit[] } | null = null;
 let watcher: () => void = () => {};
 let logged = false;
 let following: ReturnType<typeof setInterval> | undefined;
@@ -221,13 +221,13 @@ export namespace ChatGPT {
 
   // the account's plan and rate limits asked of the usage endpoint
   // together, while the account it asks for is still the one in use
-  // (true: told). A failure leaves the record untold (logged once), and
-  // never spoils the token
+  // (true: told). Asked, the account holds an untold record, so `follow`
+  // doesn't ask again meanwhile. A failure leaves it untold (logged once),
+  // and never spoils the token
   export async function usage(): Promise<boolean> {
     const at = epoch;
     if (ChatGPT.key() !== "" && record === null) {
-      record = { key: ChatGPT.key(), tier: "", limits: [], state: "asking" };
-      watcher();
+      record = { key: ChatGPT.key(), tier: "", limits: [] };
     }
     try {
       const token = await ChatGPT.token();
@@ -239,17 +239,13 @@ export namespace ChatGPT {
       if (epoch !== at || ChatGPT.key(token) !== ChatGPT.key()) {
         return false;
       }
-      record = { key: ChatGPT.key(token), ...told, state: "told" };
+      record = { key: ChatGPT.key(token), ...told };
       watcher();
       return true;
     } catch (err: any) {
       if (!logged) {
         logged = true;
         console.error("chatgpt: the plan's usage wasn't told: " + err?.message);
-      }
-      if (epoch === at && record?.state === "asking") {
-        record = { ...record, state: undefined };
-        watcher();
       }
       return false;
     }
@@ -674,7 +670,7 @@ export namespace ChatGPT {
       return Number.isFinite(used) && window > 0 ? [{ window, used, reset }] : [];
     });
     if (told.length > 0) {
-      record = { key, tier: record?.key === key ? record.tier : "", limits: told, state: record?.key === key ? record.state : undefined };
+      record = { key, tier: record?.key === key ? record.tier : "", limits: told };
       watcher();
     }
   }
@@ -717,7 +713,7 @@ export namespace ChatGPT {
       return null;
     }
     const own = record?.key === key ? record : null;
-    return { brand: "ChatGPT", tier: own?.tier || ChatGPT.tier(), limits: own?.limits ?? [], ...(own?.state === undefined ? {} : { state: own.state }) };
+    return { brand: "ChatGPT", tier: own?.tier || ChatGPT.tier(), limits: own?.limits ?? [] };
   }
 
   // one stream event (OpenAI.read); the last, if its response lists no

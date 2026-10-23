@@ -203,7 +203,7 @@ test("the plan and its usage are one record of the account they are of: a new lo
   expect(ChatGPT.told()!.limits).toEqual([]);
   usage = async () => plan("prolite", 7);
   expect(await ChatGPT.usage()).toBe(true);
-  expect(ChatGPT.told()).toEqual({ brand: "ChatGPT", tier: "prolite", limits: [{ window: 10080, used: 7, reset: expect.any(Number) }], state: "told" });
+  expect(ChatGPT.told()).toEqual({ brand: "ChatGPT", tier: "prolite", limits: [{ window: 10080, used: 7, reset: expect.any(Number) }] });
   ChatGPT.watch(() => {});
 });
 
@@ -225,10 +225,10 @@ test("a renewal or any rewrite for the same account keeps its record; an answer 
   expect(await asking).toBe(false);
   expect(ChatGPT.told()).toEqual({ brand: "ChatGPT", tier: "plus", limits: [] });
   usage = async () => new Response("<html>", { status: 200, headers: { "content-type": "text/html" } });
-  const states: unknown[] = [];
-  ChatGPT.watch(() => states.push(ChatGPT.told()?.state));
+  let changes = 0;
+  ChatGPT.watch(() => (changes += 1));
   expect(await ChatGPT.usage()).toBe(false);
-  expect(states).toEqual(["asking", undefined]);
+  expect([changes, ChatGPT.told()]).toEqual([0, { brand: "ChatGPT", tier: "plus", limits: [] }]);
   expect(ChatGPT.headers(c, { model: "m", system: "s" } as any)["chatgpt-account-id"]).toBe("acct-c");
   expect(ChatGPT.headers(b, { model: "m", system: "s" } as any)["chatgpt-account-id"]).toBe("acct-b");
   ChatGPT.watch(() => {});

@@ -482,7 +482,7 @@ test("two illis counting at once each keep their uses over the other's: the file
   expect([fs.statSync(DIR + "/blocked.json").isDirectory(), fs.readdirSync(DIR).filter((f) => f.startsWith("blocked.json."))]).toEqual([true, []]);
 });
 
-test("the side shows any vendor's plan alike: each window's share used, a bar as full, in the accent, the theme's error as it fills; one past its reset, none", () => {
+test("the side shows any vendor's plan alike: each window's share used, a bar as full, in the accent, the theme's error as it fills; one past its reset, none; no plan, or none of its use told, no Usage at all", () => {
   const t = term();
   Object.assign(t, { agents: [], profs: ["default"], since: Date.now() });
   t.v.use.plan = { brand: "Claude", tier: "max", limits: [{ window: 300, used: 23, reset: Date.now() + 7200e3 }, { window: 10080, used: 95, reset: Date.now() + 3 * 86400e3 }, { window: 1440, used: 50, reset: Date.now() - 1 }] };
@@ -496,6 +496,8 @@ test("the side shows any vendor's plan alike: each window's share used, a bar as
   expect(text(lines[at])).toBe("Usage · Claude Max");
   t.v.use.plan = null;
   expect(term_side(t, 30, 40).map(([line]) => text(line))).not.toContain("Usage");
+  t.v.use.plan = { brand: "ChatGPT", tier: "pro", limits: [] };
+  expect(term_side(t, 30, 40).map(([line]) => text(line)).filter((x) => x.startsWith("Usage"))).toEqual([]);
 });
 
 test("a skill named mid-message: suggested as it's typed (skills alone, none shown till one matches, read once), filled in there by Enter, and illi told to use it as the message goes", () => {
