@@ -51,7 +51,7 @@ Marks
 | `█ ▌ ░` | a gauge: full, half, empty | the auto compact in `/model` |
 | `█` | a bar: the share used (in the accent; warning past 70%, error past 90%), the rest dim | the side's context and plan use |
 | `∞` traced in braille dots | illi at work | the work line |
-| a braille cell, its dots going round | illi at work | the title, the side's subagents and profiles at work |
+| a braille cell, three of its six dots tracing a figure of eight | illi at work | the title, the side's subagents and profiles at work |
 | `⌕` | search | a list's search line |
 | `↓` | the chat's end; tokens written | Jump to Bottom; the work line |
 | `[ ⧉ copy ]` | a button: a click copies (`⧉ md`, `⧉ art`, `⧉ source`, `⧉ copy reply`) | over or beside a reply's lists, tables, code, diagrams, quotes and alerts; a reply's end |

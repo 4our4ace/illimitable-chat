@@ -117,14 +117,14 @@ test("the terminal's title names illi and the project, written as it changes: a 
   expect(spun.every((s, k) => /^\x1b\]0;[⠀-⣿] illi · /.test(s) && s !== titles[k])).toBe(true);
 });
 
-test("the title's mark while work runs: one braille cell, a trail of 3 dots a step round its edge, all its 8 steps apart; the trail's every place, the cell's edge whole", () => {
+test("the title's mark while work runs: one braille cell, a trail of 3 dots a step on a figure of eight over its six dots (1 4 5 2, 3 6 5 2), all its 8 steps apart", () => {
   const frames = Array.from({ length: 8 }, (_, k) => term_orbit(k));
-  const dots   = (s: string) => (s.charCodeAt(0) - 0x2800).toString(2).replaceAll("0", "").length;
-  expect(frames.every((f) => [...f].length === 1)).toBe(true);
+  const path   = [1, 4, 5, 2, 3, 6, 5, 2];
+  const bit    = (k: number) => 1 << (path[(k + 8) % 8] - 1);
+  expect(frames).toEqual(path.map((_, k) => String.fromCharCode(0x2800 | bit(k) | bit(k - 1) | bit(k - 2))));
   expect(new Set(frames).size).toBe(8);
-  expect(frames.map(dots)).toEqual(Array(8).fill(3));
   expect([term_orbit(8), term_orbit(-1)]).toEqual([frames[0], frames[7]]);
-  expect(String.fromCharCode(0x2800 | frames.reduce((b, f) => b | (f.charCodeAt(0) - 0x2800), 0))).toBe("⣿");
+  expect(String.fromCharCode(0x2800 | frames.reduce((b, f) => b | (f.charCodeAt(0) - 0x2800), 0))).toBe("⠿");
 });
 
 for (const place of ["right", "left"]) {
