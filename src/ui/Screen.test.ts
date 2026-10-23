@@ -70,6 +70,20 @@ test("a long paste is one token, erased whole, its text put back as sent; a shor
   expect(Screen.ed_expand(ed, "[Pasted text #9 +3 lines]")).toBe("[Pasted text #9 +3 lines]");
 });
 
+test("a long paste pasted again while its token is in the input shows whole, in the token's place, the cursor at its end; a third makes a token anew", () => {
+  const ed   = Screen.ed_new();
+  const long = Array.from({ length: 9 }, (_, k) => "line " + k).join("\n");
+  Screen.ed_paste(ed, long + "\n");
+  Screen.ed_type(ed, " and ");
+  Screen.ed_paste(ed, "x".repeat(600));
+  Screen.ed_paste(ed, long);
+  expect(ed.text).toBe(long + " and [Pasted text #2, 600 chars]");
+  expect(ed.pos).toBe(long.length);
+  expect(Screen.ed_expand(ed, ed.text)).toBe(long + ' and <pasted n="2">\n' + "x".repeat(600) + "\n</pasted>");
+  Screen.ed_paste(ed, long);
+  expect(ed.text).toBe(long + "[Pasted text #3 +9 lines] and [Pasted text #2, 600 chars]");
+});
+
 test("a message sent shows each paste whole, as pasted; its history, read again, its token", () => {
   const ed   = Screen.ed_new();
   const long = Array.from({ length: 8 }, (_, k) => "row " + k + (k === 3 ? " [FireAnt]" : "")).join("\n") + "\n";
@@ -289,6 +303,40 @@ test("the input's cursor and wrap follow the prompt's own width; its hint is cle
   const empty = screen();
   const hint  = Screen.screen_input(empty.scr, 40, 3, "go\x1b]52;c;eA==\x07 on", false).lines[0][1].x;
   expect(hint).toBe("go]52;c;eA== on");
+});
+
+test("the input laid out line by line: Left and Right cross a line's end, Up and Down keep the column over wrapped rows, a full last row gives the cursor one of its own; an edit lays out its line alone", () => {
+  const { scr } = screen();
+  const spot = () => Screen.screen_input(scr, 6, 20, "", false).at;
+  const col  = Paint.text_width(Theme.GLYPH.input);
+  Screen.ed_type(scr.ed, "abcd\n世界ab\nwxyzwxyzw");
+  scr.ed.w = 6 - col;
+  const w = scr.ed.w;
+  expect(w).toBe(4);
+  expect(spot()).toEqual({ row: 5, col: col + 1 });
+  Screen.ed_key(scr.ed, "Up");
+  expect([scr.ed.pos, spot()]).toEqual([15, { row: 4, col: col + 1 }]);
+  Screen.ed_key(scr.ed, "Up");
+  Screen.ed_key(scr.ed, "Up");
+  expect([scr.ed.pos, spot()]).toEqual([8, { row: 2, col: col + 1 }]);
+  Screen.ed_key(scr.ed, "Up");
+  expect([scr.ed.pos, spot()]).toEqual([5, { row: 1, col }]);
+  scr.ed.pos = 5;
+  Screen.ed_key(scr.ed, "Left");
+  expect([scr.ed.pos, spot()]).toEqual([4, { row: 0, col: col + 4 }]);
+  Screen.ed_key(scr.ed, "Right");
+  Screen.ed_key(scr.ed, "Right");
+  expect(scr.ed.pos).toBe(6);
+  scr.ed.pos = scr.ed.text.length;
+  Screen.ed_key(scr.ed, "Backspace");
+  expect(spot()).toEqual({ row: 5, col });
+  Screen.ed_type(scr.ed, "w");
+  expect(spot()).toEqual({ row: 5, col: col + 1 });
+  const laid = scr.ed.laid!;
+  Screen.ed_type(scr.ed, "!");
+  spot();
+  expect(scr.ed.laid!.lines[0].wrap).toBe(laid.lines[0].wrap);
+  expect(scr.ed.laid!.lines[2].wrap).not.toBe(laid.lines[2].wrap);
 });
 
 test("a pipe's last line, without a newline, waits in the input for the end", () => {
