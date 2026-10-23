@@ -73,6 +73,10 @@ const LIST   = "https://chatgpt.com/backend-api/codex/models?client_version=1.0.
 const LISTED = 3000;
 const UNTOLD = "ChatGPT hasn't told #'s context window (its model list didn't answer), and illi never guesses one";
 const NO_WINDOW = "ChatGPT's model list tells no context window for #, and illi never guesses one";
+
+// the share of a window (%) a request may fill where the list leaves it
+// out: Codex's own (effective_context_window_percent's default)
+const USABLE = 95;
 const AUTH   = "https://auth.openai.com";
 const ISSUER = AUTH + "/oauth/token";
 
@@ -547,7 +551,8 @@ export namespace ChatGPT {
   // (standard) when below it; its efforts (supported_reasoning_levels, in
   // order); its speeds, standard and each service tier it offers
   // (priority: fast, ultrafast), each one's tier id kept to send; the
-  // share of the window a request may fill (effective_context_window_percent)
+  // share of the window a request may fill (effective_context_window_percent,
+  // else USABLE)
   export function model(m: any): Model {
     const usual  = Number(m.context_window) || 0;
     const usable = Number(m.effective_context_window_percent) || 0;
@@ -565,7 +570,7 @@ export namespace ChatGPT {
       standard : window !== undefined && usual > 0 && usual < window ? usual : undefined,
       efforts  : named.length === 0 ? undefined : [...new Set<string>(named)],
       tiers    : Object.keys(tiers).length === 0 ? undefined : tiers,
-      room     : usable > 0 && usable <= 100 ? usable / 100 : undefined,
+      room     : (usable > 0 && usable <= 100 ? usable : USABLE) / 100,
     };
   }
 

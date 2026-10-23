@@ -102,7 +102,8 @@ On ChatGPT the list is your account's own: a model it adds is offered
 at once, one it drops is gone. A model's window is exactly what Codex's
 model list says is the most your account may use (`max_context_window`,
 else `context_window`), and the share of it a request may fill is its
-`effective_context_window_percent`: illi has no ChatGPT window of its
+`effective_context_window_percent` (95% where the list leaves it out,
+as Codex takes it): illi has no ChatGPT window of its
 own and never guesses one. Nothing is folded at the start till the
 list answers. A turn (or a subagent) waits a few seconds for it, then
 goes on the windows it told last (kept in `models.json`); on a model it

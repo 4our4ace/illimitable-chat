@@ -108,7 +108,7 @@ model (`Pick.ts` `Model`) has:
 | `standard` | the vendor's usual window, when smaller (chatgpt's `context_window` below its `max_context_window`) |
 | `efforts`  | the efforts it takes, in the vendor's names (none: illi's five) |
 | `tiers`    | the id each speed is sent as |
-| `room`     | the share of the window a request may fill, as the vendor tells it (chatgpt's `effective_context_window_percent`; none: 90%) |
+| `room`     | the share of the window a request may fill, as the vendor tells it (chatgpt's `effective_context_window_percent`, else Codex's 95%; a vendor that tells none: 90%) |
 
 Built-in models in `MODELS` hold until the vendor answers. Ways to
 learn them, from best:
