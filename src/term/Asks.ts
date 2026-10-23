@@ -203,8 +203,8 @@ export function term_form_lines(t: Term, w: number, max: number): { lines: Paint
   return { lines, at: { row: head.length + ask.length + opts.length + words.at.row, col: 2 + words.at.col } };
 }
 
-// the picker for a question: its answers, "don't ask again" only where
-// it keeps something
+// the picker for a question, which stays (Chooser stays): its answers,
+// "don't ask again" only where it keeps something
 function term_ask_open(t: Term, q: Question): void {
   const keep  = q.keep ?? "";
   const names = ["Yes", ...(keep === "" ? [] : ["Yes, and don't ask again for " + keep + " in this project"]), "No", "No, and say why"];
@@ -227,7 +227,7 @@ function term_ask_open(t: Term, q: Question): void {
   };
   const title = "Allow " + q.tool + (q.who === "illi" ? "" : " for " + q.who) + "?";
   const lead  = [...(q.what === "" ? [] : [[Paint.Run(Paint.text_clean(q.what), { ...Paint.INK, b: true })]]), ...(q.why === undefined || q.why === "" ? [] : [[Paint.Run("Why: ", Paint.DIM), Paint.Run(Paint.text_clean(q.why))]])];
-  term_chooser(t, title, names, names.map(() => ""), 0, pick, { keys, lead, foot: () => "Esc no" });
+  term_chooser(t, title, names, names.map(() => ""), 0, pick, { keys, lead, foot: () => "Esc no", stays: true });
   t.asking!.c = t.choose;
 }
 

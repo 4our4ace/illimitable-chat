@@ -218,7 +218,8 @@ type Hit = { row: number; col: number; to: number; run: () => void };
 // how often an option was picked (a search ranks the more used first);
 // aside: what shows at an option's right end, each (its keys, its value);
 // heads: each option's group, a head over its first while nothing is
-// searched;
+// searched; stays: a question illi asks (its box may take all but two
+// of the screen's rows); past: the lines leading it scrolled past;
 // lead: lines over the options (a question's what and why), wrapped;
 // detail: lines under them of the lit option k, made for w columns (the
 // model picker's autocompact gauge)
@@ -230,6 +231,8 @@ export type Chooser = {
   used?  : (k: number) => number;
   aside? : string[];
   heads? : string[];
+  stays? : boolean;
+  past?  : number;
   lead?  : Paint.Line[];
   here   : number;
   pick   : (k: number) => void;
