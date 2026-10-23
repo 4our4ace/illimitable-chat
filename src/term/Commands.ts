@@ -3,12 +3,11 @@
 // All a person can do here, by group (term_groups, /help), and the commands
 // themselves: a /word typed runs one, and, as it's typed, the commands it
 // matches show over the input (suggested, the ones run most first among
-// those it matches alike), then the settings it matches, as
-// `/set <key>`; the picker (/agent, /profile,
-// /model, /settings), the panes over the chat (/help, /agents, /mcp), the
-// pick, the login, the tabs, the blocks, the memory's exports; the
-// leader (Ctrl+X, as OpenCode's), then a key: a shortcut (term_lead), each
-// listed and changed in /shortcuts.
+// those it matches alike), then the settings it matches, as `/set <key>`;
+// the picker (/agent, /profile, /model, /settings), the panes over the
+// chat (/help, /agents, /mcp), the pick, the login, the tabs, the blocks,
+// the memory's exports; the leader (Ctrl+X, as OpenCode's), then a key: a
+// shortcut (term_lead), each listed and changed in /shortcuts.
 
 import * as fs from "node:fs";
 import type { Vendor } from "../ai/AskAI.ts";
@@ -129,7 +128,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/logout",           "",                        "remove illi's own ChatGPT login (opencode's, if any, is used again)", term_logout],
       ["/settings",         "",                        "all the settings: type to search, Left, Right or Enter change one, Del puts its default back", (t) => term_settings(t)],
       ["/shortcuts",        "",                        "the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one", (t) => term_shortcuts(t)],
-      ["/set <key> [value]", "",                       "change a setting (default: back to its default); no value: /settings at it. / finds each setting by its name or what it does", term_set],
+      ["/set <key> [value]", "",                       "change a setting (default: back to its default); no value: /settings at it. / finds each setting by its key or what it does", term_set],
       ["/mcp",              "",                        "your MCP servers: their tools, or why one failed", term_mcp],
       ["/mode [mode]",      "",                        "what runs without asking, this session: auto, ask, read-only or yolo; no mode: opens a list (or click it on the bottom line)", term_mode],
       ["/permissions",      "",                        "the requests refused (Enter allows one again, this session), the grants kept (Del removes one), your rules", (t) => term_permissions(t)],
@@ -219,8 +218,9 @@ export function term_suggest(t: Term): Sug | null {
   if (sug.word !== word) {
     const hays  = sug.cmds.map(([, , text, , , said]) => (mid === null ? Paint.text_clean(said ?? text) : undefined));
     const count = term_tally(USED);
-    const found = Screen.ed_find(word.slice(1), sug.names, hays, (k) => count["/" + sug.names[k]] ?? 0);
-    Object.assign(sug, { word, found: word === "/" ? found.filter((m) => m.k < sug.commands) : found, at: 0, top: 0, off: null });
+    const found = Screen.ed_find(word.slice(1), sug.names, hays, (k) => (k < sug.commands ? count["/" + sug.names[k]] ?? 0 : 0));
+    const sets  = word === "/" ? [] : found.filter((m) => m.k >= sug.commands);
+    Object.assign(sug, { word, found: [...found.filter((m) => m.k < sug.commands), ...sets], at: 0, top: 0, off: null });
   }
   return sug.off === word || (mid !== null && sug.found.length === 0) ? null : sug;
 }

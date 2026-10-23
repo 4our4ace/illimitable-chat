@@ -280,7 +280,7 @@ is asked before you write the file, whatever the mode.
   FILE).
 - Keep secrets out of these files.
 - Leave illi's own state alone: login.json, models.json, update.json,
-  chat/, profiles/.
+  profile, project-profiles.json, chat/, profiles/.
 - Say when it applies: agents, commands, skills (a plugin's too) and the
   rules file's text at the next message; config.json, theme.json,
   mcp.json, hooks.json, a plugin's code, hooks and MCP servers, and a new

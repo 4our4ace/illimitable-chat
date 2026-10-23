@@ -10,7 +10,8 @@
 // by the main agent's name; the dead ends (/stop, /fold, /image, /mcp
 // with nothing to act on) say something. A sticky skill's name alone
 // turns it on and off; with words, on, the words sent; it shows at the
-// side, on or off, where a click turns it on or off. The leader (Ctrl+X) greys the
+// side beside the agents (under them when a name won't fit whole), on or
+// off, where a click turns it on or off. The leader (Ctrl+X) greys the
 // screen (a picker open closed first), and the next key runs its
 // shortcut; /shortcuts lists them and the leader, to change (one a
 // variable sets, said so, unchanged); the leader is never a key illi
@@ -499,7 +500,12 @@ test("/ finds every setting once a word is typed, by its key or what it does: /s
   };
   expect(found("/").some((use) => use.startsWith("/set side"))).toBe(false);
   expect(found("/sid")[0]).toBe("/set side [value]");
-  expect(found("/mode")).toEqual(expect.arrayContaining(["/mode [mode]", "/set mode [value]"]));
+  expect(found("/mode").slice(0, 2)).toEqual(["/mode [mode]", "/model [name]"]);
+  term_command(t, "/mcp");
+  t.pane = null;
+  const m = found("/m");
+  const first = m.findIndex((use) => use.startsWith("/set "));
+  expect([m[0], m.slice(first).every((use) => use.startsWith("/set ")), m.slice(0, first).some((use) => use.startsWith("/set "))]).toEqual(["/mcp", true, false]);
   expect(found("/panel")).toEqual(expect.arrayContaining(["/set side [value]*", "/set side_width [value]*"]));
   expect(term_suggest(t)!.cmds.find(([use]) => use === "/set side_width [value]")![2]).toBe("the side panel's width (now 25%)");
   Screen.ed_set(t.scr.ed, "/sid");

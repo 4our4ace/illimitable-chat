@@ -48,15 +48,17 @@ export const CLOCK   = 60000;
 const STICKY = "Sticky skills";
 const GAP    = 3;
 
-// the side, w wide and tall: illi and the primary agents (a click makes
-// one the main agent), the sticky skills beside them (a click turns one
-// on or off), the tabs (a click shows one), the background jobs (a click:
-// /background), the profiles, once there are two (a click on the head:
-// /profile), a ChatGPT plan's use, the chat's (its context, the memory),
-// the MCP servers (a click: /mcp), the requests refused (a click:
-// /permissions on it), each plugin's lines (Plugins.side); at its foot
-// illi's to-do list, which, longer than the room, pushes the rest up (its
-// head stays); with none, a faint hint for the keys (HINT), if it fits
+// the side, w wide and tall: illi and the primary agents by name (a click
+// makes one the main agent), the sticky skills beside them (a click
+// turns one on or off; under them when a name won't fit whole:
+// term_side_beside), the tabs (a click shows one), the background jobs
+// (a click: /background), the profiles, once there are two (a click on
+// the head: /profile), a ChatGPT plan's use, the chat's (its context, the
+// memory), the MCP servers (a click: /mcp), the requests refused (a
+// click: /permissions on it), each plugin's lines (Plugins.side); at its
+// foot illi's to-do list, which, longer than the room, pushes the rest up
+// (its head stays); with none, a faint hint for the keys (HINT), if it
+// fits
 export function term_side(t: Term, w: number, tall: number): Item[] {
   return term_side_drawn(t, w, tall).items;
 }
@@ -330,14 +332,14 @@ function term_side_subs(t: Term): Item[] {
 // turning it on or off in place (its head, Sticky where Sticky skills
 // won't fit: the list of them, /settings), a name too long cut; none (no
 // skill sticky, or each turned off by `off`): nothing; whole, null if a
-// name won't fit. Read anew only once the settings change (new lists),
+// name, or the head as Sticky, won't fit. Read anew only once the settings change (new lists),
 // never at a paint
 let stuck: { on: string[]; off: string[]; skills: Skill[] } | null = null;
 function term_side_sticky(t: Term, w: number, whole: boolean): Item[] | null {
   if (stuck?.on !== config.STICKY || stuck.off !== config.OFF) {
     stuck = { on: config.STICKY, off: config.OFF, skills: Custom.skills(process.cwd()).filter((s) => s.sticky) };
   }
-  if (whole && stuck.skills.some((s) => 2 + Paint.text_width(s.name) > w)) {
+  if (whole && (w < Paint.text_width("Sticky") || stuck.skills.some((s) => 2 + Paint.text_width(s.name) > w))) {
     return null;
   }
   const items = stuck.skills.map((s): Item => {

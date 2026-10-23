@@ -241,6 +241,9 @@ export function term_paint(t: Term): void {
       with_.push(k);
     }
     rows.push(row);
+    // a side row's click: its item's, but from a second column on (Item's
+    // aside, its col into the line, which starts 1 in on the left side
+    // and 2 in on the right) that column's
     const aside = row.length === 1 ? undefined : sides[k][2];
     const split = aside === undefined ? at + side : at + (left > 0 ? 1 : 2) + aside.col;
     term_hit(t, 1 + k, at, split, row.length === 1 ? null : sides[k][1]);
