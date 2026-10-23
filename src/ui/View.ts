@@ -7,12 +7,15 @@
 // (0x) and its thoughts, then what streams or what the turn waits on. The
 // work between the person's words and illi's (tool calls, their results,
 // thinking, the agents' reports: ACTIVITY) shows as one line per run
-// (an "Act" row: what was done, counted), opened by a click or all at
-// once (verbose: Ctrl+O); while closed, what streams of it shows only on
-// the line over the input (Term.ts). A recap (/compact) shows as a line
-// across the chat (a "Rule" row), the recap under it once opened the
-// same way; what the screen showed before it stays above. An agent's
-// page is its log, kept live, whole.
+// (an "Act" row: what was done, counted, keyed by its first message:
+// row_key), opened by a click or all at once (verbose: Ctrl+O; a click
+// then closes one alone), each message in an open one folded by a click
+// to a line (a "Fold" row, keyed: row_fold); while closed, what streams
+// of it shows only on the line over the input (Term.ts). A recap
+// (/compact) shows as a line across the chat (a "Rule" row), the recap
+// under it once opened the same way, its pages folding so too; what the
+// screen showed before it stays above. An agent's page is its log, kept
+// live, whole.
 
 import type { Kind, Vendor } from "../ai/AskAI.ts";
 import type { Mode } from "../tools/Guard.ts";

@@ -3,7 +3,8 @@
 // `bun test runs.test.ts`. Runs of work in a chat painted (Frame.ts),
 // clicked as a terminal reports it. A click on a run's head, or anywhere
 // down its bar, opens or closes the whole run, the runs led by a thought
-// each its own; a click inside a message of an open run folds it to one
+// each its own (shown by Ctrl+O, a click closes one alone, and Ctrl+O
+// again forgets the clicks); a click inside a message of an open run folds it to one
 // line, its siblings staying, and a click on that line unfolds it; an
 // open block shuts from any line of its frame, a block inside it opening
 // itself; a gap line in a run is the block's above it. What a click
@@ -155,6 +156,23 @@ test("a click on a run's head, or anywhere down its bar, closes the whole run; o
   click(t, row_of(t, "r2"), left(t));
   paint(t);
   expect([mark(t, "r2").open, mark(t, "r8").open]).toEqual([true, false]);
+});
+
+test("shown by Ctrl+O, a click closes the run it lights, alone; Ctrl+O again forgets the clicks", () => {
+  const t = term(chat());
+  paint(t);
+  Screen.screen_feed(t.scr, "\x0f");
+  paint(t);
+  expect([mark(t, "r2").open, mark(t, "r8").open]).toEqual([true, true]);
+  move(t, row_of(t, "r8"), left(t) + 4);
+  paint(t);
+  expect(lit(t)[0]).toEqual([row_of(t, "r8"), OPEN]);
+  click(t, row_of(t, "r8"), left(t) + 4);
+  paint(t);
+  expect([mark(t, "r2").open, mark(t, "r8").open]).toEqual([true, false]);
+  Screen.screen_feed(t.scr, "\x0f\x0f");
+  paint(t);
+  expect([mark(t, "r2").open, mark(t, "r8").open, t.v.acts.size]).toEqual([true, true, 0]);
 });
 
 test("runs led by a thought each open and close alone", () => {

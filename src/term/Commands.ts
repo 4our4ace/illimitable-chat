@@ -102,7 +102,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/image <path>",     "",                        "attach an image to the next message (or paste or drop the file)", term_image],
       ["",                  "Alt+V, Ctrl+V",           "attach the clipboard's image (the terminal's own paste brings text)", term_clip],
       ["/open #id",         "",                        "open block #id and keep it open (or click it)",  (t, a) => term_block(t, a, true)],
-      ["/close #id",        "",                        "close block #id and keep it closed (or click its top edge)", (t, a) => term_block(t, a, false)],
+      ["/close #id",        "",                        "close block #id and keep it closed (or click anywhere in its frame)", (t, a) => term_block(t, a, false)],
       ["/fold",             "Ctrl+F",                  "fold the chat into the fewest blocks; again: unfold", term_fold],
       ["",                  "Ctrl+Y",                  "copy illi's last reply (a drag copies the text it covers, a double click a word)", term_copy],
       ["",                  "Ctrl+O",                  "show or hide the work between replies: tools, thinking, agents' reports", term_verbose],

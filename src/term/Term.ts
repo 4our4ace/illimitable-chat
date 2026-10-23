@@ -7,7 +7,9 @@
 // screen, the side panel (Side.ts); under it the input and its bars. A
 // paint (Frame.ts) lays the chat out anew (each row's lines made once)
 // and writes only the rows that changed. A drag anywhere chooses text
-// and copies it as it's let go (Select.ts). Every act is a command
+// and copies it as it's let go (Select.ts); in the chat, a click opens,
+// closes or folds what's under it, which lights as the pointer goes over
+// it, and it stays under the pointer (Keys.ts, Select.ts). Every act is a command
 // (Commands.ts, /help), a key's too (Keys.ts), and so is each of the
 // user's commands (Custom.ts) and skills; images attach by a path, a
 // drop or the clipboard (Attach.ts). The user's MCP servers start with
