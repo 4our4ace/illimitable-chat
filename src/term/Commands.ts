@@ -140,7 +140,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/shortcuts",        "",                        "the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one", (t) => term_shortcuts(t)],
       ["/set <key> [value]", "",                       "change a setting (default: back to its default); no value: /settings at it. / finds each setting by its key or what it does", term_set],
       ["/mcp",              "",                        "your MCP servers: their tools, or why one failed", term_mcp],
-      ["/mode [mode]",      "",                        "what runs without asking, this session: auto, ask, read-only or yolo; no mode: opens a list (or click it on the bottom line)", term_mode],
+      ["/mode [mode]",      "",                        "what runs without asking, this session: auto, careful, ask, read-only or yolo; no mode: opens a list (or click it on the bottom line)", term_mode],
       ["/permissions",      "",                        "the requests refused (Enter allows one again, this session), the grants kept (Del removes one), your rules", (t) => term_permissions(t)],
     ]],
     ["Projects and profiles", [

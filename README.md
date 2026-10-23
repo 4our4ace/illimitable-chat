@@ -45,8 +45,9 @@ Then run `illi` in any project folder. The first time in a folder, it
 asks, full screen, whether you trust it: illi reads, edits and runs
 files there and follows its `AGENTS.md` or `CLAUDE.md`. A yes is kept
 for the whole repo; your home folder is asked at every start. Then
-illi runs routine work and asks before a risky call, saying why
-([Permissions](docs/permissions.md)). It goes
+illi runs what stays in the project and asks, saying why, before what
+reaches outside it, the system or your secrets (`/mode careful` asks
+before every risky call: [Permissions](docs/permissions.md)). It goes
 in `~/.local/bin` (or
 `ILLI_INSTALL`) and updates itself: once a day, as it starts or while
 it runs, it looks for a new release, downloads and checks it in the

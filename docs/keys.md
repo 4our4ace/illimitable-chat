@@ -80,7 +80,7 @@ Setup
 | `/shortcuts` | the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one |
 | `/set <key> [value]` | change a setting (default: back to its default); no value: opens `/settings` at it. A `/word` finds every setting too, by its key or what it does |
 | `/mcp` | your MCP servers: their tools, or why one failed |
-| `/mode [mode]` | what runs without asking, this session: `auto`, `ask`, `read-only` or `yolo`; no mode: opens a list (or click it on the bottom line) |
+| `/mode [mode]` | what runs without asking, this session: `auto`, `careful`, `ask`, `read-only` or `yolo`; no mode: opens a list (or click it on the bottom line) |
 | `/permissions` | the requests refused (Enter allows one again, this session), the grants kept (Del removes one), your rules |
 
 Projects and profiles

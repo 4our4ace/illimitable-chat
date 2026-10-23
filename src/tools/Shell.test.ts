@@ -57,10 +57,11 @@ test("substitutions, heredoc bodies and process substitutions are read as comman
   expect(Shell.parse("bash <<'EOF'\nrm -rf x\nEOF", "/w")).toMatchObject([{ redirs: [{ op: "<<", body: "rm -rf x\n" }] }]);
 });
 
-test("wrappers come off: root, input-fed, env's folder and assignments; unknown options refused", () => {
+test("wrappers come off: root, input-fed (what xargs adds known only as it runs), env's folder and assignments; unknown options refused", () => {
   expect(parts("sudo -E -u root rm -rf /")).toEqual(["rm -rf / @/w [root]"]);
   expect(parts("timeout -s KILL 5 env -C /tmp FOO=1 bun test")).toEqual(["FOO=1 bun test @/tmp"]);
-  expect(parts("xargs -0r -n1 rm < list")).toEqual(["rm <list @/w [fed]"]);
+  expect(parts("xargs -0r -n1 rm < list")).toEqual(["rm ~ <list @/w [fed]"]);
+  expect(parts("xargs -I{} cp {} /tmp/{}.bak; xargs -i mv {} x")).toEqual(["cp ~ ~ @/w [fed]", "mv ~ x @/w [fed]"]);
   expect(parts("nice -5 ls; nohup ls; command -v ls")).toEqual(["ls @/w", "ls @/w", "command -v ls @/w"]);
   expect(parts("timeout --bogus 5 rm -rf x")).toBe("timeout --bogus: an option illi doesn't know");
   expect(parts("env -S 'rm -rf x'")).toBe("env -S splits a string into a command");

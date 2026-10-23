@@ -11,13 +11,14 @@
 // Claude Code gets only the tools it lacks (?lean), and prompts that say
 // it works inside illi, the project's CLAUDE.md left to Claude Code. Its
 // permission prompt, and illi's own shell, files and MCP tools, pass the
-// checks (Guard.ts): a risk asked with why, the question given the
-// command whole up to 32,000 characters, how many more left out (a note
-// and the refused list, cut short), what don't ask again keeps by its
-// ends past 1,000; a refusal recorded and told to the model; a plugin's
-// hooks come before them and after the tool. The projects: their table,
-// a search across them, a zoom into another's chat. A subagent's view
-// fits its model: the oldest lines left out.
+// checks (Guard.ts; careful mode, so a risk is refused, never run): a
+// risk asked with why, the question given the command whole up to 32,000
+// characters, how many more left out (a note and the refused list, cut
+// short), what don't ask again keeps by its ends past 1,000; a refusal
+// recorded and told to the model; a plugin's hooks come before them and
+// after the tool. The projects: their table, a search across them, a
+// zoom into another's chat. A subagent's view fits its model: the oldest
+// lines left out.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -25,6 +26,10 @@ import * as os from "node:os";
 
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-tools-");
 process.env.ILLI_DIR = DIR;
+
+// careful, as the risks these calls are refused for (git push --force)
+// would run in auto: never in this checkout
+process.env.ILLI_MODE = "careful";
 
 const { Chat } = await import("../chat/Chat.ts");
 const config = await import("../config/Config.ts");

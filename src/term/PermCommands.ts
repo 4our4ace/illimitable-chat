@@ -23,9 +23,10 @@ import { term_send, type Term } from "./Term.ts";
 import type { Grant, Refused } from "../ui/View.ts";
 
 // the modes in the order the list shows them, and what each does
-const ORDER: Mode[] = ["auto", "ask", "read-only", "yolo"];
+const ORDER: Mode[] = ["auto", "careful", "ask", "read-only", "yolo"];
 const ABOUT: Record<Mode, string> = {
-  "auto"      : "reads and changes in the project run; risky calls are asked",
+  "auto"      : "everything in the project runs; outside it, the system and secrets are asked",
+  "careful"   : "reads and changes in the project run; risky calls are asked",
   "ask"       : "reads run; every change is asked",
   "read-only" : "reads run; changes are refused",
   "yolo"      : "everything runs, but what your rules refuse or ask",
@@ -45,7 +46,7 @@ const SHAPE = `{
 export function term_mode(t: Term, arg: string): void {
   const mode = arg.trim().toLowerCase();
   if (mode !== "") {
-    return MODES.includes(mode as Mode) ? mode_set(t, mode as Mode) : term_note(t, "No mode " + arg.trim() + ": auto, ask, read-only or yolo.");
+    return MODES.includes(mode as Mode) ? mode_set(t, mode as Mode) : term_note(t, "No mode " + arg.trim() + ": auto, careful, ask, read-only or yolo.");
   }
   const aside = ORDER.map((m) => (m === t.v.perm.set ? "the setting's" : ""));
   term_chooser(t, "Mode, this session", ORDER, ORDER.map((m) => ABOUT[m]), ORDER.indexOf(t.v.perm.mode), (k) => mode_set(t, ORDER[k]), { aside, foot: () => "Enter switch · /settings changes the default" });
