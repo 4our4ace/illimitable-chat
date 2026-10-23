@@ -1,7 +1,7 @@
 // Project commands
 // ================
-// /projects: the projects (Projects.ts), in a list in the screen's middle
-// as Ctrl+P's, this one first, then the one used last first: each its
+// /projects: the projects (Projects.ts), in a list (a popup, as every
+// list: Popup.ts), this one first, then the one used last first: each its
 // name, its last day and its messages, its folder (last: the longest),
 // typed to search. Enter says more of one; Delete asks to forget it:
 // Cancel (lit), a copy exported first (./illi-project-<name>.json, never
@@ -22,9 +22,6 @@ import { Projects } from "../chat/Projects.ts";
 import { Store, type Project } from "../chat/Store.ts";
 import type { Term } from "./Term.ts";
 
-// the most columns the list takes, the screen's width allowing
-const WIDE = 72;
-
 // the list
 export function term_projects(t: Term): void {
   const store = t.mem().store;
@@ -38,7 +35,7 @@ export function term_projects(t: Term): void {
     return true;
   };
   const about = list.map((p) => project_about(p) + (p.file === store.file ? " · here" : ""));
-  term_chooser(t, "Projects", list.map((p) => p.name), about, 0, (k) => project_more(t, list[k]), { find: true, keys, foot: () => "Enter more · Del forget", middle: WIDE });
+  term_chooser(t, "Projects", list.map((p) => p.name), about, 0, (k) => project_more(t, list[k]), { find: true, keys, foot: () => "Enter more · Del forget" });
 }
 
 // a project's last day and size, its folder
@@ -84,7 +81,7 @@ function project_ask(t: Term, p: Project): void {
       project_forget(t, p, k === 1).catch((err) => term_note(t, "Not forgotten: " + (err?.message ?? err) + "."));
     }
   };
-  term_chooser(t, "Forget " + p.name + "?", names, about, -1, pick, { foot: (k) => (k === 0 ? "Enter or Esc keep it" : "can't be undone"), middle: WIDE });
+  term_chooser(t, "Forget " + p.name + "?", names, about, -1, pick, { foot: (k) => (k === 0 ? "Enter or Esc keep it" : "can't be undone") });
 }
 
 // a project forgotten, a copy exported first if asked; its lock held

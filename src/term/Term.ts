@@ -105,7 +105,8 @@ import * as View from "../ui/View.ts";
 // goes (one that sent it keeps it so, as the chat lets it go; "": none);
 // lead: the leader pressed, the next key its shortcut's (the screen grey
 // meanwhile: Frame.ts); quoted: the quote a right drag put in the input
-// last, when and what it added (Select.ts; null: none)
+// last, when and what it added (Select.ts; null: none); box: the popup
+// as last painted (Popup.ts; null: none, or a new size since)
 export type Term = {
   v       : View.View;
   scr     : Screen.Screen;
@@ -149,7 +150,17 @@ export type Term = {
   lead    : boolean;
   quoted  : { at: number; add: string } | null;
   asking  : { id: string; c: Chooser | null; done: boolean; form: Form | null } | null; // the question shown (Asks.ts): its picker or form, whether answered
+  box     : PopBox | null;
 };
+
+// a popup as last painted (Popup.ts): what it was painted for (the
+// picker), its place and size, and what each of its rows stands for, top
+// first (null: nothing to point at: its frame, a head, a blank)
+export type PopBox = { of: object; row: number; col: number; w: number; h: number; rows: Array<Target | null> };
+
+// what a row of a popup stands for: one of its options (by its index
+// among the names)
+export type Target = { $: "option"; k: number };
 
 // illi's own questions, in place of the input (Asks.ts): the tab shown
 // (past the last question: the answers, to look over), and for each
@@ -190,7 +201,8 @@ export type Pane = { title: string; make: (w: number) => Paint.Line[]; w: number
 // a place on the screen (a row, its columns from, to) and its click
 type Hit = { row: number; col: number; to: number; run: () => void };
 
-// the picker over the chat's foot (/agent, /profile, /model, /settings):
+// the picker, a popup in the screen's middle (Popup.ts: /agent,
+// /profile, /model, /settings, Ctrl+P and the rest):
 // its title, its options' names and what each is, the one marked as now
 // (-1: none), what picking option k does; find: the search typed, an
 // input as the chat's, its editing keys too (null: none, typing goes to
@@ -205,9 +217,8 @@ type Hit = { row: number; col: number; to: number; run: () => void };
 // hay: what a search looks in, an option's each (none: its name); used:
 // how often an option was picked (a search ranks the more used first);
 // aside: what shows at an option's right end, each (its keys, its value);
-// middle: the box in the screen's middle, over all else, this many
-// columns wide at most (none: down over the input, Frame.ts); heads:
-// each option's group, a head over its first while nothing is searched;
+// heads: each option's group, a head over its first while nothing is
+// searched;
 // lead: lines over the options (a question's what and why), wrapped;
 // detail: lines under them of the lit option k, made for w columns (the
 // model picker's autocompact gauge)
@@ -218,7 +229,6 @@ export type Chooser = {
   hay?   : string[];
   used?  : (k: number) => number;
   aside? : string[];
-  middle?: number;
   heads? : string[];
   lead?  : Paint.Line[];
   here   : number;
@@ -233,9 +243,10 @@ export type Chooser = {
   ask    : { hint: string; done: (text: string) => string | null } | null;
 };
 
-// a line drawn and what a click on it does (null: nothing); a second
-// column in it (the side's: Side.term_side_beside): where it starts,
-// columns into the line, and what a click from there on does
+// a line drawn (the side's, the commands suggested) and what a click on
+// it does (null: nothing); a second column in it (the side's:
+// Side.term_side_beside): where it starts, columns into the line, and
+// what a click from there on does
 export type Item = [Paint.Line, (() => void) | null, { col: number; run: (() => void) | null }?];
 
 // the commands suggested as a `/word` is typed, as in Claude Code: all
@@ -320,6 +331,7 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
     lead    : false,
     quoted  : null,
     asking  : null,
+    box     : null,
   };
   // the chat suggests replies to a screen that shows them, never a pipe
   if (chat !== null) {

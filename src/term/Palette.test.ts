@@ -1,6 +1,6 @@
 // Palette test
 // ============
-// `bun test Palette.test.ts`. Ctrl+P lists, in the screen's middle, each
+// `bun test Palette.test.ts`. Ctrl+P lists, in a popup, each
 // command (its /name, else its first key; its keys at the right) and each
 // setting (its value at the right), but no key that means
 // something only pressed; a search finds a word in what one does too,
@@ -48,7 +48,7 @@ const file  = () => JSON.parse(fs.readFileSync(DIR + "/config.json", "utf8"));
 
 test("Ctrl+P lists each command and each setting with its value, but no key that means something only pressed", () => {
   const t = open();
-  expect([t.choose.title, t.choose.middle]).toEqual(["Commands", 72]);
+  expect(t.choose.title).toBe("Commands");
   expect(t.choose.names).toEqual(expect.arrayContaining(["/model", "/fold", "/goal", "Ctrl+Y", "Ctrl+O", "Shift+Tab", "Ctrl+PgDn", "set tps", "set side"]));
   expect(right(t, "Ctrl+PgDn")).toBe("Ctrl+PgUp");
   for (const key of ["Enter", "Esc", "Ctrl+C", "Ctrl+P", "PgUp, PgDn", "Shift+Up, Shift+Down"]) {

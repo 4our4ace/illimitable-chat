@@ -1,8 +1,8 @@
 // Palette
 // =======
 // Ctrl+P: all a person can do, in one list typed to search, as OpenCode's
-// command palette, a box in the screen's middle, in groups (/help's, then
-// the settings) while nothing is searched: each command (term_groups:
+// command palette (a popup, as every list: Popup.ts), in groups (/help's,
+// then the settings) while nothing is searched: each command (term_groups:
 // its /name, else its first key), what it does (its first clause) and, at
 // the right, its keys (the others, and the leader's shortcut to it, as
 // Ctrl+X m); then each setting (Config SETTINGS,
@@ -28,9 +28,7 @@ const PRESSED = new Set(["Enter", "Esc", "Ctrl+C", "Ctrl+D", "Tab", "PgUp, PgDn"
 // a setting's row's name, before its key
 const SET = "set ";
 
-// the most columns the palette takes, the screen's width allowing; the
-// most a value at a row's right end shows; the settings' group
-const WIDE  = 72;
+// the most a value at a row's right end shows; the settings' group
 const ASIDE = 24;
 const GROUP = "Settings";
 
@@ -69,7 +67,7 @@ export function term_palette(t: Term): void {
     return s !== null ? setting_foot(s) : palette_needs(cmds[k][0]) ? "Enter type it in" : "Enter run";
   };
   const right = aside();
-  term_chooser(t, "Commands", names, about, -1, pick, { find: true, keys: press, foot, hay: names.map((name, k) => name + "  " + whole[k] + "  " + right[k]), used: (k) => picked[names[k]] ?? 0, aside: right, middle: WIDE, heads: [...all.map(([group]) => group), ...keys.map(() => GROUP)] });
+  term_chooser(t, "Commands", names, about, -1, pick, { find: true, keys: press, foot, hay: names.map((name, k) => name + "  " + whole[k] + "  " + right[k]), used: (k) => picked[names[k]] ?? 0, aside: right, heads: [...all.map(([group]) => group), ...keys.map(() => GROUP)] });
 }
 
 // a command chosen: one that needs words, in the input to finish (the

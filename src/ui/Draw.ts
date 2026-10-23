@@ -273,6 +273,17 @@ export function draw_mix(a: string, b: string, f: number): string {
   return "#" + [1, 3, 5].map((k) => Math.round(at(a, k) + (at(b, k) - at(a, k)) * f).toString(16).padStart(2, "0")).join("");
 }
 
+// a color f of the way from the background (canvas) toward white, or
+// toward black on a light one (a popup's backdrop and box, a pane's
+// background); the background not told: none
+export function draw_off(canvas: string | undefined, f: number): string | undefined {
+  if (canvas === undefined) {
+    return undefined;
+  }
+  const light = [1, 3, 5].reduce((n, k) => n + parseInt(canvas.slice(k, k + 2), 16), 0) > 3 * 128;
+  return draw_mix(canvas, light ? "#000000" : "#ffffff", f);
+}
+
 // the brand's color (BRAND), as the background has it
 export function draw_brand(): string {
   return BRAND[draw_tone()];

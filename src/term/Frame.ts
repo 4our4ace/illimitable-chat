@@ -4,11 +4,10 @@
 // frame at most each FRAME ms: the head; the chat (or a pane; over its
 // foot the commands suggested), the side beside it (Side.ts); the notes,
 // the toast and the jump to the end; the rule (what runs, the ∞ traced),
-// the input, the pages, the pick; the picker down over the input and
-// its rules (the cursor in its search if it has one, the input's hidden;
-// the palette's in the screen's middle); all of it grey while the leader
-// waits for its key (Commands.ts term_lead); the terminal's title. A pipe
-// gets text.
+// the input, the pages, the pick; a popup open (the picker: Popup.ts)
+// over all of it, all else dimmed, the cursor in its search if it has
+// one; all of it grey while the leader waits for its key (Commands.ts
+// term_lead); the terminal's title. A pipe gets text.
 
 import * as path from "node:path";
 import { term_asks, term_form_lines } from "./Asks.ts";
@@ -18,6 +17,7 @@ import * as Draw from "../ui/Draw.ts";
 import { term_hint } from "./Keys.ts";
 import { member_others } from "./Member.ts";
 import * as Paint from "../ui/Paint.ts";
+import { PANEL, popup_paint, term_popup } from "./Popup.ts";
 import { term_shown } from "./Notices.ts";
 import { term_mode } from "./PermCommands.ts";
 import { term_profile_pick } from "./ProfileCommands.ts";
@@ -27,8 +27,7 @@ import * as Screen from "../ui/Screen.ts";
 import { term_area, term_under } from "./Select.ts";
 import { term_side, term_side_drawn, term_side_width, term_tokens } from "./Side.ts";
 import { status_rows } from "./Status.ts";
-import { term_act, type Area, type Chooser, type Item, type Pane, type Sug, type Term } from "./Term.ts";
-import { GLYPH } from "../ui/Theme.ts";
+import { term_act, type Area, type Item, type Pane, type Sug, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
 // the folder illi works in, as the head shows it
@@ -117,26 +116,16 @@ let titled: { cwd: string; name: string } | null = null;
 const OFF = "Read-only · Ctrl+PgUp back to ";
 
 // the commands suggested: the most lines shown, the keys said in its top
-// edge (a skill's name mid-message: NAMED's); the picker's width (wider
-// as its options need, the screen allowing: term_box)
+// edge (a skill's name mid-message: NAMED's)
 const SUGGEST   = 10;
 const SUGGESTED = "Commands · ↑↓ · Tab fills in · Enter runs · Esc";
 const NAMED     = "Skills · ↑↓ · Tab or Enter fills in · Esc";
-const PICKER_W  = 72;
 
-// the box in the screen's middle (Chooser middle): the share of the
-// screen's rows it takes at most; how far from the background all else under it
-// is drawn, and the box's own background, toward white (toward black on
-// a light one)
-const MIDDLE    = 1 / 2;
-const BACKDROP  = 0.16;
-const PANEL     = 0.05;
-
-// the least of a picker's option's next column shown cut (term_about)
-const CUT       = 8;
-
-// a new size: every row written again, once the size settles
+// a new size: every row written again, once the size settles; a popup
+// measured afresh, and till painted again, its box as last painted
+// stands for nothing
 export function term_resize(t: Term): void {
+  t.box = null;
   clearTimeout(t.settle);
   t.settle = setTimeout(() => term_redraw(t), SETTLE);
 }
@@ -164,21 +153,19 @@ export function term_draw(t: Term): void {
 }
 
 // the screen, top to bottom: the head; the chat (or a pane), the side
-// beside it on a wide screen; over their foot, its last line right on
-// the input, a box: as a /word is typed, the commands it matches (as
-// wide as the input); else the picker, down over the input and the rules
-// around it, its last line on the lower rule, the input's cursor hidden
-// (at the chat's left; the palette's in the screen's middle, all else
-// dimmed under it); a row with, at the chat's right
-// end, a toast in the accent; a rule (what runs,
-// while it does), the input, a rule, the pages, the agent
-// and the pick. The notes, however the chat is scrolled, end over the
-// input: the newest in the rule, the one before it, faded, in the row
+// beside it on a wide screen; as a /word is typed, over their foot, its
+// last line right on the input, the commands it matches (as wide as the
+// input); a row with, at the chat's right end, a toast in the accent; a
+// rule (what runs, while it does), the input, a rule, the pages, the
+// agent and the pick. The notes, however the chat is scrolled, end over
+// the input: the newest in the rule, the one before it, faded, in the row
 // above (unless the toast leaves it no room); while work runs (its
 // status has the rule), the newest alone, in the row above. Only what is
 // left over takes rows from the chat. Scrolled up, a button floats over
 // the chat's foot, in its middle: a jump to its end (a click goes there,
-// as Ctrl+End does). A pipe gets the notes as text
+// as Ctrl+End does). A popup open (Popup.ts) over all of it, all else
+// dimmed, the cursor in its search (none: hidden), and nothing under it
+// takes a click. A pipe gets the notes as text
 export function term_paint(t: Term): void {
   t.due   = false;
   painted = Date.now();
@@ -210,14 +197,11 @@ export function term_paint(t: Term): void {
   const above = notes.slice(-Math.floor(h / 4)).map((l) => [Paint.Run(" ".repeat(NOTE_IN)), ...l]);
   const status = status_rows(t, iw, h - (paned ? 4 : 5) - input.lines.length - above.length - STATUS_ROOM);
   const tall  = Math.max(1, h - (paned ? 4 : 5) - input.lines.length - above.length - status.length);
-  const mid   = t.choose?.middle !== undefined;
-  const floor = 3 + tall + above.length + input.lines.length;
-  const box   = mid ? term_middle(t, full, h) : term_box(t, iw, Math.min(cw, PICKER_W), left + MARGIN, tall + 1 + above.length, floor, full - MARGIN);
-  const over  = box !== null && !mid && !box.wide;
-  const covers = box !== null && !mid && (left > 0 ? box.col < left : box.col + box.w > full - side);
-  const top   = box === null ? Infinity : mid ? Math.floor((h - box.items.length) / 2) : over ? floor + 1 - box.items.length : 2 + tall + above.length - box.items.length;
+  const pop   = term_popup(t) !== null;
+  const box   = pop ? null : term_box(t, iw, tall + 1 + above.length);
+  const top   = box === null ? Infinity : 2 + tall + above.length - box.length;
   const view  = term_view(t, cw, tall, 1, left + MARGIN);
-  for (let r = top; r <= tall && !mid; r++) {
+  for (let r = top; r <= tall; r++) {
     view.lines[view.first + r - 1] = [];
   }
   const shown = term_area(t, view);
@@ -238,35 +222,35 @@ export function term_paint(t: Term): void {
   rows.push([{ col: 0, w: full, line: head[0] }]);
   for (let k = 0; k < tall; k++) {
     const row: Screen.Piece[] = [{ col: left + MARGIN, w: cw, line: shown[k] }];
-    if (sides[k] !== undefined && !(covers && 1 + k >= top)) {
+    if (sides[k] !== undefined && 1 + k < top) {
       row.push({ col: at, w: side, line: term_side_line(sided[k], sw, left > 0) });
       with_.push(k);
     }
     rows.push(row);
     // a side row's click: its item's, but from a second column on (Item's
     // aside, its col into the line, which starts 1 in on the left side
-    // and 2 in on the right) that column's
+    // and 2 in on the right) that column's; none under a popup
     const aside = row.length === 1 ? undefined : sides[k][2];
     const split = aside === undefined ? at + side : at + (left > 0 ? 1 : 2) + aside.col;
-    term_hit(t, 1 + k, at, split, row.length === 1 ? null : sides[k][1]);
-    term_hit(t, 1 + k, split, at + side, aside?.run ?? null);
+    term_hit(t, 1 + k, at, split, row.length === 1 || pop ? null : sides[k][1]);
+    term_hit(t, 1 + k, split, at + side, pop ? null : aside?.run ?? null);
   }
   for (const line of foot) {
     rows.push([{ col: MARGIN, w: iw, line }]);
   }
-  for (let r = Math.max(top, 1 + tall); over && r <= floor; r++) {
-    rows[r] = [];
-  }
   if (box !== null) {
-    term_over(t, rows, box, top, mid);
-  } else if (t.pane === null && t.scroll > 0) {
+    term_over(t, rows, box, top, MARGIN, iw);
+  } else if (t.pane === null && t.scroll > 0 && !pop) {
     term_jump(t, rows, tall, left + MARGIN, cw, lit);
   }
+  if (!pop) {
+    term_tabs(t, h - 1, side === 0, iw, jobs);
+  }
+  const popped = pop ? popup_paint(t, rows, w, h) : null;
   t.hover = t.sel?.held ? undefined : term_under(t, t.scr.point);
-  term_tabs(t, h - 1, side === 0, iw, jobs);
-  const cursor = box?.at !== undefined ? { row: top + box.at.row, col: box.col + box.at.col } : input.at === null || over ? null : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
+  const cursor = pop ? popped : input.at === null ? null : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
   const drawn  = t.lead ? rows.map((row) => row.map((p) => ({ ...p, line: p.line.map((r) => ({ ...r, s: { ...r.s, d: true, c: "", g: "" } })) }))) : rows;
-  t.ruled ={ row: 2 + tall + above.length, w: iw, at: cursor, rows: drawn, side: box === null ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
+  t.ruled ={ row: 2 + tall + above.length, w: iw, at: cursor, rows: drawn, side: box === null && !pop ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
   t.scr.blink = idle || form !== null;
   Screen.screen_paint(t.scr, drawn, cursor);
   painted = Date.now();
@@ -372,15 +356,15 @@ function term_wake(t: Term): void {
 // the ∞ whole: at each wake). With agents at work and their spinner
 // changed, the side's rows too (term_side_again). No paint, no layout of
 // the chat; a whole paint only once work ended, with text chosen (its
-// look may cover them), a picker open (over the rule, or the rule dimmed
-// under it) or the leader waiting (all grey); nothing while a paint is due
+// look may cover them), a popup open (the rule dimmed under it) or the
+// leader waiting (all grey); nothing while a paint is due
 function term_tick(t: Term): void {
   const r = t.ruled;
   if (t.due) {
     return;
   }
   term_title(t);
-  if (r === null || t.doing === null || t.sel !== null || t.lead || t.choose !== null || !View.view_running(t.v)) {
+  if (r === null || t.doing === null || t.sel !== null || t.lead || term_popup(t) !== null || !View.view_running(t.v)) {
     return term_paint(t);
   }
   const now  = Date.now();
@@ -541,71 +525,25 @@ function term_view(t: Term, w: number, tall: number, row: number, col: number): 
   return { key: pane !== null ? "pane" : "chat", lines, first, row, col, w, tall, scroll };
 }
 
-// the box over the chat's foot, room lines at most: as a /word is typed,
-// the commands it matches, iw wide (wide: over the side too), over the
-// chat's foot; else the picker, pw wide (wider as its options need, to
-// column end at most: term_picker_need) at column col, down over the
-// input, its last line on `floor` (the rule under the input), so it alone
-// has the focus (none: null); at: the cursor's place in it, if it takes
-// the typing (a search)
-function term_box(t: Term, iw: number, pw: number, col: number, room: number, floor: number, end: number): { items: Item[]; col: number; w: number; wide: boolean; at?: Screen.Spot } | null {
+// the commands suggested as a /word is typed (none: null), over the
+// chat's foot, room lines at most, iw wide (over the side too); none
+// while illi's question is drawn in the input's place
+function term_box(t: Term, iw: number, room: number): Item[] | null {
   const sug = t.asking?.form == null ? term_suggest(t) : null;
-  if (sug !== null) {
-    return { items: term_suggestions(t, sug, iw, room), col: MARGIN, w: iw, wide: true };
-  }
-  if (t.choose === null) {
-    return null;
-  }
-  const w = Math.max(pw, Math.min(end - col, term_picker_need(t.choose)));
-  const { items, at } = term_picker(t, w, floor);
-  return { items: items.slice(0, floor), col, w, wide: false, at };
+  return sug === null ? null : term_suggestions(t, sug, iw, room);
 }
 
-// the columns a picker needs for each option's name whole: its frame,
-// the lit one's mark, the chosen one's (where one is), the name, the
-// gap after it
-function term_picker_need(c: Chooser): number {
-  return 4 + 2 + (c.here < 0 ? 0 : 2) + Math.max(0, ...c.names.map((name) => Paint.text_width(name))) + 2;
-}
-
-// the picker in the screen's middle (Chooser middle): as wide as it
-// asks, the screen allowing, MIDDLE of the screen's rows tall at most
-function term_middle(t: Term, full: number, h: number): { items: Item[]; col: number; w: number; wide: boolean; at?: Screen.Spot } {
-  const w = Math.min(full - 2 * MARGIN, t.choose!.middle!);
-  const { items, at } = term_picker(t, w, Math.min(h - 2, Math.max(4, Math.floor(h * MIDDLE))));
-  return { items, col: Math.floor((full - w) / 2), w, wide: false, at };
-}
-
-// the box laid over the rows from screen row top on (the chat's under it
-// blanked by the caller); a click on its lines goes to it before what
-// is under it. Over all (the middle's), all else fades, in one ink near
-// the background (dim, if the background wasn't told), and takes no
-// click; the box has a background of its own
-function term_over(t: Term, rows: Screen.Piece[][], box: { items: Item[]; col: number; w: number }, top: number, all = false): void {
-  const under = all ? [] : t.hits;
-  const fade  = term_off(t.scr.canvas, BACKDROP);
-  const panel = term_off(t.scr.canvas, PANEL);
-  const ink   = fade === undefined ? Paint.DIM : { ...Paint.INK, c: fade };
+// the commands suggested laid over the rows from screen row top on, at
+// column col, w wide (the chat's under them blanked by the caller); a
+// click on their lines goes to them before what is under them
+function term_over(t: Term, rows: Screen.Piece[][], items: Item[], top: number, col: number, w: number): void {
+  const under = t.hits;
   t.hits = [];
-  for (const piece of all ? rows.flat() : []) {
-    piece.line = piece.line.map((run) => ({ ...run, s: ink }));
-  }
-  for (const [k, [line, run]] of box.items.entries()) {
-    const own = all && panel !== undefined ? line.map((r) => ({ ...r, s: { ...r.s, g: panel } })) : line;
-    rows[top + k].push({ col: box.col, w: box.w, line: own });
-    term_hit(t, top + k, box.col, box.col + box.w, run);
+  for (const [k, [line, run]] of items.entries()) {
+    rows[top + k].push({ col, w, line });
+    term_hit(t, top + k, col, col + w, run);
   }
   t.hits.push(...under);
-}
-
-// a color f of the way from the background (canvas) toward white, or
-// toward black on a light one; the background not told: none
-function term_off(canvas: string | undefined, f: number): string | undefined {
-  if (canvas === undefined) {
-    return undefined;
-  }
-  const light = [1, 3, 5].reduce((n, k) => n + parseInt(canvas.slice(k, k + 2), 16), 0) > 3 * 128;
-  return Draw.draw_mix(canvas, light ? "#000000" : "#ffffff", f);
 }
 
 // the chat's lines and the first shown, tall of them: its rows (made
@@ -671,93 +609,9 @@ function term_paned(t: Term, pane: Pane, w: number, tall: number): [Paint.Line[]
   const rule  = (said: Paint.Line) => [Paint.Run("─ ", Paint.DIM), ...said, Paint.Run(" " + "─".repeat(Math.max(0, w - 3 - Paint.line_width(said))), Paint.DIM)];
   const keys  = [Paint.Run("Esc", { ...Paint.INK, b: true }), Paint.Run(" close" + (pane.lines.length > room ? " · ↑↓ PgUp PgDn scroll" : "") + " · typing goes back to the chat", Paint.DIM)];
   const lines = [rule([Paint.Run(pane.title, { ...Paint.INK, b: true, c: Draw.draw_tokens().accent })]), ...body.map((l) => [Paint.Run(" "), ...l]), ...Array.from({ length: room - body.length }, (): Paint.Line => []), rule(keys)];
-  const panel = term_off(t.scr.canvas, PANEL);
+  const panel = Draw.draw_off(t.scr.canvas, PANEL);
   const pad   = (l: Paint.Line): Paint.Line => [...l, Paint.Run(" ".repeat(Math.max(0, w - Paint.line_width(l))))];
   return [panel === undefined ? lines : lines.map((l) => pad(l).map((r) => ({ ...r, s: { ...r.s, g: r.s.g || panel } }))), 0];
-}
-
-// the picker, framed, w wide, room lines at most: its search first, if
-// it has one (the cursor in it: at); each option shown (illi's own and
-// each of the user's primary agents; each profile; each model; each
-// setting), what it is, the one now marked (none: no marks; one that
-// makes something new, "+ ...", has its "+" in the mark's place), the one
-// lit bold, the characters the search matched bold in the accent; with
-// groups, while nothing is searched, each group's head over its first (a
-// blank line before each but the first): as many lines as fit from the
-// first in view (moved to keep the lit one in it), the box as tall as all
-// of them would be (blank past those shown; none: a note says so), and at its right end what it has aside (its keys, its
-// value). Lines it leads with (a question's what and why) go over all
-// of it, wrapped; lines of the lit one's detail under all, after a blank
-// one (none where they won't fit). Its foot says what the lit one takes besides; a click
-// on one picks it. A line asked for (Chooser ask) is its one line, as the input
-// shows a message typed, its hint while empty; a search or a line too
-// long shows its end
-function term_picker(t: Term, w: number, room: number): { items: Item[]; at?: Screen.Spot } {
-  const c     = t.choose!;
-  const bold  = { ...Paint.INK, b: true };
-  const lit   = { ...bold, c: Draw.draw_tokens().accent };
-  const act   = (name: string) => c.here >= 0 && name.startsWith("+ ");
-  const wide  = Math.max(...c.names.map((name) => Paint.text_width(name) - (act(name) ? 2 : 0)));
-  const glyph = c.ask === null ? GLYPH.find : GLYPH.input;
-  const fits  = w - 5 - Paint.text_width(glyph);
-  const text  = c.find?.text ?? "";
-  const typed = Paint.text_width(text) <= fits ? text : "…" + Paint.text_graphemes(text).slice(1 - fits).join("");
-  const find  = c.find === null ? [] : [[Paint.Run(glyph, Paint.DIM), typed === "" ? Paint.Run(c.ask?.hint ?? "type to search", Paint.DIM) : Paint.Run(typed)]];
-  const lead  = (c.lead ?? []).flatMap((l) => Paint.runs_wrap(l, Math.max(1, w - 4), false)).slice(0, Math.max(0, room - 3 - find.length));
-  const group = c.heads !== undefined && text === "";
-  const heads = group ? 2 * new Set(c.heads).size - 1 : 0;
-  const more  = c.ask !== null || c.detail === undefined || c.shown.length === 0 ? [] : c.detail(c.shown[c.at].k, w - 4);
-  const under = more.length === 0 || room - 3 - find.length - lead.length < more.length + 1 ? [] : [[], ...more];
-  const rows  = c.ask !== null ? 0 : Math.max(1, Math.min(c.names.length + heads, room - 2 - find.length - lead.length - under.length));
-  const pick  = (k: number) => {
-    t.choose = null;
-    c.pick(k);
-  };
-  const item  = (m: Screen.Match, i: number): Item => {
-    const name = c.names[m.k];
-    const here = i === c.at;
-    const head = [
-      Paint.Run(here ? "› " : "  ", bold),
-      ...(c.here < 0 || act(name) ? [] : [Paint.Run((m.k === c.here ? GLYPH.here : GLYPH.tab) + " ", Paint.DIM)]),
-      ...[...name].map((ch, j) => Paint.Run(ch, m.hay !== true && m.at.includes(j) ? lit : here ? bold : Paint.INK)),
-      Paint.Run(" ".repeat(wide - Paint.text_width(name) + (act(name) ? 4 : 2))),
-    ];
-    const side  = Paint.text_clean(c.aside?.[m.k] ?? "");
-    const room  = w - 4 - Paint.line_width(head) - (side === "" ? 0 : Paint.text_width(side) + 2);
-    const about = term_about(Paint.text_clean(c.about[m.k]), room);
-    const right = side === "" ? [] : [Paint.Run(" ".repeat(Math.max(2, room - Paint.text_width(about) + 2))), Paint.Run(side, Paint.DIM)];
-    return [[...head, Paint.Run(about, Paint.DIM), ...right], () => pick(m.k)];
-  };
-  const list  = c.shown.flatMap((m, i): Array<string | number> => {
-    const head = c.heads?.[m.k] ?? "";
-    return !group || (i > 0 && head === c.heads![c.shown[i - 1].k]) ? [i] : i === 0 ? [head, i] : ["", head, i];
-  });
-  const lit_at = list.indexOf(c.at);
-  c.top       = Math.max(0, Math.min(c.top, lit_at - (typeof list[lit_at - 1] === "string" ? 1 : 0)), lit_at - rows + 1);
-  const line  = (e: string | number): Item => (typeof e === "number" ? item(c.shown[e], e) : [[Paint.Run(e, lit)], null]);
-  const none  = [[Paint.Run("  Nothing matches " + Paint.text_clean(text), Paint.DIM)], null] as Item;
-  const shown = c.ask !== null ? [] : c.shown.length === 0 ? [none] : list.slice(c.top, c.top + rows).map(line);
-  const items = [...lead.map((l): Item => [l, null]), ...find.map((l): Item => [l, null]), ...shown, ...Array.from({ length: rows - shown.length }, (): Item => [[], null]), ...under.map((l): Item => [l, null])];
-  const title = [Paint.Run(" " + c.title + (c.ask === null ? " · ↑↓ Enter · Esc " : " · Enter · Esc "), { ...Paint.DIM, b: true })];
-  const said  = c.ask !== null ? c.foot(-1) : c.shown.length === 0 ? "" : c.foot(c.shown[c.at].k);
-  const foot  = said === "" ? [] : [Paint.Run(" " + said + " ", { ...Paint.DIM, b: true })];
-  const lines = Paint.frame(items.map(([l]) => Paint.runs_wrap(l, w - 4, true)[0]), w, title, foot);
-  const after = Paint.text_width(text.slice(c.find?.pos ?? 0));
-  const at    = c.find === null ? undefined : { row: 1 + lead.length, col: Math.min(w - 3, 2 + Paint.text_width(glyph) + Math.max(0, Paint.text_width(typed) - after)) };
-  return { items: lines.map((l, k) => [l, items[k - 1]?.[1] ?? null]), at };
-}
-
-// what a picker's option is, as fits in w columns: whole, else its
-// columns (two spaces or more apart) up to the last that fits whole, and
-// as much of the next as fits, an ellipsis at its end, if more than CUT
-// of it would show; not even the first: cut so
-function term_about(text: string, w: number): string {
-  if (Paint.text_width(text) <= w) {
-    return text;
-  }
-  const end  = [...text.matchAll(/ {2,}/g)].map((m) => m.index + m[0].length).reverse().find((e) => Paint.text_width(text.slice(0, e)) <= w);
-  const cut  = end === undefined || w - Paint.text_width(text.slice(0, end)) > CUT;
-  return cut ? (w < 2 ? "" : Paint.line_cut([Paint.Run(text)], 0, w - 1)[1].map((r) => r.x).join("") + "…") : text.slice(0, end).trimEnd();
 }
 
 // the commands suggested, framed as the picker is, fw wide, room lines

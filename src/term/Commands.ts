@@ -571,15 +571,15 @@ function term_agent_set(t: Term, arg: string): void {
   term_chooser(t, "Agent", names.map((name) => name ?? View.MAIN), about, names.indexOf(t.v.agent), (k) => term_choose(t, names[k]));
 }
 
-// the picker opened (closing the pane), at the option marked as now; with
-// `more`, a search (typing ranks the names, or each option's hay; with
-// `used`, the more used first among matches as good), what else the lit
-// option takes and what the foot says of it (the model picker's), what
-// shows at each option's right end, the screen's middle as its place and
-// each option's group (the palette's)
-export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; detail?: Chooser["detail"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; middle?: number; heads?: string[]; lead?: Chooser["lead"] } = {}): void {
+// the picker opened, a popup (Popup.ts; the pane closed), at the option
+// marked as now; with `more`, a search (typing ranks the names, or each
+// option's hay; with `used`, the more used first among matches as good),
+// what else the lit option takes and what the foot says of it (the model
+// picker's), what shows at each option's right end, each option's group
+// (the palette's) and the lines leading the options
+export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; detail?: Chooser["detail"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; heads?: string[]; lead?: Chooser["lead"] } = {}): void {
   const shown = Screen.ed_rank("", names);
-  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, middle: more.middle, heads: more.heads, lead: more.lead, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), detail: more.detail, ask: null };
+  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, heads: more.heads, lead: more.lead, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), detail: more.detail, ask: null };
   t.pane   = null;
 }
 
@@ -694,7 +694,7 @@ export function term_shortcut(t: Term, run: string): void {
   void cmd?.[3](t, cmd[0] === "" ? run : "");
 }
 
-// a line asked for in the picker's box (Chooser ask): its title, the hint
+// a line asked for in the picker's popup (Chooser ask): its title, the hint
 // while it is empty, what it starts as, what the foot says, what Enter
 // does with it (a reason: the box stays, saying it)
 export function term_ask(t: Term, title: string, hint: string, start: string, foot: string, done: (text: string) => string | null): void {
