@@ -42,7 +42,7 @@ afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 // view the suggested reply came to; a paint always due, so none is asked
 // for
 function term(suggest: string): any {
-  const t: any = { v: { ...View.view_new(), suggest }, dropped: "", sel: null, due: true, sug: null, choose: null, pane: null, notices: [], agents: [], quit: 0, ver: 0, scroll: 0, subs: new Map(), pending: 0, asking: null, box: null, lead: false, aim: { row: -1, in: false, press: null, first: null }, pin: null };
+  const t: any = { v: { ...View.view_new(), suggest }, dropped: "", sel: null, due: true, sug: null, choose: null, pane: null, notices: [], agents: [], quit: 0, ver: 0, scroll: 0, subs: new Map(), pending: 0, asking: null, box: null, lead: false, aim: { row: -1, in: false, press: null, first: null }, pin: null, lit: null, pointed: false };
   t.scr = { tty: true, kitty: false, ed: Screen.ed_new(), rest: "", shown: [], click: { row: 0, col: 0 }, clicks: 0, pressed: 0, point: { row: 0, col: 0 }, typed: false, grab: (k: string) => term_grab(t, k), on: (k: string) => term_press(t, k), type: (x: string) => term_type(t, x) };
   Screen.screen_feed(t.scr, "\x1b[?1u");
   return t;

@@ -13,6 +13,7 @@ import { term_draw } from "./Frame.ts";
 import { host_wsl } from "./Host.ts";
 import { term_note } from "./Notices.ts";
 import * as Screen from "../ui/Screen.ts";
+import { term_typing } from "./Select.ts";
 import type { Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
@@ -41,9 +42,10 @@ export function term_image(t: Term, arg: string): void {
 // the line asked, as one line, its newlines spaces; none: nowhere; illi's
 // questions, to their words: Asks.ts); a path to an image (a file
 // dropped) attaches it; else it goes in the input, a long one as its
-// token (a pane open, closed)
+// token (a pane open, closed). The pointer's light goes out, as at typing
 export function term_paste(t: Term, text: string): void {
   const c = t.choose;
+  term_typing(t, "");
   if (c !== null) {
     if (c.find !== null) {
       Screen.ed_type(c.find, text.replace(/\s*\n\s*/g, " "));

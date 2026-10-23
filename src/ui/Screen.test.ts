@@ -2,7 +2,7 @@
 // end anywhere (a reader held up lets the terminal's writes split at any
 // byte), and no text typed or pasted may slow a key down; the mouse's
 // reports (the wheel's place too), the focus told (a press that only
-// focuses the window marked). A paint writes only the rows that changed, those moved as a
+// focuses the window marked, its loss told). A paint writes only the rows that changed, those moved as a
 // block moved by the terminal. Then the lines Paint lays out: a link
 // wider than a line breaks at its edge, its pieces each opening it whole;
 // a word of several runs is kept whole; a frame never passes its width;
@@ -405,15 +405,15 @@ test("the mouse: the wheel, the left button pressed, dragged, let go, the pointe
   expect(scr.point).toEqual({ row: 3, col: 29 });
 });
 
-test("the focus gained and lost, whatever the reads, is no key, never typed, nothing to paint; a press while it's lost, or within 150 ms of its coming back, only focuses the window", () => {
+test("the focus gained and lost, whatever the reads, is never typed, nothing to paint: gained no key, lost told (Away); a press while it's lost, or within 150 ms of its coming back, only focuses the window", () => {
   splits("a\x1b[Ib\x1b[O", (text, keys) => {
-    expect([text, keys]).toEqual(["ab", []]);
+    expect([text, keys]).toEqual(["ab", ["Away"]]);
   });
   const seen: string[] = [];
   const scr = fresh(true, Screen.ed_new(), (k) => seen.push(k));
   Screen.screen_feed(scr, "\x1b[O");
   Screen.screen_feed(scr, "\x1b[I\x1b[O");
-  expect([seen, scr.typed]).toEqual([[], false]);
+  expect([seen, scr.typed]).toEqual([["Away", "Away"], false]);
   const press = (col: number) => {
     Screen.screen_feed(scr, "\x1b[<0;" + col + ";5M");
     Screen.screen_feed(scr, "\x1b[<0;" + col + ";5m");

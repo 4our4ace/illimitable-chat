@@ -26,7 +26,7 @@ import { DEFAULT } from "../config/Profiles.ts";
 import { Projects } from "../chat/Projects.ts";
 import * as Screen from "../ui/Screen.ts";
 import { GLYPH } from "../ui/Theme.ts";
-import { term_area, term_under } from "./Select.ts";
+import { term_area, term_light, term_under } from "./Select.ts";
 import { term_side, term_side_drawn, term_side_width, term_tokens } from "./Side.ts";
 import { status_rows } from "./Status.ts";
 import { term_act, type Area, type Pane, type Sug, type Target, type Term } from "./Term.ts";
@@ -161,10 +161,11 @@ export function term_draw(t: Term): void {
 // status has the rule), the newest alone, in the row above. Only what is
 // left over takes rows from the chat. Scrolled up, a button floats over
 // the chat's foot, in its middle: a jump to its end (a click goes there,
-// as Ctrl+End does). A popup open (Popup.ts) over all of it, all else
-// dimmed, the cursor in its search or words (none: hidden; blinking in
-// illi's questions, which wait on you), and nothing under it takes a
-// click. A pipe gets the notes as text
+// as Ctrl+End does). What a click in the chat would act on lit, once
+// every hit is placed (Select.ts term_light). A popup open (Popup.ts)
+// over all of it, all else dimmed, the cursor in its search or words
+// (none: hidden; blinking in illi's questions, which wait on you), and
+// nothing under it takes a click or lights. A pipe gets the notes as text
 export function term_paint(t: Term): void {
   t.due   = false;
   painted = Date.now();
@@ -248,6 +249,7 @@ export function term_paint(t: Term): void {
   if (!pop) {
     term_tabs(t, h - 1, side === 0, iw, jobs);
   }
+  term_light(t, rows);
   const popped = pop ? popup_paint(t, rows, w, h) : null;
   t.hover = t.sel?.held ? undefined : term_under(t, t.scr.point);
   const cursor = pop ? popped : input.at === null ? null : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
@@ -547,7 +549,8 @@ function term_over(t: Term, rows: Screen.Piece[][], box: { sug: Sug; lines: Arra
 // top; a mark a click acted on (t.pin) has its first line on the row
 // clicked: an open while the chat's end is followed leaves it (the jump
 // to the end shows), and a close there lands lower, as the chat never
-// scrolls past its end
+// scrolls past its end. The chat moving by itself while followed (more
+// came, or a new size) puts the pointer's light out till it moves
 function term_chat(t: Term, w: number, tall: number, row: number, col: number): [Paint.Line[], number] {
   const was   = t.body;
   const body  = was !== null && was.ver === t.ver && !Paint.laid_stale(was, w) ? was : { ver: t.ver, ...Paint.laid_new(View.view_body(t.v), w, 1) };
@@ -575,7 +578,10 @@ function term_chat(t: Term, w: number, tall: number, row: number, col: number): 
   const lines = [[], ...body.lines, ...(tail.length === 0 ? [] : [[], ...tail])];
   t.scroll = Math.max(0, Math.min(t.scroll, lines.length - tall));
   const first = Math.max(0, lines.length - tall - t.scroll);
-  t.seen = { total: lines.length, marks: body.marks, row, first, tall, col, end: col + w };
+  if (t.seen.scroll === 0 && t.scroll === 0 && aim === null && first !== t.seen.first) {
+    t.pointed = false;
+  }
+  t.seen = { total: lines.length, marks: body.marks, row, first, tall, col, end: col + w, scroll: t.scroll };
   return [lines, first];
 }
 
