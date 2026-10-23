@@ -34,7 +34,7 @@ import { term_profile } from "./ProfileCommands.ts";
 import { term_projects } from "./ProjectCommands.ts";
 import * as Reply from "../ui/Reply.ts";
 import * as Screen from "../ui/Screen.ts";
-import { term_set, term_settings } from "./Settings.ts";
+import { setting_value, term_set, term_settings } from "./Settings.ts";
 import { Trusted } from "../config/Trusted.ts";
 import { term_age, term_tokens } from "./Side.ts";
 import { term_act, term_idle, term_primaries, term_send, term_unhint, type Chooser, type Cmd, type Sug, type Term } from "./Term.ts";
@@ -128,7 +128,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/logout",           "",                        "remove illi's own ChatGPT login (opencode's, if any, is used again)", term_logout],
       ["/settings",         "",                        "all the settings: type to search, Left, Right or Enter change one, Del puts its default back", (t) => term_settings(t)],
       ["/shortcuts",        "",                        "the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one", (t) => term_shortcuts(t)],
-      ["/set <key> [value]", "",                       "change a setting (default: back to its default); no value: says what it is", term_set],
+      ["/set <key> [value]", "",                       "change a setting (default: back to its default); no value: /settings at it. / finds each setting by its name or what it does", term_set],
       ["/mcp",              "",                        "your MCP servers: their tools, or why one failed", term_mcp],
       ["/mode [mode]",      "",                        "what runs without asking, this session: auto, ask, read-only or yolo; no mode: opens a list (or click it on the bottom line)", term_mode],
       ["/permissions",      "",                        "the requests refused (Enter allows one again, this session), the grants kept (Del removes one), your rules", (t) => term_permissions(t)],
@@ -149,6 +149,15 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
 
 export function term_commands(custom = false): Cmd[] {
   return term_groups(custom).flatMap(([, cmds]) => cmds);
+}
+
+// each setting as / suggests it, by its key: `/set <key> [value]`, what
+// it is and its value now (Enter: /settings at it; Tab: its value next)
+function term_setting_rows(): [key: string, cmd: Cmd][] {
+  return (Object.keys(config.SETTINGS) as config.Key[]).map((key) => {
+    const what = config.SETTINGS[key].what;
+    return [key, ["/set " + key + " [value]", "", what + " (now " + setting_value(key) + ")", term_set, undefined, what]];
+  });
 }
 
 // a plugin's command, on the words after its name: what it answers, a
@@ -183,8 +192,9 @@ export function term_command(t: Term, text: string, typed = true): boolean {
 
 // the commands suggested, kept to the input: opened (all of them read)
 // as it becomes a /word, matched again as the word changes (the best
-// lit; by name, and by what each does: Screen.ed_find), closed as it is
-// none; null while closed or closed by Esc. A /word mid-message: the
+// lit; by name, and by what each does: Screen.ed_find), then the
+// settings (by key: term_setting_rows), once a word is typed; closed as
+// it is none; null while closed or closed by Esc. A /word mid-message: the
 // user's skills alone (no command runs there), by name only (a path
 // would find what they do), none shown till one matches
 export function term_suggest(t: Term): Sug | null {
@@ -198,16 +208,18 @@ export function term_suggest(t: Term): Sug | null {
   }
   if (t.sug === null) {
     const skills = mid === null ? [] : term_skills().map((y) => "/" + y.word);
-    t.sug = { cmds: term_commands(true).filter(([use]) => use !== "" && (mid === null || skills.includes(use.split(" ")[0]))), word: "", found: [], at: 0, top: 0, tall: 1, off: null, mid };
+    const cmds   = term_commands(true).filter(([use]) => use !== "" && (mid === null || skills.includes(use.split(" ")[0])));
+    const sets   = mid === null ? term_setting_rows() : [];
+    t.sug = { cmds: [...cmds, ...sets.map(([, cmd]) => cmd)], names: [...cmds.map(([use]) => use.split(" ")[0].slice(1)), ...sets.map(([key]) => key)], commands: cmds.length, word: "", found: [], at: 0, top: 0, tall: 1, off: null, mid };
   }
   const sug  = t.sug;
   const word = slash.word;
   sug.mid    = mid;
   if (sug.word !== word) {
-    const names = sug.cmds.map(([use]) => use.split(" ")[0].slice(1));
     const hays  = sug.cmds.map(([, , text, , , said]) => (mid === null ? Paint.text_clean(said ?? text) : undefined));
     const count = term_tally(USED);
-    Object.assign(sug, { word, found: Screen.ed_find(word.slice(1), names, hays, (k) => count["/" + names[k]] ?? 0), at: 0, top: 0, off: null });
+    const found = Screen.ed_find(word.slice(1), sug.names, hays, (k) => count["/" + sug.names[k]] ?? 0);
+    Object.assign(sug, { word, found: word === "/" ? found.filter((m) => m.k < sug.commands) : found, at: 0, top: 0, off: null });
   }
   return sug.off === word || (mid !== null && sug.found.length === 0) ? null : sug;
 }

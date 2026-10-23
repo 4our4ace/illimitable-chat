@@ -88,7 +88,8 @@ export function setting_value(key: config.Key): string {
 }
 
 // /set <key> <value>: the setting changed ("default": its default back);
-// a key alone: what it is and how to change it; none: the picker
+// a key alone: the picker at it (its value, what it is, how to change
+// it); none: the picker
 export function term_set(t: Term, arg: string): void {
   const [word = ""] = arg.split(/\s+/);
   const text = arg.slice(word.length).trim();
@@ -100,9 +101,7 @@ export function term_set(t: Term, arg: string): void {
     return term_note(t, "No setting " + word + ". The settings: " + KEYS.join(", ") + "; /settings lists them.");
   }
   if (text === "") {
-    const { what } = config.SETTINGS[key];
-    const def      = config.config_default(key);
-    return term_note(t, key + ": " + setting_shown(key) + ". " + what[0].toUpperCase() + what.slice(1) + ". /set " + key + " <value> changes it; /set " + key + " default puts back " + setting_shown(key, def) + ".");
+    return term_settings(t, key);
   }
   let value: unknown = text === "default" ? null : text;
   // contexts and shortcuts as JSON; text that won't parse goes on as it

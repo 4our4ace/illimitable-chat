@@ -5,7 +5,8 @@ Config
 profile's own `config.json` goes over it, key by key; its `off` and
 `sticky` add to the global lists ([Profiles](profiles.md)).
 
-- `/settings` changes them from inside illi (`/set <key> <value>` too);
+- `/settings` changes them from inside illi (`/set <key> <value>` too;
+  typing `/` and a word finds each setting by its key or what it does);
   `/shortcuts` the leader and its shortcuts.
 - Most apply at once; `vendors`, `models`, `jobs`, `theme`, `mcp`,
   `permissions`, `login` and `autoupdate` at the next start.
