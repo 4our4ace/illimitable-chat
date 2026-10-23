@@ -12,7 +12,8 @@
 // whose window no one told moves no cut, its turn saying why (a stop
 // while it waits for the catalog ends it at once). A call too long for the model's window makes the
 // chat refit and the turn go on from a note, unasked; three in a row end
-// it, saying why. A failed turn asks to try again only when a later try
+// it, saying why; with autocontinue off, the turn ends at the first,
+// saying a message goes on. A failed turn asks to try again only when a later try
 // may answer, and says a reply was cut off; summaries stuck are told once;
 // a save that fails is told, never thrown (a goal met still ends as
 // met). The suggested reply stays as a message of the user's own goes
@@ -471,6 +472,20 @@ test("a turn grown past its room goes on without shrinking; three refits in a ro
   const last = Memory.message(chat.mem, chat.mem.count - 1)!;
   expect([last.kind, last.text]).toEqual(["note", "No reply: the chat won't fit " + chat.model + "'s window even summarized. /clear starts a new topic (the chat before it is kept, not sent), or /model picks a model with a bigger window."]);
   expect(chat.refits).toBe(0);
+});
+
+test("autocontinue off: a turn whose chat outgrew the window ends there, its note saying a message goes on, the share still made smaller", async () => {
+  const fit = chat.fit;
+  config.config_set("autocontinue", "off");
+  try {
+    const asked = await refitted([{ text: "HTTP 400: prompt is too long: 210000 tokens > 200000 maximum" }]);
+    expect(asked).toHaveLength(1);
+    expect(last()).toBe("The chat outgrew " + chat.model + "'s window: more of it is summarized now, each summary a zoom away. Send a message to go on (autocontinue is off).");
+    expect([chat.fit, chat.refits]).toEqual([fit * 0.8, 0]);
+  } finally {
+    config.config_set("autocontinue", null);
+  }
+  expect(config.AUTOCONTINUE).toBe(true);
 });
 
 // the chat's last message's text

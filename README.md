@@ -85,7 +85,7 @@ flowchart TD
   model's auto compact (60% of its window by default, `/autocompact`);
   older ones go as lines, merged as they age. A turn that
   outgrows the model's window anyway goes on by itself, more of it
-  summarized.
+  summarized (`autocontinue`, on by default).
 - **Zoom.** illi can open any line back down to the original messages.
   `/compact` has illi write a recap of the chat and go on from it
   alone, as other agents compact (the screen keeps the chat, a
