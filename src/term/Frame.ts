@@ -540,10 +540,14 @@ function term_over(t: Term, rows: Screen.Piece[][], box: { sug: Sug; lines: Arra
 // again only once they changed), laid out from the last up as far as
 // shown and a screen more (those above as it is scrolled to them, any
 // text chosen in it kept on its lines), then what streams or is waited
-// on. Scrolled up, the lines read stay in place as more come below (the
-// rows laid out before laid out again, as with text chosen at the same
-// width), and about in place at a new width; a block asked for (/open,
-// /close) shows at the top
+// on (no marks: nothing in it lights or takes a click). Scrolled up, the
+// lines read stay in place as more come below (the rows laid out before
+// laid out again, as with text chosen at the same width), and about in
+// place at a new width; a block asked for (/open, /close) shows at the
+// top; a mark a click acted on (t.pin) has its first line on the row
+// clicked: an open while the chat's end is followed leaves it (the jump
+// to the end shows), and a close there lands lower, as the chat never
+// scrolls past its end
 function term_chat(t: Term, w: number, tall: number, row: number, col: number): [Paint.Line[], number] {
   const was   = t.body;
   const body  = was !== null && was.ver === t.ver && !Paint.laid_stale(was, w) ? was : { ver: t.ver, ...Paint.laid_new(View.view_body(t.v), w, 1) };
@@ -559,14 +563,14 @@ function term_chat(t: Term, w: number, tall: number, row: number, col: number): 
     const total = 1 + body.lines.length + below;
     t.scroll = wider ? Math.round((t.scroll * total) / t.seen.total) : t.scroll + Math.max(0, total - t.seen.total);
   }
-  const key   = t.find === null ? null : Paint.block_key(t.find[0], t.find[1]);
-  const at    = key === null ? -1 : Paint.rows_find(body.rows, key);
+  const aim   = t.find !== null ? { key: Paint.block_key(t.find[0], t.find[1]), row: row + 1 } : t.pin;
+  const at    = aim === null ? -1 : Paint.rows_find(body.rows, aim.key);
   const up    = Paint.laid_up(body, 0, at < 0 ? Infinity : at);
-  const find  = key === null ? undefined : body.marks.find((m) => m.key === key);
-  if (find !== undefined) {
-    t.scroll = 1 + body.lines.length + below - tall - find.from + 1;
+  const kept  = aim === null ? undefined : body.marks.find((m) => m.key === aim.key);
+  if (kept !== undefined) {
+    t.scroll = 1 + body.lines.length + below - tall - kept.from + aim!.row - row;
   }
-  t.find = null;
+  [t.find, t.pin] = [null, null];
   term_chosen(t, up + Paint.laid_up(body, t.scroll + 2 * tall - 1 - below));
   const lines = [[], ...body.lines, ...(tail.length === 0 ? [] : [[], ...tail])];
   t.scroll = Math.max(0, Math.min(t.scroll, lines.length - tall));
