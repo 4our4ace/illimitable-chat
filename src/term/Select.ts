@@ -16,9 +16,13 @@
 // (term_target): in the chat, what a click would act on lights (a run of
 // work, a message in it, a block: term_light), one thing at a time, once
 // the pointer itself has moved; it goes as the chat moves by itself while
-// followed, at a key, as the window loses the focus. Under a popup the
-// mouse is its alone (Popup.ts popup_mouse, before all of this): nothing
-// is chosen there, and nothing lights.
+// followed, at a key, as the window loses the focus. A click on a word
+// there waits out a double click (Keys.ts term_click), so a second press
+// still chooses the word; a press again soon on the cell whose click just
+// acted, or one that only focused the window, clicks nothing and chooses
+// no word (term_dead). Under a popup the mouse is its alone (Popup.ts
+// popup_mouse, before all of this): nothing is chosen there, and nothing
+// lights.
 
 import * as Draw from "../ui/Draw.ts";
 import { term_draw } from "./Frame.ts";

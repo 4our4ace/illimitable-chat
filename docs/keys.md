@@ -23,10 +23,10 @@ Chat
 | `/image <path>` | attach an image to the next message (or paste or drop the file) |
 | Alt+V, Ctrl+V | attach the clipboard's image (the terminal's own paste brings text) |
 | `/open #id` | open block #id and keep it open (or click it) |
-| `/close #id` | close block #id and keep it closed (or click its top edge) |
+| `/close #id` | close block #id and keep it closed (or click anywhere in its frame) |
 | `/fold`, Ctrl+F | fold the chat into the fewest blocks; again: unfold |
 | Ctrl+Y | copy illi's last reply (a drag copies the text it covers, a double click a word) |
-| Ctrl+O | show or hide the work between replies: tools, thinking, agents' reports, and the recaps under the "Compaction" lines (hidden, a click on one line opens it alone; shown, a click hides it alone) |
+| Ctrl+O | show or hide the work between replies: tools, thinking, agents' reports, and the recaps under the "Compaction" lines (hidden, a click opens one alone; shown, a click closes one alone; Ctrl+O forgets those clicks) |
 | `/export` | save this project's memory as ./illi-memory.json |
 | `/tree` | save this project's whole memory tree as ./illi-tree.html |
 | Ctrl+L | draw the screen again |
@@ -258,18 +258,33 @@ background jobs don't show here.
 Mouse and side panel
 --------------------
 
-- A click on a block opens it, on an open block's top edge closes it. A
-  drag copies the text it covers, a double click a word; a reply's code
-  has a copy button. Copying uses OSC 52, so the terminal (and tmux) must
-  allow it.
+- A click on a block opens it; a click anywhere in an open block's frame
+  closes it. A drag copies the text it covers, a double click a word; a
+  reply's code has a copy button. Copying uses OSC 52, so the terminal
+  (and tmux) must allow it.
+- The work between replies (tool calls, results, thinking, agents'
+  reports): a click on a run's line, or anywhere down the bar at its
+  left, opens or closes the whole run. Inside an open run, a click on a
+  call, a result, a thought or a report folds it to one line (`result ·
+  1,204 lines`), wherever you are in it; a click on that line unfolds it.
+  What you clicked stays under the pointer (at the chat's end a close
+  lands lower, as the chat can't scroll past its end).
+- A click on a word waits a moment before it folds, so a double click
+  still copies the word; past a line's end, on a blank line or a frame's
+  edge it folds at once. A second click on the same spot right after
+  does nothing, so a slow double click never undoes the fold.
+- What a click would act on lights as the pointer moves over it: a run's
+  line and its whole bar, heavier; a message's bar beside it; a block's
+  `/open`, an open block's top edge. It goes as you type, as the chat
+  moves on by itself, and as the window loses the focus.
 - A drag with the right button over the chat quotes what it covers in
   your message, each line after `> `, to reply to it; a right click
   within 5 seconds takes the quote out again. A reply's buttons are left
   out of what's quoted or copied, and a right drag never starts on one.
 - The wheel scrolls the chat, a pane, or the list or question open.
-- In a list or a question, the click that only brings the terminal's
-  window to the front does nothing (in tmux, with `set -g focus-events
-  on`).
+- The click that only brings the terminal's window to the front does
+  nothing, in the chat as in a list or a question (in tmux, with `set -g
+  focus-events on`).
 - From 100 columns on, a side panel shows the primary agents by name (a
   click makes one the main agent) and beside them your sticky skills,
   each on (●) or off (◯), a click turning it on or off (under the agents
