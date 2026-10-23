@@ -22,9 +22,14 @@
 // when the login changes on disk, as another terminal or opencode may
 // change it: `sync`, `follow`), and kept current by each response's
 // headers. A change of account drops the old record at once, so no view
-// shows one account's plan with another's usage. The backend lists its models (`models`): each one shown
-// is offered, a new one too, its context window known (Pick.ts), kept in
-// config.MODELS_FILE for the next start.
+// shows one account's plan with another's usage. The account's catalog
+// (`models`: at start, after /login and /logout, on a change of account)
+// is the chatgpt list: each model shown offered, a new one too, one it
+// drops gone; its window the most the account may set, its usual one
+// (standard: past it the plan drains faster), its efforts and its speeds
+// (each a service tier: priority is fast), kept in config.MODELS_FILE for
+// the next start, naming the account. A request refused as too long past
+// a model's usual window makes that its whole one for the account.
 
 import * as fs from "node:fs";
 import { json_object } from "../tools/Clip.ts";
@@ -33,7 +38,7 @@ import { dlopen } from "bun:ffi";
 import type { Ask } from "./AskAI.ts";
 import { Agent, type Wire } from "./Agent.ts";
 import { OpenAI } from "./OpenAI.ts";
-import { Pick } from "./Pick.ts";
+import { Pick, SPEEDS, type Model } from "./Pick.ts";
 import type { Limit, Plan } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
 
@@ -99,6 +104,9 @@ let record: { key: string; tier: string; limits: Limit[]; state?: "asking" | "to
 let watcher: () => void = () => {};
 let logged = false;
 let following: ReturnType<typeof setInterval> | undefined;
+// the account whose catalog was last asked, and the ask running
+let asked = "";
+let listing: Promise<string[] | null> | null = null;
 
 // ChatGPT
 // =======
@@ -154,12 +162,16 @@ export namespace ChatGPT {
 
   // the login file followed while illi runs (each FOLLOW): an account
   // whose plan nothing told yet (a change of account, seen here or by a
-  // request's token) asks it (usage)
+  // request's token) asks it (usage), and one whose catalog wasn't asked
+  // yet asks that (models)
   export function follow(): void {
     following ??= setInterval(() => {
       ChatGPT.sync();
       if (record === null && ChatGPT.key() !== "") {
         void ChatGPT.usage();
+      }
+      if (asked !== ChatGPT.key() && ChatGPT.key() !== "") {
+        void ChatGPT.models();
       }
     }, FOLLOW);
     following.unref?.();
@@ -466,29 +478,99 @@ export namespace ChatGPT {
     return Bun.hash(ask.model + "\n" + ask.system).toString(16);
   }
 
-  // the models the backend shows (not hidden), best first: offered (new
-  // ones too, unless `models` names those offered) and kept with their
-  // windows; null: not told (no login, offline: those kept last stay)
-  export async function models(): Promise<string[] | null> {
+  // the account's catalog asked (one ask at a time): the models it shows
+  // (not hidden), best first, are the chatgpt list now, a model it drops
+  // gone; offered (new ones too, unless `models` names those offered),
+  // the watcher told, and kept for the next start, naming the account.
+  // The labels new to illi; null: not told (no login, offline, the
+  // account changed meanwhile: the list as it was stays)
+  export function models(): Promise<string[] | null> {
+    asked = ChatGPT.key();
+    listing ??= ChatGPT.catalog().finally(() => (listing = null));
+    return listing;
+  }
+
+  export async function catalog(): Promise<string[] | null> {
     try {
-      const token  = await ChatGPT.token();
-      const init   = { headers: { authorization: "Bearer " + token, "chatgpt-account-id": ChatGPT.account_id(token), originator: "illi" }, signal: AbortSignal.timeout(15e3) };
-      const res    = await fetch(LIST, init);
+      const token = await ChatGPT.token();
+      const at    = epoch;
+      const init  = { headers: { authorization: "Bearer " + token, "chatgpt-account-id": ChatGPT.account_id(token), originator: "illi" }, signal: AbortSignal.timeout(15e3) };
+      const res   = await fetch(LIST, init);
       const list: any[] = res.ok ? ((await res.json()) as any).models ?? [] : [];
-      const shown  = list.filter((m) => m?.visibility === "list" && typeof m.slug === "string").sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99));
-      const kept   = shown.map((m) => ({ label: m.slug, id: m.slug, speeds: ["slow"], window: Number(m.context_window) || undefined }));
+      const shown = list.filter((m) => m?.visibility === "list" && typeof m.slug === "string").sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99));
+      const kept  = shown.map(ChatGPT.model);
+      const key   = ChatGPT.key(token);
+      if (epoch !== at || key !== ChatGPT.key()) {
+        asked = "";
+        return null;
+      }
       if (kept.length === 0) {
         return null;
       }
-      fs.writeFileSync(config.MODELS_FILE, JSON.stringify({ at: new Date().toISOString(), vendors: { chatgpt: kept } }, null, 2) + "\n");
-      const fresh = Pick.learn("chatgpt", kept);
+      const file   = config.config_models_file();
+      const capped = file.account === key && Array.isArray(file.capped) ? file.capped.filter((label) => kept.some((m) => m.label === label)) : [];
+      for (const m of kept.filter((m) => capped.includes(m.label) && m.standard !== undefined)) {
+        [m.window, m.standard] = [m.standard, undefined];
+      }
+      const fresh = Pick.learn("chatgpt", kept, "replace");
       if (!config.MODELS_SET) {
         config.OFFER.models.push(...fresh.filter((label) => !config.OFFER.models.includes(label)));
       }
+      config.config_models_keep("chatgpt", kept, { account: key, capped });
+      watcher();
       return fresh;
     } catch {
       return null;
     }
+  }
+
+  // a catalog's model as illi keeps it: its window the most the account
+  // may set (max_context_window, else context_window), the usual one
+  // (standard) when below it; its efforts (supported_reasoning_levels, in
+  // order); its speeds, standard and each service tier it offers
+  // (priority: fast, ultrafast), each one's tier id kept to send
+  export function model(m: any): Model {
+    const usual  = Number(m.context_window) || 0;
+    const window = Number(m.max_context_window) || usual || undefined;
+    const levels = Array.isArray(m.supported_reasoning_levels) ? m.supported_reasoning_levels : [];
+    const named  = levels.map((l: any) => (typeof l === "string" ? l : l?.effort)).filter((e: unknown): e is string => typeof e === "string" && e !== "");
+    const ids    = (Array.isArray(m.service_tiers) ? m.service_tiers : []).map((t: any) => String(typeof t === "string" ? t : t?.id ?? ""));
+    const tiers  = Object.fromEntries(ids.flatMap((id: string) => (id === "priority" ? [["fast", id]] : id === "ultrafast" ? [["ultrafast", id]] : [])));
+    const speeds = SPEEDS.filter((sp) => sp === "slow" || sp in tiers);
+    return {
+      label    : m.slug,
+      id       : m.slug,
+      speeds,
+      window,
+      standard : window !== undefined && usual > 0 && usual < window ? usual : undefined,
+      efforts  : named.length === 0 ? undefined : [...new Set<string>(named)],
+      tiers    : Object.keys(tiers).length === 0 ? undefined : tiers,
+    };
+  }
+
+  // the catalog asked now, waited on at most `ms` (a turn's first cut
+  // waits on it: the windows kept last may be smaller, and a cut never
+  // moves back)
+  export async function listed(ms: number): Promise<void> {
+    if (listing !== null) {
+      await Promise.race([listing, Bun.sleep(ms)]);
+    }
+  }
+
+  // a model this account refused as too long past its standard window:
+  // that window is its whole one from now on, kept for this account
+  export function refused(label: string): boolean {
+    const model = Pick.model("chatgpt", label);
+    const key   = ChatGPT.key();
+    if (model?.standard === undefined || key === "") {
+      return false;
+    }
+    [model.window, model.standard] = [model.standard, undefined];
+    const file   = config.config_models_file();
+    const capped = file.account === key && Array.isArray(file.capped) ? file.capped : [];
+    config.config_models_keep("chatgpt", Pick.list("chatgpt"), { account: key, capped: [...new Set([...capped, label])] });
+    watcher();
+    return true;
   }
 
   export function headers(token: string, ask: Ask): Record<string, string> {
@@ -510,10 +592,12 @@ export namespace ChatGPT {
   }
 
   // OpenAI.ts's body, keyed by its session, its cache mode and search cap
-  // dropped (the backend refuses them, and cache marks: Wire.marks, none)
+  // dropped (the backend refuses them, and cache marks: Wire.marks, none),
+  // a speed past the standard one sent as the catalog's tier for it
   export function body(...args: Parameters<typeof OpenAI.body>): unknown {
     const body: any = OpenAI.body(...args);
-    return { ...body, prompt_cache_options: undefined, max_tool_calls: undefined, prompt_cache_key: ChatGPT.session(args[0]) };
+    const tier = args[0].speed === "slow" ? undefined : Pick.by_id("chatgpt", args[0].model)?.tiers?.[args[0].speed];
+    return { ...body, service_tier: tier ?? body.service_tier, prompt_cache_options: undefined, max_tool_calls: undefined, prompt_cache_key: ChatGPT.session(args[0]) };
   }
 
   // the plan's limits a response's headers tell: each window's share

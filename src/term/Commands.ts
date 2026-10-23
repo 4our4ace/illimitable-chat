@@ -14,6 +14,7 @@ import type { Vendor } from "../ai/AskAI.ts";
 import { term_clip, term_image } from "./Attach.ts";
 import { browser_open } from "./Browser.ts";
 import { Bundle } from "../config/Bundle.ts";
+import { Anthropic } from "../ai/Anthropic.ts";
 import { Chat } from "../chat/Chat.ts";
 import { ChatGPT } from "../ai/ChatGPT.ts";
 import { json_object } from "../tools/Clip.ts";
@@ -758,21 +759,28 @@ async function term_login(t: Term): Promise<void> {
   }
 }
 
-// the ChatGPT account as it is now (ChatGPT.ts; signed in, and run
-// here, not in another terminal's view): its plan and usage asked
-// together, the login followed for a change of account, and the models
-// it lists learned (a new one offered, each one's window known); the
-// chat tells its views
+// the accounts as they are now (run here, not in another terminal's
+// view): ChatGPT's (ChatGPT.ts; signed in) plan and usage asked together,
+// the login followed for a change of account, and its catalog learned
+// (the chatgpt list: each model's window, efforts and speeds); the
+// Anthropic key's models' windows (Anthropic.models); the chat tells its
+// views
 export function term_account(t: Term): void {
+  if (t.chat === null) {
+    return;
+  }
   const chat = t.chat;
-  if (chat === null || !config.OFFER.vendors.includes("chatgpt")) {
+  if (config.OFFER.vendors.includes("claude-api") && config.KEYS.anthropic) {
+    void Anthropic.models(config.KEYS.anthropic).then((news) => news && Chat.change(chat));
+  }
+  if (!config.OFFER.vendors.includes("chatgpt")) {
     return;
   }
   ChatGPT.sync();
   ChatGPT.follow();
   if (ChatGPT.signed()) {
     void ChatGPT.usage();
-    void ChatGPT.models().then((fresh) => fresh !== null && Chat.change(chat));
+    void ChatGPT.models();
   }
 }
 

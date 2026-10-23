@@ -25,7 +25,8 @@
 // words (a plan's limit and when it resets, a login missing, a chat too
 // long for the window: `full`, a busy service). A stop interrupts it
 // (SIGINT, then SIGKILL), what streamed of its message logged as cut
-// off. A model's window, as a result tells it, is learned (Pick.told).
+// off. A model's window, as a result tells it, is learned (Pick.told, by
+// its canonical id) and kept for the next start.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -35,6 +36,7 @@ import { Agent, type Emit, type Entry } from "./Agent.ts";
 import { Anthropic } from "./Anthropic.ts";
 import { Pick } from "./Pick.ts";
 import { live_push } from "../ui/View.ts";
+import * as config from "../config/Config.ts";
 
 // Types
 // =====
@@ -235,8 +237,9 @@ export namespace ClaudeCode {
       }
       case "result": {
         run.result = m;
-        for (const [id, use] of Object.entries<any>(m.modelUsage ?? {})) {
-          Pick.told("claude-code", id, Number(use?.contextWindow ?? 0));
+        const news = Object.entries<any>(m.modelUsage ?? {}).filter(([id, use]) => Pick.told("claude-code", String(use?.canonicalModel ?? id), Number(use?.contextWindow ?? 0)));
+        if (news.length > 0) {
+          config.config_models_keep("claude-code", Pick.list("claude-code"));
         }
         return;
       }

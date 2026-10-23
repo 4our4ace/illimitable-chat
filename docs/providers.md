@@ -88,6 +88,27 @@ To choose them, or list more vendors (the first gives the defaults):
 claude-api` in the chat works from the next start. `/model` picks the
 model, its effort and speed per chat.
 
+Each vendor tells illi its models, kept in `~/.illi/models.json` for the
+next start:
+
+| Vendor        | What it tells                                                    | When                                   |
+| ------------- | ---------------------------------------------------------------- | -------------------------------------- |
+| `chatgpt`     | the models your account may use, each one's window, efforts and speeds | at start, after `/login` and `/logout`, when the account changes |
+| `claude-api`  | each model's window (Anthropic's Models API)                     | at start                               |
+| `claude-code` | the window of the model a reply ran on                           | after each reply                       |
+| `openai-api`  | nothing: its windows are built in (1.05M)                        |                                        |
+
+On ChatGPT the list is your account's own: a model it adds is offered
+at once, one it drops is gone. A model's window is the most your plan
+may use. Past its usual window (272k on most) your plan's usage drains
+faster; if your account refuses a chat that long, illi keeps to the
+usual window for that model from then on. A pick whose effort or speed
+the model doesn't have runs at the nearest one it has. Until a vendor
+tells, illi uses windows built in (Claude Code's: 200k).
+
+How much of the window a turn sends is each model's autocompact
+([Config](config.md)): `/autocompact` sets it for the chat's model.
+
 The vendors never mix: a chat's summaries and subagents run on its own
 vendor's models. `compactor` and `agents` take one pick per vendor,
 comma-separated, and a chat uses its own vendor's. All settings are in

@@ -5,7 +5,8 @@
 // Code whole with illi's prompt after its own and illi's tools added
 // (lean), the view's marked block cached for an hour, its stream shown
 // live and logged, illi's tools by their own
-// names, and the model's window learned; a call without tools has none
+// names, and the model's window learned (by its canonical id) and kept;
+// a call without tools has none
 // of Claude Code's; a message sent mid-run is taken as it is echoed, one
 // sent after the end is left; a plan's limit, a missing login, a chat
 // too long and a crash end it in plain words; a stop cuts it; a missing
@@ -58,7 +59,7 @@ if (scene.includes("turn")) {
   out({ type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "mcp__illi__zoom", input: { id: 3 } }] }, parent_tool_use_id: null });
   out({ type: "assistant", message: { content: [{ type: "text", text: "a subagent's step" }] }, parent_tool_use_id: "task-1" });
   out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: [{ type: "text", text: "line 3" }] }] }, parent_tool_use_id: null });
-  result({ result: "Hello", modelUsage: { "claude-opus-5-5": { contextWindow: 1000000 } } });
+  result({ result: "Hello", modelUsage: { "claude-opus-5-5[1m]": { contextWindow: 1000000, canonicalModel: "claude-opus-5-5" } } });
 } else if (scene.includes("send")) {
   await next(3000);
   result({ result: "got both" });
@@ -125,6 +126,7 @@ test("a turn runs Claude Code whole, illi's prompt after its own and illi's tool
   ]);
   expect(end).toMatchObject({ ok: true, text: "Hello", left: [] });
   expect(Pick.window({ vendor: "claude-code", model: "opus-5.5", effort: "high", speed: "slow" })).toBe(1000000);
+  expect(JSON.parse(fs.readFileSync(DIR + "/models.json", "utf8")).vendors["claude-code"].find((m: any) => m.label === "opus-5.5").window).toBe(1000000);
   expect(fs.existsSync(log.args[log.args.indexOf("--append-system-prompt-file") + 1])).toBe(false);
 });
 

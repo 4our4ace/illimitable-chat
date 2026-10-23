@@ -76,7 +76,7 @@ const MODELS: Record<Vendor, Model[]> = {
 
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 
-const SPEEDS = ["slow", "fast", "ultrafast"];
+export const SPEEDS = ["slow", "fast", "ultrafast"];
 
 export const LABELS = [...new Set(Object.values(MODELS).flat().map((m) => m.label))];
 
@@ -129,13 +129,20 @@ export namespace Pick {
     return Pick.model(pick.vendor, pick.model)?.window;
   }
 
+  // a vendor's model by the id it runs as
+  export function by_id(vendor: Vendor, id: string): Model | undefined {
+    return MODELS[vendor].find((m) => m.id === id);
+  }
+
   // a vendor's model, by the id it runs as, takes `window` tokens in, as
-  // its vendor told (a model not known: none)
-  export function told(vendor: Vendor, id: string, window: number): void {
-    const model = MODELS[vendor].find((m) => m.id === id);
-    if (model !== undefined && window > 0) {
-      model.window = window;
+  // its vendor told (a model not known: none); true: that's news
+  export function told(vendor: Vendor, id: string, window: number): boolean {
+    const model = Pick.by_id(vendor, id);
+    if (model === undefined || !(window > 0) || model.window === window) {
+      return false;
     }
+    model.window = window;
+    return true;
   }
 
   export function on(pick: Pick, vendor: Vendor, model: Model): Pick {
