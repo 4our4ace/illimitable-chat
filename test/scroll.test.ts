@@ -5,11 +5,13 @@
 // pages, the wheel, to its top and back to its end, it shows what the
 // chat laid out whole shows there; scrolled up, the lines read stay in
 // place as more come, and text chosen stays on its lines as more are
-// laid out over them; a block asked for shows at the top.
+// laid out over them; a block asked for shows at the top. The palette
+// opened, searched and closed lays out none of the chat again.
 
 import { expect, test } from "bun:test";
 import { term_paint } from "../src/term/Frame.ts";
-import { term_press } from "../src/term/Keys.ts";
+import { term_grab, term_press, term_type } from "../src/term/Keys.ts";
+import { term_palette } from "../src/term/Palette.ts";
 import { term_selected } from "../src/term/Select.ts";
 import { status_new } from "../src/term/Status.ts";
 import * as Paint from "../src/ui/Paint.ts";
@@ -103,4 +105,24 @@ test("a block asked for shows at the top, all under it laid out", () => {
   const mark = t.seen.marks.find((m: Paint.Mark) => m.id === 0 && m.n === 4);
   expect(area.first).toBe(mark.from - 1);
   expect(text(area.lines.slice(mark.from, mark.to)).join("\n")).toContain("what was said first");
+});
+
+test("the palette opened, searched and closed lays out none of the chat again: a long chat costs it nothing", () => {
+  const t = term(chat(2000));
+  paint(t);
+  const body = t.body;
+  const from = body.from;
+  term_palette(t);
+  paint(t);
+  for (const ch of "settings") {
+    term_type(t, ch);
+    paint(t);
+  }
+  expect(t.choose.shown.length).toBeGreaterThan(0);
+  term_grab(t, "Esc");
+  const { shown } = paint(t);
+  expect(t.choose).toBeNull();
+  expect(t.body).toBe(body);
+  expect(t.body.from).toBe(from);
+  expect(shown.join("\n")).toContain("Answer 2003");
 });

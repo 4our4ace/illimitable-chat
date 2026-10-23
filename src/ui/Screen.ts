@@ -69,7 +69,8 @@ export type Match = { k: number; at: number[]; hay?: true };
 
 // the screen: whether a terminal, whether it answered kitty's flags (so
 // Esc comes as CSI 27u, and a bare ESC only starts a sequence), the
-// input, input not read yet (cut by a read's end), the rows as last
+// input, input not read yet (cut by a read's end) and the wait for the
+// rest of it (screen_alone), the rows as last
 // written ([]: none, the screen to clear), where the left button was last
 // pressed, how many times there in a row (2: a double click, 3: a triple)
 // and when, where the pointer is; whether the input was typed in since
@@ -85,6 +86,7 @@ export type Screen = {
   kitty  : boolean;
   ed     : Ed;
   rest   : string;
+  alone? : ReturnType<typeof setTimeout>;
   shown  : string[];
   click  : Spot;
   clicks : number;
@@ -225,8 +227,10 @@ for (let k = 0; k < 10; k++) {
   KEYPAD[57399 + k] = String(k);
 }
 
-// a legacy Alt+[ or Alt+Shift+O, read alone: a sequence's start (CSI,
-// SS3) till no more comes for this long (ms)
+// a key's sequence cut by a read's end is awaited this long (ms) for
+// the rest of it, read alone after: a bare ESC, ESC [ or ESC O (Esc, a
+// legacy Alt+[ or Alt+Shift+O); a longer one, a sequence that never
+// ended, is dropped after AWAIT
 const ALONE = 50;
 
 // each line's text as written, at the width it was cut to
@@ -553,22 +557,31 @@ export function screen_feed(scr: Screen, data: string): void {
     data = data.slice(n);
   }
   scr.rest = data;
-  if (/^\x1b[O[]$/.test(data)) {
-    setTimeout(() => screen_alone(scr, data), ALONE).unref?.();
+  clearTimeout(scr.alone);
+  if (scr.tty && data.startsWith("\x1b") && !data.startsWith(PASTE_ON)) {
+    scr.alone = setTimeout(() => screen_alone(scr), data.length <= 2 ? ALONE : AWAIT);
+    scr.alone.unref?.();
   }
   if (!moved) {
     scr.on("");
   }
 }
 
-// a sequence's start left unread (screen_feed) still alone after ALONE:
-// a legacy Alt+[ or Alt+Shift+O
-function screen_alone(scr: Screen, rest: string): void {
-  if (scr.rest === rest) {
-    scr.rest = "";
+// a sequence's start left unread (screen_feed), nothing more come for
+// it: a bare ESC is Esc (where Esc comes as CSI 27u, one a read cut
+// short, or a terminal that sends it bare anyway: never held till the
+// next key), ESC [ or ESC O (] while the background is awaited) a legacy
+// Alt+ that key; a longer one, a sequence never ended, dropped. A paste
+// is awaited to its end, however slow
+function screen_alone(scr: Screen): void {
+  const rest = scr.rest;
+  scr.rest = "";
+  if (rest === "\x1b") {
+    screen_press(scr, "Esc");
+  } else if (rest.length === 2) {
     screen_press(scr, "Alt+" + rest[1]);
-    scr.on("");
   }
+  scr.on("");
 }
 
 // reads one key at the start of data; returns its length (0: cut short)
