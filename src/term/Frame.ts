@@ -4,11 +4,11 @@
 // frame at most each FRAME ms: the head; the chat (or a pane; over its
 // foot the commands suggested), the side beside it (Side.ts); the notes,
 // the toast and the jump to the end; the rule (what runs, the ∞ traced),
-// the input, the pages, the pick; a popup open (the picker, illi's
-// questions: Popup.ts) over all of it, all else dimmed, the cursor in its
-// search or words if it has them; all of it grey while the leader waits
-// for its key (Commands.ts term_lead); the terminal's title. A pipe gets
-// text.
+// the input (or a question in its place: Question.ts), the pages, the
+// pick; a popup open (a list, illi's questions: Popup.ts) over all of it,
+// all else dimmed, the cursor in its search or words if it has them; all
+// of it grey while the leader waits for its key (Commands.ts term_lead);
+// the terminal's title. A pipe gets text.
 
 import * as path from "node:path";
 import { term_asks } from "./Asks.ts";
@@ -18,10 +18,11 @@ import * as Draw from "../ui/Draw.ts";
 import { term_hint } from "./Keys.ts";
 import { member_others } from "./Member.ts";
 import * as Paint from "../ui/Paint.ts";
-import { PANEL, popup_paint, popup_shown, term_popup } from "./Popup.ts";
+import { PANEL, popup_paint, term_popup } from "./Popup.ts";
 import { term_shown } from "./Notices.ts";
 import { term_mode } from "./PermCommands.ts";
 import { term_profile_pick } from "./ProfileCommands.ts";
+import { question_kept, question_laid, question_shown } from "./Question.ts";
 import { DEFAULT } from "../config/Profiles.ts";
 import { Projects } from "../chat/Projects.ts";
 import * as Screen from "../ui/Screen.ts";
@@ -156,17 +157,22 @@ export function term_draw(t: Term): void {
 // last line right on the input, the commands it matches (as wide as the
 // input); a row with, at the chat's right end, a toast in the accent; a
 // rule (what runs, while it does), the input, a rule, the pages, the
-// agent and the pick. The notes, however the chat is scrolled, end over
-// the input: the newest in the rule, the one before it, faded, in the row
-// above (unless the toast leaves it no room); while work runs (its
-// status has the rule), the newest alone, in the row above. Only what is
+// agent and the pick. A question in the input's place (Question.ts, over
+// a pane too: its rows, the rule under it), the rule over it its, the
+// input as typed kept for after it; no commands suggested meanwhile. The
+// notes, however the chat is scrolled, end over the input: the newest in
+// the rule, the one before it, faded, in the row above (unless the toast
+// leaves it no room); while work runs (its status has the rule) or a
+// question shows, the newest in the row above (work: alone). Only what is
 // left over takes rows from the chat. Scrolled up, a button floats over
 // the chat's foot, in its middle: a jump to its end (a click goes there,
 // as Ctrl+End does). What a click in the chat would act on lit, once
 // every hit is placed (Select.ts term_light). A popup open (Popup.ts)
 // over all of it, all else dimmed, the cursor in its search or words
 // (none: hidden; blinking in illi's questions, which wait on you), and
-// nothing under it takes a click or lights. A pipe gets the notes as text
+// nothing under it takes a click or lights; with none, the cursor in the
+// question's words, if it takes typing (blinking: it waits on you), else
+// the input's. A pipe gets the notes as text
 export function term_paint(t: Term): void {
   t.due   = false;
   painted = Date.now();
@@ -186,11 +192,12 @@ export function term_paint(t: Term): void {
   const cw    = full - side - 2 * MARGIN;
   const iw    = full - 2 * MARGIN;
   const off   = !View.view_typing(t.v);
-  const paned = t.pane !== null;
-  const input = paned ? { lines: [], at: null } : Screen.screen_input(t.scr, iw, Math.max(1, Math.floor(h / 3)), off ? OFF + (t.v.agent ?? View.MAIN) : term_hint(t), off);
+  const asked = question_laid(t, iw, h);
+  const paned = t.pane !== null && asked === null;
+  const input = asked ?? (paned ? { lines: [], at: null } : Screen.screen_input(t.scr, iw, Math.max(1, Math.floor(h / 3)), off ? OFF + (t.v.agent ?? View.MAIN) : term_hint(t), off));
   const idle  = View.view_doing(t.v) === null;
   const notes = term_notes(idle ? said.notes : said.notes.slice(-1), iw - 2 * NOTE_IN);
-  const ruled = idle ? notes.pop() : undefined;
+  const ruled = idle && asked === null ? notes.pop() : undefined;
   const last  = notes.at(-1);
   const roomy = last !== undefined && NOTE_IN + Paint.line_width(last) + 1 + Paint.text_width(said.toast) <= left + cw;
   const lead  = roomy ? [Paint.Run(" ".repeat(NOTE_IN)), ...notes.pop()!] : [];
@@ -198,8 +205,8 @@ export function term_paint(t: Term): void {
   const status = status_rows(t, iw, h - (paned ? 4 : 5) - input.lines.length - above.length - STATUS_ROOM);
   const tall  = Math.max(1, h - (paned ? 4 : 5) - input.lines.length - above.length - status.length);
   const pop   = term_popup(t) !== null;
-  popup_shown(t);
-  const box   = pop ? null : term_box(t, iw, tall + 1 + above.length);
+  question_shown(t);
+  const box   = pop || asked !== null ? null : term_box(t, iw, tall + 1 + above.length);
   const top   = box === null ? Infinity : 2 + tall + above.length - box.lines.length;
   const view  = term_view(t, cw, tall, 1, left + MARGIN);
   for (let r = top; r <= tall; r++) {
@@ -214,7 +221,7 @@ export function term_paint(t: Term): void {
   const sided = term_area(t, { key: "side", lines: sides.map((s) => s[0]), first: 0, row: 1, col: left > 0 ? 1 : at + 2, w: sw, tall: sides.length });
   const lit   = { ...Paint.INK, c: Draw.draw_tokens().accent };
   const toast = box !== null ? [] : [...lead, Paint.Run(" ".repeat(Math.max(1, left + cw - Paint.line_width(lead) - Paint.text_width(said.toast)))), Paint.Run(said.toast, lit)];
-  const lines = [...above, toast, term_rule(t, iw, ruled), ...input.lines, ...(paned ? [] : [Paint.rule(iw)]), ...status, Paint.tabs_line(t.v, iw, side === 0, jobs)];
+  const lines = [...above, toast, term_rule(t, iw, ruled, asked?.rule), ...input.lines, ...(paned ? [] : [Paint.rule(iw)]), ...status, Paint.tabs_line(t.v, iw, side === 0, jobs)];
   const foot  = term_area(t, { key: "foot", lines, first: 0, row: 1 + tall, col: MARGIN, w: iw, tall: lines.length });
   const head  = term_area(t, { key: "head", lines: [term_head(t, full)], first: 0, row: 0, col: 0, w: full, tall: 1 });
   const rows  = ROWS;
@@ -241,6 +248,8 @@ export function term_paint(t: Term): void {
   }
   if (box !== null) {
     term_over(t, rows, box, top, MARGIN, iw);
+  } else if (asked !== null && !pop) {
+    question_kept(t, asked, 3 + tall + above.length, MARGIN, iw);
   } else if (!pop) {
     t.box = null;
   }
@@ -256,7 +265,7 @@ export function term_paint(t: Term): void {
   const cursor = pop ? popped : input.at === null ? null : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
   const drawn  = t.lead ? rows.map((row) => row.map((p) => ({ ...p, line: p.line.map((r) => ({ ...r, s: { ...r.s, d: true, c: "", g: "" } })) }))) : rows;
   t.ruled ={ row: 2 + tall + above.length, w: iw, at: cursor, rows: drawn, side: box === null && !pop ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
-  t.scr.blink = idle || term_popup(t) === "form";
+  t.scr.blink = idle || asked !== null || term_popup(t) === "form";
   Screen.screen_paint(t.scr, drawn, cursor);
   painted = Date.now();
 }
@@ -286,13 +295,18 @@ function term_jump(t: Term, rows: Screen.Piece[][], tall: number, col: number, w
   term_hit(t, row, at, at + bw, () => (t.scroll = 0));
 }
 
-// the rule over the input; while work runs: what runs (term_working),
-// kept for the clock to write again alone; else a note's line, if one
-// is given
-function term_rule(t: Term, w: number, note?: Paint.Line): Paint.Line {
+// the rule over the input: a question's, while one shows there (its
+// title and keys: Question.ts); while work runs, what runs
+// (term_working), kept for the clock to write again alone; else a note's
+// line, if one is given. The clock runs while work does, a question over
+// its rule or not (the side's spinners, the title)
+function term_rule(t: Term, w: number, note?: Paint.Line, asked?: Paint.Line): Paint.Line {
   const doing = View.view_doing(t.v);
   term_spin(t, doing !== null);
-  t.doing = doing;
+  t.doing = asked === undefined ? doing : null;
+  if (asked !== undefined) {
+    return asked;
+  }
   if (doing === null) {
     return note === undefined ? Paint.rule(w) : [Paint.Run("─".repeat(NOTE_IN - 1) + " ", Paint.DIM), ...note, Paint.Run(" " + "─".repeat(Math.max(0, w - NOTE_IN - 1 - Paint.line_width(note))), Paint.DIM)];
   }
@@ -358,18 +372,19 @@ function term_wake(t: Term): void {
 // a wake of the clock, where the rule was last painted: the ∞'s cells
 // that changed written again alone (term_traced); each WORDS, from what
 // runs now, the rule written whole if its words changed (too narrow for
-// the ∞ whole: at each wake). With agents at work and their spinner
-// changed, the side's rows too (term_side_again). No paint, no layout of
-// the chat; a whole paint only once work ended, with text chosen (its
-// look may cover them), a popup open (the rule dimmed under it) or the
-// leader waiting (all grey); nothing while a paint is due
+// the ∞ whole: at each wake); none while a question has the rule (no
+// doing kept). With agents at work and their spinner changed, the side's
+// rows too (term_side_again). No paint, no layout of the chat; a whole
+// paint only once work ended, with text chosen (its look may cover
+// them), a popup open (the rule dimmed under it) or the leader waiting
+// (all grey); nothing while a paint is due
 function term_tick(t: Term): void {
   const r = t.ruled;
   if (t.due) {
     return;
   }
   term_title(t);
-  if (r === null || t.doing === null || t.sel !== null || t.lead || term_popup(t) !== null || !View.view_running(t.v)) {
+  if (r === null || t.sel !== null || t.lead || term_popup(t) !== null || !View.view_running(t.v)) {
     return term_paint(t);
   }
   const now  = Date.now();
@@ -377,7 +392,7 @@ function term_tick(t: Term): void {
   const head = Math.floor(ms / TRACE) % INFINITY.length;
   const fits = r.w >= Paint.text_width(RULE_HEAD) + 4;
   const tr   = traced?.of === r ? traced : (traced = { of: r, head: -1, step: -1, sec: -1 });
-  if (!fits || Math.floor(ms / WORDS) !== tr.step) {
+  if (t.doing !== null && (!fits || Math.floor(ms / WORDS) !== tr.step)) {
     const was = t.doing;
     t.doing   = View.view_doing(t.v, now) ?? was;
     tr.step   = Math.floor(ms / WORDS);
@@ -386,7 +401,7 @@ function term_tick(t: Term): void {
       Screen.screen_row(t.scr, r.row, [{ col: MARGIN, w: r.w, line: term_working(t, t.doing, r.w, now) }], r.at);
     }
   }
-  if (head !== tr.head) {
+  if (t.doing !== null && head !== tr.head) {
     Screen.screen_cells(t.scr, r.row, term_traced(t, head, tr.head), r.at);
     tr.head = head;
   }
@@ -537,7 +552,7 @@ function term_box(t: Term, iw: number, room: number): { sug: Sug; lines: Array<[
 // as painted (t.box: the mouse over them is Popup.ts's)
 function term_over(t: Term, rows: Screen.Piece[][], box: { sug: Sug; lines: Array<[Paint.Line, Target | null]> }, top: number, col: number, w: number): void {
   box.lines.forEach(([line], k) => rows[top + k].push({ col, w, line }));
-  t.box = { of: box.sug, row: top, col, w, h: box.lines.length, rows: box.lines.map(([, aim]) => aim), list: 1, lines: box.lines.length - 2, tall: box.sug.tall, ahead: 0, lead: 0 };
+  t.box = { of: box.sug, row: top, col, w, h: box.lines.length, inset: 2, rows: box.lines.map(([, aim]) => aim), list: 1, lines: box.lines.length - 2, tall: box.sug.tall, ahead: 0, lead: 0 };
 }
 
 // the chat's lines and the first shown, tall of them: its rows (made

@@ -8,12 +8,13 @@
 // then the rules file. Enter on a refused one allows it again, by why it
 // was refused: the user's no (or no one there to ask), for this session,
 // the one who asked told it may run it again; read-only mode's, just it
-// for this session, or ask mode switched on; the user's rules', only by
-// changing them, which it says where. Enter or Delete on a grant lets it
-// go; Enter on the rules says where they are and their shape. The side's
-// Refused lines (Side.ts) open it on theirs.
+// for this session, or ask mode switched on (asked at the input: a
+// question, Question.ts); the user's rules', only by changing them,
+// which it says where. Enter or Delete on a grant lets it go; Enter on
+// the rules says where they are and their shape. The side's Refused
+// lines (Side.ts) open it on theirs.
 
-import { term_chooser, term_pane_text } from "./Commands.ts";
+import { term_chooser, term_pane_text, term_question } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { MODES, type Mode } from "../tools/Guard.ts";
 import { term_note } from "./Notices.ts";
@@ -100,7 +101,7 @@ function refused_pick(t: Term, r: Refused): void {
   }
   const names = ["Allow just this, this session", "Switch to ask mode"];
   const about = ["and tell " + r.who + " it may run it again", "every change asked about, this session"];
-  term_chooser(t, "Read-only mode refused it", names, about, -1, (k) => (k === 0 ? refused_allow(t, r) : mode_set(t, "ask")), { lead: [[Paint.Run(one_line(r.what), { ...Paint.INK, b: true })]] });
+  term_question(t, "Read-only mode refused it", names, about, (k) => (k === 0 ? refused_allow(t, r) : mode_set(t, "ask")), { lead: [[Paint.Run(one_line(r.what), { ...Paint.INK, b: true })]] });
 }
 
 // a refused request allowed for this session, the one who asked told

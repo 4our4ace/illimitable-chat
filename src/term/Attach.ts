@@ -38,13 +38,14 @@ export function term_image(t: Term, arg: string): void {
   }
 }
 
-// a paste: a popup open takes it (Popup.ts: a list, to its search or
-// the line asked, as one line, its newlines spaces; none: nowhere; illi's
-// questions, to their words: Asks.ts); a path to an image (a file
-// dropped) attaches it; else it goes in the input, a long one as its
-// token (a pane open, closed). The pointer's light goes out, as at typing
+// a paste: a picker open takes it (a list's popup, to its search; a
+// question at the input, to the line it asks; as one line, its newlines
+// spaces; none: nowhere); else illi's questions, to their words
+// (Asks.ts); a path to an image (a file dropped) attaches it; else it
+// goes in the input, a long one as its token (a pane open, closed). The
+// pointer's light goes out, as at typing
 export function term_paste(t: Term, text: string): void {
-  const c = t.choose;
+  const c = t.choose ?? t.question;
   term_typing(t, "");
   if (c !== null) {
     if (c.find !== null) {

@@ -50,7 +50,7 @@ const said = async (run: () => unknown) => {
 const term = (tty = true) => {
   const scr: any = { tty, kitty: false, ed: Screen.ed_new(), rest: "", shown: [], click: { row: 0, col: 0 }, clicks: 0, pressed: 0, point: { row: 0, col: 0 }, typed: false, grab: null, on: () => {}, win: member_screen() };
   const v = { ...View.view_new(), busy: true, background: [{ id: 1, command: "npm run dev", agent: "illi", since: 0 }] };
-  const t: any = { v, scr, chat: { busy: true }, status: status_new(), login: null, sel: null, lead: false, drift: undefined, notices: [], due: true, choose: null, wait: null, pane: null, sug: null, profs: [], quitting: false, ver: 0, asking: null, box: null, aim: { row: -1, in: false, press: null, first: null } };
+  const t: any = { v, scr, chat: { busy: true }, status: status_new(), login: null, sel: null, lead: false, drift: undefined, notices: [], due: true, choose: null, question: null, wait: null, pane: null, sug: null, profs: [], quitting: false, ver: 0, asking: null, box: null, aim: { row: -1, in: false, press: null, first: null } };
   member_attach(t);
   return t;
 };
@@ -68,8 +68,8 @@ test("a fresh profile is made and switched to at once, whatever runs", async () 
   t.choose.pick(t.choose.names.indexOf("+ new profile"));
   term_type(t, "fresh");
   term_grab(t, "Enter");
-  expect(t.choose.title).toBe("New profile fresh");
-  expect(await said(() => t.choose.pick(0))).toEqual([{ $: "hide", to: "fresh" }]);
+  expect(t.question.title).toBe("New profile fresh");
+  expect(await said(() => t.question.pick(0))).toEqual([{ $: "hide", to: "fresh" }]);
   expect(fs.existsSync(DIR + "/profiles/fresh")).toBe(true);
 });
 
@@ -78,18 +78,18 @@ test("a profile open hidden in the window can't be renamed or deleted", async ()
   Screen.screen_feed(t.scr, wire_frame({ $: "roster", open: [{ profile: "work", asks: false, working: true, jobs: 0, holds: true }] }, NONCE));
   term_profile(t, "");
   t.choose.keys(t.choose.names.indexOf("work"), "Ctrl+R");
-  t.choose.ask.done("job");
+  t.question.ask.done("job");
   await Bun.sleep(10);
   expect(note(t)).toBe("Profile work runs hidden in this window: quit illi and start it again before renaming it.");
   term_profile(t, "");
   t.choose.keys(t.choose.names.indexOf("work"), "Delete");
-  t.choose.pick(1);
+  t.question.pick(1);
   await Bun.sleep(10);
   expect(note(t)).toBe("Profile work runs hidden in this window: quit illi and start it again before deleting it.");
   expect(fs.existsSync(DIR + "/profiles/work")).toBe(true);
   term_profile(t, "");
   t.choose.keys(t.choose.names.indexOf("home"), "Ctrl+R");
-  t.choose.ask.done("house");
+  t.question.ask.done("house");
   await Bun.sleep(10);
   expect([note(t), fs.existsSync(DIR + "/profiles/house")]).toEqual(["Renamed profile home to house.", true]);
 });

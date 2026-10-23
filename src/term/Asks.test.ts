@@ -1,20 +1,22 @@
 // Asks test
 // =========
-// `bun test Asks.test.ts`. A question the chat asks shows in the picker,
-// what it would do and why over its answers, no note saying them again:
-// Yes allows; "don't ask again" names what it keeps, on one line
-// (offered only when it keeps something); Esc says no; "No, and say why"
-// asks a line (Esc: back to the picker). One gone before it is answered
-// closes its picker; the next shows once the one before is gone. A pipe
-// notes what was asked and answers no at once. illi's own questions
-// (ask) show as a form (in the popup: Popup.test), a tab
+// `bun test Asks.test.ts`. A question the chat asks shows in its picker
+// at the input, why and what it would do (a command by its lines) over
+// its answers, no note saying them again: Yes allows; "don't ask again"
+// names what it keeps, on one line (offered only when it keeps
+// something); Esc says no; "No, and say why" asks a line (Esc: back to
+// the question). One gone before it is answered closes its picker; the
+// next shows once the one before is gone; one that comes while a list or
+// another question is open waits for it. A pipe notes what was asked and
+// answers no at once. illi's own questions (ask) show as a form (in the
+// popup: Popup.test), a tab
 // each (the tabs wrapped, each where it is), who asks its title: Up and
 // Down move, Space picks (one; several with multi), typing goes to the
 // words of the user's own, Enter picks the lit option and goes on; PgUp
 // and Ctrl+Home go to the first row, PgDn and Ctrl+End to the words',
 // Home and End too off the words (on them they edit); the last tab shows
 // all the answers, and Enter there sends them; Esc and Ctrl+D skip; any
-// other key does nothing, a pane under it stays; a picker opened over it
+// other key does nothing, a pane under it stays; a list opened over it
 // takes the keys. A question just shown holds Enter (the form Space too)
 // for half a second from its first paint, and again once shown anew
 // after a list over it; Esc is never held.
@@ -29,14 +31,14 @@ process.env.ILLI_DIR = DIR;
 const { term_asks, term_form_lines } = await import("./Asks.ts");
 const { term_chooser } = await import("./Commands.ts");
 const { term_grab, term_type } = await import("./Keys.ts");
-const { popup_shown } = await import("./Popup.ts");
+const { question_shown } = await import("./Question.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
 // a terminal with no screen, only its view and notes
-const term = (tty = true) => ({ v: View.view_new(), scr: { tty, ed: Screen.ed_new() }, choose: null, wait: null, pane: null, notices: [], due: true, ver: 0, asking: null }) as any;
+const term = (tty = true) => ({ v: View.view_new(), scr: { tty, ed: Screen.ed_new() }, choose: null, question: null, wait: null, pane: null, notices: [], due: true, ver: 0, asking: null }) as any;
 const note = (t: any) => t.notices.at(-1)?.text ?? "";
 
 // the answers sent, without their message ids
@@ -66,90 +68,106 @@ const text = (t: any) => {
   return [...f.tabs, ...f.body.map(([l]: any) => l), ...f.keys].map((l: any) => l.map((r: any) => r.x).join("").trimEnd());
 };
 
-test("a question shows in the picker, what it would do and why over its answers and in no note, no answer marked as chosen, Yes lit; Enter on Yes allows it, once", () => {
+test("a question shows in its picker at the input, why it asks and what it would do over its answers and in no note, no answer marked as chosen, Yes lit; Enter on Yes allows it, once", () => {
   const t = term();
   asks(t, ["q1", "Bash", "rm -r build"]);
-  expect(t.notices).toEqual([]);
-  expect(t.choose.title).toBe("Allow Bash?");
-  expect(t.choose.names).toEqual(["Yes", "Yes, and don't ask again for rm -r build in this project", "No", "No, and say why"]);
-  expect(t.choose.lead.map((l: any) => l.map((r: any) => r.x).join(""))).toEqual(["rm -r build", "Why: it is risky"]);
-  expect(t.choose.foot(0)).toBe("Esc no");
-  expect([t.choose.here, t.choose.at]).toEqual([-1, 0]);
+  expect([t.notices, t.choose]).toEqual([[], null]);
+  expect(t.question.title).toBe("Allow Bash?");
+  expect(t.question.names).toEqual(["Yes", "Yes, and don't ask again for rm -r build in this project", "No", "No, and say why"]);
+  expect(t.question.lead.map((l: any) => l.map((r: any) => r.x).join(""))).toEqual(["Why: it is risky", "rm -r build"]);
+  expect(t.question.foot(0)).toBe("Esc no");
+  expect([t.question.here, t.question.at]).toEqual([-1, 0]);
   term_grab(t, "Enter");
   expect(sent(t)).toEqual([{ ask: "q1", yes: true, always: false, said: "" }]);
-  expect(t.choose).toBeNull();
+  expect(t.question).toBeNull();
   term_asks(t);
-  expect(t.choose).toBeNull();
+  expect(t.question).toBeNull();
   asks(t);
   expect(t.asking).toBeNull();
+});
+
+test("a command leads the question by its lines after the why, each bold, its blank ones and their end spaces left out, tabs as spaces", () => {
+  const t = term();
+  asks(t, ["q1", "Bash", "cat <<EOF > notes\n\tfirst  \n\n   \nsecond\nEOF"]);
+  const lead = t.question.lead;
+  expect(lead.map((l: any) => l.map((r: any) => r.x).join(""))).toEqual(["Why: it is risky", "cat <<EOF > notes", "  first", "second", "EOF"]);
+  expect(lead.slice(1).every((l: any) => l.length === 1 && l[0].s.b === true)).toBe(true);
 });
 
 test("don't ask again keeps what it names; one that keeps nothing isn't offered; Esc says no", () => {
   const t = term();
   asks(t, ["q1", "Bash", "git push", "git push *"]);
-  expect(t.choose.names[1]).toBe("Yes, and don't ask again for git push * in this project");
+  expect(t.question.names[1]).toBe("Yes, and don't ask again for git push * in this project");
   term_grab(t, "Down");
   term_grab(t, "Enter");
   asks(t, ["q2", "Bash", "git push", ""]);
-  expect(t.choose.names).toEqual(["Yes", "No", "No, and say why"]);
+  expect(t.question.names).toEqual(["Yes", "No", "No, and say why"]);
   term_grab(t, "Down");
   term_grab(t, "Enter");
   asks(t, ["q3", "Write", "a.txt"]);
   term_grab(t, "Esc");
   expect(sent(t)).toEqual([{ ask: "q1", yes: true, always: true, said: "" }, { ask: "q2", yes: false, always: false, said: "" }, { ask: "q3", yes: false, always: false, said: "" }]);
-  expect(t.choose).toBeNull();
+  expect(t.question).toBeNull();
 });
 
 test("don't ask again names a command of several lines on one line, as a list shows a command", () => {
   const t = term();
   asks(t, ["q1", "Bash", "python3 <<'EOF'\n\timport os\n\tos.remove('a')\nEOF"]);
-  expect(t.choose.names[1]).toBe("Yes, and don't ask again for python3 <<'EOF' import os os.remove('a') EOF in this project");
+  expect(t.question.names[1]).toBe("Yes, and don't ask again for python3 <<'EOF' import os os.remove('a') EOF in this project");
 });
 
-test("No, and say why asks a line for the model; Esc there goes back to the picker", () => {
+test("No, and say why asks a line for the model, at the input too; Esc there goes back to the question", () => {
   const t = term();
   asks(t, ["q1", "Bash", "rm -r build"]);
   ["Down", "Down", "Down", "Enter"].forEach((key) => term_grab(t, key));
-  expect(t.choose.title).toBe("Why not Bash?");
+  expect([t.question.title, t.question.ask.hint, t.asking.c]).toEqual(["Why not Bash?", "your reason, for the model", t.question]);
   term_grab(t, "Esc");
   term_asks(t);
   shown(t);
-  expect(t.choose.title).toBe("Allow Bash?");
+  expect(t.question.title).toBe("Allow Bash?");
   ["Down", "Down", "Down", "Enter"].forEach((key) => term_grab(t, key));
   term_type(t, "use the clean script");
   term_grab(t, "Enter");
   expect(sent(t)).toEqual([{ ask: "q1", yes: false, always: false, said: "use the clean script" }]);
-  expect(t.choose).toBeNull();
+  expect(t.question).toBeNull();
 });
 
-test("one gone before it is answered closes its picker, the next one shown; another picker is left alone", () => {
+test("one gone before it is answered closes its picker, the next one shown; a list over it, or another question, is left alone", () => {
   const t = term();
   asks(t, ["q1", "Bash", "ls"], ["q2", "Edit", "src/a.ts"]);
-  expect(t.choose.title).toBe("Allow Bash?");
+  expect(t.question.title).toBe("Allow Bash?");
   asks(t, ["q2", "Edit", "src/a.ts"]);
-  expect(t.choose.title).toBe("Allow Edit?");
+  expect(t.question.title).toBe("Allow Edit?");
   const mine = { title: "Pick a model" };
   t.choose = mine;
   asks(t);
-  expect(t.choose).toBe(mine);
-  expect(sent(t)).toEqual([]);
+  expect([t.choose, t.question]).toEqual([mine, null]);
+  const other = { title: "Delete profile work?" };
+  asks(t, ["q3", "Bash", "ls"]);
+  t.question = other;
+  asks(t);
+  expect([t.question, sent(t)]).toEqual([other, []]);
 });
 
-test("a question that comes while another picker is open waits for it", () => {
+test("a question that comes while a list or another question is open waits for it", () => {
   const t = term();
   const mine = { title: "Pick a model" };
   t.choose = mine;
   asks(t, ["q1", "Bash", "ls"]);
-  expect(t.choose).toBe(mine);
+  expect([t.choose, t.question]).toEqual([mine, null]);
   t.choose = null;
+  t.question = { title: "Forget app?" };
   term_asks(t);
-  expect(t.choose.title).toBe("Allow Bash?");
+  expect(t.question.title).toBe("Forget app?");
+  t.question = null;
+  term_asks(t);
+  expect(t.question.title).toBe("Allow Bash?");
 });
 
 test("a pipe has no one to ask: a note says what was asked, and no, at once", () => {
   const t = term(false);
   asks(t, ["q1", "Bash", "ls"]);
-  expect([t.choose, note(t)]).toEqual([null, "illi asks to use Bash: ls. Why: it is risky"]);
+  expect([t.question, note(t)]).toEqual([null, "illi asks to use Bash: ls. Why: it is risky"]);
   expect(sent(t)).toEqual([{ ask: "q1", yes: false, always: false, said: "" }]);
   term_asks(t);
   expect(sent(t)).toHaveLength(1);
@@ -158,7 +176,7 @@ test("a pipe has no one to ask: a note says what was asked, and no, at once", ()
 test("illi's question shows as a form: who asks, its tabs, the question, its options, a row for words of the user's own, the keys", () => {
   const t = term();
   own(t);
-  expect([t.choose, t.notices]).toEqual([null, []]);
+  expect([t.choose, t.question, t.notices]).toEqual([null, null, []]);
   expect(term_form_lines(t, 80, 4)!.who).toBe("illi");
   expect(text(t)).toEqual([" Database   Review", "Which database?  pick one", "> ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
   expect(term_form_lines(t, 80, 4)!.at).toEqual({ row: 4, col: 4 });
@@ -253,16 +271,16 @@ test("a question just shown holds Enter for half a second from its first paint (
   t.v.asks = [{ id: "q1", who: "illi", tool: "Bash", what: "ls", why: "", keep: "" }];
   term_asks(t);
   term_grab(t, "Enter");
-  popup_shown(t);
+  question_shown(t);
   term_grab(t, "Enter");
   expect(sent(t)).toEqual([]);
   t.asking.shown -= 600;
   term_chooser(t, "Agent", ["illi"], [""], 0, () => {});
-  popup_shown(t);
+  question_shown(t);
   expect(t.asking.shown).toBeNull();
   term_grab(t, "Esc");
   term_asks(t);
-  popup_shown(t);
+  question_shown(t);
   term_grab(t, "Enter");
   expect(sent(t)).toEqual([]);
   t.asking.shown -= 600;
@@ -276,7 +294,7 @@ test("a question just shown holds Enter for half a second from its first paint (
   const f = term();
   f.v.asks = [{ id: "a1", who: "illi", tool: "ask", what: DB.text, queries: [DB] }];
   term_asks(f);
-  popup_shown(f);
+  question_shown(f);
   term_type(f, " ");
   term_grab(f, "Enter");
   expect([f.asking.form.tab, f.asking.form.each[0].picked]).toEqual([0, []]);

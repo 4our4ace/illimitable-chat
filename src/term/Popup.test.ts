@@ -4,32 +4,28 @@
 // screen's middle: the same column, top and width with the side panel
 // left, right or off, the head row and the bottom line uncovered, all
 // else dimmed in one ink, and no click on the side or the tabs under it.
-// Its size from its content and the screen alone: POP_MIN wide for a
-// two-answer question, what options say widening it to POP_CAP, a name
-// never held to it, a line asked for ASK_MIN wide; a share of the rows
-// at most, all but two on a short screen or for a question. A name is
-// never cut (what an option is is, with an ellipsis); on a screen too
-// narrow for it, it wraps under itself. No control character in a name
-// or a title reaches the screen. A search keeps the box's place
-// and size; a value stepped wider grows it, never shrinks it, till a new
-// size. A question's answers always show, its long lead cut. The wheel
-// scrolls a long list (a third of what shows, three at most), stopping at
-// its ends, the option brought under the pointer lit, or off the list
-// the lit one held in view; a list shown whole never moves, nor the chat.
-// A lead cut scrolls by the wheel and the pages, the answers staying.
-// The mouse is the popup's alone: the pointer moving to another row
-// lights it (along its row, at rest, or as the popup first shows under
-// it: not); a press and a release on one option do what Enter does
-// there, on two rows nothing; a click outside closes a list, never a
-// question (the line asked why goes back to it), and goes no further; no
-// text is chosen, no button lights or copies, the right button does
-// nothing; a double click picks once; a box no longer open (a new size,
-// a question answered elsewhere) does nothing; a question just shown
-// holds a click as it holds Enter; the click that only focuses the
-// terminal's window picks nothing and closes nothing. The wheel over a
-// group's head scrolls on. The commands suggested as a /word is typed: a
-// click on one does what Enter does there, a press on them chooses no
-// text; a drag from elsewhere goes on over them. illi's own questions
+// Its size from its content and the screen alone: POP_MIN wide for two
+// options, what options say widening it to POP_CAP, a name never held to
+// it; a share of the rows at most, all but two on a short screen or for
+// illi's form. A name is never cut (what an option is is, with an
+// ellipsis); on a screen too narrow for it, it wraps under itself. No
+// control character in a name or a title reaches the screen. A search
+// keeps the box's place and size; a value stepped wider grows it, never
+// shrinks it, till a new size. The wheel scrolls a long list (a
+// third of what shows, three at most), stopping at its ends, the option
+// brought under the pointer lit, or off the list the lit one held in
+// view; a list shown whole never moves, nor the chat. The mouse is the
+// popup's alone: the pointer moving to another row lights it (along its
+// row, at rest, or as the popup first shows under it: not); a press and a
+// release on one option do what Enter does there, on two rows nothing; a
+// click outside closes a list and goes no further; no text is chosen, no
+// button lights or copies, the right button does nothing; a double click
+// picks once; a box no longer open (a new size) does nothing; the click
+// that only focuses the terminal's window picks nothing and closes
+// nothing. The wheel over a group's head scrolls on. (Questions take the
+// input's place instead: Question.test.ts.) The commands suggested as a
+// /word is typed: a click on one does what Enter does there, a press on
+// them chooses no text; a drag from elsewhere goes on over them. illi's own questions
 // show in the popup, the room's full width, who asks its title, the
 // input still drawn under it, the cursor in the words; going from tab to
 // tab never moves it; over a pane too, typing and a paste going to the
@@ -67,7 +63,7 @@ function term(): any {
   const scr: any = { tty: true, kitty: false, ed: Screen.ed_new(), rest: "", shown: [], click: { row: 0, col: 0 }, clicks: 0, pressed: 0, point: { row: 0, col: 0 }, typed: false, left: true };
   const t: any = {
     v: View.view_new(), scr, due: false, notices: [], scroll: 0, seen: { total: 0, marks: [], row: 0, first: 0, tall: 1, col: 0, end: 0 }, ver: 0, body: null, find: null,
-    pane: null, agents: [], choose: null, profs: [], hits: [], since: 0, spin: undefined, ruled: null, doing: null, subs: new Map(), side: { place: "right", width: "25%" }, status: status_new(),
+    pane: null, agents: [], choose: null, question: null, profs: [], hits: [], since: 0, spin: undefined, ruled: null, doing: null, subs: new Map(), side: { place: "right", width: "25%" }, status: status_new(),
     todo: false, areas: [], sel: null, sug: null, dropped: "", asking: null, box: null, aim: { row: -1, in: false, press: null, first: null }, pin: null, lit: null, pointed: false, wait: null, acted: null, quit: 0, pending: 0, imgs: new Map(), quoted: null, lead: false,
   };
   [scr.grab, scr.on, scr.type] = [(k: string) => term_grab(t, k), (k: string) => term_press(t, k), (x: string) => term_type(t, x)];
@@ -119,8 +115,8 @@ const text = (row: any[], cols: number) => {
   return cells.join("");
 };
 
-// a measure: names, wants, least wide, tall rows at any width; a
-// question's, if it stays
+// a measure: names, wants, least wide, tall rows at any width; illi's
+// form's, if it stays
 const measure = (names: number, wants: number, least: number, tall = 6, stays = false) => ({ names, wants, least, tall: () => tall, stays });
 
 // the popup as last painted: its rows' text, inside its frame, cols wide
@@ -151,7 +147,7 @@ test("a list opens in the screen's middle, the same with the side left, right or
   expect(places[0][2]).toBe(40);
 });
 
-test("its size from its content and the screen alone: POP_MIN for two answers, what they say up to POP_CAP, a name never held to it, a line asked ASK_MIN; a share of the rows, all but two on a short screen", () => {
+test("its size from its content and the screen alone: POP_MIN for two options, what they say up to POP_CAP, a name never held to it, the least it asks; a share of the rows, all but two on a short screen or for illi's form", () => {
   expect(popup_size(measure(20, 30, 40), 160, 40)).toEqual({ row: 17, col: 59, w: 40, h: 6 });
   expect(popup_size(measure(30, 140, 40), 160, 40).w).toBe(96);
   expect(popup_size(measure(120, 140, 40), 160, 40).w).toBe(120);
@@ -164,10 +160,10 @@ test("its size from its content and the screen alone: POP_MIN for two answers, w
 });
 
 test("a name is never cut: the longest shows whole past POP_CAP; what options say stops at it, cut with an ellipsis", () => {
-  const long = "Yes, and don't ask again for git -C /home/someone/work/a/project/with/a/long/path push origin main in this project";
+  const long = "a grant kept for git -C /somewhere/work/a/project/with/a/long/path push origin main in this project";
   sized(160, 40, () => {
     const t = term();
-    term_chooser(t, "Allow Bash?", ["Yes", long, "No", "No, and say why"], ["", "", "", ""], -1, () => {}, { stays: true });
+    term_chooser(t, "Grants", ["one", long, "two", "three"], ["", "", "", ""], -1, () => {});
     term_paint(t);
     expect(t.box.w).toBe(4 + 2 + long.length + 2);
     expect(inside(t, 160)).toContain("  " + long + "  ");
@@ -232,20 +228,6 @@ test("a search keeps the popup's place and size; a value stepped wider grows it,
   });
 });
 
-test("a question takes all but two rows at most: its answers show whole, a long lead cut, its last line shown ending in an ellipsis", () => {
-  sized(100, 24, () => {
-    const t = term();
-    const lead = Array.from({ length: 40 }, (_, k) => [Paint.Run("line " + k + " of a long command")]);
-    term_chooser(t, "Allow Bash?", ["Yes", "No", "No, and say why"], ["", "", ""], -1, () => {}, { lead, stays: true });
-    term_paint(t);
-    const rows = inside(t, 100);
-    expect(t.box.h).toBe(22);
-    expect(rows.slice(-3).map((r: string) => r.trim())).toEqual(["> Yes", "No", "No, and say why"]);
-    expect(rows[0].trim()).toBe("line 0 of a long command");
-    expect(rows.at(-4).trim()).toBe("line 16 of a long command…");
-  });
-});
-
 test("the wheel scrolls a long list three entries a turn, stopping at its ends, the option brought under the pointer lit; off the list, the lit one held in view; a list shown whole never moves, nor the chat", () => {
   sized(100, 24, () => {
     const t = term();
@@ -274,24 +256,6 @@ test("the wheel scrolls a long list three entries a turn, stopping at its ends, 
   });
 });
 
-test("a question's lead cut scrolls by the wheel and the pages, its answers staying", () => {
-  sized(100, 24, () => {
-    const t = term();
-    const lead = Array.from({ length: 40 }, (_, k) => [Paint.Run("line " + k + " of a long command")]);
-    term_chooser(t, "Allow Bash?", ["Yes", "No", "No, and say why"], ["", "", ""], -1, () => {}, { lead, stays: true });
-    term_paint(t);
-    term_grab(t, "WheelDown");
-    term_paint(t);
-    expect(inside(t, 100)[0].trim()).toBe("line 3 of a long command");
-    term_grab(t, "PgDn");
-    term_grab(t, "PgDn");
-    term_paint(t);
-    const rows = inside(t, 100);
-    expect([rows[0].trim(), rows.at(-4).trim(), t.choose.at]).toEqual(["line 23 of a long command", "line 39 of a long command", 0]);
-    expect(rows.slice(-3).map((r: string) => r.trim())).toEqual(["> Yes", "No", "No, and say why"]);
-  });
-});
-
 test("the pointer moving to another row lights its option, one lit row with the keys; along its row, at rest, or as the popup first shows under it, the keys' lit row holds; a search under a resting pointer keeps its best match lit", () => {
   sized(100, 30, () => {
     const t = term();
@@ -314,11 +278,10 @@ test("the pointer moving to another row lights its option, one lit row with the 
   });
 });
 
-test("a press and a release on one option do what Enter does there: a setting stepped, a palette row run, a question answered; pressed on one row and let go on another, nothing", async () => {
+test("a press and a release on one option do what Enter does there: a setting stepped, a palette row run; pressed on one row and let go on another, nothing", async () => {
   const config = await import("../config/Config.ts");
   const { term_settings } = await import("./Settings.ts");
   const { term_palette } = await import("./Palette.ts");
-  const { term_asks } = await import("./Asks.ts");
   sized(120, 40, () => {
     const t = term();
     term_settings(t, "tps");
@@ -337,36 +300,17 @@ test("a press and a release on one option do what Enter does there: a setting st
     paint(t);
     click(t, row_of(t, "Ctrl+O"), col(t));
     expect([t.choose, t.v.verbose]).toEqual([null, true]);
-    t.v.asks = [{ id: "q1", who: "illi", tool: "Bash", what: "ls", why: "", keep: "" }];
-    term_asks(t);
-    paint(t);
-    t.asking.shown -= 600;
-    click(t, row_of(t, "No"), col(t));
-    expect(t.v.out.map((o: any) => o.msg).filter((m: any) => m.$ === "answer").map((m: any) => [m.ask, m.yes])).toEqual([["q1", false]]);
   });
 });
 
-test("a click outside closes a list and goes no further (no side, no tab, no block); outside a question, nothing; outside the line asked why, back to its question", async () => {
-  const { term_asks } = await import("./Asks.ts");
+test("a click outside closes a list and goes no further (no side, no tab, no block)", () => {
   sized(160, 40, () => {
     const t = term();
     term_chooser(t, "Agent", ["illi", "reviewer"], ["", ""], 0, () => {});
     paint(t);
     expect(t.hits).toEqual([]);
     click(t, 39, 5);
-    expect([t.choose, t.v.out]).toEqual([null, []]);
-    t.v.asks = [{ id: "q1", who: "illi", tool: "Bash", what: "ls", why: "", keep: "" }];
-    term_asks(t);
-    paint(t);
-    t.asking.shown -= 600;
-    click(t, 2, 2);
-    expect([t.choose.title, t.v.out]).toEqual(["Allow Bash?", []]);
-    click(t, row_of(t, "No, and say why"), col(t));
-    paint(t);
-    expect(t.choose.title).toBe("Why not Bash?");
-    click(t, 2, 2);
-    paint(t);
-    expect([t.choose.title, t.v.out]).toEqual(["Allow Bash?", []]);
+    expect([t.choose, t.v.out, t.notices]).toEqual([null, [], []]);
   });
 });
 
@@ -422,9 +366,8 @@ test("a double click on an option picks once, its second press going nowhere onc
   });
 });
 
-test("a report for a box no longer open does nothing: after a new size, before it is painted again; a question answered elsewhere; a question just shown holds a click", async () => {
+test("a report for a box no longer open does nothing: after a new size, before it is painted again", async () => {
   const { term_resize } = await import("./Frame.ts");
-  const { term_asks } = await import("./Asks.ts");
   sized(120, 30, () => {
     const t = term();
     const picked: number[] = [];
@@ -435,17 +378,6 @@ test("a report for a box no longer open does nothing: after a new size, before i
     clearTimeout(t.settle);
     click(t, r, c);
     expect([picked, t.choose.title]).toEqual([[], "Agent"]);
-    t.choose = null;
-    t.v.asks = [{ id: "q1", who: "illi", tool: "Bash", what: "ls", why: "", keep: "" }];
-    term_asks(t);
-    paint(t);
-    const yes = row_of(t, "Yes");
-    click(t, yes, col(t));
-    expect(t.v.out).toEqual([]);
-    t.asking.shown -= 600;
-    t.v.asks = [];
-    click(t, yes, col(t));
-    expect([t.v.out, t.choose]).toEqual([[], null]);
   });
 });
 

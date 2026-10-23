@@ -44,7 +44,7 @@ const GRANTS = [{ grant: "shell=ls", said: "ls", saved: false }, { grant: "shell
 const term = (mode = "auto") => {
   const v = View.view_new();
   v.perm = { mode: mode as any, set: "auto", refused: [...REFUSED] as any, grants: GRANTS, file: DIR + "/permissions.json", broken: "" };
-  return { v, scr: { tty: true, ed: Screen.ed_new() }, choose: null, wait: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], subs: new Map(), seen: { tall: 20 }, due: true, agents: [], profs: ["default"], since: 0 } as any;
+  return { v, scr: { tty: true, ed: Screen.ed_new() }, choose: null, question: null, wait: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], subs: new Map(), seen: { tall: 20 }, due: true, agents: [], profs: ["default"], since: 0 } as any;
 };
 const note = (t: any) => t.notices.at(-1)?.text ?? "";
 const lit  = (t: any) => t.choose.names[t.choose.shown[t.choose.at].k];
@@ -90,7 +90,7 @@ test("Enter on a refused one acts by why: the user's no allowed this session; re
   expect(note(t)).toBe("Allowed this session: git push --force. illi is told it may run it again.");
   term_permissions(t, "r2");
   keys(t, "Enter");
-  expect([t.choose.title, t.choose.names]).toEqual(["Read-only mode refused it", ["Allow just this, this session", "Switch to ask mode"]]);
+  expect([t.choose, t.question.title, t.question.names]).toEqual([null, "Read-only mode refused it", ["Allow just this, this session", "Switch to ask mode"]]);
   keys(t, "Down", "Enter");
   expect(sent(t).at(-1)).toEqual({ $: "mode", mode: "ask" });
   term_permissions(t, "r2");

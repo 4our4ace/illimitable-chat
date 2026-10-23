@@ -102,7 +102,7 @@ test("/login's notice: the link and code either way, 'opening in your browser' w
   const device = ChatGPT.device;
   let grant = () => {};
   ChatGPT.device = async () => ({ url: URL, code: "ABCD-1234", done: new Promise<void>((done) => (grant = done)) });
-  const t: any = { v: View.view_new(), scr: { tty: true, ed: Screen.ed_new() }, choose: null, pane: null, notices: [], due: true, ver: 0, login: null };
+  const t: any = { v: View.view_new(), scr: { tty: true, ed: Screen.ed_new() }, choose: null, question: null, pane: null, notices: [], due: true, ver: 0, login: null };
   const write = process.stdout.write;
   process.stdout.write = (() => true) as any;
   try {

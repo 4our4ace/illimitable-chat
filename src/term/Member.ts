@@ -194,9 +194,9 @@ function member_suspend(): void {
 // the terminal hidden: nothing painted, the status line's command
 // stopped, text chosen, the leader and a press a popup took let go, the
 // pointer's place forgotten (shown again, nothing lights till it moves)
-// and a click's fold waiting given up; a question shown shows anew once
-// this one is shown again, holding Enter and a click again (Popup.ts
-// popup_held), as it pops up then
+// and a click's fold waiting given up; the chat's question shows anew
+// once this one is shown again, holding Enter and a click again
+// (Question.ts question_held), as it comes up then
 function member_rest(t: Term): void {
   WIN!.shown = false;
   member_spin(t);

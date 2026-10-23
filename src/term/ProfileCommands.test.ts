@@ -5,8 +5,9 @@
 // import row asks the archive's path (and a name, if its file gives
 // none) and says what came with the profile. The picker lists every
 // profile, then its new and import rows; the new row asks a name (a
-// reason keeps the box open), then what comes along; Ctrl+R renames and
-// Delete deletes (asked first) another profile, never the default.
+// reason keeps it asked), then what comes along; Ctrl+R renames and
+// Delete deletes (asked first) another profile, never the default; each
+// asked at the input, in the list's place.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -32,7 +33,7 @@ afterAll(() => {
 });
 
 // a terminal with no screen, only its view and notes
-const term = () => ({ v: View.view_new(), scr: { tty: true, ed: Screen.ed_new() }, choose: null, wait: null, pane: null, notices: [], due: true, ver: 0 }) as any;
+const term = () => ({ v: View.view_new(), scr: { tty: true, ed: Screen.ed_new() }, choose: null, question: null, wait: null, pane: null, notices: [], due: true, ver: 0 }) as any;
 const note = (t: any) => t.notices.at(-1)?.text ?? "";
 
 // the last note, once one starting so has come (an export, an import)
@@ -59,18 +60,18 @@ test("the import row asks the archive's path, then a name its file can't give, a
   const t = term();
   term_profile(t, "");
   t.choose.pick(t.choose.names.indexOf("+ import a profile"));
-  expect([t.choose.title, t.choose.ask.hint]).toEqual(["Import a profile", "the archive's path"]);
-  expect(t.choose.ask.done(TMP + "/none.tar.gz")).toBe("No such file.");
-  expect(t.choose.ask.done(TMP + "/illi-profile-default.tar.gz")).toBeNull();
-  expect([t.choose.title, t.choose.find.text, t.choose.foot(-1)]).toEqual(["Name the imported profile", "", "a-z, 0-9, - and _, a letter or digit first"]);
-  expect(t.choose.ask.done("home")).toBeNull();
+  expect([t.choose, t.question.title, t.question.ask.hint]).toEqual([null, "Import a profile", "the archive's path"]);
+  expect(t.question.ask.done(TMP + "/none.tar.gz")).toBe("No such file.");
+  expect(t.question.ask.done(TMP + "/illi-profile-default.tar.gz")).toBeNull();
+  expect([t.question.title, t.question.find.text, t.question.foot(-1)]).toEqual(["Name the imported profile", "", "a-z, 0-9, - and _, a letter or digit first"]);
+  expect(t.question.ask.done("home")).toBeNull();
   const said = await noted(t, "Imported");
   expect(said).toContain("Its agents, commands, skills and RULES.md came as they were");
   expect(said.length).toBeLessThanOrEqual(160);
   expect(fs.existsSync(DIR + "/profiles/home/config.json")).toBe(true);
 });
 
-test("the picker lists every profile, then its new and import rows; Delete asks first, never on the default", () => {
+test("the picker lists every profile, then its new and import rows; Delete asks first, at the input in its place, never on the default", () => {
   const t = term();
   term_profile(t, "");
   expect(t.choose.names).toEqual(["default", "home", "+ new profile", "+ import a profile"]);
@@ -79,24 +80,24 @@ test("the picker lists every profile, then its new and import rows; Delete asks 
   expect(t.choose.keys(0, "Delete")).toBe(true);
   expect(note(t)).toMatch(/^The default profile is illi's own folder .* and can't be deleted\.$/);
   t.choose.keys(1, "Delete");
-  expect(t.choose.title).toBe("Delete profile home?");
+  expect([t.choose, t.question.title, t.question.names]).toEqual([null, "Delete profile home?", ["Keep it", "Delete it"]]);
 });
 
-test("the new row asks a name, a reason keeping the box open, then what comes along", () => {
+test("the new row asks a name at the input, a reason keeping it there, then what comes along, asked there too", () => {
   const t = term();
   term_profile(t, "");
   t.choose.pick(t.choose.names.indexOf("+ new profile"));
-  expect([t.choose.title, t.choose.ask.hint, t.choose.find.text]).toEqual(["New profile", "its name", ""]);
+  expect([t.question.title, t.question.ask.hint, t.question.find.text]).toEqual(["New profile", "its name", ""]);
   term_grab(t, "Enter");
-  expect([t.choose?.title, t.choose?.foot(-1)]).toEqual(["New profile", "Type its name first."]);
-  Object.assign(t.choose.find, { text: "Home", pos: 4 });
+  expect([t.question?.title, t.question?.foot(-1)]).toEqual(["New profile", "Type its name first."]);
+  Object.assign(t.question.find, { text: "Home", pos: 4 });
   term_grab(t, "Enter");
-  expect(t.choose.foot(-1)).toBe("There's a profile home already.");
-  Object.assign(t.choose.find, { text: "work", pos: 4 });
+  expect(t.question.foot(-1)).toBe("There's a profile home already.");
+  Object.assign(t.question.find, { text: "work", pos: 4 });
   term_grab(t, "Enter");
-  expect(t.choose.title).toBe("New profile work");
-  expect(t.choose.names).toEqual(["Fresh chat", "With this chat"]);
-  expect(t.choose.about[1]).toBe("this chat moves there; default starts empty");
+  expect([t.choose, t.question.title]).toEqual([null, "New profile work"]);
+  expect(t.question.names).toEqual(["Fresh chat", "With this chat"]);
+  expect(t.question.about[1]).toBe("this chat moves there; default starts empty");
 });
 
 test("Ctrl+R renames another profile, its old name to start from; Delete then deletes it, asked first", async () => {
@@ -105,18 +106,18 @@ test("Ctrl+R renames another profile, its old name to start from; Delete then de
   t.choose.keys(0, "Ctrl+R");
   expect(note(t)).toMatch(/^The default profile is illi's own folder .* and keeps its name\.$/);
   t.choose.keys(1, "Ctrl+R");
-  expect([t.choose.title, t.choose.find.text]).toEqual(["Rename profile home", "home"]);
-  expect(t.choose.ask.done("default")).toContain("illi's own folder");
-  expect(t.choose.ask.done("house")).toBeNull();
+  expect([t.choose, t.question.title, t.question.find.text]).toEqual([null, "Rename profile home", "home"]);
+  expect(t.question.ask.done("default")).toContain("illi's own folder");
+  expect(t.question.ask.done("house")).toBeNull();
   await noted(t, "Renamed");
   expect([note(t), fs.existsSync(DIR + "/profiles/house")]).toEqual(["Renamed profile home to house.", true]);
   term_profile(t, "");
   t.choose.keys(1, "Delete");
-  t.choose.pick(0);
+  t.question.pick(0);
   expect([note(t), fs.existsSync(DIR + "/profiles/house")]).toEqual(["Kept profile house.", true]);
   term_profile(t, "");
   t.choose.keys(1, "Delete");
-  t.choose.pick(1);
+  t.question.pick(1);
   await noted(t, "Deleted");
   expect([note(t), fs.existsSync(DIR + "/profiles/house")]).toEqual(["Deleted profile house.", false]);
 });
