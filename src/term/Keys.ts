@@ -13,6 +13,7 @@ import { term_after, term_chooser_find, term_command, term_commands, term_main, 
 import * as config from "../config/Config.ts";
 import { Custom } from "../config/Custom.ts";
 import { term_draw } from "./Frame.ts";
+import { member_others } from "./Member.ts";
 import { term_note, term_toast, term_unnote } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import * as Screen from "../ui/Screen.ts";
@@ -327,13 +328,18 @@ export function term_clear(t: Term, key: string): void {
 
 // what a quit stops besides a turn, said (nothing, or a view of another
 // terminal's chat, whose quit stops nothing: ""): the background jobs,
-// gone for good, and the subagents at work, which go on at the next start
+// gone for good, and the subagents at work, which go on at the next start;
+// each profile open hidden in this window at work or running jobs, which
+// the quit ends too (those at rest end without a word: nothing of theirs
+// is lost)
 function term_stops(t: Term): string {
   const jobs = t.chat === null ? 0 : t.v.background.length;
   const subs = t.chat === null ? 0 : t.v.agents.length;
+  const busy = (n: number) => n + (n === 1 ? " background job" : " background jobs");
   const said = [
-    jobs === 0 ? "" : "stops " + jobs + (jobs === 1 ? " background job" : " background jobs") + " (/background)",
+    jobs === 0 ? "" : "stops " + busy(jobs) + " (/background)",
     subs === 0 ? "" : subs + (subs === 1 ? " subagent pauses" : " subagents pause") + " till the next start",
+    ...member_others().filter((o) => o.working || o.jobs > 0).map((o) => "also ends profile " + o.profile + " (" + [o.working ? "at work" : "", o.jobs > 0 ? busy(o.jobs) : ""].filter((x) => x !== "").join(", ") + ")"),
   ];
   return said.filter((x) => x !== "").join(" · ");
 }

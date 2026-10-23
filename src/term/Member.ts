@@ -15,8 +15,9 @@
 // jobs, MCP servers, hooks and plugins, a question waiting for the person.
 // Shown again (`show`), it paints whole; shown by a switch, it is kept as
 // the profile used last (anywhere, and in this project). Shown, it hears
-// of the others open (`roster`): what the side panel and a quit's warning
-// say of them, and a note as one asks something or is done. The person's
+// of the others open (`roster`): what the side panel (a spinner moving
+// while one works), the title and a quit's warning say of them, and a
+// note as one asks something or is done. The person's
 // quit goes to the window first (`quit`), which ends the others; `end`
 // quits this one as a quit does, once (a quit under way goes on; a second
 // Ctrl+D still quits at once). Lines said after leaving the screen go to
@@ -28,7 +29,7 @@ import { term_note } from "./Notices.ts";
 import * as Profiles from "../config/Profiles.ts";
 import * as Screen from "../ui/Screen.ts";
 import { status_end, status_set } from "./Status.ts";
-import { term_draw } from "./Frame.ts";
+import { term_draw, term_side_again } from "./Frame.ts";
 import { term_quit, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 import { VERSION, wire_env, wire_env_parse, wire_frame, type Down, type How, type Open, type State, type Up } from "./Wire.ts";
@@ -47,6 +48,11 @@ type Win = { nonce: string; how: How; shown: boolean; open: Open[]; t: Term | nu
 
 // in a window: this illi's end of it (null: not in one)
 export const WIN: Win | null = member_open();
+
+// how often the side's spinner of a profile at work hidden here moves
+// (ms: as the subagents'); its clock, while one does
+const SPIN = 160;
+let spin: Timer | undefined;
 
 // Member
 // ======
@@ -179,6 +185,7 @@ function member_suspend(): void {
 // the terminal hidden (member_hide)
 function member_rest(t: Term): void {
   WIN!.shown = false;
+  member_spin(t);
   status_end(t);
   t.login?.abort();
   t.sel  = null;
@@ -198,6 +205,7 @@ function member_roster(open: Open[], note: string): void {
   if (t === null) {
     return;
   }
+  member_spin(t);
   for (const o of open) {
     const before = was.find((p) => p.profile === o.profile);
     if (o.asks && before?.asks !== true) {
@@ -210,6 +218,21 @@ function member_roster(open: Open[], note: string): void {
     term_note(t, note);
   }
   term_draw(t);
+}
+
+// while this one is shown and another open here works, the side's
+// spinner for it moves: the side's rows written again alone, each SPIN
+// (none while a paint is due, or text chosen, the leader or a picker
+// would need a whole one)
+function member_spin(t: Term): void {
+  const on = WIN!.shown && WIN!.open.some((o) => o.working && !o.asks);
+  if (on && spin === undefined) {
+    spin = setInterval(() => !t.due && t.ruled !== null && t.ruled.side !== null && t.sel === null && !t.lead && t.choose === null && term_side_again(t), SPIN);
+    spin.unref?.();
+  } else if (!on && spin !== undefined) {
+    clearInterval(spin);
+    spin = undefined;
+  }
 }
 
 // this one's state, to the window, if it changed
