@@ -58,8 +58,10 @@ type State = { res: any; error: any; use: any; items: any[] };
 const URL    = "https://chatgpt.com/backend-api/codex/responses";
 // the account's plan and its rate limits, as Codex's /status asks them
 const USAGE  = "https://chatgpt.com/backend-api/wham/usage";
-// how often the login file is looked at for a change of account (ms)
+// how often the login file is looked at for a change of account (ms),
+// and how long a catalog that didn't answer waits to be asked again
 const FOLLOW = 5000;
+const RELIST = 300e3;
 // the models' list, as a Codex client this new asks it
 const LIST   = "https://chatgpt.com/backend-api/codex/models?client_version=1.0.0";
 const AUTH   = "https://auth.openai.com";
@@ -105,9 +107,10 @@ let record: { key: string; tier: string; limits: Limit[]; state?: "asking" | "to
 let watcher: () => void = () => {};
 let logged = false;
 let following: ReturnType<typeof setInterval> | undefined;
-// the account whose catalog was last asked, the ask running, and the
-// account whose catalog last answered
+// the account whose catalog was last asked, and when; the ask running;
+// the account whose catalog last answered
 let asked = "";
+let tried = 0;
 let listing: Promise<string[] | null> | null = null;
 let answered = "";
 
@@ -166,14 +169,16 @@ export namespace ChatGPT {
   // the login file followed while illi runs (each FOLLOW): an account
   // whose plan nothing told yet (a change of account, seen here or by a
   // request's token) asks it (usage), and one whose catalog wasn't asked
-  // yet asks that (models)
+  // yet asks that (models), again each RELIST while it doesn't answer
+  // (offline at the start)
   export function follow(): void {
     following ??= setInterval(() => {
       ChatGPT.sync();
       if (record === null && ChatGPT.key() !== "") {
         void ChatGPT.usage();
       }
-      if (asked !== ChatGPT.key() && ChatGPT.key() !== "") {
+      const key = ChatGPT.key();
+      if (key !== "" && (asked !== key || (answered !== key && listing === null && Date.now() - tried > RELIST))) {
         void ChatGPT.models();
       }
     }, FOLLOW);
@@ -488,7 +493,7 @@ export namespace ChatGPT {
   // The labels new to illi; null: not told (no login, offline, the
   // account changed meanwhile: the list as it was stays)
   export function models(): Promise<string[] | null> {
-    asked = ChatGPT.key();
+    [asked, tried] = [ChatGPT.key(), Date.now()];
     listing ??= ChatGPT.catalog().finally(() => (listing = null));
     return listing;
   }
