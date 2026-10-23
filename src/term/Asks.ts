@@ -31,7 +31,8 @@ const SEND = "Enter send · Shift+Tab back · Esc skip";
 // illi's questions, as the form asks them
 type Asked = Question & { queries: Query[] };
 
-// the question first asked, shown till it is answered or gone
+// the question first asked, shown till it is answered or gone (while
+// the leader waits for its key, after it)
 export function term_asks(t: Term): void {
   const q = t.v.asks[0] ?? null;
   if (t.asking !== null && t.asking.id !== q?.id) {
@@ -52,7 +53,7 @@ export function term_asks(t: Term): void {
       return term_answer(t, q, false, false, "");
     }
   }
-  if (!t.asking.done && t.asking.form === null && t.choose === null) {
+  if (!t.asking.done && t.asking.form === null && t.choose === null && !t.lead) {
     term_ask_open(t, q);
   }
 }
@@ -210,7 +211,7 @@ function term_ask_open(t: Term, q: Question): void {
   const names = ["Yes", ...(keep === "" ? [] : ["Yes, and don't ask again for " + keep + " in this project"]), "No", "No, and say why"];
   const [always, no, why] = keep === "" ? [-1, 1, 2] : [1, 2, 3];
   const keys  = (_k: number, key: string) => {
-    if (key !== "Esc" && key !== "Ctrl+C") {
+    if (key !== "Esc") {
       return false;
     }
     t.choose = null;

@@ -154,9 +154,11 @@ export type Term = {
 };
 
 // a popup as last painted (Popup.ts): what it was painted for (the
-// picker), its place and size, and what each of its rows stands for, top
-// first (null: nothing to point at: its frame, a head, a blank)
-export type PopBox = { of: object; row: number; col: number; w: number; h: number; rows: Array<Target | null> };
+// picker), its place and size, what each of its rows stands for, top
+// first (null: nothing to point at: its frame, a head, a blank); its
+// list: the box's row it starts at, its lines, the entries they show;
+// the lines leading it: how many show, of how many
+export type PopBox = { of: object; row: number; col: number; w: number; h: number; rows: Array<Target | null>; list: number; lines: number; tall: number; ahead: number; lead: number };
 
 // what a row of a popup stands for: one of its options (by its index
 // among the names)
@@ -219,7 +221,8 @@ type Hit = { row: number; col: number; to: number; run: () => void };
 // aside: what shows at an option's right end, each (its keys, its value);
 // heads: each option's group, a head over its first while nothing is
 // searched; stays: a question illi asks (its box may take all but two
-// of the screen's rows); past: the lines leading it scrolled past;
+// of the screen's rows); key: the key that opened it, which closes it
+// (Ctrl+P's); past: the lines leading it scrolled past;
 // lead: lines over the options (a question's what and why), wrapped;
 // detail: lines under them of the lit option k, made for w columns (the
 // model picker's autocompact gauge)
@@ -232,6 +235,7 @@ export type Chooser = {
   aside? : string[];
   heads? : string[];
   stays? : boolean;
+  key?   : string;
   past?  : number;
   lead?  : Paint.Line[];
   here   : number;
