@@ -100,20 +100,25 @@ asked.
 The question
 ------------
 
-It shows in the screen's middle, the rest of the screen dimmed, every
-answer whole:
+It takes the input's place, the chat over it as it was, nothing dimmed;
+what you were typing comes back once you answer:
 
 ```
-╭─ Allow shell? · ↑↓ Enter · Esc ─────────────────────────────────────────────────╮
-│ git push --force origin main                                                    │
-│ Why: git push --force origin main rewrites or deletes history                   │
-│ > Yes                                                                           │
-│   Yes, and don't ask again for git push --force origin main in this project     │
-│   No                                                                            │
-│   No, and say why                                                               │
-╰─ Esc no ────────────────────────────────────────────────────────────────────────╯
+── Allow shell? · ↑↓ Enter · Esc no ───────────────────────────────────────────
+Why: git push --force origin main rewrites or deletes history
+git push --force origin main
+> Yes
+  Yes, and don't ask again for git push --force origin main in this project
+  No
+  No, and say why
+───────────────────────────────────────────────────────────────────────────────
+● illi                                                                auto mode
 ```
 
+- Why it asks comes first, then what it would do, a command by its
+  lines. One too long for half the screen is cut, a dim line saying how
+  much more; the wheel over it, or PgUp and PgDn, scroll it. The
+  answers always show.
 - "Don't ask again" says what it keeps, for this project: a family
   (`git push *`) for routine risks, the exact command for dangerous
   ones, a folder for files outside the project (the file itself in your
@@ -124,12 +129,14 @@ answer whole:
   (`> log`), and the folder a `cd` moved it to (`cd /x && ...`). One
   whose words are filled in as it runs (`$x`, `$(...)`), or whose input
   comes from elsewhere (a pipe, a file, a heredoc), is kept as the whole
-  command you saw.
+  command you saw. The answer names it on one line; one too long for
+  three shows how it starts and how it ends.
 - No tells illi you refused, with your words if you say why; Esc is No.
   A subagent's question names it.
-- A click picks as Enter does; a click outside leaves the question
-  open. For half a second after it appears it takes no Enter or click,
-  so a key meant for the chat doesn't answer it; Esc works at once.
+- A click picks as Enter does; a click outside never answers it (the
+  chat scrolls, text is selected and copied as ever). For half a second
+  after it appears it takes no Enter or click, so a key meant for the
+  chat doesn't answer it; Esc works at once.
 - With no one at the screen (a pipe), a call that would be asked is
   refused, saying so.
 

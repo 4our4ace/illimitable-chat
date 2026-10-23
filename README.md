@@ -94,8 +94,8 @@ flowchart TD
   summarized, so illi finds any of it by search or zoom. `/tree`
   writes yours as a web page into the current folder.
 - **Tools.** Shell, file edits, subagents, a to-do list, MCP servers,
-  questions with options you pick in a popup, your answers kept in the
-  chat.
+  questions with options you pick at the input, your answers kept in
+  the chat.
   `/goal <message>` keeps it working until the goal is met.
 - **Drawn replies.** Mermaid diagrams, code highlighted in 40 languages
   and boxed tables, in one of 15 palettes or your terminal's own colors.
