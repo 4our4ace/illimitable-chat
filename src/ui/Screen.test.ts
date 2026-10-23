@@ -8,10 +8,13 @@
 // each block's lines are marked. A word finds options by name, then by
 // a word of what they do, then by its letters. The window's title, written as it
 // changes, put back as illi's goes. In a window (Window.ts), frames in
-// the input are heard, never typed, however the reads cut them; hidden,
-// the screen writes nothing; shown, it says it's up, asks the kitty flags
-// and the background, then writes every row; Ctrl+Z goes to the window,
-// leaving writes nothing, and the PTY's end tells the window gone.
+// the input are heard, never typed, however the reads cut them (one
+// written between two reads of a key or a paste leaves them whole; one
+// cut is awaited however slow); keys reaching a hidden screen, or read
+// after one that hid it, are dropped; hidden, the screen writes nothing;
+// shown, it says it's up, asks the kitty flags and the background, then
+// writes every row; Ctrl+Z goes to the window, leaving writes nothing,
+// and the PTY's end tells the window gone.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -731,6 +734,43 @@ test("in a window, the window's frames are heard, never typed or pressed (no Alt
   const { scr, heard } = windowed();
   Screen.screen_feed(scr, wire_frame({ $: "end" }, "f".repeat(32)));
   expect(heard).toEqual([]);
+});
+
+test("in a window, a frame the window wrote between two reads of a key or a paste's end is heard, the key and the paste kept whole", () => {
+  const roster = wire_frame({ $: "roster", open: [] }, NONCE);
+  const { scr, heard, keys } = windowed();
+  Screen.screen_feed(scr, "x\x1b[200~pasted\x1b[20");
+  Screen.screen_feed(scr, roster + "1~z\x1b[5");
+  Screen.screen_feed(scr, roster + "~");
+  expect([heard.length, scr.ed.text, keys]).toEqual([2, "xpastedz", ["PgUp"]]);
+});
+
+test("in a window, a frame cut by a read is awaited however slow its rest (the screen held up), never typed", async () => {
+  const show = wire_frame({ $: "show" }, NONCE);
+  const { scr, heard } = windowed();
+  Screen.screen_feed(scr, show.slice(0, 50));
+  await Bun.sleep(1100);
+  Screen.screen_feed(scr, show.slice(50));
+  expect([heard, scr.ed.text]).toEqual([[{ $: "show" }], ""]);
+});
+
+test("in a window, keys read after one that hides the screen (a switch typed ahead) are dropped, never typed or pressed", () => {
+  const { scr, keys } = windowed();
+  scr.on = (k) => (k === "Enter" ? Screen.screen_hide(scr) : k !== "" && keys.push(k));
+  Screen.screen_feed(scr, "/profile work\rhello\r\x03");
+  expect([scr.ed.text, keys, scr.rest]).toEqual(["/profile work", [], ""]);
+});
+
+test("in a window, keys reaching a hidden screen (sent as it hid) are dropped, never typed or pressed, a lone Esc left too; frames still heard", async () => {
+  const { scr, heard, keys } = windowed();
+  Screen.screen_hide(scr);
+  Screen.screen_feed(scr, "hello\r\x03\x1b[200~p\x1b[201~\x1b");
+  await Bun.sleep(80);
+  Screen.screen_feed(scr, wire_frame({ $: "show" }, NONCE));
+  expect([heard, keys, scr.ed.text]).toEqual([[{ $: "show" }], [], ""]);
+  scr.hidden = false;
+  Screen.screen_feed(scr, "k");
+  expect(scr.ed.text).toBe("k");
 });
 
 test("in a window, a hidden screen writes nothing; shown, it says it's up, asks the kitty flags and the background, then writes every row", () => {

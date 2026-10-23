@@ -5,8 +5,9 @@
 // speaking the wire: a member runs on a PTY of the terminal's size and
 // follows its resizes; a switch starts the other profile, and back shows
 // the first again; a quit ends both and the window exits with the shown
-// one's code, the modes off; a hangup of the window ends every member;
-// the window killed, no member outlives it.
+// one's code, the modes off; a 1 MB paste reaches the member once, whole;
+// a hangup of the window ends every member; the window killed, no member
+// outlives it.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -22,7 +23,8 @@ afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
 // a member: says hello and up, then its profile and size; its size again
 // on each resize; the others open on each roster; keys: s hides to work,
-// b back to default, q quits (exit code 3); `end` exits 0, `show` shows
+// b back to default, q quits (exit code 3), the bytes of a paste counted
+// once it ends; `end` exits 0, `show` shows
 fs.writeFileSync(FAKE, `
 import * as fs from "node:fs";
 import { wire_cut, wire_env_parse, wire_frame } from ${JSON.stringify(WIRE)};
@@ -36,6 +38,7 @@ const show = () => { say({ $: "up" }); process.stdout.write("member " + profile 
 show();
 process.stdout.on("resize", () => process.stdout.write("size " + profile + " " + process.stdout.columns + "x" + process.stdout.rows + "\\n"));
 let carry = "";
+let pasted = 0;
 const buf = Buffer.alloc(4096);
 const next = () => fs.read(0, buf, 0, 4096, null, (err, n) => {
   if (err || n === 0) process.exit(5);
@@ -53,6 +56,11 @@ const next = () => fs.read(0, buf, 0, 4096, null, (err, n) => {
     } else if (part === "q") {
       say({ $: "quit" });
       setTimeout(() => process.exit(3), 50);
+    } else {
+      pasted += part.length;
+      if (part.endsWith("\\x1b[201~")) {
+        process.stdout.write("pasted " + pasted + "\\n");
+      }
     }
   }
   next();
@@ -113,6 +121,19 @@ test("a member runs on a PTY of the terminal's size and follows it; a switch sta
   expect(await w.proc.exited).toBe(3);
   expect(w.out().endsWith(MODES_END)).toBe(true);
   expect(await gone(work)).toBe(true);
+  w.proc.terminal!.close();
+});
+
+test("a 1 MB paste reaches the member shown once, whole (the PTY takes less at a time: the rest is queued, never written again)", async () => {
+  const w = start();
+  expect(await w.seen("member default")).toBe(true);
+  const paste = "\x1b[200~" + "x".repeat(1000000) + "\x1b[201~";
+  w.type(paste);
+  expect(await w.seen("pasted " + paste.length)).toBe(true);
+  await Bun.sleep(200);
+  expect(w.out().split("pasted ").length - 1).toBe(1);
+  w.proc.kill("SIGHUP");
+  await w.proc.exited;
   w.proc.terminal!.close();
 });
 

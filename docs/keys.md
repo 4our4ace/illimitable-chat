@@ -30,7 +30,7 @@ Chat
 | `/export` | save this project's memory as ./illi-memory.json |
 | `/tree` | save this project's whole memory tree as ./illi-tree.html |
 | Ctrl+L | draw the screen again |
-| Ctrl+Z | back to the shell, illi's work going on (in every profile open in this terminal); fg brings it back |
+| Ctrl+Z | back to the shell, illi's work going on (in every profile open in this terminal; alone, with `ILLI_WINDOW=off`, it waits); fg brings it back |
 | `/help` | this list |
 
 Scroll

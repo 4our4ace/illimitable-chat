@@ -4,17 +4,19 @@
 // that owns it, every profile's illi under it on a PTY of its own). The
 // window names its wire (Wire.ts) and how this one starts in ILLI_WINDOW,
 // taken out of the environment as this loads, so no tool, hook or MCP
-// server inherits it (put back for a restart in place: member_env).
+// server inherits it (put back for a restart in place: member_env; and
+// so is `off`, which runs illi alone).
 //
 // This one says who it is as it starts (hello), and its state (a question
 // waits, at work, its background jobs, whether it holds its chat) each
 // time it changes. Hidden (member_hide: a switch; member_suspend: Ctrl+Z,
 // the window stopping), it paints nothing (Screen.ts, and no paint is
-// even laid out: Frame.ts term_draw) and runs no status line command; a
-// switch lets a device login waiting go too (its code is on the screen
-// left; Ctrl+Z keeps it, for a sign-in in the shell meanwhile). All else
-// runs on: its turn, subagents,
-// jobs, MCP servers, hooks and plugins, a question waiting for the person.
+// even laid out: Frame.ts term_draw), takes no keys (any sent as it hid
+// are dropped) and runs no status line command; a switch lets a device
+// login waiting go too (its code is on the screen left; Ctrl+Z keeps it,
+// for a sign-in in the shell meanwhile). All else runs on: its turn,
+// subagents, jobs, MCP servers, hooks and plugins, a question waiting for
+// the person.
 // Shown again (`show`), it paints whole; shown by a switch, it is kept as
 // the profile used last (anywhere, and in this project). Shown, it hears
 // of the others open (`roster`): what the side panel (a spinner moving
@@ -48,7 +50,10 @@ type Win = { nonce: string; how: How; shown: boolean; open: Open[]; t: Term | nu
 // Constants
 // =========
 
-// in a window: this illi's end of it (null: not in one)
+// ILLI_WINDOW as this illi found it (taken out of the environment as it
+// loads); in a window: this illi's end of it (null: not in one, as with
+// none or `off`)
+const FOUND = process.env.ILLI_WINDOW;
 export const WIN: Win | null = member_open();
 
 // how often the side's spinner of a profile at work hidden here moves
@@ -73,10 +78,12 @@ function member_send(msg: Up): void {
   }
 }
 
-// ILLI_WINDOW again, for this illi run again in place (a restart: shown
-// or hidden as it is now)
+// ILLI_WINDOW again, for this illi run again in place (a restart): in a
+// window, shown or hidden as it is now; alone, as found, so one started
+// with ILLI_WINDOW=off stays alone (unset, the execve would make it a
+// window)
 export function member_env(): Record<string, string> {
-  return WIN === null ? {} : { ILLI_WINDOW: wire_env(WIN.nonce, WIN.shown ? "shown" : "hidden") };
+  return WIN !== null ? { ILLI_WINDOW: wire_env(WIN.nonce, WIN.shown ? "shown" : "hidden") } : FOUND === undefined ? {} : { ILLI_WINDOW: FOUND };
 }
 
 // who this is, to the window, as it starts

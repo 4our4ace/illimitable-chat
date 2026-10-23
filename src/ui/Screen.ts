@@ -31,9 +31,11 @@
 // queries and frames (Wire.ts). It says it is up as it starts and as
 // it's shown again (asking the kitty flags and the background then, so
 // the answers reach the screen that uses them); hidden, it paints
-// nothing and keeps reading (only frames come then); frames in its input
-// are the window's, read before keys, a paste's too; Ctrl+Z goes to the
-// window; the PTY lost (its read fails or ends) means the window is gone.
+// nothing and keeps reading (only frames count then: keys that reach it,
+// sent as it hid, are dropped); frames in its input are the window's,
+// cut out before keys wherever they fall (in a key, a paste) and awaited
+// however slow; Ctrl+Z goes to the window; the PTY lost (its read fails
+// or ends) means the window is gone.
 
 import * as fs from "node:fs";
 import { StringDecoder } from "node:string_decoder";
@@ -42,7 +44,7 @@ import * as Md from "./Md.ts";
 import { ASK, BLINK, CLEAR, FLAGS_ASK, HIDE, MODES_OFF, MODES_ON, PASTE_OFF, PASTE_ON, SHOW, STEADY, SYNC_OFF, SYNC_ON, TITLE_AGAIN, TITLE_END, TITLE_NONE, TITLE_POP, TITLE_SET } from "./Modes.ts";
 import * as Paint from "./Paint.ts";
 import * as Theme from "./Theme.ts";
-import { wire_cut, wire_take } from "../term/Wire.ts";
+import { CAP, wire_cut, wire_head, wire_take } from "../term/Wire.ts";
 
 // Types
 // =====
@@ -578,24 +580,52 @@ export function screen_copy(text: string): void {
 // -----
 
 // each key read, then "" (the input may have changed), unless the
-// pointer only moved
+// pointer only moved. In a window, the window's frames first
+// (screen_wired), and no key once hidden (a switch or Ctrl+Z read here:
+// those after it were meant for the profile shown next); what's left
+// unread is awaited as a paste is while it is a frame's start (up to
+// Wire's CAP), or while hidden (no keys come then)
 export function screen_feed(scr: Screen, data: string): void {
   data = scr.rest + data;
+  let cut = "";
+  if (scr.win !== undefined) {
+    [data, cut] = screen_wired(scr, scr.win, data);
+  }
   const moved = MOVED.test(data);
   let n = 1;
-  while (data !== "" && n > 0) {
+  while (data !== "" && n > 0 && scr.hidden !== true) {
     n = screen_key(scr, data);
     data = data.slice(n);
   }
-  scr.rest = data;
+  const rest = scr.rest = (scr.hidden === true ? "" : data) + cut;
   clearTimeout(scr.alone);
-  if (scr.tty && data.startsWith("\x1b") && !data.startsWith(PASTE_ON)) {
-    scr.alone = setTimeout(() => screen_alone(scr), data.length <= 2 ? ALONE : AWAIT);
+  const framed = scr.win !== undefined && (scr.hidden === true || (rest.startsWith(wire_head(scr.win.nonce)) && rest.length <= CAP));
+  if (scr.tty && rest.startsWith("\x1b") && !rest.startsWith(PASTE_ON) && !framed) {
+    scr.alone = setTimeout(() => screen_alone(scr), rest.length <= 2 ? ALONE : AWAIT);
     scr.alone.unref?.();
   }
   if (!moved) {
     scr.on("");
   }
+}
+
+// in a window, the window's frames cut out of the input wherever they
+// fall (it writes one between two reads of the terminal, which may end
+// inside a key or a paste) and heard, before the keys around them; keys
+// reaching a hidden screen dropped (sent as it hid, they were meant for
+// the profile shown next); what's left: the keys, and a frame cut by the
+// read's end (or its start, or an Esc), awaited
+function screen_wired(scr: Screen, win: Windowed, data: string): [keys: string, cut: string] {
+  const { parts, carry } = wire_cut("", data, win.nonce);
+  let keys = "";
+  for (const part of parts) {
+    if (typeof part !== "string") {
+      win.heard(part, scr);
+    } else if (scr.hidden !== true) {
+      keys += part;
+    }
+  }
+  return [keys, carry];
 }
 
 // a sequence's start left unread (screen_feed), nothing more come for
@@ -773,19 +803,14 @@ export function screen_leave(scr: Screen): Promise<void> {
   return new Promise((done) => process.stdout.write(scr.tty ? screen_off(scr) : "", () => done()));
 }
 
-// a paste, typed whole (the window's frames in it heard, not typed)
+// a paste, typed whole (in a window, the window's frames in it are cut
+// out first: screen_wired)
 function screen_paste(scr: Screen, data: string): number {
   const end = data.indexOf(PASTE_OFF);
   if (end < 0) {
     return 0;
   }
-  let text = data.slice(PASTE_ON.length, end);
-  if (scr.win !== undefined) {
-    const { parts, carry } = wire_cut("", text, scr.win.nonce);
-    parts.forEach((p) => typeof p !== "string" && scr.win!.heard(p, scr));
-    text = parts.filter((p) => typeof p === "string").join("") + carry;
-  }
-  text = text.replace(/\r\n?/g, "\n");
+  const text = data.slice(PASTE_ON.length, end).replace(/\r\n?/g, "\n");
   if (scr.paste === undefined) {
     ed_type(scr.ed, text);
   } else {

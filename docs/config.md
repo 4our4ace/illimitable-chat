@@ -53,6 +53,7 @@ variables:
 | `ILLI_DIR`     | illi's folder, instead of `~/.illi`                   |
 | `ILLI_AGENTS_DIR` | the folder shared with other agents, whose `skills/` illi loads, instead of `~/.agents` |
 | `ILLI_PROFILE` | the profile to start in                               |
+| `ILLI_WINDOW`  | `off`: illi runs alone on a terminal, not under a window, so a profile switch quits it and starts it again in the other, never while it works ([Profiles](profiles.md)) |
 | `ILLI_CLAUDE`  | the `claude` program the `claude-code` vendor runs    |
 | `BROWSER`      | what opens `/login`'s page: programs `:`-separated, tried in turn (`%s` is the link, else it goes last), before the system's; `none`: never open one |
 | `ILLI_INSTALL`, `ILLI_SOURCE` | where the installer puts illi; `1`: build from the source |
