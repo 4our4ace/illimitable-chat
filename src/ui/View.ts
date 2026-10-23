@@ -144,8 +144,8 @@ export type State = {
 
 // fold: the tops shown (null: not folded); nodes and whole: the summaries
 // ("id+n") and messages known; open: the blocks opened (true) or shut by
-// hand; acts: the runs of work opened (by their first message's id),
-// verbose: all of them; minds: the thoughts after each message; pages: the agents' asked
+// hand; acts: the runs of work opened or shut by hand, against the
+// mode, by their key (row_key); verbose: every run open (Ctrl+O); minds: the thoughts after each message; pages: the agents' asked
 // for; page: the one shown (null: illi's); made: the characters the
 // models streamed (replies, thoughts, calls) since work began; flow:
 // the last RATE ms of them (when, how many); the Link's: acts not
@@ -248,7 +248,7 @@ export type Row =
   | { $: "Box"; id: number; n: number; text: string; rows: Row[] }                              // a block open: its bar
   | { $: "Act"; id: number; text: string; open: boolean; rows: Row[] }                         // a run of work (ACTIVITY), from message id: what was done, its rows if open
   | { $: "Rule"; id: number; text: string; open: boolean; rows: Row[] }                        // a recap (/compact), message id: a line across the chat naming it, the recap's rows if open
-  | { $: "Msg"; id: number | null; kind: Kind; who: string; text: string; body: Md.Block[]; call: Call.Call | null; images: string[] } // a message whole: 0x (who: its speaker or "↳ result", named on its block; body: its blocks, none for illi's (drawn from its text); call: a tool call's, drawn as Call.ts reads it)
+  | { $: "Msg"; id: number | null; kind: Kind; who: string; text: string; body: Md.Block[]; call: Call.Call | null; images: string[]; after?: number } // a message whole: 0x (who: its speaker or "↳ result", named on its block; body: its blocks, none for illi's (drawn from its text); call: a tool call's, drawn as Call.ts reads it; after: a thought's, the message it follows)
   | { $: "Cap"; text: string }                                                                  // a line about the page
 
 // a tab: its page (null: the chat), whether it's shown, its mark, its
@@ -588,17 +588,25 @@ export function view_acts(v: View, rows: Row[]): Row[] {
     if (row_recap(row) && last?.$ === "Rule") {
       last.rows.push(row);
     } else if (row_recap(row) && row.$ !== "Cap" && row.id !== null) {
-      out.push({ $: "Rule", id: row.id, text: RULE, open: v.verbose || v.acts.has(row.id), rows: [row] });
+      out.push({ $: "Rule", id: row.id, text: RULE, open: v.verbose !== v.acts.has(row.id), rows: [row] });
     } else if (!row_busy(row)) {
       out.push(row);
     } else if (last?.$ === "Act") {
       last.rows.push(row);
     } else {
-      const id = row.$ === "Cap" || row.id === null ? -1 : row.id;
-      out.push({ $: "Act", id, text: "", open: v.verbose || v.acts.has(id), rows: [row] });
+      const id = row_key(row);
+      out.push({ $: "Act", id, text: "", open: v.verbose !== v.acts.has(id), rows: [row] });
     }
   }
   return out.map((row) => (row.$ === "Act" ? { ...row, text: act_text(row.rows) } : row));
+}
+
+// the key of a run of work led by a row: its message's id; a thought's
+// (no id: never logged), from the message it follows, below -1 (-2 after
+// message 0), so it holds as the run's first call arrives and no two
+// runs share one
+function row_key(row: Row): number {
+  return row.$ === "Cap" ? -1 : row.id !== null ? row.id : row.$ === "Msg" && row.after !== undefined ? -2 - row.after : -1;
 }
 
 // whether a row is a recap's, whole or summed up
@@ -653,6 +661,14 @@ function act_text(rows: Row[]): string {
 }
 
 // a run of work, or a recap, opened or closed (by its first message's id)
+// verbose (Ctrl+O): every run of work open, or none but those opened
+// alone; the runs opened or shut by hand forgotten, so each shows as the
+// mode says
+export function view_verbose(v: View): void {
+  v.verbose = !v.verbose;
+  v.acts.clear();
+}
+
 export function view_toggle(v: View, id: number): void {
   if (v.acts.has(id)) {
     v.acts.delete(id);
@@ -867,7 +883,7 @@ function part_rows(v: View, id: number, n: number, t: number, talk: boolean): Ro
   const half  = n / 2;
   if (n === 1 && id >= t && entry !== undefined) {
     const minds = v.minds.get(id) ?? [];
-    const after = minds.flatMap((x) => entry_rows(null, "mind", x));
+    const after = minds.flatMap((x) => entry_rows(null, "mind", x).map((row) => ({ ...row, after: id })));
     return [...whole_rows(id, entry), ...after];
   }
   const open  = talk && n === 1 && ["user", "illi"].includes(entry?.kind ?? "");
