@@ -5,7 +5,6 @@ illimitable is a modified version of software by Higher Order Company
 (Copyright 2026 Higher Order Company), used under the Apache License,
 Version 2.0 (LICENSE). The changes are by 4our4ace.
 
-How illi draws a reply (src/ui/Markdown.ts, Palettes.ts, Prism.ts, most
-of Reply.ts, parts of Draw.ts and Theme.ts) is adapted from prismantis,
-under the MIT License. The libraries compiled into illi (package.json's
-dependencies) are under the MIT License. Both: see THIRD_PARTY_NOTICES.md.
+The libraries compiled into illi (package.json's dependencies) are under
+the MIT License; one holds a table adapted from prismantis, under the MIT
+License too. See THIRD_PARTY_NOTICES.md.

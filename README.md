@@ -151,6 +151,5 @@ Docs
 License
 -------
 
-Apache 2.0: LICENSE and NOTICE. The libraries compiled in and the code
-adapted from prismantis are MIT: their licenses are in
-THIRD_PARTY_NOTICES.md.
+Apache 2.0: LICENSE and NOTICE. The libraries compiled in are MIT: their
+licenses are in THIRD_PARTY_NOTICES.md.
