@@ -699,11 +699,12 @@ function act_text(rows: Row[]): string {
 }
 
 // verbose (Ctrl+O): every run of work open, or none but those opened
-// alone; the runs opened or shut by hand forgotten, so each shows as the
-// mode says
+// alone; the runs opened or shut by hand, and the messages folded in
+// them, forgotten, so each shows as the mode says
 export function view_verbose(v: View): void {
   v.verbose = !v.verbose;
   v.acts.clear();
+  v.folds.clear();
 }
 
 // a run of work, or a recap, opened or closed (by its key: row_key)
