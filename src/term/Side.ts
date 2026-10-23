@@ -2,9 +2,9 @@
 // ====
 // The side panel, on a wide screen: the primary agents, the subagents of
 // this run, the sticky skills on, the profiles (two or more), a ChatGPT
-// plan's use, the chat's (the context, the memory), the MCP servers, a
-// hint for the keys or illi's to-do list; the side and side_width
-// settings place it.
+// plan's use, the chat's (the context, the memory), the MCP servers, the
+// plugins' lines, a hint for the keys or illi's to-do list; the side and
+// side_width settings place it.
 
 import { term_choose, term_mcp } from "./Commands.ts";
 import * as config from "../config/Config.ts";
@@ -13,6 +13,7 @@ import * as Draw from "../ui/Draw.ts";
 import { term_spinner } from "./Frame.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
 import * as Paint from "../ui/Paint.ts";
+import { Plugins } from "../config/Plugins.ts";
 import { term_note } from "./Notices.ts";
 import { term_profile_go, term_profile_pick } from "./ProfileCommands.ts";
 import { setting_open } from "./Settings.ts";
@@ -41,7 +42,8 @@ export const CLOCK   = 60000;
 // one the main agent), the tabs (a click shows one), the sticky skills on
 // (a click turns one off), the profiles, once there are two (a click on
 // the head: /profile), a ChatGPT plan's use, the chat's (its context, the
-// memory), the MCP servers (a click: /mcp); at its foot illi's to-do
+// memory), the MCP servers (a click: /mcp), each plugin's lines
+// (Plugins.side); at its foot illi's to-do
 // list, which, longer than the room, pushes the rest up (its head stays);
 // with none, a faint hint for the keys (HINT), if it fits
 export function term_side(t: Term, w: number, tall: number): Item[] {
@@ -61,7 +63,7 @@ export function term_side(t: Term, w: number, tall: number): Item[] {
   const gap   = [[], null] as Item;
   const fill  = (n: number) => Array.from({ length: n }, (): Item => [[], null]);
   const plan  = term_side_plan(t, w);
-  const top   = [head("Agents"), ...mains, gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...term_side_sticky(t), ...term_side_profiles(t), ...(plan.length === 0 ? [] : [...plan, gap]), head("Chat"), ...term_side_use(t, w), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp])];
+  const top   = [head("Agents"), ...mains, gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...term_side_sticky(t), ...term_side_profiles(t), ...(plan.length === 0 ? [] : [...plan, gap]), head("Chat"), ...term_side_use(t, w), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp]), ...term_side_plugins(w)];
   const foot  = todo.length === 0 ? keys : todo;
   const room  = tall - top.length - foot.length;
   const items = room > 0 ? [...top, ...fill(room), ...foot]
@@ -75,7 +77,7 @@ export function term_side(t: Term, w: number, tall: number): Item[] {
 // or nothing told yet: nothing): its head, the plan named (ChatGPT Pro;
 // as Pro, else not at all, if it won't fit), then each of its windows, a
 // label a line: the share used and when it starts anew, a bar under it
-// (in the theme's blue, as term_bar colors it); none told yet, a line
+// (in the accent, as the context's: term_bar); none told yet, a line
 // says when it will be. What won't fit says less
 function term_side_plan(t: Term, w: number): Item[] {
   const told  = t.v.use.plan;
@@ -85,12 +87,12 @@ function term_side_plan(t: Term, w: number): Item[] {
   const plan  = told.tier === "" ? "" : told.tier[0].toUpperCase() + told.tier.slice(1);
   const says  = plan === "" ? [] : [" · " + told.brand + " " + plan, " · " + plan].filter((x) => Paint.text_width("Usage" + x) <= w);
   const head  = [[Paint.Run("Usage", { ...Paint.INK, b: true }), ...says.slice(0, 1).map((x) => Paint.Run(x, Paint.DIM))], null] as Item;
-  const blue  = Draw.draw_theme().link ?? "4";
+  const c     = Draw.draw_tokens().accent;
   const shown = told.limits.flatMap((l) => {
     const left  = l.reset - Date.now();
     const share = left > 0 ? l.used / 100 : 0;
-    const used  = term_pct(share, blue);
-    return [term_row(w, term_window(l.window), [used, Paint.Run(left > 0 ? " · resets " + term_left(left) : " · reset", Paint.DIM)], [used]), term_bar(share, w, blue)];
+    const used  = term_pct(share, c);
+    return [term_row(w, term_window(l.window), [used, Paint.Run(left > 0 ? " · resets " + term_left(left) : " · reset", Paint.DIM)], [used]), term_bar(share, w, c)];
   });
   return [head, ...(shown.length > 0 ? shown : [[[Paint.Run("shown after a reply", Paint.DIM)], null] as Item])];
 }
@@ -101,7 +103,7 @@ function term_side_plan(t: Term, w: number): Item[] {
 // term_bar colors it), then where it folds and its model's window; the
 // memory's size. What won't fit says less
 function term_side_use(t: Term, w: number): Item[] {
-  const c      = Draw.draw_theme().accent ?? "5";
+  const c      = Draw.draw_tokens().accent;
   const fill   = t.v.use.fill ?? null;
   const window = fill?.cap;
   const tokens = fill?.used ?? null;
@@ -125,14 +127,15 @@ function term_row(w: number, label: string, ...says: Paint.Line[]): Item {
   return [[Paint.Run(label.padEnd(LABEL), Paint.DIM), ...(says.find((l) => LABEL + Paint.line_width(l) <= w) ?? says[says.length - 1])], null];
 }
 
-// a share as a percentage, in c (yellow past 70%, red past 90%)
+// a share as a percentage, in c (warning past 70%, error past 90%)
 function term_pct(f: number, c: string): Paint.Run {
   return Paint.Run(Math.round(f * 100) + "%", { ...Paint.INK, c: term_level(f, c) });
 }
 
-// a share's color: c, yellow past 70%, red past 90%
+// a share's color: c, the theme's warning past 70%, its error past 90%
 function term_level(f: number, c: string): string {
-  return f >= 0.9 ? "1" : f >= 0.7 ? "3" : c;
+  const tokens = Draw.draw_tokens();
+  return f >= 0.9 ? tokens.error : f >= 0.7 ? tokens.warning : c;
 }
 
 // a bar, every one on the side alike: BAR wide (w less two at most),
@@ -145,21 +148,28 @@ function term_bar(f: number, w: number, c: string): Item {
 }
 
 // the user's MCP servers, a line each, their names aligned: ● ready
-// (green; its tools counted), ✗ failed (red), ◌ starting; a file that
-// won't read; a click on any: /mcp
+// (in the theme's success; its tools counted), ✗ failed (its error), ◌
+// starting; a file that won't read; a click on any: /mcp
 function term_side_mcp(t: Term): Item[] {
   const { servers, trouble } = Mcp.status();
   const wide = Math.max(0, ...servers.map((s) => Paint.text_width(s.name)));
-  const red  = { ...Paint.INK, c: "1" };
+  const tone = Draw.draw_tokens();
+  const red  = { ...Paint.INK, c: tone.error };
   const line = (s: Server): Paint.Line => {
     const name = s.name + " ".repeat(wide - Paint.text_width(s.name));
     const n    = s.own.size;
-    return s.state === "ready" ? [Paint.Run("● ", { ...Paint.INK, c: "2" }), Paint.Run(name), Paint.Run("  " + n + (n === 1 ? " tool" : " tools"), Paint.DIM)]
-      : s.state === "failed" ? [Paint.Run("✗ ", red), Paint.Run(name, Paint.DIM), Paint.Run("  failed", { ...Paint.DIM, c: "1" })]
+    return s.state === "ready" ? [Paint.Run("● ", { ...Paint.INK, c: tone.success }), Paint.Run(name), Paint.Run("  " + n + (n === 1 ? " tool" : " tools"), Paint.DIM)]
+      : s.state === "failed" ? [Paint.Run("✗ ", red), Paint.Run(name, Paint.DIM), Paint.Run("  failed", { ...Paint.DIM, c: tone.error })]
       : [Paint.Run("◌ " + name + "  starting", Paint.DIM)];
   };
   const file = trouble === "" ? [] : [[Paint.Run("✗ ", red), Paint.Run("mcp.json won't read", Paint.DIM)]];
   return [...servers.map(line), ...file].map((l): Item => [l, () => term_mcp(t)]);
+}
+
+// each plugin's lines, w wide, a gap before each plugin's (its first line
+// its head, if it makes one: bold, as it says)
+function term_side_plugins(w: number): Item[] {
+  return Plugins.side(w).flatMap((lines) => [[[], null] as Item, ...lines.map((l): Item => [Paint.pieces_line(l), null])]);
 }
 
 // illi's to-do list, w wide (none: nothing): its head (how many done; a
@@ -173,7 +183,7 @@ function term_side_todo(t: Term, w: number): Item[] {
   if (list.length === 0) {
     return [];
   }
-  const c      = Draw.draw_theme().accent ?? "5";
+  const c      = Draw.draw_tokens().accent;
   const done   = list.filter((x) => x.status === "done").length;
   const now    = list.findIndex((x) => x.status === "active");
   const next   = now >= 0 ? now : list.findIndex((x) => x.status === "pending");
@@ -227,15 +237,16 @@ export function term_side_width(t: Term, w: number): number {
 
 // the side's subagents: the way back to the chat while an agent's tab
 // shows (named as the main agent); each subagent of this run, at work
-// (the spinner) or done (✓), its tab shown bold; a click shows its tab
+// (the spinner, in the accent) or done (✓, in the theme's success), its
+// tab shown bold; a click shows its tab
 function term_side_subs(t: Term): Item[] {
   const shown = t.v.page?.name ?? null;
-  const c     = Draw.draw_theme().accent ?? "5";
+  const c     = Draw.draw_tokens().accent;
   const spin  = term_spinner(Date.now() - t.since);
   const names = shown === null || t.subs.has(shown) ? [...t.subs] : [...t.subs, [shown, t.v.agents.includes(shown)] as [string, boolean]];
   const back  = shown === null ? [] : [[[Paint.Run("‹ " + (t.v.agent ?? View.MAIN), Paint.DIM)], () => term_act(t, { $: "Goto", name: null })] as Item];
   const subs  = names.map(([name, working]): Item => [
-    [Paint.Run((working ? spin : "✓") + " ", working ? { ...Paint.INK, c, b: true } : { ...Paint.INK, c: "2" }), Paint.Run(name, name === shown ? { ...Paint.INK, b: true } : working ? Paint.INK : Paint.DIM)],
+    [Paint.Run((working ? spin : "✓") + " ", working ? { ...Paint.INK, c, b: true } : { ...Paint.INK, c: Draw.draw_tokens().success }), Paint.Run(name, name === shown ? { ...Paint.INK, b: true } : working ? Paint.INK : Paint.DIM)],
     () => term_act(t, { $: "Goto", name }),
   ]);
   return [...back, ...subs];

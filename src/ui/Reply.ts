@@ -34,6 +34,7 @@
 import { displayText, inlineText, parse, type Block, type Inline } from "../../vendor/cellsmith/markdown.ts";
 import * as Draw from "./Draw.ts";
 import * as Paint from "./Paint.ts";
+import type { Token } from "./Theme.ts";
 
 // Types
 // =====
@@ -73,8 +74,8 @@ const SLOT: Record<string, string> = {
 // the slots dimmed where the palette leaves them out
 const FAINT = ["codeComment", "quote", "rule", "tableRule"];
 
-// an alert's color by its kind: the terminal's own, in any palette
-const ALERT: Record<string, string> = { note: "4", tip: "2", important: "5", warning: "3", caution: "1" };
+// an alert's color by its kind: the theme's token (Draw.draw_tokens)
+const ALERT: Record<string, Token> = { note: "link", tip: "success", important: "accent", warning: "warning", caution: "error" };
 
 // the longest rule; the room between figures side by side; the widest a
 // table's art is copied
@@ -229,7 +230,7 @@ function quote_text(raw: string): string {
 
 // an alert: a round box of its color, its kind bold over its text
 function alert_lines(pal: Pal, level: string, inline: Inline[], w: number): Line[] {
-  const edge  = { ...Paint.INK, c: ALERT[level] ?? "" };
+  const edge  = { ...Paint.INK, c: level in ALERT ? Draw.draw_tokens()[ALERT[level]] : "" };
   const title = [Paint.Run(level[0].toUpperCase() + level.slice(1), { ...edge, b: true })];
   const text  = inline.length === 0 ? [] : Paint.runs_wrap(inline_runs(pal, inline, Paint.INK), Math.max(1, w - 4), false);
   return lines_boxed([title, ...text], edge, "╭─╮│╰╯");

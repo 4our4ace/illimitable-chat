@@ -170,7 +170,7 @@ export function term_form_lines(t: Term, w: number, max: number): { lines: Paint
   }
   const [q, f] = open;
   const bold   = { ...Paint.INK, b: true };
-  const accent = { ...bold, c: Draw.draw_theme().accent ?? "5" };
+  const accent = { ...bold, c: Draw.draw_tokens().accent };
   const said   = (k: number) => f.each[k].picked.length > 0 || f.each[k].ed.text.trim() !== "";
   const names  = [...q.queries.map((query, k) => (said(k) ? "✓ " : "") + Paint.text_clean(query.head)), "Review"];
   const tabs   = names.flatMap((name, k) => [Paint.Run(" "), Paint.Run(" " + name + " ", k === f.tab ? { ...bold, v: true } : k < q.queries.length && said(k) ? Paint.INK : Paint.DIM)]);
