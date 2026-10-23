@@ -19,6 +19,16 @@
 // answers it: text is chosen and copied there, Ctrl+C copies it, the
 // tabs answer, the line asked stays. Ctrl+P's palette pops up over a
 // question; closed, the question is back, held again as it shows anew.
+// illi's form takes the input's place too, who asks in the rule: its
+// tabs, the question, its options, its words and its keys, as tall as
+// the tab shown, the cursor in the words; over a pane, typing and a
+// paste going to the words. A click on an option picks it (one to pick:
+// and goes on; of any: toggled), on a tab goes there, on the words
+// lights them, outside does nothing. Taller than half the screen, its
+// tabs and keys hold and its lines scroll, by the keys (the lit row kept
+// in view) and by the wheel over it (the lit row held while it shows,
+// else the nearest; the one under the pointer lit). A theme's lit mark
+// of any width leads every row as wide.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -33,6 +43,7 @@ const { term_grab, term_press, term_type } = await import("./Keys.ts");
 const Paint = await import("../ui/Paint.ts");
 const Screen = await import("../ui/Screen.ts");
 const { status_new } = await import("./Status.ts");
+const Theme = await import("../ui/Theme.ts");
 const View = await import("../ui/View.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
@@ -125,6 +136,15 @@ const lit    = (t: any) => t.question.names[t.question.shown[t.question.at].k];
 
 // the answers sent, without their message ids
 const sent = (t: any) => t.v.out.map((o: any) => o.msg).filter((m: any) => m.$ === "answer").map(({ id, $, ...m }: any) => m);
+
+// illi's own questions now, each a tab: which database (one of three),
+// and the cache (any of two)
+const DB    = { text: "Which database?", head: "Database", options: [{ label: "Postgres", about: "you know it" }, { label: "SQLite", about: "" }, { label: "MySQL", about: "" }], multi: false };
+const CACHE = { text: "Which caches?", head: "Cache", options: [{ label: "Redis", about: "" }, { label: "Memcached", about: "" }], multi: true };
+const own   = (t: any, queries: any[]) => (t.v.asks = [{ id: "a1", who: "illi", tool: "ask", what: queries[0].text, queries }]);
+
+// the screen row of row k of illi's form
+const form_row = (t: any, k: number) => t.box.row + t.box.rows.findIndex((aim: any) => aim?.$ === "row" && aim.k === k);
 
 const LONG = "rm -r ./no-such-folder-here && echo " + "abcdefghij".repeat(197);
 const TALL = "rm -r ./no-such-folder-here\n" + Array.from({ length: 299 }, (_, k) => "echo line " + (k + 1)).join("\n");
@@ -335,4 +355,123 @@ test("Ctrl+P's palette pops up over a question, which keeps its place; closed, t
     term_grab(t, "Enter");
     expect(sent(t)).toEqual([{ ask: "q1", yes: true, always: false, said: "" }]);
   });
+});
+
+test("illi's form takes the input's place, its full width, who asks in the rule: tabs, question, options, words, keys, as tall as the tab shown; the cursor in the words; the input as typed back once it is skipped", () => {
+  sized(110, 34, () => {
+    const t = term();
+    Screen.ed_set(t.scr.ed, "my draft");
+    own(t, [DB, CACHE]);
+    paint(t);
+    expect([t.box.of, t.box.col, t.box.w, t.box.h]).toEqual([t.asking.form, 2, 105, 7]);
+    expect(asked(t, 110)).toEqual(["── illi asks " + "─".repeat(92), " Database   Cache   Review", "Which database?  pick one", "> ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip", "─".repeat(105)]);
+    expect(t.ruled.rows.some((r: any[]) => text(r, 110).includes("my draft"))).toBe(false);
+    expect([t.ruled.at, t.scr.blink]).toEqual([{ row: t.box.row + 5, col: 2 + 4 }, true]);
+    term_grab(t, "Tab");
+    term_grab(t, "Tab");
+    paint(t);
+    expect(asked(t, 110).slice(1, -1)).toEqual([" Database   Cache   Review", "Which database?", "  no answer", "Which caches?", "  no answer", "Enter send · Shift+Tab back · Esc skip"]);
+    expect(t.ruled.at).toBeNull();
+    term_grab(t, "Esc");
+    paint(t);
+    expect([sent(t).length, t.box, text(t.ruled.rows[31], 110).trimEnd()]).toEqual([1, null, "  > my draft"]);
+  });
+});
+
+test("with a pane open illi's form takes the input's place under it: typing and a paste go to its words, the pane kept; Esc skips it, the pane still there", async () => {
+  const { term_paste } = await import("./Attach.ts");
+  sized(110, 34, () => {
+    const t = term();
+    t.pane = { title: "Help", make: () => [[Paint.Run("help text")]], w: 0, lines: [], scroll: 0 };
+    own(t, [DB]);
+    paint(t);
+    expect(t.box?.of).toBe(t.asking.form);
+    term_type(t, "near");
+    term_paste(t, "by\nme");
+    expect([t.asking.form.each[0].ed.text, t.pane?.title, t.scr.ed.text]).toEqual(["nearby\nme", "Help", ""]);
+    term_grab(t, "Esc");
+    paint(t);
+    expect([t.v.out.map((o: any) => o.msg.$), t.box, t.pane?.title]).toEqual([["answer"], null, "Help"]);
+  });
+});
+
+test("a click in illi's form: on an option, one to pick picks it and goes on, of any toggles it (just shown: lit only); on a tab, there; on the words, lit; outside, nothing", () => {
+  sized(110, 34, () => {
+    const t = term();
+    own(t, [DB, CACHE]);
+    paint(t);
+    const f = t.asking.form;
+    click(t, form_row(t, 1), COL);
+    expect([f.each[0].at, f.each[0].picked, f.tab]).toEqual([1, [], 0]);
+    armed(t);
+    click(t, form_row(t, 1), COL);
+    expect([f.each[0].picked, f.tab]).toEqual([[1], 1]);
+    paint(t);
+    click(t, form_row(t, 1), COL);
+    click(t, form_row(t, 0), COL);
+    click(t, form_row(t, 1), COL);
+    expect([f.each[1].picked, f.tab]).toEqual([[0], 1]);
+    click(t, form_row(t, 2), COL);
+    expect(f.each[1].at).toBe(2);
+    const tabs = t.box.rows[0];
+    click(t, t.box.row, t.box.col + tabs[0].col + 2);
+    expect(f.tab).toBe(0);
+    paint(t);
+    click(t, 3, 10);
+    click(t, t.box.row + t.box.h - 1, COL);
+    click(t, t.box.row - 1, COL);
+    expect([f.tab, f.each[0].picked, t.v.out, t.asking.done]).toEqual([0, [1], [], false]);
+  });
+});
+
+test("illi's form taller than half the screen: its tabs and keys hold, its lines scroll to keep the lit row in view; the wheel over it scrolls them, the lit row held while it shows, else the nearest, the row under the pointer lit, stopping at their ends; the wheel elsewhere scrolls the chat", () => {
+  sized(100, 20, () => {
+    const t = term();
+    const many = { text: "Which one?", head: "One", options: Array.from({ length: 20 }, (_, k) => ({ label: "o" + k, about: "" })), multi: false };
+    own(t, [many]);
+    paint(t);
+    const f = t.asking.form;
+    expect([t.box.h, t.box.lines]).toEqual([10, 8]);
+    for (let k = 0; k < 10; k++) {
+      term_grab(t, "Down");
+    }
+    paint(t);
+    const shown = asked(t, 100).slice(1, -1).map((l: string) => l.trim());
+    expect([f.top, shown[0], shown[1], shown.at(-2), shown.at(-1)]).toEqual([4, "One   Review", "○ o3", "> ○ o10", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
+    const turn = (key: string) => {
+      term_grab(t, key);
+      paint(t);
+      return [f.top, f.each[0].at];
+    };
+    t.scr.point = { row: t.box.row, col: t.box.col + 5 };
+    expect([turn("WheelDown"), turn("WheelDown"), turn("WheelDown"), turn("WheelDown")]).toEqual([[6, 10], [8, 10], [10, 10], [12, 11]]);
+    expect([turn("WheelDown"), turn("WheelDown")]).toEqual([[14, 13], [14, 13]]);
+    t.scr.point = { row: t.box.row + t.box.list + 2, col: t.box.col + 5 };
+    expect(turn("WheelUp")).toEqual([12, 13]);
+    expect(turn("WheelUp")).toEqual([10, 11]);
+    Screen.screen_feed(t.scr, sgr(64, 3, COL));
+    expect([t.scroll, f.top]).toEqual([3, 10]);
+    term_grab(t, "Ctrl+End");
+    paint(t);
+    expect([f.top, t.ruled.at]).toEqual([14, { row: t.box.row + 1 + 21 - 14, col: t.box.col + 4 }]);
+  });
+});
+
+test("a lit mark wider than >: the form's options and words lead as wide, the cursor after them; a question's answers too", () => {
+  const was = Theme.GLYPH.lit;
+  Theme.GLYPH.lit = "->";
+  try {
+    sized(160, 40, () => {
+      const t = term();
+      own(t, [DB]);
+      paint(t);
+      expect(asked(t, 160).slice(3, 7)).toEqual(["-> ○ Postgres  you know it", "   ○ SQLite", "   ○ MySQL", "   > Something else: type your own"]);
+      expect(t.ruled.at).toEqual({ row: t.box.row + 5, col: 2 + 5 });
+      const u = term();
+      ask(u, "ls");
+      expect(asked(u, 160).slice(3, 7)).toEqual(["-> Yes", "   Yes, and don't ask again for ls in this project", "   No", "   No, and say why"]);
+    });
+  } finally {
+    Theme.GLYPH.lit = was;
+  }
 });

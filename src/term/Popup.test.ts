@@ -6,36 +6,28 @@
 // else dimmed in one ink, and no click on the side or the tabs under it.
 // Its size from its content and the screen alone: POP_MIN wide for two
 // options, what options say widening it to POP_CAP, a name never held to
-// it; a share of the rows at most, all but two on a short screen or for
-// illi's form. A name is never cut (what an option is is, with an
-// ellipsis); on a screen too narrow for it, it wraps under itself. No
-// control character in a name or a title reaches the screen. A search
-// keeps the box's place and size; a value stepped wider grows it, never
-// shrinks it, till a new size. The wheel scrolls a long list (a
-// third of what shows, three at most), stopping at its ends, the option
-// brought under the pointer lit, or off the list the lit one held in
-// view; a list shown whole never moves, nor the chat. The mouse is the
-// popup's alone: the pointer moving to another row lights it (along its
-// row, at rest, or as the popup first shows under it: not); a press and a
-// release on one option do what Enter does there, on two rows nothing; a
-// click outside closes a list and goes no further; no text is chosen, no
-// button lights or copies, the right button does nothing; a double click
-// picks once; a box no longer open (a new size) does nothing; the click
-// that only focuses the terminal's window picks nothing and closes
-// nothing. The wheel over a group's head scrolls on. (Questions take the
-// input's place instead: Question.test.ts.) The commands suggested as a
+// it; a share of the rows at most, all but two on a short screen. A name
+// is never cut (what an option is is, with an ellipsis); on a screen too
+// narrow for it, it wraps under itself. No control character in a name
+// or a title reaches the screen. A search keeps the box's place and
+// size; a value stepped wider grows it, never shrinks it, till a new
+// size. The wheel scrolls a long list (a third of what shows, three at
+// most), stopping at its ends, the option brought under the pointer lit,
+// or off the list the lit one held in view; a list shown whole never
+// moves, nor the chat. The mouse is the popup's alone: the pointer
+// moving to another row lights it (along its row, at rest, or as the
+// popup first shows under it: not); a press and a release on one option
+// do what Enter does there, on two rows nothing; a click outside closes
+// a list and goes no further; no text is chosen, no button lights or
+// copies, the right button does nothing; a double click picks once; a
+// box no longer open (a new size) does nothing; the click that only
+// focuses the terminal's window picks nothing and closes nothing. The
+// wheel over a group's head scrolls on. The commands suggested as a
 // /word is typed: a click on one does what Enter does there, a press on
-// them chooses no text; a drag from elsewhere goes on over them. illi's own questions
-// show in the popup, the room's full width, who asks its title, the
-// input still drawn under it, the cursor in the words; going from tab to
-// tab never moves it; over a pane too, typing and a paste going to the
-// words, Esc skipping them, the pane kept. A click on an option picks it
-// (one to pick: and goes on; of any: toggled), on a tab goes there, on
-// the words lights them, outside does nothing. Taller than the screen,
-// its tabs and keys hold and its lines scroll, by the keys (the lit row
-// kept in view) and by the wheel (the lit row held while it shows, else
-// the nearest; the one under the pointer lit). A theme's lit mark of any
-// width leads every row as wide, lists, forms and commands alike.
+// them chooses no text; a drag from elsewhere goes on over them. A
+// theme's lit mark of any width leads every row as wide, lists and
+// commands alike. (Questions, illi's form too, take the input's place
+// instead: Question.test.ts.)
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -115,9 +107,8 @@ const text = (row: any[], cols: number) => {
   return cells.join("");
 };
 
-// a measure: names, wants, least wide, tall rows at any width; illi's
-// form's, if it stays
-const measure = (names: number, wants: number, least: number, tall = 6, stays = false) => ({ names, wants, least, tall: () => tall, stays });
+// a measure: names, wants, least wide, tall rows at any width
+const measure = (names: number, wants: number, least: number, tall = 6) => ({ names, wants, least, tall: () => tall });
 
 // the popup as last painted: its rows' text, inside its frame, cols wide
 // on the screen
@@ -147,7 +138,7 @@ test("a list opens in the screen's middle, the same with the side left, right or
   expect(places[0][2]).toBe(40);
 });
 
-test("its size from its content and the screen alone: POP_MIN for two options, what they say up to POP_CAP, a name never held to it, the least it asks; a share of the rows, all but two on a short screen or for illi's form", () => {
+test("its size from its content and the screen alone: POP_MIN for two options, what they say up to POP_CAP, a name never held to it, the least it asks; a share of the rows, all but two on a short screen", () => {
   expect(popup_size(measure(20, 30, 40), 160, 40)).toEqual({ row: 17, col: 59, w: 40, h: 6 });
   expect(popup_size(measure(30, 140, 40), 160, 40).w).toBe(96);
   expect(popup_size(measure(120, 140, 40), 160, 40).w).toBe(120);
@@ -155,7 +146,6 @@ test("its size from its content and the screen alone: POP_MIN for two options, w
   expect(popup_size(measure(8, 20, 60), 160, 40).w).toBe(60);
   expect(popup_size(measure(20, 30, 40, 100), 160, 24).h).toBe(14);
   expect(popup_size(measure(20, 30, 40, 100), 160, 10)).toEqual({ row: 1, col: 59, w: 40, h: 8 });
-  expect(popup_size(measure(20, 30, 40, 100, true), 160, 24).h).toBe(22);
   expect(popup_size(measure(20, 30, 40), 160, 40, 70).w).toBe(70);
 });
 
@@ -429,113 +419,6 @@ test("the commands suggested: a click on one does what Enter does there (found b
   });
 });
 
-// illi's own questions now, each a tab: which database (one of three),
-// which caches (any of two), or others given
-const DB    = { text: "Which database?", head: "Database", options: [{ label: "Postgres", about: "you know it" }, { label: "SQLite", about: "" }, { label: "MySQL", about: "" }], multi: false };
-const CACHE = { text: "Which caches?", head: "Cache", options: [{ label: "Redis", about: "" }, { label: "Memcached", about: "" }], multi: true };
-const own   = (t: any, queries: any[]) => (t.v.asks = [{ id: "a1", who: "illi", tool: "ask", what: queries[0].text, queries }]);
-
-// the screen row of illi's form's row k (an option; past them, the words)
-const form_row = (t: any, k: number) => t.box.row + t.box.rows.findIndex((aim: any) => aim?.$ === "row" && aim.k === k);
-
-test("illi's questions show in the popup, the room's full width, who asks its title: tabs, question, options, words, keys; the input as typed drawn under it, the cursor in the words; tab to tab it never moves", () => {
-  sized(110, 34, () => {
-    const t = term();
-    Screen.ed_set(t.scr.ed, "my draft");
-    own(t, [DB, CACHE]);
-    paint(t);
-    expect(t.box.of).toBe(t.asking.form);
-    const { row, col, w, h } = t.box;
-    expect([col, w, h]).toEqual([2, 105, 9]);
-    expect(text(t.ruled.rows[row], 110).slice(col)).toStartWith("╭─ illi asks ─");
-    expect(inside(t, 110).map((l: string) => l.trimEnd())).toEqual([" Database   Cache   Review", "Which database?  pick one", "> ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
-    expect(t.ruled.rows.slice(t.ruled.row + 1).map((r: any[]) => text(r, 110)).join("\n")).toContain("my draft");
-    expect([t.ruled.at, t.scr.blink]).toEqual([{ row: row + 6, col: col + 6 }, true]);
-    for (const key of ["Tab", "Tab"]) {
-      term_grab(t, key);
-      paint(t);
-      expect([t.box.row, t.box.col, t.box.w, t.box.h]).toEqual([row, col, w, h]);
-    }
-    expect(inside(t, 110)[1].trimEnd()).toBe("Which database?");
-    expect(t.ruled.at).toBeNull();
-  });
-});
-
-test("with a pane open illi's questions show over it: typing and a paste go to their words, the pane kept under them; Esc skips them, the pane back", async () => {
-  const { term_paste } = await import("./Attach.ts");
-  sized(110, 34, () => {
-    const t = term();
-    t.pane = { title: "Help", make: () => [[Paint.Run("help text")]], w: 0, lines: [], scroll: 0 };
-    own(t, [DB]);
-    paint(t);
-    expect(t.box?.of).toBe(t.asking.form);
-    term_type(t, "near");
-    term_paste(t, "by\nme");
-    expect([t.asking.form.each[0].ed.text, t.pane?.title, t.scr.ed.text]).toEqual(["nearby\nme", "Help", ""]);
-    term_grab(t, "Esc");
-    paint(t);
-    expect([t.v.out.map((o: any) => o.msg.$), t.box, t.pane?.title]).toEqual([["answer"], null, "Help"]);
-  });
-});
-
-test("a click in illi's form: on an option, one to pick picks it and goes on, of any toggles it (just shown: lit only); on a tab, there; on the words, lit; outside, nothing", () => {
-  sized(110, 34, () => {
-    const t = term();
-    own(t, [DB, CACHE]);
-    paint(t);
-    const f = t.asking.form;
-    click(t, form_row(t, 1), col(t));
-    expect([f.each[0].at, f.each[0].picked, f.tab]).toEqual([1, [], 0]);
-    t.asking.shown -= 600;
-    click(t, form_row(t, 1), col(t));
-    expect([f.each[0].picked, f.tab]).toEqual([[1], 1]);
-    paint(t);
-    click(t, form_row(t, 1), col(t));
-    click(t, form_row(t, 0), col(t));
-    click(t, form_row(t, 1), col(t));
-    expect([f.each[1].picked, f.tab]).toEqual([[0], 1]);
-    click(t, form_row(t, 2), col(t));
-    expect(f.each[1].at).toBe(2);
-    const tabs = t.box.rows[1];
-    click(t, t.box.row + 1, t.box.col + 2 + tabs[0].col + 2);
-    expect(f.tab).toBe(0);
-    paint(t);
-    click(t, 0, 0);
-    click(t, t.box.row + t.box.h - 2, col(t));
-    expect([f.tab, f.each[0].picked, t.v.out, t.asking.done]).toEqual([0, [1], [], false]);
-  });
-});
-
-test("illi's form taller than the screen: its tabs and keys hold, its lines scroll to keep the lit row in view; the wheel scrolls them, the lit row held while it shows, else the nearest, the row under the pointer lit; stopping at their ends", () => {
-  sized(100, 14, () => {
-    const t = term();
-    const many = { text: "Which one?", head: "One", options: Array.from({ length: 20 }, (_, k) => ({ label: "o" + k, about: "" })), multi: false };
-    own(t, [many]);
-    paint(t);
-    const f = t.asking.form;
-    expect([t.box.h, t.box.lines]).toEqual([12, 8]);
-    for (let k = 0; k < 10; k++) {
-      term_grab(t, "Down");
-    }
-    paint(t);
-    const shown = inside(t, 100).map((l: string) => l.trim());
-    expect([f.top, shown[0], shown[1], shown.at(-2), shown.at(-1)]).toEqual([4, "One   Review", "○ o3", "> ○ o10", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
-    const turn = (key: string) => {
-      term_grab(t, key);
-      paint(t);
-      return [f.top, f.each[0].at];
-    };
-    expect([turn("WheelDown"), turn("WheelDown"), turn("WheelDown"), turn("WheelDown")]).toEqual([[6, 10], [8, 10], [10, 10], [12, 11]]);
-    expect([turn("WheelDown"), turn("WheelDown")]).toEqual([[14, 13], [14, 13]]);
-    t.scr.point = { row: t.box.row + t.box.list + 2, col: t.box.col + 5 };
-    expect(turn("WheelUp")).toEqual([12, 13]);
-    expect(turn("WheelUp")).toEqual([10, 11]);
-    term_grab(t, "Ctrl+End");
-    paint(t);
-    expect([f.top, t.ruled.at]).toEqual([14, { row: t.box.row + 1 + 1 + 21 - 14, col: t.box.col + 6 }]);
-  });
-});
-
 test("the wheel over a group's head scrolls on: the lit option gone from view, the nearest still in it lit", () => {
   sized(100, 24, () => {
     const t = term();
@@ -552,10 +435,9 @@ test("the wheel over a group's head scrolls on: the lit option gone from view, t
 });
 
 // a theme's own mark for the lit row, wider than >: every row leads as
-// wide (Paint.lit_lead), so a list's names and what they are, a form's
-// options and its words, the commands suggested and what they do, stay
-// in line, the cursor after the mark
-test("a lit mark wider than >: every row leads as wide, a list's names and what they are in line, a form's options and words, the commands suggested; the cursor after them", () => {
+// wide (Paint.lit_lead), so a list's names and what they are, the
+// commands suggested and what they do, stay in line
+test("a lit mark wider than >: every row leads as wide, a list's names and what they are in line, the commands suggested", () => {
   const was = Theme.GLYPH.lit;
   Theme.GLYPH.lit = "->";
   try {
@@ -565,12 +447,6 @@ test("a lit mark wider than >: every row leads as wide, a list's names and what 
       term_paint(t);
       const rows = inside(t, 160).filter((r: string) => /illi|reviewer/.test(r));
       expect(rows.map((r: string) => r.trimEnd())).toEqual(["-> ● illi      illi's own", "   ◯ reviewer  reviews"]);
-      const u = term();
-      own(u, [DB]);
-      paint(u);
-      const { row, col } = u.box;
-      expect(inside(u, 160).slice(2, 6).map((l: string) => l.trimEnd())).toEqual(["-> ○ Postgres  you know it", "   ○ SQLite", "   ○ MySQL", "   > Something else: type your own"]);
-      expect(u.ruled.at).toEqual({ row: row + 6, col: col + 7 });
       const v = term();
       Screen.ed_set(v.scr.ed, "/cl");
       paint(v);

@@ -5,10 +5,10 @@
 // foot the commands suggested), the side beside it (Side.ts); the notes,
 // the toast and the jump to the end; the rule (what runs, the ∞ traced),
 // the input (or a question in its place: Question.ts), the pages, the
-// pick; a popup open (a list, illi's questions: Popup.ts) over all of it,
-// all else dimmed, the cursor in its search or words if it has them; all
-// of it grey while the leader waits for its key (Commands.ts term_lead);
-// the terminal's title. A pipe gets text.
+// pick; a list's popup open (Popup.ts) over all of it, all else dimmed,
+// the cursor in its search if it has one; all of it grey while the
+// leader waits for its key (Commands.ts term_lead); the terminal's
+// title. A pipe gets text.
 
 import * as path from "node:path";
 import { term_asks } from "./Asks.ts";
@@ -167,12 +167,12 @@ export function term_draw(t: Term): void {
 // left over takes rows from the chat. Scrolled up, a button floats over
 // the chat's foot, in its middle: a jump to its end (a click goes there,
 // as Ctrl+End does). What a click in the chat would act on lit, once
-// every hit is placed (Select.ts term_light). A popup open (Popup.ts)
-// over all of it, all else dimmed, the cursor in its search or words
-// (none: hidden; blinking in illi's questions, which wait on you), and
-// nothing under it takes a click or lights; with none, the cursor in the
-// question's words, if it takes typing (blinking: it waits on you), else
-// the input's. A pipe gets the notes as text
+// every hit is placed (Select.ts term_light). A list's popup open
+// (Popup.ts) over all of it, all else dimmed, the cursor in its search
+// (none: hidden), and nothing under it takes a click or lights; with
+// none, the cursor in the question's line or words, if it takes typing
+// (blinking: it waits on you), else the input's. A pipe gets the notes
+// as text
 export function term_paint(t: Term): void {
   t.due   = false;
   painted = Date.now();
@@ -204,7 +204,7 @@ export function term_paint(t: Term): void {
   const above = notes.slice(-Math.floor(h / 4)).map((l) => [Paint.Run(" ".repeat(NOTE_IN)), ...l]);
   const status = status_rows(t, iw, h - (paned ? 4 : 5) - input.lines.length - above.length - STATUS_ROOM);
   const tall  = Math.max(1, h - (paned ? 4 : 5) - input.lines.length - above.length - status.length);
-  const pop   = term_popup(t) !== null;
+  const pop   = term_popup(t);
   question_shown(t);
   const box   = pop || asked !== null ? null : term_box(t, iw, tall + 1 + above.length);
   const top   = box === null ? Infinity : 2 + tall + above.length - box.lines.length;
@@ -265,7 +265,7 @@ export function term_paint(t: Term): void {
   const cursor = pop ? popped : input.at === null ? null : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
   const drawn  = t.lead ? rows.map((row) => row.map((p) => ({ ...p, line: p.line.map((r) => ({ ...r, s: { ...r.s, d: true, c: "", g: "" } })) }))) : rows;
   t.ruled ={ row: 2 + tall + above.length, w: iw, at: cursor, rows: drawn, side: box === null && !pop ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
-  t.scr.blink = idle || asked !== null || term_popup(t) === "form";
+  t.scr.blink = idle || asked !== null;
   Screen.screen_paint(t.scr, drawn, cursor);
   painted = Date.now();
 }
@@ -384,7 +384,7 @@ function term_tick(t: Term): void {
     return;
   }
   term_title(t);
-  if (r === null || t.sel !== null || t.lead || term_popup(t) !== null || !View.view_running(t.v)) {
+  if (r === null || t.sel !== null || t.lead || term_popup(t) || !View.view_running(t.v)) {
     return term_paint(t);
   }
   const now  = Date.now();

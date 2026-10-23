@@ -89,7 +89,8 @@ import * as View from "../ui/View.ts";
 // (/help, /agents); agents: the user's primary agents, as last read; choose: the
 // picker of a list, a popup (Popup.ts; null: closed); question: the
 // picker of a question, in the input's place (Question.ts: a
-// confirmation, a line asked for, the permission question; null: none);
+// confirmation, a line asked for, the permission question; null: none,
+// or illi's form: asking);
 // profs: the profiles, as last read; hits: what a click on the screen does;
 // since: when the work running began, spin: the spinner's clock,
 // ruled: the screen as last painted, for the clock to write the rule and
@@ -205,7 +206,7 @@ export type Target = { $: "option" | "command" | "tab"; k: number } | { $: "row"
 // from, to (past its end), and what it stands for
 export type Span = { col: number; to: number; aim: Target };
 
-// illi's own questions, in a popup (Asks.ts, Popup.ts): the tab shown
+// illi's own questions, at the input (Asks.ts, Question.ts): the tab shown
 // (past the last question: the answers, to look over), the first of its
 // lines in view (under the tabs, as it scrolls), and for each question
 // the words typed beside its options, the row lit (past the options: the

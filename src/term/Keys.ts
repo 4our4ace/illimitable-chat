@@ -2,11 +2,11 @@
 // ====
 // A key, as Screen.ts reads it: the mouse's (Select.ts), the wheel, the
 // keys of term_groups (Commands.ts), the key after the leader (its
-// shortcut, before all else), and what takes keys first: a popup open
-// (Popup.ts: a list, illi's questions) every key but PASS's, so none
-// reaches the chat, a pane, the input or the commands suggested under it
-// (its search or words the text typed too); then a question at the input
-// (Question.ts) every key but PASS's and the wheel off it (its line the
+// shortcut, before all else), and what takes keys first: a list's popup
+// open (Popup.ts) every key but PASS's, so none reaches the chat, a
+// pane, the input or the commands suggested under it (its search the
+// text typed too); then a question at the input (Question.ts) every key
+// but PASS's and the wheel off it (its line or illi's form's words the
 // text typed too); then the commands suggested and a pane; Enter (a
 // skill named mid-message told), Esc, Ctrl+C and Ctrl+D, Tab (the
 // suggested reply), Shift+Tab and the pages.
@@ -20,8 +20,8 @@ import { term_draw } from "./Frame.ts";
 import { member_others } from "./Member.ts";
 import { term_note, term_toast, term_unnote } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
-import { popup_form_wheel, popup_mouse, popup_page, popup_wheel, term_popup } from "./Popup.ts";
-import { question_held, question_of, question_over } from "./Question.ts";
+import { popup_mouse, popup_page, popup_wheel, term_popup } from "./Popup.ts";
+import { question_form_wheel, question_held, question_of, question_over } from "./Question.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_copied, term_hover, term_mouse, term_selected, term_target, term_typing, term_wordy } from "./Select.ts";
 import { term_act, term_primaries, term_quit, type Chooser, type Cmd, type Term } from "./Term.ts";
@@ -122,11 +122,9 @@ function term_keyed(key: string): Cmd | undefined {
 
 // a key after the leader: its shortcut's (term_after; the wheel lets the
 // leader go and goes on to what has it: the popup, the question, a pane,
-// else the chat). A key while a popup (a list, illi's questions), a
-// question at the input, the commands suggested or a pane is open:
-// theirs first (true: taken). A list as term_choose_key, every key but
-// PASS's; illi's questions every key but PASS's and the leader too, as
-// Asks.ts says (the wheel scrolls them: Popup.ts); a question at the
+// else the chat). A key while a list's popup, a question at the input,
+// the commands suggested or a pane is open: theirs first (true: taken).
+// A list as term_choose_key, every key but PASS's; a question at the
 // input as term_question_key; the commands move by Up and Down, fill one
 // in by Tab, run it by Enter; a pane scrolls by the arrows, the pages and
 // the wheel, Esc and Enter close it, and no editing key reaches the input
@@ -138,24 +136,12 @@ export function term_grab(t: Term, key: string): boolean {
     term_after(t, key);
     return true;
   }
-  t.lead    = false;
-  const pop = term_popup(t);
-  if (pop === "list") {
+  t.lead = false;
+  if (term_popup(t)) {
     return term_choose_key(t, t.choose!, key);
   }
-  if (pop === "form" && (PASS.includes(key) || key === config.LEADER)) {
-    return false;
-  }
-  if (pop === "form") {
-    if (key === "WheelUp" || key === "WheelDown") {
-      popup_form_wheel(t, key === "WheelUp" ? -1 : 1);
-    } else {
-      term_form_key(t, key);
-    }
-    return true;
-  }
   const asked = question_of(t);
-  if (asked !== null && term_question_key(t, asked, key)) {
+  if (asked !== null && term_question_key(t, key)) {
     return true;
   }
   const sug = asked === null ? term_suggest(t) : null;
@@ -181,14 +167,26 @@ export function term_grab(t: Term, key: string): boolean {
 // PASS's and the leader, which go on to what they do with no question
 // (Ctrl+P's list shows over it), Ctrl+C while text is chosen (it copies
 // it, as ever), and the wheel off it, which scrolls the chat (or a pane)
-// as with no question; its picker's as term_choose_key (the wheel on it
-// scrolls its lead)
-function term_question_key(t: Term, c: Chooser, key: string): boolean {
+// as with no question; a picker's as term_choose_key (the wheel on it
+// scrolls its lead); illi's form's as Asks.ts term_form_key (the wheel on
+// it scrolls its lines: Question.ts), any it doesn't use doing nothing
+function term_question_key(t: Term, key: string): boolean {
   const wheel = key === "WheelUp" || key === "WheelDown";
   if ((wheel && !question_over(t)) || (key === "Ctrl+C" && t.sel?.moved === true && !t.sel.held)) {
     return false;
   }
-  return term_choose_key(t, c, key);
+  if (t.question !== null) {
+    return term_choose_key(t, t.question, key);
+  }
+  if (PASS.includes(key) || key === config.LEADER) {
+    return false;
+  }
+  if (wheel) {
+    question_form_wheel(t, key === "WheelUp" ? -1 : 1);
+  } else {
+    term_form_key(t, key);
+  }
+  return true;
 }
 
 // a picker closed: the list's popup or the question at the input it is
@@ -332,7 +330,7 @@ function term_wait(t: Term, m: Paint.Mark, at: Screen.Spot): void {
   const timer = setTimeout(() => {
     t.wait    = null;
     const now = t.seen.marks.find((x) => x.key === m.key);
-    if (now !== undefined && term_popup(t) === null && t.pane === null) {
+    if (now !== undefined && !term_popup(t) && t.pane === null) {
       term_fold(t, now, at);
     }
     term_draw(t);
