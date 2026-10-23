@@ -78,6 +78,7 @@ What else illi keeps in `~/.illi`:
 | `used.json`     | how often you ran each command: among those a `/word` matches alike, the most used come first; a use counts half as much 100 uses later, and a command you stopped using drops out (two illis at once each add theirs: [Storage](storage.md#usage-counts)) |
 | `picked.json`   | the same for what you pick in Ctrl+P's list, kept apart |
 | `profile`       | the profile used last                                 |
+| `trust.json`    | the folders you trust illi in (a repo's top covers the repo), every profile's: the question at the start asks only for others; edit or delete it to trust less |
 | `update.json`   | when illi last looked for a new release (`autoupdate`), and the one it last said it couldn't install |
 | `locks/`        | a lock per project, held while its chat is open (by the system: a crash never leaves one held), and the socket a second terminal joins it by |
 | `illi.log`      | what went wrong (each profile's own)                  |

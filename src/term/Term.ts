@@ -55,6 +55,8 @@ import * as Screen from "../ui/Screen.ts";
 import { CLOCK } from "./Side.ts";
 import { Store } from "../chat/Store.ts";
 import { THEME_TROUBLE } from "../ui/Theme.ts";
+import { Trust } from "./Trust.ts";
+import { Trusted } from "../config/Trusted.ts";
 import { AGAIN, HERE, Update } from "../config/Update.ts";
 import * as View from "../ui/View.ts";
 
@@ -243,10 +245,10 @@ let hint: Notice | null = null;
 const GONE   = 600;
 const REJOIN = 20;
 
-function term_new(chat: Chat | null, mem: () => Memory): Term {
+function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Term {
   const t: Term = {
     v       : View.view_new(),
-    scr     : Screen.screen_new((key) => term_press(t, key)),
+    scr,
     chat,
     mem,
     ended   : false,
@@ -292,6 +294,7 @@ function term_new(chat: Chat | null, mem: () => Memory): Term {
   }
   term_primaries(t);
   Reply.reply_buttons(t.scr.tty);
+  t.scr.on    = (key) => term_press(t, key);
   t.scr.grab  = (key) => term_grab(t, key);
   t.scr.type  = (text) => term_type(t, text);
   t.scr.paste = (text) => term_paste(t, text);
@@ -508,10 +511,21 @@ function term_trouble(t: Term, told: Set<string>): void {
 // illi a project), on the terminal (its log lines to LOG; a crash said, the
 // terminal left as found: term_crash) or a pipe; the MCP servers started
 // (a failure told: term_trouble); the models ChatGPT lists learned; a new
-// release looked for (term_update)
+// release looked for (term_update). First of all, on a terminal, the
+// folder trusted (Trust.ts): not, illi leaves as it came, saying so. The
+// screen is taken here only on a terminal, for that question; a pipe's
+// is made where the chat's is (term_new), so its input's end, which can
+// come at once, finds Term listening
 export async function term_start(): Promise<void> {
   process.on("uncaughtException", term_crash);
   process.on("unhandledRejection", term_crash);
+  const tty = process.stdin.isTTY === true && process.stdout.isTTY === true;
+  const scr = tty ? Screen.screen_new(() => {}) : null;
+  if (scr !== null && !(await Trust.check(scr, process.cwd()))) {
+    await Screen.screen_leave(scr);
+    process.stderr.write("illi: not started: " + Trusted.folder(process.cwd()) + " isn't trusted.\n");
+    process.exit(1);
+  }
   const holds = await Lock.take(process.cwd(), Remote.serve).catch((err) => {
     console.error("illi: " + err.message);
     process.exit(1);
@@ -525,7 +539,7 @@ export async function term_start(): Promise<void> {
     delete process.env.ILLI_REJOIN;
   }
   const chat = holds ? Chat.open(process.cwd()) : null;
-  const t = term_new(chat, chat !== null ? () => chat.mem : term_reader());
+  const t = term_new(chat, chat !== null ? () => chat.mem : term_reader(), scr ?? Screen.screen_new(() => {}));
   const told = new Set<string>();
   if (chat !== null) {
     Remote.share(chat);

@@ -3,7 +3,10 @@ Customize
 
 All in `~/.illi/`, for every profile; a profile may add its own
 ([Profiles](profiles.md)). A project's `.illi/` may hold agents, commands
-and skills too, which win by name; the rest is read only from yours.
+and skills too, which win by name, once you trust its folder (the
+question illi asks at its first start there; a run from a pipe or a
+script is never asked, so it loads them only for a folder trusted
+before); the rest is read only from yours.
 [`examples/`](../examples) has samples. Or ask illi: it comes with a
 skill, `customize-illi`, and writes these files itself.
 

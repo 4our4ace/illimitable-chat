@@ -255,7 +255,7 @@ export function screen_new(on: (key: string) => void): Screen {
   if (tty) {
     process.stdin.setRawMode(true);
     process.stdout.write(MODES_ON + ASK);
-    process.on("exit", () => process.stdout.write(MODES_OFF));
+    process.on("exit", () => scr.left || process.stdout.write(MODES_OFF));
     scr.asked = true;
     setTimeout(() => (scr.asked = false), AWAIT).unref();
     screen_read(scr);
@@ -652,8 +652,10 @@ export function screen_suspend(scr: Screen): void {
 }
 
 // the terminal as illi found it, for the program that takes it next (a
-// profile's switch: illi run again): its modes off, its input cooked and
-// no longer read; answers once that is written
+// profile's switch: illi run again, or a message before quitting): its
+// modes off, its input cooked and no longer read; answers once that is
+// written. The exit's own reset is skipped then: leaving the alternate
+// screen twice puts the cursor back over what was written between
 export function screen_leave(scr: Screen): Promise<void> {
   scr.left = true;
   if (scr.tty) {

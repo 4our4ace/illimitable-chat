@@ -3,7 +3,8 @@
 // What the user defines, as markdown files: agents, commands and skills,
 // in config.ROOT (global: ~/.illi/agents, ~/.illi/commands,
 // ~/.illi/skills), a profile's folder (config.DIR, its own beside them)
-// and the working dir's .illi (the project's); by name, the later wins.
+// and the working dir's .illi (the project's, only in a folder the user
+// trusts: Trusted.ts); by name, the later wins.
 // One named in the `off` setting is left out. Each is read anew at each
 // use, so an edit applies at the next call.
 //
@@ -48,6 +49,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { EFFORTS, Pick, type Offer } from "../ai/Pick.ts";
 import * as config from "./Config.ts";
+import { Trusted } from "./Trusted.ts";
 import CUSTOMIZE from "../skills/customize-illi/SKILL.md" with { type: "text" };
 
 // Types
@@ -100,10 +102,11 @@ const BUILT_IN = [CUSTOMIZE];
 export namespace Custom {
 
   // where the user's files of a kind are: the global ones first, then
-  // the profile's, the project's last
+  // the profile's, the project's last (a trusted folder's only)
   export function dirs(cwd: string, kind: "agents" | "commands" | "skills"): string[] {
     const own = config.DIR === config.ROOT ? [] : [path.join(config.ROOT, kind)];
-    return [...own, path.join(config.DIR, kind), path.join(cwd, ".illi", kind)];
+    const project = Trusted.has(Trusted.folder(cwd)) ? [path.join(cwd, ".illi", kind)] : [];
+    return [...own, path.join(config.DIR, kind), ...project];
   }
 
   // the markdown files of a kind, by name, the later dir's over the

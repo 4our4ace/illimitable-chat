@@ -2,7 +2,8 @@ Development
 ===========
 
     src/main.ts    the illi command
-    src/term/      the terminal app: keys, selection, commands, side panel
+    src/term/      the terminal app: keys, selection, commands, side panel, the
+                   trust question at the start (Trust.ts)
     src/ui/        the chat's view, markdown, replies, diagrams, the screen
     src/chat/      the chat's turns (Chat.ts), its memory tree and views (Memory.ts),
                    the summaries written (Compactor.ts), its SQLite file (Store.ts),
@@ -12,7 +13,8 @@ Development
                    (Remote.ts), the disk
     src/ai/        model vendors, the agent loop, picks, token usage
     src/tools/     shell and files, MCP servers, the prompts
-    src/config/    settings, profiles, your agents, commands and skills, updates
+    src/config/    settings, profiles, your agents, commands and skills, updates,
+                   the folders you trust (Trusted.ts)
     src/skills/    the skills built into illi (customize-illi)
     test/          tests across modules; each module's own sit beside it
     vendor/        cellsmith's markdown parser and palettes
