@@ -140,7 +140,7 @@ test("ChatGPT's list: a new model shown is offered and kept, a hidden one not, a
 // usual 272k), four efforts, fast as priority; luna at 272k, two efforts
 const CATALOG = { models: [
   { slug: "gpt-6-luna", visibility: "list", priority: 2, context_window: 272000, supported_reasoning_levels: [{ effort: "low" }, { effort: "medium" }] },
-  { slug: "gpt-6.1-sol", visibility: "list", priority: 1, context_window: 272000, max_context_window: 872000, effective_context_window_percent: 95, supported_reasoning_levels: ["low", "medium", "high", "xhigh"].map((effort) => ({ effort })), service_tiers: [{ id: "priority" }] },
+  { slug: "gpt-6.1-sol", visibility: "list", priority: 1, context_window: 272000, max_context_window: 872000, effective_context_window_percent: 90, supported_reasoning_levels: ["low", "medium", "high", "xhigh"].map((effort) => ({ effort })), service_tiers: [{ id: "priority" }] },
   { slug: "gpt-hidden", visibility: "hide", priority: 0, context_window: 272000 },
 ] };
 
@@ -148,10 +148,10 @@ test("ChatGPT's catalog is the chatgpt list: each model's whole window, its usua
   expect(await fetching(() => CATALOG, () => ChatGPT.models())).toEqual([]);
   const [sol, luna] = Pick.list("chatgpt");
   expect(Pick.list("chatgpt").map((m) => m.label)).toEqual(["gpt-6.1-sol", "gpt-6-luna"]);
-  expect(sol).toEqual({ label: "gpt-6.1-sol", id: "gpt-6.1-sol", speeds: ["slow", "fast"], window: 872000, standard: 272000, efforts: ["low", "medium", "high", "xhigh"], tiers: { fast: "priority" }, room: 0.95 });
-  expect(luna.room).toBeUndefined();
+  expect(sol).toEqual({ label: "gpt-6.1-sol", id: "gpt-6.1-sol", speeds: ["slow", "fast"], window: 872000, standard: 272000, efforts: ["low", "medium", "high", "xhigh"], tiers: { fast: "priority" }, room: 0.9 });
+  expect(luna.room).toBe(0.95);
   expect(config.config_most(872000, 0, sol.room)).toBe(610400);
-  expect(config.config_most(872000, 300000, sol.room)).toBe(528400);
+  expect(config.config_most(872000, 300000, sol.room)).toBe(484800);
   expect(luna).toMatchObject({ speeds: ["slow"], window: 272000, standard: undefined, efforts: ["low", "medium"] });
   const file = JSON.parse(fs.readFileSync(config.MODELS_FILE, "utf8"));
   expect([file.account, file.capped, Object.keys(file.vendors).sort()]).toEqual(["acct-1", [], ["chatgpt", "claude-code"]]);
