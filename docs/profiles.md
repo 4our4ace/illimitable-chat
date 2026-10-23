@@ -27,22 +27,24 @@ Global and a profile's own
 --------------------------
 
 `~/.illi` is global: every profile gets its settings, skills, agents,
-commands, MCP servers, `RULES.md` and theme. A profile's folder holds only
-what is its own:
+commands, MCP servers, plugins, hooks, `RULES.md` and theme. A profile's
+folder holds only what is its own:
 
 | In the profile's folder      | Does                                      |
 | ---------------------------- | ----------------------------------------- |
 | `config.json`                | its settings, over the global ones key by key |
 | `skills/`, `agents/`, `commands/` | beside the global ones; by name, its own win |
 | `mcp.json`                   | servers beside the global ones; by name, its own win |
+| `plugins/`, `hooks.json`     | beside the global ones; by name, its own plugins win |
+| `permissions.json`           | its own rules and grants; the global file isn't read |
 | `RULES.md`, `theme.json`     | used instead of the global ones, if there |
 
 - In a profile, `/settings` changes the profile's own value. Each row
   says where its value comes from (`global` or the profile), and Del
   puts the global one back.
 - The `off` setting turns global ones off for a profile: Enter on it in
-  `/settings` lists every skill, agent, command and MCP server to turn on
-  and off. A profile's list adds to the global one: what is off globally
+  `/settings` lists every skill, agent, command, MCP server and plugin to
+  turn on and off. A profile's list adds to the global one: what is off globally
   is off in every profile.
 - A sticky skill's on and off goes with the skill: a global one's is
   every profile's, a profile's own skill's that profile's.
@@ -63,8 +65,13 @@ Export and import
   like a known key or token.
 - The chat's SQLite files go as snapshots SQLite takes, whole even while
   illi writes to them. The rest goes as it is: agents, commands, skills,
-  theme.json and RULES.md.
-- An import is treated as untrusted: its config's `after`, `rules`,
-  `login`, `mcp` and `theme` are dropped and its MCP servers turned off.
+  plugins, hooks.json, permissions.json, theme.json and RULES.md.
+- An import is treated as untrusted: nothing in it runs a command till
+  you turn it on. Its config's `after`, `rules`, `login`, `mcp`, `theme`,
+  `permissions` and `statusline` are dropped; its MCP servers and plugins
+  are turned off (`/settings`, `off`, turns one on); its `hooks.json` and
+  `permissions.json` are kept aside as `hooks.json.imported` and
+  `permissions.json.imported` (rename one back to use it).
 - Its agents, commands, skills, RULES.md and chat come in as they are, at
-  work once you switch to it.
+  work once you switch to it: look through an archive from elsewhere
+  before you import it.

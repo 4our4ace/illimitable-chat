@@ -6,7 +6,7 @@ illi's docs
 - [Providers](providers.md): your ChatGPT plan, your Claude plan through
   Claude Code, API keys, and which models do what.
 - [Customize](customize.md): agents, commands, skills, MCP servers,
-  plugins, the theme and its accent, rules.
+  plugins, hooks, a status line, the theme and its accent, rules.
 - [Permissions](permissions.md): what illi runs without asking, the
   modes, the question, refused requests, your rules.
 - [Profiles](profiles.md): separate chats on one global setup, exported

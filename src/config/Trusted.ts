@@ -6,10 +6,10 @@
 // trust.json in illi's own folder, every profile's; home's own folder,
 // and each above it (/home, /), is trusted only for the run it was
 // answered in, never kept, as keeping it would trust every folder under
-// it. What a project brings that runs or
-// instructs (its .illi agents, commands and skills: Custom.ts) loads only
-// in a trusted folder, so a pipe (never asked) runs a folder's own only
-// once a terminal trusted it.
+// it. What a project brings that runs or instructs (its .illi agents,
+// commands and skills: Custom.ts; its plugins, hooks and MCP servers:
+// Plugins.ts, Hooks.ts, Mcp.ts) loads only in a trusted folder, so a pipe
+// (never asked) runs a folder's own only once a terminal trusted it.
 
 import * as fs from "node:fs";
 import * as os from "node:os";

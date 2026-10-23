@@ -58,7 +58,8 @@ export type Hints = { read: boolean; destructive: boolean };
 
 // where a call is judged: the mode, the working dir, the project's top,
 // the user's rules, the grants (kind=subject, kind:pattern), the folders
-// read freely besides (illi's skills')
+// read freely besides (illi's skills'), the loaded plugins' folders (read
+// freely but their secrets; their scripts run as the project's)
 export type Where = { mode: Mode; cwd: string; top: string; rules: Rules; grants: Set<string>; reads: string[]; plugins: string[] };
 
 // a verdict: run; ask (why; the grants a "don't ask again" keeps, none
@@ -182,12 +183,12 @@ const DEVS = /^\/dev\/(null|zero|stdin|stdout|stderr|tty|u?random|fd\/\d+)$|^\/p
 const NET = /^\/dev\/(tcp|udp)\//;
 const SYSTEM = ["/usr", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/libx32", "/opt", "/etc", "/proc", "/sys", "/nix", "/snap", "/System", "/Library", "/Applications", "/private/etc"];
 
-// secrets: files by name anywhere, folders and files under home, files
-// of the system
 // a plugin's files read only on asking: where the user's tokens may be
 // pasted (its MCP servers, its settings, its manifest's folder)
 const PLUGIN_KEPT = [".mcp.json", "settings.json", ".claude-plugin"];
 
+// secrets: files by name anywhere, folders and files under home, files
+// of the system
 const SECRET_NAME = /^(\.env(\.(?!(example|sample|template|dist)$)[^/]+)?|\.netrc|\.pgpass|\.git-credentials|\.npmrc|\.pypirc|\.vault-token|id_(rsa|dsa|ecdsa|ed25519)(_sk)?|.+\.(pem|key|p12|pfx|keystore|jks|kdbx))$/;
 const SECRET_HOME = [
   ".ssh", ".aws", ".gnupg", ".kube", ".docker", ".azure", ".config/gh", ".config/gcloud", ".config/hub", ".config/op",

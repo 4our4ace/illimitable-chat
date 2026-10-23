@@ -248,9 +248,10 @@ plugin that one skill. Install one by copying or cloning it in:
   folder that looks meant as one but isn't (a marketplace, a name with
   a space).
 - A project's plugins load only in a folder you trust; one new or
-  changed since illi last started there is said at the start. Commands,
-  skills and agents are read as they're used, so a new one works at
-  once; code, hooks and MCP servers from the next start.
+  changed since illi last started there is said at the start. Which
+  plugins there are is read as illi starts, and their code, hooks and
+  MCP servers with it; a plugin's commands, skills and agents are read
+  as they're used, so one added to it works at once.
 
 A plugin runs as you: its code, hooks and MCP servers run on your
 computer with all illi can do. Install only what you trust. illi reads
@@ -278,7 +279,9 @@ over. What differs:
   matchers.
 - Not done: a command's `` !`cmd` `` lines and `@file` references (said
   in `/agents`), `${user_config.*}` (empty: illi has no userConfig),
-  `bin/` on your PATH, output styles, LSP servers, themes, monitors.
+  `bin/` on your PATH, output styles, LSP servers, themes, monitors,
+  workflows, channels, its `settings.json` (`/agents` says what of a
+  plugin illi doesn't use).
 - A root `index.js` beside other parts is often its MCP server, so illi
   never imports it: illi's code goes in `illi.ts`.
 - On `claude-code`, Claude Code still loads its own enabled plugins
@@ -310,7 +313,7 @@ Its default export is a function, given `illi`:
 
 | Member | Does |
 | ------ | ---- |
-| `api`, `name`, `dir`, `cwd`, `profile`, `version` | the API's version (1), the plugin's name and folder, the project's folder, the profile, illi's version |
+| `api`, `name`, `dir`, `cwd`, `profile`, `version` | the API's version (1), the plugin's name and folder (a file plugin's: the plugins folder it is in), the project's folder, the profile, illi's version |
 | `on(hook, fn)` | a hook (below) |
 | `command(name, about, fn)` | `/name words` runs `fn(words)`; text it returns is a note. A command of illi's or yours of that name wins |
 | `tool({ name, description, schema, run })` | a tool the model may call, named `plugin__<plugin>__<name>` (an agent's `tools: plugin__<plugin>` allows them all); `run(input, call)` returns text, or `{ text, fail }` |

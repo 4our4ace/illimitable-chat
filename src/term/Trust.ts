@@ -7,8 +7,8 @@
 // first), before anything of the folder's loads or runs. A yes is kept
 // for the project (Trusted.ts); home's own folder, and any above it, is
 // asked at each start, never kept. A pipe is never asked: a script's run is its own
-// say, though a folder's own agents, commands and skills load in it only
-// once a terminal trusted the folder.
+// say, though a folder's own agents, commands, skills, plugins, hooks and
+// MCP servers load in it only once a terminal trusted the folder.
 
 import * as Draw from "../ui/Draw.ts";
 import * as Paint from "../ui/Paint.ts";
