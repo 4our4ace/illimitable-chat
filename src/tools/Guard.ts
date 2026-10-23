@@ -75,8 +75,9 @@ export type Verdict =
 type Flag = { why: string; kind: Kind; subject: string; wide: { kind: Kind; subject: string; grant: string } | null; rule?: boolean };
 
 // what a call was found to do: refused by the user's rules (why), its
-// flags, and its changes (flags only the modes read-only and ask act on)
-type Look = { denied: string[]; flags: Flag[]; changes: Flag[] };
+// flags, and its changes (flags only the modes read-only and ask act on);
+// a shell command's whole text (look_part)
+type Look = { denied: string[]; flags: Flag[]; changes: Flag[]; whole: string };
 
 // a file a part reads or writes, as a word, in its folder
 type Use = { word: Word; write: boolean; cwd: string | null };
@@ -173,6 +174,10 @@ const GIT_READ = new Set([
 ]);
 const GIT_RUNS = /^(core\.(pager|editor|sshcommand|fsmonitor|hookspath|askpass|gitproxy|worktree)|alias\.|include\.|includeif\.|diff\.external|sequence\.editor|uploadpack\.|receivepack\.|protocol\.|url\.|http\..*proxy|.*\.(textconv|command|cmd|helper|program|driver|process|clean|smudge))/i;
 
+// the programs that can wipe a disk: make a file system, partition,
+// erase, encrypt
+const DISKS = /^(mkfs(\..+)?|mke2fs|mkdosfs|mkntfs|mkexfatfs|mkswap|wipefs|blkdiscard|fdisk|sfdisk|cfdisk|gdisk|sgdisk|parted|cryptsetup)$/;
+
 // Claude Code's tools that touch nothing on this computer, or only what
 // was already allowed (a shell's output, stopping it): run (Guard.hosted)
 const HOSTED = new Set(["WebFetch", "WebSearch", "Task", "Agent", "TodoWrite", "TodoRead", "TaskOutput", "BashOutput", "TaskStop", "KillShell", "KillBash"]);
@@ -194,7 +199,7 @@ export namespace Guard {
   // a tool call's verdict: shell, read, write, edit, an MCP tool (by its
   // hints); any other tool (illi's own) runs
   export function check(where: Where, tool: string, input: any, hints?: Hints): Verdict {
-    const look: Look = { denied: [], flags: [], changes: [] };
+    const look: Look = { denied: [], flags: [], changes: [], whole: "" };
     try {
       if (tool === "shell") {
         look_shell(where, look, String(input?.command ?? ""));
@@ -239,7 +244,7 @@ export namespace Guard {
     if (tool.startsWith("mcp__")) {
       return Guard.check(where, tool, input);
     }
-    const look: Look = { denied: [], flags: [], changes: [] };
+    const look: Look = { denied: [], flags: [], changes: [], whole: "" };
     look_tool(where, look, tool, " is a Claude Code tool illi doesn't know");
     return verdict(where, look);
   }
@@ -270,10 +275,12 @@ export namespace Guard {
   }
 
   // a command as an exact grant names it: root marked, its assignments
-  // and words unquoted, joined by spaces, quoted again where needed
+  // and words unquoted, joined by spaces, quoted again where needed; a
+  // word that expands (a variable, a command's output, a ~) as written,
+  // so the grant reads as typed and holds no value of the environment
   // (wrappers such as timeout left out: they don't change what runs)
   export function norm(part: Part): string {
-    const word = (w: Word) => (w.dynamic || w.alts.length !== 1 ? w.raw : quote(w.alts[0]));
+    const word = (w: Word) => (w.dynamic || w.alts.length !== 1 || /[$`]|^~/.test(w.raw) ? w.raw : quote(w.alts[0]));
     const env = part.env.map((e) => e.name + "=" + word(e.value));
     return [...(part.root ? ["sudo"] : []), ...env, ...part.argv.map(word)].join(" ");
   }
@@ -351,14 +358,18 @@ function look_shell(where: Where, look: Look, command: string): void {
     }
     return;
   }
+  look.whole = text;
   parts.forEach((part) => look_part(where, look, part, 0));
 }
 
 // a part's flags and change: by the user's rules first, then each value
 // its command's name can take (a loop's), its redirections, assignments
-// and files
+// and files. An exact grant names the part (git push --force, wherever
+// it is written), but one whose input comes from elsewhere (a pipe,
+// xargs, a file or heredoc read in) names the whole command: `sh` alone
+// would let any code piped into it run
 function look_part(where: Where, look: Look, part: Part, depth: number): void {
-  const exact = Guard.norm(part);
+  const exact = part.piped || part.fed || part.redirs.some((r) => r.op.startsWith("<")) ? look.whole : Guard.norm(part);
   const plain = part.text;
   const rule = rule_of(where, "shell", [plain, exact], part.root ? [exact] : [plain, exact]);
   if (rule === "deny") {
@@ -483,7 +494,7 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
   const short = (c: string) => xs.some((x) => /^-[a-zA-Z]+$/.test(x) && x.includes(c));
   const pos = positional(args);
   const sub = pos[0]?.alts[0] ?? "";
-  switch (base) {
+  switch (DISKS.test(base) ? "mkfs" : base) {
     case "git": {
       return git_look(part, args, use, flag);
     }
@@ -519,13 +530,7 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
       }
       return true;
     }
-    case "mkfs":
-    case "wipefs":
-    case "fdisk":
-    case "sfdisk":
-    case "parted":
-    case "mkswap":
-    case "cryptsetup": {
+    case "mkfs": {
       flag(text + " can wipe a disk");
       return true;
     }
@@ -1147,7 +1152,7 @@ function path_why(where: Where, file: string, write: boolean): { why: string; wi
   if (!write && where.reads.some((d) => under(file, d))) {
     return null;
   }
-  if (secret(file)) {
+  if (secret(file, where.top)) {
     return { why: at + " may hold secrets", wide: false };
   }
   if (file.startsWith("/dev/") && write) {
@@ -1162,8 +1167,14 @@ function path_why(where: Where, file: string, write: boolean): { why: string; wi
   return { why: at + " is outside the project", wide: true };
 }
 
-function secret(file: string): boolean {
-  return SECRET_NAME.test(path.basename(file)) || SECRET_HOME.some((d) => under(file, path.join(HOME, d))) || SECRET_SYSTEM.some((d) => under(file, d)) || under(file, Projects_real(config.ROOT));
+// whether a file may hold secrets: by its name anywhere; in a secret
+// folder of home's, the system's, or illi's own, unless the project is
+// inside that folder and the file inside the project (a repo kept in
+// ~/.claude: its files are the project's, the folder's others still
+// secret)
+function secret(file: string, top: string): boolean {
+  const held = (dir: string) => under(file, dir) && !(under(top, dir) && under(file, top));
+  return SECRET_NAME.test(path.basename(file)) || SECRET_HOME.some((d) => held(path.join(HOME, d))) || SECRET_SYSTEM.some(held) || held(Projects_real(config.ROOT));
 }
 
 // whether a file inside the project is protected

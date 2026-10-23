@@ -3,7 +3,8 @@ Development
 
     src/main.ts    the illi command
     src/term/      the terminal app: keys, selection, commands, side panel, the
-                   trust question at the start (Trust.ts)
+                   trust question at the start (Trust.ts), /mode and
+                   /permissions (PermCommands.ts)
     src/ui/        the chat's view, markdown, replies, diagrams, the screen
     src/chat/      the chat's turns (Chat.ts), its memory tree and views (Memory.ts),
                    the summaries written (Compactor.ts), its SQLite file (Store.ts),
@@ -12,7 +13,9 @@ Development
                    and their search's thread (Seeker.ts), a second terminal's view
                    (Remote.ts), the disk
     src/ai/        model vendors, the agent loop, picks, token usage
-    src/tools/     shell and files, MCP servers, the prompts
+    src/tools/     shell and files, MCP servers, the prompts; the permission
+                   checks: bash read as bash reads it (Shell.ts), each call
+                   judged (Guard.ts), your rules and grants (Permissions.ts)
     src/config/    settings, profiles, your agents, commands, skills and plugins
                    (Plugins.ts), updates, the folders you trust (Trusted.ts)
     src/skills/    the skills built into illi (customize-illi)
