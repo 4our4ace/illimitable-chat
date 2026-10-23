@@ -82,7 +82,7 @@ flowchart TD
 - **Memory tree.** Each message is summarized into one line, and lines
   merge in pairs into a binary tree, written in the background by a
   smaller model. A turn sends the latest messages whole, up to the
-  model's autocompact (60% of its window by default, `/autocompact`);
+  model's auto compact (60% of its window by default, `/autocompact`);
   older ones go as lines, merged as they age. A turn that
   outgrows the model's window anyway goes on by itself, more of it
   summarized.
@@ -117,7 +117,7 @@ Keys and commands
 | Ctrl+X, then a key   | a shortcut (m model, s settings…); `/shortcuts` changes them |
 | Shift+Tab            | switch primary agent                  |
 | `/login`             | sign in with your ChatGPT plan        |
-| `/model`             | pick the model, its effort, speed and autocompact |
+| `/model`             | pick the model, its effort, speed and auto compact |
 | `/settings`          | change any setting                    |
 | `/profile`           | switch (the one left runs on), make or export a profile |
 | `/tree`, `/export`   | the memory as a page, as JSON, written into the current folder |

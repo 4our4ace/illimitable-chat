@@ -23,7 +23,7 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `compactor`  | each vendor's small model         | writes the summaries: a pick per vendor, comma-separated |
 | `agents`     | the pick                          | what subagents run on: a pick per vendor         |
 | `models`     | all                               | models offered                                   |
-| `autocompact` | `60%`                            | how much of the chat a turn sends before older messages fold into the tree: a share of the model's window (`"60%"`) or tokens (`400000`, `"400k"`); at most 70% of the window, less what a request takes beside the chat. `/autocompact` and Shift+Left/Right in `/model` set it per model. Read as `context` (`ILLI_CONTEXT`) too |
+| `autocompact` | `60%`                            | how much of the chat a turn sends before older messages fold into the tree: a share of the model's window (`"60%"`) or tokens (`400000`, `"400k"`); at most 70% of the window, less what a request takes beside the chat. `/autocompact` and Shift+Left/Right in `/model` set it per model (its gauge: "auto compact at"). Read as `context` (`ILLI_CONTEXT`) too |
 | `autocompacts` |                                 | per model: `{ "gpt-6.1-sol": "50%" }` (tokens apply on every provider of that model, a share follows each one's window). Read as `contexts` (`ILLI_CONTEXTS`) too |
 | `rules`      | `RULES.md`: the profile's, else `~/.illi`'s | your rules for every project (none: no rules) |
 | `after`      |                                   | a shell command run after each turn              |

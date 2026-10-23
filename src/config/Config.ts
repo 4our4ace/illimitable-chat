@@ -97,7 +97,7 @@ const TABLE = {
   leader     : { def: "Ctrl+X", values: "text", now: true, what: "the key before a shortcut", shape: [/^(ctrl|alt)\+[a-z]$/i, "Ctrl or Alt and a letter, like Ctrl+X"] },
   shortcuts  : { def: "", values: "text", now: true, what: "the keys after the leader, as JSON", none: "illi's own" },
   autocompact : { def: "60%", values: ["40%", "50%", "60%", "70%"], now: true, what: "chat sent before older messages fold, of the model's window", shape: [/^(\d+(\.\d+)?k?|\d+(\.\d+)?%)$/i, "a share of the window (60%) or tokens (400000, 400k)"] },
-  autocompacts: { def: "", values: "text", now: true, what: "autocompact by model, as JSON" },
+  autocompacts: { def: "", values: "text", now: true, what: "auto compact by model, as JSON" },
   rules      : { def: config_own("RULES.md"), values: "text", now: true, what: "your rules, every project", path: true },
   after      : { def: "", values: "text", now: true, what: "a command after each turn" },
   off        : { def: "", values: "text", now: true, what: "skills, agents, commands, MCP servers, plugins (or a plugin's part, as plugin:name) and hooks.json turned off", none: "none" },
@@ -234,8 +234,11 @@ let ROLES: Record<Role, Partial<Record<Vendor, Pick>>> = { agents: {}, compactor
 // window ("60%") or tokens ("400000", "400k"); at most MOST of the
 // window. ROOM: what of the window a turn may read before it ends to
 // fold more (Chat.ts, Agent.ts), what the prompt and tools take beside
-// the chat left out of the autocompact too. A model whose window no one
-// told is taken to have GUESS
+// the chat left out of the autocompact too; a model whose vendor tells
+// its own (ChatGPT's effective_context_window_percent: Pick's room), that.
+// A model whose window no one told is taken to have GUESS (none on
+// ChatGPT: Chat.cut moves nothing, and no turn starts, till its catalog
+// tells it)
 export const MOST       = 0.7;
 export const ROOM       = 0.9;
 export const GUESS      = 128000;
@@ -535,11 +538,11 @@ function config_object(value: unknown): Record<string, unknown> | null {
 
 // the tokens of the chat a turn sends on a model: its autocompact (its
 // own, else the global one) of its window as known (none: GUESS), at most
-// config_most
-export function config_context(label: string, window = GUESS, overhead = 0): number {
+// config_most (room: the share of the window a request may fill)
+export function config_context(label: string, window = GUESS, overhead = 0, room = ROOM): number {
   const set  = String(AUTOCOMPACTS[label] ?? AUTOCOMPACT_SET);
   const want = config_tokens(set, window) ?? config_tokens(SETTINGS.autocompact.def, window)!;
-  return Math.max(1, Math.round(Math.min(want, config_most(window, overhead))));
+  return Math.max(1, Math.round(Math.min(want, config_most(window, overhead, room))));
 }
 
 // a model's autocompact as set: its own (`autocompacts`), else the global
@@ -556,10 +559,10 @@ export function config_autocompacts(): { global: string; sets: Record<string, st
 }
 
 // the most a model's autocompact may be: MOST of its window, and a turn
-// at it starting under ROOM of it beside what else a request takes
-// (overhead)
-export function config_most(window: number, overhead = 0): number {
-  return Math.round(Math.min(window * MOST, window * ROOM - overhead));
+// at it starting under `room` of it (ROOM, or the vendor's own) beside
+// what else a request takes (overhead)
+export function config_most(window: number, overhead = 0, room = ROOM): number {
+  return Math.round(Math.min(window * MOST, window * room - overhead));
 }
 
 // an autocompact as tokens of a window: a share of it (60%), tokens
@@ -580,7 +583,7 @@ export function config_tokens(text: string, window: number): number | null {
 export function config_autocompact(label: string, value: string | null): string | null {
   const env = config_env_set("autocompacts");
   if (env !== null) {
-    return "autocompacts is set by " + env + ": unset it to change a model's autocompact here.";
+    return "autocompacts is set by " + env + ": unset it to change a model's auto compact here.";
   }
   const root = PATH !== ROOT + "/config.json" && !("autocompacts" in config_file(PATH)) && "autocompacts" in config_file(ROOT + "/config.json");
   const all  = { ...(config_object(config_file(root ? ROOT + "/config.json" : PATH).autocompacts) ?? {}) };

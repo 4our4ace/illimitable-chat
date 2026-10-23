@@ -64,14 +64,14 @@ test("/settings lists each setting, its value and what it does; one a variable s
   expect(note(t)).toBe("pick is set by ILLI_PICK: unset it to change it here.");
   run(t, "/settings");
   term_type(t, "jobs");
-  expect([lit(t), foot(t)]).toEqual(["jobs", "◂ ▸ Enter change · Del default · at the next start"]);
+  expect([lit(t), foot(t)]).toEqual(["jobs", "<- -> Enter change · Del default · at the next start"]);
 });
 
 test("Left, Right, Enter and Shift+Enter step a setting, kept in config.json at once; Delete puts its default back", () => {
   const t = term();
   run(t, "/settings");
   term_type(t, "side_w");
-  expect([lit(t), foot(t)]).toEqual(["side_width", "◂ ▸ Enter change · Del default · applies now"]);
+  expect([lit(t), foot(t)]).toEqual(["side_width", "<- -> Enter change · Del default · applies now"]);
   term_grab(t, "Right");
   expect([file().side_width, config.SIDE_WIDTH, t.side.width]).toEqual(["30%", "30%", "30%"]);
   expect(about(t)).toMatch(/^30% +the side panel's width/);

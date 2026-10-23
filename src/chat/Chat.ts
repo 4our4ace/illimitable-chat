@@ -68,9 +68,7 @@ type Check = { call: Call; goal: string };
 // gets (Chat.refit makes it smaller, till illi starts again); beside:
 // what a turn's first request read beyond the chat it carried (the
 // prompt, the tools, illi's guess of tokens put right), by vendor:model,
-// as last told (Chat.cap leaves room for it); past: the last call read
-// past its model's standard window (no suggested reply is asked after
-// it: past that window the plan drains faster); refits: the
+// as last told (Chat.cap leaves room for it); refits: the
 // refits since a call was last answered; compacting: a /compact's recap
 // under way (Chat.compact), busy too; goings: the times hooks made the
 // turn go on in a row, with no tool call nor message of the user's
@@ -107,7 +105,6 @@ export type Chat = {
   suggest: Suggested;
   fit   : number;
   beside: Map<string, number>;
-  past  : boolean;
   refits: number;
   asks  : Asked[];
   compacting: boolean;
@@ -151,7 +148,8 @@ const NO_ANSWER  = "No one is at illi's screen to answer: decide yourself, or as
 // the context made this much smaller, when the request itself was too
 // long; the most refits in a row; the note the turn goes on from (#: the
 // model; an account found to take less of its window: CAPPED_NOTE, #
-// that window, $ the model), the one it ends with
+// that window, $ the model), the one it ends with; why a turn on a model
+// whose window no one told can't start (NO_WINDOW)
 const FIT        = 0.8;
 const REFITS     = 3;
 // how long a turn waits on ChatGPT's catalog being asked (ms), and how
@@ -160,6 +158,7 @@ const REFITS     = 3;
 const LISTED     = 3000;
 const CAPPED     = 0.75;
 const REFIT      = "The chat outgrew #'s window: more of it is summarized now, each summary a zoom away. Go on where you were.";
+const NO_WINDOW  = "ChatGPT hasn't told #'s context window (its model list didn't answer), and illi never guesses one";
 const CAPPED_NOTE = "This ChatGPT account takes at most # of $'s window, kept from now on: more of the chat is summarized now, each summary a zoom away. Go on where you were.";
 const NO_FIT     = "No reply: the chat won't fit #'s window even summarized. /clear starts a new topic (the chat before it is kept, not sent), or /model picks a model with a bigger window.";
 
@@ -268,7 +267,7 @@ export namespace Chat {
       mem, tools, pick, socks: new Set(), busy: false, call: null, model: "", asked: false, open: 0, sent: [], wait: [], next: [],
       halt: new AbortController(), live: [], calls: {}, eye: { parts: [], from: 0 }, after: Promise.resolve(),
       writes: Promise.resolve(), held: null, switched: false, was: null, picks: new Map(),
-      suggest: { on: false, due: false, text: mem.suggest, call: null, passed: false, unused: 0 }, fit: 1, beside: new Map(), past: false, refits: 0, asks: [], compacting: false,
+      suggest: { on: false, due: false, text: mem.suggest, call: null, passed: false, unused: 0 }, fit: 1, beside: new Map(), refits: 0, asks: [], compacting: false,
       goings: 0, going: false, saying: Promise.resolve(), checking: null, context: Promise.resolve([]), idle: undefined,
     };
     chat.context = Plugins.context({ cwd });
@@ -505,9 +504,7 @@ export namespace Chat {
       if (chat.wait.length > 0) {
         void Chat.turn(chat);
       } else if (answered) {
-        if (!chat.past) {
-          Suggest.ask(chat);
-        }
+        Suggest.ask(chat);
         Chat.idle(chat);
       }
     }
@@ -515,10 +512,12 @@ export namespace Chat {
 
   // the cut fitted to the chat's model now (Memory.cutoff: it may move
   // and is saved), where a call's messages go whole from: as many of the
-  // chat's tokens as its model takes (config_context), TOKEN bytes each. A
-  // read of where it is (mem.cut) moves nothing
+  // chat's tokens as its model takes (config_context), TOKEN bytes each;
+  // a model whose window isn't known (ChatGPT's catalog not answered)
+  // moves none, as a guess could fold the chat for good. A read of where
+  // it is (mem.cut) moves nothing
   export function cut(chat: Chat): number {
-    return Memory.cutoff(chat.mem, Chat.cap(chat) * TOKEN);
+    return Pick.window(chat.pick) === undefined ? chat.mem.cut : Memory.cutoff(chat.mem, Chat.cap(chat) * TOKEN);
   }
 
   // the tokens of the chat a turn sends on the chat's model (its
@@ -526,7 +525,7 @@ export namespace Chat {
   // share as the chat's refits left it (fit)
   export function cap(chat: Chat): number {
     const beside = chat.beside.get(chat.pick.vendor + ":" + chat.pick.model) ?? 0;
-    return Math.round(config.config_context(chat.pick.model, Pick.window(chat.pick), beside) * chat.fit);
+    return Math.round(config.config_context(chat.pick.model, Pick.window(chat.pick), beside, Pick.room(chat.pick)) * chat.fit);
   }
 
   // a turn's call, once the summaries it sends are built: the chat as
@@ -540,6 +539,13 @@ export namespace Chat {
     Chat.change(chat);
     if (chat.pick.vendor === "chatgpt") {
       await ChatGPT.listed(LISTED);
+    }
+    if (chat.pick.vendor === "chatgpt" && Pick.window(chat.pick) === undefined) {
+      await ChatGPT.models();
+    }
+    if (Pick.window(chat.pick) === undefined && !halt.signal.aborted) {
+      Chat.failed(chat, NO_WINDOW.replace("#", chat.pick.model));
+      return false;
     }
     const why = await Chat.settled(chat, halt.signal);
     if (why !== null) {
@@ -563,7 +569,7 @@ export namespace Chat {
     const told = context.length === 0 ? [] : [{ text: context.join("\n\n") + "\n\n", mark: false }];
     const blocks = [...view, Tools.here(chat.tools), ...told, Tools.at_work(chat.tools), { text: HEAD + text, mark: true }];
     const window  = Pick.window(chat.pick);
-    const ask     = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server, blocks, imgs, keep: true, room: window === undefined ? undefined : Math.round(window * config.ROOM) };
+    const ask     = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server, blocks, imgs, keep: true, room: window === undefined ? undefined : Math.round(window * (Pick.room(chat.pick) ?? config.ROOM)) };
     const carried = { model: chat.pick.vendor + ":" + chat.pick.model, tokens: Math.round(Memory.fill(mem) / TOKEN) };
     chat.model = chat.pick.model;
     chat.asked = true;
@@ -594,11 +600,6 @@ export namespace Chat {
     const end = await call.done;
     if (end.first !== undefined && carried !== undefined) {
       chat.beside.set(carried.model, Math.max(0, end.first - carried.tokens));
-    }
-    if (carried !== undefined) {
-      const [vendor, model] = [carried.model.slice(0, carried.model.indexOf(":")), carried.model.slice(carried.model.indexOf(":") + 1)];
-      const standard = Pick.model(vendor as Vendor, model)?.standard;
-      chat.past = standard !== undefined && carried.tokens + (chat.beside.get(carried.model) ?? 0) > standard;
     }
     chat.call = null;
     Chat.unanswered(chat, null);
@@ -965,9 +966,9 @@ export namespace Chat {
   export function state(chat: Chat): Out {
     const agents = Tools.working(chat.tools).map((a) => a.name);
     const tools  = Tools.state(chat.tools, chat.pick.vendor);
-    const window = Pick.window(chat.pick) ?? config.GUESS;
+    const window = Pick.window(chat.pick);
     const beside = chat.beside.get(chat.pick.vendor + ":" + chat.pick.model) ?? 0;
-    const fill   = { used: Math.round(Memory.fill(chat.mem) / TOKEN), cap: Chat.cap(chat), window, ...config.config_autocompact_of(chat.pick.model), most: config.config_most(window, beside), standard: Pick.model(chat.pick.vendor, chat.pick.model)?.standard, ...config.config_autocompacts() };
+    const fill   = window === undefined ? null : { used: Math.round(Memory.fill(chat.mem) / TOKEN), cap: Chat.cap(chat), window, ...config.config_autocompact_of(chat.pick.model), most: config.config_most(window, beside, Pick.room(chat.pick)), ...config.config_autocompacts() };
     const asks   = chat.asks.map(({ done, ...q }) => q);
     const catalog = Object.fromEntries(config.OFFER.vendors.map((v) => [v, Pick.list(v)]));
     return { $: "state", busy: chat.busy || chat.checking !== null, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, catalog, ...tools, use: { ...tools.use, fill }, suggest: chat.suggest.on ? chat.suggest.text : "", asks };

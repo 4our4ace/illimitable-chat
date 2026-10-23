@@ -8,7 +8,8 @@
 // main agent switch is a note of its own. A message sent as a stopped turn
 // winds down is answered, and what was logged between waiting messages
 // reaches the turn. What a turn's first request read beyond the chat
-// lowers the chat's budget; a view sets its model's autocompact. A call too long for the model's window makes the
+// lowers the chat's budget; a view sets its model's autocompact; a model
+// whose window no one told moves no cut, its turn saying why. A call too long for the model's window makes the
 // chat refit and the turn go on from a note, unasked; three in a row end
 // it, saying why. A failed turn asks to try again only when a later try
 // may answer, and says a reply was cut off; summaries stuck are told once;
@@ -34,6 +35,7 @@ const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-chat-");
 process.env.ILLI_DIR = DIR;
 
 const { AskAI } = await import("../ai/AskAI.ts");
+const { ChatGPT } = await import("../ai/ChatGPT.ts");
 const { Chat } = await import("./Chat.ts");
 const { Lock } = await import("./Lock.ts");
 const { Suggest } = await import("./Suggest.ts");
@@ -460,6 +462,25 @@ test("a turn grown past its room goes on without shrinking; three refits in a ro
 function last(): string {
   return Memory.message(chat.mem, chat.mem.count - 1)!.text;
 }
+
+test("a model whose window no one told (ChatGPT's before its catalog answers) moves no cut and shows no fill; its turn says why instead of guessing one", async () => {
+  await until(() => !chat.busy);
+  const [was, listed, models] = [chat.pick, ChatGPT.listed, ChatGPT.models];
+  ChatGPT.listed = async () => {};
+  ChatGPT.models = async () => null;
+  chat.pick = { vendor: "chatgpt", model: "gpt-6-luna", effort: "medium", speed: "slow" };
+  try {
+    expect(Pick.window(chat.pick)).toBeUndefined();
+    const cut = chat.mem.cut;
+    expect([Chat.cut(chat), (Chat.state(chat) as any).use.fill]).toEqual([cut, null]);
+    Chat.take(chat, Chat.push(chat, null, "user", "how big is your window?"));
+    await until(() => !chat.busy && last().startsWith("No reply"));
+    expect(last()).toBe("No reply: ChatGPT hasn't told gpt-6-luna's context window (its model list didn't answer), and illi never guesses one. Send a message to try again.");
+    expect(chat.mem.cut).toBe(cut);
+  } finally {
+    [chat.pick, ChatGPT.listed, ChatGPT.models] = [was, listed, models];
+  }
+});
 
 test("a failed turn asks to try again only when a later try may answer; a reply begun is cut off", () => {
   Chat.failed(chat, "the AI service is busy or unavailable right now", { ok: false, text: "", left: [], stop: "down", again: true });

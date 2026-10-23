@@ -48,7 +48,7 @@ Pick
 | -------------- | ---- |
 | Shift+Left, Shift+Right | the model before, the next |
 | Shift+Up, Shift+Down | more effort, less |
-| `/model [name]` | model, effort, speed and autocompact in one list (Left and Right: effort, Tab: speed, Shift+Left and Shift+Right: autocompact); a name: that model |
+| `/model [name]` | model, effort, speed and auto compact in one list (Left and Right: effort, Tab: speed, Shift+Left and Shift+Right: auto compact, shown as Shift + <-/->); a name: that model |
 | `/effort [level]` | set the effort; no level: lists them |
 | `/autocompact [value]` | how much of the chat a turn sends before older messages fold, for the chat's model: a share of its window (50%), a size (300k) or default; no value: says it |
 
@@ -169,8 +169,9 @@ alone; the input comes back as you left it when the list closes.
   move, Enter picks, Esc closes.
 - `/model`: Left and Right change the effort (Shift+Up and Shift+Down
   too), Tab the speed; Shift+Left and Shift+Right step the lit model's
-  autocompact by 5%, its gauge under the list (a tick where your plan
-  starts to drain faster). Enter keeps it with the pick, Esc drops it.
+  auto compact by 5%, its gauge under the list ("auto compact at", a bar
+  of the model's window, its keys shown as Shift + <-/->; the effort's
+  as <- and ->). Enter keeps it with the pick, Esc drops it.
 - `/settings` (and a setting in Ctrl+P): Enter or Right steps a setting
   to its next value, Shift+Enter or Left back; Del puts its default back
   (in a profile: the global value).

@@ -78,7 +78,7 @@ export function setting_key(t: Term, key: config.Key, press: string): boolean {
 export function setting_foot(key: config.Key): string {
   const s   = config.SETTINGS[key];
   const env = config.config_env_set(key);
-  const how = Array.isArray(s.values) ? "◂ ▸ Enter change" : s.values === "pick" ? "Enter pick a model" : key === "off" || key === "sticky" ? "Enter list" : "Enter edit";
+  const how = Array.isArray(s.values) ? "<- -> Enter change" : s.values === "pick" ? "Enter pick a model" : key === "off" || key === "sticky" ? "Enter list" : "Enter edit";
   const del = config.DIR === config.ROOT ? "Del default · " : config.config_from(key) === config.PROFILE ? "Del global · " : "";
   return env !== null ? "set by " + env : how + " · " + del + (s.now ? "applies now" : "at the next start");
 }

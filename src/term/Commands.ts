@@ -53,10 +53,10 @@ const ARROWS: Record<string, Move> = { "Shift+Left": "prev", "Shift+Right": "nex
 // the shortcuts' list's title (term_shortcuts)
 const LEAD = "Shortcuts";
 
-// the /model gauge: a model's autocompact as set (as written), its
-// tokens, the most it may be, the model's window and standard one; the
-// gauge's bar at most GAUGE columns, stepped STEP points of the window
-type Gauge = { set: string; tokens: number; most: number; window: number; standard?: number };
+// the /model gauge: a model's auto compact as set (as written), its
+// tokens, the most it may be, the model's window; the gauge's bar at most
+// GAUGE columns, stepped STEP points of the window
+type Gauge = { set: string; tokens: number; most: number; window: number };
 const GAUGE = 20;
 const STEP  = 5;
 
@@ -119,7 +119,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
     ["Pick", [
       ["",                  "Shift+Left, Shift+Right", "the model before, the next",                     (t, k) => term_move(t, ARROWS[k])],
       ["",                  "Shift+Up, Shift+Down",    "more effort, less",                              (t, k) => term_move(t, ARROWS[k])],
-      ["/model [name]",     "",                        "model, effort, speed and autocompact in one list (Left and Right: effort, Tab: speed, Shift+Left and Shift+Right: autocompact); a name: that model", term_model],
+      ["/model [name]",     "",                        "model, effort, speed and auto compact in one list (Left and Right: effort, Tab: speed, Shift+Left and Shift+Right: auto compact); a name: that model", term_model],
       ["/effort [level]",   "",                        "set the effort; no level: lists them",           (t, a) => term_pick(t, "effort", a)],
       ["/autocompact [value]", "",                     "how much of the chat a turn sends before older messages fold, for the chat's model: a share of its window (50%), a size (300k) or default; no value: says it", term_autocompact],
     ]],
@@ -928,7 +928,7 @@ export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "
     const e       = efforts.indexOf(p.effort);
     const speeds  = Pick.options(p, "speed", t.v).length;
     const speed   = speeds < 2 ? "no fast mode" : "Tab speed: " + Pick.speed(p.speed);
-    return "effort: " + (e > 0 ? "◂ " : "") + p.effort + (e < efforts.length - 1 ? " ▸" : "") + " · " + speed;
+    return "effort: " + (e > 0 ? "<- " : "") + p.effort + (e < efforts.length - 1 ? " ->" : "") + " · " + speed;
   };
   const detail = (k: number, w: number) => {
     const now = term_autocompact_at(t, rows[k], moved);
@@ -941,52 +941,43 @@ export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "
   term_chooser(t, title, rows.map(([, m]) => m.label), about, here, chosen, { find: true, keys, foot, detail: gauge ? detail : undefined });
 }
 
-// a model's autocompact as the picker shows it: its share stepped while
+// a model's auto compact as the picker shows it: its share stepped while
 // the picker is open (moved), else as set (its own, else the global
 // one); its tokens (at most `most`: MOST of its window, less what a
-// request takes beside the chat on the chat's own model), its window and
-// standard one; null: the chat's process told none yet
+// request takes beside the chat on the chat's own model), its window;
+// null: the chat's process told none yet, or the model's window isn't
+// known (its vendor hasn't told it: none is guessed)
 function term_autocompact_at(t: Term, [vendor, m]: [Vendor, Model], moved: Map<string, number>): Gauge | null {
-  const fill = t.v.use.fill ?? null;
-  if (fill === null) {
+  const fill   = t.v.use.fill ?? null;
+  const window = m.window;
+  if (fill === null || window === undefined) {
     return null;
   }
-  const window = m.window ?? config.GUESS;
   const chat   = t.v.pick?.vendor === vendor && t.v.pick.model === m.label;
-  const most   = chat ? fill.most : config.config_most(window);
+  const most   = chat ? fill.most : config.config_most(window, 0, m.room);
   const step   = moved.get(m.label);
   const set    = step !== undefined ? step + "%" : fill.sets[m.label] ?? fill.global;
   const tokens = Math.max(1, Math.min(config.config_tokens(set, window) ?? config.config_tokens(config.SETTINGS.autocompact.def, window)!, most));
-  return { set, tokens, most, window, standard: m.standard };
+  return { set, tokens, most, window };
 }
 
-// the autocompact gauge, for w columns: `autocompact ▕██████▌░░░░░▏ 60% ·
-// 523k of 872k ⇧◂▸`, a tick at the standard window (the fill past it in
-// the warning color, and a line saying the plan drains faster there, if
-// it fits); narrower, `autocompact 60% · 523k ⇧◂▸`, then `60%`
+// the auto compact gauge, for w columns: `auto compact at ██████▌░░░░░
+// 60% · 523k of 872k   Shift + <-/->`; narrower, `auto compact at 60% ·
+// 523k`, then `60%`
 export function term_gauge(g: Gauge, w: number): Paint.Line[] {
-  const tokens = Draw.draw_tokens();
-  const past   = g.standard !== undefined && g.tokens > g.standard;
-  const ink    = { ...Paint.INK, c: past ? tokens.warning : tokens.accent };
-  const share  = Math.round((g.tokens / g.window) * 100) + "%";
-  const keys   = Paint.Run("  ⇧◂▸", Paint.DIM);
-  const said   = Paint.Run(" " + share + " · " + term_tokens(g.tokens) + " of " + term_tokens(g.window), Paint.INK);
-  const name   = Paint.Run("autocompact ", Paint.DIM);
-  const bw     = Math.min(GAUGE, w - Paint.line_width([name, said, keys]) - 2);
-  const warn   = past ? [[Paint.Run("past " + term_tokens(g.standard!) + " your plan's usage drains faster", { ...Paint.INK, c: tokens.warning })]] : [];
-  const fits   = warn.filter((l) => Paint.line_width(l) <= w);
+  const ink   = { ...Paint.INK, c: Draw.draw_tokens().accent };
+  const share = Math.round((g.tokens / g.window) * 100) + "%";
+  const keys  = Paint.Run("   Shift + <-/->", Paint.DIM);
+  const said  = Paint.Run("  " + share + " · " + term_tokens(g.tokens) + " of " + term_tokens(g.window), Paint.INK);
+  const name  = Paint.Run("auto compact at ", Paint.DIM);
+  const bw    = Math.min(GAUGE, w - Paint.line_width([name, said, keys]));
   if (bw >= GAUGE / 2) {
     const halves = Math.round((g.tokens / g.window) * bw * 2);
-    const tick   = g.standard === undefined ? bw : Math.min(bw - 1, Math.floor((g.standard / g.window) * bw));
-    const cells  = Array.from({ length: bw }, (_, i): Paint.Run => {
-      const fill = halves >= 2 * (i + 1) ? "█" : halves === 2 * i + 1 ? "▌" : "";
-      const on   = { ...Paint.INK, c: i >= tick ? tokens.warning : tokens.accent };
-      return fill !== "" ? Paint.Run(fill, on) : i === tick ? Paint.Run("┊", Paint.DIM) : Paint.Run("░", Paint.DIM);
-    });
-    return [[name, Paint.Run("▕", Paint.DIM), ...cells, Paint.Run("▏", Paint.DIM), said, keys], ...fits];
+    const cells  = Array.from({ length: bw }, (_, i) => (halves >= 2 * (i + 1) ? "█" : halves === 2 * i + 1 ? "▌" : ""));
+    return [[name, Paint.Run(cells.join(""), ink), Paint.Run("░".repeat(cells.filter((c) => c === "").length), Paint.DIM), said, keys]];
   }
-  const short = [name, Paint.Run(share + " · " + term_tokens(g.tokens), past ? ink : Paint.INK), keys];
-  return [Paint.line_width(short) <= w ? short : [Paint.Run(share, past ? ink : Paint.INK)], ...fits];
+  const short = [name, Paint.Run(share + " · " + term_tokens(g.tokens), Paint.INK)];
+  return [Paint.line_width(short) <= w ? short : [Paint.Run(share, Paint.INK)]];
 }
 
 // /autocompact: the chat's model's autocompact said (no value), or set
@@ -997,19 +988,22 @@ function term_autocompact(t: Term, arg: string): void {
   const fill  = t.v.use.fill ?? null;
   const model = t.v.pick?.model;
   const text  = arg.trim().toLowerCase();
-  if (fill === null || model === undefined) {
+  if (model === undefined) {
     return term_note(t, "No chat to set it for here.");
   }
+  if (fill === null) {
+    return term_note(t, model + "'s window isn't known yet: its vendor hasn't told it.");
+  }
   if (text === "") {
-    return term_note(t, "Autocompact for " + model + ": " + fill.set + (fill.own ? "" : " (the global one)") + ", " + term_tokens(fill.cap) + " of its " + term_tokens(fill.window) + " window. /autocompact 50%, 300k or default changes it; in /model, Shift+Left and Shift+Right.");
+    return term_note(t, "Auto compact for " + model + " at " + fill.set + (fill.own ? "" : " (the global one)") + ": " + term_tokens(fill.cap) + " of its " + term_tokens(fill.window) + " window. /autocompact 50%, 300k or default changes it; in /model, Shift + <-/->.");
   }
   const value = text === "default" ? null : text;
   const want  = value === null ? null : config.config_tokens(value, fill.window);
   if (value !== null && want === null) {
     return term_note(t, "/autocompact takes a share of the window (50%), a size (300k) or default.");
   }
-  const said = want === null ? "back to the global one" : value + ", " + (want > fill.most ? "held to " : "") + term_tokens(Math.min(want, fill.most)) + " of its " + term_tokens(fill.window) + " window";
-  term_send(t, { $: "autocompact", label: model, value }, undefined, "Autocompact for " + model + ": " + said + ".");
+  const said = want === null ? ": back to the global one" : " at " + value + ": " + (want > fill.most ? "held to " : "") + term_tokens(Math.min(want, fill.most)) + " of its " + term_tokens(fill.window) + " window";
+  term_send(t, { $: "autocompact", label: model, value }, undefined, "Auto compact for " + model + said + ".");
 }
 
 // a part of the pick (its model, its effort): to the value given, or,

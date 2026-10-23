@@ -26,6 +26,9 @@ function put(file: string, text: string): void {
   fs.writeFileSync(file, text);
 }
 
+// ChatGPT's models as its catalog told them at a start before (a window
+// is never guessed there)
+put(DIR + "/models.json", JSON.stringify({ vendors: { chatgpt: ["gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra"].map((id) => ({ label: id, id, speeds: ["slow"], window: 872000 })) } }));
 put(DIR + "/agents/reviewer.md", "---\ndescription: theirs\n---\nTheirs.");
 put(CWD + "/.illi/agents/reviewer.md", "---\ndescription: Reviews\nmodel: gpt-6-luna\neffort: high\ntools: zoom, read\n---\nYou review.\n");
 put(DIR + "/agents/coder.md", "---\ndescription: \"Codes\"\nmodel: claude-api:opus-5.5:low:slow\n---\nYou code.");
