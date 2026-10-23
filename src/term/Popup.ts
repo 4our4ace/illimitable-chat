@@ -126,7 +126,9 @@ function popup_asks(t: Term): boolean {
 
 // a paint: the question shown stamped as it first shows (t.asking.shown),
 // the stamp kept while it shows (another of the form's tabs too); hidden
-// (a list over it, the leader's key awaited), it shows anew after
+// (a list over it, the permission question closed while the leader's key
+// is awaited, another profile shown in the window: Member.ts), it shows
+// anew after
 export function popup_shown(t: Term): void {
   if (t.asking != null) {
     t.asking.shown = popup_asks(t) ? t.asking.shown ?? Date.now() : null;

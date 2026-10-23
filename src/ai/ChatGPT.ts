@@ -29,8 +29,11 @@
 // most the account may set, its usual one (standard: what Codex uses
 // unless set higher), its efforts and its speeds (each a service tier:
 // priority is fast), kept in config.MODELS_FILE for the next start,
-// naming the account. A turn's first request refused as too long past a
-// model's usual window makes that its whole one for the account.
+// naming the account. A model's window is only ever the catalog's: a
+// call (a turn's, a subagent's) waits on it (`ready`), and one on a
+// model it tells none never runs on a guess. A turn's first request
+// refused as too long past a model's usual window makes that its whole
+// one for the account.
 
 import * as fs from "node:fs";
 import { json_object } from "../tools/Clip.ts";
@@ -64,6 +67,12 @@ const FOLLOW = 5000;
 const RELIST = 300e3;
 // the models' list, as a Codex client this new asks it
 const LIST   = "https://chatgpt.com/backend-api/codex/models?client_version=1.0.0";
+// how long a call waits on the account's catalog being asked (ms); why a
+// call on a model whose window the catalog hasn't told can't run (#: the
+// model): its list not answered, or answered with no window for it
+const LISTED = 3000;
+const UNTOLD = "ChatGPT hasn't told #'s context window (its model list didn't answer), and illi never guesses one";
+const NO_WINDOW = "ChatGPT's model list tells no context window for #, and illi never guesses one";
 const AUTH   = "https://auth.openai.com";
 const ISSUER = AUTH + "/oauth/token";
 
@@ -572,6 +581,22 @@ export namespace ChatGPT {
     if (listing !== null) {
       await Promise.race([listing, Bun.sleep(ms)]);
     }
+  }
+
+  // a call on model `label` made ready (a turn's, a subagent's): the
+  // account's catalog waited on, LISTED at most (the windows kept last
+  // may be smaller, and a cut never moves back), then asked again while
+  // it tells the model no window (a stop, halt, waits no more). Why the
+  // call can't run: its window still not told, which illi never guesses;
+  // null: it can
+  export async function ready(label: string, halt?: AbortSignal): Promise<string | null> {
+    const told = () => Pick.model("chatgpt", label)?.window !== undefined;
+    await ChatGPT.listed(LISTED);
+    if (!told() && halt?.aborted !== true) {
+      const stopped = new Promise<void>((done) => halt?.addEventListener("abort", () => done(), { once: true }));
+      await Promise.race([ChatGPT.models(), stopped]);
+    }
+    return told() ? null : (ChatGPT.catalogued() ? NO_WINDOW : UNTOLD).replace("#", label);
   }
 
   // whether the catalog of the account in use answered this run, so the

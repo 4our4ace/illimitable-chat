@@ -236,12 +236,11 @@ let ROLES: Record<Role, Partial<Record<Vendor, Pick>>> = { agents: {}, compactor
 // fold more (Chat.ts, Agent.ts), what the prompt and tools take beside
 // the chat left out of the autocompact too; a model whose vendor tells
 // its own (ChatGPT's effective_context_window_percent: Pick's room), that.
-// A model whose window no one told is taken to have GUESS (none on
-// ChatGPT: Chat.cut moves nothing, and no turn starts, till its catalog
-// tells it)
+// No window is ever guessed: a model whose window no one told (ChatGPT's,
+// till its catalog tells it) has none, so Chat.cut moves nothing, and no
+// turn nor subagent starts on it (ChatGPT.ready)
 export const MOST       = 0.7;
 export const ROOM       = 0.9;
-export const GUESS      = 128000;
 let AUTOCOMPACT_SET     = "";
 let AUTOCOMPACTS: Record<string, unknown> = {};
 
@@ -537,9 +536,9 @@ function config_object(value: unknown): Record<string, unknown> | null {
 }
 
 // the tokens of the chat a turn sends on a model: its autocompact (its
-// own, else the global one) of its window as known (none: GUESS), at most
+// own, else the global one) of its window as its vendor told it, at most
 // config_most (room: the share of the window a request may fill)
-export function config_context(label: string, window = GUESS, overhead = 0, room = ROOM): number {
+export function config_context(label: string, window: number, overhead = 0, room = ROOM): number {
   const set  = String(AUTOCOMPACTS[label] ?? AUTOCOMPACT_SET);
   const want = config_tokens(set, window) ?? config_tokens(SETTINGS.autocompact.def, window)!;
   return Math.max(1, Math.round(Math.min(want, config_most(window, overhead, room))));
@@ -598,16 +597,18 @@ export function config_autocompact(label: string, value: string | null): string 
 
 // the models listed last, learned (a file that won't read: none): the
 // chatgpt list as the catalog last gave it, whatever account it was of
-// (not known yet; the catalog's answer replaces it), the others' windows
-// on the models built in, and only those (their speeds and list are
-// illi's own: a model a later illi dropped, or a speed it changed, never
-// comes back from the file)
+// (not known yet; the catalog's answer replaces it), a window or a share
+// that isn't one (not a count above 0; a room past 0 to 1) none, so never
+// a wrong one; the others' windows on the models built in, and only those
+// (their speeds and list are illi's own: a model a later illi dropped, or
+// a speed it changed, never comes back from the file)
 function config_models(): void {
   const kept = json_object(MODELS_FILE)?.vendors ?? {};
+  const count = (x: unknown) => (typeof x === "number" && x > 0 && Number.isFinite(x) ? x : undefined);
   for (const vendor of Object.keys(kept).filter((v) => VENDORS.includes(v as Vendor) && Array.isArray(kept[v])) as Vendor[]) {
     const models = kept[vendor].filter((m: any) => typeof m?.label === "string" && typeof m.id === "string" && Array.isArray(m.speeds));
     if (vendor === "chatgpt") {
-      Pick.learn(vendor, models, "replace");
+      Pick.learn(vendor, models.map((m: any) => ({ ...m, window: count(m.window), standard: count(m.standard), room: count(m.room) !== undefined && m.room <= 1 ? m.room : undefined })), "replace");
     } else {
       models.forEach((m: any) => Pick.told(vendor, m.id, Number(m.window)));
     }

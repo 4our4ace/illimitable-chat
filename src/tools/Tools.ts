@@ -622,7 +622,7 @@ export namespace Tools {
   // ------
 
   export async function spawn(tools: Tools, tasks: string[], role: Agent["role"]): Promise<string> {
-    const view = tasks.length === 0 ? "No tasks." : await Tools.view(tools);
+    const view = tasks.length === 0 ? "No tasks." : await Tools.view(tools, role);
     if (typeof view === "string") {
       return view;
     }
@@ -640,7 +640,7 @@ export namespace Tools {
       agent.call.send({ text: message, imgs: [] });
       return "Sent. " + name + " reads it between its tool calls, and its report answers it.";
     }
-    const view = await Tools.view(tools);
+    const view = await Tools.view(tools, agent.role);
     if (typeof view === "string") {
       return view;
     }
@@ -701,20 +701,29 @@ export namespace Tools {
     tools.hooks.report(agent, report_text(agent.name, agent.log ?? agent.name, agent.replies.join("\n\n")), agent.stop || away);
   }
 
-  // a call of an agent: on its user's agent's model, else the agents
-  // pick of the chat's vendor, else the chat's pick (an agent's model not
-  // offered gives way to them); the chat's view as much as half its
-  // model's autocompact holds (a smaller model's window than the chat's)
+  // what an agent of this role runs on: its user's agent's model, else
+  // the agents pick of the chat's vendor, else the chat's pick (an
+  // agent's model not offered gives way to them)
+  export function pick(tools: Tools, role: Agent["role"]): Pick {
+    const profile = Custom.agent(tools.cwd, role.agent);
+    const base = config.config_role("agents", tools.hooks.pick());
+    const own = profile === null ? base : Custom.pick(profile, base, config.OFFER);
+    return typeof own === "string" ? base : own;
+  }
+
+  // a call of an agent, on its pick (Tools.pick): the chat's view as much
+  // as half its model's autocompact holds (a smaller model's window than
+  // the chat's; its window not told, which Tools.view waits on: its
+  // opening and last block alone, as a window is never guessed)
   export function ask(tools: Tools, agent: Agent): Ask {
     const log = { text: Logs.show(tools.mem, agent.name), mark: true };
     const server = Tools.at(tools, agent.name);
     const profile = Custom.agent(tools.cwd, agent.role.agent);
-    const base = config.config_role("agents", tools.hooks.pick());
-    const own = profile === null ? base : Custom.pick(profile, base, config.OFFER);
-    const pick = typeof own === "string" ? base : own;
+    const pick = Tools.pick(tools, agent.role);
     const run = Pick.ask(pick);
     const system = Tools.system(SUB + Custom.section(profile), tools.cwd, run.vendor);
-    const most = (config.config_context(pick.model, Pick.window(pick), 0, Pick.room(pick)) * TOKEN) / 2;
+    const window = Pick.window(pick);
+    const most = window === undefined ? 0 : (config.config_context(pick.model, window, 0, Pick.room(pick)) * TOKEN) / 2;
     const blocks = [...Tools.fitted(agent.view, most), Tools.here(tools), log];
     const effort = agent.role.effort ?? run.effort;
     return { ...run, effort, system, blocks, searches: SEARCHES, server };
@@ -868,10 +877,15 @@ export namespace Tools {
     return text.length > WHAT ? text.slice(0, WHAT - 1) + "…" : text;
   }
 
-  // a string: why there is none (Memory.settle)
-  export async function view(tools: Tools): Promise<Block[] | string> {
+  // the chat's view, once its summaries are built, for an agent of this
+  // role once its model's window is told too (on ChatGPT: ChatGPT.ready,
+  // as a turn waits; never guessed); a string: why there is none
+  // (Memory.settle, the window)
+  export async function view(tools: Tools, role?: Agent["role"]): Promise<Block[] | string> {
     const why = await Memory.settle(tools.mem, tools.mem.count, tools.hooks.halt());
-    return why ?? Memory.view(tools.mem);
+    const pick = role === undefined ? null : Tools.pick(tools, role);
+    const unready = why === null && pick?.vendor === "chatgpt" ? await ChatGPT.ready(pick.model, tools.hooks.halt()) : null;
+    return why ?? (unready === null ? Memory.view(tools.mem) : "Not started: " + unready + ".");
   }
 
   export function working(tools: Tools): Agent[] {

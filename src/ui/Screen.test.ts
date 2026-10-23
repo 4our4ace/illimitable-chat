@@ -14,8 +14,9 @@
 // cut is awaited however slow); keys reaching a hidden screen, or read
 // after one that hid it, are dropped; hidden, the screen writes nothing;
 // shown, it says it's up, asks the kitty flags and the background, then
-// writes every row; Ctrl+Z goes to the window, leaving writes nothing,
-// and the PTY's end tells the window gone.
+// writes every row, the focus told before it hid no longer held; Ctrl+Z
+// goes to the window, leaving writes nothing, and the PTY's end tells
+// the window gone.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -813,6 +814,18 @@ test("in a window, a hidden screen writes nothing; shown, it says it's up, asks 
   expect(out).toContain("\x1b[2J");
   expect(out).toContain("hello");
   expect([told, scr.hidden, scr.asked]).toEqual([["up"], false, true]);
+});
+
+test("in a window, the focus lost before the screen hid is stale once it's shown again (no report reached it hidden): a press then is a click", () => {
+  const { scr } = windowed();
+  Screen.screen_feed(scr, "\x1b[O");
+  Screen.screen_hide(scr);
+  Screen.screen_feed(scr, "\x1b[I");
+  written(() => Screen.screen_show(scr));
+  Screen.screen_feed(scr, "\x1b[<0;5;5M");
+  expect(scr.focusing).toBe(false);
+  Screen.screen_feed(scr, "\x1b[<0;5;5m\x1b[O\x1b[<0;6;5M");
+  expect(scr.focusing).toBe(true);
 });
 
 test("in a window, Ctrl+Z goes to the window; leaving writes nothing; the PTY's end tells the window gone", async () => {

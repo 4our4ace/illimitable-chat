@@ -60,9 +60,12 @@ export type Limit = { window: number; used: number; reset: number };
 // its oldest messages fold into the tree (its auto compact, as it
 // applies), its model's window; the auto compact set for the model (set:
 // as written, "60%" or "400k"; own: the model's own, else the global
-// one), the most it may be (tokens); the global auto compact and each
-// model's own, by label (the /model gauge's)
-export type Fill = { used: number; cap: number; window: number; set: string; own: boolean; most: number; global: string; sets: Record<string, string> };
+// one), the most it may be (tokens)
+export type Fill = { used: number; cap: number; window: number; set: string; own: boolean; most: number };
+
+// the auto compacts set: the global one and each model's own, by label
+// (the /model gauge's, whatever the chat's model's window)
+export type Compacts = { global: string; sets: Record<string, string> };
 
 // a plan, as its vendor tells it (ChatGPT.ts told): whose it is
 // (ChatGPT), which one (plus, pro…; "": not known), its limits (none:
@@ -72,8 +75,9 @@ export type Plan = { brand: string; tier: string; limits: Limit[]; state?: "aski
 
 // what the main agent's calls use: the plan of the vendor picked (null:
 // none told, or a vendor that tells none); how full the chat is (null:
-// not told yet)
-export type Use = { plan: Plan | null; fill?: Fill | null };
+// not told yet, or its model's window isn't known); the auto compacts
+// set (none: not told yet)
+export type Use = { plan: Plan | null; fill?: Fill | null; compacts?: Compacts };
 
 // an item of illi's to-do list (Tools.ts todo): what to do, how it stands
 export type Todo = { text: string; status: "pending" | "active" | "done" };
