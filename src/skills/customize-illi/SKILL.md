@@ -14,7 +14,10 @@ illi is customized with plain files, which you write with your tools:
   and MCP servers add to the user's)
 
 Write to illi's folder unless the user asks for every profile (the global
-folder) or this project only. /agents shows the user every agent, command,
+folder) or this project only. Skills shared with other agents load too
+(~/.agents/skills, and a project's .agents/skills), under illi's own of
+the same name: write there only when the user wants a skill every agent
+of theirs uses. /agents shows the user every agent, command,
 skill, plugin and hook, and where their files go; the `off` setting turns
 one off (a plugin's part as plugin:name; hooks.json: all hooks).
 

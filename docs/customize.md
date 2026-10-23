@@ -20,7 +20,10 @@ skill, `customize-illi`, and writes these files itself.
   anywhere in it ("Use the /imagegen skill to…"). One with `sticky: true`
   is for every reply (a tone, a format): `/name` turns it on and off, and
   while on it is in every turn's prompt, so no summary drops it.
-  customize-illi suggests it when it installs a skill.
+  customize-illi suggests it when it installs a skill. Skills shared with
+  other agents (opencode's, Codex's) load too: `~/.agents/skills`, under
+  yours of the same name, and a trusted project's `.agents/skills`, from
+  the repo's top down to the folder you start in, under its `.illi/`.
 - `mcp.json`: MCP servers, in Claude Code's `mcpServers` shape (below).
 - `theme.json`: the accent, the other colors, the palette and glyphs
   ([Theme](#theme), below). The `accent` setting alone recolors

@@ -434,7 +434,7 @@ export namespace Tools {
   // goes), then the project's (Tools.project), each whole up to RULES_MOST
   export function rules(cwd: string, hosted = false): string {
     const own  = rules_read(config.RULES);
-    const top  = Tools.top(cwd);
+    const top  = config.config_top(cwd);
     const each = Tools.project(cwd).filter((file) => !hosted || path.basename(file) !== "CLAUDE.md").flatMap((file) => {
       const text = rules_read(file);
       return text === null ? [] : ["This project's, in " + path.relative(top, file) + ":\n\n" + text];
@@ -442,31 +442,10 @@ export namespace Tools {
     return ["# The user's rules", "For every project, in " + config.RULES + ":\n\n" + (own || "(none yet)"), ...each].join("\n\n");
   }
 
-  // a project's rules files: from its top (Tools.top) down to cwd, in
+  // a project's rules files: from its top down to cwd (config_down), in
   // each folder the first of PROJECT there
   export function project(cwd: string): string[] {
-    const top  = Tools.top(cwd);
-    const dirs: string[] = [];
-    for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
-      dirs.unshift(dir);
-      if (dir === top || dir === path.dirname(dir)) {
-        break;
-      }
-    }
-    return dirs.flatMap((dir) => PROJECT.map((name) => path.join(dir, name)).filter((file) => fs.existsSync(file)).slice(0, 1));
-  }
-
-  // a project's top: the nearest folder up from cwd holding .git, else
-  // cwd itself
-  export function top(cwd: string): string {
-    for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
-      if (fs.existsSync(path.join(dir, ".git"))) {
-        return dir;
-      }
-      if (dir === path.dirname(dir)) {
-        return path.resolve(cwd);
-      }
-    }
+    return config.config_down(cwd).flatMap((dir) => PROJECT.map((name) => path.join(dir, name)).filter((file) => fs.existsSync(file)).slice(0, 1));
   }
 
   // MCP

@@ -256,6 +256,10 @@ export const LOGIN_SET      = config_value("login") === "" ? null : config_place
 export const OWN_LOGIN      = ROOT + "/login.json";
 export const OPENCODE_LOGIN = config_path((process.env.XDG_DATA_HOME ?? "~/.local/share") + "/opencode/auth.json");
 
+// the folder of what illi shares with other agents (opencode's, Codex's):
+// its skills/ (~/.agents/skills), as a project's .agents/skills
+export const AGENTS_DIR = config_path(process.env.ILLI_AGENTS_DIR ?? "~/.agents");
+
 // the keys, by name, and the variable each is read from
 export const VARS: Record<string, string> = {
   anthropic       : "ANTHROPIC_API_KEY",
@@ -615,6 +619,31 @@ export function config_check(key: string, value: unknown, strict = true): string
 function config_path(text: string, base?: string): string {
   const home = text.startsWith("~/") ? os.homedir() + text.slice(1) : text;
   return base === undefined || home === "" ? home : path.resolve(base, home);
+}
+
+// a project's top: the nearest folder up from cwd holding .git, else
+// cwd itself
+export function config_top(cwd: string): string {
+  for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
+    if (fs.existsSync(path.join(dir, ".git"))) {
+      return dir;
+    }
+    if (dir === path.dirname(dir)) {
+      return path.resolve(cwd);
+    }
+  }
+}
+
+// the folders from a project's top (config_top) down to cwd
+export function config_down(cwd: string): string[] {
+  const top  = config_top(cwd);
+  const dirs: string[] = [];
+  for (let dir = path.resolve(cwd); ; dir = path.dirname(dir)) {
+    dirs.unshift(dir);
+    if (dir === top || dir === path.dirname(dir)) {
+      return dirs;
+    }
+  }
 }
 
 // a path as illi shows it: ~ for the home folder
