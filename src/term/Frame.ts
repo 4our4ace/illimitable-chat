@@ -424,13 +424,7 @@ function term_trace(ms: number, c: string, canvas: string | undefined): Paint.Li
   }
   const hex = c.startsWith("#") && canvas !== undefined;
   return cells.map((bits, i) => bits === 0 ? Paint.Run(" ")
-    : Paint.Run(String.fromCharCode(0x2800 + bits), hex ? { ...Paint.INK, c: term_mix(c, canvas!, young[i] / TRAIL) } : { ...Paint.INK, c, d: young[i] >= TRAIL / 2 }));
-}
-
-// a color f of the way to another (#rrggbb)
-export function term_mix(a: string, b: string, f: number): string {
-  const at = (hex: string, k: number) => parseInt(hex.slice(k, k + 2), 16);
-  return "#" + [1, 3, 5].map((k) => Math.round(at(a, k) + (at(b, k) - at(a, k)) * f).toString(16).padStart(2, "0")).join("");
+    : Paint.Run(String.fromCharCode(0x2800 + bits), hex ? { ...Paint.INK, c: Draw.draw_mix(c, canvas!, young[i] / TRAIL) } : { ...Paint.INK, c, d: young[i] >= TRAIL / 2 }));
 }
 
 // how long, as a person says it: 7s, 2m 05s, 1h 03m
@@ -534,7 +528,7 @@ function term_off(canvas: string | undefined, f: number): string | undefined {
     return undefined;
   }
   const light = [1, 3, 5].reduce((n, k) => n + parseInt(canvas.slice(k, k + 2), 16), 0) > 3 * 128;
-  return term_mix(canvas, light ? "#000000" : "#ffffff", f);
+  return Draw.draw_mix(canvas, light ? "#000000" : "#ffffff", f);
 }
 
 // the chat's lines and the first shown, tall of them: its rows (made

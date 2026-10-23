@@ -13,8 +13,8 @@ Development
                    (Remote.ts), the disk
     src/ai/        model vendors, the agent loop, picks, token usage
     src/tools/     shell and files, MCP servers, the prompts
-    src/config/    settings, profiles, your agents, commands and skills, updates,
-                   the folders you trust (Trusted.ts)
+    src/config/    settings, profiles, your agents, commands, skills and plugins
+                   (Plugins.ts), updates, the folders you trust (Trusted.ts)
     src/skills/    the skills built into illi (customize-illi)
     test/          tests across modules; each module's own sit beside it
     vendor/        cellsmith's markdown parser and palettes

@@ -26,9 +26,10 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `contexts`   |                                   | per model: `{ "gpt-6.1-sol": 350000 }`           |
 | `rules`      | `RULES.md`: the profile's, else `~/.illi`'s | your rules for every project (none: no rules) |
 | `after`      |                                   | a shell command run after each turn              |
-| `off`        |                                   | skills, agents, commands and MCP servers turned off, by name; `/settings` lists them to turn on and off |
+| `off`        |                                   | skills, agents, commands, MCP servers and plugins turned off, by name; `/settings` lists them to turn on and off |
 | `sticky`     |                                   | sticky skills on, by name; `/name` turns one on and off ([Customize](customize.md)) |
 | `side`       | `right`                           | side panel: `left`, `off`; `side_width` `25%`    |
+| `accent`     | `auto`                            | the color everything is themed in, at once: `auto` (the theme's: illi's aqua, else the palette's or `theme.json`'s), `illi`, `blue`, `magenta`, `cyan`, `green`, `yellow`, `red`, a palette index or `#rrggbb` ([Theme](customize.md#theme)) |
 | `leader`     | `Ctrl+X`                          | the key before a shortcut: Ctrl or Alt and a letter illi doesn't use ([Keys](keys.md#shortcuts)) |
 | `shortcuts`  | illi's own                        | the keys after the leader: `{ "c": "/compact", "o": "Ctrl+O", "t": "" }`, over illi's own (`""` drops one; a key in capitals is the lower-case one); `/shortcuts` edits them |
 | `suggest`    | `on`                              | a suggested reply after each turn, shown till you send it or illi answers, kept across a restart; `off` |

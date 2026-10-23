@@ -1,6 +1,6 @@
 ---
 name: customize-illi
-description: Customize illi itself - add or change its agents, slash commands, skills, MCP servers, theme, settings, or the rules added to its prompt. Use when the user asks illi to change how it works, remember a workflow as a skill or a command, add an agent, connect a tool server, or change a setting.
+description: Customize illi itself - add or change its agents, slash commands, skills, MCP servers, plugins, theme and accent color, settings, or the rules added to its prompt. Use when the user asks illi to change how it works or looks, remember a workflow as a skill or a command, add an agent, connect a tool server, write a plugin, or change a setting.
 ---
 
 illi is customized with plain files, which you write with your tools:
@@ -9,12 +9,13 @@ illi is customized with plain files, which you write with your tools:
 - illi's folder, this profile's own: {{illi}} (the same, in the default
   profile; a profile's agents, commands, skills and MCP servers go beside
   the global ones, and win by name)
-- This project's: {{project}} (agents, commands and skills only; by
-  name, a project's win over the others)
+- This project's: {{project}} (agents, commands, skills and plugins
+  only; by name, a project's win over the others)
 
 Write to illi's folder unless the user asks for every profile (the global
-folder) or this project only. /agents shows the user every agent, command
-and skill, and where their files go; the `off` setting turns one off.
+folder) or this project only. /agents shows the user every agent, command,
+skill and plugin, and where their files go; the `off` setting turns one
+off.
 
 # What goes where
 
@@ -127,6 +128,10 @@ one:
   for the user
 - side: right, left or off; side_width: "25%" or columns; jobs: summaries
   built at once
+- accent: the color everything on the screen is themed in, at once: auto
+  (the theme's; illi's aqua by default), illi, blue, magenta, cyan,
+  green, yellow, red, a palette index or #rrggbb. For "make it orange",
+  point the user to /settings or /set accent #ff9e64
 - leader: the key before a shortcut (default Ctrl+X: Ctrl or Alt and a
   letter illi doesn't use; pressed, the screen greys till the next key,
   which runs its shortcut); shortcuts: the keys after it, as an object
@@ -169,17 +174,36 @@ just no rules.
 A project's own AGENTS.md (else CLAUDE.md) is read too, in each folder from
 the repo's top down to where illi started. Change those only when the user
 asks: they belong to the project.
+
 ## Theme: theme.json
 
 ```json
-{ "palette": "nord", "colors": { "heading": "#ff9e64" }, "glyph": { "input": "❯ " } }
+{ "accent": "#7dcfff", "tokens": { "you": "accent", "dim": "8" },
+  "palette": "nord", "colors": { "heading": "#ff9e64" }, "glyph": { "input": "❯ " } }
 ```
 
-palette: catppuccin-mocha, catppuccin-latte, dracula, nord, tokyo-night,
-gruvbox-dark, gruvbox-light, rose-pine, rose-pine-dawn, everforest,
-github-dark, github-light, one-dark, solarized-dark, solarized-light, mono,
-or auto (the default: by the terminal's background); colors: any of the
-palette's over it; glyph, tool, ansi and syntax entries too.
+Every colored part of the screen takes one of these tokens: accent
+(buttons, bars, spinner, matches, chips, bullets), you (the frame round
+the user's messages; the accent, softer, by default), link, success,
+warning, error, dim (the secondary text). A token's value is #rrggbb, a
+palette index, a color's name (red, green, yellow, blue, magenta, cyan),
+illi, or another token's name to follow it. palette: catppuccin-mocha,
+catppuccin-latte, dracula, nord, tokyo-night, gruvbox-dark,
+gruvbox-light, rose-pine, rose-pine-dawn, everforest, github-dark,
+github-light, one-dark, solarized-dark, solarized-light, mono, or auto
+(the default: by the terminal's background); colors: any of the
+palette's slots over it; glyph, tool, ansi and syntax entries too. The
+accent setting goes over the file's accent.
+
+## Plugins: plugins/<name>.ts
+
+Code that runs inside illi as the user, with hooks on what it does (a
+turn's start and end, each message, a tool's call before and after it
+runs), commands, tools, side lines, a piece of the bottom line and
+colors; illi's docs/customize.md lists the API. Write one only when the
+user asks for a plugin, and say first what it will do: it runs with all
+illi's rights. A project's load only in a folder the user trusts. They
+load as illi starts.
 
 # Doing it cleanly
 
@@ -195,7 +219,7 @@ palette's over it; glyph, tool, ansi and syntax entries too.
 - Leave illi's own state alone: login.json, models.json, update.json,
   chat/, profiles/.
 - Say when it applies: agents, commands, skills and the rules file's text
-  at the next message; config.json, theme.json and mcp.json once illi
-  starts again (Ctrl+D, then `illi`: the chat goes on where it was).
+  at the next message; config.json, theme.json, mcp.json and plugins once
+  illi starts again (Ctrl+D, then `illi`: the chat goes on where it was).
 - Then tell the user how to use it: /<name>, Shift+Tab, or that the skill loads
   when a task matches.

@@ -14,7 +14,7 @@
 // after takes the quote out again.
 
 import * as Draw from "../ui/Draw.ts";
-import { term_draw, term_mix } from "./Frame.ts";
+import { term_draw } from "./Frame.ts";
 import { term_click } from "./Keys.ts";
 import { term_toast } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
@@ -250,14 +250,14 @@ function term_marked(t: Term, area: Area, k: number): Paint.Line {
     const c    = Draw.draw_tokens().accent;
     const room = Math.min(span[1], area.w) - Paint.line_width(line);
     line = room > 0 ? [...line, Paint.Run(" ".repeat(room))] : line;
-    line = Paint.line_mark(line, span[0], span[1], hex(c) ? (s) => ({ ...s, g: term_mix(canvas, c!, SELECT), v: false }) : (s) => ({ ...s, v: !s.v }));
+    line = Paint.line_mark(line, span[0], span[1], hex(c) ? (s) => ({ ...s, g: Draw.draw_mix(canvas, c!, SELECT), v: false }) : (s) => ({ ...s, v: !s.v }));
   }
   const copy = t.sel?.held || p.row !== area.row + k ? undefined : term_button(line, p.col - area.col);
   if (copy !== undefined) {
     const runs  = line.filter((r) => r.copy === copy);
     const from  = Paint.line_width(line.slice(0, line.indexOf(runs[0])));
     const label = runs.find((r) => r.s.c.startsWith("#"))?.s.c;
-    const lit: Ink = hex(label, theme.codeText) ? { ...Paint.INK, c: canvas, g: term_mix(theme.codeText, label!, LIT) } : { ...Paint.INK, v: true };
+    const lit: Ink = hex(label, theme.codeText) ? { ...Paint.INK, c: canvas, g: Draw.draw_mix(theme.codeText, label!, LIT) } : { ...Paint.INK, v: true };
     line = Paint.line_mark(line, from, from + Paint.line_width(runs), () => lit);
   }
   return line;

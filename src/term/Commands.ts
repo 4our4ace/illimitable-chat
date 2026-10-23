@@ -21,7 +21,7 @@ import { term_redraw } from "./Frame.ts";
 import { term_away, term_clear, term_cycle, term_enter, term_esc, term_next, term_page, term_shots, term_take, term_verbose } from "./Keys.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
 import { Export } from "../chat/Export.ts";
-import { Plugins, type Command as Plugged } from "../config/Plugins.ts";
+import { Plugins, type Command as Plugged, type Found } from "../config/Plugins.ts";
 import { term_note, term_notify, term_toast, term_unnote, term_unnotify, type Notice } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_palette } from "./Palette.ts";
@@ -31,6 +31,7 @@ import { term_projects } from "./ProjectCommands.ts";
 import * as Reply from "../ui/Reply.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_set, term_settings } from "./Settings.ts";
+import { Trusted } from "../config/Trusted.ts";
 import { term_tokens } from "./Side.ts";
 import { term_act, term_idle, term_primaries, term_send, term_unhint, type Chooser, type Cmd, type Sug, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
@@ -114,7 +115,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
     ["Agents", [
       ["",                  "Shift+Tab",               "illi runs as the next primary agent (or click one at the side)", term_next],
       ["/agent [name]",     "",                        "illi runs as that primary agent (illi: its own); no name: opens a list", term_agent_set],
-      ["/agents",           "",                        "your agents, commands and skills, and where their files go", term_agents],
+      ["/agents",           "",                        "your agents, commands, skills and plugins, and where their files go", term_agents],
       ["",                  "Ctrl+PgDn, Ctrl+PgUp",    "the next tab, the one before: the chat's, each subagent's at work", term_cycle],
       ["/tab [name]",       "",                        "go to that agent's tab; no name: lists the tabs", term_tab],
       ["/stop [name]",      "",                        "stop all work, agents too; a name: only that agent", term_stop],
@@ -399,13 +400,16 @@ export function term_mcp(t: Term): void {
 }
 
 // the user's agents, primary (the main one marked) and subagents, their
-// commands and skills, and the dirs of all
+// commands, skills and plugins (off, or failed to load, said so), and
+// the dirs of all
 function term_agents(t: Term): void {
   const cwd   = process.cwd();
   const agent = (a: Profile) => "- **" + a.name + "**" + (a.name === t.v.agent ? " (main)" : "") + (a.description === "" ? "" : ": " + a.description) + [a.model, a.effort].filter(Boolean).map((x) => " · " + x).join("") + (a.tools === null ? "" : " · tools: " + a.tools.join(", "));
   const cmd   = (c: Command) => "- **/" + c.name + "**" + (c.description === "" ? "" : ": " + c.description);
   const list  = (title: string, xs: string[]) => ["", title + (xs.length === 0 ? ": none yet." : ":"), ...xs];
   const dirs  = (kind: "agents" | "commands" | "skills") => Custom.dirs(cwd, kind).map(config.config_home).join(" or ");
+  const plugin = (p: Found) => "- **" + p.name + "**" + (p.off ? " (off)" : p.runs ? "" : " (didn't load: illi.log says why)") + " · " + config.config_home(p.file);
+  const plugins = Plugins.dirs(cwd, (dir) => Trusted.has(Trusted.folder(dir))).map(config.config_home).join(" or ");
   term_primaries(t);
   const text  = [
     "Main agent: " + (t.v.agent === null ? "illi's own" : t.v.agent) + ". Shift+Tab runs illi as the next primary agent; so does a click at the side, and /agent <name>.",
@@ -413,7 +417,8 @@ function term_agents(t: Term): void {
     ...list("Subagents (only an agent spawns them)", Custom.subagents(cwd).map(agent)),
     ...list("Commands", Custom.commands(cwd).map(cmd)),
     ...list("Skills (the agent loads one when a task matches; /name asks for it)", Custom.skills(cwd).map((s) => "- **" + s.name + "**" + (s.description === "" ? "" : ": " + s.description))),
-    "", "An agent is a markdown file in " + dirs("agents") + " (the project's wins); its mode is primary, subagent, or all (both, the default). A command is one in " + dirs("commands") + ", a skill a folder with a SKILL.md in " + dirs("skills") + ". illi's docs/customize.md shows their shape.",
+    ...list("Plugins (code that runs inside illi, loaded as it starts)", Plugins.found().map(plugin)),
+    "", "An agent is a markdown file in " + dirs("agents") + " (the project's wins); its mode is primary, subagent, or all (both, the default). A command is one in " + dirs("commands") + ", a skill a folder with a SKILL.md in " + dirs("skills") + ", a plugin a .ts or .js file in " + plugins + ". illi's docs/customize.md shows their shape.",
   ];
   term_pane_text(t, "Agents", text.join("\n"));
 }

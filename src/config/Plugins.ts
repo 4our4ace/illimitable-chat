@@ -90,9 +90,11 @@ export type Command = { name: string; about: string; plugin: string; run: (args:
 // it), its input's JSON schema, what runs it (its text, or its output)
 export type Tool = { name: string; description: string; schema?: object; run: (input: any, call: ToolCall) => string | Output | Promise<string | Output> };
 
-// what a plugin may use, given to its function: its name, folder, the
-// project's folder, the profile, illi's version; and what it adds
+// what a plugin may use, given to its function: the API's version
+// (API), its name, folder, the project's folder, the profile, illi's
+// version; and what it adds
 export type Api = {
+  api     : number;
   name    : string;
   dir     : string;
   cwd     : string;
@@ -145,8 +147,13 @@ const TOOL = /^[a-z0-9_-]+$/i;
 // the files a plugin may be, a folder's index
 const FILES = [".ts", ".js", ".mjs"];
 
+// the API's version: what a plugin is given only grows within one (a
+// hook, a member, a field added); a change that would break a plugin is
+// a new one
+export const API = 1;
+
 // the hooks there are
-const HOOKS: Hook[] = ["start", "quit", "turn.start", "turn.end", "message", "tool.before", "tool.after"];
+export const HOOKS: Hook[] = ["start", "quit", "turn.start", "turn.end", "message", "tool.before", "tool.after"];
 
 // the longest a plugin's function or a hook is waited for (ms)
 const SLOW = 30000;
@@ -384,6 +391,7 @@ function plugin_files(dir: string): Array<[string, string]> {
 function plugin_api(p: Plugin, cwd: string): Api {
   const live = () => p.runs;
   return {
+    api     : API,
     name    : p.name,
     dir     : path.dirname(p.file),
     cwd,
