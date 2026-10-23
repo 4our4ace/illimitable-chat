@@ -5,7 +5,8 @@
 // block moved by the terminal. Then the lines Paint lays out: a link
 // wider than a line breaks at its edge, its pieces each opening it whole;
 // a word of several runs is kept whole; a frame never passes its width;
-// each block's lines are marked. The window's title, written as it
+// each block's lines are marked. A word finds options by name, then by
+// a word of what they do, then by its letters. The window's title, written as it
 // changes, put back as illi's goes.
 
 import { expect, test } from "bun:test";
@@ -605,4 +606,16 @@ test("the window's title is written only as it changes, cleaned, and again after
     process.stdout.write = write;
   }
   expect(out).toEqual(["\x1b]0;∞ illi · a]0;b\x07", "\x1b]0;∞ illi · a]0;b\x07", "\x1b]0;\x07\x1b[23;0t\x1b[22;0t"]);
+});
+
+test("a word finds options by name first, then (from three letters) by a word of what they do it starts, in any script, then by its letters in turn", () => {
+  const names = ["clear", "login", "background", "mode", "news"];
+  const hays  = ["start a new topic", "renews it", "what a shell call left going", "what runs without asking", undefined];
+  const found = (word: string) => Screen.ed_find(word, names, hays).map((m) => names[m.k] + (m.hay ? " (hay " + m.at.join(",") + ")" : ""));
+  expect(found("new")).toEqual(["news", "clear (hay 8,9,10)"]);
+  expect(found("run")).toEqual(["mode (hay 5,6,7)", "background"]);
+  expect(found("ne")).toEqual(["news"]);
+  expect(Screen.ed_find("при", ["a", "b"], ["запустить", "привет мир"]).map((m) => m.k)).toEqual([1]);
+  expect(Screen.ed_find("a.b", ["x"], ["a.b c"]).map((m) => m.hay)).toEqual([true]);
+  expect(Screen.ed_find("x(", ["x"], ["y"]).map((m) => m.k)).toEqual([]);
 });

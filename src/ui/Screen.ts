@@ -22,7 +22,7 @@
 // each erased whole, a paste's text put back in its place as it's sent
 // (ed_expand). A lone /word is a command being typed, and one the
 // cursor ends mid-message a skill's name, matched to the names (ed_slash,
-// ed_rank: Term.ts lists them under the input). A list open (grab) takes keys before the input does, and a
+// ed_rank, ed_find: Term.ts lists them under the input). A list open (grab) takes keys before the input does, and a
 // list searched (type) the text typed.
 
 import * as fs from "node:fs";
@@ -63,8 +63,9 @@ type Place = Spot & { pos: number };
 export type Piece = { col: number; w: number; line: Paint.Line };
 
 // a name a word typed matches: its index, the places of the characters
-// matched in it
-export type Match = { k: number; at: number[] };
+// matched in it (hay: matched in what it does, not its name: the places
+// are the hay's, ed_find)
+export type Match = { k: number; at: number[]; hay?: true };
 
 // the screen: whether a terminal, whether it answered kitty's flags (so
 // Esc comes as CSI 27u, and a bare ESC only starts a sequence), the
@@ -109,7 +110,11 @@ export type Screen = {
 // =========
 
 // the editing keys, as /help lists them
-export const EDITING = "Arrows, Home, End, Ctrl+A, E, U, K, W, Alt+B, F, D, as in a shell; Shift+Enter or Ctrl+J, a new line; Up and Down past the ends, the messages sent. A / first lists the commands that match as you type, in a box over the input: Up and Down choose, Tab fills one in, Enter runs it (or fills it in, if it needs an argument), Esc closes the list.";
+export const EDITING = "Arrows, Home, End, Ctrl+A, E, U, K, W, Alt+B, F, D, as in a shell; Shift+Enter or Ctrl+J, a new line; Up and Down past the ends, the messages sent. A / first lists the commands that match as you type (by name, then by a word of what they do), in a box over the input: Up and Down choose, Tab fills one in, Enter runs it (or fills it in, if it needs an argument or was found by what it does), Esc closes the list.";
+
+// the fewest characters a word finds options by what they do (ed_find):
+// a shorter one would find most
+const HAY = 3;
 
 const PASTE_ON  = "\x1b[200~";
 const PASTE_OFF = "\x1b[201~";
@@ -901,6 +906,36 @@ export function ed_slash(ed: Ed): { word: string; from: number } | null {
 // together first). In each, the most used first (used: how often each
 // was chosen), then in their order
 export function ed_rank(word: string, names: string[], used: (k: number) => number = () => 0): Match[] {
+  return ed_tiers(word, names, used).map(({ k, at }) => ({ k, at }));
+}
+
+// the options a word finds, best first: those whose names it starts or
+// is in (ed_rank's first two kinds); then, for a word of HAY characters
+// or more, those with a word in their hay (what each does) that it starts
+// (case aside, any script), the more used first; then those whose names
+// hold its characters in turn
+export function ed_find(word: string, names: string[], hays: Array<string | undefined>, used: (k: number) => number = () => 0): Match[] {
+  const named = ed_tiers(word, names, used);
+  const close = new Set(named.filter((m) => m.tier < 2).map((m) => m.k));
+  const said  = [...word].length < HAY ? [] : ed_words(word, hays).filter((m) => !close.has(m.k)).sort((a, b) => used(b.k) - used(a.k) || a.k - b.k);
+  const by    = new Set(said.map((m) => m.k));
+  const plain = ({ k, at }: Match) => ({ k, at });
+  return [...named.filter((m) => m.tier < 2).map(plain), ...said, ...named.filter((m) => m.tier === 2 && !by.has(m.k)).map(plain)];
+}
+
+// the hays in which a word starts a word (case aside), each its first
+// such place
+function ed_words(word: string, hays: Array<string | undefined>): Match[] {
+  const find = new RegExp("(?<![\\p{L}\\p{N}])" + word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "iu");
+  return hays.flatMap((hay, k): Match[] => {
+    const hit = hay === undefined ? null : find.exec(hay);
+    return hit === null ? [] : [{ k, at: Array.from({ length: hit[0].length }, (_, j) => hit.index + j), hay: true }];
+  });
+}
+
+// ed_rank's matches, each with its kind (tier: 0 starts, 1 is in, 2 its
+// characters in turn)
+function ed_tiers(word: string, names: string[], used: (k: number) => number): Array<Match & { tier: number }> {
   const want  = [...word].map((c) => c.toLowerCase());
   const found: Array<Match & { tier: number; cost: number }> = [];
   names.forEach((name, k) => {
@@ -915,7 +950,7 @@ export function ed_rank(word: string, names: string[], used: (k: number) => numb
       found.push({ k, at: seq, tier: 2, cost: seq[seq.length - 1] - seq[0] });
     }
   });
-  return found.sort((a, b) => a.tier - b.tier || used(b.k) - used(a.k) || a.cost - b.cost || a.k - b.k).map(({ k, at }) => ({ k, at }));
+  return found.sort((a, b) => a.tier - b.tier || used(b.k) - used(a.k) || a.cost - b.cost || a.k - b.k).map(({ k, at, tier }) => ({ k, at, tier }));
 }
 
 // the places of want's characters in have, in turn, the closest together

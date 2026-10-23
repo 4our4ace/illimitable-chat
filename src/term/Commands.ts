@@ -139,10 +139,10 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
     ]],
   ];
   const mine  = (custom ? term_yours(term_builtin(groups)) : []).map(({ word, also, command: c, skill: s }): Cmd => (c !== null
-    ? ["/" + word + " [...]", "", c.description || (c.plugin == null ? "your command (" : "plugin " + c.plugin + "'s command (") + c.file + ")", (t, a) => term_custom(t, c, a, "/" + word), also ?? undefined]
-    : ["/" + word + " [...]", "", (!s!.sticky ? "skill: " : config.config_sticky(s!.name) ? "sticky skill, on: " : "sticky skill, off: ") + (s!.description || s!.dir), (t, a) => term_skill(t, s!, a, "/" + word), also ?? undefined]));
+    ? ["/" + word + " [...]", "", c.description || (c.plugin == null ? "your command (" : "plugin " + c.plugin + "'s command (") + c.file + ")", (t, a) => term_custom(t, c, a, "/" + word), also ?? undefined, c.description]
+    : ["/" + word + " [...]", "", (!s!.sticky ? "skill: " : config.config_sticky(s!.name) ? "sticky skill, on: " : "sticky skill, off: ") + (s!.description || s!.dir), (t, a) => term_skill(t, s!, a, "/" + word), also ?? undefined, s!.description]));
   const taken = new Set([...groups.flatMap(([, own]) => own), ...mine].map(([use]) => use.split(" ")[0]));
-  const plugs = (custom ? Plugins.commands() : []).filter((c) => !taken.has("/" + c.name)).map((c): Cmd => ["/" + c.name + " [...]", "", c.about || "plugin " + c.plugin + "'s command", (t, a) => term_plugged(t, c, a)]);
+  const plugs = (custom ? Plugins.commands() : []).filter((c) => !taken.has("/" + c.name)).map((c): Cmd => ["/" + c.name + " [...]", "", c.about || "plugin " + c.plugin + "'s command", (t, a) => term_plugged(t, c, a), undefined, c.about]);
   const yours = [...mine, ...plugs];
   return [...groups, ...(yours.length === 0 ? [] : [["Yours", yours] as [string, Cmd[]]])];
 }
@@ -183,9 +183,10 @@ export function term_command(t: Term, text: string, typed = true): boolean {
 
 // the commands suggested, kept to the input: opened (all of them read)
 // as it becomes a /word, matched again as the word changes (the best
-// lit), closed as it is none; null while closed or closed by Esc. A
-// /word mid-message: the user's skills alone (no command runs there),
-// none shown till one matches
+// lit; by name, and by what each does: Screen.ed_find), closed as it is
+// none; null while closed or closed by Esc. A /word mid-message: the
+// user's skills alone (no command runs there), by name only (a path
+// would find what they do), none shown till one matches
 export function term_suggest(t: Term): Sug | null {
   const slash = Screen.ed_slash(t.scr.ed);
   const mid   = slash === null || slash.word === t.scr.ed.text ? null : slash.from;
@@ -204,8 +205,9 @@ export function term_suggest(t: Term): Sug | null {
   sug.mid    = mid;
   if (sug.word !== word) {
     const names = sug.cmds.map(([use]) => use.split(" ")[0].slice(1));
+    const hays  = sug.cmds.map(([, , text, , , said]) => (mid === null ? Paint.text_clean(said ?? text) : undefined));
     const count = term_tally(USED);
-    Object.assign(sug, { word, found: Screen.ed_rank(word.slice(1), names, (k) => count["/" + names[k]] ?? 0), at: 0, top: 0, off: null });
+    Object.assign(sug, { word, found: Screen.ed_find(word.slice(1), names, hays, (k) => count["/" + names[k]] ?? 0), at: 0, top: 0, off: null });
   }
   return sug.off === word || (mid !== null && sug.found.length === 0) ? null : sug;
 }
@@ -313,8 +315,9 @@ function tally_use(count: Record<string, number>, name: string): void {
 }
 
 // a key to the commands suggested (true: taken): Up and Down move round
-// them, Tab fills the one lit in, Enter takes it; Esc closes them till
-// the word changes. None matching, they take Esc alone
+// them, Tab fills the one lit in, Enter takes it (one found only by what
+// it does, filled in, so a second Enter runs what shows); Esc closes them
+// till the word changes. None matching, they take Esc alone
 export function term_suggest_key(t: Term, sug: Sug, key: string): boolean {
   const n    = sug.found.length;
   const move = ({ Up: -1, Down: 1 } as Record<string, number>)[key];
@@ -324,7 +327,8 @@ export function term_suggest_key(t: Term, sug: Sug, key: string): boolean {
     sug.at  = (sug.at + move + n) % n;
     sug.top = Math.max(Math.min(sug.top, sug.at), sug.at - sug.tall + 1);
   } else if (n > 0 && (key === "Tab" || key === "Enter")) {
-    term_suggested(t, sug.cmds[sug.found[sug.at].k][0], key === "Enter");
+    const lit = sug.found[sug.at];
+    term_suggested(t, sug.cmds[lit.k][0], key === "Enter" && lit.hay !== true);
   } else {
     return false;
   }
@@ -673,16 +677,14 @@ export function term_ask(t: Term, title: string, hint: string, start: string, fo
 }
 
 // the picker's search changed: the options it matches, the best lit
-// (with hay, those matched by name first, then those only by the rest;
-// each the more used first); emptied, all in their order, the one lit
-// before still lit (none: the one marked as now)
+// (with hay, by name and by what each does: Screen.ed_find; each the more
+// used first); emptied, all in their order, the one lit before still lit
+// (none: the one marked as now)
 export function term_chooser_find(c: Chooser): void {
   const was  = c.shown[c.at]?.k ?? c.here;
   const find = c.find?.text ?? "";
   const used = find === "" ? undefined : c.used;
-  const named = Screen.ed_rank(find, c.names, used);
-  const by    = new Set(named.map((m) => m.k));
-  c.shown = c.hay === undefined ? named : [...named, ...Screen.ed_rank(find, c.hay, used).filter((m) => !by.has(m.k))];
+  c.shown = c.hay === undefined ? Screen.ed_rank(find, c.names, used) : Screen.ed_find(find, c.names, c.hay, used);
   c.at    = find === "" ? Math.max(0, c.shown.findIndex((m) => m.k === was)) : 0;
   c.top   = 0;
 }

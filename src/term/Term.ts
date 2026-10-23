@@ -240,8 +240,11 @@ export type Item = [Paint.Line, (() => void) | null];
 export type Sug = { cmds: Cmd[]; word: string; found: Screen.Match[]; at: number; top: number; tall: number; off: string | null; mid: number | null };
 
 // a line of /help: how it is typed ("": keys only), its keys, what it
-// does; it runs on its argument, or by a key on "" (or the key's name)
-export type Cmd = [use: string, keys: string, text: string, run: (t: Term, arg: string) => void | Promise<void>, also?: string];
+// does; it runs on its argument, or by a key on "" (or the key's name);
+// the other name it answers to; what it does as searched (none: text; a
+// command or skill of the user's or a plugin's: its own description,
+// without what illi says around it)
+export type Cmd = [use: string, keys: string, text: string, run: (t: Term, arg: string) => void | Promise<void>, also?: string, said?: string];
 
 // where the agent's log lines go on a terminal
 const LOG = config.DIR + "/illi.log";

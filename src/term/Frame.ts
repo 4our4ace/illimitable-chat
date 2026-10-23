@@ -680,7 +680,7 @@ function term_picker(t: Term, w: number, room: number): { items: Item[]; at?: Sc
     const head = [
       Paint.Run(here ? "› " : "  ", bold),
       ...(c.here < 0 || act(name) ? [] : [Paint.Run((m.k === c.here ? GLYPH.here : GLYPH.tab) + " ", Paint.DIM)]),
-      ...[...name].map((ch, j) => Paint.Run(ch, m.at.includes(j) ? lit : here ? bold : Paint.INK)),
+      ...[...name].map((ch, j) => Paint.Run(ch, m.hay !== true && m.at.includes(j) ? lit : here ? bold : Paint.INK)),
       Paint.Run(" ".repeat(wide - Paint.text_width(name) + (act(name) ? 4 : 2))),
     ];
     const side  = Paint.text_clean(c.aside?.[m.k] ?? "");
@@ -735,17 +735,18 @@ function term_suggestions(t: Term, sug: Sug, fw: number, room: number): Item[] {
   const bold = { ...lit, b: true };
   const wide = Math.min(Math.max(0, ...sug.found.map((m) => Paint.text_width(sug.cmds[m.k][0]))), Math.floor(w / 2)) + 4;
   const item = (m: Screen.Match, k: number): Item[] => {
-    const [use, , text] = sug.cmds[m.k];
+    const [use, , text, , , about] = sug.cmds[m.k];
     const name = use.split(" ")[0];
     const here = k === sug.at;
     const head = [
       Paint.Run(here ? "› " : "  ", bold),
-      ...[...name].map((c, i) => Paint.Run(c, here || m.at.includes(i - 1) ? bold : Paint.INK)),
+      ...[...name].map((c, i) => Paint.Run(c, here || (m.hay !== true && m.at.includes(i - 1)) ? bold : Paint.INK)),
       Paint.Run(use.slice(name.length), here ? lit : Paint.DIM),
     ];
     const cut  = Paint.line_cut(head, 0, wide - 2)[1];
     const pad  = Paint.Run(" ".repeat(wide - Paint.line_width(cut)));
-    const said = Paint.runs_wrap([Paint.Run(Paint.text_clean(text), here ? lit : Paint.DIM)], Math.max(1, w - wide), false);
+    const ink  = here ? lit : Paint.DIM;
+    const said = Paint.runs_wrap(term_found(Paint.text_clean(text), m.hay === true ? Paint.text_clean(about ?? text) : "", m.at, ink), Math.max(1, w - wide), false);
     const run  = () => term_suggested(t, use, true);
     return said.map((l, i): Item => [i === 0 ? [...cut, pad, ...l] : [Paint.Run(" ".repeat(wide)), ...l], run]);
   };
@@ -766,6 +767,18 @@ function term_suggestions(t: Term, sug: Sug, fw: number, room: number): Item[] {
   const items = [...shown, ...Array.from({ length: rows - shown.length }, (): Item => [[], null])];
   const lines = Paint.frame(items.map(([line]) => line), fw, [Paint.Run(" " + (sug.mid === null ? SUGGESTED : NAMED) + " ", { ...Paint.DIM, b: true })]);
   return lines.map((l, k) => [l, items[k - 1]?.[1] ?? null]);
+}
+
+// a suggested command's text, in ink, the word found in what it does
+// (about, the part of text searched; at, its places there; none: "")
+// bold in the accent
+function term_found(text: string, about: string, at: number[], ink: Paint.Ink): Paint.Line {
+  const from = about === "" || at.length === 0 ? -1 : text.indexOf(about);
+  if (from < 0) {
+    return [Paint.Run(text, ink)];
+  }
+  const [a, b] = [from + at[0], from + at[at.length - 1] + 1];
+  return [Paint.Run(text.slice(0, a), ink), Paint.Run(text.slice(a, b), { ...ink, d: false, b: true, c: Draw.draw_tokens().accent }), Paint.Run(text.slice(b), ink)];
 }
 
 // the pages' line at screen row `row`, w wide (all of them, or the one
