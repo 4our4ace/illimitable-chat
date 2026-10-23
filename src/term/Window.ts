@@ -111,7 +111,7 @@ export type Effect =
   | { $: "send"; id: number; data: string }
   | { $: "resize"; cols: number; rows: number }
   | { $: "suspend" }
-  | { $: "kill"; id: number; signal: "SIGTERM" | "SIGKILL" }
+  | { $: "kill"; id: number; signal: "SIGINT" | "SIGTERM" | "SIGKILL" }
   | { $: "wait" }
   | { $: "exit"; code: number; lines: string[] };
 
@@ -219,6 +219,8 @@ function window_out(w: Window, fx: Effect[], m: Member, data: string): void {
   }
 }
 
+// a member's bytes: to the terminal if its output is the screen, else
+// kept as its tail
 function window_bytes(w: Window, fx: Effect[], m: Member, data: string): void {
   if (data === "") {
     return;
@@ -307,11 +309,14 @@ function window_hide(w: Window, fx: Effect[], m: Member, to: string): void {
 }
 
 // the terminal's input: to the member up on the screen, else kept for
-// the next one up
+// the next one up. Ctrl+C before the first is up interrupts its start,
+// as on a terminal of its own
 function window_in(w: Window, fx: Effect[], data: string): void {
-  const m = w.members.find((x) => x.id === w.shown && x.phase === "shown");
-  if (m !== undefined) {
+  const m = w.members.find((x) => x.id === w.shown);
+  if (m?.phase === "shown") {
     fx.push({ $: "send", id: m.id, data });
+  } else if (m !== undefined && !w.on && data.includes("\x03")) {
+    fx.push({ $: "kill", id: m.id, signal: "SIGINT" });
   } else if (w.queue.length + data.length <= QUEUE) {
     w.queue += data;
   }
@@ -357,8 +362,9 @@ function window_finish(w: Window, fx: Effect[]): void {
 // lines kept for the end, the modes off once the shown one is gone, the
 // end once all are. Else: one asked to show (a switch's) that never came
 // up, the one shown before comes back, saying why; the one shown, the one
-// shown before it comes back, saying so; one hidden, a note to the one
-// shown. None left to show: the end, with its code and lines
+// shown before it comes back, saying so (kept as the profile used last,
+// as a switch to it would be); one hidden, a note to the one shown. None
+// left to show: the end, with its code and lines
 function window_gone(w: Window, fx: Effect[], m: Member, code: number, why?: string): void {
   window_bytes(w, fx, m, m.carry);
   w.members = w.members.filter((x) => x !== m);
@@ -392,7 +398,7 @@ function window_gone(w: Window, fx: Effect[], m: Member, code: number, why?: str
     }
     w.pending = back.id;
     const note = m.refused ? UPDATED : switched ? "Not switched: " + named + " didn't start" + (line === "" ? "." : ": " + line) : named + " ended" + (line === "" ? "." : ": " + line);
-    return window_send(w, fx, back, { $: "show", note });
+    return window_send(w, fx, back, switched || m.refused ? { $: "show", note } : { $: "show", switch: true, note });
   }
   w.notes.push(named + " ended" + (line === "" ? "." : ": " + line));
   window_roster(w, fx);
@@ -447,6 +453,9 @@ export function window_run(self = window_self()): void {
   // a member's end, once its process and its PTY both ended (or
   // EOF_WAIT after its process)
   const ended = (id: number, part: { proc?: number; pty?: boolean }) => {
+    if (!procs.has(id)) {
+      return;
+    }
     const seen = { ...left.get(id), ...part };
     left.set(id, seen);
     if (seen.proc !== undefined && seen.pty === true) {

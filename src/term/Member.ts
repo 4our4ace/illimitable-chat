@@ -40,10 +40,10 @@ import { VERSION, wire_env, wire_env_parse, wire_frame, type Down, type How, typ
 // =====
 
 // this illi in its window: the wire's nonce; how it started; whether it
-// is shown; the others open, as last told; its terminal (once it's up)
-// and screen; its state as last said; whether the window asked it to
-// quit; whether it told the window of the person's quit
-type Win = { nonce: string; how: How; shown: boolean; open: Open[]; t: Term | null; scr: Screen.Screen | null; said: string; ended: boolean; quit: boolean };
+// is shown; the others open, as last told; its terminal (once it's up);
+// its state as last said; whether the window asked it to quit; whether
+// it told the window of the person's quit
+type Win = { nonce: string; how: How; shown: boolean; open: Open[]; t: Term | null; said: string; ended: boolean; quit: boolean };
 
 // Constants
 // =========
@@ -63,7 +63,7 @@ let spin: Timer | undefined;
 function member_open(): Win | null {
   const env = wire_env_parse(process.env.ILLI_WINDOW);
   delete process.env.ILLI_WINDOW;
-  return env === null ? null : { nonce: env.nonce, how: env.how, shown: env.how !== "hidden", open: [], t: null, scr: null, said: "", ended: false, quit: false };
+  return env === null ? null : { nonce: env.nonce, how: env.how, shown: env.how !== "hidden", open: [], t: null, said: "", ended: false, quit: false };
 }
 
 // a message to the window, in order after what was painted before it
@@ -111,11 +111,6 @@ export function member_attach(t: Term): void {
   }
 }
 
-// whether this illi is hidden in a window
-export function member_hidden(): boolean {
-  return WIN !== null && !WIN.shown;
-}
-
 // the other profiles open in the window, as last told (none outside one)
 export function member_others(): Open[] {
   return WIN?.open ?? [];
@@ -126,7 +121,6 @@ function member_heard(scr: Screen.Screen, msg: Down): void {
   if (WIN === null) {
     return;
   }
-  WIN.scr = scr;
   if (msg.$ === "show") {
     member_show(scr, msg.switch === true, typeof msg.note === "string" ? msg.note : "");
   } else if (msg.$ === "roster" && Array.isArray(msg.open)) {
