@@ -5,39 +5,42 @@
 // (Term question, never a list's popup): the permission question
 // (Asks.ts), a confirmation (Switch to X?, Delete profile X?, Forget X?,
 // Read-only mode refused it, what a new profile starts with), a line
-// asked for (Commands.ts term_ask: a name, a path, why not); illi's own
-// questions, their form, show in the popup still (Popup.ts). The lists a
-// person opens are popups; one opened over a question (Ctrl+P) shows over
-// it, the question back as it closes. A question has the rows between
-// the rules round the input, its full width (under the side panel too):
-// the rule over it says its title, its keys and what the lit answer takes
-// besides (its foot); under it, the lines leading its answers (why it
-// asks; what it would do, bold), then its answers, the lit one marked, or
-// the line asked, as the input shows a message typed. As tall as its
-// lines, half the screen's rows at most, the chat keeping the rest: too
-// tall, its lead gives way, cut to fit, a dim line after it saying how
-// much more, and scrolls by the wheel over it and PgUp, PgDn; its answers
-// always show, each whole (one taller than ANSWER, naming what it keeps
-// by a long command: its start and its end). Each row is one line, drawn
-// once, no control character in it (Popup.ts popup_name_lines). Nothing
-// is dimmed, and the input as typed is kept under it, back once it is
-// answered. It has every key but Ctrl+L, Ctrl+Z, Ctrl+P and the leader
-// (Keys.ts); Esc, Ctrl+C and Ctrl+D close it (the permission question's
-// No; Ctrl+C copies text chosen instead, as ever). On its rows the row
+// asked for (Commands.ts term_ask: a name, a path, why not); else illi's
+// own questions, their form (Asks.ts). The lists a person opens are
+// popups (Popup.ts); one opened over a question (Ctrl+P) shows over it,
+// the question back as it closes. A question has the rows between the
+// rules round the input, its full width (under the side panel too): the
+// rule over it says its title (the form's: who asks), its keys and what
+// the lit answer takes besides (its foot); under it, the lines leading
+// its answers (why it asks; what it would do, bold), then its answers,
+// the lit one marked, or the line asked, as the input shows a message
+// typed; the form, its tabs, the question shown, its options, its words
+// and its keys. As tall as its lines, half the screen's rows at most,
+// the chat keeping the rest: too tall, its lead gives way, cut to fit, a
+// dim line after it saying how much more, and scrolls by the wheel over
+// it and PgUp, PgDn; its answers always show, each whole (one taller
+// than ANSWER, naming what it keeps by a long command: its start and its
+// end); the form's lines between its tabs and its keys scroll, the lit
+// row kept in view. Each row is one line, drawn once, no control
+// character in it (Popup.ts popup_name_lines). Nothing is dimmed, and
+// the input as typed is kept under it, back once it is answered. It has
+// every key but Ctrl+L, Ctrl+Z, Ctrl+P and the leader (Keys.ts); Esc,
+// Ctrl+C and Ctrl+D close it (the permission question's No, the form's
+// skip; Ctrl+C copies text chosen instead, as ever). On its rows the row
 // under the pointer lights and a click does what Enter does (Popup.ts
-// popup_mouse), the wheel scrolls its lead; all else on the screen works
-// as with no question (the wheel scrolls the chat, text is chosen and
-// copied, the side and the tabs answer; a click outside never answers
-// it). A question illi asks (the permission question, its form) holds
-// Enter, Space and a click for ARM after it first shows (question_held),
-// so the key that ended a sentence never answers it; Esc, its no, never
-// waits.
+// popup_mouse; on a tab of the form, goes there), the wheel scrolls its
+// lead or the form's lines; all else on the screen works as with no
+// question (the wheel scrolls the chat, text is chosen and copied, the
+// side and the tabs answer; a click outside never answers it). A
+// question illi asks (the permission question, its form) holds Enter,
+// Space and a click for ARM after it first shows (question_held), so the
+// key that ended a sentence never answers it; Esc, its no, never waits.
 
-import { term_form } from "./Asks.ts";
+import { term_form, term_form_lines } from "./Asks.ts";
 import * as Paint from "../ui/Paint.ts";
-import { popup_at, popup_entries, popup_foot, popup_lead, popup_rows } from "./Popup.ts";
+import { STEP, popup_at, popup_entries, popup_foot, popup_lead, popup_rows } from "./Popup.ts";
 import * as Screen from "../ui/Screen.ts";
-import type { Box, Chooser, Target, Term } from "./Term.ts";
+import type { Box, Chooser, Form, Target, Term } from "./Term.ts";
 
 // how long a question just shown holds Enter, Space and a click (ms):
 // less than it takes to read it
@@ -54,9 +57,10 @@ const ANSWER = 3;
 // as laid out (Box's)
 export type Asked = { of: object; rule: Paint.Line; lines: Paint.Line[]; rows: Box["rows"]; at: Screen.Spot | null; shape: Pick<Box, "list" | "lines" | "tall" | "ahead" | "lead"> };
 
-// the question shown at the input: its picker (null: none)
-export function question_of(t: Term): Chooser | null {
-  return t.question;
+// the question shown at the input: its picker, else illi's form (null:
+// none)
+export function question_of(t: Term): Chooser | Form | null {
+  return t.question ?? term_form(t)?.[1] ?? null;
 }
 
 // whether the chat's question (t.asking: the permission question, the
@@ -99,8 +103,8 @@ function question_words(h: number): number {
 // the question at the input laid out, w wide, on a screen h rows tall
 // (none: null)
 export function question_laid(t: Term, w: number, h: number): Asked | null {
-  const c = question_of(t);
-  return c === null ? null : question_picker(t, c, w, h);
+  const f = term_form(t)?.[1] ?? null;
+  return t.question !== null ? question_picker(t, t.question, w, h) : f !== null ? question_form(t, f, w, h) : null;
 }
 
 // a question's picker laid out w wide, on a screen h rows tall: over its
@@ -166,6 +170,42 @@ function question_cut(lines: Array<[Paint.Line, Target | null]>, name: string, c
   return cap === 1 ? [[cut, aim]] : [...lines.slice(0, cap - 1), [[pad, Paint.Run("…", Paint.DIM), ...ends], aim]];
 }
 
+// illi's form laid out w wide, on a screen h rows tall (Asks.ts
+// term_form_lines, the words question_words at most): as tall as the tab
+// shown, question_most at most; its tabs hold at its top and its keys at
+// its foot (the room allowing), its lines between scroll (Form top),
+// kept to show the lit row (question_row; the answers have none: only
+// the wheel scrolls them). The cursor in the words, while they show. Its
+// rule: who asks
+function question_form(t: Term, f: Form, w: number, h: number): Asked {
+  const laid = term_form_lines(t, w, question_words(h))!;
+  const most = question_most(h);
+  const head = laid.tabs.slice(0, most);
+  const keys = laid.keys.slice(0, Math.max(0, most - head.length - 1));
+  const room = Math.max(0, Math.min(laid.body.length, most - head.length - keys.length));
+  const e    = f.each[f.tab];
+  const keep = e === undefined ? null : question_row(laid.body, laid.at, e.at);
+  const top  = Math.max(0, Math.min(f.top, laid.body.length - room));
+  f.top      = keep === null ? top : Math.max(0, Math.min(keep[0], Math.max(top, keep[1] - room + 1)));
+  const view = laid.body.slice(f.top, f.top + room);
+  const cur  = laid.at;
+  const at   = cur === null || cur.row < f.top || cur.row >= f.top + room ? null : { row: head.length + cur.row - f.top, col: cur.col };
+  const rows = [...laid.spans.slice(0, head.length), ...view.map(([, aim]) => aim), ...keys.map(() => null)];
+  return { of: f, rule: question_rule(w, laid.who + " asks", []), lines: [...head, ...view.map(([l]) => l), ...keys], rows, at, shape: { list: head.length, lines: room, tall: laid.body.length, ahead: 0, lead: 0 } };
+}
+
+// the lines row k of illi's form takes in its lines as laid out (body,
+// the cursor at `at`): its first, its last (the words', the last row:
+// their cursor's line); none such: null
+function question_row(body: Array<[Paint.Line, Target | null]>, at: Screen.Spot | null, k: number): [number, number] | null {
+  const words = body.at(-1)?.[1];
+  if (at !== null && words?.$ === "row" && words.k === k) {
+    return [at.row, at.row];
+  }
+  const on = body.flatMap(([, aim], j) => (aim?.$ === "row" && aim.k === k ? [j] : []));
+  return on.length === 0 ? null : [on[0], on.at(-1)!];
+}
+
 // the rule over a question, w wide, as the rule over the input starts:
 // its title, bold, then what it says besides ("": nothing), dim, a dot
 // before each; too wide, cut at its end, an ellipsis there
@@ -193,4 +233,41 @@ export function question_kept(t: Term, asked: Asked, row: number, col: number, w
 export function question_over(t: Term): boolean {
   const of = question_of(t);
   return of !== null && t.box?.of === of && popup_at(t.box, t.scr.point) !== "out";
+}
+
+// a turn of the wheel over illi's form (d -1: up), as last painted (none
+// yet: nothing): its lines under the tabs scrolled STEP (a third of those
+// shown, on a short one), stopping at their ends. On a question, with
+// the pointer on a row that shows whole (the words: their cursor's line),
+// that row lit; else, the lit one gone from view, the nearest still in
+// it (none shows whole: nothing moves), so what is lit always shows
+export function question_form_wheel(t: Term, d: number): void {
+  const f   = term_form(t)?.[1] ?? null;
+  const box = f !== null && t.box?.of === f ? t.box : null;
+  if (f === null || box === null) {
+    return;
+  }
+  const laid  = term_form_lines(t, box.w, question_words(Screen.screen_size().h))!;
+  const step  = Math.max(1, Math.min(STEP, Math.floor(box.lines / 3)));
+  const top   = Math.max(0, Math.min(laid.body.length - box.lines, f.top + d * step));
+  const e     = f.each[f.tab];
+  const shows = (k: number) => {
+    const rows = question_row(laid.body, laid.at, k);
+    return rows !== null && rows[0] >= top && rows[1] < top + box.lines;
+  };
+  if (top === f.top || e === undefined) {
+    f.top = top;
+    return;
+  }
+  const p     = t.scr.point;
+  const line  = p.row - box.row - box.list;
+  const over  = line >= 0 && line < box.lines && p.col >= box.col && p.col < box.col + box.w;
+  const under = over ? laid.body[top + line]?.[1] : undefined;
+  const words = laid.body.at(-1)?.[1];
+  const all   = Array.from({ length: words?.$ === "row" ? words.k + 1 : 0 }, (_, k) => k).filter(shows);
+  const lit   = under?.$ === "row" && shows(under.k) ? under.k : shows(e.at) ? e.at : question_row(laid.body, laid.at, e.at)![0] < top ? all[0] : all.at(-1);
+  if (lit !== undefined) {
+    e.at  = lit;
+    f.top = top;
+  }
 }

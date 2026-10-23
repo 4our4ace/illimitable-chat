@@ -8,18 +8,18 @@
 // the question). One gone before it is answered closes its picker; the
 // next shows once the one before is gone; one that comes while a list or
 // another question is open waits for it. A pipe notes what was asked and
-// answers no at once. illi's own questions (ask) show as a form (in the
-// popup: Popup.test), a tab
-// each (the tabs wrapped, each where it is), who asks its title: Up and
-// Down move, Space picks (one; several with multi), typing goes to the
-// words of the user's own, Enter picks the lit option and goes on; PgUp
-// and Ctrl+Home go to the first row, PgDn and Ctrl+End to the words',
-// Home and End too off the words (on them they edit); the last tab shows
-// all the answers, and Enter there sends them; Esc and Ctrl+D skip; any
-// other key does nothing, a pane under it stays; a list opened over it
-// takes the keys. A question just shown holds Enter (the form Space too)
-// for half a second from its first paint, and again once shown anew
-// after a list over it; Esc is never held.
+// answers no at once. illi's own questions (ask) show as a form (at the
+// input too: Question.test), a tab each (the tabs wrapped, each where it
+// is), who asks its title: Up and Down move, Space picks (one; several
+// with multi), typing goes to the words of the user's own, Enter picks
+// the lit option and goes on; PgUp and Ctrl+Home go to the first row,
+// PgDn and Ctrl+End to the words', Home and End too off the words (on
+// them they edit); the last tab shows all the answers, and Enter there
+// sends them; Esc and Ctrl+D skip; any other key does nothing, a pane
+// under it stays; a list opened over it takes the keys. A question just
+// shown holds Enter (the form Space too) for half a second from its
+// first paint, and again once shown anew after a list over it; Esc is
+// never held.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";

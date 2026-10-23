@@ -302,7 +302,7 @@ export function term_wordy(t: Term, p: Screen.Spot): boolean {
 // the button under a spot (none: no button there, or a popup over all)
 export function term_under(t: Term, p: Screen.Spot): (() => string) | undefined {
   const area = t.areas.find((a) => p.row >= a.row && p.row < a.row + a.tall && p.col >= a.col && p.col < a.col + a.w);
-  return area === undefined || term_popup(t) !== null ? undefined : term_button(area.lines[area.first + p.row - area.row] ?? [], p.col - area.col);
+  return area === undefined || term_popup(t) ? undefined : term_button(area.lines[area.first + p.row - area.row] ?? [], p.col - area.col);
 }
 
 // what's under a spot, as last painted, for a click and the light alike:
@@ -313,7 +313,7 @@ export function term_under(t: Term, p: Screen.Spot): (() => string) | undefined 
 // holding the line; else nothing. The live tail under the chat's rows
 // has no marks
 export function term_target(t: Term, p: Screen.Spot): Under {
-  if (term_popup(t) !== null || (t.box !== null && term_boxed(t.box, p))) {
+  if (term_popup(t) || (t.box !== null && term_boxed(t.box, p))) {
     return { $: "popup" };
   }
   const hit = t.hits.find((h) => h.row === p.row && p.col >= h.col && p.col < h.to);
@@ -427,7 +427,7 @@ function term_marked(t: Term, area: Area, k: number): Paint.Line {
     line = room > 0 ? [...line, Paint.Run(" ".repeat(room))] : line;
     line = Paint.line_mark(line, span[0], span[1], hex(c) ? (s) => ({ ...s, g: Draw.draw_mix(canvas, c!, SELECT), v: false }) : (s) => ({ ...s, v: !s.v }));
   }
-  const copy = t.sel?.held || p.row !== area.row + k || term_popup(t) !== null ? undefined : term_button(line, p.col - area.col);
+  const copy = t.sel?.held || p.row !== area.row + k || term_popup(t) ? undefined : term_button(line, p.col - area.col);
   if (copy !== undefined) {
     const runs  = line.filter((r) => r.copy === copy);
     const from  = Paint.line_width(line.slice(0, line.indexOf(runs[0])));
