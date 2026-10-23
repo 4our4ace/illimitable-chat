@@ -105,9 +105,10 @@ model (`Pick.ts` `Model`) has:
 | `id`       | as the vendor names it in requests |
 | `speeds`   | `slow`, and `fast`/`ultrafast` where it has them |
 | `window`   | the whole context window the vendor states (input and output share it) |
-| `standard` | a smaller window the plan counts as usual, past which it costs more (chatgpt's `context_window` below its max) |
+| `standard` | the vendor's usual window, when smaller (chatgpt's `context_window` below its `max_context_window`) |
 | `efforts`  | the efforts it takes, in the vendor's names (none: illi's five) |
 | `tiers`    | the id each speed is sent as |
+| `room`     | the share of the window a request may fill, as the vendor tells it (chatgpt's `effective_context_window_percent`; none: 90%) |
 
 Built-in models in `MODELS` hold until the vendor answers. Ways to
 learn them, from best:
@@ -130,11 +131,13 @@ holds each vendor's list on its own. Ask the vendor at the start
 windows that are only true for some accounts, keep which account the
 list is of (models.json's `account`, as chatgpt does).
 
-A model's `window` sets how much of the chat a turn sends: its
-autocompact (default 60%, at most 70%, and room left for the prompt and
-tools: `config_context`). A wrong window costs either memory (too small)
-or failed turns (too big), so a vendor that tells none gets a cautious
-built-in one.
+A model's `window` sets how much of the chat a turn sends: its auto
+compact (default 60%, at most 70%, and its `room` less what a request
+takes beside the chat: `config_context`). A wrong window costs either
+memory (too small) or failed turns (too big). A vendor that tells its
+windows gets none built in: until it answers, nothing is folded and a
+turn fails saying why (chatgpt's `NO_WINDOW`). A vendor that tells none
+(the OpenAI API) gets a cautious built-in one.
 
 6. The plan and its usage
 -------------------------

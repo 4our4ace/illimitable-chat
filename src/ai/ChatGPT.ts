@@ -26,8 +26,8 @@
 // (`models`: at start, after /login and /logout, on a change of account,
 // by a turn that finds it not asked: `listed`) is the chatgpt list: each
 // model shown offered, a new one too, one it drops gone; its window the
-// most the account may set, its usual one (standard: past it the plan
-// drains faster), its efforts and its speeds (each a service tier:
+// most the account may set, its usual one (standard: what Codex uses
+// unless set higher), its efforts and its speeds (each a service tier:
 // priority is fast), kept in config.MODELS_FILE for the next start,
 // naming the account. A turn's first request refused as too long past a
 // model's usual window makes that its whole one for the account.
@@ -537,9 +537,11 @@ export namespace ChatGPT {
   // may set (max_context_window, else context_window), the usual one
   // (standard) when below it; its efforts (supported_reasoning_levels, in
   // order); its speeds, standard and each service tier it offers
-  // (priority: fast, ultrafast), each one's tier id kept to send
+  // (priority: fast, ultrafast), each one's tier id kept to send; the
+  // share of the window a request may fill (effective_context_window_percent)
   export function model(m: any): Model {
     const usual  = Number(m.context_window) || 0;
+    const usable = Number(m.effective_context_window_percent) || 0;
     const window = Number(m.max_context_window) || usual || undefined;
     const levels = Array.isArray(m.supported_reasoning_levels) ? m.supported_reasoning_levels : [];
     const named  = levels.map((l: any) => (typeof l === "string" ? l : l?.effort)).filter((e: unknown): e is string => typeof e === "string" && e !== "");
@@ -554,6 +556,7 @@ export namespace ChatGPT {
       standard : window !== undefined && usual > 0 && usual < window ? usual : undefined,
       efforts  : named.length === 0 ? undefined : [...new Set<string>(named)],
       tiers    : Object.keys(tiers).length === 0 ? undefined : tiers,
+      room     : usable > 0 && usable <= 100 ? usable / 100 : undefined,
     };
   }
 

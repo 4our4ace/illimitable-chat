@@ -31,11 +31,13 @@ export type Move = "next" | "prev" | "model" | "up" | "down" | "effort" | "speed
 
 // a model: as shown, as the vendor names it, its speeds; its context
 // window, the whole of it as its vendor tells it (input and output share
-// it); standard: the window a plan counts as usual, past which it drains
-// faster (ChatGPT's context_window, below its max); its efforts, as its
+// it); standard: the vendor's usual window when below that (ChatGPT's
+// context_window, which Codex uses unless set higher); its efforts, as its
 // vendor names them (none told: EFFORTS); the service tier each speed
-// sends (none: OpenAI.body's own names)
-export type Model = { label: string; id: string; speeds: string[]; window?: number; standard?: number; efforts?: string[]; tiers?: Record<string, string> };
+// sends (none: OpenAI.body's own names); room: the share of its window a
+// request may fill, as its vendor tells it (ChatGPT's
+// effective_context_window_percent; none: config.ROOM)
+export type Model = { label: string; id: string; speeds: string[]; window?: number; standard?: number; efforts?: string[]; tiers?: Record<string, string>; room?: number };
 
 // what a server offers: vendors, and models by label
 export type Offer = { vendors: Vendor[]; models: string[] };
@@ -56,9 +58,10 @@ const OPENAI: Model[] = [
   { label: "gpt-6-astra", id: "gpt-6-astra", speeds: ["slow", "fast", "ultrafast"], window: 1050000 },
 ];
 
-// the same on a ChatGPT plan (ChatGPT.ts), at one speed and the plan's
-// usual windows, till its catalog tells each one's speeds and windows
-const CHATGPT: Model[] = OPENAI.map((m) => ({ ...m, speeds: ["slow"], window: m.label === "gpt-6.1-sol" ? 500000 : 272000 }));
+// the same on a ChatGPT plan (ChatGPT.ts), at one speed and no window
+// till the account's catalog tells each one's speeds and windows (its
+// max_context_window): a window is never guessed there
+const CHATGPT: Model[] = OPENAI.map(({ label, id }) => ({ label, id, speeds: ["slow"] }));
 
 // Claude's on a Claude plan, through Claude Code (ClaudeCode.ts), at its
 // standard speed; each one's window 200k till Claude Code tells it (it
@@ -122,6 +125,12 @@ export namespace Pick {
   // the tokens a pick's model takes in (none: not known)
   export function window(pick: Pick): number | undefined {
     return Pick.model(pick.vendor, pick.model)?.window;
+  }
+
+  // the share of its window a pick's model's request may fill, as its
+  // vendor tells it (none: not told)
+  export function room(pick: Pick): number | undefined {
+    return Pick.model(pick.vendor, pick.model)?.room;
   }
 
   // a vendor's model by the id it runs as

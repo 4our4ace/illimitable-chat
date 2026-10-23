@@ -57,13 +57,12 @@ export type Doing = { verb: string; tokens: number; rate: number };
 export type Limit = { window: number; used: number; reset: number };
 
 // how full the chat a turn sends is (tokens), the most it holds before
-// its oldest messages fold into the tree (its autocompact, as it applies),
-// its model's window; the autocompact set for the model (set: as written,
-// "60%" or "400k"; own: the model's own, else the global one), the most
-// it may be (tokens) and the window past which the plan drains faster
-// (none: no such one); the global autocompact and each model's own, by
-// label (the /model gauge's)
-export type Fill = { used: number; cap: number; window: number; set: string; own: boolean; most: number; standard?: number; global: string; sets: Record<string, string> };
+// its oldest messages fold into the tree (its auto compact, as it
+// applies), its model's window; the auto compact set for the model (set:
+// as written, "60%" or "400k"; own: the model's own, else the global
+// one), the most it may be (tokens); the global auto compact and each
+// model's own, by label (the /model gauge's)
+export type Fill = { used: number; cap: number; window: number; set: string; own: boolean; most: number; global: string; sets: Record<string, string> };
 
 // a plan, as its vendor tells it (ChatGPT.ts told): whose it is
 // (ChatGPT), which one (plus, pro…; "": not known), its limits (none:

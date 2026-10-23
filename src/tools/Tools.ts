@@ -714,7 +714,7 @@ export namespace Tools {
     const pick = typeof own === "string" ? base : own;
     const run = Pick.ask(pick);
     const system = Tools.system(SUB + Custom.section(profile), tools.cwd, run.vendor);
-    const most = (config.config_context(pick.model, Pick.window(pick)) * TOKEN) / 2;
+    const most = (config.config_context(pick.model, Pick.window(pick), 0, Pick.room(pick)) * TOKEN) / 2;
     const blocks = [...Tools.fitted(agent.view, most), Tools.here(tools), log];
     const effort = agent.role.effort ?? run.effort;
     return { ...run, effort, system, blocks, searches: SEARCHES, server };
