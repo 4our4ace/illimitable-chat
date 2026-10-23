@@ -112,6 +112,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["",                  "Shift+Up, Shift+Down",    "more effort, less",                              (t, k) => term_move(t, ARROWS[k])],
       ["/model [name]",     "",                        "model, effort and speed in one list (Left and Right: effort, Tab: speed); a name: that model", term_model],
       ["/effort [level]",   "",                        "set the effort; no level: lists them",           (t, a) => term_pick(t, "effort", a)],
+      ["/autocompact [value]", "",                     "how much of the chat a turn sends before older messages fold, for the chat's model: a share of its window (50%), a size (300k) or default; no value: says it", term_autocompact],
       ["/speed [speed]",    "",                        "set the speed; no speed: lists them",            (t, a) => term_pick(t, "speed", a)],
     ]],
     ["Agents", [
@@ -902,6 +903,29 @@ export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "
     return "effort: " + (e > 0 ? "◂ " : "") + p.effort + (e < efforts.length - 1 ? " ▸" : "") + " · " + speed;
   };
   term_chooser(t, title, rows.map(([, m]) => m.label), about, here, (k) => done(pick(k)), { find: true, keys, foot });
+}
+
+// /autocompact: the chat's model's autocompact said (no value), or set
+// for it (by the chat's process: from another terminal too): a share of
+// its window, tokens, or default (its own taken out, the global one holds)
+function term_autocompact(t: Term, arg: string): void {
+  const fill  = t.v.use.fill ?? null;
+  const model = t.v.pick?.model;
+  const text  = arg.trim().toLowerCase();
+  if (fill === null || model === undefined) {
+    return term_note(t, "No chat to set it for here.");
+  }
+  if (text === "") {
+    return term_note(t, "Autocompact for " + model + ": " + fill.set + (fill.own ? "" : " (the global one)") + ", " + term_tokens(fill.cap) + " of its " + term_tokens(fill.window) + " window. /autocompact 50%, 300k or default changes it; in /model, Shift+Left and Shift+Right.");
+  }
+  const value = text === "default" ? null : text;
+  const want  = value === null ? null : config.config_tokens(value, fill.window);
+  if (value !== null && want === null) {
+    return term_note(t, "/autocompact takes a share of the window (50%), a size (300k) or default.");
+  }
+  term_send(t, { $: "autocompact", label: model, value });
+  const said = want === null ? "back to the global one" : value + ", " + (want > fill.most ? "held to " : "") + term_tokens(Math.min(want, fill.most)) + " of its " + term_tokens(fill.window) + " window";
+  term_note(t, "Autocompact for " + model + ": " + said + ".");
 }
 
 // a part of the pick: to the value given (a speed as shown: standard

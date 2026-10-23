@@ -57,7 +57,7 @@ const file  = () => JSON.parse(fs.readFileSync(DIR + "/config.json", "utf8"));
 test("/settings lists each setting, its value and what it does; one a variable sets says so, and stays", () => {
   const t = term();
   run(t, "/settings");
-  expect(t.choose.names).toEqual(["pick", "agents", "compactor", "suggest", "tps", "statusline", "title", "side", "side_width", "accent", "leader", "shortcuts", "context", "contexts", "rules", "after", "off", "sticky", "mode", "permissions", "vendors", "models", "jobs", "theme", "mcp", "login", "autoupdate"]);
+  expect(t.choose.names).toEqual(["pick", "agents", "compactor", "suggest", "tps", "statusline", "title", "side", "side_width", "accent", "leader", "shortcuts", "autocompact", "autocompacts", "rules", "after", "off", "sticky", "mode", "permissions", "vendors", "models", "jobs", "theme", "mcp", "login", "autoupdate"]);
   expect(about(t)).toMatch(/^sonnet-5\.5 · medium +illi's own default model/);
   expect(foot(t)).toBe("set by ILLI_PICK");
   term_grab(t, "Enter");
@@ -132,11 +132,11 @@ test("Enter on one typed in puts /set in the input; /set checks the value, then 
   expect(config.RULES).toBe(DIR + "/RULES.md");
   run(t, "/set", "jobs none");
   expect(note(t)).toBe("jobs takes a number, 1 or more.");
-  run(t, "/set", "contexts {\"sonnet-5.5\": 100000}");
+  run(t, "/set", "autocompacts {\"sonnet-5.5\": 100000}");
   expect(config.config_context("sonnet-5.5", 200000)).toBe(100000);
   for (const bad of ["[1]", "{nope"]) {
-    run(t, "/set", "contexts " + bad);
-    expect(note(t)).toBe("contexts takes each model's context, like {\"gpt-6.1-sol\": 350000}.");
+    run(t, "/set", "autocompacts " + bad);
+    expect(note(t)).toBe("autocompacts takes each model's autocompact, like {\"gpt-6.1-sol\": \"50%\"}.");
   }
   run(t, "/set", "nope 1");
   expect(note(t)).toMatch(/^No setting nope\./);

@@ -35,7 +35,6 @@
 import type { Ask, Block, Call, Img, Kind, Say } from "../ai/AskAI.ts";
 import { Compactor } from "./Compactor.ts";
 import { clip_page, clip_pages } from "../tools/Clip.ts";
-import * as config from "../config/Config.ts";
 import { HOME, Store, type Place } from "./Store.ts";
 import { FIT, IMAGE, PICS, PIXELS, image_fit } from "../ai/Image.ts";
 import { image_kind } from "../ui/View.ts";
@@ -127,14 +126,12 @@ export type Memory = {
 // the bytes a token is taken for (UTF-8 text's rough mean): sizes here
 // are bytes, a model's limits tokens
 export const TOKEN = 4;
-// a turn's call gets config.CONTEXT tokens of the chat (HIGH bytes:
-// 1.6 MB at the default 400k; less for a model's smaller window):
-// its latest messages whole, the view's lines before them (Memory.cutoff).
-// A view past its `high` merges to half: the chat's LINES, half a call's
-// (so its lines leave the messages at least half), the compactions'
-// 16-32 KB (24 KB)
-const HIGH  = config.CONTEXT * TOKEN;
-const LINES = HIGH / 2;
+// a turn's call gets its model's autocompact of the chat (Chat.cap, in
+// bytes: Memory.cutoff): its latest messages whole, the view's lines
+// before them. A view past its `high` merges to half: the chat's, half a
+// call's (so its lines leave the messages at least half), set by the
+// first cutoff (till then none: a restart never merges it, whatever the
+// model's window), the compactions' 16-32 KB (24 KB)
 const SEEN  = 32000;
 const BLOCK = 4;
 
@@ -164,7 +161,7 @@ export namespace Memory {
   export function read(dir: string, store: Store, share: Memory["share"], alone: boolean): Memory {
     const mem: Memory = {
       dir, store, cwd: "", count: Store.count(store), pick: null, goal: null, suggest: "", agent: null, work: [], cut: 0, show: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), logs: new Map(), ready: [],
-      view: { parts: [], size: 0, batch: false, high: LINES, from: 0 }, seen: { parts: [], size: 0, batch: false, high: SEEN, from: 0 },
+      view: { parts: [], size: 0, batch: false, high: Infinity, from: 0 }, seen: { parts: [], size: 0, batch: false, high: SEEN, from: 0 },
       busy: new Set(), calls: new Map(), hold: alone, done: alone, wait: new Set(), share,
     };
     // a field of another shape than illi writes: as if not saved
@@ -200,7 +197,7 @@ export namespace Memory {
   export function glance(mem: Memory, store: Store): Memory {
     return {
       ...mem, store, count: Store.count(store), nodes: new Map(), agents: new Map(), logs: new Map(), ready: [], busy: new Set(), calls: new Map(), hold: true, done: true, wait: new Set(),
-      view: { parts: [], size: 0, batch: false, high: LINES, from: 0 }, seen: { parts: [], size: 0, batch: false, high: SEEN, from: 0 },
+      view: { parts: [], size: 0, batch: false, high: Infinity, from: 0 }, seen: { parts: [], size: 0, batch: false, high: SEEN, from: 0 },
     };
   }
 
@@ -269,7 +266,7 @@ export namespace Memory {
 
   // the first message, from `from` on, from which those to the end go
   // whole in a call: `high` bytes, `most` images (the last always)
-  export function whole(mem: Memory, from: number, high = HIGH, most = PICS): number {
+  export function whole(mem: Memory, from: number, high: number, most = PICS): number {
     let [k, size, pics] = [mem.count, 0, 0];
     for (; k > from; k--) {
       const root = Memory.message(mem, k - 1)!;

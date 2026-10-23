@@ -1,7 +1,8 @@
 // Memory test
 // ===========
 // `bun test Memory.test.ts`. The cut: a turn's call gets the messages from
-// it whole, the view's lines before it; it holds while they fit, so each
+// it whole, the view's lines before it (sized by the first cutoff: none
+// merged at load); it holds while they fit, so each
 // call starts as the one before did, and past the call's size moves on
 // till they fill half (the oldest fold into the view); kept on disk. The
 // recent messages come in blocks, one marked in place of the view's.
@@ -56,6 +57,17 @@ test("the cut holds while the messages fit, then moves on till they fill half, a
   Memory.push(mem, [{ kind: "user", text: "one more" }]);
   expect(Memory.cutoff(mem, high)).toBe(cut);
   expect(Memory.load(DIR + "/cut", () => ({}) as any).cut).toBe(cut);
+});
+
+test("a chat read back merges none of its view's lines till a turn's cutoff sizes it, so a restart never shrinks it", () => {
+  const mem = chat("restart", 12);
+  Memory.cutoff(mem, 1e6);
+  expect(mem.view.high).toBe(5e5);
+  Memory.stop(mem);
+  const back = Memory.load(DIR + "/restart", () => ({}) as any);
+  expect(back.view.high).toBe(Infinity);
+  Memory.cutoff(back, 4e5);
+  expect(back.view.high).toBe(2e5);
 });
 
 test("a turn's chat: the messages from the cut whole, in blocks, the last whole one marked, and the view's", () => {

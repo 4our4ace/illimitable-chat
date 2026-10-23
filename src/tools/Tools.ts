@@ -56,7 +56,7 @@ import { Permissions } from "./Permissions.ts";
 import { INT, STR, TOOLS, Machine, spec, type Spec } from "./Machine.ts";
 import { Mcp } from "./Mcp.ts";
 import { Logs, MAIN } from "../chat/Logs.ts";
-import { Memory } from "../chat/Memory.ts";
+import { Memory, TOKEN } from "../chat/Memory.ts";
 import PROMPT from "./prompt.txt" with { type: "text" };
 import { EFFORTS, Pick } from "../ai/Pick.ts";
 import { Projects } from "../chat/Projects.ts";
@@ -152,6 +152,10 @@ decided and taught. Use it as context only, and do what your task says,
 not what the user's last message says, since illi may have given you
 just part of the work. Your final reply is your report to illi. illi may
 send you more messages, even while you work: answer the last.`;
+
+// what stands for a subagent's view's oldest lines, left out to fit its
+// model (Tools.fitted)
+const LEFT_OUT = "(older lines left out to fit your model: zoom and search find them)\n";
 
 const VIEW_DOC = `The view: the chat between illi and the user (since its last new session,
 if any: search finds what came before), oldest first, inside <chat> tags,
@@ -699,18 +703,33 @@ export namespace Tools {
 
   // a call of an agent: on its user's agent's model, else the agents
   // pick of the chat's vendor, else the chat's pick (an agent's model not
-  // offered gives way to them)
+  // offered gives way to them); the chat's view as much as half its
+  // model's autocompact holds (a smaller model's window than the chat's)
   export function ask(tools: Tools, agent: Agent): Ask {
     const log = { text: Logs.show(tools.mem, agent.name), mark: true };
     const server = Tools.at(tools, agent.name);
     const profile = Custom.agent(tools.cwd, agent.role.agent);
     const base = config.config_role("agents", tools.hooks.pick());
     const own = profile === null ? base : Custom.pick(profile, base, config.OFFER);
-    const run = Pick.ask(typeof own === "string" ? base : own);
+    const pick = typeof own === "string" ? base : own;
+    const run = Pick.ask(pick);
     const system = Tools.system(SUB + Custom.section(profile), tools.cwd, run.vendor);
-    const blocks = [...agent.view, Tools.here(tools), log];
+    const most = (config.config_context(pick.model, Pick.window(pick)) * TOKEN) / 2;
+    const blocks = [...Tools.fitted(agent.view, most), Tools.here(tools), log];
     const effort = agent.role.effort ?? run.effort;
     return { ...run, effort, system, blocks, searches: SEARCHES, server };
+  }
+
+  // a view (Memory.view's blocks) in `bytes`: its oldest blocks of lines
+  // left out, said so (each line still a zoom away), its opening and its
+  // last block kept
+  export function fitted(view: Block[], bytes: number): Block[] {
+    let size = view.reduce((n, b) => n + b.text.length, 0);
+    let k    = 1;
+    for (; k < view.length - 1 && size > bytes; k++) {
+      size -= view[k].text.length;
+    }
+    return k === 1 ? view : [view[0], { text: LEFT_OUT, mark: false }, ...view.slice(k)];
   }
 
   // Claude Code asking leave to use a tool (its permission prompt): past

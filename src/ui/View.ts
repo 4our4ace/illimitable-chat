@@ -57,8 +57,12 @@ export type Doing = { verb: string; tokens: number; rate: number };
 export type Limit = { window: number; used: number; reset: number };
 
 // how full the chat a turn sends is (tokens), the most it holds before
-// its oldest messages fold into the tree, its model's window
-export type Fill = { used: number; cap: number; window: number };
+// its oldest messages fold into the tree (its autocompact, as it applies),
+// its model's window; the autocompact set for the model (set: as written,
+// "60%" or "400k"; own: the model's own, else the global one), the most
+// it may be (tokens) and the window past which the plan drains faster
+// (none: no such one)
+export type Fill = { used: number; cap: number; window: number; set: string; own: boolean; most: number; standard?: number };
 
 // a plan, as its vendor tells it (ChatGPT.ts told): whose it is
 // (ChatGPT), which one (plus, pro…; "": not known), its limits (none:
@@ -206,7 +210,8 @@ export type Client =
   | { $: "mode"; mode: Mode | null } // the mode for this run (/mode), or back to the setting's
   | { $: "allow"; refused: string } // a refused request (State perm, by its id) allowed for this run, the one who asked told (/permissions)
   | { $: "background"; stop: number } // a background job (State background, by its id) stopped (/background)
-  | { $: "revoke"; grant: string }; // a grant let go, kept or this run's (/permissions)
+  | { $: "revoke"; grant: string } // a grant let go, kept or this run's (/permissions)
+  | { $: "autocompact"; label: string; value: string | null }; // a model's autocompact set (/autocompact, /model), or its own taken out
 
 // an act not answered: with its id, whether it was sent, what its
 // answer does
@@ -502,8 +507,9 @@ export function view_act(v: View, act: Act): Client[] {
       return [{ $: "pick", to }];
     }
     case "Pick": {
-      // model, effort and speed as one change, one note saying it; none
-      // if it is the pick already
+      // model, effort and speed as one change, one note saying it (as it
+      // runs: an effort or speed the model lacks fitted); none if it is
+      // the pick already
       const from = view_asked(v);
       const to   = Pick.read(act.to, v);
       if (to === null) {
@@ -513,8 +519,9 @@ export function view_act(v: View, act: Act): Client[] {
       if (from !== null && Pick.label(from) === Pick.label(to)) {
         return [];
       }
+      const runs   = Pick.fit(to);
       const vendor = v.vendors.length > 1 ? " (" + to.vendor + ")" : "";
-      v.notes.push("Now on " + to.model + vendor + ", " + to.effort + " effort" + (to.speed === "slow" ? "" : ", " + to.speed) + ".");
+      v.notes.push("Now on " + to.model + vendor + ", " + runs.effort + " effort" + (runs.speed === "slow" ? "" : ", " + runs.speed) + ".");
       return [{ $: "pick", to }];
     }
     case "Open": {

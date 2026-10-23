@@ -122,8 +122,9 @@ one:
   comma-separated, and a chat uses its own vendor's: vendors never mix.
   Unset, the compactor is the vendor's small model, agents the chat's
   pick
-- models: the models offered; context: the tokens a turn sends ("auto", a
-  number, or a share like "60%"); contexts: per model
+- models: the models offered; autocompact: how much of the chat a turn
+  sends before older messages fold (a share of the window like "60%",
+  or tokens like "400k"; at most 70%); autocompacts: per model
 - rules: the rules file, RULES.md in illi's folder (else the global
   folder's) unless set; after: a shell command run after each turn
 - off: skills, agents, commands, MCP servers and plugins turned off, by

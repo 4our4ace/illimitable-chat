@@ -7,7 +7,8 @@
 // chat. A goal check and a message sent mid-run fit the chat's model. A
 // main agent switch is a note of its own. A message sent as a stopped turn
 // winds down is answered, and what was logged between waiting messages
-// reaches the turn. A call too long for the model's window makes the
+// reaches the turn. What a turn's first request read beyond the chat
+// lowers the chat's budget; a view sets its model's autocompact. A call too long for the model's window makes the
 // chat refit and the turn go on from a note, unasked; three in a row end
 // it, saying why. A failed turn asks to try again only when a later try
 // may answer, and says a reply was cut off; summaries stuck are told once;
@@ -400,6 +401,37 @@ async function refitted(ends: Array<{ text: string }>) {
   }
   return asked;
 }
+
+test("what a turn's first request read beyond the chat it carried lowers the chat's budget; a view's autocompact act sets its model's, taken back by none", async () => {
+  const real   = AskAI.ask;
+  const window = Pick.window(chat.pick) ?? config.GUESS;
+  AskAI.ask = (_, on) => {
+    const [call, feed] = AskAI.tie(on, () => {}, () => {});
+    const first = Math.round(Memory.fill(chat.mem) / 4) + window / 2;
+    queueMicrotask(() => {
+      feed.on({ $: "Entry", kind: "illi", text: "hello back" });
+      feed.end({ ok: true, text: "hello back", left: [], first });
+    });
+    return call;
+  };
+  const v = View.view_new();
+  View.link_open(v, Chat.link(chat, (msg) => View.view_hear(v, msg).forEach((out) => View.link_send(v, out))));
+  try {
+    await until(() => v.up);
+    View.view_act(v, { $: "Send", text: "how big is the prompt?" }).forEach((out) => View.link_send(v, out));
+    await until(() => chat.beside.size === 1 && !chat.busy);
+    expect(Chat.cap(chat)).toBe(Math.round(Math.round(window * 0.4) * chat.fit));
+    View.link_send(v, { $: "autocompact", label: chat.pick.model, value: "30%" });
+    await until(() => v.use.fill?.set === "30%");
+    expect([v.use.fill!.own, Chat.cap(chat)]).toEqual([true, Math.round(Math.round(window * 0.3) * chat.fit)]);
+    View.link_send(v, { $: "autocompact", label: chat.pick.model, value: null });
+    await until(() => v.use.fill?.own === false);
+  } finally {
+    AskAI.ask = real;
+    chat.beside.clear();
+    v.ws?.close();
+  }
+});
 
 test("a call too long for the model's window: a turn's share shrinks, and the turn goes on from a note, unasked", async () => {
   const fit = chat.fit;

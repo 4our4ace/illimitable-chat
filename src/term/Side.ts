@@ -180,7 +180,7 @@ function term_side_use(t: Term, w: number): Item[] {
   const of     = window === undefined ? [] : [Paint.Run(" / " + term_tokens(window), Paint.DIM)];
   const part   = share === null ? [] : [Paint.Run(" · ", Paint.DIM), term_pct(share, c)];
   const bar    = share === null ? [] : [term_bar(tokens! > 0 ? Math.max(share, 1e-9) : 0, w, c)];
-  const says   = fill === null ? [] : ["summarizes at " + term_tokens(fill.cap) + " · window " + term_tokens(fill.window), "summarizes at " + term_tokens(fill.cap), "at " + term_tokens(fill.cap)];
+  const says   = fill === null ? [] : ["autocompact at " + term_tokens(fill.cap) + " · window " + term_tokens(fill.window), "autocompact at " + term_tokens(fill.cap), "at " + term_tokens(fill.cap)];
   const folds  = says.length === 0 ? [] : [[[Paint.Run(says.find((x) => Paint.text_width(x) <= w) ?? says[says.length - 1], Paint.DIM)], null] as Item];
   const count  = View.view_count(t.v);
   const n      = Paint.Run(count + (count === 1 ? " message" : " messages"));
@@ -282,7 +282,7 @@ function term_side_todo(t: Term, w: number): Item[] {
 
 // a count of tokens, as a person says it: 812, 4.2k, 41k, 1.2M
 export function term_tokens(n: number): string {
-  return n < 1000 ? String(n) : n < 10000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : n < 1e6 ? Math.round(n / 1000) + "k" : (n / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+  return n < 1000 ? String(n) : n < 10000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : n < 1e6 ? Math.round(n / 1000) + "k" : (n / 1e6).toFixed(2).replace(/\.?0+$/, "") + "M";
 }
 
 // a plan's window, by its minutes: 5h, Week, Day, 3d, 90m

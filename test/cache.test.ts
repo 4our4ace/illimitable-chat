@@ -210,10 +210,10 @@ async function replay(logs: Log[]): Promise<Record<string, Use>> {
   return uses;
 }
 
-// a turn as Chat.call makes it (Memory.turn): the view's lines before the
-// cut, the messages from it whole, the new one
+// a turn as Chat.call makes it (Memory.turn), on a 400k autocompact: the
+// view's lines before the cut, the messages from it whole, the new one
 async function turn(mem: any, id: number, log: Log): Promise<void> {
-  const from = Memory.cutoff(mem, config.CONTEXT * TOKEN);
+  const from = Memory.cutoff(mem, 400000 * TOKEN);
   if ((await Memory.settle(mem, from, new AbortController().signal)) === null) {
     const { view, text } = Memory.turn(mem, from, [{ id, end: id + 1 }]);
     const call = AskAI.ask({ ...SHARE, blocks: [...view, { text: text + " #steps=" + log.steps, mark: true }] }, () => {});

@@ -99,7 +99,8 @@ export type Event =
 // too long for the model's window, or past its room), we (`lost`: a
 // stop), the vendor (`down`), or none (our setup threw); again: down, but
 // a later try may answer (the vendor busy or out of reach); cut: a reply
-// had begun
+// had begun; first: the tokens its first request read, as its vendor told
+// (the chat learns from it what a request takes beside the chat: Chat.cap)
 export type End = {
   ok     : boolean;
   text   : string;
@@ -108,6 +109,7 @@ export type End = {
   stop?  : "fail" | "lost" | "down" | "full";
   again? : boolean;
   cut?   : boolean;
+  first? : number;
 };
 
 // one try at a vendor

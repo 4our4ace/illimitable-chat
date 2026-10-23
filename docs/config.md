@@ -23,8 +23,8 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `compactor`  | each vendor's small model         | writes the summaries: a pick per vendor, comma-separated |
 | `agents`     | the pick                          | what subagents run on: a pick per vendor         |
 | `models`     | all                               | models offered                                   |
-| `context`    | `auto`                            | tokens a turn sends: `auto` (70% of the window, at most 400k), a number, or `"60%"` |
-| `contexts`   |                                   | per model: `{ "gpt-6.1-sol": 350000 }`           |
+| `autocompact` | `60%`                            | how much of the chat a turn sends before older messages fold into the tree: a share of the model's window (`"60%"`) or tokens (`400000`, `"400k"`); at most 70% of the window, less what a request takes beside the chat. `/autocompact` and Shift+Left/Right in `/model` set it per model. Read as `context` too |
+| `autocompacts` |                                 | per model: `{ "gpt-6.1-sol": "50%" }` (tokens apply on every provider of that model, a share follows each one's window). Read as `contexts` too |
 | `rules`      | `RULES.md`: the profile's, else `~/.illi`'s | your rules for every project (none: no rules) |
 | `after`      |                                   | a shell command run after each turn              |
 | `off`        |                                   | skills, agents, commands, MCP servers and plugins turned off, by name (a plugin's part as `plugin:name` too; `hooks.json`: all hooks); `/settings` lists them to turn on and off |
@@ -82,7 +82,7 @@ What else illi keeps in `~/.illi`:
 | File            | Holds                                                 |
 | --------------- | ----------------------------------------------------- |
 | `login.json`    | the ChatGPT login `/login` makes (else opencode's, in `~/.local/share/opencode/auth.json`) |
-| `models.json`   | the models the vendors listed last                    |
+| `models.json`   | the models the vendors told last: each one's window, speeds and efforts (ChatGPT's for the account named in it) |
 | `used.json`     | how often you ran each command: among those a `/word` matches alike, the most used come first; a use counts half as much 100 uses later, and a command you stopped using drops out (two illis at once each add theirs: [Storage](storage.md#usage-counts)) |
 | `picked.json`   | the same for what you pick in Ctrl+P's list, kept apart |
 | `profile`       | the profile used last, for a project illi hasn't run in yet |
