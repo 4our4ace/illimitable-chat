@@ -93,6 +93,8 @@ const TABLE = {
   after      : { def: "", values: "text", now: true, what: "a command after each turn" },
   off        : { def: "", values: "text", now: true, what: "skills, agents, commands, MCP servers turned off", none: "none" },
   sticky     : { def: "", values: "text", now: true, what: "sticky skills on, in every turn", none: "none" },
+  mode       : { def: "auto", values: ["auto", "ask", "read-only", "yolo"], now: true, what: "what runs without asking", shape: [/^(read-only|ask|auto|yolo)$/, "read-only, ask, auto or yolo"] },
+  permissions: { def: DIR + "/permissions.json", values: "text", now: false, what: "your permission rules and grants", path: true },
   vendors    : { def: "chatgpt", values: "text", now: false, what: "where models come from" },
   models     : { def: "", values: "text", now: false, what: "the models offered", none: "all" },
   jobs       : { def: "8", values: ["2", "4", "8", "16", "32"], now: false, what: "summaries built at once", shape: [/^[1-9]\d*$/, "a number, 1 or more"] },
@@ -142,6 +144,9 @@ export let AFTER      = "";
 export const THEME    = config_place("theme");
 export const MCP      = config_place("mcp");
 export const MCPS     = DIR === ROOT ? [MCP] : [...new Set([ROOT + "/mcp.json", MCP])];
+
+// the user's permission rules and the grants kept (Permissions.ts)
+export const PERMISSIONS = config_place("permissions");
 
 // the skills, agents, commands and MCP servers turned off, and the sticky
 // skills on, by name, in lower case (Custom.ts, Mcp.ts); each the root's

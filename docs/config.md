@@ -8,7 +8,7 @@ profile's own `config.json` goes over it, key by key; its `off` and
 - `/settings` changes them from inside illi (`/set <key> <value>` too);
   `/shortcuts` the leader and its shortcuts.
 - Most apply at once; `vendors`, `models`, `jobs`, `theme`, `mcp`,
-  `login` and `autoupdate` at the next start.
+  `permissions`, `login` and `autoupdate` at the next start.
 - A key set by a variable stays as the variable says.
 - A relative path is taken from the folder of the config.json that names
   it (a variable's: the working folder).
@@ -28,6 +28,8 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `after`      |                                   | a shell command run after each turn              |
 | `off`        |                                   | skills, agents, commands, MCP servers and plugins turned off, by name; `/settings` lists them to turn on and off |
 | `sticky`     |                                   | sticky skills on, by name; `/name` turns one on and off ([Customize](customize.md)) |
+| `mode`       | `auto`                            | what runs without asking: `auto` (reads, and changes inside the project; a risky call is asked about, saying why), `ask` (every change asked), `read-only` (changes refused), `yolo` (everything, but what your rules refuse or ask) |
+| `permissions` | `permissions.json` in the profile's folder | your permission rules (`allow`, `ask` or `deny`, by pattern, for `shell`, `read`, `write` and `mcp`) and, per project, the grants "don't ask again" keeps |
 | `side`       | `right`                           | side panel: `left`, `off`; `side_width` `25%`    |
 | `accent`     | `auto`                            | the color everything is themed in, at once: `auto` (the theme's: illi's aqua, else the palette's or `theme.json`'s), `illi`, `blue`, `magenta`, `cyan`, `green`, `yellow`, `red`, a palette index or `#rrggbb` ([Theme](customize.md#theme)) |
 | `leader`     | `Ctrl+X`                          | the key before a shortcut: Ctrl or Alt and a letter illi doesn't use ([Keys](keys.md#shortcuts)) |

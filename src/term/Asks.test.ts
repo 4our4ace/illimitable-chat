@@ -1,8 +1,9 @@
 // Asks test
 // =========
 // `bun test Asks.test.ts`. A question the chat asks shows in the picker,
-// what it would do in a note: Yes allows; "don't ask again" allows for
-// the run; Esc says no; "No, and say why" asks a line (Esc: back to the
+// what it would do and why in a note: Yes allows; "don't ask again"
+// names what it keeps (offered only when it keeps something); Esc says
+// no; "No, and say why" asks a line (Esc: back to the
 // picker). One gone before it is answered closes its picker; the next
 // shows once the one before is gone. A pipe answers no at once. illi's
 // own questions (ask) show in place of the input, a tab each: Up and
@@ -32,9 +33,11 @@ const note = (t: any) => t.notices.at(-1)?.text ?? "";
 // the answers sent, without their message ids
 const sent = (t: any) => t.v.out.map((o: any) => o.msg).filter((m: any) => m.$ === "answer").map(({ id, $, ...m }: any) => m);
 
-// the chat's questions now: a state, then a paint
-const asks = (t: any, ...qs: Array<[string, string, string]>) => {
-  t.v.asks = qs.map(([id, tool, what]) => ({ id, who: "illi", tool, what }));
+// the chat's questions now (each asked because it is risky, "don't ask
+// again" keeping that very command, or what is given): a state, then a
+// paint
+const asks = (t: any, ...qs: Array<[string, string, string, string?]>) => {
+  t.v.asks = qs.map(([id, tool, what, keep]) => ({ id, who: "illi", tool, what, why: "it is risky", keep: keep ?? what }));
   term_asks(t);
 };
 
@@ -51,9 +54,9 @@ const text = (t: any) => term_form_lines(t, 70, 4)!.lines.map((l: any) => l.map(
 test("a question shows in the picker with a note; Enter on Yes allows it, once", () => {
   const t = term();
   asks(t, ["q1", "Bash", "rm -r build"]);
-  expect(note(t)).toBe("illi asks to use Bash: rm -r build");
+  expect(note(t)).toBe("illi asks to use Bash: rm -r build. Why: it is risky");
   expect(t.choose.title).toBe("Allow Bash?");
-  expect(t.choose.names).toEqual(["Yes", "Yes, and don't ask again for Bash this run", "No", "No, and say why"]);
+  expect(t.choose.names).toEqual(["Yes", "Yes, and don't ask again for rm -r build in this project", "No", "No, and say why"]);
   expect(t.choose.foot(0)).toBe("rm -r build");
   term_grab(t, "Enter");
   expect(sent(t)).toEqual([{ ask: "q1", yes: true, always: false, said: "" }]);
@@ -64,14 +67,19 @@ test("a question shows in the picker with a note; Enter on Yes allows it, once",
   expect(t.asking).toBeNull();
 });
 
-test("don't ask again allows for the run; Esc says no", () => {
+test("don't ask again keeps what it names; one that keeps nothing isn't offered; Esc says no", () => {
   const t = term();
-  asks(t, ["q1", "Bash", "ls"]);
+  asks(t, ["q1", "Bash", "git push", "git push *"]);
+  expect(t.choose.names[1]).toBe("Yes, and don't ask again for git push * in this project");
   term_grab(t, "Down");
   term_grab(t, "Enter");
-  asks(t, ["q2", "Write", "a.txt"]);
+  asks(t, ["q2", "Bash", "git push", ""]);
+  expect(t.choose.names).toEqual(["Yes", "No", "No, and say why"]);
+  term_grab(t, "Down");
+  term_grab(t, "Enter");
+  asks(t, ["q3", "Write", "a.txt"]);
   term_grab(t, "Esc");
-  expect(sent(t)).toEqual([{ ask: "q1", yes: true, always: true, said: "" }, { ask: "q2", yes: false, always: false, said: "" }]);
+  expect(sent(t)).toEqual([{ ask: "q1", yes: true, always: true, said: "" }, { ask: "q2", yes: false, always: false, said: "" }, { ask: "q3", yes: false, always: false, said: "" }]);
   expect(t.choose).toBeNull();
 });
 
@@ -96,7 +104,7 @@ test("one gone before it is answered closes its picker, the next one shown; anot
   expect(t.choose.title).toBe("Allow Bash?");
   asks(t, ["q2", "Edit", "src/a.ts"]);
   expect(t.choose.title).toBe("Allow Edit?");
-  expect(note(t)).toBe("illi asks to use Edit: src/a.ts");
+  expect(note(t)).toBe("illi asks to use Edit: src/a.ts. Why: it is risky");
   const mine = { title: "Pick a model" };
   t.choose = mine;
   asks(t);
