@@ -240,5 +240,6 @@ Mouse and side panel
   `read-only` in the warning color, `yolo` in the error color. Before
   it, the background jobs are counted when the side panel doesn't show
   them.
-- The terminal's title says `∞ illi · <project>`, a spinner in the ∞'s
-  place while illi works; the `title` setting turns it off.
+- The terminal's title says `∞ illi · <project>`, a small ∞ traced in
+  its place while illi works (`⢎⠶⡱`, a dot running along it); the
+  `title` setting turns it off.

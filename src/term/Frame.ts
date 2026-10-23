@@ -97,11 +97,16 @@ let traced: { of: Term["ruled"]; head: number; step: number; sec: number } | nul
 const RULE_HEAD = "── ";
 
 // the terminal's title (term_title): its mark at rest, waiting on the
-// user's answer; while work runs, the side's spinner, a frame each
-// TITLE_STEP (ms: a tab's title changed no faster)
+// user's answer; while work runs, a small ∞ traced (term_loop): 3
+// braille cells, 6 dots by 4 (LOOP: round its left loop and its right,
+// crossing in the middle; whole, ⢎⠶⡱), a trail of LOOP_TRAIL dots
+// running along it, a dot each TITLE_STEP (ms: a tab's title changed no
+// faster)
 const TITLE_REST = "∞";
 const TITLE_ASK  = "?";
-const TITLE_STEP = 500;
+const TITLE_STEP = 250;
+const LOOP: [number, number][] = [[2, 2], [1, 3], [0, 2], [0, 1], [1, 0], [2, 1], [3, 2], [4, 3], [5, 2], [5, 1], [4, 0], [3, 1]];
+const LOOP_TRAIL = 4;
 
 // the project as the title names it, by the folder illi runs in
 let titled: { cwd: string; name: string } | null = null;
@@ -311,13 +316,14 @@ function term_working(t: Term, doing: View.Doing, w: number, now: number): Paint
 
 // the terminal's title, unless the title setting is off: `∞ illi ·
 // <project>` (its git repo's folder, or home outside any), the profile
-// after it but for the default; while work runs, the ∞ a spinner, and a
-// question waiting on the user, ? (Screen writes it only as it changes)
+// after it but for the default; while work runs, the ∞ traced small
+// (term_loop), and a question waiting on the user, ? (Screen writes it
+// only as it changes)
 export function term_title(t: Term): void {
   if (!config.TITLE) {
     return Screen.screen_title(t.scr, null);
   }
-  const mark  = t.v.asks.length > 0 ? TITLE_ASK : View.view_running(t.v) ? term_spinner(Math.floor((Date.now() - t.since) / TITLE_STEP) * 2 * TRACE) : TITLE_REST;
+  const mark  = t.v.asks.length > 0 ? TITLE_ASK : View.view_running(t.v) ? term_loop(Math.floor((Date.now() - t.since) / TITLE_STEP)) : TITLE_REST;
   const cwd   = process.cwd();
   if (titled?.cwd !== cwd) {
     const top = Projects.place(cwd).path;
@@ -437,6 +443,17 @@ function term_side_again(t: Term): void {
 
 // a subagent's spinner, ms into the work: ORBIT_TRAIL dots round one
 // braille cell, a dot each 2 TRACE
+// the title's ∞ at a step of its trace: its 3 cells, the trail's dots on
+// LOOP, the head at the step's
+export function term_loop(step: number): string {
+  const bits = [0, 0, 0];
+  for (let k = 0; k < LOOP_TRAIL; k++) {
+    const [x, y] = LOOP[(((step - k) % LOOP.length) + LOOP.length) % LOOP.length];
+    bits[x >> 1] |= DOT[x & 1][y];
+  }
+  return bits.map((b) => String.fromCharCode(0x2800 + b)).join("");
+}
+
 export function term_spinner(ms: number): string {
   const head = Math.floor(ms / (2 * TRACE)) % ORBIT.length;
   let bits = 0;
