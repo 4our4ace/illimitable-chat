@@ -36,7 +36,9 @@ import { json_object } from "../tools/Clip.ts";
 // =========
 
 // the root (the default profile's folder, and the others'), the profile
-// running ($ILLI_PROFILE, else the one used last) and its folder
+// running ($ILLI_PROFILE, else the one used last in the working folder's
+// project, else the one used last anywhere: Profiles.profile_pick) and
+// its folder
 const PICKED         = profile_pick(config_path(process.env.ILLI_DIR ?? "~/.illi"), process.env.ILLI_PROFILE);
 export const ROOT    = PICKED.root;
 export const PROFILE = PICKED.name;

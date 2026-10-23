@@ -236,12 +236,11 @@ export type Item = [Paint.Line, (() => void) | null, { col: number; run: (() => 
 // and after them the settings, each by the name it is matched by (a
 // setting's: its key), how many are commands (the settings shown only
 // once a word is typed); the word they're matched to, those it matches
-// (best first), the one
-// lit, the first shown; how many fit as last shown (their descriptions
-// wrapped, up to Frame.ts SUGGEST lines); the word Esc closed it at
-// (null: none); mid: where the word starts in a message, the user's
-// skills alone suggested, a pick filling it in (null: the input is the
-// word alone)
+// (best first), the one lit, the first shown; how many fit as last
+// shown (their descriptions wrapped, up to Frame.ts SUGGEST lines); the
+// word Esc closed it at (null: none); mid: where the word starts in a
+// message, the user's skills alone suggested, a pick filling it in
+// (null: the input is the word alone)
 export type Sug = { cmds: Cmd[]; names: string[]; commands: number; word: string; found: Screen.Match[]; at: number; top: number; tall: number; off: string | null; mid: number | null };
 
 // a line of /help: how it is typed ("": keys only), its keys, what it
@@ -551,8 +550,10 @@ function term_trouble(t: Term, told: Set<string>): void {
 }
 
 // the chat of the working folder's project opened (its lock taken: one
-// illi a project), on the terminal (its log lines to LOG; a crash said, the
-// terminal left as found: term_crash) or a pipe; the user's plugins loaded
+// illi a project; the profile running kept as the project's, for its
+// next start: Profiles.profile_here_keep), on the terminal (its log
+// lines to LOG; a crash said, the terminal left as found: term_crash)
+// or a pipe; the user's plugins loaded
 // before it (their start told; a project's only in a trusted folder) and
 // given the screen once it is up; the MCP servers started (a failure
 // told: term_trouble); the models ChatGPT lists learned; a new release

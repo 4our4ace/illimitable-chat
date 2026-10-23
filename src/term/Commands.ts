@@ -3,7 +3,8 @@
 // All a person can do here, by group (term_groups, /help), and the commands
 // themselves: a /word typed runs one, and, as it's typed, the commands it
 // matches show over the input (suggested, the ones run most first among
-// those it matches alike); the picker (/agent, /profile,
+// those it matches alike), then the settings it matches, as
+// `/set <key>`; the picker (/agent, /profile,
 // /model, /settings), the panes over the chat (/help, /agents, /mcp), the
 // pick, the login, the tabs, the blocks, the memory's exports; the
 // leader (Ctrl+X, as OpenCode's), then a key: a shortcut (term_lead), each

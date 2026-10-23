@@ -179,8 +179,10 @@ one:
 - a relative path is taken from the folder of the config.json naming it
 
 The user can change any of these with /settings, or /set <key> <value>,
-most at once (/ and a word finds a setting by its key or what it does). What you write to the file applies at the next start: for a
-single setting, point the user to /settings instead.
+most at once (/ and a word finds a setting by its key or what it does;
+/set <key> alone opens /settings at it). What you write to the file
+applies at the next start: for a single setting, point the user to
+/settings instead.
 
 API keys come only from ANTHROPIC_API_KEY and OPENAI_API_KEY in the
 environment.

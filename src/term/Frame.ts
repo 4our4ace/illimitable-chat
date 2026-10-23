@@ -755,7 +755,8 @@ function term_about(text: string, w: number): string {
 // the commands suggested, framed as the picker is, fw wide, room lines
 // at most: each as /help shows how it's typed (its argument dim), then
 // what it does (dim), wrapped under itself; the characters the word
-// matched bold in the accent, the one lit all in it, marked as the
+// matched (in the name it is matched by: a setting's key, after
+// `/set `) bold in the accent, the one lit all in it, marked as the
 // picker marks its choice; a click takes one. As many as fit from the
 // first shown (moved to keep the one lit whole in view; sug.tall: how
 // many fit), the box as tall as all of them would be, SUGGEST lines at
