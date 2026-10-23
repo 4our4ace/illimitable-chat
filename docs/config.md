@@ -26,7 +26,7 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `contexts`   |                                   | per model: `{ "gpt-6.1-sol": 350000 }`           |
 | `rules`      | `RULES.md`: the profile's, else `~/.illi`'s | your rules for every project (none: no rules) |
 | `after`      |                                   | a shell command run after each turn              |
-| `off`        |                                   | skills, agents, commands, MCP servers and plugins turned off, by name; `/settings` lists them to turn on and off |
+| `off`        |                                   | skills, agents, commands, MCP servers and plugins turned off, by name (`hooks.json`: all hooks); `/settings` lists them to turn on and off |
 | `sticky`     |                                   | sticky skills on, by name; `/name` turns one on and off ([Customize](customize.md)) |
 | `mode`       | `auto`                            | what runs without asking: `auto` (reads, and changes inside the project; a risky call is asked about, saying why), `ask` (every change asked), `read-only` (changes refused), `yolo` (everything, but what your rules refuse or ask); `/mode` switches it for a session ([Permissions](permissions.md)) |
 | `permissions` | `permissions.json` in the profile's folder | your permission rules (`allow`, `ask` or `deny`, by pattern, for `shell`, `read`, `write` and `mcp`) and, per project, the grants "don't ask again" keeps ([Permissions](permissions.md)) |
@@ -81,6 +81,7 @@ What else illi keeps in `~/.illi`:
 | `used.json`     | how often you ran each command: among those a `/word` matches alike, the most used come first; a use counts half as much 100 uses later, and a command you stopped using drops out (two illis at once each add theirs: [Storage](storage.md#usage-counts)) |
 | `picked.json`   | the same for what you pick in Ctrl+P's list, kept apart |
 | `profile`       | the profile used last                                 |
+| `hooks-seen.json` | the projects' hooks files as illi last saw them (each one's hash), so one new or changed is said at the start |
 | `trust.json`    | the folders you trust illi in (a repo's top covers the repo), every profile's: the question at the start asks only for others; edit or delete it to trust less |
 | `update.json`   | when illi last looked for a new release (`autoupdate`), and the one it last said it couldn't install |
 | `locks/`        | a lock per project, held while its chat is open (by the system: a crash never leaves one held), and the socket a second terminal joins it by |

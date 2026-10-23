@@ -73,8 +73,12 @@ export type Verdict =
 // a reason to ask: why; what an exact grant names (kind=subject); what a
 // pattern grant may clear it for (its kind and subject, the pattern a
 // "don't ask again" offers), if any; whether it is the user's own ask
-// rule (never cleared)
-type Flag = { why: string; kind: Kind; subject: string; wide: { kind: Kind; subject: string; grant: string } | null; rule?: boolean };
+// rule (never cleared); whether it changes illi's own config (asked in
+// every mode, yolo too, unless granted)
+type Flag = { why: string; kind: Kind; subject: string; wide: { kind: Kind; subject: string; grant: string } | null; rule?: boolean; self?: boolean };
+
+// how a command's checks flag it (look_part's: its exact subject)
+type Flagger = (why: string, wide?: Flag["wide"], self?: boolean) => void;
 
 // what a call was found to do: refused by the user's rules (why), its
 // flags, and its changes (flags only the modes read-only and ask act on);
@@ -336,7 +340,8 @@ export namespace Guard {
 // Verdicts
 // ========
 
-// what is left after the rules and grants, by the mode. "Don't ask
+// what is left after the rules and grants, by the mode (yolo: the user's
+// ask rules and changes to illi's own config). "Don't ask
 // again" keeps a family or folder only when every flag offers one: by a
 // dangerous flag beside an outside folder's, the exact command alone, so
 // a yes to it doesn't let the folder be written freely after
@@ -345,7 +350,7 @@ function verdict(where: Where, look: Look): Verdict {
     return { $: "deny", why: uniq(look.denied).join("; "), rule: true, exact: [] };
   }
   const rules = look.flags.filter((f) => f.rule === true);
-  const flags = where.mode === "yolo" ? rules : look.flags.filter((f) => f.rule === true || !granted(where, f));
+  const flags = look.flags.filter((f) => f.rule === true || ((where.mode !== "yolo" || f.self === true) && !granted(where, f)));
   const changes = where.mode === "read-only" || where.mode === "ask" ? look.changes.filter((f) => !granted(where, f)) : [];
   const exact = (fs: Flag[]) => uniq(fs.map((f) => f.kind + "=" + f.subject));
   if (where.mode === "read-only" && changes.length > 0) {
@@ -436,7 +441,7 @@ function look_part(where: Where, look: Look, part: Part, depth: number): void {
     return;
   }
   const own = rule !== "allow";
-  const flag = (why: string, wide: Flag["wide"] = null) => look.flags.push({ why, kind: "shell", subject: exact, wide });
+  const flag: Flagger = (why, wide = null, self = false) => look.flags.push({ why, kind: "shell", subject: exact, wide, self });
   if (rule === "ask") {
     look.flags.push({ why: "your rules ask about " + clip(plain), kind: "shell", subject: exact, wide: null, rule: true });
   }
@@ -504,7 +509,7 @@ function redir_use(r: Part["redirs"][number], cwd: string | null): Use[] {
 
 // a command (its name one value): its danger flags and files (pushed to
 // uses); whether it changes things
-function look_command(where: Where, look: Look, part: Part, uses: Use[], flag: (why: string, wide?: Flag["wide"]) => void, depth: number): boolean {
+function look_command(where: Where, look: Look, part: Part, uses: Use[], flag: Flagger, depth: number): boolean {
   const head = part.argv[0];
   const alt = head.alts[0];
   const base = path.basename(alt);
@@ -561,7 +566,7 @@ function look_command(where: Where, look: Look, part: Part, uses: Use[], flag: (
 // the danger list, by the command's base name (wherever it lives): its
 // flags pushed, and whether it changes things (null: not on the list,
 // judged as any other)
-function command_danger(where: Where, look: Look, part: Part, base: string, args: Word[], use: (w: Word, write: boolean) => void, flag: (why: string, wide?: Flag["wide"]) => void, depth: number): boolean | null {
+function command_danger(where: Where, look: Look, part: Part, base: string, args: Word[], use: (w: Word, write: boolean) => void, flag: Flagger, depth: number): boolean | null {
   const text = clip(part.text);
   const xs = args.map((a) => (a.dynamic ? "" : a.alts[0]));
   const has = (...names: string[]) => xs.some((x) => names.includes(x) || names.some((n) => n.startsWith("--") && x.startsWith(n + "=")));
@@ -786,7 +791,7 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
 
 // git: its own options (-C, -c, --git-dir), the subcommand's danger, and
 // whether it only reads; its positional words are its files
-function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => void, flag: (why: string, wide?: Flag["wide"]) => void): boolean {
+function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => void, flag: Flagger): boolean {
   const text = clip(part.text);
   let k = 0;
   for (; k < args.length; k++) {
@@ -1442,7 +1447,7 @@ function look_file(where: Where, look: Look, file: unknown, write: boolean): voi
   }
   const why = path_why(where, abs, write);
   if (why !== null) {
-    look.flags.push({ why: why.why, kind, subject: abs, wide: why.wide ? folder_wide(kind, abs) : null });
+    look.flags.push({ why: why.why, kind, subject: abs, wide: why.wide ? folder_wide(kind, abs) : null, self: why.self });
   }
   if (write) {
     look.changes.push({ why: where.mode === "read-only" ? "changing " + shown(abs, where.top) : "ask mode asks before changing " + shown(abs, where.top), kind, subject: abs, wide: where.mode === "ask" ? { kind, subject: abs, grant: "write:" + where.top + "/*" } : null });
@@ -1452,7 +1457,7 @@ function look_file(where: Where, look: Look, file: unknown, write: boolean): voi
 // a file a part reads or writes, judged: the user's path rules, then
 // where it is (outside the project, a secret, protected, a device);
 // known only as it runs: asked
-function use_look(where: Where, look: Look, use: Use, flag: (why: string, wide?: Flag["wide"]) => void): void {
+function use_look(where: Where, look: Look, use: Use, flag: Flagger): void {
   const files = named(use.word, use.cwd);
   if (files === null) {
     flag((use.word.raw || "a file") + " is known only as it runs");
@@ -1468,7 +1473,7 @@ function use_look(where: Where, look: Look, use: Use, flag: (why: string, wide?:
     } else if (rule !== "allow") {
       const why = path_why(where, file, use.write);
       if (why !== null) {
-        flag(why.why, why.wide ? folder_wide(kind, file) : null);
+        flag(why.why, why.wide ? folder_wide(kind, file) : null, why.self);
       }
     }
   }
@@ -1493,9 +1498,9 @@ function path_rule(where: Where, file: string, write: boolean): Rule | null {
   return rule_of(where, write ? "write" : "read", [file], [file]) ?? (write ? null : rule_of(where, "write", [], [file]));
 }
 
-// why a file is asked about (wide: a folder grant may clear it); null:
-// it isn't
-function path_why(where: Where, file: string, write: boolean): { why: string; wide: boolean } | null {
+// why a file is asked about (wide: a folder grant may clear it; self: a
+// change to illi's own config, asked in every mode); null: it isn't
+function path_why(where: Where, file: string, write: boolean): { why: string; wide: boolean; self?: boolean } | null {
   const at = shown(file, where.top);
   if (NET.test(file)) {
     return { why: at + " opens a network connection", wide: false };
@@ -1505,6 +1510,9 @@ function path_why(where: Where, file: string, write: boolean): { why: string; wi
   }
   if (!write && where.reads.some((d) => under(file, d))) {
     return null;
+  }
+  if (write && (under(file, Projects_real(config.ROOT)) || under(file, path.join(where.top, ".illi")))) {
+    return { why: at + " is illi's own config (what it runs and is told)", wide: false, self: true };
   }
   if (secret(file, where.top)) {
     return { why: at + " may hold secrets", wide: false };

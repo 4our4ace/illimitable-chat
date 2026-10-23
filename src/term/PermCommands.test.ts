@@ -103,6 +103,16 @@ test("Enter on a refused one acts by why: the user's no allowed this session; re
   expect(note(t)).toBe("Your rules refuse rm -rf /: change them in " + DIR + "/permissions.json to allow it.");
 });
 
+test("one asked each time (a hook asked it: nothing to allow) says so, and how to run it; nothing is sent", () => {
+  const t = term();
+  t.v.perm.refused.push({ id: "r4", who: "illi", tool: "shell", what: "make deploy", why: "your PreToolUse hook asks", how: "no", said: "", at: 4, exact: [] });
+  term_permissions(t, "r4");
+  expect(foot(t)).toBe("asked each time: have it run again, and say yes");
+  keys(t, "Enter");
+  expect(sent(t)).toEqual([]);
+  expect(note(t)).toBe("make deploy is asked each time (your PreToolUse hook asks): have it run again, and say yes.");
+});
+
 test("a grant goes by Enter or Delete; Enter on the rules says where they are and their shape", () => {
   const t = term();
   term_permissions(t);

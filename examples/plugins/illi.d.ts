@@ -18,19 +18,32 @@ export type ToolCall = { tool: string; input: any; agent: string | null; cwd: st
 // what a tool answers: its text, whether it failed
 export type Output = { text: string; fail: boolean };
 
-// what a tool's check decides: refused (the model reads why), or run on
-// this input
-export type Verdict = { block: string } | { input: unknown };
+// what a tool.before hook may return: refuse the call (the model reads
+// why), run it on other input, allow it (illi's own checks passed over;
+// your permission rules still hold), have it asked of you (why), add to
+// what the model reads after its answer; the input with any of those. An
+// allow vouches for the input it was given: a later hook's change to it
+// takes the allow back
+export type Before = { block: string } | { input?: unknown; allow?: boolean; ask?: string; context?: string };
+
+// how illi waits on you: a question for leave to run a call, or its
+// question tool's, unanswered a while; a reply left a while with no
+// message after it
+export type Wait = "permission_prompt" | "question" | "idle_prompt";
 
 // each hook: what it is given, what it may return
 export type Hooks = {
-  "start"      : [{ cwd: string; profile: string; chat: boolean }, void];
-  "quit"       : [{ cwd: string }, void];
-  "turn.start" : [{ cwd: string }, void];
-  "turn.end"   : [{ cwd: string; stopped: string | null }, void];
-  "message"    : [{ id: number; kind: string; text: string; agent: string | null }, void];
-  "tool.before": [ToolCall, Verdict | void];
-  "tool.after" : [ToolCall & { output: Output }, Partial<Output> | void];
+  "start"         : [{ cwd: string; profile: string; chat: boolean }, void];
+  "quit"          : [{ cwd: string; reason: "prompt_input_exit" | "other" }, void];
+  "context"       : [{ cwd: string }, { context: string } | void];
+  "turn.start"    : [{ cwd: string }, void];
+  "turn.end"      : [{ cwd: string; stopped: string | null }, void];
+  "turn.stop"     : [{ cwd: string; again: boolean; reply: string; signal?: AbortSignal }, { continue: string } | void];
+  "message"       : [{ id: number; kind: string; text: string; agent: string | null }, void];
+  "message.before": [{ text: string; cwd: string; signal?: AbortSignal }, { block: string } | { context: string } | void];
+  "notify"        : [{ cwd: string; type: Wait; text: string }, void];
+  "tool.before"   : [ToolCall, Before | void];
+  "tool.after"    : [ToolCall & { output: Output }, Partial<Output> | void];
 };
 export type Hook = keyof Hooks;
 

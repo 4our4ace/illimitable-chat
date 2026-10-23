@@ -81,16 +81,22 @@ export function term_permissions(t: Term, lit = ""): void {
   t.choose!.at = Math.max(0, refused.findIndex((r) => r.id === lit));
 }
 
-// what Enter does to a refused request, by why it was refused
+// what Enter does to a refused request, by why it was refused (one
+// asked each time, with nothing to allow: a hook's ask, or rules that
+// won't read, a way to run it)
 function refused_foot(r: Refused): string {
-  return r.how === "rule" ? "your rules refuse it: change them to allow it" : r.how === "mode" ? "Enter allow just this, or switch to ask mode" : "Enter allow it this session and tell " + r.who;
+  return r.how !== "rule" && r.exact.length === 0 ? "asked each time: have it run again, and say yes" : r.how === "rule" ? "your rules refuse it: change them to allow it" : r.how === "mode" ? "Enter allow just this, or switch to ask mode" : "Enter allow it this session and tell " + r.who;
 }
 
 // Enter on a refused request: the user's no, allowed for this session;
-// read-only mode's, a choice; the user's rules', where they are
+// read-only mode's, a choice; the user's rules', where they are; one
+// asked each time (nothing to allow), how to run it
 function refused_pick(t: Term, r: Refused): void {
   if (r.how === "rule") {
     return term_note(t, "Your rules refuse " + one_line(r.what) + ": change them in " + config.config_home(t.v.perm.file) + " to allow it.");
+  }
+  if (r.exact.length === 0) {
+    return term_note(t, one_line(r.what) + " is asked each time (" + r.why + "): have it run again, and say yes.");
   }
   if (r.how === "no") {
     return refused_allow(t, r);

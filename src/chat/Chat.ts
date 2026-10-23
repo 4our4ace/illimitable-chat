@@ -65,7 +65,15 @@ type Check = { call: Call; goal: string };
 // suggest: the suggested reply; fit: the share of its context a turn
 // gets (Chat.refit makes it smaller, till illi starts again), refits: the
 // refits since a call was last answered; compacting: a /compact's recap
-// under way (Chat.compact), busy too
+// under way (Chat.compact), busy too; goings: the times hooks made the
+// turn go on in a row, with no tool call nor message of the user's
+// between (Chat.stopping), going: whether one did since the user's last
+// message; saying: the user's messages past their hooks, one after
+// another (Chat.say), checking: what stops the hooks checking one (null:
+// none checks); context: what the plugins and hooks tell the model in
+// every call of the run (Plugins.context, asked as the chat opens); idle:
+// the wait after a reply before the hooks hear the user is waited on
+// (Chat.idle)
 export type Chat = {
   mem   : Memory;
   tools : Tools;
@@ -94,6 +102,12 @@ export type Chat = {
   refits: number;
   asks  : Asked[];
   compacting: boolean;
+  goings: number;
+  going : boolean;
+  saying: Promise<unknown>;
+  checking: AbortController | null;
+  context: Promise<string[]>;
+  idle  : ReturnType<typeof setTimeout> | undefined;
 };
 
 // a question asked of the user (Chat.question), and what its answer does
@@ -133,6 +147,24 @@ const REFITS     = 3;
 const ROOM       = 0.9;
 const REFIT      = "The chat outgrew #'s window: more of it is summarized now, each summary a zoom away. Go on where you were.";
 const NO_FIT     = "No reply: the chat won't fit #'s window even summarized. /clear starts a new topic (the chat before it is kept, not sent), or /model picks a model with a bigger window.";
+
+// the most turns hooks may make go on in a row, with no message of the
+// user's between (Chat.stopping), and the note once past it
+const GOINGS     = 8;
+const GONE       = "Hooks asked illi to go on # times in a row: it stops here till your next message.";
+
+// a message's hooks (Chat.said): what the views say waits while they
+// run, once they take CHECKING ms; a message stopped meanwhile (Esc)
+const HOOKS_WAIT = "your hooks";
+const CHECKING   = 300;
+const UNSENT     = "Stopped before it was sent: your message is back in the input.";
+
+// how long a question waits unanswered, and a reply with no message
+// after it, before the hooks hear the user is waited on (Plugins
+// "notify"), ms; what they hear of the latter
+const ASK_WAIT   = 6000;
+const IDLE_WAIT  = 60000;
+const IDLE_TEXT  = "illi is waiting for your input";
 
 // a recap (Chat.compact): its task, after the chat as a turn sends it (a
 // template of OpenCode's anchored summary's), what the user asked it to
@@ -222,7 +254,9 @@ export namespace Chat {
       halt: new AbortController(), live: [], calls: {}, eye: { parts: [], from: 0 }, after: Promise.resolve(),
       writes: Promise.resolve(), held: null, switched: false, was: null, picks: new Map(),
       suggest: { on: false, due: false, text: mem.suggest, call: null, passed: false, unused: 0 }, fit: 1, refits: 0, asks: [], compacting: false,
+      goings: 0, going: false, saying: Promise.resolve(), checking: null, context: Promise.resolve([]), idle: undefined,
     };
+    chat.context = Plugins.context({ cwd });
     // a saved pick not offered gave way: told once
     const saved = mem.pick as Pick | null;
     if (saved !== null && Pick.label(saved) !== Pick.label(pick)) {
@@ -278,13 +312,45 @@ export namespace Chat {
     Lock.release(keep);
   }
 
-  // a message (its body: its images, sizes given, then its text), logged
-  // and taken; none while a recap is written (it would come before it, so
-  // out of view: Chat.compact), asked again as it's logged (a /compact may
-  // have come between)
-  export async function say(chat: Chat, sizes: number[], body: Buffer): Promise<Answer> {
+  // a message (its body: its images, sizes given, then its text), past
+  // the plugins' and hooks' checks (Plugins.before_message: kept back, why
+  // goes to the user and the text back in their input), logged and taken,
+  // what the checks add for the model as notes after it; one message after
+  // another, in the order sent, whatever their checks take. While they
+  // run, the views say so once they take a while, and a stop (Esc) stops
+  // them, the message unsent. None while a recap is written (it would
+  // come before it, so out of view: Chat.compact), asked again as it's
+  // logged (a /compact may have come between)
+  export function say(chat: Chat, sizes: number[], body: Buffer): Promise<Answer> {
+    const run = chat.saying.then(() => Chat.said(chat, sizes, body));
+    chat.saying = run.catch(() => {});
+    return run;
+  }
+
+  export async function said(chat: Chat, sizes: number[], body: Buffer): Promise<Answer> {
     if (chat.compacting) {
       return { error: RECAPPING };
+    }
+    const text = body.subarray(sizes.reduce((a, b) => a + b, 0)).toString("utf8");
+    clearTimeout(chat.idle);
+    const checking = (chat.checking = new AbortController());
+    let shown = false;
+    const show = setTimeout(() => {
+      shown = true;
+      Chat.change(chat);
+    }, CHECKING);
+    const told = await Plugins.before_message({ text, cwd: chat.tools.cwd, signal: checking.signal }).finally(() => {
+      clearTimeout(show);
+      chat.checking = null;
+      if (shown) {
+        Chat.change(chat);
+      }
+    });
+    if (checking.signal.aborted) {
+      return { error: UNSENT };
+    }
+    if ("block" in told) {
+      return { error: told.block };
     }
     const images: string[] = [];
     let at = 0;
@@ -296,13 +362,15 @@ export namespace Chat {
       images.push(name);
       at += size;
     }
-    const text = body.subarray(at).toString("utf8");
     Suggest.used(chat, text);
+    [chat.goings, chat.going] = [0, false];
     return Chat.writing(chat, async (): Promise<Answer> => {
       if (chat.compacting) {
         return { error: RECAPPING };
       }
-      Chat.take(chat, Chat.push(chat, null, "user", text, images));
+      const msg = Chat.push(chat, null, "user", text, images);
+      const notes = told.context.map((note) => Chat.push(chat, null, "note", note));
+      [msg, ...notes].forEach((m) => Chat.take(chat, m));
       return {};
     });
   }
@@ -363,6 +431,7 @@ export namespace Chat {
   // The plugins are told it starts and ends (why it stopped, if it did)
   export async function turn(chat: Chat): Promise<void> {
     chat.busy = true;
+    clearTimeout(chat.idle);
     void Plugins.emit("turn.start", { cwd: chat.tools.cwd });
     Tools.todo_finished(chat.tools);
     try {
@@ -396,6 +465,7 @@ export namespace Chat {
         void Chat.turn(chat);
       } else if (answered) {
         Suggest.ask(chat);
+        Chat.idle(chat);
       }
     }
   }
@@ -415,8 +485,9 @@ export namespace Chat {
   }
 
   // a turn's call, once the summaries it sends are built: the chat as
-  // Memory.turn gives it, where illi works, its agents at work, then the
-  // new text. false: the turn ends
+  // Memory.turn gives it, where illi works, what the plugins and hooks
+  // tell every call (Plugins.context), its agents at work, then the new
+  // text. false: the turn ends
   export async function call(chat: Chat): Promise<boolean> {
     const mem = chat.mem;
     const halt = (chat.halt = new AbortController());
@@ -429,13 +500,20 @@ export namespace Chat {
       }
       return false;
     }
+    // what the plugins and hooks tell every call, once they've said it (a
+    // stop meanwhile ends the turn)
+    const context = await Promise.race([chat.context, new Promise<null>((done) => halt.signal.addEventListener("abort", () => done(null), { once: true }))]);
+    if (context === null) {
+      return false;
+    }
     const from = mem.cut;
     const msgs = (chat.sent = chat.wait.splice(0));
     const { view, text, imgs } = Memory.turn(mem, from, msgs);
     const server = Tools.at(chat.tools, "main");
     chat.eye = Chat.eye(mem, mem.show);
     chat.socks.forEach((sock) => Chat.show(chat, sock));
-    const blocks = [...view, Tools.here(chat.tools), Tools.at_work(chat.tools), { text: HEAD + text, mark: true }];
+    const told = context.length === 0 ? [] : [{ text: context.join("\n\n") + "\n\n", mark: false }];
+    const blocks = [...view, Tools.here(chat.tools), ...told, Tools.at_work(chat.tools), { text: HEAD + text, mark: true }];
     const window = Pick.window(chat.pick);
     const ask = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server, blocks, imgs, keep: true, room: window === undefined ? undefined : Math.round(window * ROOM) };
     chat.model = chat.pick.model;
@@ -479,11 +557,38 @@ export namespace Chat {
     if (full) {
       return Chat.refit(chat, end.text !== "");
     }
+    if (end.ok && !halt.signal.aborted && chat.wait.length === 0 && (await Chat.stopping(chat, end.text, halt))) {
+      return !halt.signal.aborted;
+    }
     const goal = chat.mem.goal;
     if (end.ok && !halt.signal.aborted && chat.wait.length === 0 && goal !== null) {
-      return Chat.checked(chat, Chat.check(chat, goal), halt);
+      const on = await Chat.checked(chat, Chat.check(chat, goal), halt);
+      if (!on || chat.wait.length > 0) {
+        return on;
+      }
     }
     return !halt.signal.aborted;
+  }
+
+  // a turn ending of itself: the plugins' and hooks' turn.stop asked
+  // (Plugins.before_stop), given illi's reply, whether it goes on (before
+  // its goal is checked: a hook's say comes first); one that says so has
+  // its why logged as a note and taken, so the turn goes on from it: true.
+  // Past GOINGS in a row with no tool call nor message of the user's
+  // between, it ends, saying why. A stop or a message meanwhile drops the
+  // answer
+  export async function stopping(chat: Chat, reply: string, halt: AbortController): Promise<boolean> {
+    const why = await Plugins.before_stop({ cwd: chat.tools.cwd, again: chat.going, reply, signal: halt.signal });
+    if (why === null || halt.signal.aborted || chat.wait.length > 0) {
+      return false;
+    }
+    if (chat.goings >= GOINGS) {
+      Chat.note(chat, GONE.replace("#", String(GOINGS)));
+      return false;
+    }
+    [chat.goings, chat.going] = [chat.goings + 1, true];
+    await Chat.writing(chat, async () => Chat.take(chat, Chat.push(chat, null, "note", why)));
+    return true;
   }
 
   // the user's goal (/goal), asked of the chat's model, without tools, on
@@ -604,6 +709,7 @@ export namespace Chat {
     }
     if (ev.kind === "tool" && ev.of !== undefined) {
       at.calls[ev.of] = ev.text;
+      chat.goings = agent === null ? 0 : chat.goings;
     } else if (ev.kind === "mind") {
       Chat.all(chat, { $: "entry", agent: name, kind: ev.kind, text: ev.text });
     } else if (ev.kind !== "user") {
@@ -783,19 +889,39 @@ export namespace Chat {
     const tools  = Tools.state(chat.tools, chat.pick.vendor);
     const fill   = { used: Math.round(Memory.fill(chat.mem) / TOKEN), cap: Chat.cap(chat), window: Pick.window(chat.pick) ?? config.GUESS };
     const asks   = chat.asks.map(({ done, ...q }) => q);
-    return { $: "state", busy: chat.busy, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, ...tools, use: { ...tools.use, fill }, suggest: chat.suggest.on ? chat.suggest.text : "", asks };
+    return { $: "state", busy: chat.busy || chat.checking !== null, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, ...tools, use: { ...tools.use, fill }, suggest: chat.suggest.on ? chat.suggest.text : "", asks };
+  }
+
+  // a reply left with no message after it: the hooks hear the user is
+  // waited on (Plugins "notify") once IDLE_WAIT passes, if a view is there
+  // and no turn ran since (a message, a turn's start clear it)
+  export function idle(chat: Chat): void {
+    clearTimeout(chat.idle);
+    chat.idle = setTimeout(() => {
+      if (!chat.busy && chat.wait.length === 0 && chat.socks.size > 0) {
+        void Plugins.emit("notify", { cwd: chat.tools.cwd, type: "idle_prompt", text: IDLE_TEXT });
+      }
+    }, IDLE_WAIT);
+    chat.idle.unref();
   }
 
   // a question for the user (Claude Code asking leave to use a tool,
   // illi's own), shown by the views till one answers, or its request
-  // drops (a stop: no); with no view to ask, no at once
+  // drops (a stop: no); with no view to ask, no at once. Unanswered
+  // ASK_WAIT, the hooks hear the user is waited on (Plugins "notify")
   export function question(chat: Chat, q: Omit<Question, "id">, signal: AbortSignal): Promise<Reply> {
     if (chat.socks.size === 0 || signal.aborted) {
       return Promise.resolve({ yes: false, always: false, said: q.queries === undefined ? NO_ONE : NO_ANSWER });
     }
+    const asking = q.queries === undefined ? q.who + " asks leave to use " + q.tool + ": " + q.what.replace(/\s+/g, " ").slice(0, 200) : q.who + " asks you: " + q.queries[0].text;
     return new Promise((done) => {
       const id = crypto.randomUUID();
       chat.asks.push({ ...q, id, done });
+      setTimeout(() => {
+        if (chat.asks.some((a) => a.id === id) && chat.socks.size > 0) {
+          void Plugins.emit("notify", { cwd: chat.tools.cwd, type: q.queries === undefined ? "permission_prompt" : "question", text: asking });
+        }
+      }, ASK_WAIT).unref();
       signal.addEventListener("abort", () => Chat.answered(chat, id, false, false, STOPPED), { once: true });
       Chat.change(chat);
     });
@@ -814,6 +940,9 @@ export namespace Chat {
   }
 
   export function waits(chat: Chat): Wait {
+    if (chat.checking !== null && !chat.busy) {
+      return HOOKS_WAIT;
+    }
     if (chat.compacting) {
       return Memory.due(chat.mem) < chat.mem.cut ? SUMMARIES : COMPACTING;
     }
@@ -929,6 +1058,9 @@ export namespace Chat {
       }
       case "stop": {
         const name = msg.name === undefined ? null : String(msg.name);
+        if (chat.checking !== null && (name === null || name === TURN)) {
+          chat.checking.abort();
+        }
         if (chat.compacting && (name === null || name === TURN)) {
           Chat.interrupt(chat, RECAP_STOP);
         }

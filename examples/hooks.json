@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "shell", "hooks": [{ "type": "command", "command": "~/.illi/hooks/guard.sh" }] }
+    ],
+    "PostToolUse": [
+      { "matcher": "write|edit", "hooks": [{ "type": "command", "command": "jq -r '.tool_input.path // .tool_input.edits[].path' | grep -E '\\.(ts|js|json|md)$' | xargs -r bunx prettier --write > /dev/null" }] }
+    ],
+    "Notification": [
+      { "matcher": "permission_prompt|question", "hooks": [{ "type": "command", "command": "notify-send illi \"$(jq -r .message)\"" }] }
+    ]
+  }
+}
