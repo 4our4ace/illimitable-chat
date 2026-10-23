@@ -2,7 +2,8 @@
 // =========
 // `bun test View.test.ts`. What a view draws of the server's messages:
 // runs of work, each keyed apart (a thought-led one too), open as a
-// click or the mode says; what streams made anew only as it grows.
+// click or the mode says, each call in one with how it ended; what
+// streams made anew only as it grows.
 
 import { expect, test } from "bun:test";
 import type { Pick } from "../ai/Pick.ts";
@@ -90,8 +91,8 @@ test("each run of work is one line saying what was done", () => {
 
 // a run's calls, listed under it while shut, each with how it ended: by
 // the result logged right after it (failed: FAILED), one with none after
-// it (stopped, summed up) not known; a call in a block opened alone among
-// them; a thought between calls changes nothing
+// it (stopped before it answered) not known; a call in a block opened
+// alone among them; a thought between calls changes nothing
 test("a run's calls each say how they ended: done, failed, not known", () => {
   const v    = View.view_new();
   const rows: View.Row[] = [
@@ -112,6 +113,31 @@ test("a run's calls each say how they ended: done, failed, not known", () => {
     ["web_search", '"bend"', true],
     ["read", "a.log", null],
   ]);
+});
+
+// a summed-up call (its line the call word for word) ends as its
+// result's message whole says (known by then), summed up or not; illi's
+// question ends as answered, though its answers end the run (shown as
+// the user's words after it)
+test("a summed-up call ends as its result says; illi's question, as answered", () => {
+  const v   = View.view_new();
+  const log: View.Entry[] = [
+    { kind: "user", text: "push it" },
+    { kind: "tool", text: 'shell {"command":"git push"}' },
+    { kind: "echo", text: View.FAILED + "rejected\n(exit 1 in 1s)" },
+    { kind: "tool", text: 'shell {"command":"bun test"}' },
+    { kind: "echo", text: "642 pass\n(exit 0 in 9s)" },
+    { kind: "tool", text: 'ask {"queries":[{"text":"Push again?"}]}' },
+    { kind: "echo", text: View.ANSWERED + "Push again? Yes" },
+    { kind: "illi", text: "Pushed." },
+  ];
+  log.forEach((entry, id) => View.view_hear(v, { $: "know", whole: { [id]: entry }, nodes: { [id + "+1"]: { text: entry.kind + ": " + entry.text.split("\n")[0], to: "" } } }));
+  View.view_hear(v, { $: "view", parts: log.map((_, id): View.Part => [id, 1]), turn: 3 });
+  const rows = View.view_body(v);
+  expect(rows.map((r) => (r.$ === "Msg" ? r.kind : r.$))).toEqual(["user", "Act", "user", "illi"]);
+  const run  = rows[1];
+  expect(run.$ === "Act" && run.rows.slice(0, 2).map((r) => r.$)).toEqual(["Sum", "Sum"]);
+  expect(run.$ === "Act" && run.calls.map((d) => [d.call.name, d.ok])).toEqual([["shell", false], ["shell", true], ["ask", true]]);
 });
 
 // runs led by a thought (never logged: no id) each keyed by the message

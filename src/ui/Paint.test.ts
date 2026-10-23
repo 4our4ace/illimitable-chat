@@ -8,13 +8,15 @@
 // whole, each message in it too (a folded one as its one line), a gap
 // line the block's above it; its glyph, label and bar tagged with its
 // key. A shut run lists its calls under its line, a line each, the
-// latest six at most. An open block is marked over its whole frame, the innermost mark
-// the smaller. A recap's pages fold as a run's messages do. A mark lit
-// lights its tagged runs: a run's glyph in the accent, its label in the
-// ink, its bar heavier; a message its own and its run's bar beside it;
-// pressed, reversed.
+// latest six at most, each fit to the width whatever it holds. An open
+// block is marked over its whole frame, the innermost mark the smaller.
+// A recap's pages fold as a run's messages do. A mark lit lights its
+// tagged runs: a run's glyph in the accent, its label in the ink, its
+// bar heavier; a message its own and its run's bar beside it; pressed,
+// reversed.
 
 import { expect, test } from "bun:test";
+import * as Call from "./Call.ts";
 import * as Draw from "./Draw.ts";
 import * as Paint from "./Paint.ts";
 import * as View from "./View.ts";
@@ -35,13 +37,16 @@ test("the background told again as it was lays nothing out anew; another, all", 
 });
 
 // a chat of every kind of row: blocks, an open one, runs of work open
-// and closed, messages (one with an image), a caption
+// and closed (a shut one's calls listed: done, failed, cut, not known),
+// messages (one with an image), a caption
 function chat(): View.Row[] {
-  const sum = (id: number, n: number): View.Row => ({ $: "Sum", id, n, text: "a summary of what was said " + id, call: null, kind: null });
+  const sum   = (id: number, n: number): View.Row => ({ $: "Sum", id, n, text: "a summary of what was said " + id, call: null, kind: null });
+  const call  = (text: string, ok: boolean | null): View.Done => ({ call: Call.call_parse(text), ok });
+  const calls = [call('shell {"command":"bun test"}', true), call('shell {"command":"git push ' + "中".repeat(40) + '"}', false), call('read {"path":"a.log"}', null)];
   const out: View.Row[] = [View.Cap("The whole chat."), sum(0, 4)];
   for (let id = 4; id < 40; id += 4) {
     out.push({ $: "Box", id, n: 2, rows: [sum(id, 1), sum(id + 1, 1)] });
-    out.push({ $: "Act", id: id + 2, text: "Ran a command", open: id % 8 === 0, rows: [sum(id + 2, 1)], calls: [] });
+    out.push({ $: "Act", id: id + 2, text: "Ran a command", open: id % 8 === 0, rows: [sum(id + 2, 1)], calls });
     out.push(...View.entry_rows(id + 3, id % 8 === 0 ? "user" : "illi", "Words " + id + "\n\n- one\n- two", id === 8 ? ["a.png"] : []));
   }
   return out;
@@ -117,10 +122,12 @@ test("an open run of work is marked whole, each message in it with its gap, a fo
 
 // a shut run lists its calls under its line, a line each from its words
 // on: how each ended (GLYPH.ok; GLYPH.failed in the error's color; not
-// known: as wide, blank), its tool's name and the call on one line, its
-// control characters dropped, cut to the width (its line too, "…"
-// where); past six, the latest five, the rest counted over them; all in the run's mark, the words
-// tagged as its label. Open, the run lists none: its rows show
+// known: as wide, blank; the names line up whatever the theme makes the
+// marks), its tool's name (after the theme's mark for it, if any) and
+// the call on one line, its control characters dropped, cut to the
+// width (its line too, "…" where); past six, the latest five, the rest
+// counted over them; all in the run's mark, the words tagged as its
+// label. Open, the run lists none: its rows show
 test("a shut run lists its calls, a line each: how each ended, its tool and call cut to the width; past six, the latest", () => {
   const v     = View.view_new();
   const call  = (id: number, command: string, out: string | null) => [
@@ -149,9 +156,48 @@ test("a shut run lists its calls, a line each: how each ended, its tool and call
   ]);
   const said  = [...call(40, "ls", "ok"), ...View.entry_rows(42, "tool", 'read {"path":"a"}'), ...View.entry_rows(43, "work", "[explorer] found it")];
   expect(text(Paint.rows_lines(View.view_acts(v, said), 30))[0]).toBe(SHUT + "Ran a command, read a fil…");
+  const glyphs = [Theme.GLYPH.ok, Theme.GLYPH.failed];
+  try {
+    Theme.TOOL.shell = "$";
+    expect(text(Paint.rows_lines(View.view_acts(v, rows), 40))[1]).toBe(lead + Theme.GLYPH.ok + " $ shell bun test");
+    delete Theme.TOOL.shell;
+    [Theme.GLYPH.ok, Theme.GLYPH.failed] = ["ok", "FAIL"];
+    expect(text(Paint.rows_lines(View.view_acts(v, rows), 40)).slice(1, 5).map((l) => l.slice(0, lead.length + 10))).toEqual([lead + "ok   shell", lead + "FAIL shell", lead + "ok   shell", lead + "     shell"]);
+  } finally {
+    delete Theme.TOOL.shell;
+    [Theme.GLYPH.ok, Theme.GLYPH.failed] = glyphs;
+  }
   View.view_toggle(v, 3);
   expect(text(Paint.rows_lines(View.view_acts(v, rows), 40))[0]).toBe(OPEN + "Ran 4 commands");
   expect(text(Paint.rows_lines(View.view_acts(v, rows), 40)).filter((l) => l.startsWith(lead))).toEqual([]);
+});
+
+// a shut run's lines fit the width whatever they hold: a wide character
+// that would cross the edge left out, the "…" after what fits (so a line
+// may end a column short); its head so too; at a width under its lead,
+// the lead cut as well. A call of any length costs about what a short one
+// does: past the width nothing of it is taken apart
+test("a shut run's lines never pass the width: wide characters, a width under the lead, a call of any length", () => {
+  const v     = View.view_new();
+  const rows  = [
+    ...View.entry_rows(3, "tool", 'shell {"command":"echo a' + "中".repeat(40) + '"}'),
+    ...View.entry_rows(4, "echo", "ok"),
+    ...View.entry_rows(5, "tool", '工具 {"emoji":"' + "😀".repeat(30) + '"}'),
+  ];
+  const lead  = " ".repeat(SHUT.length);
+  const lines = Paint.rows_lines(View.view_acts(v, rows), 40);
+  expect(text(lines)[1]).toBe(lead + Theme.GLYPH.ok + " shell echo a" + "中".repeat(10) + "…");
+  expect(Paint.line_width(lines[1])).toBe(39);
+  for (let w = 0; w <= 48; w++) {
+    expect(Paint.rows_lines(View.view_acts(v, rows), w).map((l) => Paint.line_width(l)).filter((n) => n > w)).toEqual([]);
+  }
+  expect(text(Paint.rows_lines(View.view_acts(v, rows), 3))).toEqual([SHUT.slice(0, 2) + "…", "  …", "  …"]);
+  const big   = View.view_acts(v, [...View.entry_rows(7, "tool", "shell " + JSON.stringify({ command: "cat > a.txt <<EOF\n" + "lorem ipsum dolor ".repeat(60000) + "\nEOF" })), ...View.entry_rows(8, "echo", "ok")]);
+  const start = performance.now();
+  for (let k = 0; k < 5; k++) {
+    Paint.rows_lines(big, 80);
+  }
+  expect(performance.now() - start).toBeLessThan(400);
 });
 
 // an open block: marked from its top edge to its bottom one; the blocks
