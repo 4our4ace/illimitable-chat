@@ -2,8 +2,10 @@
 // ====
 // A key, as Screen.ts reads it: the mouse's (Select.ts), the wheel, the
 // keys of term_groups (Commands.ts), the key after the leader (its
-// shortcut, before all else), and what the lists and panes over the chat
-// take first (a picker searched, the text typed too); Enter (a skill
+// shortcut, before all else), and what takes keys first: a popup open
+// (Popup.ts) every key but PASS's, so none reaches the chat, the input or
+// the commands suggested under it (its search the text typed too); then
+// illi's questions, the commands suggested and a pane; Enter (a skill
 // named mid-message told), Esc, Ctrl+C and Ctrl+D, Tab (the suggested
 // reply), Shift+Tab and the pages.
 
@@ -16,6 +18,7 @@ import { term_draw } from "./Frame.ts";
 import { member_others } from "./Member.ts";
 import { term_note, term_toast, term_unnote } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
+import { popup_page, popup_wheel } from "./Popup.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_copied, term_hover, term_mouse, term_selected, term_under } from "./Select.ts";
 import { term_act, term_primaries, term_quit, type Chooser, type Cmd, type Term } from "./Term.ts";
@@ -24,6 +27,11 @@ import * as View from "../ui/View.ts";
 // the editing keys a picker's search leaves to its rows: a new line, a
 // line up or down
 const ROWS = ["Up", "Down", "Shift+Enter", "Ctrl+J"];
+
+// the keys a popup leaves to what is under it: the screen drawn again,
+// a suspend, the palette (in the popup's place), the leader (its own
+// key: config.LEADER)
+const PASS = ["Ctrl+L", "Ctrl+Z", "Ctrl+P"];
 
 // the keys that leave text chosen (any other lets it go)
 const KEEP   = ["", "Canvas", "Press", "Drag", "Release", "RightPress", "RightDrag", "RightRelease", "WheelUp", "WheelDown", "Esc", "PgUp", "PgDn", "Ctrl+Home", "Ctrl+End"];
@@ -87,31 +95,28 @@ function term_keyed(key: string): Cmd | undefined {
 }
 
 // a key after the leader: its shortcut's (term_after; the wheel lets the
-// leader go and scrolls). A key while the commands suggested show, the
-// picker, illi's question or a pane is open: theirs first (true: taken).
-// The commands move by Up
-// and Down, fill one in by Tab, run it by Enter; the picker as
-// term_choose_key; the question as Asks.ts says; a pane scrolls by the
-// arrows, the pages and the wheel, Esc and Enter close it, and no
-// editing key reaches the input hidden under it
+// leader go and goes on to what has it: the popup, a pane, else the
+// chat). A key while the picker (a popup), illi's question, the commands
+// suggested or a pane is open: theirs first (true: taken). The picker as
+// term_choose_key, every key but PASS's; the question as Asks.ts says;
+// the commands move by Up and Down, fill one in by Tab, run it by Enter;
+// a pane scrolls by the arrows, the pages and the wheel, Esc and Enter
+// close it, and no editing key reaches the input hidden under it
 export function term_grab(t: Term, key: string): boolean {
-  if (t.lead) {
-    if (key === "WheelUp" || key === "WheelDown") {
-      t.lead = false;
-      return false;
-    }
+  if (t.lead && key !== "WheelUp" && key !== "WheelDown") {
     term_after(t, key);
     return true;
   }
-  if (t.choose === null && term_form_key(t, key)) {
+  t.lead = false;
+  if (t.choose !== null) {
+    return term_choose_key(t, t.choose, key);
+  }
+  if (term_form_key(t, key)) {
     return true;
   }
   const sug = term_suggest(t);
   if (sug !== null && term_suggest_key(t, sug, key)) {
     return true;
-  }
-  if (t.choose !== null) {
-    return term_choose_key(t, t.choose, key);
   }
   if (t.pane === null) {
     return false;
@@ -128,16 +133,30 @@ export function term_grab(t: Term, key: string): boolean {
   return move !== undefined || shut || Screen.ed_key(Screen.ed_new(), key);
 }
 
-// a key to the picker (true: taken): the lit option's own first (the
+// a key to the picker (true: taken: all but PASS's and the leader, which
+// go on to open what they open in its place). Ctrl+C and Ctrl+D are Esc
+// here (neither interrupts, clears the input nor quits); the key that
+// opened it closes it (Ctrl+P's); the lit option's own keys first (the
 // model picker's effort and speed); then Up and Down (or Tab) move round
-// the options shown, Enter picks the lit one (none matching the search:
-// nothing; a line asked for: given, the box kept with a reason if it
-// won't do), Esc and Ctrl+C close (Ctrl+C neither interrupts nor quits
-// here), and the search takes the input's editing keys (but its rows')
-function term_choose_key(t: Term, c: Chooser, key: string): boolean {
+// the options shown, PgUp and PgDn a page, Ctrl+Home and Ctrl+End to the
+// first and the last (Home and End too, with nothing to type in), the
+// wheel scrolls (Popup.ts), Enter picks the lit one (none matching the
+// search: nothing; a line asked for: given, the box kept with a reason
+// if it won't do), Esc closes, and the search takes the input's editing
+// keys (but its rows'); any other key does nothing
+function term_choose_key(t: Term, c: Chooser, press: string): boolean {
+  const key  = press === "Ctrl+C" || press === "Ctrl+D" ? "Esc" : press;
   const n    = c.shown.length;
   const lit  = c.shown[c.at]?.k;
   const move = ({ Up: -1, "Shift+Tab": -1, Down: 1, Tab: 1 } as Record<string, number>)[key];
+  const page = ["PgUp", "PgDn", "Ctrl+Home", "Ctrl+End", ...(c.find === null ? ["Home", "End"] : [])].includes(key);
+  if (key === c.key) {
+    t.choose = null;
+    return true;
+  }
+  if (PASS.includes(key) || key === config.LEADER) {
+    return false;
+  }
   if (lit !== undefined && c.keys(lit, key)) {
     return true;
   }
@@ -152,23 +171,25 @@ function term_choose_key(t: Term, c: Chooser, key: string): boolean {
   }
   if (move !== undefined) {
     c.at = n === 0 ? 0 : (c.at + move + n) % n;
+  } else if (key === "WheelUp" || key === "WheelDown") {
+    popup_wheel(t, c, key === "WheelUp" ? -1 : 1);
+  } else if (page) {
+    popup_page(t, c, key);
   } else if (key === "Enter" && lit !== undefined) {
     t.choose = null;
     c.pick(lit);
-  } else if (key === "Esc" || key === "Ctrl+C") {
+  } else if (key === "Esc") {
     t.choose = null;
   } else if (c.find !== null && !ROWS.includes(key) && Screen.ed_key(c.find, key)) {
     term_chooser_find(c);
-  } else if (key !== "Enter") {
-    return false;
   }
   return true;
 }
 
 // text typed after the leader: its first character the shortcut's key,
-// the rest as typed after it; while the picker searches: to its search,
-// not the input; while illi asks, to its question (Asks.ts); over a pane,
-// to the input, the pane closed
+// the rest as typed after it; while the picker is open: to its search,
+// none: nowhere, never the input; while illi asks, to its question
+// (Asks.ts); over a pane, to the input, the pane closed
 export function term_type(t: Term, text: string): boolean {
   const c = t.choose;
   if (t.lead) {
@@ -181,15 +202,17 @@ export function term_type(t: Term, text: string): boolean {
     }
     return true;
   }
-  if (c === null && t.pane !== null) {
+  if (c !== null) {
+    if (c.find !== null) {
+      Screen.ed_type(c.find, text);
+      term_chooser_find(c);
+    }
+    return true;
+  }
+  if (t.pane !== null) {
     t.pane = null;
   }
-  if (c === null || c.find === null) {
-    return c === null && term_form_type(t, text);
-  }
-  Screen.ed_type(c.find, text);
-  term_chooser_find(c);
-  return true;
+  return term_form_type(t, text);
 }
 
 // a click: what was drawn there does its own (the side, the picker, the

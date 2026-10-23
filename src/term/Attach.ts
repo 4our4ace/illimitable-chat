@@ -8,6 +8,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { term_form_paste } from "./Asks.ts";
+import { term_chooser_find } from "./Commands.ts";
 import { term_draw } from "./Frame.ts";
 import { host_wsl } from "./Host.ts";
 import { term_note } from "./Notices.ts";
@@ -36,10 +37,20 @@ export function term_image(t: Term, arg: string): void {
   }
 }
 
-// a paste: to illi's question if it asks (Asks.ts); a path to an image
-// (a file dropped) attaches it; else it goes in the input, a long one as
-// its token (a pane open, closed)
+// a paste: a popup open takes it (Popup.ts: its search or the line
+// asked, as one line, its newlines spaces; none: nowhere); else to
+// illi's question if it asks (Asks.ts); a path to an image (a file
+// dropped) attaches it; else it goes in the input, a long one as its
+// token (a pane open, closed)
 export function term_paste(t: Term, text: string): void {
+  const c = t.choose;
+  if (c !== null) {
+    if (c.find !== null) {
+      Screen.ed_type(c.find, text.replace(/\s*\n\s*/g, " "));
+      term_chooser_find(c);
+    }
+    return;
+  }
   t.pane = null;
   if (term_form_paste(t, text)) {
     return;

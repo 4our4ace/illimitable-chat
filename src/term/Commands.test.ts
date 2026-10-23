@@ -1,10 +1,11 @@
 // Commands test
 // =============
-// `bun test Commands.test.ts`. The pickers over the chat's foot: /model's
-// searches the models as you type (Backspace too), sets the lit one's
-// effort by Left and Right and its speed by Tab, and sends all three as
-// one pick by Enter (Esc: none); /agent's and /profile's take no typing,
-// and Tab moves in them. /help fits a narrow pane, a row a key, the setup
+// `bun test Commands.test.ts`. The pickers: /model's searches the
+// models as you type (Backspace too), sets the lit one's effort by Left
+// and Right and its speed by Tab, and sends all three as one pick by
+// Enter (Esc: none); a picker without a search takes typing and the
+// editing keys to nowhere, the input under it kept, and Tab moves in
+// /agent's and /profile's. /help fits a narrow pane, a row a key, the setup
 // commands their own group; /agents' lists have no copy buttons (a pane
 // is no reply). /model's gauge steps the lit model's autocompact (Enter
 // sends it, Esc drops it) and fits its width; /autocompact says the chat's
@@ -130,11 +131,14 @@ test("Esc closes the model picker, the pick as it was", () => {
   expect(t.v.out).toEqual([]);
 });
 
-test("a picker without a search takes no typing; Tab moves in it", () => {
+test("a picker without a search takes typing to nowhere, and the editing keys: the input under it stays as it was; Tab moves in it", () => {
   const t = term();
   const picked: number[] = [];
+  Screen.ed_set(t.scr.ed, "my draft");
   term_chooser(t, "Agent", ["illi", "reviewer"], ["illi's own", "reviews"], 0, (k) => picked.push(k));
-  expect(term_type(t, "r")).toBe(false);
+  expect(term_type(t, "r")).toBe(true);
+  expect(["Backspace", "Ctrl+U", "Ctrl+K", "Shift+Enter", "Ctrl+J", "Left"].map((key) => term_grab(t, key))).toEqual(Array(6).fill(true));
+  expect(t.scr.ed.text).toBe("my draft");
   term_grab(t, "Tab");
   term_grab(t, "Enter");
   expect(picked).toEqual([1]);

@@ -15,15 +15,18 @@
 // uncovered. While it stays open it only grows (a value stepped wider),
 // never shrinks; a new size measures it afresh. A name is never cut:
 // what an option is gives way first, then its aside, and on a screen too
-// narrow for it the name wraps, under itself. The commands suggested as
-// a /word is typed stay at the input, and panes in the chat's place
-// (Frame.ts).
+// narrow for it the name wraps, under itself. While it is open it has
+// every key (Keys.ts), the wheel and the pages moving in it
+// (popup_wheel, popup_page): nothing reaches the chat, the side, the
+// tabs or the input under it, and a paste goes to its search, if any.
+// The commands suggested as a /word is typed stay at the input, and
+// panes in the chat's place (Frame.ts).
 
 import * as Draw from "../ui/Draw.ts";
 import { MARGIN } from "./Frame.ts";
 import * as Paint from "../ui/Paint.ts";
 import type * as Screen from "../ui/Screen.ts";
-import type { Chooser, Target, Term } from "./Term.ts";
+import type { Chooser, PopBox, Target, Term } from "./Term.ts";
 import { GLYPH } from "../ui/Theme.ts";
 
 // the narrowest a popup is (a two-answer question still reads as a
@@ -51,9 +54,18 @@ export const PANEL = 0.05;
 // the least of an option's next column shown cut (popup_about)
 const CUT = 8;
 
+// the most entries a turn of the wheel scrolls a list (fewer on a short
+// one: a third of those shown, one at least)
+const STEP = 3;
+
 // a popup's place on the screen: its top row, its first column, its
 // width and height
 type Place = { row: number; col: number; w: number; h: number };
+
+// a popup's list and lead as laid out (PopBox's): the box's row its list
+// starts at, its lines, the entries they show; the lines leading it
+// shown, of how many
+type Shape = Pick<PopBox, "list" | "lines" | "tall" | "ahead" | "lead">;
 
 // what a popup's content asks of its box, in columns with its frame: its
 // options' names whole, with their marks (names); all it shows whole
@@ -103,7 +115,7 @@ export function popup_paint(t: Term, rows: Screen.Piece[][], w: number, h: numbe
   box.lines.forEach((line, k) => {
     rows[at.row + k].push({ col: at.col, w: at.w, line: panel === undefined ? line : line.map((r) => ({ ...r, s: { ...r.s, g: panel } })) });
   });
-  t.box = { of: c, ...at, rows: box.rows };
+  t.box = { of: c, ...at, rows: box.rows, ...box.shape };
   box.rows.forEach((aim, k) => {
     if (aim !== null) {
       t.hits.push({ row: at.row + k, col: at.col, to: at.col + at.w, run: () => {
@@ -222,7 +234,7 @@ function popup_heights(c: Chooser, list: Array<string | number>, iw: number): nu
 
 // the picker's box, w by h: its lines, framed, and what each stands for
 // (popup_paint); the cursor's spot in it, if it has a search or a line
-// asked. Inside, its search first, if it has one; each option shown
+// asked; its list and lead as laid out (Shape). Inside, its search first, if it has one; each option shown
 // (illi's own and each of the user's primary agents; each profile; each
 // model; each setting), what it is from one column for all (after the
 // widest name on one line), the one now marked (none: no marks; one that
@@ -240,7 +252,7 @@ function popup_heights(c: Chooser, list: Array<string | number>, iw: number): nu
 // one takes besides. A line asked for (Chooser ask) is its one line, as
 // the input shows a message typed, its hint while empty; a search or a
 // line too long shows its end
-function popup_list(c: Chooser, w: number, h: number): { lines: Paint.Line[]; rows: Array<Target | null>; at?: Screen.Spot } {
+function popup_list(c: Chooser, w: number, h: number): { lines: Paint.Line[]; rows: Array<Target | null>; at?: Screen.Spot; shape: Shape } {
   const iw    = w - 4;
   const room  = h - 2;
   const glyph = c.ask === null ? GLYPH.find : GLYPH.input;
@@ -261,7 +273,8 @@ function popup_list(c: Chooser, w: number, h: number): { lines: Paint.Line[]; ro
   const list  = popup_entries(c);
   const tall  = popup_heights(c, list, iw);
   const wide  = Math.max(0, ...c.names.filter((n) => popup_name_lines(c, n, iw).length === 1).map((n) => popup_name_width(c, n)));
-  const shown = c.ask !== null ? [] : c.shown.length === 0 ? [[[Paint.Run("  Nothing matches " + Paint.text_clean(text), Paint.DIM)], null] as [Paint.Line, null]] : popup_view(c, list, tall, rows).flatMap((e) => popup_entry(c, list[e], iw, wide));
+  const view  = c.ask !== null || c.shown.length === 0 ? [] : popup_view(c, list, tall, rows);
+  const shown = c.ask !== null ? [] : c.shown.length === 0 ? [[[Paint.Run("  Nothing matches " + Paint.text_clean(text), Paint.DIM)], null] as [Paint.Line, null]] : view.flatMap((e) => popup_entry(c, list[e], iw, wide));
   const blank = (n: number) => Array.from({ length: Math.max(0, n) }, (): [Paint.Line, null] => [[], null]);
   const items = [...read.map((l): [Paint.Line, null] => [l, null]), ...find.map((l): [Paint.Line, null] => [l, null]), ...shown, ...blank(rows - shown.length), ...under.map((l): [Paint.Line, null] => [l, null])];
   const said  = popup_foot(c);
@@ -270,7 +283,7 @@ function popup_list(c: Chooser, w: number, h: number): { lines: Paint.Line[]; ro
   const fill  = [...items, ...blank(room - items.length)];
   const after = Paint.text_width(text.slice(c.find?.pos ?? 0));
   const at    = c.find === null ? undefined : { row: 1 + ahead, col: Math.min(w - 3, 2 + Paint.text_width(glyph) + Math.max(0, Paint.text_width(typed) - after)) };
-  return { lines: Paint.frame(fill.map(([l]) => l), w, title, foot), rows: [null, ...fill.map(([, aim]) => aim), null], at };
+  return { lines: Paint.frame(fill.map(([l]) => l), w, title, foot), rows: [null, ...fill.map(([, aim]) => aim), null], at, shape: { list: 1 + read.length + find.length, lines: rows, tall: view.length, ahead, lead: lead.length } };
 }
 
 // the entries of the picker's list in view (their indices), rows lines at
@@ -284,11 +297,79 @@ function popup_view(c: Chooser, list: Array<string | number>, tall: number[], ro
     top++;
   }
   c.top = top;
+  return popup_fit(tall, top, rows);
+}
+
+// the entries that show whole in rows lines from entry top (the first at
+// least), each tall[e] lines
+function popup_fit(tall: number[], top: number, rows: number): number[] {
   const view: number[] = [];
-  for (let e = top, used = 0; e < list.length && (view.length === 0 || used + tall[e] <= rows); used += tall[e], e++) {
+  for (let e = top, used = 0; e < tall.length && (view.length === 0 || used + tall[e] <= rows); used += tall[e], e++) {
     view.push(e);
   }
   return view;
+}
+
+// a turn of the wheel in the picker (d -1: up), as last painted (none
+// yet: nothing): the lines leading it scrolled, while they are cut; else
+// its list scrolled STEP entries (a third of those shown, on a short
+// one), stopping at its ends (it never goes round; one shown whole never
+// moves). The list moved: with the pointer over it, the option brought
+// under the pointer lit; else, the lit one gone from view, the nearest
+// still in it, so Enter picks what shows
+export function popup_wheel(t: Term, c: Chooser, d: number): void {
+  const box = t.box?.of === c ? t.box : null;
+  if (box === null) {
+    return;
+  }
+  const step = (n: number) => Math.max(1, Math.min(STEP, Math.floor(n / 3)));
+  if (box.ahead < box.lead) {
+    c.past = Math.max(0, Math.min(box.lead - box.ahead, (c.past ?? 0) + d * step(box.ahead)));
+    return;
+  }
+  const list = popup_entries(c);
+  const tall = popup_heights(c, list, box.w - 4);
+  let last   = list.length;
+  while (last > 0 && tall.slice(last - 1).reduce((n, x) => n + x, 0) <= box.lines) {
+    last--;
+  }
+  const top = Math.max(0, Math.min(last, c.top + d * step(box.tall)));
+  if (top === c.top || c.shown.length === 0) {
+    return;
+  }
+  c.top      = top;
+  const view = popup_fit(tall, top, box.lines);
+  const p    = t.scr.point;
+  const line = p.row - box.row - box.list;
+  const over = line >= 0 && line < box.lines && p.col >= box.col && p.col < box.col + box.w;
+  const opts = view.filter((e) => typeof list[e] === "number");
+  let at     = -1;
+  for (let k = 0, from = 0; over && k < view.length; from += tall[view[k]], k++) {
+    at = line >= from && line < from + tall[view[k]] ? view[k] : at;
+  }
+  const lit  = list.indexOf(c.at);
+  const near = lit < view[0] ? opts[0] : opts.at(-1);
+  const to   = over ? (typeof list[at] === "number" ? at : -1) : view.includes(lit) ? -1 : near ?? -1;
+  if (to >= 0) {
+    c.at = list[to] as number;
+  }
+}
+
+// PgUp, PgDn in the picker: the lines leading it a page, while they are
+// cut (as last painted); else the lit option a page (those shown, less
+// one), stopping at the ends. Ctrl+Home, Ctrl+End (and Home, End where
+// nothing is typed): the first option, the last
+export function popup_page(t: Term, c: Chooser, key: string): void {
+  const box = t.box?.of === c ? t.box : null;
+  const n   = c.shown.length;
+  const d   = key === "PgUp" ? -1 : key === "PgDn" ? 1 : 0;
+  if (d !== 0 && box !== null && box.ahead < box.lead) {
+    c.past = Math.max(0, Math.min(box.lead - box.ahead, (c.past ?? 0) + d * Math.max(1, box.ahead - 1)));
+  } else if (d !== 0) {
+    c.at = Math.max(0, Math.min(n - 1, c.at + d * Math.max(1, (box?.tall ?? n) - 1)));
+  } else {
+    c.at = key === "Ctrl+Home" || key === "Home" ? 0 : Math.max(0, n - 1);
+  }
 }
 
 // an entry of the picker's list as its lines, iw wide, each with what it

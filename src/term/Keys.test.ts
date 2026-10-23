@@ -12,7 +12,14 @@
 // closes a picker, as Esc does. Shift+Tab goes back to illi's own agent
 // from one that can't run. A key runs the command whose keys name it.
 // The terminal's background told lays the chat out again only when it
-// changed.
+// changed. A popup has every key but Ctrl+L, Ctrl+Z, Ctrl+P and the
+// leader: under a picker PgUp, PgDn, Ctrl+Home and Ctrl+End move its lit
+// row, never the chat (Home and End edit its search, or move without
+// one); keys it doesn't use do nothing; Ctrl+D closes it, the input
+// kept; Ctrl+P closes the palette it opened; a question takes Down and
+// Enter over the commands suggested; a paste goes to its search as one
+// line (none: nowhere), never the input. The leader let go by the wheel
+// passes it on to what has it.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -21,8 +28,10 @@ import * as os from "node:os";
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-keys-");
 process.env.ILLI_DIR = DIR;
 
+const { term_asks } = await import("./Asks.ts");
+const { term_paste } = await import("./Attach.ts");
 const { term_chooser } = await import("./Commands.ts");
-const { term_grab, term_hint, term_next, term_press } = await import("./Keys.ts");
+const { term_grab, term_hint, term_next, term_press, term_type } = await import("./Keys.ts");
 const Paint = await import("../ui/Paint.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
@@ -33,8 +42,8 @@ afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 // view the suggested reply came to; a paint always due, so none is asked
 // for
 function term(suggest: string): any {
-  const t: any = { v: { ...View.view_new(), suggest }, dropped: "", sel: null, due: true, sug: null, choose: null, pane: null, notices: [], agents: [], quit: 0, ver: 0, scroll: 0, subs: new Map(), pending: 0 };
-  t.scr = { tty: true, kitty: false, ed: Screen.ed_new(), rest: "", shown: [], click: { row: 0, col: 0 }, clicks: 0, pressed: 0, point: { row: 0, col: 0 }, typed: false, grab: (k: string) => term_grab(t, k), on: (k: string) => term_press(t, k) };
+  const t: any = { v: { ...View.view_new(), suggest }, dropped: "", sel: null, due: true, sug: null, choose: null, pane: null, notices: [], agents: [], quit: 0, ver: 0, scroll: 0, subs: new Map(), pending: 0, asking: null, box: null, lead: false };
+  t.scr = { tty: true, kitty: false, ed: Screen.ed_new(), rest: "", shown: [], click: { row: 0, col: 0 }, clicks: 0, pressed: 0, point: { row: 0, col: 0 }, typed: false, grab: (k: string) => term_grab(t, k), on: (k: string) => term_press(t, k), type: (x: string) => term_type(t, x) };
   Screen.screen_feed(t.scr, "\x1b[?1u");
   return t;
 }
@@ -172,4 +181,67 @@ test("the terminal's background told lays the chat out again only when it change
   t.scr.canvas = "#203040";
   term_press(t, "Canvas");
   expect([ver, t.ver]).toEqual([1, 2]);
+});
+
+// a list of n options (with a search, if find), its options named o0, o1...
+const list = (t: any, n: number, find = false) => term_chooser(t, "List", Array.from({ length: n }, (_, k) => "o" + k), Array(n).fill(""), -1, () => {}, { find });
+
+test("under a picker, PgUp and PgDn move its lit row a page, Ctrl+Home and Ctrl+End to its ends, never the chat; Home and End edit its search, or move without one", () => {
+  const t = term("");
+  t.seen = { tall: 20 };
+  list(t, 30);
+  t.box = { of: t.choose, tall: 10, ahead: 0, lead: 0 };
+  const at = (keys: string) => (Screen.screen_feed(t.scr, keys), t.choose.at);
+  expect([at("\x1b[6~"), at("\x1b[6~"), at("\x1b[5~"), at("\x1b[1;5F"), at("\x1b[1;5H"), at("\x1b[F"), at("\x1b[H")]).toEqual([9, 18, 9, 29, 0, 29, 0]);
+  expect(t.scroll).toBe(0);
+  const u = term("");
+  list(u, 30, true);
+  Screen.screen_feed(u.scr, "o2\x1b[H");
+  expect([u.choose.find.pos, u.choose.at]).toEqual([0, 0]);
+  Screen.screen_feed(u.scr, "\x1b[F");
+  expect([u.choose.find.pos, u.choose.at]).toEqual([2, 0]);
+});
+
+test("under a picker, keys it doesn't use do nothing: Ctrl+O, Shift+Left, Ctrl+PgDn; Ctrl+D closes it, the input kept, no quit armed; Ctrl+P closes the palette it opened", () => {
+  const t = term("");
+  Screen.ed_set(t.scr.ed, "my draft");
+  list(t, 3);
+  Screen.screen_feed(t.scr, "\x0f\x1b[1;2D\x1b[6;5~");
+  expect([t.v.verbose, t.v.out, t.choose.title]).toEqual([false, [], "List"]);
+  Screen.screen_feed(t.scr, "\x04");
+  expect([t.choose, t.scr.ed.text, t.quit]).toEqual([null, "my draft", 0]);
+  Screen.screen_feed(t.scr, "\x10");
+  expect(t.choose.title).toBe("Commands");
+  Screen.screen_feed(t.scr, "\x10");
+  expect([t.choose, t.scr.ed.text]).toEqual([null, "my draft"]);
+});
+
+test("with the input a /word and a question open, Down and Enter go to the question, not the commands suggested", () => {
+  const t = term("");
+  Screen.ed_set(t.scr.ed, "/mo");
+  t.v.asks = [{ id: "q1", who: "illi", tool: "Bash", what: "ls", why: "", keep: "" }];
+  term_asks(t);
+  Screen.screen_feed(t.scr, "\x1b[B\r");
+  expect([sent(t), t.scr.ed.text]).toEqual([[{ $: "answer", ask: "q1", yes: false, always: false, said: "" }], "/mo"]);
+});
+
+test("a paste goes to a popup's search as one line; without one, nowhere; never to the input under it", () => {
+  const t = term("");
+  Screen.ed_set(t.scr.ed, "my draft");
+  list(t, 3, true);
+  term_paste(t, "o\n1");
+  expect([t.choose.find.text, t.scr.ed.text]).toEqual(["o 1", "my draft"]);
+  list(t, 3);
+  term_paste(t, "anything");
+  expect(t.scr.ed.text).toBe("my draft");
+});
+
+test("the leader let go by the wheel passes it on to what has it: a pane scrolls, not the chat", () => {
+  const t = term("");
+  t.seen = { tall: 20 };
+  t.pane = { title: "Help", make: () => [], w: 0, lines: [], scroll: 0 };
+  Screen.screen_feed(t.scr, "\x18");
+  expect(t.lead).toBe(true);
+  Screen.screen_feed(t.scr, "\x1b[<65;10;5M");
+  expect([t.lead, t.pane.scroll, t.scroll]).toEqual([false, 3, 0]);
 });

@@ -32,7 +32,8 @@ const SET = "set ";
 const ASIDE = 24;
 const GROUP = "Settings";
 
-// Ctrl+P: the palette; the user's commands and skills read anew
+// Ctrl+P: the palette (Ctrl+P again closes it); the user's commands and
+// skills read anew
 export function term_palette(t: Term): void {
   const all   = term_groups(true).flatMap(([group, cmds]) => cmds.filter(([use, keys]) => use !== "" || !PRESSED.has(keys)).map((cmd) => [group, cmd] as const));
   const cmds  = all.map(([, cmd]) => cmd);
@@ -67,7 +68,7 @@ export function term_palette(t: Term): void {
     return s !== null ? setting_foot(s) : palette_needs(cmds[k][0]) ? "Enter type it in" : "Enter run";
   };
   const right = aside();
-  term_chooser(t, "Commands", names, about, -1, pick, { find: true, keys: press, foot, hay: names.map((name, k) => name + "  " + whole[k] + "  " + right[k]), used: (k) => picked[names[k]] ?? 0, aside: right, heads: [...all.map(([group]) => group), ...keys.map(() => GROUP)] });
+  term_chooser(t, "Commands", names, about, -1, pick, { find: true, keys: press, foot, hay: names.map((name, k) => name + "  " + whole[k] + "  " + right[k]), used: (k) => picked[names[k]] ?? 0, aside: right, key: "Ctrl+P", heads: [...all.map(([group]) => group), ...keys.map(() => GROUP)] });
 }
 
 // a command chosen: one that needs words, in the input to finish (the

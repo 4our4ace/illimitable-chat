@@ -6,7 +6,8 @@
 // chat laid out whole shows there; scrolled up, the lines read stay in
 // place as more come, and text chosen stays on its lines as more are
 // laid out over them; a block asked for shows at the top. The palette
-// opened, searched and closed lays out none of the chat again.
+// opened, searched and closed lays out none of the chat again; while it
+// is open, the wheel and the pages leave the chat where it was.
 
 import { expect, test } from "bun:test";
 import { term_paint } from "../src/term/Frame.ts";
@@ -39,7 +40,7 @@ function term(v: View.View): any {
     v, chat: null, ended: false, pending: 0, due: true, settle: undefined, imgs: new Map(), quit: 0, esc: 0, notices: [], expire: undefined,
     scroll: 0, seen: { total: 0, marks: [], row: 0, first: 0, tall: 1, col: 0, end: 0 }, ver: 0, body: null, find: null, pane: null, agents: [],
     choose: null, profs: [], hits: [], since: 0, spin: undefined, ruled: null, doing: null, subs: new Map(), side: { place: "off", width: "" }, status: status_new(),
-    todo: false, login: null, areas: [], sel: null, hover: undefined, drift: undefined, sug: null, dropped: "", asking: null,
+    todo: false, login: null, areas: [], sel: null, hover: undefined, drift: undefined, sug: null, dropped: "", asking: null, box: null,
   };
   t.scr = { tty: true, kitty: false, ed: Screen.ed_new(), rest: "", shown: [], click: { row: 0, col: 0 }, clicks: 0, pressed: 0, point: { row: 0, col: 0 }, typed: false, grab: null, on: () => {}, left: true };
   return t;
@@ -125,4 +126,23 @@ test("the palette opened, searched and closed lays out none of the chat again: a
   expect(t.body).toBe(body);
   expect(t.body.from).toBe(from);
   expect(shown.join("\n")).toContain("Answer 2003");
+});
+
+test("with the palette open, the wheel and the pages move in it, the chat where it was", () => {
+  const t = term(chat(400));
+  paint(t);
+  term_press(t, "PgUp");
+  const { shown } = paint(t);
+  const [scroll, body, from] = [t.scroll, t.body, t.body.from];
+  term_palette(t);
+  paint(t);
+  for (const key of ["WheelUp", "WheelDown", "PgUp", "PgDn", "Ctrl+Home", "Ctrl+End"]) {
+    if (!term_grab(t, key)) {
+      term_press(t, key);
+    }
+    paint(t);
+  }
+  expect([t.choose.title, t.scroll, t.body, t.body.from]).toEqual(["Commands", scroll, body, from]);
+  term_grab(t, "Esc");
+  expect(paint(t).shown).toEqual(shown);
 });

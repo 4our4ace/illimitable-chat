@@ -11,7 +11,11 @@
 // never cut (what an option is is, with an ellipsis); on a screen too
 // narrow for it, it wraps under itself. A search keeps the box's place
 // and size; a value stepped wider grows it, never shrinks it, till a new
-// size. A question's answers always show, its long lead cut.
+// size. A question's answers always show, its long lead cut. The wheel
+// scrolls a long list (a third of what shows, three at most), stopping at
+// its ends, the option brought under the pointer lit, or off the list
+// the lit one held in view; a list shown whole never moves, nor the chat.
+// A lead cut scrolls by the wheel and the pages, the answers staying.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -22,6 +26,7 @@ process.env.ILLI_DIR = DIR;
 
 const { term_chooser } = await import("./Commands.ts");
 const { term_paint } = await import("./Frame.ts");
+const { term_grab } = await import("./Keys.ts");
 const { popup_size } = await import("./Popup.ts");
 const Paint = await import("../ui/Paint.ts");
 const Screen = await import("../ui/Screen.ts");
@@ -174,5 +179,51 @@ test("a question takes all but two rows at most: its answers show whole, a long 
     expect(rows.slice(-3).map((r: string) => r.trim())).toEqual(["› Yes", "No", "No, and say why"]);
     expect(rows[0].trim()).toBe("line 0 of a long command");
     expect(rows.at(-4).trim()).toBe("line 16 of a long command…");
+  });
+});
+
+test("the wheel scrolls a long list three entries a turn, stopping at its ends, the option brought under the pointer lit; off the list, the lit one held in view; a list shown whole never moves, nor the chat", () => {
+  sized(100, 24, () => {
+    const t = term();
+    term_chooser(t, "List", Array.from({ length: 40 }, (_, k) => "o" + k), Array(40).fill(""), -1, () => {});
+    term_paint(t);
+    expect([t.box.lines, t.box.tall]).toEqual([12, 12]);
+    t.scr.point = { row: t.box.row + t.box.list + 2, col: t.box.col + 5 };
+    const turn = (key: string) => {
+      term_grab(t, key);
+      term_paint(t);
+      return [t.choose.top, t.choose.at];
+    };
+    expect([turn("WheelDown"), turn("WheelUp"), turn("WheelUp")]).toEqual([[3, 5], [0, 2], [0, 2]]);
+    t.scr.point = { row: 0, col: 0 };
+    for (let k = 0; k < 10; k++) {
+      turn("WheelDown");
+    }
+    expect([t.choose.top, t.choose.at, t.scroll]).toEqual([28, 28, 0]);
+    expect(inside(t, 100)[0].trim()).toBe("› o28");
+    const u = term();
+    term_chooser(u, "List", ["a", "b", "c"], ["", "", ""], -1, () => {});
+    term_paint(u);
+    u.scr.point = { row: u.box.row + u.box.list + 2, col: u.box.col + 5 };
+    term_grab(u, "WheelDown");
+    expect([u.choose.top, u.choose.at]).toEqual([0, 0]);
+  });
+});
+
+test("a question's lead cut scrolls by the wheel and the pages, its answers staying", () => {
+  sized(100, 24, () => {
+    const t = term();
+    const lead = Array.from({ length: 40 }, (_, k) => [Paint.Run("line " + k + " of a long command")]);
+    term_chooser(t, "Allow Bash?", ["Yes", "No", "No, and say why"], ["", "", ""], -1, () => {}, { lead, stays: true });
+    term_paint(t);
+    term_grab(t, "WheelDown");
+    term_paint(t);
+    expect(inside(t, 100)[0].trim()).toBe("line 3 of a long command");
+    term_grab(t, "PgDn");
+    term_grab(t, "PgDn");
+    term_paint(t);
+    const rows = inside(t, 100);
+    expect([rows[0].trim(), rows.at(-4).trim(), t.choose.at]).toEqual(["line 23 of a long command", "line 39 of a long command", 0]);
+    expect(rows.slice(-3).map((r: string) => r.trim())).toEqual(["› Yes", "No", "No, and say why"]);
   });
 });
