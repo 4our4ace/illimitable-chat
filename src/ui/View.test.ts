@@ -92,7 +92,7 @@ test("each run of work is one line saying what was done", () => {
 // the thought follows, so one opens alone and keeps its key as its first
 // call comes; in verbose mode a toggle shuts that one run, and Ctrl+O
 // forgets the runs toggled by hand
-test("each run of work has its own key, a thought-led one too; verbose mode shuts the run toggled, Ctrl+O forgets them", () => {
+test("each run of work has its own key, a thought-led one too; verbose mode shuts the run toggled, Ctrl+O forgets them and the messages folded", () => {
   const v = View.view_new();
   for (const [id, kind, text] of [[1, "user", "a"], [2, "tool", 'shell {"command":"ls"}'], [3, "illi", "done"], [4, "user", "b"], [5, "tool", 'shell {"command":"pwd"}'], [6, "illi", "here"]] as const) {
     View.view_hear(v, { $: "entry", id, kind, text, at: id } as any);
@@ -109,8 +109,9 @@ test("each run of work has its own key, a thought-led one too; verbose mode shut
   expect(keys()).toEqual([[-3, true], [-6, true]]);
   View.view_toggle(v, -3);
   expect(keys()).toEqual([[-3, false], [-6, true]]);
+  v.folds.add("#5");
   View.view_verbose(v);
-  expect([v.verbose, v.acts.size, keys()]).toEqual([false, 0, [[-3, false], [-6, false]]]);
+  expect([v.verbose, v.acts.size, v.folds.size, keys()]).toEqual([false, 0, 0, [[-3, false], [-6, false]]]);
 });
 
 // a recap (/compact): a line across the chat, "Compaction", closed or

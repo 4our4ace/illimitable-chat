@@ -26,7 +26,7 @@ Chat
 | `/close #id` | close block #id and keep it closed (or click anywhere in its frame) |
 | `/fold`, Ctrl+F | fold the chat into the fewest blocks; again: unfold |
 | Ctrl+Y | copy illi's last reply (a drag copies the text it covers, a double click a word) |
-| Ctrl+O | show or hide the work between replies: tools, thinking, agents' reports, and the recaps under the "Compaction" lines (hidden, a click opens one alone; shown, a click closes one alone; Ctrl+O forgets those clicks) |
+| Ctrl+O | show or hide the work between replies: tools, thinking, agents' reports, and the recaps under the "Compaction" lines (hidden, a click opens one alone; shown, a click closes one alone; Ctrl+O forgets those clicks, and unfolds what a click folded) |
 | `/export` | save this project's memory as ./illi-memory.json |
 | `/tree` | save this project's whole memory tree as ./illi-tree.html |
 | Ctrl+L | draw the screen again |
