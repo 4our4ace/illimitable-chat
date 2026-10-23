@@ -9,7 +9,7 @@
 // a report sit in a frame; illi's answer, its thinking and a note are bare.
 // A call is named by its tool, a report or note by WHO; thinking
 // is unnamed, told by its faint italic. Every tool
-// is in ink, its emoji telling it at a glance (TOOL); a diff's lines are
+// is in ink, its name in bold (a theme may mark one: TOOL); a diff's lines are
 // green and red. Text is in the terminal's own palette (ANSI), so it
 // fits any theme, light or dark; the fill is the terminal's background a
 // little lighter (a dark one) or darker (a light one), once the terminal
@@ -122,20 +122,9 @@ export const KIND: Record<Kind, Look> = {
 export const FILLED: Kind[] = ["tool"];
 export const FRAMED: Kind[] = ["user", "work"];
 
-// each tool's emoji, in both views; any other's is TOOL_ANY
-export const TOOL: Record<string, string> = {
-  zoom     : "🔍",
-  date     : "📅",
-  shell    : "⌨️",
-  read     : "📖",
-  write    : "📄",
-  edit     : "📝",
-  spawn    : "🤖",
-  tell     : "💬",
-  todo     : "📋",
-  ...OWN.tool,
-};
-export const TOOL_ANY = "🔧";
+// a mark before a tool's name, by tool, as the theme sets it (none of
+// its own: a call reads by its name)
+export const TOOL: Record<string, string> = { ...OWN.tool };
 
 export const GLYPH = {
   tab     : "◯",  // a chat's tab
@@ -218,8 +207,9 @@ const PLUGGED: { tokens: Partial<Record<Token, string>>; colors: Record<string, 
 let changes = 0;
 let accent  = config.ACCENT;
 
+// the mark before a tool's name ("": none)
 export function tool_glyph(name: string): string {
-  return TOOL[name] ?? TOOL_ANY;
+  return TOOL[name] ?? "";
 }
 
 // each token as asked now: the theme file's, a plugin's over them, the
@@ -277,7 +267,7 @@ function theme_read(): Own {
 }
 
 // a theme's entries that will do: colors a palette index ("0"-"255") or
-// #rrggbb ("": the terminal's own, for ANSI's), glyphs and tools' emoji
+// #rrggbb ("": the terminal's own, for ANSI's), glyphs and tools' marks
 // text without control characters (an imported profile's theme could
 // otherwise send the terminal escapes), tokens as theme_token takes them
 // (`accent` alone the accent's, under `tokens` its own); any other left
