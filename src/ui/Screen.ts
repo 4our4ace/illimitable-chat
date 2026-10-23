@@ -10,10 +10,12 @@
 // cooked line at 1024 bytes) as one stream, into one buffer (Bun's own
 // reader takes half a megabyte a read); a paste comes bracketed and
 // is typed whole. Kitty's keys at flag 1 only, so dead keys still
-// compose. The mouse reports its wheel, its left button pressed (counted:
-// a double click, a triple), dragged and let go, and each move (SGR), for
-// Term.ts to choose text and light buttons; Shift and a drag still select
-// as the terminal's own. The terminal is asked its
+// compose. The mouse reports its wheel (where it turned too), its left
+// button pressed (counted: a double click, a triple), dragged and let go,
+// and each move (SGR), for Term.ts to choose text and light buttons;
+// Shift and a drag still select as the terminal's own. The terminal tells
+// as its window gains and loses the focus, so a press that only focuses
+// it is marked (focusing): no key, no paint. The terminal is asked its
 // background (OSC 11), which diagrams draw over (Draw.ts); its answer
 // comes as input, and is never typed. The input (Ed) draws as rows
 // starting `> ` and takes its editing keys (ed_key, EDITING) here; Up and
@@ -97,7 +99,9 @@ export type Match = { k: number; at: number[]; hay?: true };
 // rest of it (screen_alone), the rows as last
 // written ([]: none, the screen to clear), where the left button was last
 // pressed, how many times there in a row (2: a double click, 3: a triple)
-// and when, where the pointer is; whether the input was typed in since
+// and when, where the pointer is; whether the window lost the focus (not
+// told it's back), when it last gained it (ms; none: never told), whether
+// the last press only focused it; whether the input was typed in since
 // Term.ts last looked; what takes keys first (true: it took the key),
 // where keys go, what takes text typed first (true: it took it; none:
 // the input), what takes a paste (none: typed); the terminal's
@@ -107,32 +111,35 @@ export type Match = { k: number; at: number[]; hay?: true };
 // the pieces of the rows as last written; in a window, its end of it, and
 // whether hidden (it paints nothing)
 export type Screen = {
-  tty    : boolean;
-  kitty  : boolean;
-  ed     : Ed;
-  rest   : string;
-  alone? : ReturnType<typeof setTimeout>;
-  shown  : string[];
-  click  : Spot;
-  clicks : number;
-  pressed: number;
-  point  : Spot;
-  typed  : boolean;
-  grab   : ((key: string) => boolean) | null;
-  on     : (key: string) => void;
-  type?  : (text: string) => boolean;
-  paste? : (text: string) => void;
-  canvas?: string;
-  asked? : boolean;
-  left?  : boolean;
-  blink? : boolean;
-  styled?: string;
-  at?    : Spot | null;
-  drawn? : Piece[][];
-  title? : string;
-  titled?: boolean;
-  win?   : Windowed;
-  hidden?: boolean;
+  tty      : boolean;
+  kitty    : boolean;
+  ed       : Ed;
+  rest     : string;
+  alone?   : ReturnType<typeof setTimeout>;
+  shown    : string[];
+  click    : Spot;
+  clicks   : number;
+  pressed  : number;
+  point    : Spot;
+  away?    : boolean;
+  gained?  : number;
+  focusing?: boolean;
+  typed    : boolean;
+  grab     : ((key: string) => boolean) | null;
+  on       : (key: string) => void;
+  type?    : (text: string) => boolean;
+  paste?   : (text: string) => void;
+  canvas?  : string;
+  asked?   : boolean;
+  left?    : boolean;
+  blink?   : boolean;
+  styled?  : string;
+  at?      : Spot | null;
+  drawn?   : Piece[][];
+  title?   : string;
+  titled?  : boolean;
+  win?     : Windowed;
+  hidden?  : boolean;
 };
 
 // a screen in a window (Member.ts): the wire's nonce; whether it starts
@@ -157,6 +164,13 @@ const LONG_CHARS = 500;
 const TOKEN  = /(\[(?:Pasted text #\d+[^\]\n]*|Image #\d+)\])/g;
 const PASTED = /\[Pasted text #(\d+)[^\]\n]*\]/g;
 
+// the terminal's window gained the focus, lost it (never a key); a press
+// within FOCUS of the focus gained (ms), or while it's lost (the report
+// comes after it), is the click that focused the window
+const FOCUS_IN  = "\x1b[I";
+const FOCUS_OUT = "\x1b[O";
+const FOCUS     = 150;
+
 // the background's answer (OSC 11 ; rgb:r/g/b, ended by BEL or ST) and
 // one cut by a read's end; how long it is awaited (ms): a bare ESC ] then
 // is Alt+]
@@ -177,8 +191,8 @@ const FLAGS = /^\?\d*$/;
 const MOUSE = /^<(\d+);(\d+);(\d+)$/;
 
 // a read that is only the pointer moving, no button down (whatever the
-// modifiers): nothing for Term.ts to paint
-const MOVED = /^(?:\x1b\[<(?:35|39|43|47|51|55|59|63);\d+;\d+M)+$/;
+// modifiers), or the focus told: nothing for Term.ts to paint
+const MOVED = /^(?:\x1b\[<(?:35|39|43|47|51|55|59|63);\d+;\d+M|\x1b\[[IO])+$/;
 
 // key names by code (a byte, kitty's), by a sequence's final, or by its
 // number and `~`; any other code is its character, byte Ctrl+letter
@@ -679,6 +693,10 @@ function screen_key(scr: Screen, data: string): number {
     screen_mouse(scr, seq[1], seq[2] === "M");
     return seq[0].length;
   }
+  if (seq?.[0] === FOCUS_IN || seq?.[0] === FOCUS_OUT) {
+    screen_focus(scr, seq[0] === FOCUS_IN);
+    return seq[0].length;
+  }
   if (seq !== null) {
     const key = seq_name(seq[1] ?? "", seq[2]);
     if (seq[2] === "u" && key === KEYPAD[Number((seq[1] ?? "").split(/[;:]/)[0])]) {
@@ -724,10 +742,12 @@ function screen_press(scr: Screen, key: string): void {
 }
 
 // a mouse report (its params, whether pressed): the wheel as WheelUp or
-// WheelDown (turned sideways: nothing); the left button as Press (where: scr.click, how many times
-// there: scr.clicks), Drag and Release, the pointer moving with none
-// down as Move, the right button as RightPress, RightDrag and
-// RightRelease (each where: scr.point); the middle one does nothing
+// WheelDown (where: scr.point; turned sideways: nothing); the left button
+// as Press (where: scr.click, how many times there: scr.clicks, whether
+// it only focused the window: scr.focusing), Drag and Release, the
+// pointer moving with none down as Move, the right button as RightPress,
+// RightDrag and RightRelease (each where: scr.point); the middle one does
+// nothing
 function screen_mouse(scr: Screen, params: string, down: boolean): void {
   const [, b, col, row] = MOUSE.exec(params)!.map(Number);
   const button = b & ~SHIFT;
@@ -735,6 +755,7 @@ function screen_mouse(scr: Screen, params: string, down: boolean): void {
   const now    = Date.now();
   if (button & WHEEL) {
     if (!(button & SIDEWAYS)) {
+      scr.point = at;
       screen_press(scr, button & DOWN ? "WheelDown" : "WheelUp");
     }
   } else if (button === DRAG || button === (DRAG | NONE)) {
@@ -746,11 +767,21 @@ function screen_mouse(scr: Screen, params: string, down: boolean): void {
   } else if (button === 0 && down) {
     const again = now - scr.pressed < TWICE && at.row === scr.click.row && at.col === scr.click.col;
     scr.clicks  = again ? (scr.clicks % 3) + 1 : 1;
+    scr.focusing = scr.away === true || now - (scr.gained ?? -Infinity) < FOCUS;
     [scr.click, scr.point, scr.pressed] = [at, at, now];
     scr.on("Press");
   } else if (button === 0) {
     scr.point = at;
     scr.on("Release");
+  }
+}
+
+// the terminal's window gained the focus (in), or lost it: kept, never
+// a key
+function screen_focus(scr: Screen, on: boolean): void {
+  scr.away = !on;
+  if (on) {
+    scr.gained = Date.now();
   }
 }
 
