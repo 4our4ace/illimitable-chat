@@ -12,7 +12,7 @@ Chat
 | Enter | send |
 | Esc | close a list; else clear the notes, and twice: interrupt illi (a `/compact` under way too; agents go on) |
 | Ctrl+C | clear the input; on an empty one, interrupt illi (again: quit) |
-| Ctrl+D | clear the input; on an empty one, quit |
+| Ctrl+D | clear the input; on an empty one, quit (while background jobs run or subagents are at work, it says what a quit stops: again to quit) |
 | Tab | take the suggested reply (it stays after a message of your own, to send as well, till illi answers) |
 | Ctrl+P | all commands and settings in one list, typed to search |
 | Ctrl+X | the leader: the screen greys, and the next key runs its shortcut ([below](#shortcuts)) |
@@ -63,6 +63,7 @@ Agents
 | Ctrl+PgDn, Ctrl+PgUp | the next tab, the one before: the chat's, each subagent's at work |
 | `/tab [name]` | go to that agent's tab; no name: lists the tabs |
 | `/stop [name]` | stop all work, agents too; a name: only that agent |
+| `/background` | the background jobs: what a shell call left running (a dev server, a watcher); Enter or Del stops one ([below](#background-jobs)) |
 
 Setup
 -----
@@ -185,6 +186,26 @@ The first time illi starts in a folder, it asks full screen whether you
 trust it: Up, Down and Tab move between No and Yes, Enter takes the lit
 one, `y` and `n` pick one, Esc (or Ctrl+C) exits.
 
+Background jobs
+---------------
+
+A shell call that starts a process in the background, its output going
+to a file (`npm run dev > dev.log 2>&1 &`), ends while that process
+runs on: a background job. Whoever started it, illi or a subagent, it
+shows in the side panel's Background section (a click opens
+`/background`); without the side panel, or with it too full, the bottom
+line counts them (`● 2 in background`, a click opens `/background`).
+`/background` lists each one, who started it and how long it has run:
+Enter or Del stops it.
+
+They live only while illi does. A quit stops them, so Ctrl+D (or a
+second Ctrl+C) first says how many it stops, and so does a profile
+switch, which asks before it goes; illi is told they were stopped, so
+it starts them again if it needs them. A process that left its group
+(`setsid`, a daemon) isn't listed but is stopped at the quit all the
+same. On the `claude-code` provider, Claude Code runs the shell, so its
+background jobs don't show here.
+
 Mouse and side panel
 --------------------
 
@@ -197,11 +218,16 @@ Mouse and side panel
   within 5 seconds takes the quote out again.
 - The wheel scrolls the chat or a pane.
 - From 100 columns on, a side panel shows the primary agents (a click
-  makes one the main agent), the subagents at work, the sticky skills on
+  makes one the main agent), the subagents at work, the background jobs
+  (a click opens `/background`), the sticky skills on
   (a click turns one off), the profiles once you have two (a click
   switches), a ChatGPT plan's use, the context and the memory, the MCP
   servers (a click opens `/mcp`), the latest requests refused (a click
   opens `/permissions` on one) and illi's to-do list, gone once every
   item is done. The `side` and `side_width` settings place it.
 - The bottom line ends with the mode (a click opens `/mode`):
-  `read-only` in the warning color, `yolo` in the error color.
+  `read-only` in the warning color, `yolo` in the error color. Before
+  it, the background jobs are counted when the side panel doesn't show
+  them.
+- The terminal's title says `∞ illi · <project>`, a spinner in the ∞'s
+  place while illi works; the `title` setting turns it off.

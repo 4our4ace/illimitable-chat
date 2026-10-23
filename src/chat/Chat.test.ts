@@ -45,6 +45,7 @@ const { Pick } = await import("../ai/Pick.ts");
 const config = await import("../config/Config.ts");
 const View = await import("../ui/View.ts");
 const { Tools } = await import("../tools/Tools.ts");
+const { Machine } = await import("../tools/Machine.ts");
 
 // the model: answers `reply` to a call that sees the user's message, after
 // `hold` resolves
@@ -634,6 +635,27 @@ test("what the plugins and hooks tell every call of the run comes after where il
   }
   const at = blocks.findIndex((b) => b.text.startsWith("Working dir: "));
   expect(blocks[at + 1]).toEqual({ text: "From your hooks:\nOn branch main.\n\n", mark: false });
+});
+
+test("background jobs over the pipe: a shell call's in every view's state, its caller named, and in what illi's calls start with; a view's stop ends it; as illi quits, those left are noted", async () => {
+  const v = View.view_new();
+  View.link_open(v, Chat.link(chat, (msg) => View.view_hear(v, msg).forEach((out) => View.link_send(v, out))));
+  await until(() => v.up);
+  expect(v.background).toEqual([]);
+  const live = new AbortController().signal;
+  const out = await Tools.call(chat.tools, "main", "shell", { command: "sleep 30 > /dev/null 2>&1 & echo $!" }, live);
+  const pid = Number(out.text.split("\n")[0]);
+  await until(() => v.background.length === 1);
+  expect(v.background[0]).toMatchObject({ command: "sleep 30 > /dev/null 2>&1 & echo $!", agent: "illi" });
+  expect(Tools.at_work(chat.tools).text).toContain("Background jobs now (what shell calls left running): \n- sleep 30 > /dev/null 2>&1 & echo $! (illi's, running 1 min)");
+  View.link_send(v, { $: "background", stop: v.background[0].id });
+  await until(() => v.background.length === 0 && !Machine.alive(pid));
+  expect(Tools.at_work(chat.tools).text).toContain("Background jobs now (what shell calls left running): none.");
+  await Machine.shell(chat.tools.cwd, "sleep 30 > /dev/null 2>&1 &", live, "reviewer");
+  Chat.leaving(chat);
+  expect(Memory.message(chat.mem, chat.mem.count - 1)).toMatchObject({ kind: "note", text: "illi quit, stopping its background jobs: sleep 30 > /dev/null 2>&1 & (reviewer's)." });
+  Machine.end();
+  v.ws!.close();
 });
 
 test("the suggested reply stays as the chat closes, so the next start shows it (a screen that asks for none, none); let go, saved so", async () => {

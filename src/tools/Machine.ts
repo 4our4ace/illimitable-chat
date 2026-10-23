@@ -2,8 +2,12 @@
 // =======
 // The tools that touch this computer: shell, read, write, edit (TOOLS),
 // run as Jobs (Tools.ts), each in its agent's working dir. A stop kills
-// the job's shell and its process group. As illi quits, end() kills every
-// shell's group (SHELLS), and any process marked ILLI_RUN that left it.
+// the job's shell and its process group. A shell call that ends leaving
+// a process running in its group (`npm run dev > dev.log 2>&1 &`) is a
+// background job: listed (Machine.background, State), stopped one by one
+// (Machine.stop), each change told (Machine.watch). As illi quits, end()
+// kills every shell's group (SHELLS), and any process marked ILLI_RUN
+// that left it.
 // A file changed (write over one, edit) answers as a unified diff (Diff),
 // which the view draws as one (Md.ts). Config.ts took the API keys out of
 // the environment the shells inherit. No read, write or edit reaches into
@@ -17,12 +21,18 @@ import type { Out } from "../ai/Agent.ts";
 import { CAP, clip, clip_end } from "./Clip.ts";
 import * as config from "../config/Config.ts";
 import { profile_chat } from "../config/Profiles.ts";
+import type { Background } from "../ui/View.ts";
 
 // Types
 // =====
 
-// a tool call to run here: its tool, its input, its agent's working dir
-export type Job = { name: string; input: any; cwd: string };
+// a tool call to run here: its tool, its input, its agent's working dir,
+// who calls it (illi, or a subagent's name; none: illi)
+export type Job = { name: string; input: any; cwd: string; agent?: string };
+
+// a shell started here: the background job it left once it ended (null:
+// it still runs, or left none), whether that job is being stopped
+type Shell = { job: Background | null; stopping: boolean };
 
 // a tool as the vendors see it: its name, what it does, its input's
 // JSON Schema
@@ -51,8 +61,17 @@ const UID = String(process.getuid?.() ?? "");
 const PS  = process.platform === "darwin" ? ["ps", "-wwE", "-U", UID, "-o", "pid=,command="] : ["ps", "-wwe", "-u", UID, "-o", "pid=,args=", "e"];
 
 // the shells started here, kept until their process groups are empty, so
-// end() kills a backgrounded job whose shell already exited
-const SHELLS = new Set<Bun.Subprocess>();
+// end() kills a backgrounded job whose shell already exited; the last
+// background job's number; how often the jobs are looked at while any
+// run, and the wait between asking a stopped one to end and killing it
+// (ms); the clock looking, what a change of them calls
+const SHELLS = new Map<Bun.Subprocess, Shell>();
+let NUMBER = 0;
+const LOOK  = 2000;
+const GRACE = 2000;
+let LOOKING: ReturnType<typeof setInterval> | null = null;
+let WATCH = () => {};
+let SEEN = "[]";
 
 // the lines kept around each change in a diff
 const CONTEXT = 3;
@@ -66,7 +85,7 @@ export const INT = { type: "integer" };
 const EDIT = { type: "object", properties: { path: STR, old: STR, new: STR, all: { type: "boolean" } }, required: ["path", "old", "new"] };
 
 export const TOOLS: Spec[] = [
-  spec("shell", "Run a command with bash (bash -c), stdout and stderr together, and return its output, then its exit code and time, as (exit 0 in 0.4 s); output past " + CAP + " characters keeps its head and tail. Each call is a new shell. The call waits until the command and everything holding its output end, so give background jobs their own output file. Background jobs live only while illi is open: quitting it kills every process the calls started.", { command: STR }, ["command"]),
+  spec("shell", "Run a command with bash (bash -c), stdout and stderr together, and return its output, then its exit code and time, as (exit 0 in 0.4 s); output past " + CAP + " characters keeps its head and tail. Each call is a new shell. The call waits until the command and everything holding its output end, so give a background job its own output file (cmd > file.log 2>&1 &). A background job shows to the user, who may stop it, and lives only while illi is open: quitting it kills every process the calls started.", { command: STR }, ["command"]),
   spec("read", "Read a text file. offset: the first line to show (from 1); limit: how many lines; at: the character of the first line to start from. It ends saying the lines shown, as [lines 4-7 of 15]; output past " + CAP + " characters comes in pages, saying where to go on.", { path: STR, offset: INT, limit: INT, at: INT }, ["path"]),
   spec("write", "Write a whole file, making its directories. Answers a unified diff of what changed (a new file: all its lines added).", { path: STR, content: STR }, ["path", "content"]),
   spec("edit", "Replace text in files: the edits in order, each on its file as the edits before it left it. old must match exactly, whitespace included, and only once, unless all is true, which replaces every match. If any edit fails, no file is changed. Answers a unified diff of each file.", { edits: { type: "array", items: EDIT, minItems: 1 } }, ["edits"]),
@@ -100,7 +119,7 @@ export namespace Machine {
       fs.mkdirSync(cwd, { recursive: true });
       switch (job.name) {
         case "shell": {
-          return await Machine.shell(cwd, String(input.command), signal);
+          return await Machine.shell(cwd, String(input.command), signal, job.agent);
         }
         case "read": {
           return Machine.read(file, Number(input.offset ?? 1), Number(input.limit ?? Infinity), Number(input.at ?? 0));
@@ -124,9 +143,10 @@ export namespace Machine {
   // marked ILLI_RUN, its output decoded as one stream (a char split over
   // reads stays whole; a broken one at its end shows) and cut as it
   // comes. A stop kills the group and ends the wait at once, whatever
-  // still holds its output
-  export async function shell(cwd: string, command: string, signal: AbortSignal): Promise<Out> {
-    SHELLS.forEach((p) => Machine.group(p) || SHELLS.delete(p));
+  // still holds its output. One that ends leaving a process in its group
+  // (not stopped) is a background job of whoever called it
+  export async function shell(cwd: string, command: string, signal: AbortSignal, agent = "illi"): Promise<Out> {
+    Machine.look();
     const start = performance.now();
     const proc = Bun.spawn([SHELL, "-c", "exec 2>&1\n" + command], {
       cwd      : cwd,
@@ -137,7 +157,8 @@ export namespace Machine {
       detached : true,
     });
     const out = clip();
-    SHELLS.add(proc);
+    const shell: Shell = { job: null, stopping: false };
+    SHELLS.set(proc, shell);
     const reader = proc.stdout.pipeThrough(new TextDecoderStream()).getReader();
     const kill = () => {
       Machine.kill(-proc.pid);
@@ -151,6 +172,12 @@ export namespace Machine {
     } catch {}
     signal.removeEventListener("abort", kill);
     const code = await proc.exited;
+    if (Machine.group(proc) && signal.aborted) {
+      kill();
+    } else if (Machine.group(proc)) {
+      shell.job = { id: ++NUMBER, command: command.replace(/\s+/g, " ").replace(/[\x00-\x1f\x7f-\x9f]/g, "").trim(), agent, since: Date.now() };
+      Machine.look();
+    }
     const time = ((performance.now() - start) / 1000).toFixed(1) + " s";
     const exit = signal.aborted ? "stopped" : proc.signalCode ? "killed by " + proc.signalCode : "exit " + code;
     const text = out.text().replace(/\n$/, "");
@@ -175,17 +202,67 @@ export namespace Machine {
     }
   }
 
-  export function kill(pid: number): void {
+  export function kill(pid: number, sig: NodeJS.Signals = "SIGKILL"): void {
     try {
-      process.kill(pid, "SIGKILL");
+      process.kill(pid, sig);
     } catch {}
+  }
+
+  // the background jobs running, oldest first (but those being stopped)
+  export function background(): Background[] {
+    return [...SHELLS].flatMap(([proc, s]) => (s.job !== null && !s.stopping && Machine.group(proc) ? [s.job] : []));
+  }
+
+  // what a change of the background jobs calls (the chat: its state to
+  // the views)
+  export function watch(fn: () => void): void {
+    WATCH = fn;
+  }
+
+  // a background job stopped: its group asked to end, killed GRACE after
+  // if it still holds one (each only while Machine.group says it is its
+  // own, so a reused id is never hit); false: no such job running
+  export function stop(id: number): boolean {
+    const found = [...SHELLS].find(([, s]) => s.job?.id === id && !s.stopping);
+    if (found === undefined) {
+      return false;
+    }
+    const [proc, s] = found;
+    if (!Machine.group(proc)) {
+      Machine.look();
+      return false;
+    }
+    s.stopping = true;
+    Machine.kill(-proc.pid, "SIGTERM");
+    setTimeout(() => Machine.group(proc) && Machine.kill(-proc.pid), GRACE).unref();
+    Machine.look();
+    return true;
+  }
+
+  // the shells whose groups are empty let go; the jobs, if changed since,
+  // told (WATCH); the clock looking again in LOOK while any job is left
+  export function look(): void {
+    SHELLS.forEach((_, proc) => Machine.group(proc) || SHELLS.delete(proc));
+    const now = JSON.stringify(Machine.background().map((j) => j.id));
+    if (now !== SEEN) {
+      SEEN = now;
+      WATCH();
+    }
+    const any = [...SHELLS.values()].some((s) => s.job !== null);
+    if (any && LOOKING === null) {
+      LOOKING = setInterval(() => Machine.look(), LOOK);
+      LOOKING.unref();
+    } else if (!any && LOOKING !== null) {
+      clearInterval(LOOKING);
+      LOOKING = null;
+    }
   }
 
   // as this illi quits: kills every shell's process group (a job still in
   // it dies), then any process that left its group (ILLI_RUN), so none is
   // left orphaned
   export function end(): void {
-    for (const proc of SHELLS) {
+    for (const proc of SHELLS.keys()) {
       if (Machine.group(proc)) {
         Machine.kill(-proc.pid);
       }

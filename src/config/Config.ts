@@ -83,6 +83,7 @@ const TABLE = {
   suggest    : { def: "on", values: ["on", "off"], now: true, what: "suggested replies (Tab)", shape: ON_OFF },
   tps        : { def: "on", values: ["on", "off"], now: true, what: "tokens a second while text streams", shape: ON_OFF },
   statusline : { def: "", values: "text", now: true, what: "a command drawing lines at the foot", none: "none" },
+  title      : { def: "on", values: ["on", "off"], now: true, what: "the terminal's title: ∞ illi · project", shape: ON_OFF },
   side       : { def: "right", values: ["right", "left", "off"], now: true, what: "where the side panel shows", shape: [/^(right|left|off)$/, "right, left or off"] },
   side_width : { def: "25%", values: ["20%", "25%", "30%", "35%", "40%"], now: true, what: "the side panel's width", shape: [/^\d+(\.\d+)?%?$/, "columns (40) or a share of the screen (30%)"] },
   accent     : { def: "auto", values: ACCENTS, now: true, what: "the color everything is themed in", shape: [new RegExp("^(" + ACCENTS.join("|") + "|#[0-9a-f]{6}|25[0-5]|2[0-4]\\d|1?\\d?\\d)$", "i"), "auto, illi (its aqua), a color's name (" + ACCENTS.slice(2).join(", ") + "), a palette index (0-255) or #rrggbb"] },
@@ -183,6 +184,10 @@ export let SUGGEST    = true;
 // the models' speed on the line over the input while text streams
 // (tok/s, Frame.ts): on, unless off (or false, 0)
 export let TPS        = true;
+
+// the terminal's title (Frame.ts term_title): on, unless off (or false,
+// 0)
+export let TITLE      = true;
 
 // the status line (Status.ts): a shell command of the user's drawing rows
 // at the screen's foot, the spaces before each, how often it runs again
@@ -400,6 +405,7 @@ function config_live(): void {
   STICKY      = [...new Set(config_list(config_value("sticky").toLowerCase()).filter((name) => name !== ""))];
   SUGGEST     = !OFFS.includes(String(config_value("suggest")).trim().toLowerCase());
   TPS         = !OFFS.includes(String(config_value("tps")).trim().toLowerCase());
+  TITLE       = !OFFS.includes(String(config_value("title")).trim().toLowerCase());
   STATUSLINE  = config_statusline(config_raw("statusline"));
   SIDE        = config_value("side");
   SIDE_WIDTH  = config_value("side_width");

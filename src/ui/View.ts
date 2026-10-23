@@ -73,6 +73,11 @@ export type Use = { plan: Plan | null; fill?: Fill | null };
 // an item of illi's to-do list (Tools.ts todo): what to do, how it stands
 export type Todo = { text: string; status: "pending" | "active" | "done" };
 
+// a background job (Machine.ts): a shell call that ended leaving a
+// process running; its number, the call's command, who called it (illi,
+// or a subagent's name), when it ended (ms)
+export type Background = { id: number; command: string; agent: string; since: number };
+
 // a question the chat asks the user, answered by a view: who asks
 // (illi, an agent), the tool, what it would do: leave to run a call the
 // checks stopped (Tools.guard: why they did; what a "don't ask again"
@@ -124,6 +129,7 @@ export type State = {
   models  : string[];
   use     : Use;
   todo    : Todo[];
+  background: Background[];
   suggest : string;
   asks    : Question[];
   perm    : Perms;
@@ -198,6 +204,7 @@ export type Client =
   | { $: "answer"; ask: string; yes: boolean; always: boolean; said?: string } // a question (State asks, its id) answered; said: a no's reason, or the answer to illi's own
   | { $: "mode"; mode: Mode | null } // the mode for this run (/mode), or back to the setting's
   | { $: "allow"; refused: string } // a refused request (State perm, by its id) allowed for this run, the one who asked told (/permissions)
+  | { $: "background"; stop: number } // a background job (State background, by its id) stopped (/background)
   | { $: "revoke"; grant: string }; // a grant let go, kept or this run's (/permissions)
 
 // an act not answered: with its id, whether it was sent, what its
@@ -328,6 +335,7 @@ export function view_new(): View {
     models    : LABELS,
     use       : { plan: null },
     todo      : [],
+    background: [],
     suggest   : "",
     asks      : [],
     perm      : { mode: "auto", set: "auto", refused: [], grants: [], file: "", broken: "" },

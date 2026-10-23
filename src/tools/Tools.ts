@@ -61,7 +61,7 @@ import PROMPT from "./prompt.txt" with { type: "text" };
 import { EFFORTS, Pick } from "../ai/Pick.ts";
 import { Projects } from "../chat/Projects.ts";
 import { Store } from "../chat/Store.ts";
-import type { Live, Perms, Plan, Query, Question, Refused, State, Todo } from "../ui/View.ts";
+import type { Background, Live, Perms, Plan, Query, Question, Refused, State, Todo } from "../ui/View.ts";
 
 export type { Live };
 
@@ -423,8 +423,10 @@ export namespace Tools {
   export function at_work(tools: Tools): Block {
     const names = Tools.working(tools).map((a) => a.name);
     const list  = Tools.todo(tools);
+    const jobs  = Machine.background();
     const todo  = list.length === 0 ? "" : "\nYour to-do list (todo): " + Tools.todo_said(list) + "\n" + list.map((x) => "- " + x.status + ": " + x.text).join("\n") + "\n";
-    return { text: "Agents at work now: " + (names.length === 0 ? "none." : names.join(", ") + ".") + "\n" + todo + "\n", mark: false };
+    const bg    = jobs.length === 0 ? "none." : "\n" + jobs.map((j) => "- " + j.command + " (" + j.agent + "'s, running " + Math.max(1, Math.round((Date.now() - j.since) / 60000)) + " min)").join("\n");
+    return { text: "Agents at work now: " + (names.length === 0 ? "none." : names.join(", ") + ".") + "\nBackground jobs now (what shell calls left running): " + bg + "\n" + todo + "\n", mark: false };
   }
 
   // the user's rules: theirs for every project (config.RULES, RULES.md in
@@ -627,7 +629,7 @@ export namespace Tools {
         if (name.startsWith("plugin__")) {
           return Plugins.run({ tool: name, input: args, agent: who === MAIN ? null : who, cwd: tools.cwd, signal });
         }
-        return name.startsWith("mcp__") ? Mcp.call(name, args, signal) : Machine.run({ name, input: args, cwd: tools.cwd }, signal);
+        return name.startsWith("mcp__") ? Mcp.call(name, args, signal) : Machine.run({ name, input: args, cwd: tools.cwd, agent: who === MAIN ? "illi" : who }, signal);
       }
     }
   }
@@ -890,8 +892,8 @@ export namespace Tools {
 
   // what the views show of the tools (Chat.state): the plan of the vendor
   // the master is on, its to-do list
-  export function state(tools: Tools, vendor: Vendor): { use: State["use"]; todo: Todo[]; perm: Perms } {
-    return { use: { plan: PLANS[vendor]?.() ?? null }, todo: Tools.todo(tools), perm: Tools.perms(tools) };
+  export function state(tools: Tools, vendor: Vendor): { use: State["use"]; todo: Todo[]; perm: Perms; background: Background[] } {
+    return { use: { plan: PLANS[vendor]?.() ?? null }, todo: Tools.todo(tools), perm: Tools.perms(tools), background: Machine.background() };
   }
 
   // the master's to-do list: as last set, else as the chat's file keeps

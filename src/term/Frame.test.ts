@@ -2,16 +2,20 @@
 // ==========
 // `bun test Frame.test.ts`. A paint comes as the work at hand is done,
 // never in its middle; asked for again within a frame, it waits for the
-// frame's end, all asked for meanwhile in one paint.
+// frame's end, all asked for meanwhile in one paint. The terminal's
+// title names illi and the project, a spinner in the ∞'s place while
+// work runs.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
+import * as path from "node:path";
 
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-frame-");
 process.env.ILLI_DIR = DIR;
 
-const { term_draw, term_paint } = await import("./Frame.ts");
+const { term_draw, term_paint, term_title } = await import("./Frame.ts");
+const { Projects } = await import("../chat/Projects.ts");
 const Screen = await import("../ui/Screen.ts");
 const { status_new } = await import("./Status.ts");
 const View = await import("../ui/View.ts");
@@ -28,11 +32,11 @@ function term(): any {
   };
 }
 
-// what f writes to the terminal
-async function written(f: (out: string[]) => Promise<void>): Promise<string[]> {
+// what f writes to the terminal; the window's titles apart (in titles)
+async function written(f: (out: string[]) => Promise<void>, titles: string[] = []): Promise<string[]> {
   const out: string[] = [];
   const write = process.stdout.write;
-  process.stdout.write = ((s: string) => out.push(s)) as any;
+  process.stdout.write = ((s: string) => (s.startsWith("\x1b]0;") ? titles : out).push(s)) as any;
   try {
     await f(out);
   } finally {
@@ -85,4 +89,28 @@ test("while work runs, a tick writes the ∞'s changed cells alone, the rule who
   expect(cells.length).toBeGreaterThanOrEqual(8);
   expect(cells.every((s) => s.length < 160 && /[⠀-⣿]/.test(s) && !s.includes("─"))).toBe(true);
   expect(t.spin).toBeUndefined();
+});
+
+test("the terminal's title names illi and the project, written as it changes: a spinner in the ∞'s place while work runs, ? while a question waits, ∞ once done; again after a wipe", async () => {
+  const t = term();
+  const top = Projects.place(process.cwd()).path;
+  const osc = (mark: string) => "\x1b]0;" + mark + " illi · " + (top === "" ? "home" : path.basename(top)) + "\x07";
+  const titles: string[] = [];
+  await written(async () => {
+    term_paint(t);
+    term_paint(t);
+    t.v.busy = true;
+    term_paint(t);
+    await Bun.sleep(1100);
+    t.v.asks = [{}];
+    term_title(t);
+    Object.assign(t.v, { busy: false, asks: [] });
+    term_paint(t);
+    Screen.screen_wipe(t.scr);
+    term_paint(t);
+  }, titles);
+  const spun = titles.slice(1, -3);
+  expect([titles[0], ...titles.slice(-3)]).toEqual([osc("∞"), osc("?"), osc("∞"), osc("∞")]);
+  expect(spun.length).toBeGreaterThanOrEqual(2);
+  expect(spun.every((s, k) => /^\x1b\]0;[⠀-⣿] illi · /.test(s) && s !== titles[k])).toBe(true);
 });

@@ -7,10 +7,12 @@
 // the input, the pages, the pick; the picker down over the input and
 // its rules (the cursor in its search if it has one, the input's hidden;
 // the palette's in the screen's middle); all of it grey while the leader
-// waits for its key (Commands.ts term_lead). A pipe gets text.
+// waits for its key (Commands.ts term_lead); the terminal's title. A pipe
+// gets text.
 
+import * as path from "node:path";
 import { term_asks, term_form_lines } from "./Asks.ts";
-import { term_suggest, term_suggested } from "./Commands.ts";
+import { term_background, term_suggest, term_suggested } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import * as Draw from "../ui/Draw.ts";
 import { term_hint } from "./Keys.ts";
@@ -18,9 +20,11 @@ import * as Paint from "../ui/Paint.ts";
 import { term_shown } from "./Notices.ts";
 import { term_mode } from "./PermCommands.ts";
 import { term_profile_pick } from "./ProfileCommands.ts";
+import { DEFAULT } from "../config/Profiles.ts";
+import { Projects } from "../chat/Projects.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_area, term_under } from "./Select.ts";
-import { term_side, term_side_width, term_tokens } from "./Side.ts";
+import { term_side, term_side_drawn, term_side_width, term_tokens } from "./Side.ts";
 import { status_rows } from "./Status.ts";
 import { term_act, type Area, type Item, type Pane, type Sug, type Term } from "./Term.ts";
 import { GLYPH } from "../ui/Theme.ts";
@@ -91,6 +95,16 @@ let traced: { of: Term["ruled"]; head: number; step: number; sec: number } | nul
 
 // the rule's start, before the trace while work runs
 const RULE_HEAD = "── ";
+
+// the terminal's title (term_title): its mark at rest, waiting on the
+// user's answer; while work runs, the side's spinner, a frame each
+// TITLE_STEP (ms: a tab's title changed no faster)
+const TITLE_REST = "∞";
+const TITLE_ASK  = "?";
+const TITLE_STEP = 500;
+
+// the project as the title names it, by the folder illi runs in
+let titled: { cwd: string; name: string } | null = null;
 
 // the input's hint on an agent's tab, the main agent's name after it (in
 // the chat's: the suggested reply, if any)
@@ -166,6 +180,7 @@ export function term_paint(t: Term): void {
     term_print(said.notes.map(View.Cap));
     return;
   }
+  term_title(t);
   t.hits  = [];
   t.areas = [];
   const { w, h } = Screen.screen_size();
@@ -199,11 +214,13 @@ export function term_paint(t: Term): void {
   const shown = term_area(t, view);
   const sw    = side - (left > 0 ? 3 : 2);
   const at    = left > 0 ? 0 : full - side;
-  const sides = side === 0 ? [] : term_side(t, sw, tall);
+  const panel = side === 0 ? null : term_side_drawn(t, sw, tall);
+  const sides = panel?.items ?? [];
+  const jobs  = panel?.background !== true;
   const sided = term_area(t, { key: "side", lines: sides.map((s) => s[0]), first: 0, row: 1, col: left > 0 ? 1 : at + 2, w: sw, tall: sides.length });
   const lit   = { ...Paint.INK, c: Draw.draw_tokens().accent };
   const toast = box !== null ? [] : [...lead, Paint.Run(" ".repeat(Math.max(1, left + cw - Paint.line_width(lead) - Paint.text_width(said.toast)))), Paint.Run(said.toast, lit)];
-  const lines = [...above, toast, term_rule(t, iw, ruled), ...input.lines, ...(paned ? [] : [Paint.rule(iw)]), ...status, Paint.tabs_line(t.v, iw, side === 0)];
+  const lines = [...above, toast, term_rule(t, iw, ruled), ...input.lines, ...(paned ? [] : [Paint.rule(iw)]), ...status, Paint.tabs_line(t.v, iw, side === 0, jobs)];
   const foot  = term_area(t, { key: "foot", lines, first: 0, row: 1 + tall, col: MARGIN, w: iw, tall: lines.length });
   const head  = term_area(t, { key: "head", lines: [term_head(t, full)], first: 0, row: 0, col: 0, w: full, tall: 1 });
   const rows  = ROWS;
@@ -231,7 +248,7 @@ export function term_paint(t: Term): void {
     term_jump(t, rows, tall, left + MARGIN, cw, lit);
   }
   t.hover = t.sel?.held ? undefined : term_under(t, t.scr.point);
-  term_tabs(t, h - 1, side === 0, iw);
+  term_tabs(t, h - 1, side === 0, iw, jobs);
   const cursor = box?.at !== undefined ? { row: top + box.at.row, col: box.col + box.at.col } : input.at === null || over ? null : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
   const drawn  = t.lead ? rows.map((row) => row.map((p) => ({ ...p, line: p.line.map((r) => ({ ...r, s: { ...r.s, d: true, c: "", g: "" } })) }))) : rows;
   t.ruled ={ row: 2 + tall + above.length, w: iw, at: cursor, rows: drawn, side: box === null ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
@@ -292,6 +309,23 @@ function term_working(t: Term, doing: View.Doing, w: number, now: number): Paint
   return [...head, Paint.Run(" · " + said + " ", Paint.DIM), Paint.Run("─".repeat(Math.max(0, w - used)), Paint.DIM)];
 }
 
+// the terminal's title, unless the title setting is off: `∞ illi ·
+// <project>` (its git repo's folder, or home outside any), the profile
+// after it but for the default; while work runs, the ∞ a spinner, and a
+// question waiting on the user, ? (Screen writes it only as it changes)
+export function term_title(t: Term): void {
+  if (!config.TITLE) {
+    return Screen.screen_title(t.scr, null);
+  }
+  const mark  = t.v.asks.length > 0 ? TITLE_ASK : View.view_running(t.v) ? term_spinner(Math.floor((Date.now() - t.since) / TITLE_STEP) * 2 * TRACE) : TITLE_REST;
+  const cwd   = process.cwd();
+  if (titled?.cwd !== cwd) {
+    const top = Projects.place(cwd).path;
+    titled = { cwd, name: top === "" ? "home" : path.basename(top) };
+  }
+  Screen.screen_title(t.scr, mark + " illi · " + titled.name + (config.PROFILE === DEFAULT ? "" : " · " + config.PROFILE));
+}
+
 // the trace's clock: it starts as work does (when kept), stops as it
 // ends; it wakes only when the rule would look different (term_wake)
 function term_spin(t: Term, on: boolean): void {
@@ -329,6 +363,7 @@ function term_tick(t: Term): void {
   if (t.due) {
     return;
   }
+  term_title(t);
   if (r === null || t.doing === null || t.sel !== null || t.lead || t.choose !== null || !View.view_running(t.v)) {
     return term_paint(t);
   }
@@ -735,9 +770,20 @@ function term_suggestions(t: Term, sug: Sug, fw: number, room: number): Item[] {
 
 // the pages' line at screen row `row`, w wide (all of them, or the one
 // shown alone: the side lists them), then the profile's name, if shown,
-// the mode at its end: a click on a page shows it, on the name opens the
-// profiles, on the mode /mode
-function term_tabs(t: Term, row: number, all: boolean, w: number): void {
+// the background jobs' count (jobs: shown) and the mode at its end: a
+// click on a page shows it, on the name opens the profiles, on the count
+// /background, on the mode /mode. The right end's first: a click takes
+// the first hit, and tabs too many for the line run under it
+function term_tabs(t: Term, row: number, all: boolean, w: number, jobs: boolean): void {
+  const mw = Paint.line_width(Paint.tabs_mode(t.v, w));
+  if (mw > 0) {
+    term_hit(t, row, MARGIN + w - mw, MARGIN + w, () => term_mode(t, ""));
+  }
+  const bw = Paint.line_width(Paint.tabs_background(t.v, w, jobs));
+  if (bw > 0) {
+    const end = MARGIN + w - mw - (mw > 0 ? 3 : 0);
+    term_hit(t, row, end - bw, end, () => term_background(t));
+  }
   let col = MARGIN;
   for (const tab of View.view_tabs(t.v).filter((tab) => all || tab.here)) {
     const tw = Paint.text_width(tab.text);
@@ -747,9 +793,5 @@ function term_tabs(t: Term, row: number, all: boolean, w: number): void {
   const pw = Paint.line_width(Paint.tabs_profile(all));
   if (pw > 0) {
     term_hit(t, row, col + 1, col - 2 + pw, () => term_profile_pick(t));
-  }
-  const mw = Paint.line_width(Paint.tabs_mode(t.v, w));
-  if (mw > 0) {
-    term_hit(t, row, MARGIN + w - mw, MARGIN + w, () => term_mode(t, ""));
   }
 }

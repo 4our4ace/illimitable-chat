@@ -72,8 +72,9 @@ import * as View from "../ui/View.ts";
 // view of it: Remote.ts); mem: its memory, to read; ended: input's; pending: commands at work;
 // due: a paint; settle: a new size's; imgs: the images attached, by
 // their tokens' numbers (kept: a message sent again from the history
-// names them still); quit: when Ctrl+C was last pressed on an empty
-// input (ms), esc: Esc while illi's turn ran (ms); notices: the notes and the toast said for a while, expire:
+// names them still); quit: when Ctrl+C (or Ctrl+D) last asked to quit on
+// an empty input (ms), quitting: a quit under way (a key quits at once),
+// esc: Esc while illi's turn ran (ms); notices: the notes and the toast said for a while, expire:
 // the clock that lets them go (Notices.ts); scroll: lines up from the
 // chat's end (0: following it); seen: the chat as last painted; ver: a
 // count of the changes to the chat's rows (a stream's aside), body: its
@@ -112,6 +113,7 @@ export type Term = {
   settle  : Timer | undefined;
   imgs    : Map<number, Blob>;
   quit    : number;
+  quitting: boolean;
   esc     : number;
   notices : Notice[];
   expire  : Timer | undefined;
@@ -272,6 +274,7 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
     settle  : undefined,
     imgs    : new Map(),
     quit    : 0,
+    quitting: false,
     esc     : 0,
     notices : [],
     expire  : undefined,
@@ -492,6 +495,7 @@ export function term_idle(t: Term): void {
 // so if they take one, and a second quit doesn't wait) and all painted is
 // out (a write's callback comes after those before it), with exitCode
 export function term_quit(t: Term): void {
+  t.quitting = true;
   t.v.ws?.close();
   term_paint(t);
   const told = Plugins.quit(process.cwd(), "prompt_input_exit");

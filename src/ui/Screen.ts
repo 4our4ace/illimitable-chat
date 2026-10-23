@@ -101,6 +101,8 @@ export type Screen = {
   styled?: string;
   at?    : Spot | null;
   drawn? : Piece[][];
+  title? : string;
+  titled?: boolean;
 };
 
 // Constants
@@ -134,11 +136,21 @@ const BLINK  = "\x1b[1 q";
 const STEADY = "\x1b[2 q";
 const PLAIN  = "\x1b[0 q";
 
+// the window's title (OSC 0) set; saved on the terminal's stack
+// (XTWINOPS) and put back from it; one emptied, so a terminal without
+// the stack falls back to its own, not to illi's
+const TITLE_SET  = "\x1b]0;";
+const TITLE_END  = "\x07";
+const TITLE_PUSH = "\x1b[22;0t";
+const TITLE_POP  = "\x1b[23;0t";
+const TITLE_NONE = TITLE_SET + TITLE_END;
+
 // the alternate screen, bracketed paste, the mouse's clicks, wheel and
 // every move as SGR reports, kitty's keys at flag 1 (popped before
 // pushed: each screen keeps its own flags), the flags asked (a kitty
-// terminal answers CSI ? flags u); off, in turn
-const MODES_ON  = "\x1b[?1049h\x1b[?2004h\x1b[?1000h\x1b[?1003h\x1b[?1006h\x1b[<u\x1b[>1u\x1b[?u";
+// terminal answers CSI ? flags u), the window's title saved (TITLE_PUSH);
+// off, in turn (screen_off)
+const MODES_ON  = "\x1b[?1049h\x1b[?2004h\x1b[?1000h\x1b[?1003h\x1b[?1006h\x1b[<u\x1b[>1u\x1b[?u" + TITLE_PUSH;
 const MODES_OFF = "\x1b[<u\x1b[?1006l\x1b[?1003l\x1b[?1000l\x1b[?2004l\x1b[?1049l" + SHOW + PLAIN;
 
 // the background asked; its answer (OSC 11 ; rgb:r/g/b, ended by BEL or
@@ -256,7 +268,7 @@ export function screen_new(on: (key: string) => void): Screen {
   if (tty) {
     process.stdin.setRawMode(true);
     process.stdout.write(MODES_ON + ASK);
-    process.on("exit", () => scr.left || process.stdout.write(MODES_OFF));
+    process.on("exit", () => scr.left || process.stdout.write(screen_off(scr)));
     scr.asked = true;
     setTimeout(() => (scr.asked = false), AWAIT).unref();
     screen_read(scr);
@@ -480,6 +492,36 @@ function screen_line_text(line: Paint.Line, w: number): string {
 export function screen_wipe(scr: Screen): void {
   scr.shown  = [];
   scr.styled = undefined;
+  scr.title  = undefined;
+}
+
+// the window's title (OSC 0), written only as it changes (and after
+// screen_wipe, as a terminal may have lost it); null: illi's taken off,
+// the one before put back (and saved again, for illi's next)
+export function screen_title(scr: Screen, text: string | null): void {
+  if (!scr.tty || scr.left) {
+    return;
+  }
+  if (text === null) {
+    if (scr.titled) {
+      process.stdout.write(TITLE_NONE + TITLE_POP + TITLE_PUSH);
+    }
+    [scr.title, scr.titled] = [undefined, false];
+    return;
+  }
+  const clean = Paint.text_clean(text);
+  if (clean !== scr.title) {
+    process.stdout.write(TITLE_SET + clean + TITLE_END);
+    [scr.title, scr.titled] = [clean, true];
+  }
+}
+
+// the screen's modes off (MODES_OFF), and the window's title put back:
+// illi's emptied, if it wrote one, then the one saved popped
+function screen_off(scr: Screen): string {
+  const off = (scr.titled ? TITLE_NONE : "") + TITLE_POP + MODES_OFF;
+  [scr.title, scr.titled] = [undefined, false];
+  return off;
 }
 
 // a pipe's lines, as text
@@ -641,7 +683,7 @@ function screen_osc(scr: Screen, code: string, body: string): void {
 // stops the process (Ctrl+Z), the terminal as it found it; continued
 // (fg), the screen's modes again, and every row written anew
 export function screen_suspend(scr: Screen): void {
-  process.stdout.write(MODES_OFF);
+  process.stdout.write(screen_off(scr));
   process.stdin.setRawMode(false);
   process.once("SIGCONT", () => {
     process.stdin.setRawMode(true);
@@ -663,7 +705,7 @@ export function screen_leave(scr: Screen): Promise<void> {
     process.stdin.setRawMode(false);
   }
   process.stdin.pause();
-  return new Promise((done) => process.stdout.write(scr.tty ? MODES_OFF : "", () => done()));
+  return new Promise((done) => process.stdout.write(scr.tty ? screen_off(scr) : "", () => done()));
 }
 
 // a paste, typed whole

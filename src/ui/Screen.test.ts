@@ -5,7 +5,8 @@
 // block moved by the terminal. Then the lines Paint lays out: a link
 // wider than a line breaks at its edge, its pieces each opening it whole;
 // a word of several runs is kept whole; a frame never passes its width;
-// each block's lines are marked.
+// each block's lines are marked. The window's title, written as it
+// changes, put back as illi's goes.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -584,4 +585,24 @@ test("a line cut at columns: a wide character either cuts taken whole, a button'
   expect(text(lit)).toBe(text(line));
   expect(lit.filter((r) => r.s.v).map((r) => r.x)).toEqual(["[ ⧉ go ]"]);
   expect(lit.find((r) => r.s.v)?.copy).toBe(copy);
+});
+
+test("the window's title is written only as it changes, cleaned, and again after a wipe; taken off, the one before comes back, only if illi wrote one", () => {
+  const out: string[] = [];
+  const write = process.stdout.write;
+  process.stdout.write = ((s: string) => out.push(s)) as any;
+  try {
+    const scr = fresh(true, Screen.ed_new(), () => {});
+    Screen.screen_title(scr, null);
+    Screen.screen_title(scr, "∞ illi · a\x1b]0;b\x07");
+    Screen.screen_title(scr, "∞ illi · a\x1b]0;b\x07");
+    Screen.screen_wipe(scr);
+    Screen.screen_title(scr, "∞ illi · a\x1b]0;b\x07");
+    Screen.screen_title(scr, null);
+    Screen.screen_title(scr, null);
+    Screen.screen_title(fresh(false, Screen.ed_new(), () => {}), "∞ illi · a");
+  } finally {
+    process.stdout.write = write;
+  }
+  expect(out).toEqual(["\x1b]0;∞ illi · a]0;b\x07", "\x1b]0;∞ illi · a]0;b\x07", "\x1b]0;\x07\x1b[23;0t\x1b[22;0t"]);
 });

@@ -111,6 +111,12 @@ export function text_clean(s: string): string {
   return s.replace(/\t/g, "  ").replace(/\n/g, " ").replace(/[\x00-\x1f\x7f-\x9f]/g, "");
 }
 
+// text on one line, cleaned (text_clean), each run of spaces one, none
+// at its ends: a command as a list shows it
+export function text_line(s: string): string {
+  return text_clean(s).replace(/\s+/g, " ").trim();
+}
+
 export function text_graphemes(s: string): string[] {
   return [...GRAPHEMES.segment(s)].map((g) => g.segment);
 }
@@ -619,11 +625,13 @@ export function rule(w: number): Line {
 // side lists them), each mark in its agent's color (illi's own: the
 // brand's; else Draw.draw_agent), the shown bold, then the profile
 // running (tabs_profile), then the pick (the standard speed left out),
-// then the plugins' pieces (Plugins.status), all cut before the mode at
-// the right end (tabs_mode; none on a line too narrow); with agents, the
-// keys that move along them, if they fit
-export function tabs_line(v: View.View, w: number, all = true): Line {
-  const mode = tabs_mode(v, w);
+// then the plugins' pieces (Plugins.status), all cut before the right
+// end: the background jobs counted (jobs: the side doesn't show them
+// whole; tabs_background) and the mode (tabs_mode; neither on a line too
+// narrow); with agents, the keys that move along them, if they fit
+export function tabs_line(v: View.View, w: number, all = true, jobs = all): Line {
+  const bg   = tabs_background(v, w, jobs);
+  const mode = [...bg, ...(bg.length === 0 ? [] : [Run(" · ", DIM)]), ...tabs_mode(v, w)];
   const room = w - line_width(mode);
   const left = tabs_left(v, mode.length === 0 ? w : room - 2, all);
   return mode.length === 0 ? left : [...left, Run(" ".repeat(Math.max(2, room - line_width(left)))), ...mode];
@@ -635,6 +643,14 @@ export function tabs_mode(v: View.View, w: number): Line {
   const tone = Draw.draw_tokens();
   const mode = v.perm.mode;
   return w < MODE_ROOM ? [] : [Run(mode + " mode", mode === "yolo" ? { ...INK, b: true, c: tone.error } : mode === "read-only" ? { ...INK, c: tone.warning } : DIM)];
+}
+
+// the background jobs running, counted for the last line (jobs false:
+// the side shows them; none, or a line under MODE_ROOM: nothing): ● (in
+// the theme's success) and how many, dim
+export function tabs_background(v: View.View, w: number, jobs: boolean): Line {
+  const n = v.background.length;
+  return !jobs || n === 0 || w < MODE_ROOM ? [] : [Run("● ", { ...INK, c: Draw.draw_tokens().success }), Run(n + " in background", DIM)];
 }
 
 // the last line but the mode, w wide

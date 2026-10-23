@@ -27,6 +27,7 @@ import { Disk } from "./Disk.ts";
 import { Compactor } from "./Compactor.ts";
 import { Lock } from "./Lock.ts";
 import { Logs } from "./Logs.ts";
+import { Machine } from "../tools/Machine.ts";
 import { Suggest, type Suggested } from "./Suggest.ts";
 import { Memory, TOKEN, type Root, type Share } from "./Memory.ts";
 import { Pick } from "../ai/Pick.ts";
@@ -257,6 +258,7 @@ export namespace Chat {
       goings: 0, going: false, saying: Promise.resolve(), checking: null, context: Promise.resolve([]), idle: undefined,
     };
     chat.context = Plugins.context({ cwd });
+    Machine.watch(() => Chat.change(chat));
     // a saved pick not offered gave way: told once
     const saved = mem.pick as Pick | null;
     if (saved !== null && Pick.label(saved) !== Pick.label(pick)) {
@@ -303,13 +305,24 @@ export namespace Chat {
   // the next start resumes it, and the suggested reply shown (a suggestion
   // still being asked, dropped); then the lock let go (keep: kept,
   // Lock.release), so the next illi in the project (another terminal's
-  // view: Remote.ts) opens it as left
+  // view: Remote.ts) opens it as left. Background jobs running are noted
+  // first (Chat.leaving)
   export function close(chat: Chat, keep = false): void {
+    Chat.leaving(chat);
     Chat.stop(chat, null);
     chat.suggest.call?.stop();
     chat.suggest.call = null;
     Memory.stop(chat.mem);
     Lock.release(keep);
+  }
+
+  // the background jobs running as illi quits, noted in the chat
+  // (Machine.end stops them next), so a resumed turn knows they're gone
+  export function leaving(chat: Chat): void {
+    const jobs = Machine.background();
+    if (jobs.length > 0) {
+      Chat.note(chat, "illi quit, stopping its background jobs: " + jobs.map((j) => j.command + " (" + j.agent + "'s)").join(", ") + ".");
+    }
   }
 
   // a message (its body: its images, sizes given, then its text), past
@@ -1118,6 +1131,9 @@ export namespace Chat {
       }
       case "allow": {
         return Chat.allow(chat, String(msg.refused));
+      }
+      case "background": {
+        return Machine.stop(Number(msg.stop)) ? {} : { error: "That background job has ended already." };
       }
       case "revoke": {
         const why = Tools.revoke(chat.tools, String(msg.grant));
