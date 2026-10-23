@@ -62,10 +62,14 @@ reading of the command finds reaching outside the project:
 | Secrets | `.env` through the shell (`cat .env`, `cp .env.example .env`) | the read tool on `.env` files (not `.env.example`, `.sample`, `.template`) and other secrets by name (keys, `auth.json`, `credentials.json`); any file in a key or credential store (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gh/hosts.yml`), illi's logins |
 | Commands | builds, tests, installs, inline code (`python -c`), the project's scripts, git of every kind (`push --force`, `reset --hard`), the network (`curl \| sh`, `ssh`), publishing, MCP tools | root (`sudo`, `doas`); disks (`mkfs`, `wipefs`, `dd of=/dev/sda`, `shred /dev/sdb`); the system's services and settings (`systemctl`, `crontab`, `mount`); turning the computer off; a container given the whole computer or a folder outside the project; a command illi can't follow (`case`) or named only as it runs (`$CMD x`) |
 | Config | the project's tool configs (`.git/hooks`, `.vscode`, `.husky`) | Claude Code's settings in the project (`.claude/settings.json`, `settings.local.json`: what it runs unasked); illi's own config |
+| Loops | a call again, or again with another between | the same call (tool and input) a third time in a row by the same agent, illi's own tools too (a skill loaded again and again): a model stuck in a loop |
 
 - "Don't ask again" for a file outside the project keeps its folder
   (for a read, the repository holding it, so a sibling repo is asked
   once); for the rest, the exact command, as `careful` offers.
+- The loop guard asks each repeat after the second, and "don't ask
+  again" can't quiet it: say yes to let one more run. A hook's allow,
+  and the other modes, leave it out.
 - A link to a file is a way to change it: `ln` (and `ln -s`) to a file
   outside the project is asked as a change there.
 - In a project that holds your home folder (illi run in `~`), deleting

@@ -32,11 +32,14 @@
 // (Plugins.before_tool: they may refuse it, change its input, allow it,
 // have it asked or add to what the model reads after it), then, for
 // shell, read, write, edit or an MCP tool, and as Claude Code asks leave
-// for one of its own (approve), it is judged on that input (Tools.guard: Guard.ts, by the user's rules and grants in
-// Permissions.ts and the mode; one a hook allowed as yolo mode would,
-// one it asks about asked whatever): run, asked about with why, or
-// refused, each refusal recorded for the side panel and /permissions;
-// what a call that ran answers goes to the plugins last (after_tool).
+// for one of its own (approve), it is judged on that input (Tools.guard:
+// Guard.ts, by the user's rules and grants in Permissions.ts and the
+// mode, /mode's or the setting's, auto by default; one a hook allowed as
+// yolo mode would, one it asks about asked whatever): run, asked about
+// with why, or refused, each refusal recorded for the side panel and
+// /permissions. In auto every call, illi's own too, passes the loop
+// guard: the same call as its caller's two before it is asked. What a
+// call that ran answers goes to the plugins last (after_tool).
 // The plugins' own tools are theirs to run (plugin__...).
 
 import * as fs from "node:fs";
@@ -119,8 +122,10 @@ export type Tools = {
 
 // the permissions of this run (Tools.guard): the mode /mode set (null:
 // the `mode` setting's), the grants /permissions gave (exact, for this
-// run only), the requests refused (the latest REFUSALS, oldest first)
-export type Perm = { mode: Mode | null; granted: Set<string>; refused: Refused[] };
+// run only), the requests refused (the latest REFUSALS, oldest first),
+// each caller's last calls (LOOP of them, each its tool and input as a
+// hash: the loop guard's)
+export type Perm = { mode: Mode | null; granted: Set<string>; refused: Refused[]; calls: Map<string, string[]> };
 
 // Constants
 // =========
@@ -281,6 +286,11 @@ const KEPT  = 1000;
 // the most refused requests kept (Perm)
 const REFUSALS = 50;
 
+// the loop guard (Tools.guard): in auto, a call the same (tool and input)
+// as its caller's LOOP before it is asked, saying why
+const LOOP = 2;
+const LOOPED = "the same call a third time in a row";
+
 // what the model is told of a call refused (Tools.refuse): after the
 // user's no (or no one there to ask), why it was asked; the mode's
 // refusal; the user's rules'
@@ -350,7 +360,7 @@ export namespace Tools {
   export function serve(mem: Memory, hooks: Hooks, cwd: string): Tools {
     const key = crypto.randomUUID();
     const url = Tools.base() + key + "/";
-    const tools: Tools = { mem, agents: new Map(), perm: { mode: null, granted: new Set(), refused: [] }, url, cwd, hooks };
+    const tools: Tools = { mem, agents: new Map(), perm: { mode: null, granted: new Set(), refused: [], calls: new Map() }, url, cwd, hooks };
     CHATS.set(key, tools);
     return tools;
   }
@@ -772,21 +782,26 @@ export namespace Tools {
   // those given this run, and the mode: null runs it, else what the model
   // is told. One a hook allowed is judged as in yolo mode (the user's
   // rules still hold); one it asks about is asked, its why first, with no
-  // "don't ask again". The question is given what the call would do and
-  // why, WHOLE characters of each at most, and what "don't ask again"
-  // keeps by its ends past KEPT. One asked runs on the user's yes, "don't
-  // ask again" keeping its grants for the project (one that can't be
-  // saved: for this run). A rules file that won't read leaves nothing run
-  // unasked
+  // "don't ask again". In auto, one the same as its caller's two before
+  // it (illi's own tools too: a skill loaded again and again) is asked,
+  // saying so first, so a model stuck in a loop stops. The question is
+  // given what the call would do and why, WHOLE characters of each at
+  // most, and what "don't ask again" keeps by its ends past KEPT. One
+  // asked runs on the user's yes, "don't ask again" keeping its grants for
+  // the project (one that can't be saved: for this run). A rules file that
+  // won't read leaves nothing run unasked
   export async function guard(tools: Tools, who: string, tool: string, input: unknown, signal: AbortSignal, judge = (where: Where) => Guard.check(where, tool, input, Mcp.hints(tool)), hooked: { allow?: boolean; ask?: string } = {}): Promise<Out | null> {
     const folder = Trusted.folder(tools.cwd);
     const perms  = Permissions.read(config.PERMISSIONS, folder);
     const ok     = typeof perms !== "string";
     const grants = new Set([...(ok ? perms.granted : []), ...tools.perm.granted]);
-    const got    = judge({ mode: hooked.allow === true ? "yolo" : Tools.mode(tools), cwd: Projects.real(tools.cwd), top: folder, rules: ok ? perms.rules : {}, grants, reads: (["skills", "commands", "agents"] as const).flatMap((k) => Custom.dirs(tools.cwd, k)).map(Projects.real), plugins: Plugins.roots() });
+    const mode   = hooked.allow === true ? "yolo" : Tools.mode(tools);
+    const got    = judge({ mode, cwd: Projects.real(tools.cwd), top: folder, rules: ok ? perms.rules : {}, grants, reads: (["skills", "commands", "agents"] as const).flatMap((k) => Custom.dirs(tools.cwd, k)).map(Projects.real), plugins: Plugins.roots() });
     const broken = "illi can't read your permission rules (" + perms + ")";
     const judged: Verdict = ok || got.$ === "deny" ? got : { $: "ask", why: got.$ === "ask" ? got.why + "; " + broken : broken, always: [], exact: got.$ === "ask" ? got.exact : [] };
-    const verdict: Verdict = hooked.ask === undefined || judged.$ === "deny" ? judged : { $: "ask", why: judged.$ === "ask" ? hooked.ask + "; " + judged.why : hooked.ask, always: [], exact: judged.$ === "ask" ? judged.exact : [] };
+    const hooks: Verdict = hooked.ask === undefined || judged.$ === "deny" ? judged : { $: "ask", why: judged.$ === "ask" ? hooked.ask + "; " + judged.why : hooked.ask, always: [], exact: judged.$ === "ask" ? judged.exact : [] };
+    const looped = Tools.looped(tools, who, tool, input) && mode === "auto";
+    const verdict: Verdict = !looped || hooks.$ === "deny" ? hooks : hooks.$ === "ask" ? { ...hooks, why: LOOPED + "; " + hooks.why } : { $: "ask", why: LOOPED, always: [], exact: [] };
     if (verdict.$ === "allow") {
       return null;
     }
@@ -804,6 +819,15 @@ export namespace Tools {
       console.error("illi: a grant kept for this run only: " + unsaved);
     }
     return null;
+  }
+
+  // whether a call is the same (tool and input) as its caller's LOOP
+  // before it; it is kept as the latest
+  export function looped(tools: Tools, who: string, tool: string, input: unknown): boolean {
+    const call = String(Bun.hash(tool + "\0" + JSON.stringify(input ?? null)));
+    const last = tools.perm.calls.get(who) ?? [];
+    tools.perm.calls.set(who, [...last, call].slice(-LOOP));
+    return last.length === LOOP && last.every((c) => c === call);
   }
 
   // the mode now: /mode's for this run, else the setting's
