@@ -12,8 +12,9 @@
 // it works inside illi, the project's CLAUDE.md left to Claude Code. Its
 // permission prompt, and illi's own shell, files and MCP tools, pass the
 // checks (Guard.ts): a risk asked with why, a refusal recorded and told
-// to the model; a plugin's hooks come before them and after the tool. The projects: their table, a search across them, a zoom
-// into another's chat.
+// to the model; a plugin's hooks come before them and after the tool. The
+// projects: their table, a search across them, a zoom into another's
+// chat. A subagent's view fits its model: the oldest lines left out.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -281,4 +282,13 @@ test("what a question shows: a command, a file, a URL or a query, else the input
   expect(Tools.what({ pattern: "TODO" })).toBe("TODO");
   expect(Tools.what({ n: 1 })).toBe('{"n":1}');
   expect(Tools.what({ command: "x".repeat(1000) })).toHaveLength(400);
+});
+
+test("a subagent's view within its model's budget: the oldest lines left out, said so; the opening and the newest kept", () => {
+  const view = [{ text: "<chat>\n", mark: false }, ...["a", "b", "c", "d"].map((x) => ({ text: x.repeat(100), mark: false })), { text: "</chat>\n", mark: true }];
+  expect(Tools.fitted(view, 10000)).toBe(view);
+  const cut = Tools.fitted(view, 250);
+  expect(cut.map((b) => b.text[0])).toEqual(["<", "(", "c", "d", "<"]);
+  expect(cut[1].text).toContain("zoom and search find them");
+  expect(Tools.fitted(view, 1).map((b) => b.text[0])).toEqual(["<", "(", "<"]);
 });

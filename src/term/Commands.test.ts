@@ -68,8 +68,8 @@ test("the model picker lists each vendor's models, at the pick's", () => {
   const t = term();
   model(t);
   expect(t.choose.names).toEqual(["opus-5.5", "sonnet-5.5", "haiku-5.5", "gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra"]);
-  expect(t.choose.about[0]).toBe("claude-api");
-  expect(t.choose.about[4]).toBe("openai-api  500k context");
+  expect(t.choose.about[0]).toBe("claude-api  1M context");
+  expect(t.choose.about[4]).toBe("openai-api  1.05M context");
   expect([t.choose.here, lit(t)]).toEqual([1, "sonnet-5.5"]);
   expect(foot(t)).toBe("effort: ◂ medium ▸ · no fast mode");
 });
@@ -314,6 +314,22 @@ test("/speed lists slow as standard, and takes standard for it", () => {
   expect(note(t)).toBe("Speeds: standard, fast (now). Pick one with /speed <speed>.");
   run(t, "/speed", "standard");
   expect(t.v.out.map((p: any) => p.msg.to.speed)).toEqual(["slow"]);
+});
+
+test("/autocompact says the chat's model's, sets it as a share or tokens, default takes it back; a value it can't read sends nothing", () => {
+  const t = term();
+  t.v.use = { ...t.v.use, fill: { used: 0, cap: 600000, window: 1000000, set: "60%", own: false, most: 700000 } };
+  run(t, "/autocompact");
+  expect(note(t)).toBe("Autocompact for sonnet-5.5: 60% (the global one), 600k of its 1M window. /autocompact 50%, 300k or default changes it; in /model, Shift+Left and Shift+Right.");
+  run(t, "/autocompact", "50%");
+  expect(note(t)).toBe("Autocompact for sonnet-5.5: 50%, 500k of its 1M window.");
+  run(t, "/autocompact", "900k");
+  expect(note(t)).toBe("Autocompact for sonnet-5.5: 900k, held to 700k of its 1M window.");
+  run(t, "/autocompact", "default");
+  expect(note(t)).toBe("Autocompact for sonnet-5.5: back to the global one.");
+  run(t, "/autocompact", "lots");
+  expect(note(t)).toBe("/autocompact takes a share of the window (50%), a size (300k) or default.");
+  expect(t.v.out.map((p: any) => p.msg)).toEqual(["50%", "900k", null].map((value) => ({ id: expect.any(String), $: "autocompact", label: "sonnet-5.5", value })));
 });
 
 test("/tab finds the chat's tab by the main agent's name, or illi's; none lists the tabs", () => {

@@ -105,11 +105,11 @@ export function term_set(t: Term, arg: string): void {
     return term_settings(t, key);
   }
   let value: unknown = text === "default" ? null : text;
-  // contexts and shortcuts as JSON; text that won't parse goes on as it
+  // autocompacts and shortcuts as JSON; text that won't parse goes on as it
   // is, for config_check to say why it won't do. statusline's only when
   // it is Claude Code's statusLine (an object with a command): else a
   // command, whatever it holds
-  if ((key === "contexts" || key === "shortcuts") && value !== null) {
+  if ((key === "autocompacts" || key === "shortcuts") && value !== null) {
     try {
       value = JSON.parse(text);
     } catch {

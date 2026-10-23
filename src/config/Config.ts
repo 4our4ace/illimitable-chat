@@ -48,6 +48,11 @@ export const DIR     = PICKED.dir;
 // so what is off or on globally is so in every profile
 const ADDS = ["off", "sticky"];
 
+// the settings read under an old name too, as their new one: in a
+// config.json (each file alone, its new key winning) and as a variable
+// (ILLI_CONTEXT); "auto", the old default, as none
+const RENAMED: Record<string, string> = { context: "autocompact", contexts: "autocompacts" };
+
 const PATH = DIR + "/config.json";
 let FILE: Record<string, unknown> = config_files();
 
@@ -91,8 +96,8 @@ const TABLE = {
   accent     : { def: "auto", values: ACCENTS, now: true, what: "the color everything is themed in", shape: [new RegExp("^(" + ACCENTS.join("|") + "|#[0-9a-f]{6}|25[0-5]|2[0-4]\\d|1?\\d?\\d)$", "i"), "auto, illi (its aqua), a color's name (" + ACCENTS.slice(2).join(", ") + "), a palette index (0-255) or #rrggbb"] },
   leader     : { def: "Ctrl+X", values: "text", now: true, what: "the key before a shortcut", shape: [/^(ctrl|alt)\+[a-z]$/i, "Ctrl or Alt and a letter, like Ctrl+X"] },
   shortcuts  : { def: "", values: "text", now: true, what: "the keys after the leader, as JSON", none: "illi's own" },
-  context    : { def: "auto", values: ["auto", "50%", "60%", "70%", "80%", "90%"], now: true, what: "chat sent before summarizing", shape: [/^(auto|\d+|\d+(\.\d+)?%)$/, "auto, tokens (350000) or a share of the window (60%)"] },
-  contexts   : { def: "", values: "text", now: true, what: "context by model, as JSON" },
+  autocompact : { def: "60%", values: ["40%", "50%", "60%", "70%"], now: true, what: "chat sent before older messages fold, of the model's window", shape: [/^(\d+(\.\d+)?k?|\d+(\.\d+)?%)$/i, "a share of the window (60%) or tokens (400000, 400k)"] },
+  autocompacts: { def: "", values: "text", now: true, what: "autocompact by model, as JSON" },
   rules      : { def: config_own("RULES.md"), values: "text", now: true, what: "your rules, every project", path: true },
   after      : { def: "", values: "text", now: true, what: "a command after each turn" },
   off        : { def: "", values: "text", now: true, what: "skills, agents, commands, MCP servers, plugins (or a plugin's part, as plugin:name) and hooks.json turned off", none: "none" },
@@ -223,25 +228,25 @@ export const TAKEN = ["Ctrl+A", "Ctrl+C", "Ctrl+D", "Ctrl+E", "Ctrl+F", "Ctrl+H"
 export let PICK!     : Pick;
 let ROLES: Record<Role, Partial<Record<Vendor, Pick>>> = { agents: {}, compactor: {} };
 
-// how much of the chat a turn sends (Memory.cutoff), in tokens (4 bytes
-// each), on a model: its `contexts` entry, else `context`: a number of
-// tokens, a share of its window ("60%"), or "auto": AUTO of its window,
-// at most AUTO_MOST; never past FULL of it. A model whose window no one
-// told is taken to have GUESS. CONTEXT: as many as `context` names at
-// the start, or AUTO_MOST (what a call holds before any model is known)
-const AUTO      = 0.7;
-const AUTO_MOST = 400000;
-const FULL      = 0.9;
+// how much of the chat a turn sends before older messages fold into the
+// tree (its autocompact: Memory.cutoff), in tokens (4 bytes each), on a
+// model: its `autocompacts` entry, else `autocompact`: a share of its
+// window ("60%") or tokens ("400000", "400k"); at most MOST of the
+// window. ROOM: what of the window a turn may read before it ends to
+// fold more (Chat.ts, Agent.ts), what the prompt and tools take beside
+// the chat left out of the autocompact too. A model whose window no one
+// told is taken to have GUESS
+export const MOST       = 0.7;
+export const ROOM       = 0.9;
 export const GUESS      = 128000;
-let CONTEXT_SET         = "";
-let CONTEXTS: Record<string, unknown> = {};
+let AUTOCOMPACT_SET     = "";
+let AUTOCOMPACTS: Record<string, unknown> = {};
+
 config_start();
 config_live();
 if (STATUSLINE === null && String(config_raw("statusline") ?? "").trim() !== "") {
   NOTES.push("statusline isn't a command or Claude Code's statusLine object (" + config_where("statusline") + "), so there is none: /set statusline <command> sets one.");
 }
-export const CONTEXT    = Number(CONTEXT_SET) > 0 ? Number(CONTEXT_SET) : AUTO_MOST;
-
 // how many summaries of a side build at once (Memory.ts): few, so a
 // plan's rate limit holds them
 export const JOBS       = Number(config_value("jobs"));
@@ -286,7 +291,9 @@ export function config_value(key: Key): string {
 // a key as set (a variable over config.json); undefined: not set, or a
 // pick that gave way (GONE)
 function config_raw(key: Key): unknown {
-  return GONE.has(key) ? undefined : process.env["ILLI_" + key.toUpperCase()] ?? FILE[key];
+  const env  = config_env_set(key);
+  const said = env === null || process.env[env] === "auto" ? undefined : process.env[env];
+  return GONE.has(key) ? undefined : said ?? FILE[key];
 }
 
 // a key's default: for illi's own pick, the first vendor's (DEFS) that
@@ -360,8 +367,9 @@ export function config_tips(pick: Pick, signed: boolean): string[] {
 
 // the variable that sets a key over config.json, if it's set; else null
 export function config_env_set(key: Key): string | null {
-  const name = "ILLI_" + key.toUpperCase();
-  return process.env[name] === undefined ? null : name;
+  const old   = Object.keys(RENAMED).find((was) => RENAMED[was] === key);
+  const names = ["ILLI_" + key.toUpperCase(), ...(old === undefined ? [] : ["ILLI_" + old.toUpperCase()])];
+  return names.find((name) => process.env[name] !== undefined) ?? null;
 }
 
 // the pick a setting names (a "pick" one's), as offered; none: null
@@ -403,7 +411,7 @@ function config_start(): void {
 function config_live(): void {
   const pick   = config_run("pick", config_value("pick"));
   const roles  = { agents: config_roles("agents", config_value("agents"), OFFER, false), compactor: config_roles("compactor", config_value("compactor"), OFFER, false) };
-  const own    = config_object(config_value("contexts"));
+  const own    = config_object(config_value("autocompacts"));
   const keys   = config_shortcuts(config_value("shortcuts"));
   RULES       = config_place("rules");
   AFTER       = config_value("after");
@@ -418,8 +426,8 @@ function config_live(): void {
   ACCENT      = String(config_value("accent")).trim();
   PICK        = pick;
   ROLES       = roles;
-  CONTEXT_SET = String(config_value("context")).trim();
-  CONTEXTS    = own ?? {};
+  AUTOCOMPACT_SET = String(config_value("autocompact")).trim();
+  AUTOCOMPACTS    = own ?? {};
   LEADER      = config_leader(String(config_value("leader")));
   SHORTCUTS   = keys ?? OWN_SHORTCUTS;
 }
@@ -517,13 +525,56 @@ function config_object(value: unknown): Record<string, unknown> | null {
   }
 }
 
-// the tokens of the chat a turn sends on a model (CONTEXT's rules), its
-// window as known (none: GUESS)
-export function config_context(label: string, window = GUESS): number {
-  const set    = String(CONTEXTS[label] ?? CONTEXT_SET).trim();
-  const share  = /^(\d+(?:\.\d+)?)%$/.exec(set);
-  const tokens = set === "auto" ? Math.min(AUTO_MOST, window * AUTO) : share !== null ? (window * Number(share[1])) / 100 : Number(set);
-  return Math.round(Math.min(tokens > 0 ? tokens : Math.min(AUTO_MOST, window * AUTO), window * FULL));
+// the tokens of the chat a turn sends on a model: its autocompact (its
+// own, else the global one) of its window as known (none: GUESS), at most
+// config_most
+export function config_context(label: string, window = GUESS, overhead = 0): number {
+  const set  = String(AUTOCOMPACTS[label] ?? AUTOCOMPACT_SET);
+  const want = config_tokens(set, window) ?? config_tokens(SETTINGS.autocompact.def, window)!;
+  return Math.max(1, Math.round(Math.min(want, config_most(window, overhead))));
+}
+
+// a model's autocompact as set: its own (`autocompacts`), else the global
+export function config_autocompact_of(label: string): { set: string; own: boolean } {
+  const own = AUTOCOMPACTS[label];
+  return own === undefined || config_tokens(String(own), 1) === null ? { set: AUTOCOMPACT_SET || SETTINGS.autocompact.def, own: false } : { set: String(own), own: true };
+}
+
+// the most a model's autocompact may be: MOST of its window, and a turn
+// at it starting under ROOM of it beside what else a request takes
+// (overhead)
+export function config_most(window: number, overhead = 0): number {
+  return Math.round(Math.min(window * MOST, window * ROOM - overhead));
+}
+
+// an autocompact as tokens of a window: a share of it (60%), tokens
+// (400000, 400k); null: none of these
+export function config_tokens(text: string, window: number): number | null {
+  const set   = text.trim().toLowerCase();
+  const share = /^(\d+(?:\.\d+)?)%$/.exec(set);
+  const k     = /^(\d+(?:\.\d+)?)k$/.exec(set);
+  const n     = share !== null ? (window * Number(share[1])) / 100 : k !== null ? Number(k[1]) * 1000 : set === "" ? NaN : Number(set);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// a model's autocompact set (null: its own taken out, so the global one
+// holds), merged into `autocompacts` in the config.json that sets it (the
+// profile's, else the root's; neither: the profile's) as the file is now:
+// two illis setting one each keep both; why not (a variable sets them)
+export function config_autocompact(label: string, value: string | null): string | null {
+  const env = config_env_set("autocompacts");
+  if (env !== null) {
+    return "autocompacts is set by " + env + ": unset it to change a model's autocompact here.";
+  }
+  const root = PATH !== ROOT + "/config.json" && !("autocompacts" in config_file(PATH)) && "autocompacts" in config_file(ROOT + "/config.json");
+  const all  = { ...(config_object(config_file(root ? ROOT + "/config.json" : PATH).autocompacts) ?? {}) };
+  if (value === null) {
+    delete all[label];
+  } else {
+    all[label] = value;
+  }
+  config_set("autocompacts", Object.keys(all).length === 0 ? null : all, root);
+  return null;
 }
 
 // the models listed last, learned (a file that won't read: none)
@@ -549,6 +600,9 @@ export function config_set(key: Key, value: unknown, root = false): void {
     delete file[key];
   } else {
     file[key] = value;
+  }
+  for (const was of Object.keys(RENAMED).filter((was) => RENAMED[was] === key)) {
+    delete file[was];
   }
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(at, JSON.stringify(file, null, 2) + "\n");
@@ -585,10 +639,10 @@ export function config_check(key: string, value: unknown, strict = true): string
   if (key === "statusline") {
     return value === null || (typeof plain === "string" && plain.trim() === "") || config_statusline(value) !== null || !strict ? null : "statusline takes a command, or Claude Code's statusLine, like {\"type\": \"command\", \"command\": \"~/.illi/statusline.sh\", \"refreshInterval\": 5}.";
   }
-  if (key === "contexts") {
+  if (key === "autocompacts") {
     const got = value === null ? {} : config_object(value);
-    const bad = got === null || Object.values(got).some((v) => !SETTINGS.context.shape![0].test(String(v)));
-    return bad ? "contexts takes each model's context, like {\"gpt-6.1-sol\": 350000}." : null;
+    const bad = got === null || Object.values(got).some((v) => !SETTINGS.autocompact.shape![0].test(String(v)));
+    return bad ? "autocompacts takes each model's autocompact, like {\"gpt-6.1-sol\": \"50%\"}." : null;
   }
   if (typeof plain !== "string" && plain !== null) {
     return key + " takes text.";
@@ -741,13 +795,24 @@ function config_files(): Record<string, unknown> {
   return { ...root, ...own, ...Object.fromEntries(both) };
 }
 
-// a config.json's keys ({}: none); one that won't read says which
+// a config.json's keys ({}: none), an old name read as its new one
+// (RENAMED); one that won't read says which
 function config_file(path: string): Record<string, unknown> {
+  let data: Record<string, unknown>;
   try {
-    return fs.existsSync(path) ? JSON.parse(fs.readFileSync(path, "utf8")) : {};
+    data = fs.existsSync(path) ? JSON.parse(fs.readFileSync(path, "utf8")) : {};
   } catch (err: any) {
     throw new Error("config: " + path + ": " + err.message);
   }
+  for (const [was, now] of Object.entries(RENAMED).filter(([was]) => was in data)) {
+    const old  = data[was];
+    const each = typeof old === "object" || String(old).trim().startsWith("{") ? config_object(old) : null;
+    delete data[was];
+    if (!(now in data) && old !== "auto") {
+      data[now] = each === null ? old : Object.fromEntries(Object.entries(each).filter(([, v]) => v !== "auto"));
+    }
+  }
+  return data;
 }
 
 // the environment as illi found it, the keys it took out put back: what

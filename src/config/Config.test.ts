@@ -2,7 +2,8 @@
 // ===========
 // `bun test Config.test.ts`. A pick on a vendor added is refused till the
 // next start, as config_live reads it on the vendors running, and the
-// settings after it are still read anew; `contexts` from a variable; a
+// settings after it are still read anew; `autocompacts` from a variable
+// (its old name, ILLI_CONTEXTS, too); a
 // relative path from the folder of the config.json naming it; a number
 // in config.json taken as its text. Each key set is checked at the
 // start: one that won't do stops illi with one line on why, no trace;
@@ -59,7 +60,7 @@ test("a pick on a vendor added is refused till the next start; the settings afte
   expect(config.SIDE).toBe("left");
 });
 
-test("contexts from a variable, as JSON", () => {
+test("autocompacts from a variable under its old name, as JSON", () => {
   expect(config.config_context("gpt-6.1-sol", 500000)).toBe(100000);
 });
 
@@ -74,7 +75,7 @@ test("a setting that won't do stops illi at the start, one line on why", () => {
     [{ ILLI_JOBS: "0" }, "illi: config: jobs takes a number, 1 or more. (ILLI_JOBS)"],
     [{ ILLI_JOBS: "abc" }, "illi: config: jobs takes a number, 1 or more. (ILLI_JOBS)"],
     [{ ILLI_PICK: "bogus" }, "illi: config: pick is no vendor:model:effort:speed offered here: bogus (ILLI_PICK)"],
-    [{ ILLI_CONTEXTS: "[1]" }, "illi: config: contexts takes each model's context, like {\"gpt-6.1-sol\": 350000}. (ILLI_CONTEXTS)"],
+    [{ ILLI_CONTEXTS: "[1]" }, "illi: config: autocompacts takes each model's autocompact, like {\"gpt-6.1-sol\": \"50%\"}. (ILLI_CONTEXTS)"],
     [{ ILLI_AUTOUPDATE: "weekly" }, "illi: config: autoupdate takes on, notify or off. (ILLI_AUTOUPDATE)"],
   ] as const) {
     expect(start(env)).toMatchObject({ code: 1, err: why + "\n" });

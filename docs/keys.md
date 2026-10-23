@@ -50,6 +50,7 @@ Pick
 | Shift+Up, Shift+Down | more effort, less |
 | `/model [name]` | model, effort and speed in one list (Left and Right: effort, Tab: speed); a name: that model |
 | `/effort [level]` | set the effort; no level: lists them |
+| `/autocompact [value]` | how much of the chat a turn sends before older messages fold, for the chat's model: a share of its window (50%), a size (300k) or default; no value: says it |
 | `/speed [speed]` | set the speed; no speed: lists them |
 
 Agents

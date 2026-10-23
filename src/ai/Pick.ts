@@ -29,8 +29,13 @@ export type Pick = {
 // a key's change to the pick
 export type Move = "next" | "prev" | "model" | "up" | "down" | "effort" | "speed";
 
-// a model: as shown, as the vendor names it, its speeds
-export type Model = { label: string; id: string; speeds: string[]; window?: number };
+// a model: as shown, as the vendor names it, its speeds; its context
+// window, the whole of it as its vendor tells it (input and output share
+// it); standard: the window a plan counts as usual, past which it drains
+// faster (ChatGPT's context_window, below its max); its efforts, as its
+// vendor names them (none told: EFFORTS); the service tier each speed
+// sends (none: OpenAI.body's own names)
+export type Model = { label: string; id: string; speeds: string[]; window?: number; standard?: number; efforts?: string[]; tiers?: Record<string, string> };
 
 // what a server offers: vendors, and models by label
 export type Offer = { vendors: Vendor[]; models: string[] };
@@ -40,22 +45,26 @@ export type Offer = { vendors: Vendor[]; models: string[] };
 
 export const VENDORS: Vendor[] = ["claude-api", "openai-api", "chatgpt", "claude-code"];
 
-const OPUS  : Model = { label: "opus-5.5",   id: "claude-opus-5-5",   speeds: ["slow", "fast"] };
-const SONNET: Model = { label: "sonnet-5.5", id: "claude-sonnet-5-5", speeds: ["slow"] };
-const HAIKU : Model = { label: "haiku-5.5",  id: "claude-haiku-5-5",  speeds: ["slow"] };
+// each vendor's models as built in, each window as its vendor states it
+// (Anthropic's Models API and the catalogs tell them anew: learn)
+const OPUS  : Model = { label: "opus-5.5",   id: "claude-opus-5-5",   speeds: ["slow", "fast"], window: 1000000 };
+const SONNET: Model = { label: "sonnet-5.5", id: "claude-sonnet-5-5", speeds: ["slow"],         window: 1000000 };
+const HAIKU : Model = { label: "haiku-5.5",  id: "claude-haiku-5-5",  speeds: ["slow"],         window: 1000000 };
 const OPENAI: Model[] = [
-  { label: "gpt-6-luna",  id: "gpt-6-luna",  speeds: ["slow", "fast"],              window: 272000 },
-  { label: "gpt-6.1-sol", id: "gpt-6.1-sol", speeds: ["slow", "fast"],              window: 500000 },
-  { label: "gpt-6-astra", id: "gpt-6-astra", speeds: ["slow", "fast", "ultrafast"], window: 272000 },
+  { label: "gpt-6-luna",  id: "gpt-6-luna",  speeds: ["slow", "fast"],              window: 1050000 },
+  { label: "gpt-6.1-sol", id: "gpt-6.1-sol", speeds: ["slow", "fast"],              window: 1050000 },
+  { label: "gpt-6-astra", id: "gpt-6-astra", speeds: ["slow", "fast", "ultrafast"], window: 1050000 },
 ];
 
-// the same on a ChatGPT plan (ChatGPT.ts), at its one speed
-const CHATGPT: Model[] = OPENAI.map((m) => ({ ...m, speeds: ["slow"] }));
+// the same on a ChatGPT plan (ChatGPT.ts), at one speed and the plan's
+// usual windows, till its catalog tells each one's speeds and windows
+const CHATGPT: Model[] = OPENAI.map((m) => ({ ...m, speeds: ["slow"], window: m.label === "gpt-6.1-sol" ? 500000 : 272000 }));
 
 // Claude's on a Claude plan, through Claude Code (ClaudeCode.ts), at its
-// standard speed; each one's window as Claude Code tells it
+// standard speed; each one's window 200k till Claude Code tells it (it
+// may run the 1M one)
 const FABLE : Model = { label: "fable-5.1", id: "claude-fable-5-1", speeds: ["slow"] };
-const CLAUDE: Model[] = [FABLE, ...[OPUS, SONNET, HAIKU].map((m) => ({ ...m, speeds: ["slow"] }))];
+const CLAUDE: Model[] = [FABLE, OPUS, SONNET, HAIKU].map((m) => ({ ...m, speeds: ["slow"], window: 200000 }));
 
 // each vendor's models, at the speeds it runs them
 const MODELS: Record<Vendor, Model[]> = {
@@ -80,17 +89,27 @@ export namespace Pick {
     return MODELS[vendor].find((m) => m.label === label);
   }
 
-  // a vendor's models as it lists them (ChatGPT.ts models): a known one's
-  // window told, a new one added (at the vendor's one speed); the labels
-  // new to LABELS
-  export function learn(vendor: Vendor, models: Model[]): string[] {
+  // a vendor's models as it tells them: a known one takes what it's told
+  // (its window, standard window, speeds, efforts, tiers), a new one is
+  // added, unless `known` (only those built in are learned: a list of
+  // every id the vendor ever had would flood the picker); `replace`:
+  // they are the vendor's list now (a catalog: one it drops is gone).
+  // The labels new to LABELS
+  export function learn(vendor: Vendor, models: Model[], how: "add" | "known" | "replace" = "add"): string[] {
     const fresh: string[] = [];
+    const list = MODELS[vendor];
+    if (how === "replace" && models.length > 0) {
+      list.splice(0, list.length, ...models.map((m) => ({ ...m })));
+    }
     for (const m of models) {
       const known = Pick.model(vendor, m.label);
-      if (known !== undefined) {
-        known.window = m.window ?? known.window;
-      } else {
-        MODELS[vendor].push(m);
+      if (known === undefined && how === "known") {
+        continue;
+      }
+      if (known === undefined) {
+        list.push({ ...m });
+      } else if (how !== "replace") {
+        Object.assign(known, Object.fromEntries(Object.entries(m).filter(([key, v]) => v !== undefined && key !== "label" && key !== "id")));
       }
       if (!LABELS.includes(m.label)) {
         LABELS.push(m.label);
@@ -98,6 +117,11 @@ export namespace Pick {
       }
     }
     return fresh;
+  }
+
+  // a vendor's models as known now (each a copy), to keep
+  export function list(vendor: Vendor): Model[] {
+    return MODELS[vendor].map((m) => ({ ...m }));
   }
 
   // the tokens a pick's model takes in (none: not known)
@@ -138,7 +162,7 @@ export namespace Pick {
       case "up":
       case "down":
       case "effort": {
-        return EFFORTS.map((effort) => [effort, { ...pick, effort }]);
+        return Pick.efforts(pick).map((effort) => [effort, { ...pick, effort }]);
       }
       case "speed": {
         return speeds.map((speed) => [speed, { ...pick, speed }]);
@@ -162,10 +186,35 @@ export namespace Pick {
     return [pick.vendor, pick.model, pick.effort, pick.speed].join(":");
   }
 
-  // as a person reads it: model · effort, the speed only if not the
-  // standard one (gpt-6.1-sol · medium · fast)
+  // as a person reads it, as it runs (fit): model · effort, the speed
+  // only if not the standard one (gpt-6.1-sol · medium · fast)
   export function shown(pick: Pick): string {
-    return [pick.model, pick.effort, ...(pick.speed === "slow" ? [] : [pick.speed])].join(" · ");
+    const p = Pick.fit(pick);
+    return [p.model, p.effort, ...(p.speed === "slow" ? [] : [p.speed])].join(" · ");
+  }
+
+  // the efforts a pick's model takes, as its vendor names them (none
+  // told: EFFORTS)
+  export function efforts(pick: Pick): string[] {
+    return Pick.model(pick.vendor, pick.model)?.efforts ?? EFFORTS;
+  }
+
+  // a pick as its model runs it: an effort or speed it lacks stepped to
+  // the nearest it has (an effort by its place in EFFORTS, the lower on
+  // a tie; a speed to the fastest below, else the standard one). Never
+  // kept: the pick asked stays, and runs as asked once the model has it
+  // again (a catalog may drop and bring back a speed)
+  export function fit(pick: Pick): Pick {
+    const model = Pick.model(pick.vendor, pick.model);
+    if (model === undefined) {
+      return pick;
+    }
+    const has    = Pick.efforts(pick);
+    const rank   = (e: string) => (EFFORTS.includes(e) ? EFFORTS.indexOf(e) : EFFORTS.length);
+    const effort = has.includes(pick.effort) ? pick.effort : [...has].sort((a, b) => Math.abs(rank(a) - rank(pick.effort)) - Math.abs(rank(b) - rank(pick.effort)) || rank(a) - rank(b))[0] ?? pick.effort;
+    const below  = SPEEDS.slice(0, SPEEDS.indexOf(pick.speed) + 1);
+    const speed  = model.speeds.includes(pick.speed) ? pick.speed : below.filter((sp) => model.speeds.includes(sp)).pop() ?? model.speeds[0] ?? "slow";
+    return { ...pick, effort, speed };
   }
 
   // a speed as a person reads it: slow is the standard one
@@ -173,16 +222,20 @@ export namespace Pick {
     return speed === "slow" ? "standard" : speed;
   }
 
-  // as a call takes it: the model by its id
+  // as a call takes it: as its model runs it (fit), the model by its id
   export function ask(pick: Pick): Pick {
-    const model = Pick.model(pick.vendor, pick.model);
-    return { ...pick, model: model?.id ?? pick.model };
+    const fitted = Pick.fit(pick);
+    const model  = Pick.model(pick.vendor, pick.model);
+    return { ...fitted, model: model?.id ?? pick.model };
   }
 
-  // as the chat runs it; null: none
+  // as the chat runs it; null: none. Its model must be offered, its
+  // effort and speed words illi knows (an effort its model names too);
+  // one the model lacks is kept as asked (fit runs it as it can), so a
+  // saved pick never gives way for a speed a catalog dropped
   export function read(x: any, offer: Offer): Pick | null {
-    const model = offer.vendors.includes(x.vendor) && offer.models.includes(x.model) ? Pick.model(x.vendor, x.model) : undefined;
-    if (model === undefined || !EFFORTS.includes(x.effort) || !model.speeds.includes(x.speed)) {
+    const model = offer.vendors.includes(x?.vendor) && offer.models.includes(x?.model) ? Pick.model(x.vendor, x.model) : undefined;
+    if (model === undefined || !(EFFORTS.includes(x.effort) || (model.efforts ?? []).includes(x.effort)) || !SPEEDS.includes(x.speed)) {
       return null;
     }
     return { vendor: x.vendor, model: x.model, effort: x.effort, speed: x.speed };

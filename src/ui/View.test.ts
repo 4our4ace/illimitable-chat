@@ -109,8 +109,9 @@ test("a recap is a line across the chat, its text under it once opened", () => {
 });
 
 // the model picker's pick: model, effort and speed sent as one change,
-// one note saying it (the vendor named once there are more); the pick
-// already, nothing; one not offered, a note why
+// one note saying it (the vendor named once there are more; a speed the
+// model lacks as it runs); the pick already, nothing; a model not
+// offered, a note why
 test("a pick set whole is one change and one note", () => {
   const v    = View.view_new();
   const pick: Pick = { vendor: "claude-api", model: "sonnet-5.5", effort: "medium", speed: "slow" };
@@ -122,8 +123,10 @@ test("a pick set whole is one change and one note", () => {
   View.view_hear(v, { $: "state", ...v, vendors: ["claude-api", "openai-api"] });
   View.view_act(v, { $: "Pick", to: { ...to, effort: "low", speed: "slow" } });
   expect(v.notes.at(-1)).toBe("Now on opus-5.5 (claude-api), low effort.");
-  expect(View.view_act(v, { $: "Pick", to: { ...to, speed: "ultrafast" } })).toEqual([]);
-  expect(v.notes.at(-1)).toBe("No pick opus-5.5 · high · ultrafast here.");
+  expect(View.view_act(v, { $: "Pick", to: { ...to, speed: "ultrafast" } })).toEqual([{ $: "pick", to: { ...to, speed: "ultrafast" } }]);
+  expect(v.notes.at(-1)).toBe("Now on opus-5.5 (claude-api), high effort, fast.");
+  expect(View.view_act(v, { $: "Pick", to: { ...to, model: "opus-9" } })).toEqual([]);
+  expect(v.notes.at(-1)).toBe("No pick opus-9 · high · fast here.");
 });
 
 // what streams keeps its rows while its text holds, so a paint lays out
