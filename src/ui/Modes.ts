@@ -41,14 +41,15 @@ export const TITLE_AGAIN = TITLE_NONE + TITLE_POP + TITLE_PUSH;
 export const FLAGS_ASK = "\x1b[?u";
 
 // the alternate screen, bracketed paste, the mouse's clicks, wheel and
-// every move as SGR reports, kitty's keys at flag 1 (popped before
+// every move as SGR reports, the focus gained and lost (Screen.ts
+// FOCUS_IN, FOCUS_OUT), kitty's keys at flag 1 (popped before
 // pushed: each screen keeps its own flags), the flags asked, the
 // terminal's title saved (TITLE_PUSH); off, in turn. The window's
 // (WINDOW_ON) asks no flags: each profile's illi asks as it's shown
-const ON = "\x1b[?1049h\x1b[?2004h\x1b[?1000h\x1b[?1003h\x1b[?1006h\x1b[<u\x1b[>1u";
+const ON = "\x1b[?1049h\x1b[?2004h\x1b[?1000h\x1b[?1003h\x1b[?1006h\x1b[?1004h\x1b[<u\x1b[>1u";
 export const MODES_ON  = ON + FLAGS_ASK + TITLE_PUSH;
 export const WINDOW_ON = ON + TITLE_PUSH;
-export const MODES_OFF = "\x1b[<u\x1b[?1006l\x1b[?1003l\x1b[?1000l\x1b[?2004l\x1b[?1049l" + SHOW + PLAIN;
+export const MODES_OFF = "\x1b[<u\x1b[?1004l\x1b[?1006l\x1b[?1003l\x1b[?1000l\x1b[?2004l\x1b[?1049l" + SHOW + PLAIN;
 
 // the modes off as the window ends: the title illi wrote emptied, the
 // one saved popped, then MODES_OFF (as Screen.ts screen_off with a title
