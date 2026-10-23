@@ -7,9 +7,10 @@
 // (keywords, strings, functions, comments, numbers), titles, links and
 // types where it names them, the rest by kin (a path a cyan or teal, a
 // bullet the accent). Comments, quotes and rules are faint, in its
-// muted tones; every other slot reads on its background (CANVAS) at
-// about 3:1 or more (Palettes.test.ts), so a role whose own color won't
-// takes the scheme's nearest that will. "mono" has none: the terminal's
+// muted tones (comments and quotes, being text, still 2.3:1 or more);
+// every other slot reads on its background (CANVAS) at about 3:1 or
+// more (Palettes.test.ts), so a role whose own color won't takes the
+// scheme's nearest that will. "mono" has none: the terminal's
 // own ink. The schemes' sources and licenses: THIRD_PARTY_NOTICES.md.
 //
 // A palette's slots: accent (third-level headings, the quote bar,
@@ -48,11 +49,13 @@ const DRACULA = {
 };
 
 // nordtheme.com, its colors and palettes: Polar Night (nord0-3), Snow
-// Storm (nord4-6), Frost (nord7-10), Aurora (nord11-15)
+// Storm (nord4-6), Frost (nord7-10), Aurora (nord11-15); and the brighter
+// nord3 its own editor themes (nordtheme/vim, visual-studio-code) take
+// for comments
 const NORD = {
   nord0: "#2e3440", nord1: "#3b4252", nord2: "#434c5e", nord3: "#4c566a", nord4: "#d8dee9", nord5: "#e5e9f0", nord6: "#eceff4",
   nord7: "#8fbcbb", nord8: "#88c0d0", nord9: "#81a1c1", nord10: "#5e81ac", nord11: "#bf616a", nord12: "#d08770", nord13: "#ebcb8b",
-  nord14: "#a3be8c", nord15: "#b48ead",
+  nord14: "#a3be8c", nord15: "#b48ead", nord3Bright: "#616e88",
 };
 
 // tokyo-night-vscode-theme's README palette, Night, named by its uses
@@ -177,8 +180,9 @@ function palette_dracula(c: typeof DRACULA): Slots {
 
 // Nord, by its colors' uses: nord8 the primary accent and functions,
 // nord9 keywords, nord7 types, nord14 strings, nord15 numbers, nord3
-// comments and guides, nord4 the text, nord6 text that needs attention;
-// a quote in nord4 (nord3 is too faint for prose)
+// guides (comments in its brighter nord3: nord3 itself is too faint for
+// text), nord4 the text, nord6 text that needs attention; a quote in
+// nord4
 function palette_nord(c: typeof NORD): Slots {
   return {
     accent     : c.nord8,
@@ -191,7 +195,7 @@ function palette_nord(c: typeof NORD): Slots {
     codeCommand: c.nord8,
     codeFlag   : c.nord9,
     codeString : c.nord14,
-    codeComment: c.nord3,
+    codeComment: c.nord3Bright,
     link       : c.nord8,
     path       : c.nord7,
     number     : c.nord15,
@@ -347,7 +351,8 @@ function palette_github(c: typeof GITHUB_DARK): Slots {
 
 // One Dark, by its syntax: keywords and italics purple, functions blue,
 // strings and raw markup green, constants and bold orange, classes the
-// second orange, headings red, links cyan, comments mono 3; its accent
+// second orange, headings red, links cyan, comments mono 3, a quote's
+// prose mono 2 (mono 3 is too faint for it); its accent
 function palette_one_dark(c: typeof ONE_DARK): Slots {
   return {
     accent     : c.accent,
@@ -364,7 +369,7 @@ function palette_one_dark(c: typeof ONE_DARK): Slots {
     link       : c.cyan,
     path       : c.cyan,
     number     : c.orange,
-    quote      : c.mono3,
+    quote      : c.mono2,
     rule       : c.mono3,
     tableRule  : c.mono3,
     bullet     : c.accent,

@@ -68,6 +68,11 @@ const CODE = 100000;
 // the drawings and highlights kept
 const KEPT = 64;
 
+// names code is often given that Prism knows by another
+const ALIASES: Record<string, string> = {
+  "c#": "csharp", "c++": "cpp", cc: "cpp", h: "c", hpp: "cpp", rs: "rust", golang: "go", jsonc: "json", tf: "hcl", terraform: "hcl",
+};
+
 // the shells, whose code is read here (draw_shell), never by Prism
 const SHELLS = ["bash", "sh", "shell", "zsh", "fish", "console", "shell-session", "powershell", "ps1"];
 
@@ -429,11 +434,12 @@ export function draw_dark(hex: string): boolean {
 }
 
 // code's tokens, line by line, as its language (the first word of lang,
-// any case) reads them: a shell's here (draw_shell), any other by
-// Prism's grammar of that name or alias (loading Prism); null: a
+// any case; ALIASES) reads them: a shell's here (draw_shell), any other
+// by Prism's grammar of that name or alias (loading Prism); null: a
 // language neither knows, or code too long. Each is kept (draw_kept)
 export function draw_code(lang: string, text: string): Token[][] | null {
-  const name = lang.trim().split(/\s+/)[0].toLowerCase();
+  const word = lang.trim().split(/\s+/)[0].toLowerCase();
+  const name = Object.hasOwn(ALIASES, word) ? ALIASES[word] : word;
   if (text.length > CODE) {
     return null;
   }

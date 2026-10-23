@@ -7,8 +7,10 @@
 // untold; each button copying its block, the last the reply; no buttons
 // in a pipe. A reply streaming, laid out as it grows, is the reply laid
 // out whole at each length, its finished blocks' lines kept. A table too
-// wide shares the room by column_widths; a button that won't fit beside
-// moves over its block, or is left out.
+// wide shares the room by column_widths, or, too wide to box at all, is
+// records; a button that won't fit beside moves over its block, or is
+// left out. A list apart is one; a diff's lines take a diff's colors; an
+// alert copies its words.
 
 import { expect, test } from "bun:test";
 import * as Paint from "./Paint.ts";
@@ -76,12 +78,12 @@ test("a pipe's reply has no buttons", () => {
   Reply.reply_buttons(true);
 });
 
-// every kind of block, figures side by side, a fence holding blank lines
-// and one never closed, CRLF too: grown a piece at a time, each length
+// every kind of block, figures side by side, a list going on past a
+// blank line, a fence holding blank lines and one never closed, CRLF too: grown a piece at a time, each length
 // lays out as it does whole (its text, inks, what each button copies);
 // a finished block's lines are those laid out before
 test("a reply grown a piece at a time is the reply laid out whole", () => {
-  const md   = "# Plan\n\nRead **this** at /tmp/a.log, 3 times.\n\n" + TABLE + "\n\n" + FLOW + "\n\n- one\n- two\n  more\n\n> said\n\n```ts\nconst x = 1;\n\nconst y = 2;\n```\n\n---\r\n\r\nlast words\n\n```sh\nls -l";
+  const md   = "# Plan\n\nRead **this** at /tmp/a.log, 3 times.\n\n" + TABLE + "\n\n" + FLOW + "\n\n- one\n- two\n  more\n\n- apart\n\n  its own\n\n> said\n\n```ts\nconst x = 1;\n\nconst y = 2;\n```\n\n---\r\n\r\nlast words\n\n```sh\nls -l";
   const seen = (lines: Paint.Line[]) => lines.map((l) => l.map((r) => [r.x, r.s, r.copy?.()]));
   for (const step of [1, 7, 40]) {
     let was: Reply.Grown | null = null;
@@ -147,4 +149,40 @@ test("figures that won't fit side by side stack", () => {
   expect(shown[0]).toMatch(/^ *\[ ⧉ md \] \[ ⧉ art \]$/);
   expect(shown.filter((l) => l.includes("⧉ source"))).toHaveLength(1);
   expect(shown.every((l) => Paint.text_width(l) <= 30)).toBe(true);
+});
+
+// a table whose box can't be as narrow as the reply: its rows as
+// records, a cell a line under its header's name, never wider than the
+// reply; a table of no rows, its header's names
+test("a table too wide to box at all is records, in the width", () => {
+  const md    = "| a | b | c | d | e | f | g | h |\n|---|---|---|---|---|---|---|---|\n| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |\n| x | y | z | w | a longer cell | f | g | h |";
+  const shown = text(Reply.reply_lines(md, 20));
+  expect(shown.every((l) => Paint.text_width(l) <= 20)).toBe(true);
+  expect(shown.slice(1, 4)).toEqual(["a: 1", "b: 2", "c: 3"]);
+  expect(shown).toContain("─".repeat(20));
+  expect(shown).toContain("e: a longer cell");
+  expect(text(Reply.reply_lines("| a | b | c | d | e | f |\n|---|---|---|---|---|---|", 20, false))).toEqual(["a", "b", "c", "d", "e", "f"]);
+});
+
+// a list of items apart is one list, one button, its blank lines kept;
+// an item's paragraph hangs under its text
+test("a list whose items are apart is one list", () => {
+  const lines = Reply.reply_lines("1. one\n\n2. two\n\n   its second paragraph", 40);
+  expect(text(lines)).toEqual([" ".repeat(13) + "[ ⧉ copy ]", "1. one", "", "2. two", "", "   its second paragraph"]);
+  expect(button(lines, "⧉ copy")).toBe("1. one\n\n2. two\n\n   its second paragraph");
+});
+
+// a diff's lines in a palette: the colors every diff takes (the success
+// and error tokens), not the palette's keyword and string colors
+test("a diff's lines in a diff's colors", () => {
+  Paint.paint_canvas("#fdf6e3");
+  const lines = Reply.reply_lines("```diff\n- old\n+ new\n```", 40);
+  const ink   = (x: string) => lines.flat().find((r) => r.x.includes(x))!.s.c;
+  expect([ink("old"), ink("new")]).toEqual(["1", "2"]);
+});
+
+// an alert's button copies its text, not its [!NOTE]
+test("an alert copies its words", () => {
+  expect(button(Reply.reply_lines("> [!NOTE]\n> look here\n> and here", 60), "⧉ copy")).toBe("look here\nand here");
+  expect(button(Reply.reply_lines("> [!tip] inline", 60), "⧉ copy")).toBe("inline");
 });

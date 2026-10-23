@@ -97,8 +97,8 @@ flowchart TD
   questions with options you pick in a popup, your answers kept in the
   chat.
   `/goal <message>` keeps it working until the goal is met.
-- **Drawn replies.** Mermaid diagrams, highlighted code and boxed tables,
-  in one of 15 palettes or your terminal's own colors.
+- **Drawn replies.** Mermaid diagrams, code highlighted in 40 languages
+  and boxed tables, in one of 15 palettes or your terminal's own colors.
 
 Two subagents at work side by side, then illi merging what they found:
 

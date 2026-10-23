@@ -15,18 +15,21 @@
 // A table's columns take their natural widths if those fit, else the
 // room shared out (column_widths): no column wider than its widest
 // cell, none narrower than its longest word while the words fit, so
-// words break only when they can't. Its art (the ⧉ art button) is the
-// same table as plain text, 100 columns wide, its links' targets shown.
+// words break only when they can't; a box that can't be as narrow as
+// the width at all is its rows as records, a cell a line under its
+// header's name. Its art (the ⧉ art button) is the same table as plain
+// text, 100 columns wide, its links' targets shown.
 //
 // A reply streaming grows (reply_grow): its blocks before its last blank
 // line outside code are finished, as no text after them changes them,
 // so their lines are kept and only the text after is read and laid out
-// again (but after a figure: the next may sit beside it).
+// again (but after a figure: the next may sit beside it; after a list,
+// till a whole line after the blank isn't its own).
 
 import { markdown_parse, markdown_shown, markdown_text, type Block, type Inline, type Item } from "./Markdown.ts";
 import * as Draw from "./Draw.ts";
 import * as Paint from "./Paint.ts";
-import { COMMENTS, theme_colors, type Token } from "./Theme.ts";
+import { ANSI, COMMENTS, theme_colors, type Token } from "./Theme.ts";
 
 // Types
 // =====
@@ -60,8 +63,9 @@ const FAINT = ["codeComment", "quote", "rule", "tableRule"];
 
 // the slot each kind of code token takes (Theme.SYNTAX's kinds; a
 // comment's, codeComment): calls a command's, words a language keeps a
-// flag's, text a string's, values a number's, names a path's; any other
-// kind (an operator, plain) the code's own ink
+// flag's, text a string's, values a number's, names a path's; a diff's
+// lines (DIFF) as every diff's; any other kind (an operator, plain) the
+// code's own ink
 const CODE: Record<string, string> = {
   function    : "codeCommand",
   builtin     : "codeCommand",
@@ -72,13 +76,11 @@ const CODE: Record<string, string> = {
   selector    : "codeFlag",
   important   : "codeFlag",
   tag         : "codeFlag",
-  deleted     : "codeFlag",
   string      : "codeString",
   char        : "codeString",
   "attr-value": "codeString",
   regex       : "codeString",
   url         : "codeString",
-  inserted    : "codeString",
   number      : "number",
   boolean     : "number",
   constant    : "number",
@@ -88,6 +90,10 @@ const CODE: Record<string, string> = {
   property    : "path",
   variable    : "path",
 };
+
+// a diff's lines, added and removed, by the colors a tool's diff takes
+// (Theme.ANSI's add and del, else the success and error tokens)
+const DIFF: Record<string, ["add" | "del", Token]> = { inserted: ["add", "success"], deleted: ["del", "error"] };
 
 // an alert's title and the token its box is in, by its level
 const ALERTS: Record<string, [string, Token]> = {
@@ -150,7 +156,9 @@ export function reply_grow(text: string, w: number, was: Grown | null, copy = tr
 // how many of a text's blocks are finished, and where the text after
 // them starts: those before its last blank line (not its last line, which
 // may grow) between two blocks or after the last, unless a figure is
-// right before it. Only blank lines lie between blocks (the parser's)
+// right before it, or a list the line after the blank lines may yet
+// join (none, or the last). Only blank lines lie between blocks (the
+// parser's)
 function reply_done(text: string, blocks: Block[], drawn: Drawn[]): [number, number] {
   const lines = text.split("\n");
   let [line, at] = [0, 0];
@@ -164,7 +172,11 @@ function reply_done(text: string, blocks: Block[], drawn: Drawn[]): [number, num
     for (let n = b.raw.split("\n").length; n > 0 && line < lines.length; n--) {
       next();
     }
-    if (!drawn[k].fig && line < lines.length - 1 && blank(line)) {
+    let after = line;
+    while (blank(after)) {
+      after++;
+    }
+    if (!drawn[k].fig && line < lines.length - 1 && blank(line) && (b.kind !== "list" || after < lines.length - 1)) {
       done = [k + 1, at + lines[line].length + 1];
     }
   }
@@ -236,7 +248,7 @@ function block_drawn(pal: Pal, b: Block, w: number): Drawn {
       return { lines: buttons_beside(pal, rows.map((r) => [Paint.Run("│ ", bar), ...r]), [[COPY, () => quote_said(b.raw)]], w), fig: false };
     }
     case "alert": {
-      return { lines: buttons_beside(pal, alert_lines(pal, b.level, b.inline, w), [[COPY, () => quote_said(b.raw)]], w), fig: false };
+      return { lines: buttons_beside(pal, alert_lines(pal, b.level, b.inline, w), [[COPY, () => alert_said(b.raw)]], w), fig: false };
     }
     case "rule": {
       return { lines: [[Paint.Run("─".repeat(Math.max(0, Math.min(w, RULE))), tone(pal, "rule"))]], fig: false };
@@ -271,16 +283,18 @@ function heading_lines(pal: Pal, level: number, inline: Inline[], w: number): Li
 // a list's items: each its lead (two columns a level, its glyph: a
 // task's box, a number as written, else a bullet, • or ◦ deeper) in the
 // bullet's tone, its text wrapped after it and hung under its own start;
-// a task done dim and struck through
+// a task done dim and struck through. An item's paragraph (no marker)
+// hangs under its item's text; a blank line before an item stays
 function list_lines(pal: Pal, items: Item[], w: number): Line[] {
   const bullet = tone(pal, "bullet");
-  return items.flatMap((item) => {
+  const hung   : number[] = [];
+  return items.flatMap((item, n) => {
     const glyph = item.task !== undefined ? (item.task ? "[✓]" : "[ ]") : /\d/.test(item.marker) ? item.marker : item.depth > 0 ? "◦" : "•";
-    const lead  = "  ".repeat(item.depth) + glyph + " ";
-    const lw    = Paint.text_width(lead);
+    const lead  = item.marker === "" ? " ".repeat(hung[item.depth] ?? 2 * item.depth) : "  ".repeat(item.depth) + glyph + " ";
+    const lw    = (hung[item.depth] = Paint.text_width(lead));
     const ink   = item.task === true ? { ...Paint.INK, d: true, t: true } : Paint.INK;
     const rows  = Paint.runs_wrap(inline_runs(pal, item.inline, ink), Math.max(1, w - lw), false);
-    return rows.map((r, k) => [k === 0 ? Paint.Run(lead, bullet) : Paint.Run(" ".repeat(lw)), ...r]);
+    return [...(item.gap && n > 0 ? [[]] : []), ...rows.map((r, k) => [k === 0 ? Paint.Run(lead, bullet) : Paint.Run(" ".repeat(lw)), ...r])];
   });
 }
 
@@ -299,6 +313,11 @@ function alert_lines(pal: Pal, level: string, inline: Inline[], w: number): Line
 // a quote's lines as said: each without its > and a space after
 function quote_said(raw: string): string {
   return raw.split("\n").map((l) => l.replace(/^\s*> ?/, "")).join("\n");
+}
+
+// an alert's lines as said, without its [!NOTE]
+function alert_said(raw: string): string {
+  return quote_said(raw).replace(/^\[![a-z]+\][ \t]*\n?/i, "");
 }
 
 // Code
@@ -340,18 +359,21 @@ function code_lines(pal: Pal, b: Block & { kind: "code" }, w: number): Line[] {
 
 // each kind of code token's ink: the code's own (codeText's color, never
 // dim), in its slot's color (CODE; a comment's codeComment) where it has
-// one, faint where the palette lacks a faint one; a comment italic. In
-// the terminal's own palette a kind takes the theme's syntax color for
-// it (Draw.draw_syntax), but where the user's colors set its slot
+// one, faint where the palette lacks a faint one, a diff's line in a
+// diff's (DIFF); a comment italic. In the terminal's own palette a kind
+// takes the theme's syntax color for it (Draw.draw_syntax), but where the
+// user's colors set its slot
 function code_ink(pal: Pal): (kind: string) => Ink {
   const base   = { ...Paint.INK, c: pal.codeText || "" };
   const syntax = Draw.draw_syntax();
   const mine   = theme_colors();
+  const tokens = Draw.draw_tokens();
   return (kind) => {
     const note  = COMMENTS.includes(kind);
     const slot  = note ? "codeComment" : Object.hasOwn(CODE, kind) ? CODE[kind] : undefined;
     const own   = slot !== undefined && slot in mine ? undefined : Object.hasOwn(syntax, kind) ? syntax[kind] : undefined;
-    const color = own ?? (slot === undefined ? undefined : pal[slot]);
+    const diff  = Object.hasOwn(DIFF, kind) ? ANSI[DIFF[kind][0]] ?? tokens[DIFF[kind][1]] : undefined;
+    const color = own ?? diff ?? (slot === undefined ? undefined : pal[slot]);
     const ink   = color ? { ...base, c: color } : slot !== undefined && FAINT.includes(slot) ? { ...base, d: true } : base;
     return note ? { ...ink, i: true } : ink;
   };
@@ -363,7 +385,9 @@ function code_ink(pal: Pal): (kind: string) => Ink {
 // a table boxed: its header (each cell's text, bold, in the header's
 // color) over its rows (each cell's marks), each column as wide as
 // column_widths makes it in w (less the frame's), each cell wrapped and
-// aligned in it; a double rule under the header, a single between rows
+// aligned in it; a double rule under the header, a single between rows.
+// A box that can't be as narrow as w (a column a character, and its
+// frame) is its rows as records (table_records)
 function table_lines(pal: Pal, b: Block & { kind: "table" }, w: number): Line[] {
   const head   = colored(pal, "tableHeader", { ...Paint.INK, b: true });
   const header = b.header.map((c) => [Paint.Run(Paint.text_clean(markdown_text(c)), head)]);
@@ -371,8 +395,24 @@ function table_lines(pal: Pal, b: Block & { kind: "table" }, w: number): Line[] 
   const widths = table_widths([b.header, ...b.rows].map((r) => r.map(markdown_text)), w - 4);
   const align  = b.header.map((_, k) => b.align[k] ?? "left");
   const ink    = tone(pal, "tableRule");
+  if (widths.reduce((a, x) => a + x + 3, 1) > w) {
+    return table_records(header, rows, ink, w);
+  }
   const body   = rows.flatMap((r, k) => [...(k === 0 ? [] : [grid_edge("├─┼┤", widths, ink)]), ...grid_row(r, widths, align, ink)]);
   return [grid_edge("┌─┬┐", widths, ink), ...grid_row(header, widths, align, ink), grid_edge("╞═╪╡", widths, ink), ...body, grid_edge("└─┴┘", widths, ink)];
+}
+
+// a table too wide for w as records: each row its cells, one a line
+// after its header's text and a colon (no header text: neither; an
+// empty cell: no colon), wrapped at w and hung two columns in; a rule in
+// the table's ink between rows. A table of no rows: its header's texts
+function table_records(header: Line[], rows: Line[][], ink: Ink, w: number): Line[] {
+  const rule   = [Paint.Run("─".repeat(Math.max(1, Math.min(w, RULE))), ink)];
+  const record = (r: Line[]) => r.flatMap((cell, k) => {
+    const label = Paint.line_width(header[k]) === 0 ? [] : [...header[k], ...(cell.length === 0 ? [] : [Paint.Run(": ", header[k][0].s)])];
+    return Paint.runs_wrap([...label, ...cell], Math.max(1, w - 2), false).map((l, j) => (j === 0 ? l : [Paint.Run("  "), ...l]));
+  });
+  return (rows.length === 0 ? [header.map(() => [])] : rows).flatMap((r, k) => [...(k === 0 ? [] : [rule]), ...record(r)]);
 }
 
 // a table's art: plain text, PAGE columns wide (less the frame's), its
@@ -487,9 +527,6 @@ function inline_runs(pal: Pal, nodes: Inline[], ink: Ink): Line {
       case "number":
       case "path": {
         return inline_run(n.text, colored(pal, n.kind, ink));
-      }
-      case "dim": {
-        return inline_run(n.text, { ...ink, d: true });
       }
       case "text": {
         return inline_run(n.text, ink);

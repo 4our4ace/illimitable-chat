@@ -148,7 +148,7 @@ export const GLYPH = {
 // background is untold (REPLY); each kind's own color is drawn so too
 // (Reply.ts). Kinds of a kind share a color: what is called blue,
 // keywords magenta, text green, values yellow, types and names cyan,
-// markup's tags and what was removed red
+// markup's tags, variables and what was removed red
 export const SYNTAX: Record<string, string> = {
   function    : "4",
   url         : "4",
