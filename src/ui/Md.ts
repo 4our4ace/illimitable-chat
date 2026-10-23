@@ -51,8 +51,12 @@ const SPAN  = new RegExp([
   /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+|\/(?!\/)[^\s)]*)\)/.source,
   NAME.source,
   /\*\*([^*\n]+)\*\*/.source,
-  /(?<![*\w])\*([^*\s][^*\n]*?)\*(?![\w*])/.source,
-  /(?<![^\s(])(https?:\/\/[^\s<)]+[^\s<).,;:!?])/.source,
+  // *x*: no word or star either side, no space after the first star, on
+  // one line (2*3*4 stays as it is)
+  /(?<![\w*])\*([^\s*][^*\n]*)\*(?![\w*])/.source,
+  // a bare url as a reply reads one (Markdown.ts): two characters at
+  // least after the scheme, the stop or bracket after it left out
+  /(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/.source,
 ].join("|"), "g");
 const NEW   = /^\+\+\+ (.*)$/;
 const READ  = /^\[(lines (\d+)-\d+ of \d+[^\]]*)\]$/;

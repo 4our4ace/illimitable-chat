@@ -3,6 +3,7 @@
 // `bun test Md.test.ts`. A message typed keeps its blank lines; a
 // command's exit names its result; a note or a thought draws as a reply
 // does, in its look; the answers to illi's questions as the user's words.
+// Italics and a bare url read as a reply reads them.
 
 import { expect, test } from "bun:test";
 import * as Md from "./Md.ts";
@@ -47,4 +48,19 @@ test("the answers to illi's questions show as the user's, not as work", () => {
   expect(text[0]).toStartWith("╭─ your answers ─");
   expect(text.slice(1, 3).map((l) => l.replace(/ +│$/, "").trim())).toEqual(["│ Which database?", "│ picked: SQLite"]);
   expect(View.view_acts(v, View.entry_rows(3, "echo", "The user skipped the questions: decide yourself, or ask in your reply.")).map((r) => r.$)).toEqual(["Act"]);
+});
+
+// *x* italic only with no word or star either side and no space after
+// its first star, on one line; a bare url as a reply's (Markdown.ts),
+// its trailing stop or bracket left out
+test("italics and a bare url, as a reply reads them", () => {
+  expect(Md.span_parse("an *important* word")).toEqual([Md.Text("an "), { $: "Ital", x: "important" }, Md.Text(" word")]);
+  expect(Md.span_parse("**bold** and *it*")).toEqual([{ $: "Bold", x: "bold" }, Md.Text(" and "), { $: "Ital", x: "it" }]);
+  for (const plain of ["2*3*4", "* a*", "a*b*", "*a*b", "*a\nb*", "*a**", "https://a"]) {
+    expect(Md.span_parse(plain)).toEqual([Md.Text(plain)]);
+  }
+  expect(Md.span_parse("see https://x.co/a.")).toEqual([Md.Text("see "), { $: "Link", x: "https://x.co/a", k: "https://x.co/a" }, Md.Text(".")]);
+  expect(Md.span_parse("(https://x.co/a?b=1)")).toEqual([Md.Text("("), { $: "Link", x: "https://x.co/a?b=1", k: "https://x.co/a?b=1" }, Md.Text(")")]);
+  expect(Md.span_parse("\"https://x.co\"")).toEqual([Md.Text("\""), { $: "Link", x: "https://x.co", k: "https://x.co" }, Md.Text("\"")]);
+  expect(Md.md_flat("*a* at https://ab")).toBe("a at https://ab");
 });

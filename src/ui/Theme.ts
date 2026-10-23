@@ -17,8 +17,7 @@
 // it fills. Code's tokens are in the palette too (SYNTAX). illi's replies
 // and diagrams paint true color (Reply.ts, Draw.ts): a palette
 // (PALETTE, Palettes.ts) over the terminal's own background, or, the
-// background untold, the terminal's palette (REPLY); those parts as
-// prismantis has them (THIRD_PARTY_NOTICES.md).
+// background untold, the terminal's palette (REPLY).
 //
 // Every colored part of the screen takes its color from one of a few
 // tokens (TOKENS), never a color of its own, so one change recolors all
@@ -141,39 +140,45 @@ export const GLYPH = {
   ...OWN.glyph,
 };
 
-// a code token's color by its kind (Prism's names, the shell's too: Draw.ts):
-// the palette's plain hues, which read on its background and a shade of
-// it; a comment is dimmed
+// a code token's color by its kind, in the terminal's own palette: the
+// kinds Prism's tokens name (prismjs.com/tokens; its operators and
+// punctuation left plain), the theme's syntax entries over them, any
+// kind it adds known too (Draw.draw_code). Functions, keywords and
+// strings are a reply's command, flag and string slots while the
+// background is untold (REPLY); each kind's own color is drawn so too
+// (Reply.ts). Kinds of a kind share a color: what is called blue,
+// keywords magenta, text green, values yellow, types and names cyan,
+// markup's tags and what was removed red
 export const SYNTAX: Record<string, string> = {
-  string     : "2",
-  char       : "2",
-  url        : "2",
-  inserted   : "2",
-  number     : "1",
-  boolean    : "1",
-  constant   : "1",
-  symbol     : "1",
-  deleted    : "1",
-  regex      : "1",
-  keyword    : "5",
-  important  : "5",
-  atrule     : "5",
-  rule       : "5",
-  variable   : "5",
-  "attr-name": "5",
-  "template-string": "2",
+  function    : "4",
+  url         : "4",
+  keyword     : "5",
+  atrule      : "5",
+  selector    : "5",
+  important   : "5",
+  string      : "2",
+  char        : "2",
   "attr-value": "2",
-  function   : "4",
-  "class-name": "4",
-  builtin    : "4",
-  key        : "4",
-  selector   : "4",
-  property   : "4",
-  tag        : "4",
+  inserted    : "2",
+  number      : "3",
+  boolean     : "3",
+  constant    : "3",
+  symbol      : "3",
+  entity      : "3",
+  "attr-name" : "3",
+  builtin     : "6",
+  "class-name": "6",
+  namespace   : "6",
+  property    : "6",
+  regex       : "6",
+  tag         : "1",
+  variable    : "1",
+  deleted     : "1",
   ...OWN.syntax,
 };
 
-// the kinds of a comment, drawn dim
+// the kinds that are comments (a markup file's prolog, doctype and CDATA
+// read as its comments): always known, drawn italic and faint
 export const COMMENTS = ["comment", "prolog", "doctype", "cdata"];
 
 // the palette replies and diagrams draw in: one of Palettes.ts's, "mono"

@@ -61,7 +61,7 @@ test("the background told: illi's aqua the accent, the palette's accent and bull
   expect(Draw.draw_stamp()).toBe(was + 1);
   const tokens = Draw.draw_tokens();
   const theme  = Draw.draw_theme();
-  expect([tokens.accent, theme.accent, theme.bullet, tokens.link, theme.link, theme.codeFlag]).toEqual([AQUA, AQUA, AQUA, "#89b4fa", "#89b4fa", "#f38ba8"]);
+  expect([tokens.accent, theme.accent, theme.bullet, tokens.link, theme.link, theme.codeFlag]).toEqual([AQUA, AQUA, AQUA, "#89b4fa", "#89b4fa", "#cba6f7"]);
   expect(tokens.you).toBe(Draw.draw_mix(AQUA, DARK, 0.4));
   expect(tokens.you).not.toBe(AQUA);
 });

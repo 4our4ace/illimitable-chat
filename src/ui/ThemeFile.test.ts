@@ -6,6 +6,7 @@
 // user's frame as its ansi sets it, a diff's added lines too, else their
 // tokens'. Each element takes its token: the user's frame, a reply's
 // copy buttons and bullets, a chip, a diff's lines, a plugin's piece.
+// Code's tokens take the file's syntax colors, each kind it names.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -18,10 +19,12 @@ fs.writeFileSync(DIR + "/theme.json", JSON.stringify({
   tokens : { accent: "#445566", link: "accent", warning: "nope" },
   ansi   : { you: "5", add: "10" },
   colors : { heading: "#ff9e64" },
+  syntax : { "class-name": "#0a0b0c", boolean: "13", property: "#102030", comment: "#405060", operator: "9" },
 }));
 
 const Draw  = await import("./Draw.ts");
 const Paint = await import("./Paint.ts");
+const Reply = await import("./Reply.ts");
 const View  = await import("./View.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
@@ -49,4 +52,17 @@ test("each element takes its token: the user's frame, copy buttons and bullets, 
 test("a plugin's pieces take their tokens' colors", () => {
   const line = Paint.pieces_line([{ text: "ok", tone: "success" }, { text: " · " }, { text: "main", tone: "accent", bold: true }]);
   expect(line.map((r) => [r.x, r.s.c, r.s.b])).toEqual([["ok", "2", false], [" · ", "", false], ["main", "#445566", true]]);
+});
+
+// each kind the file names takes its color, one Prism names that illi
+// leaves plain (operators) too; a comment its color, still italic; the
+// kinds it doesn't name keep theirs (keywords and a selector magenta)
+test("code's tokens take the file's syntax colors, each kind it names", () => {
+  const code = Reply.reply_lines("```ts\nclass Box { on = true; } // c\nlet a = 1 + 2;\n```\n\n```css\na { color: red; }\n```", 60);
+  expect(colored(code, "#0a0b0c")).toEqual(["Box"]);
+  expect(colored(code, "13")).toEqual(["true"]);
+  expect(colored(code, "#102030")).toEqual(["color"]);
+  expect(colored(code, "9")).toEqual(["=", "=", "+"]);
+  expect(code.flat().find((r) => r.x === "// c")!.s).toMatchObject({ c: "#405060", i: true });
+  expect(colored(code, "5")).toEqual(["class", "let", "a"]);
 });

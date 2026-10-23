@@ -1,7 +1,6 @@
 // Draw
 // ====
-// What Paint.ts draws in color, in parts as prismantis does
-// (THIRD_PARTY_NOTICES.md). A ```mermaid block: a diagram on the
+// What Paint.ts draws in color. A ```mermaid block: a diagram on the
 // terminal's cell grid (Pele lays it out with each character one cell,
 // pelext draws the layout in box lines, block fills, braille and text),
 // laid out again narrower till it fits the width; else none (its code
@@ -58,14 +57,37 @@ type Prism = typeof import("./Prism.ts");
 // Constants
 // =========
 
-// the longest diagram drawn (characters, lines), the longest
-// code highlighted
+// the longest diagram source drawn (characters, lines): past them its
+// code shows, so laying out a reply stays quick
 const LONGEST = 8000;
-const LINES   = 80;
-const CODE    = 100000;
+const LINES   = 150;
+
+// the longest code highlighted
+const CODE = 100000;
 
 // the drawings and highlights kept
 const KEPT = 64;
+
+// the shells, whose code is read here (draw_shell), never by Prism
+const SHELLS = ["bash", "sh", "shell", "zsh", "fish", "console", "shell-session", "powershell", "ps1"];
+
+// a shell line's pieces: a comment (a # starting a piece) to the line's
+// end; a string ('...', "..." its escapes in it; one left open to the
+// end); a redirection (2>&1, >>, &>); an operator; a flag (-x, --long);
+// whitespace; a word (anything else up to those)
+const PIECE = /(?<comment>#.*)|(?<string>'[^']*(?:'|$)|"(?:\\.?|[^"\\])*(?:"|$))|(?<redirect>\d*(?:<<?|>>?)&?(?:\d+(?![^\s|;&'"])|-)?|&>>?)|(?<operator>\|\||&&|[|;&])|(?<flag>--?\w[\w-]*)|(?<space>\s+)|(?<word>[^\s|;&'"]+)/y;
+
+// a shell's prompt, a line's first word in a session: none of its
+// command
+const PROMPT = /^[$%]$/;
+
+// the diagram palette's series: the reply palette's hues, in the order
+// charts and nodes take them
+const SERIES = ["link", "codeString", "number", "codeFlag", "tableHeader", "path", "codeCommand", "inlineCode", "heading", "emphasis"];
+
+// how near red (degrees of hue) and how saturated a color the critical
+// one is (draw_red)
+const RED = { hue: 40, saturation: 0.35 };
 
 // illimitable's color, illi's: the aqua its wordmark ends in (the
 // README's header); on a dark background, on a light one (the same hue,
@@ -86,11 +108,6 @@ const HUES = 12;
 const RING = { dark: [[0.78, 0.15], [0.66, 0.15]], light: [[0.56, 0.15], [0.44, 0.13]] };
 const NEAR = 30;
 const OWN  = [["1", 29], ["3", 110], ["2", 142], ["4", 264], ["5", 328]] as const;
-
-// the shell's languages, and its pieces: a comment, a string, a flag, an
-// operator (a command follows), a word, a space
-const SHELLS = ["bash", "sh", "shell", "zsh", "fish", "console", "shell-session", "powershell", "ps1"];
-const SHELL  = /(#.*)|('[^']*'?|"(?:\\.|[^"\\])*"?)|(--?\w[\w-]*)|(\|\||&&|[|;&])|([^\s|;&'"]+)|(\s+)/g;
 
 // Draw
 // ====
@@ -165,12 +182,42 @@ function draw_palette(): { key: string; colors: PelePalette } {
   return palette;
 }
 
-// a reply's colors as a diagram's: its text, the
-// muted, its lines and borders, the accent, the critical and highlit,
-// and the series charts and nodes take in turn, over the canvas
-function draw_colors(theme: Partial<Record<string, string>>, canvas: string): PelePalette {
-  const series = [...new Set([theme.link, theme.number, theme.heading, theme.emphasis, theme.path, theme.codeFlag, theme.accent, theme.codeString].filter((c): c is string => !!c))];
-  return { canvas, text: theme.diagramText ?? theme.codeText, muted: theme.quote ?? theme.codeComment, line: theme.diagram, border: theme.diagram, accent: theme.accent, critical: theme.codeFlag, highlight: theme.emphasis ?? theme.accent, series, hues: series };
+// the diagram palette from a reply's slots (#rrggbb) over the
+// background: its text the diagram's (else code's), its lines and
+// borders the diagram's, secondary text the comments', the accent, the
+// reddest hue the critical one (else the accent), the heading the
+// highlight (else the accent); charts and nodes cycling through the
+// palette's hues (SERIES), each once, those it lacks left out (none:
+// pelext tells them apart by shades)
+function draw_colors(colors: Record<string, string | undefined>, canvas: string): PelePalette {
+  const series = [...new Set(SERIES.map((s) => colors[s]).filter((c): c is string => c !== undefined))];
+  return {
+    canvas,
+    text     : colors.diagramText ?? colors.codeText,
+    muted    : colors.codeComment ?? colors.quote,
+    line     : colors.diagram,
+    border   : colors.diagram,
+    accent   : colors.accent,
+    critical : draw_red(series) ?? colors.accent,
+    highlight: colors.heading ?? colors.accent,
+    series,
+    hues     : series,
+  };
+}
+
+// the reddest of colors (#rrggbb): the one whose hue is nearest red,
+// within RED's degrees and saturated enough; none: undefined
+function draw_red(colors: string[]): string | undefined {
+  const hsl = (hex: string) => {
+    const [r, g, b] = [1, 3, 5].map((at) => parseInt(hex.slice(at, at + 2), 16) / 255);
+    const [hi, lo] = [Math.max(r, g, b), Math.min(r, g, b)];
+    const d = hi - lo;
+    const l = (hi + lo) / 2;
+    const h = d === 0 ? 0 : hi === r ? ((g - b) / d) % 6 : hi === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return { hue: (h * 60 + 360) % 360, saturation: d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1)) };
+  };
+  const red = colors.map((c) => ({ c, ...hsl(c) })).filter((x) => x.saturation >= RED.saturation && draw_apart(x.hue, 0) <= RED.hue);
+  return red.sort((a, b) => draw_apart(a.hue, 0) - draw_apart(b.hue, 0))[0]?.c;
 }
 
 // the palette's name: the one named, else dark or light by the
@@ -381,17 +428,94 @@ export function draw_dark(hex: string): boolean {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b < 0.5;
 }
 
-// code's lines as tokens, by its language (a fence's first word); null: a
-// language not known
+// code's tokens, line by line, as its language (the first word of lang,
+// any case) reads them: a shell's here (draw_shell), any other by
+// Prism's grammar of that name or alias (loading Prism); null: a
+// language neither knows, or code too long. Each is kept (draw_kept)
 export function draw_code(lang: string, text: string): Token[][] | null {
-  const name = lang.trim().split(/\s/)[0].toLowerCase();
-  const shell = SHELLS.includes(name);
-  const read = shell ? null : draw_prism();
-  const grammar = read !== null && Object.hasOwn(read.languages, name) ? read.languages[name] : undefined;
-  if (text.length > CODE || (read !== null && (grammar === null || typeof grammar !== "object"))) {
+  const name = lang.trim().split(/\s+/)[0].toLowerCase();
+  if (text.length > CODE) {
     return null;
   }
-  return draw_kept(LIT, name + "\0" + text, () => (read === null ? draw_shell(text) : draw_lines(draw_flat(read.tokenize(text, grammar), ""))));
+  if (SHELLS.includes(name)) {
+    return draw_kept(LIT, "shell\0" + text, () => text.split("\n").map(draw_shell));
+  }
+  const languages = draw_prism().languages;
+  const grammar   = Object.hasOwn(languages, name) ? languages[name] : null;
+  if (typeof grammar !== "object" || grammar === null) {
+    return null;
+  }
+  return draw_kept(LIT, name + "\0" + text, () => draw_lines(draw_prism().tokenize(text, grammar)));
+}
+
+// a shell's line as tokens (PIECE): comments, strings, operators, flags
+// (keywords, but where a command goes: plain), and the command (a
+// function) where one goes: the line's start, after an operator,
+// whitespace and a session's prompt ($ or %) keeping it, any other piece
+// ending it (a redirection too: what follows is its file)
+function draw_shell(line: string): Token[] {
+  const out: Token[] = [];
+  let [at, cmd] = [0, true];
+  while (at < line.length) {
+    PIECE.lastIndex = at;
+    const m = PIECE.exec(line);
+    if (m === null) {
+      out.push({ text: line.slice(at), kind: "" });
+      break;
+    }
+    const g = m.groups!;
+    const x = m[0];
+    at += x.length;
+    if (g.space !== undefined || (g.word !== undefined && cmd && PROMPT.test(x) && out.every((t) => t.text.trim() === ""))) {
+      out.push({ text: x, kind: "" });
+    } else if (g.operator !== undefined) {
+      out.push({ text: x, kind: "operator" });
+      cmd = true;
+    } else {
+      const kind = g.comment !== undefined ? "comment" : g.string !== undefined ? "string" : g.flag !== undefined ? (cmd ? "" : "keyword") : g.word !== undefined && cmd ? "function" : "";
+      out.push({ text: x, kind });
+      cmd = false;
+    }
+  }
+  return out;
+}
+
+// Prism's tokens as lines of tokens: each of its kind (draw_kind), the
+// text it holds of its kind, split at each line's end
+function draw_lines(tokens: PrismToken[]): Token[][] {
+  const lines: Token[][] = [[]];
+  const walk  = (t: PrismToken | PrismToken[], kind: string): void => {
+    if (Array.isArray(t)) {
+      t.forEach((x) => walk(x, kind));
+    } else if (typeof t !== "string") {
+      walk(t.content, draw_kind(t, kind));
+    } else {
+      t.split("\n").forEach((part, k) => {
+        if (k > 0) {
+          lines.push([]);
+        }
+        if (part !== "") {
+          lines[lines.length - 1].push({ text: part, kind });
+        }
+      });
+    }
+  };
+  walk(tokens, "");
+  return lines;
+}
+
+// a Prism token's kind: its type if a kind known (Theme.SYNTAX's, a
+// comment's), else its first alias known, else the kind it sits in
+function draw_kind(t: Exclude<PrismToken, string>, outer: string): string {
+  const aliases = t.alias === undefined ? [] : Array.isArray(t.alias) ? t.alias : [t.alias];
+  return [t.type, ...aliases].find((k) => Object.hasOwn(Theme.SYNTAX, k) || Theme.COMMENTS.includes(k)) ?? outer;
+}
+
+// each code kind's color in the terminal's own palette (auto, the
+// background untold: Theme.SYNTAX, the theme's syntax entries over it);
+// none in a palette, whose slots color code (Reply.ts)
+export function draw_syntax(): Record<string, string> {
+  return draw_name() === "mono" && !(Theme.PALETTE in PALETTES) ? Theme.SYNTAX : {};
 }
 
 // what draws a diagram, loaded as the first is drawn
@@ -404,61 +528,19 @@ function draw_prism(): Prism {
   return (prism ??= require("./Prism.ts"));
 }
 
-// Prism's tokens, flat, each its kind: its own, an alias's, else the one
-// it is inside
-function draw_flat(tokens: PrismToken[], kind: string): Token[] {
-  return tokens.flatMap((t) => {
-    if (typeof t === "string") {
-      return [{ text: t, kind }];
-    }
-    const names = [t.type, ...(Array.isArray(t.alias) ? t.alias : t.alias === undefined ? [] : [t.alias])];
-    const own   = names.find((n) => n in Theme.SYNTAX || Theme.COMMENTS.includes(n));
-    return draw_flat(Array.isArray(t.content) ? t.content : [t.content], own ?? kind);
-  });
-}
-
-// tokens cut at their newlines into lines
-function draw_lines(tokens: Token[]): Token[][] {
-  const out: Token[][] = [[]];
-  for (const t of tokens) {
-    t.text.split("\n").forEach((piece, k) => {
-      if (k > 0) {
-        out.push([]);
-      }
-      if (piece !== "") {
-        out[out.length - 1].push({ text: piece, kind: t.kind });
-      }
-    });
-  }
-  return out;
-}
-
-// a shell's lines: the first word of each command a function, a flag a
-// keyword, a string, a comment; a command starts each line and follows
-// each operator
-function draw_shell(text: string): Token[][] {
-  return text.split("\n").map((line) => {
-    let head = true;
-    return [...line.matchAll(SHELL)].map((m): Token => {
-      const kind = m[1] ? "comment" : m[2] ? "string" : m[3] && !head ? "keyword" : m[4] ? "operator" : m[5] && head ? "function" : "";
-      head = m[4] !== undefined || (head && m[6] !== undefined);
-      return { text: m[0], kind };
-    });
-  });
-}
-
-// a value made once per key, the latest KEPT kept
+// what make makes, kept by key: the KEPT used last, the one used least
+// lately let go
 function draw_kept<T>(kept: Map<string, T>, key: string, make: () => T): T {
   if (kept.has(key)) {
-    const hit = kept.get(key)!;
+    const x = kept.get(key)!;
     kept.delete(key);
-    kept.set(key, hit);
-    return hit;
+    kept.set(key, x);
+    return x;
   }
-  const made = make();
-  kept.set(key, made);
+  const x = make();
+  kept.set(key, x);
   if (kept.size > KEPT) {
     kept.delete(kept.keys().next().value!);
   }
-  return made;
+  return x;
 }

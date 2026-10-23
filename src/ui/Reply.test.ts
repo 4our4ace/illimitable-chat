@@ -6,7 +6,9 @@
 // colors from the palette, the terminal's own while its background is
 // untold; each button copying its block, the last the reply; no buttons
 // in a pipe. A reply streaming, laid out as it grows, is the reply laid
-// out whole at each length, its finished blocks' lines kept.
+// out whole at each length, its finished blocks' lines kept. A table too
+// wide shares the room by column_widths; a button that won't fit beside
+// moves over its block, or is left out.
 
 import { expect, test } from "bun:test";
 import * as Paint from "./Paint.ts";
@@ -62,8 +64,8 @@ test("text's colors: the palette's once the background is told, the terminal's b
   expect(ink(bare, "/tmp/a.log").c).toBe("6");
   Paint.paint_canvas("#1e1e2e");
   const lit = Reply.reply_lines(md, 80);
-  expect(ink(lit, "x").c).toBe("#89dceb");
-  expect(ink(lit, "3")).toMatchObject({ b: true, c: "#a6e3a1" });
+  expect(ink(lit, "x").c).toBe("#94e2d5");
+  expect(ink(lit, "3")).toMatchObject({ b: true, c: "#fab387" });
   expect(ink(lit, "https://x.co")).toMatchObject({ u: true, k: "https://x.co" });
 });
 
@@ -94,4 +96,55 @@ test("a reply grown a piece at a time is the reply laid out whole", () => {
     }
     expect(kept).toBeGreaterThan(5);
   }
+});
+
+// columns at their widths if they fit; else each at least its longest
+// word (while those fit, else one), filled to one level, the room left
+// one more a column from the left
+test("columns share the room: their words kept, filled level, the rest to the left", () => {
+  expect(Reply.column_widths([10, 40, 5], 100, 3, [4, 12, 5])).toEqual([10, 40, 5]);
+  expect(Reply.column_widths([10, 40, 5], 30, 3, [4, 12, 5])).toEqual([7, 12, 5]);
+  expect(Reply.column_widths([10, 10, 10], 21, 1, [1, 1, 1])).toEqual([7, 6, 6]);
+  expect(Reply.column_widths([10, 40, 5], 15, 3, [4, 12, 5])).toEqual([3, 3, 3]);
+  expect(Reply.column_widths([10, 40, 5], 4, 3, [4, 12, 5])).toEqual([1, 1, 1]);
+  for (const room of [9, 20, 33, 47, 60]) {
+    const got = Reply.column_widths([12, 30, 8, 3], room, 3, [5, 9, 8, 3]);
+    expect(got.reduce((a, b) => a + b, 0)).toBe(Math.min(53, Math.max(4, room - 9)));
+    expect(got.every((x, k) => x >= 1 && x <= [12, 30, 8, 3][k])).toBe(true);
+  }
+});
+
+// a table wider than the reply: its cells wrap in the widths it gets
+test("a table too wide wraps its cells", () => {
+  const shown = text(Reply.reply_lines("| Name | Notes |\n| --- | --- |\n| a | the quick brown fox jumps over the lazy dog |", 30));
+  expect(shown.slice(1)).toEqual([
+    "┌──────┬─────────────────────┐",
+    "│ Name │ Notes               │",
+    "╞══════╪═════════════════════╡",
+    "│ a    │ the quick brown fox │",
+    "│      │ jumps over the lazy │",
+    "│      │ dog                 │",
+    "└──────┴─────────────────────┘",
+  ]);
+});
+
+// a table's art: its rows ruled between each, fenced as code
+test("a table's art button copies it ruled and fenced", () => {
+  const lines = Reply.reply_lines("| a | b |\n| - | - |\n| 1 | 2 |\n| 3 | 4 |", 40);
+  expect(button(lines, "⧉ art")).toBe("```\n┌───┬───┐\n│ a │ b │\n├───┼───┤\n│ 1 │ 2 │\n├───┼───┤\n│ 3 │ 4 │\n└───┴───┘\n```");
+});
+
+// a code block's button beside its header while it fits, else over its
+// lines at the right; narrower than the button, none (the reply's too)
+test("a button that won't fit beside moves over its block, or is left out", () => {
+  expect(text(Reply.reply_lines("```ts\nconst a = 1;\n```", 14))).toEqual(["── ts", "    [ ⧉ copy ]", "  const a = 1;"]);
+  expect(text(Reply.reply_lines("```ts\nconst a = 1;\n```", 8))).toEqual(["── ts", "  const", "  a = 1;"]);
+});
+
+// figures side by side only while both fit, else one over the other
+test("figures that won't fit side by side stack", () => {
+  const shown = text(Reply.reply_lines(TABLE + "\n\n" + FLOW, 30));
+  expect(shown[0]).toMatch(/^ *\[ ⧉ md \] \[ ⧉ art \]$/);
+  expect(shown.filter((l) => l.includes("⧉ source"))).toHaveLength(1);
+  expect(shown.every((l) => Paint.text_width(l) <= 30)).toBe(true);
 });
