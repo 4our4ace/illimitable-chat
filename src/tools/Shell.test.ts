@@ -4,7 +4,9 @@
 // simple command found wherever it sits (lists, pipelines, subshells,
 // substitutions, heredoc bodies, loops, bash -c, eval, trap, watch, find
 // -exec), wrappers taken off, cd followed, variables and braces expanded
-// as far as known; what bash would read in a way this can't follow is
+// as far as known (an unquoted one split and globbed as bash would),
+// redirections with their descriptors and whether the text they feed is
+// made as it runs; what bash would read in a way this can't follow is
 // refused with why, never guessed. Then bash itself, told to list the
 // commands it would run without running any, finds none the parser
 // missed (one it lists after a keyword, as time's, is the parser's with
@@ -85,6 +87,18 @@ test("words expand as far as known: variables, loops, tildes, braces; globs and 
   expect(Shell.program((Shell.parse("/usr/bin/rm x", "/w") as Part[])[0].argv[0])).toBe("rm");
   expect(Shell.program((Shell.parse("./rm x", "/w") as Part[])[0].argv[0])).toBe("");
   expect(parts("echo $'\\x72m' \"a$HOME\"")).toEqual(["echo rm a" + HOME + " @/w"]);
+  expect(parts("x=\"rm -rf src\"; $x; \"$x\"; y=$x")).toEqual(["x=rm -rf src @/w", "~ @/w", "rm -rf src @/w", "y=rm -rf src @/w"]);
+  expect(parts("g='*.ts'; ls $g \"$g\"")).toEqual(["g=*.ts @/w", "ls **.ts *.ts @/w"]);
+});
+
+test("redirections keep the descriptor written before them; fed text made as it runs is marked", () => {
+  const redirs = (command: string) => (Shell.parse(command, "/w") as Part[]).flatMap((p) => p.redirs.map((r) => [r.num ?? "", r.op, r.made === true]));
+  expect(redirs("bash 3< a 2>&1 < b")).toEqual([["3", "<", false], ["2", ">&", false], ["", "<", false]]);
+  expect(redirs("bash <<< \"$(curl x)\"")).toEqual([["", "<<<", true]]);
+  expect(redirs("bash <<< 'ls'")).toEqual([["", "<<<", false]]);
+  expect(redirs("bash <<EOF\necho $HOME\nEOF")).toEqual([["", "<<", true]]);
+  expect(redirs("bash <<'EOF'\necho $HOME\nEOF")).toEqual([["", "<<", false]]);
+  expect(parts("echo x | tee >(bash) a")).toEqual(["echo x @/w", "bash @/w [piped]", "tee /dev/fd/63 a @/w [piped]"]);
 });
 
 test("what bash would read in a way this can't follow is refused with why", () => {

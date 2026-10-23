@@ -5,8 +5,8 @@
 // instructions its AGENTS.md or CLAUDE.md holds. Asked full screen, the
 // question in its middle (No, exit; Yes, I trust this folder: No lit
 // first), before anything of the folder's loads or runs. A yes is kept
-// for the project (Trusted.ts); home's own folder is asked at each
-// start, never kept. A pipe is never asked: a script's run is its own
+// for the project (Trusted.ts); home's own folder, and any above it, is
+// asked at each start, never kept. A pipe is never asked: a script's run is its own
 // say, though a folder's own agents, commands and skills load in it only
 // once a terminal trusted the folder.
 
@@ -19,7 +19,7 @@ import { Trusted } from "../config/Trusted.ts";
 // =====
 
 // the question as shown: the folder, whether it is kept once trusted
-// (home's own is not), the option lit (NO, YES)
+// (home's own, or one above it, is not), the option lit (NO, YES)
 export type Asked = { folder: string; kept: boolean; at: number };
 
 // Constants
@@ -31,7 +31,7 @@ const OPTIONS = ["No, exit", "Yes, I trust this folder"];
 const WIDE = 72;
 
 const TEXT = "illi will read, edit and run files here, and follow the instructions in the folder's AGENTS.md or CLAUDE.md. Trust it only if it is your own work, your team's, or a well-known open-source project; if not, look through it first.";
-const HOME = "This is your home folder: illi asks each time it starts here.";
+const HOME = "This is your home folder, or one above it: illi asks each time it starts here.";
 const KEYS = "↑↓ choose · Enter confirm · Esc exit";
 
 // Trust

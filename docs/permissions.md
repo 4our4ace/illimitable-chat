@@ -6,6 +6,14 @@ MCP tool, it checks the call. Routine work runs; a risky call is asked
 about, saying why; a few are refused. The checks are fixed rules: no
 model judges them.
 
+Trust comes first: on a terminal, illi starts in a folder only once
+you've said you trust it (the full-screen question at its first start
+there, kept for the whole repo in `trust.json`; your home folder, and
+any folder above it, is asked at every start). The checks below presume a trusted folder. A run
+from a pipe is never asked: it runs, but a project's own `.illi` agents,
+commands, skills and plugins load only if a terminal trusted the folder
+before ([Customize](customize.md)).
+
 Modes
 -----
 
@@ -45,12 +53,20 @@ about when it:
   to another computer (`scp`, `rsync host:`), publishes (`npm publish`,
   `docker push`, `gh release`), installs for the whole computer
   (`npm i -g`), or changes infrastructure (`kubectl apply`,
-  `terraform apply`, cloud CLIs, `docker rm`)
+  `terraform apply`, `docker rm`, a cloud CLI doing anything but read:
+  bare `vercel` deploys), or gives a container a folder outside the
+  project (`docker run -v /:/host`)
 - sets what changes what runs (`PATH=`, `LD_PRELOAD=`,
-  `GIT_SSH_COMMAND=`, ...), pipes code into a shell (`curl ... | sh`),
-  or runs inline code that starts programs, changes files or reaches
-  the network (`python -c`, `node -e`)
-- runs a program or script from outside the project (`bash /tmp/x.sh`)
+  `GIT_SSH_COMMAND=`, ...), feeds a shell code from elsewhere
+  (`curl ... | sh`, `bash < <(curl ...)`, `bash <<< "$(curl ...)"`), or
+  runs inline code that starts programs, changes files, reaches the
+  network or reads a secret (`python -c`, `perl -e`, `node -p`)
+- runs a command given in its words or options, which illi doesn't read
+  (`flock`, `strace`, `parallel`, `tmux new`, `fd -x`,
+  `tar --to-command`, `git rebase -x`, `rsync -e`)
+- runs a program or script from outside the project (`bash /tmp/x.sh`,
+  `make -f /tmp/x.mk`), or a project tool in a folder outside it
+  (`cd /x && npm test` runs that folder's scripts)
 - touches a file outside the project (reading the system's folders and
   `/tmp`, and writing `/tmp`, are free), a secret anywhere (`.env`, keys,
   `~/.ssh`, `~/.aws`, illi's own folder), or a protected file in the
@@ -88,8 +104,15 @@ The question
 
 - "Don't ask again" says what it keeps, for this project: a family
   (`git push *`) for routine risks, the exact command for dangerous
-  ones, a folder for files outside the project. It isn't offered for
-  your own ask rules.
+  ones, a folder for files outside the project (the file itself in your
+  home folder or above it). One call with a dangerous risk beside the
+  others keeps just the exact command. It isn't offered for your own
+  ask rules.
+- The exact command is what runs: its words, where it writes
+  (`> log`), and the folder a `cd` moved it to (`cd /x && ...`). One
+  whose words are filled in as it runs (`$x`, `$(...)`), or whose input
+  comes from elsewhere (a pipe, a file, a heredoc), is kept as the whole
+  command you saw.
 - No tells illi you refused, with your words if you say why; Esc is No.
   A subagent's question names it.
 - With no one at the screen (a pipe), a call that would be asked is
@@ -133,12 +156,19 @@ keeps:
 
 - `deny` refuses, `ask` asks every time (no "don't ask again"), `allow`
   runs over illi's own checks; deny wins over ask, ask over allow.
+- An allow rule covers the command itself: what it writes by a
+  redirection (a rule `bun *` allows `bun test`, not its
+  `> ~/.bashrc`) and what its assignments set (`PATH=`) are still
+  checked. On a command illi can't follow, an allow rule applies only
+  if each `*` in it stands for no `;`, `|`, `&`, newline, backtick,
+  parenthesis, `<` or `>`.
 - `*` matches anything, `\*` a star; a shell pattern that ends in a
   space and `*` matches the bare command too (`git push *` matches
   `git push`).
 - A shell rule matches each command without its wrappers (`timeout 5
   bun test` matches `bun *`); a root command only a rule that names its
-  `sudo`.
+  `sudo`. A deny or ask rule matches a program named by its path too
+  (`/bin/rm -rf x` by `rm *`).
 - Paths: `~` is your home, a relative one is from the project's top; a
   write rule covers reads too.
 - `granted` is illi's: `kind:pattern` or `kind=exact`. A pattern clears

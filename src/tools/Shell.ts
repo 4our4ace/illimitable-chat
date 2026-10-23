@@ -31,8 +31,10 @@ export type Word = { alts: string[]; raw: string; dynamic: boolean; glob: boolea
 
 // a redirection: its operator (">", ">>", "<", "&>", "<<", ">&", ...) and
 // its target (a file; a descriptor for >& and <&; a heredoc's delimiter),
-// what it feeds the command as text (a heredoc's body, a here-string's)
-export type Redir = { op: string; target: Word; body?: string };
+// the descriptor written before it (2>, 3<), what it feeds the command as
+// text (a heredoc's body, a here-string's), whether that text is made as
+// it runs (a here-string's word; an expanding heredoc's $ or `)
+export type Redir = { op: string; target: Word; num?: string; body?: string; made?: boolean };
 
 export type Env = { name: string; value: Word };
 
@@ -72,7 +74,8 @@ type Doc = { delim: string; strip: boolean; expand: boolean; redir: Redir };
 // the reading: the text and where in it; the parts found; the folder
 // (null: unknown), the variables set so far, whether one may have been
 // set unseen (wild: a source), the heredocs waiting; what wrappers
-// around a nested script (bash -c, eval) give its parts
+// around a nested script (bash -c, eval) give its parts; whether its
+// commands read another's output (inside >(...): piped)
 type Scan = {
   src   : string;
   at    : number;
@@ -83,6 +86,7 @@ type Scan = {
   docs  : Doc[];
   root  : boolean;
   fed   : boolean;
+  inpipe: boolean;
   depth : number;
 };
 
@@ -176,7 +180,7 @@ export namespace Shell {
   // be read so (any failure of the reading too: never a throw, so a bug
   // here asks rather than lets a command through)
   export function parse(command: string, cwd: string): Part[] | string {
-    const s: Scan = { src: command, at: 0, parts: [], cwd, vars: new Map(), wild: false, docs: [], root: false, fed: false, depth: 0 };
+    const s: Scan = { src: command, at: 0, parts: [], cwd, vars: new Map(), wild: false, docs: [], root: false, fed: false, inpipe: false, depth: 0 };
     try {
       scan_list(s, "");
       return s.parts;
@@ -341,7 +345,7 @@ function scan_list(s: Scan, close: string): void {
         throw new Unread("a " + c + " where bash doesn't take one");
       }
       if ((s.src[s.at] === "<" || s.src[s.at] === ">") && /^(\d+|\{[A-Za-z_]\w*\})$/.test(word.raw)) {
-        scan_redir(s, cmd);
+        scan_redir(s, cmd, word.raw);
       } else if (!cmd_word(s, cmd, word)) {
         continue;
       }
@@ -398,7 +402,7 @@ function scan_word(s: Scan): Word {
       s.at++;
       scan_quoted(s, b);
     } else if (c === "$") {
-      scan_dollar(s, b);
+      scan_dollar(s, b, !/^[A-Za-z_]\w*\+?=/.test(s.src.slice(start, s.at)));
     } else if (c === "`") {
       scan_tick(s);
       b.dynamic = true;
@@ -536,8 +540,10 @@ function scan_quoted(s: Scan, b: Build): void {
   }
 }
 
-// a $: an arithmetic, a command's output, a variable, or itself
-function scan_dollar(s: Scan, b: Build): void {
+// a $: an arithmetic, a command's output, a variable, or itself; split:
+// unquoted, outside an assignment, where bash splits a value into words
+// and globs it (var_put)
+function scan_dollar(s: Scan, b: Build, split = false): void {
   const rest = s.src.slice(s.at, s.at + 3);
   if (rest === "$((") {
     s.at = arith(s, s.at + 3);
@@ -558,7 +564,7 @@ function scan_dollar(s: Scan, b: Build): void {
       throw new Unread("a command inside ${...}");
     }
     if (/^[A-Za-z_]\w*$/.test(body)) {
-      var_put(s, b, body);
+      var_put(s, b, body, split);
     } else {
       b.dynamic = true;
     }
@@ -567,7 +573,7 @@ function scan_dollar(s: Scan, b: Build): void {
   const name = /^\$([A-Za-z_]\w*)/.exec(s.src.slice(s.at));
   if (name !== null) {
     s.at += name[0].length;
-    var_put(s, b, name[1]);
+    var_put(s, b, name[1], split);
   } else if (/^\$[0-9@*#?$!-]/.test(rest)) {
     s.at += 2;
     b.dynamic = true;
@@ -579,21 +585,20 @@ function scan_dollar(s: Scan, b: Build): void {
 
 // a variable's values put in a word: as the command set it, else as the
 // environment has it (PWD: the folder followed); else known only as it
-// runs (as is any after a source: it may have set them)
-function var_put(s: Scan, b: Build, name: string): void {
+// runs (as is any after a source: it may have set them). Split (bash
+// splits an unquoted value into words, and globs it): one holding a
+// space is known only as it runs (x="rm -rf src"; $x is three words, a
+// command), one holding *, ? or [ a glob
+function var_put(s: Scan, b: Build, name: string, split = false): void {
   const v = s.vars.get(name);
-  if (v !== undefined) {
-    add(b, v.alts);
-    b.glob ||= v.glob;
-    b.dynamic ||= v.dynamic;
+  const known = v !== undefined ? v.alts : name === "PWD" ? (s.cwd === null ? null : [s.cwd]) : s.wild || name === "OLDPWD" || process.env[name] === undefined ? null : [process.env[name]!];
+  if (known === null || (split && known.some((x) => /[ \t\n]/.test(x)))) {
+    b.dynamic = true;
     return;
   }
-  const known = name === "PWD" ? s.cwd : s.wild || name === "OLDPWD" ? null : process.env[name] ?? null;
-  if (known === null) {
-    b.dynamic = true;
-  } else {
-    add(b, [known]);
-  }
+  add(b, known);
+  b.glob ||= v?.glob === true || (split && known.some((x) => /[*?[]/.test(x)));
+  b.dynamic ||= v?.dynamic === true;
 }
 
 // past a ${...} from its body's start: after its closing }
@@ -727,16 +732,24 @@ function scan_tilde(s: Scan, b: Build): void {
   }
 }
 
-// <(...) or >(...): its commands, a subshell's; the word, a /dev/fd file
+// <(...) or >(...): its commands, a subshell's (>(...)'s reading the
+// command's output, as a pipe's); the word, a /dev/fd file
 function scan_proc(s: Scan): Word {
   const start = s.at;
+  const was = s.inpipe;
+  s.inpipe ||= s.src[s.at] === ">";
   s.at += 2;
-  scope(s, () => scan_list(s, ")"));
+  try {
+    scope(s, () => scan_list(s, ")"));
+  } finally {
+    s.inpipe = was;
+  }
   return { alts: ["/dev/fd/63"], raw: s.src.slice(start, s.at), dynamic: false, glob: false, fd: true };
 }
 
-// a redirection and its target; a heredoc's body waits for the line's end
-function scan_redir(s: Scan, cmd: Cmd): void {
+// a redirection and its target, the descriptor before it if written; a
+// heredoc's body waits for the line's end
+function scan_redir(s: Scan, cmd: Cmd, num?: string): void {
   const op = REDIRS.find((o) => s.src.startsWith(o, s.at)) ?? ">";
   s.at += op.length;
   blank(s, false);
@@ -750,7 +763,7 @@ function scan_redir(s: Scan, cmd: Cmd): void {
       throw new Unread("a heredoc's delimiter made as it runs");
     }
   }
-  const redir: Redir = op === "<<<" ? { op, target, body: target.alts[0] + "\n" } : { op, target };
+  const redir: Redir = op === "<<<" ? { op, target, num, body: target.alts[0] + "\n", made: target.dynamic || target.alts.length !== 1 } : { op, target, num };
   if (op === "<<" || op === "<<-") {
     s.docs.push({ delim: target.alts[0], strip: op === "<<-", expand: !/['"\\]/.test(target.raw), redir });
   }
@@ -775,6 +788,7 @@ function docs_read(s: Scan): void {
       body += line + "\n";
     }
     doc.redir.body = body;
+    doc.redir.made = doc.expand && /\$\S|`/.test(body);
     if (doc.expand) {
       scan_body(s, body);
     }
@@ -952,7 +966,7 @@ function cmd_end(s: Scan, cmd: Cmd, piped: boolean, forked: boolean): void {
 // a command's parts (an assignment alone: one without words, its
 // variables set), and what it changes of the shell after it (cmd_after)
 function cmd_run(s: Scan, cmd: Cmd, full: string, piped: boolean): void {
-  const ctx = { cwd: s.cwd, root: s.root, fed: s.fed, piped };
+  const ctx = { cwd: s.cwd, root: s.root, fed: s.fed, piped: piped || s.inpipe };
   if (cmd.words.length === 0) {
     cmd.env.forEach((e) => s.vars.set(e.name, e.value));
     part_push(s, [], cmd.env, cmd.redirs, full, ctx);
