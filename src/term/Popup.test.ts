@@ -16,6 +16,15 @@
 // its ends, the option brought under the pointer lit, or off the list
 // the lit one held in view; a list shown whole never moves, nor the chat.
 // A lead cut scrolls by the wheel and the pages, the answers staying.
+// The mouse is the popup's alone: the pointer moving to another row
+// lights it (along its row, at rest, or as the popup first shows under
+// it: not); a press and a release on one option do what Enter does
+// there, on two rows nothing; a click outside closes a list, never a
+// question (the line asked why goes back to it), and goes no further; no
+// text is chosen, no button lights or copies, the right button does
+// nothing; a double click picks once; a box no longer open (a new size,
+// a question answered elsewhere) does nothing; a question just shown
+// holds a click as it holds Enter.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -26,8 +35,9 @@ process.env.ILLI_DIR = DIR;
 
 const { term_chooser } = await import("./Commands.ts");
 const { term_paint } = await import("./Frame.ts");
-const { term_grab } = await import("./Keys.ts");
+const { term_grab, term_press, term_type } = await import("./Keys.ts");
 const { popup_size } = await import("./Popup.ts");
+const { term_under } = await import("./Select.ts");
 const Paint = await import("../ui/Paint.ts");
 const Screen = await import("../ui/Screen.ts");
 const { status_new } = await import("./Status.ts");
@@ -35,16 +45,41 @@ const View = await import("../ui/View.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
-// a terminal on a screen fed by hand, nothing painted yet, its paints
-// written nowhere
+// a terminal on a screen fed by hand (its keys, text and mouse to the
+// terminal), nothing painted yet, its paints written nowhere
 function term(): any {
-  const scr = { tty: true, kitty: false, ed: Screen.ed_new(), rest: "", shown: [], click: { row: 0, col: 0 }, clicks: 0, pressed: 0, point: { row: 0, col: 0 }, typed: false, grab: null, on: () => {}, left: true };
-  return {
+  const scr: any = { tty: true, kitty: false, ed: Screen.ed_new(), rest: "", shown: [], click: { row: 0, col: 0 }, clicks: 0, pressed: 0, point: { row: 0, col: 0 }, typed: false, left: true };
+  const t: any = {
     v: View.view_new(), scr, due: false, notices: [], scroll: 0, seen: { total: 0, marks: [], row: 0, first: 0, tall: 1, col: 0, end: 0 }, ver: 0, body: null, find: null,
     pane: null, agents: [], choose: null, profs: [], hits: [], since: 0, spin: undefined, ruled: null, doing: null, subs: new Map(), side: { place: "right", width: "25%" }, status: status_new(),
-    todo: false, areas: [], sel: null, sug: null, dropped: "", asking: null, box: null,
+    todo: false, areas: [], sel: null, sug: null, dropped: "", asking: null, box: null, aim: { row: -1, in: false, press: null, first: null }, quit: 0, pending: 0, imgs: new Map(), quoted: null, lead: false,
   };
+  [scr.grab, scr.on, scr.type] = [(k: string) => term_grab(t, k), (k: string) => term_press(t, k), (x: string) => term_type(t, x)];
+  return t;
 }
+
+// a paint now, none asked for after (a paint always due)
+const paint = (t: any) => {
+  term_paint(t);
+  t.due = true;
+};
+
+// the mouse at a screen row and column, as a terminal reports it: the
+// left button pressed (a new click: never a double one), let go, the
+// pointer moved, dragged; the right button pressed, dragged, let go
+const sgr   = (b: number, row: number, col: number, end = "M") => "\x1b[<" + b + ";" + (col + 1) + ";" + (row + 1) + end;
+const press = (t: any, row: number, col: number) => ((t.scr.pressed = 0), Screen.screen_feed(t.scr, sgr(0, row, col)));
+const again = (t: any, row: number, col: number) => Screen.screen_feed(t.scr, sgr(0, row, col));
+const let_go = (t: any, row: number, col: number) => Screen.screen_feed(t.scr, sgr(0, row, col, "m"));
+const click = (t: any, row: number, col: number) => (press(t, row, col), let_go(t, row, col));
+const move  = (t: any, row: number, col: number) => Screen.screen_feed(t.scr, sgr(35, row, col));
+const drag  = (t: any, row: number, col: number) => Screen.screen_feed(t.scr, sgr(32, row, col));
+const right = (t: any, row: number, col: number, to: number) => Screen.screen_feed(t.scr, sgr(2, row, col) + sgr(34, row, to) + sgr(2, row, to, "m"));
+
+// the screen row of the popup's option named name, and a column on it
+const row_of = (t: any, name: string) => t.box.row + t.box.rows.findIndex((aim: any) => aim?.k === t.choose.names.indexOf(name));
+const col = (t: any) => t.box.col + 6;
+const lit = (t: any) => t.choose.names[t.choose.shown[t.choose.at].k];
 
 // f run on a screen cols by rows
 function sized<T>(cols: number, rows: number, f: () => T): T {
@@ -225,5 +260,162 @@ test("a question's lead cut scrolls by the wheel and the pages, its answers stay
     const rows = inside(t, 100);
     expect([rows[0].trim(), rows.at(-4).trim(), t.choose.at]).toEqual(["line 23 of a long command", "line 39 of a long command", 0]);
     expect(rows.slice(-3).map((r: string) => r.trim())).toEqual(["› Yes", "No", "No, and say why"]);
+  });
+});
+
+test("the pointer moving to another row lights its option, one lit row with the keys; along its row, at rest, or as the popup first shows under it, the keys' lit row holds; a search under a resting pointer keeps its best match lit", () => {
+  sized(100, 30, () => {
+    const t = term();
+    t.scr.point = { row: 14, col: 50 };
+    term_chooser(t, "Agent", ["illi", "reviewer", "writer", "tester"], ["", "", "", ""], -1, () => {}, { find: true });
+    paint(t);
+    move(t, 14, 52);
+    expect(lit(t)).toBe("illi");
+    move(t, row_of(t, "writer"), col(t));
+    expect(lit(t)).toBe("writer");
+    term_grab(t, "Down");
+    move(t, row_of(t, "writer"), col(t) + 3);
+    expect(lit(t)).toBe("tester");
+    move(t, row_of(t, "reviewer"), col(t));
+    term_type(t, "te");
+    paint(t);
+    expect(lit(t)).toBe("tester");
+    move(t, 1, 1);
+    expect(lit(t)).toBe("tester");
+  });
+});
+
+test("a press and a release on one option do what Enter does there: a setting stepped, a palette row run, a question answered; pressed on one row and let go on another, nothing", async () => {
+  const config = await import("../config/Config.ts");
+  const { term_settings } = await import("./Settings.ts");
+  const { term_palette } = await import("./Palette.ts");
+  const { term_asks } = await import("./Asks.ts");
+  sized(120, 40, () => {
+    const t = term();
+    term_settings(t, "tps");
+    paint(t);
+    const tps = row_of(t, "tps");
+    click(t, tps, col(t));
+    expect([config.TPS, t.choose.title]).toEqual([false, "Settings"]);
+    press(t, tps, col(t));
+    let_go(t, row_of(t, "side"), col(t));
+    expect(config.TPS).toBe(false);
+    click(t, tps, col(t));
+    expect(config.TPS).toBe(true);
+    t.choose = null;
+    term_palette(t);
+    term_type(t, "Ctrl+O");
+    paint(t);
+    click(t, row_of(t, "Ctrl+O"), col(t));
+    expect([t.choose, t.v.verbose]).toEqual([null, true]);
+    t.v.asks = [{ id: "q1", who: "illi", tool: "Bash", what: "ls", why: "", keep: "" }];
+    term_asks(t);
+    paint(t);
+    t.asking.shown -= 600;
+    click(t, row_of(t, "No"), col(t));
+    expect(t.v.out.map((o: any) => o.msg).filter((m: any) => m.$ === "answer").map((m: any) => [m.ask, m.yes])).toEqual([["q1", false]]);
+  });
+});
+
+test("a click outside closes a list and goes no further (no side, no tab, no block); outside a question, nothing; outside the line asked why, back to its question", async () => {
+  const { term_asks } = await import("./Asks.ts");
+  sized(160, 40, () => {
+    const t = term();
+    term_chooser(t, "Agent", ["illi", "reviewer"], ["", ""], 0, () => {});
+    paint(t);
+    expect(t.hits).toEqual([]);
+    click(t, 39, 5);
+    expect([t.choose, t.v.out]).toEqual([null, []]);
+    t.v.asks = [{ id: "q1", who: "illi", tool: "Bash", what: "ls", why: "", keep: "" }];
+    term_asks(t);
+    paint(t);
+    t.asking.shown -= 600;
+    click(t, 2, 2);
+    expect([t.choose.title, t.v.out]).toEqual(["Allow Bash?", []]);
+    click(t, row_of(t, "No, and say why"), col(t));
+    paint(t);
+    expect(t.choose.title).toBe("Why not Bash?");
+    click(t, 2, 2);
+    paint(t);
+    expect([t.choose.title, t.v.out]).toEqual(["Allow Bash?", []]);
+  });
+});
+
+test("under a popup no text is chosen and nothing copied, no button lights or copies, the right button quotes nothing; a drag begun before it opened is let go", () => {
+  sized(120, 30, () => {
+    const t = term();
+    Screen.ed_set(t.scr.ed, "my reply");
+    term_chooser(t, "Agent", ["illi", "reviewer"], ["", ""], 0, () => {});
+    paint(t);
+    const button = { key: "chat", lines: [[{ x: "copy", s: Paint.INK, copy: () => "secret" }]], first: 0, row: 2, col: 2, w: 20, tall: 1 };
+    t.areas.push(button);
+    t.scr.point = { row: 2, col: 3 };
+    expect(term_under(t, t.scr.point)).toBeUndefined();
+    press(t, 2, 3);
+    drag(t, 2, 10);
+    expect(t.sel).toBeNull();
+    right(t, 2, 3, 10);
+    expect([t.scr.ed.text, t.notices]).toEqual(["my reply", []]);
+    const u = term();
+    paint(u);
+    u.areas.push(button);
+    press(u, 2, 3);
+    drag(u, 2, 6);
+    expect(u.sel?.held).toBe(true);
+    term_chooser(u, "Agent", ["illi", "reviewer"], ["", ""], 0, () => {});
+    drag(u, 2, 8);
+    let_go(u, 2, 8);
+    expect([u.sel, u.notices, u.choose.title]).toEqual([null, [], "Agent"]);
+  });
+});
+
+test("a double click on an option picks once, its second press going nowhere once the popup is gone; one on the mode opens /mode and leaves it open", () => {
+  sized(120, 30, () => {
+    const t = term();
+    const picked: number[] = [];
+    term_chooser(t, "Agent", ["illi", "reviewer"], ["", ""], 0, (k) => picked.push(k));
+    paint(t);
+    const [r, c] = [row_of(t, "reviewer"), col(t)];
+    click(t, r, c);
+    paint(t);
+    again(t, r, c);
+    let_go(t, r, c);
+    expect([picked, t.scr.clicks, t.sel, t.notices]).toEqual([[1], 2, null, []]);
+    const u = term();
+    paint(u);
+    const mode = u.hits.find((h: any) => h.row === 29 && h.to === 2 + 115);
+    click(u, 29, mode.col);
+    paint(u);
+    expect(u.choose.title).toBe("Mode, this session");
+    again(u, 29, mode.col);
+    let_go(u, 29, mode.col);
+    expect([u.choose?.title, u.sel, u.notices]).toEqual(["Mode, this session", null, []]);
+  });
+});
+
+test("a report for a box no longer open does nothing: after a new size, before it is painted again; a question answered elsewhere; a question just shown holds a click", async () => {
+  const { term_resize } = await import("./Frame.ts");
+  const { term_asks } = await import("./Asks.ts");
+  sized(120, 30, () => {
+    const t = term();
+    const picked: number[] = [];
+    term_chooser(t, "Agent", ["illi", "reviewer"], ["", ""], 0, (k) => picked.push(k));
+    paint(t);
+    const [r, c] = [row_of(t, "reviewer"), col(t)];
+    term_resize(t);
+    clearTimeout(t.settle);
+    click(t, r, c);
+    expect([picked, t.choose.title]).toEqual([[], "Agent"]);
+    t.choose = null;
+    t.v.asks = [{ id: "q1", who: "illi", tool: "Bash", what: "ls", why: "", keep: "" }];
+    term_asks(t);
+    paint(t);
+    const yes = row_of(t, "Yes");
+    click(t, yes, col(t));
+    expect(t.v.out).toEqual([]);
+    t.asking.shown -= 600;
+    t.v.asks = [];
+    click(t, yes, col(t));
+    expect([t.v.out, t.choose]).toEqual([[], null]);
   });
 });

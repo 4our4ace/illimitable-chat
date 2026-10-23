@@ -18,7 +18,7 @@ import { term_draw } from "./Frame.ts";
 import { member_others } from "./Member.ts";
 import { term_note, term_toast, term_unnote } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
-import { popup_held, popup_page, popup_wheel } from "./Popup.ts";
+import { popup_held, popup_mouse, popup_page, popup_wheel } from "./Popup.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_copied, term_hover, term_mouse, term_selected, term_under } from "./Select.ts";
 import { term_act, term_primaries, term_quit, type Chooser, type Cmd, type Term } from "./Term.ts";
@@ -36,6 +36,9 @@ const PASS = ["Ctrl+L", "Ctrl+Z", "Ctrl+P"];
 // the keys that leave text chosen (any other lets it go)
 const KEEP   = ["", "Canvas", "Press", "Drag", "Release", "RightPress", "RightDrag", "RightRelease", "WheelUp", "WheelDown", "Esc", "PgUp", "PgDn", "Ctrl+Home", "Ctrl+End"];
 
+// the mouse's reports, a popup's before all else
+const MOUSE  = ["Move", "Press", "Drag", "Release", "RightPress", "RightDrag", "RightRelease"];
+
 // how soon a second Ctrl+C quits (ms)
 const AGAIN = 2000;
 
@@ -48,17 +51,24 @@ const WHEEL = 3;
 let keyed: { leader: string; cmds: Map<string, Cmd> } | null = null;
 
 // a key ("": the input may have changed): the mouse (a click lets the
-// leader go), the wheel, the terminal's background told (the chat laid
-// out anew: diagrams draw over it), or its line of term_groups. Text chosen is let go at a key not KEEP's
-// or at typing; Ctrl+C copies it again instead. Text in the input
-// dismisses the suggested reply
+// leader go; a popup's first: Popup.ts), the wheel, the terminal's
+// background told (the chat laid out anew: diagrams draw over it), or its
+// line of term_groups. Text chosen is let go at a key not KEEP's or at
+// typing; Ctrl+C copies it again instead. Text in the input dismisses the
+// suggested reply
 export function term_press(t: Term, key: string): void {
+  if (key === "Press" || key === "RightPress") {
+    t.lead = false;
+  }
+  if (MOUSE.includes(key) && popup_mouse(t, key)) {
+    if (key !== "Move") {
+      term_draw(t);
+    }
+    return;
+  }
   if (key === "Move") {
     term_hover(t);
     return;
-  }
-  if (key === "Press" || key === "RightPress") {
-    t.lead = false;
   }
   if (t.scr.ed.text !== "") {
     t.dropped = t.v.suggest;
@@ -145,7 +155,7 @@ export function term_grab(t: Term, key: string): boolean {
 // search: nothing; a line asked for: given, the box kept with a reason
 // if it won't do), Esc closes, and the search takes the input's editing
 // keys (but its rows'); any other key does nothing
-function term_choose_key(t: Term, c: Chooser, press: string): boolean {
+export function term_choose_key(t: Term, c: Chooser, press: string): boolean {
   const key  = press === "Ctrl+C" || press === "Ctrl+D" ? "Esc" : press;
   const n    = c.shown.length;
   const lit  = c.shown[c.at]?.k;
@@ -219,10 +229,10 @@ export function term_type(t: Term, text: string): boolean {
   return term_form_type(t, text);
 }
 
-// a click: what was drawn there does its own (the side, the picker, the
-// tabs, a reply's button copies); in the chat, a run of work opens or
-// closes, a block opens, an open one's top edge shuts it; outside the
-// picker, it closes
+// a click (never under a popup: Popup.ts has those): what was drawn
+// there does its own (the side, the commands suggested, the tabs, a
+// reply's button copies); in the chat, a run of work opens or closes, a
+// block opens, an open one's top edge shuts it
 export function term_click(t: Term): void {
   const { row, col } = t.scr.click;
   const hit  = t.hits.find((h) => h.row === row && col >= h.col && col < h.to);
@@ -234,8 +244,6 @@ export function term_click(t: Term): void {
     hit.run();
   } else if (copy !== undefined) {
     term_copied(t, copy());
-  } else if (t.choose !== null) {
-    t.choose = null;
   } else if (t.pane === null && mark?.act === true) {
     View.view_toggle(t.v, mark.id);
     t.ver += 1;
