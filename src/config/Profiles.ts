@@ -58,8 +58,9 @@ const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
 
 // what a profile's folder holds that is never a profile's to give: the
 // login (the root's, shared), the locks, the log; the default's folder
-// also holds the others, which was used last, and when illi last looked
-// for a new release of itself (Update.ts)
+// also holds the others, which was used last (anywhere, and in each
+// project: HERE), and when illi last looked for a new release of itself
+// (Update.ts)
 const OWN    = ["login.json", "locks", "illi.log"];
 const ROOTED = ["profiles", "profile", "project-profiles.json", "update.json"];
 
