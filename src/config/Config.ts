@@ -563,12 +563,13 @@ export function config_most(window: number, overhead = 0): number {
 }
 
 // an autocompact as tokens of a window: a share of it (60%), tokens
-// (400000, 400k); null: none of these
+// (400000, 400k); null: none of these (as the setting's shape: what
+// config_check would refuse, such as 1e5, is none)
 export function config_tokens(text: string, window: number): number | null {
   const set   = text.trim().toLowerCase();
   const share = /^(\d+(?:\.\d+)?)%$/.exec(set);
   const k     = /^(\d+(?:\.\d+)?)k$/.exec(set);
-  const n     = share !== null ? (window * Number(share[1])) / 100 : k !== null ? Number(k[1]) * 1000 : set === "" ? NaN : Number(set);
+  const n     = share !== null ? (window * Number(share[1])) / 100 : k !== null ? Number(k[1]) * 1000 : /^\d+(\.\d+)?$/.test(set) ? Number(set) : NaN;
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
@@ -595,12 +596,18 @@ export function config_autocompact(label: string, value: string | null): string 
 // the models listed last, learned (a file that won't read: none): the
 // chatgpt list as the catalog last gave it, whatever account it was of
 // (not known yet; the catalog's answer replaces it), the others' windows
-// on the models built in
+// on the models built in, and only those (their speeds and list are
+// illi's own: a model a later illi dropped, or a speed it changed, never
+// comes back from the file)
 function config_models(): void {
   const kept = json_object(MODELS_FILE)?.vendors ?? {};
-  for (const vendor of Object.keys(kept).filter((v) => VENDORS.includes(v as Vendor) && Array.isArray(kept[v]))) {
+  for (const vendor of Object.keys(kept).filter((v) => VENDORS.includes(v as Vendor) && Array.isArray(kept[v])) as Vendor[]) {
     const models = kept[vendor].filter((m: any) => typeof m?.label === "string" && typeof m.id === "string" && Array.isArray(m.speeds));
-    Pick.learn(vendor as Vendor, models, vendor === "chatgpt" ? "replace" : "add");
+    if (vendor === "chatgpt") {
+      Pick.learn(vendor, models, "replace");
+    } else {
+      models.forEach((m: any) => Pick.told(vendor, m.id, Number(m.window)));
+    }
   }
 }
 

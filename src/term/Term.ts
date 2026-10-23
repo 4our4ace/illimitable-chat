@@ -391,11 +391,12 @@ function term_gone(t: Term, why: string, heard: boolean): void {
   process.exit(1);
 }
 
-// an act to the chat; a message refused goes back in the input
-export function term_send(t: Term, msg: View.Client, sent?: View.Sent): void {
+// an act to the chat; a message refused goes back in the input; taken,
+// what `ok` says is noted (a refusal says why instead)
+export function term_send(t: Term, msg: View.Client, sent?: View.Sent, ok?: string): void {
   View.link_send(t.v, msg, (a) => {
-    if (a.error !== undefined) {
-      term_note(t, a.error);
+    if (a.error !== undefined || ok !== undefined) {
+      term_note(t, a.error ?? ok!);
     }
     if (a.error !== undefined && sent !== undefined) {
       term_back(t, sent);

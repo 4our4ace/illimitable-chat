@@ -124,7 +124,9 @@ one:
   pick
 - models: the models offered; autocompact: how much of the chat a turn
   sends before older messages fold (a share of the window like "60%",
-  or tokens like "400k"; at most 70%); autocompacts: per model
+  or tokens like "400k"; at most 70%); autocompacts: per model, as
+  `/autocompact 50%` (the chat's model) and Shift+Left/Right in /model
+  set it
 - rules: the rules file, RULES.md in illi's folder (else the global
   folder's) unless set; after: a shell command run after each turn
 - off: skills, agents, commands, MCP servers and plugins turned off, by

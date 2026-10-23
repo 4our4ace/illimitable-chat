@@ -272,10 +272,11 @@ export namespace Chat {
     chat.context = Plugins.context({ cwd });
     Machine.watch(() => Chat.change(chat));
     // the account's catalog or plan told: on ChatGPT the cut fitted anew
-    // while no turn runs (the start's waits on it: the windows kept last
-    // may be smaller, and a cut never moves back)
+    // while no turn runs, once the account's catalog told its windows (the
+    // start's waits on it, as a plan or a login told first must: the
+    // windows kept last may be smaller, and a cut never moves back)
     ChatGPT.watch(() => {
-      if (!chat.busy && chat.pick.vendor === "chatgpt") {
+      if (!chat.busy && chat.pick.vendor === "chatgpt" && ChatGPT.catalogued()) {
         Chat.cut(chat);
       }
       Chat.change(chat);
@@ -610,7 +611,7 @@ export namespace Chat {
     if (end.note) {
       Chat.all(chat, { $: "note", text: end.note });
     }
-    if (full && carried !== undefined && Chat.capped(chat, carried.tokens)) {
+    if (full && carried !== undefined && Chat.capped(chat, end, carried)) {
       return Chat.refit(chat, false);
     }
     if (full) {
@@ -686,16 +687,19 @@ export namespace Chat {
     return !halt.signal.aborted;
   }
 
-  // a call refused as too long on ChatGPT while it carried (`tokens` of
-  // the chat, with what a request takes beside it) past its model's
-  // standard window, yet well within its whole one (no misjudged size
-  // explains it): the account takes no more than the standard window,
-  // learned for it (ChatGPT.refused). true: learned, the turn goes on
-  // fitted to it
-  export function capped(chat: Chat, tokens: number): boolean {
-    const model = Pick.model(chat.pick.vendor, chat.pick.model);
-    const sent  = tokens + (chat.beside.get(chat.pick.vendor + ":" + chat.pick.model) ?? 0);
-    return chat.pick.vendor === "chatgpt" && model?.standard !== undefined && model.window !== undefined && sent > model.standard && sent < model.window * CAPPED && ChatGPT.refused(model.label);
+  // a call refused as too long on ChatGPT at its first request (it read
+  // nothing: end.first none; one past its room, or refused at a later
+  // step as its tools' output grew, tells nothing of the account) while
+  // it carried (carried: the chat's tokens, and on what, with what a
+  // request takes beside it) past its model's standard window, yet well
+  // within its whole one (no misjudged size explains it): the account
+  // takes no more than the standard window, learned for it
+  // (ChatGPT.refused). true: learned, the turn goes on fitted to it
+  export function capped(chat: Chat, end: End, carried: { model: string; tokens: number }): boolean {
+    const at    = carried.model.indexOf(":");
+    const model = Pick.model(carried.model.slice(0, at) as Vendor, carried.model.slice(at + 1));
+    const sent  = carried.tokens + (chat.beside.get(carried.model) ?? 0);
+    return end.first === undefined && carried.model.startsWith("chatgpt:") && model?.standard !== undefined && model.window !== undefined && sent > model.standard && sent < model.window * CAPPED && ChatGPT.refused(model.label);
   }
 
   // the chat outgrew the model's window (a call ended `full`): the

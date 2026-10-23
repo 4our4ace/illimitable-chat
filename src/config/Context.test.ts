@@ -7,12 +7,20 @@
 // "auto" as none); at most 70% of the window, and never so much that a
 // turn can't start under 90% of it beside what a request takes besides
 // the chat. A change of one model's is merged into the file as it is,
-// the old name dropped. ChatGPT's catalog is the chatgpt list: each
+// the old name dropped. The models kept last: chatgpt's list whole,
+// another vendor's windows on those built in only. ChatGPT's catalog is
+// the chatgpt list: each
 // model's whole window, its usual one, efforts and speeds, kept naming the
 // account (another vendor's kept too); a pick its model can't run as asked
-// runs at the nearest; a refusal past the usual window teaches it for the
-// account; a compactor whose model it dropped runs on its first one.
-// Anthropic's model list tells the built-in models' windows.
+// runs at the nearest (so the last line shows it), a step of its effort
+// taken from there; a turn's
+// first request refused past the usual window teaches it for the account
+// (one refused later in the turn, or past its room, nothing); a compactor
+// whose model it dropped runs on its first one. Anthropic's model list
+// tells the built-in models' windows. A chat on ChatGPT folds nothing on
+// the windows kept last as a login or a plan is told, only once the
+// account's catalog tells its own; a turn's wait asks the catalog of an
+// account not asked yet.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -26,15 +34,22 @@ process.env.ILLI_VENDORS = "claude-api,chatgpt";
 delete process.env.ILLI_CONTEXT;
 delete process.env.ILLI_MODELS;
 fs.writeFileSync(DIR + "/config.json", JSON.stringify({ context: "60%", contexts: { "gpt-6.1-sol": 350000, big: 990000, auto: "auto", kilo: "400k" } }));
-fs.writeFileSync(DIR + "/models.json", JSON.stringify({ vendors: { chatgpt: [{ label: "gpt-7-kept", id: "gpt-7-kept", speeds: ["slow"], window: 400000 }], "claude-code": [{ label: "opus-5.5", id: "claude-opus-5-5", speeds: ["slow"], window: 1000000 }] } }));
+fs.writeFileSync(DIR + "/models.json", JSON.stringify({ vendors: { chatgpt: [{ label: "gpt-7-kept", id: "gpt-7-kept", speeds: ["slow"], window: 400000 }], "claude-code": [{ label: "opus-5.5", id: "claude-opus-5-5", speeds: ["slow", "fast"], window: 1000000 }, { label: "opus-4.1", id: "claude-opus-4-1", speeds: ["slow"], window: 200000 }] } }));
 fs.mkdirSync(DATA + "/opencode");
-const ACCESS = "e30." + Buffer.from(JSON.stringify({ chatgpt_account_id: "acct-1" })).toString("base64url") + ".sig";
-fs.writeFileSync(DATA + "/opencode/auth.json", JSON.stringify({ openai: { type: "oauth", access: ACCESS, refresh: "r", expires: Date.now() + 3600e3 } }));
+// a ChatGPT account's access token (its id the claim), and the login
+// opencode keeps, of one
+const token = (account: string) => "e30." + Buffer.from(JSON.stringify({ chatgpt_account_id: account })).toString("base64url") + ".sig";
+const login = (access: string) => fs.writeFileSync(DATA + "/opencode/auth.json", JSON.stringify({ openai: { type: "oauth", access, refresh: "r", expires: Date.now() + 3600e3 } }));
+login(token("acct-1"));
 
 const config = await import("./Config.ts");
 const { Pick } = await import("../ai/Pick.ts");
 const { ChatGPT } = await import("../ai/ChatGPT.ts");
 const { Anthropic } = await import("../ai/Anthropic.ts");
+const { AskAI } = await import("../ai/AskAI.ts");
+const { Chat } = await import("../chat/Chat.ts");
+const { Memory } = await import("../chat/Memory.ts");
+const View = await import("../ui/View.ts");
 
 // fetch answering each URL asked with `answer`'s JSON for it, while fn runs
 async function fetching<T>(answer: (url: string) => unknown, fn: () => Promise<T>): Promise<T> {
@@ -67,6 +82,7 @@ test("a model's own, else the share the old `context` names (its \"auto\" none: 
   expect(config.config_tokens("400k", 1)).toBe(400000);
   expect(config.config_tokens("60%", 872000)).toBe(523200);
   expect(config.config_tokens("auto", 872000)).toBeNull();
+  expect(config.config_tokens("1e5", 1)).toBeNull();
 });
 
 test("a model's autocompact set: merged into the file as it is now, under the new name, the old dropped; null takes it out", () => {
@@ -93,9 +109,10 @@ test("a model's autocompact set goes into the file that sets autocompacts; a var
   config.config_autocompact("gpt-6-luna", null);
 });
 
-test("the models kept from the last start are offered, their windows known", () => {
+test("the models kept from the last start are offered, their windows known; another vendor's only tell the windows of those built in", () => {
   expect(config.OFFER.models).toContain("gpt-7-kept");
   expect(Pick.window({ vendor: "chatgpt", model: "gpt-7-kept", effort: "low", speed: "slow" })).toBe(400000);
+  expect([Pick.model("claude-code", "opus-5.5"), Pick.model("claude-code", "opus-4.1")]).toEqual([{ label: "opus-5.5", id: "claude-opus-5-5", speeds: ["slow"], window: 1000000 }, undefined]);
 });
 
 test("ChatGPT's list: a new model shown is offered and kept, a hidden one not, a known one's window told", async () => {
@@ -143,13 +160,20 @@ test("a pick whose effort or speed its model lacks is kept, run at the nearest i
   expect(Pick.load(saved, offer, def)).toEqual(saved);
   expect(Pick.fit(saved)).toEqual({ ...saved, effort: "medium", speed: "slow" });
   expect(Pick.shown(saved)).toBe("gpt-6-luna · medium");
+  expect([Pick.move(saved, "up", offer)?.effort, Pick.move(saved, "down", offer)?.effort]).toEqual(["medium", "low"]);
+  expect(View.view_pick({ ...View.view_new(), pick: saved }).map((knob) => knob.text)).toEqual(["gpt-6-luna", "medium", ""]);
   const ask = (model: string, speed: string) => ({ model, speed, effort: "medium", system: "s", searches: 0, blocks: [], imgs: [] }) as any;
   expect((ChatGPT.body(ask("gpt-6.1-sol", "fast"), [], [], 1000) as any).service_tier).toBe("priority");
   expect((ChatGPT.body(ask("gpt-6.1-sol", "slow"), [], [], 1000) as any).service_tier).toBe("default");
 });
 
-test("a request refused as too long past the usual window makes it the model's whole one for the account, kept through the catalog asked again", async () => {
-  expect(ChatGPT.refused("gpt-6.1-sol")).toBe(true);
+test("a turn's first request refused as too long past the usual window makes it the model's whole one for the account, kept through the catalog asked again; one refused later in the turn, or past its room, teaches nothing", async () => {
+  const chat    = { beside: new Map([["chatgpt:gpt-6.1-sol", 20000]]) } as any;
+  const carried = { model: "chatgpt:gpt-6.1-sol", tokens: 400000 };
+  const full    = { ok: false, text: "HTTP 400: context_length_exceeded", left: [], stop: "full" as const };
+  expect(Chat.capped(chat, { ...full, first: 420000 }, carried)).toBe(false);
+  expect(Pick.model("chatgpt", "gpt-6.1-sol")).toMatchObject({ window: 872000, standard: 272000 });
+  expect(Chat.capped(chat, full, carried)).toBe(true);
   expect(Pick.model("chatgpt", "gpt-6.1-sol")).toMatchObject({ window: 272000, standard: undefined });
   expect(ChatGPT.refused("gpt-6.1-sol")).toBe(false);
   expect(JSON.parse(fs.readFileSync(config.MODELS_FILE, "utf8")).capped).toEqual(["gpt-6.1-sol"]);
@@ -175,4 +199,32 @@ test("Anthropic's model list, page after page, tells the built-in models' window
   expect(Pick.model("claude-api", "claude-old-1")).toBeUndefined();
   expect(JSON.parse(fs.readFileSync(config.MODELS_FILE, "utf8")).vendors["claude-api"].map((m: any) => m.window)).toEqual([900000, 1000000, 400000]);
   expect(fetching(() => new Response("no", { status: 401 }), () => Anthropic.list("key"))).rejects.toThrow("HTTP 401");
+});
+
+test("a chat on ChatGPT folds nothing on the windows kept last as a login or a plan is told, only once the account's catalog tells its own", async () => {
+  // no model asked meanwhile (the compactor's summaries): none past here
+  AskAI.ask = (_, on) => AskAI.tie(on, () => {}, () => {})[0];
+  Pick.learn("chatgpt", [{ label: "gpt-6.1-sol", id: "gpt-6.1-sol", speeds: ["slow"], window: 272000 }], "replace");
+  const chat = Chat.open(process.cwd());
+  try {
+    expect(await Chat.act(chat, { $: "pick", to: { vendor: "chatgpt", model: "gpt-6.1-sol", effort: "medium", speed: "slow" } })).toEqual({});
+    Memory.push(chat.mem, Array.from({ length: 10 }, (_, k) => ({ kind: "user" as const, text: String(k).repeat(100000), line: "user: " + k })));
+    const cut = chat.mem.cut;
+    login(token("acct-2"));
+    ChatGPT.sync();
+    await fetching(() => ({ plan_type: "pro" }), () => ChatGPT.usage());
+    expect(chat.mem.cut).toBe(cut);
+    await fetching(() => CATALOG, () => ChatGPT.models());
+    expect([chat.mem.cut, Pick.window(chat.pick), Chat.cap(chat)]).toEqual([cut, 872000, 523200]);
+  } finally {
+    Chat.close(chat);
+    ChatGPT.watch(() => {});
+  }
+});
+
+test("a turn's wait asks the catalog of an account not asked yet (a turn resumed at the start comes before the terminal asks it)", async () => {
+  login(token("acct-3"));
+  const other = { models: CATALOG.models.map((m) => (m.slug === "gpt-6.1-sol" ? { ...m, max_context_window: 500000 } : m)) };
+  await fetching(() => other, () => ChatGPT.listed(2000));
+  expect(Pick.window({ vendor: "chatgpt", model: "gpt-6.1-sol", effort: "low", speed: "slow" })).toBe(500000);
 });

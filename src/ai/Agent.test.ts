@@ -3,7 +3,8 @@
 // `bun test Agent.test.ts`. A refusal saying the request is too long for
 // the model's window is told apart from any other; a call whose step
 // read past its room ends `full` once that step's tools ran, saying so
-// only if it was the first step (the request itself too long). A call
+// only if it was the first step (the request itself too long); what its
+// first request read is told, none when that one was refused. A call
 // once (a recap) runs no tool: one that calls one ends unanswered. A call
 // going on from another's keeps its vendor's cache marks in all: the
 // other's count. A request carries at most PICS images, the oldest left
@@ -55,11 +56,24 @@ async function scripted(reads: number[], room?: number, once?: boolean) {
 
 test("a step read past the call's room ends it full once its tools ran; saying why only at the first step", async () => {
   const first = await scripted([500, 10], 400);
-  expect([first.end.stop, first.end.text, first.ran]).toEqual(["full", "the turn starts past 400 tokens", ["t1"]]);
+  expect([first.end.stop, first.end.text, first.ran, first.end.first]).toEqual(["full", "the turn starts past 400 tokens", ["t1"], 500]);
   const grown = await scripted([100, 200, 500, 10], 400);
-  expect([grown.end.stop, grown.end.text, grown.ran]).toEqual(["full", "", ["t1", "t2", "t3"]]);
+  expect([grown.end.stop, grown.end.text, grown.ran, grown.end.first]).toEqual(["full", "", ["t1", "t2", "t3"], 100]);
   const fits = await scripted([100, 200, 300], 400);
   expect([fits.end.ok, fits.end.stop, fits.ran]).toEqual([true, undefined, ["t1", "t2"]]);
+});
+
+test("a first request refused as too long (streamed, its usage nothing) tells no read: the chat learns nothing from it", async () => {
+  const step = Agent.step;
+  Agent.step = async () => ({ out: [], uses: [], entries: [], stop: "full", why: "context_length_exceeded", note: "", read: 0 }) as any;
+  try {
+    const ask = { vendor: "chatgpt", model: "m", effort: "low", speed: "slow", system: "", blocks: [{ text: "hi", mark: false }], searches: 0, server: "" } as any;
+    const run = { ask, on: () => {}, sent: [], abort: new AbortController(), end: AskAI.end("") };
+    await Agent.loop({ auth: { token: async () => "", spoil: () => {} }, marks: () => 0 } as any, run);
+    expect([run.end.stop, run.end.first]).toEqual(["full", undefined]);
+  } finally {
+    Agent.step = step;
+  }
 });
 
 test("a call once runs no tool: one calling a tool ends unanswered, one writing ends answered", async () => {

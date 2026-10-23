@@ -102,10 +102,12 @@ On ChatGPT the list is your account's own: a model it adds is offered
 at once, one it drops is gone. A model's window is the most your plan
 may use. Past its usual window (272k on most) your plan's usage drains
 faster: `/model`'s gauge marks where, and illi asks for no suggested
-reply after such a turn. If your account refuses a chat that long, illi keeps to the
-usual window for that model from then on. A pick whose effort or speed
-the model doesn't have runs at the nearest one it has. Until a vendor
-tells, illi uses windows built in (Claude Code's: 200k).
+reply after such a turn. If your account refuses a chat that long at a
+turn's start, illi keeps to the usual window for that model from then
+on. A pick whose effort or speed the model doesn't have runs at the
+nearest one it has. Until a vendor tells, illi uses windows built in
+(Claude Code's: 200k); on ChatGPT a turn waits for the catalog a few
+seconds at most before it folds anything.
 
 How much of the window a turn sends is each model's autocompact
 ([Config](config.md)): `/autocompact` sets it for the chat's model.

@@ -787,13 +787,14 @@ export function view_asked(v: View): Pick | null {
   return v.out.flatMap((p) => (p.msg.$ === "pick" ? [p.msg.to] : [])).at(-1) ?? v.pick;
 }
 
-// the pick's parts, as the last line shows them (the standard speed: no
-// text)
+// the pick's parts, as the last line shows them: as it runs (fit: an
+// effort or speed its model lacks, the nearest it has; the standard
+// speed: no text)
 export function view_pick(v: View): Knob[] {
   if (v.pick === null) {
     return [];
   }
-  const { vendor, model, effort, speed } = v.pick;
+  const { vendor, model, effort, speed } = Pick.fit(v.pick);
   return [
     { text: model, move: "model", hint: model + " on " + vendor },
     { text: effort, move: "effort", hint: effort + " effort: how long it thinks first; more is smarter and slower" },

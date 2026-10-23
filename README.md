@@ -117,7 +117,7 @@ Keys and commands
 | Ctrl+X, then a key   | a shortcut (m model, s settings…); `/shortcuts` changes them |
 | Shift+Tab            | switch primary agent                  |
 | `/login`             | sign in with your ChatGPT plan        |
-| `/model`             | pick the model, its effort and speed  |
+| `/model`             | pick the model, its effort, speed and autocompact |
 | `/settings`          | change any setting                    |
 | `/profile`           | switch, make or export a profile      |
 | `/tree`, `/export`   | the memory as a page, as JSON, written into the current folder |

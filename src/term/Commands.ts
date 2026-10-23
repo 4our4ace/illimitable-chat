@@ -923,7 +923,7 @@ export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "
     return true;
   };
   const foot  = (k: number) => {
-    const p       = pick(k);
+    const p       = Pick.fit(pick(k));
     const efforts = Pick.options(p, "effort", t.v).map(([effort]) => effort);
     const e       = efforts.indexOf(p.effort);
     const speeds  = Pick.options(p, "speed", t.v).length;
@@ -991,7 +991,8 @@ export function term_gauge(g: Gauge, w: number): Paint.Line[] {
 
 // /autocompact: the chat's model's autocompact said (no value), or set
 // for it (by the chat's process: from another terminal too): a share of
-// its window, tokens, or default (its own taken out, the global one holds)
+// its window, tokens, or default (its own taken out, the global one
+// holds), said once the chat took it (a variable setting them: why not)
 function term_autocompact(t: Term, arg: string): void {
   const fill  = t.v.use.fill ?? null;
   const model = t.v.pick?.model;
@@ -1007,9 +1008,8 @@ function term_autocompact(t: Term, arg: string): void {
   if (value !== null && want === null) {
     return term_note(t, "/autocompact takes a share of the window (50%), a size (300k) or default.");
   }
-  term_send(t, { $: "autocompact", label: model, value });
   const said = want === null ? "back to the global one" : value + ", " + (want > fill.most ? "held to " : "") + term_tokens(Math.min(want, fill.most)) + " of its " + term_tokens(fill.window) + " window";
-  term_note(t, "Autocompact for " + model + ": " + said + ".");
+  term_send(t, { $: "autocompact", label: model, value }, undefined, "Autocompact for " + model + ": " + said + ".");
 }
 
 // a part of the pick (its model, its effort): to the value given, or,
