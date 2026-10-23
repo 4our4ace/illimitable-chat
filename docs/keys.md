@@ -288,7 +288,11 @@ Mouse and side panel
   three a line; a reply's code has a copy button. Copying uses OSC 52,
   so the terminal (and tmux) must allow it.
 - The work between replies (tool calls, results, thinking, agents'
-  reports): a click on a run's line, or anywhere down the bar at its
+  reports) shows as one line saying what was done, its calls under it,
+  one line each: `✓` done, `✗` failed (blank: stopped before it
+  answered), the tool and what it was called with; past six, the latest
+  five, under a line counting the rest (`… 12 earlier`). A click on a
+  run's line or a call's, or anywhere down the bar at an open run's
   left, opens or closes the whole run. Inside an open run, a click on a
   call, a result, a thought or a report folds it to one line (`result ·
   1,204 lines`), wherever you are in it; a click on that line unfolds it.
@@ -301,7 +305,7 @@ Mouse and side panel
   click on the same spot right after does nothing, so a slow double
   click never undoes the fold.
 - What a click would act on lights as the pointer moves over it: a run's
-  line and its whole bar, heavier; a message's bar beside it (and a
+  line, its calls and its whole bar, heavier; a message's bar beside it (and a
   folded one's `[+]`); a block's `/open`, an open block's top edge. It
   goes as you type, as the chat moves on by itself, and as the window
   loses the focus. While text you chose shows, nothing lights: a click

@@ -88,6 +88,32 @@ test("each run of work is one line saying what was done", () => {
   expect(View.view_tail(v, false).map((r) => (r.$ === "Msg" ? r.kind : r.$))).toEqual(["mind", "illi"]);
 });
 
+// a run's calls, listed under it while shut, each with how it ended: by
+// the result logged right after it (failed: FAILED), one with none after
+// it (stopped, summed up) not known; a call in a block opened alone among
+// them; a thought between calls changes nothing
+test("a run's calls each say how they ended: done, failed, not known", () => {
+  const v    = View.view_new();
+  const rows: View.Row[] = [
+    ...View.entry_rows(1, "user", "push it"),
+    ...View.entry_rows(2, "tool", 'shell {"command":"bun test"}'),
+    ...View.entry_rows(3, "echo", "642 pass\n(exit 0 in 9s)"),
+    ...View.entry_rows(4, "tool", 'shell {"command":"git push"}'),
+    ...View.entry_rows(5, "echo", View.FAILED + "rejected\n(exit 1 in 1s)"),
+    ...View.entry_rows(null, "mind", "it was refused"),
+    { $: "Box", id: 6, n: 1, rows: View.entry_rows(6, "tool", 'web_search {"query":"bend"}') },
+    ...View.entry_rows(7, "echo", "bend: a language"),
+    ...View.entry_rows(8, "tool", 'read {"path":"a.log"}'),
+  ];
+  const run = View.view_acts(v, rows)[1];
+  expect(run.$ === "Act" && run.calls.map((d) => [d.call.name, d.call.head, d.ok])).toEqual([
+    ["shell", "bun test", true],
+    ["shell", "git push", false],
+    ["web_search", '"bend"', true],
+    ["read", "a.log", null],
+  ]);
+});
+
 // runs led by a thought (never logged: no id) each keyed by the message
 // the thought follows, so one opens alone and keeps its key as its first
 // call comes; in verbose mode a toggle shuts that one run, and Ctrl+O

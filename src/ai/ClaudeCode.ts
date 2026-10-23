@@ -35,7 +35,7 @@ import { AskAI, type Ask, type Block, type End, type Event, type Img, type Say, 
 import { Agent, type Emit, type Entry } from "./Agent.ts";
 import { Anthropic } from "./Anthropic.ts";
 import { Pick } from "./Pick.ts";
-import { live_push } from "../ui/View.ts";
+import { FAILED, live_push } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
 
 // Types
@@ -278,7 +278,7 @@ export namespace ClaudeCode {
     const content = m.message?.content;
     const results = Array.isArray(content) ? content.filter((c: any) => c.type === "tool_result") : [];
     for (const r of results) {
-      run.on({ $: "Entry", kind: "echo", text: (r.is_error ? "error: " : "") + (AskAI.show(r.content) || "(no output)"), of: r.tool_use_id });
+      run.on({ $: "Entry", kind: "echo", text: (r.is_error ? FAILED : "") + (AskAI.show(r.content) || "(no output)"), of: r.tool_use_id });
     }
     if (results.length > 0 || m.isSynthetic === true || m.isMeta === true) {
       return;

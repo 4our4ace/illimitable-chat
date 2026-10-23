@@ -129,7 +129,9 @@ the full accent).
   question's answer picked too), `option` (`○`, an answer of a question
   that takes one), `find` (`⌕ `,
   before a list's search), `pending`, `active` and `done` (`□`, `>`,
-  `■`: the to-do's items). Control characters are left out.
+  `■`: the to-do's items), `ok` and `failed` (`✓`, `✗`: a call in a
+  shut run, a subagent done, an MCP server down). Control characters
+  are left out.
 - `tool` (a mark before a tool's name, by tool: none by default),
   `syntax` (code's colors by the kinds Prism names: `keyword`,
   `string`, `function`, `comment`, `class-name`, `tag`..., any of them,

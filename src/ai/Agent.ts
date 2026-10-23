@@ -42,7 +42,7 @@ import { Anthropic } from "./Anthropic.ts";
 import { ChatGPT } from "./ChatGPT.ts";
 import { ClaudeCode } from "./ClaudeCode.ts";
 import { OpenAI } from "./OpenAI.ts";
-import { live_push } from "../ui/View.ts";
+import { FAILED, live_push } from "../ui/View.ts";
 import { stream_events } from "../tools/Clip.ts";
 import { Machine, type Spec } from "../tools/Machine.ts";
 import * as config from "../config/Config.ts";
@@ -245,7 +245,7 @@ export namespace Agent {
           return;
         }
         const out = await Agent.use(run, tools, use);
-        on({ $: "Entry", kind: "echo", text: (out.fail ? "error: " : "") + out.text, of: use.id });
+        on({ $: "Entry", kind: "echo", text: (out.fail ? FAILED : "") + out.text, of: use.id });
         backs.push({ id: use.id, out });
       }
       if (signal.aborted) {

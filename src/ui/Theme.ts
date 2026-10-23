@@ -138,6 +138,8 @@ export const GLYPH = {
   pending : "□",  // a to-do item not begun
   active  : ">",  // the one at work
   done    : "■",  // one done
+  ok      : "✓",  // done well: a call in a shut run, a subagent finished, a question answered
+  failed  : "✗",  // failed: a call in a shut run, an MCP server, a refused request
   ...OWN.glyph,
 };
 

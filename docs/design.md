@@ -42,7 +42,7 @@ Marks
 | `◯` `●` | one of a set, the one in use (`GLYPH.tab`, `GLYPH.here`) | the tabs; the model, agent, profile, mode or project in use in a list; the side's agents, sticky skills (on, off) and profiles |
 | `●` | running (success) | background jobs, MCP servers ready |
 | `◌` | starting | MCP servers at the side |
-| `✓` `✗` | done, failed | `✓` a subagent at the side, a question answered (its tab); `✗` an MCP server, a refused request |
+| `✓` `✗` | done, failed (`GLYPH.ok`, `GLYPH.failed`) | a shut run's calls (`✓` dim, `✗` in the error's color); `✓` a subagent at the side, a question answered (its tab); `✗` an MCP server, a refused request |
 | `<-` | back | the side's way back from an agent's page |
 | `·` | between the parts of one line | everywhere |
 | `…` | cut here | any text cut to fit |
