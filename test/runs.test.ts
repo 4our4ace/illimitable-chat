@@ -6,7 +6,11 @@
 // each its own; a click inside a message of an open run folds it to one
 // line, its siblings staying, and a click on that line unfolds it; an
 // open block shuts from any line of its frame, a block inside it opening
-// itself; a gap line in a run is the block's above it.
+// itself; a gap line in a run is the block's above it. What a click
+// acted on keeps its first line on the row clicked, the chat scrolled up
+// or at its end (an open there leaves the end, the jump to it shown; a
+// close there lands lower, as the chat never scrolls past its end). The
+// live tail takes no click.
 
 import { expect, test } from "bun:test";
 import { term_paint } from "../src/term/Frame.ts";
@@ -16,13 +20,14 @@ import * as Paint from "../src/ui/Paint.ts";
 import * as Screen from "../src/ui/Screen.ts";
 import * as View from "../src/ui/View.ts";
 
-// a chat: the user's words, a run of work (two calls, a long result, a
-// short one), illi's reply; again, a run of one call; messages before
-// `turn` summed up (each its summary, a call's word for word)
-function chat(turn = 0): View.View {
+// a chat: the user's words (`top` lines more), a run of work (two
+// calls, a long result, a short one), illi's reply; again, a run of one
+// call and a long result, illi's reply (`end` lines more); messages
+// before `turn` summed up (each its summary, a call's word for word)
+function chat(turn = 0, top = 0, end = 0): View.View {
   const v = View.view_new();
   const whole: Record<string, View.Entry> = {
-    1 : { kind: "user", text: "Run the tests" },
+    1 : { kind: "user", text: "Run the tests" + "\nplease".repeat(top) },
     2 : { kind: "tool", text: 'shell {"command":"npm test"}' },
     3 : { kind: "echo", text: Array.from({ length: 30 }, (_, k) => "ok " + k).join("\n") },
     4 : { kind: "tool", text: 'shell {"command":"ls"}' },
@@ -30,8 +35,8 @@ function chat(turn = 0): View.View {
     6 : { kind: "illi", text: "Done, they pass." },
     7 : { kind: "user", text: "Again" },
     8 : { kind: "tool", text: 'shell {"command":"npm test"}' },
-    9 : { kind: "echo", text: "ok" },
-    10: { kind: "illi", text: "Still passing." },
+    9 : { kind: "echo", text: Array.from({ length: 20 }, (_, k) => "fine " + k).join("\n") },
+    10: { kind: "illi", text: "Still passing." + "\n\nYes.".repeat(end) },
   };
   const nodes = Object.fromEntries(Object.entries(whole).map(([id, e]) => [id + "+1", { text: e.kind + ": " + e.text.split("\n")[0], to: "" }]));
   View.view_hear(v, { $: "know", nodes, whole });
@@ -47,7 +52,7 @@ function term(v: View.View): any {
     scroll: 0, seen: { total: 0, marks: [], row: 0, first: 0, tall: 1, col: 0, end: 0 }, ver: 0, body: null, find: null, pane: null, agents: [],
     choose: null, profs: [], hits: [], since: 0, spin: undefined, ruled: null, doing: null, subs: new Map(), side: { place: "off", width: "" }, status: status_new(),
     todo: false, login: null, areas: [], sel: null, hover: undefined, drift: undefined, sug: null, dropped: "", lead: false, quoted: null, asking: null, box: null,
-    aim: { row: -1, in: false, press: null, first: null },
+    aim: { row: -1, in: false, press: null, first: null }, pin: null,
   };
   t.scr = { tty: true, kitty: false, ed: Screen.ed_new(), rest: "", shown: [], click: { row: 0, col: 0 }, clicks: 0, pressed: 0, point: { row: 0, col: 0 }, typed: false, left: true };
   [t.scr.grab, t.scr.on, t.scr.type] = [(k: string) => term_grab(t, k), (k: string) => term_press(t, k), (x: string) => term_type(t, x)];
@@ -107,7 +112,7 @@ test("a click on a run's head, or anywhere down its bar, closes the whole run; o
   click(t, row_of(t, "r2"), left(t) + 4);
   paint(t);
   expect(mark(t, "r2").open).toBe(true);
-  click(t, row_of(t, "r2", -3), left(t) + 1);
+  click(t, row_of(t, "r2", 3), left(t) + 1);
   paint(t);
   expect(mark(t, "r2").open).toBe(false);
   click(t, row_of(t, "r2"), left(t));
@@ -169,7 +174,7 @@ test("in an open block, a summary opens itself, an open block inside shuts itsel
   paint(t);
   expect([mark(t, Paint.block_key(3, 1)).open, mark(t, Paint.block_key(2, 2)).open]).toEqual([true, true]);
   const inner = mark(t, Paint.block_key(3, 1));
-  click(t, row_of(t, inner.key, -3), left(t) + 6);
+  click(t, row_of(t, inner.key, 1), left(t) + 6);
   paint(t);
   expect([mark(t, inner.key).open, mark(t, outer.key).open]).toEqual([false, true]);
   click(t, row_of(t, outer.key, -1), left(t) + 10);
@@ -177,3 +182,50 @@ test("in an open block, a summary opens itself, an open block inside shuts itsel
   expect(mark(t, outer.key).open).toBe(false);
 });
 
+
+test("a fold or an open keeps the first line of what it acted on on the row clicked, the chat scrolled up", () => {
+  const t = term(chat(0, 40, 40));
+  View.view_toggle(t.v, 2);
+  t.scroll = Infinity;
+  paint(t);
+  t.scroll = t.seen.total - t.seen.tall - mark(t, "r2").from + 2;
+  paint(t);
+  const row = row_of(t, "#3", 10);
+  click(t, row, left(t) + 8);
+  paint(t);
+  expect([mark(t, "#3").open, row_of(t, "#3"), t.scroll > 0]).toEqual([false, row, true]);
+  click(t, row, left(t) + 8);
+  paint(t);
+  expect([mark(t, "#3").open, row_of(t, "#3")]).toEqual([true, row]);
+  const head = row_of(t, "r2");
+  click(t, head, left(t) + 4);
+  paint(t);
+  expect([mark(t, "r2").open, row_of(t, "r2")]).toEqual([false, head]);
+});
+
+test("at the chat's end, an open keeps its head, leaving the end (the jump shown); a close lands lower, the chat never past its end", () => {
+  const t = term(chat(0, 40));
+  paint(t);
+  const row = row_of(t, "r8");
+  click(t, row, left(t) + 4);
+  paint(t);
+  const jump = t.ruled.rows.some((r: any[]) => r.some((p: any) => p.line.some((x: Paint.Run) => x.x.includes("Jump to Bottom"))));
+  expect([mark(t, "r8").open, row_of(t, "r8"), t.scroll > 0, jump]).toEqual([true, row, true, true]);
+  t.scroll = 0;
+  paint(t);
+  const bar = row_of(t, "r8", 2);
+  click(t, bar, left(t));
+  paint(t);
+  expect([mark(t, "r8").open, t.scroll]).toEqual([false, 0]);
+  expect(row_of(t, "r8")).toBeGreaterThan(bar);
+});
+
+test("the live tail takes no click", () => {
+  const t = term(chat());
+  t.v.live = [{ kind: "illi", text: "Working on it, line one\nline two\nline three" }];
+  t.v.busy = true;
+  const area = paint(t);
+  const ver  = t.ver;
+  click(t, area.row + area.tall - 2, left(t) + 3);
+  expect([t.ver, t.v.acts.size, t.v.folds.size, t.v.open.size]).toEqual([ver, 0, 0, 0]);
+});

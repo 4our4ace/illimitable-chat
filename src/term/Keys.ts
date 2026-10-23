@@ -248,7 +248,8 @@ export function term_type(t: Term, text: string): boolean {
 // copies); in the chat, a run of work's head or its bar opens or closes
 // the whole run; inside an open one, a message folds to a line, or
 // unfolds; a block opens, and an open one shuts from any line of its
-// frame (the innermost thing holding the line acts)
+// frame (the innermost thing holding the line acts); whatever it acted
+// on keeps its place under the pointer
 export function term_click(t: Term): void {
   const aim = term_target(t, t.scr.click);
   if (aim.$ === "hit") {
@@ -256,13 +257,16 @@ export function term_click(t: Term): void {
   } else if (aim.$ === "copy") {
     term_copied(t, aim.copy());
   } else if (aim.$ === "mark") {
-    term_fold(t, aim.mark);
+    term_fold(t, aim.mark, t.scr.click);
   }
 }
 
-// a mark acted on by a click: a run of work (or a recap) opened or
-// closed, a message in one folded or unfolded, a block opened or shut
-function term_fold(t: Term, m: Paint.Mark): void {
+// a mark acted on by a click at a spot: a run of work (or a recap)
+// opened or closed, a message in one folded or unfolded, a block opened
+// or shut; its first line kept on the row clicked (t.pin), so what was
+// under the pointer stays there
+function term_fold(t: Term, m: Paint.Mark, at: Screen.Spot): void {
+  t.pin = { key: m.key, row: at.row };
   if (m.act === true) {
     View.view_toggle(t.v, m.id);
     t.ver += 1;

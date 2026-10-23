@@ -107,7 +107,9 @@ import * as View from "../ui/View.ts";
 // meanwhile: Frame.ts); quoted: the quote a right drag put in the input
 // last, when and what it added (Select.ts; null: none); box: the popup
 // as last painted (Popup.ts; null: none, or a new size since), aim: the
-// mouse as it saw it
+// mouse as it saw it; pin: a mark a click acted on, by its key, and the
+// screen row clicked, where the next paint puts its first line (Frame.ts
+// term_chat; null: none)
 export type Term = {
   v       : View.View;
   scr     : Screen.Screen;
@@ -153,6 +155,7 @@ export type Term = {
   asking  : { id: string; c: Chooser | null; done: boolean; form: Form | null; shown: number | null } | null; // the question shown (Asks.ts): its picker or form, whether answered, when it showed (Popup.ts popup_shown; null: not since it last opened)
   box     : PopBox | null;
   aim     : Aim;
+  pin     : { key: string; row: number } | null;
 };
 
 // the mouse as the popup saw it (Popup.ts popup_mouse): the pointer's
@@ -365,6 +368,7 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
     asking  : null,
     box     : null,
     aim     : { row: -1, in: false, press: null, first: null },
+    pin     : null,
   };
   // the chat suggests replies to a screen that shows them, never a pipe
   if (chat !== null) {
