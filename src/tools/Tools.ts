@@ -28,11 +28,14 @@
 // tools: it gets the tools Claude Code lacks (a `lean` list: no shell or
 // files), and prompts that say it works inside illi (Tools.hosted), the
 // project's CLAUDE.md left to Claude Code, which reads it itself.
-// Before shell, read, write, edit or an MCP tool runs, and as Claude
-// Code asks leave for one of its own (approve), the call is judged
-// (Tools.guard: Guard.ts, by the user's rules and grants in
-// Permissions.ts and the mode): run, asked about with why, or refused;
-// each refusal recorded for the side panel and /permissions.
+// Every call goes first to the user's plugins (Plugins.before_tool: they
+// may refuse it or change its input), then, for shell, read, write, edit
+// or an MCP tool, and as Claude Code asks leave for one of its own
+// (approve), it is judged on that input (Tools.guard: Guard.ts, by the
+// user's rules and grants in Permissions.ts and the mode): run, asked
+// about with why, or refused, each refusal recorded for the side panel
+// and /permissions; what it answers goes to the plugins last
+// (after_tool). The plugins' own tools are theirs to run (plugin__...).
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -44,6 +47,7 @@ import { ChatGPT } from "../ai/ChatGPT.ts";
 import { clip_page } from "./Clip.ts";
 import * as config from "../config/Config.ts";
 import { Custom, type Skill } from "../config/Custom.ts";
+import { Plugins } from "../config/Plugins.ts";
 import { Trusted } from "../config/Trusted.ts";
 import { Guard, MODES, type Mode, type Verdict, type Where } from "./Guard.ts";
 import { Permissions } from "./Permissions.ts";
@@ -498,7 +502,7 @@ export namespace Tools {
   // a caller's tools, as its agent allows; `lean`, a caller in Claude
   // Code, none it has (shell, files: TOOLS), and its permission prompt
   export function list(tools: Tools, who: string, lean = false): Spec[] {
-    const user = [...skill_tools(tools.cwd), ...Mcp.tools(), ...(lean ? [APPROVE] : [])];
+    const user = [...skill_tools(tools.cwd), ...Mcp.tools(), ...Plugins.tools(), ...(lean ? [APPROVE] : [])];
     const here = lean ? [] : TOOLS;
     if (who === MAIN) {
       return Custom.allow(Custom.agent(tools.cwd, tools.hooks.main()), [...OWN, ...boss(tools.cwd), ...here, ...user]);
@@ -506,12 +510,25 @@ export namespace Tools {
     return Custom.allow(Custom.agent(tools.cwd, tools.agents.get(who)?.role.agent ?? null), [...OWN, ...here, ...user]);
   }
 
+  // a call, past the plugins' hooks (approve: Claude Code's, which judges
+  // its own)
   export async function call(tools: Tools, who: string, name: string, args: any, signal: AbortSignal): Promise<Out> {
+    if (name === "approve") {
+      return Tools.approve(tools, who, String(args.tool_name ?? ""), args.input ?? {}, signal);
+    }
+    const call = { tool: name, input: args, agent: who === MAIN ? null : who, cwd: tools.cwd, signal };
+    const told = await Plugins.before_tool(call);
+    if ("block" in told) {
+      return { text: told.block, fail: true };
+    }
+    return Plugins.after_tool({ ...call, input: told.input }, await Tools.handle(tools, who, name, told.input as any, signal));
+  }
+
+  // a call run: illi's own tools here; shell, files and MCP tools once
+  // judged (Tools.guard); a plugin's by its plugin
+  export async function handle(tools: Tools, who: string, name: string, args: any, signal: AbortSignal): Promise<Out> {
     const mem = tools.mem;
     switch (name) {
-      case "approve": {
-        return Tools.approve(tools, who, String(args.tool_name ?? ""), args.input ?? {}, signal);
-      }
       case "zoom": {
         const id = String(args.id);
         const n = Number(args.n ?? 1);
@@ -578,6 +595,9 @@ export namespace Tools {
         const stop = await Tools.guard(tools, who, name, args, signal);
         if (stop !== null) {
           return stop;
+        }
+        if (name.startsWith("plugin__")) {
+          return Plugins.run({ tool: name, input: args, agent: who === MAIN ? null : who, cwd: tools.cwd, signal });
         }
         return name.startsWith("mcp__") ? Mcp.call(name, args, signal) : Machine.run({ name, input: args, cwd: tools.cwd }, signal);
       }
@@ -683,13 +703,17 @@ export namespace Tools {
     return { ...run, effort, system, blocks, searches: SEARCHES, server };
   }
 
-  // Claude Code asking leave to use a tool (its permission prompt): its
-  // tool judged as illi's own would be (Guard.hosted), so the same rules,
-  // grants and mode hold there. Its answer as Claude Code reads it: the
-  // input as it was, or a no with what the model is told
+  // Claude Code asking leave to use a tool (its permission prompt): past
+  // the plugins' hooks first (they may refuse it or change its input; what
+  // it answers stays Claude Code's), then judged as illi's own would be
+  // (Guard.hosted), so the same rules, grants and mode hold there. Its
+  // answer as Claude Code reads it: the input to run, or a no with what
+  // the model is told
   export async function approve(tools: Tools, who: string, tool: string, input: unknown, signal: AbortSignal): Promise<Out> {
-    const stop = await Tools.guard(tools, who, tool, input, signal, (where) => Guard.hosted(where, tool, input));
-    const answer = stop === null ? { behavior: "allow", updatedInput: input } : { behavior: "deny", message: stop.text };
+    const told = await Plugins.before_tool({ tool, input, agent: who === MAIN ? null : who, cwd: tools.cwd, signal });
+    const used = "block" in told ? undefined : told.input;
+    const stop = "block" in told ? { text: told.block, fail: true } : await Tools.guard(tools, who, tool, used, signal, (where) => Guard.hosted(where, tool, used));
+    const answer = stop === null ? { behavior: "allow", updatedInput: used } : { behavior: "deny", message: stop.text };
     return { text: JSON.stringify(answer), fail: false };
   }
 

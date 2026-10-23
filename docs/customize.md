@@ -170,8 +170,9 @@ it follows the theme) or a list of those.
 | `tool.before` | `{ tool, input, agent, cwd }` | `{ block: "why" }` to refuse the call, `{ input }` to run it on other input |
 | `tool.after` | the same, and `output: { text, fail }` | `{ text, fail }`: what the model reads |
 
-`tool.before`, `tool.after` and plugins' tools take effect once tool
-calls pass through plugins.
+`tool.before` sees every tool call, Claude Code's own tools too (as
+they ask leave); `tool.after` every call illi runs (Claude Code runs its
+own, so it doesn't see theirs).
 
 - Hooks run one after another: the plugins in the order they load
   (global, profile, project; by name), each one's in the order it gave
