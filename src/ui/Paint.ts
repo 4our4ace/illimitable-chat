@@ -56,8 +56,9 @@ export type Ink = { d: boolean; b: boolean; i: boolean; u: boolean; v: boolean; 
 export type Run = { x: string; s: Ink; copy?: () => string; mark?: Tag };
 
 // a run's part in the mark it lights with, by the mark's key (line_lit):
-// its glyph (a run of work's GLYPH.shut or GLYPH.open, a folded message's, a block's
-// gutter and /open, an open block's bar), a run of work's label, or its
+// its glyph (a run of work's mark, open or shut: Theme.GLYPH; a folded
+// message's; a block's gutter and /open, an open block's bar), a run of
+// work's label, or its
 // bar down the left of its rows (a click on it is the run's: Term.ts)
 export type Tag = { key: string; as: "glyph" | "label" | "bar" };
 
@@ -478,12 +479,13 @@ function canvas_shade(hex: string): string {
   return "#" + rgb.map((v) => Math.round(dark ? v + (255 - v) * SHADE_DARK : v * (1 - SHADE_LIGHT)).toString(16).padStart(2, "0")).join("");
 }
 
-// a run of work: one dim line saying what was done (after GLYPH.shut), or opened (GLYPH.open)
-// over its rows, a dim bar at their left, each message marked (a click
-// folds it to a line, and back); a click on the line or the bar opens
-// or closes the whole run. A recap so too, its line a rule across the
-// chat, its name in the middle. The glyph, the label and the bar tagged,
-// to light with the run (line_lit; a rule's dashes never light)
+// a run of work: one dim line saying what was done (after GLYPH.shut),
+// or opened (GLYPH.open) over its rows, a dim bar at their left, each
+// message marked (a click folds it to a line, and back); a click on the
+// line or the bar opens or closes the whole run. A recap so too, its
+// line a rule across the chat, its name in the middle. The glyph, the
+// label and the bar tagged, to light with the run (line_lit; a rule's
+// dashes never light)
 function act_lines(row: View.Row & { $: "Act" | "Rule" }, w: number, marks: Mark[], at: number): Line[] {
   const key   = mark_key(row)!;
   const glyph = Run((row.open ? Theme.GLYPH.open : Theme.GLYPH.shut) + " ", DIM, { key, as: "glyph" });

@@ -24,6 +24,11 @@ import { status_new } from "../src/term/Status.ts";
 import * as Paint from "../src/ui/Paint.ts";
 import * as Screen from "../src/ui/Screen.ts";
 import * as View from "../src/ui/View.ts";
+import * as Theme from "../src/ui/Theme.ts";
+
+// a run's marks, open and shut, as the theme draws them
+const OPEN = Theme.GLYPH.open + " ";
+const SHUT = Theme.GLYPH.shut + " ";
 
 // a chat: the user's words (`top` lines more), a run of work (two
 // calls, a long result, a short one), illi's reply; again, a run of one
@@ -151,7 +156,7 @@ test("a click inside a message of an open run folds it to one line, its siblings
   click(t, row_of(t, "#3", -5), left(t) + 8);
   let area = paint(t);
   expect([mark(t, "#3").open, mark(t, "#3").to - mark(t, "#3").from, mark(t, "#2").open, mark(t, "#4").open]).toEqual([false, 2, true, true]);
-  expect(text(area)[mark(t, "#3").from]).toBe("│ [+] result · 30 lines");
+  expect(text(area)[mark(t, "#3").from]).toBe("│ " + SHUT + "result · 30 lines");
   click(t, row_of(t, "#3"), left(t) + 6);
   area = paint(t);
   expect(mark(t, "#3").open).toBe(true);
@@ -255,10 +260,10 @@ test("what a click would act on lights once the pointer moves: a message's bar b
   expect(lit(t)).toEqual(rows("#3").map((r) => [r, "│ "]));
   move(t, row_of(t, "r2"), left(t) + 30);
   paint(t);
-  expect(lit(t)).toEqual([[row_of(t, "r2"), "[-] "], [row_of(t, "r2"), "Ran 2 commands"], ...rows("r2").slice(1).map((r): [number, string] => [r, "┃ "])]);
+  expect(lit(t)).toEqual([[row_of(t, "r2"), OPEN], [row_of(t, "r2"), "Ran 2 commands"], ...rows("r2").slice(1).map((r): [number, string] => [r, "┃ "])]);
   click(t, row_of(t, "#2"), left(t) + 4);
   paint(t);
-  expect(lit(t)).toEqual([[row_of(t, "#2"), "│ "], [row_of(t, "#2"), "[+] "], [row_of(t, "#2", 1), "│ "]]);
+  expect(lit(t)).toEqual([[row_of(t, "#2"), "│ "], [row_of(t, "#2"), SHUT], [row_of(t, "#2", 1), "│ "]]);
 });
 
 test("a summary lights its gutter and /open, an open block its bar, each its bar in the run beside it; nothing over a line no click acts on", () => {
