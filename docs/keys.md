@@ -160,8 +160,9 @@ alone; the input comes back as you left it when the list closes.
   `/` does); the search edits as the input does. Up and Down (or Tab)
   move, Enter picks, Esc closes.
 - `/model`: Left and Right change the effort, Tab the speed.
-- `/settings`: Left, Right and Enter change a setting, Del puts its
-  default back (in a profile: the global value).
+- `/settings` (and a setting in Ctrl+P): Enter or Right steps a setting
+  to its next value, Shift+Enter or Left back; Del puts its default back
+  (in a profile: the global value).
 
 Panes (`/help`, `/agents`, `/mcp`) open in the chat's place,
 on a background of their own: Esc or Enter closes one, the arrows and

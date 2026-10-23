@@ -3,7 +3,7 @@
 // /settings: each setting (Config SETTINGS, so a new one shows here as
 // it is added there) in the picker, its value now and what it is, typed
 // to search. The lit one: Left and Right step it through its values, so
-// does Enter (kept in config.json at once); Enter on a pick opens the
+// do Enter and Shift+Enter, back (kept in config.json at once); Enter on a pick opens the
 // model picker for it (a role's: the chat's vendor's pick, the choice
 // kept in its vendor's place), on `off` lists what it may turn off, on
 // `sticky` the sticky skills to turn on, on one typed in puts
@@ -57,11 +57,11 @@ export function term_settings(t: Term, at = ""): void {
 }
 
 // a key to a setting's row (true: taken): Left and Right step it through
-// its values, so does Enter (kept in config.json at once); Delete puts
-// its default back
+// its values, so do Enter and Shift+Enter, back (kept in config.json at
+// once); Delete puts its default back
 export function setting_key(t: Term, key: config.Key, press: string): boolean {
   const vals = config.SETTINGS[key].values;
-  const step = ({ Left: -1, Right: 1, Enter: 1 } as Record<string, number>)[press];
+  const step = ({ Left: -1, Right: 1, Enter: 1, "Shift+Enter": -1 } as Record<string, number>)[press];
   if (press === "Delete" ? config.config_from(key) === "global" && config.DIR !== config.ROOT : step === undefined || !Array.isArray(vals)) {
     return false;
   }
