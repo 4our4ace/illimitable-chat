@@ -2,8 +2,8 @@
 // ====
 // A tool call as people read it. Logged as its tool's name, a space and its
 // input's JSON (`zoom {"id":6243,"n":1}`; an MCP client's prefix,
-// `mcp__illi__`, dropped), it shows as its emoji (Theme.TOOL), its name in
-// bold and a head, as its tool reads (READS): a command as itself; a file
+// `mcp__illi__`, dropped), it shows as its name in bold (after a mark,
+// if the theme gives it one: Theme.TOOL) and a head, as its tool reads (READS): a command as itself; a file
 // tool its path, read's lines after it, edit's files (the diff comes in its
 // result); zoom and date the message (`#6243`, a line `#6243+8`, an agent by
 // name); spawn its tasks, tell its agent's name and its text in blocks; todo

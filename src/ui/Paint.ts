@@ -8,7 +8,7 @@
 // `rows_lines` lays rows out as the site: what the machine wrote
 // filled (Theme.FILLED), half blocks rounding the fill's top and
 // bottom: a block, its level in a gutter, its summary and its first
-// message's id (`#6840`, for /open); a tool call, its emoji and verb
+// message's id (`#6840`, for /open); a tool call, its name
 // bold; its result its own fill. The user's words
 // framed, unnamed; an agent's report framed, its name on the top edge
 // (Theme.FRAMED); illi's words bare, drawn as cellsmith draws a reply
@@ -505,10 +505,11 @@ function call_lines(c: Call.Call, w: number): Line[] {
   return [top, ...heads, ...c.blocks.flatMap((b) => code_lines(b.k, b.x, w))];
 }
 
-// a call's emoji and name, bold
+// a call's name, bold, after its mark if the theme gives one
 function verb_runs(c: Call.Call): Line {
-  const ink = { ...INK, b: true };
-  return [Run(Theme.tool_glyph(c.name) + " ", ink), ...(c.name === "" ? [] : [Run(c.name + " ", ink)])];
+  const ink  = { ...INK, b: true };
+  const mark = Theme.tool_glyph(c.name);
+  return [...(mark === "" ? [] : [Run(mark + " ", ink)]), ...(c.name === "" ? [] : [Run(c.name + " ", ink)])];
 }
 
 // Block

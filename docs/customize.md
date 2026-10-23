@@ -115,7 +115,8 @@ the full accent).
   bullets too; links set, its links.
 - `colors`: any of the palette's slots (`heading`, `inlineCode`, `path`,
   `number`, `codeString`...), over it.
-- `glyph`, `tool` (each tool's emoji), `syntax` (code by kind, while the
+- `glyph`, `tool` (a mark before a tool's name, by tool: none by
+  default), `syntax` (code by kind, while the
   terminal's background is unknown) and `ansi` (`block`, `ink`: the tool
   calls' fill and its text; `you`, `add`, `del`: the frame and a diff's
   lines, over their tokens) as before.
