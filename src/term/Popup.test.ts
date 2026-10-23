@@ -9,7 +9,8 @@
 // never held to it, a line asked for ASK_MIN wide; a share of the rows
 // at most, all but two on a short screen or for a question. A name is
 // never cut (what an option is is, with an ellipsis); on a screen too
-// narrow for it, it wraps under itself. A search keeps the box's place
+// narrow for it, it wraps under itself. No control character in a name
+// or a title reaches the screen. A search keeps the box's place
 // and size; a value stepped wider grows it, never shrinks it, till a new
 // size. A question's answers always show, its long lead cut. The wheel
 // scrolls a long list (a third of what shows, three at most), stopping at
@@ -191,6 +192,19 @@ test("on a screen narrower than a name, the name wraps at its words, whole, unde
     expect((rows[at].trim().slice(2) + " " + rows[at + 1].trim()).replace(/ +/g, " ")).toStartWith(long.slice(0, 40));
     expect(rows.join("")).not.toContain("…");
     expect([t.box.rows[1 + at], t.box.rows[2 + at]]).toEqual([{ $: "option", k: 1 }, { $: "option", k: 1 }]);
+  });
+});
+
+test("a name or a title holding a new line or a tab writes none to the screen: each a space, a tab two, the name as wide as it shows", () => {
+  sized(120, 30, () => {
+    const t = term();
+    term_chooser(t, "Forget\nthis?", ["keep", "line one\nline\ttwo"], ["", ""], -1, () => {});
+    term_paint(t);
+    const runs = t.ruled.rows.flatMap((r: any[]) => r.flatMap((p: any) => p.line));
+    expect(runs.filter((r: any) => /[\x00-\x1f\x7f-\x9f]/.test(r.x))).toEqual([]);
+    const rows = t.ruled.rows.slice(t.box.row, t.box.row + t.box.h).map((r: any[]) => text(r, 120).slice(t.box.col, t.box.col + t.box.w));
+    expect(rows[0]).toStartWith("╭─ Forget this? · ↑↓ Enter · Esc ");
+    expect(rows.some((r: string) => r.includes("line one line  two"))).toBe(true);
   });
 });
 
