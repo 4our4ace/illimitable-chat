@@ -729,8 +729,8 @@ function act_calls(v: View, rows: Row[], after: Row | undefined): Done[] {
 // to illi's question (ANSWERED, shown as the user's). None follows a call
 // logged alone: one stopped before it answered (Chat.unanswered: not run
 // yet, or Claude Code's, cut off; illi's own tools answer a stop, as
-// failed), or one the vendor ran and keeps the result of (OpenAI's web
-// search: no `of`)
+// failed), or an OpenAI web search logged before its result was (0.3.1:
+// OpenAI.entries)
 function row_echo(v: View, row: Row | undefined): string | null {
   return row?.$ === "Msg" ? (row.kind === "echo" ? row.text : row.kind === "user" && row.who === ANSWERS ? ANSWERED + row.text : null)
     : row?.$ === "Sum" && row.n === 1 && row.kind === "echo" ? v.whole.get(row.id)?.text ?? null

@@ -7,7 +7,8 @@
 // latest cache marks its vendor writes: OpenAI four (three with the end
 // cached implicitly), Anthropic's room beside its system prompt and
 // end, the ChatGPT backend none. A tool result's image goes in its
-// function_call_output's list.
+// function_call_output's list. A web search is logged with its result,
+// failed as its status says.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -55,4 +56,13 @@ test("a request keeps the latest cache marks its vendor writes", async () => {
 test("a tool's result with an image goes as its function_call_output's list: its text, then the image as a data URL", () => {
   const item = { $: "Back" as const, backs: [{ id: "c1", out: { text: "Image a.png", fail: false, imgs: [{ type: "image/webp", data: "UklG" }] } }] };
   expect(OpenAI.input(item)).toEqual([{ type: "function_call_output", call_id: "c1", output: [{ type: "input_text", text: "Image a.png" }, { type: "input_image", image_url: "data:image/webp;base64,UklG" }] }]);
+});
+
+test("a web search is logged with its result: searched, or failed as its status says", () => {
+  const search = (status: string) => OpenAI.entries({ type: "web_search_call", id: "ws_1", status, action: { type: "search", query: "bend" } });
+  expect(search("completed")).toEqual([
+    { kind: "tool", text: 'web_search {"type":"search","query":"bend"}', of: "ws_1" },
+    { kind: "echo", text: "searched", of: "ws_1" },
+  ]);
+  expect(search("failed")[1]).toEqual({ kind: "echo", text: "error: the search failed", of: "ws_1" });
 });
