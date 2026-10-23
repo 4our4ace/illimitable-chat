@@ -70,7 +70,7 @@ Setup
 
 | Key or command | Does |
 | -------------- | ---- |
-| `/login` | sign in to ChatGPT (Plus or Pro) with a code; illi keeps the login and renews it |
+| `/login` | sign in to ChatGPT (Plus or Pro) with a code, its page opened in your browser; illi keeps the login and renews it |
 | `/logout` | remove illi's own ChatGPT login (opencode's, if any, is used again) |
 | `/settings` | all the settings: type to search, Left, Right or Enter change one, Del puts its default back |
 | `/shortcuts` | the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one |

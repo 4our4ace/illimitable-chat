@@ -52,6 +52,7 @@ variables:
 | `ILLI_DIR`     | illi's folder, instead of `~/.illi`                   |
 | `ILLI_PROFILE` | the profile to start in                               |
 | `ILLI_CLAUDE`  | the `claude` program the `claude-code` vendor runs    |
+| `BROWSER`      | what opens `/login`'s page: programs `:`-separated, tried in turn (`%s` is the link, else it goes last), before the system's; `none`: never open one |
 | `ILLI_INSTALL`, `ILLI_SOURCE` | where the installer puts illi; `1`: build from the source |
 
 Your chats

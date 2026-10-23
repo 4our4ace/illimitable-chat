@@ -9,6 +9,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { term_form_paste } from "./Asks.ts";
 import { term_draw } from "./Frame.ts";
+import { host_wsl } from "./Host.ts";
 import { term_note } from "./Notices.ts";
 import * as Screen from "../ui/Screen.ts";
 import type { Term } from "./Term.ts";
@@ -90,7 +91,7 @@ export async function term_clip(t: Term): Promise<void> {
 // the clipboard's image, as PNG: Windows' under WSL (PowerShell, as
 // base64), Wayland's, X's, macOS' (as hex); null: none, or no way to it
 async function term_clipboard(): Promise<Uint8Array<ArrayBuffer> | null> {
-  const wsl = process.platform === "linux" && /microsoft/i.test(os.release());
+  const wsl = host_wsl();
   const mac = process.platform === "darwin";
   const run = wsl ? ["powershell.exe", "-NoProfile", "-STA", "-Command", CLIP_WIN]
     : mac ? ["osascript", "-e", "the clipboard as «class PNGf»"]

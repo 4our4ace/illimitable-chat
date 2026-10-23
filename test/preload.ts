@@ -5,7 +5,8 @@
 // (one file, all at once without --isolate, without the test script's
 // variables), reads or writes the user's own ~/.illi or login. A test
 // file sets its own ILLI_DIR over this one as it starts. The folders of
-// runs ended are removed as the next one starts.
+// runs ended are removed as the next one starts. No browser opens
+// (Browser.ts: BROWSER none), whatever a test does.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -21,6 +22,7 @@ for (const name of fs.readdirSync(TEMP).filter((n) => /^illi-test-\d+$/.test(n))
 fs.mkdirSync(DIR, { recursive: true });
 process.env.ILLI_DIR      = DIR + "/illi";
 process.env.XDG_DATA_HOME = DIR + "/data";
+process.env.BROWSER       = "none";
 
 // whether a process runs
 function alive(pid: number): boolean {

@@ -12,6 +12,7 @@
 import * as fs from "node:fs";
 import type { Vendor } from "../ai/AskAI.ts";
 import { term_clip, term_image } from "./Attach.ts";
+import { browser_open } from "./Browser.ts";
 import { Bundle } from "../config/Bundle.ts";
 import { Chat } from "../chat/Chat.ts";
 import { ChatGPT } from "../ai/ChatGPT.ts";
@@ -123,7 +124,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/background",       "",                        "the background jobs: what a shell call left running (a dev server, a watcher); Enter or Del stops one", term_background],
     ]],
     ["Setup", [
-      ["/login",            "",                        "sign in to ChatGPT (Plus or Pro) with a code; illi keeps the login and renews it", term_login],
+      ["/login",            "",                        "sign in to ChatGPT (Plus or Pro) with a code, its page opened in your browser; illi keeps the login and renews it", term_login],
       ["/logout",           "",                        "remove illi's own ChatGPT login (opencode's, if any, is used again)", term_logout],
       ["/settings",         "",                        "all the settings: type to search, Left, Right or Enter change one, Del puts its default back", (t) => term_settings(t)],
       ["/shortcuts",        "",                        "the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one", (t) => term_shortcuts(t)],
@@ -709,7 +710,16 @@ async function term_login(t: Term): Promise<void> {
   try {
     const { url, code, done } = await ChatGPT.device(stop.signal);
     Screen.screen_copy(code);
-    asked = term_notify(t, "Sign in to ChatGPT: open " + url + " and enter the code " + code + " (copied; it is good for 15 minutes). illi waits for it.", false, LOGIN);
+    const until   = Date.now() + LOGIN;
+    const opening = t.scr.tty ? browser_open(url) : null;
+    const open    = (why: string) => "Sign in to ChatGPT: " + why + "open " + url + " and enter the code " + code + " (copied; it is good for 15 minutes). illi waits for it.";
+    asked = term_notify(t, opening === null ? open("") : "Sign in to ChatGPT at " + url + " (opening in your browser) with the code " + code + " (copied; it is good for 15 minutes). illi waits for it.", false, LOGIN);
+    void opening?.then((why) => {
+      if (why !== "" && t.login === stop && asked !== null) {
+        term_unnotify(t, asked);
+        asked = term_notify(t, open("your browser didn't open (" + why + "), so "), false, Math.max(0, until - Date.now()));
+      }
+    });
     await done;
     term_unhint(t);
     term_note(t, "Signed in to ChatGPT. illi keeps the login in " + ChatGPT.own() + (config.LOGIN_SET === null ? "" : " (the file `login` names)") + " and renews it there.");
