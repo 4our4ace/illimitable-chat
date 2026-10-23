@@ -15,17 +15,22 @@
 // (Reply.ts: its code, diagrams, tables, headings, lists and quotes, and
 // buttons that copy them); thinking and a note drawn so too, in their
 // look, without buttons. A run of work (View's Act) is one dim line,
-// [+] what was done, or [-] over its rows behind a dim bar (Theme's
-// GLYPH.shut, GLYPH.open); a recap (View's
-// Rule) so too, its line across the chat, naming it. An open block
+// [+] what was done (Theme's GLYPH.shut), or [-] (GLYPH.open) over its
+// rows behind a dim bar, a message in it folded by a click to one dim
+// line too; a recap (View's Rule) so too, its line across the chat,
+// naming it. An open block
 // framed, its bar in the frame's top edge; a call's code framed on the
 // call's fill; a file's lines (a read, a diff) framed, the file on the
 // top edge, each numbered. Control characters never reach the terminal.
 // A row's lines are laid out once per width and look (a reply streaming,
 // only past its finished blocks: Reply.ts); a chat's rows from its last
 // up, only as far as asked (laid_up: a paint asks for what shows, so the
-// top of a long chat waits till it is scrolled to). Each block's place in
-// them is marked, so a click finds it.
+// top of a long chat waits till it is scrolled to). Each thing a click
+// acts on is marked in them by its key (Mark: a block, a run of work, a
+// message in an open run, the innermost holding a line), and the runs
+// that light with it are tagged with that key (Tag: a run's glyph, its
+// label, its bar), so what lights and what a click finds are told at
+// layout, never by columns (line_lit).
 
 import type { Kind } from "../ai/AskAI.ts";
 import * as Call from "./Call.ts";
@@ -46,17 +51,29 @@ import * as View from "./View.ts";
 // "0"-"15", a palette's #rrggbb, or "": the terminal's own)
 export type Ink = { d: boolean; b: boolean; i: boolean; u: boolean; v: boolean; t: boolean; k: string; c: string; g: string };
 
-// text in an ink; a button's: what a click copies (Reply.ts, Term.ts)
-export type Run = { x: string; s: Ink; copy?: () => string };
+// text in an ink; a button's: what a click copies (Reply.ts, Term.ts);
+// a part of a mark's: it lights with it (Tag)
+export type Run = { x: string; s: Ink; copy?: () => string; mark?: Tag };
+
+// a run's part in the mark it lights with, by the mark's key (line_lit):
+// its glyph (a run of work's GLYPH.shut or GLYPH.open, a folded message's, a block's
+// gutter and /open, an open block's bar), a run of work's label, or its
+// bar down the left of its rows (a click on it is the run's: Term.ts)
+export type Tag = { key: string; as: "glyph" | "label" | "bar" };
 
 export type Line = Run[];
 
-// a block in lines laid out: its first line, the line past its last, its
-// first message's id and size, whether open (the line is its bar);
-// a run of work's or a recap's (act: a click opens or closes it, n 0); a
-// message inside an open run, whole or folded (fold: its key, View.row_fold:
-// a click folds or unfolds it, n 0)
-export type Mark = { from: number; to: number; id: number; n: number; open: boolean; act?: true; fold?: string };
+// a thing a click acts on, in lines laid out (Term.ts): its first line,
+// the line past its last, its key (mark_key: a click's pin and the light
+// find it by it), its first message's id and size, whether open. A
+// block's: a summary (a click opens it), an open block, its whole frame
+// (a click shuts it); a run of work's or a recap's (act, n 0): its head
+// and every line under it (a click on its head or its bar opens or
+// closes it); a message's in an open run, whole or folded (fold, n 0: a
+// click folds or unfolds it). Inside a run or an open block, a gap line
+// is the block's above it; up: the run it is in (the run's bar beside it
+// lights with it)
+export type Mark = { from: number; to: number; key: string; id: number; n: number; open: boolean; act?: true; fold?: true; up?: string };
 
 // rows laid out from the last up, only as far as asked (laid_up): the
 // rows, the first of them laid out, their lines as from line `at` on,
@@ -97,8 +114,8 @@ let FILL = Theme.ANSI.block ?? "";
 // Constructors
 // ============
 
-export function Run(x: string, s: Ink = INK): Run {
-  return { x, s };
+export function Run(x: string, s: Ink = INK, mark?: Tag): Run {
+  return mark === undefined ? { x, s } : { x, s, mark };
 }
 
 // Text
@@ -130,9 +147,10 @@ export function text_graphemes(s: string): string[] {
 // runs into lines of w columns: prose breaks between words (the space at a
 // break dropped), a word made of several runs (`code`, **bold**) kept
 // whole; code (hard) and a word wider than a line, a link's too, at any
-// character (a link's pieces keep its url, so each opens it whole). A run
-// that fits in the rest of its line goes whole, unless it would start a
-// line that a break began.
+// character (a link's pieces keep its url, so each opens it whole; a
+// run's pieces keep its button and its tag). A run that fits in the rest
+// of its line goes whole, unless it would start a line that a break
+// began.
 export function runs_wrap(runs: Line, w: number, hard: boolean): Line[] {
   const out: Line[] = [[]];
   let col = 0;
@@ -149,7 +167,7 @@ export function runs_wrap(runs: Line, w: number, hard: boolean): Line[] {
         col = line_width(word);
       }
       if (!(!hard && /^\s+$/.test(p) && col === 0 && out.length > 1)) {
-        out[out.length - 1].push(Run(p, r.s));
+        out[out.length - 1].push({ ...r, x: p });
         col += pw;
       }
     }
@@ -164,11 +182,11 @@ function line_word(l: Line, room: number): Line {
   for (let k = l.length - 1; k >= 0; k--) {
     const tail = /\S*$/.exec(l[k].x)![0];
     if (tail.length < l[k].x.length) {
-      const word = [...(tail === "" ? [] : [Run(tail, l[k].s)]), ...l.slice(k + 1)];
+      const word = [...(tail === "" ? [] : [{ ...l[k], x: tail }]), ...l.slice(k + 1)];
       if (line_width(word) > room) {
         return [];
       }
-      l.splice(k, l.length - k, Run(l[k].x.slice(0, l[k].x.length - tail.length), l[k].s));
+      l.splice(k, l.length - k, { ...l[k], x: l[k].x.slice(0, l[k].x.length - tail.length) });
       return word;
     }
   }
@@ -191,7 +209,7 @@ export function line_cut(l: Line, from: number, to: number): [Line, Line, Line] 
       const pw   = text_width(p);
       const side = col >= to ? 2 : col + Math.max(pw, 1) <= from ? 0 : 1;
       const last = out[side][out[side].length - 1];
-      if (last !== undefined && last.s === r.s && last.copy === r.copy) {
+      if (last !== undefined && last.s === r.s && last.copy === r.copy && last.mark === r.mark) {
         out[side][out[side].length - 1] = { ...last, x: last.x + p };
       } else {
         out[side].push({ ...r, x: p });
@@ -262,7 +280,7 @@ function fill_lines(body: Line[], iw: number): Line[] {
   }
   const pad  = { ...INK, g };
   const edge = (c: string) => [Run(c.repeat(Math.max(0, iw + 2)), { ...INK, c: g })];
-  const ink  = (r: Run) => Run(r.x, { ...r.s, g, c: r.s.c || (Theme.ANSI.ink ?? "") });
+  const ink  = (r: Run): Run => ({ ...r, s: { ...r.s, g, c: r.s.c || (Theme.ANSI.ink ?? "") } });
   const mid  = body.map((l) => [Run(" ", pad), ...l.map(ink), Run(" ".repeat(Math.max(0, iw - line_width(l))) + " ", pad)]);
   return [edge("▄"), ...mid, edge("▀")];
 }
@@ -290,26 +308,91 @@ function lines_join<T>(xs: T[], f: (x: T) => Line[]): Line[] {
 // ===
 
 // rows a blank line apart: one block per message, in its order; each
-// block's lines marked, as laid out from line `at` on (a click opens or
-// shuts it: Term.ts); in an open run of work (`run`), each message's
-// lines too, whole or folded (a click folds or unfolds it)
-export function rows_lines(rows: View.Row[], w: number, marks: Mark[] = [], at = 0, run = false): Line[] {
+// thing a click acts on marked (Mark), as laid out from line `at` on: a
+// summary, an open block, a run of work or a recap, and in an open run
+// (run: its key) each message, whole or folded. Inside a run or an open
+// block (inner), a gap line is the block's above it, so the pointer
+// going down a run of summaries never falls between them
+export function rows_lines(rows: View.Row[], w: number, marks: Mark[] = [], at = 0, run: string | null = null, inner = false): Line[] {
   const out: Line[] = [];
+  let last: Mark | null = null;
   for (const [k, row] of rows.entries()) {
     if (k > 0) {
       out.push([]);
+      if (inner && last !== null) {
+        last.to += 1;
+      }
     }
     const from  = at + out.length;
-    const lines = row.$ === "Box" ? box_lines(row, w, marks, from) : row.$ === "Act" || row.$ === "Rule" ? act_lines(row, w, marks, from) : row_cached(row, w);
-    const fold  = row.$ === "Fold" ? row.key : run ? View.row_fold(row) : null;
-    if (row.$ === "Sum") {
-      marks.push({ from, to: from + lines.length, id: row.id, n: row.n, open: false });
-    } else if (fold !== null) {
-      marks.push({ from, to: from + lines.length, id: row.$ === "Msg" ? row.id ?? -1 : -1, n: 0, open: row.$ === "Msg", fold });
+    const mark  = row_mark(row, from, run);
+    if (mark !== null) {
+      marks.push(mark);
     }
-    out.push(...lines, ...images_lines(row));
+    const lines = [...(row.$ === "Box" ? box_lines(row, w, marks, from) : row.$ === "Act" || row.$ === "Rule" ? act_lines(row, w, marks, from) : row_cached(row, w)), ...images_lines(row)];
+    if (mark !== null) {
+      mark.to = from + lines.length;
+    }
+    last = mark;
+    out.push(...lines);
   }
   return out;
+}
+
+// a row's mark, from line `at` (its end set once it is laid out; none:
+// null): a summary's or an open block's; a run of work's or a recap's;
+// in a run (its key), a message's, whole or folded, and the run noted
+// on each of its marks (up)
+function row_mark(row: View.Row, at: number, run: string | null): Mark | null {
+  const key = mark_key(row);
+  const up  = run === null ? {} : { up: run };
+  switch (row.$) {
+    case "Sum":
+    case "Box": {
+      return { from: at, to: at, key: key!, id: row.id, n: row.n, open: row.$ === "Box", ...up };
+    }
+    case "Act":
+    case "Rule": {
+      return { from: at, to: at, key: key!, id: row.id, n: 0, open: row.open, act: true };
+    }
+    case "Msg":
+    case "Fold": {
+      return run === null || key === null ? null : { from: at, to: at, key, id: row.$ === "Msg" ? row.id ?? -1 : -1, n: 0, open: row.$ === "Msg", fold: true, ...up };
+    }
+    case "Cap": {
+      return null;
+    }
+  }
+}
+
+// the key a row's mark has (none: null): a block's, the same summed up
+// or open ("b" id "+" n: block_key); a run of work's or a recap's ("r"
+// and its key: View.view_acts); a message's, whole or folded
+// (View.row_fold: "#" id, a thought's "m" ...)
+export function mark_key(row: View.Row): string | null {
+  switch (row.$) {
+    case "Sum":
+    case "Box": {
+      return block_key(row.id, row.n);
+    }
+    case "Act":
+    case "Rule": {
+      return "r" + row.id;
+    }
+    case "Msg": {
+      return View.row_fold(row);
+    }
+    case "Fold": {
+      return row.key;
+    }
+    case "Cap": {
+      return null;
+    }
+  }
+}
+
+// a block's mark key, summed up or open (block id, n)
+export function block_key(id: number, n: number): string {
+  return "b" + id + "+" + n;
 }
 
 // rows to lay out, w wide, as from line `at` on: none yet
@@ -355,10 +438,10 @@ export function laid_up(laid: Laid, need: number, top = laid.rows.length): numbe
   return head.length;
 }
 
-// the first of rows holding block (id, n): itself, or an open block or
-// run of work it is in; -1: none
-export function rows_find(rows: View.Row[], id: number, n: number): number {
-  return rows.findIndex((r) => ((r.$ === "Sum" || r.$ === "Box") && r.id === id && r.n === n) || ((r.$ === "Box" || r.$ === "Act" || r.$ === "Rule") && rows_find(r.rows, id, n) >= 0));
+// the first of rows holding the mark keyed `key` (mark_key): itself, or
+// an open block or a run of work it is in; -1: none
+export function rows_find(rows: View.Row[], key: string): number {
+  return rows.findIndex((r) => mark_key(r) === key || ((r.$ === "Box" || r.$ === "Act" || r.$ === "Rule") && rows_find(r.rows, key) >= 0));
 }
 
 // a row's lines, laid out once per width: a message's and a summary's rows
@@ -395,28 +478,31 @@ function canvas_shade(hex: string): string {
   return "#" + rgb.map((v) => Math.round(dark ? v + (255 - v) * SHADE_DARK : v * (1 - SHADE_LIGHT)).toString(16).padStart(2, "0")).join("");
 }
 
-// a run of work: one dim line saying what was done ([+]; a click opens
-// it), or opened ([-]) over its rows, a dim bar at their left, each
-// message marked (a click folds it to a line, [+], and back); a recap so
-// too, its line a rule across the chat, its name in the middle
+// a run of work: one dim line saying what was done (after GLYPH.shut), or opened (GLYPH.open)
+// over its rows, a dim bar at their left, each message marked (a click
+// folds it to a line, and back); a click on the line or the bar opens
+// or closes the whole run. A recap so too, its line a rule across the
+// chat, its name in the middle. The glyph, the label and the bar tagged,
+// to light with the run (line_lit; a rule's dashes never light)
 function act_lines(row: View.Row & { $: "Act" | "Rule" }, w: number, marks: Mark[], at: number): Line[] {
-  const text = (row.open ? Theme.GLYPH.open : Theme.GLYPH.shut) + " " + text_clean(row.text);
-  const fill = Math.max(0, w - text_width(text) - 2);
-  const line = row.$ === "Rule" ? "─".repeat(fill >> 1) + " " + text + " " + "─".repeat(fill - (fill >> 1)) : text;
-  const head = runs_wrap([Run(line, DIM)], w, false)[0];
-  marks.push({ from: at, to: at + 1, id: row.id, n: 0, open: row.open, act: true });
+  const key   = mark_key(row)!;
+  const glyph = Run((row.open ? Theme.GLYPH.open : Theme.GLYPH.shut) + " ", DIM, { key, as: "glyph" });
+  const label = Run(text_clean(row.text), DIM, { key, as: "label" });
+  const fill  = Math.max(0, w - text_width(glyph.x + label.x) - 2);
+  const line  = row.$ === "Rule" ? [Run("─".repeat(fill >> 1) + " ", DIM), glyph, label, Run(" " + "─".repeat(fill - (fill >> 1)), DIM)] : [glyph, label];
+  const head  = runs_wrap(line, w, false)[0];
   if (!row.open) {
     return [head];
   }
-  return [head, ...rows_lines(row.rows, w - 2, marks, at + 1, true).map((l) => [Run("│ ", DIM), ...l])];
+  const bar   = Run("│ ", DIM, { key, as: "bar" });
+  return [head, ...rows_lines(row.rows, w - 2, marks, at + 1, key, true).map((l) => [bar, ...l])];
 }
 
-// an open block: its rows framed, its bar on the top edge (a click shuts
-// it)
+// an open block: its rows framed, its bar on the top edge, tagged to
+// light (a click anywhere in the frame shuts it: but on a block inside)
 function box_lines(row: View.Row & { $: "Box" }, w: number, marks: Mark[], at: number): Line[] {
-  const bar = [Run(" " + row.n + "x · /close " + View.block_name(row.id, row.n) + " ", { ...DIM, b: true })];
-  marks.push({ from: at, to: at + 1, id: row.id, n: row.n, open: true });
-  return frame_lines(rows_lines(row.rows, w - 4, marks, at + 1), w - 4, DIM, bar);
+  const bar = [Run(" " + row.n + "x · /close " + View.block_name(row.id, row.n) + " ", { ...DIM, b: true }, { key: block_key(row.id, row.n), as: "glyph" })];
+  return frame_lines(rows_lines(row.rows, w - 4, marks, at + 1, null, true), w - 4, DIM, bar);
 }
 
 // lines framed w columns wide, dim, a title on the top edge, a foot on
@@ -449,7 +535,7 @@ function row_lines(row: View.Row, w: number): Line[] {
       return row.call !== null ? fill_lines(call_lines(row.call, w - 2), w - 2) : row.kind === "illi" ? reply_lines(row.text, w) : msg_lines(row.kind, row.who, row.body, row.text, w);
     }
     case "Fold": {
-      return runs_wrap([Run(Theme.GLYPH.shut + " " + text_clean(row.text), DIM)], w, false).slice(0, 1);
+      return runs_wrap([Run(Theme.GLYPH.shut + " ", DIM, { key: row.key, as: "glyph" }), Run(text_clean(row.text), DIM)], w, false).slice(0, 1);
     }
     case "Cap": {
       return runs_wrap([Run(text_clean(row.text), { ...DIM, i: true })], w, false);
@@ -468,15 +554,17 @@ function reply_lines(text: string, w: number): Line[] {
 
 // a block's summary (a tool call's: after its glyph and verb); the
 // command that opens it ends its last line, else has a line of its own:
-// copied whole, never split by a wrap
+// copied whole, never split by a wrap. Its gutter and the command tagged,
+// to light (line_lit)
 function sum_lines(id: number, n: number, head: Line, text: string, w: number): Line[] {
   const room = w - GUTTER - 2;
-  const cmd  = Run("/open " + View.block_name(id, n), DIM);
+  const tag  = { key: block_key(id, n), as: "glyph" } as const;
+  const cmd  = Run("/open " + View.block_name(id, n), DIM, tag);
   const rows = runs_wrap([...head, Run(text_clean(text))], room, false);
   const last = rows.pop() ?? [];
   const ends = line_width(last) + 2 + text_width(cmd.x) <= room ? [[...last, Run("  "), cmd]] : [last, [cmd]];
   const lvl  = { ...DIM, b: true };
-  return [...rows, ...ends].map((l, k) => [Run(" " + (k === 0 ? n + "x" : "").padEnd(GUTTER), lvl), ...l]);
+  return [...rows, ...ends].map((l, k) => [Run(" " + (k === 0 ? n + "x" : "").padEnd(GUTTER), lvl, tag), ...l]);
 }
 
 // a message as its kind looks: its blocks (a person's words, a result's

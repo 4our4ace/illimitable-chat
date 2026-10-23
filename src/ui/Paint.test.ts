@@ -4,8 +4,11 @@
 // and look: the background told again as it was lays nothing out anew,
 // another lays all of it out again. A chat laid out from its last row
 // up, a few rows at a time, is the chat laid out whole; a block asked
-// for is laid out with all under it. An open run of work marks its head
-// and each message in it (a folded one as its one line).
+// for is laid out with all under it. An open run of work is marked
+// whole, each message in it too (a folded one as its one line), a gap
+// line the block's above it; its glyph, label and bar tagged with its
+// key. An open block is marked over its whole frame, the innermost mark
+// the smaller. A recap's pages fold as a run's messages do.
 
 import { expect, test } from "bun:test";
 import * as Paint from "./Paint.ts";
@@ -55,23 +58,29 @@ test("rows laid out from the last up are the rows laid out whole", () => {
   expect(laid.marks).toEqual(marks);
 });
 
-// a block asked for is found among the rows, inside an open block or a
-// run of work too, and the rows laid out as far as it
+// a block asked for (by its mark's key) is found among the rows, inside
+// an open block or a run of work too, and the rows laid out as far as it;
+// a run of work by its key too
 test("a block's row is found, and the rows laid out as far as it", () => {
   const rows = chat();
-  expect(Paint.rows_find(rows, 0, 4)).toBe(1);
-  expect(Paint.rows_find(rows, 13, 1)).toBe(rows.findIndex((r) => r.$ === "Box" && r.id === 12));
-  expect(Paint.rows_find(rows, 14, 1)).toBe(rows.findIndex((r) => r.$ === "Act" && r.id === 14));
-  expect(Paint.rows_find(rows, 99, 1)).toBe(-1);
+  expect(Paint.rows_find(rows, Paint.block_key(0, 4))).toBe(1);
+  expect(Paint.rows_find(rows, Paint.block_key(13, 1))).toBe(rows.findIndex((r) => r.$ === "Box" && r.id === 12));
+  expect(Paint.rows_find(rows, Paint.block_key(14, 1))).toBe(rows.findIndex((r) => r.$ === "Act" && r.id === 14));
+  expect(Paint.rows_find(rows, "r14")).toBe(rows.findIndex((r) => r.$ === "Act" && r.id === 14));
+  expect(Paint.rows_find(rows, Paint.block_key(99, 1))).toBe(-1);
   const laid = Paint.laid_new(rows, 60, 1);
   Paint.laid_up(laid, 0, 1);
   expect(laid.from).toBe(1);
-  expect(laid.marks.find((m) => m.id === 0 && m.n === 4)).toBeDefined();
+  expect(laid.marks.find((m) => m.key === Paint.block_key(0, 4))).toBeDefined();
   expect(Paint.laid_stale(laid, 60)).toBe(false);
   expect(Paint.laid_stale(laid, 61)).toBe(true);
 });
 
-test("an open run of work marks its head and each message in it, a folded one as its one line", () => {
+// an open run: marked whole, its head and every line under it; each
+// message in it with the gap under it (a folded one as its one line), its
+// run noted; the head's glyph and label and the bar tagged with the
+// run's key, a folded line's glyph with its own
+test("an open run of work is marked whole, each message in it with its gap, a folded one as its one line; its glyph, label and bar tagged", () => {
   const v    = View.view_new();
   const rows = [
     ...View.entry_rows(3, "tool", 'shell {"command":"npm test"}'),
@@ -83,9 +92,42 @@ test("an open run of work marks its head and each message in it, a folded one as
   const marks: Paint.Mark[] = [];
   const lines = Paint.rows_lines(run, 60, marks);
   const text  = (l: Paint.Line) => l.map((r) => r.x).join("");
-  expect(marks.map((m) => [m.act ?? false, m.fold ?? "", m.open, m.to - m.from])).toEqual([[true, "", true, 1], [false, "#3", true, 3], [false, "#4", false, 1]]);
-  expect([marks[1].from, marks[2].from - marks[1].to]).toEqual([1, 1]);
-  expect(text(lines[marks[2].from])).toBe("│ [+] result · 1,204 lines");
+  expect(marks.map((m) => [m.key, m.act ?? false, m.fold ?? false, m.open, m.from, m.to, m.up ?? ""])).toEqual([
+    ["r3", true, false, true, 0, 6, ""],
+    ["#3", false, true, true, 1, 5, "r3"],
+    ["#4", false, true, false, 5, 6, "r3"],
+  ]);
+  expect(lines[0].map((r) => [r.x, r.mark])).toEqual([["[-] ", { key: "r3", as: "glyph" }], ["Ran a command", { key: "r3", as: "label" }]]);
+  expect(lines.slice(1).map((l) => l[0].mark)).toEqual(Array(5).fill({ key: "r3", as: "bar" }));
+  expect(text(lines[5])).toBe("│ [+] result · 1,204 lines");
+  expect(lines[5][1].mark).toEqual({ key: "#4", as: "glyph" });
   View.view_fold(v, "#4");
   expect(Paint.rows_lines(View.view_acts(v, rows), 60).length).toBeGreaterThan(10);
+});
+
+// an open block: marked from its top edge to its bottom one; the blocks
+// in it each with the gap under it, the smaller, so the innermost holds a
+// line; its bar and a summary's gutter and /open tagged
+test("an open block is marked over its whole frame, the blocks in it with their gaps; bars, gutters and /open tagged", () => {
+  const sum = (id: number): View.Row => ({ $: "Sum", id, n: 1, text: "said " + id, call: null, kind: null });
+  const marks: Paint.Mark[] = [];
+  const lines = Paint.rows_lines([{ $: "Box", id: 4, n: 2, text: "", rows: [sum(4), sum(5)] }], 60, marks);
+  const [box, a, b] = marks;
+  expect([box.key, box.from, box.to, lines.length]).toEqual(["b4+2", 0, lines.length, lines.length]);
+  expect([a.key, a.from, b.key, b.from - a.to, b.to]).toEqual(["b4+1", 1, "b5+1", 0, lines.length - 1]);
+  expect(lines[0].find((r) => r.mark !== undefined)?.mark).toEqual({ key: "b4+2", as: "glyph" });
+  const tagged = lines[a.from + 1].filter((r) => r.mark?.key === "b4+1").map((r) => r.x.trim());
+  expect(tagged).toEqual(["1x", "/open #4"]);
+});
+
+// a recap opened: its pages fold to a line as a run's messages do
+test("a recap's pages fold to a line by their key", () => {
+  const v    = View.view_new();
+  const rows = View.entry_rows(9, "recap", "a\nb\nc");
+  View.view_toggle(v, 9);
+  View.view_fold(v, "#9");
+  const marks: Paint.Mark[] = [];
+  const lines = Paint.rows_lines(View.view_acts(v, rows), 60, marks);
+  expect(marks.map((m) => m.key)).toEqual(["r9", "#9"]);
+  expect(lines[1].map((r) => r.x).join("")).toBe("│ [+] recap · 3 lines");
 });

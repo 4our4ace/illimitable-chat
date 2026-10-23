@@ -650,13 +650,13 @@ test("a fill, the background untold, is a dim bar; told, a shade of it, never th
   expect(lit.flat().some((r) => r.s.c === "0" || r.s.g === "7")).toBe(false);
 });
 
-test("each block's lines are marked: a summary's all, an open one's top edge", () => {
+test("each block's lines are marked: a summary's all, an open one's whole frame, a gap in it the block's above", () => {
   const sum = (id: number, n: number): View.Row => ({ $: "Sum", id, n, text: "a summary", call: null, kind: null });
   const box: View.Row = { $: "Box", id: 4, n: 4, text: "", rows: [sum(4, 2), sum(6, 2)] };
   const marks: Paint.Mark[] = [];
   const lines = Paint.rows_lines([sum(0, 4), box], 60, marks, 1);
   const at = (m: Paint.Mark) => lines[m.from - 1].map((r) => r.x).join("");
-  expect(marks.map((m) => [m.id, m.n, m.open, m.to - m.from])).toEqual([[0, 4, false, 3], [4, 4, true, 1], [4, 2, false, 3], [6, 2, false, 3]]);
+  expect(marks.map((m) => [m.id, m.n, m.open, m.to - m.from])).toEqual([[0, 4, false, 3], [4, 4, true, 9], [4, 2, false, 4], [6, 2, false, 3]]);
   expect(at(marks[0])).toMatch(/^▄+$/);
   expect(at(marks[1])).toContain("/close #4+4");
   expect(lines[marks[2].from].map((r) => r.x).join("")).toContain("/open #4+2");

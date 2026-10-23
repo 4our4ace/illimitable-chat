@@ -221,7 +221,12 @@ type Body = Paint.Laid & { ver: number };
 export type Pane = { title: string; make: (w: number) => Paint.Line[]; w: number; lines: Paint.Line[]; scroll: number };
 
 // a place on the screen (a row, its columns from, to) and its click
-type Hit = { row: number; col: number; to: number; run: () => void };
+export type Hit = { row: number; col: number; to: number; run: () => void };
+
+// what's under a spot of the screen, for a click and the light alike
+// (Select.ts term_target): a popup (or the commands suggested) over it,
+// a hit, a reply's button, a mark of the chat, or nothing
+export type Under = { $: "popup" } | { $: "hit"; hit: Hit } | { $: "copy"; copy: () => string } | { $: "mark"; mark: Paint.Mark } | { $: "none" };
 
 // the picker, a popup in the screen's middle (Popup.ts: /agent,
 // /profile, /model, /settings, Ctrl+P and the rest):

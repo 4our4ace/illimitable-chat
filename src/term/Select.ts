@@ -22,7 +22,7 @@ import { term_toast } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_popup } from "./Popup.ts";
 import * as Screen from "../ui/Screen.ts";
-import type { Area, Cell, Ink, Sel, Term } from "./Term.ts";
+import type { Area, Cell, Ink, PopBox, Sel, Term, Under } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
 // a drag past a chat's edge scrolls it a line each DRIFT ms; text chosen
@@ -41,17 +41,22 @@ const UNDO   = 5000;
 const WORDY  = /^[\p{L}\p{N}\p{M}_\-+.\/\\~:@%?=&#$*]+$/u;
 const ENDING = /^[.:?]$/;
 
-// what the button at column col of a line copies (none: no button there)
-function term_button(line: Paint.Line, col: number): (() => string) | undefined {
+// the run at column col of a line (none: past its end)
+function term_run(line: Paint.Line, col: number): Paint.Run | undefined {
   let at = 0;
   for (const r of line) {
     const w = Paint.text_width(r.x);
     if (col >= at && col < at + w) {
-      return r.copy;
+      return r;
     }
     at += w;
   }
   return undefined;
+}
+
+// what the button at column col of a line copies (none: no button there)
+function term_button(line: Paint.Line, col: number): (() => string) | undefined {
+  return term_run(line, col)?.copy;
 }
 
 // the left button: pressed, a drag starts choosing text in the area under
@@ -231,6 +236,41 @@ function term_word(line: Paint.Line, col: number): [number, number] {
 export function term_under(t: Term, p: Screen.Spot): (() => string) | undefined {
   const area = t.areas.find((a) => p.row >= a.row && p.row < a.row + a.tall && p.col >= a.col && p.col < a.col + a.w);
   return area === undefined || term_popup(t) !== null ? undefined : term_button(area.lines[area.first + p.row - area.row] ?? [], p.col - area.col);
+}
+
+// what's under a spot, as last painted, for a click and the light alike:
+// a popup open, or the commands suggested where they show, before all;
+// then a hit (the side, the tabs, the jump to the end); a reply's button;
+// in the chat (no pane over it), the mark a tag there names (a run's bar:
+// the run's), else the innermost mark holding the line; else nothing.
+// The live tail under the chat's rows has no marks
+export function term_target(t: Term, p: Screen.Spot): Under {
+  if (term_popup(t) !== null || (t.box !== null && term_boxed(t.box, p))) {
+    return { $: "popup" };
+  }
+  const hit = t.hits.find((h) => h.row === p.row && p.col >= h.col && p.col < h.to);
+  if (hit !== undefined) {
+    return { $: "hit", hit };
+  }
+  const copy = term_under(t, p);
+  if (copy !== undefined) {
+    return { $: "copy", copy };
+  }
+  const area = t.pane === null ? t.areas.find((a) => a.key === "chat") : undefined;
+  if (area === undefined || p.row < area.row || p.row >= area.row + area.tall || p.col < area.col || p.col >= area.col + area.w) {
+    return { $: "none" };
+  }
+  const line = area.first + p.row - area.row;
+  const tag  = term_run(area.lines[line] ?? [], p.col - area.col)?.mark;
+  const held = t.seen.marks.filter((m) => m.from <= line && line < m.to);
+  const most = held.reduce<Paint.Mark | undefined>((a, m) => (a === undefined || m.to - m.from <= a.to - a.from ? m : a), undefined);
+  const mark = held.find((m) => m.key === tag?.key) ?? most;
+  return mark === undefined ? { $: "none" } : { $: "mark", mark };
+}
+
+// whether a spot is in a box as last painted
+function term_boxed(box: PopBox, p: Screen.Spot): boolean {
+  return p.row >= box.row && p.row < box.row + box.h && p.col >= box.col && p.col < box.col + box.w;
 }
 
 // the pointer moved: painted again only if it's over another button

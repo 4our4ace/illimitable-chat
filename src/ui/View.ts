@@ -587,7 +587,8 @@ export function view_body(v: View): Row[] {
 }
 
 // rows with each run of work (ACTIVITY) one Act row, and each recap
-// (its pages) a Rule, open as a run of work is
+// (its pages) a Rule, open as a run of work is; in each, the messages
+// folded by a click one line each (row_folded)
 export function view_acts(v: View, rows: Row[]): Row[] {
   const out: Row[] = [];
   for (const row of rows) {
@@ -605,7 +606,8 @@ export function view_acts(v: View, rows: Row[]): Row[] {
       out.push({ $: "Act", id, text: "", open: v.verbose !== v.acts.has(id), rows: [row] });
     }
   }
-  return out.map((row) => (row.$ === "Act" ? { ...row, text: act_text(row.rows), rows: row.rows.map((r) => row_folded(v, r)) } : row));
+  const folded = (rows: Row[]) => rows.map((r) => row_folded(v, r));
+  return out.map((row) => (row.$ === "Act" ? { ...row, text: act_text(row.rows), rows: folded(row.rows) } : row.$ === "Rule" ? { ...row, rows: folded(row.rows) } : row));
 }
 
 // a message's key as a click folds it in an open run: a logged one's
