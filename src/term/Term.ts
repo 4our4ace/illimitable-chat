@@ -275,7 +275,8 @@ export type Under = { $: "popup" } | { $: "hit"; hit: Hit } | { $: "copy"; copy:
 // heads: each option's group, a head over its first while nothing is
 // searched; key: the key that opened it, which closes it (Ctrl+P's);
 // past: the lines leading it scrolled past; lead: lines over a
-// question's answers (why it asks, what it would do), wrapped;
+// question's answers (why it asks, what it would do), wrapped and
+// cleaned as laid out (Question.ts);
 // detail: lines under them of the lit option k, made for w columns (the
 // model picker's autocompact gauge)
 export type Chooser = {

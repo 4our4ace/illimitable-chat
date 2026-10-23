@@ -2,7 +2,9 @@
 // =========
 // `bun test Asks.test.ts`. A question the chat asks shows in its picker
 // at the input, why and what it would do (a command by its lines) over
-// its answers, no note saying them again: Yes allows; "don't ask again"
+// its answers, no note saying them again (past what the question is
+// given of a long one, a dim line saying how much more isn't shown): Yes
+// allows; "don't ask again"
 // names what it keeps, on one line (offered only when it keeps
 // something); Esc says no; "No, and say why" asks a line (Esc: back to
 // the question). One gone before it is answered closes its picker; the
@@ -92,6 +94,15 @@ test("a command leads the question by its lines after the why, each bold, its bl
   const lead = t.question.lead;
   expect(lead.map((l: any) => l.map((r: any) => r.x).join(""))).toEqual(["Why: it is risky", "cat <<EOF > notes", "  first", "second", "EOF"]);
   expect(lead.slice(1).every((l: any) => l.length === 1 && l[0].s.b === true)).toBe(true);
+});
+
+test("a command longer than the question is given (Tools.whole) leads it as far as given, a dim line after it saying how many characters more aren't shown", () => {
+  const t = term();
+  t.v.asks = [{ id: "q1", who: "illi", tool: "Bash", what: "cat <<EOF > big…", whole: "cat <<EOF > big\nline 1\nline 2", more: 48211, why: "it is risky", keep: "" }];
+  term_asks(t);
+  const lead = t.question.lead;
+  expect(lead.map((l: any) => l.map((r: any) => r.x).join(""))).toEqual(["Why: it is risky", "cat <<EOF > big", "line 1", "line 2", "… 48,211 more characters not shown"]);
+  expect(lead.at(-1)[0].s.d).toBe(true);
 });
 
 test("don't ask again keeps what it names; one that keeps nothing isn't offered; Esc says no", () => {

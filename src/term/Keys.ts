@@ -6,10 +6,11 @@
 // open (Popup.ts) every key but PASS's, so none reaches the chat, a
 // pane, the input or the commands suggested under it (its search the
 // text typed too); then a question at the input (Question.ts) every key
-// but PASS's and the wheel off it (its line or illi's form's words the
-// text typed too); then the commands suggested and a pane; Enter (a
-// skill named mid-message told), Esc, Ctrl+C and Ctrl+D, Tab (the
-// suggested reply), Shift+Tab and the pages.
+// but PASS's, the leader, the wheel off it and Ctrl+C with text chosen
+// (its line or illi's form's words the text typed too); then the
+// commands suggested and a pane; Enter (a skill named mid-message told),
+// Esc, Ctrl+C and Ctrl+D, Tab (the suggested reply), Shift+Tab and the
+// pages.
 
 import { term_form_key, term_form_type } from "./Asks.ts";
 import { Chat } from "../chat/Chat.ts";

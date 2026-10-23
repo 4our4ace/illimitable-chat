@@ -41,6 +41,12 @@ export const MARGIN = 2;
 // the chat's rows the status line's leave at least (Status.ts)
 const STATUS_ROOM = 3;
 
+// the rows the screen keeps for all but the input (or a question in its
+// place) and the notes over it: the head, a row of the chat, the toast's,
+// the rules round the input, the pages' line (a pane's has no rule under
+// it: one less)
+const AROUND = 6;
+
 // a note's indent: its text starts where the rule's does
 const NOTE_IN = 3;
 
@@ -164,10 +170,13 @@ export function term_draw(t: Term): void {
 // the rule, the one before it, faded, in the row above (unless the toast
 // leaves it no room); while work runs (its status has the rule) or a
 // question shows, the newest in the row above (work: alone). Only what is
-// left over takes rows from the chat. Scrolled up, a button floats over
-// the chat's foot, in its middle: a jump to its end (a click goes there,
-// as Ctrl+End does). What a click in the chat would act on lit, once
-// every hit is placed (Select.ts term_light). A list's popup open
+// left over takes rows from the chat; the input (or the question) and the
+// notes over it never take more than leave the rest of the screen its
+// rows (AROUND), so no row is written past the screen's last, on a
+// screen AROUND rows and one more tall at least. Scrolled up, a button
+// floats over the chat's foot, in its middle: a jump to its end (a click
+// goes there, as Ctrl+End does). What a click in the chat would act on
+// lit, once every hit is placed (Select.ts term_light). A list's popup open
 // (Popup.ts) over all of it, all else dimmed, the cursor in its search
 // (none: hidden), and nothing under it takes a click or lights; with
 // none, the cursor in the question's line or words, if it takes typing
@@ -192,16 +201,18 @@ export function term_paint(t: Term): void {
   const cw    = full - side - 2 * MARGIN;
   const iw    = full - 2 * MARGIN;
   const off   = !View.view_typing(t.v);
-  const asked = question_laid(t, iw, h);
+  const room  = h - AROUND;
+  const asked = question_laid(t, iw, h, room);
   const paned = t.pane !== null && asked === null;
-  const input = asked ?? (paned ? { lines: [], at: null } : Screen.screen_input(t.scr, iw, Math.max(1, Math.floor(h / 3)), off ? OFF + (t.v.agent ?? View.MAIN) : term_hint(t), off));
+  const input = asked ?? (paned ? { lines: [], at: null } : Screen.screen_input(t.scr, iw, Math.max(1, Math.min(Math.floor(h / 3), room)), off ? OFF + (t.v.agent ?? View.MAIN) : term_hint(t), off));
   const idle  = View.view_doing(t.v) === null;
   const notes = term_notes(idle ? said.notes : said.notes.slice(-1), iw - 2 * NOTE_IN);
   const ruled = idle && asked === null ? notes.pop() : undefined;
   const last  = notes.at(-1);
   const roomy = last !== undefined && NOTE_IN + Paint.line_width(last) + 1 + Paint.text_width(said.toast) <= left + cw;
   const lead  = roomy ? [Paint.Run(" ".repeat(NOTE_IN)), ...notes.pop()!] : [];
-  const above = notes.slice(-Math.floor(h / 4)).map((l) => [Paint.Run(" ".repeat(NOTE_IN)), ...l]);
+  const most  = Math.max(0, Math.min(Math.floor(h / 4), room + (paned ? 1 : 0) - input.lines.length));
+  const above = notes.slice(notes.length - most).map((l) => [Paint.Run(" ".repeat(NOTE_IN)), ...l]);
   const status = status_rows(t, iw, h - (paned ? 4 : 5) - input.lines.length - above.length - STATUS_ROOM);
   const tall  = Math.max(1, h - (paned ? 4 : 5) - input.lines.length - above.length - status.length);
   const pop   = term_popup(t);

@@ -118,8 +118,10 @@ git push --force origin main
 - Why it asks comes first, then what it would do: the whole command, by
   its lines (the side panel and `/permissions` show it cut short). One
   too long for half the screen is cut to fit, a dim line saying how much
-  more; the wheel over it, or PgUp and PgDn, scroll it to its end. The
-  answers always show.
+  more; the wheel over it, or PgUp and PgDn, scroll it to its end. Past
+  32,000 characters (a heredoc carrying a whole file), a dim line at its
+  end says how many more aren't shown. The answers always show; on a
+  screen too short for both, what leads them gives way first.
 - "Don't ask again" says what it keeps, for this project: a family
   (`git push *`) for routine risks, the exact command for dangerous
   ones, a folder for files outside the project (the file itself in your

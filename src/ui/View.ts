@@ -92,10 +92,12 @@ export type Background = { id: number; command: string; agent: string; since: nu
 // a question the chat asks the user, answered by a view: who asks
 // (illi, an agent), the tool, what it would do (Tools.what: cut short,
 // for a note): leave to run a call the checks stopped (Tools.guard: what
-// it would do, whole, as the question shows it; why they stopped it;
-// what a "don't ask again" keeps, as said, "": none offered); or illi's
-// own (ask: its queries, one or more, answered at once)
-export type Question = { id: string; who: string; tool: string; what: string; whole?: string; why?: string; keep?: string; queries?: Query[] };
+// it would do as the question shows it, whole up to Tools.whole's most,
+// and how many characters past that are left out; why they stopped it;
+// what a "don't ask again" keeps, as said, "": none offered; the middle
+// of a long why or keep left out); or illi's own (ask: its queries, one
+// or more, answered at once)
+export type Question = { id: string; who: string; tool: string; what: string; whole?: string; more?: number; why?: string; keep?: string; queries?: Query[] };
 
 // a request refused (Tools.guard): its id, who asked (illi, an agent),
 // the tool, what (a command, a file), why; how: the user said no (or no

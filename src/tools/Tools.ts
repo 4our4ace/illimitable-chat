@@ -268,8 +268,15 @@ const ASK: Spec = spec("ask", "Ask the user one or more questions and wait for t
 const FILES = 50;
 
 // the most characters of what a tool would do that a note, the side's
-// refused list and /permissions show (the question shows it whole)
-const WHAT = 400;
+// refused list and /permissions show; that the question shows of it, and
+// of why it asks, its lead scrolling (a heredoc may carry a whole file,
+// and a why may quote it: the question goes to every view at each change
+// of the chat's state, and is laid out on their paints); of what a "don't
+// ask again" keeps that it names (its answer shows three lines of it at
+// most: its start and its end)
+const WHAT  = 400;
+const WHOLE = 32000;
+const KEPT  = 1000;
 
 // the most refused requests kept (Perm)
 const REFUSALS = 50;
@@ -765,9 +772,12 @@ export namespace Tools {
   // those given this run, and the mode: null runs it, else what the model
   // is told. One a hook allowed is judged as in yolo mode (the user's
   // rules still hold); one it asks about is asked, its why first, with no
-  // "don't ask again". One asked runs on the user's yes, "don't ask again"
-  // keeping its grants for the project (one that can't be saved: for this
-  // run). A rules file that won't read leaves nothing run unasked
+  // "don't ask again". The question is given what the call would do and
+  // why, WHOLE characters of each at most, and what "don't ask again"
+  // keeps by its ends past KEPT. One asked runs on the user's yes, "don't
+  // ask again" keeping its grants for the project (one that can't be
+  // saved: for this run). A rules file that won't read leaves nothing run
+  // unasked
   export async function guard(tools: Tools, who: string, tool: string, input: unknown, signal: AbortSignal, judge = (where: Where) => Guard.check(where, tool, input, Mcp.hints(tool)), hooked: { allow?: boolean; ask?: string } = {}): Promise<Out | null> {
     const folder = Trusted.folder(tools.cwd);
     const perms  = Permissions.read(config.PERMISSIONS, folder);
@@ -784,7 +794,7 @@ export namespace Tools {
     if (verdict.$ === "deny") {
       return Tools.refuse(tools, { ...asked, how: verdict.rule ? "rule" : "mode", said: "", exact: verdict.exact });
     }
-    const reply = await tools.hooks.ask({ ...asked, whole: Tools.whole(input), keep: verdict.always.map((g) => Guard.said(g, folder)).join(", ") }, signal);
+    const reply = await tools.hooks.ask({ ...asked, ...Tools.whole(input), why: Tools.ends(verdict.why, WHOLE), keep: Tools.ends(verdict.always.map((g) => Guard.said(g, folder)).join(", "), KEPT) }, signal);
     if (!reply.yes) {
       return Tools.refuse(tools, { ...asked, how: "no", said: reply.said, exact: verdict.exact }, !signal.aborted);
     }
@@ -868,21 +878,43 @@ export namespace Tools {
     return bad ? "Ask 1 to " + QUERIES + " questions, each with its text and 2 to " + OPTIONS + " options, each with a label." : each;
   }
 
-  // what a tool would do, whole, as the question shows it (its lead
-  // scrolls): a command, a file (an edit's files), a URL or a query, else
-  // its input
-  export function whole(input: any): string {
+  // what a tool would do: a command, a file (an edit's files), a URL or a
+  // query, else its input
+  export function does(input: any): string {
     const edits = Array.isArray(input?.edits) && input?.file_path === undefined ? [...new Set(input.edits.map((e: any) => String(e?.path ?? "")))].join(", ") : undefined;
     const one = input?.command ?? input?.file_path ?? input?.notebook_path ?? input?.path ?? edits ?? input?.url ?? input?.query ?? input?.pattern;
     return typeof one === "string" ? one : JSON.stringify(input ?? {});
   }
 
-  // what a tool would do (Tools.whole), WHAT characters at most, where
+  // what a tool would do (Tools.does) as the question shows it: WHOLE
+  // characters at most (a character in two halves, a surrogate pair, kept
+  // whole), and how many past them are left out (more: the question says
+  // so)
+  export function whole(input: any): { whole: string; more: number } {
+    const text = Tools.does(input);
+    const end  = text.length <= WHOLE ? text.length : WHOLE - (text.charCodeAt(WHOLE - 1) >> 10 === 0x36 ? 1 : 0);
+    return { whole: text.slice(0, end), more: text.length - end };
+  }
+
+  // what a tool would do (Tools.does), WHAT characters at most, where
   // the room is small and nothing scrolls: a note, the side's refused
   // list, /permissions
   export function what(input: any): string {
-    const text = Tools.whole(input);
+    const text = Tools.does(input);
     return text.length > WHAT ? text.slice(0, WHAT - 1) + "…" : text;
+  }
+
+  // a text, most characters at most: whole, else its start and its end
+  // about an ellipsis, half each (a character in two halves, a surrogate
+  // pair, kept whole)
+  export function ends(text: string, most: number): string {
+    if (text.length <= most) {
+      return text;
+    }
+    const half = Math.floor(most / 2);
+    const head = half - (text.charCodeAt(half - 1) >> 10 === 0x36 ? 1 : 0);
+    const tail = text.length - half - (text.charCodeAt(text.length - half) >> 10 === 0x37 ? 1 : 0);
+    return text.slice(0, head) + " … " + text.slice(tail);
   }
 
   // the chat's view, once its summaries are built, for an agent of this
