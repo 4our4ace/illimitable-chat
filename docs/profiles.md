@@ -22,8 +22,20 @@ happens there:
 in one. Otherwise illi opens a project in the profile you last used
 there, and a project it hasn't run in yet in the one you used last
 anywhere. A profile that illi has open in another terminal (in any
-project) can't be renamed, deleted or have its chats moved: quit illi
-there first.
+project), or hidden in this one, can't be renamed, deleted or have its
+chats moved: quit illi there first.
+
+A switch never stops anything. The profile you leave keeps running,
+hidden, until you close the terminal or quit illi there: its turn
+streams on, its subagents, background jobs and MCP servers keep going,
+and a question it asks waits for you. Switching back shows it as you
+left it (the chat where you scrolled, what you had typed), at once; a
+profile not open yet starts as illi does. Ctrl+D (or a second Ctrl+C)
+quits every profile open in the terminal. Behind it, `illi` on a
+terminal is a small window process that runs each profile's illi on a
+pseudo-terminal of its own ([development](development.md)); with
+`ILLI_WINDOW=off`, or from a pipe, illi runs alone, and a switch quits
+it and starts it again in the other profile, never while it works.
 
 Global and a profile's own
 --------------------------

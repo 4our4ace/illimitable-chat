@@ -173,7 +173,7 @@ note, illi going on.
 
 | Who | Connection | When | Code |
 | --- | --- | --- | --- |
-| **The holder**: the illi that holds a project's lock and runs its chat | read-write to its project's file, kept open until illi quits | always, one per project being used | `Memory.load` → `Store.open(dir, place)` |
+| **The holder**: the illi that holds a project's lock and runs its chat (shown, or a profile left running hidden in a window) | read-write to its project's file, kept open until illi quits | always, one per project being used | `Memory.load` → `Store.open(dir, place)` |
 | **A view**: a second terminal in the same project | read-write to the same file | to read exports, the tree and the projects list; the chat itself comes from the holder over a socket | `Term.ts term_reader` |
 | **A look at other projects**: the projects list, a zoom or date into another project, an export of one, the image count before a forget | read-write to that project's file, opened for the read and closed right after | each time | `Store.visit` → `Store.peek` |
 | **The search thread** (`Seeker.ts`) | its own connections, to each file a search covers, each closed after | each `search` the model calls | `Projects.seek` |

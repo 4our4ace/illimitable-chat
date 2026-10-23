@@ -1,12 +1,18 @@
 // Profile commands
 // ================
 // /profile: the profiles' picker, where all a profile takes is done: Enter
-// switches (all this illi holds let go, and illi run again in its place,
-// in the profile chosen), Ctrl+R renames, Ctrl+E exports, Delete deletes
-// (asked first); its last rows make a new one (named, then with a fresh
-// chat or this one moved into it; the global setup its own) and bring one
-// in from an archive. /profile <name> switches at once. Profiles.ts does
-// the files.
+// switches, Ctrl+R renames, Ctrl+E exports, Delete deletes (asked first);
+// its last rows make a new one (named, then with a fresh chat or this one
+// moved into it; the global setup its own) and bring one in from an
+// archive. /profile <name> switches at once. On a terminal, illi runs
+// under a window (Window.ts): a switch, whatever runs, hides this illi
+// and shows the profile chosen (open in the window already, as it was
+// left; else started), and this one runs on, hidden, till the window
+// closes or illi quits (Member.ts). Alone (ILLI_WINDOW=off), a switch
+// lets all this illi holds go and runs illi again in its place, in the
+// profile chosen, never while it works. A profile open in the window
+// can't be renamed or deleted (its illi holds its folder), nor one open
+// in another terminal. Profiles.ts does the files.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -17,7 +23,7 @@ import { term_ask, term_chooser } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Disk } from "../chat/Disk.ts";
 import { Machine } from "../tools/Machine.ts";
-import { member_env } from "./Member.ts";
+import { WIN, member_env, member_hide, member_others } from "./Member.ts";
 import { Mcp } from "../tools/Mcp.ts";
 import { term_note } from "./Notices.ts";
 import { Update } from "../config/Update.ts";
@@ -83,8 +89,9 @@ function term_profile_name(t: Term): void {
   });
 }
 
-// a switch to profile `name`, only while illi rests (a switch would cut
-// its turn), as term_restart does it
+// a switch to profile `name`: in a window, at once, this illi hidden and
+// running on; alone, only while illi rests (a switch would cut its turn),
+// as term_restart does it; never from a pipe
 export async function term_profile_go(t: Term, name: string): Promise<void> {
   t.profs = Profiles.profile_list(config.ROOT);
   if (name === config.PROFILE) {
@@ -92,6 +99,9 @@ export async function term_profile_go(t: Term, name: string): Promise<void> {
   }
   if (!t.profs.includes(name)) {
     return term_note(t, "No profile " + Paint.text_clean(name) + ". Profiles: " + t.profs.join(", ") + "; /profile makes one.");
+  }
+  if (t.scr.tty && WIN !== null) {
+    return member_hide(t, name);
   }
   if (term_profile_busy(t, "switch to " + name)) {
     return;
@@ -197,8 +207,14 @@ function term_profile_new(t: Term, name: string): void {
 
 // a new profile made, and switched to (move: with this chat, moved as
 // this illi lets it go); made as this illi lets go, so a switch not made
-// (background jobs kept running: term_restart) makes none
+// (background jobs kept running: term_restart) makes none. In a window, a
+// fresh one is made and switched to at once, whatever runs
 async function term_profile_make(t: Term, name: string, move: boolean): Promise<void> {
+  if (!move && t.scr.tty && WIN !== null) {
+    Profiles.profile_new(config.ROOT, name);
+    t.profs = Profiles.profile_list(config.ROOT);
+    return member_hide(t, name);
+  }
   if (term_profile_busy(t, "make " + name) || (move && (await term_profile_elsewhere(t, config.PROFILE, "moving its chat")))) {
     return;
   }
@@ -240,9 +256,13 @@ function term_profile_rename(t: Term, from: string): void {
   });
 }
 
-// whether illi runs in profile `name` in another terminal (said; true):
-// its folder can't change under it
+// whether illi runs in profile `name` hidden in this window, or in
+// another terminal (said; true): its folder can't change under it
 async function term_profile_elsewhere(t: Term, name: string, what: string): Promise<boolean> {
+  if (name !== config.PROFILE && member_others().some((o) => o.profile === name)) {
+    term_note(t, "Profile " + name + " runs hidden in this window: quit illi and start it again before " + what + ".");
+    return true;
+  }
   const n = Lock.others(Profiles.profile_dir(config.ROOT, name));
   if (n > 0) {
     term_note(t, "illi runs in profile " + name + " in " + (n === 1 ? "another terminal" : n + " other terminals") + ": quit it there before " + what + ".");
