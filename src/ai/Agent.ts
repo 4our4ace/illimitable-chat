@@ -105,7 +105,7 @@ export type Wire<S> = {
   idle    : number;
   url     : string;
   auth?   : { token: () => Promise<string>; spoil: (token: string) => void };
-  heard?  : (res: Response) => void;
+  heard?  : (res: Response, token: string) => void;
   headers : (key: string, ask: Ask) => Record<string, string>;
   body    : (ask: Ask, items: Item[], tools: Tool[], max: number) => unknown;
   marks   : (ask: Ask) => number;
@@ -406,7 +406,7 @@ export namespace Agent {
         signal  : AbortSignal.any([run.abort.signal, idle.signal]),
         timeout : false,
       } as RequestInit);
-      wire.heard?.(res);
+      wire.heard?.(res, token);
       const spoilt = res.status === 401 && wire.auth !== undefined;
       if (spoilt) {
         wire.auth!.spoil(token);

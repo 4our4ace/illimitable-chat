@@ -62,8 +62,9 @@ export type Fill = { used: number; cap: number; window: number };
 
 // a plan, as its vendor tells it (ChatGPT.ts told): whose it is
 // (ChatGPT), which one (plus, pro…; "": not known), its limits (none:
-// not told)
-export type Plan = { brand: string; tier: string; limits: Limit[] };
+// not told), whether they are being asked or were told (none told: a
+// plan without limits)
+export type Plan = { brand: string; tier: string; limits: Limit[]; state?: "asking" | "told" };
 
 // what the main agent's calls use: the plan of the vendor picked (null:
 // none told, or a vendor that tells none); how full the chat is (null:
