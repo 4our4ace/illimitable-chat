@@ -4,7 +4,11 @@
 // in config.ROOT (global: ~/.illi/agents, ~/.illi/commands,
 // ~/.illi/skills), a profile's folder (config.DIR, its own beside them)
 // and the working dir's .illi (the project's, only in a folder the user
-// trusts: Trusted.ts); by name, the later wins. The plugins' bundles
+// trusts: Trusted.ts); by name, the later wins. Skills shared with other
+// agents (opencode's, Codex's) are read too, each under illi's own of
+// its scope: ~/.agents/skills (config.AGENTS_DIR) under the global ones,
+// a trusted project's .agents/skills, from its top down to the working
+// dir (config_down), under its .illi. The plugins' bundles
 // (Plugins.bundles) add theirs, under the user's own: a file of the
 // user's always wins over a plugin's of its name, a later plugin's over
 // an earlier's, and a plugin never takes a name built into illi; one
@@ -132,12 +136,24 @@ const BUILT_IN = [CUSTOMIZE];
 
 export namespace Custom {
 
-  // where the user's files of a kind are: the global ones first, then
-  // the profile's, the project's last (a trusted folder's only)
+  // where the user's files of a kind are: the global ones first (for
+  // skills, those shared with other agents before illi's own), then the
+  // profile's, the project's last (a trusted folder's only; for skills,
+  // its .agents/skills from its top down, then its .illi's); each once
   export function dirs(cwd: string, kind: "agents" | "commands" | "skills"): string[] {
-    const own = config.DIR === config.ROOT ? [] : [path.join(config.ROOT, kind)];
-    const project = Trusted.has(Trusted.folder(cwd)) ? [path.join(cwd, ".illi", kind)] : [];
-    return [...own, path.join(config.DIR, kind), ...project];
+    const skills  = kind === "skills";
+    const shared  = skills ? [path.join(config.AGENTS_DIR, "skills")] : [];
+    const own     = config.DIR === config.ROOT ? [] : [path.join(config.ROOT, kind)];
+    const trusted = Trusted.has(Trusted.folder(cwd));
+    const tree    = trusted && skills ? config.config_down(cwd).map((dir) => path.join(dir, ".agents", "skills")) : [];
+    const project = trusted ? [path.join(cwd, ".illi", kind)] : [];
+    return [...new Set([...shared, ...own, path.join(config.DIR, kind), ...tree, ...project])];
+  }
+
+  // whether a skill's folder is a global one's: in the root's skills, or
+  // those shared with other agents (~/.agents/skills)
+  export function global_dir(file: string): boolean {
+    return [path.join(config.ROOT, "skills"), path.join(config.AGENTS_DIR, "skills")].some((dir) => file.startsWith(dir + path.sep));
   }
 
   // a kind's parts as listed: the plugins' first (in their order), then
@@ -210,7 +226,7 @@ export namespace Custom {
     }
     for (const p of Custom.parts(cwd, "skills", all, new Set(out.keys()))) {
       const { head, body } = safe_read(path.join(p.file, "SKILL.md"));
-      const global = p.plugin === null ? p.file.startsWith(path.join(config.ROOT, "skills") + path.sep) : p.plugin.scope === "global";
+      const global = p.plugin === null ? Custom.global_dir(p.file) : p.plugin.scope === "global";
       out.set(p.name.toLowerCase(), { name: p.name, description: head.description ?? "", body: p.plugin === null ? body : Bundle.fill(body, p.plugin, p.file), dir: p.file, sticky: YES.test(head.sticky ?? ""), model: !YES.test(head["disable-model-invocation"] ?? ""), plugin: p.plugin?.name ?? null, own: p.own, global });
     }
     return [...out.values()].filter((s) => all || !config.config_off(s.name)).sort((a, b) => a.name.localeCompare(b.name));
@@ -233,7 +249,7 @@ export namespace Custom {
   // default profile, or a global skill's (a global plugin's too), or one
   // built in
   export function global(skill: Skill): boolean {
-    return config.DIR === config.ROOT || skill.dir === "" || skill.global === true || skill.dir.startsWith(path.join(config.ROOT, "skills") + path.sep);
+    return config.DIR === config.ROOT || skill.dir === "" || skill.global === true || Custom.global_dir(skill.dir);
   }
 
   // a sticky skill turned on, in the list where its file is (global: the

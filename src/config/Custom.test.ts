@@ -7,8 +7,9 @@
 // the next message, each keeping its pick; spawn's agent runs a subagent
 // as it. A skill: its folder's SKILL.md (a folded description), the
 // project's over theirs, listed by the skill tool and loaded by it; a
-// sticky one turned on and off by it, while on in every turn's prompt.
-// The project is trusted first: only then do its own files load.
+// sticky one turned on and off by it, while on in every turn's prompt;
+// those shared with other agents (.agents/skills) under illi's own. The
+// project is trusted first: only then do its own files load.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -177,6 +178,31 @@ test("a skill: its folder's SKILL.md, the project's over theirs; listed and load
   expect(Chat.main(chat, "reviewer")).toEqual({});
   expect(Tools.list(chat.tools, "main").map((t) => t.name)).toEqual(["zoom", "read"]);
   expect(Chat.main(chat, null)).toEqual({});
+});
+
+test("skills shared with other agents: ~/.agents/skills under illi's global ones, a trusted project's .agents/skills from its top down under its .illi; global for the on/off lists", () => {
+  const shared = config.AGENTS_DIR + "/skills";
+  const top    = fs.mkdtempSync(os.tmpdir() + "/illi-tree-");
+  const cwd    = top + "/pkg";
+  put(top + "/.git/HEAD", "ref: refs/heads/main\n");
+  put(shared + "/pdf/SKILL.md", "---\ndescription: shared pdf\n---\nShared.");
+  put(shared + "/lint/SKILL.md", "---\ndescription: Lints\n---\nLint.");
+  put(top + "/.agents/skills/up/SKILL.md", "---\ndescription: from the top\n---\nTop.");
+  put(top + "/.agents/skills/near/SKILL.md", "---\ndescription: from the top\n---\nTop.");
+  put(cwd + "/.agents/skills/near/SKILL.md", "---\ndescription: from here\n---\nHere.");
+  put(cwd + "/.agents/skills/lint/SKILL.md", "---\ndescription: the project's lint\n---\nLint here.");
+  put(cwd + "/.illi/skills/near/SKILL.md", "---\ndescription: illi's own here\n---\nOwn.");
+  try {
+    const said = (dir: string) => Object.fromEntries(Custom.skills(dir).map((k) => [k.name, k.description]));
+    expect(said(cwd)).toEqual({ "customize-illi": expect.any(String), Deploy: "theirs", lint: "Lints", pdf: "Fills PDF forms. Use for any .pdf." });
+    Trusted.trust(Trusted.folder(cwd));
+    expect(said(cwd)).toEqual({ "customize-illi": expect.any(String), Deploy: "theirs", lint: "the project's lint", near: "illi's own here", pdf: "Fills PDF forms. Use for any .pdf.", up: "from the top" });
+    expect(Custom.dirs(cwd, "skills")).toEqual([shared, DIR + "/skills", top + "/.agents/skills", cwd + "/.agents/skills", cwd + "/.illi/skills"]);
+    expect(Custom.dirs(cwd, "agents")).toEqual([DIR + "/agents", cwd + "/.illi/agents"]);
+    expect(Custom.global(Custom.skills(CWD).find((k) => k.name === "lint")!)).toBe(true);
+  } finally {
+    fs.rmSync(shared, { recursive: true, force: true });
+  }
 });
 
 test("illi's own skill, customize-illi: listed first, loaded with its folders named; the user's of its name takes its place", async () => {

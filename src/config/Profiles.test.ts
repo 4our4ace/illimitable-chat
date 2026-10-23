@@ -245,7 +245,7 @@ test("the root is global: a profile has its skills, agents, commands and MCP ser
   put(ROOT + "/commands/ship.md", "Ship it.");
   put(own + "/agents/reviewer.md", "---\ndescription: mine\n---\nMine.");
   put(own + "/mcp.json", JSON.stringify({ mcpServers: { docs: { type: "http", url: "https://example.com/mine" } } }));
-  expect(Custom.dirs(TMP, "skills")).toEqual([ROOT + "/skills", own + "/skills", TMP + "/.illi/skills"]);
+  expect(Custom.dirs(TMP, "skills")).toEqual([config.AGENTS_DIR + "/skills", ROOT + "/skills", own + "/skills", TMP + "/.agents/skills", TMP + "/.illi/skills"]);
   expect(Custom.skills(TMP).map((s) => s.name + ":" + s.description)).toEqual(["customize-illi:" + Custom.skills(TMP)[0].description, "notes:mine"]);
   expect(Custom.skills(TMP, true).map((s) => s.name)).toContain("adhd");
   expect([Custom.agent(TMP, "reviewer")?.description, Custom.commands(TMP).map((c) => c.name)]).toEqual(["mine", ["ship"]]);
