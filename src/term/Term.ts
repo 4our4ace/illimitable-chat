@@ -164,23 +164,31 @@ export type Term = {
 export type Aim = { row: number; in: boolean; press: { of: object | null; on: Target | "box" | "out" | null } | null; first: object | null };
 
 // a box as last painted: a popup (Popup.ts), or the commands suggested
-// (Frame.ts); what it was painted for (the picker, the commands), its
-// place and size, what each of its rows stands for, top first (null:
-// nothing to point at: its frame, a head, a blank); its list: the box's
-// row it starts at, its lines, the entries they show; the lines leading
-// it: how many show, of how many
-export type PopBox = { of: object; row: number; col: number; w: number; h: number; rows: Array<Target | null>; list: number; lines: number; tall: number; ahead: number; lead: number };
+// (Frame.ts); what it was painted for (the picker, illi's form, the
+// commands), its place and size, what each of its rows stands for, top
+// first (null: nothing to point at: its frame, a head, a blank; spans:
+// things side by side, the form's tabs); its list (the form's: what
+// scrolls under its tabs): the box's row it starts at, its lines, the
+// entries they show (the form's: all its lines, shown or not); the lines
+// leading it: how many show, of how many
+export type PopBox = { of: object; row: number; col: number; w: number; h: number; rows: Array<Target | Span[] | null>; list: number; lines: number; tall: number; ahead: number; lead: number };
 
 // what a row of a box stands for: one of a popup's options (by its
 // index among the names), one of the commands suggested (by its index
-// among those found)
-export type Target = { $: "option"; k: number } | { $: "command"; k: number };
+// among those found), a tab of illi's form, a row of one of its tabs
+// (an option, past them its words)
+export type Target = { $: "option" | "command" | "tab"; k: number } | { $: "row"; k: number; tab: number };
 
-// illi's own questions, in place of the input (Asks.ts): the tab shown
-// (past the last question: the answers, to look over), and for each
-// question the words typed beside its options, the row lit (past the
-// options: the words'), the options picked
-export type Form = { tab: number; each: Array<{ ed: Screen.Ed; at: number; picked: number[] }> };
+// a thing on a row of a box beside others: its columns inside the frame,
+// from, to (past its end), and what it stands for
+export type Span = { col: number; to: number; aim: Target };
+
+// illi's own questions, in a popup (Asks.ts, Popup.ts): the tab shown
+// (past the last question: the answers, to look over), the first of its
+// lines in view (under the tabs, as it scrolls), and for each question
+// the words typed beside its options, the row lit (past the options: the
+// words'), the options picked
+export type Form = { tab: number; top: number; each: Array<{ ed: Screen.Ed; at: number; picked: number[] }> };
 
 // the chat as last painted: its lines, its blocks in them, the screen
 // row of its first line shown and that line, the rows it had, its first

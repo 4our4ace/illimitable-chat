@@ -2,28 +2,32 @@
 // =====
 // Every list a person picks from opens in one popup (term_popup): the
 // picker (Term.ts Chooser: /model, /settings, /profile, Ctrl+P and the
-// rest, a line asked for, the permission question), in the screen's
-// middle whatever the side panel does, over the rest of the screen dimmed
-// in one ink (the backdrop), the box on a background of its own. One rule
-// places and sizes it, from the screen and what it shows alone
-// (popup_size): as wide as its options' names ask, POP_MIN at least (a
-// two-answer question still reads as a dialog), what they say widening it
-// to POP_CAP (a line asked for: ASK_MIN at least), the room allowing; as
-// tall as its lines, every option counted as unsearched (a search shows
-// fewer in the same box), SHARE of the screen's rows at most (a question:
-// all but two); centered, the head row and the bottom line left
-// uncovered. While it stays open it only grows (a value stepped wider),
-// never shrinks; a new size measures it afresh. A name is never cut:
-// what an option is gives way first, then its aside, and on a screen too
-// narrow for it the name wraps, under itself. While it is open it has
-// every key (Keys.ts), the wheel and the pages moving in it
-// (popup_wheel, popup_page), and the whole mouse (popup_mouse): the
-// pointer moving to a row lights it (one lit row, shared with the keys),
-// a click on an option does what Enter does there, a click outside
-// closes a list (a question stays), the click that only focuses the
-// terminal does nothing; nothing reaches the chat, the side,
-// the tabs or the input under it (no button lights, no text is chosen),
-// and a paste goes to its search, if any.
+// rest, a line asked for, the permission question), else illi's own
+// questions (their form: Asks.ts), in the screen's middle whatever the
+// side panel does, over the rest of the screen dimmed in one ink (the
+// backdrop: a pane, the input as typed), the box on a background of its
+// own. One rule places and sizes it, from the screen and what it shows
+// alone (popup_size): as wide as its options' names ask, POP_MIN at
+// least (a two-answer question still reads as a dialog), what they say
+// widening it to POP_CAP (a line asked for: ASK_MIN at least; the form:
+// the room's full width), the room allowing; as tall as its lines, every
+// option counted as unsearched (a search shows fewer in the same box;
+// the form as its tallest tab), SHARE of the screen's rows at most (a
+// question: all but two); centered, the head row and the bottom line
+// left uncovered. While it stays open it only grows (a value stepped
+// wider), never shrinks; a new size measures it afresh. A name is never
+// cut: what an option is gives way first, then its aside, and on a
+// screen too narrow for it the name wraps, under itself. While it is
+// open it has every key (Keys.ts), the wheel and the pages moving in it
+// (popup_wheel, popup_page; the form's lines under its tabs scroll:
+// popup_form_wheel), and the whole mouse (popup_mouse): the pointer
+// moving to a row lights it (one lit row, shared with the keys), a click
+// on an option does what Enter does there (in the form, Space where any
+// may be picked; on a tab, that tab), a click outside closes a list (a
+// question stays), the click that only focuses the terminal does
+// nothing; nothing reaches the chat, a pane, the side, the tabs or the
+// input under it (no button lights, no text is chosen), and a paste
+// goes to its search or words, if any.
 // A question illi asks (the permission question, its form) holds Enter,
 // Space and a click for ARM after it first shows (popup_held), so the key
 // that ended a sentence never answers it; Esc, its no, never waits. The
@@ -32,15 +36,15 @@
 // (no text chosen; a click does what Enter does there). Panes stay in
 // the chat's place.
 
-import { term_asks } from "./Asks.ts";
+import { term_asks, term_form, term_form_key, term_form_lines, term_form_type } from "./Asks.ts";
 import { term_suggest, term_suggest_key } from "./Commands.ts";
 import * as Draw from "../ui/Draw.ts";
 import { MARGIN, term_draw } from "./Frame.ts";
 import { term_choose_key } from "./Keys.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_let_go } from "./Select.ts";
-import type * as Screen from "../ui/Screen.ts";
-import type { Chooser, PopBox, Target, Term } from "./Term.ts";
+import * as Screen from "../ui/Screen.ts";
+import type { Chooser, Form, PopBox, Target, Term } from "./Term.ts";
 import { GLYPH } from "../ui/Theme.ts";
 
 // the narrowest a popup is (a two-answer question still reads as a
@@ -89,6 +93,11 @@ type Place = { row: number; col: number; w: number; h: number };
 // shown, of how many
 type Shape = Pick<PopBox, "list" | "lines" | "tall" | "ahead" | "lead">;
 
+// a popup laid out: its place, its lines framed, what each stands for
+// (PopBox rows), the cursor's spot in it (none: it takes no typing), its
+// Shape
+type Laid = { place: Place; lines: Paint.Line[]; rows: PopBox["rows"]; at?: Screen.Spot; shape: Shape };
+
 // what a popup's content asks of its box, in columns with its frame: its
 // options' names whole, with their marks (names); all it shows whole
 // (wants); the least it takes (least); its rows with its frame at an
@@ -96,29 +105,31 @@ type Shape = Pick<PopBox, "list" | "lines" | "tall" | "ahead" | "lead">;
 // screen's rows)
 type Measure = { names: number; wants: number; least: number; tall: (iw: number) => number; stays: boolean };
 
-// the popup open: the picker (a list, or a line asked for); none: null
-export function term_popup(t: Term): "list" | null {
-  return t.choose !== null ? "list" : null;
+// the popup open: the picker (a list, or a line asked for), else illi's
+// questions (their form, over a pane too); none: null
+export function term_popup(t: Term): "list" | "form" | null {
+  return t.choose !== null ? "list" : term_form(t) !== null ? "form" : null;
 }
 
-// what the popup open is (its picker; none: null), as its box keeps it
+// what the popup open is (its picker, illi's form; none: null), as its
+// box keeps it
 function popup_of(t: Term): object | null {
-  return t.choose;
+  return t.choose ?? term_form(t)?.[1] ?? null;
 }
 
-// whether the question open (its picker, or illi's form, form: drawn now)
-// is the question shown: its picker, not a list over it
-function popup_asks(t: Term, form: boolean): boolean {
+// whether the question open (its picker, or illi's form) is the popup
+// shown, not a list over it
+function popup_asks(t: Term): boolean {
   const a = t.asking;
-  return a != null && !a.done && (t.choose !== null ? t.choose === a.c && t.choose.stays === true : form);
+  return a != null && !a.done && (t.choose !== null ? t.choose === a.c && t.choose.stays === true : term_form(t) !== null);
 }
 
-// a paint, illi's form drawn or not: the question shown stamped as it
-// first shows (t.asking.shown), the stamp kept while it shows; hidden (a
-// list over it, the leader's key awaited), it shows anew after
-export function popup_shown(t: Term, form: boolean): void {
+// a paint: the question shown stamped as it first shows (t.asking.shown),
+// the stamp kept while it shows (another of the form's tabs too); hidden
+// (a list over it, the leader's key awaited), it shows anew after
+export function popup_shown(t: Term): void {
   if (t.asking != null) {
-    t.asking.shown = popup_asks(t, form) ? t.asking.shown ?? Date.now() : null;
+    t.asking.shown = popup_asks(t) ? t.asking.shown ?? Date.now() : null;
   }
 }
 
@@ -127,7 +138,7 @@ export function popup_shown(t: Term, form: boolean): void {
 // read may bring the question and the keys after it)
 export function popup_held(t: Term): boolean {
   const a = t.asking;
-  return popup_asks(t, a?.form != null) && (a!.shown == null || Date.now() - a!.shown < ARM);
+  return popup_asks(t) && (a!.shown == null || Date.now() - a!.shown < ARM);
 }
 
 // a popup's place and size on a screen w by h, from its measure alone
@@ -151,13 +162,14 @@ export function popup_size(m: Measure, w: number, h: number, was = 0): Place {
 // else re-inked in one ink near the background (the backdrop; dim, the
 // background not told), the box on a background of its own, at its
 // place (popup_size; as wide as it was painted last, if it is still the
-// one open); kept as painted (t.box), the pointer's row seen as it first
-// shows (it lights a row once it moves). The cursor's spot in it, if it
-// takes the typing (null: none)
+// one open: illi's form, as tall); kept as painted (t.box), the
+// pointer's row seen as it first shows (it lights a row once it moves).
+// The cursor's spot in it, if it takes the typing (null: none)
 export function popup_paint(t: Term, rows: Screen.Piece[][], w: number, h: number): Screen.Spot | null {
-  const c     = t.choose!;
-  const at    = popup_size(popup_measure(c), w, h, t.box?.of === c ? t.box.w : 0);
-  const box   = popup_list(c, at.w, at.h);
+  const of    = popup_of(t)!;
+  const was   = t.box?.of === of ? t.box : null;
+  const box   = t.choose !== null ? popup_picker(t.choose, w, h, was?.w ?? 0) : popup_form(t, of as Form, w, h, was?.h ?? 0);
+  const at    = box.place;
   const fade  = Draw.draw_off(t.scr.canvas, BACKDROP);
   const panel = Draw.draw_off(t.scr.canvas, PANEL);
   const ink   = fade === undefined ? Paint.DIM : { ...Paint.INK, c: fade };
@@ -167,13 +179,74 @@ export function popup_paint(t: Term, rows: Screen.Piece[][], w: number, h: numbe
   box.lines.forEach((line, k) => {
     rows[at.row + k].push({ col: at.col, w: at.w, line: panel === undefined ? line : line.map((r) => ({ ...r, s: { ...r.s, g: panel } })) });
   });
-  const first = t.box?.of !== c;
-  t.box = { of: c, ...at, rows: box.rows, ...box.shape };
-  if (first) {
+  t.box = { of, ...at, rows: box.rows, ...box.shape };
+  if (was === null) {
     t.aim.row = t.scr.point.row;
     t.aim.in  = popup_at(t.box, t.scr.point) !== "out";
   }
   return box.at === undefined ? null : { row: at.row + box.at.row, col: at.col + box.at.col };
+}
+
+// the picker laid out on a screen w by h, as wide as it was (was)
+function popup_picker(c: Chooser, w: number, h: number, was: number): Laid {
+  const place = popup_size(popup_measure(c), w, h, was);
+  return { place, ...popup_list(c, place.w, place.h) };
+}
+
+// illi's form laid out on a screen w by h (Asks.ts term_form_lines), as
+// tall as it was (was: it only grows while open): the room's full width
+// (what will be typed isn't known); as tall as its tallest tab (the
+// answers' too: going from tab to tab never moves it; a shorter one blank
+// under), all but two of the screen's rows at most; centered as any
+// popup (popup_size), framed, who asks its title. Its tabs hold at its
+// top and its keys at its foot (the room allowing); its lines between
+// scroll (Form top), kept to show the lit row (popup_form_row; the
+// answers have none: only the wheel scrolls them). The cursor in the
+// words, while they show
+function popup_form(t: Term, f: Form, w: number, h: number, was: number): Laid {
+  const max   = popup_words(h);
+  const tabs  = Array.from({ length: f.each.length + 1 }, (_, k) => k);
+  const tall  = (iw: number) => Math.max(was, ...tabs.map((k) => {
+    const each = term_form_lines(t, iw, max, k)!;
+    return 2 + each.tabs.length + each.body.length + each.keys.length;
+  }));
+  const place = popup_size({ names: 0, wants: 0, least: w, tall, stays: true }, w, h);
+  const iw    = place.w - 4;
+  const laid  = term_form_lines(t, iw, max)!;
+  const inner = place.h - 2;
+  const head  = laid.tabs.slice(0, inner);
+  const keys  = laid.keys.slice(0, Math.max(0, inner - head.length - 1));
+  const room  = Math.max(0, inner - head.length - keys.length);
+  const e     = f.each[f.tab];
+  const keep  = e === undefined ? null : popup_form_row(laid.body, laid.at, e.at);
+  const top   = Math.max(0, Math.min(f.top, laid.body.length - room));
+  f.top       = keep === null ? top : Math.max(0, Math.min(keep[0], Math.max(top, keep[1] - room + 1)));
+  const view  = laid.body.slice(f.top, f.top + room);
+  const blank = Array.from({ length: room - view.length }, (): [Paint.Line, null] => [[], null]);
+  const title = [Paint.Run(popup_cut(" " + laid.who + " asks ", iw + 1), { ...Paint.DIM, b: true })];
+  const lines = Paint.frame([...head, ...[...view, ...blank].map(([l]) => l), ...keys], place.w, title);
+  const rows  = [null, ...laid.spans.slice(0, head.length), ...[...view, ...blank].map(([, aim]) => aim), ...keys.map(() => null), null];
+  const cur   = laid.at;
+  const at    = cur === null || cur.row < f.top || cur.row >= f.top + room ? undefined : { row: 1 + head.length + cur.row - f.top, col: 2 + cur.col };
+  return { place, lines, rows, at, shape: { list: 1 + head.length, lines: room, tall: laid.body.length, ahead: 0, lead: 0 } };
+}
+
+// the most lines the words typed at illi's questions take, on a screen
+// h rows tall
+function popup_words(h: number): number {
+  return Math.max(1, Math.floor(h / 4));
+}
+
+// the lines row k of illi's form takes in its lines as laid out (body,
+// the cursor at `at`): its first, its last (the words', the last row:
+// their cursor's line); none such: null
+function popup_form_row(body: Array<[Paint.Line, Target | null]>, at: Screen.Spot | null, k: number): [number, number] | null {
+  const words = body.at(-1)?.[1];
+  if (at !== null && words?.$ === "row" && words.k === k) {
+    return [at.row, at.row];
+  }
+  const on = body.flatMap(([, aim], j) => (aim?.$ === "row" && aim.k === k ? [j] : []));
+  return on.length === 0 ? null : [on[0], on.at(-1)!];
 }
 
 // what the picker asks of its box (popup_size): each option's name whole
@@ -301,7 +374,7 @@ function popup_heights(c: Chooser, list: Array<string | number>, iw: number): nu
 // one takes besides. A line asked for (Chooser ask) is its one line, as
 // the input shows a message typed, its hint while empty; a search or a
 // line too long shows its end
-function popup_list(c: Chooser, w: number, h: number): { lines: Paint.Line[]; rows: Array<Target | null>; at?: Screen.Spot; shape: Shape } {
+function popup_list(c: Chooser, w: number, h: number): Omit<Laid, "place"> {
   const iw    = w - 4;
   const room  = h - 2;
   const glyph = c.ask === null ? GLYPH.find : GLYPH.input;
@@ -363,9 +436,9 @@ function popup_fit(tall: number[], top: number, rows: number): number[] {
 // yet: nothing): the lines leading it scrolled, while they are cut; else
 // its list scrolled STEP entries (a third of those shown, on a short
 // one), stopping at its ends (it never goes round; one shown whole never
-// moves). The list moved: with the pointer over it, the option brought
-// under the pointer lit; else, the lit one gone from view, the nearest
-// still in it, so Enter picks what shows
+// moves). The list moved: with the pointer on an option, that option
+// lit; else, the lit one gone from view, the nearest still in it, so
+// Enter picks what shows
 export function popup_wheel(t: Term, c: Chooser, d: number): void {
   const box = t.box?.of === c ? t.box : null;
   if (box === null) {
@@ -398,9 +471,46 @@ export function popup_wheel(t: Term, c: Chooser, d: number): void {
   }
   const lit  = list.indexOf(c.at);
   const near = lit < view[0] ? opts[0] : opts.at(-1);
-  const to   = over ? (typeof list[at] === "number" ? at : -1) : view.includes(lit) ? -1 : near ?? -1;
+  const to   = over && typeof list[at] === "number" ? at : view.includes(lit) ? -1 : near ?? -1;
   if (to >= 0) {
     c.at = list[to] as number;
+  }
+}
+
+// a turn of the wheel in illi's form (d -1: up), as last painted (none
+// yet: nothing): its lines under the tabs scrolled STEP (a third of those
+// shown, on a short one), stopping at their ends. On a question, with
+// the pointer on a row that shows whole (the words: their cursor's line),
+// that row lit; else, the lit one gone from view, the nearest still in
+// it (none shows whole: nothing moves), so what is lit always shows
+export function popup_form_wheel(t: Term, d: number): void {
+  const f   = term_form(t)?.[1] ?? null;
+  const box = f !== null && t.box?.of === f ? t.box : null;
+  if (f === null || box === null) {
+    return;
+  }
+  const laid  = term_form_lines(t, box.w - 4, popup_words(Screen.screen_size().h))!;
+  const step  = Math.max(1, Math.min(STEP, Math.floor(box.lines / 3)));
+  const top   = Math.max(0, Math.min(laid.body.length - box.lines, f.top + d * step));
+  const e     = f.each[f.tab];
+  const shows = (k: number) => {
+    const rows = popup_form_row(laid.body, laid.at, k);
+    return rows !== null && rows[0] >= top && rows[1] < top + box.lines;
+  };
+  if (top === f.top || e === undefined) {
+    f.top = top;
+    return;
+  }
+  const p     = t.scr.point;
+  const line  = p.row - box.row - box.list;
+  const over  = line >= 0 && line < box.lines && p.col >= box.col && p.col < box.col + box.w;
+  const under = over ? laid.body[top + line]?.[1] : undefined;
+  const words = laid.body.at(-1)?.[1];
+  const all   = Array.from({ length: words?.$ === "row" ? words.k + 1 : 0 }, (_, k) => k).filter(shows);
+  const lit   = under?.$ === "row" && shows(under.k) ? under.k : shows(e.at) ? e.at : popup_form_row(laid.body, laid.at, e.at)![0] < top ? all[0] : all.at(-1);
+  if (lit !== undefined) {
+    e.at  = lit;
+    f.top = top;
   }
 }
 
@@ -521,15 +631,19 @@ export function popup_mouse(t: Term, key: string): boolean {
   return took;
 }
 
-// what a spot of the screen is in a popup as painted
+// what a spot of the screen is in a popup as painted (on a row of
+// things side by side, the one under it)
 function popup_at(box: PopBox, p: Screen.Spot): Pointed {
   const inside = p.row >= box.row && p.row < box.row + box.h && p.col >= box.col && p.col < box.col + box.w;
-  return !inside ? "out" : box.rows[p.row - box.row] ?? "box";
+  const row    = inside ? box.rows[p.row - box.row] ?? null : null;
+  const col    = p.col - box.col - 2;
+  return !inside ? "out" : Array.isArray(row) ? row.find((s) => col >= s.col && col < s.to)?.aim ?? "box" : row ?? "box";
 }
 
 // whether two spots are one: the same place, or what they stand for
 function popup_same(a: Pointed | null, b: Pointed): boolean {
-  return typeof a === "object" && a !== null && typeof b === "object" ? a.$ === b.$ && a.k === b.k : a === b;
+  const tab = (x: Target) => (x.$ === "row" ? x.tab : -1);
+  return typeof a === "object" && a !== null && typeof b === "object" ? a.$ === b.$ && a.k === b.k && tab(a) === tab(b) : a === b;
 }
 
 // the pointer moved, in a popup as painted (none: nothing): to another
@@ -550,9 +664,19 @@ function popup_hover(t: Term, box: PopBox | null): void {
   }
 }
 
-// an option lit in the popup open, if it still shows (true: it changed)
+// an option lit in the popup open, if it still shows (illi's form: a
+// row of the tab shown) (true: it changed)
 function popup_light(t: Term, at: Target): boolean {
   const c = t.choose;
+  const f = c === null ? term_form(t)?.[1] ?? null : null;
+  const e = f?.each[f.tab];
+  if (at.$ === "row") {
+    const lit = e !== undefined && at.tab === f!.tab && at.k !== e.at;
+    if (lit) {
+      e.at = at.k;
+    }
+    return lit;
+  }
   const i = c === null || at.$ !== "option" ? -1 : c.shown.findIndex((m) => m.k === at.k);
   if (c === null || i < 0 || i === c.at) {
     return false;
@@ -566,13 +690,31 @@ function popup_light(t: Term, at: Target): boolean {
 // first (a setting stepped, a toggle, a question's answer; held as Enter
 // is, just shown); outside, a list closes as Esc closes it (a question
 // stays: a click never answers for you; the line asked why goes back to
-// its question). On the commands suggested, one (still found) lit, then
-// what Enter does there (run, or filled in: one found by what it does,
-// one that needs words). The box, nothing
+// its question). In illi's form, a tab: that tab; an option of the tab
+// shown: lit, then what Enter does where one is picked (picked, and on to
+// the next), what Space does where any are (picked or not; both held as
+// the keys are, just shown); the words' row: lit (typing goes there
+// anyway). On the commands suggested, one (still found) lit, then what
+// Enter does there (run, or filled in: one found by what it does, one
+// that needs words). The box, nothing
 function popup_click(t: Term, at: Pointed): void {
-  const c   = t.choose;
-  const sug = c === null ? term_suggest(t) : null;
-  if (typeof at === "object" && at.$ === "command" && sug?.found[at.k] !== undefined) {
+  const c    = t.choose;
+  const open = c === null ? term_form(t) : null;
+  const sug  = c === null && open === null ? term_suggest(t) : null;
+  if (open !== null && typeof at === "object") {
+    const [q, f] = open;
+    const query  = q.queries[f.tab];
+    if (at.$ === "tab") {
+      f.tab = at.k;
+    } else if (at.$ === "row" && at.tab === f.tab) {
+      popup_light(t, at);
+      if (at.k < (query?.options.length ?? 0) && query.multi) {
+        term_form_type(t, " ");
+      } else if (at.k < (query?.options.length ?? 0)) {
+        term_form_key(t, "Enter");
+      }
+    }
+  } else if (typeof at === "object" && at.$ === "command" && sug?.found[at.k] !== undefined) {
     sug.at = at.k;
     term_suggest_key(t, sug, "Enter");
   } else if (c !== null && at === "out" && c.stays !== true) {

@@ -6,13 +6,17 @@
 // no; "No, and say why" asks a line (Esc: back to the
 // picker). One gone before it is answered closes its picker; the next
 // shows once the one before is gone. A pipe answers no at once. illi's
-// own questions (ask) show in place of the input, a tab each: Up and
+// own questions (ask) show as a form (in the popup: Popup.test), a tab
+// each (the tabs wrapped, each where it is), who asks its title: Up and
 // Down move, Space picks (one; several with multi), typing goes to the
-// words of the user's own, Enter picks the lit option and goes on; the
-// last tab shows all the answers, and Enter there sends them; Esc skips;
-// a picker opened over it takes the keys. A question just shown holds
-// Enter (the form Space too) for half a second from its first paint, and
-// again once shown anew after a list over it; Esc is never held.
+// words of the user's own, Enter picks the lit option and goes on; PgUp
+// and Ctrl+Home go to the first row, PgDn and Ctrl+End to the words',
+// Home and End too off the words (on them they edit); the last tab shows
+// all the answers, and Enter there sends them; Esc and Ctrl+D skip; any
+// other key does nothing, a pane under it stays; a picker opened over it
+// takes the keys. A question just shown holds Enter (the form Space too)
+// for half a second from its first paint, and again once shown anew
+// after a list over it; Esc is never held.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -56,7 +60,10 @@ const own   = (t: any, queries = [DB]) => {
   term_asks(t);
   shown(t);
 };
-const text = (t: any) => term_form_lines(t, 70, 4)!.lines.map((l: any) => l.map((r: any) => r.x).join("").trimEnd());
+const text = (t: any) => {
+  const f = term_form_lines(t, 80, 4)!;
+  return [...f.tabs, ...f.body.map(([l]: any) => l), ...f.keys].map((l: any) => l.map((r: any) => r.x).join("").trimEnd());
+};
 
 test("a question shows in the picker with a note; Enter on Yes allows it, once", () => {
   const t = term();
@@ -141,12 +148,13 @@ test("a pipe has no one to ask: no, at once", () => {
   expect(sent(t)).toHaveLength(1);
 });
 
-test("illi's question shows in place of the input: its tabs, the question, its options, a row for words of the user's own, the keys", () => {
+test("illi's question shows as a form: who asks, its tabs, the question, its options, a row for words of the user's own, the keys", () => {
   const t = term();
   own(t);
   expect([t.choose, t.notices]).toEqual([null, []]);
-  expect(text(t)).toEqual(["illi asks  Database   Review", "Which database?  pick one", "› ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
-  expect(term_form_lines(t, 70, 4)!.at).toEqual({ row: 5, col: 4 });
+  expect(term_form_lines(t, 80, 4)!.who).toBe("illi");
+  expect(text(t)).toEqual([" Database   Review", "Which database?  pick one", "› ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
+  expect(term_form_lines(t, 80, 4)!.at).toEqual({ row: 4, col: 4 });
 });
 
 test("one question: Space picks one, typing goes to the words, Enter goes on to the answers, Enter there sends them", () => {
@@ -161,13 +169,13 @@ test("one question: Space picks one, typing goes to the words, Enter goes on to 
   term_grab(t, "Ctrl+W");
   term_type(t, "backups");
   term_grab(t, "Enter");
-  expect(text(t)).toEqual(["illi asks  ✓ Database   Review", "Which database?", "  ● MySQL", "  > with backups", "Enter send · Shift+Tab back · Esc skip"]);
+  expect(text(t)).toEqual([" ✓ Database   Review", "Which database?", "  ● MySQL", "  > with backups", "Enter send · Shift+Tab back · Esc skip"]);
   expect(sent(t)).toEqual([]);
   term_type(t, "x");
   term_grab(t, "Backspace");
   term_grab(t, "Enter");
   expect(sent(t)).toEqual([{ ask: "a1", yes: true, always: false, said: "Which database?\npicked: MySQL\nwrote: with backups" }]);
-  expect([term_form_lines(t, 70, 4), t.scr.ed.text]).toEqual([null, ""]);
+  expect([term_form_lines(t, 80, 4), t.scr.ed.text]).toEqual([null, ""]);
 });
 
 test("several questions, a tab each: Enter on an option picks it and goes on; several picked where multi; one unanswered says so", () => {
@@ -175,14 +183,14 @@ test("several questions, a tab each: Enter on an option picks it and goes on; se
   own(t, [DB, CACHE, { ...DB, text: "And for tests?", head: "Tests" }]);
   term_grab(t, "Down");
   term_grab(t, "Enter");
-  expect(text(t)[0]).toBe("illi asks  ✓ Database   Cache   Tests   Review");
+  expect(text(t)[0]).toBe(" ✓ Database   Cache   Tests   Review");
   expect(text(t).slice(1, 4)).toEqual(["Which caches?  pick any", "› □ Redis", "  □ Memcached"]);
   term_type(t, " ");
   term_grab(t, "Down");
   term_type(t, " ");
   term_grab(t, "Enter");
   term_grab(t, "Tab");
-  expect(text(t)).toEqual(["illi asks  ✓ Database   ✓ Cache   Tests   Review", "Which database?", "  ● SQLite", "Which caches?", "  ● Redis, Memcached", "And for tests?", "  no answer", "Enter send · Shift+Tab back · Esc skip"]);
+  expect(text(t)).toEqual([" ✓ Database   ✓ Cache   Tests   Review", "Which database?", "  ● SQLite", "Which caches?", "  ● Redis, Memcached", "And for tests?", "  no answer", "Enter send · Shift+Tab back · Esc skip"]);
   term_grab(t, "Shift+Tab");
   term_grab(t, "Left");
   expect(text(t)[1]).toBe("Which caches?  pick any");
@@ -190,6 +198,32 @@ test("several questions, a tab each: Enter on an option picks it and goes on; se
   term_grab(t, "Tab");
   term_grab(t, "Enter");
   expect(sent(t)).toEqual([{ ask: "a1", yes: true, always: false, said: "Which database?\npicked: SQLite\n\nWhich caches?\npicked: Redis, Memcached\n\nAnd for tests?\nno answer" }]);
+});
+
+test("the form's tabs wrap at its width, each where it is on its line", () => {
+  const t = term();
+  own(t, [DB, CACHE]);
+  const f = term_form_lines(t, 20, 4)!;
+  expect(f.tabs.map((l: any) => l.map((r: any) => r.x).join(""))).toEqual([" Database   Cache ", " Review "]);
+  expect(f.spans).toEqual([[{ col: 0, to: 10, aim: { $: "tab", k: 0 } }, { col: 11, to: 18, aim: { $: "tab", k: 1 } }], [{ col: 0, to: 8, aim: { $: "tab", k: 2 } }]]);
+});
+
+test("the form's keys: PgUp and Ctrl+Home to the first row, PgDn and Ctrl+End to the words', Home and End off the words; on them they edit; any other key does nothing, the pane under it kept; Ctrl+D skips", () => {
+  const t = term();
+  own(t);
+  t.pane = { scroll: 0 };
+  const at = () => t.asking.form.each[0].at;
+  const keys = (...ks: string[]) => ks.map((k) => [k, term_grab(t, k), at()]);
+  expect(keys("PgDn", "PgUp", "Ctrl+End", "Ctrl+Home", "End", "Home", "Up", "Home")).toEqual([["PgDn", true, 3], ["PgUp", true, 0], ["Ctrl+End", true, 3], ["Ctrl+Home", true, 0], ["End", true, 3], ["Home", true, 3], ["Up", true, 2], ["Home", true, 0]]);
+  term_grab(t, "End");
+  term_type(t, "nearby");
+  term_grab(t, "Home");
+  term_type(t, "x");
+  expect([t.asking.form.each[0].ed.text, at()]).toEqual(["xnearby", 3]);
+  expect(keys("Ctrl+O", "Shift+Left", "Ctrl+PgDn")).toEqual([["Ctrl+O", true, 3], ["Shift+Left", true, 3], ["Ctrl+PgDn", true, 3]]);
+  expect([t.v.verbose, t.pane, t.scr.ed.text, sent(t)]).toEqual([false, { scroll: 0 }, "", []]);
+  term_grab(t, "Ctrl+D");
+  expect([sent(t), t.pane]).toEqual([[{ ask: "a1", yes: false, always: false, said: "" }], { scroll: 0 }]);
 });
 
 test("nothing said to any question sends as skipped; Esc skips at once; a picker opened over it takes the keys first", () => {
@@ -212,16 +246,16 @@ test("a question just shown holds Enter for half a second from its first paint (
   t.v.asks = [{ id: "q1", who: "illi", tool: "Bash", what: "ls", why: "", keep: "" }];
   term_asks(t);
   term_grab(t, "Enter");
-  popup_shown(t, false);
+  popup_shown(t);
   term_grab(t, "Enter");
   expect(sent(t)).toEqual([]);
   t.asking.shown -= 600;
   term_chooser(t, "Agent", ["illi"], [""], 0, () => {});
-  popup_shown(t, false);
+  popup_shown(t);
   expect(t.asking.shown).toBeNull();
   term_grab(t, "Esc");
   term_asks(t);
-  popup_shown(t, false);
+  popup_shown(t);
   term_grab(t, "Enter");
   expect(sent(t)).toEqual([]);
   t.asking.shown -= 600;
@@ -235,7 +269,7 @@ test("a question just shown holds Enter for half a second from its first paint (
   const f = term();
   f.v.asks = [{ id: "a1", who: "illi", tool: "ask", what: DB.text, queries: [DB] }];
   term_asks(f);
-  popup_shown(f, true);
+  popup_shown(f);
   term_type(f, " ");
   term_grab(f, "Enter");
   expect([f.asking.form.tab, f.asking.form.each[0].picked]).toEqual([0, []]);

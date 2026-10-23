@@ -37,9 +37,9 @@ export function term_image(t: Term, arg: string): void {
   }
 }
 
-// a paste: a popup open takes it (Popup.ts: its search or the line
-// asked, as one line, its newlines spaces; none: nowhere); else to
-// illi's question if it asks (Asks.ts); a path to an image (a file
+// a paste: a popup open takes it (Popup.ts: a list, to its search or
+// the line asked, as one line, its newlines spaces; none: nowhere; illi's
+// questions, to their words: Asks.ts); a path to an image (a file
 // dropped) attaches it; else it goes in the input, a long one as its
 // token (a pane open, closed)
 export function term_paste(t: Term, text: string): void {
@@ -51,10 +51,10 @@ export function term_paste(t: Term, text: string): void {
     }
     return;
   }
-  t.pane = null;
   if (term_form_paste(t, text)) {
     return;
   }
+  t.pane = null;
   const file = text.includes("\n") ? null : term_file(text.trim());
   if (file === null || !term_attach(t, file)) {
     Screen.ed_paste(t.scr.ed, text);
