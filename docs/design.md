@@ -35,7 +35,7 @@ Marks
 | `[+]` | shut: a click opens it (`GLYPH.shut`) | a run of work's head, a recap's line, a message folded in a run, the side's to-do folded |
 | `[-]` | open: a click shuts it (`GLYPH.open`) | an open run's head, an open recap's line, the side's to-do shown whole |
 | `>` | the lit row: Enter picks it (`GLYPH.lit`) | lists, questions, the trust question, the commands suggested |
-| `> ` | the message you type (`GLYPH.input`) | the input, your words in a question, a line a list asks for |
+| `> ` | the message you type (`GLYPH.input`) | the input, your words in a question, a line a question asks for |
 | `>` | the to-do item at work (`GLYPH.active`) | the side's to-do, the todo tool |
 | `□` `■` | to do, done; an option among several | the to-do; a question that takes several |
 | `○` `●` | an option, the one picked | a question that takes one; the picks on the questions' Review tab |
@@ -47,7 +47,7 @@ Marks
 | `·` | between the parts of one line | everywhere |
 | `…` | cut here | any text cut to fit |
 | `│` | an open run's rows (lit, `┃`: a click there opens or closes the run) | the chat |
-| `─ ╭ ╮ ╰ ╯` | frames and rules | popups, the commands suggested, messages and open blocks in the chat; panes and the input between rules |
+| `─ ╭ ╮ ╰ ╯` | frames and rules | popups, the commands suggested, messages and open blocks in the chat; panes, and the input (or a question in its place, its title in the rule over it) between rules |
 | `█ ▌ ░` | a gauge: full, half, empty | the auto compact in `/model` |
 | `█` | a bar: the share used (in the accent; warning past 70%, error past 90%), the rest dim | the side's context and plan use |
 | `∞` traced in braille dots | illi at work | the work line |
