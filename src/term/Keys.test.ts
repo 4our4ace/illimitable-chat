@@ -221,6 +221,7 @@ test("with the input a /word and a question open, Down and Enter go to the quest
   Screen.ed_set(t.scr.ed, "/mo");
   t.v.asks = [{ id: "q1", who: "illi", tool: "Bash", what: "ls", why: "", keep: "" }];
   term_asks(t);
+  t.asking.shown = 0;
   Screen.screen_feed(t.scr, "\x1b[B\r");
   expect([sent(t), t.scr.ed.text]).toEqual([[{ $: "answer", ask: "q1", yes: false, always: false, said: "" }], "/mo"]);
 });

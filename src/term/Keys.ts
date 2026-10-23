@@ -18,7 +18,7 @@ import { term_draw } from "./Frame.ts";
 import { member_others } from "./Member.ts";
 import { term_note, term_toast, term_unnote } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
-import { popup_page, popup_wheel } from "./Popup.ts";
+import { popup_held, popup_page, popup_wheel } from "./Popup.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_copied, term_hover, term_mouse, term_selected, term_under } from "./Select.ts";
 import { term_act, term_primaries, term_quit, type Chooser, type Cmd, type Term } from "./Term.ts";
@@ -136,8 +136,9 @@ export function term_grab(t: Term, key: string): boolean {
 // a key to the picker (true: taken: all but PASS's and the leader, which
 // go on to open what they open in its place). Ctrl+C and Ctrl+D are Esc
 // here (neither interrupts, clears the input nor quits); the key that
-// opened it closes it (Ctrl+P's); the lit option's own keys first (the
-// model picker's effort and speed); then Up and Down (or Tab) move round
+// opened it closes it (Ctrl+P's); a question just shown holds Enter
+// (Popup.ts popup_held); the lit option's own keys first (the model
+// picker's effort and speed); then Up and Down (or Tab) move round
 // the options shown, PgUp and PgDn a page, Ctrl+Home and Ctrl+End to the
 // first and the last (Home and End too, with nothing to type in), the
 // wheel scrolls (Popup.ts), Enter picks the lit one (none matching the
@@ -156,6 +157,9 @@ function term_choose_key(t: Term, c: Chooser, press: string): boolean {
   }
   if (PASS.includes(key) || key === config.LEADER) {
     return false;
+  }
+  if (key === "Enter" && popup_held(t)) {
+    return true;
   }
   if (lit !== undefined && c.keys(lit, key)) {
     return true;
