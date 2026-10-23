@@ -71,14 +71,16 @@ const ROWS: Screen.Piece[][] = [];
 // head is in the accent, each other fades by its newest dot's age, so the
 // tail dies away; where the path crosses itself, a dot more than CROSS
 // older than its cell's newest is left out. Each subagent at work in the
-// side gets the same in one cell: a trail of ORBIT_TRAIL round its edge,
-// a dot each 2 TRACE. One clock draws them all, waking only as they
+// side gets a small one in one cell: a trail of ORBIT_TRAIL on a figure
+// of eight over its six dots (ORBIT: 1 4 5 2, 3 6 5 2; the dots by
+// braille's numbers, 1 2 3 down the left, 4 5 6 down the right), a dot
+// each 2 TRACE. One clock draws them all, waking only as they
 // change (term_wake); a dot of the ∞ writes only the cells it changed
 const INFINITY: [number, number][] = [[3, 2], [2, 3], [1, 3], [0, 2], [0, 1], [1, 0], [2, 0], [3, 1], [4, 2], [5, 3], [6, 3], [7, 2], [7, 1], [6, 0], [5, 0], [4, 1]];
 const TRAIL       = 8;
 const CROSS       = 3;
 const TRACE       = 80;
-const ORBIT: [number, number][] = [[0, 0], [1, 0], [1, 1], [1, 2], [1, 3], [0, 3], [0, 2], [0, 1]];
+const ORBIT: [number, number][] = [[0, 0], [1, 0], [1, 1], [0, 1], [0, 2], [1, 2], [1, 1], [0, 1]];
 const ORBIT_TRAIL = 3;
 
 // a braille dot's bit, by its column (0, 1) and row (0 to 3)
@@ -438,8 +440,9 @@ export function term_side_again(t: Term): void {
   }
 }
 
-// one braille cell at a step: ORBIT_TRAIL dots round its edge, the
-// head at the step's (the title's mark while work runs, a subagent's)
+// one braille cell at a step: ORBIT_TRAIL dots along its figure of
+// eight, the head at the step's (the title's mark while work runs, a
+// subagent's)
 export function term_orbit(step: number): string {
   let bits = 0;
   for (let k = 0; k < ORBIT_TRAIL; k++) {
