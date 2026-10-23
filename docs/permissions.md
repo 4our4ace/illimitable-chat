@@ -107,10 +107,10 @@ answer whole:
 ╭─ Allow shell? · ↑↓ Enter · Esc ─────────────────────────────────────────────────╮
 │ git push --force origin main                                                    │
 │ Why: git push --force origin main rewrites or deletes history                   │
-│ > ● Yes                                                                         │
-│   ◯ Yes, and don't ask again for git push --force origin main in this project   │
-│   ◯ No                                                                          │
-│   ◯ No, and say why                                                             │
+│ > Yes                                                                           │
+│   Yes, and don't ask again for git push --force origin main in this project     │
+│   No                                                                            │
+│   No, and say why                                                               │
 ╰─ Esc no ────────────────────────────────────────────────────────────────────────╯
 ```
 
