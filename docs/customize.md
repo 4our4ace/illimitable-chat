@@ -129,9 +129,12 @@ the full accent).
   before a list's search), `pending`, `active` and `done` (`□`, `>`,
   `■`: the to-do's items). Control characters are left out.
 - `tool` (a mark before a tool's name, by tool: none by default),
-  `syntax` (code by kind, while the terminal's background is unknown)
-  and `ansi` (`block`, `ink`: the tool calls' fill and its text; `you`,
-  `add`, `del`: the frame and a diff's lines, over their tokens).
+  `syntax` (code's colors by the kinds Prism names: `keyword`,
+  `string`, `function`, `comment`, `class-name`, `tag`..., any of them,
+  `operator` and `punctuation` too; while replies draw in the
+  terminal's own colors: `auto`, its background unknown) and `ansi`
+  (`block`, `ink`: the tool calls' fill and its text; `you`, `add`,
+  `del`: the frame and a diff's lines, over their tokens).
 
 What wins, lowest first: the defaults, `theme.json`, a plugin's theme,
 the `accent` setting (unless `auto`). The file is read as illi starts;
