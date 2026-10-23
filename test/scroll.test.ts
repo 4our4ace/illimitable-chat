@@ -11,6 +11,7 @@ import { expect, test } from "bun:test";
 import { term_paint } from "../src/term/Frame.ts";
 import { term_press } from "../src/term/Keys.ts";
 import { term_selected } from "../src/term/Select.ts";
+import { status_new } from "../src/term/Status.ts";
 import * as Paint from "../src/ui/Paint.ts";
 import * as Screen from "../src/ui/Screen.ts";
 import * as View from "../src/ui/View.ts";
@@ -35,7 +36,7 @@ function term(v: View.View): any {
   const t: any = {
     v, chat: null, ended: false, pending: 0, due: true, settle: undefined, imgs: new Map(), quit: 0, esc: 0, notices: [], expire: undefined,
     scroll: 0, seen: { total: 0, marks: [], row: 0, first: 0, tall: 1, col: 0, end: 0 }, ver: 0, body: null, find: null, pane: null, agents: [],
-    choose: null, profs: [], hits: [], since: 0, spin: undefined, ruled: null, doing: null, subs: new Map(), side: { place: "off", width: "" },
+    choose: null, profs: [], hits: [], since: 0, spin: undefined, ruled: null, doing: null, subs: new Map(), side: { place: "off", width: "" }, status: status_new(),
     todo: false, login: null, areas: [], sel: null, hover: undefined, drift: undefined, sug: null, dropped: "", asking: null,
   };
   t.scr = { tty: true, kitty: false, ed: Screen.ed_new(), rest: "", shown: [], click: { row: 0, col: 0 }, clicks: 0, pressed: 0, point: { row: 0, col: 0 }, typed: false, grab: null, on: () => {}, left: true };

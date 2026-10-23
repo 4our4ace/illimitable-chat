@@ -30,6 +30,9 @@ skill, `customize-illi`, and writes these files itself.
   inside illi ([Plugins](#plugins), below).
 - `hooks.json`: shell commands run at what illi does, in Claude Code's
   hook format ([Hooks](#hooks), below).
+- the `statusline` setting: a command of yours drawing rows at the
+  screen's foot, as Claude Code's status line ([Status line](#status-line),
+  below).
 - `RULES.md`: your rules for every project, in every prompt. illi writes
   it when you ask ("add that to my rules"), never on its own. A
   project's own `AGENTS.md` (else `CLAUDE.md`) is read too, from the
@@ -120,6 +123,83 @@ the full accent).
 What wins, lowest first: the defaults, `theme.json`, a plugin's theme,
 the `accent` setting (unless `auto`). The file is read as illi starts;
 the setting applies at once.
+
+Status line
+-----------
+
+A shell command of yours draws a few rows at the screen's foot, between
+the input and the bottom line, from what illi tells it, as Claude Code's
+`statusLine` does: a script written for Claude Code works with little
+change. Set it in `config.json` as a command, or as Claude Code's object,
+pasted as it is:
+
+```json
+{ "statusline": { "type": "command", "command": "~/.illi/statusline.sh", "padding": 1, "refreshInterval": 5 } }
+```
+
+or `/set statusline ~/.illi/statusline.sh`, which applies at once
+(`/set statusline default` takes it off). `padding` puts spaces before
+each row; `refreshInterval` (seconds, 1 to 86400; another value: none)
+runs it again that often, beside the runs below.
+
+It runs in `sh`, in the folder illi started in, with `COLUMNS` (the
+width its rows may take), `LINES`, `ILLI_PROJECT_DIR` and
+`CLAUDE_PROJECT_DIR` set, and gets JSON on its input:
+
+| Field | Holds |
+| ----- | ----- |
+| `hook_event_name` | `"Status"` |
+| `session_id` | the chat's id: one per project and profile, the same across starts |
+| `cwd`, `workspace.current_dir` | the folder illi works in |
+| `workspace.project_dir` | the project's top |
+| `model.id`, `model.display_name` | the model, as illi names it (`sonnet-5.5`) |
+| `model.vendor` | illi's: `chatgpt`, `claude-code`, `claude-api`, `openai-api` |
+| `effort.level` | the effort |
+| `fast_mode` | the speed is fast (or faster) |
+| `version` | illi's |
+| `context_window.used_percentage`, `remaining_percentage` | how full the window is, as whole percents; `null` till the first turn tells |
+| `context_window.context_window_size`, `total_input_tokens` | the model's window, the tokens a turn sends now (once told) |
+| `context_window.summarize_at` | illi's: the tokens past which old messages fold into the memory tree |
+| `agent.name` | the main agent, when not illi's own |
+| `permission_mode` | illi's mode: `auto`, `ask`, `read-only`, `yolo` |
+| `rate_limits.five_hour`, `seven_day` | the plan's limits as its vendor tells them: `used_percentage`, `resets_at` (epoch seconds); only when told |
+| `profile`, `busy`, `agents` | illi's: the profile, whether a turn runs, the subagents at work |
+
+Not given: `transcript_path`, `cost`, `output_style`, `vim`, `worktree`.
+A field illi doesn't know is left out, so read one with a fallback
+(jq's `// empty`, or `// 0`):
+
+```sh
+#!/bin/sh
+# ~/.illi/statusline.sh
+jq -r '"\(.model.display_name) · \(.context_window.used_percentage // 0)% · \(.workspace.current_dir | split("/") | last)"'
+```
+
+Without jq, any language that reads JSON does:
+
+```sh
+#!/bin/sh
+python3 -c 'import json,sys; d=json.load(sys.stdin); print("\033[36m%s\033[0m %s%%" % (d["model"]["display_name"], d["context_window"].get("used_percentage") or 0))'
+```
+
+- It runs once the chat is up, then as what it is told changes (the
+  model, effort or speed, the main agent, the mode, a turn's start and
+  end, how full the chat is, the width), 300 ms after the last change
+  (a second at most), and every `refreshInterval` if set. One runs at a
+  time; a change meanwhile runs it again once it ends.
+- Each line of its output on exit 0 is a row, 3 at most, cut to the
+  width. Colors (16, 256 and `#rrggbb`), bold, dim, italic, underline,
+  inverse, strike and links (OSC 8: `http`, `https`, `file`, `mailto`)
+  show; any other escape (cursor moves, a title, the clipboard) is
+  dropped. Empty output, or another exit, blanks the rows; the room they
+  took is kept till the setting changes, so the chat doesn't jump.
+- It gets 5 s; past that it is killed and its rows stay as they were.
+  Output past 16 KB kills it and blanks them. A job it leaves running in
+  the background is killed once its output is in, as it runs again and
+  again. A failure (it can't start, exits otherwise, runs past its time,
+  prints too much) is said once, and logged in `illi.log` each time.
+- Every terminal's illi runs its own, a second terminal's view too; a
+  pipe has none.
 
 Plugins
 -------

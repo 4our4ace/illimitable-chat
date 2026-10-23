@@ -42,6 +42,7 @@ import * as path from "node:path";
 import { Bundle } from "./Bundle.ts";
 import * as config from "./Config.ts";
 import { Plugins, type Output, type ToolCall, type Wait } from "./Plugins.ts";
+import { Run, type Ran } from "./Run.ts";
 import { Seen } from "./Seen.ts";
 import { Trusted } from "./Trusted.ts";
 
@@ -56,10 +57,6 @@ export type Event = "PreToolUse" | "PostToolUse" | "UserPromptSubmit" | "Stop" |
 // its plugin (null: the user's own) and what it is given of it (its
 // variables: Bundle.vars)
 export type Entry = { event: Event; match: string; matcher: ((what: string) => boolean) | null; command: string; timeout: number; fail: "block" | "continue"; file: string; plugin: string | null; vars: Record<string, string> };
-
-// a command's run: its exit code (null: no answer, why), its output and
-// its errors' (each cut at CAP)
-export type Ran = { code: number | null; why: string; out: string; err: string };
 
 // what a command's answer says, in illi's terms: refuse, or keep back
 // (block: why; Stop's: go on, why); allow; ask (why); the input to run
@@ -93,30 +90,24 @@ const CONTEXT: Partial<Record<Event, true>> = { UserPromptSubmit: true, SessionS
 const STOPS: Partial<Record<Event, true>> = { PreToolUse: true, PostToolUse: true, UserPromptSubmit: true };
 
 // a command's time limit unless it sets one (s; SessionEnd's at most
-// SPAN, as illi waits for them as it quits); the wait between asking a
-// command to end and killing it, and for its output once it ended (a job
-// it left may hold the pipe) (ms)
+// SPAN, as illi waits for them as it quits)
 const TIMEOUTS: Record<Event, number> = { PreToolUse: 60, PostToolUse: 60, UserPromptSubmit: 30, Stop: 60, Notification: 60, SessionStart: 60, SessionEnd: 1.5 };
 const SPAN = 60;
-const GRACE = 2000;
-const SETTLE = 1000;
 
-// the most of a command's output and of its errors read (bytes), and of
-// the context the model is told from one event's commands (characters)
-const CAP = 64 * 1024;
+// the most of the context the model is told from one event's commands
+// (characters)
 const TOLD_MAX = 10000;
 
 // the commands loaded, the project's folder and its top they run in and
 // are given, whether this illi runs the chat (the start told it), why
-// none runs ("": they do), the failures told once (by command and event), the process groups running
-// (illi's quit kills them, but SessionEnd's)
+// none runs ("": they do), the failures told once (by command, event
+// and plugin)
 let ENTRIES: Entry[] = [];
 let CWD = "";
 let TOP = "";
 let HOLDS = false;
 let OFF = "";
 const TOLD = new Set<string>();
-const RUNNING = new Set<number>();
 
 // Hooks
 // =====
@@ -218,47 +209,13 @@ export namespace Hooks {
     return entry.matcher === null || !MATCHED[entry.event] || entry.matcher(what) || (what === "shell" && entry.matcher("Bash"));
   }
 
-  // a command run, in sh, in a folder, the project's top in
+  // a command run (Run.ts), in a folder, the project's top in
   // ILLI_PROJECT_DIR (and CLAUDE_PROJECT_DIR, as pasted Claude Code hooks
   // read it), more variables given, its input as JSON: its exit code,
-  // output and errors. In its own process group, so its time limit (and a stop) ends
-  // all it started: asked to end, then killed GRACE after. Once it ends,
-  // its output is waited for SETTLE at most (a job it left in the
-  // background may hold the pipe, and is left to run). One not tracked
-  // (SessionEnd's) outlives illi's quit (end)
-  export async function run(command: string, input: object, cwd: string, top: string, timeout: number, signal?: AbortSignal, tracked = true, vars: Record<string, string> = {}): Promise<Ran> {
-    let proc: Bun.Subprocess<Blob, "pipe", "pipe">;
-    try {
-      proc = Bun.spawn(["/bin/sh", "-c", command], { cwd, env: { ...process.env, ILLI_PROJECT_DIR: top, CLAUDE_PROJECT_DIR: top, ...vars }, stdin: new Blob([JSON.stringify(input) + "\n"]), stdout: "pipe", stderr: "pipe", detached: true });
-    } catch (err: any) {
-      return { code: null, why: "couldn't start (" + String(err?.message ?? err) + ")", out: "", err: "" };
-    }
-    if (tracked) {
-      RUNNING.add(proc.pid);
-    }
-    let why = "";
-    const end = (said: string, now: boolean) => {
-      why ||= said;
-      group_kill(proc.pid, now ? "SIGKILL" : "SIGTERM");
-      if (!now) {
-        setTimeout(() => group_kill(proc.pid, "SIGKILL"), GRACE).unref();
-      }
-    };
-    const timer = setTimeout(() => end("ran past its " + timeout / 1000 + " s", false), timeout);
-    const stop = () => end("was stopped", true);
-    signal?.addEventListener("abort", stop, { once: true });
-    if (signal?.aborted) {
-      stop();
-    }
-    const [out, err] = [capped(proc.stdout), capped(proc.stderr)];
-    const code = await proc.exited;
-    clearTimeout(timer);
-    signal?.removeEventListener("abort", stop);
-    RUNNING.delete(proc.pid);
-    await Promise.race([Promise.all([out.done, err.done]), new Promise((done) => setTimeout(done, SETTLE).unref())]);
-    out.stop();
-    err.stop();
-    return { code: why === "" ? code : null, why, out: out.text(), err: err.text() };
+  // output and errors. One not tracked (SessionEnd's) outlives illi's
+  // quit (Run.end)
+  export function run(command: string, input: object, cwd: string, top: string, timeout: number, signal?: AbortSignal, tracked = true, vars: Record<string, string> = {}): Promise<Ran> {
+    return Run.run(command, { cwd, env: { ILLI_PROJECT_DIR: top, CLAUDE_PROJECT_DIR: top, ...vars }, input: JSON.stringify(input) + "\n", timeout, signal, tracked });
   }
 
   // a command's answer, as Claude Code reads one: exit 2 blocks (stderr
@@ -290,13 +247,6 @@ export namespace Hooks {
       return failed("exited " + ran.code + (first === "" ? "" : ": " + first));
     }
     return CONTEXT[e.event] && text !== "" ? { context: text } : {};
-  }
-
-  // as illi quits: every hook command still running killed (but
-  // SessionEnd's), so none outlives it
-  export function end(): void {
-    RUNNING.forEach((pid) => group_kill(pid, "SIGKILL"));
-    RUNNING.clear();
   }
 
   // none loaded (a test's start)
@@ -665,37 +615,6 @@ function decided(event: Event, label: string, json: any): Said {
     default: {
       return said;
     }
-  }
-}
-
-// a stream read as it comes, up to CAP bytes (the rest read and dropped,
-// so a command writing more never blocks on it): what came, as text;
-// when it ended; a stop to the reading
-function capped(stream: ReadableStream<Uint8Array>): { text: () => string; done: Promise<void>; stop: () => void } {
-  const parts: Uint8Array[] = [];
-  let size = 0;
-  const reader = stream.getReader();
-  const done = (async () => {
-    try {
-      for (let got = await reader.read(); !got.done; got = await reader.read()) {
-        if (size < CAP) {
-          parts.push(got.value.subarray(0, CAP - size));
-          size += Math.min(got.value.length, CAP - size);
-        }
-      }
-    } catch {
-      // its pipe broke as it was killed, or the reading stopped
-    }
-  })();
-  return { text: () => Buffer.concat(parts).toString("utf8"), done, stop: () => void reader.cancel().catch(() => {}) };
-}
-
-// a process group sent a signal (gone already: nothing)
-function group_kill(pid: number, sig: NodeJS.Signals): void {
-  try {
-    process.kill(-pid, sig);
-  } catch {
-    // ended
   }
 }
 

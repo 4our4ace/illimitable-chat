@@ -43,7 +43,7 @@ import * as View from "./View.ts";
 // an ink: dim, bold, italic, underlined, reversed, struck through, a
 // link's url ("": none), its color and its fill (an ANSI palette index
 // "0"-"15", a palette's #rrggbb, or "": the terminal's own)
-type Ink = { d: boolean; b: boolean; i: boolean; u: boolean; v: boolean; t: boolean; k: string; c: string; g: string };
+export type Ink = { d: boolean; b: boolean; i: boolean; u: boolean; v: boolean; t: boolean; k: string; c: string; g: string };
 
 // text in an ink; a button's: what a click copies (Reply.ts, Term.ts)
 export type Run = { x: string; s: Ink; copy?: () => string };

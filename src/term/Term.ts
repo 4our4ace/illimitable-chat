@@ -55,6 +55,8 @@ import { term_restart } from "./ProfileCommands.ts";
 import * as Profiles from "../config/Profiles.ts";
 import { Projects } from "../chat/Projects.ts";
 import { Remote } from "../chat/Remote.ts";
+import { status_hear, status_new, status_set, type Status } from "./Status.ts";
+import { Run } from "../config/Run.ts";
 import * as Reply from "../ui/Reply.ts";
 import * as Screen from "../ui/Screen.ts";
 import { CLOCK } from "./Side.ts";
@@ -129,6 +131,7 @@ export type Term = {
   doing   : View.Doing | null;
   subs    : Map<string, boolean>;
   side    : { place: string; width: string };
+  status  : Status;
   todo    : boolean;
   login   : AbortController | null;
   areas   : Area[];
@@ -288,6 +291,7 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
     doing   : null,
     subs    : new Map(),
     side    : { place: config.SIDE, width: config.SIDE_WIDTH },
+    status  : status_new(),
     todo    : false,
     login   : null,
     areas   : [],
@@ -317,10 +321,13 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
     t.ended = true;
     term_idle(t);
   });
-  process.stdout.on("resize", () => term_resize(t));
+  process.stdout.on("resize", () => {
+    term_resize(t);
+    status_hear(t);
+  });
   process.on("exit", () => {
     void Plugins.quit(process.cwd(), "other");
-    Hooks.end();
+    Run.end();
     if (chat !== null) {
       Chat.close(chat);
     }
@@ -408,6 +415,7 @@ function term_hear(t: Term, msg: View.Server): void {
   }
   term_draw(t);
   if (msg.$ === "state") {
+    status_hear(t);
     term_idle(t);
   }
 }
@@ -583,6 +591,7 @@ export async function term_start(): Promise<void> {
   term_connect(t);
   term_trouble(t, told);
   term_hints(t);
+  status_set(t);
   term_models(t);
   term_update(t);
 }

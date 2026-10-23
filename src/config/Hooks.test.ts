@@ -33,6 +33,7 @@ process.env.ILLI_PROFILE = "work";
 
 const { Hooks } = await import("./Hooks.ts");
 const { Plugins } = await import("./Plugins.ts");
+const { Run } = await import("./Run.ts");
 type Entry = ReturnType<typeof Hooks.entries>[number];
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
@@ -267,7 +268,7 @@ test("the chat's start: SessionStart's output, context for every call; illi's qu
   Hooks.load(REPO, () => false);
   await Plugins.emit("start", { cwd: REPO, profile: "work", chat: true });
   const quitting = Plugins.quit(REPO, "prompt_input_exit");
-  Hooks.end();
+  Run.end();
   await quitting;
   expect(JSON.parse(fs.readFileSync(DIR + "/end.json", "utf8"))).toMatchObject({ hook_event_name: "SessionEnd", reason: "prompt_input_exit" });
   expect(fs.existsSync(DIR + "/other.json")).toBe(false);
@@ -307,7 +308,7 @@ test("illi's quit kills a hook still running: the call it checked is refused at 
   const at = Date.now();
   const told = Plugins.before_tool(shell("ls"));
   await Bun.sleep(150);
-  Hooks.end();
+  Run.end();
   expect(await told).toMatchObject({ block: expect.stringContaining("so the call was refused") });
   expect(Date.now() - at).toBeLessThan(2500);
 });
