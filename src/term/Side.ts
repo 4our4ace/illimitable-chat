@@ -1,13 +1,13 @@
 // Side
 // ====
 // The side panel, on a wide screen: the primary agents and the sticky
-// skills on beside them, the subagents of this run, the background jobs,
+// skills beside them, the subagents of this run, the background jobs,
 // the profiles (two or more), a ChatGPT plan's use, the chat's (the
 // context, the memory), the MCP servers, the requests refused, the
 // plugins' lines, a hint for the keys or illi's to-do list; the side and
 // side_width settings place it.
 
-import { term_background, term_choose, term_mcp } from "./Commands.ts";
+import { term_background, term_choose, term_mcp, term_stick } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Custom, type Skill } from "../config/Custom.ts";
 import * as Draw from "../ui/Draw.ts";
@@ -15,7 +15,6 @@ import { term_spinner } from "./Frame.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
 import * as Paint from "../ui/Paint.ts";
 import { Plugins } from "../config/Plugins.ts";
-import { term_note } from "./Notices.ts";
 import { term_permissions } from "./PermCommands.ts";
 import { term_profile_go, term_profile_pick } from "./ProfileCommands.ts";
 import { setting_open } from "./Settings.ts";
@@ -50,8 +49,8 @@ const STICKY = "Sticky skills";
 const GAP    = 3;
 
 // the side, w wide and tall: illi and the primary agents (a click makes
-// one the main agent), the sticky skills on beside them (a click turns
-// one off), the tabs (a click shows one), the background jobs (a click:
+// one the main agent), the sticky skills beside them (a click turns one
+// on or off), the tabs (a click shows one), the background jobs (a click:
 // /background), the profiles, once there are two (a click on the head:
 // /profile), a ChatGPT plan's use, the chat's (its context, the memory),
 // the MCP servers (a click: /mcp), the requests refused (a click:
@@ -326,21 +325,25 @@ function term_side_subs(t: Term): Item[] {
   return [...back, ...subs];
 }
 
-// the sticky skills on, w wide (beside the agents, or under them), each
-// a click turning it off (its head, Sticky where Sticky skills won't
-// fit: the list of them, /settings), a name too long cut; none: nothing;
-// whole, null if a name won't fit. Read anew only once the settings
-// change (new lists), never at a paint
+// the sticky skills, w wide (beside the agents, or under them): one on
+// marked as the agent running is, one off as the others are, a click
+// turning it on or off in place (its head, Sticky where Sticky skills
+// won't fit: the list of them, /settings), a name too long cut; none (no
+// skill sticky, or each turned off by `off`): nothing; whole, null if a
+// name won't fit. Read anew only once the settings change (new lists),
+// never at a paint
 let stuck: { on: string[]; off: string[]; skills: Skill[] } | null = null;
 function term_side_sticky(t: Term, w: number, whole: boolean): Item[] | null {
   if (stuck?.on !== config.STICKY || stuck.off !== config.OFF) {
-    stuck = { on: config.STICKY, off: config.OFF, skills: config.STICKY.length === 0 ? [] : Custom.stuck(process.cwd()) };
+    stuck = { on: config.STICKY, off: config.OFF, skills: Custom.skills(process.cwd()).filter((s) => s.sticky) };
   }
   if (whole && stuck.skills.some((s) => 2 + Paint.text_width(s.name) > w)) {
     return null;
   }
-  const off   = (s: Skill) => () => term_note(t, Custom.stick(s, false) ?? s.name + " is off.");
-  const items = stuck.skills.map((s): Item => [[Paint.Run(GLYPH.here + " " + term_side_cut(s.name, w - 2))], off(s)]);
+  const items = stuck.skills.map((s): Item => {
+    const on = config.config_sticky(s.name);
+    return [[Paint.Run((on ? GLYPH.here : GLYPH.tab) + " " + term_side_cut(s.name, w - 2), on ? Paint.INK : Paint.DIM)], () => void term_stick(t, s, !on, "A click on it again")];
+  });
   const name  = Paint.text_width(STICKY) <= w ? STICKY : "Sticky";
   return items.length === 0 ? [] : [[[Paint.Run(name, { ...Paint.INK, b: true })], () => setting_open(t, "sticky")], ...items];
 }

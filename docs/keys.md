@@ -232,9 +232,9 @@ Mouse and side panel
   within 5 seconds takes the quote out again.
 - The wheel scrolls the chat or a pane.
 - From 100 columns on, a side panel shows the primary agents by name (a
-  click makes one the main agent) and beside them the sticky skills on
-  (a click turns one off; under the agents when a name won't fit whole
-  beside them), the subagents at work, the background jobs (a click
+  click makes one the main agent) and beside them your sticky skills,
+  each on (●) or off (◯), a click turning it on or off (under the agents
+  when a name won't fit whole beside them), the subagents at work, the background jobs (a click
   opens `/background`), the profiles once you have two (a click
   switches), a ChatGPT plan's use, the context and the memory, the MCP
   servers (a click opens `/mcp`), the latest requests refused (a click

@@ -9,8 +9,8 @@
 // is no reply). /speed says standard for slow; /tab finds the chat's tab
 // by the main agent's name; the dead ends (/stop, /fold, /image, /mcp
 // with nothing to act on) say something. A sticky skill's name alone
-// turns it on and off; with words, on, the words sent; while on, it shows
-// at the side, where a click turns it off. The leader (Ctrl+X) greys the
+// turns it on and off; with words, on, the words sent; it shows at the
+// side, on or off, where a click turns it on or off. The leader (Ctrl+X) greys the
 // screen (a picker open closed first), and the next key runs its
 // shortcut; /shortcuts lists them and the leader, to change (one a
 // variable sets, said so, unchanged); the leader is never a key illi
@@ -458,7 +458,7 @@ test("a skill named mid-message: suggested as it's typed (skills alone, none sho
   fs.rmSync(DIR + "/skills/imagegen", { recursive: true });
 });
 
-test("a sticky skill: its name alone turns it on, again off, each said; with words, on, then the words sent; on, at the side beside the agents (under them when narrow), where a click turns it off", () => {
+test("a sticky skill: its name alone turns it on, again off, each said; with words, on, then the words sent; at the side beside the agents (under them when narrow), on or off, a click turning it on or off in place; gone once no skill is sticky", () => {
   fs.mkdirSync(DIR + "/skills/terse", { recursive: true });
   fs.writeFileSync(DIR + "/skills/terse/SKILL.md", "---\ndescription: Short replies\nsticky: true\n---\nBe terse.");
   const config = require("../config/Config.ts");
@@ -481,8 +481,13 @@ test("a sticky skill: its name alone turns it on, again off, each said; with wor
   expect(on[1][2]!.col).toBe(9);
   on[1][2]!.run!();
   expect([config.STICKY, note(t)]).toEqual([[], "terse is off."]);
-  expect(side().map(([text]) => text)).toEqual(expect.not.arrayContaining([expect.stringContaining("Sticky")]));
+  const off = side();
+  expect(off[1][0]).toBe(GLYPH.here + " " + View.MAIN + "   " + GLYPH.tab + " terse");
+  off[1][2]!.run!();
+  expect([config.STICKY, note(t)]).toEqual([["terse"], "terse is on: every reply follows it (global). A click on it again turns it off."]);
   fs.rmSync(DIR + "/skills/terse", { recursive: true });
+  term_command(t, "/set sticky default");
+  expect(side().map(([text]) => text)).toEqual(expect.not.arrayContaining([expect.stringContaining("Sticky")]));
 });
 
 test("/ finds every setting once a word is typed, by its key or what it does: /set <key>, its value now; Enter opens /settings at it, Tab fills it in for a value", () => {
