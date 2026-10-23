@@ -1,6 +1,6 @@
 // Reply test
 // ==========
-// `bun test Reply.test.ts`. A reply as cellsmith draws it: code under its
+// `bun test Reply.test.ts`. A reply as illi draws it: code under its
 // header and copy button, unfilled; a table boxed and a diagram side by
 // side under their buttons; headings, lists, quotes and alerts; text's
 // colors from the palette, the terminal's own while its background is
@@ -43,7 +43,7 @@ test("a table boxed and a diagram beside it, each under its buttons", () => {
   expect(button(lines, "⧉ source")).toBe("flowchart TD\n  A[Start] --> B[Go]");
 });
 
-test("headings, lists, quotes and alerts as cellsmith draws them", () => {
+test("headings, lists, quotes and alerts as a reply draws them", () => {
   const md = "# Report\n\n## Steps\n\n1. one\n   - two\n   - [x] done\n\n> said so\n\n> [!TIP]\n> try it";
   const shown = text(Reply.reply_lines(md, 60));
   expect(shown.slice(0, 7)).toEqual(["┏━━━━━━━━┓", "┃ Report ┃", "┗━━━━━━━━┛", "", "Steps", "━━━━━", ""]);

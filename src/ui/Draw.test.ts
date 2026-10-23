@@ -1,6 +1,6 @@
 // Draw test
 // =========
-// `bun test Draw.test.ts`. What cellsmith draws for a message: a mermaid
+// `bun test Draw.test.ts`. What illi draws for a message: a mermaid
 // block whole as a diagram, in the width, in the terminal's ink till its
 // background is told, then in a palette over it; one still streaming as
 // its code; code's tokens by kind, a shell's too. Prism and Pele are

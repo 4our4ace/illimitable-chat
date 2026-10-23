@@ -11,7 +11,7 @@
 // message's id (`#6840`, for /open); a tool call, its name
 // bold; its result its own fill. The user's words
 // framed, unnamed; an agent's report framed, its name on the top edge
-// (Theme.FRAMED); illi's words bare, drawn as cellsmith draws a reply
+// (Theme.FRAMED); illi's words bare, drawn from their markdown
 // (Reply.ts: its code, diagrams, tables, headings, lists and quotes, and
 // buttons that copy them); thinking and a note drawn so too, in their
 // look, without buttons. A run of work (View's Act) is one dim line,

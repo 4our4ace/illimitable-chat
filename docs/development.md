@@ -27,7 +27,6 @@ Development
                    the folders you trust (Trusted.ts)
     src/skills/    the skills built into illi (customize-illi)
     test/          tests across modules; each module's own sit beside it
-    vendor/        cellsmith's markdown parser and palettes
     assets/        the README's banner and screenshots; logo.svg and
                    logo-on-dark.svg are the logo's source files, kept
                    for brand use though no page shows them
