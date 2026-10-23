@@ -150,7 +150,8 @@ const NO_ANSWER  = "No one is at illi's screen to answer: decide yourself, or as
 // a chat that outgrew its model's window (Chat.refit): a turn's share of
 // the context made this much smaller, when the request itself was too
 // long; the most refits in a row; the note the turn goes on from (#: the
-// model), the one it ends with
+// model; an account found to take less of its window: CAPPED_NOTE, #
+// that window, $ the model), the one it ends with
 const FIT        = 0.8;
 const REFITS     = 3;
 // how long a turn waits on ChatGPT's catalog being asked (ms), and how
@@ -159,6 +160,7 @@ const REFITS     = 3;
 const LISTED     = 3000;
 const CAPPED     = 0.75;
 const REFIT      = "The chat outgrew #'s window: more of it is summarized now, each summary a zoom away. Go on where you were.";
+const CAPPED_NOTE = "This ChatGPT account takes at most # of $'s window, kept from now on: more of the chat is summarized now, each summary a zoom away. Go on where you were.";
 const NO_FIT     = "No reply: the chat won't fit #'s window even summarized. /clear starts a new topic (the chat before it is kept, not sent), or /model picks a model with a bigger window.";
 
 // the most turns hooks may make go on in a row, with no message of the
@@ -612,7 +614,8 @@ export namespace Chat {
       Chat.all(chat, { $: "note", text: end.note });
     }
     if (full && carried !== undefined && Chat.capped(chat, end, carried)) {
-      return Chat.refit(chat, false);
+      const window = Pick.model("chatgpt", chat.model)?.window ?? 0;
+      return Chat.refit(chat, false, CAPPED_NOTE.replace("$", chat.model).replace("#", Math.round(window / 1000) + "k"));
     }
     if (full) {
       return Chat.refit(chat, end.text !== "");
@@ -707,9 +710,9 @@ export namespace Chat {
   // at its first step: the chat's text is more tokens than its bytes
   // told), a turn's share made FIT smaller; either way a note says so,
   // and the turn goes on from it, the chat as it now is, more of it as
-  // summary lines (Chat.cut moves on). Past REFITS in a row, the turn
-  // ends, saying why. false: the turn ends
-  export function refit(chat: Chat, shrink: boolean): boolean {
+  // summary lines (Chat.cut moves on); why: the note it goes on from.
+  // Past REFITS in a row, the turn ends, saying why. false: the turn ends
+  export function refit(chat: Chat, shrink: boolean, why = REFIT.replace("#", chat.model)): boolean {
     chat.refits += 1;
     if (chat.refits > REFITS) {
       chat.refits = 0;
@@ -717,7 +720,7 @@ export namespace Chat {
       return false;
     }
     chat.fit *= shrink ? FIT : 1;
-    Chat.hold(chat, () => Chat.take(chat, Chat.push(chat, null, "note", REFIT.replace("#", chat.model))));
+    Chat.hold(chat, () => Chat.take(chat, Chat.push(chat, null, "note", why)));
     return true;
   }
 

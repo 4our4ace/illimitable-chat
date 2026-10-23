@@ -91,11 +91,9 @@ export namespace Pick {
 
   // a vendor's models as it tells them: a known one takes what it's told
   // (its window, standard window, speeds, efforts, tiers), a new one is
-  // added, unless `known` (only those built in are learned: a list of
-  // every id the vendor ever had would flood the picker); `replace`:
-  // they are the vendor's list now (a catalog: one it drops is gone).
-  // The labels new to LABELS
-  export function learn(vendor: Vendor, models: Model[], how: "add" | "known" | "replace" = "add"): string[] {
+  // added; `replace`: they are the vendor's list now (a catalog: one it
+  // drops is gone). The labels new to LABELS
+  export function learn(vendor: Vendor, models: Model[], how: "add" | "replace" = "add"): string[] {
     const fresh: string[] = [];
     const list = MODELS[vendor];
     if (how === "replace" && models.length > 0) {
@@ -103,9 +101,6 @@ export namespace Pick {
     }
     for (const m of models) {
       const known = Pick.model(vendor, m.label);
-      if (known === undefined && how === "known") {
-        continue;
-      }
       if (known === undefined) {
         list.push({ ...m });
       } else if (how !== "replace") {
