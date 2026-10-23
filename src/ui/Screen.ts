@@ -24,14 +24,25 @@
 // cursor ends mid-message a skill's name, matched to the names (ed_slash,
 // ed_rank, ed_find: Term.ts lists them under the input). A list open (grab) takes keys before the input does, and a
 // list searched (type) the text typed.
+//
+// In a window (term/Window.ts, which owns the terminal for every
+// profile's illi under it; Member.ts sets it up), the screen is a PTY of
+// its own: the window writes the modes, the screen only its rows, its
+// queries and frames (Wire.ts). It says it is up as it starts and as
+// it's shown again (asking the kitty flags and the background then, so
+// the answers reach the screen that uses them); hidden, it paints
+// nothing and keeps reading (only frames come then); frames in its input
+// are the window's, read before keys, a paste's too; Ctrl+Z goes to the
+// window; the PTY lost (its read fails or ends) means the window is gone.
 
 import * as fs from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import * as Draw from "./Draw.ts";
 import * as Md from "./Md.ts";
-import { ASK, BLINK, CLEAR, HIDE, MODES_OFF, MODES_ON, PASTE_OFF, PASTE_ON, SHOW, STEADY, SYNC_OFF, SYNC_ON, TITLE_AGAIN, TITLE_END, TITLE_NONE, TITLE_POP, TITLE_SET } from "./Modes.ts";
+import { ASK, BLINK, CLEAR, FLAGS_ASK, HIDE, MODES_OFF, MODES_ON, PASTE_OFF, PASTE_ON, SHOW, STEADY, SYNC_OFF, SYNC_ON, TITLE_AGAIN, TITLE_END, TITLE_NONE, TITLE_POP, TITLE_SET } from "./Modes.ts";
 import * as Paint from "./Paint.ts";
 import * as Theme from "./Theme.ts";
+import { wire_cut, wire_take } from "../term/Wire.ts";
 
 // Types
 // =====
@@ -91,7 +102,8 @@ export type Match = { k: number; at: number[]; hay?: true };
 // background (#rrggbb) once told, and whether it is awaited; whether it
 // was left (screen_leave: it paints no more); whether the cursor blinks
 // (illi waits), its look and its spot as last written (null: hidden);
-// the pieces of the rows as last written
+// the pieces of the rows as last written; in a window, its end of it, and
+// whether hidden (it paints nothing)
 export type Screen = {
   tty    : boolean;
   kitty  : boolean;
@@ -117,7 +129,14 @@ export type Screen = {
   drawn? : Piece[][];
   title? : string;
   titled?: boolean;
+  win?   : Windowed;
+  hidden?: boolean;
 };
+
+// a screen in a window (Member.ts): the wire's nonce; whether it starts
+// hidden; a message heard from the window; the frame that says the screen
+// is up; Ctrl+Z; the PTY lost (the window gone)
+export type Windowed = { nonce: string; hidden: boolean; heard: (msg: object) => void; up: () => string; suspend: () => void; lost: () => void };
 
 // Constants
 // =========
@@ -147,7 +166,8 @@ const AWAIT    = 1000;
 // a sequence: CSI params [intermediates] final, or SS3 final (kitty's:
 // CSI code[:alts] [; mods] u; modifyOtherKeys': CSI 27 ; mods ; code ~;
 // the mouse's: CSI < button ; col ; row M, or m as it's let go); CUT: one
-// cut by the end of a read (a bare ESC too, where Esc is CSI 27u);
+// cut by the end of a read (a bare ESC too, where Esc is CSI 27u, and
+// in a window, where it may start a frame);
 // FLAGS: kitty's answer to the flags asked
 const SEQ   = /^\x1b(?:\[([0-9;:?<=>]*)[\x20-\x2f]*|O)([\x40-\x7e])/;
 const CUT   = /^\x1b(?:\[[0-9;:?<=>\x20-\x2f]*|O)$/;
@@ -245,16 +265,23 @@ const TWICE = 400;
 // Screen
 // ======
 
-export function screen_new(on: (key: string) => void): Screen {
+// the screen: on a terminal, raw, its modes on (put back as illi exits),
+// the background asked; in a window (win), raw, and up unless hidden
+export function screen_new(on: (key: string) => void, win?: Windowed): Screen {
   const tty = process.stdin.isTTY === true && process.stdout.isTTY === true;
   const ed  = ed_new();
   const scr: Screen = { tty, kitty: false, ed, rest: "", shown: [], click: { row: 0, col: 0 }, clicks: 0, pressed: 0, point: { row: 0, col: 0 }, typed: false, grab: null, on };
   if (tty) {
     process.stdin.setRawMode(true);
-    process.stdout.write(MODES_ON + ASK);
-    process.on("exit", () => scr.left || process.stdout.write(screen_off(scr)));
-    scr.asked = true;
-    setTimeout(() => (scr.asked = false), AWAIT).unref();
+    if (win === undefined) {
+      screen_ask(scr, MODES_ON);
+      process.on("exit", () => scr.left || process.stdout.write(screen_off(scr)));
+    } else {
+      [scr.win, scr.hidden] = [win, win.hidden];
+      if (!win.hidden) {
+        screen_ask(scr, win.up() + FLAGS_ASK);
+      }
+    }
     screen_read(scr);
     return scr;
   }
@@ -263,10 +290,18 @@ export function screen_new(on: (key: string) => void): Screen {
   return scr;
 }
 
+// what comes first, then the background asked (its answer awaited for
+// AWAIT)
+function screen_ask(scr: Screen, first: string): void {
+  process.stdout.write(first + ASK);
+  scr.asked = true;
+  setTimeout(() => (scr.asked = false), AWAIT).unref();
+}
+
 // a terminal's input (fd), read into one buffer (READ) as it comes, each
 // read fed as text (a character cut by a read's end waits for its rest);
 // a read cut by a signal (Ctrl+Z), or with nothing ready, tried again;
-// till the screen is left or the terminal is gone
+// till the screen is left or the terminal is gone (in a window: lost)
 export function screen_read(scr: Screen, fd = 0): void {
   const buf  = Buffer.alloc(READ);
   const text = new StringDecoder("utf8");
@@ -279,6 +314,8 @@ export function screen_read(scr: Screen, fd = 0): void {
     } else if (err === null && n > 0) {
       screen_feed(scr, text.write(buf.subarray(0, n)));
       next();
+    } else {
+      scr.win?.lost();
     }
   });
   next();
@@ -297,7 +334,7 @@ export function screen_size(): { w: number; h: number } {
 // (null: hidden); none, and the cursor as it was: nothing written. A row
 // whose pieces are alike those last written isn't even made again
 export function screen_paint(scr: Screen, rows: Piece[][], at: Spot | null): void {
-  if (scr.left) {
+  if (scr.left || scr.hidden) {
     return;
   }
   const fresh = scr.shown.length === 0;
@@ -428,7 +465,7 @@ function screen_style(scr: Screen): string {
 // (a spinner's frame, between paints); none written yet: nothing
 export function screen_row(scr: Screen, k: number, row: Piece[], at: Spot | null): void {
   const x = screen_row_text(row);
-  if (scr.left || scr.shown.length <= k || scr.shown[k] === x) {
+  if (scr.left || scr.hidden || scr.shown.length <= k || scr.shown[k] === x) {
     return;
   }
   scr.shown[k] = x;
@@ -441,7 +478,7 @@ export function screen_row(scr: Screen, k: number, row: Piece[], at: Spot | null
 // erased, then its line, cut to them; the row as last written then
 // unknown, so the next paint writes it whole. None written yet: nothing
 export function screen_cells(scr: Screen, k: number, pieces: Piece[], at: Spot | null): void {
-  if (scr.left || scr.shown.length <= k) {
+  if (scr.left || scr.hidden || scr.shown.length <= k) {
     return;
   }
   const cells = pieces.map((p) => "\x1b[" + (p.col + 1) + "G\x1b[" + p.w + "X" + Paint.line_ansi(Paint.runs_wrap(p.line, p.w, true)[0])).join("");
@@ -479,11 +516,30 @@ export function screen_wipe(scr: Screen): void {
   scr.title  = undefined;
 }
 
+// in a window, the screen hidden: it paints nothing till shown, and
+// forgets what it wrote
+export function screen_hide(scr: Screen): void {
+  scr.hidden = true;
+  screen_wipe(scr);
+}
+
+// in a window, the screen shown again: up (the kitty flags and the
+// background asked again), then every row written anew
+export function screen_show(scr: Screen): void {
+  if (scr.win === undefined || scr.left) {
+    return;
+  }
+  scr.hidden = false;
+  screen_wipe(scr);
+  screen_ask(scr, scr.win.up() + FLAGS_ASK);
+  scr.on("");
+}
+
 // the window's title (OSC 0), written only as it changes (and after
 // screen_wipe, as a terminal may have lost it); null: illi's taken off,
 // the one before put back (and saved again, for illi's next)
 export function screen_title(scr: Screen, text: string | null): void {
-  if (!scr.tty || scr.left) {
+  if (!scr.tty || scr.left || scr.hidden) {
     return;
   }
   if (text === null) {
@@ -570,12 +626,19 @@ function screen_key(scr: Screen, data: string): number {
   if (data.startsWith(PASTE_ON)) {
     return screen_paste(scr, data);
   }
+  const frame = scr.win !== undefined && data.startsWith("\x1b_") ? wire_take(data, scr.win.nonce) : null;
+  if (frame !== null) {
+    if (frame !== 0 && frame.msg !== null) {
+      scr.win!.heard(frame.msg);
+    }
+    return frame === 0 ? 0 : frame.n;
+  }
   const osc = OSC.exec(data);
   if (osc !== null) {
     screen_osc(scr, osc[1], osc[2]);
     return osc[0].length;
   }
-  if ((scr.asked && OSC_CUT.test(data)) || CUT.test(data) || (scr.kitty && data === "\x1b")) {
+  if ((scr.asked && OSC_CUT.test(data)) || CUT.test(data) || ((scr.kitty || scr.win !== undefined) && data === "\x1b")) {
     return 0;
   }
   if (seq !== null && seq[2] === "u" && FLAGS.test(seq[1] ?? "")) {
@@ -674,8 +737,12 @@ function screen_osc(scr: Screen, code: string, body: string): void {
 }
 
 // stops the process (Ctrl+Z), the terminal as it found it; continued
-// (fg), the screen's modes again, and every row written anew
+// (fg), the screen's modes again, and every row written anew. In a
+// window, the window does it (win.suspend)
 export function screen_suspend(scr: Screen): void {
+  if (scr.win !== undefined) {
+    return scr.win.suspend();
+  }
   process.stdout.write(screen_off(scr));
   process.stdin.setRawMode(false);
   process.once("SIGCONT", () => {
@@ -691,9 +758,14 @@ export function screen_suspend(scr: Screen): void {
 // profile's switch: illi run again, or a message before quitting): its
 // modes off, its input cooked and no longer read; answers once that is
 // written. The exit's own reset is skipped then: leaving the alternate
-// screen twice puts the cursor back over what was written between
+// screen twice puts the cursor back over what was written between. In a
+// window, the terminal is the window's: nothing written, the PTY kept raw
 export function screen_leave(scr: Screen): Promise<void> {
   scr.left = true;
+  if (scr.win !== undefined) {
+    process.stdin.pause();
+    return Promise.resolve();
+  }
   if (scr.tty) {
     process.stdin.setRawMode(false);
   }
@@ -701,13 +773,19 @@ export function screen_leave(scr: Screen): Promise<void> {
   return new Promise((done) => process.stdout.write(scr.tty ? screen_off(scr) : "", () => done()));
 }
 
-// a paste, typed whole
+// a paste, typed whole (the window's frames in it heard, not typed)
 function screen_paste(scr: Screen, data: string): number {
   const end = data.indexOf(PASTE_OFF);
   if (end < 0) {
     return 0;
   }
-  const text = data.slice(PASTE_ON.length, end).replace(/\r\n?/g, "\n");
+  let text = data.slice(PASTE_ON.length, end);
+  if (scr.win !== undefined) {
+    const { parts, carry } = wire_cut("", text, scr.win.nonce);
+    parts.forEach((p) => typeof p !== "string" && scr.win!.heard(p));
+    text = parts.filter((p) => typeof p === "string").join("") + carry;
+  }
+  text = text.replace(/\r\n?/g, "\n");
   if (scr.paste === undefined) {
     ed_type(scr.ed, text);
   } else {

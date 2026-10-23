@@ -7,7 +7,11 @@
 // a word of several runs is kept whole; a frame never passes its width;
 // each block's lines are marked. A word finds options by name, then by
 // a word of what they do, then by its letters. The window's title, written as it
-// changes, put back as illi's goes.
+// changes, put back as illi's goes. In a window (Window.ts), frames in
+// the input are heard, never typed, however the reads cut them; hidden,
+// the screen writes nothing; shown, it says it's up, asks the kitty flags
+// and the background, then writes every row; Ctrl+Z goes to the window,
+// leaving writes nothing, and the PTY's end tells the window gone.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -18,6 +22,7 @@ import * as Reply from "./Reply.ts";
 import * as Screen from "./Screen.ts";
 import * as Theme from "./Theme.ts";
 import * as View from "./View.ts";
+import { wire_frame } from "../term/Wire.ts";
 
 function fresh(tty: boolean, ed: Screen.Screen["ed"], on: (k: string) => unknown): Screen.Screen {
   return { tty, kitty: false, ed, rest: "", shown: [], click: { row: 0, col: 0 }, clicks: 0, pressed: 0, point: { row: 0, col: 0 }, typed: false, grab: null, on };
@@ -684,4 +689,89 @@ test("a word finds options by name first, then (from three letters) by a word of
   expect(Screen.ed_find("при", ["a", "b"], ["запустить", "привет мир"]).map((m) => m.k)).toEqual([1]);
   expect(Screen.ed_find("a.b", ["x"], ["a.b c"]).map((m) => m.hay)).toEqual([true]);
   expect(Screen.ed_find("x(", ["x"], ["y"]).map((m) => m.k)).toEqual([]);
+});
+
+// a screen in a window: what it heard from the window, what its end of
+// it was told (up asked, Ctrl+Z, lost), keys pressed
+const NONCE = "0123456789abcdef0123456789abcdef";
+function windowed(kitty = true): { scr: Screen.Screen; heard: object[]; told: string[]; keys: string[] } {
+  const keys: string[] = [];
+  const scr = fresh(true, Screen.ed_new(), (k) => k !== "" && keys.push(k));
+  Screen.screen_feed(scr, kitty ? "\x1b[?1u" : "");
+  const heard: object[] = [];
+  const told: string[] = [];
+  scr.win = { nonce: NONCE, hidden: false, heard: (msg) => heard.push(msg), up: () => (told.push("up"), "<up>"), suspend: () => told.push("suspend"), lost: () => told.push("lost") };
+  return { scr, heard, told, keys };
+}
+
+// what a call wrote to the terminal
+function written(run: () => void): string {
+  const out: string[] = [];
+  const write = process.stdout.write;
+  process.stdout.write = ((s: string) => out.push(s)) as any;
+  try {
+    run();
+  } finally {
+    process.stdout.write = write;
+  }
+  return out.join("");
+}
+
+test("in a window, the window's frames are heard, never typed or pressed (no Alt+_), however the reads cut them; a paste's too", () => {
+  const show = wire_frame({ $: "show", switch: true }, NONCE);
+  const stream = "a" + show + "b\x1b[200~x" + wire_frame({ $: "end" }, NONCE) + "y\x1b[201~c";
+  for (const kitty of [true, false]) {
+    for (let k = 0; k <= stream.length; k++) {
+      const { scr, heard, keys } = windowed(kitty);
+      Screen.screen_feed(scr, stream.slice(0, k));
+      Screen.screen_feed(scr, stream.slice(k));
+      expect([heard, keys, scr.ed.text]).toEqual([[{ $: "show", switch: true }, { $: "end" }], [], "abxyc"]);
+    }
+  }
+  const { scr, heard } = windowed();
+  Screen.screen_feed(scr, wire_frame({ $: "end" }, "f".repeat(32)));
+  expect(heard).toEqual([]);
+});
+
+test("in a window, a hidden screen writes nothing; shown, it says it's up, asks the kitty flags and the background, then writes every row", () => {
+  const { scr, told } = windowed();
+  const rows = [[{ col: 0, w: 10, line: [Paint.Run("hello")] }]];
+  written(() => Screen.screen_paint(scr, rows, null));
+  Screen.screen_hide(scr);
+  expect(written(() => {
+    Screen.screen_paint(scr, rows, null);
+    Screen.screen_row(scr, 0, rows[0], null);
+    Screen.screen_title(scr, "∞ illi");
+  })).toBe("");
+  scr.on = () => Screen.screen_paint(scr, rows, null);
+  const out = written(() => Screen.screen_show(scr));
+  expect(out.startsWith("<up>\x1b[?u\x1b]11;?\x1b\\")).toBe(true);
+  expect(out).toContain("\x1b[2J");
+  expect(out).toContain("hello");
+  expect([told, scr.hidden, scr.asked]).toEqual([["up"], false, true]);
+});
+
+test("in a window, Ctrl+Z goes to the window; leaving writes nothing; the PTY's end tells the window gone", async () => {
+  const { scr, told } = windowed();
+  expect(written(() => Screen.screen_suspend(scr))).toBe("");
+  expect(told).toEqual(["suspend"]);
+  const fd = fs.openSync("/dev/null", "r");
+  try {
+    Screen.screen_read(scr, fd);
+    for (let k = 0; k < 50 && !told.includes("lost"); k++) {
+      await Bun.sleep(10);
+    }
+    expect(told).toEqual(["suspend", "lost"]);
+  } finally {
+    fs.closeSync(fd);
+  }
+  let left = "";
+  const pause = process.stdin.pause;
+  process.stdin.pause = (() => process.stdin) as any;
+  try {
+    left = written(() => void Screen.screen_leave(scr));
+  } finally {
+    process.stdin.pause = pause;
+  }
+  expect([left, scr.left]).toEqual(["", true]);
 });
