@@ -34,6 +34,7 @@ import * as Profiles from "../config/Profiles.ts";
 import * as Screen from "../ui/Screen.ts";
 import { status_end, status_set } from "./Status.ts";
 import { term_draw, term_side_again } from "./Frame.ts";
+import { term_unwait } from "./Keys.ts";
 import { term_quit, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 import { VERSION, wire_env, wire_env_parse, wire_frame, type Down, type How, type Open, type State, type Up } from "./Wire.ts";
@@ -191,9 +192,11 @@ function member_suspend(): void {
 }
 
 // the terminal hidden: nothing painted, the status line's command
-// stopped, text chosen, the leader and a press a popup took let go; a
-// question shown shows anew once this one is shown again, holding Enter
-// and a click again (Popup.ts popup_held), as it pops up then
+// stopped, text chosen, the leader and a press a popup took let go, the
+// pointer's place forgotten (shown again, nothing lights till it moves)
+// and a click's fold waiting given up; a question shown shows anew once
+// this one is shown again, holding Enter and a click again (Popup.ts
+// popup_held), as it pops up then
 function member_rest(t: Term): void {
   WIN!.shown = false;
   member_spin(t);
@@ -201,6 +204,8 @@ function member_rest(t: Term): void {
   t.sel       = null;
   t.lead      = false;
   t.aim.press = null;
+  t.pointed   = false;
+  term_unwait(t);
   if (t.asking !== null) {
     t.asking.shown = null;
   }

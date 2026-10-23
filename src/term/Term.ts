@@ -223,8 +223,10 @@ export type Cell = { line: number; col: number };
 // text chosen: in which area, from where to where (either way round),
 // whether the button is still down, whether it left its first cell; by
 // what it grows as it's dragged (1: a character, 2: a word, 3: a line,
-// as many times as it was pressed) and the first it took, first and last
-export type Sel = { key: string; a: Cell; b: Cell; held: boolean; moved: boolean; unit: number; root: [Cell, Cell] };
+// as many times as it was pressed) and the first it took, first and last;
+// drop: its press let go of text chosen that showed, so as a click it
+// acts on nothing in the chat (Select.ts term_showing)
+export type Sel = { key: string; a: Cell; b: Cell; held: boolean; moved: boolean; unit: number; root: [Cell, Cell]; drop?: true };
 
 export type Ink = Paint.Run["s"];
 

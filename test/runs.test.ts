@@ -16,12 +16,16 @@
 // (heavier), a message's bar beside it, a folded line's glyph, a
 // summary's gutter and /open, an open block's bar; never under a hit
 // (the jump to the end); gone as the pointer leaves, as the chat moves
-// by itself while followed, at a key, as the window loses the focus. A
-// click on a word inside a message waits out a double click, what it
-// acts on shown pressed meanwhile (a second press chooses the word; a
-// key, the wheel, a right press give it up; a drag never folds); a press
-// again soon on the cell whose click just acted does nothing, nor does
-// the press that only focuses the window.
+// by itself while followed, at a key, as the window loses the focus,
+// while text chosen shows (the click that lets it go folds nothing;
+// scrolled away, it holds no click back). A click on a word inside a
+// message or a summary waits out a double click, what it acts on shown
+// pressed meanwhile (a second press chooses the word; a key, the wheel,
+// a right press give it up; a drag never folds; its mark gone by then,
+// nothing), on a mark's own control (a summary's gutter and /open, an
+// open block's bar) at once; a press again soon on the cell whose click
+// just acted does nothing, nor does the press that only focuses the
+// window. A pin past the chat's rows is held inside them.
 
 import { expect, test } from "bun:test";
 import { term_paint } from "../src/term/Frame.ts";
@@ -434,4 +438,86 @@ test("the press that only focuses the window acts on nothing: one while the focu
   click(t, row, left(t) + 6);
   paint(t);
   expect(mark(t, "r8").open).toBe(true);
+});
+
+test("while text chosen shows, nothing lights and the click that lets it go acts on nothing in the chat; scrolled away, a click acts", async () => {
+  const t = term(chat());
+  View.view_toggle(t.v, 2);
+  t.scroll = Infinity;
+  paint(t);
+  const row = row_of(t, "#3", 4);
+  written(() => Screen.screen_feed(t.scr, sgr(0, row, left(t) + 8) + sgr(32, row, left(t) + 20) + sgr(0, row, left(t) + 20, "m")));
+  paint(t);
+  move(t, row_of(t, "#3", 8), left(t) + 8);
+  paint(t);
+  expect([t.sel?.moved, lit(t)]).toEqual([true, []]);
+  click(t, row_of(t, "#3", 8), left(t) + 8);
+  paint(t);
+  expect([t.sel, t.wait, lit(t).length > 0]).toEqual([null, null, true]);
+  click(t, row_of(t, "#2"), left(t) + 80);
+  paint(t);
+  expect(mark(t, "#2").open).toBe(false);
+  written(() => Screen.screen_feed(t.scr, sgr(0, row, left(t) + 8) + sgr(32, row, left(t) + 20) + sgr(0, row, left(t) + 20, "m")));
+  t.scroll = 0;
+  paint(t);
+  expect(t.sel.b.line).toBeLessThan(t.areas.find((a: any) => a.key === "chat").first);
+  click(t, row_of(t, "r8"), left(t) + 4);
+  paint(t);
+  expect([t.sel, mark(t, "r8").open]).toEqual([null, true]);
+});
+
+test("a click on a mark's own control acts at once: a summary's /open and gutter, an open block's bar; on a summary's words it waits", async () => {
+  const t = term(chat(11));
+  View.view_toggle(t.v, 2);
+  paint(t);
+  const sum  = Paint.block_key(4, 1);
+  const line = (k = 0) => t.areas.find((a: any) => a.key === "chat").lines[mark(t, sum).from + k].map((r: Paint.Run) => r.x).join("");
+  click(t, row_of(t, sum), left(t) + line().indexOf("/open") + 2);
+  expect([t.wait, mark(t, sum).open]).toEqual([null, false]);
+  paint(t);
+  expect(mark(t, sum).open).toBe(true);
+  t.acted = null;
+  click(t, row_of(t, sum), left(t) + line().indexOf("/close") + 2);
+  paint(t);
+  expect([t.wait, mark(t, sum).open]).toEqual([null, false]);
+  t.acted = null;
+  click(t, row_of(t, sum), left(t) + line().indexOf("1x"));
+  paint(t);
+  expect([t.wait, mark(t, sum).open]).toEqual([null, true]);
+  View.view_act(t.v, { $: "Shut", id: 4, n: 1 });
+  t.ver += 1;
+  paint(t);
+  click(t, row_of(t, sum), left(t) + line().indexOf("ls") + 1);
+  expect(t.wait?.key).toBe(sum);
+  await waited();
+  paint(t);
+  expect(mark(t, sum).open).toBe(true);
+});
+
+test("a click's fold waiting acts on its mark as painted then: gone by then (its run closed), nothing", async () => {
+  const t = term(chat());
+  View.view_toggle(t.v, 2);
+  paint(t);
+  click(t, row_of(t, "#3", -5), left(t) + 8);
+  expect(t.wait?.key).toBe("#3");
+  View.view_toggle(t.v, 2);
+  t.ver += 1;
+  paint(t);
+  await waited();
+  paint(t);
+  expect([t.wait, t.v.folds.size, mark(t, "r2").open]).toEqual([null, 0, false]);
+});
+
+test("a pin past the chat's rows (a new size since the click) is held inside them", () => {
+  const t = term(chat(0, 40, 40));
+  View.view_toggle(t.v, 2);
+  t.scroll = Infinity;
+  paint(t);
+  const area = t.areas.find((a: any) => a.key === "chat");
+  t.pin = { key: "#3", row: area.row + area.tall + 20 };
+  paint(t);
+  expect(row_of(t, "#3")).toBe(area.row + area.tall - 1);
+  t.pin = { key: "#3", row: 0 };
+  paint(t);
+  expect(row_of(t, "#3")).toBe(area.row);
 });
