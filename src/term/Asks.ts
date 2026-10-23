@@ -176,28 +176,29 @@ function term_said(q: Asked, f: Form): string {
 }
 
 // illi's questions laid out at the input (Question.ts), w columns, the
-// words at most max lines (null: none open): who asks (the title in the
-// rule over them); the tabs (the one shown lit, one answered ticked),
-// wrapped, each where it is on its line (a click goes there); then the
-// question, its options (the lit one marked, those picked filled;
-// several: squares), the words' row as the input looks, each line with
-// the row it stands for (a click takes it), or the answers, each under
-// its question; and the keys, wrapped. The cursor in the words (on the
-// answers: none)
-export function term_form_lines(t: Term, w: number, max: number): { who: string; tabs: Paint.Line[]; spans: Span[][]; body: Array<[Paint.Line, Target | null]>; keys: Paint.Line[]; at: Screen.Spot | null } | null {
+// words at most max lines, at tab `tab` (none: the one shown; null: none
+// open): who asks (the title in the rule over them); the tabs (the one
+// shown lit, one answered ticked), wrapped, each where it is on its line
+// (a click goes there); then the question, its options (the lit one
+// marked, those picked filled; several: squares), the words' row as the
+// input looks, each line with the row it stands for (a click takes it),
+// or the answers, each under its question; and the keys, wrapped. The
+// cursor in the words (on the answers: none)
+export function term_form_lines(t: Term, w: number, max: number, tab?: number): { who: string; tabs: Paint.Line[]; spans: Span[][]; body: Array<[Paint.Line, Target | null]>; keys: Paint.Line[]; at: Screen.Spot | null } | null {
   const open = term_form(t);
   if (open === null) {
     return null;
   }
   const [q, f] = open;
+  const shown  = tab ?? f.tab;
   const bold   = { ...Paint.INK, b: true };
   const accent = { ...bold, c: Draw.draw_tokens().accent };
   const said   = (k: number) => f.each[k].picked.length > 0 || f.each[k].ed.text.trim() !== "";
   const names  = [...q.queries.map((query, k) => (said(k) ? "✓ " : "") + Paint.text_clean(query.head)), "Review"];
-  const tabs   = form_tabs(names.map((name, k) => Paint.Run(" " + name + " ", k === f.tab ? { ...bold, v: true } : k < q.queries.length && said(k) ? Paint.INK : Paint.DIM)), w);
+  const tabs   = form_tabs(names.map((name, k) => Paint.Run(" " + name + " ", k === shown ? { ...bold, v: true } : k < q.queries.length && said(k) ? Paint.INK : Paint.DIM)), w);
   const keys   = (text: string) => Paint.runs_wrap([Paint.Run(text, Paint.DIM)], w, false);
   const plain  = (l: Paint.Line): [Paint.Line, null] => [l, null];
-  const e      = f.each[f.tab];
+  const e      = f.each[shown];
   if (e === undefined) {
     const answer = (k: number) => {
       const picked = [...f.each[k].picked].sort((a, b) => a - b).map((i) => q.queries[k].options[i].label);
@@ -208,7 +209,7 @@ export function term_form_lines(t: Term, w: number, max: number): { who: string;
     const each = q.queries.flatMap((query, k) => [...Paint.runs_wrap([Paint.Run(Paint.text_clean(query.text), bold)], w, false), ...answer(k)]);
     return { who: q.who, ...tabs, body: each.map(plain), keys: keys(SEND), at: null };
   }
-  const query  = q.queries[f.tab];
+  const query  = q.queries[shown];
   const lw     = Paint.text_width(Paint.lit_lead(true));
   const lead   = (k: number) => Paint.Run(Paint.lit_lead(k === e.at), bold);
   const marks  = query.multi ? ["□ ", "■ "] : ["○ ", "● "];
@@ -216,13 +217,13 @@ export function term_form_lines(t: Term, w: number, max: number): { who: string;
     const runs = [Paint.Run(Paint.text_clean(o.label), k === e.at ? bold : Paint.INK), ...(o.about === "" ? [] : [Paint.Run("  " + Paint.text_clean(o.about), Paint.DIM)])];
     const rows = Paint.runs_wrap(runs, Math.max(1, w - lw - 2), false);
     const mark = Paint.Run(marks[e.picked.includes(k) ? 1 : 0], e.picked.includes(k) ? accent : Paint.DIM);
-    const aim: Target = { $: "row", k, tab: f.tab };
+    const aim: Target = { $: "row", k, tab: shown };
     return rows.map((l, j): [Paint.Line, Target] => [j === 0 ? [lead(k), mark, ...l] : [Paint.Run(" ".repeat(lw + 2)), ...l], aim]);
   };
   const ask    = Paint.runs_wrap([Paint.Run(Paint.text_clean(query.text)), Paint.Run(query.multi ? "  pick any" : "  pick one", Paint.DIM)], w, false);
   const opts   = query.options.flatMap(option);
   const words  = Screen.screen_input({ ...t.scr, ed: e.ed }, w - lw, max, "Something else: type your own", false);
-  const mine: Target = { $: "row", k: query.options.length, tab: f.tab };
+  const mine: Target = { $: "row", k: query.options.length, tab: shown };
   const own    = words.lines.map((l, j): [Paint.Line, Target] => [[j === 0 ? lead(query.options.length) : Paint.Run(" ".repeat(lw)), ...l], mine]);
   return { who: q.who, ...tabs, body: [...ask.map(plain), ...opts, ...own], keys: keys(KEYS), at: { row: ask.length + opts.length + words.at.row, col: lw + words.at.col } };
 }
