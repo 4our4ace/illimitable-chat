@@ -380,10 +380,18 @@ export function config_pick(key: Key): Pick | null {
 
 // what a role runs on for a chat on `pick`, always its vendor: the pick
 // the role's setting names for that vendor, else (the compactor) the
-// vendor's own default, else the chat's pick itself
+// vendor's own default (its model gone from the vendor's list, as a
+// catalog may drop one: the vendor's first model offered, at the
+// default's effort), else the chat's pick itself
 export function config_role(key: Role, pick: Pick): Pick {
-  const def = key === "compactor" ? Pick.read(config_split(DEFS[pick.vendor].compactor), OFFER) : null;
-  return ROLES[key][pick.vendor] ?? def ?? pick;
+  const set = ROLES[key][pick.vendor];
+  if (set !== undefined || key !== "compactor") {
+    return set ?? pick;
+  }
+  const want  = config_split(DEFS[pick.vendor].compactor);
+  const first = Pick.models([pick.vendor], OFFER.models)[0]?.[1];
+  const stand = first === undefined ? null : Pick.read({ ...want, model: first.label, speed: first.speeds[0] ?? "slow" }, OFFER);
+  return Pick.read(want, OFFER) ?? stand ?? pick;
 }
 
 // a role's setting with `pick` in its vendor's place, the other vendors'
@@ -577,11 +585,38 @@ export function config_autocompact(label: string, value: string | null): string 
   return null;
 }
 
-// the models listed last, learned (a file that won't read: none)
+// the models listed last, learned (a file that won't read: none): the
+// chatgpt list as the catalog last gave it, whatever account it was of
+// (not known yet; the catalog's answer replaces it), the others' windows
+// on the models built in
 function config_models(): void {
   const kept = json_object(MODELS_FILE)?.vendors ?? {};
-  for (const vendor of Object.keys(kept).filter((v) => VENDORS.includes(v as Vendor))) {
-    Pick.learn(vendor as Vendor, kept[vendor]);
+  for (const vendor of Object.keys(kept).filter((v) => VENDORS.includes(v as Vendor) && Array.isArray(kept[v]))) {
+    const models = kept[vendor].filter((m: any) => typeof m?.label === "string" && typeof m.id === "string" && Array.isArray(m.speeds));
+    Pick.learn(vendor as Vendor, models, vendor === "chatgpt" ? "replace" : "add");
+  }
+}
+
+// models.json as read now ({}: none, or it won't read)
+export function config_models_file(): { at?: string; vendors?: Record<string, unknown>; account?: string; capped?: string[] } {
+  return json_object(MODELS_FILE) ?? {};
+}
+
+// a vendor's models kept in models.json for the next start, the other
+// vendors' as the file is now (one vendor's learning never drops
+// another's); chatgpt's names the account its catalog is of, and the
+// models that account refused past their standard window (capped):
+// written whole, then moved over
+export function config_models_keep(vendor: Vendor, models: unknown[], chatgpt?: { account: string; capped: string[] }): void {
+  const file = config_models_file();
+  const out  = { ...file, at: new Date().toISOString(), vendors: { ...(file.vendors ?? {}), [vendor]: models }, ...chatgpt };
+  const tmp  = MODELS_FILE + "." + process.pid + ".tmp";
+  try {
+    fs.mkdirSync(ROOT, { recursive: true });
+    fs.writeFileSync(tmp, JSON.stringify(out, null, 2) + "\n");
+    fs.renameSync(tmp, MODELS_FILE);
+  } catch (err: any) {
+    console.error("models: " + MODELS_FILE + " wasn't kept: " + err?.message);
   }
 }
 

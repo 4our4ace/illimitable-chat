@@ -150,6 +150,11 @@ const NO_ANSWER  = "No one is at illi's screen to answer: decide yourself, or as
 // model), the one it ends with
 const FIT        = 0.8;
 const REFITS     = 3;
+// how long a turn waits on ChatGPT's catalog being asked (ms), and how
+// far within a model's whole window a refusal must come to teach that the
+// account takes only its standard one (Chat.capped)
+const LISTED     = 3000;
+const CAPPED     = 0.75;
 const REFIT      = "The chat outgrew #'s window: more of it is summarized now, each summary a zoom away. Go on where you were.";
 const NO_FIT     = "No reply: the chat won't fit #'s window even summarized. /clear starts a new topic (the chat before it is kept, not sent), or /model picks a model with a bigger window.";
 
@@ -263,7 +268,15 @@ export namespace Chat {
     };
     chat.context = Plugins.context({ cwd });
     Machine.watch(() => Chat.change(chat));
-    ChatGPT.watch(() => Chat.change(chat));
+    // the account's catalog or plan told: on ChatGPT the cut fitted anew
+    // while no turn runs (the start's waits on it: the windows kept last
+    // may be smaller, and a cut never moves back)
+    ChatGPT.watch(() => {
+      if (!chat.busy && chat.pick.vendor === "chatgpt") {
+        Chat.cut(chat);
+      }
+      Chat.change(chat);
+    });
     // a saved pick not offered gave way: told once
     const saved = mem.pick as Pick | null;
     if (saved !== null && Pick.label(saved) !== Pick.label(pick)) {
@@ -274,7 +287,9 @@ export namespace Chat {
     if (mem.count === 0) {
       Memory.push(mem, [{ kind: "illi", text: HELLO, line: HELLO_LINE }]);
     }
-    Chat.cut(chat);
+    if (chat.pick.vendor !== "chatgpt") {
+      Chat.cut(chat);
+    }
     chat.eye = Chat.eye(mem, mem.show);
     mem.made = (l, i) => Chat.made(chat, l, i);
     // summaries stuck: told once till one is built again ("")
@@ -515,6 +530,9 @@ export namespace Chat {
     const halt = (chat.halt = new AbortController());
     chat.suggest.due = false;
     Chat.change(chat);
+    if (chat.pick.vendor === "chatgpt") {
+      await ChatGPT.listed(LISTED);
+    }
     const why = await Chat.settled(chat, halt.signal);
     if (why !== null) {
       if (!halt.signal.aborted) {
@@ -581,6 +599,9 @@ export namespace Chat {
     }
     if (end.note) {
       Chat.all(chat, { $: "note", text: end.note });
+    }
+    if (full && carried !== undefined && Chat.capped(chat, carried.tokens)) {
+      return Chat.refit(chat, false);
     }
     if (full) {
       return Chat.refit(chat, end.text !== "");
@@ -653,6 +674,18 @@ export namespace Chat {
       await Chat.writing(chat, async () => Chat.take(chat, Chat.push(chat, null, "user", GOAL_NO)));
     }
     return !halt.signal.aborted;
+  }
+
+  // a call refused as too long on ChatGPT while it carried (`tokens` of
+  // the chat, with what a request takes beside it) past its model's
+  // standard window, yet well within its whole one (no misjudged size
+  // explains it): the account takes no more than the standard window,
+  // learned for it (ChatGPT.refused). true: learned, the turn goes on
+  // fitted to it
+  export function capped(chat: Chat, tokens: number): boolean {
+    const model = Pick.model(chat.pick.vendor, chat.pick.model);
+    const sent  = tokens + (chat.beside.get(chat.pick.vendor + ":" + chat.pick.model) ?? 0);
+    return chat.pick.vendor === "chatgpt" && model?.standard !== undefined && model.window !== undefined && sent > model.standard && sent < model.window * CAPPED && ChatGPT.refused(model.label);
   }
 
   // the chat outgrew the model's window (a call ended `full`): the

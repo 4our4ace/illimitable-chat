@@ -11,10 +11,13 @@
 // from pieces; tool_use and end_turn end a step, pause_turn asks again,
 // any other stop fails (in plain words: Agent.stopped), an error event is
 // busy. It pings while the model thinks, so 5 silent
-// minutes mean it is dead.
+// minutes mean it is dead. The Models API tells each model's window
+// (models), learned at the start.
 
 import { AskAI, type Ask, type Img, type Usage } from "./AskAI.ts";
 import { Agent, type Emit, type Entry, type Item, type Step, type Tool, type Use, type Wire } from "./Agent.ts";
+import { Pick } from "./Pick.ts";
+import * as config from "../config/Config.ts";
 
 // Types
 // =====
@@ -40,11 +43,59 @@ const MARK  = { type: "ephemeral" };
 const BREAKS = 4;
 const WEB   = { type: "web_search_20260318", name: "web_search" };
 const FAST  = "fast-mode-2026-02-01";
+// the models a key may use, a page of them at a time (at most PAGES)
+const LIST  = "https://api.anthropic.com/v1/models?limit=1000";
+const PAGES = 10;
+
+// the key's models asked (once: keys are read at the start)
+let listed: Promise<boolean> | null = null;
 
 // Anthropic
 // =========
 
 export namespace Anthropic {
+
+  // the windows of the models the key may use (Models API: list), each
+  // built-in model's learned and kept for the next start; asked once, a
+  // failure changing nothing (the built-in windows hold). true: a window
+  // changed
+  export function models(key: string): Promise<boolean> {
+    listed ??= Anthropic.list(key).then((all) => {
+      const news = all.filter((m) => Pick.told("claude-api", m.id, m.window)).length > 0;
+      if (news) {
+        config.config_models_keep("claude-api", Pick.list("claude-api"));
+      }
+      return news;
+    }, (err) => {
+      console.error("claude-api: the models' windows weren't told: " + err?.message);
+      return false;
+    });
+    return listed;
+  }
+
+  // each model the key may use, by id, with its window (max_input_tokens),
+  // page after page
+  export async function list(key: string): Promise<Array<{ id: string; window: number }>> {
+    const out: Array<{ id: string; window: number }> = [];
+    let after = "";
+    for (let page = 0; page < PAGES; page++) {
+      const res = await fetch(LIST + (after === "" ? "" : "&after_id=" + encodeURIComponent(after)), { headers: { "x-api-key": key, "anthropic-version": "2023-06-01" }, signal: AbortSignal.timeout(15e3) });
+      if (!res.ok) {
+        throw new Error("HTTP " + res.status);
+      }
+      const body: any = await res.json();
+      for (const m of Array.isArray(body?.data) ? body.data : []) {
+        if (typeof m?.id === "string" && Number(m.max_input_tokens) > 0) {
+          out.push({ id: m.id, window: Number(m.max_input_tokens) });
+        }
+      }
+      if (body?.has_more !== true || typeof body.last_id !== "string") {
+        break;
+      }
+      after = body.last_id;
+    }
+    return out;
+  }
 
   export function headers(key: string, ask: Ask): Record<string, string> {
     const out: Record<string, string> = {
