@@ -10,7 +10,9 @@
 // Down move, Space picks (one; several with multi), typing goes to the
 // words of the user's own, Enter picks the lit option and goes on; the
 // last tab shows all the answers, and Enter there sends them; Esc skips;
-// a picker opened over it takes the keys.
+// a picker opened over it takes the keys. A question just shown holds
+// Enter (the form Space too) for half a second from its first paint, and
+// again once shown anew after a list over it; Esc is never held.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -20,7 +22,9 @@ const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-asks-");
 process.env.ILLI_DIR = DIR;
 
 const { term_asks, term_form_lines } = await import("./Asks.ts");
+const { term_chooser } = await import("./Commands.ts");
 const { term_grab, term_type } = await import("./Keys.ts");
+const { popup_shown } = await import("./Popup.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
 
@@ -35,11 +39,13 @@ const sent = (t: any) => t.v.out.map((o: any) => o.msg).filter((m: any) => m.$ =
 
 // the chat's questions now (each asked because it is risky, "don't ask
 // again" keeping that very command, or what is given): a state, then a
-// paint
+// paint, the question shown long ago (its hold over)
 const asks = (t: any, ...qs: Array<[string, string, string, string?]>) => {
   t.v.asks = qs.map(([id, tool, what, keep]) => ({ id, who: "illi", tool, what, why: "it is risky", keep: keep ?? what }));
   term_asks(t);
+  shown(t);
 };
+const shown = (t: any) => t.asking !== null && (t.asking.shown = 0);
 
 // illi's own questions: which database (one of three), and the cache
 // (any of two)
@@ -48,6 +54,7 @@ const CACHE = { text: "Which caches?", head: "Cache", options: [{ label: "Redis"
 const own   = (t: any, queries = [DB]) => {
   t.v.asks = [{ id: "a1", who: "illi", tool: "ask", what: queries[0].text, queries }];
   term_asks(t);
+  shown(t);
 };
 const text = (t: any) => term_form_lines(t, 70, 4)!.lines.map((l: any) => l.map((r: any) => r.x).join("").trimEnd());
 
@@ -91,6 +98,7 @@ test("No, and say why asks a line for the model; Esc there goes back to the pick
   expect(t.choose.title).toBe("Why not Bash?");
   term_grab(t, "Esc");
   term_asks(t);
+  shown(t);
   expect(t.choose.title).toBe("Allow Bash?");
   ["Down", "Down", "Down", "Enter"].forEach((key) => term_grab(t, key));
   term_type(t, "use the clean script");
@@ -197,4 +205,41 @@ test("nothing said to any question sends as skipped; Esc skips at once; a picker
   expect([u.choose, sent(u)]).toEqual([null, []]);
   term_grab(u, "Esc");
   expect(sent(u)).toEqual([{ ask: "a1", yes: false, always: false, said: "" }]);
+});
+
+test("a question just shown holds Enter for half a second from its first paint (none yet: held), and again shown anew after a list over it; Esc says no at once; illi's form holds Enter and Space alike", () => {
+  const t = term();
+  t.v.asks = [{ id: "q1", who: "illi", tool: "Bash", what: "ls", why: "", keep: "" }];
+  term_asks(t);
+  term_grab(t, "Enter");
+  popup_shown(t, false);
+  term_grab(t, "Enter");
+  expect(sent(t)).toEqual([]);
+  t.asking.shown -= 600;
+  term_chooser(t, "Agent", ["illi"], [""], 0, () => {});
+  popup_shown(t, false);
+  expect(t.asking.shown).toBeNull();
+  term_grab(t, "Esc");
+  term_asks(t);
+  popup_shown(t, false);
+  term_grab(t, "Enter");
+  expect(sent(t)).toEqual([]);
+  t.asking.shown -= 600;
+  term_grab(t, "Enter");
+  expect(sent(t)).toEqual([{ ask: "q1", yes: true, always: false, said: "" }]);
+  const u = term();
+  u.v.asks = [{ id: "q2", who: "illi", tool: "Bash", what: "ls", why: "", keep: "" }];
+  term_asks(u);
+  term_grab(u, "Esc");
+  expect(sent(u)).toEqual([{ ask: "q2", yes: false, always: false, said: "" }]);
+  const f = term();
+  f.v.asks = [{ id: "a1", who: "illi", tool: "ask", what: DB.text, queries: [DB] }];
+  term_asks(f);
+  popup_shown(f, true);
+  term_type(f, " ");
+  term_grab(f, "Enter");
+  expect([f.asking.form.tab, f.asking.form.each[0].picked]).toEqual([0, []]);
+  f.asking.shown -= 600;
+  term_type(f, " ");
+  expect(f.asking.form.each[0].picked).toEqual([0]);
 });

@@ -19,6 +19,7 @@ import { term_ask, term_chooser } from "./Commands.ts";
 import * as Draw from "../ui/Draw.ts";
 import { term_note } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
+import { popup_held } from "./Popup.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_send, type Form, type Term } from "./Term.ts";
 import type { Query, Question } from "../ui/View.ts";
@@ -45,7 +46,7 @@ export function term_asks(t: Term): void {
     return;
   }
   if (t.asking === null) {
-    t.asking = { id: q.id, c: null, done: false, form: q.queries === undefined ? null : { tab: 0, each: q.queries.map(() => ({ ed: Screen.ed_new(), at: 0, picked: [] })) } };
+    t.asking = { id: q.id, c: null, done: false, form: q.queries === undefined ? null : { tab: 0, each: q.queries.map(() => ({ ed: Screen.ed_new(), at: 0, picked: [] })) }, shown: null };
     if (q.queries === undefined) {
       term_note(t, q.who + " asks to use " + q.tool + (q.what === "" ? "" : ": " + q.what) + (q.why === undefined || q.why === "" ? "." : ". Why: " + q.why));
     }
@@ -71,7 +72,8 @@ function term_form(t: Term): [Asked, Form] | null {
 // rest edit the words, as the input's keys do. Tab and Shift+Tab (Left
 // and Right off the words) go round the questions and the answers,
 // where Enter sends them (no editing key reaches the input there). Esc
-// and Ctrl+C skip them all
+// and Ctrl+C skip them all; Enter does nothing while they are held
+// (Popup.ts popup_held: just shown)
 export function term_form_key(t: Term, key: string): boolean {
   const open = term_form(t);
   if (open === null) {
@@ -87,6 +89,8 @@ export function term_form_key(t: Term, key: string): boolean {
   const row    = ({ Up: -1, Down: 1 } as Record<string, number>)[key];
   if (key === "Esc" || key === "Ctrl+C") {
     term_answer(t, q, false, false, "");
+  } else if (key === "Enter" && popup_held(t)) {
+    return true;
   } else if (tab !== undefined) {
     f.tab = (f.tab + tab + n + 1) % (n + 1);
   } else if (e === undefined) {
@@ -111,8 +115,9 @@ export function term_form_key(t: Term, key: string): boolean {
 }
 
 // text typed at illi's questions (true: taken): a space on an option
-// picks it (the one picked, but where several may be; again: not), else
-// to the words; on the answers, nowhere
+// picks it (the one picked, but where several may be; again: not; held
+// just shown, as Enter is: nothing), else to the words; on the answers,
+// nowhere
 export function term_form_type(t: Term, text: string): boolean {
   const open = term_form(t);
   if (open === null) {
@@ -125,6 +130,9 @@ export function term_form_type(t: Term, text: string): boolean {
     return true;
   }
   if (text === " " && e.at < query.options.length) {
+    if (popup_held(t)) {
+      return true;
+    }
     e.picked = e.picked.includes(e.at) ? e.picked.filter((k) => k !== e.at) : query.multi ? [...e.picked, e.at] : [e.at];
   } else {
     Screen.ed_type(e.ed, text);
@@ -234,6 +242,6 @@ function term_ask_open(t: Term, q: Question): void {
 
 // a question answered; said: a no's reason, the answer to illi's own
 function term_answer(t: Term, q: Question, yes: boolean, always: boolean, said: string): void {
-  t.asking = { id: q.id, c: null, done: true, form: null };
+  t.asking = { id: q.id, c: null, done: true, form: null, shown: null };
   term_send(t, { $: "answer", ask: q.id, yes, always, said });
 }

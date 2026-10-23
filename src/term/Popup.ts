@@ -19,8 +19,11 @@
 // every key (Keys.ts), the wheel and the pages moving in it
 // (popup_wheel, popup_page): nothing reaches the chat, the side, the
 // tabs or the input under it, and a paste goes to its search, if any.
-// The commands suggested as a /word is typed stay at the input, and
-// panes in the chat's place (Frame.ts).
+// A question illi asks (the permission question, its form) holds Enter,
+// Space and a click for ARM after it first shows (popup_held), so the key
+// that ended a sentence never answers it; Esc, its no, never waits. The
+// commands suggested as a /word is typed stay at the input, and panes in
+// the chat's place (Frame.ts).
 
 import * as Draw from "../ui/Draw.ts";
 import { MARGIN } from "./Frame.ts";
@@ -58,6 +61,10 @@ const CUT = 8;
 // one: a third of those shown, one at least)
 const STEP = 3;
 
+// how long a question just shown holds Enter, Space and a click (ms):
+// less than it takes to read it
+const ARM = 500;
+
 // a popup's place on the screen: its top row, its first column, its
 // width and height
 type Place = { row: number; col: number; w: number; h: number };
@@ -77,6 +84,30 @@ type Measure = { names: number; wants: number; least: number; tall: (iw: number)
 // the popup open: the picker (a list, or a line asked for); none: null
 export function term_popup(t: Term): "list" | null {
   return t.choose !== null ? "list" : null;
+}
+
+// whether the question open (its picker, or illi's form, form: drawn now)
+// is the question shown: its picker, not a list over it
+function popup_asks(t: Term, form: boolean): boolean {
+  const a = t.asking;
+  return a != null && !a.done && (t.choose !== null ? t.choose === a.c && t.choose.stays === true : form);
+}
+
+// a paint, illi's form drawn or not: the question shown stamped as it
+// first shows (t.asking.shown), the stamp kept while it shows; hidden (a
+// list over it, the leader's key awaited), it shows anew after
+export function popup_shown(t: Term, form: boolean): void {
+  if (t.asking != null) {
+    t.asking.shown = popup_asks(t, form) ? t.asking.shown ?? Date.now() : null;
+  }
+}
+
+// whether the question open still holds Enter, Space and a click: till
+// ARM after it first showed, as painted (not painted yet: held, as one
+// read may bring the question and the keys after it)
+export function popup_held(t: Term): boolean {
+  const a = t.asking;
+  return popup_asks(t, a?.form != null) && (a!.shown == null || Date.now() - a!.shown < ARM);
 }
 
 // a popup's place and size on a screen w by h, from its measure alone

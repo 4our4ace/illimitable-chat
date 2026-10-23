@@ -149,7 +149,7 @@ export type Term = {
   dropped : string;
   lead    : boolean;
   quoted  : { at: number; add: string } | null;
-  asking  : { id: string; c: Chooser | null; done: boolean; form: Form | null } | null; // the question shown (Asks.ts): its picker or form, whether answered
+  asking  : { id: string; c: Chooser | null; done: boolean; form: Form | null; shown: number | null } | null; // the question shown (Asks.ts): its picker or form, whether answered, when it showed (Popup.ts popup_shown; null: not since it last opened)
   box     : PopBox | null;
 };
 

@@ -17,7 +17,7 @@ import * as Draw from "../ui/Draw.ts";
 import { term_hint } from "./Keys.ts";
 import { member_others } from "./Member.ts";
 import * as Paint from "../ui/Paint.ts";
-import { PANEL, popup_paint, term_popup } from "./Popup.ts";
+import { PANEL, popup_paint, popup_shown, term_popup } from "./Popup.ts";
 import { term_shown } from "./Notices.ts";
 import { term_mode } from "./PermCommands.ts";
 import { term_profile_pick } from "./ProfileCommands.ts";
@@ -198,6 +198,7 @@ export function term_paint(t: Term): void {
   const status = status_rows(t, iw, h - (paned ? 4 : 5) - input.lines.length - above.length - STATUS_ROOM);
   const tall  = Math.max(1, h - (paned ? 4 : 5) - input.lines.length - above.length - status.length);
   const pop   = term_popup(t) !== null;
+  popup_shown(t, form !== null && !paned);
   const box   = pop ? null : term_box(t, iw, tall + 1 + above.length);
   const top   = box === null ? Infinity : 2 + tall + above.length - box.length;
   const view  = term_view(t, cw, tall, 1, left + MARGIN);
