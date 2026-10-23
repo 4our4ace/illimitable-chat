@@ -572,24 +572,37 @@ function term_agent_set(t: Term, arg: string): void {
   term_chooser(t, "Agent", names.map((name) => name ?? View.MAIN), about, names.indexOf(t.v.agent), (k) => term_choose(t, names[k]));
 }
 
-// the picker opened, a popup (Popup.ts; the pane closed), at the option
-// marked as now; with `more`, a search (typing ranks the names, or each
-// option's hay; with `used`, the more used first among matches as good),
-// what else the lit option takes and what the foot says of it (the model
-// picker's), what shows at each option's right end, each option's group
-// (the palette's), the lines leading the options, whether it is a
-// question illi asks (stays) and the key that opened it, to close it
-export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; detail?: Chooser["detail"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; heads?: string[]; lead?: Chooser["lead"]; stays?: boolean; key?: string } = {}): void {
+// a list's picker opened, a popup (Popup.ts; the pane closed; a
+// question at the input waits under it), at the option marked as now;
+// with `more`, a search (typing ranks the names, or each option's hay;
+// with `used`, the more used first among matches as good), what else the
+// lit option takes and what the foot says of it (the model picker's),
+// what shows at each option's right end, each option's group (the
+// palette's) and the key that opened it, to close it
+export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; detail?: Chooser["detail"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; heads?: string[]; key?: string } = {}): void {
   const shown = Screen.ed_rank("", names);
-  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, heads: more.heads, lead: more.lead, stays: more.stays, key: more.key, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), detail: more.detail, ask: null };
+  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, heads: more.heads, key: more.key, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), detail: more.detail, ask: null };
   t.pane   = null;
+}
+
+// a question's picker opened in the input's place (Question.ts: a
+// confirmation, the permission question), in place of the question
+// there and of the list that asked it (a pane stays), its first answer
+// lit: its title, its answers and what each is, what picking answer k
+// does; with `more`, what else a key does on answer k (the permission
+// question's Esc), what its rule says of the lit one, the lines leading
+// the answers (why it asks, what it would do)
+export function term_question(t: Term, title: string, names: string[], about: string[], pick: (k: number) => void, more: { keys?: Chooser["keys"]; foot?: Chooser["foot"]; lead?: Chooser["lead"] } = {}): void {
+  t.question = { title, names, about, lead: more.lead, here: -1, pick, find: null, shown: Screen.ed_rank("", names), at: 0, top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null };
+  t.choose   = null;
 }
 
 // the leader pressed (config.LEADER): the screen greys till the next key,
 // which runs its shortcut (term_after); nothing else shows, a shortcut is
-// found by trying, or in /shortcuts. A picker open is closed first, the
-// commands suggested too (as Esc would), so the shortcut has the screen
-// (a question shows again after it: Asks.ts)
+// found by trying, or in /shortcuts. A list open is closed first, the
+// commands suggested too (as Esc would), so the shortcut has the screen;
+// a question at the input stays (one the chat asks waits for the
+// shortcut: Asks.ts)
 export function term_lead(t: Term): void {
   t.choose = null;
   const sug = term_suggest(t);
@@ -697,14 +710,16 @@ export function term_shortcut(t: Term, run: string): void {
   void cmd?.[3](t, cmd[0] === "" ? run : "");
 }
 
-// a line asked for in the picker's popup (Chooser ask): its title, the hint
-// while it is empty, what it starts as, what the foot says, what Enter
-// does with it (a reason: the box stays, saying it)
+// a line asked for, a question in the input's place (Chooser ask;
+// Question.ts), in place of the question there and of the list that
+// asked it (a pane stays): its title, the hint while it is empty, what it
+// starts as, what its rule says, what Enter does with it (a reason: it
+// stays, saying it)
 export function term_ask(t: Term, title: string, hint: string, start: string, foot: string, done: (text: string) => string | null): void {
   const find = Screen.ed_new();
   Screen.ed_set(find, start);
-  t.choose = { title, names: [], about: [], here: -1, pick: () => {}, find, shown: [], at: 0, top: 0, keys: () => false, foot: () => foot, ask: { hint, done } };
-  t.pane   = null;
+  t.question = { title, names: [], about: [], here: -1, pick: () => {}, find, shown: [], at: 0, top: 0, keys: () => false, foot: () => foot, ask: { hint, done } };
+  t.choose   = null;
 }
 
 // the picker's search changed: the options it matches, the best lit

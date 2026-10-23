@@ -87,8 +87,10 @@ import * as View from "../ui/View.ts";
 // lines as laid
 // out at one; find: a block to scroll to; pane: a text over the chat
 // (/help, /agents); agents: the user's primary agents, as last read; choose: the
-// picker, a popup (Popup.ts; null: closed); profs: the profiles, as last
-// read; hits: what a click on the screen does;
+// picker of a list, a popup (Popup.ts; null: closed); question: the
+// picker of a question, in the input's place (Question.ts: a
+// confirmation, a line asked for, the permission question; null: none);
+// profs: the profiles, as last read; hits: what a click on the screen does;
 // since: when the work running began, spin: the spinner's clock,
 // ruled: the screen as last painted, for the clock to write the rule and
 // the side's rows again alone (null: none yet): the rule's row and width,
@@ -107,8 +109,9 @@ import * as View from "../ui/View.ts";
 // goes (one that sent it keeps it so, as the chat lets it go; "": none);
 // lead: the leader pressed, the next key its shortcut's (the screen grey
 // meanwhile: Frame.ts); quoted: the quote a right drag put in the input
-// last, when and what it added (Select.ts; null: none); box: the popup
-// as last painted (Popup.ts; null: none, or a new size since), aim: the
+// last, when and what it added (Select.ts; null: none); box: the box the
+// mouse goes to as last painted (a popup, else the question at the input
+// or the commands suggested; null: none, or a new size since), aim: the
 // mouse as it saw it; pin: a mark a click acted on, by its key, and the
 // screen row clicked, where the next paint puts its first line (Frame.ts
 // term_chat; null: none); lit: the mark lit as last painted, by its key
@@ -142,6 +145,7 @@ export type Term = {
   pane    : Pane | null;
   agents  : Profile[];
   choose  : Chooser | null;
+  question: Chooser | null;
   profs   : string[];
   hits    : Hit[];
   since   : number;
@@ -161,8 +165,8 @@ export type Term = {
   dropped : string;
   lead    : boolean;
   quoted  : { at: number; add: string } | null;
-  asking  : { id: string; c: Chooser | null; done: boolean; form: Form | null; shown: number | null } | null; // the question shown (Asks.ts): its picker or form, whether answered, when it showed (Popup.ts popup_shown; null: not since it last opened)
-  box     : PopBox | null;
+  asking  : { id: string; c: Chooser | null; done: boolean; form: Form | null; shown: number | null } | null; // the chat's question (Asks.ts): its picker (or the line it asks why) or form, whether answered, when it showed (Question.ts question_shown; null: not since it last opened)
+  box     : Box | null;
   aim     : Aim;
   pin     : { key: string; row: number } | null;
   lit     : string | null;
@@ -171,23 +175,25 @@ export type Term = {
   acted   : { at: Screen.Spot; until: number } | null;
 };
 
-// the mouse as the popup saw it (Popup.ts popup_mouse): the pointer's
-// row as last seen, and whether it was in the box; the press it took
-// (none: null), in the box painted for what (null: one let go: a box
-// stale, a click again), and what it landed on (a row's target, the box,
-// outside); what was open at the last first press (a popup's picker,
-// none: null), for the presses again after it
+// the mouse as a box saw it (Popup.ts popup_mouse): the pointer's row as
+// last seen, and whether it was in the box; the press it took (none:
+// null), in the box painted for what (null: one let go: a box stale, a
+// click again), and what it landed on (a row's target, the box,
+// outside); what was open at the last first press (a popup's picker or
+// the question's, none: null), for the presses again after it
 export type Aim = { row: number; in: boolean; press: { of: object | null; on: Target | "box" | "out" | null } | null; first: object | null };
 
-// a box as last painted: a popup (Popup.ts), or the commands suggested
-// (Frame.ts); what it was painted for (the picker, illi's form, the
-// commands), its place and size, what each of its rows stands for, top
-// first (null: nothing to point at: its frame, a head, a blank; spans:
+// a box as last painted: a popup (Popup.ts), the question at the input
+// (Question.ts), or the commands suggested (Frame.ts); what it was
+// painted for (the picker, illi's form, the commands), its place and
+// size, how far in from its edge its lines start (a frame's 2; the
+// question's, none), what each of its rows stands for, top first (null:
+// nothing to point at: its frame, a head, the lead, a blank; spans:
 // things side by side, the form's tabs); its list (the form's: what
 // scrolls under its tabs): the box's row it starts at, its lines, the
 // entries they show (the form's: all its lines, shown or not); the lines
 // leading it: how many show, of how many
-export type PopBox = { of: object; row: number; col: number; w: number; h: number; rows: Array<Target | Span[] | null>; list: number; lines: number; tall: number; ahead: number; lead: number };
+export type Box = { of: object; row: number; col: number; w: number; h: number; inset: number; rows: Array<Target | Span[] | null>; list: number; lines: number; tall: number; ahead: number; lead: number };
 
 // what a row of a box stands for: one of a popup's options (by its
 // index among the names), one of the commands suggested (by its index
@@ -242,32 +248,33 @@ export type Pane = { title: string; make: (w: number) => Paint.Line[]; w: number
 export type Hit = { row: number; col: number; to: number; run: () => void };
 
 // what's under a spot of the screen, for a click and the light alike
-// (Select.ts term_target): a popup (or the commands suggested) over it,
-// a hit, a reply's button, a mark of the chat, or nothing
+// (Select.ts term_target): a box (a popup, the question at the input,
+// the commands suggested) over it, a hit, a reply's button, a mark of
+// the chat, or nothing
 export type Under = { $: "popup" } | { $: "hit"; hit: Hit } | { $: "copy"; copy: () => string } | { $: "mark"; mark: Paint.Mark } | { $: "none" };
 
-// the picker, a popup in the screen's middle (Popup.ts: /agent,
-// /profile, /model, /settings, Ctrl+P and the rest):
-// its title, its options' names and what each is, the one marked as now
-// (-1: none), what picking option k does; find: the search typed, an
-// input as the chat's, its editing keys too (null: none, typing goes
-// nowhere), shown: the options it matches
-// (Screen.ed_rank), best first, at: the one lit among them, top: the
-// first in view; keys: what else the lit option k takes (true: taken; the
-// model picker's effort and speed, a setting's steps), foot: what the
-// box's foot says of it ("": nothing); ask: a line asked for instead of
-// options (a profile's name, a file): typed in `find`, its hint shown
-// while it is empty, given by Enter to `done`, whose answer null closes
-// the box (what it opened stays) and a reason keeps it open, in the foot;
+// the picker: a list, a popup in the screen's middle (Popup.ts: /agent,
+// /profile, /model, /settings, Ctrl+P and the rest), or a question, in
+// the input's place (Question.ts: a confirmation, a line asked for, the
+// permission question): its title, its options' names and what each
+// is, the one marked as now (-1: none), what picking option k does;
+// find: the search typed (a question's: the line asked), an input as the
+// chat's, its editing keys too (null: none, typing goes nowhere), shown:
+// the options it matches (Screen.ed_rank), best first, at: the one lit
+// among them, top: the first in view; keys: what else the lit option k
+// takes (true: taken; the model picker's effort and speed, a setting's
+// steps), foot: what the box's foot (a question's rule) says of it ("":
+// nothing); ask: a line asked for instead of options (a profile's name,
+// a file), always a question: typed in `find`, its hint shown while it
+// is empty, given by Enter to `done`, whose answer null closes it (what
+// it opened stays) and a reason keeps it open, saying it;
 // hay: what a search looks in, an option's each (none: its name); used:
 // how often an option was picked (a search ranks the more used first);
 // aside: what shows at an option's right end, each (its keys, its value);
 // heads: each option's group, a head over its first while nothing is
-// searched; stays: a question illi asks (a click outside leaves it; its
-// box may take all but two of the screen's rows); key: the key that
-// opened it, which closes it (Ctrl+P's); past: the lines leading it
-// scrolled past; lead: lines over the options (a question's what and
-// why), wrapped;
+// searched; key: the key that opened it, which closes it (Ctrl+P's);
+// past: the lines leading it scrolled past; lead: lines over a
+// question's answers (why it asks, what it would do), wrapped;
 // detail: lines under them of the lit option k, made for w columns (the
 // model picker's autocompact gauge)
 export type Chooser = {
@@ -278,7 +285,6 @@ export type Chooser = {
   used?  : (k: number) => number;
   aside? : string[];
   heads? : string[];
-  stays? : boolean;
   key?   : string;
   past?  : number;
   lead?  : Paint.Line[];
@@ -361,6 +367,7 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
     pane    : null,
     agents  : [],
     choose  : null,
+    question: null,
     profs   : Profiles.profile_list(config.ROOT),
     hits    : [],
     since   : 0,

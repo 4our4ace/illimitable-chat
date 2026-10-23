@@ -5,9 +5,11 @@
 // shortcut, before all else), and what takes keys first: a popup open
 // (Popup.ts: a list, illi's questions) every key but PASS's, so none
 // reaches the chat, a pane, the input or the commands suggested under it
-// (its search or words the text typed too); then the commands suggested
-// and a pane; Enter (a skill named mid-message told), Esc, Ctrl+C and
-// Ctrl+D, Tab (the suggested reply), Shift+Tab and the pages.
+// (its search or words the text typed too); then a question at the input
+// (Question.ts) every key but PASS's and the wheel off it (its line the
+// text typed too); then the commands suggested and a pane; Enter (a
+// skill named mid-message told), Esc, Ctrl+C and Ctrl+D, Tab (the
+// suggested reply), Shift+Tab and the pages.
 
 import { term_form_key, term_form_type } from "./Asks.ts";
 import { Chat } from "../chat/Chat.ts";
@@ -18,7 +20,8 @@ import { term_draw } from "./Frame.ts";
 import { member_others } from "./Member.ts";
 import { term_note, term_toast, term_unnote } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
-import { popup_form_wheel, popup_held, popup_mouse, popup_page, popup_wheel, term_popup } from "./Popup.ts";
+import { popup_form_wheel, popup_mouse, popup_page, popup_wheel, term_popup } from "./Popup.ts";
+import { question_held, question_of, question_over } from "./Question.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_copied, term_hover, term_mouse, term_selected, term_target, term_typing, term_wordy } from "./Select.ts";
 import { term_act, term_primaries, term_quit, type Chooser, type Cmd, type Term } from "./Term.ts";
@@ -28,9 +31,9 @@ import * as View from "../ui/View.ts";
 // line up or down
 const ROWS = ["Up", "Down", "Shift+Enter", "Ctrl+J"];
 
-// the keys a popup leaves to what is under it: the screen drawn again,
-// a suspend, the palette (in the popup's place), the leader (its own
-// key: config.LEADER)
+// the keys a popup or a question leaves to what is under it: the screen
+// drawn again, a suspend, the palette (in a list's place, over a
+// question), the leader (its own key: config.LEADER)
 const PASS = ["Ctrl+L", "Ctrl+Z", "Ctrl+P"];
 
 // the keys that leave text chosen (any other lets it go)
@@ -118,14 +121,15 @@ function term_keyed(key: string): Cmd | undefined {
 }
 
 // a key after the leader: its shortcut's (term_after; the wheel lets the
-// leader go and goes on to what has it: the popup, a pane, else the
-// chat). A key while a popup (the picker, illi's questions), the
-// commands suggested or a pane is open: theirs first (true: taken). The
-// picker as term_choose_key, every key but PASS's; illi's questions every
-// key but PASS's and the leader too, as Asks.ts says (the wheel scrolls
-// them: Popup.ts); the commands move by Up and Down, fill one in by Tab,
-// run it by Enter; a pane scrolls by the arrows, the pages and the
-// wheel, Esc and Enter close it, and no editing key reaches the input
+// leader go and goes on to what has it: the popup, the question, a pane,
+// else the chat). A key while a popup (a list, illi's questions), a
+// question at the input, the commands suggested or a pane is open:
+// theirs first (true: taken). A list as term_choose_key, every key but
+// PASS's; illi's questions every key but PASS's and the leader too, as
+// Asks.ts says (the wheel scrolls them: Popup.ts); a question at the
+// input as term_question_key; the commands move by Up and Down, fill one
+// in by Tab, run it by Enter; a pane scrolls by the arrows, the pages and
+// the wheel, Esc and Enter close it, and no editing key reaches the input
 // hidden under it. Any key puts the pointer's light out first (but the
 // wheel: Select.ts term_typing)
 export function term_grab(t: Term, key: string): boolean {
@@ -150,7 +154,11 @@ export function term_grab(t: Term, key: string): boolean {
     }
     return true;
   }
-  const sug = term_suggest(t);
+  const asked = question_of(t);
+  if (asked !== null && term_question_key(t, asked, key)) {
+    return true;
+  }
+  const sug = asked === null ? term_suggest(t) : null;
   if (sug !== null && term_suggest_key(t, sug, key)) {
     return true;
   }
@@ -169,18 +177,40 @@ export function term_grab(t: Term, key: string): boolean {
   return move !== undefined || shut || Screen.ed_key(Screen.ed_new(), key);
 }
 
-// a key to the picker (true: taken: all but PASS's and the leader, which
-// go on to open what they open in its place). Ctrl+C and Ctrl+D are Esc
-// here (neither interrupts, clears the input nor quits); the key that
-// opened it closes it (Ctrl+P's); a question just shown holds Enter
-// (Popup.ts popup_held); the lit option's own keys first (the model
-// picker's effort and speed); then Up and Down (or Tab, Shift+Tab) move round
-// the options shown, PgUp and PgDn a page, Ctrl+Home and Ctrl+End to the
-// first and the last (Home and End too, with nothing to type in), the
-// wheel scrolls (Popup.ts), Enter picks the lit one (none matching the
-// search: nothing; a line asked for: given, the box kept with a reason
-// if it won't do), Esc closes, and the search takes the input's editing
-// keys (but its rows'); any other key does nothing
+// a key while a question shows at the input (true: taken): every one but
+// PASS's and the leader, which go on to what they do with no question
+// (Ctrl+P's list shows over it), Ctrl+C while text is chosen (it copies
+// it, as ever), and the wheel off it, which scrolls the chat (or a pane)
+// as with no question; its picker's as term_choose_key (the wheel on it
+// scrolls its lead)
+function term_question_key(t: Term, c: Chooser, key: string): boolean {
+  const wheel = key === "WheelUp" || key === "WheelDown";
+  if ((wheel && !question_over(t)) || (key === "Ctrl+C" && t.sel?.moved === true && !t.sel.held)) {
+    return false;
+  }
+  return term_choose_key(t, c, key);
+}
+
+// a picker closed: the list's popup or the question at the input it is
+function term_shut(t: Term, c: Chooser): void {
+  t.choose   = t.choose === c ? null : t.choose;
+  t.question = t.question === c ? null : t.question;
+}
+
+// a key to the picker, a list's or a question's (true: taken: all but
+// PASS's and the leader, which go on to open what they open in a list's
+// place). Ctrl+C and Ctrl+D are Esc here (neither interrupts, clears the
+// input nor quits); the key that opened it closes it (Ctrl+P's); a
+// question illi asks, just shown, holds Enter (Question.ts
+// question_held); the lit option's own keys first (the model picker's
+// effort and speed, the permission question's Esc); then Up and Down (or
+// Tab, Shift+Tab) move round the options shown, PgUp and PgDn a page,
+// Ctrl+Home and Ctrl+End to the first and the last (Home and End too,
+// with nothing to type in), the wheel scrolls (Popup.ts), Enter picks the
+// lit one (none matching the search: nothing; a line asked for: given,
+// kept with a reason if it won't do), Esc closes, and the search (the
+// line asked) takes the input's editing keys (but its rows'); any other
+// key does nothing
 export function term_choose_key(t: Term, c: Chooser, press: string): boolean {
   const key  = press === "Ctrl+C" || press === "Ctrl+D" ? "Esc" : press;
   const n    = c.shown.length;
@@ -188,24 +218,24 @@ export function term_choose_key(t: Term, c: Chooser, press: string): boolean {
   const move = ({ Up: -1, "Shift+Tab": -1, Down: 1, Tab: 1 } as Record<string, number>)[key];
   const page = ["PgUp", "PgDn", "Ctrl+Home", "Ctrl+End", ...(c.find === null ? ["Home", "End"] : [])].includes(key);
   if (key === c.key) {
-    t.choose = null;
+    term_shut(t, c);
     return true;
   }
   if (PASS.includes(key) || key === config.LEADER) {
     return false;
   }
-  if (key === "Enter" && popup_held(t)) {
+  if (key === "Enter" && question_held(t)) {
     return true;
   }
   if (lit !== undefined && c.keys(lit, key)) {
     return true;
   }
   if (key === "Enter" && c.ask !== null) {
-    t.choose  = null;
+    term_shut(t, c);
     const why = c.ask.done((c.find?.text ?? "").trim());
     if (why !== null) {
-      t.choose = c;
-      c.foot   = () => why;
+      t.question = c;
+      c.foot     = () => why;
     }
     return true;
   }
@@ -216,10 +246,10 @@ export function term_choose_key(t: Term, c: Chooser, press: string): boolean {
   } else if (page) {
     popup_page(t, c, key);
   } else if (key === "Enter" && lit !== undefined) {
-    t.choose = null;
+    term_shut(t, c);
     c.pick(lit);
   } else if (key === "Esc") {
-    t.choose = null;
+    term_shut(t, c);
   } else if (c.find !== null && !ROWS.includes(key) && Screen.ed_key(c.find, key)) {
     term_chooser_find(c);
   }
@@ -227,12 +257,13 @@ export function term_choose_key(t: Term, c: Chooser, press: string): boolean {
 }
 
 // text typed after the leader: its first character the shortcut's key,
-// the rest as typed after it; while the picker is open: to its search,
-// none: nowhere, never the input; while illi asks, to its question
-// (Asks.ts; a pane under it stays); over a pane, to the input, the pane
-// closed. The pointer's light goes out first, as at a key
+// the rest as typed after it; while a picker is open (a list, else a
+// question at the input): to its search or its line, none: nowhere,
+// never the input; while illi asks, to its question (Asks.ts; a pane
+// under it stays); over a pane, to the input, the pane closed. The
+// pointer's light goes out first, as at a key
 export function term_type(t: Term, text: string): boolean {
-  const c = t.choose;
+  const c = t.choose ?? t.question;
   term_typing(t, "");
   if (t.lead) {
     const ch   = [...text][0];
@@ -258,15 +289,16 @@ export function term_type(t: Term, text: string): boolean {
   return false;
 }
 
-// a click (never under a popup, nor on the commands suggested: Popup.ts
-// has those; never the press that focused the window, nor one again on
-// what a click just acted on: Select.ts), on what's under it (Select.ts
-// term_target): what was drawn there does its own (the side, the tabs,
-// the jump, a reply's button copies); in the chat (marks false: nothing,
-// the click let text chosen go), a run of work's head or its bar opens or
-// closes the whole run, at once; inside an open one, a message folds to
-// a line, or unfolds; a block opens, and an open one shuts from any line
-// of its frame (the innermost thing holding the line acts). Those wait
+// a click (never under a popup, nor on the answers of a question at the
+// input or the commands suggested: Popup.ts has those; never the press
+// that focused the window, nor one again on what a click just acted on:
+// Select.ts), on what's under it (Select.ts term_target): what was drawn
+// there does its own (the side, the tabs, the jump, a reply's button
+// copies); in the chat (marks false: nothing, the click let text chosen
+// go), a run of work's head or its bar opens or closes the whole run, at
+// once; inside an open one, a message folds to a line, or unfolds; a
+// block opens, and an open one shuts from any line of its frame (the
+// innermost thing holding the line acts). Those wait
 // till TWICE after the press (term_wait), so a double click still
 // chooses the word under it; where no word is (past a line's end, a
 // blank line, a frame's edge, a mark's own control: its glyph, a

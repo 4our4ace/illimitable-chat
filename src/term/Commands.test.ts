@@ -53,7 +53,7 @@ afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 const term = () => {
   const v = View.view_new();
   View.view_hear(v, { $: "state", ...v, vendors: ["claude-api", "openai-api"], pick: { vendor: "claude-api", model: "sonnet-5.5", effort: "medium", speed: "slow" } });
-  return { v, scr: { tty: true, ed: Screen.ed_new() }, choose: null, wait: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], subs: new Map(), seen: { tall: 20 }, due: true } as any;
+  return { v, scr: { tty: true, ed: Screen.ed_new() }, choose: null, question: null, wait: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], subs: new Map(), seen: { tall: 20 }, due: true } as any;
 };
 
 // /model typed with no name
@@ -183,7 +183,7 @@ test("/shortcuts: the leader and each key after it; Enter changes one, Del puts 
   const enter = (name: string, text: string) => {
     at(name);
     term_grab(t, "Enter");
-    Screen.ed_set(t.choose.find, text);
+    Screen.ed_set(t.question.find, text);
     term_grab(t, "Enter");
   };
   run(t, "/shortcuts");
@@ -200,13 +200,13 @@ test("/shortcuts: the leader and each key after it; Enter changes one, Del puts 
   term_grab(t, "Delete");
   expect(config.SHORTCUTS.t).toBe("/tab");
   enter("add one", "c");
-  expect(t.choose.foot(-1)).toBe("a key, a space, then what it runs: c /compact");
-  Screen.ed_set(t.choose.find, "c /compact");
+  expect([t.choose, t.question.foot(-1)]).toEqual([null, "a key, a space, then what it runs: c /compact"]);
+  Screen.ed_set(t.question.find, "c /compact");
   term_grab(t, "Enter");
   expect([config.SHORTCUTS.c, t.choose.names.includes("Ctrl+X c")]).toEqual(["/compact", true]);
   enter("leader", "ctrl+p");
-  expect(t.choose.foot(-1)).toBe("leader takes a key illi doesn't take itself; Ctrl+P is one.");
-  Screen.ed_set(t.choose.find, "alt+l");
+  expect(t.question.foot(-1)).toBe("leader takes a key illi doesn't take itself; Ctrl+P is one.");
+  Screen.ed_set(t.question.find, "alt+l");
   term_grab(t, "Enter");
   expect([config.LEADER, t.choose.names[1], about("leader")]).toEqual(["Alt+L", "Alt+L a", "Alt+L · the key before a shortcut (illi's: Ctrl+X)"]);
   term_press(t, "Alt+L");
@@ -254,9 +254,9 @@ test("/shortcuts while a variable sets them: a change, or a Del, says so and cha
     run(t, "/shortcuts");
     at("Ctrl+X m");
     term_grab(t, "Enter");
-    Screen.ed_set(t.choose.find, "/settings");
+    Screen.ed_set(t.question.find, "/settings");
     term_grab(t, "Enter");
-    expect(t.choose.foot(-1)).toBe(why);
+    expect(t.question.foot(-1)).toBe(why);
     term_grab(t, "Esc");
     run(t, "/shortcuts");
     at("Ctrl+X t");

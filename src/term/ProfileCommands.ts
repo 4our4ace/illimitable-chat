@@ -19,7 +19,7 @@ import * as path from "node:path";
 import { term_file } from "./Attach.ts";
 import { Chat } from "../chat/Chat.ts";
 import { Lock } from "../chat/Lock.ts";
-import { term_ask, term_chooser } from "./Commands.ts";
+import { term_ask, term_chooser, term_question } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Disk } from "../chat/Disk.ts";
 import { Machine } from "../tools/Machine.ts";
@@ -131,7 +131,7 @@ function term_profile_busy(t: Term, what: string): boolean {
 // keep: the project's lock kept through the step (this project
 // forgotten: no illi opens it meanwhile), let go as illi runs again.
 // Background jobs running (this illi runs the chat) stop with it, so it
-// asks first in a picker, Stay lit, unless the caller asked already
+// asks first at the input, Stay lit, unless the caller asked already
 // (asked); a switch taken is checked again (a turn begun meanwhile
 // refuses it, jobs begun meanwhile are asked about)
 export async function term_restart(t: Term, name: string, step?: () => void | Promise<void>, keep = false, asked = false): Promise<void> {
@@ -145,7 +145,7 @@ export async function term_restart(t: Term, name: string, step?: () => void | Pr
         void term_restart(t, name, step, keep, t.v.background.every((j) => shown.has(j.id)));
       }
     };
-    term_chooser(t, "Switch to " + name + "?", ["Stay", "Switch and stop " + them], ["keeps " + them + " running", "gone for good"], -1, pick, { lead: [[Paint.Run(lead)]], foot: (k) => (k === 0 ? "Enter or Esc stay" : "/background shows " + them) });
+    term_question(t, "Switch to " + name + "?", ["Stay", "Switch and stop " + them], ["keeps " + them + " running", "gone for good"], pick, { lead: [[Paint.Run(lead)]], foot: (k) => (k === 0 ? "Enter or Esc stay" : "/background shows " + them) });
     return;
   }
   await term_leave(t, keep);
@@ -194,7 +194,7 @@ async function term_leave(t: Term, keep = false): Promise<void> {
   await Screen.screen_leave(t.scr);
 }
 
-// what new profile `name` starts with, asked in a picker: a fresh chat,
+// what new profile `name` starts with, asked at the input: a fresh chat,
 // or this one (moved: this one starts with an empty chat); the global
 // setup either way
 function term_profile_new(t: Term, name: string): void {
@@ -203,7 +203,7 @@ function term_profile_new(t: Term, name: string): void {
     ["Fresh chat",     "the global settings, skills and MCP servers; its own chat", false],
     ["With this chat", "this chat moves there; " + here + " starts empty",           true],
   ];
-  term_chooser(t, "New profile " + name, rows.map((r) => r[0]), rows.map((r) => r[1]), -1, (k) => void term_profile_make(t, name, rows[k][2]));
+  term_question(t, "New profile " + name, rows.map((r) => r[0]), rows.map((r) => r[1]), (k) => void term_profile_make(t, name, rows[k][2]));
 }
 
 // a new profile made, and switched to (move: with this chat, moved as
@@ -271,8 +271,8 @@ async function term_profile_elsewhere(t: Term, name: string, what: string): Prom
   return n > 0;
 }
 
-// a profile and all it holds gone, once the person says so in a picker;
-// never the default, nor the one running
+// a profile and all it holds gone, once the person says so at the
+// input; never the default, nor the one running
 export function term_profile_delete(t: Term, name: string): void {
   const why =
     name === Profiles.DEFAULT ? "The default profile is illi's own folder (" + config.config_home(config.ROOT) + ") and can't be deleted." :
@@ -291,7 +291,7 @@ export function term_profile_delete(t: Term, name: string): void {
   };
   const about = ["", "its chat and setup, gone for good"];
   const foot  = () => "Ctrl+E in /profile exports a copy first";
-  term_chooser(t, "Delete profile " + name + "?", ["Keep it", "Delete it"], about, -1, (k) => (k === 1 ? void gone() : term_note(t, "Kept profile " + name + ".")), { foot });
+  term_question(t, "Delete profile " + name + "?", ["Keep it", "Delete it"], about, (k) => (k === 1 ? void gone() : term_note(t, "Kept profile " + name + ".")), { foot });
 }
 
 // a profile as one archive, ./illi-profile-<name>.tar.gz, never over a

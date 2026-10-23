@@ -3,16 +3,17 @@
 // /projects: the projects (Projects.ts), in a list (a popup, as every
 // list: Popup.ts), this one first, then the one used last first: each its
 // name, its last day and its messages, its folder (last: the longest),
-// typed to search. Enter says more of one; Delete asks to forget it:
-// Cancel (lit), a copy exported first (./illi-project-<name>.json, never
-// over a file), or forget. A project forgotten is gone, its file
-// deleted, its images with it (Store.forget); its lock is held
-// meanwhile, so one open in another terminal is kept (quit it there
-// first). This one, forgotten, starts anew: illi runs again.
+// typed to search. Enter says more of one; Delete asks to forget it, at
+// the input (a question: Question.ts): Cancel (lit), a copy exported
+// first (./illi-project-<name>.json, never over a file), or forget. A
+// project forgotten is gone, its file deleted, its images with it
+// (Store.forget); its lock is held meanwhile, so one open in another
+// terminal is kept (quit it there first). This one, forgotten, starts
+// anew: illi runs again.
 
 import * as fs from "node:fs";
 import { Lock } from "../chat/Lock.ts";
-import { term_chooser } from "./Commands.ts";
+import { term_chooser, term_question } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Export } from "../chat/Export.ts";
 import { Memory } from "../chat/Memory.ts";
@@ -62,8 +63,8 @@ function project_more(t: Term, p: Project): void {
   term_note(t, p.name + " · " + project_where(p) + " · " + when + (p.lately === "" ? "." : ". Lately: " + Projects.clip(p.lately)));
 }
 
-// whether to forget a project, asked: Cancel lit (one gone meanwhile:
-// said)
+// whether to forget a project, asked at the input in the list's place:
+// Cancel lit (one gone meanwhile: said, the list closed)
 function project_ask(t: Term, p: Project): void {
   const pics = project_pictures(t, p);
   if (pics === null) {
@@ -76,12 +77,11 @@ function project_ask(t: Term, p: Project): void {
   const names = ["Cancel", "Export a copy first, then forget", "Forget"];
   const about = ["keep it", "./illi-project-" + p.name + ".json, then forgotten" + stops, what + ", gone for good" + stops];
   const pick  = (k: number) => {
-    t.choose = null;
     if (k > 0) {
       project_forget(t, p, k === 1).catch((err) => term_note(t, "Not forgotten: " + (err?.message ?? err) + "."));
     }
   };
-  term_chooser(t, "Forget " + p.name + "?", names, about, -1, pick, { foot: (k) => (k === 0 ? "Enter or Esc keep it" : "can't be undone") });
+  term_question(t, "Forget " + p.name + "?", names, about, pick, { foot: (k) => (k === 0 ? "Enter or Esc keep it" : "can't be undone") });
 }
 
 // a project forgotten, a copy exported first if asked; its lock held

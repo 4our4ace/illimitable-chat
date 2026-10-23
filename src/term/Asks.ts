@@ -1,27 +1,30 @@
 // Asks
 // ====
 // A question the chat asks (View Question: leave to run a call the
-// checks stopped, Tools.guard) in the picker, as it comes: Yes; Yes, and
-// don't ask again for what it keeps, in this project (offered only when
-// it keeps something); No (Esc too); No, and say why (a line typed, for
-// the model). What it would do and why it was asked show over the
-// answers, once: no note says them again (a pipe, with no answers to
-// show, notes them).
-// illi's own questions (ask) show in the popup too, as a form (Popup.ts:
+// checks stopped, Tools.guard) at the input, as every question
+// (Question.ts), as it comes: Yes; Yes, and don't ask again for what it
+// keeps, in this project (offered only when it keeps something); No (Esc
+// too); No, and say why (a line typed, for the model). Why it was asked
+// and what it would do (a command by its lines) show over the answers,
+// once: no note says them again (a pipe, with no answers to show, notes
+// them).
+// illi's own questions (ask) show in the popup, as a form (Popup.ts:
 // over a pane too, the input as typed left under it), a tab each: the
 // question, its options (one to pick, or several), and a row for words
 // of the user's own, which they may type beside the options they pick or
 // instead of them; then a tab with all the answers, to look over and
 // send. Esc skips them all.
 // One answered elsewhere, or dropped (a stop), closes its picker; one
-// that comes while another picker is open waits for it to close. A
-// pipe has no one to ask: a note says what was asked, and no, at once.
+// that comes while a list or another question is open waits for it to
+// close (a list opened over it, Ctrl+P's, leaves it waiting at the
+// input). A pipe has no one to ask: a note says what was asked, and no,
+// at once.
 
-import { term_ask, term_chooser } from "./Commands.ts";
+import { term_ask, term_question } from "./Commands.ts";
 import * as Draw from "../ui/Draw.ts";
 import { term_note } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
-import { popup_held } from "./Popup.ts";
+import { question_held } from "./Question.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_send, type Form, type Span, type Target, type Term } from "./Term.ts";
 import type { Query, Question } from "../ui/View.ts";
@@ -39,8 +42,8 @@ type Asked = Question & { queries: Query[] };
 export function term_asks(t: Term): void {
   const q = t.v.asks[0] ?? null;
   if (t.asking !== null && t.asking.id !== q?.id) {
-    if (t.asking.c !== null && t.choose === t.asking.c) {
-      t.choose = null;
+    if (t.asking.c !== null && t.question === t.asking.c) {
+      t.question = null;
     }
     t.asking = null;
   }
@@ -56,7 +59,7 @@ export function term_asks(t: Term): void {
       return term_answer(t, q, false, false, "");
     }
   }
-  if (!t.asking.done && t.asking.form === null && t.choose === null && !t.lead) {
+  if (!t.asking.done && t.asking.form === null && t.choose === null && t.question === null && !t.lead) {
     term_ask_open(t, q);
   }
 }
@@ -77,7 +80,7 @@ export function term_form(t: Term): [Asked, Form] | null {
 // and Ctrl+Home go to the first row, PgDn and Ctrl+End to the last (the
 // words'); Home and End edit the words there, else go so too. Esc,
 // Ctrl+C and Ctrl+D skip them all; Enter does nothing while they are
-// held (Popup.ts popup_held: just shown)
+// held (Question.ts question_held: just shown)
 export function term_form_key(t: Term, press: string): boolean {
   const open = term_form(t);
   if (open === null) {
@@ -95,7 +98,7 @@ export function term_form_key(t: Term, press: string): boolean {
   const ends   = ({ PgUp: 0, "Ctrl+Home": 0, PgDn: o, "Ctrl+End": o, ...(e === undefined || e.at < o ? { Home: 0, End: o } : {}) } as Record<string, number>)[key];
   if (key === "Esc" || key === "Ctrl+C") {
     term_answer(t, q, false, false, "");
-  } else if (key === "Enter" && popup_held(t)) {
+  } else if (key === "Enter" && question_held(t)) {
     return true;
   } else if (tab !== undefined) {
     f.tab = (f.tab + tab + n + 1) % (n + 1);
@@ -138,7 +141,7 @@ export function term_form_type(t: Term, text: string): boolean {
     return true;
   }
   if (text === " " && e.at < query.options.length) {
-    if (popup_held(t)) {
+    if (question_held(t)) {
       return true;
     }
     e.picked = e.picked.includes(e.at) ? e.picked.filter((k) => k !== e.at) : query.multi ? [...e.picked, e.at] : [e.at];
@@ -246,9 +249,11 @@ function form_tabs(tabs: Paint.Run[], w: number): { tabs: Paint.Line[]; spans: S
   return { tabs: lines, spans };
 }
 
-// the picker for a question, which stays (Chooser stays): its answers,
-// "don't ask again" only where it keeps something (named on one line, as
-// a list shows a command)
+// the question's picker, at the input: its answers, "don't ask again"
+// only where it keeps something (named on one line, as a list shows a
+// command); over them why it asks, then what it would do, bold, by its
+// lines (a command's blank ones left out), so a long command cut to fit
+// never hides the why
 function term_ask_open(t: Term, q: Question): void {
   const keep  = q.keep ?? "";
   const names = ["Yes", ...(keep === "" ? [] : ["Yes, and don't ask again for " + Paint.text_line(keep) + " in this project"]), "No", "No, and say why"];
@@ -257,22 +262,23 @@ function term_ask_open(t: Term, q: Question): void {
     if (key !== "Esc") {
       return false;
     }
-    t.choose = null;
+    t.question = null;
     term_answer(t, q, false, false, "");
     return true;
   };
   const pick = (k: number) => {
     if (k === why) {
       term_ask(t, "Why not " + q.tool + "?", "your reason, for the model", "", "Enter send · Esc back", (why) => (term_answer(t, q, false, false, why), null));
-      t.asking!.c = t.choose;
+      t.asking!.c = t.question;
       return;
     }
     term_answer(t, q, k !== no, k === always, "");
   };
   const title = "Allow " + q.tool + (q.who === "illi" ? "" : " for " + q.who) + "?";
-  const lead  = [...(q.what === "" ? [] : [[Paint.Run(Paint.text_clean(q.what), { ...Paint.INK, b: true })]]), ...(q.why === undefined || q.why === "" ? [] : [[Paint.Run("Why: ", Paint.DIM), Paint.Run(Paint.text_clean(q.why))]])];
-  term_chooser(t, title, names, names.map(() => ""), -1, pick, { keys, lead, foot: () => "Esc no", stays: true });
-  t.asking!.c = t.choose;
+  const what  = q.what.split("\n").map((l) => Paint.text_clean(l).trimEnd()).filter((l) => l.trim() !== "");
+  const lead  = [...(q.why === undefined || q.why === "" ? [] : [[Paint.Run("Why: ", Paint.DIM), Paint.Run(Paint.text_clean(q.why))]]), ...what.map((l) => [Paint.Run(l, { ...Paint.INK, b: true })])];
+  term_question(t, title, names, names.map(() => ""), pick, { keys, lead, foot: () => "Esc no" });
+  t.asking!.c = t.question;
 }
 
 // a question answered; said: a no's reason, the answer to illi's own

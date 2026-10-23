@@ -33,7 +33,7 @@ const MIN = 60000;
 // terminal's: chat null), the jobs given running; a paint always due
 const term = (jobs: Background[], chat: object | null = { busy: false }) => {
   const v = { ...View.view_new(), background: jobs };
-  return { v, chat, scr: { tty: true, ed: Screen.ed_new() }, choose: null, wait: null, pane: null, sug: null, notices: [], agents: [], profs: ["default"], subs: new Map(), since: Date.now(), todo: false, quit: 0, due: true, ver: 0 } as any;
+  return { v, chat, scr: { tty: true, ed: Screen.ed_new() }, choose: null, question: null, wait: null, pane: null, sug: null, notices: [], agents: [], profs: ["default"], subs: new Map(), since: Date.now(), todo: false, quit: 0, due: true, ver: 0 } as any;
 };
 
 // a job, started `ago` ms back
@@ -101,9 +101,9 @@ test("a quit asked for while jobs run or subagents work says what it stops first
 test("a profile switch while jobs run asks first, naming them; staying switches nothing, and a new profile isn't made", async () => {
   const t = term([job(1, "npm run dev"), job(2, "tail -f x.log")]);
   await term_profile_go(t, "work");
-  expect([t.choose.title, t.choose.names, t.choose.lead[0][0].x]).toEqual(["Switch to work?", ["Stay", "Switch and stop them"], "2 background jobs run, and a switch stops them: npm run dev, tail -f x.log"]);
+  expect([t.question.title, t.question.names, t.question.lead[0][0].x]).toEqual(["Switch to work?", ["Stay", "Switch and stop them"], "2 background jobs run, and a switch stops them: npm run dev, tail -f x.log"]);
   term_grab(t, "Enter");
-  expect(t.choose).toBeNull();
+  expect(t.question).toBeNull();
   term_profile(t, "");
   term_grab(t, "Down");
   term_grab(t, "Down");
@@ -112,7 +112,7 @@ test("a profile switch while jobs run asks first, naming them; staying switches 
   term_grab(t, "Enter");
   term_grab(t, "Enter");
   await Bun.sleep(10);
-  expect(t.choose?.title).toBe("Switch to fresh?");
+  expect([t.choose, t.question?.title]).toEqual([null, "Switch to fresh?"]);
   term_grab(t, "Enter");
-  expect([t.choose, fs.existsSync(DIR + "/profiles/fresh")]).toEqual([null, false]);
+  expect([t.question, fs.existsSync(DIR + "/profiles/fresh")]).toEqual([null, false]);
 });

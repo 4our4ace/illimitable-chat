@@ -32,7 +32,7 @@ const View = await import("../ui/View.ts");
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
 // a terminal with no screen; a paint always due, so none is asked for
-const term = () => ({ v: View.view_new(), scr: { tty: true, ed: Screen.ed_new() }, side: { place: "right", width: "25%" }, choose: null, wait: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], due: true }) as any;
+const term = () => ({ v: View.view_new(), scr: { tty: true, ed: Screen.ed_new() }, side: { place: "right", width: "25%" }, choose: null, question: null, wait: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], due: true }) as any;
 
 // the palette searched for `find`, its first match lit
 const open = (find = "") => {

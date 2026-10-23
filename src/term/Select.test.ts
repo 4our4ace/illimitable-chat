@@ -61,7 +61,7 @@ test("a choice lights a short line past its text and a blank line whole; it copi
 });
 
 test("a right drag over the chat quotes what it covers at the input's end, a line each; a right click soon after takes it out, later not; none into an agent's read-only page", () => {
-  const t = { ...term(), v: View.view_new(), notices: [], quoted: null, choose: null, scr: { point: { row: 0, col: 0 }, clicks: 1, ed: Screen.ed_new() } } as any;
+  const t = { ...term(), v: View.view_new(), notices: [], quoted: null, choose: null, question: null, scr: { point: { row: 0, col: 0 }, clicks: 1, ed: Screen.ed_new() } } as any;
   const quote = (from: [number, number], to: [number, number], area = AREA) => {
     t.areas = [];
     term_area(t, area);
@@ -93,7 +93,7 @@ test("a right drag over the chat quotes what it covers at the input's end, a lin
 });
 
 test("a reply's buttons are never quoted: a right drag over them leaves them out (a line of buttons alone whole), and none starts on one", () => {
-  const t    = { ...term(), v: View.view_new(), notices: [], quoted: null, choose: null, scr: { point: { row: 0, col: 0 }, clicks: 1, ed: Screen.ed_new() } } as any;
+  const t    = { ...term(), v: View.view_new(), notices: [], quoted: null, choose: null, question: null, scr: { point: { row: 0, col: 0 }, clicks: 1, ed: Screen.ed_new() } } as any;
   const btn  = (x: string) => ({ ...Paint.Run(x), copy: () => "the code" });
   const area = { ...AREA, lines: [[Paint.Run("── ts       "), btn("⧉ copy")], [Paint.Run("let x = 1")], [Paint.Run("  "), btn("⧉ copy"), Paint.Run("  "), btn("⧉ art")]] };
   const quote = (from: [number, number], to: [number, number]) => {

@@ -26,7 +26,9 @@
 // acted, or one that only focused the window, clicks nothing and chooses
 // no word (term_dead). Under a popup the mouse is its alone (Popup.ts
 // popup_mouse, before all of this): nothing is chosen there, and nothing
-// lights.
+// lights; a question at the input takes the presses on its answers
+// alone (its lead's text is chosen as any other), and on it only its
+// answers light.
 
 import * as Draw from "../ui/Draw.ts";
 import { term_draw } from "./Frame.ts";
@@ -35,7 +37,7 @@ import { term_toast } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_popup } from "./Popup.ts";
 import * as Screen from "../ui/Screen.ts";
-import type { Area, Cell, Ink, PopBox, Sel, Term, Under } from "./Term.ts";
+import type { Area, Box, Cell, Ink, Sel, Term, Under } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
 // a drag past a chat's edge scrolls it a line each DRIFT ms; text chosen
@@ -304,11 +306,12 @@ export function term_under(t: Term, p: Screen.Spot): (() => string) | undefined 
 }
 
 // what's under a spot, as last painted, for a click and the light alike:
-// a popup open, or the commands suggested where they show, before all;
-// then a hit (the side, the tabs, the jump to the end); a reply's button;
-// in the chat (no pane over it), the mark a tag there names (a run's bar:
-// the run's), else the innermost mark holding the line; else nothing.
-// The live tail under the chat's rows has no marks
+// a popup open, or the question at the input or the commands suggested
+// where they show, before all; then a hit (the side, the tabs, the jump
+// to the end); a reply's button; in the chat (no pane over it), the mark
+// a tag there names (a run's bar: the run's), else the innermost mark
+// holding the line; else nothing. The live tail under the chat's rows
+// has no marks
 export function term_target(t: Term, p: Screen.Spot): Under {
   if (term_popup(t) !== null || (t.box !== null && term_boxed(t.box, p))) {
     return { $: "popup" };
@@ -334,7 +337,7 @@ export function term_target(t: Term, p: Screen.Spot): Under {
 }
 
 // whether a spot is in a box as last painted
-function term_boxed(box: PopBox, p: Screen.Spot): boolean {
+function term_boxed(box: Box, p: Screen.Spot): boolean {
   return p.row >= box.row && p.row < box.row + box.h && p.col >= box.col && p.col < box.col + box.w;
 }
 
