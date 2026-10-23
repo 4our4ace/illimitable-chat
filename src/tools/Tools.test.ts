@@ -12,7 +12,7 @@
 // it works inside illi, the project's CLAUDE.md left to Claude Code. Its
 // permission prompt, and illi's own shell, files and MCP tools, pass the
 // checks (Guard.ts): a risk asked with why, a refusal recorded and told
-// to the model. The projects: their table, a search across them, a zoom
+// to the model; a plugin's hooks come before them and after the tool. The projects: their table, a search across them, a zoom
 // into another's chat.
 
 import { expect, test } from "bun:test";
@@ -192,6 +192,33 @@ test("illi's own shell, files and MCP tools pass the same checks: the user's rul
   expect((await call("shell", { command: "ls" })).text).toContain("Asked because illi can't read your permission rules (" + config.PERMISSIONS + ": ");
   fs.rmSync(config.PERMISSIONS);
   chat.tools.perm.refused.length = 0;
+});
+
+test("a plugin's hooks come first: its input is what the checks judge and Claude Code runs, its refusal final, what the model reads its last say; its tools run", async () => {
+  const { Plugins } = await import("../config/Plugins.ts");
+  fs.mkdirSync(DIR + "/plugins", { recursive: true });
+  fs.writeFileSync(DIR + "/plugins/p.ts", `export default function (illi: any) {
+  illi.on("tool.before", (call: any) => call.input?.command === "echo swap" ? { input: { command: "git push --force" } } : call.input?.command === "echo old" ? { input: { command: "ls" } } : call.input?.command === "echo nope" ? { block: "The plugin says no." } : undefined);
+  illi.on("tool.after", (call: any) => call.input?.command === "echo seen" ? { text: call.output.text + "(seen)" } : undefined);
+  illi.tool({ name: "twice", description: "doubles x", run: (input: any) => String(2 * input.x) });
+}
+`);
+  await Plugins.load(process.cwd(), () => false);
+  const call = (name: string, args: object) => Tools.call(chat.tools, "main", name, args, new AbortController().signal);
+  try {
+    expect((await call("shell", { command: "echo swap" })).text).toStartWith("No one is at illi's screen to ask, so it isn't allowed. Asked because git push --force ");
+    expect(await call("shell", { command: "echo nope" })).toEqual({ text: "The plugin says no.", fail: true });
+    expect((await call("shell", { command: "echo seen" })).text).toEndWith("(seen)");
+    expect(Tools.list(chat.tools, "main").map((t) => t.name)).toContain("plugin__p__twice");
+    expect(await call("plugin__p__twice", { x: 21 })).toMatchObject({ text: "42", fail: false });
+    const approve = async (input: object) => JSON.parse((await call("approve", { tool_name: "Bash", input })).text);
+    expect(await approve({ command: "echo nope" })).toEqual({ behavior: "deny", message: "The plugin says no." });
+    expect((await approve({ command: "echo swap" })).message).toStartWith("No one is at illi's screen to ask");
+    expect(await approve({ command: "echo old" })).toEqual({ behavior: "allow", updatedInput: { command: "ls" } });
+  } finally {
+    Plugins.reset();
+    chat.tools.perm.refused.length = 0;
+  }
 });
 
 test("illi's own questions (ask): the main agent's; each checked; answered as the user said, skipped when they skip", async () => {
