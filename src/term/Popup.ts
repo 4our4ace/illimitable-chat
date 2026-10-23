@@ -20,7 +20,8 @@
 // (popup_wheel, popup_page), and the whole mouse (popup_mouse): the
 // pointer moving to a row lights it (one lit row, shared with the keys),
 // a click on an option does what Enter does there, a click outside
-// closes a list (a question stays); nothing reaches the chat, the side,
+// closes a list (a question stays), the click that only focuses the
+// terminal does nothing; nothing reaches the chat, the side,
 // the tabs or the input under it (no button lights, no text is chosen),
 // and a paste goes to its search, if any.
 // A question illi asks (the permission question, its form) holds Enter,
@@ -472,8 +473,9 @@ function popup_about(text: string, w: number): string {
 // there, a paint only as the lit one changes (popup_hover); a press arms
 // what it lands on (an option, the box, outside) and a release on the
 // same takes it (popup_click), so a slip never picks; a drag, the right
-// button, nothing. A press the popup took keeps its release, though the
-// popup be gone since; a press again (a double or triple click) goes
+// button, nothing; the click that only focused the terminal's window
+// (Screen focusing), nothing either. A press the popup took keeps its
+// release, though the popup be gone since; a press again (a double or triple click) goes
 // nowhere if a popup opened or closed since the first; a report for a
 // box no longer open (a new size, a question answered elsewhere: asked
 // again first) does nothing. No popup: not taken (Select.ts)
@@ -486,8 +488,9 @@ export function popup_mouse(t: Term, key: string): boolean {
   const box = t.box !== null && t.box.of === of ? t.box : null;
   if (key === "Press") {
     const again = t.scr.clicks > 1 && aim.first !== of;
+    const live  = box !== null && !t.scr.focusing;
     aim.first   = t.scr.clicks === 1 ? of : aim.first;
-    aim.press   = again ? { of: null, on: null } : of === null ? null : { of: box === null ? null : of, on: box === null ? null : popup_at(box, t.scr.point) };
+    aim.press   = again ? { of: null, on: null } : of === null ? null : { of: live ? of : null, on: live ? popup_at(box, t.scr.point) : null };
     if (again) {
       return true;
     }

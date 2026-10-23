@@ -24,7 +24,8 @@
 // text is chosen, no button lights or copies, the right button does
 // nothing; a double click picks once; a box no longer open (a new size,
 // a question answered elsewhere) does nothing; a question just shown
-// holds a click as it holds Enter.
+// holds a click as it holds Enter; the click that only focuses the
+// terminal's window picks nothing and closes nothing.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -417,5 +418,23 @@ test("a report for a box no longer open does nothing: after a new size, before i
     t.v.asks = [];
     click(t, yes, col(t));
     expect([t.v.out, t.choose]).toEqual([[], null]);
+  });
+});
+
+test("the click that only focuses the terminal picks nothing and closes nothing: one while the focus is lost, or just after it comes back", () => {
+  sized(120, 30, () => {
+    const t = term();
+    const picked: number[] = [];
+    term_chooser(t, "Agent", ["illi", "reviewer"], ["", ""], 0, (k) => picked.push(k));
+    paint(t);
+    const [r, c] = [row_of(t, "reviewer"), col(t)];
+    Screen.screen_feed(t.scr, "\x1b[O");
+    click(t, r, c);
+    Screen.screen_feed(t.scr, "\x1b[I");
+    click(t, 2, 2);
+    expect([picked, t.choose?.title]).toEqual([[], "Agent"]);
+    t.scr.gained -= 200;
+    click(t, r, c);
+    expect(picked).toEqual([1]);
   });
 });
