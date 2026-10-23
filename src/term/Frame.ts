@@ -16,6 +16,7 @@ import { term_background, term_suggest, term_suggested } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import * as Draw from "../ui/Draw.ts";
 import { term_hint } from "./Keys.ts";
+import { member_others } from "./Member.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_shown } from "./Notices.ts";
 import { term_mode } from "./PermCommands.ts";
@@ -326,13 +327,13 @@ function term_working(t: Term, doing: View.Doing, w: number, now: number): Paint
 // the terminal's title, unless the title setting is off: `∞ illi ·
 // <project>` (its git repo's folder, or home outside any), the profile
 // after it but for the default; while work runs, the ∞ traced small
-// (term_loop), and a question waiting on the user, ? (Screen writes it
-// only as it changes)
+// (term_loop), and a question waiting on the user, here or in a profile
+// open hidden in this window, ? (Screen writes it only as it changes)
 export function term_title(t: Term): void {
   if (!config.TITLE) {
     return Screen.screen_title(t.scr, null);
   }
-  const mark  = t.v.asks.length > 0 ? TITLE_ASK : View.view_running(t.v) ? term_loop(Math.floor((Date.now() - t.since) / TITLE_STEP)) : TITLE_REST;
+  const mark  = t.v.asks.length > 0 || member_others().some((o) => o.asks) ? TITLE_ASK : View.view_running(t.v) ? term_loop(Math.floor((Date.now() - t.since) / TITLE_STEP)) : TITLE_REST;
   const cwd   = process.cwd();
   if (titled?.cwd !== cwd) {
     const top = Projects.place(cwd).path;
@@ -435,7 +436,7 @@ function term_traced(t: Term, head: number, was: number): Screen.Piece[] {
 
 // the side's rows written again alone, beside the chat's as last painted
 // (each written only if it changed); a box over them: a whole paint
-function term_side_again(t: Term): void {
+export function term_side_again(t: Term): void {
   const r = t.ruled!;
   if (r.side === null) {
     return term_paint(t);

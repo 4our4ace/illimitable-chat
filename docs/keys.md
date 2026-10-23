@@ -12,7 +12,7 @@ Chat
 | Enter | send |
 | Esc | close a list; else clear the notes, and twice: interrupt illi (a `/compact` under way too; agents go on) |
 | Ctrl+C | clear the input; on an empty one, interrupt illi (again: quit) |
-| Ctrl+D | clear the input; on an empty one, quit (while background jobs run or subagents are at work, it says what a quit stops: again to quit) |
+| Ctrl+D | clear the input; on an empty one, quit, every profile open in this terminal too (while background jobs run, subagents or another profile are at work, it says what a quit stops: again to quit) |
 | Tab | take the suggested reply (it stays after a message of your own, to send as well, till illi answers) |
 | Ctrl+P | all commands and settings in one list, typed to search |
 | Ctrl+X | the leader: the screen greys, and the next key runs its shortcut ([below](#shortcuts)) |
@@ -240,7 +240,9 @@ Mouse and side panel
   each on (●) or off (◯), a click turning it on or off (under the agents
   when a name won't fit whole beside them), the subagents at work, the background jobs (a click
   opens `/background`), the profiles once you have two (a click
-  switches), a ChatGPT plan's use, the context and the memory, the MCP
+  switches; one open in this terminal shows a spinner while it works,
+  `?` while it asks you something, `● 2` while only its background jobs
+  run), a ChatGPT plan's use, the context and the memory, the MCP
   servers (a click opens `/mcp`), the latest requests refused (a click
   opens `/permissions` on one) and illi's to-do list, gone once every
   item is done. The `side` and `side_width` settings place it.

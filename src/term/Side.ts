@@ -2,7 +2,8 @@
 // ====
 // The side panel, on a wide screen: the primary agents and the sticky
 // skills beside them, the subagents of this run, the background jobs,
-// the profiles (two or more), a ChatGPT plan's use, the chat's (the
+// the profiles (two or more; those open in this window marked as they
+// are), a ChatGPT plan's use, the chat's (the
 // context, the memory), the MCP servers, the requests refused, the
 // plugins' lines, a hint for the keys or illi's to-do list; the side and
 // side_width settings place it.
@@ -12,6 +13,7 @@ import * as config from "../config/Config.ts";
 import { Custom, type Skill } from "../config/Custom.ts";
 import * as Draw from "../ui/Draw.ts";
 import { term_spinner } from "./Frame.ts";
+import { member_others } from "./Member.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
 import * as Paint from "../ui/Paint.ts";
 import { Plugins } from "../config/Plugins.ts";
@@ -21,6 +23,7 @@ import { setting_open } from "./Settings.ts";
 import { term_act, type Item, type Term } from "./Term.ts";
 import { GLYPH } from "../ui/Theme.ts";
 import * as View from "../ui/View.ts";
+import type { Open } from "./Wire.ts";
 
 // the side's narrowest, its line included; the narrowest chat beside it;
 // the narrowest screen it shows on
@@ -351,15 +354,32 @@ function term_side_sticky(t: Term, w: number, whole: boolean): Item[] | null {
 }
 
 // the side's profiles, once there are two: a head (a click: /profile's
-// picker), each profile (the one running marked), a gap; a click on
-// another switches to it
+// picker), each profile (the one running marked; one open hidden in this
+// window in the ink, its state after it: term_side_open), a gap; a click
+// on another switches to it
 function term_side_profiles(t: Term): Item[] {
   if (t.profs.length < 2) {
     return [];
   }
+  const others = member_others();
   const items = t.profs.map((name): Item => {
     const here = name === config.PROFILE;
-    return [[Paint.Run((here ? GLYPH.here : GLYPH.tab) + " " + name, here ? Paint.INK : Paint.DIM)], here ? null : () => void term_profile_go(t, name)];
+    const open = here ? undefined : others.find((o) => o.profile === name);
+    return [[Paint.Run((here ? GLYPH.here : GLYPH.tab) + " " + name, here || open !== undefined ? Paint.INK : Paint.DIM), ...term_side_open(open)], here ? null : () => void term_profile_go(t, name)];
   });
   return [[[Paint.Run("Profiles", { ...Paint.INK, b: true })], () => term_profile_pick(t)], ...items, [[], null]];
+}
+
+// a profile open hidden in this window, as the side marks it: ? (bold,
+// in the accent) while a question waits on you; while its turn or
+// subagents run, a spinner as the subagents' (Member.ts moves it); while
+// only its background jobs run, ● and how many (in the theme's success);
+// at rest, or not open, nothing
+function term_side_open(o: Open | undefined): Paint.Run[] {
+  const tone = Draw.draw_tokens();
+  return o === undefined ? []
+    : o.asks ? [Paint.Run(" ?", { ...Paint.INK, c: tone.accent, b: true })]
+    : o.working ? [Paint.Run(" " + term_spinner(Date.now()), { ...Paint.INK, c: tone.accent, b: true })]
+    : o.jobs > 0 ? [Paint.Run(" ● " + o.jobs, { ...Paint.INK, c: tone.success })]
+    : [];
 }
