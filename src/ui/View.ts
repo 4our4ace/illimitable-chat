@@ -90,11 +90,12 @@ export type Todo = { text: string; status: "pending" | "active" | "done" };
 export type Background = { id: number; command: string; agent: string; since: number };
 
 // a question the chat asks the user, answered by a view: who asks
-// (illi, an agent), the tool, what it would do: leave to run a call the
-// checks stopped (Tools.guard: why they did; what a "don't ask again"
-// keeps, as said, "": none offered); or illi's own (ask: its queries,
-// one or more, answered at once)
-export type Question = { id: string; who: string; tool: string; what: string; why?: string; keep?: string; queries?: Query[] };
+// (illi, an agent), the tool, what it would do (Tools.what: cut short,
+// for a note): leave to run a call the checks stopped (Tools.guard: what
+// it would do, whole, as the question shows it; why they stopped it;
+// what a "don't ask again" keeps, as said, "": none offered); or illi's
+// own (ask: its queries, one or more, answered at once)
+export type Question = { id: string; who: string; tool: string; what: string; whole?: string; why?: string; keep?: string; queries?: Query[] };
 
 // a request refused (Tools.guard): its id, who asked (illi, an agent),
 // the tool, what (a command, a file), why; how: the user said no (or no

@@ -267,7 +267,8 @@ const ASK: Spec = spec("ask", "Ask the user one or more questions and wait for t
 // the most of a skill's files named when it loads
 const FILES = 50;
 
-// the most characters of what a tool would do that a question shows
+// the most characters of what a tool would do that a note, the side's
+// refused list and /permissions show (the question shows it whole)
 const WHAT = 400;
 
 // the most refused requests kept (Perm)
@@ -783,7 +784,7 @@ export namespace Tools {
     if (verdict.$ === "deny") {
       return Tools.refuse(tools, { ...asked, how: verdict.rule ? "rule" : "mode", said: "", exact: verdict.exact });
     }
-    const reply = await tools.hooks.ask({ ...asked, keep: verdict.always.map((g) => Guard.said(g, folder)).join(", ") }, signal);
+    const reply = await tools.hooks.ask({ ...asked, whole: Tools.whole(input), keep: verdict.always.map((g) => Guard.said(g, folder)).join(", ") }, signal);
     if (!reply.yes) {
       return Tools.refuse(tools, { ...asked, how: "no", said: reply.said, exact: verdict.exact }, !signal.aborted);
     }
@@ -867,13 +868,20 @@ export namespace Tools {
     return bad ? "Ask 1 to " + QUERIES + " questions, each with its text and 2 to " + OPTIONS + " options, each with a label." : each;
   }
 
-  // what a tool would do, as a question shows it: a command, a file (an
-  // edit's files), a URL or a query, else its input, WHAT characters at
-  // most
-  export function what(input: any): string {
+  // what a tool would do, whole, as the question shows it (its lead
+  // scrolls): a command, a file (an edit's files), a URL or a query, else
+  // its input
+  export function whole(input: any): string {
     const edits = Array.isArray(input?.edits) && input?.file_path === undefined ? [...new Set(input.edits.map((e: any) => String(e?.path ?? "")))].join(", ") : undefined;
     const one = input?.command ?? input?.file_path ?? input?.notebook_path ?? input?.path ?? edits ?? input?.url ?? input?.query ?? input?.pattern;
-    const text = typeof one === "string" ? one : JSON.stringify(input ?? {});
+    return typeof one === "string" ? one : JSON.stringify(input ?? {});
+  }
+
+  // what a tool would do (Tools.whole), WHAT characters at most, where
+  // the room is small and nothing scrolls: a note, the side's refused
+  // list, /permissions
+  export function what(input: any): string {
+    const text = Tools.whole(input);
     return text.length > WHAT ? text.slice(0, WHAT - 1) + "…" : text;
   }
 

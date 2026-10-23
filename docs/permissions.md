@@ -115,9 +115,10 @@ git push --force origin main
 ● illi                                                                auto mode
 ```
 
-- Why it asks comes first, then what it would do, a command by its
-  lines. One too long for half the screen is cut, a dim line saying how
-  much more; the wheel over it, or PgUp and PgDn, scroll it. The
+- Why it asks comes first, then what it would do: the whole command, by
+  its lines (the side panel and `/permissions` show it cut short). One
+  too long for half the screen is cut to fit, a dim line saying how much
+  more; the wheel over it, or PgUp and PgDn, scroll it to its end. The
   answers always show.
 - "Don't ask again" says what it keeps, for this project: a family
   (`git push *`) for routine risks, the exact command for dangerous
