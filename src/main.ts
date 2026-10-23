@@ -33,10 +33,10 @@ First, run illi in a project folder and type /login to sign in with
 your ChatGPT plan (Plus or Pro); your Claude plan and API keys work too
 (docs/providers.md). The chat and its settings are in ~/.illi
 (ILLI_DIR); docs/config.md lists them. Other profiles' are in
-~/.illi/profiles: illi opens a project in the one used last there
-(ILLI_PROFILE names one). A new release installs itself, looked for once a day, and runs
-from the next start (autoupdate). In the chat, /help lists every
-command and key.`;
+~/.illi/profiles: illi opens a project in the one used last there, a
+new one in the one used last anywhere (ILLI_PROFILE names one). A new
+release installs itself, looked for once a day, and runs from the next
+start (autoupdate). In the chat, /help lists every command and key.`;
 
 // `illi upgrade`: one file, the latest release installed in its place
 // (Update.upgrade: checked, then the file replaced as a whole, so the one

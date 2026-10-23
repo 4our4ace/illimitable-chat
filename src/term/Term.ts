@@ -553,15 +553,14 @@ function term_trouble(t: Term, told: Set<string>): void {
 // illi a project; the profile running kept as the project's, for its
 // next start: Profiles.profile_here_keep), on the terminal (its log
 // lines to LOG; a crash said, the terminal left as found: term_crash)
-// or a pipe; the user's plugins loaded
-// before it (their start told; a project's only in a trusted folder) and
-// given the screen once it is up; the MCP servers started (a failure
-// told: term_trouble); the models ChatGPT lists learned; a new release
-// looked for (term_update). First of all, on a terminal, the folder
-// trusted (Trust.ts): not, illi leaves as it came, saying so. The screen
-// is taken here only on a terminal, for that question; a pipe's is made
-// where the chat's is (term_new), so its input's end, which can come at
-// once, finds Term listening
+// or a pipe; the user's plugins loaded before it (their start told; a
+// project's only in a trusted folder) and given the screen once it is
+// up; the MCP servers started (a failure told: term_trouble); the models
+// ChatGPT lists learned; a new release looked for (term_update). First
+// of all, on a terminal, the folder trusted (Trust.ts): not, illi leaves
+// as it came, saying so. The screen is taken here only on a terminal,
+// for that question; a pipe's is made where the chat's is (term_new), so
+// its input's end, which can come at once, finds Term listening
 export async function term_start(): Promise<void> {
   process.on("uncaughtException", term_crash);
   process.on("unhandledRejection", term_crash);
@@ -576,15 +575,19 @@ export async function term_start(): Promise<void> {
     console.error("illi: " + err.message);
     process.exit(1);
   });
-  try {
-    Profiles.profile_here_keep(config.ROOT, process.cwd(), config.PROFILE);
-  } catch (err: any) {
-    console.error("illi: the project's profile wasn't kept: " + err.message);
-  }
   // on a terminal, what the agent logs goes to LOG, never over the screen
   if (process.stdout.isTTY) {
     const log = (...args: unknown[]) => fs.appendFileSync(LOG, new Date().toISOString() + " " + args.map(String).join(" ") + "\n");
     console.log = console.warn = console.error = log;
+  }
+  // the profile a person works in here, kept for the project's next start
+  // (a script's run through a pipe changes nothing)
+  if (tty) {
+    try {
+      Profiles.profile_here_keep(config.ROOT, process.cwd(), config.PROFILE);
+    } catch (err: any) {
+      console.error("illi: the project's profile wasn't kept: " + err.message);
+    }
   }
   if (holds) {
     delete process.env.ILLI_REJOIN;

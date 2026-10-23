@@ -7,7 +7,8 @@
 // model picker, its choice the setting's; on one typed in, /set in the
 // input; on `off`, what it may turn off, Enter turning one off and on.
 // /set checks a value first: its shape and the picks still
-// offered (a file named needn't be there). A pick set while illi's own
+// offered (a file named needn't be there); a key alone opens the picker
+// at it. A pick set while illi's own
 // agent is the main one is the chat's at once: not over a variable, nor
 // into a config.json that won't read. Each
 // setting is in docs/config.md and the customize-illi skill.

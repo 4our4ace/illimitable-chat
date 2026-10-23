@@ -45,6 +45,7 @@ put(ROOT + "/auth/other-login.json", "{}");
 put(ROOT + "/locks/0123456789ab.lock", "");
 put(ROOT + "/illi.log", "log\n");
 put(ROOT + "/update.json", JSON.stringify({ checked: "2026-10-20T00:00:00.000Z" }));
+put(ROOT + "/project-profiles.json", JSON.stringify({ home: "default" }));
 put(ROOT + "/chat/main/2026-10-20.jsonl", '{"text":"hello from default"}\n');
 put(ROOT + "/agents/reviewer.md", "---\ndescription: Reviews\n---\nReview.");
 put(ROOT + "/mcp.json", JSON.stringify({ mcpServers: {
@@ -157,7 +158,7 @@ test("an archive's paths: inside its folder, files and folders only", () => {
   expect(Profiles.profile_unsafe(["a", "b"], ["-", "h"])).toContain("link");
 });
 
-test("an export: the folder but the login (one its config names in a subfolder too), the locks, the log, the other profiles, the look for a release; secrets left out", async () => {
+test("an export: the folder but the login (one its config names in a subfolder too), the locks, the log, the other profiles, the profiles used last, the look for a release; secrets left out", async () => {
   const file = TMP + "/illi-profile-default.tar.gz";
   const cut  = await Profiles.profile_export(ROOT, "default", file);
   expect(cut).toBe(4);

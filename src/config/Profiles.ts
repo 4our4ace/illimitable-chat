@@ -133,18 +133,22 @@ export function profile_here_keep(root: string, cwd: string, name: string): void
 }
 
 // the projects' profiles changed: each project's name given to `change`,
-// its answer kept (null: the project's dropped)
+// its answer kept (null: the project's dropped). Read again once written,
+// and written again (twice at most) if another illi's write, at the same
+// moment, left the change out
 function profile_here_set(root: string, change: (all: Record<string, string>) => Record<string, string | null>): void {
   const file = root + "/" + HERE;
-  const was  = (json_object(file) ?? {}) as Record<string, string>;
-  const next = Object.fromEntries(Object.entries(change(was)).filter(([, name]) => name !== null));
-  if (JSON.stringify(next) === JSON.stringify(was)) {
-    return;
+  for (let k = 0; k < 3; k++) {
+    const was  = (json_object(file) ?? {}) as Record<string, string>;
+    const next = Object.fromEntries(Object.entries(change(was)).filter(([, name]) => name !== null));
+    if (JSON.stringify(next) === JSON.stringify(was)) {
+      return;
+    }
+    fs.mkdirSync(root, { recursive: true });
+    const tmp = file + "." + process.pid;
+    fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + "\n");
+    fs.renameSync(tmp, file);
   }
-  fs.mkdirSync(root, { recursive: true });
-  const tmp = file + "." + process.pid;
-  fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + "\n");
-  fs.renameSync(tmp, file);
 }
 
 // a profile's folder: the root itself for the default
