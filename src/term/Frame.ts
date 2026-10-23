@@ -685,7 +685,8 @@ function term_paned(t: Term, pane: Pane, w: number, tall: number): [Paint.Line[]
 // first in view (moved to keep the lit one in it), the box as tall as all
 // of them would be (blank past those shown; none: a note says so), and at its right end what it has aside (its keys, its
 // value). Lines it leads with (a question's what and why) go over all
-// of it, wrapped. Its foot says what the lit one takes besides; a click
+// of it, wrapped; lines of the lit one's detail under all, after a blank
+// one (none where they won't fit). Its foot says what the lit one takes besides; a click
 // on one picks it. A line asked for (Chooser ask) is its one line, as the input
 // shows a message typed, its hint while empty; a search or a line too
 // long shows its end
@@ -703,7 +704,9 @@ function term_picker(t: Term, w: number, room: number): { items: Item[]; at?: Sc
   const lead  = (c.lead ?? []).flatMap((l) => Paint.runs_wrap(l, Math.max(1, w - 4), false)).slice(0, Math.max(0, room - 3 - find.length));
   const group = c.heads !== undefined && text === "";
   const heads = group ? 2 * new Set(c.heads).size - 1 : 0;
-  const rows  = c.ask !== null ? 0 : Math.max(1, Math.min(c.names.length + heads, room - 2 - find.length - lead.length));
+  const more  = c.ask !== null || c.detail === undefined || c.shown.length === 0 ? [] : c.detail(c.shown[c.at].k, w - 4);
+  const under = more.length === 0 || room - 3 - find.length - lead.length < more.length + 1 ? [] : [[], ...more];
+  const rows  = c.ask !== null ? 0 : Math.max(1, Math.min(c.names.length + heads, room - 2 - find.length - lead.length - under.length));
   const pick  = (k: number) => {
     t.choose = null;
     c.pick(k);
@@ -732,7 +735,7 @@ function term_picker(t: Term, w: number, room: number): { items: Item[]; at?: Sc
   const line  = (e: string | number): Item => (typeof e === "number" ? item(c.shown[e], e) : [[Paint.Run(e, lit)], null]);
   const none  = [[Paint.Run("  Nothing matches " + Paint.text_clean(text), Paint.DIM)], null] as Item;
   const shown = c.ask !== null ? [] : c.shown.length === 0 ? [none] : list.slice(c.top, c.top + rows).map(line);
-  const items = [...lead.map((l): Item => [l, null]), ...find.map((l): Item => [l, null]), ...shown, ...Array.from({ length: rows - shown.length }, (): Item => [[], null])];
+  const items = [...lead.map((l): Item => [l, null]), ...find.map((l): Item => [l, null]), ...shown, ...Array.from({ length: rows - shown.length }, (): Item => [[], null]), ...under.map((l): Item => [l, null])];
   const title = [Paint.Run(" " + c.title + (c.ask === null ? " · ↑↓ Enter · Esc " : " · Enter · Esc "), { ...Paint.DIM, b: true })];
   const said  = c.ask !== null ? c.foot(-1) : c.shown.length === 0 ? "" : c.foot(c.shown[c.at].k);
   const foot  = said === "" ? [] : [Paint.Run(" " + said + " ", { ...Paint.DIM, b: true })];

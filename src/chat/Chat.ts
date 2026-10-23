@@ -21,7 +21,7 @@
 // logged (Plugins.emit), never waited for.
 
 import * as fs from "node:fs";
-import { AskAI, type Call, type End, type Event, type Kind } from "../ai/AskAI.ts";
+import { AskAI, type Call, type End, type Event, type Kind, type Vendor } from "../ai/AskAI.ts";
 import { ChatGPT } from "../ai/ChatGPT.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
@@ -68,7 +68,9 @@ type Check = { call: Call; goal: string };
 // gets (Chat.refit makes it smaller, till illi starts again); beside:
 // what a turn's first request read beyond the chat it carried (the
 // prompt, the tools, illi's guess of tokens put right), by vendor:model,
-// as last told (Chat.cap leaves room for it); refits: the
+// as last told (Chat.cap leaves room for it); past: the last call read
+// past its model's standard window (no suggested reply is asked after
+// it: past that window the plan drains faster); refits: the
 // refits since a call was last answered; compacting: a /compact's recap
 // under way (Chat.compact), busy too; goings: the times hooks made the
 // turn go on in a row, with no tool call nor message of the user's
@@ -105,6 +107,7 @@ export type Chat = {
   suggest: Suggested;
   fit   : number;
   beside: Map<string, number>;
+  past  : boolean;
   refits: number;
   asks  : Asked[];
   compacting: boolean;
@@ -263,7 +266,7 @@ export namespace Chat {
       mem, tools, pick, socks: new Set(), busy: false, call: null, model: "", asked: false, open: 0, sent: [], wait: [], next: [],
       halt: new AbortController(), live: [], calls: {}, eye: { parts: [], from: 0 }, after: Promise.resolve(),
       writes: Promise.resolve(), held: null, switched: false, was: null, picks: new Map(),
-      suggest: { on: false, due: false, text: mem.suggest, call: null, passed: false, unused: 0 }, fit: 1, beside: new Map(), refits: 0, asks: [], compacting: false,
+      suggest: { on: false, due: false, text: mem.suggest, call: null, passed: false, unused: 0 }, fit: 1, beside: new Map(), past: false, refits: 0, asks: [], compacting: false,
       goings: 0, going: false, saying: Promise.resolve(), checking: null, context: Promise.resolve([]), idle: undefined,
     };
     chat.context = Plugins.context({ cwd });
@@ -499,7 +502,9 @@ export namespace Chat {
       if (chat.wait.length > 0) {
         void Chat.turn(chat);
       } else if (answered) {
-        Suggest.ask(chat);
+        if (!chat.past) {
+          Suggest.ask(chat);
+        }
         Chat.idle(chat);
       }
     }
@@ -586,6 +591,11 @@ export namespace Chat {
     const end = await call.done;
     if (end.first !== undefined && carried !== undefined) {
       chat.beside.set(carried.model, Math.max(0, end.first - carried.tokens));
+    }
+    if (carried !== undefined) {
+      const [vendor, model] = [carried.model.slice(0, carried.model.indexOf(":")), carried.model.slice(carried.model.indexOf(":") + 1)];
+      const standard = Pick.model(vendor as Vendor, model)?.standard;
+      chat.past = standard !== undefined && carried.tokens + (chat.beside.get(carried.model) ?? 0) > standard;
     }
     chat.call = null;
     Chat.unanswered(chat, null);
@@ -950,9 +960,10 @@ export namespace Chat {
     const tools  = Tools.state(chat.tools, chat.pick.vendor);
     const window = Pick.window(chat.pick) ?? config.GUESS;
     const beside = chat.beside.get(chat.pick.vendor + ":" + chat.pick.model) ?? 0;
-    const fill   = { used: Math.round(Memory.fill(chat.mem) / TOKEN), cap: Chat.cap(chat), window, ...config.config_autocompact_of(chat.pick.model), most: config.config_most(window, beside), standard: Pick.model(chat.pick.vendor, chat.pick.model)?.standard };
+    const fill   = { used: Math.round(Memory.fill(chat.mem) / TOKEN), cap: Chat.cap(chat), window, ...config.config_autocompact_of(chat.pick.model), most: config.config_most(window, beside), standard: Pick.model(chat.pick.vendor, chat.pick.model)?.standard, ...config.config_autocompacts() };
     const asks   = chat.asks.map(({ done, ...q }) => q);
-    return { $: "state", busy: chat.busy || chat.checking !== null, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, ...tools, use: { ...tools.use, fill }, suggest: chat.suggest.on ? chat.suggest.text : "", asks };
+    const catalog = Object.fromEntries(config.OFFER.vendors.map((v) => [v, Pick.list(v)]));
+    return { $: "state", busy: chat.busy || chat.checking !== null, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, catalog, ...tools, use: { ...tools.use, fill }, suggest: chat.suggest.on ? chat.suggest.text : "", asks };
   }
 
   // a reply left with no message after it: the hooks hear the user is

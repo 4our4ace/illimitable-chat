@@ -204,7 +204,9 @@ type Hit = { row: number; col: number; to: number; run: () => void };
 // middle: the box in the screen's middle, over all else, this many
 // columns wide at most (none: down over the input, Frame.ts); heads:
 // each option's group, a head over its first while nothing is searched;
-// lead: lines over the options (a question's what and why), wrapped
+// lead: lines over the options (a question's what and why), wrapped;
+// detail: lines under them of the lit option k, made for w columns (the
+// model picker's autocompact gauge)
 export type Chooser = {
   title  : string;
   names  : string[];
@@ -223,6 +225,7 @@ export type Chooser = {
   top    : number;
   keys   : (k: number, key: string) => boolean;
   foot   : (k: number) => string;
+  detail?: (k: number, w: number) => Paint.Line[];
   ask    : { hint: string; done: (text: string) => string | null } | null;
 };
 

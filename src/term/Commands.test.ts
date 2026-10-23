@@ -6,7 +6,8 @@
 // one pick by Enter (Esc: none); /agent's and /profile's take no typing,
 // and Tab moves in them. /help fits a narrow pane, a row a key, the setup
 // commands their own group; /agents' lists have no copy buttons (a pane
-// is no reply). /speed says standard for slow; /tab finds the chat's tab
+// is no reply). /model's gauge steps the lit model's autocompact (Enter
+// sends it, Esc drops it) and fits its width; /tab finds the chat's tab
 // by the main agent's name; the dead ends (/stop, /fold, /image, /mcp
 // with nothing to act on) say something. A sticky skill's name alone
 // turns it on and off; with words, on, the words sent; it shows at the
@@ -33,7 +34,7 @@ import type { Match } from "../ui/Screen.ts";
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-commands-");
 process.env.ILLI_DIR = DIR;
 
-const { term_chooser, term_command, term_commands, term_named, term_suggest, term_tally, term_tally_keep, term_tally_one } = await import("./Commands.ts");
+const { term_chooser, term_command, term_commands, term_gauge, term_named, term_suggest, term_tally, term_tally_keep, term_tally_one } = await import("./Commands.ts");
 const { term_grab, term_press, term_type } = await import("./Keys.ts");
 const { term_side } = await import("./Side.ts");
 const Draw = await import("../ui/Draw.ts");
@@ -181,11 +182,11 @@ test("/shortcuts: the leader and each key after it; Enter changes one, Del puts 
   };
   run(t, "/shortcuts");
   expect(t.choose.names).toEqual(["leader", "Ctrl+X a", "Ctrl+X e", "Ctrl+X h", "Ctrl+X l", "Ctrl+X m", "Ctrl+X p", "Ctrl+X s", "Ctrl+X t", "Ctrl+X y", "add one"]);
-  expect([about("leader"), about("Ctrl+X m"), about("Ctrl+X y")]).toEqual(["Ctrl+X · the key before a shortcut", "/model · model, effort and speed in one list", "Ctrl+Y · copy illi's last reply"]);
+  expect([about("leader"), about("Ctrl+X m"), about("Ctrl+X y")]).toEqual(["Ctrl+X · the key before a shortcut", "/model · model, effort, speed and autocompact in one list", "Ctrl+Y · copy illi's last reply"]);
   enter("Ctrl+X m", "/settings");
   expect([config.SHORTCUTS.m, t.choose.title, lit(t), about("Ctrl+X m"), foot(t)]).toEqual(["/settings", "Shortcuts", "Ctrl+X m", "/settings · all the settings (illi's: /model)", "Enter change · Del illi's"]);
   term_grab(t, "Delete");
-  expect([config.SHORTCUTS.m, about("Ctrl+X m")]).toEqual(["/model", "/model · model, effort and speed in one list"]);
+  expect([config.SHORTCUTS.m, about("Ctrl+X m")]).toEqual(["/model", "/model · model, effort, speed and autocompact in one list"]);
   at("Ctrl+X t");
   expect(foot(t)).toBe("Enter change · Del drop it");
   term_grab(t, "Delete");
@@ -307,29 +308,38 @@ test("/help: Ctrl+C and Ctrl+D a row each, the setup commands in a group of thei
   expect(text.join("\n")).not.toMatch(/zoom|token|view's lines/);
 });
 
-test("/speed lists slow as standard, and takes standard for it", () => {
+test("/model's gauge: the lit model's autocompact, stepped 5 points by Shift+Right and Shift+Left (at most its cap), kept per model and sent with the pick by Enter; Esc drops them; Shift+Up and Shift+Down move the effort", () => {
   const t = term();
-  t.v.pick = { vendor: "claude-api", model: "opus-5.5", effort: "medium", speed: "fast" };
-  run(t, "/speed");
-  expect(note(t)).toBe("Speeds: standard, fast (now). Pick one with /speed <speed>.");
-  run(t, "/speed", "standard");
-  expect(t.v.out.map((p: any) => p.msg.to.speed)).toEqual(["slow"]);
+  t.v.use = { ...t.v.use, fill: { used: 0, cap: 600000, window: 1000000, set: "60%", own: false, most: 700000, global: "60%", sets: { "opus-5.5": "50%" } } };
+  model(t);
+  const gauge = () => t.choose.detail(t.choose.shown[t.choose.at].k, 76).map((l: any) => l.map((r: any) => r.x).join(""));
+  expect(gauge()).toEqual(["autocompact ▕████████████░░░░░░░░▏ 60% · 600k of 1M  ⇧◂▸"]);
+  ["Shift+Right", "Shift+Right", "Shift+Right"].forEach((key) => expect(term_grab(t, key)).toBe(true));
+  expect(gauge()[0]).toEndWith(" 70% · 700k of 1M  ⇧◂▸");
+  term_grab(t, "Up");
+  expect([lit(t), gauge()[0]]).toEqual(["opus-5.5", "autocompact ▕██████████░░░░░░░░░░▏ 50% · 500k of 1M  ⇧◂▸"]);
+  term_grab(t, "Shift+Up");
+  expect(foot(t)).toBe("effort: ◂ high ▸ · Tab speed: standard");
+  term_grab(t, "Enter");
+  expect(t.v.out.map((p: any) => p.msg)).toEqual([
+    { id: expect.any(String), $: "pick", to: { vendor: "claude-api", model: "opus-5.5", effort: "high", speed: "slow" } },
+    { id: expect.any(String), $: "autocompact", label: "sonnet-5.5", value: "70%" },
+  ]);
+  model(t);
+  term_grab(t, "Shift+Left");
+  term_grab(t, "Esc");
+  expect(t.v.out).toHaveLength(2);
 });
 
-test("/autocompact says the chat's model's, sets it as a share or tokens, default takes it back; a value it can't read sends nothing", () => {
-  const t = term();
-  t.v.use = { ...t.v.use, fill: { used: 0, cap: 600000, window: 1000000, set: "60%", own: false, most: 700000 } };
-  run(t, "/autocompact");
-  expect(note(t)).toBe("Autocompact for sonnet-5.5: 60% (the global one), 600k of its 1M window. /autocompact 50%, 300k or default changes it; in /model, Shift+Left and Shift+Right.");
-  run(t, "/autocompact", "50%");
-  expect(note(t)).toBe("Autocompact for sonnet-5.5: 50%, 500k of its 1M window.");
-  run(t, "/autocompact", "900k");
-  expect(note(t)).toBe("Autocompact for sonnet-5.5: 900k, held to 700k of its 1M window.");
-  run(t, "/autocompact", "default");
-  expect(note(t)).toBe("Autocompact for sonnet-5.5: back to the global one.");
-  run(t, "/autocompact", "lots");
-  expect(note(t)).toBe("/autocompact takes a share of the window (50%), a size (300k) or default.");
-  expect(t.v.out.map((p: any) => p.msg)).toEqual(["50%", "900k", null].map((value) => ({ id: expect.any(String), $: "autocompact", label: "sonnet-5.5", value })));
+test("the gauge fits its width: past the standard window the fill turns the warning color and a line says why; narrow, the share and tokens, then the share", () => {
+  const g    = { set: "60%", tokens: 523200, most: 610400, window: 872000, standard: 272000 };
+  const text = (w: number) => term_gauge(g, w).map((l: any) => l.map((r: any) => r.x).join(""));
+  expect(text(96)).toEqual(["autocompact ▕████████████░░░░░░░░▏ 60% · 523k of 872k  ⇧◂▸", "past 272k your plan's usage drains faster"]);
+  const cells = term_gauge(g, 96)[0].slice(2, 22);
+  expect([cells[5].s.c, cells[6].s.c]).toEqual([Draw.draw_tokens().accent, Draw.draw_tokens().warning]);
+  expect(text(40)).toEqual(["autocompact 60% · 523k  ⇧◂▸"]);
+  expect(text(20)).toEqual(["60%"]);
+  expect(term_gauge({ ...g, tokens: 200000 }, 96).map((l: any) => l.map((r: any) => r.x).join(""))).toEqual(["autocompact ▕████▌░┊░░░░░░░░░░░░░▏ 23% · 200k of 872k  ⇧◂▸"]);
 });
 
 test("/tab finds the chat's tab by the main agent's name, or illi's; none lists the tabs", () => {
