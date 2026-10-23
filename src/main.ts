@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
 // Main
 // ====
-// `illi`: the chat in this folder (term/Term.ts), or, by its argument,
+// `illi`: the chat in this folder (term/Term.ts; on a terminal, under a
+// window, term/Window.ts, which runs each profile's chat on a PTY of its
+// own, so a switch leaves the one before running), or, by its argument,
 // `illi upgrade` (the latest in this one's place: for the one file, the
 // update the chat runs once a day, config/Update.ts, run now; for a git
 // clone, a pull), `illi version`, `illi help` (USAGE). The chat is
@@ -68,8 +70,18 @@ if (HELP || ODD !== undefined) {
   console.log("illi " + VERSION);
 } else if (UPGRADE) {
   process.exit(await main_upgrade());
+} else if (main_windowed()) {
+  (await import("./term/Window.ts")).window_run();
 } else {
   await main_chat();
+}
+
+// whether the chat runs under a window: on a terminal (its input and
+// output), where Bun makes PTYs (not on Windows), unless this is a
+// window's member already (ILLI_WINDOW; any other value, as `off`, runs
+// the chat alone)
+function main_windowed(): boolean {
+  return process.stdin.isTTY === true && process.stdout.isTTY === true && process.platform !== "win32" && typeof Bun.Terminal === "function" && process.env.ILLI_WINDOW === undefined;
 }
 
 // the chat; a setting that won't do (Config.ts: "config: ...") or a chat
