@@ -163,16 +163,18 @@ export type Term = {
 // none: null), for the presses again after it
 export type Aim = { row: number; in: boolean; press: { of: object | null; on: Target | "box" | "out" | null } | null; first: object | null };
 
-// a popup as last painted (Popup.ts): what it was painted for (the
-// picker), its place and size, what each of its rows stands for, top
-// first (null: nothing to point at: its frame, a head, a blank); its
-// list: the box's row it starts at, its lines, the entries they show;
-// the lines leading it: how many show, of how many
+// a box as last painted: a popup (Popup.ts), or the commands suggested
+// (Frame.ts); what it was painted for (the picker, the commands), its
+// place and size, what each of its rows stands for, top first (null:
+// nothing to point at: its frame, a head, a blank); its list: the box's
+// row it starts at, its lines, the entries they show; the lines leading
+// it: how many show, of how many
 export type PopBox = { of: object; row: number; col: number; w: number; h: number; rows: Array<Target | null>; list: number; lines: number; tall: number; ahead: number; lead: number };
 
-// what a row of a popup stands for: one of its options (by its index
-// among the names)
-export type Target = { $: "option"; k: number };
+// what a row of a box stands for: one of a popup's options (by its
+// index among the names), one of the commands suggested (by its index
+// among those found)
+export type Target = { $: "option"; k: number } | { $: "command"; k: number };
 
 // illi's own questions, in place of the input (Asks.ts): the tab shown
 // (past the last question: the answers, to look over), and for each
@@ -260,10 +262,9 @@ export type Chooser = {
   ask    : { hint: string; done: (text: string) => string | null } | null;
 };
 
-// a line drawn (the side's, the commands suggested) and what a click on
-// it does (null: nothing); a second column in it (the side's:
-// Side.term_side_beside): where it starts, columns into the line, and
-// what a click from there on does
+// a line of the side drawn and what a click on it does (null: nothing);
+// a second column in it (Side.term_side_beside): where it starts,
+// columns into the line, and what a click from there on does
 export type Item = [Paint.Line, (() => void) | null, { col: number; run: (() => void) | null }?];
 
 // the commands suggested as a `/word` is typed, as in Claude Code: all

@@ -27,10 +27,13 @@
 // A question illi asks (the permission question, its form) holds Enter,
 // Space and a click for ARM after it first shows (popup_held), so the key
 // that ended a sentence never answers it; Esc, its no, never waits. The
-// commands suggested as a /word is typed stay at the input, and panes in
-// the chat's place (Frame.ts).
+// commands suggested as a /word is typed stay at the input (Frame.ts):
+// no popup, they belong to typing, but a press on them is theirs too
+// (no text chosen; a click does what Enter does there). Panes stay in
+// the chat's place.
 
 import { term_asks } from "./Asks.ts";
+import { term_suggest, term_suggest_key } from "./Commands.ts";
 import * as Draw from "../ui/Draw.ts";
 import { MARGIN, term_draw } from "./Frame.ts";
 import { term_choose_key } from "./Keys.ts";
@@ -469,51 +472,53 @@ function popup_about(text: string, w: number): string {
 // a mouse report (Keys.ts term_press, before all else; true: taken).
 // While a popup is open every report is its, wherever the pointer is
 // (none but its own: a drag begun before it opened is let go, nothing
-// copied): a move to another row, or into the box, lights the option
-// there, a paint only as the lit one changes (popup_hover); a press arms
-// what it lands on (an option, the box, outside) and a release on the
-// same takes it (popup_click), so a slip never picks; a drag, the right
-// button, nothing; the click that only focused the terminal's window
-// (Screen focusing), nothing either. A press the popup took keeps its
-// release, though the popup be gone since; a press again (a double or triple click) goes
-// nowhere if a popup opened or closed since the first; a report for a
-// box no longer open (a new size, a question answered elsewhere: asked
-// again first) does nothing. No popup: not taken (Select.ts)
+// copied); with none, the commands suggested take the presses on them,
+// so no text is chosen there (moves and all else elsewhere go on as if
+// they weren't there). A move to another row of a popup, or into it,
+// lights the option there, a paint only as the lit one changes
+// (popup_hover); a press arms what it lands on (an option or a command,
+// the box, outside) and a release on the same takes it (popup_click), so
+// a slip never picks; a drag, the right button, nothing; in a popup, the
+// click that only focused the terminal's window (Screen focusing),
+// nothing either. A press taken keeps its release, though its box be
+// gone since; a press again (a double or triple click) goes nowhere if a
+// popup opened or closed since the first; a report for a box no longer
+// open (a new size, a question answered elsewhere: asked again first)
+// does nothing
 export function popup_mouse(t: Term, key: string): boolean {
   const aim = t.aim;
   if (key === "Press" || key === "Release") {
     term_asks(t);
   }
-  const of  = popup_of(t);
-  const box = t.box !== null && t.box.of === of ? t.box : null;
-  if (key === "Press") {
-    const again = t.scr.clicks > 1 && aim.first !== of;
-    const live  = box !== null && !t.scr.focusing;
-    aim.first   = t.scr.clicks === 1 ? of : aim.first;
-    aim.press   = again ? { of: null, on: null } : of === null ? null : { of: live ? of : null, on: live ? popup_at(box, t.scr.point) : null };
-    if (again) {
-      return true;
-    }
+  const of = popup_of(t);
+  if (of === null && key === "Move") {
+    return false;
   }
-  if (of === null) {
-    const took = aim.press !== null && (key === "Drag" || key === "Release");
-    aim.press  = key === "Release" ? null : aim.press;
-    return took;
+  const on   = of ?? term_suggest(t);
+  const box  = on !== null && t.box?.of === on ? t.box : null;
+  const at   = box === null ? null : popup_at(box, t.scr.point);
+  const over = of !== null || (at !== null && at !== "out");
+  if (key === "Press" || key === "RightPress") {
+    const again = key === "Press" && t.scr.clicks > 1 && aim.first !== of;
+    const live  = key === "Press" && !again && box !== null && !(of !== null && t.scr.focusing);
+    aim.first   = key === "Press" && t.scr.clicks === 1 ? of : aim.first;
+    aim.press   = again || over ? { of: live ? on : null, on: live ? at : null } : null;
+    return aim.press !== null;
   }
-  if (t.sel?.held) {
+  const took = of !== null || aim.press !== null;
+  if (of !== null && t.sel?.held) {
     term_let_go(t);
   }
   if (key === "Move") {
     popup_hover(t, box);
-  } else if (key === "Release") {
+  } else if (key === "Release" || key === "RightRelease") {
     const press = aim.press;
     aim.press   = null;
-    const at    = box === null ? null : popup_at(box, t.scr.point);
-    if (press?.of === of && at !== null && popup_same(press.on, at)) {
+    if (key === "Release" && press?.of === on && at !== null && popup_same(press.on, at)) {
       popup_click(t, at);
     }
   }
-  return true;
+  return took;
 }
 
 // what a spot of the screen is in a popup as painted
@@ -545,28 +550,34 @@ function popup_hover(t: Term, box: PopBox | null): void {
   }
 }
 
-// a target lit in the popup open, if it still shows (true: it changed)
+// an option lit in the popup open, if it still shows (true: it changed)
 function popup_light(t: Term, at: Target): boolean {
-  const c = t.choose!;
-  const i = c.shown.findIndex((m) => m.k === at.k);
-  if (i < 0 || i === c.at) {
+  const c = t.choose;
+  const i = c === null || at.$ !== "option" ? -1 : c.shown.findIndex((m) => m.k === at.k);
+  if (c === null || i < 0 || i === c.at) {
     return false;
   }
   c.at = i;
   return true;
 }
 
-// a click in the popup open, pressed and let go on one spot: an option
+// a click, pressed and let go on one spot: in the popup open, an option
 // (still shown), lit, then what Enter does there, its list's own keys
 // first (a setting stepped, a toggle, a question's answer; held as Enter
 // is, just shown); outside, a list closes as Esc closes it (a question
 // stays: a click never answers for you; the line asked why goes back to
-// its question); the box, nothing
+// its question). On the commands suggested, one (still found) lit, then
+// what Enter does there (run, or filled in: one found by what it does,
+// one that needs words). The box, nothing
 function popup_click(t: Term, at: Pointed): void {
-  const c = t.choose!;
-  if (at === "out" && c.stays !== true) {
+  const c   = t.choose;
+  const sug = c === null ? term_suggest(t) : null;
+  if (typeof at === "object" && at.$ === "command" && sug?.found[at.k] !== undefined) {
+    sug.at = at.k;
+    term_suggest_key(t, sug, "Enter");
+  } else if (c !== null && at === "out" && c.stays !== true) {
     term_choose_key(t, c, "Esc");
-  } else if (typeof at === "object") {
+  } else if (c !== null && typeof at === "object" && at.$ === "option") {
     popup_light(t, at);
     if (c.shown[c.at]?.k === at.k) {
       term_choose_key(t, c, "Enter");

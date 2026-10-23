@@ -11,7 +11,7 @@
 
 import * as path from "node:path";
 import { term_asks, term_form_lines } from "./Asks.ts";
-import { term_background, term_suggest, term_suggested } from "./Commands.ts";
+import { term_background, term_suggest } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import * as Draw from "../ui/Draw.ts";
 import { term_hint } from "./Keys.ts";
@@ -27,7 +27,7 @@ import * as Screen from "../ui/Screen.ts";
 import { term_area, term_under } from "./Select.ts";
 import { term_side, term_side_drawn, term_side_width, term_tokens } from "./Side.ts";
 import { status_rows } from "./Status.ts";
-import { term_act, type Area, type Item, type Pane, type Sug, type Term } from "./Term.ts";
+import { term_act, type Area, type Pane, type Sug, type Target, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
 // the folder illi works in, as the head shows it
@@ -200,7 +200,7 @@ export function term_paint(t: Term): void {
   const pop   = term_popup(t) !== null;
   popup_shown(t, form !== null && !paned);
   const box   = pop ? null : term_box(t, iw, tall + 1 + above.length);
-  const top   = box === null ? Infinity : 2 + tall + above.length - box.length;
+  const top   = box === null ? Infinity : 2 + tall + above.length - box.lines.length;
   const view  = term_view(t, cw, tall, 1, left + MARGIN);
   for (let r = top; r <= tall; r++) {
     view.lines[view.first + r - 1] = [];
@@ -241,7 +241,10 @@ export function term_paint(t: Term): void {
   }
   if (box !== null) {
     term_over(t, rows, box, top, MARGIN, iw);
-  } else if (t.pane === null && t.scroll > 0 && !pop) {
+  } else if (!pop) {
+    t.box = null;
+  }
+  if (box === null && t.pane === null && t.scroll > 0 && !pop) {
     term_jump(t, rows, tall, left + MARGIN, cw, lit);
   }
   if (!pop) {
@@ -527,24 +530,20 @@ function term_view(t: Term, w: number, tall: number, row: number, col: number): 
 }
 
 // the commands suggested as a /word is typed (none: null), over the
-// chat's foot, room lines at most, iw wide (over the side too); none
-// while illi's question is drawn in the input's place
-function term_box(t: Term, iw: number, room: number): Item[] | null {
+// chat's foot, room lines at most, iw wide (over the side too), each
+// line with the command it stands for; none while illi's question is
+// drawn in the input's place
+function term_box(t: Term, iw: number, room: number): { sug: Sug; lines: Array<[Paint.Line, Target | null]> } | null {
   const sug = t.asking?.form == null ? term_suggest(t) : null;
-  return sug === null ? null : term_suggestions(t, sug, iw, room);
+  return sug === null ? null : { sug, lines: term_suggestions(sug, iw, room) };
 }
 
 // the commands suggested laid over the rows from screen row top on, at
-// column col, w wide (the chat's under them blanked by the caller); a
-// click on their lines goes to them before what is under them
-function term_over(t: Term, rows: Screen.Piece[][], items: Item[], top: number, col: number, w: number): void {
-  const under = t.hits;
-  t.hits = [];
-  for (const [k, [line, run]] of items.entries()) {
-    rows[top + k].push({ col, w, line });
-    term_hit(t, top + k, col, col + w, run);
-  }
-  t.hits.push(...under);
+// column col, w wide (the chat's under them blanked by the caller), kept
+// as painted (t.box: the mouse over them is Popup.ts's)
+function term_over(t: Term, rows: Screen.Piece[][], box: { sug: Sug; lines: Array<[Paint.Line, Target | null]> }, top: number, col: number, w: number): void {
+  box.lines.forEach(([line], k) => rows[top + k].push({ col, w, line }));
+  t.box = { of: box.sug, row: top, col, w, h: box.lines.length, rows: box.lines.map(([, aim]) => aim), list: 1, lines: box.lines.length - 2, tall: box.sug.tall, ahead: 0, lead: 0 };
 }
 
 // the chat's lines and the first shown, tall of them: its rows (made
@@ -620,16 +619,17 @@ function term_paned(t: Term, pane: Pane, w: number, tall: number): [Paint.Line[]
 // what it does (dim), wrapped under itself; the characters the word
 // matched (in the name it is matched by: a setting's key, after
 // `/set `) bold in the accent, the one lit all in it, marked as the
-// picker marks its choice; a click takes one. As many as fit from the
+// picker marks its choice; each line with the command it stands for (a
+// click on it does what Enter does there: Popup.ts). As many as fit from the
 // first shown (moved to keep the one lit whole in view; sug.tall: how
 // many fit), the box as tall as all of them would be, SUGGEST lines at
 // most (blank past them). None matching, a note says so
-function term_suggestions(t: Term, sug: Sug, fw: number, room: number): Item[] {
+function term_suggestions(sug: Sug, fw: number, room: number): Array<[Paint.Line, Target | null]> {
   const w    = fw - 4;
   const lit  = { ...Paint.INK, c: Draw.draw_tokens().accent };
   const bold = { ...lit, b: true };
   const wide = Math.min(Math.max(0, ...sug.found.map((m) => Paint.text_width(sug.cmds[m.k][0]))), Math.floor(w / 2)) + 4;
-  const item = (m: Screen.Match, k: number): Item[] => {
+  const item = (m: Screen.Match, k: number): Array<[Paint.Line, Target | null]> => {
     const [use, , text, , , about] = sug.cmds[m.k];
     const from = use.indexOf(sug.names[m.k]);
     const end  = from + sug.names[m.k].length;
@@ -643,10 +643,10 @@ function term_suggestions(t: Term, sug: Sug, fw: number, room: number): Item[] {
     const pad  = Paint.Run(" ".repeat(wide - Paint.line_width(cut)));
     const ink  = here ? lit : Paint.DIM;
     const said = Paint.runs_wrap(term_found(Paint.text_clean(text), m.hay === true ? Paint.text_clean(about ?? text) : "", m.at, ink), Math.max(1, w - wide), false);
-    const run  = () => term_suggested(t, use, true);
-    return said.map((l, i): Item => [i === 0 ? [...cut, pad, ...l] : [Paint.Run(" ".repeat(wide)), ...l], run]);
+    const aim: Target = { $: "command", k };
+    return said.map((l, i): [Paint.Line, Target] => [i === 0 ? [...cut, pad, ...l] : [Paint.Run(" ".repeat(wide)), ...l], aim]);
   };
-  const none  = [[Paint.Run("  No command matches " + Paint.text_clean(sug.word), Paint.DIM)], null] as Item;
+  const none  = [[Paint.Run("  No command matches " + Paint.text_clean(sug.word), Paint.DIM)], null] as [Paint.Line, null];
   const all   = sug.found.length === 0 ? [[none]] : sug.found.map(item);
   const rows  = Math.min(SUGGEST, Math.max(1, room - 2), all.flat().length);
   const fits  = (from: number, to: number) => all.slice(from, to + 1).flat().length <= rows;
@@ -660,7 +660,7 @@ function term_suggestions(t: Term, sug: Sug, fw: number, room: number): Item[] {
   }
   sug.tall    = end - sug.top + 1;
   const shown = all.slice(sug.top).flat().slice(0, rows);
-  const items = [...shown, ...Array.from({ length: rows - shown.length }, (): Item => [[], null])];
+  const items = [...shown, ...Array.from({ length: rows - shown.length }, (): [Paint.Line, null] => [[], null])];
   const lines = Paint.frame(items.map(([line]) => line), fw, [Paint.Run(" " + (sug.mid === null ? SUGGESTED : NAMED) + " ", { ...Paint.DIM, b: true })]);
   return lines.map((l, k) => [l, items[k - 1]?.[1] ?? null]);
 }
