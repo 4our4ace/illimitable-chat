@@ -4,13 +4,14 @@
 // frame at most each FRAME ms: the head; the chat (or a pane; over its
 // foot the commands suggested), the side beside it (Side.ts); the notes,
 // the toast and the jump to the end; the rule (what runs, the ∞ traced),
-// the input, the pages, the pick; a popup open (the picker: Popup.ts)
-// over all of it, all else dimmed, the cursor in its search if it has
-// one; all of it grey while the leader waits for its key (Commands.ts
-// term_lead); the terminal's title. A pipe gets text.
+// the input, the pages, the pick; a popup open (the picker, illi's
+// questions: Popup.ts) over all of it, all else dimmed, the cursor in its
+// search or words if it has them; all of it grey while the leader waits
+// for its key (Commands.ts term_lead); the terminal's title. A pipe gets
+// text.
 
 import * as path from "node:path";
-import { term_asks, term_form_lines } from "./Asks.ts";
+import { term_asks } from "./Asks.ts";
 import { term_background, term_suggest } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import * as Draw from "../ui/Draw.ts";
@@ -164,8 +165,9 @@ export function term_draw(t: Term): void {
 // left over takes rows from the chat. Scrolled up, a button floats over
 // the chat's foot, in its middle: a jump to its end (a click goes there,
 // as Ctrl+End does). A popup open (Popup.ts) over all of it, all else
-// dimmed, the cursor in its search (none: hidden), and nothing under it
-// takes a click. A pipe gets the notes as text
+// dimmed, the cursor in its search or words (none: hidden; blinking in
+// illi's questions, which wait on you), and nothing under it takes a
+// click. A pipe gets the notes as text
 export function term_paint(t: Term): void {
   t.due   = false;
   painted = Date.now();
@@ -186,8 +188,7 @@ export function term_paint(t: Term): void {
   const iw    = full - 2 * MARGIN;
   const off   = !View.view_typing(t.v);
   const paned = t.pane !== null;
-  const form  = t.choose === null ? term_form_lines(t, iw, Math.max(1, Math.floor(h / 4))) : null;
-  const input = paned ? { lines: [], at: null } : form ?? Screen.screen_input(t.scr, iw, Math.max(1, Math.floor(h / 3)), off ? OFF + (t.v.agent ?? View.MAIN) : term_hint(t), off);
+  const input = paned ? { lines: [], at: null } : Screen.screen_input(t.scr, iw, Math.max(1, Math.floor(h / 3)), off ? OFF + (t.v.agent ?? View.MAIN) : term_hint(t), off);
   const idle  = View.view_doing(t.v) === null;
   const notes = term_notes(idle ? said.notes : said.notes.slice(-1), iw - 2 * NOTE_IN);
   const ruled = idle ? notes.pop() : undefined;
@@ -198,7 +199,7 @@ export function term_paint(t: Term): void {
   const status = status_rows(t, iw, h - (paned ? 4 : 5) - input.lines.length - above.length - STATUS_ROOM);
   const tall  = Math.max(1, h - (paned ? 4 : 5) - input.lines.length - above.length - status.length);
   const pop   = term_popup(t) !== null;
-  popup_shown(t, form !== null && !paned);
+  popup_shown(t);
   const box   = pop ? null : term_box(t, iw, tall + 1 + above.length);
   const top   = box === null ? Infinity : 2 + tall + above.length - box.lines.length;
   const view  = term_view(t, cw, tall, 1, left + MARGIN);
@@ -255,7 +256,7 @@ export function term_paint(t: Term): void {
   const cursor = pop ? popped : input.at === null ? null : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
   const drawn  = t.lead ? rows.map((row) => row.map((p) => ({ ...p, line: p.line.map((r) => ({ ...r, s: { ...r.s, d: true, c: "", g: "" } })) }))) : rows;
   t.ruled ={ row: 2 + tall + above.length, w: iw, at: cursor, rows: drawn, side: box === null && !pop ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
-  t.scr.blink = idle || form !== null;
+  t.scr.blink = idle || term_popup(t) === "form";
   Screen.screen_paint(t.scr, drawn, cursor);
   painted = Date.now();
 }
@@ -531,10 +532,9 @@ function term_view(t: Term, w: number, tall: number, row: number, col: number): 
 
 // the commands suggested as a /word is typed (none: null), over the
 // chat's foot, room lines at most, iw wide (over the side too), each
-// line with the command it stands for; none while illi's question is
-// drawn in the input's place
+// line with the command it stands for
 function term_box(t: Term, iw: number, room: number): { sug: Sug; lines: Array<[Paint.Line, Target | null]> } | null {
-  const sug = t.asking?.form == null ? term_suggest(t) : null;
+  const sug = term_suggest(t);
   return sug === null ? null : { sug, lines: term_suggestions(sug, iw, room) };
 }
 

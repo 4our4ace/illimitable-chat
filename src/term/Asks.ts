@@ -6,11 +6,12 @@
 // it keeps something); No (Esc too); No, and say why (a line typed, for
 // the model). What it would do and why it was asked show over the
 // answers, and as a note.
-// illi's own questions (ask) show in place of the input instead (its
-// form), a tab each: the question, its options (one to pick, or
-// several), and a row for words of the user's own, which they may type
-// beside the options they pick or instead of them; then a tab with all
-// the answers, to look over and send. Esc skips them all.
+// illi's own questions (ask) show in the popup too, as a form (Popup.ts:
+// over a pane too, the input as typed left under it), a tab each: the
+// question, its options (one to pick, or several), and a row for words
+// of the user's own, which they may type beside the options they pick or
+// instead of them; then a tab with all the answers, to look over and
+// send. Esc skips them all.
 // One answered elsewhere, or dropped (a stop), closes its picker; one
 // that comes while another picker is open waits for it to close. A
 // pipe has no one to ask: no, at once.
@@ -21,7 +22,7 @@ import { term_note } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { popup_held } from "./Popup.ts";
 import * as Screen from "../ui/Screen.ts";
-import { term_send, type Form, type Term } from "./Term.ts";
+import { term_send, type Form, type Span, type Target, type Term } from "./Term.ts";
 import type { Query, Question } from "../ui/View.ts";
 
 
@@ -46,7 +47,7 @@ export function term_asks(t: Term): void {
     return;
   }
   if (t.asking === null) {
-    t.asking = { id: q.id, c: null, done: false, form: q.queries === undefined ? null : { tab: 0, each: q.queries.map(() => ({ ed: Screen.ed_new(), at: 0, picked: [] })) }, shown: null };
+    t.asking = { id: q.id, c: null, done: false, form: q.queries === undefined ? null : { tab: 0, top: 0, each: q.queries.map(() => ({ ed: Screen.ed_new(), at: 0, picked: [] })) }, shown: null };
     if (q.queries === undefined) {
       term_note(t, q.who + " asks to use " + q.tool + (q.what === "" ? "" : ": " + q.what) + (q.why === undefined || q.why === "" ? "." : ". Why: " + q.why));
     }
@@ -60,7 +61,7 @@ export function term_asks(t: Term): void {
 }
 
 // illi's questions open, and their form
-function term_form(t: Term): [Asked, Form] | null {
+export function term_form(t: Term): [Asked, Form] | null {
   const q = t.v.asks[0];
   const f = t.asking?.form ?? null;
   return f === null || q?.id !== t.asking!.id || q.queries === undefined ? null : [q as Asked, f];
@@ -71,14 +72,17 @@ function term_form(t: Term): [Asked, Form] | null {
 // (of several, only while none is picked nor typed) and goes on; the
 // rest edit the words, as the input's keys do. Tab and Shift+Tab (Left
 // and Right off the words) go round the questions and the answers,
-// where Enter sends them (no editing key reaches the input there). Esc
-// and Ctrl+C skip them all; Enter does nothing while they are held
-// (Popup.ts popup_held: just shown)
-export function term_form_key(t: Term, key: string): boolean {
+// where Enter sends them (no editing key reaches the input there). PgUp
+// and Ctrl+Home go to the first row, PgDn and Ctrl+End to the last (the
+// words'); Home and End edit the words there, else go so too. Esc,
+// Ctrl+C and Ctrl+D skip them all; Enter does nothing while they are
+// held (Popup.ts popup_held: just shown)
+export function term_form_key(t: Term, press: string): boolean {
   const open = term_form(t);
   if (open === null) {
     return false;
   }
+  const key    = press === "Ctrl+D" ? "Esc" : press;
   const [q, f] = open;
   const n      = q.queries.length;
   const e      = f.each[f.tab];
@@ -87,6 +91,7 @@ export function term_form_key(t: Term, key: string): boolean {
   const side   = e === undefined || e.at < o ? { Left: -1, Right: 1 } : {};
   const tab    = ({ Tab: 1, "Shift+Tab": -1, ...side } as Record<string, number>)[key];
   const row    = ({ Up: -1, Down: 1 } as Record<string, number>)[key];
+  const ends   = ({ PgUp: 0, "Ctrl+Home": 0, PgDn: o, "Ctrl+End": o, ...(e === undefined || e.at < o ? { Home: 0, End: o } : {}) } as Record<string, number>)[key];
   if (key === "Esc" || key === "Ctrl+C") {
     term_answer(t, q, false, false, "");
   } else if (key === "Enter" && popup_held(t)) {
@@ -98,9 +103,11 @@ export function term_form_key(t: Term, key: string): boolean {
       const said = term_said(q, f);
       term_answer(t, q, said !== "", false, said);
     }
-    return key === "Enter" || row !== undefined || Screen.ed_key(Screen.ed_new(), key);
+    return key === "Enter" || row !== undefined || ends !== undefined || Screen.ed_key(Screen.ed_new(), key);
   } else if (row !== undefined) {
     e.at = (e.at + row + o + 1) % (o + 1);
+  } else if (ends !== undefined) {
+    e.at = ends;
   } else if (key === "Enter") {
     if (e.at < o && (!query.multi || (e.picked.length === 0 && e.ed.text.trim() === ""))) {
       e.picked = [e.at];
@@ -165,25 +172,30 @@ function term_said(q: Asked, f: Form): string {
   return each.every((said) => said.length === 0) ? "" : q.queries.map((query, k) => [query.text, ...(each[k].length === 0 ? ["no answer"] : each[k])].join("\n")).join("\n\n");
 }
 
-// illi's questions as lines in place of the input, w wide, the words at
-// most max lines (null: none open): who asks over the tabs (the one shown
-// lit, one answered ticked), then the question shown, its options (the
-// lit one marked, those picked filled; several: squares), the words' row
-// as the input looks, the keys; or the answers, each under its question.
-// The cursor in the words (on the answers: at the keys)
-export function term_form_lines(t: Term, w: number, max: number): { lines: Paint.Line[]; at: Screen.Spot } | null {
+// illi's questions laid out for their popup (Popup.ts), w columns
+// inside, the words at most max lines, at tab `tab` (none: the one shown;
+// null: none open): who asks (the popup's title); the tabs (the one shown
+// lit, one answered ticked), wrapped, each where it is on its line (a
+// click goes there); then the question, its options (the lit one marked,
+// those picked filled; several: squares), the words' row as the input
+// looks, each line with the row it stands for (a click takes it), or the
+// answers, each under its question; and the keys, wrapped. The cursor in
+// the words (on the answers: none)
+export function term_form_lines(t: Term, w: number, max: number, tab?: number): { who: string; tabs: Paint.Line[]; spans: Span[][]; body: Array<[Paint.Line, Target | null]>; keys: Paint.Line[]; at: Screen.Spot | null } | null {
   const open = term_form(t);
   if (open === null) {
     return null;
   }
   const [q, f] = open;
+  const shown  = tab ?? f.tab;
   const bold   = { ...Paint.INK, b: true };
   const accent = { ...bold, c: Draw.draw_tokens().accent };
   const said   = (k: number) => f.each[k].picked.length > 0 || f.each[k].ed.text.trim() !== "";
   const names  = [...q.queries.map((query, k) => (said(k) ? "✓ " : "") + Paint.text_clean(query.head)), "Review"];
-  const tabs   = names.flatMap((name, k) => [Paint.Run(" "), Paint.Run(" " + name + " ", k === f.tab ? { ...bold, v: true } : k < q.queries.length && said(k) ? Paint.INK : Paint.DIM)]);
-  const head   = Paint.runs_wrap([Paint.Run(q.who + " asks", accent), ...tabs], w, false);
-  const e      = f.each[f.tab];
+  const tabs   = form_tabs(names.map((name, k) => Paint.Run(" " + name + " ", k === shown ? { ...bold, v: true } : k < q.queries.length && said(k) ? Paint.INK : Paint.DIM)), w);
+  const keys   = (text: string) => Paint.runs_wrap([Paint.Run(text, Paint.DIM)], w, false);
+  const plain  = (l: Paint.Line): [Paint.Line, null] => [l, null];
+  const e      = f.each[shown];
   if (e === undefined) {
     const answer = (k: number) => {
       const picked = [...f.each[k].picked].sort((a, b) => a - b).map((i) => q.queries[k].options[i].label);
@@ -191,25 +203,45 @@ export function term_form_lines(t: Term, w: number, max: number): { lines: Paint
       const lines  = [...(picked.length === 0 ? [] : [[Paint.Run("  ● ", accent), Paint.Run(Paint.text_clean(picked.join(", ")))]]), ...(words === "" ? [] : [[Paint.Run("  > ", Paint.DIM), Paint.Run(Paint.text_clean(words))]])];
       return lines.length === 0 ? [[Paint.Run("  no answer", Paint.DIM)]] : lines.flatMap((l) => Paint.runs_wrap(l, w, false));
     };
-    const each  = q.queries.flatMap((query, k) => [...Paint.runs_wrap([Paint.Run(Paint.text_clean(query.text), bold)], w, false), ...answer(k)]);
-    const lines = [...head, ...each, [Paint.Run(SEND, Paint.DIM)]];
-    return { lines, at: { row: lines.length - 1, col: 0 } };
+    const each = q.queries.flatMap((query, k) => [...Paint.runs_wrap([Paint.Run(Paint.text_clean(query.text), bold)], w, false), ...answer(k)]);
+    return { who: q.who, ...tabs, body: each.map(plain), keys: keys(SEND), at: null };
   }
-  const query  = q.queries[f.tab];
+  const query  = q.queries[shown];
   const lead   = (k: number) => Paint.Run(k === e.at ? "› " : "  ", bold);
   const marks  = query.multi ? ["□ ", "■ "] : ["○ ", "● "];
   const option = (o: { label: string; about: string }, k: number) => {
     const runs = [Paint.Run(Paint.text_clean(o.label), k === e.at ? bold : Paint.INK), ...(o.about === "" ? [] : [Paint.Run("  " + Paint.text_clean(o.about), Paint.DIM)])];
     const rows = Paint.runs_wrap(runs, Math.max(1, w - 4), false);
     const mark = Paint.Run(marks[e.picked.includes(k) ? 1 : 0], e.picked.includes(k) ? accent : Paint.DIM);
-    return rows.map((l, j) => (j === 0 ? [lead(k), mark, ...l] : [Paint.Run("    "), ...l]));
+    const aim: Target = { $: "row", k, tab: shown };
+    return rows.map((l, j): [Paint.Line, Target] => [j === 0 ? [lead(k), mark, ...l] : [Paint.Run("    "), ...l], aim]);
   };
   const ask    = Paint.runs_wrap([Paint.Run(Paint.text_clean(query.text)), Paint.Run(query.multi ? "  pick any" : "  pick one", Paint.DIM)], w, false);
   const opts   = query.options.flatMap(option);
   const words  = Screen.screen_input({ ...t.scr, ed: e.ed }, w - 2, max, "Something else: type your own", false);
-  const own    = words.lines.map((l, j) => [j === 0 ? lead(query.options.length) : Paint.Run("  "), ...l]);
-  const lines  = [...head, ...ask, ...opts, ...own, [Paint.Run(KEYS, Paint.DIM)]];
-  return { lines, at: { row: head.length + ask.length + opts.length + words.at.row, col: 2 + words.at.col } };
+  const mine: Target = { $: "row", k: query.options.length, tab: shown };
+  const own    = words.lines.map((l, j): [Paint.Line, Target] => [[j === 0 ? lead(query.options.length) : Paint.Run("  "), ...l], mine]);
+  return { who: q.who, ...tabs, body: [...ask.map(plain), ...opts, ...own], keys: keys(KEYS), at: { row: ask.length + opts.length + words.at.row, col: 2 + words.at.col } };
+}
+
+// the form's tabs, each a run, laid on lines w wide a space apart (one
+// too wide for the rest of a line starts the next), and where each is on
+// its line (a click on it goes there)
+function form_tabs(tabs: Paint.Run[], w: number): { tabs: Paint.Line[]; spans: Span[][] } {
+  const lines: Paint.Line[] = [[]];
+  const spans: Span[][]     = [[]];
+  tabs.forEach((run, k) => {
+    const tw = Paint.text_width(run.x);
+    if (lines.at(-1)!.length > 0 && Paint.line_width(lines.at(-1)!) + 1 + tw > w) {
+      lines.push([]);
+      spans.push([]);
+    }
+    const line = lines.at(-1)!;
+    const from = line.length === 0 ? 0 : Paint.line_width(line) + 1;
+    line.push(...(line.length === 0 ? [] : [Paint.Run(" ")]), run);
+    spans.at(-1)!.push({ col: from, to: from + tw, aim: { $: "tab", k } });
+  });
+  return { tabs: lines, spans };
 }
 
 // the picker for a question, which stays (Chooser stays): its answers,

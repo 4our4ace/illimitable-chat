@@ -3,11 +3,11 @@
 // A key, as Screen.ts reads it: the mouse's (Select.ts), the wheel, the
 // keys of term_groups (Commands.ts), the key after the leader (its
 // shortcut, before all else), and what takes keys first: a popup open
-// (Popup.ts) every key but PASS's, so none reaches the chat, the input or
-// the commands suggested under it (its search the text typed too); then
-// illi's questions, the commands suggested and a pane; Enter (a skill
-// named mid-message told), Esc, Ctrl+C and Ctrl+D, Tab (the suggested
-// reply), Shift+Tab and the pages.
+// (Popup.ts: a list, illi's questions) every key but PASS's, so none
+// reaches the chat, a pane, the input or the commands suggested under it
+// (its search or words the text typed too); then the commands suggested
+// and a pane; Enter (a skill named mid-message told), Esc, Ctrl+C and
+// Ctrl+D, Tab (the suggested reply), Shift+Tab and the pages.
 
 import { term_form_key, term_form_type } from "./Asks.ts";
 import { Chat } from "../chat/Chat.ts";
@@ -18,7 +18,7 @@ import { term_draw } from "./Frame.ts";
 import { member_others } from "./Member.ts";
 import { term_note, term_toast, term_unnote } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
-import { popup_held, popup_mouse, popup_page, popup_wheel } from "./Popup.ts";
+import { popup_form_wheel, popup_held, popup_mouse, popup_page, popup_wheel, term_popup } from "./Popup.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_copied, term_hover, term_mouse, term_selected, term_under } from "./Select.ts";
 import { term_act, term_primaries, term_quit, type Chooser, type Cmd, type Term } from "./Term.ts";
@@ -106,22 +106,33 @@ function term_keyed(key: string): Cmd | undefined {
 
 // a key after the leader: its shortcut's (term_after; the wheel lets the
 // leader go and goes on to what has it: the popup, a pane, else the
-// chat). A key while the picker (a popup), illi's question, the commands
-// suggested or a pane is open: theirs first (true: taken). The picker as
-// term_choose_key, every key but PASS's; the question as Asks.ts says;
-// the commands move by Up and Down, fill one in by Tab, run it by Enter;
-// a pane scrolls by the arrows, the pages and the wheel, Esc and Enter
-// close it, and no editing key reaches the input hidden under it
+// chat). A key while a popup (the picker, illi's questions), the
+// commands suggested or a pane is open: theirs first (true: taken). The
+// picker as term_choose_key, every key but PASS's; illi's questions every
+// key but PASS's and the leader too, as Asks.ts says (the wheel scrolls
+// them: Popup.ts); the commands move by Up and Down, fill one in by Tab,
+// run it by Enter; a pane scrolls by the arrows, the pages and the
+// wheel, Esc and Enter close it, and no editing key reaches the input
+// hidden under it
 export function term_grab(t: Term, key: string): boolean {
   if (t.lead && key !== "WheelUp" && key !== "WheelDown") {
     term_after(t, key);
     return true;
   }
-  t.lead = false;
-  if (t.choose !== null) {
-    return term_choose_key(t, t.choose, key);
+  t.lead    = false;
+  const pop = term_popup(t);
+  if (pop === "list") {
+    return term_choose_key(t, t.choose!, key);
   }
-  if (term_form_key(t, key)) {
+  if (pop === "form" && (PASS.includes(key) || key === config.LEADER)) {
+    return false;
+  }
+  if (pop === "form") {
+    if (key === "WheelUp" || key === "WheelDown") {
+      popup_form_wheel(t, key === "WheelUp" ? -1 : 1);
+    } else {
+      term_form_key(t, key);
+    }
     return true;
   }
   const sug = term_suggest(t);
@@ -203,7 +214,8 @@ export function term_choose_key(t: Term, c: Chooser, press: string): boolean {
 // text typed after the leader: its first character the shortcut's key,
 // the rest as typed after it; while the picker is open: to its search,
 // none: nowhere, never the input; while illi asks, to its question
-// (Asks.ts); over a pane, to the input, the pane closed
+// (Asks.ts; a pane under it stays); over a pane, to the input, the pane
+// closed
 export function term_type(t: Term, text: string): boolean {
   const c = t.choose;
   if (t.lead) {
@@ -223,10 +235,11 @@ export function term_type(t: Term, text: string): boolean {
     }
     return true;
   }
-  if (t.pane !== null) {
-    t.pane = null;
+  if (term_form_type(t, text)) {
+    return true;
   }
-  return term_form_type(t, text);
+  t.pane = null;
+  return false;
 }
 
 // a click (never under a popup, nor on the commands suggested: Popup.ts
