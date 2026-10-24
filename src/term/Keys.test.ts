@@ -115,13 +115,13 @@ test("the picker keeps its Tab while a suggested reply shows", () => {
 const sent = (t: any) => t.v.out.map((p: any) => { const { id, ...msg } = p.msg; return msg; });
 const note = (t: any) => t.notices.filter((n: any) => !n.toast).at(-1)?.text ?? "";
 
-test("on an agent's page, Esc twice and Ctrl+C interrupt illi's turn; Enter on an empty input, on any page, does nothing", () => {
+test("on an agent's page, Esc twice and Ctrl+C stop the work; Enter on an empty input, on any page, does nothing", () => {
   for (const key of ["\x1b[27u\x1b[27u", "\x03"]) {
     const t = term("");
     t.v.busy = true;
     t.v.page = { name: "reviewer", log: [], live: [] };
     Screen.screen_feed(t.scr, key);
-    expect([key, sent(t)]).toEqual([key, [{ $: "stop", name: View.TURN }]]);
+    expect([key, sent(t)]).toEqual([key, [{ $: "stop" }]]);
   }
   for (const page of [null, { name: "reviewer", log: [], live: [] }]) {
     const t = term("Commit it");
@@ -131,14 +131,18 @@ test("on an agent's page, Esc twice and Ctrl+C interrupt illi's turn; Enter on a
   }
 });
 
-test("one Esc says a second interrupts, and a second does; with no turn running, Esc interrupts nothing", () => {
+test("one Esc says a second stops the work, and a second stops all of it, the subagents too; with only subagents at work, the same; with nothing running, Esc stops nothing", () => {
   const t = term("");
   t.v.busy = true;
   Screen.screen_feed(t.scr, "\x1b[27u");
   expect(sent(t)).toEqual([]);
-  expect(t.notices.at(-1).text).toBe("Esc again to interrupt");
+  expect(t.notices.at(-1).text).toBe("Esc again to stop");
   Screen.screen_feed(t.scr, "\x1b[27u");
-  expect(sent(t)).toEqual([{ $: "stop", name: View.TURN }]);
+  expect(sent(t)).toEqual([{ $: "stop" }]);
+  const agents = term("");
+  agents.v.agents = ["reviewer"];
+  Screen.screen_feed(agents.scr, "\x1b[27u\x1b[27u");
+  expect(sent(agents)).toEqual([{ $: "stop" }]);
   const idle = term("");
   Screen.screen_feed(idle.scr, "\x1b[27u\x1b[27u");
   expect(sent(idle)).toEqual([]);
