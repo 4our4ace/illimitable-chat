@@ -6,7 +6,7 @@
       "name": "illimitable-chat",
       "dependencies": {
         "pele": "1.7.0",
-        "pelext": "github:4our4ace/pelext#v0.2.1",
+        "pelext": "github:4our4ace/pelext#v0.2.2",
         "prismjs": "1.30.0",
       },
       "devDependencies": {
@@ -24,7 +24,7 @@
 
     "pele": ["pele@1.7.0", "", {}, "sha512-nkYb5VnxsTgwD4NThF6j4pJEC4AhGLJ9ptiL4q/vIzGr9q6ZtoRE3hFr94LgHpZ/xy56d1pw42UAQGaZkjM5XA=="],
 
-    "pelext": ["pelext@github:4our4ace/pelext#2422ff8", { "peerDependencies": { "pele": "^1.6.0" }, "bin": { "pelext": "bin/pelext.mjs" } }, "4our4ace-pelext-2422ff8", "sha512-4Fcv93tM6i8hhJdFjmXrKP/kR6dGQupbSqUUExis3Tsp8tfsm8P9+s9n0tQpVkm6mascoNV8D/yrH8MY/Bif6Q=="],
+    "pelext": ["pelext@github:4our4ace/pelext#6c6fa42", { "peerDependencies": { "pele": "^1.6.0" }, "bin": { "pelext": "bin/pelext.mjs" } }, "4our4ace-pelext-6c6fa42", "sha512-cYAOZJg5a29qSWgLX3b+LkzX4FtxAUc5ZG9GzkQdphiHfHP+XXMa9EHzfZ5m7pQWmRP9/+upcBPFV9DJvQcrLw=="],
 
     "prismjs": ["prismjs@1.30.0", "", {}, "sha512-DEvV2ZF2r2/63V+tK8hQvrR2ZGn10srHbXviTlcv7Kpzw8jWiNTqbVgjO3IY8RxrrOUF8VPMQQFysYYYv0YZxw=="],
 

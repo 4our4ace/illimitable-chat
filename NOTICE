@@ -6,5 +6,5 @@ illimitable is a modified version of software by Higher Order Company
 Version 2.0 (LICENSE). The changes are by 4our4ace.
 
 The libraries compiled into illi (package.json's dependencies) are under
-the MIT License; one holds a table adapted from prismantis, under the MIT
-License too. See THIRD_PARTY_NOTICES.md.
+the MIT License; one holds a table generated from the Unicode Character
+Database, under the Unicode License v3. See THIRD_PARTY_NOTICES.md.
