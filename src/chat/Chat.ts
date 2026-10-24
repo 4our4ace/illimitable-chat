@@ -78,7 +78,8 @@ type Check = { call: Call; goal: string };
 // none checks); context: what the plugins and hooks tell the model in
 // every call of the run (Plugins.context, asked as the chat opens); idle:
 // the wait after a reply before the hooks hear the user is waited on
-// (Chat.idle)
+// (Chat.idle); told: the state each view was last told, each field's
+// JSON (Chat.tell)
 export type Chat = {
   mem   : Memory;
   tools : Tools;
@@ -114,6 +115,7 @@ export type Chat = {
   checking: AbortController | null;
   context: Promise<string[]>;
   idle  : ReturnType<typeof setTimeout> | undefined;
+  told  : WeakMap<Sock, Record<string, string>>;
 };
 
 // a question asked of the user (Chat.question), and what its answer does
@@ -269,6 +271,7 @@ export namespace Chat {
       writes: Promise.resolve(), held: null, switched: false, was: null, picks: new Map(),
       suggest: { on: false, due: false, text: mem.suggest, call: null, passed: false, unused: 0 }, fit: 1, beside: new Map(), refits: 0, asks: [], compacting: false,
       goings: 0, going: false, saying: Promise.resolve(), checking: null, context: Promise.resolve([]), idle: undefined,
+      told: new WeakMap(),
     };
     chat.context = Plugins.context({ cwd });
     Machine.watch(() => Chat.change(chat));
@@ -1057,7 +1060,25 @@ export namespace Chat {
       chat.mem.work = work;
       Chat.save(chat);
     }
-    Chat.all(chat, Chat.state(chat));
+    Chat.tell(chat, chat.socks);
+  }
+
+  // the state told views: to each, only the fields moved since what it
+  // was last told (View.ts takes a state's fields over its own; a view
+  // joining, told none yet, gets it whole), nothing if none moved. So
+  // the refused requests, the grants and the catalog go out as they
+  // change, not with every turn's step
+  export function tell(chat: Chat, socks: Iterable<Sock>): void {
+    const { $, ...state } = Chat.state(chat) as Out & { $: "state" };
+    const now = Object.fromEntries(Object.entries(state).map(([key, value]) => [key, JSON.stringify(value)]));
+    for (const sock of socks) {
+      const was = chat.told.get(sock) ?? {};
+      const moved = Object.keys(now).filter((key) => now[key] !== was[key]);
+      chat.told.set(sock, now);
+      if (moved.length > 0) {
+        Chat.send(sock, { $: "state", ...Object.fromEntries(moved.map((key) => [key, (state as Record<string, unknown>)[key]])) });
+      }
+    }
   }
 
   // the chat's state saved; a save that fails is told to the views, never
@@ -1085,13 +1106,15 @@ export namespace Chat {
   // a view joins on the chat as it is now
   export function join(chat: Chat, sock: Sock): void {
     chat.socks.add(sock);
-    Chat.send(sock, Chat.state(chat));
+    chat.told.delete(sock);
+    Chat.tell(chat, [sock]);
     Chat.show(chat, sock);
     Chat.send(sock, { $: "live", live: chat.live });
   }
 
   export function leave(chat: Chat, sock: Sock): void {
     chat.socks.delete(sock);
+    chat.told.delete(sock);
   }
 
   // a view's message answered (ack): a read at once, else as Chat.apply
