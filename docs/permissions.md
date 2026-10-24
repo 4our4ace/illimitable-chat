@@ -34,10 +34,11 @@ Modes
   `yolo`. So does one check of illi's own: a write to its config (any
   file in `~/.illi`, or a project's `.illi`: what it runs and is told,
   hooks and plugins among them) is asked, until you grant that file.
-- Every mode but `yolo` asks about a secret, through any tool, and, as
-  `auto` does, root and the system, a change outside the project, what
-  deletes for good on another computer and what makes git or Claude
-  Code run a program (`read-only` refuses what changes).
+- Every mode but `yolo` asks all `auto` asks: a secret, through any
+  tool (and a folder outside the project holding a secret store), root
+  and the system, a change outside the project, what deletes for good on
+  another computer, what makes git or Claude Code run a program, and a
+  loop (`read-only` refuses what changes).
 
 How a command is read
 ---------------------
@@ -54,7 +55,12 @@ where the link leads, a glob's matches looked at. A program on your
 one named in the project (`.venv/bin/python`) is the project's,
 wherever its link leads. A search's pattern (`grep -n '^x==' file`),
 git's branches, tags and revisions (`git checkout -b token-x`) and its
-config keys are not files. The shell tool runs bash, so what illi
+config keys are not files. A sed script's own files are files (`sed
+'r x'`, `s/a/b/w x`), and awk's are written when it edits them in place
+(`awk -i inplace`). An option is read as its command reads it: in a
+cluster (`sed -ne`, `curl -sSLo x`), a value glued to its letter
+(`wget -Ox`), and, for what `auto` asks, a long option cut short (`git
+push --forc` is `--force`). The shell tool runs bash, so what illi
 reads is what runs.
 
 auto
@@ -69,10 +75,10 @@ git or Claude Code runs unasked:
 | --- | --- | --- |
 | Changes | any in the project, deleting files and folders too (`rm -rf src`), and in `/tmp` | a file changed, deleted or moved outside the project (`rm -rf ../x`, `cd ~ && rm -rf code`, `echo x >> ~/.bashrc`, `mv src ../y`, `ln -s ~/.bashrc rc`), placed where the system finds it (`link/../x` from where the link leads, a glob's matches); one whose file is known only as it runs (`rm -rf "$X"`, `rm -rf $(...)`, `find . \| xargs rm`); deleting the project itself, its `.git`, home or `/`; an archive extracted with its absolute names (`tar -xPf`, `unzip -:`); writing to a device |
 | Reads | anywhere, by a program that only reads (`cat`, `grep -r`, `find`, `sed -n`, `git log`, the read tool) | a folder outside the project that holds a secret store, read as a whole (`grep -r x ~`, `ls ~/.claude`: home holds `~/.ssh`); a file outside the project read by a command that may change things (a script or program from there: `python3 ../lib/gen.py`; a build there: `cd ../lib && make`; a program illi doesn't know: `fmt-tool ../lib`), but in `/tmp`, the system's folders, the dependency caches and illi's skills |
-| Secrets | `.env.example`, `.env.sample`, `.env.template` | a file that may hold secrets, through any tool (`cat .env`, `cp .env.example .env`, `git show HEAD:.env`, the read tool): `.env` files, keys (`*.pem`, `id_ed25519`), logins and tokens by name (`auth.json`, `credentials.json`, `.npmrc`, `.netrc`), key and credential stores (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gh/hosts.yml`), other agents' logins (Claude Code's, Codex's, opencode's), browser profiles, illi's logins; `gh auth token`; inline code naming one (`python3 -c 'open(".env")'`) |
+| Secrets | `.env.example`, `.env.sample`, `.env.template`; awk and sed scripts that only mention one (`awk '/\.env/'`, `sed 's/credentials/creds/'`) | a file that may hold secrets, through any tool (`cat .env`, `cp .env.example .env`, `git show HEAD:.env`, `sed 'r .env'`, the read tool): `.env` files, keys (`*.pem`, `id_ed25519`), logins and tokens by name (`auth.json`, `credentials.json`, `.npmrc`, `.netrc`), key and credential stores (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gh/hosts.yml`), other agents' logins (Claude Code's, Codex's, opencode's), browser profiles, illi's logins; `gh auth token`, `git credential fill`; inline code naming one (`python3 -c 'open(".env")'`, `sed 'e cat .env'`), an awk program opening one (`getline < ".env"`, `-v f=.env`, `F=.env` read by `ENVIRON`) |
 | System | builds, tests, installs, inline code (`python -c`), the project's scripts, git's own work (`reset --hard`, `clean -fdx`), the network (`curl \| sh`, `ssh`), `pkill`, `PATH=...` | root (`sudo`, `doas`, `sudoedit`); disks and their volumes (`mkfs`, `wipefs`, `dd of=/dev/sda`, `lvremove`, `zfs destroy`, `diskutil eraseDisk`); the system's services and settings (`systemctl`, `crontab`, `mount`); turning the computer off; `kill -1`; a container given the whole computer or a folder outside the project; a command illi can't follow (`case`) or named only as it runs (`$CMD x`) |
-| Remote | plain pushes (`git push`, `--tags`), pull requests, releases, publishing (`npm publish`), deploys (`vercel deploy`, `kubectl apply`, `terraform apply`) | what deletes for good on another computer: a push that rewrites or deletes the remote's history (`--force`, `--force-with-lease`, `+main`, `--delete`, `:old`, `--mirror`, `--prune`); `gh repo delete`, `gh release delete`, `gh api -X DELETE`, `gh pr close --delete-branch`; `npm unpublish`, `gem yank`; cloud and infrastructure deletes (`aws s3 rm`, `gcloud ... delete`, `kubectl delete`, `terraform destroy`, `helm uninstall`) |
-| Config | the project's tool configs (`.husky`, `.vscode`, `.git/info/exclude`), `.claude/commands`; reading git's config and Claude Code's settings (`cat .git/config .claude/settings.json`) | what makes git run a program: its hooks and config written (`.git/hooks/*`, `.git/config`, `~/.gitconfig`), a git config key that names one (`core.hooksPath`, `core.sshCommand`, `credential.helper`, a `!` alias, a filter) set by `git config` or `git -c`, `--upload-pack`; Claude Code's settings, what it runs unasked (`settings.json`, `settings.local.json` in any `.claude` folder, home's too; a `.claude` folder moved, copied, linked or deleted); illi's own config |
+| Remote | plain pushes (`git push`, `--tags`, a dry run), pull requests, releases, publishing (`npm publish`), deploys (`vercel deploy`, `kubectl apply`, `terraform apply`) | what deletes for good on another computer: a push that rewrites or deletes the remote's history (`--force`, `--force-with-lease`, `+main`, `--delete`, `:old`, `--mirror`, `--prune`, however cut short: `--forc`), or git config that makes a plain push do so (`remote.origin.mirror`, a `remote.origin.push` of `+x` or `:x`, an alias of `push --force`, `git remote add --mirror=push`); `gh repo delete`, `gh release delete`, `gh api -X DELETE`, `gh pr close --delete-branch`; `npm unpublish`, `gem yank`; cloud and infrastructure deletes (`aws s3 rm`, `gcloud ... delete`, `kubectl delete`, `terraform destroy`, `helm uninstall`) |
+| Config | the project's tool configs (`.husky`, `.vscode`, `.git/info/exclude`), `.claude/commands`; reading git's config and Claude Code's settings (`cat .git/config .claude/settings.json`) | what makes git run a program: its hooks and config written (`.git/hooks/*`, `.git/config`, `~/.gitconfig`), a git config key that names one (`core.hooksPath`, `core.sshCommand`, `credential.helper`, a `!` alias, a filter) set by `git config`, `git -c` or the environment (`GIT_CONFIG_KEY_0`, `GIT_CONFIG_PARAMETERS`), config read from another file (`GIT_CONFIG_GLOBAL=x`), `--upload-pack`; Claude Code's settings, what it runs unasked (`settings.json`, `settings.local.json` in any `.claude` folder, home's too; a `.claude` folder moved, copied, linked or deleted); illi's own config |
 | Loops | a call again, or again with another between | the same call (tool and input) a third time in a row in one turn, by illi or an agent, illi's own tools too (a skill loaded again and again): a model stuck in a loop |
 
 - "Don't ask again" keeps a folder for what is asked as outside the
@@ -83,12 +89,13 @@ git or Claude Code runs unasked:
   holding a secret store, root and the system, what deletes on another
   computer, what makes git or Claude Code run a program, illi's own
   config, what is known only as it runs. A folder grant never clears a
-  secret, and one such risk beside a folder's keeps just the exact
-  command.
-- The loop guard asks each repeat after the second, and "don't ask
-  again" can't quiet it: a yes lets it run and starts the count again,
-  as the agent's next turn does. A hook's allow, and the other modes,
-  leave it out.
+  secret, nor a read of a folder holding a secret store (a grant for
+  `~/.config` doesn't let `grep -r token ~/.config` run), and one such
+  risk beside a folder's keeps just the exact command.
+- The loop guard, in every mode but `yolo`, asks each repeat after the
+  second, and "don't ask again" can't quiet it: a yes lets it run and
+  starts the count again, as the agent's next turn does. A hook's allow
+  leaves it out.
 - A link to a file is a way to change it: `ln` (and `ln -s`) to a file
   outside the project is asked as a change there.
 - In a project that holds your home folder (illi run in `~`), deleting
@@ -104,11 +111,12 @@ git or Claude Code runs unasked:
 careful
 -------
 
-`careful` runs reads and routine changes in the project. Besides what
-every mode but `yolo` asks (a secret, root and the system, a change
-outside the project, what deletes for good on another computer, what
-makes git or Claude Code run a program), it asks about each command
-that:
+`careful` runs reads and routine changes in the project. Besides all
+`auto` asks (a secret, root and the system, a change outside the
+project, what deletes for good on another computer, what makes git or
+Claude Code run a program, a loop; a command that may change things run
+in a folder outside the project: `cd /x && tool`), it asks about each
+command that:
 
 - changes a whole tree's permissions (`chmod -R`), destroys files for
   good (`shred`) or stops processes by name (`pkill`)
@@ -131,13 +139,14 @@ that:
   (`curl ... | sh`, `bash < <(curl ...)`, `bash <<< "$(curl ...)"`),
   runs inline code that starts programs, changes files, reaches the
   network or reads a secret (`python -c`, `perl -e`, `node -p`), or an
-  awk or sed script that runs or writes (awk's `system()`, sed's `e`
-  and `w`)
+  awk or sed script that runs, writes or loads code (awk's `system()`
+  and `-l`, sed's `e` and `w`)
 - runs a command given in its words or options, which illi doesn't read
   (`strace`, `parallel`, `tmux new`, `fd -x`,
   `tar --to-command`, `git rebase -x`, `rsync -e`)
 - runs a program or script from outside the project (`bash /tmp/x.sh`,
-  `make -f /tmp/x.mk`; a loaded plugin's own run as the project's), or
+  `make -f /tmp/x.mk`, `awk -f /tmp/x.awk`; a loaded plugin's own run as
+  the project's), or
   a project tool in a folder outside it (`cd /x && npm test` runs that
   folder's scripts)
 - touches a file outside the project (reading the system's folders,
@@ -279,8 +288,10 @@ keeps:
   write rule covers reads too.
 - `granted` is illi's: `kind:pattern` or `kind=exact`. A pattern clears
   only routine risks and files outside the project; a dangerous one, a
-  secret, a protected file, git's hooks or Claude Code's settings need
-  the exact grant (or your allow rule).
+  secret (or a folder holding a secret store), a protected file, git's
+  hooks or Claude Code's settings need the exact grant (or your allow
+  rule). A folder's own `*` is kept as `\*` in its grant, so it stands
+  for that letter alone.
 - A change applies at the next call. A file that won't read, or a rule
   that isn't allow, ask or deny, is said, and illi asks before every
   call it checks until it's fixed.
@@ -296,15 +307,28 @@ Limits
   can't read runs unchecked: code piped into a shell (`curl ... | sh`),
   a command given to another program (`tmux new`, `parallel`,
   `strace`).
-- Inline code (`python -c`, `node -e`, a heredoc into an interpreter)
-  and awk programs aren't checked for the files they touch. `auto` asks
-  only an interpreter's inline code that names a secret; `careful`
-  checks it by the words it uses (what can run, write or reach out), so
-  disguised code passes. An awk program is checked only for running a
-  command or writing (in `careful`), so one reading a secret by itself
-  (`getline < ".env"`) runs. Inline code that writes into `~/.illi` (a
-  `python -c` installing a skill) isn't seen as a change to illi's own
-  config.
+- Inline code (`python -c`, `node -e`, a heredoc into an interpreter,
+  an awk program) isn't checked for the files it touches, only for the
+  words it uses. `auto` asks only one that names a secret (an awk
+  program, a name in its strings where it may open a file: `getline <
+  ".env"`, but not `/\.env/`); `careful` checks what can run, write or
+  reach out besides. So disguised code passes (a name made of pieces:
+  `"." "env"`). A script given as a file (`sed -f`, `awk -f`) isn't
+  read: it does what it says, as a project's script does. Inline code
+  that writes into `~/.illi` (a `python -c` installing a skill) isn't
+  seen as a change to illi's own config.
+- A recursive search of the project reads its secrets too (`grep -r
+  KEY .` reads `.env`): a folder is asked as a whole only for the secret
+  stores it holds (home's `.ssh`, another agent's login), not for a
+  secret named by its file.
+- A git alias set before (`git pf` for `push --force`) runs as its name
+  says, not as what it runs; one set by the command or illi (`git -c
+  alias.x=...`, `git config alias.x ...`) is judged.
+- A long option cut short is read as the one it starts where `auto`'s
+  checks read it (git push's and git config's, git's message files and
+  remote programs, sed's, awk's, curl's and wget's, `rm --recursive`,
+  `cp --target-directory`, `sort --output`); `careful`'s other checks and
+  other programs take it as written (`git reset --ha`, `npm i --glob`).
 - A link made earlier in the same command is seen only if `ln` made it
   (`ln -s /tmp x && rm -rf x/../y` is asked); one made another way
   (`cp -s`, inline code) isn't.

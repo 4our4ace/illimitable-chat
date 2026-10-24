@@ -13,9 +13,18 @@
 // git run a program (its hooks and config, git config's keys that name
 // one, git -c's) and Claude Code's settings (at any depth, home's, a
 // .claude folder moved into place), those exactly, and illi's own
-// config; git's refs are never files. Secrets are
-// asked through any tool in every mode but yolo, never by a folder
-// grant. careful runs routine work; each risk is asked about with
+// config; git's refs are never files. Options are read as their command
+// reads them (a cluster, a value glued, a long one cut short: git push
+// --forc, -o's value; sed -ne, curl -sSLo, rm --recu), git config that
+// makes a plain push delete on the remote is asked as such a push, and
+// git config set by the environment as git -c's. Secrets are asked
+// through any tool in every mode but yolo (a sed script's files, an awk
+// program's strings where it opens a file, git credential fill; a script
+// that only mentions one runs), never cleared by a folder grant (nor a
+// folder holding a secret store; a grant keeps its folder's * as one);
+// family grants never cover a destructive or secret-reading form, ask
+// mode's the part alone. careful asks all auto asks (a command run in
+// a folder outside, a loop: Tools.test); each risk is asked about with
 // why (every bypass the reviews found among them; inline code with no
 // "don't ask again"), and what only looks like one isn't ([ as a test, a
 // project's bin/, a sed s/// holding ;, git's revisions, a search's
@@ -463,7 +472,7 @@ test("a secret store of home's linked elsewhere (~/.ssh to another disk) is stil
   expect(JSON.parse(run.stdout.toString())).toEqual([{ $: "ask", why: TMP + "/disk/ssh/deploy_key may hold secrets", always: ["shell=cat ~/.ssh/deploy_key"], exact: ["shell=cat ~/.ssh/deploy_key"] }, "ask"]);
 });
 
-test("auto: a read of a folder outside the project that holds a secret store (home's .ssh, another agent's login) is asked, a folder grant not clearing it, so a recursive search, a deep glob or a find feeding cat can't reach one; careful asks it as outside", () => {
+test("a read of a folder outside the project that holds a secret store (home's .ssh, another agent's login) is asked in auto and careful, a folder grant not clearing it, so a recursive search, a deep glob or a find feeding cat can't reach one; careful asks it as outside too", () => {
   const asks = [
     "grep -r token ~",
     "rg --hidden x ~",
@@ -475,13 +484,16 @@ test("auto: a read of a folder outside the project that holds a secret store (ho
     "ls ~/.claude",
     "ls ~/.local/share",
   ];
-  for (const command of asks) {
-    const got = judge(command, { mode: "auto", grants: new Set(["read:" + HOME + "/.claude/*", "read:" + HOME + "/.local/*"]) });
-    expect([command, got.startsWith("ask: "), got.includes("may hold secrets")]).toEqual([command, true, true]);
+  for (const mode of ["auto", "careful"] as const) {
+    for (const command of asks) {
+      const got = judge(command, { mode, grants: new Set(["read:" + HOME + "/.claude/*", "read:" + HOME + "/.local/*"]) });
+      expect([mode, command, got.startsWith("ask: "), got.includes("may hold secrets")]).toEqual([mode, command, true, true]);
+    }
   }
   expect(Guard.hosted(where({ mode: "auto" }), "Grep", { pattern: "token", path: HOME })).toMatchObject({ $: "ask", why: "~ may hold secrets" });
   expect([judge("ls ~/code-illi-test", { mode: "auto" }), judge("grep -r x ~/.claude/skills", { mode: "auto" })]).toEqual(["run", "run"]);
-  expect(judge("ls ~/.claude")).toBe("ask: ~/.claude is outside the project");
+  expect(judge("ls ~/.claude")).toBe("ask: ~/.claude may hold secrets; ~/.claude is outside the project");
+  expect(judge("ls ~/.claude", { mode: "yolo" })).toBe("run");
 });
 
 // a command asked in auto and careful with why (part of it), "don't ask
@@ -1041,4 +1053,231 @@ test("patterns: * anything, \\* a star, a trailing ' *' the bare command too; gr
   expect(Guard.said("read:" + HOME + "/.cargo/*", TOP)).toBe("reads in ~/.cargo/");
   expect(Guard.said("write:" + TOP + "/*", TOP)).toBe("changes in this project");
   expect(Guard.said("read=" + TOP + "/.env", TOP)).toBe("reading .env");
+});
+
+// a command asked in auto and careful with why (part of it) and no
+// "don't ask again" (inline code: it never runs again as it was); yolo
+// runs it
+function once(command: string, why: string, over: Partial<Where> = {}): void {
+  for (const mode of ["auto", "careful"] as const) {
+    const v = Guard.check(where({ mode, ...over }), "shell", { command });
+    expect([mode, command, v.$, v.$ === "ask" && v.why.includes(why) ? why : v.$ === "allow" ? "" : v.why, v.$ === "ask" ? v.always : null]).toEqual([mode, command, "ask", why, []]);
+  }
+  expect([command, judge(command, { mode: "yolo", ...over })]).toEqual([command, "run"]);
+}
+
+test("careful asks all auto asks: a command that may change things run in a folder outside the project (cd /x && tool), a folder holding a secret store read (a folder grant clearing it in neither); yolo runs them", () => {
+  asked("cd /work/illi-test/lib && fmt-tool", "/work/illi-test/lib is outside the project");
+  asked("cd /work/illi-test/lib && make", "/work/illi-test/lib is outside the project");
+  const config = { grants: new Set(["read:" + HOME + "/.config/*", "read:" + HOME + "/.claude/*"]) };
+  for (const command of ["ls ~/.config", "grep -r token ~/.config", "cd ~/.config && ls", "ls ~/.claude"]) {
+    asked(command, "may hold secrets", config);
+  }
+  for (const mode of ["auto", "careful"] as const) {
+    expect([mode, Guard.check(where({ mode, ...config }), "read", { path: HOME + "/.config" })]).toMatchObject([mode, { $: "ask", why: "~/.config may hold secrets", always: ["read=" + HOME + "/.config"] }]);
+  }
+  expect(Guard.check(where(), "read", { path: HOME + "/.config" })).toMatchObject({ $: "ask", why: "~/.config may hold secrets; ~/.config is outside the project", always: ["read=" + HOME + "/.config"] });
+  expect([judge("cd /work/illi-test/lib && ls"), judge("cat ../lib/a.txt", { cwd: AWAY, top: AWAY, grants: new Set(["read:/work/illi-test/lib/*"]) })]).toEqual(["run", "run"]);
+});
+
+test("a sed script's own files are judged as any command's, in auto and careful (r, R, w, W, s///w: a secret read, a write outside the project or to git's hooks), its e's command checked for secrets with no \"don't ask again\", however its options are written (-ne, -e'x', --expr, -f, BSD's order); careful asks e itself; scripts that only mention a secret, and writes in the project, run", () => {
+  const away = { cwd: AWAY, top: AWAY };
+  for (const command of ["sed 'r .env' a.txt", "sed '1r.env' a.txt", "sed -ne 'r .env' -e p a.txt", "sed --expr='r .env' a.txt", "sed 'r .env' -e p a.txt", "sed -f .env a.txt", "sed '/x/{R .env\n}' a.txt"]) {
+    asked(command, ".env may hold secrets");
+  }
+  asked("sed '$R " + HOME + "/.ssh/id_ed25519' a.txt", "~/.ssh/id_ed25519 may hold secrets");
+  asked("sed 'w ../out' a.txt", "/work/illi-test/out is outside the project", away);
+  asked("sed -n '/x/W /work/illi-test/out' a.txt", "/work/illi-test/out is outside the project");
+  asked("sed -e'w /work/illi-test/out' a.txt", "/work/illi-test/out is outside the project");
+  exactly("sed s/a/b/w.git/hooks/pre-commit a.txt", ".git/hooks/pre-commit is a git hook, which git runs");
+  exactly("sed -n 1w.claude/settings.json a.txt", ".claude/settings.json sets what Claude Code runs unasked");
+  for (const command of ["sed 'e cat .env' a.txt", "sed 'ecat .env' a.txt", "sed 's/.*/cat .env/e' a.txt", "sed '1e cat ~/.ssh/id_rsa' a.txt"]) {
+    once(command, "names a file that may hold secrets");
+  }
+  expect([judge("sed -ne 'e id' -e p a.txt"), judge("sed -ne 'e id' -e p a.txt", { mode: "auto" })]).toEqual(["ask: sed -ne 'e id' -e p a.txt runs a shell command (sed's e)", "run"]);
+  const runs = [
+    "sed -n '/\\.env/p' a.txt", "sed 's/credentials/creds/' a.txt", "sed -i '' 's/a/b/' a.txt", "sed -ie 's/x/y/' a.txt", "sed -n 's/^API_KEY=//p' .env.example",
+    "sed -n -e '/token/p' a.txt", "sed -E 's/(a|b)/c/g' a.txt > out.txt", "grep -n KEY a.txt | sed 's/=.*//'",
+  ];
+  for (const mode of ["auto", "careful"] as const) {
+    for (const command of runs) {
+      expect([mode, command, judge(command, { mode })]).toEqual([mode, command, "run"]);
+    }
+  }
+  expect([judge("sed '/x/w out.txt' a.txt", { mode: "auto" }), judge("sed -n 's/x/y/w /dev/stdout' ../lib/a.txt", { mode: "auto", ...away })]).toEqual(["run", "run"]);
+});
+
+test("an awk program naming a secret in its strings is asked in auto and careful where it may open a file (getline, system, print >, ARGV), with no \"don't ask again\"; so is an assignment's value naming one there (-v f=.env), and a program given by -e, --source (cut short too) or -W; -i inplace edits its files and -o writes one, judged as writes; careful asks a program from outside the project or a library loaded; one that only mentions a secret runs", () => {
+  const programs = [
+    "awk '{getline l < \".env\"; print l}' a.txt", "awk 'BEGIN{system(\"cat .env\")}'", "awk 'BEGIN{print \"x\" > \".env\"}'", "awk 'BEGIN{ARGV[1]=\".env\"; ARGC=2} {print}'",
+    "gawk -e 'BEGIN{getline l < \"keys/id_ed25519\"}'", "gawk --sour='BEGIN{getline l < \".env\"}'", "gawk -W source='BEGIN{getline l < \".env\"}'", "awk -- '{getline l < \".env\"}' a.txt",
+    "awk -F, 'BEGIN{while ((getline l < \"server.pem\") > 0) print l}'",
+  ];
+  for (const command of programs) {
+    once(command, "names a file that may hold secrets");
+  }
+  for (const command of ["python3 -c 'print(open(\".env\").read())'", "node - <<'EOF'\nrequire('fs').readFileSync('.env')\nEOF"]) {
+    once(command, "names a file that may hold secrets");
+  }
+  const app = TMP + "/awk-app";
+  fs.mkdirSync(app + "/.git", { recursive: true });
+  fs.writeFileSync(app + "/.env", "KEY=x\n");
+  fs.writeFileSync(app + "/a.txt", "a\n");
+  const at = { cwd: app, top: app };
+  for (const command of ["awk -v f=.env 'BEGIN{while ((getline l < f) > 0) print l}'", "awk 'BEGIN{while ((getline l < f) > 0) print l}' f=.env", "awk -vf=.env 'BEGIN{getline l < f; print l}'", "awk --assign=f=.env 'BEGIN{getline l < f; print l}'", "awk -f prog.awk f=.env", "F=.env awk 'BEGIN{while ((getline l < ENVIRON[\"F\"]) > 0) print l}'"]) {
+    asked(command, ".env may hold secrets", at);
+  }
+  const away = { cwd: AWAY, top: AWAY };
+  exactly("awk -i inplace 1 .git/config", ".git/config is git's config, which can make git run a program");
+  asked("awk -i inplace 1 ../lib/a.txt", "/work/illi-test/lib/a.txt is outside the project", away);
+  asked("awk -iinplace 1 ~/.bashrc", "~/.bashrc is outside the project");
+  asked("gawk --incl=inplace 1 ~/.bashrc", "~/.bashrc is outside the project");
+  asked("gawk -W include=inplace 1 ~/.bashrc", "~/.bashrc is outside the project");
+  asked("gawk -o/work/illi-test/out.awk 1 a.txt", "/work/illi-test/out.awk is outside the project");
+  expect(judge("awk -i inplace 1 a.txt", { mode: "read-only" })).toBe("deny: read-only mode: awk -i inplace 1 a.txt may change things");
+  expect(judge("awk -i inplace 1 ../lib/a.txt", { mode: "auto", ...away, grants: new Set(["write:/work/illi-test/lib/*"]) })).toBe("run");
+  expect(judge("awk -f /tmp/illi-x.awk a.txt")).toBe("ask: awk -f /tmp/illi-x.awk a.txt runs an awk program from /tmp");
+  expect(judge("gawk -l filefuncs 'BEGIN{print 1}'")).toBe("ask: gawk -l filefuncs 'BEGIN{print 1}' loads awk code illi can't check (-l, -i)");
+  expect([judge("awk -f /tmp/illi-x.awk a.txt", { mode: "auto" }), judge("awk -f prog.awk a.txt"), judge("gawk -l filefuncs 'BEGIN{print 1}'", { mode: "auto" })]).toEqual(["run", "run", "run"]);
+  const runs = [
+    "awk '/credentials/ {print}' a.txt", "awk '/\\.env/ {print}' a.txt", "awk -F= '/^KEY/{print $1}' .env.example", "awk -F: '$1 == \"credentials\" {print $2}' a.txt",
+    "awk -v sep=/ '{print $1 sep $2}' a.txt", "awk -v key=token '{print key}' a.txt", "awk '{print $1}' a.txt | sort | uniq -c", "awk 'NR==FNR{a[$1];next} $1 in a' a.txt a.txt",
+    "gawk -i inplace '{sub(/a/, \"b\")} 1' a.txt", "awk '{print > \"out.txt\"}' a.txt",
+  ];
+  for (const mode of ["auto", "careful"] as const) {
+    for (const command of runs.slice(0, mode === "careful" ? -1 : runs.length)) {
+      expect([mode, command, judge(command, { mode })]).toEqual([mode, command, "run"]);
+    }
+    expect([mode, judge("awk -v pat=.env '$0 ~ pat' a.txt", { mode, ...at }), judge("LC_ALL=C F=.env awk '{print $1}' a.txt", { mode, ...at })]).toEqual([mode, "run", "run"]);
+  }
+});
+
+test("a push however written: a long option cut short (--forc, --mirr, --del, --pru), -o's value no dry run (-on, -o -n), --no-dry-run undoing one, are asked in auto and careful, exactly; git config that makes a plain push delete on the remote (remote.x.mirror, a push refspec of +x or :x, an alias of a force push, remote add --mirror=push, through git config, git -c or the environment) too; a stored login printed (credential fill) and a remote's program given cut short (--upl) too; dry runs and plain config run", () => {
+  const asks: [string, string][] = [
+    ["git push --forc origin main", "rewrites the remote's history"],
+    ["git push --force-w origin main", "rewrites the remote's history"],
+    ["git push origin main --f", "rewrites the remote's history"],
+    ["git push --mirr", "rewrites the remote's history and deletes what only it has"],
+    ["git push --del origin x", "deletes x on the remote"],
+    ["git push --pru origin", "deletes the remote's branches this repository doesn't have"],
+    ["git push -on origin +main", "rewrites the remote's history"],
+    ["git push -o -n origin +main", "rewrites the remote's history"],
+    ["git push --push-option -n origin +main", "rewrites the remote's history"],
+    ["git push --dry-run --no-dry-run --force", "rewrites the remote's history"],
+    ["git config remote.origin.mirror true", "remote.origin.mirror makes a plain git push delete what only the remote has"],
+    ["git -c remote.origin.mirror=true push", "remote.origin.mirror makes a plain git push delete what only the remote has"],
+    ["git -c remote.origin.mirror push", "remote.origin.mirror makes a plain git push delete what only the remote has"],
+    ["git config remote.origin.push +refs/heads/main:refs/heads/main", "remote.origin.push makes a plain git push rewrite or delete the remote's history"],
+    ["git config --add remote.origin.push :refs/heads/old", "remote.origin.push makes a plain git push rewrite or delete the remote's history"],
+    ["git config alias.pf 'push --force'", "alias.pf is a push that rewrites the remote's history"],
+    ["git -c alias.p='push --force-with-lease' p", "alias.p is a push that rewrites the remote's history"],
+    ["git remote add --mirror=push o https://example.com/r.git", "makes a plain git push delete what only the remote has"],
+    ["git remote add --mirror o https://example.com/r.git", "makes a plain git push delete what only the remote has"],
+    ["GIT_CONFIG_PARAMETERS=\"'remote.origin.mirror'='true'\" git push", "remote.origin.mirror makes a plain git push delete what only the remote has"],
+    ["git credential fill", "git credential fill prints a stored login: its output may hold secrets"],
+    ["printf 'host=example.com\\n' | git credential fill", "prints a stored login: its output may hold secrets"],
+    ["git credential-store get", "prints a stored login: its output may hold secrets"],
+    ["git fetch --upl='sh -c id' origin", "runs a program it's given"],
+    ["git push --rece=./r.sh origin", "runs a program it's given"],
+  ];
+  for (const [command, why] of asks) {
+    exactly(command, why);
+  }
+  const runs = [
+    "git push -fn origin main", "git push -no ci.skip origin +main", "git push --follow-tags --porcelain --progress origin main", "git push --recurse-submodules=check origin main",
+    "git push -uo ci.skip origin main", "git config remote.origin.mirror false", "git config remote.origin.push refs/heads/main:refs/heads/main", "git config alias.lg 'log --oneline --graph'",
+    "git remote add --mirror=fetch o https://example.com/r.git", "git remote add origin https://example.com/r.git", "git fetch --prune origin", "git -c remote.origin.mirror= push",
+  ];
+  for (const command of runs) {
+    expect([command, judge(command, { mode: "auto" })]).toEqual([command, "run"]);
+  }
+});
+
+test("git config set by the environment is judged as git -c's, in auto and careful, exactly: GIT_CONFIG_KEY_n, GIT_CONFIG_PARAMETERS, config read from another file (GIT_CONFIG_GLOBAL); other keys, /dev/null and the rest run in auto", () => {
+  exactly("GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/tmp/illi-h git commit -m x", "core.hooksPath makes git run a program");
+  exactly("GIT_CONFIG_PARAMETERS=\"'core.pager'='sh -c id'\" git log", "core.pager makes git run a program");
+  exactly("GIT_CONFIG_PARAMETERS=\"'core.pager=sh -c id'\" git log", "core.pager makes git run a program");
+  exactly("GIT_CONFIG_GLOBAL=/tmp/illi-x.gitconfig git commit -m x", "GIT_CONFIG_GLOBAL=/tmp/illi-x.gitconfig makes git read config from another file, which can run a program");
+  exactly("export GIT_CONFIG_KEY_0=core.sshCommand", "core.sshCommand makes git run a program");
+  for (const command of ["GIT_CONFIG_GLOBAL=/dev/null git status", "GIT_CONFIG_NOSYSTEM=1 git status", "GIT_CONFIG_PARAMETERS=\"'user.name'='x'\" git commit -m x", "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.name GIT_CONFIG_VALUE_0=x git commit -m x"]) {
+    expect([command, judge(command, { mode: "auto" })]).toEqual([command, "run"]);
+  }
+});
+
+test("a long option cut short is the one it starts, as getopt and git take it: a write to git's hooks or config (cp --target, sort --out, wget's and curl's outputs, glued or by -e, a download named by its URL), a secret read (git commit --fil), git config's file and section renamed, deleting the project (rm --recu) are asked in auto and careful; the same whole, and plain downloads, run", () => {
+  const asks: [string, string][] = [
+    ["cp --target=.git/hooks pre-commit", ".git/hooks is where git finds its hooks"],
+    ["sort --out=.git/config a.txt", ".git/config is git's config, which can make git run a program"],
+    ["wget --output-document .git/hooks/pre-commit https://example.com/x", ".git/hooks/pre-commit is a git hook, which git runs"],
+    ["wget --output-doc=.git/hooks/pre-commit https://example.com/x", ".git/hooks/pre-commit is a git hook, which git runs"],
+    ["wget -O.git/hooks/pre-commit https://example.com/x", ".git/hooks/pre-commit is a git hook, which git runs"],
+    ["wget -e output_document=.git/hooks/pre-commit https://example.com/x", ".git/hooks/pre-commit is a git hook, which git runs"],
+    ["wget -P .git/hooks https://example.com/pre-commit", ".git/hooks is where git finds its hooks"],
+    ["cd .git/hooks && wget https://example.com/pre-commit", "is where git finds its hooks"],
+    ["cd .git/hooks && curl -O https://example.com/pre-commit", "is where git finds its hooks"],
+    ["curl -sSLo .git/hooks/pre-commit https://example.com/x", ".git/hooks/pre-commit is a git hook, which git runs"],
+    ["curl -o.git/hooks/pre-commit https://example.com/x", ".git/hooks/pre-commit is a git hook, which git runs"],
+    ["curl --out .git/hooks/pre-commit https://example.com/x", ".git/hooks/pre-commit is a git hook, which git runs"],
+    ["git commit --fil=.env", ".env may hold secrets"],
+    ["git config --fil .git/config core.hooksPath /tmp/illi-h", "core.hooksPath makes git run a program"],
+    ["git config --rename-s x core", "may set git config that makes git run a program"],
+    ["rm --recu --fo " + TOP, "a folder that matters"],
+  ];
+  for (const [command, why] of asks) {
+    exactly(command, why);
+  }
+  const runs = [
+    "cp --target-directory=src a.txt", "sort --output=out.txt a.txt", "rm --recursive --force dist", "git commit --file=a.txt", "curl -fsSLo out.txt https://example.com/x",
+    "curl -sSL https://example.com/i.sh | sh", "curl --head https://example.com/x", "wget https://example.com/x.tgz", "wget -qO- https://example.com/i.sh | sh", "wget -e robots=off -r https://example.com/",
+    "curl -O https://example.com/x.tgz", "cd /tmp && wget https://example.com/x.tgz",
+  ];
+  for (const command of runs) {
+    expect([command, judge(command, { mode: "auto" })]).toEqual([command, "run"]);
+  }
+  expect(judge("curl -O https://example.com/x.tgz", { mode: "auto", cwd: AWAY, top: TOP })).toStartWith("ask: /work/illi-test/app is outside the project");
+});
+
+test("folder grants never clear a secret, illi's own config, Claude Code's settings, git's hooks or config, nor what deletes on another computer; a folder's * is kept as one in its grant; family grants (git *, git push *, cat *, npm *) never cover a destructive or secret-reading form; ask mode's covers the part alone; a path grant holds where the system places a path (.., a link)", () => {
+  const wide = new Set([
+    "read:" + TOP + "/*", "write:" + TOP + "/*", "write:" + TOP + "/.git/*", "write:" + TOP + "/.claude/*", "write:" + TOP + "/.illi/*", "read:" + HOME + "/.config/*",
+    "write:" + HOME + "/.config/*", "read:" + HOME + "/.ssh/*", "write:" + process.env.ILLI_DIR + "/*", "shell:git *", "shell:git push *", "shell:cat *", "shell:npm *", "shell:sed *",
+    "shell:awk *", "shell:curl *", "shell:rm *", "shell:gh *", "shell:gh pr *", "shell:echo *",
+  ]);
+  const asks = [
+    "cat .env", "cat ~/.ssh/id_ed25519", "cat ~/.config/gh/hosts.yml", "git show HEAD:.env", "git credential fill", "sed 'r .env' a.txt", "echo x > .illi/hooks.json",
+    "echo '{}' > .claude/settings.json", "echo x > .git/hooks/pre-commit", "echo x >> .git/config", "git config core.hooksPath /tmp/illi-h", "git push --force", "git push --forc",
+    "git push origin :old", "npm unpublish x", "gh pr close 7 --delete-branch", "gh auth token", "awk -i inplace 1 .git/config", "curl -o .git/hooks/pre-commit https://example.com/x",
+    "rm -rf ~", "grep -r token ~/.config",
+  ];
+  for (const mode of ["auto", "careful"] as const) {
+    for (const command of asks) {
+      expect([mode, command, judge(command, { mode, grants: wide }).startsWith("ask: ")]).toEqual([mode, command, true]);
+    }
+    for (const [tool, p] of [["read", ".env"], ["write", ".claude/settings.json"], ["write", ".git/config"], ["write", ".illi/hooks.json"], ["read", HOME + "/.config/gh/hosts.yml"], ["write", process.env.ILLI_DIR + "/config.json"]]) {
+      expect([mode, tool, p, Guard.check(where({ mode, grants: wide }), tool, { path: p, content: "x" }).$]).toEqual([mode, tool, p, "ask"]);
+    }
+  }
+  expect(judge("echo x > .illi/hooks.json", { mode: "yolo", grants: wide })).toStartWith("ask: ");
+  const star = Guard.check(where({ mode: "auto" }), "shell", { command: "echo x > '/work/illi-test/a*/x'" });
+  expect(star).toMatchObject({ $: "ask", always: ["write:/work/illi-test/a\\*/*"] });
+  expect(Guard.said("write:/work/illi-test/a\\*/*", TOP)).toBe("changes in /work/illi-test/a*/");
+  const kept = { mode: "auto" as const, grants: new Set(["write:/work/illi-test/a\\*/*"]) };
+  expect([judge("echo x > '/work/illi-test/a*/x'", kept), judge("echo x > /work/illi-test/ab/.bashrc", kept)]).toEqual(["run", "ask: /work/illi-test/ab/.bashrc is outside the project"]);
+  expect(Guard.check(where({ mode: "ask" }), "write", { path: TOP + "/src/a.ts", content: "x" })).toMatchObject({ always: ["write:" + TOP + "/*"] });
+  const cat = { mode: "ask" as const, grants: new Set(["shell:cat *"]) };
+  expect([judge("cat a.txt > out.txt", cat), judge("cat a.txt | tee out.txt", cat)]).toEqual(["run", "ask: ask mode asks before tee out.txt"]);
+  expect(judge("cd src && touch b.txt", { mode: "ask", grants: new Set(["shell:touch *"]) })).toBe("run");
+  const lib = TMP + "/granted-lib";
+  fs.mkdirSync(lib, { recursive: true });
+  fs.mkdirSync(TMP + "/vault", { recursive: true });
+  fs.writeFileSync(TMP + "/vault/id_ed25519", "x\n");
+  fs.symlinkSync(TMP + "/vault", lib + "/keys");
+  fs.symlinkSync("/etc/hosts", lib + "/rc");
+  const hosts = fs.realpathSync("/etc/hosts");
+  const granted = { grants: new Set(["read:" + lib + "/*", "write:" + lib + "/*", "write:/work/illi-test/lib/*"]) };
+  for (const mode of ["auto", "careful"] as const) {
+    expect([mode, judge("echo x > /work/illi-test/lib/../other/x", { mode, ...granted }), Guard.check(where({ mode, ...granted }), "write", { path: "/work/illi-test/lib/../other/x", content: "x" }).$]).toEqual([mode, "ask: /work/illi-test/other/x is outside the project", "ask"]);
+    expect([mode, judge("cat " + lib + "/keys/id_ed25519", { mode, ...granted }), judge("echo x >> " + lib + "/rc", { mode, ...granted })]).toEqual([mode, "ask: " + TMP + "/vault/id_ed25519 may hold secrets", "ask: " + hosts + " is outside the project"]);
+    expect([mode, Guard.check(where({ mode, ...granted }), "write", { path: lib + "/rc", content: "x" })]).toMatchObject([mode, { $: "ask", why: hosts + " is outside the project" }]);
+  }
 });
