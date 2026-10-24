@@ -29,7 +29,7 @@ const ABOUT: Record<Mode, string> = {
   "careful"   : "reads and changes in the project run; risky calls are asked",
   "ask"       : "reads run; every change is asked",
   "read-only" : "reads run; changes are refused",
-  "yolo"      : "everything runs, but what your rules refuse or ask",
+  "yolo"      : "all runs but writes to illi's config, what rules deny or ask",
 };
 
 // the rules' shape, as /permissions shows it

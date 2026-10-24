@@ -128,10 +128,11 @@ the full accent).
   list's rows, the side's agents, skills and profiles; `here` is a
   question's answer picked too), `option` (`○`, an answer of a question
   that takes one), `find` (`⌕ `, before a list's search), `pending`,
-  `active` and `done` (`□`, `>`, `■`: the to-do's items), `ok` and
-  `failed` (`✓`, `✗`: how a call in a shut run ended; a subagent done, a
-  question answered; an MCP server down, a request refused). Control
-  characters are left out.
+  `active` and `done` (`□`, `>`, `■`: the to-do's items; `pending` and
+  `done` a question's options that take several, not picked and picked
+  too), `ok` and `failed` (`✓`, `✗`: how a call in a shut run ended; a
+  subagent done, a question answered; an MCP server down, a request
+  refused). Control characters are left out.
 - `tool` (a mark before a tool's name, by tool: none by default),
   `syntax` (code's colors by the kinds Prism names: `keyword`,
   `string`, `function`, `comment`, `class-name`, `tag`..., any of them,

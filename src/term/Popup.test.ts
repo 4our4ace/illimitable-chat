@@ -26,8 +26,10 @@
 // /word is typed: a click on one does what Enter does there, a press on
 // them chooses no text; a drag from elsewhere goes on over them. A
 // theme's lit mark of any width leads every row as wide, lists and
-// commands alike. (Questions, illi's form too, take the input's place
-// instead: Question.test.ts.)
+// commands alike. Only a list with one in use dots its rows (the palette
+// and /permissions none), what /mode's say whole on 100 columns.
+// (Questions, illi's form too, take the input's place instead, their
+// answers dotted: Question.test.ts.)
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -39,6 +41,8 @@ process.env.ILLI_DIR = DIR;
 const { term_chooser } = await import("./Commands.ts");
 const { term_paint } = await import("./Frame.ts");
 const { term_grab, term_press, term_type } = await import("./Keys.ts");
+const { term_palette } = await import("./Palette.ts");
+const { term_mode, term_permissions } = await import("./PermCommands.ts");
 const { popup_size } = await import("./Popup.ts");
 const { term_under } = await import("./Select.ts");
 const Paint = await import("../ui/Paint.ts");
@@ -456,5 +460,40 @@ test("a lit mark wider than >: every row leads as wide, a list's names and what 
     });
   } finally {
     Theme.GLYPH.lit = was;
+  }
+});
+
+// a dot after the lit mark is a list's one in use (and the rest of its
+// set) alone, or a question's answers (Question.test.ts): the palette and
+// /permissions, lists of what to do, carry none; /mode's every row one,
+// and what each does whole, the longest too beside "the setting's" (the
+// widest row), at the box's cap and on 100 columns. (A paint's rows are
+// one list, each paint's own: each read as painted)
+test("only a list with one in use dots its rows: the palette and /permissions none; /mode each, what each mode does whole, beside the setting's too, on 100 columns too", () => {
+  const options = (t: any) => inside(t, 160).filter((r: string) => /^(> | {2})\S/.test(r));
+  const dotted  = (t: any) => options(t).filter((r: string) => /^(> | {2})[◯●○] /.test(r));
+  sized(160, 40, () => {
+    const palette = term();
+    term_palette(palette);
+    term_paint(palette);
+    expect([options(palette).length > 10, dotted(palette)]).toEqual([true, []]);
+    const perms = term();
+    perms.v.perm = { ...perms.v.perm, refused: [{ id: "r1", who: "illi", tool: "shell", what: "git push --force", why: "it rewrites history", how: "no", said: "", at: 1, exact: [] }], grants: [{ grant: "shell=ls", said: "ls", saved: false }] };
+    term_permissions(perms);
+    term_paint(perms);
+    expect([options(perms).map((r: string) => r.slice(2, 4)), dotted(perms)]).toEqual([["gi", "ls", "Yo"], []]);
+  });
+  for (const [cols, set] of [[160, "yolo"], [100, "yolo"], [100, "auto"]] as const) {
+    sized(cols, 40, () => {
+      const mode = term();
+      mode.v.perm = { ...mode.v.perm, mode: "yolo", set };
+      term_mode(mode, "");
+      term_paint(mode);
+      const rows = dotted(mode);
+      const at   = mode.choose.names.indexOf(set);
+      expect(rows.map((r: string) => r.slice(2, 4))).toEqual(["◯ ", "◯ ", "◯ ", "◯ ", "● "]);
+      expect(rows[at]).toEndWith(mode.choose.about[at] + "  the setting's");
+      expect(rows.map((r: string) => r.replace(/^.{4}\S+ +/, "").replace(/ +the setting's$/, "").trimEnd())).toEqual(mode.choose.about);
+    });
   }
 });

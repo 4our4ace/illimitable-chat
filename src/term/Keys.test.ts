@@ -5,8 +5,9 @@
 // start (on an agent's page, none); Tab puts it in the input, not sent;
 // anything typed dismisses it, even erased, till the next one comes; with
 // none shown, Tab does nothing; the picker keeps its Tab. On an agent's
-// page, Esc twice and Ctrl+C still interrupt illi (one Esc says a second
-// does; with no turn, it interrupts nothing); Enter on an empty input
+// page, Esc twice and Ctrl+C still stop the work, illi's turn and its
+// subagents (one Esc says a second does; with only subagents at work,
+// the same; with nothing running, it stops nothing); Enter on an empty input
 // does nothing, anywhere; a message or a chat's
 // command typed there comes back to the input, a note saying why. Ctrl+C
 // closes a picker, as Esc does. Shift+Tab goes back to illi's own agent

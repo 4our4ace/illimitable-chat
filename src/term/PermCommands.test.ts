@@ -62,7 +62,7 @@ test("/mode: the five, the one now marked, the setting's said; Enter switches th
   expect(t.choose.about.slice(0, 2)).toEqual(["all runs but changes outside, secrets, system, remote deletes", "reads and changes in the project run; risky calls are asked"]);
   expect([t.choose.here, lit(t)]).toEqual([2, "ask"]);
   keys(t, "Down", "Down", "Enter");
-  expect(note(t)).toBe("Mode: yolo, this session (everything runs, but what your rules refuse or ask).");
+  expect(note(t)).toBe("Mode: yolo, this session (all runs but writes to illi's config, what rules deny or ask).");
   term_mode(t, "");
   keys(t, "Up", "Up", "Enter");
   expect(sent(t)).toEqual([{ $: "mode", mode: "yolo" }, { $: "mode", mode: null }]);

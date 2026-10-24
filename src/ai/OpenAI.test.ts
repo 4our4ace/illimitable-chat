@@ -8,7 +8,7 @@
 // cached implicitly), Anthropic's room beside its system prompt and
 // end, the ChatGPT backend none. A tool result's image goes in its
 // function_call_output's list. A web search is logged with its result,
-// failed as its status says.
+// failed as its status says; one unfinished, alone.
 
 import { expect, test } from "bun:test";
 import { temp_dir } from "../../test/repo.ts";
@@ -57,11 +57,12 @@ test("a tool's result with an image goes as its function_call_output's list: its
   expect(OpenAI.input(item)).toEqual([{ type: "function_call_output", call_id: "c1", output: [{ type: "input_text", text: "Image a.png" }, { type: "input_image", image_url: "data:image/webp;base64,UklG" }] }]);
 });
 
-test("a web search is logged with its result: searched, or failed as its status says", () => {
+test("a web search is logged with its result: searched, or failed as its status says; one left unfinished, alone, as a call stopped before it answered", () => {
   const search = (status: string) => OpenAI.entries({ type: "web_search_call", id: "ws_1", status, action: { type: "search", query: "bend" } });
   expect(search("completed")).toEqual([
     { kind: "tool", text: 'web_search {"type":"search","query":"bend"}', of: "ws_1" },
     { kind: "echo", text: "searched", of: "ws_1" },
   ]);
   expect(search("failed")[1]).toEqual({ kind: "echo", text: "error: the search failed", of: "ws_1" });
+  expect([search("searching"), search("in_progress")]).toEqual([0, 1].map(() => [{ kind: "tool", text: 'web_search {"type":"search","query":"bend"}' }]));
 });

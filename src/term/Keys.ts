@@ -460,10 +460,11 @@ export function term_esc(t: Term): void {
 // Ctrl+C or Ctrl+D: clears the input; on an empty one, Ctrl+C stops the
 // work running (as Esc twice) and says how to quit, a second within AGAIN quits; Ctrl+D
 // quits, but while a quit would stop more than a turn (term_stops) it
-// says what first, as Ctrl+C does, and a second within AGAIN quits; a
-// quit under way (waiting on hooks), at once
+// says what first, as Ctrl+C does (the subagents it stopped left out: no
+// quit pauses them now), and a second within AGAIN quits; a quit under
+// way (waiting on hooks), at once
 export function term_clear(t: Term, key: string): void {
-  const stops = term_stops(t);
+  const stops = term_stops(t, key === "Ctrl+D");
   if (t.scr.ed.text !== "") {
     Screen.ed_take(t.scr.ed);
   } else if (t.quitting || Date.now() - t.quit < AGAIN || (key === "Ctrl+D" && stops === "")) {
@@ -479,13 +480,13 @@ export function term_clear(t: Term, key: string): void {
 
 // what a quit stops besides a turn, said (nothing, or a view of another
 // terminal's chat, whose quit stops nothing: ""): the background jobs,
-// gone for good, and the subagents at work, which go on at the next start;
-// each profile open hidden in this window at work or running jobs, which
-// the quit ends too (those at rest end without a word: nothing of theirs
-// is lost)
-function term_stops(t: Term): string {
+// gone for good, and the subagents at work (agents: unless just
+// stopped), which go on at the next start; each profile open hidden in
+// this window at work or running jobs, which the quit ends too (those at
+// rest end without a word: nothing of theirs is lost)
+function term_stops(t: Term, agents: boolean): string {
   const jobs = t.chat === null ? 0 : t.v.background.length;
-  const subs = t.chat === null ? 0 : t.v.agents.length;
+  const subs = t.chat === null || !agents ? 0 : t.v.agents.length;
   const busy = (n: number) => n + (n === 1 ? " background job" : " background jobs");
   const said = [
     jobs === 0 ? "" : "stops " + busy(jobs) + " (/background)",
