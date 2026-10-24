@@ -16,9 +16,10 @@
 // characters, how many more left out (a note and the refused list, cut
 // short), what don't ask again keeps by its ends past 1,000; a refusal
 // recorded and told to the model; a plugin's hooks come before them and
-// after the tool. The projects: their table, a search across them, a
-// zoom into another's chat. A subagent's view fits its model: the oldest
-// lines left out.
+// after the tool. The loop guard (auto): a call the same as its caller's
+// two before it asked, illi's own tools too. The projects: their table,
+// a search across them, a zoom into another's chat. A subagent's view
+// fits its model: the oldest lines left out.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -218,6 +219,35 @@ test("illi's own shell, files and MCP tools pass the same checks: the user's rul
   expect((await call("shell", { command: "ls" })).text).toContain("Asked because illi can't read your permission rules (" + config.PERMISSIONS + ": ");
   fs.rmSync(config.PERMISSIONS);
   chat.tools.perm.refused.length = 0;
+});
+
+test("the loop guard, in auto: a call the same (tool and input) as its caller's two before it is asked, saying so, illi's own tools too; another call between, another caller or another mode, not", async () => {
+  const call = (name: string, args: object, who = "main") => Tools.call(chat.tools, who, name, args, new AbortController().signal);
+  const looped = "No one is at illi's screen to ask, so it isn't allowed. Asked because the same call a third time in a row";
+  chat.tools.perm.calls.clear();
+  chat.tools.perm.mode = "auto";
+  try {
+    expect((await call("projects", {})).fail).toBe(false);
+    expect((await call("projects", {})).fail).toBe(false);
+    expect((await call("projects", {})).text).toStartWith(looped);
+    expect((await call("projects", {})).text).toStartWith(looped);
+    expect(chat.tools.perm.refused.at(-1)).toMatchObject({ how: "no", tool: "projects", why: "the same call a third time in a row", exact: [] });
+    expect((await call("search", { words: "loop" })).fail).toBe(false);
+    expect((await call("projects", {})).fail).toBe(false);
+    expect((await call("shell", { command: "echo loop" })).text).toStartWith("loop\n");
+    expect((await call("shell", { command: "echo loop" })).text).toStartWith("loop\n");
+    expect((await call("shell", { command: "echo loop", timeout: 5 })).text).toStartWith("loop\n");
+    expect((await call("shell", { command: "echo loop" })).text).toStartWith("loop\n");
+    expect((await call("shell", { command: "echo loop" })).text).toStartWith("loop\n");
+    expect((await call("projects", {}, "Scout")).fail).toBe(false);
+    expect((await call("shell", { command: "echo loop" })).text).toStartWith(looped);
+    chat.tools.perm.mode = "careful";
+    expect((await call("shell", { command: "echo loop" })).text).toStartWith("loop\n");
+  } finally {
+    chat.tools.perm.mode = null;
+    chat.tools.perm.calls.clear();
+    chat.tools.perm.refused.length = 0;
+  }
 });
 
 test("a plugin's hooks come first: its input is what the checks judge and Claude Code runs, its refusal final, its ask asked, its allow run, what it adds after the answer, what the model reads its last say; its tools run", async () => {
