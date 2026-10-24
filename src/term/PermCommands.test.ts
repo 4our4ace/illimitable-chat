@@ -59,7 +59,7 @@ test("/mode: the five, the one now marked, the setting's said; Enter switches th
   term_mode(t, "");
   expect(t.choose.names).toEqual(["auto", "careful", "ask", "read-only", "yolo"]);
   expect(t.choose.aside).toEqual(["the setting's", "", "", "", ""]);
-  expect(t.choose.about.slice(0, 2)).toEqual(["all in the project runs; outside it, system and secrets asked", "reads and changes in the project run; risky calls are asked"]);
+  expect(t.choose.about.slice(0, 2)).toEqual(["all runs but changes outside, secrets, system, remote deletes", "reads and changes in the project run; risky calls are asked"]);
   expect([t.choose.here, lit(t)]).toEqual([2, "ask"]);
   keys(t, "Down", "Down", "Enter");
   expect(note(t)).toBe("Mode: yolo, this session (everything runs, but what your rules refuse or ask).");

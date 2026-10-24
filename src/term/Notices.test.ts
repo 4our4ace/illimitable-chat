@@ -70,7 +70,7 @@ test("a pipe gets each note once", () => {
 
 test("a mode of auto is said once ever, on a terminal only (a pipe spends none): what auto asks now, careful the old rules", () => {
   expect(config.config_value("mode")).toBe("auto");
-  expect(config.AUTO_NOTE).toBe("mode is auto: it now asks only before a change outside the project, remote destruction (a force push, a delete), root, your secrets and illi's own config. /mode careful keeps the old rules for this session, /set mode careful for good.");
+  expect(config.AUTO_NOTE).toBe("mode is auto: it now runs most calls unasked, asking before a change outside the project, your secrets, root and the system, remote destruction (a force push, a delete), git's hooks, Claude Code's settings and illi's own config. /mode careful keeps the old rules for this session, /set mode careful for good.");
   const pipe = term(false);
   term_once(pipe, 60000);
   expect(pipe.notices).toEqual([]);
