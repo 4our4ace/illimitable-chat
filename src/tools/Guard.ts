@@ -687,7 +687,9 @@ function look_shell(where: Where, look: Look, command: string): void {
 
 // a part's flags and change: by the user's rules first (an allow rule
 // covers the command itself, not what its assignments set or its
-// redirections write), then each value its command's name can take (a
+// redirections write; one named by the whole command, as one reading
+// a pipe or a file is, only strictly, as look_shell's: curl * covers no
+// bash curl's output is piped into), then each value its command's name can take (a
 // loop's), its redirections, assignments and files (what a command that
 // may change things reads may be what it writes: use_look), and the
 // folder it runs in: a secret store (cd ~/.ssh && ls), one outside the
@@ -712,7 +714,8 @@ function look_part(where: Where, look: Look, part: Part, depth: number): void {
   const exact = whole ? look.whole : Guard.norm(part, where.cwd);
   const bare = Guard.norm(part);
   const plain = part.text;
-  const rule = rule_of(where, "shell", [plain, bare, exact, ...by_name(part)], part.root ? [bare, exact] : [plain, bare, exact]);
+  const names = part.root ? [bare] : [plain, bare];
+  const rule = rule_of(where, "shell", [plain, bare, exact, ...by_name(part)], whole ? names : [...names, exact]) ?? (whole && rule_of(where, "shell", [], [exact], true) === "allow" ? "allow" : null);
   if (rule === "deny") {
     look.denied.push({ why: "your rules refuse " + clip(bare), span: held });
     return;

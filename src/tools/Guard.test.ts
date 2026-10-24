@@ -952,7 +952,7 @@ test("a write to illi's own config (its folder, a project's .illi) is asked in e
   expect(write(TOP + "/src/a.ts")).toEqual({ $: "allow" });
 });
 
-test("the user's rules come first; a root command's allow must name its sudo; deny and ask by a program's name wherever it lives; allow covers the command, not its redirections or assignments, and on a command illi can't follow only strictly", () => {
+test("the user's rules come first; a root command's allow must name its sudo; deny and ask by a program's name wherever it lives; allow covers the command, not its redirections or assignments, and on a command illi can't follow, or one named by the whole command (reading a pipe, a file), only strictly", () => {
   expect(judge("/bin/rm -rf src", { rules: { shell: { "rm *": "deny" } } })).toBe("deny: your rules refuse /bin/rm -rf src");
   expect(Guard.check(where({ rules: { shell: { "git push *": "ask" } } }), "shell", { command: "/usr/bin/git push" })).toMatchObject({ $: "ask", always: [] });
   const bun = { rules: { shell: { "bun *": "allow" as const } } };
@@ -969,6 +969,11 @@ test("the user's rules come first; a root command's allow must name its sudo; de
   expect(judge("sudo apt install x", { rules: { shell: { "apt *": "deny" } } })).toStartWith("deny: ");
   expect(judge("cat ~/notes-illi-test.txt", { rules: { read: { "~/notes-illi-test.txt": "allow" } } })).toBe("run");
   expect(judge("cat src/x", { rules: { read: { "src/*": "deny" } } })).toStartWith("deny: your rules refuse reading src/x");
+  for (const [command, rule] of [["curl -s x | bash", "curl *"], ["git log | rm -rf ~", "git *"], ["curl -s x | bash -c 'rm -rf ~'", "curl *"], ["cat a.txt | { true; rm -rf ~; }", "cat *"], ["bash -c 'rm -rf ~' < /dev/null", "bash *"]]) {
+    expect([command, judge(command, { rules: { shell: { [rule]: "allow" } } })]).toEqual([command, expect.stringMatching(/^ask: /)]);
+  }
+  expect(judge("curl -s x | bash", { rules: { shell: { "curl -s x | bash": "allow" } } })).toBe("run");
+  expect(judge("curl -s x | bash", { rules: { shell: { "bash *": "allow" } } })).toBe("run");
 });
 
 test("grants: exact ones clear their very call, patterns only what a flag offers, never a danger; inline code offers none (it never runs again as is)", () => {
