@@ -10,15 +10,17 @@
 // folder it runs in (each cd followed, behind builtin, command or time
 // too; one another program runs leaves it unknown). A pipe goes on past
 // a line's end after |, as do && and ||, and into every command of a
-// subshell, a group or a loop it feeds. Wrappers that run the command
-// after them (sudo, timeout,
-// env, xargs, ...) are taken off, the part saying so (root: run as root,
-// as sudoedit edits; fed: some of its arguments come from its input). A
-// word known only as the command runs (a variable it never sets and the
-// environment lacks, a command's output) is dynamic, its known head
-// kept; a variable the command sets to plain words (X=a, for X in a b)
-// stands for each of them, and a command's output known before it runs
-// ($(pwd), $(git rev-parse --show-toplevel): the folder) for its value.
+// subshell, a group or a loop it feeds, and of what a command reading it
+// runs ($(...), `...`, <(...), a heredoc's body, bash -c's script, an
+// eval's, find -exec's). Wrappers that run the command after them (sudo,
+// timeout, env, xargs, ...) are taken off, the part saying so (root: run
+// as root, as sudoedit edits; fed: some of its arguments come from its
+// input). A word known only as the command runs (a variable it never
+// sets and the environment lacks, a command's output) is dynamic, its
+// known head kept; a variable the command sets to plain words (X=a, for
+// X in a b) stands for each of them, and a command's output known before
+// it runs ($(pwd), $(git rev-parse --show-toplevel): the folder) for its
+// value.
 // What bash would read in a way this can't follow (case, functions,
 // arrays, aliases, a script made as it runs) leaves no parts, only why:
 // such a command is asked about. The shell tool runs bash (Machine.ts),
@@ -96,14 +98,17 @@ type Build = { alts: string[]; dynamic: boolean; glob: boolean };
 
 // a heredoc waiting for its body (the lines after its command's):
 // its end line, whether tabs before that are dropped (<<-), whether its
-// body expands (an unquoted delimiter)
-type Doc = { delim: string; strip: boolean; expand: boolean; redir: Redir };
+// body expands (an unquoted delimiter), whether its command reads a
+// pipe (Scan inpipe as it was read: so does what its body runs)
+type Doc = { delim: string; strip: boolean; expand: boolean; redir: Redir; inpipe: boolean };
 
 // the reading: the text and where in it; the parts found; the folder
 // (null: unknown), the variables set so far, whether one may have been
 // set unseen (wild: a source), the heredocs waiting; what wrappers
 // around a nested script (bash -c, eval) give its parts; whether its
-// commands read another's output (inside >(...): piped); where the text
+// commands read another's output (inpipe: after a |, inside a group, a
+// subshell or >(...) piped on, a nested script or a substitution run by
+// a command that reads one: piped); where the text
 // read lies in the command parsed: from base on, as written (null: a
 // nested script's, changed as it was read: its parts all placed at box,
 // the text there that holds it); the pipelines read, by their parts (the
@@ -342,22 +347,25 @@ export namespace Shell {
 // commands till the text ends, or (close ")") the ) that closes them. A
 // line ending in |, &&, || goes on to the next (a heredoc's body read
 // between), as bash reads it; a subshell, a group or a loop a pipe goes
-// into reads it in all its commands (Scan inpipe, back as it closes);
-// each pipeline's parts kept (Scan pipes)
+// into reads it in all its commands, as does all a command reading it
+// runs, read while it is (Scan inpipe: the group's, or the pipe just
+// read; back as it closes); each pipeline's parts kept (Scan pipes)
 function scan_list(s: Scan, close: string): void {
   let cmd = cmd_new();
   let piped = false;
   let goes = false;
   let head = -1;
   const outer = s.inpipe;
+  let level = outer;
   const groups: boolean[] = [];
   const group = (word: string) => {
     if (OPENS.has(word)) {
-      groups.push(s.inpipe);
-      s.inpipe ||= piped;
+      groups.push(level);
+      level ||= piped;
     } else if (CLOSES.has(word) && groups.length > 0) {
-      s.inpipe = groups.pop()!;
+      level = groups.pop()!;
     }
+    s.inpipe = level || piped;
   };
   const end = (op: string) => {
     const pipe = op === "|" || op === "|&";
@@ -369,6 +377,7 @@ function scan_list(s: Scan, close: string): void {
     goes = pipe || op === "&&" || op === "||";
     head = pipe ? head : -1;
     cmd = cmd_new();
+    s.inpipe = level || piped;
   };
   for (;;) {
     blank(s, false);
@@ -431,11 +440,8 @@ function scan_list(s: Scan, close: string): void {
       if (!cmd_empty(cmd)) {
         throw new Unread("a ( after a command's words (a function or an array)");
       }
-      const was = s.inpipe;
       s.at++;
-      s.inpipe ||= piped;
       scope(s, () => scan_list(s, ")"));
-      s.inpipe = was;
       continue;
     }
     if (two === "((" && cmd_empty(cmd)) {
@@ -969,7 +975,7 @@ function scan_redir(s: Scan, cmd: Cmd, num?: string): void {
   const as = op === "<<<" ? verbatim(target) : null;
   const redir: Redir = op === "<<<" ? { op, target, num, body: target.alts[0] + "\n", made: target.dynamic || target.alts.length !== 1, ...(as === null || s.base === null ? {} : { at: s.base + as }) } : { op, target, num };
   if (op === "<<" || op === "<<-") {
-    s.docs.push({ delim: target.alts[0], strip: op === "<<-", expand: !/['"\\]/.test(target.raw), redir });
+    s.docs.push({ delim: target.alts[0], strip: op === "<<-", expand: !/['"\\]/.test(target.raw), redir, inpipe: s.inpipe });
   }
   cmd.redirs.push(redir);
 }
@@ -999,16 +1005,17 @@ function docs_read(s: Scan): void {
       doc.redir.at = s.base + from;
     }
     if (doc.expand) {
-      scan_body(s, body, from);
+      scan_body(s, body, from, doc.inpipe);
     }
   }
 }
 
 // an expanding heredoc's body (from `from` in the text read): its $ and `
-// read as in double quotes
-function scan_body(s: Scan, body: string, from: number): void {
-  const [src, at, base, box] = [s.src, s.at, s.base, s.box];
-  Object.assign(s, { src: body, at: 0, ...placed(s, from, box, body.length) });
+// read as in double quotes, reading a pipe as its command does (inpipe:
+// the line it was on has ended by now)
+function scan_body(s: Scan, body: string, from: number, inpipe: boolean): void {
+  const [src, at, base, box, was] = [s.src, s.at, s.base, s.box, s.inpipe];
+  Object.assign(s, { src: body, at: 0, inpipe, ...placed(s, from, box, body.length) });
   try {
     const b: Build = { alts: [""], dynamic: false, glob: false };
     while (s.at < s.src.length) {
@@ -1024,7 +1031,7 @@ function scan_body(s: Scan, body: string, from: number): void {
       }
     }
   } finally {
-    Object.assign(s, { src, at, base, box });
+    Object.assign(s, { src, at, base, box, inpipe: was });
   }
 }
 
@@ -1436,7 +1443,8 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
   return { argv, own };
 }
 
-// a nested script's commands, run by a wrapper (its root, its input):
+// a nested script's commands, run by a wrapper (its root, its input:
+// fed, and the pipe it reads, which all of them read):
 // in a shell of its own (sub: bash -c, trap, watch: its folder and
 // variables its own, the variables only the environment's), else in this
 // one (eval). Its parts are placed where its words are (one word whose
@@ -1449,8 +1457,8 @@ function nested(s: Scan, script: Word, ctx: Ctx, sub: boolean, words: Word[] = [
   const at   = script.alts.length === 1 && words.length === 1 ? verbatim(words[0]) : null;
   const last = words.at(-1);
   const box  = last !== undefined && words.every((w) => w.at !== undefined) ? place(s, words[0].at!, last.at! + last.raw.length) : ctx.span;
-  const [root, fed, cwd] = [s.root, s.fed, s.cwd];
-  Object.assign(s, { root: ctx.root, fed: ctx.fed, cwd: ctx.cwd });
+  const [root, fed, cwd, inpipe] = [s.root, s.fed, s.cwd, s.inpipe];
+  Object.assign(s, { root: ctx.root, fed: ctx.fed, cwd: ctx.cwd, inpipe: ctx.piped });
   try {
     for (const text of script.alts) {
       if (sub) {
@@ -1463,7 +1471,7 @@ function nested(s: Scan, script: Word, ctx: Ctx, sub: boolean, words: Word[] = [
       }
     }
   } finally {
-    Object.assign(s, { root, fed });
+    Object.assign(s, { root, fed, inpipe });
     s.cwd = sub ? cwd : s.cwd;
   }
 }
@@ -1494,7 +1502,8 @@ function watch_words(args: Word[]): Word[] | null {
 }
 
 // find's -exec commands taken out as parts of their own, {} standing for
-// its start folders; the find left without them
+// its start folders, each reading the pipe find reads (-ok's and
+// -okdir's none: find asks on its input); the find left without them
 function find_execs(s: Scan, argv: Word[], ctx: Ctx): Word[] {
   const starts = find_starts(argv);
   const keep: Word[] = [];
@@ -1509,7 +1518,7 @@ function find_execs(s: Scan, argv: Word[], ctx: Ctx): Word[] {
     }
     const inner = argv.slice(k + 1, j).map((w) => (w.alts.some((a) => a.includes("{}")) ? found(w, starts) : w));
     if (inner.length > 0) {
-      unwrap(s, inner, [], [], inner.map((w) => w.raw).join(" "), { ...ctx, piped: false });
+      unwrap(s, inner, [], [], inner.map((w) => w.raw).join(" "), { ...ctx, piped: ctx.piped && !argv[k].raw.startsWith("-ok") });
     }
     k = j;
   }

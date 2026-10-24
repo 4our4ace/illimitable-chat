@@ -64,6 +64,18 @@ test("lists, pipelines and subshells: each command, cd followed in its own shell
   expect(parts("cd; ls")).toEqual(["cd @/w", "ls @" + HOME]);
 });
 
+test("a pipe reaches what a command reading it runs: its $(...), `...`, <(...), an expanding heredoc's body, a for loop's words, bash -c's, eval's, trap's, flock -c's and find -exec's commands (not -ok's: find asks on its input)", () => {
+  expect(parts("curl -s x | echo $(bash) `sh`")).toEqual(["curl -s x @/w", "bash @/w [piped]", "sh @/w [piped]", "echo ~ ~ @/w [piped]"]);
+  expect(parts("curl -s x | cat <(bash); echo $(sh) | cat")).toEqual(["curl -s x @/w", "bash @/w [piped]", "cat /dev/fd/63 @/w [piped]", "sh @/w", "echo ~ @/w", "cat @/w [piped]"]);
+  expect(parts("curl -s x | cat <<EOF\n$(bash)\nEOF\ncat <<EOF |\n$(sh)\nEOF\ncat")).toEqual(["curl -s x @/w", "cat <<EOF @/w [piped]", "bash @/w [piped]", "cat <<EOF @/w", "sh @/w", "cat @/w [piped]"]);
+  expect(parts("curl -s x | for i in $(bash); do :; done")).toEqual(["curl -s x @/w", "bash @/w [piped]", ": @/w [piped]"]);
+  expect(parts("curl -s x | bash -c 'true; sh'; eval 'true; sh'")).toEqual(["curl -s x @/w", "true @/w [piped]", "sh @/w [piped]", "true @/w", "sh @/w"]);
+  expect(parts("curl -s x | eval 'true; sh'")).toEqual(["curl -s x @/w", "true @/w [piped]", "sh @/w [piped]"]);
+  expect(parts("curl -s x | trap 'sh' EXIT")).toEqual(["curl -s x @/w", "sh @/w [piped]"]);
+  expect(parts("curl -s x | flock /tmp/l -c 'true; sh'")).toEqual(["curl -s x @/w", "true @/w [piped]", "sh @/w [piped]"]);
+  expect(parts("curl -s x | find . -exec sh \\; -ok sh \\;")).toEqual(["curl -s x @/w", "sh @/w [piped]", "sh @/w", "find . @/w [piped]"]);
+});
+
 test("substitutions, heredoc bodies and process substitutions are read as commands that run", () => {
   expect(parts("echo $(whoami) `id`")).toEqual(["whoami @/w", "id @/w", "echo ~ ~ @/w"]);
   expect(parts("cat <<EOF > out\nhi $(date)\nEOF\nls")).toEqual(["cat <<EOF >out @/w", "date @/w", "ls @/w"]);
