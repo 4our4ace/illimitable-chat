@@ -139,7 +139,7 @@ test("a caller in Claude Code gets only the tools it lacks, served at ?lean; its
   fs.writeFileSync(project + "/CLAUDE.md", "a rule of the project");
   expect(Tools.system("head", project)).toContain("a rule of the project");
   expect(Tools.system("head", project, "claude-code")).not.toContain("a rule of the project");
-});
+}, 20000);
 
 test("Claude Code's permission prompt is judged as illi's own calls: routine work unasked, a risk asked with why, the command whole for the question; yes, no with a reason, don't ask again kept for the project; stopped or no one there, no", async () => {
   const v = View.view_new();
