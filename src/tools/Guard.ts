@@ -687,26 +687,26 @@ function look_shell(where: Where, look: Look, command: string): void {
 
 // a part's flags and change: by the user's rules first (an allow rule
 // covers the command itself, not what its assignments set or its
-// redirections write; one named by the whole command, as one reading
-// a pipe or a file is, only strictly, as look_shell's: curl * covers no
-// bash curl's output is piped into), then each value its command's name can take (a
-// loop's), its redirections, assignments and files (what a command that
-// may change things reads may be what it writes: use_look), and the
+// redirections write; one named by the whole command, as one reading a
+// pipe or a file is, only strictly, as look_shell's: curl * covers no bash
+// curl's output is piped into), then each value its command's name can
+// take (a loop's), its redirections, assignments and files (what a command
+// that may change things reads may be what it writes: use_look), and the
 // folder it runs in: a secret store (cd ~/.ssh && ls), one outside the
 // project read by a command that may change things (cd ~/x && npm test
-// runs that folder's code) or one holding a secret store read by any
-// (said only if nothing else is). An exact grant names the part as it
-// runs (Guard.norm: git push --force, and the folder a cd moved it to),
-// but one whose input comes from elsewhere (a pipe, xargs, a file or
-// heredoc read in), whose words expand as it runs ($x, $(...), <(...))
-// or whose folder is known only then names the whole command: `sh` alone
-// would let any code piped into it run, `rm -rf $x` any folder. ask
-// mode's family grant covers the part alone (cat * covers no tee piped
-// after it). Its flags are placed at it, the heredocs' bodies it reads
-// and what writes the pipe it reads or gives it its input (Shell.held:
-// what it writes to a file, feeds a shell or an interpreter, sends to
-// another computer is what is asked about, its lines no one line), so a
-// question folding the command shows them
+// runs that folder's code) or one holding a secret store read by any (said
+// only if nothing else is). An exact grant names the part as it runs
+// (Guard.norm: git push --force, and the folder a cd moved it to), but one
+// whose input comes from elsewhere (a pipe, xargs, a file or heredoc read
+// in), whose words expand as it runs ($x, $(...), <(...)) or whose folder
+// is known only then names the whole command: `sh` alone would let any
+// code piped into it run, `rm -rf $x` any folder. ask mode's family grant
+// covers the part alone (cat * covers no tee piped after it). Its flags
+// are placed at it, the heredocs' bodies it reads and what writes the pipe
+// it reads or gives it its input (Shell.held: what it writes to a file,
+// feeds a shell or an interpreter, sends to another computer is what is
+// asked about, its lines no one line), so a question folding the command
+// shows them
 function look_part(where: Where, look: Look, part: Part, depth: number): void {
   const held  = Shell.held(part);
   const words = [...part.argv, ...part.env.map((e) => e.value), ...part.redirs.map((r) => r.target)];
