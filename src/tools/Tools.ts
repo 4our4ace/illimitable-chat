@@ -801,10 +801,10 @@ export namespace Tools {
   // count again (Tools.looped). The question is
   // given what the call would do and why, WHOLE characters of each at
   // most (Tools.whole: past that, the lines holding what made it ask),
-  // where in it that is (Verdict spots; a reason with no place in it, a
-  // hook's ask, the loop guard, rules that won't read: all of it, so the
-  // question doesn't fold it), and what "don't ask again" keeps by its
-  // ends past KEPT. One
+  // where in it that is (Verdict spots; a hook's ask, the loop guard,
+  // rules that won't read: all of it; a file's, an MCP tool's reasons have
+  // no place in it: none, so the question doesn't fold it either), and
+  // what "don't ask again" keeps by its ends past KEPT. One
   // asked runs on the user's yes, "don't ask again" keeping its grants for
   // the project (one that can't be saved: for this run). A rules file that
   // won't read leaves nothing run unasked
@@ -942,12 +942,14 @@ export namespace Tools {
   // characters at most (a character in two halves, a surrogate pair, kept
   // whole); past them, each line holding a spot (where the checks found
   // what made them ask: Guard Verdict spots), PIECE characters of it at
-  // most from REACH before the spot, WHOLE of all such at most, a line
-  // before each saying how many characters were left out there (cuts:
-  // where those lines are, so the question tells them from the command);
-  // how many past the last shown are left out (more: the question says
-  // so); the spots, moved to where they are in what it shows (none given:
-  // none). So a risk deep in a heredoc carrying a whole file still shows
+  // most from REACH before the spot, WHOLE of all such at most (spots
+  // past that: only the why names them), lines one after another kept
+  // as one, a line before each saying how many characters were left out
+  // there (cuts: where those lines are, so the question tells them from
+  // the command); how many past the last shown are left out (more: the
+  // question says so); the spots, moved to where they are in what it
+  // shows (none given: none). So a risk deep in a heredoc carrying a
+  // whole file still shows
   export function whole(input: any, spots?: Span[]): { whole: string; more: number; spots?: Span[]; cuts?: Span[] } {
     const text   = Tools.does(input);
     const ends   = (e: number) => (e < text.length && text.charCodeAt(e - 1) >> 10 === 0x36 ? e - 1 : e);
@@ -964,7 +966,7 @@ export namespace Tools {
       const b    = ends(Math.min(nl < 0 ? text.length : nl, a + PIECE));
       const last = shown.at(-1)!;
       used += Math.max(0, b - Math.max(a, last[1]));
-      if (a <= last[1]) {
+      if (a <= last[1] || (a === last[1] + 1 && text[last[1]] === "\n")) {
         last[1] = Math.max(last[1], b);
       } else {
         shown.push([a, b]);

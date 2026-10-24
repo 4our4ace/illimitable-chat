@@ -11,7 +11,8 @@
 // line saying how much was left out) show over the answers, once: no
 // note says them again (a pipe, with no answers to show, notes them, cut
 // short). A long command folds to its first line, those lines and its
-// last (Question.ts: Ctrl+O shows it whole), never hiding why it asks.
+// last, a long line to its rows holding what made them ask (Question.ts:
+// Ctrl+O shows it whole), never hiding why it asks.
 // illi's own questions (ask) show at the input too (Question.ts), as a
 // form, a tab each: the question, its options (one to pick, or several),
 // and a row for words of the user's own, which they may type beside the
@@ -262,8 +263,10 @@ function form_tabs(tabs: Paint.Run[], w: number): { tabs: Paint.Line[]; spans: S
 // where it left text out between the lines it kept (its cuts). Told
 // where in it what made the checks ask is (its spots), a long command
 // folds (Chooser fold, Question.ts: Ctrl+O shows it whole): the lines
-// holding a spot stay, as do those lines saying text was left out, the
-// line before each and its last line; told nothing, it doesn't fold
+// holding a spot stay, and where on them each is (a long line folds to
+// its rows holding it), as do those lines saying text was left out, the
+// line before each and its last line; told nothing (none, or no place
+// in it: a file's, an MCP tool's), it doesn't fold
 function term_ask_open(t: Term, q: Question): void {
   const keep  = q.keep ?? "";
   const names = ["Yes", ...(keep === "" ? [] : ["Yes, and don't ask again for " + Paint.text_line(keep) + " in this project"]), "No", "No, and say why"];
@@ -291,34 +294,64 @@ function term_ask_open(t: Term, q: Question): void {
   const head  = q.why === undefined || q.why === "" ? [] : [[Paint.Run("Why: ", Paint.DIM), Paint.Run(Paint.text_clean(q.why))]];
   const lead  = [...head, ...what.map((l) => [Paint.Run(l.text, l.cut ? Paint.DIM : { ...Paint.INK, b: true })]), ...left];
   const cuts  = what.flatMap((l, k) => (l.cut ? [k - 1, k] : []));
-  const shows = [...ask_spots(what, q.spots ?? []), ...cuts, what.length - 1].filter((k) => k >= 0).map((k) => head.length + k);
-  const fold  = q.spots === undefined ? undefined : { from: head.length, keep: shows, open: false };
+  const shows = [...cuts, what.length - 1].filter((k) => k >= 0).map((k) => head.length + k);
+  const spots = ask_spots(what, q.spots ?? []).map(([k, a, b]): [number, number, number] => [head.length + k, a, b]);
+  const fold  = q.spots === undefined || q.spots.length === 0 ? undefined : { from: head.length, keep: shows, spots, open: false };
   term_question(t, title, names, names.map(() => ""), pick, { keys, lead, fold, foot: () => "Esc no" });
   t.asking!.c = t.question;
 }
 
 // a command's lines as the question shows them: cleaned, end spaces and
 // blank lines left out, each with where it is in the text (from, and to
-// its end) and whether it says text was left out there (a cut's line:
-// Tools.whole), told apart by where it is, never by what it says
-function ask_lines(text: string, cuts: Array<[number, number]>): Array<{ text: string; from: number; to: number; cut: boolean }> {
+// its end), where each of its characters lands as cleaned (at: by its
+// place in the line as written) and whether it says text was left out
+// there (a cut's line: Tools.whole), told apart by where it is, never by
+// what it says
+function ask_lines(text: string, cuts: Array<[number, number]>): Array<{ text: string; from: number; to: number; at: (k: number) => number; cut: boolean }> {
   let at = 0;
   return text.split("\n").flatMap((raw) => {
     const [from, to] = [at, at + raw.length];
     const line       = Paint.text_clean(raw).trimEnd();
     at = to + 1;
-    return line.trim() === "" ? [] : [{ text: line, from, to, cut: cuts.some(([a, b]) => a < to && from < b) }];
+    return line.trim() === "" ? [] : [{ text: line, from, to, at: ask_at(raw), cut: cuts.some(([a, b]) => a < to && from < b) }];
   });
 }
 
-// the lines (by their place among lines) holding a spot: each it
-// overlaps, so one over several lines keeps them all; one only on lines
-// left out (blank), the next line shown (none: the last)
-function ask_spots(lines: Array<{ from: number; to: number }>, spots: Array<[number, number]>): number[] {
-  return spots.flatMap(([a, b]) => {
-    const on = lines.flatMap((l, k) => (l.from < Math.max(b, a + 1) && a < l.to ? [k] : []));
-    const next = lines.findIndex((l) => l.from >= a);
-    return on.length > 0 ? on : [next < 0 ? lines.length - 1 : next];
+// where each character of a line lands as cleaned (Paint.text_clean, a
+// character at a time: a tab two spaces, a control character none), by
+// its place in the line as written; nothing cleaned, the same
+function ask_at(raw: string): (k: number) => number {
+  if (Paint.text_clean(raw) === raw) {
+    return (k) => k;
+  }
+  const at = [0];
+  for (let k = 0; k < raw.length; k++) {
+    at.push(at[k] + Paint.text_clean(raw[k]).length);
+  }
+  return (k) => at[k];
+}
+
+// where the spots are on the lines shown: each line one overlaps (by its
+// place among them) and from, to on it, by character of its text as
+// shown (ask_lines at), so one over several lines keeps them all; one
+// only on lines left out (blank), the next line shown, at its start
+// (none: the last, at its end). The first line it may be on found by
+// halving: many spots on many lines cost little more than their count
+function ask_spots(lines: Array<{ text: string; from: number; to: number; at: (k: number) => number }>, spots: Array<[number, number]>): Array<[number, number, number]> {
+  return spots.flatMap(([a, b]): Array<[number, number, number]> => {
+    const end = Math.max(b, a + 1);
+    let [lo, hi] = [0, lines.length];
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      [lo, hi] = lines[mid].to > a ? [lo, mid] : [mid + 1, hi];
+    }
+    const on: Array<[number, number, number]> = [];
+    for (let k = lo; k < lines.length && lines[k].from < end; k++) {
+      const l = lines[k];
+      on.push([k, l.at(Math.max(a, l.from) - l.from), l.at(Math.min(end, l.to) - l.from)]);
+    }
+    const last = lines.length - 1;
+    return on.length > 0 || last < 0 ? on : lo <= last ? [[lo, 0, 0]] : [[last, lines[last].text.length, lines[last].text.length]];
   });
 }
 

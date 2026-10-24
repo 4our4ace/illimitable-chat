@@ -279,9 +279,11 @@ export type Under = { $: "popup" } | { $: "hit"; hit: Hit } | { $: "copy"; copy:
 // past: the lines leading it scrolled past; lead: lines over a
 // question's answers (why it asks, what it would do), wrapped and
 // cleaned as laid out (Question.ts); fold: how a long command in them
-// folds (from: the lead's line it starts on; keep: the lines shown while
-// it is folded besides its first and the lead's last: those holding what
-// made the checks ask; open: shown whole, Ctrl+O's); answers: a question's options, each
+// folds (from: the lead's line it starts on; keep: lines shown while it
+// is folded besides its first, the lead's last and those holding what
+// made the checks ask; spots: where that is, a line and from, to by
+// character of its text, cleaned: a long line shows its rows holding
+// it; open: shown whole, Ctrl+O's); answers: a question's options, each
 // marked an answer (GLYPH.option) as nothing is picked yet;
 // detail: lines under them of the lit option k, made for w columns (the
 // model picker's autocompact gauge)
@@ -296,7 +298,7 @@ export type Chooser = {
   key?   : string;
   past?  : number;
   lead?  : Paint.Line[];
-  fold?  : { from: number; keep: number[]; open: boolean };
+  fold?  : { from: number; keep: number[]; spots: Array<[number, number, number]>; open: boolean };
   answers?: boolean;
   here   : number;
   pick   : (k: number) => void;

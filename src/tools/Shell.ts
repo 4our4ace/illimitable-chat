@@ -6,9 +6,12 @@
 // body, a loop, a bash -c's script, an eval's, a trap's, a find -exec's),
 // each with its words as they'd expand, its assignments, its
 // redirections, where it is in the command (its span: a question shows
-// the lines a risk is on) and the folder it runs in (each cd followed,
-// behind builtin, command or time too; one another program runs leaves
-// it unknown). Wrappers that run the command after them (sudo, timeout,
+// the lines a risk is on; reading a pipe, with what writes it) and the
+// folder it runs in (each cd followed, behind builtin, command or time
+// too; one another program runs leaves it unknown). A pipe goes on past
+// a line's end after |, as do && and ||, and into every command of a
+// subshell, a group or a loop it feeds. Wrappers that run the command
+// after them (sudo, timeout,
 // env, xargs, ...) are taken off, the part saying so (root: run as root,
 // as sudoedit edits; fed: some of its arguments come from its input). A
 // word known only as the command runs (a variable it never sets and the
@@ -58,7 +61,10 @@ export type Span = [number, number];
 // written (full: wrappers, assignments and redirections too); whether it
 // runs as root, takes arguments from its input (fed), reads a pipe's
 // output (piped); where it is in the command parsed (span: from its
-// first word to its last, a heredoc's body after its line not held). One
+// first word to its last, a heredoc's body after its line not held), and
+// reading a pipe, where what writes it is (feed: the commands before it
+// in its pipeline, with the heredocs' bodies they read; not known, as
+// in a group a pipe goes into, all the command). One
 // in a nested script is placed in the command itself where its text lies
 // there as written (bash -c 'x', a $(...), a heredoc's body); else (an
 // eval's words joined, a quote holding an escape) at the text there that
@@ -74,6 +80,7 @@ export type Part = {
   fed    : boolean;
   piped  : boolean;
   span   : Span;
+  feed?  : Span;
 };
 
 // a command being read: its words, assignments and redirections so far,
@@ -99,7 +106,8 @@ type Doc = { delim: string; strip: boolean; expand: boolean; redir: Redir };
 // commands read another's output (inside >(...): piped); where the text
 // read lies in the command parsed: from base on, as written (null: a
 // nested script's, changed as it was read: its parts all placed at box,
-// the text there that holds it)
+// the text there that holds it); the pipelines read, by their parts (the
+// first, the one past the last: Part feed)
 type Scan = {
   src   : string;
   at    : number;
@@ -114,6 +122,7 @@ type Scan = {
   fed   : boolean;
   inpipe: boolean;
   depth : number;
+  pipes : Span[];
 };
 
 // a wrapper's options: those taking a value; those that don't, and those
@@ -143,6 +152,11 @@ const SKIP = new Set(["if", "then", "elif", "else", "fi", "do", "done", "while",
 
 // those whose commands this doesn't follow
 const REFUSE = new Set(["case", "esac", "select", "function", "coproc"]);
+
+// the reserved words opening a group or a loop, and those closing one: a
+// pipe into one is read by all its commands
+const OPENS  = new Set(["{", "if", "while", "until", "for"]);
+const CLOSES = new Set(["}", "fi", "done"]);
 
 // the redirections, longest first
 const REDIRS = ["<<<", "<<-", "&>>", "<<", "<>", "<&", ">>", ">|", ">&", "&>", "<", ">"];
@@ -218,9 +232,10 @@ export namespace Shell {
   // whose text isn't there as written)
   export function parse(command: string, cwd: string, at: number | Span = 0): Part[] | string {
     const [base, box]: [number | null, Span] = typeof at === "number" ? [at, [at, at + command.length]] : [null, at];
-    const s: Scan = { src: command, at: 0, base, box, parts: [], cwd, vars: new Map(), wild: false, docs: [], root: false, fed: false, inpipe: false, depth: 0 };
+    const s: Scan = { src: command, at: 0, base, box, parts: [], cwd, vars: new Map(), wild: false, docs: [], root: false, fed: false, inpipe: false, depth: 0, pipes: [] };
     try {
       scan_list(s, "");
+      pipe_feeds(s);
       return s.parts;
     } catch (err: any) {
       return err instanceof Unread ? err.message : "illi failed to read it (" + String(err?.message ?? err) + ")";
@@ -257,6 +272,13 @@ export namespace Shell {
       }
     }
     return at;
+  }
+
+  // where a part is in the command parsed, with the heredocs' bodies it
+  // reads (after its line: Redir at) and what writes the pipe it reads
+  // (Part feed): all it acts on
+  export function held(part: Part): Span {
+    return span_join(part_reach(part), part.feed ?? part.span);
   }
 
   // a word from its nth character on (an option's value: --to=x)
@@ -317,13 +339,35 @@ export namespace Shell {
 // Reading
 // =======
 
-// commands till the text ends, or (close ")") the ) that closes them
+// commands till the text ends, or (close ")") the ) that closes them. A
+// line ending in |, &&, || goes on to the next (a heredoc's body read
+// between), as bash reads it; a subshell, a group or a loop a pipe goes
+// into reads it in all its commands (Scan inpipe, back as it closes);
+// each pipeline's parts kept (Scan pipes)
 function scan_list(s: Scan, close: string): void {
   let cmd = cmd_new();
   let piped = false;
+  let goes = false;
+  let head = -1;
+  const outer = s.inpipe;
+  const groups: boolean[] = [];
+  const group = (word: string) => {
+    if (OPENS.has(word)) {
+      groups.push(s.inpipe);
+      s.inpipe ||= piped;
+    } else if (CLOSES.has(word) && groups.length > 0) {
+      s.inpipe = groups.pop()!;
+    }
+  };
   const end = (op: string) => {
-    cmd_end(s, cmd, piped, op === "|" || op === "|&" || op === "&");
-    piped = op === "|" || op === "|&";
+    const pipe = op === "|" || op === "|&";
+    cmd_end(s, cmd, piped, pipe || op === "&");
+    if (piped && !pipe) {
+      s.pipes.push([head, s.parts.length]);
+    }
+    piped = pipe;
+    goes = pipe || op === "&&" || op === "||";
+    head = pipe ? head : -1;
     cmd = cmd_new();
   };
   for (;;) {
@@ -331,12 +375,15 @@ function scan_list(s: Scan, close: string): void {
     const from = s.at;
     const c = s.src[s.at];
     const two = s.src.slice(s.at, s.at + 2);
+    head = head < 0 ? s.parts.length : head;
+    goes &&= c === "\n" || c === "#";
     if (c === undefined) {
       if (close !== "") {
         throw new Unread("a " + close + " is missing");
       }
       end("");
       docs_read(s);
+      s.inpipe = outer;
       return;
     }
     if (c === "#") {
@@ -347,7 +394,9 @@ function scan_list(s: Scan, close: string): void {
     }
     if (c === "\n") {
       s.at++;
-      end("\n");
+      if (!goes) {
+        end("\n");
+      }
       docs_read(s);
       continue;
     }
@@ -357,6 +406,7 @@ function scan_list(s: Scan, close: string): void {
       }
       s.at++;
       end("");
+      s.inpipe = outer;
       return;
     }
     if (c === ";") {
@@ -381,8 +431,11 @@ function scan_list(s: Scan, close: string): void {
       if (!cmd_empty(cmd)) {
         throw new Unread("a ( after a command's words (a function or an array)");
       }
+      const was = s.inpipe;
       s.at++;
+      s.inpipe ||= piped;
       scope(s, () => scan_list(s, ")"));
+      s.inpipe = was;
       continue;
     }
     if (two === "((" && cmd_empty(cmd)) {
@@ -402,6 +455,7 @@ function scan_list(s: Scan, close: string): void {
       if ((s.src[s.at] === "<" || s.src[s.at] === ">") && /^(\d+|\{[A-Za-z_]\w*\})$/.test(word.raw)) {
         scan_redir(s, cmd, word.raw);
       } else if (!cmd_word(s, cmd, word)) {
+        group(word.raw);
         continue;
       }
     }
@@ -1062,6 +1116,37 @@ function placed(s: Scan, at: number | null, box: Span, length: number): { base: 
 // where a stretch of the text read is in the command parsed
 function place(s: Scan, from: number, to: number): Span {
   return s.base === null ? s.box : [s.base + from, s.base + to];
+}
+
+// each part reading a pipe placed with what writes it (Part feed): the
+// parts before it in each pipeline it is in (one in a subshell piped on
+// is in that pipeline too), with the heredocs' bodies they read, once
+// the bodies are read (after their lines); where that isn't known (a
+// group's, { ...; } | sh, a loop's, >(...)'s), all the command read
+function pipe_feeds(s: Scan): void {
+  for (const [from, to] of s.pipes) {
+    let feed: Span | null = null;
+    for (let k = from; k < to; k++) {
+      const part = s.parts[k];
+      if (feed !== null && part.piped) {
+        part.feed = span_join(feed, part.feed ?? feed);
+      }
+      feed = span_join(feed ?? part.span, part_reach(part));
+    }
+  }
+  for (const part of s.parts) {
+    part.feed ??= part.piped ? s.box : undefined;
+  }
+}
+
+// where a part is with the heredocs' bodies it reads
+function part_reach(part: Part): Span {
+  return part.redirs.reduce((at, r) => ((r.op !== "<<" && r.op !== "<<-") || r.at === undefined || r.body === undefined ? at : span_join(at, [r.at, r.at + r.body.length])), part.span);
+}
+
+// the least span holding two
+function span_join(a: Span, b: Span): Span {
+  return [Math.min(a[0], b[0]), Math.max(a[1], b[1])];
 }
 
 // where a word's one value starts in the text read, if it lies there as

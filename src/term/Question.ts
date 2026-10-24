@@ -24,8 +24,11 @@
 // where in it the checks found what made them ask: Chooser fold) folds,
 // taller than FOLD rows: its first line, the lines holding what made
 // them ask and its last show, each run of the rest one dim line saying
-// how many lines it hides ("… 37 lines"), so a fold never hides why it
-// asks; Ctrl+O shows it whole and folds it again (its rule says which:
+// how many lines it hides ("… 37 lines"), and each of those lines
+// wrapping to many rows (a one-liner) so too by its rows: its first,
+// those holding what made them ask and its last ("… 12 rows"; folded
+// anew at each width), so a fold never hides why it asks, nor a row
+// alone; Ctrl+O shows it whole and folds it again (its rule says which:
 // "Ctrl+O all", "Ctrl+O fold"), as a click on such a line shows it whole,
 // its lead from its top, the lit answer and the hold as they were; folded
 // or whole, too tall it is cut as above, such a line last in view taking
@@ -199,46 +202,91 @@ function question_picker(t: Term, c: Chooser, w: number, h: number, free: number
 // reaches the screen, whoever made them), all of them and folded
 // (question_folded); made once a lead, fold and width, as a paint lays
 // the question out again and again and a command whole may run to many
-// lines
+// lines (a new width wraps and folds it anew)
 function question_lead(c: Chooser, w: number): { all: Paint.Line[]; folded: Folded | null } {
   const lead  = c.lead ?? [];
   const known = LEADS.get(lead);
   if (known?.w === w && known.fold === c.fold) {
     return known;
   }
-  const each = lead.map((l) => Paint.runs_wrap(l.map((r) => ({ ...r, x: Paint.text_clean(r.x) })), Math.max(1, w), false));
-  const laid = { fold: c.fold, w, all: each.flat(), folded: c.fold === undefined ? null : question_folded(each, c.fold) };
+  const clean = lead.map((l) => l.map((r) => ({ ...r, x: Paint.text_clean(r.x) })));
+  const each  = clean.map((l) => Paint.runs_wrap(l, Math.max(1, w), false));
+  const laid  = { fold: c.fold, w, all: each.flat(), folded: c.fold === undefined ? null : question_folded(clean.map((l) => l.map((r) => r.x).join("")), each, c.fold) };
   LEADS.set(lead, laid);
   return laid;
 }
 
-// a lead (each: its lines' rows, as wrapped) with its command folded
-// (fold): the lines before the command, then its first line, those
-// kept (holding what made the checks ask) and the lead's last, each run
-// of the others one dim line saying how many lines it hides ("… 37
-// lines": a click shows them all), but a run of one row, shown as it is
-// (its line takes no more). Ending on a line shown, a fold never puts
-// such a line right over the cut's (question_picker). Null: it doesn't
-// fold, the command FOLD rows at most or nothing hidden
-function question_folded(each: Paint.Line[][], fold: NonNullable<Chooser["fold"]>): Folded | null {
-  const keep  = new Set([...fold.keep, fold.from, each.length - 1]);
-  const tall  = each.slice(fold.from).reduce((n, rows) => n + rows.length, 0);
+// a lead (texts: its lines' text, cleaned; each: their rows, as wrapped)
+// with its command folded (fold): the lines before the command, then its
+// first line, those kept (holding what made the checks ask, a cut's)
+// and the lead's last, each of them taller than a row its first row,
+// those holding a spot and its last (question_rows); each run of the
+// rest one dim line saying how many lines it hides ("… 37 lines"), or
+// how many rows of a line ("… 12 rows"): a click shows them all; a run
+// of one row shown as it is (its line takes no more). Each line kept
+// showing its first row and its last, no two such lines ever meet, and
+// a fold never puts one right over the cut's (question_picker). Null:
+// it doesn't fold, the command FOLD rows at most or nothing hidden
+function question_folded(texts: string[], each: Paint.Line[][], fold: NonNullable<Chooser["fold"]>): Folded | null {
+  const keep = new Set([...fold.keep, ...fold.spots.map(([k]) => k), fold.from, each.length - 1]);
+  const on   = new Map<number, Array<[number, number]>>();
+  for (const [k, a, b] of fold.spots) {
+    if (!on.has(k)) {
+      on.set(k, []);
+    }
+    on.get(k)!.push([a, b]);
+  }
+  const all  = each.flatMap((rows, k) => {
+    const shows = k < fold.from ? rows.map(() => true) : keep.has(k) ? question_rows(texts[k], rows, on.get(k) ?? []) : rows.map(() => false);
+    return rows.map((row, j) => ({ row, k, hid: shows[j] ? null : keep.has(k) ? ("row" as const) : ("line" as const) }));
+  });
   const lines: Paint.Line[] = [];
   const aims: Array<Target | null> = [];
-  let gaps    = 0;
-  for (let k = 0; k < each.length;) {
-    let j = k + 1;
-    while (k >= fold.from && !keep.has(k) && j < each.length && !keep.has(j)) {
+  let gaps   = 0;
+  for (let i = 0; i < all.length;) {
+    let j = i + 1;
+    while (all[i].hid !== null && j < all.length && all[j].hid !== null) {
       j++;
     }
-    const rows = each.slice(k, j).flat();
-    const hide = k >= fold.from && !keep.has(k) && rows.length > 1;
-    const n    = j - k;
-    lines.push(...(hide ? [[Paint.Run("… " + n.toLocaleString("en-US") + (n === 1 ? " line" : " lines"), Paint.DIM)]] : rows));
-    aims.push(...(hide ? [{ $: "fold" as const, k: gaps++ }] : rows.map(() => null)));
-    k = j;
+    const n    = all[i].hid === "line" ? all[j - 1].k - all[i].k + 1 : j - i;
+    const said = all[i].hid === "line" ? (n === 1 ? " line" : " lines") : " rows";
+    lines.push(j - i > 1 ? [Paint.Run("… " + n.toLocaleString("en-US") + said, Paint.DIM)] : all[i].row);
+    aims.push(j - i > 1 ? { $: "fold", k: gaps++ } : null);
+    i = j;
   }
-  return tall > FOLD && gaps > 0 ? { lines, aims } : null;
+  return all.filter((r) => r.k >= fold.from).length > FOLD && gaps > 0 ? { lines, aims } : null;
+}
+
+// the rows a fold shows of a line it keeps (rows: as runs_wrap wrapped
+// it, each a stretch of its text in turn, the spaces at a break
+// dropped): its first, its last and each a spot is on (spots: from, to
+// by character of its text; one on no character, the row where it
+// sits), each row found where it is in the text, so a line whose rows
+// aren't there as wrapped shows whole, never hiding a spot
+function question_rows(text: string, rows: Paint.Line[], spots: Array<[number, number]>): boolean[] {
+  const starts: number[] = [];
+  let end = 0;
+  for (const row of rows) {
+    const x  = row.map((r) => r.x).join("");
+    const at = text.indexOf(x, end);
+    if (at < 0 || text.slice(end, at).trim() !== "") {
+      return rows.map(() => true);
+    }
+    starts.push(at);
+    end = at + x.length;
+  }
+  const shows = rows.map((_, j) => j === 0 || j === rows.length - 1);
+  let [j, upto] = [0, -1];
+  for (const [a, b] of [...spots].sort((x, y) => x[0] - y[0])) {
+    while (j + 1 < rows.length && starts[j + 1] <= a) {
+      j++;
+    }
+    for (let k = Math.max(j, upto + 1); k < rows.length && (k === j || starts[k] < Math.max(b, a + 1)); k++) {
+      shows[k] = true;
+      upto     = k;
+    }
+  }
+  return shows;
 }
 
 // the row of the question at the input the pointer is on, as last painted
