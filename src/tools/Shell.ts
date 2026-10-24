@@ -69,9 +69,10 @@ export type Span = [number, number];
 // output (piped); where it is in the command parsed (span: from its
 // first word to its last, a heredoc's body after its line not held), and
 // reading a pipe, where what writes it is (feed: the commands before it
-// in its pipeline, with the heredocs' bodies they read; not known, as
-// in a group a pipe goes into, all the command; given the input of the
-// group or nested script it is in, where that redirection is). One
+// in its pipeline, a group's a pipe goes into too, with the heredocs'
+// bodies they read; not known, as after a group piped on, all the
+// command; given the input of the group or nested script it is in, where
+// that redirection is). One
 // in a nested script is placed in the command itself where its text lies
 // there as written (bash -c 'x', a $(...), a heredoc's body); else (an
 // eval's words joined, a quote holding an escape) at the text there that
@@ -374,10 +375,10 @@ function scan_list(s: Scan, close: string): void {
   const outer = s.inpipe;
   let level = outer;
   let closed: { was: State | null; from: number } | null = null;
-  const groups: Array<{ level: boolean; piped: boolean; was: State; from: number }> = [];
+  const groups: Array<{ level: boolean; piped: boolean; was: State; from: number; head: number }> = [];
   const group = (word: string, was: State | null) => {
     if (was !== null) {
-      groups.push({ level, piped, was, from: s.parts.length });
+      groups.push({ level, piped, was, from: s.parts.length, head });
       level ||= piped;
       piped = false;
     } else if (CLOSES.has(word) && groups.length > 0) {
@@ -385,6 +386,8 @@ function scan_list(s: Scan, close: string): void {
       level = g.level;
       if (g.piped) {
         state_put(s, g.was);
+        s.pipes.push([g.head, s.parts.length]);
+        head = g.head;
       }
       closed = { was: g.piped ? null : g.was, from: g.from };
     }
@@ -1170,9 +1173,10 @@ function place(s: Scan, from: number, to: number): Span {
 
 // each part reading a pipe placed with what writes it (Part feed): the
 // parts before it in each pipeline it is in (one in a subshell piped on
-// is in that pipeline too), with the heredocs' bodies they read, once
-// the bodies are read (after their lines); where that isn't known (a
-// group's, { ...; } | sh, a loop's, >(...)'s), all the command read
+// is in that pipeline too, as is one in a group or a loop a pipe goes
+// into), with the heredocs' bodies they read, once the bodies are read
+// (after their lines); where that isn't known (a group's or a loop's
+// piped on, { ...; } | sh; >(...)'s), all the command read
 function pipe_feeds(s: Scan): void {
   for (const [from, to] of s.pipes) {
     let feed: Span | null = null;
