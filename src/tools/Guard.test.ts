@@ -2,13 +2,18 @@
 // ==========
 // `bun test Guard.test.ts`. auto runs all in the project, reads outside
 // it, the network, plain pushes and deploys, and asks what changes
-// outside it, or reads there by a command that may change things (once
-// per folder, a sibling repo's whole), a folder there holding a secret
-// store, what it can't place, root, disks and the system, what deletes
-// for good on another computer (a force push, a remote branch, a
-// repository, a package, cloud resources) and what makes git run a
-// program (its hooks and config, git config's keys that name one, git
-// -c's), those exactly, and illi's own config. Secrets are
+// outside it (placed as the system finds it: a .. after a link, a glob's
+// matches, a brace to ~, a cd behind builtin, command or time, an
+// archive tool's glued value), or reads there by a command that may
+// change things (once per folder, a sibling repo's whole), a folder
+// there holding a secret store, what it can't place, root, disks, their
+// volumes and the system, an archive extracted with its names kept
+// whole, what deletes for good on another computer (a force push, a
+// remote branch, a repository, a package, cloud resources), what makes
+// git run a program (its hooks and config, git config's keys that name
+// one, git -c's) and Claude Code's settings (at any depth, home's, a
+// .claude folder moved into place), those exactly, and illi's own
+// config; git's refs are never files. Secrets are
 // asked through any tool in every mode but yolo, never by a folder
 // grant. careful runs routine work; each risk is asked about with
 // why (every bypass the reviews found among them; inline code with no
@@ -688,6 +693,185 @@ test("what makes git run a program is asked in auto as in careful, granted only 
   expect(judge("git config alias.st status")).toBe("ask: git config alias.st status sets git config that changes what git runs");
   expect(judge("git config --global user.name x")).toBe("ask: git config --global user.name x changes git for every repository");
   expect([judge("git config -f .gitmodules submodule.lib.url ../lib"), judge("git config -f .gitmodules submodule.lib.url ../lib", { mode: "auto" })]).toEqual(["ask: .gitmodules configures tools or illi (protected)", "run"]);
+});
+
+// a command asked in auto and careful with why (part of it); yolo runs it
+function asked(command: string, why: string, over: Partial<Where> = {}): void {
+  for (const mode of ["auto", "careful"] as const) {
+    const got = judge(command, { mode, ...over });
+    expect([mode, command, got.startsWith("ask: "), got.includes(why) ? why : got]).toEqual([mode, command, true, why]);
+  }
+  expect([command, judge(command, { mode: "yolo", ...over })]).toEqual([command, "run"]);
+}
+
+test("a write or delete is placed as the system finds it, asked in auto and careful where that is outside the project: a .. after a link from where the link leads, a glob's matches before a / or a .., a brace to ~, a cd behind builtin, command or time (one another program runs leaves the folder unknown); a name made as it runs is a plain folder, but where the command makes links (one may be climbed out of)", () => {
+  const top = TMP + "/linked";
+  fs.mkdirSync(top + "/.git", { recursive: true });
+  fs.mkdirSync(top + "/src", { recursive: true });
+  fs.symlinkSync("/usr/bin", top + "/link");
+  const bin = fs.realpathSync("/usr/bin");
+  const up = path.dirname(bin);
+  const linked = { cwd: top, top };
+  asked("rm -rf link/../y", up + "/y is outside the project", linked);
+  asked("echo x > link/../y", up + "/y is outside the project", linked);
+  asked("cd link && rm -rf ../y", up + "/y is outside the project", linked);
+  asked("cd -P link/.. && rm -rf y", up + "/y is outside the project", linked);
+  asked("rm -rf ./*/y", bin + "/y is outside the project", linked);
+  asked("rm -rf ./*/../y", up + "/y is outside the project", linked);
+  asked("rm -rf {~,x}/y-illi-test", "~/y-illi-test is outside the project");
+  asked("echo x > {~/.bashrc,}", "~/.bashrc is outside the project");
+  asked("rm -rf ~{,}", "rm -rf ~{,} deletes ~, a folder that matters");
+  asked("rm -rf ./*/../../x-illi-test", "/work/illi-test/x-illi-test is outside the project", { cwd: AWAY, top: AWAY });
+  for (const wrap of ["builtin", "command", "time"]) {
+    asked(wrap + " cd ~/x-illi-test && rm -rf y", "~/x-illi-test/y is outside the project");
+  }
+  asked("builtin pushd ~/x-illi-test && touch y", "~/x-illi-test/y is outside the project");
+  asked("env cd ~/x-illi-test && rm -rf y", "y is known only as it runs");
+  asked("exec cd ~/x-illi-test; rm -rf y", "y is known only as it runs");
+  asked("ln -s /tmp src/l && rm -rf src/l/../../x-illi-test", "src/l/../../x-illi-test is known only as it runs", linked);
+  for (const command of ["rm -rf src/../build", "mkdir -p build/../dist && touch build/../dist/x", "mkdir out && cd out && cmake .. && touch ../out/y", "ls link/ && cat link/../share/x", "cd link/.. && rm -rf src/old", "ln -s ../a.txt src/b.txt && rm -rf src/../build"]) {
+    expect([command, judge(command, { mode: "auto", ...linked })]).toEqual([command, "run"]);
+  }
+});
+
+test("an archive or patch tool's value glued to its option names a file as the next word does (tar -cf/x, -C/x, patch -o/x, unzip -d/x, 7z -o/x, cpio -F/x), asked outside the project in auto and careful; one extracting with its names kept whole (tar -P, unzip -:, 7z -spf, cpio without --no-absolute-filenames) asked exactly; other values, scratch and the rest run", () => {
+  const asks: [string, string][] = [
+    ["tar -cf/work/illi-test/x.tar src", "/work/illi-test/x.tar is outside the project"],
+    ["tar -czvf/work/illi-test/x.tgz src", "/work/illi-test/x.tgz is outside the project"],
+    ["tar -C/work/illi-test/out -xf a.tar", "/work/illi-test/out is outside the project"],
+    ["tar -xf a.tar -C/work/illi-test/out", "/work/illi-test/out is outside the project"],
+    ["tar -xf a.tar -C /work/illi-test/out", "/work/illi-test/out is outside the project"],
+    ["tar --file=/work/illi-test/x.tar -c src", "/work/illi-test/x.tar is outside the project"],
+    ["patch -o/work/illi-test/a.c a.c", "/work/illi-test/a.c is outside the project"],
+    ["patch -p1 -d/work/illi-test/lib < x.patch", "/work/illi-test/lib is outside the project"],
+    ["patch -B/work/illi-test/bak/ -p1 < x.patch", "/work/illi-test/bak is outside the project"],
+    ["patch --directory=/work/illi-test/lib -p1 < x.patch", "/work/illi-test/lib is outside the project"],
+    ["unzip -d/work/illi-test/out a.zip", "/work/illi-test/out is outside the project"],
+    ["unzip a.zip -d /work/illi-test/out", "/work/illi-test/out is outside the project"],
+    ["7z x -o/work/illi-test/out a.7z", "/work/illi-test/out is outside the project"],
+    ["7z a -w/work/illi-test/tmp x.7z src", "/work/illi-test/tmp is outside the project"],
+    ["cpio -ovF/work/illi-test/x.cpio < list", "/work/illi-test/x.cpio is outside the project"],
+    ["cpio -o -O /work/illi-test/x.cpio < list", "/work/illi-test/x.cpio is outside the project"],
+  ];
+  for (const [command, why] of asks) {
+    asked(command, why);
+  }
+  for (const command of ["tar -xPf a.tar", "tar xPf a.tar", "tar -x -P -f a.tar", "tar --absolute-names -xf a.tar", "unzip -: a.zip", "7z x -spf a.7z", "cpio -idmv < a.cpio"]) {
+    exactly(command, "extracts files wherever their names say (absolute names kept)");
+  }
+  const runs = [
+    "tar -cf/tmp/illi-x.tar src", "tar -xzf a.tgz -Cbuild", "tar -czf out.tgz -b20 src", "tar -cPf x.tar src", "tar -tvPf x.tar", "patch -p1 < x.patch",
+    "patch -p1 -i fix.patch", "patch -p1 -z.orig < x.patch", "unzip -o a.zip -d build", "7z x a.7z -aoa -y -obuild", "cpio -idmv --no-absolute-filenames < a.cpio",
+    "cpio -o < list > a.cpio",
+  ];
+  for (const command of runs) {
+    for (const mode of ["auto", "careful"] as const) {
+      expect([mode, command, judge(command, { mode })]).toEqual([mode, command, "run"]);
+    }
+  }
+});
+
+test("Claude Code's settings are asked in auto as in careful, granted only exactly, through any tool: home's, a .claude folder's at any depth, a .claude folder moved, copied or linked into place, or deleted; its other files, and reading any, run in auto", () => {
+  const sets: [string, string][] = [
+    ["echo '{}' > ~/.claude/settings.json", "~/.claude/settings.json sets what Claude Code runs unasked"],
+    ["cp x ~/.claude/settings.local.json", "~/.claude/settings.local.json sets what Claude Code runs unasked"],
+    ["echo '{}' > packages/web/.claude/settings.json", "packages/web/.claude/settings.json sets what Claude Code runs unasked"],
+    ["sed -i 's/a/b/' apps/api/.claude/settings.local.json", "apps/api/.claude/settings.local.json sets what Claude Code runs unasked"],
+    ["ln -s /tmp/illi-x .claude/settings.json", ".claude/settings.json sets what Claude Code runs unasked"],
+    ["mv x .claude", ".claude holds Claude Code's settings (what it runs unasked)"],
+    ["mv .claude.new .claude", ".claude holds Claude Code's settings (what it runs unasked)"],
+    ["cp -r evil/.claude .", ".claude holds Claude Code's settings (what it runs unasked)"],
+    ["cp -r evil/.claude packages/web/", "packages/web/.claude holds Claude Code's settings (what it runs unasked)"],
+    ["cp -rt . evil/.claude", ".claude holds Claude Code's settings (what it runs unasked)"],
+    ["rsync -a evil/.claude .", ".claude holds Claude Code's settings (what it runs unasked)"],
+    ["ln -s /tmp/illi-x/.claude .", ".claude holds Claude Code's settings (what it runs unasked)"],
+    ["ln -s ../shared/.claude", ".claude holds Claude Code's settings (what it runs unasked)"],
+    ["echo '{}' > .Claude/Settings.json", ".Claude/Settings.json sets what Claude Code runs unasked"],
+    ["cp settings.json .claude/", ".claude holds Claude Code's settings (what it runs unasked)"],
+    ["rm -rf .claude", ".claude holds Claude Code's settings (what it runs unasked)"],
+  ];
+  for (const [command, why] of sets) {
+    exactly(command, why);
+  }
+  const folders = new Set(["write:" + HOME + "/.claude/*", "write:" + TOP + "/*"]);
+  expect(judge("echo '{}' > ~/.claude/settings.json", { mode: "auto", grants: folders })).toStartWith("ask: ");
+  for (const p of [HOME + "/.claude/settings.json", "packages/web/.claude/settings.local.json"]) {
+    for (const mode of ["auto", "careful"] as const) {
+      expect([mode, p, Guard.check(where({ mode, grants: folders }), "write", { path: p, content: "{}" })]).toMatchObject([mode, p, { $: "ask", why: expect.stringContaining("sets what Claude Code runs unasked") }]);
+    }
+  }
+  expect(Guard.hosted(where({ mode: "auto" }), "Write", { file_path: HOME + "/.claude/settings.json", content: "{}" }).$).toBe("ask");
+  for (const command of ["mkdir -p .claude/commands && echo x > .claude/commands/review.md", "cp x .claude/commands/", "cat .claude/settings.json ~/.claude/settings.json packages/web/.claude/settings.json"]) {
+    expect([command, judge(command, { mode: "auto" })]).toEqual([command, "run"]);
+  }
+});
+
+test("root and disks are asked in auto as in careful, granted only exactly: sudoedit and sudo -e as root; the volume managers' verbs (LVM's, ZFS's, diskutil's, dmsetup's) that can wipe a disk, or change the system; their listings run", () => {
+  const asks: [string, string][] = [
+    ["sudoedit /etc/hosts", "sudoedit /etc/hosts runs as root"],
+    ["sudo -e /etc/hosts", "sudoedit /etc/hosts runs as root"],
+    ["lvremove -f vg0/data", "lvremove -f vg0/data can wipe a disk"],
+    ["vgremove vg0", "vgremove vg0 can wipe a disk"],
+    ["pvcreate /dev/sdz", "can wipe a disk"],
+    ["lvcreate -L 1G -n x vg0", "can wipe a disk"],
+    ["lvreduce -L -1G vg0/data", "can wipe a disk"],
+    ["lvm lvremove vg0/data", "can wipe a disk"],
+    ["zfs destroy -r tank/data", "zfs destroy -r tank/data can wipe a disk"],
+    ["zfs rollback tank/data@x", "can wipe a disk"],
+    ["zpool destroy tank", "can wipe a disk"],
+    ["zpool create tank /dev/sdz", "can wipe a disk"],
+    ["diskutil eraseDisk APFS X disk9", "diskutil eraseDisk APFS X disk9 can wipe a disk"],
+    ["diskutil partitionDisk disk9 GPT APFS X 100%", "can wipe a disk"],
+    ["diskutil apfs deleteContainer disk9", "can wipe a disk"],
+    ["dmsetup remove x", "dmsetup remove x can wipe a disk"],
+    ["dmsetup wipe_table x", "can wipe a disk"],
+    ["dmsetup create x --table '0 8 zero'", "can wipe a disk"],
+    ["lvextend -L +1G vg0/data", "lvextend -L +1G vg0/data changes the system"],
+    ["zfs snapshot tank/data@x", "changes the system"],
+    ["diskutil unmount disk9s1", "changes the system"],
+  ];
+  for (const [command, why] of asks) {
+    exactly(command, why);
+  }
+  const runs = ["lvs", "vgs -o +devices", "pvdisplay", "lvm version", "zfs list -t snapshot", "zfs get all tank", "zpool status -v", "diskutil list", "diskutil info disk9", "diskutil apfs list", "dmsetup ls", "dmsetup table", "lvremove --help"];
+  for (const command of runs) {
+    for (const mode of ["auto", "careful"] as const) {
+      expect([mode, command, judge(command, { mode })]).toEqual([mode, command, "run"]);
+    }
+  }
+});
+
+test("git's refs are never files: a branch, tag or revision named token-x runs in auto and careful; its paths stay paths (a file that exists, for a subcommand taking either, as git tells them apart; a revision's file, HEAD:.env; a message's file, -F)", () => {
+  const runs = [
+    "git checkout -b feature/token-x", "git checkout -B fix-secrets origin/fix-secrets", "git switch -c fix-secret-handling", "git switch fix-secret-handling",
+    "git branch token-refresh", "git branch -m token-old token-new", "git tag v1-credentials", "git tag -a v1-credentials -m 'release'", "git log --oneline feature/token-refresh",
+    "git merge --no-ff token-x", "git rebase origin/fix-secrets", "git cherry-pick token-fix", "git checkout fix-secret-handling", "git diff main..fix-token",
+    "git show v1-credentials", "git grep token", "git clone git@github.com:o/token-service.git", "git clone -b token-x https://example.com/o/r.git",
+    "git worktree add -b token-x wt-illi-test", "git stash push -m 'token wip'", "git diff ..fix-token", "git log main...token-x",
+  ];
+  for (const command of runs) {
+    for (const mode of ["auto", "careful"] as const) {
+      expect([mode, command, judge(command, { mode })]).toEqual([mode, command, "run"]);
+    }
+  }
+  const asks = [
+    "git add .env", "git rm --cached .env", "git mv .env .env.bak", "git checkout -- .env", "git restore --source=HEAD~1 .env", "git checkout HEAD~1 .env",
+    "git show HEAD:.env", "git show :.env", "git cat-file -p HEAD:config/credentials.json", "git log -p -- .env", "git tag -F .env v1", "git commit -F .env",
+    "git notes add -F .env", "git checkout .env", "git reset .env", "git diff .env", "git log -p .env.local", "git diff src/.env.production",
+  ];
+  for (const command of asks) {
+    asked(command, "may hold secrets");
+  }
+  const repo = TMP + "/repo-refs";
+  fs.mkdirSync(repo + "/.git", { recursive: true });
+  fs.mkdirSync(repo + "/config", { recursive: true });
+  fs.writeFileSync(repo + "/config/token.json", "{}");
+  const at = { cwd: repo, top: repo };
+  asked("git log -p config/token.json", "config/token.json may hold secrets", at);
+  asked("git diff config/token.json", "config/token.json may hold secrets", at);
+  asked("git checkout config/token.json", "config/token.json may hold secrets", at);
+  asked("git checkout config/*.json", "config/token.json may hold secrets", at);
+  expect([judge("git log -p config/token-old", { mode: "auto", ...at }), judge("git log -p config/token-old", at)]).toEqual(["run", "run"]);
 });
 
 test("read-only refuses changes, ask asks them (offering the family), yolo runs all but the user's deny and ask rules", () => {

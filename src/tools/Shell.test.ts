@@ -3,7 +3,9 @@
 // `bun test Shell.test.ts`. A command reads as bash reads it: every
 // simple command found wherever it sits (lists, pipelines, subshells,
 // substitutions, heredoc bodies, loops, bash -c, eval, trap, watch, find
-// -exec, flock), wrappers taken off, cd followed, variables, braces and
+// -exec, flock), wrappers taken off, cd followed (behind builtin, command
+// or time too; another program's leaving the folder unknown; a path
+// walked as the system walks it), variables, braces (before tildes) and
 // the folder's own outputs ($(pwd)) expanded as far as known (an
 // unquoted one split and globbed as bash would; a [ without its ] not),
 // redirections with their descriptors and whether the text they feed is
@@ -123,6 +125,41 @@ test("redirections keep the descriptor written before them; fed text made as it 
   expect(redirs("bash <<EOF\necho $HOME\nEOF")).toEqual([["", "<<", true]]);
   expect(redirs("bash <<'EOF'\necho $HOME\nEOF")).toEqual([["", "<<", false]]);
   expect(parts("echo x | tee >(bash) a")).toEqual(["echo x @/w", "bash @/w [piped]", "tee /dev/fd/63 a @/w [piped]"]);
+});
+
+test("a cd behind builtin, command or the keyword time moves this shell; one another program runs (sudo, env, exec, an assignment's time) leaves its folder unknown, as an eval another program runs keeps its own; sudoedit and sudo -e run as root", () => {
+  for (const wrap of ["builtin", "command", "command -p", "time", "time -p"]) {
+    expect(parts(wrap + " cd /tmp; ls")).toEqual(["cd /tmp @/w", "ls @/tmp"]);
+  }
+  expect(parts("builtin pushd /tmp; ls")).toEqual(["pushd /tmp @/w", "ls @/tmp"]);
+  expect(parts("command -v cd; ls")).toEqual(["command -v cd @/w", "ls @/w"]);
+  expect(parts("sudo cd /tmp; ls")).toEqual(["cd /tmp @/w [root]", "ls @null"]);
+  expect(parts("env cd /tmp; ls; exec cd /; ls")).toEqual(["cd /tmp @/w", "ls @null", "cd / @null", "ls @null"]);
+  expect(parts("X=1 time cd /tmp; ls")).toEqual(["X=1 cd /tmp @/w", "ls @null"]);
+  expect(parts("command time cd /tmp; ls")).toEqual(["cd /tmp @/w", "ls @null"]);
+  expect(parts("nohup eval 'cd /tmp'; ls")).toEqual(["cd /tmp @/w", "ls @/w"]);
+  expect(parts("sudoedit /etc/hosts; sudo -e /etc/hosts")).toEqual(["sudoedit /etc/hosts @/w [root]", "sudoedit /etc/hosts @/w [root]"]);
+});
+
+test("braces expand before tildes, as bash does: {~,x}/y is home's y, ~{,/x} home and its x; a ~ another user's, or one whose name goes on past the brace, known only as it runs", () => {
+  expect(parts("rm -rf {~,x}/y ~{,/x}")).toEqual(["rm -rf " + HOME + "/y|x/y " + HOME + "|" + HOME + "/x @/w"]);
+  expect(parts("echo > {~/.bashrc,}")).toEqual(["echo >" + HOME + "/.bashrc| @/w"]);
+  expect(parts("ls {~+,x} a{~,b}")).toEqual(["ls /w|x a~|ab @/w"]);
+  expect(parts("ls {~root,x}; ls {~,x}y")).toEqual(["ls ~ @/w", "ls ~ @/w"]);
+});
+
+test("a path is walked as the system walks it: a .. from where the folder before it really is (link/.. where the link leads), a name not made yet as a plain folder; cd takes .. as written, cd -P as the system does", () => {
+  const dir = fs.realpathSync(fs.mkdtempSync(os.tmpdir() + "/illi-shell-links-"));
+  try {
+    fs.mkdirSync(dir + "/far/deep", { recursive: true });
+    fs.mkdirSync(dir + "/near");
+    fs.symlinkSync(dir + "/far/deep", dir + "/near/link");
+    expect([Shell.walk(dir + "/near", "link/../x"), Shell.walk(dir + "/near/link", "../x"), Shell.walk(dir, "near/new/../x"), Shell.walk(dir, "/a/./b/../c")]).toEqual([dir + "/far/x", dir + "/far/x", dir + "/near/x", "/a/c"]);
+    const at = (command: string) => (Shell.parse(command, dir + "/near") as Part[]).at(-1)!.cwd;
+    expect([at("cd link/.. && ls"), at("cd -P link/.. && ls"), at("cd -LP link/.. && ls"), at("cd -PL link/.. && ls")]).toEqual([dir + "/near", dir + "/far", dir + "/far", dir + "/near"]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("what bash would read in a way this can't follow is refused with why", () => {
