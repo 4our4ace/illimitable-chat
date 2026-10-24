@@ -2,20 +2,21 @@
 // ===========
 // The user's permission file (config.PERMISSIONS: permissions.json in
 // illi's folder, a profile's in its own), read by the checks (Guard.ts)
-// before each call they judge:
+// before each call they judge, in every mode:
 //
 //     { "rules":    { "shell": { "git push *": "ask", "rm -rf /*": "deny", "bun *": "allow" },
 //                     "read":  { "~/notes/*": "allow" },
 //                     "write": { "~/scratch/*": "allow" },
 //                     "mcp":   { "mcp__github__*": "ask" } },
-//       "projects": { "/home/me/app": { "granted": ["shell:git commit *", "write=/home/me/app/.npmrc"] } } }
+//       "projects": { "/home/me/app": { "granted": ["read:/home/me/lib/*", "shell:git push *", "write=/home/me/app/.npmrc"] } } }
 //
 // rules are the user's, written by hand (Guard.Rules); granted, by
 // project (its folder: Trusted.folder), illi's, kept by a question's
-// "don't ask again" (Guard's grants). Read again whenever the file
-// changes, so a hand edit counts at the next call. A file that won't
-// read, or a rule that isn't allow, ask or deny, is said, never taken as
-// no rules: the caller asks about everything then (Tools.guard). A save
+// "don't ask again" (Guard's grants: in auto mostly a folder outside the
+// project, read:/x/*; in careful a family too). Read again whenever the
+// file changes, so a hand edit counts at the next call. A file that
+// won't read, or a rule that isn't allow, ask or deny, is said, never
+// taken as no rules: the caller asks about everything then (Tools.guard). A save
 // reads the file again just before, so what another illi or a hand edit
 // put there stays, then writes a temporary file and renames it over, so
 // a crash never leaves half a file; one that won't read isn't written.

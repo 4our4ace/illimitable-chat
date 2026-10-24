@@ -1,6 +1,6 @@
 // Permission commands test
 // ========================
-// `bun test PermCommands.test.ts`. /mode lists the four modes, the one
+// `bun test PermCommands.test.ts`. /mode lists the five modes, the one
 // now marked, the setting's said; Enter switches this session's (the
 // setting's own: follow it again), said in a note; a mode typed switches
 // at once, one unknown says so. /permissions lists the requests refused
@@ -54,21 +54,25 @@ const keys = (t: any, ...ks: string[]) => ks.forEach((k) => term_grab(t, k));
 // the acts sent, without their ids
 const sent = (t: any) => t.v.out.map((o: any) => o.msg).map(({ id, ...m }: any) => m);
 
-test("/mode: the four, the one now marked, the setting's said; Enter switches this session's, the setting's own following it again", () => {
+test("/mode: the five, the one now marked, the setting's said; Enter switches this session's, the setting's own following it again", () => {
   const t = term("ask");
   term_mode(t, "");
-  expect(t.choose.names).toEqual(["auto", "ask", "read-only", "yolo"]);
-  expect(t.choose.aside).toEqual(["the setting's", "", "", ""]);
-  expect([t.choose.here, lit(t)]).toEqual([1, "ask"]);
+  expect(t.choose.names).toEqual(["auto", "careful", "ask", "read-only", "yolo"]);
+  expect(t.choose.aside).toEqual(["the setting's", "", "", "", ""]);
+  expect(t.choose.about.slice(0, 2)).toEqual(["everything in the project runs; outside it, the system and secrets are asked", "reads and changes in the project run; risky calls are asked"]);
+  expect([t.choose.here, lit(t)]).toEqual([2, "ask"]);
   keys(t, "Down", "Down", "Enter");
   expect(note(t)).toBe("Mode: yolo, this session (everything runs, but what your rules refuse or ask).");
   term_mode(t, "");
-  keys(t, "Up", "Enter");
+  keys(t, "Up", "Up", "Enter");
   expect(sent(t)).toEqual([{ $: "mode", mode: "yolo" }, { $: "mode", mode: null }]);
   term_mode(t, "Read-Only");
-  term_mode(t, "nope");
   expect(sent(t).at(-1)).toEqual({ $: "mode", mode: "read-only" });
-  expect(note(t)).toBe("No mode nope: auto, ask, read-only or yolo.");
+  term_mode(t, "careful");
+  expect(sent(t).at(-1)).toEqual({ $: "mode", mode: "careful" });
+  expect(note(t)).toBe("Mode: careful, this session (reads and changes in the project run; risky calls are asked).");
+  term_mode(t, "nope");
+  expect(note(t)).toBe("No mode nope: auto, careful, ask, read-only or yolo.");
 });
 
 test("/permissions: refused (newest first), grants (kept, then this session's), the rules, each group headed; the lit one given", () => {
@@ -137,6 +141,7 @@ test("the side lists the latest refused, newest first, a click opening /permissi
   const line = (v: any, w: number) => Paint.tabs_line(v, w).map((r) => r.x).join("");
   expect(line(t.v, 80)).toEndWith(" auto mode");
   expect(line(t.v, 40)).not.toContain("mode");
+  expect(line(term("careful").v, 80)).toEndWith(" careful mode");
   const yolo = Paint.tabs_line(term("yolo").v, 80).at(-1)!;
   expect([yolo.x, yolo.s.b, yolo.s.c]).toEqual(["yolo mode", true, Draw.draw_tokens().error]);
 });

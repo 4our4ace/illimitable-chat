@@ -29,8 +29,9 @@ import * as path from "node:path";
 // a word as bash would expand it: each value it can take (one, or a
 // variable's several), as written (raw); dynamic: only its head (alts)
 // is known before it runs; glob: an unquoted *, ?, [ or {; fd: a
-// process substitution's /dev/fd file
-export type Word = { alts: string[]; raw: string; dynamic: boolean; glob: boolean; fd: boolean };
+// process substitution's /dev/fd file; input: one xargs gives from its
+// input
+export type Word = { alts: string[]; raw: string; dynamic: boolean; glob: boolean; fd: boolean; input?: boolean };
 
 // a redirection: its operator (">", ">>", "<", "&>", "<<", ">&", ...) and
 // its target (a file; a descriptor for >& and <&; a heredoc's delimiter),
@@ -1108,7 +1109,9 @@ function cmd_after(s: Scan, argv: Word[]): void {
   }
 }
 
-// a command's wrappers taken off, each as it runs what follows it; a
+// a command's wrappers taken off, each as it runs what follows it (the
+// words xargs adds known only as it runs: one more word, or, with -I,
+// each word holding its mark); a
 // shell's -c script, an eval's words, a trap's action and a watch's
 // command read as commands of their own; find's -exec commands too, each
 // {} standing for what find searches (its start folders)
@@ -1151,8 +1154,10 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
         }
       }
       if (name === "xargs") {
+        const mark = got.get("-I")?.alts[0] ?? (got.has("-i") ? got.get("-i")!.alts[0] || "{}" : null);
         ctx = { ...ctx, fed: true };
         next = next.length === 0 ? [Shell.lit("echo")] : next;
+        next = mark === null || got.get("-I")?.dynamic ? [...next, { ...DYN, input: true }] : next.map((w) => (w.alts.some((a) => a.includes(mark)) ? { ...DYN, raw: w.raw, input: true } : w));
       }
       if (name === "flock" && /^(-c|--command)$/.test(next[0]?.raw ?? "")) {
         nested(s, next[1] ?? DYN, ctx, true);

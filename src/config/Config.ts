@@ -103,7 +103,7 @@ const TABLE = {
   after      : { def: "", values: "text", now: true, what: "a command after each turn" },
   off        : { def: "", values: "text", now: true, what: "skills, agents, commands, MCP servers, plugins (or a plugin's part, as plugin:name) and hooks.json turned off", none: "none" },
   sticky     : { def: "", values: "text", now: true, what: "sticky skills on, in every turn", none: "none" },
-  mode       : { def: "auto", values: ["auto", "ask", "read-only", "yolo"], now: true, what: "what runs without asking", shape: [/^(read-only|ask|auto|yolo)$/, "read-only, ask, auto or yolo"] },
+  mode       : { def: "auto", values: ["auto", "careful", "ask", "read-only", "yolo"], now: true, what: "what runs without asking", shape: [/^(read-only|ask|careful|auto|yolo)$/, "read-only, ask, careful, auto or yolo"] },
   permissions: { def: DIR + "/permissions.json", values: "text", now: false, what: "your permission rules and grants", path: true },
   vendors    : { def: "chatgpt", values: "text", now: false, what: "where models come from" },
   models     : { def: "", values: "text", now: false, what: "the models offered", none: "all" },

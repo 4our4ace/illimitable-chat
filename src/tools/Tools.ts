@@ -783,7 +783,7 @@ export namespace Tools {
     const perms  = Permissions.read(config.PERMISSIONS, folder);
     const ok     = typeof perms !== "string";
     const grants = new Set([...(ok ? perms.granted : []), ...tools.perm.granted]);
-    const got    = judge({ mode: hooked.allow === true ? "yolo" : Tools.mode(tools), cwd: Projects.real(tools.cwd), top: folder, rules: ok ? perms.rules : {}, grants, reads: Custom.dirs(tools.cwd, "skills").map(Projects.real), plugins: Plugins.roots() });
+    const got    = judge({ mode: hooked.allow === true ? "yolo" : Tools.mode(tools), cwd: Projects.real(tools.cwd), top: folder, rules: ok ? perms.rules : {}, grants, reads: (["skills", "commands", "agents"] as const).flatMap((k) => Custom.dirs(tools.cwd, k)).map(Projects.real), plugins: Plugins.roots() });
     const broken = "illi can't read your permission rules (" + perms + ")";
     const judged: Verdict = ok || got.$ === "deny" ? got : { $: "ask", why: got.$ === "ask" ? got.why + "; " + broken : broken, always: [], exact: got.$ === "ask" ? got.exact : [] };
     const verdict: Verdict = hooked.ask === undefined || judged.$ === "deny" ? judged : { $: "ask", why: judged.$ === "ask" ? hooked.ask + "; " + judged.why : hooked.ask, always: [], exact: judged.$ === "ask" ? judged.exact : [] };

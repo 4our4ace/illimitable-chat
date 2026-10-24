@@ -3,12 +3,37 @@
 // Whether a tool call may run before it does: run, asked about (the user
 // says yes or no, told why), or refused. Deterministic: the call is read
 // (a shell command by Shell.ts, as bash reads it), its risks found as
-// flags, and the mode decides what is left:
+// flags, each of a tier (the modes that ask it), and the mode decides
+// what is left:
 //
-//   read-only  reads run; changes are refused; flags are asked
-//   ask        reads run; changes and flags are asked
-//   auto       reads and changes run; flags are asked
+//   read-only  reads run; changes are refused; careful's flags are asked
+//   ask        reads run; changes and careful's flags are asked
+//   careful    reads and changes run; its flags are asked
+//   auto       all runs but auto's flags (the default)
 //   yolo       all runs
+//
+// auto's flags: a file changed, deleted or moved outside the project,
+// or read there (once per folder, a folder grant: the system's folders,
+// scratch, the dependency caches and illi's skills free); a change whose
+// file is known only as it runs ($X, $(...), what xargs adds); root,
+// disks, the system's services and settings, power; a secret through the
+// read tool (.env), or in a key or credential store; Claude Code's
+// settings and illi's own config; what Shell.ts can't read. The network,
+// pushes, inline code, project scripts and MCP tools run, as everything
+// in the project does.
+//
+// careful's, the long list: the danger list (root, deleting trees,
+// wiping disks, losing git work, sending data off, connecting out,
+// publishing, changing the system, infrastructure or the cloud,
+// assignments that change what runs, code fed into a shell from
+// elsewhere, programs that run a command they're given, inline code that
+// names what can run, write or reach out); paths (outside the project,
+// secrets anywhere, protected files inside, devices and network
+// sockets); what is known only as the command runs (a variable, a
+// command's output, a folder after a cd to one, a glob as a command's
+// name); a program, script or makefile from outside the project, a
+// project tool run outside it; what Shell.ts can't read. Whatever these
+// checks can't be sure of is asked, never run silently.
 //
 // Before the mode, the user's rules (Rules: allow, ask or deny, by
 // pattern): deny refuses, even in yolo; ask asks every time, even in
@@ -16,19 +41,9 @@
 // ("don't ask again" answers, kept by the caller) clear flags: an exact
 // one (kind=subject) any flag of that very call, a pattern (kind:pattern)
 // only flags that offer one (a family of commands, a folder, an MCP
-// tool); danger, secrets and protected files clear only exactly.
-//
-// Flags: the danger list (root, deleting trees, wiping disks, losing git
-// work, sending data off, connecting out, publishing, changing the
-// system, infrastructure or the cloud, assignments that change what
-// runs, code fed into a shell from elsewhere, programs that run a command
-// they're given); paths (outside the project, secrets anywhere,
-// protected files inside, devices and network sockets); what is known
-// only as the command runs (a variable, a command's output, a folder
-// after a cd to one, a glob as a command's name); a program, script or
-// makefile from outside the project, a project tool run outside it; what
-// Shell.ts can't read. Whatever the checks can't be sure of is asked,
-// never run silently.
+// tool); danger, secrets and protected files clear only exactly, and
+// inline code offers none. A change to illi's own config is asked in
+// every mode, yolo too.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -39,8 +54,8 @@ import { Shell, type Part, type Redir, type Word } from "./Shell.ts";
 // Types
 // =====
 
-export type Mode = "read-only" | "ask" | "auto" | "yolo";
-export const MODES: Mode[] = ["read-only", "ask", "auto", "yolo"];
+export type Mode = "read-only" | "ask" | "careful" | "auto" | "yolo";
+export const MODES: Mode[] = ["read-only", "ask", "careful", "auto", "yolo"];
 
 export type Rule = "allow" | "ask" | "deny";
 
@@ -58,8 +73,9 @@ export type Hints = { read: boolean; destructive: boolean };
 
 // where a call is judged: the mode, the working dir, the project's top,
 // the user's rules, the grants (kind=subject, kind:pattern), the folders
-// read freely besides (illi's skills'), the loaded plugins' folders (read
-// freely but their secrets; their scripts run as the project's)
+// read freely besides (illi's skills', commands' and agents'), the loaded
+// plugins' folders (read freely but their secrets; their scripts run as
+// the project's)
 export type Where = { mode: Mode; cwd: string; top: string; rules: Rules; grants: Set<string>; reads: string[]; plugins: string[] };
 
 // a verdict: run; ask (why; the grants a "don't ask again" keeps, none
@@ -71,15 +87,27 @@ export type Verdict =
   | { $: "ask"; why: string; always: string[]; exact: string[] }
   | { $: "deny"; why: string; rule: boolean; exact: string[] };
 
+// the modes that ask a flag: every one, yolo too (self: a change to
+// illi's own config); every one but yolo (all: what auto asks); careful,
+// ask and read-only (careful: the long list); auto alone (auto: what
+// careful asks another way)
+type Tier = "self" | "all" | "careful" | "auto";
+
 // a reason to ask: why; what an exact grant names (kind=subject); what a
 // pattern grant may clear it for (its kind and subject, the pattern a
-// "don't ask again" offers), if any; whether it is the user's own ask
-// rule (never cleared); whether it changes illi's own config (asked in
-// every mode, yolo too, unless granted)
-type Flag = { why: string; kind: Kind; subject: string; wide: { kind: Kind; subject: string; grant: string } | null; rule?: boolean; self?: boolean };
+// "don't ask again" offers), if any; the modes that ask it; whether it
+// is the user's own ask rule (asked in every mode, never cleared);
+// whether it is a one-off (inline code: no "don't ask again", as its
+// exact grant would never match again)
+type Flag = { why: string; kind: Kind; subject: string; wide: { kind: Kind; subject: string; grant: string } | null; tier: Tier; rule?: boolean; once?: boolean };
 
-// how a command's checks flag it (look_part's: its exact subject)
-type Flagger = (why: string, wide?: Flag["wide"], self?: boolean) => void;
+// how a command's checks flag it (look_part's: its exact subject), of
+// careful's list unless told
+type Flagger = (why: string, wide?: Flag["wide"], tier?: Tier, once?: boolean) => void;
+
+// why a file is asked about (path_why): whether a folder grant may clear
+// it (wide), the modes that ask it
+type Reason = { why: string; wide: boolean; tier: Tier };
 
 // what a call was found to do: refused by the user's rules (why), its
 // flags, and its changes (flags only the modes read-only and ask act on);
@@ -103,6 +131,17 @@ const READS = new Set([
   "zcat", "zless", "zgrep", "bzcat", "xzcat", "man", "info", "uniq", "tr",
 ]);
 
+// the searches whose first word is a pattern (none when -e or -f gives
+// it, rg's --files, ag's -g): the letters and long options that take a
+// value (-A 3, -g '*.ts', --type py), by program (egrep, fgrep, zgrep as
+// grep)
+const SEARCHES: Record<string, [string, RegExp]> = {
+  grep : ["efmABCdD", /^--(regexp|file|max-count|after-context|before-context|context|directories|devices|label|include|exclude|exclude-dir|exclude-from|binary-files|group-separator)$/],
+  rg   : ["efgtTABCmMjrdE", /^--(regexp|file|glob|iglob|type|type-not|after-context|before-context|context|max-count|max-columns|threads|replace|max-depth|encoding|sort|sortr|type-add|type-clear|pre|pre-glob|ignore-file|colors|context-separator|field-match-separator|path-separator|dfa-size-limit|regex-size-limit|max-filesize|engine)$/],
+  ag   : ["GgABCmp", /^--(file-search-regex|ignore|ignore-dir|path-to-ignore|depth|after|before|context|max-count)$/],
+  ack  : ["ABCm", /^--(type|ignore-dir|ignore-file|match|after-context|before-context|context|max-count|output)$/],
+};
+
 // the programs and builtins whose words aren't files
 const WORDS = new Set([
   "echo", "printf", "sleep", "seq", "true", "false", ":", "date", "whoami", "id", "uname", "hostname", "nproc", "export",
@@ -113,7 +152,7 @@ const WORDS = new Set([
 ]);
 
 // the programs whose files are written (all their words, or, for those
-// copying, the last: the rest are read)
+// copying, the last: the rest are read; ln's all, ln_use)
 const WRITERS = new Set([
   "rm", "rmdir", "unlink", "shred", "truncate", "touch", "mkdir", "tee", "chmod", "chown", "chgrp", "mv", "tar", "unzip",
   "zip", "gzip", "gunzip", "bzip2", "bunzip2", "xz", "unxz", "7z", "patch", "split", "csplit", "mkfifo", "mknod", "link",
@@ -185,20 +224,40 @@ const DEVS = /^\/dev\/(null|zero|stdin|stdout|stderr|tty|u?random|fd\/\d+)$|^\/p
 const NET = /^\/dev\/(tcp|udp)\//;
 const SYSTEM = ["/usr", "/bin", "/sbin", "/lib", "/lib32", "/lib64", "/libx32", "/opt", "/etc", "/proc", "/sys", "/nix", "/snap", "/System", "/Library", "/Applications", "/private/etc"];
 
+// the dependency caches, read freely in auto (the packages' sources a
+// model looks up): those kept in home (cargo's and go's where their
+// variables put them), and a site-packages or node_modules folder
+// anywhere
+const DEPS = [
+  ...[".cargo/registry", ".cargo/git", ".rustup/toolchains", "go/pkg/mod", ".npm", ".nvm/versions", ".bun/install/cache", ".pnpm-store",
+    ".local/share/pnpm", ".yarn/berry/cache", ".cache/yarn", ".cache/deno", ".m2/repository", ".gradle/caches", ".gem", ".pub-cache/hosted",
+    ".pub-cache/git", ".nuget/packages", ".pyenv/versions", ".rbenv/versions", ".local/share/uv", ".cache/uv", ".cache/pip"].map((d) => path.join(HOME, d)),
+  ...(process.env.CARGO_HOME ? ["registry", "git"].map((d) => path.join(Projects_real(process.env.CARGO_HOME!), d)) : []),
+  ...(process.env.RUSTUP_HOME ? [path.join(Projects_real(process.env.RUSTUP_HOME), "toolchains")] : []),
+  ...(process.env.GOMODCACHE || process.env.GOPATH ? [Projects_real(process.env.GOMODCACHE || path.join(process.env.GOPATH!.split(":")[0], "pkg/mod"))] : []),
+];
+const DEPS_PARTS = new Set(["site-packages", "dist-packages", "node_modules"]);
+
 // a plugin's files read only on asking: where the user's tokens may be
 // pasted (its MCP servers, its settings, its manifest's folder)
 const PLUGIN_KEPT = [".mcp.json", "settings.json", ".claude-plugin"];
 
-// secrets: files by name anywhere, folders and files under home, files
-// of the system
-const SECRET_NAME = /^(\.env(\.(?!(example|sample|template|dist)$)[^/]+)?|\.netrc|\.pgpass|\.git-credentials|\.npmrc|\.pypirc|\.vault-token|id_(rsa|dsa|ecdsa|ed25519)(_sk)?|.+\.(pem|key|p12|pfx|keystore|jks|kdbx))$/;
+// secrets: files by name anywhere (.env files, keys, logins, and those
+// named for the credentials, token or secrets they hold, but code and
+// docs: tokens.ts, secrets.md), key and credential stores and browser
+// profiles under home, files of the system, and illi's logins (its
+// login.json; its mcp.json, whose servers' tokens may be pasted in)
+const SECRET_NAME = /^(\.env(\.(?!(example|sample|template|dist)$)[^/]+)?|\.netrc|\.pgpass|\.git-credentials|\.npmrc|\.pypirc|\.vault-token|auth\.json|id_(rsa|dsa|ecdsa|ed25519)(_sk)?|.+\.(pem|key|p12|pfx|keystore|jks|kdbx))$/;
+const SECRET_WORD = /(^|[._-])(credentials?|token|secrets?)([._-]|$)/i;
+const CODE = /\.(m?[jt]sx?|c[jt]s|py|rs|go|java|kt|rb|php|c|cc|cpp|h|hpp|cs|swift|scala|lua|exs?|md|mdx|rst|html?|css|scss|vue|svelte|sh|snap|map)$/i;
 const SECRET_HOME = [
-  ".ssh", ".aws", ".gnupg", ".kube", ".docker", ".azure", ".config/gh", ".config/gcloud", ".config/hub", ".config/op",
-  ".config/sops", ".local/share/opencode", ".codex", ".claude", ".claude.json", ".password-store", ".cargo/credentials",
-  ".cargo/credentials.toml", ".terraform.d", ".gem/credentials", ".mozilla", ".thunderbird", ".config/google-chrome",
-  ".config/chromium", ".config/BraveSoftware", "Library/Keychains", "Library/Application Support/Google/Chrome",
+  ".ssh", ".aws", ".gnupg", ".kube", ".docker", ".azure", ".config/gh/hosts.yml", ".config/gcloud", ".config/hub", ".config/op",
+  ".config/sops", ".claude.json", ".password-store", ".cargo/credentials", ".cargo/credentials.toml", ".terraform.d", ".gem/credentials",
+  ".mozilla", ".thunderbird", ".config/google-chrome", ".config/chromium", ".config/BraveSoftware", "Library/Keychains",
+  "Library/Application Support/Google/Chrome",
 ];
 const SECRET_SYSTEM = ["/etc/shadow", "/etc/gshadow", "/etc/sudoers", "/etc/sudoers.d", "/etc/ssh"];
+const SECRET_ILLI = /^(login|mcp)\.json$/;
 
 // protected inside the project (asked before a write): folders and
 // files that configure tools that run code, or what illi reads; and,
@@ -270,7 +329,7 @@ export namespace Guard {
         return { $: "allow" };
       }
     } catch (err: any) {
-      look.flags.push({ why: "illi's check of it failed (" + String(err?.message ?? err) + ")", kind: "shell", subject: JSON.stringify(input ?? {}), wide: null });
+      look.flags.push({ why: "illi's check of it failed (" + String(err?.message ?? err) + ")", kind: "shell", subject: JSON.stringify(input ?? {}), wide: null, tier: "all" });
     }
     return verdict(where, look);
   }
@@ -353,17 +412,18 @@ export namespace Guard {
 // Verdicts
 // ========
 
-// what is left after the rules and grants, by the mode (yolo: the user's
-// ask rules and changes to illi's own config). "Don't ask
-// again" keeps a family or folder only when every flag offers one: by a
-// dangerous flag beside an outside folder's, the exact command alone, so
-// a yes to it doesn't let the folder be written freely after
+// what is left after the rules and grants, by the mode: the flags of the
+// tiers it asks (asked; yolo: the user's ask rules and changes to illi's
+// own config). "Don't ask again" keeps a family or folder only when every
+// flag offers one: by a dangerous flag beside an outside folder's, the
+// exact command alone, so a yes to it doesn't let the folder be written
+// freely after; nothing for inline code (once)
 function verdict(where: Where, look: Look): Verdict {
   if (look.denied.length > 0) {
     return { $: "deny", why: uniq(look.denied).join("; "), rule: true, exact: [] };
   }
   const rules = look.flags.filter((f) => f.rule === true);
-  const flags = look.flags.filter((f) => f.rule === true || ((where.mode !== "yolo" || f.self === true) && !granted(where, f)));
+  const flags = look.flags.filter((f) => f.rule === true || (asked(where.mode, f.tier) && !granted(where, f)));
   const changes = where.mode === "read-only" || where.mode === "ask" ? look.changes.filter((f) => !granted(where, f)) : [];
   const exact = (fs: Flag[]) => uniq(fs.map((f) => f.kind + "=" + f.subject));
   if (where.mode === "read-only" && changes.length > 0) {
@@ -373,8 +433,13 @@ function verdict(where: Where, look: Look): Verdict {
   if (all.length === 0) {
     return { $: "allow" };
   }
-  const always = rules.length > 0 ? [] : all.some((f) => f.wide === null) ? exact(all) : uniq(all.map((f) => f.wide!.grant));
+  const always = rules.length > 0 || all.some((f) => f.once === true) ? [] : all.some((f) => f.wide === null) ? exact(all) : uniq(all.map((f) => f.wide!.grant));
   return { $: "ask", why: uniq(all.map((f) => f.why)).join("; "), always, exact: exact(all) };
+}
+
+// whether a mode asks a flag of a tier
+function asked(mode: Mode, tier: Tier): boolean {
+  return tier === "self" || (mode !== "yolo" && (tier === "all" || (tier === "auto") === (mode === "auto")));
 }
 
 // whether a grant clears a flag: an exact one of its very call, or a
@@ -422,10 +487,10 @@ function look_shell(where: Where, look: Look, command: string): void {
   }
   if (typeof parts === "string") {
     if (rule === "ask") {
-      look.flags.push({ why: "your rules ask about " + clip(text), kind: "shell", subject: text, wide: null, rule: true });
+      look.flags.push({ why: "your rules ask about " + clip(text), kind: "shell", subject: text, wide: null, tier: "all", rule: true });
     }
     if (rule !== "allow") {
-      look.flags.push({ why: "illi can't follow this command: " + parts, kind: "shell", subject: text, wide: null });
+      look.flags.push({ why: "illi can't follow this command: " + parts, kind: "shell", subject: text, wide: null, tier: "all" });
     }
     return;
   }
@@ -436,7 +501,9 @@ function look_shell(where: Where, look: Look, command: string): void {
 // a part's flags and change: by the user's rules first (an allow rule
 // covers the command itself, not what its assignments set or its
 // redirections write), then each value its command's name can take (a
-// loop's), its redirections, assignments and files. An exact grant names
+// loop's), its redirections, assignments and files, and, in auto, the
+// folder it runs in (one outside the project is read: cd ~/x && npm test
+// runs that folder's code; said only if nothing else is). An exact grant names
 // the part as it runs (Guard.norm: git push --force, and the folder a cd
 // moved it to), but one whose input comes from elsewhere (a pipe, xargs,
 // a file or heredoc read in), whose words expand as it runs ($x, $(...),
@@ -454,12 +521,13 @@ function look_part(where: Where, look: Look, part: Part, depth: number): void {
     return;
   }
   const own = rule !== "allow";
-  const flag: Flagger = (why, wide = null, self = false) => look.flags.push({ why, kind: "shell", subject: exact, wide, self });
+  const flag: Flagger = (why, wide = null, tier = "careful", once = false) => look.flags.push({ why, kind: "shell", subject: exact, wide, tier, once });
   if (rule === "ask") {
-    look.flags.push({ why: "your rules ask about " + clip(plain), kind: "shell", subject: exact, wide: null, rule: true });
+    look.flags.push({ why: "your rules ask about " + clip(plain), kind: "shell", subject: exact, wide: null, tier: "all", rule: true });
   }
+  const before = look.flags.length;
   if (part.root && own) {
-    flag(clip(plain) + " runs as root");
+    flag(clip(plain) + " runs as root", null, "all");
   }
   for (const e of part.env) {
     env_flag(e.name, e.value, flag);
@@ -470,7 +538,7 @@ function look_part(where: Where, look: Look, part: Part, depth: number): void {
   if (head !== undefined && own) {
     const heads = head.dynamic || head.glob ? null : head.alts;
     if (heads === null) {
-      flag("the command " + head.raw + " is named only as it runs");
+      flag("the command " + head.raw + " is named only as it runs", null, "all");
       change = true;
     } else {
       for (const name of heads) {
@@ -482,9 +550,13 @@ function look_part(where: Where, look: Look, part: Part, depth: number): void {
   for (const use of uses) {
     use_look(where, look, use, flag);
   }
+  if (head !== undefined && own && part.cwd !== null && !look.flags.slice(before).some((f) => f.tier === "all")) {
+    const dir = real(part.cwd);
+    path_why(where, dir, false).filter((r) => r.tier === "all").forEach((r) => flag(r.why, r.wide ? folder_wide("read", dir) : null, "auto"));
+  }
   if (change) {
     const pattern = "shell:" + prefix(part);
-    look.changes.push({ why: where.mode === "read-only" ? clip(plain) + " may change things" : "ask mode asks before " + clip(plain), kind: "shell", subject: exact, wide: where.mode === "ask" ? { kind: "shell", subject: exact, grant: pattern } : null });
+    look.changes.push({ why: where.mode === "read-only" ? clip(plain) + " may change things" : "ask mode asks before " + clip(plain), kind: "shell", subject: exact, wide: where.mode === "ask" ? { kind: "shell", subject: exact, grant: pattern } : null, tier: "careful" });
   }
 }
 
@@ -521,7 +593,9 @@ function redir_use(r: Part["redirs"][number], cwd: string | null): Use[] {
 }
 
 // a command (its name one value): its danger flags and files (pushed to
-// uses); whether it changes things
+// uses; a program named by its path, where it is, not where a link
+// there leads: a project's .venv/bin/python is the project's, read if
+// it is outside); whether it changes things
 function look_command(where: Where, look: Look, part: Part, uses: Use[], flag: Flagger, depth: number): boolean {
   const head = part.argv[0];
   const alt = head.alts[0];
@@ -530,10 +604,11 @@ function look_command(where: Where, look: Look, part: Part, uses: Use[], flag: F
   const args = part.argv.slice(1);
   const text = clip(part.text);
   const use = (w: Word, write: boolean) => uses.push({ word: w, write, cwd: part.cwd });
-  if (alt.includes("/")) {
-    const file = part.cwd === null && !path.isAbsolute(alt) ? null : real(path.resolve(part.cwd ?? "/", alt));
-    if (file === null || (!under(file, where.top) && !where.plugins.some((d) => under(file, d)) && name === "")) {
+  if (alt.includes("/") && name === "") {
+    const file = part.cwd === null && !path.isAbsolute(alt) ? null : placed(path.resolve(part.cwd ?? "/", alt));
+    if (file === null || (!under(file, where.top) && !where.plugins.some((d) => under(file, d)))) {
       flag(text + " runs a program from " + (file === null ? "a folder known only as it runs" : shown(path.dirname(file), where.top)));
+      use(head, false);
     }
   }
   if (part.fed && !READS.has(name) && !WORDS.has(name)) {
@@ -555,7 +630,11 @@ function look_command(where: Where, look: Look, part: Part, uses: Use[], flag: F
     return name === "trap" || name === "alias";
   }
   if (READS.has(name)) {
-    args_use(args, false, use);
+    if (/^(e|f|z)?grep$|^(rg|ag|ack)$/.test(name)) {
+      search_use(name, args, use);
+    } else {
+      args_use(args, false, use);
+    }
     return false;
   }
   if (WRITERS.has(base)) {
@@ -569,7 +648,11 @@ function look_command(where: Where, look: Look, part: Part, uses: Use[], flag: F
     if (into !== null) {
       use(into, true);
     }
-    pos.forEach((w, k) => use(w, dirs || (into === null && k === pos.length - 1)));
+    if (base === "ln") {
+      ln_use(args, pos, into, part.cwd, uses);
+    } else {
+      pos.forEach((w, k) => use(w, dirs || (into === null && k === pos.length - 1)));
+    }
     return true;
   }
   args_use(args, false, use);
@@ -615,9 +698,9 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
         const targets = pos.flatMap((w) => named(w, part.cwd, true) ?? [null]);
         const vital = targets.find((f) => f !== null && vital_of(where, f));
         if (vital !== undefined) {
-          flag(text + " deletes " + shown(vital!, where.top) + ", a folder that matters");
+          flag(text + " deletes " + shown(vital!, where.top) + ", a folder that matters", null, "all");
         } else if (!pos.every((w) => rebuilt(where, w, part.cwd))) {
-          flag(text + " deletes " + pos.map((w) => w.raw).join(" ") + " and all in it");
+          flag(text + " deletes " + pos.map((w) => w.raw).join(" ") + " and all in it", null, homely(where));
         }
       }
       return true;
@@ -629,14 +712,14 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
           const w = Shell.cut(a, m[0].length);
           use(w, m[1] === "of");
           if (m[1] === "of" && /^\/dev\//.test(w.alts[0]) && !DEVS.test(w.alts[0])) {
-            flag(text + " writes to a whole device");
+            flag(text + " writes to a whole device", null, "all");
           }
         }
       }
       return true;
     }
     case "mkfs": {
-      flag(text + " can wipe a disk");
+      flag(text + " can wipe a disk", null, "all");
       return true;
     }
     case "chmod":
@@ -656,7 +739,7 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
     }
     case "kill": {
       if (xs.some((x) => x === "-1") || (has("--") && xs.includes("-1"))) {
-        flag(text + " stops every process you own");
+        flag(text + " stops every process you own", null, "all");
       }
       return true;
     }
@@ -666,7 +749,7 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
     case "halt":
     case "init":
     case "telinit": {
-      flag(text + " turns the computer off or restarts it");
+      flag(text + " turns the computer off or restarts it", null, "all");
       return true;
     }
     case "systemctl":
@@ -698,7 +781,7 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
     case "firewall-cmd": {
       const reads = (base === "systemctl" && /^(status|show|list-\S+|is-\S+|cat|help)$/.test(sub)) || (base === "launchctl" && /^(list|print)$/.test(sub)) || (base === "crontab" && has("-l")) || (base === "sysctl" && !short("w") && !xs.some((x) => x.includes("=")));
       if (!reads) {
-        flag(text + " changes the system");
+        flag(text + " changes the system", null, "all");
       }
       return !reads;
     }
@@ -738,13 +821,13 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
         flag(text + " deletes containers, images or volumes");
       }
       if (has("--privileged") || xs.some((x) => /^(\/|\/var\/run\/docker\.sock)(:|$)/.test(x))) {
-        flag(text + " gives a container the whole computer");
+        flag(text + " gives a container the whole computer", null, "all");
       }
       for (const m of mounts(args, xs)) {
         const files = named(m, part.cwd);
         const out = files?.find((f) => !under(f, where.top) && !SCRATCH.some((d) => under(f, d)));
         if (files === null || out !== undefined) {
-          flag(text + " gives a container " + (files === null ? "a folder known only as it runs" : shown(out!, where.top)));
+          flag(text + " gives a container " + (files === null ? "a folder known only as it runs" : shown(out!, where.top)), null, "all");
         }
       }
       if (verb === "push" || (/^(image|manifest|buildx)$/.test(verb) && pos[1]?.alts[0] === "push") || (pos.some((w) => w.alts[0] === "build") && has("--push"))) {
@@ -1040,13 +1123,13 @@ function net_look(part: Part, base: string, args: Word[], use: (w: Word, write: 
 // write, reach out or read a secret: flagged; perl -pi's files written),
 // its script (from outside the project: flagged), or, with neither, the
 // code it reads from its input (stdin_look; a pipe's: flagged)
-function runner_look(where: Where, look: Look, part: Part, base: string, args: Word[], use: (w: Word, write: boolean) => void, flag: (why: string) => void, depth: number): boolean {
+function runner_look(where: Where, look: Look, part: Part, base: string, args: Word[], use: (w: Word, write: boolean) => void, flag: Flagger, depth: number): boolean {
   const text = clip(part.text);
   const sourced = base === "source" || base === ".";
   const inline = sourced ? null : inline_code(base, args);
   if (inline !== null) {
     if (SHELLS.has(base) || inline.some((w) => w.dynamic || risky(base, w.alts.join("\n")))) {
-      flag(text + " runs code illi can't check");
+      flag(text + " runs code illi can't check", null, "careful", true);
     }
     const inplace = /^(perl|ruby)/.test(base) && args.some((a) => !a.dynamic && /^-[A-Za-z]*i/.test(a.alts[0]));
     positional(args).filter((w) => !inline.includes(w)).forEach((w) => use(w, inplace));
@@ -1091,7 +1174,7 @@ function runner_look(where: Where, look: Look, part: Part, base: string, args: W
 // interpreter's checked by its words; made as it runs, as an expanding
 // heredoc's $x is: flagged), a file (a script: from outside the project,
 // flagged), a command's output (< <(curl ...)) or a descriptor's: flagged
-function stdin_look(where: Where, look: Look, part: Part, base: string, r: Redir, flag: (why: string) => void, depth: number): void {
+function stdin_look(where: Where, look: Look, part: Part, base: string, r: Redir, flag: Flagger, depth: number): void {
   const text = clip(part.text);
   if (r.body === undefined) {
     if (r.op === "<&" || r.target.fd) {
@@ -1108,16 +1191,16 @@ function stdin_look(where: Where, look: Look, part: Part, base: string, r: Redir
     return;
   }
   if (r.made === true) {
-    flag(text + " runs code made as it runs");
+    flag(text + " runs code made as it runs", null, "careful", true);
   } else if (SHELLS.has(base) && !ODD.has(base) && depth < 8) {
     const inner = Shell.parse(r.body, part.cwd ?? where.cwd);
     if (typeof inner === "string") {
-      flag(text + " runs a script illi can't follow: " + inner);
+      flag(text + " runs a script illi can't follow: " + inner, null, "all");
     } else {
       inner.forEach((p) => look_part(where, look, p, depth + 1));
     }
   } else if (!INTERPS.test(base) || risky(base, r.body)) {
-    flag(text + " runs code illi can't check");
+    flag(text + " runs code illi can't check", null, "careful", true);
   }
 }
 
@@ -1226,6 +1309,9 @@ function runs_given(base: string, sub: string, xs: string[], has: (...names: str
     case "sort": {
       return has("--compress-program") ? " runs a program it's given" : null;
     }
+    case "rg": {
+      return has("--pre") ? " runs a program on each file it searches" : null;
+    }
     case "rsync": {
       return has("--rsh", "--rsync-path") || short(/^-[A-Za-z]*e/) ? " runs a program it's given" : null;
     }
@@ -1291,6 +1377,19 @@ function mounts(args: Word[], xs: string[]): Word[] {
   return out;
 }
 
+// ln's files, all written: a link to a file is a way to change it (a
+// hard link's or a symbolic one's), so its target counts as its name
+// does; a symbolic one's target, unless -r, from the link's folder
+function ln_use(args: Word[], pos: Word[], into: Word | null, cwd: string | null, uses: Use[]): void {
+  const xs = args.map((a) => (a.dynamic ? "" : a.alts[0]));
+  const symbolic = xs.some((x) => x === "--symbolic" || (/^-[A-Za-z]+$/.test(x) && x.includes("s")));
+  const relative = xs.some((x) => x === "--relative" || (/^-[A-Za-z]+$/.test(x) && x.includes("r")));
+  const dest = into ?? (pos.length > 1 ? pos[pos.length - 1] : null);
+  const at = dest === null || cwd === null ? cwd : dest.dynamic || dest.alts.length !== 1 ? null : path.resolve(cwd, dest.alts[0]);
+  const dir = at === null || dest === null ? at : dest === into || dest.alts[0].endsWith("/") || is_dir(at) ? at : path.dirname(at);
+  pos.forEach((w) => uses.push({ word: w, write: true, cwd: w !== dest && symbolic && !relative ? dir : cwd }));
+}
+
 // a copier's folder named by -t (cp -t dir a b, -rt dir, -tdir,
 // --target-directory=dir), or null; a cluster's letters before its t
 // take no value (not install's -o, -g, -m, nor cp's -S)
@@ -1308,9 +1407,46 @@ function copier_into(args: Word[]): Word | null {
   return null;
 }
 
+// a search's files: its words but its pattern and its options' values; a
+// file of patterns (-f) read too
+function search_use(name: string, args: Word[], use: (w: Word, write: boolean) => void): void {
+  const base = /^(rg|ag|ack)$/.test(name) ? name : "grep";
+  const [letters, longs] = SEARCHES[base];
+  const pos: Word[] = [];
+  let given = base === "rg" && args.some((a) => !a.dynamic && a.alts[0] === "--files");
+  let ended = false;
+  for (let k = 0; k < args.length; k++) {
+    const a = args[k];
+    const x = a.dynamic ? "" : a.alts[0];
+    if (ended || a.dynamic || !x.startsWith("-") || x === "-") {
+      pos.push(a);
+    } else if (x === "--") {
+      ended = true;
+    } else if (x.startsWith("--")) {
+      const eq = x.indexOf("=");
+      const opt = eq > 0 ? x.slice(0, eq) : x;
+      const value = eq > 0 ? Shell.cut(a, eq + 1) : longs.test(opt) ? args[++k] : undefined;
+      given ||= opt === "--regexp" || opt === "--file";
+      if (opt === "--file" && value !== undefined) {
+        use(value, false);
+      }
+    } else {
+      const at = [...x.slice(1)].findIndex((c) => letters.includes(c)) + 1;
+      if (at > 0) {
+        const value = at + 1 < x.length ? Shell.cut(a, at + 1) : args[++k];
+        given ||= (base !== "ag" && (x[at] === "e" || x[at] === "f")) || (base === "ag" && x[at] === "g");
+        if (base !== "ag" && x[at] === "f" && value !== undefined) {
+          use(value, false);
+        }
+      }
+    }
+  }
+  (given ? pos : pos.slice(1)).forEach((w) => use(w, false));
+}
+
 // find, fd, sed, sort, awk: read-only unless an option or a script makes
 // them write or run things
-function reader_look(where: Where, part: Part, base: string, args: Word[], use: (w: Word, write: boolean) => void, flag: (why: string) => void): boolean {
+function reader_look(where: Where, part: Part, base: string, args: Word[], use: (w: Word, write: boolean) => void, flag: Flagger): boolean {
   const text = clip(part.text);
   const xs = args.map((a) => (a.dynamic ? "" : a.alts[0]));
   switch (base) {
@@ -1332,9 +1468,9 @@ function reader_look(where: Where, part: Part, base: string, args: Word[], use: 
         const files = from.flatMap((w) => named(w, part.cwd) ?? [null]);
         const vital = files.find((f): f is string => f !== null && vital_of(where, f));
         if (vital !== undefined || files.includes(null)) {
-          flag(text + " deletes what it finds in " + (vital === undefined ? "a folder known only as it runs" : shown(vital, where.top) + ", a folder that matters"));
+          flag(text + " deletes what it finds in " + (vital === undefined ? "a folder known only as it runs" : shown(vital, where.top) + ", a folder that matters"), null, "all");
         } else if (!from.every((w) => rebuilt(where, w, part.cwd))) {
-          flag(text + " deletes what it finds in " + from.map((w) => w.raw).join(" ") + " and below");
+          flag(text + " deletes what it finds in " + from.map((w) => w.raw).join(" ") + " and below", null, homely(where));
         }
       }
       return deletes || writes.length > 0;
@@ -1457,9 +1593,9 @@ function installs(base: string, sub: string, xs: string[], has: (...names: strin
 
 // a tool by its name (an MCP tool, or one of Claude Code's illi doesn't
 // know): by the user's rules on its name first (their mcp rules); one
-// that only reads runs (in read-only too); any other is asked the first
-// time (why: what it may do), "don't ask again" covering the tool from
-// then on
+// that only reads runs (in read-only too); any other runs in auto, and is
+// asked the first time in the other modes (why: what it may do), "don't
+// ask again" covering the tool from then on
 function look_tool(where: Where, look: Look, tool: string, why: string | null): void {
   const rule = rule_of(where, "mcp", [tool], [tool]);
   if (rule === "deny") {
@@ -1470,25 +1606,25 @@ function look_tool(where: Where, look: Look, tool: string, why: string | null): 
     return;
   }
   if (rule === "ask") {
-    look.flags.push({ why: "your rules ask about " + tool, kind: "mcp", subject: tool, wide: null, rule: true });
+    look.flags.push({ why: "your rules ask about " + tool, kind: "mcp", subject: tool, wide: null, tier: "all", rule: true });
   }
   if (why === null) {
     return;
   }
   const wide = { kind: "mcp" as const, subject: tool, grant: "mcp:" + tool.replace(/\*/g, "\\*") };
-  look.flags.push({ why: tool + why, kind: "mcp", subject: tool, wide });
-  look.changes.push({ why: where.mode === "read-only" ? tool + " may change things" : "ask mode asks before " + tool, kind: "mcp", subject: tool, wide: where.mode === "ask" ? wide : null });
+  look.flags.push({ why: tool + why, kind: "mcp", subject: tool, wide, tier: "careful" });
+  look.changes.push({ why: where.mode === "read-only" ? tool + " may change things" : "ask mode asks before " + tool, kind: "mcp", subject: tool, wide: where.mode === "ask" ? wide : null, tier: "careful" });
 }
 
 // Files
 // =====
 
-// a file read or written (a folder: read, as a search's), judged; a
-// write naming none is asked
+// a file read or written by a file tool (a folder: read, as a search's),
+// judged; a write naming none is asked
 function look_file(where: Where, look: Look, file: unknown, write: boolean): void {
   if (typeof file !== "string" || file === "") {
     if (write) {
-      look.flags.push({ why: "it names no file to change", kind: "write", subject: "", wide: null });
+      look.flags.push({ why: "it names no file to change", kind: "write", subject: "", wide: null, tier: "all" });
     }
     return;
   }
@@ -1503,54 +1639,77 @@ function look_file(where: Where, look: Look, file: unknown, write: boolean): voi
     return;
   }
   if (rule === "ask") {
-    look.flags.push({ why: "your rules ask about " + shown(abs, where.top), kind, subject: abs, wide: null, rule: true });
+    look.flags.push({ why: "your rules ask about " + shown(abs, where.top), kind, subject: abs, wide: null, tier: "all", rule: true });
   }
-  const why = path_why(where, abs, write);
-  if (why !== null) {
-    look.flags.push({ why: why.why, kind, subject: abs, wide: why.wide ? folder_wide(kind, abs) : null, self: why.self });
+  for (const r of path_why(where, abs, write, true)) {
+    look.flags.push({ why: r.why, kind, subject: abs, wide: r.wide ? folder_wide(kind, abs) : null, tier: r.tier });
   }
   if (write) {
-    look.changes.push({ why: where.mode === "read-only" ? "changing " + shown(abs, where.top) : "ask mode asks before changing " + shown(abs, where.top), kind, subject: abs, wide: where.mode === "ask" ? { kind, subject: abs, grant: "write:" + where.top + "/*" } : null });
+    look.changes.push({ why: where.mode === "read-only" ? "changing " + shown(abs, where.top) : "ask mode asks before changing " + shown(abs, where.top), kind, subject: abs, wide: where.mode === "ask" ? { kind, subject: abs, grant: "write:" + where.top + "/*" } : null, tier: "careful" });
   }
 }
 
 // a file a part reads or writes, judged: the user's path rules, then
-// where it is (outside the project, a secret, protected, a device);
-// known only as it runs: asked
+// where it is (outside the project, a secret, protected, a device); one
+// known only as it runs asked (in auto, a write's; one xargs gives, a
+// write's alone: its reads are its program's, look_command). A glob's
+// entries outside are said by their folder, once
 function use_look(where: Where, look: Look, use: Use, flag: Flagger): void {
   const files = named(use.word, use.cwd);
   if (files === null) {
-    flag((use.word.raw || "a file") + " is known only as it runs");
+    if (use.write || use.word.input !== true) {
+      flag((use.word.raw || "what xargs adds") + " is known only as it runs", null, use.write ? "all" : "careful");
+    }
     return;
   }
   const kind: Kind = use.write ? "write" : "read";
+  const said = new Set<string>();
   for (const file of files) {
     const rule = path_rule(where, file, use.write);
     if (rule === "deny") {
       look.denied.push("your rules refuse " + (use.write ? "changing " : "reading ") + shown(file, where.top));
     } else if (rule === "ask") {
-      look.flags.push({ why: "your rules ask about " + shown(file, where.top), kind: "shell", subject: "", wide: null, rule: true });
+      look.flags.push({ why: "your rules ask about " + shown(file, where.top), kind: "shell", subject: "", wide: null, tier: "all", rule: true });
     } else if (rule !== "allow") {
-      const why = path_why(where, file, use.write);
-      if (why !== null) {
-        flag(why.why, why.wide ? folder_wide(kind, file) : null, why.self);
+      for (const r of path_why(where, file, use.write)) {
+        if (!(r.wide && use.word.glob && said.has(path.dirname(file)))) {
+          flag(r.why, r.wide ? folder_wide(kind, file) : null, r.tier);
+          said.add(r.wide ? file : "");
+        }
       }
     }
   }
 }
 
 // what "don't ask again" keeps for a file outside the project: its
-// folder (a folder named, itself); none for home, or / or a folder above
-// home, as that would cover all of home
+// folder (a folder named, itself), for a read the repository holding it
+// (a sibling repo's top); none for home, or / or a folder above home, as
+// that would cover all of home
 function folder_wide(kind: Kind, file: string): Flag["wide"] {
-  let folder = false;
-  try {
-    folder = fs.statSync(file, { throwIfNoEntry: false })?.isDirectory() === true;
-  } catch {
-    // one this user can't look at (/root): taken as a file
-  }
+  const folder = is_dir(file);
   const dir = folder ? file : path.dirname(file);
-  return under(HOME, dir) ? null : { kind, subject: folder ? file + "/" : file, grant: kind + ":" + dir + "/*" };
+  const at = (kind === "read" ? repo_of(dir) : null) ?? dir;
+  return under(HOME, at) ? null : { kind, subject: folder ? file + "/" : file, grant: kind + ":" + at + "/*" };
+}
+
+// whether a path is a folder (one this user can't look at, /root: no)
+function is_dir(file: string): boolean {
+  try {
+    return fs.statSync(file, { throwIfNoEntry: false })?.isDirectory() === true;
+  } catch {
+    return false;
+  }
+}
+
+// the repository a folder is in, below home: it or the nearest folder
+// above holding a .git; null: none
+function repo_of(dir: string): string | null {
+  for (let d = dir; !under(HOME, d) && path.dirname(d) !== d; d = path.dirname(d)) {
+    if (fs.existsSync(path.join(d, ".git"))) {
+      return d;
+    }
+  }
+  return null;
 }
 
 // the user's rule for a file: its kind's (a read also by write rules)
@@ -1558,56 +1717,83 @@ function path_rule(where: Where, file: string, write: boolean): Rule | null {
   return rule_of(where, write ? "write" : "read", [file], [file]) ?? (write ? null : rule_of(where, "write", [], [file]));
 }
 
-// why a file is asked about (wide: a folder grant may clear it; self: a
-// change to illi's own config, asked in every mode); null: it isn't
-function path_why(where: Where, file: string, write: boolean): { why: string; wide: boolean; self?: boolean } | null {
+// why a file is asked about, each reason with the modes that ask it:
+// illi's own config (in every mode); a secret (one kept in a secret
+// folder, or one by its name through the read tool, in auto too: else
+// careful's); a device written; inside the project, a protected file
+// written (careful's, but in home: homely; Claude Code's settings, what
+// it runs unasked, in auto too); outside it, any but scratch, or the
+// system's folders read
+// (a dependency cache read: careful's). None: it isn't asked
+function path_why(where: Where, file: string, write: boolean, tool = false): Reason[] {
   const at = shown(file, where.top);
   if (NET.test(file)) {
-    return { why: at + " opens a network connection", wide: false };
+    return [{ why: at + " opens a network connection", wide: false, tier: "careful" }];
   }
-  if (DEVS.test(file)) {
-    return null;
-  }
-  if (!write && where.reads.some((d) => under(file, d))) {
-    return null;
-  }
-  if (!write && where.plugins.some((d) => plugin_open(file, d))) {
-    return null;
+  if (DEVS.test(file) || (!write && (where.reads.some((d) => under(file, d)) || where.plugins.some((d) => plugin_open(file, d))))) {
+    return [];
   }
   if (write && (under(file, Projects_real(config.ROOT)) || under(file, path.join(where.top, ".illi")))) {
-    return { why: at + " is illi's own config (what it runs and is told)", wide: false, self: true };
+    return [{ why: at + " is illi's own config (what it runs and is told)", wide: false, tier: "self" }];
   }
-  if (secret(file, where.top)) {
-    return { why: at + " may hold secrets", wide: false };
+  const outside = !under(file, where.top) && !SCRATCH.some((d) => under(file, d)) && !(!write && SYSTEM.some((d) => under(file, d)));
+  const away: Reason = { why: at + " is outside the project", wide: true, tier: !write && deps(file) ? "careful" : "all" };
+  const kept = where.plugins.some((d) => plugin_kept(file, d)) ? "kept" : secret(file, where.top);
+  if (kept !== null) {
+    const tier = kept === "kept" || (tool && !write) ? "all" : "careful";
+    return [{ why: at + " may hold secrets", wide: false, tier }, ...(tier === "careful" && outside && away.tier === "all" ? [{ ...away, tier: "auto" as const }] : [])];
   }
   if (file.startsWith("/dev/") && write) {
-    return { why: at + " is a device", wide: false };
+    return [{ why: at + " is a device", wide: false, tier: "all" }];
   }
   if (under(file, where.top)) {
-    return write && guarded(file, where.top) ? { why: at + " configures tools or illi (protected)", wide: false } : null;
+    const claude = /^\.claude\/settings(\.local)?\.json$/.test(path.relative(where.top, file));
+    return !write ? [] : claude ? [{ why: at + " sets what Claude Code runs unasked", wide: false, tier: "all" }] : guarded(file, where.top) ? [{ why: at + " configures tools or illi (protected)", wide: false, tier: homely(where) }] : [];
   }
-  if (SCRATCH.some((d) => under(file, d)) || (!write && SYSTEM.some((d) => under(file, d)))) {
-    return null;
-  }
-  return { why: at + " is outside the project", wide: true };
+  return outside ? [away] : [];
+}
+
+// whether a file is in a dependency cache
+function deps(file: string): boolean {
+  return DEPS.some((d) => under(file, d)) || file.split(path.sep).some((p) => DEPS_PARTS.has(p));
 }
 
 // whether a plugin's file is free to read, its folder given: anything in
-// it but what may hold the user's tokens (its MCP servers' file, its
-// settings, its manifest's folder) or a secret by its name
+// it but what may hold the user's tokens (plugin_kept) or a secret by
+// its name
 function plugin_open(file: string, dir: string): boolean {
-  const rel = path.relative(dir, file);
-  return under(file, dir) && !PLUGIN_KEPT.some((k) => rel === k || rel.startsWith(k + path.sep)) && !SECRET_NAME.test(path.basename(file));
+  return under(file, dir) && !plugin_kept(file, dir) && !secret_name(path.basename(file));
 }
 
-// whether a file may hold secrets: by its name anywhere; in a secret
-// folder of home's, the system's, or illi's own, unless the project is
-// inside that folder and the file inside the project (a repo kept in
-// ~/.claude: its files are the project's, the folder's others still
-// secret)
-function secret(file: string, top: string): boolean {
+// whether a plugin's file may hold the user's tokens, its folder given:
+// its MCP servers' file, its settings, its manifest's folder (a secret)
+function plugin_kept(file: string, dir: string): boolean {
+  const rel = path.relative(dir, file);
+  return under(file, dir) && PLUGIN_KEPT.some((k) => rel === k || rel.startsWith(k + path.sep));
+}
+
+// whether a file may hold secrets: kept in a secret store of home's or
+// the system's, or one of illi's logins, unless the project is inside
+// that store and the file inside the project (a repo kept in ~/.aws: its
+// files are the project's, the store's others still secret); else by its
+// name anywhere; null: neither
+function secret(file: string, top: string): "kept" | "name" | null {
   const held = (dir: string) => under(file, dir) && !(under(top, dir) && under(file, top));
-  return SECRET_NAME.test(path.basename(file)) || SECRET_HOME.some((d) => held(path.join(HOME, d))) || SECRET_SYSTEM.some(held) || held(Projects_real(config.ROOT));
+  const login = (held(Projects_real(config.ROOT)) && SECRET_ILLI.test(path.basename(file))) || (config.LOGIN_SET !== null && file === real(config.LOGIN_SET));
+  return SECRET_HOME.some((d) => held(path.join(HOME, d))) || SECRET_SYSTEM.some(held) || login ? "kept" : secret_name(path.basename(file)) ? "name" : null;
+}
+
+// whether a file's name is a secret's
+function secret_name(name: string): boolean {
+  return SECRET_NAME.test(name) || (SECRET_WORD.test(name) && !CODE.test(name));
+}
+
+// the tier of deleting a folder in the project, or changing a protected
+// file there: careful's, but in a project that holds home (illi run in
+// ~), where auto asks them too: home's folders and rc files aren't a
+// project's to drop
+function homely(where: Where): Tier {
+  return under(HOME, where.top) ? "all" : "careful";
 }
 
 // whether a file inside the project is protected
@@ -1789,6 +1975,12 @@ function real(file: string): string {
     }
   }
   return file;
+}
+
+// where a file is named: its folder's real place, itself as named (a
+// link left as it is)
+function placed(file: string): string {
+  return path.join(real(path.dirname(file)), path.basename(file));
 }
 
 function Projects_real(dir: string): string {

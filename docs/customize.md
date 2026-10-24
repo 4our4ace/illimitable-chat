@@ -182,7 +182,7 @@ width its rows may take), `LINES`, `ILLI_PROJECT_DIR` and
 | `context_window.context_window_size`, `total_input_tokens` | the model's window, the tokens a turn sends now (once told) |
 | `context_window.summarize_at` | illi's: the tokens past which old messages fold into the memory tree |
 | `agent.name` | the main agent, when not illi's own |
-| `permission_mode` | illi's mode: `auto`, `ask`, `read-only`, `yolo` |
+| `permission_mode` | illi's mode: `auto`, `careful`, `ask`, `read-only`, `yolo` |
 | `rate_limits.five_hour`, `seven_day` | the plan's limits as its vendor tells them, for the account in use: `used_percentage`, `resets_at` (epoch seconds); only when told |
 | `profile`, `busy`, `agents` | illi's: the profile, whether a turn runs, the subagents at work |
 
@@ -461,7 +461,7 @@ its input:
 
 | Field | Events |
 | ----- | ------ |
-| `hook_event_name`, `cwd`, `permission_mode` (illi's mode: `auto`, `ask`, `read-only`, `yolo`) | all |
+| `hook_event_name`, `cwd`, `permission_mode` (illi's mode: `auto`, `careful`, `ask`, `read-only`, `yolo`) | all |
 | `tool_name`, `tool_input` | `PreToolUse`, `PostToolUse` |
 | `agent_id`, `agent_type` (the subagent's name) | the same, on a subagent's call |
 | `tool_response`: `{ text, fail }` (an image a tool gives, as a read of one, isn't in it) | `PostToolUse` |
