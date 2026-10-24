@@ -24,7 +24,8 @@
 // stopped, the chat is as it was, and a quit resumes nothing. /clear
 // empties the to-do list beside the chat, whatever was said. A view
 // switches this session's mode; a refused request allowed again is told
-// to illi in the user's name, its grants this session's; a grant goes. A
+// to illi in the user's name, its grants this session's; a grant goes.
+// The loop guard counts within a turn (an agent's run too). A
 // message passes the plugins' and hooks' checks (kept back, told more;
 // slow ones waited on in the views' sight, a stop sending it back); their
 // turn.stop makes a turn go on before its goal is checked, 8 times in a
@@ -32,10 +33,14 @@
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
-import * as os from "node:os";
+import { temp_dir, temp_repo } from "../../test/repo.ts";
 
-const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-chat-");
+const DIR = temp_dir("illi-chat-");
 process.env.ILLI_DIR = DIR;
+
+// the project the chat is opened in: a throwaway repository (no
+// remote), so its calls act there, never on this checkout
+const REPO = temp_repo("illi-chat-work-");
 
 const { AskAI } = await import("../ai/AskAI.ts");
 const { ChatGPT } = await import("../ai/ChatGPT.ts");
@@ -45,8 +50,8 @@ const { Suggest } = await import("./Suggest.ts");
 const { Memory } = await import("./Memory.ts");
 const { Projects } = await import("./Projects.ts");
 
-// the project the tests run in (this repo), whose chat Chat.open opens
-const HERE = Projects.place(process.cwd());
+// the project the tests run in, whose chat Chat.open opens
+const HERE = Projects.place(REPO);
 const { Pick } = await import("../ai/Pick.ts");
 const config = await import("../config/Config.ts");
 const View = await import("../ui/View.ts");
@@ -74,7 +79,7 @@ async function until(ok: () => boolean): Promise<void> {
   }
 }
 
-const chat = Chat.open(process.cwd());
+const chat = Chat.open(REPO);
 
 test("a view over the pipe sends a message and hears the reply", async () => {
   const v = View.view_new();
@@ -114,7 +119,7 @@ test("permissions over the pipe: the mode switched for this session (the setting
   await until(() => v.perm.grants.length === 0);
   View.link_send(v, { $: "mode", mode: null });
   await until(() => v.perm.mode === "auto");
-  expect(fs.existsSync("x-illi-test.txt")).toBe(false);
+  expect(fs.existsSync(REPO + "/x-illi-test.txt")).toBe(false);
   v.ws!.close();
 });
 
@@ -134,15 +139,14 @@ test("a turn's wait names the model it runs on, not one picked since", async () 
 });
 
 test("one process at a time holds a project's chat, even many starting at once; its lock only its user's to reach, let go however a process ends; those held elsewhere counted", async () => {
-  expect(await Lock.take()).toBe(true);
+  expect(await Lock.take(REPO)).toBe(true);
   expect(fs.statSync(DIR + "/locks").mode & 0o777).toBe(0o700);
   const env = { ...process.env, ILLI_DIR: DIR };
   const code = (after = "", at = 0) => `const { Lock } = await import(${JSON.stringify(import.meta.dir + "/Lock.ts")}); while (Date.now() < ${at}) {} console.log(await Lock.take()); ${after}`;
-  const proc = Bun.spawn([process.execPath, "-e", code()], { env, stdout: "pipe" });
+  const proc = Bun.spawn([process.execPath, "-e", code()], { cwd: REPO, env, stdout: "pipe" });
   expect(await new Response(proc.stdout).text()).toBe("false\n");
-  const repo = fs.realpathSync(fs.mkdtempSync(os.tmpdir() + "/illi-chat-repo-"));
+  const repo = temp_repo("illi-chat-repo-");
   const name = Projects.lock(repo);
-  fs.mkdirSync(repo + "/.git");
   const at = Date.now() + 1500;
   const many = Array.from({ length: 6 }, () => Bun.spawn([process.execPath, "-e", code("await Bun.sleep(2500); process.exit(0);", at)], { cwd: repo, env, stdout: "pipe" }));
   const said = await Promise.all(many.map((p) => new Response(p.stdout).text()));
@@ -160,7 +164,6 @@ test("one process at a time holds a project's chat, even many starting at once; 
   const after = await Lock.claim(name);
   expect(after).not.toBeNull();
   after!.stop();
-  fs.rmSync(repo, { recursive: true, force: true });
 }, 20000);
 
 test("/compact: illi's recap, asked once on the turn's cache, starts the agent's view; the screen keeps what it showed; what's logged meanwhile comes after it (a main agent switch's note too), a message refused", async () => {
@@ -747,6 +750,30 @@ test("background jobs over the pipe: a shell call's in every view's state, its c
   expect(Memory.message(chat.mem, chat.mem.count - 1)).toMatchObject({ kind: "note", text: "illi quit, stopping its background jobs: sleep 30 > /dev/null 2>&1 & (reviewer's)." });
   Machine.end();
   v.ws!.close();
+});
+
+test("the loop guard starts each turn fresh: a command polled once a turn is never a loop, three in a turn are; an agent's run, a name used again, starts fresh too", async () => {
+  const poll = (who = "main") => Tools.call(chat.tools, who, "shell", { command: "echo poll" }, new AbortController().signal);
+  const looped = "No one is at illi's screen to ask, so it isn't allowed. Asked because the same call a third time in a row";
+  await until(() => !chat.busy);
+  expect(Tools.mode(chat.tools)).toBe("auto");
+  for (let k = 0; k < 3; k++) {
+    expect((await poll()).text).toStartWith("poll\n");
+    expect((await poll()).text).toStartWith("poll\n");
+    Chat.take(chat, Chat.push(chat, null, "user", "check again"));
+    await until(() => !chat.busy);
+  }
+  expect((await poll()).text).toStartWith("poll\n");
+  expect((await poll()).text).toStartWith("poll\n");
+  expect((await poll()).text).toStartWith(looped);
+  expect((await poll("reviewer")).text).toStartWith("poll\n");
+  expect((await poll("reviewer")).text).toStartWith("poll\n");
+  expect(Tools.start(chat.tools, { $: "sub", effort: null, agent: "reviewer" }, "look again", [])).toBe("reviewer");
+  expect((await poll("reviewer")).text).toStartWith("poll\n");
+  const said = () => Array.from({ length: chat.mem.count }, (_, i) => Memory.message(chat.mem, i)!);
+  await until(() => said().some((m) => m.kind === "work" && m.text.includes("reviewer")));
+  await until(() => !chat.busy && said().at(-1)!.kind === "illi");
+  chat.tools.perm.refused.length = 0;
 });
 
 test("the suggested reply stays as the chat closes, so the next start shows it (a screen that asks for none, none); let go, saved so", async () => {

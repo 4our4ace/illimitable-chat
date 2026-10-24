@@ -12,8 +12,10 @@
 // has the rule): one more pushes the oldest out; a note said again only
 // lives longer. Esc and a message sent take the notes away sooner. The
 // view's own (View.ts notes) come in as notes. A pipe prints each note
-// as it comes.
+// as it comes. A few are said once ever (term_once).
 
+import * as config from "../config/Config.ts";
+import { Seen } from "../config/Seen.ts";
 import * as View from "../ui/View.ts";
 import { term_draw } from "./Frame.ts";
 import type { Term } from "./Term.ts";
@@ -62,6 +64,15 @@ export function term_notify(t: Term, text: string, toast: boolean, ms?: number):
 // a note over the input, for ms (none: as long as reading it takes)
 export function term_note(t: Term, text: string, ms?: number): void {
   term_notify(t, text, false, ms);
+}
+
+// the start's notes said once ever, on a terminal (a pipe's script never
+// reads them, so none is spent there), each for ms: a mode of auto, what
+// it asks now (config.AUTO_NOTE); kept as said in illi's folder (Seen)
+export function term_once(t: Term, ms: number): void {
+  if (t.scr.tty && config.AUTO_NOTE !== "" && Seen.first("note auto 0.3.1")) {
+    term_note(t, config.AUTO_NOTE, ms);
+  }
 }
 
 // a toast at the chat's right end, for ms (none: TOAST)

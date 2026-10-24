@@ -13,11 +13,13 @@ import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as net from "node:net";
 import * as os from "node:os";
+import { temp_repo } from "../../test/repo.ts";
 
 const DIR  = fs.mkdtempSync(os.tmpdir() + "/illi-remote-");
-const REPO = fs.realpathSync(fs.mkdtempSync(os.tmpdir() + "/illi-remote-repo-"));
+// the project the chat is opened in: a throwaway repository, never this
+// checkout
+const REPO = temp_repo("illi-remote-repo-");
 process.env.ILLI_DIR = DIR;
-fs.mkdirSync(REPO + "/.git");
 
 const { AskAI } = await import("../ai/AskAI.ts");
 const { Chat } = await import("./Chat.ts");
@@ -29,7 +31,6 @@ const View = await import("../ui/View.ts");
 
 afterAll(() => {
   fs.rmSync(DIR, { recursive: true, force: true });
-  fs.rmSync(REPO, { recursive: true, force: true });
 });
 
 // the model: answers "hello back"

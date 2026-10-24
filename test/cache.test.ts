@@ -8,8 +8,7 @@
 
 import { expect, setSystemTime, test } from "bun:test";
 import * as crypto from "node:crypto";
-import * as fs from "node:fs";
-import * as os from "node:os";
+import { temp_dir } from "./repo.ts";
 
 // Types
 // =====
@@ -29,7 +28,7 @@ type Use = { read: number; write: number; input: number; n: number };
 const LOOK  = 20;
 const TTL   = 300e3;
 const FIRST = 1500;
-const DIR   = fs.mkdtempSync(os.tmpdir() + "/illi-cache-");
+const DIR   = temp_dir("illi-cache-");
 
 process.env.ILLI_DIR = DIR;
 

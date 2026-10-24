@@ -27,7 +27,7 @@ import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
 import { Compactor } from "./Compactor.ts";
 import { Lock } from "./Lock.ts";
-import { Logs } from "./Logs.ts";
+import { Logs, MAIN } from "./Logs.ts";
 import { Machine } from "../tools/Machine.ts";
 import { Suggest, type Suggested } from "./Suggest.ts";
 import { Memory, TOKEN, type Root, type Share } from "./Memory.ts";
@@ -467,13 +467,16 @@ export namespace Chat {
   // ends answered lets the suggested reply go (counted unused if the user
   // passed it over; one still being asked, stopped) and asks for the
   // next. The messages sent as a stopped one wound down start a new one.
-  // A to-do list all done goes as it starts and ends (Tools.todo_finished).
-  // The plugins are told it starts and ends (why it stopped, if it did)
+  // A to-do list all done goes as it starts and ends (Tools.todo_finished);
+  // the loop guard starts the main agent's count fresh (Tools.fresh: a
+  // command polled once a turn is never a loop). The plugins are told it
+  // starts and ends (why it stopped, if it did)
   export async function turn(chat: Chat): Promise<void> {
     chat.busy = true;
     clearTimeout(chat.idle);
     void Plugins.emit("turn.start", { cwd: chat.tools.cwd });
     Tools.todo_finished(chat.tools);
+    Tools.fresh(chat.tools, MAIN);
     try {
       let go = true;
       while (go && chat.wait.length > 0) {
@@ -880,13 +883,15 @@ export namespace Chat {
     });
   }
 
-  // config.AFTER, a shell command, after each turn
+  // config.AFTER, a shell command, after each turn, in illi's environment
+  // as it is now (the API keys out of it: Config.ts), as Bun would give a
+  // spawn the one illi started with
   export function after(chat: Chat): void {
     if (!config.AFTER) {
       return;
     }
     chat.after = chat.after.then(async () => {
-      const proc = Bun.spawn(["/bin/sh", "-c", config.AFTER], { cwd: chat.tools.cwd, stdout: "ignore", stderr: "pipe" });
+      const proc = Bun.spawn(["/bin/sh", "-c", config.AFTER], { cwd: chat.tools.cwd, env: process.env, stdout: "ignore", stderr: "pipe" });
       const err = await new Response(proc.stderr).text();
       if ((await proc.exited) !== 0) {
         Chat.all(chat, { $: "note", text: "after: " + err.trim() });

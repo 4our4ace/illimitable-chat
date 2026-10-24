@@ -11,8 +11,9 @@ import * as os from "node:os";
 import * as config from "../config/Config.ts";
 import { Machine } from "./Machine.ts";
 import { png } from "../../test/png.ts";
+import { temp_dir } from "../../test/repo.ts";
 
-const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-machine-");
+const DIR = temp_dir("illi-machine-");
 
 afterAll(() => Machine.end());
 

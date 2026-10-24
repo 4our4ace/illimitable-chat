@@ -3,7 +3,8 @@
 // The project's files that run as you work (its hooks.json, mcp.json and
 // plugins), as illi last saw them, by a hash of their paths and
 // contents: one new or changed since is said once at the start (its
-// caller says what), then kept as seen. Kept in seen.json in illi's
+// caller says what), then kept as seen. A one-time note (first: by its
+// key) is kept the same way, said once ever. Kept in seen.json in illi's
 // folder, out of the repository's reach.
 
 import * as crypto from "node:crypto";
@@ -27,28 +28,37 @@ export namespace Seen {
         // not there: not part of it
       }
     }
-    if (!any) {
-      return false;
-    }
-    const now = hash.digest("hex");
-    const file = path.join(config.ROOT, "seen.json");
-    let seen: Record<string, string> = {};
-    try {
-      const data = JSON.parse(fs.readFileSync(file, "utf8"));
-      seen = typeof data === "object" && data !== null && !Array.isArray(data) ? data : {};
-    } catch {
-      // none seen yet
-    }
-    if (seen[key] === now) {
-      return false;
-    }
-    try {
-      fs.writeFileSync(file + ".tmp", JSON.stringify({ ...seen, [key]: now }, null, 2) + "\n");
-      fs.renameSync(file + ".tmp", file);
-    } catch (err: any) {
-      console.error("illi: " + file + ": " + String(err?.message ?? err));
-    }
-    return true;
+    return any && seen_keep(key, hash.digest("hex"));
   }
 
+  // whether a one-time thing (a note, by its key) is new: the first time
+  // asked, then kept as seen
+  export function first(key: string): boolean {
+    return seen_keep(key, "seen");
+  }
+
+}
+
+// whether a key's value differs from the one kept (none kept: it does);
+// the new one kept then (a temporary file renamed over, so a crash never
+// leaves half a file; one that can't be written said, still taken as new)
+function seen_keep(key: string, now: string): boolean {
+  const file = path.join(config.ROOT, "seen.json");
+  let seen: Record<string, string> = {};
+  try {
+    const data = JSON.parse(fs.readFileSync(file, "utf8"));
+    seen = typeof data === "object" && data !== null && !Array.isArray(data) ? data : {};
+  } catch {
+    // none seen yet
+  }
+  if (seen[key] === now) {
+    return false;
+  }
+  try {
+    fs.writeFileSync(file + ".tmp", JSON.stringify({ ...seen, [key]: now }, null, 2) + "\n");
+    fs.renameSync(file + ".tmp", file);
+  } catch (err: any) {
+    console.error("illi: " + file + ": " + String(err?.message ?? err));
+  }
+  return true;
 }

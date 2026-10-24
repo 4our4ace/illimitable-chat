@@ -10,10 +10,11 @@
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
-import * as os from "node:os";
+import { temp_dir, temp_repo } from "../../test/repo.ts";
 
-const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-mcp-");
-const CWD = fs.mkdtempSync(os.tmpdir() + "/illi-mcp-cwd-");
+const DIR = temp_dir("illi-mcp-");
+// the chat's project: a throwaway repository, never this checkout
+const CWD = temp_repo("illi-mcp-cwd-");
 const CANCELLED = DIR + "/cancelled";
 process.env.ILLI_DIR = DIR;
 process.env.MCP_TEST_TOKEN = "t0k";
@@ -38,7 +39,7 @@ process.stdin.on("data", (d) => {
     buf = buf.slice(i + 1);
     if (m.method === "initialize") send({ id: m.id, result: { protocolVersion: m.params.protocolVersion, capabilities: { tools: {} }, serverInfo: { name: "fake" } } });
     if (m.method === "tools/list") send({ id: m.id, result: m.params.cursor ? { tools: tools.slice(1) } : { tools: tools.slice(0, 1), nextCursor: "2" } });
-    if (m.method === "tools/call" && m.params.name === "echo") send({ id: m.id, result: { content: [{ type: "text", text: "echo: " + m.params.arguments.text + " in " + process.cwd() + " with " + process.env.TOKEN }, { type: "image", data: "aGk=", mimeType: "image/png" }] } });
+    if (m.method === "tools/call" && m.params.name === "echo") send({ id: m.id, result: { content: [{ type: "text", text: "echo: " + m.params.arguments.text + " in " + process.cwd() + " with " + process.env.TOKEN + " " + process.env.GIT_ALLOW_PROTOCOL }, { type: "image", data: "aGk=", mimeType: "image/png" }] } });
     if (m.method === "tools/call" && m.params.name === "fail.me") send({ id: m.id, result: { content: [{ type: "text", text: "bad" }], isError: true } });
     if (m.method === "tools/call" && m.params.name === "fail_me") send({ id: m.id, result: { content: [{ type: "text", text: "underscored" }] } });
     if (m.method === "notifications/cancelled") fs.writeFileSync(process.env.CANCELLED, String(m.params.requestId));
@@ -104,9 +105,9 @@ test("each server's tools, named by it, in pages, beside illi's", async () => {
   expect(names).toContain("mcp__web__add");
 });
 
-test("a call: its text and images, run in the working dir with its env; a failure", async () => {
+test("a call: its text and images, run in the working dir with its env (the test preload's GIT_ALLOW_PROTOCOL too: Bun gives a child only what its spawn passes); a failure", async () => {
   const out = await Tools.call(tools, "main", "mcp__fake__echo", { text: "hi" }, new AbortController().signal);
-  expect(out).toEqual({ text: "echo: hi in " + fs.realpathSync(CWD) + " with t0k", fail: false, imgs: [{ type: "image/png", data: "aGk=" }] });
+  expect(out).toEqual({ text: "echo: hi in " + CWD + " with t0k file", fail: false, imgs: [{ type: "image/png", data: "aGk=" }] });
   expect(await Mcp.call("mcp__fake__fail_me", {}, new AbortController().signal)).toMatchObject({ text: "bad", fail: true });
   expect(await Mcp.call("mcp__fake__gone", {}, new AbortController().signal)).toMatchObject({ fail: true });
 });

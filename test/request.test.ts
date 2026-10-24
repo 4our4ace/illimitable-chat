@@ -11,11 +11,14 @@
 // four cache breakpoints Anthropic takes.
 
 import { afterAll, expect, test } from "bun:test";
-import * as fs from "node:fs";
-import * as os from "node:os";
+import { temp_dir, temp_repo } from "./repo.ts";
 
-const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-request-");
+const DIR = temp_dir("illi-request-");
 process.env.ILLI_DIR = DIR;
+
+// the project the chat is opened in: a throwaway repository, never this
+// checkout
+const REPO = temp_repo("illi-request-work-");
 
 // a process reads Config once (maybe for another test): the fake key goes
 // in it, not in the environment
@@ -50,7 +53,6 @@ globalThis.fetch = (async (url: string, init: any) => {
 
 afterAll(() => {
   globalThis.fetch = real;
-  fs.rmSync(DIR, { recursive: true, force: true });
 });
 
 // a streamed answer of `text`
@@ -97,7 +99,7 @@ function prefix(body: any): { system: string; tools: string[]; texts: string[] }
 }
 
 test("a chat that fits goes whole; /compact's recap goes on the turn's prefix, then starts the turns' chat; /clear sends nothing before it, opened again too", async () => {
-  let chat = Chat.open(process.cwd());
+  let chat = Chat.open(REPO);
   const mem = chat.mem;
   Memory.push(mem, OLD);
   await until(() => Memory.first(mem) >= mem.count);
@@ -134,7 +136,7 @@ test("a chat that fits goes whole; /compact's recap goes on the turn's prefix, t
   }
 
   Chat.close(chat);
-  chat = Chat.open(process.cwd());
+  chat = Chat.open(REPO);
   const again = await turn(chat, "after a restart");
   expect(again.lines.every((id) => id >= before)).toBe(true);
   expect(again.whole.every((id) => id >= before)).toBe(true);

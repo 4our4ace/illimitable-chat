@@ -55,7 +55,7 @@ import { Hooks } from "../config/Hooks.ts";
 import { Mcp } from "../tools/Mcp.ts";
 import { Memory } from "../chat/Memory.ts";
 import { Plugins } from "../config/Plugins.ts";
-import { term_note, term_notify, term_toast, term_unnotify, type Notice } from "./Notices.ts";
+import { term_note, term_notify, term_once, term_toast, term_unnotify, type Notice } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_restart } from "./ProfileCommands.ts";
 import * as Profiles from "../config/Profiles.ts";
@@ -733,8 +733,9 @@ function term_update(t: Term): void {
 }
 
 // the start's notes, held (HOLD): a pick set that gave way (config.NOTES);
-// on a terminal, the ChatGPT login unreadable or missing, and what the
-// API keys need (config.config_tips)
+// on a terminal, those said once ever (term_once: what auto asks), the
+// ChatGPT login unreadable or missing, and what the API keys need
+// (config.config_tips)
 function term_hints(t: Term): void {
   const signed = ChatGPT.signed();
   const chatgpt = config.OFFER.vendors.includes("chatgpt");
@@ -743,6 +744,7 @@ function term_hints(t: Term): void {
   if (!t.scr.tty) {
     return;
   }
+  term_once(t, HOLD);
   if (unread !== "" || (chatgpt && !signed)) {
     hint = term_notify(t, unread !== "" ? unread : "No ChatGPT login yet: type /login to sign in with your ChatGPT plan.", false, HOLD);
   }

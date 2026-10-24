@@ -9,11 +9,13 @@
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import { png } from "./png.ts";
+import { temp_dir, temp_repo } from "./repo.ts";
 
-const DIR  = fs.mkdtempSync(os.tmpdir() + "/illi-image-");
-const WORK = fs.mkdtempSync(os.tmpdir() + "/illi-image-work-");
+const DIR  = temp_dir("illi-image-");
+// the project the chat is opened in: a throwaway repository, never this
+// checkout
+const WORK = temp_repo("illi-image-work-");
 process.env.ILLI_DIR       = DIR;
 process.env.ILLI_VENDORS   = "claude-api";
 process.env.ILLI_PICK      = "claude-api:sonnet-5.5:medium:slow";
@@ -45,8 +47,6 @@ globalThis.fetch = (async (url: string, init: any) => {
 
 afterAll(() => {
   globalThis.fetch = real;
-  fs.rmSync(DIR, { recursive: true, force: true });
-  fs.rmSync(WORK, { recursive: true, force: true });
 });
 
 // a streamed answer: one block, a tool call (its input's JSON) or text
