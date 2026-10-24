@@ -153,7 +153,7 @@ test("a message sent mid-run is taken as Claude Code echoes it; one sent after t
 test("a plan's limit, a missing login, a chat too long and a crash end the call in plain words", async () => {
   const limit = (await call("limit")).end;
   expect(limit).toMatchObject({ ok: false, stop: "down", again: true });
-  expect(limit.text).toMatch(/^your Claude plan's usage limit is reached: it resets at \d\d:\d\d; \/model picks another model meanwhile$/);
+  expect(limit.text).toMatch(/^your Claude plan's usage limit is reached: it resets at (\w{3} )?\d\d:\d\d; \/model picks another model meanwhile$/);
   expect((await call("login")).end).toMatchObject({ ok: false, stop: "down", text: "Claude Code isn't logged in: run claude in a terminal, log in there (/login), then send a message" });
   expect((await call("long")).end).toMatchObject({ ok: false, stop: "full" });
   expect((await call("crash")).end).toMatchObject({ ok: false, stop: "down", text: "boom" });
