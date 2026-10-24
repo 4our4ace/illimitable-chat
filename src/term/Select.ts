@@ -27,8 +27,9 @@
 // no word (term_dead). Under a popup the mouse is its alone (Popup.ts
 // popup_mouse, before all of this): nothing is chosen there, and nothing
 // lights; a question at the input takes the presses on its answers
-// alone (its lead's text is chosen as any other), and on it only its
-// answers light.
+// alone (and on a line of a folded command saying what it hides; its
+// lead's other text is chosen as any other), and on it only its answers
+// and such a line light.
 
 import * as Draw from "../ui/Draw.ts";
 import { term_draw } from "./Frame.ts";

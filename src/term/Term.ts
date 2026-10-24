@@ -193,14 +193,16 @@ export type Aim = { row: number; in: boolean; press: { of: object | null; on: Ta
 // things side by side, the form's tabs); its list (the form's: what
 // scrolls under its tabs): the box's row it starts at, its lines, the
 // entries they show (the form's: all its lines, shown or not); the lines
-// leading it: how many show, of how many
-export type Box = { of: object; row: number; col: number; w: number; h: number; inset: number; rows: Array<Target | Span[] | null>; list: number; lines: number; tall: number; ahead: number; lead: number };
+// leading it: how many show, of how many; whether they fold (the
+// permission question's long command: Chooser fold, as it was laid out)
+export type Box = { of: object; row: number; col: number; w: number; h: number; inset: number; rows: Array<Target | Span[] | null>; list: number; lines: number; tall: number; ahead: number; lead: number; folds: boolean };
 
 // what a row of a box stands for: one of a popup's options (by its
 // index among the names), one of the commands suggested (by its index
 // among those found), a tab of illi's form, a row of one of its tabs
-// (an option, past them its words)
-export type Target = { $: "option" | "command" | "tab"; k: number } | { $: "row"; k: number; tab: number };
+// (an option, past them its words), a line of a folded command saying
+// how many lines it hides (fold: the kth such; a click shows them all)
+export type Target = { $: "option" | "command" | "tab" | "fold"; k: number } | { $: "row"; k: number; tab: number };
 
 // a thing on a row of a box beside others: its columns inside the frame,
 // from, to (past its end), and what it stands for
@@ -276,7 +278,10 @@ export type Under = { $: "popup" } | { $: "hit"; hit: Hit } | { $: "copy"; copy:
 // searched; key: the key that opened it, which closes it (Ctrl+P's);
 // past: the lines leading it scrolled past; lead: lines over a
 // question's answers (why it asks, what it would do), wrapped and
-// cleaned as laid out (Question.ts); answers: a question's options, each
+// cleaned as laid out (Question.ts); fold: how a long command in them
+// folds (from: the lead's line it starts on; keep: the lines shown while
+// it is folded besides its first and the lead's last: those holding what
+// made the checks ask; open: shown whole, Ctrl+O's); answers: a question's options, each
 // marked an answer (GLYPH.option) as nothing is picked yet;
 // detail: lines under them of the lit option k, made for w columns (the
 // model picker's autocompact gauge)
@@ -291,6 +296,7 @@ export type Chooser = {
   key?   : string;
   past?  : number;
   lead?  : Paint.Line[];
+  fold?  : { from: number; keep: number[]; open: boolean };
   answers?: boolean;
   here   : number;
   pick   : (k: number) => void;

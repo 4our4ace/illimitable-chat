@@ -45,7 +45,7 @@ Marks
 | `✓` `✗` | done, failed (`GLYPH.ok`, `GLYPH.failed`) | a shut run's calls (`✓` dim, `✗` in the error's color); `✓` a subagent at the side, a question answered (its tab); `✗` an MCP server, a refused request |
 | `<-` | back | the side's way back from an agent's page |
 | `·` | between the parts of one line | everywhere |
-| `…` | cut here | any text cut to fit |
+| `…` | cut here | any text cut to fit; the lines a folded command leaves out (`… 38 lines`: a click shows them) |
 | `│` | an open run's rows (lit, `┃`: a click there opens or closes the run) | the chat |
 | `─ ╭ ╮ ╰ ╯` | frames and rules | popups, the commands suggested, messages and open blocks in the chat; panes, and the input (or a question in its place, its title in the rule over it) between rules |
 | `█ ▌ ░` | a gauge: full, half, empty | the auto compact in `/model` |

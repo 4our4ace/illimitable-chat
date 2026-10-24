@@ -3,7 +3,11 @@
 // `bun test Asks.test.ts`. A question the chat asks shows in its picker
 // at the input, why and what it would do (a command by its lines) over
 // its answers, no note saying them again (past what the question is
-// given of a long one, a dim line saying how much more isn't shown): Yes
+// given of a long one, a dim line saying how much more isn't shown; a
+// line saying where text was left out to keep a risk past that, dim and
+// kept while folded, told by where it is, not its words); told where
+// the risk is, it folds, keeping the lines holding it (blank lines left
+// out counted right) and its last; told nothing, it doesn't: Yes
 // allows; "don't ask again"
 // names what it keeps, on one line (offered only when it keeps
 // something); Esc says no; "No, and say why" asks a line (Esc: back to
@@ -103,6 +107,31 @@ test("a command longer than the question is given (Tools.whole) leads it as far 
   const lead = t.question.lead;
   expect(lead.map((l: any) => l.map((r: any) => r.x).join(""))).toEqual(["Why: it is risky", "cat <<EOF > big", "line 1", "line 2", "… 48,211 more characters not shown"]);
   expect(lead.at(-1)[0].s.d).toBe(true);
+});
+
+test("told where in a command the checks found its risk (spots), the question folds it: the lines holding one kept, found by their place among the lines shown (the blank ones left out), one over two lines both, and its last; told nothing, it doesn't fold", () => {
+  const t = term();
+  const whole = "cd app\n\n\nnpm ci\n   \nrm -rf \\\n  ~/old\nnpm test\necho done";
+  const at = whole.indexOf("rm -rf");
+  t.v.asks = [{ id: "q1", who: "illi", tool: "Bash", what: whole, whole, spots: [[at, whole.indexOf("~/old") + 5]], why: "it is risky", keep: "" }];
+  term_asks(t);
+  expect(t.question.lead.map((l: any) => l.map((r: any) => r.x).join(""))).toEqual(["Why: it is risky", "cd app", "npm ci", "rm -rf \\", "  ~/old", "npm test", "echo done"]);
+  expect(t.question.fold).toEqual({ from: 1, keep: [3, 4, 6], open: false });
+  asks(t, ["q2", "Bash", whole]);
+  expect([t.question.lead.length, t.question.fold]).toEqual([7, undefined]);
+});
+
+test("where a command's whole was cut to keep a spot past what the question is given, the line saying so is dim and kept while folded, as is the line before it, told apart by where it is (cuts), not by its words", () => {
+  const t = term();
+  const said = "… 9,000 characters left out";
+  const whole = "cat <<EOF > big\nline 1\nline 2\n" + said + "\nrm -rf ~/x\n" + said;
+  const at = whole.indexOf(said);
+  t.v.asks = [{ id: "q1", who: "illi", tool: "Bash", what: "cat <<EOF > big…", whole, more: 12, spots: [[whole.indexOf("rm"), whole.indexOf("rm") + 10]], cuts: [[at, at + said.length]], why: "it is risky", keep: "" }];
+  term_asks(t);
+  const lead = t.question.lead;
+  expect(lead.map((l: any) => l.map((r: any) => r.x).join(""))).toEqual(["Why: it is risky", "cat <<EOF > big", "line 1", "line 2", said, "rm -rf ~/x", said, "… 12 more characters not shown"]);
+  expect(lead.map((l: any) => l[0].s.d === true)).toEqual([true, false, false, false, true, false, false, true]);
+  expect(t.question.fold).toEqual({ from: 1, keep: [5, 3, 4, 6], open: false });
 });
 
 test("don't ask again keeps what it names; one that keeps nothing isn't offered; Esc says no", () => {

@@ -5,9 +5,10 @@
 // (a pipeline, a list, a subshell, a command's substitution, a heredoc's
 // body, a loop, a bash -c's script, an eval's, a trap's, a find -exec's),
 // each with its words as they'd expand, its assignments, its
-// redirections and the folder it runs in (each cd followed, behind
-// builtin, command or time too; one another program runs leaves it
-// unknown). Wrappers that run the command after them (sudo, timeout,
+// redirections, where it is in the command (its span: a question shows
+// the lines a risk is on) and the folder it runs in (each cd followed,
+// behind builtin, command or time too; one another program runs leaves
+// it unknown). Wrappers that run the command after them (sudo, timeout,
 // env, xargs, ...) are taken off, the part saying so (root: run as root,
 // as sudoedit edits; fed: some of its arguments come from its input). A
 // word known only as the command runs (a variable it never sets and the
@@ -31,24 +32,37 @@ import * as path from "node:path";
 // variable's several), as written (raw); dynamic: only its head (alts)
 // is known before it runs; glob: an unquoted *, ?, [ or {; fd: a
 // process substitution's /dev/fd file; input: one xargs gives from its
-// input
-export type Word = { alts: string[]; raw: string; dynamic: boolean; glob: boolean; fd: boolean; input?: boolean };
+// input; at: where it starts in the text read (a nested script's own:
+// Scan src)
+export type Word = { alts: string[]; raw: string; dynamic: boolean; glob: boolean; fd: boolean; input?: boolean; at?: number };
 
 // a redirection: its operator (">", ">>", "<", "&>", "<<", ">&", ...) and
 // its target (a file; a descriptor for >& and <&; a heredoc's delimiter),
 // the descriptor written before it (2>, 3<), what it feeds the command as
 // text (a heredoc's body, a here-string's), whether that text is made as
-// it runs (a here-string's word; an expanding heredoc's $ or `)
-export type Redir = { op: string; target: Word; num?: string; body?: string; made?: boolean };
+// it runs (a here-string's word; an expanding heredoc's $ or `), where
+// that text starts in the command parsed if it lies there as written (a
+// heredoc's body does, but in a nested script whose text was changed as
+// it was read: Scan base)
+export type Redir = { op: string; target: Word; num?: string; body?: string; made?: boolean; at?: number };
 
 export type Env = { name: string; value: Word };
+
+// a place in the command parsed: its first character, the one past its
+// last
+export type Span = [number, number];
 
 // a simple command: its words (wrappers taken off), the assignments
 // before them, its redirections, the folder it runs in (null: known only
 // as it runs), its words as written (text) and the whole command as
 // written (full: wrappers, assignments and redirections too); whether it
 // runs as root, takes arguments from its input (fed), reads a pipe's
-// output (piped)
+// output (piped); where it is in the command parsed (span: from its
+// first word to its last, a heredoc's body after its line not held). One
+// in a nested script is placed in the command itself where its text lies
+// there as written (bash -c 'x', a $(...), a heredoc's body); else (an
+// eval's words joined, a quote holding an escape) at the text there that
+// holds it: its word, its command
 export type Part = {
   argv   : Word[];
   env    : Env[];
@@ -59,14 +73,16 @@ export type Part = {
   root   : boolean;
   fed    : boolean;
   piped  : boolean;
+  span   : Span;
 };
 
 // a command being read: its words, assignments and redirections so far,
 // where its text starts and ends (-1: nothing read yet)
 type Cmd = { words: Word[]; env: Env[]; redirs: Redir[]; from: number; to: number };
 
-// how a part runs, as the wrappers before it left it
-type Ctx = { cwd: string | null; root: boolean; fed: boolean; piped: boolean };
+// how a part runs, as the wrappers before it left it, and where its
+// command is in the command parsed (Part span)
+type Ctx = { cwd: string | null; root: boolean; fed: boolean; piped: boolean; span: Span };
 
 // a word's values as it is read
 type Build = { alts: string[]; dynamic: boolean; glob: boolean };
@@ -80,10 +96,15 @@ type Doc = { delim: string; strip: boolean; expand: boolean; redir: Redir };
 // (null: unknown), the variables set so far, whether one may have been
 // set unseen (wild: a source), the heredocs waiting; what wrappers
 // around a nested script (bash -c, eval) give its parts; whether its
-// commands read another's output (inside >(...): piped)
+// commands read another's output (inside >(...): piped); where the text
+// read lies in the command parsed: from base on, as written (null: a
+// nested script's, changed as it was read: its parts all placed at box,
+// the text there that holds it)
 type Scan = {
   src   : string;
   at    : number;
+  base  : number | null;
+  box   : Span;
   parts : Part[];
   cwd   : string | null;
   vars  : Map<string, Word>;
@@ -191,9 +212,13 @@ export namespace Shell {
 
   // a command's parts, read as bash would in cwd; a string: why it can't
   // be read so (any failure of the reading too: never a throw, so a bug
-  // here asks rather than lets a command through)
-  export function parse(command: string, cwd: string): Part[] | string {
-    const s: Scan = { src: command, at: 0, parts: [], cwd, vars: new Map(), wild: false, docs: [], root: false, fed: false, inpipe: false, depth: 0 };
+  // here asks rather than lets a command through). Their spans count from
+  // `at`, so a heredoc's body read again is placed in the command holding
+  // it (Redir at); at a span instead, all of them are placed there (a body
+  // whose text isn't there as written)
+  export function parse(command: string, cwd: string, at: number | Span = 0): Part[] | string {
+    const [base, box]: [number | null, Span] = typeof at === "number" ? [at, [at, at + command.length]] : [null, at];
+    const s: Scan = { src: command, at: 0, base, box, parts: [], cwd, vars: new Map(), wild: false, docs: [], root: false, fed: false, inpipe: false, depth: 0 };
     try {
       scan_list(s, "");
       return s.parts;
@@ -238,7 +263,8 @@ export namespace Shell {
   export function cut(w: Word, n: number): Word {
     const known = w.alts.every((a) => a.length >= n);
     const raw = w.raw.startsWith(w.alts[0].slice(0, n)) ? w.raw.slice(n) : w.raw;
-    return known ? { ...w, alts: w.alts.map((a) => a.slice(n)), raw } : { ...DYN, raw };
+    const at = w.at === undefined || raw === w.raw ? w.at : w.at + n;
+    return known ? { ...w, alts: w.alts.map((a) => a.slice(n)), raw, at } : { ...DYN, raw };
   }
 
   // a wrapper's options (Opts), taken off its words: the words after
@@ -455,7 +481,7 @@ function scan_word(s: Scan): Word {
       s.at++;
     }
   }
-  return { alts: b.alts, raw: s.src.slice(start, s.at), dynamic: b.dynamic, glob: b.glob, fd: false };
+  return { alts: b.alts, raw: s.src.slice(start, s.at), dynamic: b.dynamic, glob: b.glob, fd: false, at: start };
 }
 
 // whether a [ at src[at] opens a bracket expression: a ] closes it
@@ -738,9 +764,11 @@ function arith(s: Scan, from: number): number {
   throw new Unread("an arithmetic isn't closed");
 }
 
-// a `command`: its text (\`, \$, \\ unescaped) read as a subshell's;
+// a `command`: its text (\`, \$, \\ unescaped) read as a subshell's
+// (placed as written, but with one of those in it: at the whole `...`);
 // the text returned
 function scan_tick(s: Scan): string {
+  const start = s.at;
   let inner = "";
   let i = s.at + 1;
   for (;;) {
@@ -761,7 +789,8 @@ function scan_tick(s: Scan): string {
     }
   }
   s.at = i + 1;
-  scope(s, () => scan_text(s, inner));
+  const same = inner.length === i - start - 1;
+  scope(s, () => scan_text(s, inner, same ? start + 1 : null, place(s, start, s.at)));
   return inner;
 }
 
@@ -883,19 +912,22 @@ function scan_redir(s: Scan, cmd: Cmd, num?: string): void {
       throw new Unread("a heredoc's delimiter made as it runs");
     }
   }
-  const redir: Redir = op === "<<<" ? { op, target, num, body: target.alts[0] + "\n", made: target.dynamic || target.alts.length !== 1 } : { op, target, num };
+  const as = op === "<<<" ? verbatim(target) : null;
+  const redir: Redir = op === "<<<" ? { op, target, num, body: target.alts[0] + "\n", made: target.dynamic || target.alts.length !== 1, ...(as === null || s.base === null ? {} : { at: s.base + as }) } : { op, target, num };
   if (op === "<<" || op === "<<-") {
     s.docs.push({ delim: target.alts[0], strip: op === "<<-", expand: !/['"\\]/.test(target.raw), redir });
   }
   cmd.redirs.push(redir);
 }
 
-// the heredocs' bodies, from the line after their command's: an unquoted
-// delimiter's body expands, so the commands in it run
+// the heredocs' bodies, from the line after their command's, each where
+// it starts in the command parsed: an unquoted delimiter's body expands,
+// so the commands in it run
 function docs_read(s: Scan): void {
   const docs = s.docs;
   s.docs = [];
   for (const doc of docs) {
+    const from = s.at;
     let body = "";
     while (s.at < s.src.length) {
       const nl = s.src.indexOf("\n", s.at);
@@ -909,16 +941,20 @@ function docs_read(s: Scan): void {
     }
     doc.redir.body = body;
     doc.redir.made = doc.expand && /\$\S|`/.test(body);
+    if (s.base !== null) {
+      doc.redir.at = s.base + from;
+    }
     if (doc.expand) {
-      scan_body(s, body);
+      scan_body(s, body, from);
     }
   }
 }
 
-// an expanding heredoc's body: its $ and ` read as in double quotes
-function scan_body(s: Scan, body: string): void {
-  const [src, at] = [s.src, s.at];
-  Object.assign(s, { src: body, at: 0 });
+// an expanding heredoc's body (from `from` in the text read): its $ and `
+// read as in double quotes
+function scan_body(s: Scan, body: string, from: number): void {
+  const [src, at, base, box] = [s.src, s.at, s.base, s.box];
+  Object.assign(s, { src: body, at: 0, ...placed(s, from, box, body.length) });
   try {
     const b: Build = { alts: [""], dynamic: false, glob: false };
     while (s.at < s.src.length) {
@@ -934,7 +970,7 @@ function scan_body(s: Scan, body: string): void {
       }
     }
   } finally {
-    Object.assign(s, { src, at });
+    Object.assign(s, { src, at, base, box });
   }
 }
 
@@ -1001,15 +1037,42 @@ function scan_for(s: Scan): void {
 }
 
 // a command's text read as another's, in this one's scope (scope() around
-// it for a subshell's)
-function scan_text(s: Scan, text: string): void {
-  const [src, at, docs] = [s.src, s.at, s.docs];
-  Object.assign(s, { src: text, at: 0, docs: [] });
+// it for a subshell's), placed in the command parsed as written from `at`
+// in the text read now (null: changed as it was read; its parts all at
+// box, the text holding it there: placed)
+function scan_text(s: Scan, text: string, at: number | null, box: Span): void {
+  const [src, pos, docs, base, outer] = [s.src, s.at, s.docs, s.base, s.box];
+  Object.assign(s, { src: text, at: 0, docs: [], ...placed(s, at, box, text.length) });
   try {
     deeper(s, () => scan_list(s, ""));
   } finally {
-    Object.assign(s, { src, at, docs });
+    Object.assign(s, { src, at: pos, docs, base, box: outer });
   }
+}
+
+// where a text read in this one's place lies in the command parsed (Scan
+// base, box): as written from `at` in the text read now; else (null, or
+// this one's own text isn't there as written) all of it at box, the text
+// there that holds it
+function placed(s: Scan, at: number | null, box: Span, length: number): { base: number | null; box: Span } {
+  const base = at === null || s.base === null ? null : s.base + at;
+  return { base, box: base === null ? box : [base, base + length] };
+}
+
+// where a stretch of the text read is in the command parsed
+function place(s: Scan, from: number, to: number): Span {
+  return s.base === null ? s.box : [s.base + from, s.base + to];
+}
+
+// where a word's one value starts in the text read, if it lies there as
+// written: bare, or inside quotes that change nothing in it (null:
+// several values, one made as it runs, an escape, an expansion)
+function verbatim(w: Word): number | null {
+  const x = w.alts[0];
+  if (w.at === undefined || w.dynamic || w.alts.length !== 1) {
+    return null;
+  }
+  return w.raw === x ? w.at : w.raw === "'" + x + "'" || w.raw === '"' + x + '"' ? w.at + 1 : null;
 }
 
 // a subshell's run: the folder and variables it changes are its own
@@ -1086,7 +1149,7 @@ function cmd_end(s: Scan, cmd: Cmd, piped: boolean, forked: boolean): void {
 // a command's parts (an assignment alone: one without words, its
 // variables set), and what it changes of the shell after it (cmd_after)
 function cmd_run(s: Scan, cmd: Cmd, full: string, piped: boolean): void {
-  const ctx = { cwd: s.cwd, root: s.root, fed: s.fed, piped: piped || s.inpipe };
+  const ctx = { cwd: s.cwd, root: s.root, fed: s.fed, piped: piped || s.inpipe, span: place(s, cmd.from, cmd.to) };
   if (cmd.words.length === 0) {
     cmd.env.forEach((e) => s.vars.set(e.name, e.value));
     part_push(s, [], cmd.env, cmd.redirs, full, ctx);
@@ -1273,7 +1336,7 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
       if (words.some((w) => w.dynamic || w.alts.length !== 1)) {
         throw new Unread(name + " runs a command made as it runs");
       }
-      nested(s, Shell.lit(words.map((w) => w.alts[0]).join(" ")), ctx, name !== "eval" || !own);
+      nested(s, Shell.lit(words.map((w) => w.alts[0]).join(" ")), ctx, name !== "eval" || !own, words);
       if (redirs.length > 0) {
         part_push(s, [], env, redirs, full, ctx);
       }
@@ -1291,11 +1354,16 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
 // a nested script's commands, run by a wrapper (its root, its input):
 // in a shell of its own (sub: bash -c, trap, watch: its folder and
 // variables its own, the variables only the environment's), else in this
-// one (eval)
-function nested(s: Scan, script: Word, ctx: Ctx, sub: boolean): void {
+// one (eval). Its parts are placed where its words are (one word whose
+// one value is there as written: each where it is in it; else at the
+// words, at the command when they are made up)
+function nested(s: Scan, script: Word, ctx: Ctx, sub: boolean, words: Word[] = [script]): void {
   if (script.dynamic) {
     throw new Unread("a shell runs a script made as it runs");
   }
+  const at   = script.alts.length === 1 && words.length === 1 ? verbatim(words[0]) : null;
+  const last = words.at(-1);
+  const box  = last !== undefined && words.every((w) => w.at !== undefined) ? place(s, words[0].at!, last.at! + last.raw.length) : ctx.span;
   const [root, fed, cwd] = [s.root, s.fed, s.cwd];
   Object.assign(s, { root: ctx.root, fed: ctx.fed, cwd: ctx.cwd });
   try {
@@ -1303,10 +1371,10 @@ function nested(s: Scan, script: Word, ctx: Ctx, sub: boolean): void {
       if (sub) {
         scope(s, () => {
           s.vars = new Map();
-          scan_text(s, text);
+          scan_text(s, text, at, box);
         });
       } else {
-        scan_text(s, text);
+        scan_text(s, text, at, box);
       }
     }
   } finally {
@@ -1385,7 +1453,7 @@ function found(w: Word, starts: Word[]): Word {
 }
 
 function part_push(s: Scan, argv: Word[], env: Env[], redirs: Redir[], full: string, ctx: Ctx): void {
-  s.parts.push({ argv, env, redirs, cwd: ctx.cwd, text: argv.map((w) => w.raw).join(" "), full, root: ctx.root, fed: ctx.fed, piped: ctx.piped });
+  s.parts.push({ argv, env, redirs, cwd: ctx.cwd, text: argv.map((w) => w.raw).join(" "), full, root: ctx.root, fed: ctx.fed, piped: ctx.piped, span: ctx.span });
 }
 
 // a folder's real place (links followed) if it exists, else as named

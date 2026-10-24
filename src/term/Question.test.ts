@@ -10,7 +10,16 @@
 // rules, the cursor hidden; its lead cut, a dim line saying how much
 // more. The lead scrolls by the wheel over it and by PgUp, PgDn, its
 // answers staying, the command whole to its end (a note's is cut
-// short); the wheel elsewhere scrolls the chat. A line asked
+// short); the wheel elsewhere scrolls the chat. A long command told
+// where its risk is folds to its first line, the lines holding it and
+// its last, a dim line for each run of the rest saying how many lines it
+// hides (one short, one hiding a row at a time, one not told: never;
+// one line: never), its rule saying Ctrl+O all; Ctrl+O shows it whole
+// and folds it again, from its top, the lit answer and the hold kept; a
+// click on such a line shows it whole, the pointer on it lighting it;
+// opened, it reads whole to its end; folded or whole on a screen 80 by
+// 16 or 40 by 10, nothing past the foot, every answer, never two lines
+// saying what is cut one over the other. A line asked
 // for has the cursor in its words. The input as typed is kept under a
 // question, typing going nowhere meanwhile, and comes back once it is
 // answered. The pointer moving onto an answer lights it; a click does
@@ -194,11 +203,12 @@ for (const [what, said] of [[LONG, "a 2,000-character command on one line"], [TA
   }
 }
 
-test("the permission question shows the command whole, not cut short as a note shows it: a 2,000-character one read to its end, page by page", () => {
+test("the permission question shows the command whole, not cut short as a note shows it: a 2,000-character one read to its end, page by page (one line: it doesn't fold, though told where its risk is)", () => {
   sized(80, 24, () => {
     const t = term();
-    t.v.asks = [{ id: "q1", who: "illi", tool: "shell", what: LONG.slice(0, 399) + "…", whole: LONG, why: "it deletes files", keep: "rm -r ./no-such-folder-here" }];
+    t.v.asks = [{ id: "q1", who: "illi", tool: "shell", what: LONG.slice(0, 399) + "…", whole: LONG, spots: [[0, 27]], why: "it deletes files", keep: "rm -r ./no-such-folder-here" }];
     paint(t);
+    expect([t.box.folds, asked(t, 80)[0]]).toEqual([false, "── Allow shell? · ↑↓ Enter · Esc no " + "─".repeat(39)]);
     const read: string[] = [];
     for (let k = 0; k < 30; k++) {
       asked(t, 80).slice(1, 1 + t.box.ahead).forEach((l: string, j: number) => (read[t.question.past + j] = l));
@@ -210,6 +220,131 @@ test("the permission question shows the command whole, not cut short as a note s
     expect(asked(t, 80)[1 + t.box.ahead]).toBe("… " + (t.box.lead - t.box.ahead) + " lines above · wheel, PgUp/PgDn");
   });
 });
+
+// a 40-line script whose risk is on line 39, the checks having told
+// where (spots), asked to run in the shell (a new question each time),
+// painted
+const SCRIPT = "set -e\n" + Array.from({ length: 37 }, (_, k) => "echo step " + (k + 2) + " >> build.log").join("\n") + "\nrm -rf ~/projects/old-site\necho done";
+const RISK   = [SCRIPT.indexOf("rm -rf"), SCRIPT.indexOf("rm -rf") + 26];
+const FOLDED = ["Why: it deletes files", "set -e", "… 37 lines", "rm -rf ~/projects/old-site", "echo done"];
+const risky  = (t: any, what = SCRIPT, spots = [RISK]) => {
+  t.v.asks = [{ id: "q" + (t.asked = (t.asked ?? 0) + 1), who: "illi", tool: "shell", what: what.slice(0, 399), whole: what, spots, why: "it deletes files", keep: "" }];
+  paint(t);
+};
+
+test("a long command folds to its first line, the lines holding what made the checks ask and its last, each run of the rest one dim line saying how many lines it hides; the rule says Ctrl+O shows all", () => {
+  sized(80, 24, () => {
+    const t = term();
+    risky(t);
+    const lines = asked(t, 80);
+    expect(lines[0]).toBe("── Allow shell? · ↑↓ Enter · Ctrl+O all · Esc no " + "─".repeat(26));
+    expect(lines.slice(1, -1)).toEqual([...FOLDED, "> ○ Yes", "  ○ No", "  ○ No, and say why"]);
+    const gap = t.box.rows.findIndex((aim: any) => aim?.$ === "fold");
+    expect([gap, t.box.rows[gap], t.box.folds, t.ruled.rows[t.box.row + gap][0].line.map((r: any) => r.s.d)]).toEqual([2, { $: "fold", k: 0 }, true, [true]]);
+    const two = SCRIPT.replace("echo step 20 >> build.log", "chmod 777 /etc/shadow");
+    const at  = two.indexOf("chmod");
+    risky(t, two, [[at, at + 21], [two.indexOf("rm -rf"), two.indexOf("rm -rf") + 26]]);
+    expect(asked(t, 80).slice(1, 8)).toEqual(["Why: it deletes files", "set -e", "… 18 lines", "chmod 777 /etc/shadow", "… 18 lines", "rm -rf ~/projects/old-site", "echo done"]);
+    expect(t.box.rows.slice(0, 7).map((aim: any) => aim?.k ?? null)).toEqual([null, null, 0, null, 1, null, null]);
+  });
+});
+
+test("a command doesn't fold where folding hides nothing: one of four rows or fewer, one whose hidden runs are a row each, one not told where its risk is; its rule says no Ctrl+O, which then does nothing", () => {
+  sized(80, 24, () => {
+    const t = term();
+    const short = "cd /tmp\nrm -rf ./x";
+    risky(t, short, [[8, 18]]);
+    expect([asked(t, 80).slice(1, 4), t.box.folds]).toEqual([["Why: it deletes files", "cd /tmp", "rm -rf ./x"], false]);
+    const five = "echo a\necho b\nrm -rf ./x\necho c\necho d";
+    risky(t, five, [[14, 24]]);
+    expect([asked(t, 80).slice(1, 7), t.box.folds]).toEqual([["Why: it deletes files", "echo a", "echo b", "rm -rf ./x", "echo c", "echo d"], false]);
+    t.v.asks = [{ id: "q-plain", who: "illi", tool: "shell", what: SCRIPT.slice(0, 399), whole: SCRIPT, why: "it deletes files", keep: "" }];
+    paint(t);
+    expect([asked(t, 80)[0], asked(t, 80)[2], t.box.folds, t.question.fold]).toEqual(["── Allow shell? · ↑↓ Enter · Esc no " + "─".repeat(39), "set -e", false, undefined]);
+    term_grab(t, "Ctrl+O");
+    paint(t);
+    expect([asked(t, 80)[3], t.v.verbose]).toEqual(["echo step 2 >> build.log", false]);
+  });
+});
+
+test("Ctrl+O shows a folded command whole, and folds it again: its lead from its top each time, the lit answer kept, the hold on Enter as it was; the rule says what Ctrl+O does next", () => {
+  sized(80, 24, () => {
+    const t = term();
+    risky(t);
+    const shown = t.asking.shown;
+    term_grab(t, "Down");
+    term_grab(t, "Ctrl+O");
+    paint(t);
+    expect(asked(t, 80)[0]).toBe("── Allow shell? · ↑↓ Enter · Ctrl+O fold · Esc no " + "─".repeat(25));
+    expect(asked(t, 80).slice(1, 5)).toEqual(["Why: it deletes files", "set -e", "echo step 2 >> build.log", "echo step 3 >> build.log"]);
+    expect([t.box.lead, t.box.folds, lit(t)]).toEqual([41, true, "No"]);
+    term_grab(t, "PgDn");
+    paint(t);
+    expect(t.question.past).toBeGreaterThan(0);
+    term_grab(t, "Ctrl+O");
+    paint(t);
+    expect([asked(t, 80).slice(1, 6), t.question.past, lit(t), t.asking.shown, t.v.verbose, sent(t)]).toEqual([FOLDED, 0, "No", shown, false, []]);
+  });
+});
+
+test("a click on a line saying what a fold hides shows the command whole, held by nothing (it answers nothing); the pointer on that line lights it", () => {
+  sized(80, 24, () => {
+    const t = term();
+    risky(t);
+    const gap = t.box.row + 2;
+    const ink = () => t.ruled.rows[gap][0].line.map((r: any) => [r.x, r.s.d]);
+    move(t, gap, COL);
+    paint(t);
+    expect([ink(), lit(t)]).toEqual([[["… 37 lines", false]], "Yes"]);
+    move(t, gap + 1, COL);
+    paint(t);
+    expect(ink()).toEqual([["… 37 lines", true]]);
+    click(t, gap, COL);
+    paint(t);
+    expect([t.question.fold.open, sent(t), asked(t, 80)[3], t.box.rows.some((aim: any) => aim?.$ === "fold")]).toEqual([true, [], "echo step 2 >> build.log", false]);
+  });
+});
+
+test("opened, a folded command reads whole to its end, page by page", () => {
+  sized(80, 24, () => {
+    const t = term();
+    risky(t);
+    term_grab(t, "Ctrl+O");
+    paint(t);
+    const read: string[] = [];
+    for (let k = 0; k < 20; k++) {
+      asked(t, 80).slice(1, 1 + t.box.ahead).forEach((l: string, j: number) => (read[t.question.past + j] = l));
+      term_grab(t, "PgDn");
+      paint(t);
+    }
+    expect([read.length, read[0], read.slice(1).join("\n")]).toEqual([t.box.lead, "Why: it deletes files", SCRIPT]);
+  });
+});
+
+for (const [cols, rows] of [[80, 16], [40, 10]]) {
+  test("folded or whole at " + cols + "x" + rows + ", the question paints nothing past the screen's foot, every answer shows, no two lines saying what is cut one over the other", () => {
+    sized(cols, rows, () => {
+      const t = term();
+      risky(t);
+      for (const open of [false, true, false]) {
+        expect([open, t.ruled.rows.length, t.box.folds, t.question.fold.open]).toEqual([open, rows, true, open]);
+        expect(t.box.row + t.box.h).toBeLessThan(rows - 1);
+        const inside = asked(t, cols).slice(1, -1);
+        expect(inside.slice(-3).map((l: string) => l.replace(/^> /, "  "))).toEqual(["  ○ Yes", "  ○ No", "  ○ No, and say why"]);
+        expect(inside.filter((l: string, k: number) => l.startsWith("… ") && inside[k + 1]?.startsWith("… "))).toEqual([]);
+        expect(asked(t, cols).at(-1)).toMatch(/^─+$/);
+        for (let k = 0; k < 12; k++) {
+          term_grab(t, "PgDn");
+          paint(t);
+          const now = asked(t, cols).slice(1, -1);
+          expect(now.filter((l: string, j: number) => l.startsWith("… ") && now[j + 1]?.startsWith("… "))).toEqual([]);
+        }
+        term_grab(t, "Ctrl+O");
+        paint(t);
+      }
+    });
+  });
+}
 
 test("a question takes the input's full width with the side left or right, nothing dimmed: the head and the side as with none, only the chat's rows fewer", () => {
   for (const place of ["left", "right"]) {

@@ -57,6 +57,7 @@ import { Custom, type Skill } from "../config/Custom.ts";
 import { Plugins } from "../config/Plugins.ts";
 import { Trusted } from "../config/Trusted.ts";
 import { Guard, MODES, type Mode, type Verdict, type Where } from "./Guard.ts";
+import type { Span } from "./Shell.ts";
 import { Permissions } from "./Permissions.ts";
 import { INT, STR, TOOLS, Machine, spec, type Spec } from "./Machine.ts";
 import { Mcp } from "./Mcp.ts";
@@ -284,6 +285,12 @@ const FILES = 50;
 const WHAT  = 400;
 const WHOLE = 32000;
 const KEPT  = 1000;
+
+// past WHOLE, the most characters the question shows of a line holding a
+// spot (what made the checks ask: Tools.whole), from REACH before the
+// spot on (a minified script is one long line)
+const PIECE = 2000;
+const REACH = 200;
 
 // the most refused requests kept (Perm)
 const REFUSALS = 50;
@@ -793,7 +800,11 @@ export namespace Tools {
   // first, so a model stuck in a loop stops; a yes starts that caller's
   // count again (Tools.looped). The question is
   // given what the call would do and why, WHOLE characters of each at
-  // most, and what "don't ask again" keeps by its ends past KEPT. One
+  // most (Tools.whole: past that, the lines holding what made it ask),
+  // where in it that is (Verdict spots; a reason with no place in it, a
+  // hook's ask, the loop guard, rules that won't read: all of it, so the
+  // question doesn't fold it), and what "don't ask again" keeps by its
+  // ends past KEPT. One
   // asked runs on the user's yes, "don't ask again" keeping its grants for
   // the project (one that can't be saved: for this run). A rules file that
   // won't read leaves nothing run unasked
@@ -805,10 +816,11 @@ export namespace Tools {
     const mode   = hooked.allow === true ? "yolo" : Tools.mode(tools);
     const got    = judge({ mode, cwd: Projects.real(tools.cwd), top: folder, rules: ok ? perms.rules : {}, grants, reads: (["skills", "commands", "agents"] as const).flatMap((k) => Custom.dirs(tools.cwd, k)).map(Projects.real), plugins: Plugins.roots() });
     const broken = "illi can't read your permission rules (" + perms + ")";
-    const judged: Verdict = ok || got.$ === "deny" ? got : { $: "ask", why: got.$ === "ask" ? got.why + "; " + broken : broken, always: [], exact: got.$ === "ask" ? got.exact : [] };
-    const hooks: Verdict = hooked.ask === undefined || judged.$ === "deny" ? judged : { $: "ask", why: judged.$ === "ask" ? hooked.ask + "; " + judged.why : hooked.ask, always: [], exact: judged.$ === "ask" ? judged.exact : [] };
+    const all: Span[] = [[0, Tools.does(input).length]];
+    const judged: Verdict = ok || got.$ === "deny" ? got : { $: "ask", why: got.$ === "ask" ? got.why + "; " + broken : broken, always: [], exact: got.$ === "ask" ? got.exact : [], spots: all };
+    const hooks: Verdict = hooked.ask === undefined || judged.$ === "deny" ? judged : { $: "ask", why: judged.$ === "ask" ? hooked.ask + "; " + judged.why : hooked.ask, always: [], exact: judged.$ === "ask" ? judged.exact : [], spots: all };
     const looped = Tools.looped(tools, who, tool, input) && mode !== "yolo";
-    const verdict: Verdict = !looped || hooks.$ === "deny" ? hooks : hooks.$ === "ask" ? { ...hooks, why: LOOPED + "; " + hooks.why } : { $: "ask", why: LOOPED, always: [], exact: [] };
+    const verdict: Verdict = !looped || hooks.$ === "deny" ? hooks : hooks.$ === "ask" ? { ...hooks, why: LOOPED + "; " + hooks.why, spots: all } : { $: "ask", why: LOOPED, always: [], exact: [], spots: all };
     if (verdict.$ === "allow") {
       return null;
     }
@@ -816,7 +828,7 @@ export namespace Tools {
     if (verdict.$ === "deny") {
       return Tools.refuse(tools, { ...asked, how: verdict.rule ? "rule" : "mode", said: "", exact: verdict.exact });
     }
-    const reply = await tools.hooks.ask({ ...asked, ...Tools.whole(input), why: Tools.ends(verdict.why, WHOLE), keep: Tools.ends(verdict.always.map((g) => Guard.said(g, folder)).join(", "), KEPT) }, signal);
+    const reply = await tools.hooks.ask({ ...asked, ...Tools.whole(input, verdict.spots), why: Tools.ends(verdict.why, WHOLE), keep: Tools.ends(verdict.always.map((g) => Guard.said(g, folder)).join(", "), KEPT) }, signal);
     if (!reply.yes) {
       return Tools.refuse(tools, { ...asked, how: "no", said: reply.said, exact: verdict.exact }, !signal.aborted);
     }
@@ -928,12 +940,52 @@ export namespace Tools {
 
   // what a tool would do (Tools.does) as the question shows it: WHOLE
   // characters at most (a character in two halves, a surrogate pair, kept
-  // whole), and how many past them are left out (more: the question says
-  // so)
-  export function whole(input: any): { whole: string; more: number } {
-    const text = Tools.does(input);
-    const end  = text.length <= WHOLE ? text.length : WHOLE - (text.charCodeAt(WHOLE - 1) >> 10 === 0x36 ? 1 : 0);
-    return { whole: text.slice(0, end), more: text.length - end };
+  // whole); past them, each line holding a spot (where the checks found
+  // what made them ask: Guard Verdict spots), PIECE characters of it at
+  // most from REACH before the spot, WHOLE of all such at most, a line
+  // before each saying how many characters were left out there (cuts:
+  // where those lines are, so the question tells them from the command);
+  // how many past the last shown are left out (more: the question says
+  // so); the spots, moved to where they are in what it shows (none given:
+  // none). So a risk deep in a heredoc carrying a whole file still shows
+  export function whole(input: any, spots?: Span[]): { whole: string; more: number; spots?: Span[]; cuts?: Span[] } {
+    const text   = Tools.does(input);
+    const ends   = (e: number) => (e < text.length && text.charCodeAt(e - 1) >> 10 === 0x36 ? e - 1 : e);
+    const starts = (a: number) => (a > 0 && text.charCodeAt(a) >> 10 === 0x37 ? a - 1 : a);
+    const head   = text.length <= WHOLE ? text.length : ends(WHOLE);
+    const shown: Span[] = [[0, head]];
+    let used = 0;
+    for (const [from, to] of [...(spots ?? [])].sort((a, b) => a[0] - b[0])) {
+      if (from < head || from >= text.length || used >= WHOLE) {
+        continue;
+      }
+      const nl   = text.indexOf("\n", Math.max(from, to - 1));
+      const a    = starts(Math.max(text.lastIndexOf("\n", from - 1) + 1, head, from - REACH));
+      const b    = ends(Math.min(nl < 0 ? text.length : nl, a + PIECE));
+      const last = shown.at(-1)!;
+      used += Math.max(0, b - Math.max(a, last[1]));
+      if (a <= last[1]) {
+        last[1] = Math.max(last[1], b);
+      } else {
+        shown.push([a, b]);
+      }
+    }
+    let out = "";
+    let end = 0;
+    const cuts: Span[] = [];
+    const moves: Array<[number, number, number]> = [];
+    for (const [a, b] of shown) {
+      if (a > end) {
+        const said = "… " + (a - end).toLocaleString("en-US") + (a - end === 1 ? " character" : " characters") + " left out";
+        cuts.push([out.length + 1, out.length + 1 + said.length]);
+        out += "\n" + said + "\n";
+      }
+      moves.push([a, b, out.length - a]);
+      out += text.slice(a, b);
+      end = b;
+    }
+    const moved = (spots ?? []).flatMap(([from, to]) => moves.flatMap(([a, b, d]): Span[] => (from < b && a < to ? [[Math.max(from, a) + d, Math.min(to, b) + d]] : [])));
+    return { whole: out, more: text.length - end, ...(spots === undefined ? {} : { spots: moved }), ...(cuts.length === 0 ? {} : { cuts }) };
   }
 
   // what a tool would do (Tools.does), WHAT characters at most, where

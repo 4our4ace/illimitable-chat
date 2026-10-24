@@ -204,9 +204,35 @@ git push --force origin main
   its lines (the side panel and `/permissions` show it cut short). One
   too long for half the screen is cut to fit, a dim line saying how much
   more; the wheel over it, or PgUp and PgDn, scroll it to its end. Past
-  32,000 characters (a heredoc carrying a whole file), a dim line at its
-  end says how many more aren't shown. The answers always show; on a
-  screen too short for both, what leads them gives way first.
+  32,000 characters (a heredoc carrying a whole file), the lines holding
+  what made illi ask still show, each after a dim line saying how many
+  characters were left out before it, and a dim line at its end says how
+  many more aren't shown. The answers always show; on a screen too short
+  for both, what leads them gives way first.
+- A command taller than four lines comes folded: its first line, every
+  line holding what made illi ask, and its last, each stretch between
+  them a dim `… 38 lines`. What made it ask always shows, wherever it
+  is: line 40 of a script, a command inside `bash -c '…'` or a heredoc
+  fed to a shell; all of a heredoc the risky command reads (what it
+  writes to a git hook, what it feeds `python`). Ctrl+O, or a click on
+  a `… 38 lines` line, shows the whole command; Ctrl+O again folds it
+  (the rule says which: `Ctrl+O all`, `Ctrl+O fold`). One illi can't
+  follow, and one asked for a reason with no place in it (a hook's ask,
+  the loop guard), shows whole.
+
+  ```
+  ── Allow shell? · ↑↓ Enter · Ctrl+O all · Esc no ──────────────────────────────
+  Why: rm -rf ~/projects/old-site deletes ~/projects/old-site and all in it;
+  ~/projects/old-site is outside the project
+  set -e
+  … 38 lines
+  rm -rf ~/projects/old-site
+  echo done
+  > ○ Yes
+    ○ No
+    ○ No, and say why
+  ───────────────────────────────────────────────────────────────────────────────
+  ```
 - "Don't ask again" says what it keeps, for this project: a folder for
   files outside the project (for a read, the repository holding it;
   just that call in your home folder itself or above it), a family
