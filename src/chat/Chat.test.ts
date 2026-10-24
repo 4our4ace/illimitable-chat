@@ -13,7 +13,8 @@
 // while it waits for the catalog ends it at once). A call too long for the model's window makes the
 // chat refit and the turn go on from a note, unasked; three in a row end
 // it, saying why; with autocontinue off, the turn ends at the first,
-// saying a message goes on. A failed turn asks to try again only when a later try
+// saying a message goes on, the three counted over the user's messages
+// all the same. A failed turn asks to try again only when a later try
 // may answer, and says a reply was cut off; summaries stuck are told once;
 // a save that fails is told, never thrown (a goal met still ends as
 // met). The suggested reply stays as a message of the user's own goes
@@ -477,16 +478,21 @@ test("a turn grown past its room goes on without shrinking; three refits in a ro
   expect(chat.refits).toBe(0);
 });
 
-test("autocontinue off: a turn whose chat outgrew the window ends there, its note saying a message goes on, the share still made smaller", async () => {
+test("autocontinue off: a turn whose chat outgrew the window ends there, its note saying a message goes on, the share still made smaller; the refits counted over the user's messages, so past three in a row it says it won't fit", async () => {
   const fit = chat.fit;
+  const long = [{ text: "HTTP 400: prompt is too long: 210000 tokens > 200000 maximum" }];
   config.config_set("autocontinue", "off");
   try {
-    const asked = await refitted([{ text: "HTTP 400: prompt is too long: 210000 tokens > 200000 maximum" }]);
-    expect(asked).toHaveLength(1);
+    expect(await refitted(long)).toHaveLength(1);
     expect(last()).toBe("The chat outgrew " + chat.model + "'s window: more of it is summarized now, each summary a zoom away. Send a message to go on (autocontinue is off).");
-    expect([chat.fit, chat.refits]).toEqual([fit * 0.8, 0]);
+    expect([chat.fit, chat.refits]).toEqual([fit * 0.8, 1]);
+    chat.refits = 3;
+    expect(await refitted(long)).toHaveLength(1);
+    expect(last()).toBe("No reply: the chat won't fit " + chat.model + "'s window even summarized. /clear starts a new topic (the chat before it is kept, not sent), or /model picks a model with a bigger window.");
+    expect(chat.refits).toBe(0);
   } finally {
     config.config_set("autocontinue", null);
+    [chat.fit, chat.refits] = [fit * 0.8, 0];
   }
   expect(config.AUTOCONTINUE).toBe(true);
 });

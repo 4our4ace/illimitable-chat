@@ -340,6 +340,6 @@ Mouse and side panel
   it, the background jobs are counted when the side panel doesn't show
   them.
 - The terminal's title says `∞ illi · <project>`, one cell of dots
-  going round in the ∞'s place while illi works (`⠋`), `?` while a
-  question waits on you (here or in another profile open in this
-  terminal); the `title` setting turns it off.
+  tracing a figure of eight in the ∞'s place while illi works (`⠋`),
+  `?` while a question waits on you (here or in another profile open
+  in this terminal); the `title` setting turns it off.

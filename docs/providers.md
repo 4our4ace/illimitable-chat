@@ -18,10 +18,11 @@ or with no display, the link is only shown. An existing [opencode](https://openc
 as it is. `chatgpt` is the default vendor.
 
 The side's Usage shows the plan the login is on and how much of its
-limits is used, both asked of ChatGPT together (as Codex's `/status`
-does) when illi starts, after `/login` and `/logout`, and when the login
-changes on disk (another terminal's `/login`, or `opencode auth login`;
-looked at every few seconds), then kept current by each reply. They are
+limits is used, once ChatGPT has told it (nothing shows before), both
+asked of ChatGPT together (as Codex's `/status` does) when illi
+starts, after `/login` and `/logout`, and when the login changes on
+disk (another terminal's `/login`, or `opencode auth login`; looked at
+every few seconds), then kept current by each reply. They are
 always the account's in use: a new login drops the old one's usage at
 once.
 

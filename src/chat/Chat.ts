@@ -718,7 +718,9 @@ export namespace Chat {
   // summary lines (Chat.cut moves on); why: the note it goes on from.
   // Past REFITS in a row, the turn ends, saying why; with autocontinue
   // off, it ends at once, the note saying a message goes on, and the
-  // next turn sends the chat fitted as here. false: the turn ends
+  // next turn sends the chat fitted as here (the count going on till a
+  // call is answered, so a chat that won't fit still ends saying so,
+  // not asking for one message after another). false: the turn ends
   export function refit(chat: Chat, shrink: boolean, why = REFIT.replace("#", chat.model)): boolean {
     chat.refits += 1;
     if (chat.refits > REFITS) {
@@ -728,7 +730,6 @@ export namespace Chat {
     }
     chat.fit *= shrink ? FIT : 1;
     if (!config.AUTOCONTINUE) {
-      chat.refits = 0;
       Chat.note(chat, why.replace(GO_ON, STAY));
       return false;
     }

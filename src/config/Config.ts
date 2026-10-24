@@ -156,10 +156,11 @@ export const MCP      = config_place("mcp");
 export const MCPS     = DIR === ROOT ? [MCP] : [...new Set([ROOT + "/mcp.json", MCP])];
 
 // the user's permission rules and the grants kept (Permissions.ts); a
-// mode of yolo set is said at the start, as nothing is asked then
+// mode of yolo set is said at the start, as little is asked then (a
+// write to illi's own config, what the rules ask: Guard.ts)
 export const PERMISSIONS = config_place("permissions");
 if (config_value("mode") === "yolo") {
-  NOTES.push("mode is yolo: every call runs unasked, but what your permission rules refuse or ask. /mode switches it for this session.");
+  NOTES.push("mode is yolo: every call runs unasked, but a write to illi's own config and what your permission rules refuse or ask. /mode switches it for this session.");
 }
 
 // a mode of auto (set, or the default) said once ever, at the first start

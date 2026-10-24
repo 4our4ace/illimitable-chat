@@ -90,8 +90,8 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
   const groups: [group: string, cmds: Cmd[]][] = [
     ["Chat", [
       ["",                  "Enter",                   "send",                                           term_enter],
-      ["",                  "Esc",                     "close a list; else clear the notes, and twice: interrupt illi (agents go on)", term_esc],
-      ["",                  "Ctrl+C",                  "clear the input; on an empty one, interrupt illi (again: quit)", term_clear],
+      ["",                  "Esc",                     "close a list; else clear the notes, and twice: stop illi and its subagents (background jobs go on)", term_esc],
+      ["",                  "Ctrl+C",                  "clear the input; on an empty one, stop illi and its subagents (again: quit)", term_clear],
       ["",                  "Ctrl+D",                  "clear the input; on an empty one, quit",         term_clear],
       ["",                  "Tab",                     "take the suggested reply",                       term_take],
       ["",                  "Ctrl+P",                  "all commands and settings in one list, typed to search", term_palette],

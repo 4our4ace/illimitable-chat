@@ -185,7 +185,9 @@ export namespace OpenAI {
   // the messages of an output item: a thought; a reply and the web
   // sources it cites; a tool call; a web search with its result, as
   // every call is logged with one (its status: failed, else searched;
-  // the pages it read are the reply's sources)
+  // the pages it read are the reply's sources), but one left unfinished
+  // (searching, in a response that failed or stopped short) logged
+  // alone, as a call stopped before it answered
   export function entries(o: any): Entry[] {
     switch (o.type) {
       case "reasoning": {
@@ -205,8 +207,9 @@ export namespace OpenAI {
         return [{ kind: "tool", text: o.name + " " + o.arguments, of: o.call_id }];
       }
       case "web_search_call": {
-        const said = o.status === "failed" ? FAILED + "the search failed" : "searched";
-        return [{ kind: "tool", text: "web_search " + JSON.stringify(o.action ?? {}), of: o.id }, { kind: "echo", text: said, of: o.id }];
+        const call = "web_search " + JSON.stringify(o.action ?? {});
+        const said = o.status === "failed" ? FAILED + "the search failed" : o.status === undefined || o.status === "completed" ? "searched" : null;
+        return said === null ? [{ kind: "tool", text: call }] : [{ kind: "tool", text: call, of: o.id }, { kind: "echo", text: said, of: o.id }];
       }
     }
     return [];

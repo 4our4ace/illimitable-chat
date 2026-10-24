@@ -253,7 +253,7 @@ export type Link = {
 // what a person does
 export type Act =
   | ({ $: "Send" } & Sent)                      // Enter: a message (empty: nothing)
-  | { $: "Stop" }                               // Esc twice, Ctrl+C: illi's turn interrupted (none running: nothing)
+  | { $: "Stop" }                               // Esc twice, Ctrl+C: illi's turn and its subagents stopped (none running: nothing)
   | { $: "Move"; move: Move; to?: string }      // the pick moves (to: to that value)
   | { $: "Pick"; to: Pick }                     // the pick set whole (the /model picker)
   | { $: "Open"; id: number; n: number }        // a click on a block
@@ -729,8 +729,8 @@ function act_calls(v: View, rows: Row[], after: Row | undefined): Done[] {
 // to illi's question (ANSWERED, shown as the user's). None follows a call
 // logged alone: one stopped before it answered (Chat.unanswered: not run
 // yet, or Claude Code's, cut off; illi's own tools answer a stop, as
-// failed), or an OpenAI web search logged before its result was (0.3.1:
-// OpenAI.entries)
+// failed; an OpenAI web search left unfinished too), or an OpenAI web
+// search logged before 0.3.1, which logged none (OpenAI.entries)
 function row_echo(v: View, row: Row | undefined): string | null {
   return row?.$ === "Msg" ? (row.kind === "echo" ? row.text : row.kind === "user" && row.who === ANSWERS ? ANSWERED + row.text : null)
     : row?.$ === "Sum" && row.n === 1 && row.kind === "echo" ? v.whole.get(row.id)?.text ?? null

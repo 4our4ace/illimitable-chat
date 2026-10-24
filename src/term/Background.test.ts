@@ -4,8 +4,9 @@
 // shows them: a section of the side (three, then how many more), the
 // bottom line's count once the side doesn't show them whole; /background
 // lists them, Enter or Del stops one (none: says what they are). A quit
-// asked for while they run or subagents work says what it stops first;
-// a profile switch asks, and staying makes no profile.
+// asked for while they run or subagents work says what it stops first
+// (Ctrl+C no subagent: it stopped them); a profile switch asks, and
+// staying makes no profile.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -84,12 +85,16 @@ test("/background lists each job, who started it and its age; Enter or Del stops
   expect([sent(t).at(-1), note(t), t.choose]).toEqual([{ $: "background", stop: 7 }, "Stopped: tail -f x.log.", null]);
 });
 
-test("a quit asked for while jobs run or subagents work says what it stops first (Ctrl+D too); a view's quit stops nothing, so says nothing more", () => {
+test("a quit asked for while jobs run or subagents work says what it stops first (Ctrl+D too; Ctrl+C has stopped the subagents, so names none); a view's quit stops nothing, so says nothing more", () => {
   const t = term([job(1, "npm run dev"), job(2, "tail -f x.log")]);
   t.v.agents = ["reviewer"];
   term_clear(t, "Ctrl+D");
   expect(toast(t)).toBe("Ctrl+D again to quit · stops 2 background jobs (/background) · 1 subagent pauses till the next start");
   expect(t.quit).toBeGreaterThan(0);
+  const stopped = term([job(1, "npm run dev")]);
+  stopped.v.agents = ["reviewer"];
+  term_clear(stopped, "Ctrl+C");
+  expect([sent(stopped), toast(stopped)]).toEqual([[{ $: "stop" }], "Ctrl+C again to quit · stops 1 background job (/background)"]);
   const one = term([job(1, "npm run dev")]);
   term_clear(one, "Ctrl+C");
   expect(toast(one)).toBe("Ctrl+C again to quit · stops 1 background job (/background)");
