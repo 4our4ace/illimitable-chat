@@ -226,10 +226,10 @@ palette's slots over it; glyph: illi's marks by name, input ("> ",
 before what the user types), lit (">", a list's lit row), open and shut
 ("[-]", "[+]"), tab and here ("◯", "●": one of a set, the one in use),
 find ("⌕ "), pending, active and done ("□", ">", "■": the to-do), ok and
-failed ("✓", "✗": a shut run's calls, a subagent done, an MCP server
-down); tool:
-a mark before a tool's name, by tool; ansi and syntax entries too. The
-accent setting goes over the file's accent.
+failed ("✓", "✗": how a shut run's calls ended; a subagent done, a
+question answered; an MCP server down, a request refused); tool: a mark
+before a tool's name, by tool; ansi and syntax entries too. The accent
+setting goes over the file's accent.
 
 ## Plugins: plugins/<name>/
 

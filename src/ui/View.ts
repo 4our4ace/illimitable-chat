@@ -41,7 +41,7 @@ export type Live = { kind: Kind; text: string };
 
 // a run's tool call as its shut line lists it (view_acts): the call, and
 // how it ended: true done, false failed (its result FAILED), null not
-// known (stopped before its result, or summed up)
+// known (no result logged with it: row_echo)
 export type Done = { call: Call.Call; ok: boolean | null };
 
 // log: null while it loads
@@ -621,7 +621,7 @@ export function view_acts(v: View, rows: Row[]): Row[] {
     }
   }
   const folded = (rows: Row[]) => rows.map((r) => row_folded(v, r));
-  return out.map((row) => (row.$ === "Act" ? { ...row, text: act_text(row.rows), rows: folded(row.rows), calls: act_calls(row.rows) } : row.$ === "Rule" ? { ...row, rows: folded(row.rows) } : row));
+  return out.map((row, k) => (row.$ === "Act" ? { ...row, text: act_text(row.rows), rows: folded(row.rows), calls: act_calls(v, row.rows, out[k + 1]) } : row.$ === "Rule" ? { ...row, rows: folded(row.rows) } : row));
 }
 
 // a message's key as a click folds it in an open run: a logged one's
@@ -711,16 +711,30 @@ function act_text(rows: Row[]): string {
 
 // a run's tool calls in order (those act_text counts), each with how it
 // ended: by the result logged right after it (Chat.on logs a call with
-// its result), failed if that says so (FAILED); none there (stopped
-// before it answered, summed up): not known
-function act_calls(rows: Row[]): Done[] {
-  const flat = rows.flatMap((r) => (r.$ === "Box" ? r.rows : [r]));
-  return flat.flatMap((r, k) => {
+// its result; the row after the run too, `after`: the answers to illi's
+// question end the run, shown as the user's), failed if that says so
+// (FAILED); none there: not known (row_echo)
+function act_calls(v: View, rows: Row[], after: Row | undefined): Done[] {
+  const own  = rows.flatMap((r) => (r.$ === "Box" ? r.rows : [r]));
+  const flat = [...own, ...(after === undefined ? [] : after.$ === "Box" ? after.rows : [after])];
+  return own.flatMap((r, k) => {
     const call = r.$ === "Msg" || r.$ === "Sum" ? r.call : null;
-    const next = flat[k + 1];
-    const ok   = r.$ === "Msg" && next?.$ === "Msg" && next.kind === "echo" ? !next.text.startsWith(FAILED) : null;
-    return call === null || call.name === "" ? [] : [{ call, ok }];
+    const echo = row_echo(v, flat[k + 1]);
+    return call === null || call.name === "" ? [] : [{ call, ok: echo === null ? null : !echo.startsWith(FAILED) }];
   });
+}
+
+// a result's text as logged, of a row (null: no result): a result's, its
+// message whole even summed up (known by then: Chat.teach), the answers
+// to illi's question (ANSWERED, shown as the user's). None follows a call
+// logged alone: one stopped before it answered (Chat.unanswered: not run
+// yet, or Claude Code's, cut off; illi's own tools answer a stop, as
+// failed), or one the vendor ran and keeps the result of (OpenAI's web
+// search: no `of`)
+function row_echo(v: View, row: Row | undefined): string | null {
+  return row?.$ === "Msg" ? (row.kind === "echo" ? row.text : row.kind === "user" && row.who === ANSWERS ? ANSWERED + row.text : null)
+    : row?.$ === "Sum" && row.n === 1 && row.kind === "echo" ? v.whole.get(row.id)?.text ?? null
+    : null;
 }
 
 // verbose (Ctrl+O): every run of work open, or none but those opened

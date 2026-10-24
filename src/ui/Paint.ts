@@ -15,9 +15,10 @@
 // (Reply.ts: its code, diagrams, tables, headings, lists and quotes, and
 // buttons that copy them); thinking and a note drawn so too, in their
 // look, without buttons. A run of work (View's Act) is one dim line,
-// [+] what was done (Theme's GLYPH.shut), or [-] (GLYPH.open) over its
-// rows behind a dim bar, a message in it folded by a click to one dim
-// line too; a recap (View's Rule) so too, its line across the chat,
+// [+] what was done (Theme's GLYPH.shut) over its calls, a line each
+// (✓ done, ✗ failed: GLYPH.ok, GLYPH.failed), or [-] (GLYPH.open) over
+// its rows behind a dim bar, a message in it folded by a click to one
+// dim line too; a recap (View's Rule) so too, its line across the chat,
 // naming it. An open block
 // framed, its bar in the frame's top edge; a call's code framed on the
 // call's fill; a file's lines (a read, a diff) framed, the file on the
@@ -57,7 +58,8 @@ export type Run = { x: string; s: Ink; copy?: () => string; mark?: Tag };
 
 // a run's part in the mark it lights with, by the mark's key (line_lit):
 // its glyph (a run of work's mark, open or shut, a folded message's:
-// Theme.GLYPH), a run of work's label, its bar down the left of its rows
+// Theme.GLYPH), a run of work's label (a shut one's calls' words too:
+// act_calls), its bar down the left of its rows
 // (a click on it is the run's), or a block's text that lights (its
 // gutter and /open, an open block's bar). Each is the mark's own
 // control, no word: a click on one acts at once (Select.ts term_wordy)
@@ -223,6 +225,39 @@ export function line_cut(l: Line, from: number, to: number): [Line, Line, Line] 
     }
   }
   return out;
+}
+
+// a line in w columns: whole if it fits, else as much of it as fits
+// before `more` (a "…"), no character crossing the edge (line_cut takes
+// one whole); past the edge no character is taken one by one, so a long
+// line (a heredoc's command) costs about what a short one does
+export function line_fit(l: Line, w: number, more: Run): Line {
+  if (line_width(l) <= w) {
+    return l;
+  }
+  const out: Line = [];
+  let room = w - text_width(more.x);
+  for (const r of l) {
+    const rw = text_width(r.x);
+    if (rw <= room) {
+      out.push(r);
+      room -= rw;
+      continue;
+    }
+    let x = "";
+    for (const { segment } of GRAPHEMES.segment(r.x)) {
+      const pw = text_width(segment);
+      if (pw > room) {
+        break;
+      }
+      [x, room] = [x + segment, room - pw];
+    }
+    if (x !== "") {
+      out.push({ ...r, x });
+    }
+    break;
+  }
+  return room < 0 ? out : [...out, more];
 }
 
 // a line, its columns from to to in another ink (f of each run's)
@@ -483,21 +518,21 @@ function canvas_shade(hex: string): string {
   return "#" + rgb.map((v) => Math.round(dark ? v + (255 - v) * SHADE_DARK : v * (1 - SHADE_LIGHT)).toString(16).padStart(2, "0")).join("");
 }
 
-// a run of work: one dim line saying what was done (after GLYPH.shut; cut
-// to the width, "…" where),
-// its calls under it (act_calls), or opened (GLYPH.open) over its rows, a
-// dim bar at their left, each message marked (a click folds it to a line,
-// and back); a click on the line, a call's or the bar opens or closes the
-// whole run. A recap so too, its line a rule across the chat, its name in
-// the middle. The glyph, the label, the calls' words and the bar tagged,
-// to light with the run (line_lit; a rule's dashes never light)
+// a run of work: one dim line saying what was done (after GLYPH.shut; fit
+// to the width, "…" where: line_fit), its calls under it (act_calls), or
+// opened (GLYPH.open) over its rows, a dim bar at their left, each
+// message marked (a click folds it to a line, and back); a click on the
+// line, a call's or the bar opens or closes the whole run. A recap so
+// too, its line a rule across the chat, its name in the middle. The
+// glyph, the label, the calls' words and the bar tagged, to light with
+// the run (line_lit; a rule's dashes never light)
 function act_lines(row: View.Row & { $: "Act" | "Rule" }, w: number, marks: Mark[], at: number): Line[] {
   const key   = mark_key(row)!;
   const glyph = Run((row.open ? Theme.GLYPH.open : Theme.GLYPH.shut) + " ", DIM, { key, as: "glyph" });
   const label = Run(text_clean(row.text), DIM, { key, as: "label" });
   const fill  = Math.max(0, w - text_width(glyph.x + label.x) - 2);
   const line  = row.$ === "Rule" ? [Run("─".repeat(fill >> 1) + " ", DIM), glyph, label, Run(" " + "─".repeat(fill - (fill >> 1)), DIM)] : [glyph, label];
-  const head  = line_width(line) <= w ? line : [...line_cut(line, 0, Math.max(0, w - 1))[1], Run("…", DIM, { key, as: "label" })];
+  const head  = line_fit(line, w, Run("…", DIM, { key, as: "label" }));
   if (!row.open) {
     return row.$ === "Act" ? [head, ...act_calls(row.calls, key, text_width(glyph.x), w)] : [head];
   }
@@ -508,21 +543,22 @@ function act_lines(row: View.Row & { $: "Act" | "Rule" }, w: number, marks: Mark
 // a shut run's calls, a line each under its head, from its words on
 // (lead: the glyph's width): how it ended (GLYPH.ok, dim; GLYPH.failed in
 // the error's color; not known: as wide, blank), its tool's name in bold
-// and the call on one line (Call.call_line), cut to the width. The last
-// CALLS at most, the rest counted on a line over them; its words tagged
-// as the run's label
+// after its mark (verb_runs) and the call on one line (Call.call_line),
+// each line fit to the width, lead and all (line_fit). The last CALLS at
+// most, the rest counted on a line over them; its words tagged as the
+// run's label
 function act_calls(calls: View.Done[], key: string, lead: number, w: number): Line[] {
-  const tag  = { key, as: "label" } as const;
-  const pad  = Run(" ".repeat(lead));
-  const mark = Math.max(text_width(Theme.GLYPH.ok), text_width(Theme.GLYPH.failed));
-  const room = Math.max(1, w - lead);
-  const cut  = (l: Line) => (line_width(l) <= room ? l : [...line_cut(l, 0, room - 1)[1], Run("…", DIM, tag)]);
-  const more = calls.length > CALLS ? [[pad, ...cut([Run("… " + (calls.length - CALLS + 1) + " earlier", DIM, tag)])]] : [];
-  const shown = calls.slice(more.length === 0 ? 0 : -(CALLS - 1));
+  const tag   = { key, as: "label" } as const;
+  const pad   = Run(" ".repeat(lead));
+  const mark  = Math.max(text_width(Theme.GLYPH.ok), text_width(Theme.GLYPH.failed));
+  const fit   = (l: Line) => line_fit([pad, ...l], w, Run("…", DIM, tag));
+  const more  = calls.length > CALLS ? [fit([Run("… " + (calls.length - CALLS + 1) + " earlier", DIM, tag)])] : [];
+  const shown = calls.slice(more.length === 0 ? 0 : 1 - CALLS);
   return [...more, ...shown.map(({ call, ok }) => {
     const glyph = ok === null ? "" : ok ? Theme.GLYPH.ok : Theme.GLYPH.failed;
     const sign  = Run(glyph + " ".repeat(mark - text_width(glyph) + 1), ok === false ? { ...INK, c: Draw.draw_tokens().error } : DIM);
-    return [pad, ...cut([sign, Run(text_clean(call.name) + " ", { ...DIM, b: true }, tag), Run(text_line(Call.call_line(call)), DIM, tag)])];
+    const verb  = verb_runs(call).map((r) => Run(text_clean(r.x), { ...r.s, d: true }, tag));
+    return fit([sign, ...verb, Run(text_line(Call.call_line(call)), DIM, tag)]);
   })];
 }
 
