@@ -3,7 +3,8 @@
 // `bun test Guard.test.ts`. auto runs all in the project, reads outside
 // it, the network, plain pushes and deploys, and asks what changes
 // outside it (placed as the system finds it: a .. after a link, a glob's
-// matches, a brace to ~, a cd behind builtin, command or time, an
+// matches, a brace to ~, a cd behind builtin, command or time, one in a
+// group or a loop in a pipeline moving only what follows in it, an
 // archive tool's glued value), or reads there by a command that may
 // change things (once per folder, a sibling repo's whole), a folder
 // there holding a secret store, what it can't place, root, disks, their
@@ -33,13 +34,16 @@
 // user's rules refuse or ask and a write to illi's own config; the user's rules come first (deny, ask,
 // allow; a root command's allow names its sudo; deny and ask by a
 // program's name, wherever it lives; allow over the command, not its
-// redirections; strictly on a command illi can't follow); grants clear
+// redirections, nor what its output is piped into; strictly on a
+// command illi can't follow); grants clear
 // flags, exactly (the command as it runs: its folder, its redirections,
 // whole if its words expand) or by the pattern a flag offers, never a
 // danger by a pattern, nor a folder beside a danger, nor all of home;
 // the file tools and MCP tools are judged alike, and Claude Code's tools
 // as illi's (a search of a folder by that folder; one illi doesn't know
-// asked once). A verdict says where in a shell command its reasons are
+// asked once). A group, a subshell, a loop or a nested script given a
+// heredoc or a file is judged as the shell it feeds would be, and a
+// pipe as reaching all a command reading it runs. A verdict says where in a shell command its reasons are
 // (the part on line 40, a link of a chain, inside bash -c or a heredoc
 // fed to bash; all a heredoc feeds an interpreter or a risky write puts
 // in place, all a pipe brings a shell, a root write or another computer

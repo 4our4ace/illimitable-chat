@@ -330,9 +330,12 @@ keeps:
 - An allow rule covers the command itself: what it writes by a
   redirection (a rule `bun *` allows `bun test`, not its
   `> ~/.bashrc`) and what its assignments set (`PATH=`) are still
-  checked. On a command illi can't follow, an allow rule applies only
-  if each `*` in it stands for no `;`, `|`, `&`, newline, backtick,
-  parenthesis, `<` or `>`.
+  checked, and so is what the command's output is piped into (`curl *`
+  allows `curl -s x`, not the `bash` in `curl -s x | bash`). On a
+  command illi can't follow, and where a rule is matched against the
+  whole command (for a command reading a pipe or a file), an allow rule
+  applies only if each `*` in it stands for no `;`, `|`, `&`, newline,
+  backtick, parenthesis, `<` or `>`.
 - `*` matches anything, `\*` a star; a shell pattern that ends in a
   space and `*` matches the bare command too (`git push *` matches
   `git push`).
