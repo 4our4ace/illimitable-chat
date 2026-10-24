@@ -14,7 +14,8 @@
 // chat refit and the turn go on from a note, unasked; three in a row end
 // it, saying why; with autocontinue off, the turn ends at the first,
 // saying a message goes on, the three counted over the user's messages
-// all the same. A failed turn asks to try again only when a later try
+// all the same. A view is told the state whole as it joins, then only
+// what moved since its last. A failed turn asks to try again only when a later try
 // may answer, and says a reply was cut off; summaries stuck are told once;
 // a save that fails is told, never thrown (a goal met still ends as
 // met). The suggested reply stays as a message of the user's own goes
@@ -572,6 +573,37 @@ test("a save that fails is told to the views, never thrown (what ran, the sugges
   }
   expect(got.find((m) => m.$ === "note").text).toBe("Can't save the chat: disk full (" + chat.mem.dir + ").");
   expect(["SQLITE_FULL", "SQLITE_READONLY", "SQLITE_IOERR_WRITE", "SQLITE_BUSY", "SQLITE_MISMATCH"].map((code) => Chat.unsaved(Object.assign(new Error("as SQLite says it"), { code })))).toEqual(["disk full", "read-only disk", "the disk failed to write", "another illi kept the file busy too long", "as SQLite says it"]);
+});
+
+// a view is told the state whole as it joins, then only the fields that
+// moved since what it was told: a refusal its permissions alone, nothing
+// when nothing moved; a view joining meanwhile gets it whole, and each
+// view's own last state is what its next is told against
+test("a view is told the state whole as it joins, then only what moved since its last", () => {
+  const sock = () => {
+    const got: any[] = [];
+    return { got, sock: { data: { seen: new Set() }, send: (text: string) => got.push(JSON.parse(text)), close: () => {} } as any };
+  };
+  const states = (got: any[]) => got.filter((m) => m.$ === "state").map((m) => Object.keys(m).filter((k) => k !== "$").sort());
+  const [a, b] = [sock(), sock()];
+  const refused = chat.tools.perm.refused;
+  try {
+    Chat.join(chat, a.sock);
+    expect(states(a.got)[0]).toEqual(["agent", "agents", "asks", "background", "busy", "catalog", "models", "perm", "pick", "suggest", "todo", "use", "vendors", "wait"]);
+    Chat.change(chat);
+    expect(states(a.got).length).toBe(1);
+    chat.tools.perm.refused = [...refused, { id: "r1", who: "illi", tool: "shell", what: "rm -rf /x", why: "/x is outside the project", how: "no", said: "", at: 1, exact: [] }];
+    Chat.join(chat, b.sock);
+    chat.tools.perm.refused = refused;
+    Chat.change(chat);
+    expect(states(a.got).slice(1)).toEqual([]);
+    expect(states(b.got)).toEqual([states(a.got)[0], ["perm"]]);
+    expect(b.got.at(-1).perm.refused).toEqual(refused);
+  } finally {
+    chat.tools.perm.refused = refused;
+    Chat.leave(chat, a.sock);
+    Chat.leave(chat, b.sock);
+  }
 });
 
 test("a goal met whose save fails still ends the turn as met, the failure told", async () => {

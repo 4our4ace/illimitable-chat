@@ -202,7 +202,7 @@ export type Server =
   | ({ $: "entry"; agent?: string; id?: number } & Entry)
   | { $: "delta"; agent?: string; kind: Kind; text: string; fresh?: boolean }
   | { $: "live"; agent?: string; live: Live[] }
-  | ({ $: "state" } & State)
+  | ({ $: "state" } & Partial<State>)
   | { $: "agent"; name: string; found: boolean }
   | { $: "note"; text: string }
   | ({ $: "ack"; id: string } & Answer);
