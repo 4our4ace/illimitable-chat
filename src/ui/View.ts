@@ -99,11 +99,14 @@ export type Background = { id: number; command: string; agent: string; since: nu
 // (illi, an agent), the tool, what it would do (Tools.what: cut short,
 // for a note): leave to run a call the checks stopped (Tools.guard: what
 // it would do as the question shows it, whole up to Tools.whole's most,
-// and how many characters past that are left out; why they stopped it;
-// what a "don't ask again" keeps, as said, "": none offered; the middle
-// of a long why or keep left out); or illi's own (ask: its queries, one
-// or more, answered at once)
-export type Question = { id: string; who: string; tool: string; what: string; whole?: string; more?: number; why?: string; keep?: string; queries?: Query[] };
+// and how many characters past that are left out; where in it what made
+// them ask is, spots, offsets into whole: a question folding it shows
+// those lines, none given: it doesn't fold; where whole says that text
+// was left out between the lines it keeps for a spot, cuts; why they
+// stopped it; what a "don't ask again" keeps, as said, "": none offered;
+// the middle of a long why or keep left out); or illi's own (ask: its
+// queries, one or more, answered at once)
+export type Question = { id: string; who: string; tool: string; what: string; whole?: string; more?: number; spots?: Array<[number, number]>; cuts?: Array<[number, number]>; why?: string; keep?: string; queries?: Query[] };
 
 // a request refused (Tools.guard): its id, who asked (illi, an agent),
 // the tool, what (a command, a file), why; how: the user said no (or no

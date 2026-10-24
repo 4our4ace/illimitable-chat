@@ -24,8 +24,9 @@
 // tabs or the input under it (no button lights, no text is chosen), and
 // a paste goes to its search, if any. What is at the input takes only
 // the mouse on it: a question there (the row under the pointer lit, a
-// press on an answer, a tab or a row of illi's form its; its lead's text
-// may be chosen), the commands suggested as a /word is typed (no popup,
+// press on an answer, a tab or a row of illi's form its, or on a line of
+// a folded command saying what it hides; its lead's text may be chosen),
+// the commands suggested as a /word is typed (no popup,
 // they belong to typing, but a press on them is theirs: no text chosen;
 // a click does what Enter does there). Panes stay in the chat's place.
 
@@ -37,7 +38,7 @@ import { term_choose_key } from "./Keys.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_let_go } from "./Select.ts";
 import * as Screen from "../ui/Screen.ts";
-import { question_of } from "./Question.ts";
+import { question_of, question_toggle } from "./Question.ts";
 import type { Box, Chooser, Target, Term } from "./Term.ts";
 import { GLYPH } from "../ui/Theme.ts";
 
@@ -78,8 +79,8 @@ type Place = { row: number; col: number; w: number; h: number };
 
 // a popup's list as laid out (Box's): the box's row its list starts at,
 // its lines, the entries they show; no lines lead it (none shown, of
-// none: only a question's lead, Question.ts)
-type Shape = Pick<Box, "list" | "lines" | "tall" | "ahead" | "lead">;
+// none: only a question's lead, Question.ts), and nothing folds
+type Shape = Pick<Box, "list" | "lines" | "tall" | "ahead" | "lead" | "folds">;
 
 // a popup laid out: its place, its lines framed, what each stands for
 // (Box rows), the cursor's spot in it (none: it takes no typing), its
@@ -311,7 +312,7 @@ function popup_list(c: Chooser, w: number, h: number): Omit<Laid, "place"> {
   const fill  = [...items, ...blank(room - items.length)];
   const after = Paint.text_width(text.slice(c.find?.pos ?? 0));
   const at    = c.find === null ? undefined : { row: 1, col: Math.min(w - 3, 2 + Paint.text_width(GLYPH.find) + Math.max(0, Paint.text_width(typed) - after)) };
-  return { lines: Paint.frame(fill.map(([l]) => l), w, title, foot), rows: [null, ...fill.map(([, aim]) => aim), null], at, shape: { list: 1 + find.length, lines: rows, tall: view.length, ahead: 0, lead: 0 } };
+  return { lines: Paint.frame(fill.map(([l]) => l), w, title, foot), rows: [null, ...fill.map(([, aim]) => aim), null], at, shape: { list: 1 + find.length, lines: rows, tall: view.length, ahead: 0, lead: 0, folds: false } };
 }
 
 // the picker's entries in view (view: their indices in list), laid out
@@ -466,8 +467,9 @@ function popup_about(text: string, w: number): string {
 // (none but its own: a drag begun before it opened is let go, nothing
 // copied). With none, what is at the input takes the reports on it, all
 // else going on as if it weren't there: the question (Question.ts) the
-// presses on its answers (illi's form: on its tabs and rows; a press on
-// its lead chooses text, as anywhere) and the moves over it; the
+// presses on its answers (illi's form: on its tabs and rows; a folded
+// command: on a line saying what it hides; a press on the rest of its
+// lead chooses text, as anywhere) and the moves over it; the
 // commands suggested the presses anywhere on them, so no text is chosen
 // there. A
 // move to another row of a popup or the question, or into it, lights
@@ -539,7 +541,9 @@ function popup_same(a: Pointed | null, b: Pointed): boolean {
 // was painted for) as painted (none: nothing): to another row, or into
 // the box, the option there lit (a head, a gap, the lead, the frame:
 // none); along its row, or at rest, the keys' lit row kept; leaving the
-// box leaves it lit. A paint only as it changes
+// box leaves it lit. A line of a folded command saying what it hides
+// lights while the pointer is on it (Question.ts question_under), and
+// goes out as it leaves. A paint only as it changes
 function popup_hover(t: Term, on: object, box: Box | null): void {
   if (box === null) {
     return;
@@ -547,11 +551,19 @@ function popup_hover(t: Term, on: object, box: Box | null): void {
   const p     = t.scr.point;
   const at    = popup_at(box, p);
   const moved = p.row !== t.aim.row || (at !== "out" && !t.aim.in);
+  const was   = t.aim.in && popup_gap(box.rows[t.aim.row - box.row]);
+  const gap   = popup_gap(at);
   t.aim.row   = p.row;
   t.aim.in    = at !== "out";
-  if (moved && typeof at === "object" && popup_light(t, on, at)) {
+  if ((moved && typeof at === "object" && popup_light(t, on, at)) || was !== gap || (gap && moved)) {
     term_draw(t);
   }
+}
+
+// whether a spot of a box is a line of a folded command saying what it
+// hides (Term Target fold)
+function popup_gap(at: Pointed | Box["rows"][number] | undefined): boolean {
+  return typeof at === "object" && at !== null && !Array.isArray(at) && at.$ === "fold";
 }
 
 // an option lit in the picker or illi's form (on), if it still shows (the
@@ -586,7 +598,9 @@ function popup_light(t: Term, on: object, at: Target): boolean {
 // held as the keys are, just shown); the words' row: lit (typing goes
 // there anyway). On the commands suggested, one (still found) lit, then
 // what Enter does there (run, or filled in: one found by what it does,
-// one that needs words). The box, nothing
+// one that needs words). On a line of the question's folded command
+// saying what it hides: the command shown whole (held by nothing: it
+// answers nothing). The box, nothing
 function popup_click(t: Term, on: object, at: Pointed): void {
   const open = term_form(t);
   const sug  = term_suggest(t);
@@ -612,6 +626,8 @@ function popup_click(t: Term, on: object, at: Pointed): void {
     }
   } else if (at === "out" && on === t.choose) {
     term_choose_key(t, t.choose, "Esc");
+  } else if (typeof at === "object" && at.$ === "fold" && on === t.question) {
+    question_toggle(t.question);
   } else if (typeof at === "object" && at.$ === "option") {
     const c = on as Chooser;
     popup_light(t, c, at);

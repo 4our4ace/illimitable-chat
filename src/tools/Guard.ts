@@ -76,13 +76,17 @@
 // tool); danger, secrets (a folder holding a secret store too) and
 // protected files clear only exactly, and inline code offers none. A
 // folder grant's own * is kept as one (\*). A change to illi's own
-// config is asked in every mode, yolo too.
+// config is asked in every mode, yolo too. A verdict says where in a
+// shell command its reasons are (Verdict spots: each flag's part, as
+// Shell.ts places it, with the heredocs' bodies it reads; all of a
+// command it can't follow), so a question folding a long command still
+// shows them.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as config from "../config/Config.ts";
-import { Shell, type Part, type Redir, type Word } from "./Shell.ts";
+import { Shell, type Part, type Redir, type Span, type Word } from "./Shell.ts";
 
 // Types
 // =====
@@ -114,11 +118,14 @@ export type Where = { mode: Mode; cwd: string; top: string; rules: Rules; grants
 // a verdict: run; ask (why; the grants a "don't ask again" keeps, none
 // for the user's own ask rules; the exact grants that clear it); refuse
 // (why; by the user's rule, which nothing here clears; by the mode, which
-// its exact grants clear)
+// its exact grants clear). Either says where in a shell command what
+// made it so is (spots: the spans of the parts whose flags or rules
+// ask or refuse it, merged, first to last; none for a file or an MCP
+// tool), so a question folding a long command still shows those lines
 export type Verdict =
   | { $: "allow" }
-  | { $: "ask"; why: string; always: string[]; exact: string[] }
-  | { $: "deny"; why: string; rule: boolean; exact: string[] };
+  | { $: "ask"; why: string; always: string[]; exact: string[]; spots: Span[] }
+  | { $: "deny"; why: string; rule: boolean; exact: string[]; spots: Span[] };
 
 // the modes that ask a flag: every one, yolo too (self: a change to
 // illi's own config); every one but yolo (all: what auto asks); careful,
@@ -131,22 +138,25 @@ type Tier = "self" | "all" | "careful";
 // "don't ask again" offers), if any; the modes that ask it; whether it
 // is the user's own ask rule (asked in every mode, never cleared);
 // whether it is a one-off (inline code: no "don't ask again", as its
-// exact grant would never match again)
-type Flag = { why: string; kind: Kind; subject: string; wide: { kind: Kind; subject: string; grant: string } | null; tier: Tier; rule?: boolean; once?: boolean };
+// exact grant would never match again); where in a shell command the
+// part that raised it is (Part span, with the heredocs' bodies it reads:
+// look_part; none: a file's, an MCP tool's)
+type Flag = { why: string; kind: Kind; subject: string; wide: { kind: Kind; subject: string; grant: string } | null; tier: Tier; rule?: boolean; once?: boolean; span?: Span };
 
-// how a command's checks flag it (look_part's: its exact subject), of
-// careful's list unless told
+// how a command's checks flag it (look_part's: its exact subject, where
+// its part is), of careful's list unless told
 type Flagger = (why: string, wide?: Flag["wide"], tier?: Tier, once?: boolean) => void;
 
 // why a file is asked about (path_why): whether a folder grant may clear
 // it (wide), the modes that ask it
 type Reason = { why: string; wide: boolean; tier: Tier };
 
-// what a call was found to do: refused by the user's rules (why), its
-// flags, and its changes (flags only the modes read-only and ask act on);
-// a shell command's whole text (look_part); the links it makes as it
-// runs (ln's, as named: a .. after one isn't where it seems)
-type Look = { denied: string[]; flags: Flag[]; changes: Flag[]; whole: string; links: string[] };
+// what a call was found to do: refused by the user's rules (why, and in
+// a shell command where), its flags, and its changes (flags only the
+// modes read-only and ask act on); a shell command's whole text
+// (look_part); the links it makes as it runs (ln's, as named: a .. after
+// one isn't where it seems)
+type Look = { denied: Array<{ why: string; span?: Span }>; flags: Flag[]; changes: Flag[]; whole: string; links: string[] };
 
 // a file a part reads or writes, as a word, in its folder; one a copy or
 // a move lands in a folder it names, into (land)
@@ -494,7 +504,7 @@ export namespace Guard {
         return { $: "allow" };
       }
     } catch (err: any) {
-      look.flags.push({ why: "illi's check of it failed (" + String(err?.message ?? err) + ")", kind: "shell", subject: JSON.stringify(input ?? {}), wide: null, tier: "all" });
+      look.flags.push({ why: "illi's check of it failed (" + String(err?.message ?? err) + ")", kind: "shell", subject: JSON.stringify(input ?? {}), wide: null, tier: "all", span: tool === "shell" ? [0, String(input?.command ?? "").length] : undefined });
     }
     return verdict(where, look);
   }
@@ -586,21 +596,37 @@ export namespace Guard {
 // freely after; nothing for inline code (once)
 function verdict(where: Where, look: Look): Verdict {
   if (look.denied.length > 0) {
-    return { $: "deny", why: uniq(look.denied).join("; "), rule: true, exact: [] };
+    return { $: "deny", why: uniq(look.denied.map((d) => d.why)).join("; "), rule: true, exact: [], spots: spots(look.denied) };
   }
   const rules = look.flags.filter((f) => f.rule === true);
   const flags = look.flags.filter((f) => f.rule === true || (asked(where.mode, f.tier) && !granted(where, f)));
   const changes = where.mode === "read-only" || where.mode === "ask" ? look.changes.filter((f) => !granted(where, f)) : [];
   const exact = (fs: Flag[]) => uniq(fs.map((f) => f.kind + "=" + f.subject));
   if (where.mode === "read-only" && changes.length > 0) {
-    return { $: "deny", why: "read-only mode: " + uniq(changes.map((f) => f.why)).join("; "), rule: false, exact: exact([...changes, ...flags]) };
+    return { $: "deny", why: "read-only mode: " + uniq(changes.map((f) => f.why)).join("; "), rule: false, exact: exact([...changes, ...flags]), spots: spots([...changes, ...flags]) };
   }
   const all = [...flags, ...changes];
   if (all.length === 0) {
     return { $: "allow" };
   }
   const always = rules.length > 0 || all.some((f) => f.once === true) ? [] : all.some((f) => f.wide === null) ? exact(all) : uniq(all.map((f) => f.wide!.grant));
-  return { $: "ask", why: uniq(all.map((f) => f.why)).join("; "), always, exact: exact(all) };
+  return { $: "ask", why: uniq(all.map((f) => f.why)).join("; "), always, exact: exact(all), spots: spots(all) };
+}
+
+// where the reasons for a verdict are in a shell command: their spans,
+// merged where they touch or overlap, first to last (none placed: none)
+function spots(reasons: Array<{ span?: Span }>): Span[] {
+  const each = reasons.flatMap((r) => (r.span === undefined ? [] : [r.span])).sort((a, b) => a[0] - b[0]);
+  const out: Span[] = [];
+  for (const [from, to] of each) {
+    const last = out.at(-1);
+    if (last !== undefined && from <= last[1]) {
+      last[1] = Math.max(last[1], to);
+    } else {
+      out.push([from, to]);
+    }
+  }
+  return out;
 }
 
 // whether a mode asks a flag of a tier
@@ -647,16 +673,17 @@ function look_shell(where: Where, look: Look, command: string): void {
   const parts = Shell.parse(command, where.cwd);
   const text = command.trim();
   const rule = rule_of(where, "shell", [text], [text], true);
+  const all: Span = [0, command.length];
   if (rule === "deny") {
-    look.denied.push("your rules refuse " + clip(text));
+    look.denied.push({ why: "your rules refuse " + clip(text), span: all });
     return;
   }
   if (typeof parts === "string") {
     if (rule === "ask") {
-      look.flags.push({ why: "your rules ask about " + clip(text), kind: "shell", subject: text, wide: null, tier: "all", rule: true });
+      look.flags.push({ why: "your rules ask about " + clip(text), kind: "shell", subject: text, wide: null, tier: "all", rule: true, span: all });
     }
     if (rule !== "allow") {
-      look.flags.push({ why: "illi can't follow this command: " + parts, kind: "shell", subject: text, wide: null, tier: "all" });
+      look.flags.push({ why: "illi can't follow this command: " + parts, kind: "shell", subject: text, wide: null, tier: "all", span: all });
     }
     return;
   }
@@ -679,8 +706,12 @@ function look_shell(where: Where, look: Look, command: string): void {
 // or whose folder is known only then names the whole command: `sh` alone
 // would let any code piped into it run, `rm -rf $x` any folder. ask
 // mode's family grant covers the part alone (cat * covers no tee piped
-// after it)
+// after it). Its flags are placed at it and the heredocs' bodies it reads
+// (held: what it writes to a file, feeds a shell or an interpreter is
+// what is asked about, its lines no one line), so a question folding the
+// command shows them
 function look_part(where: Where, look: Look, part: Part, depth: number): void {
+  const held  = part.redirs.reduce<Span>((s, r) => ((r.op !== "<<" && r.op !== "<<-") || r.at === undefined || r.body === undefined ? s : [Math.min(s[0], r.at), Math.max(s[1], r.at + r.body.length)]), part.span);
   const words = [...part.argv, ...part.env.map((e) => e.value), ...part.redirs.map((r) => r.target)];
   const whole = part.piped || part.fed || part.cwd === null || part.redirs.some((r) => r.op.startsWith("<")) || words.some((w) => w.dynamic || w.fd || /[$`]/.test(w.raw));
   const exact = whole ? look.whole : Guard.norm(part, where.cwd);
@@ -688,13 +719,13 @@ function look_part(where: Where, look: Look, part: Part, depth: number): void {
   const plain = part.text;
   const rule = rule_of(where, "shell", [plain, bare, exact, ...by_name(part)], part.root ? [bare, exact] : [plain, bare, exact]);
   if (rule === "deny") {
-    look.denied.push("your rules refuse " + clip(bare));
+    look.denied.push({ why: "your rules refuse " + clip(bare), span: held });
     return;
   }
   const own = rule !== "allow";
-  const flag: Flagger = (why, wide = null, tier = "careful", once = false) => look.flags.push({ why, kind: "shell", subject: exact, wide, tier, once });
+  const flag: Flagger = (why, wide = null, tier = "careful", once = false) => look.flags.push({ why, kind: "shell", subject: exact, wide, tier, once, span: held });
   if (rule === "ask") {
-    look.flags.push({ why: "your rules ask about " + clip(plain), kind: "shell", subject: exact, wide: null, tier: "all", rule: true });
+    look.flags.push({ why: "your rules ask about " + clip(plain), kind: "shell", subject: exact, wide: null, tier: "all", rule: true, span: held });
   }
   const before = look.flags.length;
   if (part.root && own) {
@@ -720,7 +751,7 @@ function look_part(where: Where, look: Look, part: Part, depth: number): void {
     }
   }
   for (const use of uses) {
-    use_look(where, look, use, flag, acts);
+    use_look(where, look, use, flag, acts, held);
   }
   if (head !== undefined && own && part.cwd !== null && !look.flags.slice(before).some((f) => f.tier === "all")) {
     const dir = real(part.cwd);
@@ -728,7 +759,7 @@ function look_part(where: Where, look: Look, part: Part, depth: number): void {
   }
   if (acts || writes) {
     const pattern = "shell:" + prefix(part);
-    look.changes.push({ why: where.mode === "read-only" ? clip(plain) + " may change things" : "ask mode asks before " + clip(plain), kind: "shell", subject: exact, wide: where.mode === "ask" ? { kind: "shell", subject: bare, grant: pattern } : null, tier: "careful" });
+    look.changes.push({ why: where.mode === "read-only" ? clip(plain) + " may change things" : "ask mode asks before " + clip(plain), kind: "shell", subject: exact, wide: where.mode === "ask" ? { kind: "shell", subject: bare, grant: pattern } : null, tier: "careful", span: held });
   }
 }
 
@@ -1577,11 +1608,12 @@ function runner_look(where: Where, look: Look, part: Part, base: string, args: W
 }
 
 // a shell's or interpreter's code from its input: a heredoc's or a
-// here-string's text (a shell's read as commands of their own, an
-// interpreter's checked by its words, one naming a secret asked in
-// every mode but yolo; made as it runs, as an expanding
-// heredoc's $x is: flagged), a file (a script: from outside the project,
-// flagged), a command's output (< <(curl ...)) or a descriptor's: flagged
+// here-string's text (a shell's read as commands of their own, each
+// placed where it is in the command; an interpreter's checked by its
+// words, one naming a secret asked in every mode but yolo; made as it
+// runs, as an expanding heredoc's $x is: flagged), a file (a script: from
+// outside the project, flagged), a command's output (< <(curl ...)) or a
+// descriptor's: flagged
 function stdin_look(where: Where, look: Look, part: Part, base: string, r: Redir, flag: Flagger, depth: number): void {
   const text = clip(part.text);
   if (r.body === undefined) {
@@ -1601,7 +1633,7 @@ function stdin_look(where: Where, look: Look, part: Part, base: string, r: Redir
   if (r.made === true) {
     flag(text + " runs code made as it runs", null, "careful", true);
   } else if (SHELLS.has(base) && !ODD.has(base) && depth < 8) {
-    const inner = Shell.parse(r.body, part.cwd ?? where.cwd);
+    const inner = Shell.parse(r.body, part.cwd ?? where.cwd, r.at ?? part.span);
     if (typeof inner === "string") {
       flag(text + " runs a script illi can't follow: " + inner, null, "all");
     } else {
@@ -2306,7 +2338,7 @@ function installs(base: string, sub: string, xs: string[], has: (...names: strin
 function look_tool(where: Where, look: Look, tool: string, why: string | null): void {
   const rule = rule_of(where, "mcp", [tool], [tool]);
   if (rule === "deny") {
-    look.denied.push("your rules refuse " + tool);
+    look.denied.push({ why: "your rules refuse " + tool });
     return;
   }
   if (rule === "allow") {
@@ -2340,7 +2372,7 @@ function look_file(where: Where, look: Look, file: unknown, write: boolean): voi
   const kind: Kind = write ? "write" : "read";
   const rule = path_rule(where, abs, write);
   if (rule === "deny") {
-    look.denied.push("your rules refuse " + (write ? "changing " : "reading ") + shown(abs, where.top));
+    look.denied.push({ why: "your rules refuse " + (write ? "changing " : "reading ") + shown(abs, where.top) });
     return;
   }
   if (rule === "allow") {
@@ -2365,7 +2397,7 @@ function look_file(where: Where, look: Look, file: unknown, write: boolean): voi
 // glob's entries outside are said by their folder, once; what lands in a
 // folder (land) only where no reason of the folder's own asks it already
 // (in as many modes, cleared by no more than a grant clearing its)
-function use_look(where: Where, look: Look, use: Use, flag: Flagger, acts: boolean): void {
+function use_look(where: Where, look: Look, use: Use, flag: Flagger, acts: boolean, span: Span): void {
   const files = named(use.word, use.cwd, false, use.write, use.write ? look.links : []);
   if (files === null) {
     if (use.write || use.word.input !== true) {
@@ -2380,9 +2412,9 @@ function use_look(where: Where, look: Look, use: Use, flag: Flagger, acts: boole
   for (const file of files) {
     const rule = path_rule(where, file, use.write);
     if (rule === "deny") {
-      look.denied.push("your rules refuse " + (use.write ? "changing " : "reading ") + shown(file, where.top));
+      look.denied.push({ why: "your rules refuse " + (use.write ? "changing " : "reading ") + shown(file, where.top), span });
     } else if (rule === "ask") {
-      look.flags.push({ why: "your rules ask about " + shown(file, where.top), kind: "shell", subject: "", wide: null, tier: "all", rule: true });
+      look.flags.push({ why: "your rules ask about " + shown(file, where.top), kind: "shell", subject: "", wide: null, tier: "all", rule: true, span });
     } else if (rule !== "allow") {
       for (const r of path_why(where, file, use.write, acts)) {
         if (!(r.wide && use.word.glob && said.has(path.dirname(file))) && !covered(r)) {

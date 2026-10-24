@@ -6,9 +6,12 @@
 // keeps, in this project (offered only when it keeps something); No (Esc
 // too); No, and say why (a line typed, for the model). Why it was asked
 // and what it would do (a command whole, by its lines, up to the most
-// the question is given: Tools.whole, a dim line saying how much more)
-// show over the answers, once: no note says them again (a pipe, with no
-// answers to show, notes them, cut short).
+// the question is given: Tools.whole, a dim line saying how much more;
+// past that, the lines holding what made the checks ask, after a dim
+// line saying how much was left out) show over the answers, once: no
+// note says them again (a pipe, with no answers to show, notes them, cut
+// short). A long command folds to its first line, those lines and its
+// last (Question.ts: Ctrl+O shows it whole), never hiding why it asks.
 // illi's own questions (ask) show at the input too (Question.ts), as a
 // form, a tab each: the question, its options (one to pick, or several),
 // and a row for words of the user's own, which they may type beside the
@@ -255,7 +258,12 @@ function form_tabs(tabs: Paint.Run[], w: number): { tabs: Paint.Line[]; spans: S
 // command); over them why it asks, then what it would do, whole, bold,
 // by its lines (a command's blank ones left out), so a long command cut
 // to fit never hides the why; past what the question is given of it
-// (Tools.whole), a dim line saying how much more was left out
+// (Tools.whole), a dim line saying how much more was left out, and one
+// where it left text out between the lines it kept (its cuts). Told
+// where in it what made the checks ask is (its spots), a long command
+// folds (Chooser fold, Question.ts: Ctrl+O shows it whole): the lines
+// holding a spot stay, as do those lines saying text was left out, the
+// line before each and its last line; told nothing, it doesn't fold
 function term_ask_open(t: Term, q: Question): void {
   const keep  = q.keep ?? "";
   const names = ["Yes", ...(keep === "" ? [] : ["Yes, and don't ask again for " + Paint.text_line(keep) + " in this project"]), "No", "No, and say why"];
@@ -277,12 +285,41 @@ function term_ask_open(t: Term, q: Question): void {
     term_answer(t, q, k !== no, k === always, "");
   };
   const title = "Allow " + q.tool + (q.who === "illi" ? "" : " for " + q.who) + "?";
-  const what  = (q.whole ?? q.what).split("\n").map((l) => Paint.text_clean(l).trimEnd()).filter((l) => l.trim() !== "");
+  const what  = ask_lines(q.whole ?? q.what, q.cuts ?? []);
   const more  = q.more ?? 0;
   const left  = more === 0 ? [] : [[Paint.Run("… " + more.toLocaleString("en-US") + (more === 1 ? " more character" : " more characters") + " not shown", Paint.DIM)]];
-  const lead  = [...(q.why === undefined || q.why === "" ? [] : [[Paint.Run("Why: ", Paint.DIM), Paint.Run(Paint.text_clean(q.why))]]), ...what.map((l) => [Paint.Run(l, { ...Paint.INK, b: true })]), ...left];
-  term_question(t, title, names, names.map(() => ""), pick, { keys, lead, foot: () => "Esc no" });
+  const head  = q.why === undefined || q.why === "" ? [] : [[Paint.Run("Why: ", Paint.DIM), Paint.Run(Paint.text_clean(q.why))]];
+  const lead  = [...head, ...what.map((l) => [Paint.Run(l.text, l.cut ? Paint.DIM : { ...Paint.INK, b: true })]), ...left];
+  const cuts  = what.flatMap((l, k) => (l.cut ? [k - 1, k] : []));
+  const shows = [...ask_spots(what, q.spots ?? []), ...cuts, what.length - 1].filter((k) => k >= 0).map((k) => head.length + k);
+  const fold  = q.spots === undefined ? undefined : { from: head.length, keep: shows, open: false };
+  term_question(t, title, names, names.map(() => ""), pick, { keys, lead, fold, foot: () => "Esc no" });
   t.asking!.c = t.question;
+}
+
+// a command's lines as the question shows them: cleaned, end spaces and
+// blank lines left out, each with where it is in the text (from, and to
+// its end) and whether it says text was left out there (a cut's line:
+// Tools.whole), told apart by where it is, never by what it says
+function ask_lines(text: string, cuts: Array<[number, number]>): Array<{ text: string; from: number; to: number; cut: boolean }> {
+  let at = 0;
+  return text.split("\n").flatMap((raw) => {
+    const [from, to] = [at, at + raw.length];
+    const line       = Paint.text_clean(raw).trimEnd();
+    at = to + 1;
+    return line.trim() === "" ? [] : [{ text: line, from, to, cut: cuts.some(([a, b]) => a < to && from < b) }];
+  });
+}
+
+// the lines (by their place among lines) holding a spot: each it
+// overlaps, so one over several lines keeps them all; one only on lines
+// left out (blank), the next line shown (none: the last)
+function ask_spots(lines: Array<{ from: number; to: number }>, spots: Array<[number, number]>): number[] {
+  return spots.flatMap(([a, b]) => {
+    const on = lines.flatMap((l, k) => (l.from < Math.max(b, a + 1) && a < l.to ? [k] : []));
+    const next = lines.findIndex((l) => l.from >= a);
+    return on.length > 0 ? on : [next < 0 ? lines.length - 1 : next];
+  });
 }
 
 // a question answered; said: a no's reason, the answer to illi's own

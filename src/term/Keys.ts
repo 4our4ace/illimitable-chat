@@ -22,7 +22,7 @@ import { member_others } from "./Member.ts";
 import { term_note, term_toast, term_unnote } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { popup_mouse, popup_page, popup_wheel, term_popup } from "./Popup.ts";
-import { question_form_wheel, question_held, question_of, question_over } from "./Question.ts";
+import { question_folds, question_form_wheel, question_held, question_of, question_over, question_toggle } from "./Question.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_copied, term_hover, term_mouse, term_selected, term_target, term_typing, term_wordy } from "./Select.ts";
 import { term_act, term_primaries, term_quit, type Chooser, type Cmd, type Term } from "./Term.ts";
@@ -169,12 +169,18 @@ export function term_grab(t: Term, key: string): boolean {
 // (Ctrl+P's list shows over it), Ctrl+C while text is chosen (it copies
 // it, as ever), and the wheel off it, which scrolls the chat (or a pane)
 // as with no question; a picker's as term_choose_key (the wheel on it
-// scrolls its lead); illi's form's as Asks.ts term_form_key (the wheel on
-// it scrolls its lines: Question.ts), any it doesn't use doing nothing
+// scrolls its lead; Ctrl+O, where its command folds, folds it or shows
+// it whole: Question.ts question_toggle, the lit answer kept); illi's
+// form's as Asks.ts term_form_key (the wheel on it scrolls its lines:
+// Question.ts), any it doesn't use doing nothing
 function term_question_key(t: Term, key: string): boolean {
   const wheel = key === "WheelUp" || key === "WheelDown";
   if ((wheel && !question_over(t)) || (key === "Ctrl+C" && t.sel?.moved === true && !t.sel.held)) {
     return false;
+  }
+  if (t.question !== null && key === "Ctrl+O" && question_folds(t)) {
+    question_toggle(t.question);
+    return true;
   }
   if (t.question !== null) {
     return term_choose_key(t, t.question, key);

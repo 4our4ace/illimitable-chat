@@ -563,7 +563,7 @@ function term_box(t: Term, iw: number, room: number): { sug: Sug; lines: Array<[
 // as painted (t.box: the mouse over them is Popup.ts's)
 function term_over(t: Term, rows: Screen.Piece[][], box: { sug: Sug; lines: Array<[Paint.Line, Target | null]> }, top: number, col: number, w: number): void {
   box.lines.forEach(([line], k) => rows[top + k].push({ col, w, line }));
-  t.box = { of: box.sug, row: top, col, w, h: box.lines.length, inset: 2, rows: box.lines.map(([, aim]) => aim), list: 1, lines: box.lines.length - 2, tall: box.sug.tall, ahead: 0, lead: 0 };
+  t.box = { of: box.sug, row: top, col, w, h: box.lines.length, inset: 2, rows: box.lines.map(([, aim]) => aim), list: 1, lines: box.lines.length - 2, tall: box.sug.tall, ahead: 0, lead: 0, folds: false };
 }
 
 // the chat's lines and the first shown, tall of them: its rows (made

@@ -10,7 +10,10 @@
 // unquoted one split and globbed as bash would; a [ without its ] not),
 // redirections with their descriptors and whether the text they feed is
 // made as it runs; what bash would read in a way this can't follow is
-// refused with why, never guessed. Then bash itself, told to list the
+// refused with why, never guessed. Each part knows where it is in the
+// command (line 40 of a script, a link of a chain, a line continued,
+// inside $(...), `...`, bash -c, eval, trap, a heredoc's body: where its
+// text is there as written; else the text holding it). Then bash itself, told to list the
 // commands it would run without running any, finds none the parser
 // missed (one it lists after a keyword, as time's, is the parser's with
 // that wrapper on).
@@ -78,6 +81,34 @@ test("nested scripts are read: bash -c, eval (its cd lasts), trap (also after --
   expect(parts("find src -name '*.ts' -exec grep -l foo {} \\;")).toEqual(["grep -l foo *src @/w", "find src -name *.ts @/w"]);
   expect(parts("bash -c \"$X\"")).toBe("a shell runs a script made as it runs");
   expect(parts("eval \"$X\"")).toBe("eval runs a command made as it runs");
+});
+
+// each part's span as the text of the command it covers
+const spans = (command: string) => (Shell.parse(command, "/w") as Part[]).map((p) => [p.text, command.slice(...p.span)]);
+
+test("each part knows where it is in the command: line 40 of a script, a link of a && chain, a line continued, inside $(...) and `...`", () => {
+  const script = Array.from({ length: 39 }, (_, k) => "echo step " + (k + 1)).join("\n") + "\nrm -rf ./old\necho done";
+  const got = Shell.parse(script, "/w") as Part[];
+  expect([got[39].text, script.slice(...got[39].span), script.slice(0, got[39].span[0]).split("\n").length]).toEqual(["rm -rf ./old", "rm -rf ./old", 40]);
+  expect(spans("ls -la && rm -rf x || echo no; pwd")).toEqual([["ls -la", "ls -la"], ["rm -rf x", "rm -rf x"], ["echo no", "echo no"], ["pwd", "pwd"]]);
+  expect(spans("FOO=1 sudo rm \\\n  -rf /x 2>/dev/null && ls")).toEqual([["rm -rf /x", "FOO=1 sudo rm \\\n  -rf /x 2>/dev/null"], ["ls", "ls"]]);
+  expect(spans("echo $(rm -rf x) `rm -f y`")).toEqual([["rm -rf x", "rm -rf x"], ["rm -f y", "rm -f y"], ["echo $(rm -rf x) `rm -f y`", "echo $(rm -rf x) `rm -f y`"]]);
+  expect(spans("echo `echo \\`date\\``")).toEqual([["date", "`echo \\`date\\``"], ["echo `date`", "`echo \\`date\\``"], ["echo `echo \\`date\\``", "echo `echo \\`date\\``"]]);
+});
+
+test("a nested script's parts are placed in the command itself where its text is there as written (bash -c, eval, trap, a heredoc's body), else at the text holding them", () => {
+  expect(spans("bash -c 'cd /a && rm -rf x'; pwd")).toEqual([["cd /a", "cd /a"], ["rm -rf x", "rm -rf x"], ["pwd", "pwd"]]);
+  expect(spans("sudo bash -lc \"ls; rm -rf x\"")).toEqual([["ls", "ls"], ["rm -rf x", "rm -rf x"]]);
+  expect(spans("eval 'rm -rf x'; trap 'rm -f y' EXIT; eval rm -f z")).toEqual([["rm -rf x", "rm -rf x"], ["rm -f y", "rm -f y"], ["rm -f z", "rm -f z"]]);
+  expect(spans("bash -c \"echo \\\"hi\\\"; rm -rf x\"")).toEqual([["echo \"hi\"", "\"echo \\\"hi\\\"; rm -rf x\""], ["rm -rf x", "\"echo \\\"hi\\\"; rm -rf x\""]]);
+  expect(spans("bash -c \"bash -c 'rm -rf x'\"")).toEqual([["rm -rf x", "rm -rf x"]]);
+  expect(spans("cat <<EOF > out\nline\nhi $(rm -rf x)\nEOF\nls")).toEqual([["cat", "cat <<EOF > out"], ["rm -rf x", "rm -rf x"], ["ls", "ls"]]);
+  const doc = "bash <<'EOF'\necho one\nrm -rf ./x\nEOF";
+  const [bash] = Shell.parse(doc, "/w") as Part[];
+  const body = bash.redirs[0];
+  expect([doc.slice(...bash.span), doc.slice(body.at, body.at! + body.body!.length)]).toEqual(["bash <<'EOF'", "echo one\nrm -rf ./x\n"]);
+  expect((Shell.parse(body.body!, "/w", body.at) as Part[]).map((p) => doc.slice(...p.span))).toEqual(["echo one", "rm -rf ./x"]);
+  expect((Shell.parse(body.body!, "/w", [3, 9]) as Part[]).map((p) => p.span)).toEqual([[3, 9], [3, 9]]);
 });
 
 test("words expand as far as known: variables, loops, tildes, braces; globs and run-time names marked", () => {

@@ -26,7 +26,7 @@ Chat
 | `/close #id` | close block #id and keep it closed (or click anywhere in its frame) |
 | `/fold`, Ctrl+F | fold the chat into the fewest blocks; again: unfold |
 | Ctrl+Y | copy illi's last reply (a drag copies the text it covers, a double click a word) |
-| Ctrl+O | show or hide the work between replies: tools, thinking, agents' reports, and the recaps under the "Compaction" lines (hidden, a click opens one alone; shown, a click closes one alone; Ctrl+O forgets those clicks, and unfolds what a click folded) |
+| Ctrl+O | show or hide the work between replies: tools, thinking, agents' reports, and the recaps under the "Compaction" lines (hidden, a click opens one alone; shown, a click closes one alone; Ctrl+O forgets those clicks, and unfolds what a click folded); on a permission question, its long command all, or folded again |
 | `/export` | save this project's memory as ./illi-memory.json |
 | `/tree` | save this project's whole memory tree as ./illi-tree.html |
 | Ctrl+L | draw the screen again |
@@ -187,6 +187,7 @@ and what you were typing comes back once you answer.
 | --- | ---- |
 | Up, Down (or Tab, Shift+Tab) | move |
 | PgUp, PgDn | a page (of a question's long lead, where it is cut) |
+| Ctrl+O | a question's long command: show it all, or fold it again |
 | Ctrl+Home, Ctrl+End | the first, the last (Home and End too, where you can't type) |
 | Enter | pick |
 | Esc (or Ctrl+C, Ctrl+D) | close; a question: No |
@@ -200,7 +201,11 @@ and what you were typing comes back once you answer.
   whole up to half the screen, then cut, a dim line saying how much more
   (`… 212 more lines · wheel, PgUp/PgDn`): the wheel over it or PgUp,
   PgDn scroll it; the answers always show (on a screen too short for
-  both, what leads them gives way). Everywhere else the mouse
+  both, what leads them gives way). A permission question's long
+  command comes folded: its first line, the lines that made illi ask,
+  and its last, a dim `… 37 lines` for each stretch left out. Ctrl+O
+  (the rule says `Ctrl+O all`) or a click on a `… 37 lines` line shows
+  all of it; Ctrl+O again (`Ctrl+O fold`) folds it. Everywhere else the mouse
   works as with no question: the wheel scrolls the chat, text is
   selected and copied (Ctrl+C with text selected copies it, and doesn't
   answer), the side and the tabs answer; a click outside never answers.
@@ -246,7 +251,8 @@ rule over them, the input you were typing kept for after them:
   the chat as yours.
 
 A call the permission checks stop ([Permissions](permissions.md)) asks
-at the input: why, and what it would do (a command by its lines), then
+at the input: why, and what it would do (a command by its lines; a
+long one folded to the lines that matter, Ctrl+O for all), then
 Yes; Yes, and don't ask again (only where it keeps something, which it
 names); No; No, and say why (a line typed, which illi reads). Up and
 Down move, Enter or a click picks, Esc is No. A subagent's question

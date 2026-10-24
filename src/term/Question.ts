@@ -20,7 +20,17 @@
 // keeping the rest: too tall, its lead gives way, cut to fit, a dim line
 // after it saying how much more, and scrolls by the wheel over it and
 // PgUp, PgDn (too short for a line of it and that one, it gives way
-// whole); its answers always show, each whole (one taller than ANSWER,
+// whole). A long command in its lead (the permission question's, told
+// where in it the checks found what made them ask: Chooser fold) folds,
+// taller than FOLD rows: its first line, the lines holding what made
+// them ask and its last show, each run of the rest one dim line saying
+// how many lines it hides ("… 37 lines"), so a fold never hides why it
+// asks; Ctrl+O shows it whole and folds it again (its rule says which:
+// "Ctrl+O all", "Ctrl+O fold"), as a click on such a line shows it whole,
+// its lead from its top, the lit answer and the hold as they were; folded
+// or whole, too tall it is cut as above, such a line last in view taking
+// the cut's words after its own (never two such lines one over the
+// other). Its answers always show, each whole (one taller than ANSWER,
 // naming what it keeps by a long command: its start and its end), on a
 // screen too short for them a line each, as many as fit about the lit
 // one; the form, as tall as its tallest tab (tabbing never moves the
@@ -34,7 +44,9 @@
 // Ctrl+D close it (the permission question's No, the form's skip; Ctrl+C
 // copies text chosen instead, as ever). On its rows the row under the
 // pointer lights and a click does what Enter does (Popup.ts popup_mouse;
-// on a tab of the form, goes there), the wheel scrolls its lead or the
+// on a tab of the form, goes there; on a line saying what a fold hides,
+// lit while the pointer is on it, shows the command whole, held by
+// nothing as it answers nothing), the wheel scrolls its lead or the
 // form's lines (its answers never move by it); all else on the screen
 // works as with no question (the wheel scrolls the chat, text is chosen
 // and copied, the side and the tabs answer; a click outside never answers
@@ -58,14 +70,24 @@ const ARM = 500;
 // after an ellipsis, how it ends (its scope)
 const ANSWER = 3;
 
-// the leads as laid out last (question_lead), by the lead and its width
-const LEADS = new WeakMap<Paint.Line[], { w: number; lines: Paint.Line[] }>();
+// the most rows a command in a question's lead takes before it folds
+// (Chooser fold)
+const FOLD = 4;
+
+// a lead folded (question_folded): its lines, and what each stands for
+// (a line saying how many it hides: a click shows them all)
+type Folded = { lines: Paint.Line[]; aims: Array<Target | null> };
+
+// the leads as laid out last (question_lead), by the lead: the fold and
+// the width they were laid out for, all their lines, and folded (null:
+// they don't fold at that width)
+const LEADS = new WeakMap<Paint.Line[], { fold: Chooser["fold"]; w: number; all: Paint.Line[]; folded: Folded | null }>();
 
 // a question laid out at the input: what it was laid out for (its
 // picker, illi's form), the rule over it, its lines and what each stands
 // for (Box rows), the cursor's spot in them (null: hidden), its answers
 // and lead as laid out (Box's)
-export type Asked = { of: object; rule: Paint.Line; lines: Paint.Line[]; rows: Box["rows"]; at: Screen.Spot | null; shape: Pick<Box, "list" | "lines" | "tall" | "ahead" | "lead"> };
+export type Asked = { of: object; rule: Paint.Line; lines: Paint.Line[]; rows: Box["rows"]; at: Screen.Spot | null; shape: Pick<Box, "list" | "lines" | "tall" | "ahead" | "lead" | "folds"> };
 
 // the question shown at the input: its picker, else illi's form (null:
 // none)
@@ -119,22 +141,31 @@ export function question_laid(t: Term, w: number, h: number, free: number): Aske
 
 // a question's picker laid out w wide, on a screen h rows tall, free of
 // them for it: over its answers (or the line asked) the lines leading
-// them (Chooser lead: why it asks, what it would do; question_lead), from
-// those scrolled past (Chooser past), as many as leave its answers room
-// in question_most; cut, a dim line after them says how many more follow
-// (none: how many are above) and how they scroll, so a cut lead takes two
-// lines at least, else gives way whole (with one line free, that line
-// alone says how many there are). Its answers as a list's options are
-// (Popup.ts popup_rows), the lit one marked, each whole up to
-// question_cap's lines (past them: question_cut), all of them (on a
-// screen too short for them: question_view); a line asked, as the input
-// shows a message typed (its hint while empty), question_words at most
-// (its cursor's and those before), the cursor in it. Its rule: its title,
-// then its keys (where it has answers) and what the lit one takes besides
-// (its foot; a line's: what it takes, or why it won't do), then Esc, the
-// no every question takes, unless the foot says it already
+// them (Chooser lead: why it asks, what it would do; question_lead;
+// a long command folded: question_folded), from those scrolled past
+// (Chooser past), as many as leave its answers room in question_most;
+// cut, a dim line after them says how many more follow (none: how many
+// are above) and how they scroll, so a cut lead takes two lines at
+// least, else gives way whole (with one line free, that line alone says
+// how many there are); a line saying what a fold hides last in view takes
+// that line's words after its own, never two such lines one over the
+// other. The line a fold hides under the pointer lit (question_under).
+// Its answers as a list's options are (Popup.ts popup_rows), the lit one
+// marked, each whole up to question_cap's lines (past them:
+// question_cut), all of them (on a screen too short for them:
+// question_view); a line asked, as the input shows a message typed (its
+// hint while empty), question_words at most (its cursor's and those
+// before), the cursor in it. Its rule: its title, then its keys (where it
+// has answers; Ctrl+O where its command folds: "all" folded, "fold"
+// shown whole) and what the lit one takes besides (its foot; a line's:
+// what it takes, or why it won't do), then Esc, the no every question
+// takes, unless the foot says it already
 function question_picker(t: Term, c: Chooser, w: number, h: number, free: number): Asked {
-  const lead  = c.lead === undefined ? [] : question_lead(c.lead, w);
+  const laid  = c.lead === undefined ? null : question_lead(c, w);
+  const folds = laid?.folded != null;
+  const shut  = folds && c.fold?.open !== true;
+  const lead  = laid === null ? [] : shut ? laid.folded!.lines : laid.all;
+  const aim   = (k: number): Target | null => (shut ? laid!.folded!.aims[k] ?? null : null);
   const list  = popup_entries(c);
   const most  = question_most(h, free);
   const each  = c.ask !== null ? [] : popup_rows(c, list, list.map((_, e) => e), w);
@@ -149,28 +180,90 @@ function question_picker(t: Term, c: Chooser, w: number, h: number, free: number
   const past  = ahead === 0 ? 0 : (c.past = Math.max(0, Math.min(c.past ?? 0, lead.length - ahead)));
   const below = lead.length - past - ahead;
   const said  = below > 0 ? below.toLocaleString("en-US") + (below === 1 ? " more line" : " more lines") : past.toLocaleString("en-US") + (past === 1 ? " line above" : " lines above");
-  const more  = ahead < lead.length && fit > 0 ? [[Paint.Run("… " + said + (ahead > 0 ? " · wheel, PgUp/PgDn" : ""), Paint.DIM)]] : [];
-  const read  = [...lead.slice(past, past + ahead), ...more];
-  const rows  = [...read.map(() => null), ...(line === null ? opts.map(([, aim]) => aim) : line.lines.map(() => null))];
+  const cuts  = ahead < lead.length && fit > 0;
+  const joins = cuts && ahead > 0 && aim(past + ahead - 1) !== null;
+  const tail  = (joins ? " · " : "… ") + said + (ahead > 0 ? " · wheel, PgUp/PgDn" : "");
+  const shown = lead.slice(past, past + ahead);
+  const under = question_under(t, c);
+  const lit   = (l: Paint.Line, j: number) => (j === under && aim(past + j) !== null ? l.map((r) => ({ ...r, s: Paint.INK })) : l);
+  const read  = [...shown.map(lit).map((l, j) => (joins && j === ahead - 1 ? [...l, Paint.Run(tail, Paint.DIM)] : l)), ...(cuts && !joins ? [[Paint.Run(tail, Paint.DIM)]] : [])];
+  const rows  = [...read.map((_, j) => (j < ahead ? aim(past + j) : null)), ...(line === null ? opts.map(([, aim]) => aim) : line.lines.map(() => null))];
   const at    = line === null ? null : { row: read.length + line.at.row, col: line.at.col };
   const foot  = popup_foot(c);
-  const rule  = question_rule(w, c.title, [c.ask === null ? "↑↓ Enter" : "", foot, /\bEsc\b/.test(foot) ? "" : "Esc"]);
-  return { of: c, rule, lines: [...read, ...(line === null ? opts.map(([l]) => l) : line.lines)], rows, at, shape: { list: read.length, lines: opts.length, tall: view.length, ahead, lead: lead.length } };
+  const rule  = question_rule(w, c.title, [c.ask === null ? "↑↓ Enter" : "", folds ? (shut ? "Ctrl+O all" : "Ctrl+O fold") : "", foot, /\bEsc\b/.test(foot) ? "" : "Esc"]);
+  return { of: c, rule, lines: [...read, ...(line === null ? opts.map(([l]) => l) : line.lines)], rows, at, shape: { list: read.length, lines: opts.length, tall: view.length, ahead, lead: lead.length, folds } };
 }
 
 // the lines leading a question's answers (Chooser lead) wrapped w wide,
 // each run cleaned as text is (Paint.text_clean: no control character
-// reaches the screen, whoever made them); made once a lead and width, as
-// a paint lays the question out again and again and a command whole may
-// run to many lines
-function question_lead(lead: Paint.Line[], w: number): Paint.Line[] {
+// reaches the screen, whoever made them), all of them and folded
+// (question_folded); made once a lead, fold and width, as a paint lays
+// the question out again and again and a command whole may run to many
+// lines
+function question_lead(c: Chooser, w: number): { all: Paint.Line[]; folded: Folded | null } {
+  const lead  = c.lead ?? [];
   const known = LEADS.get(lead);
-  if (known?.w === w) {
-    return known.lines;
+  if (known?.w === w && known.fold === c.fold) {
+    return known;
   }
-  const lines = lead.flatMap((l) => Paint.runs_wrap(l.map((r) => ({ ...r, x: Paint.text_clean(r.x) })), Math.max(1, w), false));
-  LEADS.set(lead, { w, lines });
-  return lines;
+  const each = lead.map((l) => Paint.runs_wrap(l.map((r) => ({ ...r, x: Paint.text_clean(r.x) })), Math.max(1, w), false));
+  const laid = { fold: c.fold, w, all: each.flat(), folded: c.fold === undefined ? null : question_folded(each, c.fold) };
+  LEADS.set(lead, laid);
+  return laid;
+}
+
+// a lead (each: its lines' rows, as wrapped) with its command folded
+// (fold): the lines before the command, then its first line, those
+// kept (holding what made the checks ask) and the lead's last, each run
+// of the others one dim line saying how many lines it hides ("… 37
+// lines": a click shows them all), but a run of one row, shown as it is
+// (its line takes no more). Ending on a line shown, a fold never puts
+// such a line right over the cut's (question_picker). Null: it doesn't
+// fold, the command FOLD rows at most or nothing hidden
+function question_folded(each: Paint.Line[][], fold: NonNullable<Chooser["fold"]>): Folded | null {
+  const keep  = new Set([...fold.keep, fold.from, each.length - 1]);
+  const tall  = each.slice(fold.from).reduce((n, rows) => n + rows.length, 0);
+  const lines: Paint.Line[] = [];
+  const aims: Array<Target | null> = [];
+  let gaps    = 0;
+  for (let k = 0; k < each.length;) {
+    let j = k + 1;
+    while (k >= fold.from && !keep.has(k) && j < each.length && !keep.has(j)) {
+      j++;
+    }
+    const rows = each.slice(k, j).flat();
+    const hide = k >= fold.from && !keep.has(k) && rows.length > 1;
+    const n    = j - k;
+    lines.push(...(hide ? [[Paint.Run("… " + n.toLocaleString("en-US") + (n === 1 ? " line" : " lines"), Paint.DIM)]] : rows));
+    aims.push(...(hide ? [{ $: "fold" as const, k: gaps++ }] : rows.map(() => null)));
+    k = j;
+  }
+  return tall > FOLD && gaps > 0 ? { lines, aims } : null;
+}
+
+// the row of the question at the input the pointer is on, as last painted
+// (none: -1), while what is under the pointer lights (Select.ts: it
+// moved since a key, the window focused)
+function question_under(t: Term, c: Chooser): number {
+  const box = t.box;
+  const p   = t.scr.point;
+  return box?.of === c && t.pointed && t.scr.away !== true && popup_at(box, p) !== "out" ? p.row - box.row : -1;
+}
+
+// whether the question at the input has a command that folds, as last
+// painted (Ctrl+O folds it or shows it whole: Keys.ts)
+export function question_folds(t: Term): boolean {
+  return t.question !== null && t.box?.of === t.question && t.box.folds;
+}
+
+// a question's command folded, or shown whole (Ctrl+O; a click on a line
+// saying what the fold hides: Popup.ts), its lead from its top again; the
+// lit answer and the hold on Enter as they were
+export function question_toggle(c: Chooser): void {
+  if (c.fold !== undefined) {
+    c.fold.open = !c.fold.open;
+    c.past      = 0;
+  }
 }
 
 // a question's answers in view (their entries' indices in list; tall:
@@ -239,7 +332,7 @@ function question_form(t: Term, f: Form, w: number, h: number, free: number): As
   const cur  = laid.at;
   const at   = cur === null || cur.row < f.top || cur.row >= f.top + room ? null : { row: head.length + cur.row - f.top, col: cur.col };
   const rows = [...laid.spans.slice(0, head.length), ...[...view, ...pad].map(([, aim]) => aim), ...keys.map(() => null)];
-  return { of: f, rule: question_rule(w, laid.who + " asks", []), lines: [...head, ...[...view, ...pad].map(([l]) => l), ...keys], rows, at, shape: { list: head.length, lines: room, tall: laid.body.length, ahead: 0, lead: 0 } };
+  return { of: f, rule: question_rule(w, laid.who + " asks", []), lines: [...head, ...[...view, ...pad].map(([l]) => l), ...keys], rows, at, shape: { list: head.length, lines: room, tall: laid.body.length, ahead: 0, lead: 0, folds: false } };
 }
 
 // the lines row k of illi's form takes in its lines as laid out (body,

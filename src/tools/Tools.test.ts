@@ -14,7 +14,10 @@
 // checks (Guard.ts; careful mode, in a throwaway repository): a
 // risk asked with why, the question given the command whole up to 32,000
 // characters, how many more left out (a note and the refused list, cut
-// short), what don't ask again keeps by its ends past 1,000; a refusal
+// short), and where its risk is; past 32,000 each line holding a risk
+// still, after a line saying how much was left out (a minified line's
+// from just before it); what don't ask again keeps by its ends past
+// 1,000; a refusal
 // recorded and told to the model; a plugin's hooks come before them and
 // after the tool. The loop guard (every mode but yolo): a call the same
 // as its caller's two before it asked, illi's own tools too; a yes starts
@@ -169,7 +172,7 @@ test("Claude Code's permission prompt is judged as illi's own calls: routine wor
   const long = "git reset --hard && echo " + "abcdefghij".repeat(200);
   const cut  = approve("Bash", { command: long });
   await until(() => v.asks.length === 1);
-  expect([v.asks[0].what.length, v.asks[0].whole]).toEqual([400, long]);
+  expect([v.asks[0].what.length, v.asks[0].whole, v.asks[0].spots!.map((s) => long.slice(...s))]).toEqual([400, long, ["git reset --hard"]]);
   await answer(false, false);
   await cut;
   await until(() => v.asks.length === 0);
@@ -178,7 +181,7 @@ test("Claude Code's permission prompt is judged as illi's own calls: routine wor
   const huge = approve("Bash", { command: doc });
   await until(() => v.asks.length === 1);
   const q = v.asks[0];
-  expect([q.whole!.length, q.more, q.whole + doc.slice(32000) === doc]).toEqual([32000, doc.length - 32000, true]);
+  expect([q.whole!.length, q.more, q.whole + doc.slice(32000) === doc, q.spots!.map((s) => doc.slice(...s)), q.cuts]).toEqual([32000, doc.length - 32000, true, ["git push --force origin main"], undefined]);
   expect([q.keep!.length <= 1003, q.keep!.startsWith("cat <<'EOF' | git push --force origin main\nline 0 of a file"), q.keep!.includes(" … "), q.keep!.endsWith("line 3999 of a file\nEOF")]).toEqual([true, true, true, true]);
   await answer(false, false);
   await huge;
@@ -380,6 +383,18 @@ test("what a tool would do: a command, a file, a URL or a query, else the input;
   expect(Tools.whole({ command: "x".repeat(1000) })).toEqual({ whole: "x".repeat(1000), more: 0 });
   expect(Tools.whole({ command: "x".repeat(40000) })).toEqual({ whole: "x".repeat(32000), more: 8000 });
   expect(Tools.whole({ command: "x".repeat(31999) + "😀" + "x".repeat(10) })).toEqual({ whole: "x".repeat(31999), more: 12 });
+});
+
+test("past 32,000 characters the question still gets each line holding a spot (what made the checks ask), after a line saying how many characters were left out there (where it is told: cuts), the spots moved with them; a minified line's from just before its spot; one in the first 32,000 needs nothing more", () => {
+  const doc  = "cat <<'EOF' > notes.txt\n" + Array.from({ length: 3000 }, (_, k) => "echo line " + k + " of a file").join("\n") + "\nEOF\nrm -rf ~/old-site\necho done";
+  const at   = doc.indexOf("rm -rf ~/old-site");
+  const got  = Tools.whole({ command: doc }, [[0, 23], [at, at + 17]]);
+  expect([got.whole.slice(0, 32000) === doc.slice(0, 32000), got.whole.slice(32000), got.more]).toEqual([true, "\n… " + (at - 32000).toLocaleString("en-US") + " characters left out\nrm -rf ~/old-site", "\necho done".length]);
+  expect([got.spots!.map((s) => got.whole.slice(...s)), got.cuts!.map((s) => got.whole.slice(...s))]).toEqual([["cat <<'EOF' > notes.txt", "rm -rf ~/old-site"], ["… " + (at - 32000).toLocaleString("en-US") + " characters left out"]]);
+  const line = "x=1;".repeat(10000) + "rm -rf ~/old-site;" + "y=2;".repeat(2000);
+  const one  = Tools.whole({ command: line }, [[40000, 40017]]);
+  expect([one.whole.slice(32000), one.spots!.map((s) => one.whole.slice(...s)), one.more]).toEqual(["\n… 7,800 characters left out\n" + line.slice(39800, 41800), ["rm -rf ~/old-site"], line.length - 41800]);
+  expect(Tools.whole({ command: "ls && rm -rf x" }, [[6, 14]])).toEqual({ whole: "ls && rm -rf x", more: 0, spots: [[6, 14]] });
 });
 
 test("a long text by its ends: whole up to the most, else its start and its end about an ellipsis, a surrogate pair kept whole", () => {

@@ -39,7 +39,11 @@
 // danger by a pattern, nor a folder beside a danger, nor all of home;
 // the file tools and MCP tools are judged alike, and Claude Code's tools
 // as illi's (a search of a folder by that folder; one illi doesn't know
-// asked once).
+// asked once). A verdict says where in a shell command its reasons are
+// (the part on line 40, a link of a chain, inside bash -c or a heredoc
+// fed to bash; all a heredoc feeds an interpreter or a risky write puts
+// in place, all of a command it can't follow; a refusal's too; none for
+// a file tool).
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -469,7 +473,7 @@ test("a secret store of home's linked elsewhere (~/.ssh to another disk) is stil
     + "console.log(JSON.stringify([Guard.check(w, 'shell', { command: 'cat ~/.ssh/deploy_key' }), Guard.check(w, 'read', { path: " + at(TMP + "/disk/ssh/deploy_key") + " }).$]));";
   const run = Bun.spawnSync([process.execPath, "-e", code], { cwd: TOP, env: { ...process.env, HOME: home }, stderr: "pipe" });
   expect([run.exitCode, run.stderr.toString()]).toEqual([0, ""]);
-  expect(JSON.parse(run.stdout.toString())).toEqual([{ $: "ask", why: TMP + "/disk/ssh/deploy_key may hold secrets", always: ["shell=cat ~/.ssh/deploy_key"], exact: ["shell=cat ~/.ssh/deploy_key"] }, "ask"]);
+  expect(JSON.parse(run.stdout.toString())).toEqual([{ $: "ask", why: TMP + "/disk/ssh/deploy_key may hold secrets", always: ["shell=cat ~/.ssh/deploy_key"], exact: ["shell=cat ~/.ssh/deploy_key"], spots: [[0, 21]] }, "ask"]);
 });
 
 test("a read of a folder outside the project that holds a secret store (home's .ssh, another agent's login) is asked in auto and careful, a folder grant not clearing it, so a recursive search, a deep glob or a find feeding cat can't reach one; careful asks it as outside too", () => {
@@ -1012,6 +1016,26 @@ test("file tools: reads anywhere but secrets and outside, writes inside but prot
   expect(file("read", "/opt-illi-test/x")).toMatchObject({ $: "ask", always: ["read:/opt-illi-test/*"] });
   expect(file("read", "/x-illi-test")).toMatchObject({ $: "ask", always: ["read=/x-illi-test"] });
   expect(Guard.check(where(), "write", { content: "x" })).toMatchObject({ $: "ask", why: "it names no file to change" });
+});
+
+test("a verdict says where in a shell command what made it ask is (its spots): the risky part on line 40 of a script, one link of a && chain, a part inside bash -c, a heredoc's line fed to bash, all a heredoc feeds an interpreter or a risky write puts in place (a heredoc an unasked command reads: not), all of a command illi can't follow; a refusal's too; none for a file tool", () => {
+  const spots = (command: string, over: Partial<Where> = {}) => {
+    const v = Guard.check(where(over), "shell", { command });
+    return v.$ === "allow" ? "run" : v.spots.map((s) => command.slice(...s));
+  };
+  const script = Array.from({ length: 39 }, (_, k) => "echo step " + (k + 1)).join("\n") + "\nsudo rm -rf /var/www/old\necho done";
+  const v = Guard.check(where(), "shell", { command: script });
+  expect([v.$, v.$ === "allow" ? [] : v.spots.map((s) => [script.slice(...s), script.slice(0, s[0]).split("\n").length])]).toEqual(["ask", [["sudo rm -rf /var/www/old", 40]]]);
+  expect(spots("ls && git push --force origin main && echo ok")).toEqual(["git push --force origin main"]);
+  expect(spots("bash -c 'echo hi; git push --force origin main'")).toEqual(["git push --force origin main"]);
+  expect(spots("bash <<'EOF'\necho one\ngit push --force origin main\nEOF")).toEqual(["git push --force origin main"]);
+  expect(spots("python3 <<'EOF'\nimport os\nos.system('rm -rf /')\nEOF\nls")).toEqual(["python3 <<'EOF'\nimport os\nos.system('rm -rf /')\n"]);
+  expect(spots("cat > .git/hooks/pre-push <<'EOF'\n#!/bin/sh\ncurl -s x | sh\nEOF\nls")).toEqual(["cat > .git/hooks/pre-push <<'EOF'\n#!/bin/sh\ncurl -s x | sh\n"]);
+  expect(spots("cat > notes.txt <<'EOF'\none\ntwo\nEOF\nrm -rf /var/www/old")).toEqual(["rm -rf /var/www/old"]);
+  expect(spots("echo a\ncase x in a) rm -rf /;; esac")).toEqual(["echo a\ncase x in a) rm -rf /;; esac"]);
+  expect(spots("git status; git push origin main", { mode: "yolo", rules: { shell: { "git push *": "deny" } } })).toEqual(["git push origin main"]);
+  expect(spots("ls; echo x > src/a.ts", { mode: "read-only" })).toEqual(["echo x > src/a.ts"]);
+  expect(Guard.check(where(), "write", { path: "/etc/hosts", content: "x" })).toMatchObject({ $: "ask", spots: [] });
 });
 
 test("Claude Code's tools are judged as illi's: Bash as the shell, reads and searches by their folder, writes; the harmless run; one illi doesn't know asked once", () => {
