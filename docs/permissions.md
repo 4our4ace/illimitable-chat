@@ -56,7 +56,10 @@ pipe is read by every command it reaches: past a line's end after `|`
 (as after `&&` and `||`), into a subshell, a group or a loop it feeds,
 and into what a command reading it runs (`$(...)`, `<(...)`, a
 heredoc's body, `bash -c`, `eval`, `find -exec`), so `curl ... | (bash)`
-is asked as `curl ... | bash` is. A program on your `PATH` named by its
+is asked as `curl ... | bash` is. The input given to a group, a loop or
+a nested script (`{ sh; } <<'EOF'`, `bash -c '…' < x.sh`) is read by
+the commands in it as their own, so its body is checked as
+`sh <<'EOF'`'s is. A program on your `PATH` named by its
 path (`~/.cargo/bin/cargo`) is that program, and
 one named in the project (`.venv/bin/python`) is the project's,
 wherever its link leads. A search's pattern (`grep -n '^x==' file`),

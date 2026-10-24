@@ -84,6 +84,16 @@ test("a pipe reaches what a command reading it runs: its $(...), `...`, <(...), 
   expect(parts("curl -s x | find . -exec sh \\; -ok sh \\;")).toEqual(["curl -s x @/w", "sh @/w [piped]", "sh @/w", "find . @/w [piped]"]);
 });
 
+test("a group, a subshell, a loop, a nested script and find -exec's command give their input to each command in them with none of its own and no pipe to read (a file's named from where the redirection is made), placed with it", () => {
+  expect(parts("{ cat | sh; read l; } <<'EOF'\nrm -rf x\nEOF")).toEqual(["cat <<EOF @/w", "sh @/w [piped]", "read l <<EOF @/w", "<<EOF @/w"]);
+  expect(parts("cd /a; ( cd /b; sh ) < x; while read l; do sh < y; done 0< z")).toEqual(["cd /a @/w", "cd /b </a/x @/a", "sh </a/x @/b", "<x @/a", "read l </a/z @/a", "sh <y @/a", "<z @/a"]);
+  expect(parts("cd $D; { sh; } < x; bash -c sh <<< 'rm -rf x'; eval sh < /e; trap sh EXIT < /t")).toEqual(["cd ~ @/w", "sh <~ @null", "<x @null", "sh <<<rm -rf x @null", "<<<rm -rf x @null", "sh </e @null", "</e @null", "sh @null", "</t @null"]);
+  expect(parts("find . -exec sh \\; -ok sh \\; < x; { sh; } 3< y")).toEqual(["sh </w/x @/w", "sh @/w", "find . <x @/w", "sh @/w", "<y @/w"]);
+  const command = "{\nsh\necho 1\n} < /tmp/x\nls";
+  const [sh] = Shell.parse(command, "/w") as Part[];
+  expect(command.slice(...Shell.held(sh))).toBe("sh\necho 1\n} < /tmp/x");
+});
+
 test("substitutions, heredoc bodies and process substitutions are read as commands that run", () => {
   expect(parts("echo $(whoami) `id`")).toEqual(["whoami @/w", "id @/w", "echo ~ ~ @/w"]);
   expect(parts("cat <<EOF > out\nhi $(date)\nEOF\nls")).toEqual(["cat <<EOF >out @/w", "date @/w", "ls @/w"]);

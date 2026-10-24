@@ -10,7 +10,9 @@
 // folder it runs in (each cd followed, behind builtin, command or time
 // too, in the shell it moves: a subshell's, a pipeline's or the
 // background's, a group's or a loop's there, its own; one another
-// program runs leaves it unknown). A pipe goes on past
+// program runs leaves it unknown), and its input as given (a heredoc,
+// a file) to the group, the subshell, the loop or the nested script it
+// is in, as its own. A pipe goes on past
 // a line's end after |, as do && and ||, and into every command of a
 // subshell, a group or a loop it feeds, and of what a command reading it
 // runs ($(...), `...`, <(...), a heredoc's body, bash -c's script, an
@@ -68,7 +70,8 @@ export type Span = [number, number];
 // first word to its last, a heredoc's body after its line not held), and
 // reading a pipe, where what writes it is (feed: the commands before it
 // in its pipeline, with the heredocs' bodies they read; not known, as
-// in a group a pipe goes into, all the command). One
+// in a group a pipe goes into, all the command; given the input of the
+// group or nested script it is in, where that redirection is). One
 // in a nested script is placed in the command itself where its text lies
 // there as written (bash -c 'x', a $(...), a heredoc's body); else (an
 // eval's words joined, a quote holding an escape) at the text there that
@@ -289,7 +292,7 @@ export namespace Shell {
 
   // where a part is in the command parsed, with the heredocs' bodies it
   // reads (after its line: Redir at) and what writes the pipe it reads
-  // (Part feed): all it acts on
+  // or gives it its input (Part feed): all it acts on
   export function held(part: Part): Span {
     return span_join(part_reach(part), part.feed ?? part.span);
   }
@@ -360,8 +363,9 @@ export namespace Shell {
 // read; back as it closes). A group or a loop in a pipeline or the
 // background runs in a subshell, as bash runs it: a cd in it moves the
 // commands after it in it, not those after it (State); the redirections
-// after one are made where the shell was as it began. Each pipeline's
-// parts kept (Scan pipes)
+// after one are made where the shell was as it began, its input given
+// to the commands in it (stdin_give), as a subshell's is. Each
+// pipeline's parts kept (Scan pipes)
 function scan_list(s: Scan, close: string): void {
   let cmd = cmd_new();
   let piped = false;
@@ -369,11 +373,11 @@ function scan_list(s: Scan, close: string): void {
   let head = -1;
   const outer = s.inpipe;
   let level = outer;
-  let closed: State | null = null;
-  const groups: Array<{ level: boolean; piped: boolean; was: State }> = [];
+  let closed: { was: State | null; from: number } | null = null;
+  const groups: Array<{ level: boolean; piped: boolean; was: State; from: number }> = [];
   const group = (word: string, was: State | null) => {
     if (was !== null) {
-      groups.push({ level, piped, was });
+      groups.push({ level, piped, was, from: s.parts.length });
       level ||= piped;
       piped = false;
     } else if (CLOSES.has(word) && groups.length > 0) {
@@ -381,22 +385,26 @@ function scan_list(s: Scan, close: string): void {
       level = g.level;
       if (g.piped) {
         state_put(s, g.was);
-      } else {
-        closed = g.was;
       }
+      closed = { was: g.piped ? null : g.was, from: g.from };
     }
     s.inpipe = level || piped;
   };
   const end = (op: string) => {
-    const pipe = op === "|" || op === "|&";
-    const sub  = pipe || op === "&";
-    const was  = cmd.words.length === 0 && cmd.env.length === 0 ? closed : null;
-    const now  = was === null ? null : state_of(s);
+    const pipe  = op === "|" || op === "|&";
+    const sub   = pipe || op === "&";
+    const after = cmd.words.length === 0 && cmd.env.length === 0 ? closed : null;
+    const to    = s.parts.length;
+    const at    = place(s, cmd.from, cmd.to);
+    const now   = after?.was == null ? null : state_of(s);
     closed = null;
-    if (was !== null) {
-      state_put(s, was);
+    if (after?.was != null) {
+      state_put(s, after.was);
     }
     cmd_end(s, cmd, piped, sub);
+    if (after !== null) {
+      stdin_give(s, after.from, to, cmd.redirs, s.cwd, at);
+    }
     if (now !== null && !sub) {
       state_put(s, now);
     }
@@ -470,8 +478,10 @@ function scan_list(s: Scan, close: string): void {
       if (!cmd_empty(cmd)) {
         throw new Unread("a ( after a command's words (a function or an array)");
       }
+      const from = s.parts.length;
       s.at++;
       scope(s, () => scan_list(s, ")"));
+      closed = { was: null, from };
       continue;
     }
     if (two === "((" && cmd_empty(cmd)) {
@@ -1436,7 +1446,7 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
         next = mark === null || got.get("-I")?.dynamic ? [...next, { ...DYN, input: true }] : next.map((w) => (w.alts.some((a) => a.includes(mark)) ? { ...DYN, raw: w.raw, input: true } : w));
       }
       if (name === "flock" && /^(-c|--command)$/.test(next[0]?.raw ?? "")) {
-        nested(s, next[1] ?? DYN, ctx, true);
+        nested(s, next[1] ?? DYN, ctx, true, undefined, redirs);
         if (redirs.length > 0) {
           part_push(s, [], env, redirs, full, ctx);
         }
@@ -1452,7 +1462,7 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
     if (SHELLS.has(name)) {
       const script = shell_script(rest);
       if (script !== null) {
-        nested(s, script, ctx, true);
+        nested(s, script, ctx, true, undefined, redirs);
         if (redirs.length > 0) {
           part_push(s, [], env, redirs, full, ctx);
         }
@@ -1470,7 +1480,7 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
       if (words.some((w) => w.dynamic || w.alts.length !== 1)) {
         throw new Unread(name + " runs a command made as it runs");
       }
-      nested(s, Shell.lit(words.map((w) => w.alts[0]).join(" ")), ctx, name !== "eval" || !own, words);
+      nested(s, Shell.lit(words.map((w) => w.alts[0]).join(" ")), ctx, name !== "eval" || !own, words, name === "trap" ? [] : redirs);
       if (redirs.length > 0) {
         part_push(s, [], env, redirs, full, ctx);
       }
@@ -1479,7 +1489,7 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
     break;
   }
   if (Shell.program(argv[0]) === "find") {
-    argv = find_execs(s, argv, ctx);
+    argv = find_execs(s, argv, ctx, redirs);
   }
   part_push(s, argv, env, redirs, full, ctx);
   return { argv, own };
@@ -1492,10 +1502,11 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
 // one (eval). Its parts are placed where its words are (one word whose
 // one value is there as written: each where it is in it; else at the
 // words, at the command when they are made up)
-function nested(s: Scan, script: Word, ctx: Ctx, sub: boolean, words: Word[] = [script]): void {
+function nested(s: Scan, script: Word, ctx: Ctx, sub: boolean, words: Word[] = [script], redirs: Redir[] = []): void {
   if (script.dynamic) {
     throw new Unread("a shell runs a script made as it runs");
   }
+  const from = s.parts.length;
   const at   = script.alts.length === 1 && words.length === 1 ? verbatim(words[0]) : null;
   const last = words.at(-1);
   const box  = last !== undefined && words.every((w) => w.at !== undefined) ? place(s, words[0].at!, last.at! + last.raw.length) : ctx.span;
@@ -1516,6 +1527,7 @@ function nested(s: Scan, script: Word, ctx: Ctx, sub: boolean, words: Word[] = [
     Object.assign(s, { root, fed, inpipe });
     s.cwd = sub ? cwd : s.cwd;
   }
+  stdin_give(s, from, s.parts.length, redirs, cwd, ctx.span);
 }
 
 // a shell's script given with -c (bash -c 'x', bash -lc 'x'); null: none
@@ -1546,7 +1558,7 @@ function watch_words(args: Word[]): Word[] | null {
 // find's -exec commands taken out as parts of their own, {} standing for
 // its start folders, each reading the pipe find reads (-ok's and
 // -okdir's none: find asks on its input); the find left without them
-function find_execs(s: Scan, argv: Word[], ctx: Ctx): Word[] {
+function find_execs(s: Scan, argv: Word[], ctx: Ctx, redirs: Redir[]): Word[] {
   const starts = find_starts(argv);
   const keep: Word[] = [];
   for (let k = 0; k < argv.length; k++) {
@@ -1559,9 +1571,12 @@ function find_execs(s: Scan, argv: Word[], ctx: Ctx): Word[] {
       j++;
     }
     const inner = argv.slice(k + 1, j).map((w) => (w.alts.some((a) => a.includes("{}")) ? found(w, starts) : w));
+    const ok = argv[k].raw.startsWith("-ok");
+    const from = s.parts.length;
     if (inner.length > 0) {
-      unwrap(s, inner, [], [], inner.map((w) => w.raw).join(" "), { ...ctx, piped: ctx.piped && !argv[k].raw.startsWith("-ok") });
+      unwrap(s, inner, [], [], inner.map((w) => w.raw).join(" "), { ...ctx, piped: ctx.piped && !ok });
     }
+    stdin_give(s, from, ok ? from : s.parts.length, redirs, s.cwd, ctx.span);
     k = j;
   }
   return keep;
@@ -1586,6 +1601,35 @@ function find_starts(argv: Word[]): Word[] {
 function found(w: Word, starts: Word[]): Word {
   const alts = w.alts.flatMap((a) => starts.flatMap((st) => st.alts.map((x) => a.replaceAll("{}", x))));
   return { ...w, alts: alts.slice(0, MOST), glob: true, dynamic: w.dynamic || starts.some((st) => st.dynamic) };
+}
+
+// the input a group, a subshell, a nested script or find -exec's command
+// is given (its last <, <<, <<<, <& or <> on descriptor 0) given to each
+// command it runs (the parts from, to) with none of its own and no pipe
+// to read, so a shell among them reads it as it would its own: sh
+// <<'EOF' and { sh; } <<'EOF' alike. A heredoc's the same (its body read
+// after its line); a file's named from cwd, the folder the redirection
+// is made in (null, a relative one: known only as it runs); each placed
+// with where it is given (at: Part feed)
+function stdin_give(s: Scan, from: number, to: number, redirs: Redir[], cwd: string | null, at: Span): void {
+  const r = redirs.filter(stdin).at(-1);
+  if (r === undefined || from >= to) {
+    return;
+  }
+  const w = r.target;
+  const local = !r.op.startsWith("<<") && r.op !== "<&" && !w.fd && !w.dynamic && w.alts.some((a) => !path.isAbsolute(a));
+  const given = !local ? r : { ...r, target: cwd === null ? { ...DYN, raw: w.raw } : { ...w, alts: w.alts.map((a) => (path.isAbsolute(a) ? a : cwd + "/" + a)), at: undefined } };
+  for (const part of s.parts.slice(from, to)) {
+    if (!part.piped && !part.redirs.some(stdin)) {
+      part.redirs = [...part.redirs, given];
+      part.feed = at;
+    }
+  }
+}
+
+// whether a redirection is a command's input: on descriptor 0
+function stdin(r: Redir): boolean {
+  return r.op.startsWith("<") && (r.num === undefined || r.num === "0");
 }
 
 function part_push(s: Scan, argv: Word[], env: Env[], redirs: Redir[], full: string, ctx: Ctx): void {
