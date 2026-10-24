@@ -155,7 +155,7 @@ test("Claude Code's permission prompt is judged as illi's own calls: routine wor
   expect(await approve("Task", { prompt: "look" })).toMatchObject({ behavior: "allow" });
   const yes = approve("Bash", { command: "git push --force origin main" });
   await until(() => v.asks.length === 1);
-  expect(v.asks[0]).toMatchObject({ who: "illi", tool: "Bash", what: "git push --force origin main", why: "git push --force origin main rewrites or deletes history on the remote", keep: "git push --force origin main" });
+  expect(v.asks[0]).toMatchObject({ who: "illi", tool: "Bash", what: "git push --force origin main", why: "git push --force origin main rewrites the remote's history", keep: "git push --force origin main" });
   await answer(true, false);
   expect(await yes).toEqual({ behavior: "allow", updatedInput: { command: "git push --force origin main" } });
   await until(() => v.asks.length === 0);

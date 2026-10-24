@@ -19,11 +19,19 @@
 // folder there holding a secret store read (home, for its .ssh); a
 // change whose file is known only as it runs ($X, $(...), what xargs
 // adds); root, disks, the system's services and settings, power; a
-// secret, through any tool (as in every mode but yolo); Claude Code's
-// settings and illi's own config; what Shell.ts can't read. Other reads
-// outside the project run (cat, grep, find, the read tool), as the
-// network, pushes, inline code, project scripts, MCP tools and
-// everything in the project do.
+// secret, through any tool (as in every mode but yolo); what deletes for
+// good on another computer (a push that rewrites or deletes the remote's
+// history: --force, +ref, --delete, :ref, --mirror, --prune; a
+// repository, release or package deleted: gh repo delete, npm unpublish;
+// cloud resources and infrastructure deleted: aws s3 rm, kubectl delete,
+// terraform destroy) and what makes git run a program (its hooks and
+// config written, through any tool; git config's keys that name one,
+// core.hooksPath, credential.helper, an alias of !...; git -c's), each
+// granted only exactly; Claude Code's settings and illi's own config;
+// what Shell.ts can't read. Other reads outside the project run (cat,
+// grep, find, the read tool), as the network, plain pushes and deploys,
+// inline code, project scripts, MCP tools and everything in the project
+// do.
 //
 // careful's, the long list: the danger list (root, deleting trees,
 // wiping disks, losing git work, sending data off, connecting out,
@@ -217,6 +225,24 @@ const CLOUDS = new Set(["aws", "gcloud", "az", "doctl", "fly", "flyctl", "vercel
 const CLOUD_READ = /^(describe|list|ls|get|show|logs?|status|whoami|info|inspect|view|search|wait|head|help|version|find|history|tail|check|validate|explain|print|cat|query|dev)(-[\w-]*)?$/;
 const CLOUD_ACTS = /^(create|delete|deploy|destroy|put|update|remove|rm|terminate|stop|start|restart|reboot|set|unset|apply|scale|cp|mv|sync|release|promote|rollback|add|up|down|run|invoke|exec|ssh|scp|login|logout|auth|configure|publish|attach|detach|import|purge|enable|disable|modify|reset|revoke|grant|tag|untag|copy|move|upload|mb|rb|send|submit|cancel|resize|replace|patch|associate|disassociate|register|deregister|link|unlink|init|open|secrets?|env)(-[\w-]*)?$/;
 
+// the verbs that delete for good on another computer, of the cloud CLIs,
+// the clusters' and infrastructure's and GitHub's: bare (gcloud ...
+// delete, aws s3 rm and rb, kubectl delete, terraform destroy, helm
+// uninstall, heroku apps:destroy: each part of a topic:command), or
+// saying what (aws ec2 delete-vpc, terminate-instances, gh release
+// delete-asset), only where the verb's place is known (a name such as
+// delete-handler is no verb); none under a CLI's own settings, kept on
+// this computer (kubectl config delete-context, gh alias delete). The
+// options before the verb that take the next word: aws's, the
+// clusters' and infrastructure's (kubectl -n prod delete, pulumi -s dev
+// destroy), gh's repository
+const GONE = /^(delete|destroy|terminate|purge|remove|rm|rb|uninstall)$/;
+const GONE_OF = /^(delete|terminate|purge)-[\w-]+$/;
+const OWN = /^(config|configure|configurations|auth|alias|extension|ext)$/;
+const AWS_VALUED = /^(--region|--profile|--output|--endpoint-url|--query|--color|--ca-bundle|--cli-read-timeout|--cli-connect-timeout|--cli-binary-format)$/;
+const INFRA_VALUED = /^(-n|--namespace|--context|--kubeconfig|--cluster|--user|-s|--server|--token|--as|--kube-context|-C|--cwd|--stack)$/;
+const GH_VALUED = /^(-R|--repo)$/;
+
 // the folders inside a project rebuilt by its tools (and Python's
 // *.egg-info: rebuilt_name): deleted whole freely
 const REBUILT = new Set([
@@ -298,8 +324,11 @@ const RUNS = /^(PATH|IFS|CDPATH|ENV|BASH_ENV|SHELLOPTS|BASHOPTS|GLOBIGNORE|BASH_
 const QUIET = new Set(["", "cat", "less", "less -R", "less -FRX", "more", "true", "head"]);
 
 // git's subcommands that only read; those whose words are files (others'
-// are revisions, or files after --), and of those the ones that only read
-// them (stage, commit); the config keys that run programs
+// are revisions, or files after --; config's are keys and push's refs,
+// never), and of those the ones that only read them (stage, commit); its
+// own options that take the next word (git -C dir, -c k=v, --git-dir x),
+// so none hides the subcommand, and push's (-o ci.skip), so none is
+// taken for its remote or a ref
 const GIT_READ = new Set([
   "status", "log", "diff", "show", "blame", "annotate", "shortlog", "describe", "rev-parse", "rev-list", "ls-files",
   "ls-tree", "ls-remote", "cat-file", "grep", "show-ref", "for-each-ref", "merge-base", "name-rev", "count-objects",
@@ -308,7 +337,24 @@ const GIT_READ = new Set([
 ]);
 const GIT_FILES = /^(add|rm|mv|restore|commit|apply|am|blame|clone|init|worktree|submodule|bundle|ls-files|check-ignore|check-attr)$/;
 const GIT_STAGES = /^(add|commit)$/;
+const GIT_VALUED = /^(-C|-c|--git-dir|--work-tree|--namespace|--config-env|--attr-source|--shallow-file)$/;
+const PUSH_VALUED = /^(-o|--push-option|--repo|--receive-pack|--exec)$/;
+
+// the git config keys that make git run a program, however set (git
+// config, git -c): a hook folder, a monitor, a pager, an editor, a
+// program by its name's end (sshCommand, sendmailCmd, credential.helper,
+// gpg.program, packObjectsHook), a merge driver, a diff's textconv or
+// external, a filter, a tool's path, a remote's uploadpack (run here for
+// one on this computer), the ext:: transport allowed, a file of keys
+// that may (include.path); an alias or a submodule's update does if its
+// value starts with ! (git_set). careful's besides: any alias, and what
+// changes where git reaches (a url, a protocol, a proxy, the worktree)
+const GIT_PROGRAMS = /^(core\.(hookspath|fsmonitor|askpass|gitproxy|pager|editor)|sequence\.editor|pager\..+|diff\.external|interactive\.difffilter|protocol\.(ext\.)?allow|filter\..+\.(clean|smudge|process)|(include|includeif\..+|mergetool\..+|difftool\..+|man\..+|browser\..+)\.path|.+\.(\w*command|\w*cmd|helper|\w*program|driver|textconv|\w*hook|uploadpack|receivepack))$/i;
 const GIT_RUNS = /^(core\.(pager|editor|sshcommand|fsmonitor|hookspath|askpass|gitproxy|worktree)|alias\.|include\.|includeif\.|diff\.external|sequence\.editor|uploadpack\.|receivepack\.|protocol\.|url\.|http\..*proxy|.*\.(textconv|command|cmd|helper|program|driver|process|clean|smudge))/i;
+
+// git's own config outside a repository (home's, where a link there
+// leads too, and the system's): written, asked as a repository's is
+const GIT_CONFIGS = [...new Set([".gitconfig", ".config/git/config"].flatMap((f) => [path.join(HOME, f), real(path.join(HOME, f))])), "/etc/gitconfig"];
 
 // the programs that can wipe a disk: make a file system, partition,
 // erase, encrypt
@@ -694,6 +740,7 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
   const short = (c: string) => xs.some((x) => /^-[a-zA-Z]+$/.test(x) && x.includes(c));
   const pos = positional(args);
   const sub = pos[0]?.alts[0] ?? "";
+  const verbs = pos.map((w) => (w.dynamic ? "" : w.alts[0]));
   const asks = xs.length === 1 && /^(--version|--help|-h|-V|version|help)$/.test(xs[0]);
   const given = asks ? null : runs_given(base, sub, xs, has);
   if (given !== null) {
@@ -866,16 +913,22 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
     case "terraform":
     case "tofu":
     case "pulumi": {
-      const reads = /^(get|describe|logs|top|explain|version|api-resources|api-versions|cluster-info|plan|validate|fmt|show|output|init|list|ls|status|history|template|lint|search|repo|preview|whoami|config)$/.test(sub) && !(sub === "config" && /^(set|use-context|delete)/.test(pos[1]?.alts[0] ?? ""));
-      if (!reads) {
+      const [head = "", next = ""] = positional(args, INFRA_VALUED).map((w) => (w.dynamic ? "" : w.alts[0]));
+      const reads = /^(get|describe|logs|top|explain|version|api-resources|api-versions|cluster-info|plan|validate|fmt|show|output|init|list|ls|status|history|template|lint|search|repo|preview|whoami|config)$/.test(head) && !(head === "config" && /^(set|use-context|delete)/.test(next));
+      if (!reads && (GONE.test(head) || (/^(stack|workspace)$/.test(head) && GONE.test(next)) || has("-destroy"))) {
+        flag(text + " deletes real infrastructure", null, "all");
+      } else if (!reads) {
         flag(text + " changes real infrastructure");
       }
       return !reads;
     }
     case "gh": {
       const verb = pos[1]?.alts[0] ?? "";
+      const lost = gh_lost(args, xs, has);
       if (sub === "auth" && (verb === "token" || has("--show-token", "-t"))) {
         flag(text + " prints your GitHub token: its output may hold secrets", null, "all");
+      } else if (lost !== null) {
+        flag(text + lost, null, "all");
       } else if (sub === "api" ? has("-X", "--method", "-f", "-F", "--field", "--raw-field", "--input") || xs.some((x) => /^-X./.test(x)) : /^(create|merge|close|delete|edit|comment|review|reopen|ready|run|set|remove|upload|rename|archive|transfer|fork|sync|deploy|enable|disable|cancel|rerun|lock|unlock|pin|unpin|install|upgrade|login|logout|refresh|setup-git|ssh)$/.test(verb)) {
         flag(text + " acts on GitHub as you", { kind: "shell", subject: Guard.norm(part), grant: "shell:" + prefix(part) });
       }
@@ -883,9 +936,10 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
     }
   }
   if (CLOUDS.has(base)) {
-    const verbs = pos.map((w) => (w.dynamic ? "" : w.alts[0]));
     const reads = asks || (verbs.some((x) => CLOUD_READ.test(x)) && !verbs.some((x) => CLOUD_ACTS.test(x)));
-    if (!reads) {
+    if (!reads && gone(base, args)) {
+      flag(text + " deletes cloud resources", null, "all");
+    } else if (!reads) {
       flag(text + " changes cloud resources");
     } else if (verbs.some((x) => /secret|token|password|credential/i.test(x))) {
       flag(text + " may print a secret");
@@ -894,6 +948,11 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
   }
   if (publishes(base, sub, xs)) {
     flag(text + " publishes for everyone");
+    return true;
+  }
+  const back = unpublishes(base, verbs);
+  if (back !== null) {
+    flag(text + (back ? " deletes a published package for everyone" : " changes a published package for everyone"), null, back ? "all" : "careful");
     return true;
   }
   const install = installs(base, sub, xs, has);
@@ -910,32 +969,40 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
   return null;
 }
 
-// git: its own options (-C, -c, --git-dir), the subcommand's danger, and
-// whether it only reads; its positional words are its files (written, but
-// those it stages), but one known only as it runs: a revision (git diff
-// $(git merge-base ...)), unless after -- or the subcommand takes files
+// git: its own options (-C, -c, --git-dir: GIT_VALUED, their values
+// skipped; -c's key and --exec-path's folder, and a remote's program
+// given, --upload-pack, asked in auto too, as git config's), the
+// subcommand's danger, and whether it only reads; its positional words
+// are its files (written, but those it stages), but one known only as it
+// runs: a revision (git diff $(git merge-base ...)), unless after -- or
+// the subcommand takes files; config's and push's say which of theirs
+// are (paths)
 function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => void, flag: Flagger): boolean {
   const text = clip(part.text);
   let k = 0;
   for (; k < args.length; k++) {
     const a = args[k];
     const x = a.dynamic ? "" : a.alts[0];
-    if (x === "-C" || x === "--git-dir" || x === "--work-tree" || x === "--namespace") {
-      const v = args[++k];
-      if (v !== undefined) {
-        use(v, x !== "-C");
+    const eq = /^--[\w-]+=/.exec(x)?.[0] ?? "";
+    const opt = eq === "" ? x : eq.slice(0, -1);
+    if (!GIT_VALUED.test(opt)) {
+      if (/^--exec-path=/.test(x)) {
+        flag(text + " changes where git finds the programs it runs", null, "all");
+      } else if (!x.startsWith("-") || a.dynamic) {
+        break;
       }
-    } else if (x === "-c") {
-      const kv = args[++k];
-      if (kv === undefined || kv.dynamic || GIT_RUNS.test(kv.alts[0])) {
-        flag(text + " sets git config that runs a program");
-      }
-    } else if (/^--(git-dir|work-tree)=/.test(x)) {
-      use(Shell.cut(a, x.indexOf("=") + 1), true);
-    } else if (/^--(exec-path|config-env)/.test(x)) {
-      flag(text + " changes what git runs");
-    } else if (!x.startsWith("-") || a.dynamic) {
-      break;
+      continue;
+    }
+    const v = eq === "" ? args[++k] : Shell.cut(a, eq.length);
+    if (v === undefined) {
+      continue;
+    }
+    if (opt === "-C" || opt === "--git-dir" || opt === "--work-tree" || opt === "--shallow-file") {
+      use(v, opt === "--git-dir" || opt === "--work-tree");
+    } else if (opt === "-c" || opt === "--config-env") {
+      const head = v.alts[0];
+      const sets = v.dynamic ? [[head.includes("=") ? head.slice(0, head.indexOf("=")) : null, null]] : v.alts.map((kv) => (kv.includes("=") ? [kv.slice(0, kv.indexOf("=")), kv.slice(kv.indexOf("=") + 1)] : [kv, "true"]));
+      sets.forEach(([key, value]) => git_set(key, opt === "-c" ? value : null, text, flag));
     }
   }
   const sub = args[k]?.dynamic ? "" : args[k]?.alts[0] ?? "";
@@ -946,13 +1013,11 @@ function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => vo
   const pos = positional(rest);
   const first = pos[0]?.alts[0] ?? "";
   let read = GIT_READ.has(sub);
+  let paths: Word[] | null = null;
   switch (sub) {
     case "push": {
-      if (has("--force", "--force-with-lease", "--force-if-includes", "--mirror", "--delete", "--prune") || short("f") || short("d") || pos.some((w) => /^[+:]/.test(w.alts[0]))) {
-        flag(text + " rewrites or deletes history on the remote");
-      } else {
-        flag(text + " sends commits to a remote", { kind: "shell", subject: Guard.norm(part), grant: "shell:git push *" });
-      }
+      push_look(rest, text, flag, Guard.norm(part));
+      paths = positional(rest, PUSH_VALUED).slice(0, 1).filter((w) => !w.dynamic && w.alts.every((x) => /^[./]/.test(x)));
       break;
     }
     case "reset": {
@@ -1003,14 +1068,11 @@ function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => vo
       break;
     }
     case "config": {
-      const asks = has("--get", "--get-all", "--get-regexp", "--get-urlmatch", "--list", "-l", "--show-origin", "--show-scope", "--name-only") || first === "get" || first === "list";
-      const write = !asks && (pos.length >= 2 || has("--unset", "--unset-all", "--add", "--replace-all", "--rename-section", "--remove-section", "-e", "--edit") || first === "set" || first === "unset" || first === "edit");
+      const write = config_look(rest, text, flag);
       if (write && has("--global", "--system")) {
         flag(text + " changes git for every repository");
       }
-      if (write && pos.some((w) => w.dynamic || GIT_RUNS.test(w.alts[0]))) {
-        flag(text + " sets git config that runs a program");
-      }
+      paths = rest.flatMap((a, j) => (xs[j] === "-f" || xs[j] === "--file" ? rest.slice(j + 1, j + 2) : /^--file=/.test(xs[j]) ? [Shell.cut(a, 7)] : []));
       read = !write;
       break;
     }
@@ -1087,15 +1149,91 @@ function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => vo
     }
   }
   if (has("--upload-pack", "--receive-pack", "--exec") || ((sub === "clone" || sub === "ls-remote") && (has("-u") || xs.some((x) => /^-u./.test(x))))) {
-    flag(text + " runs a program it's given");
+    flag(text + " runs a program it's given", null, "all");
   }
   const o = sub === "format-patch" || sub === "archive";
   const outs = rest.flatMap((a, j) => (xs[j] === "--output" || xs[j] === "--output-directory" || (o && xs[j] === "-o") ? rest.slice(j + 1, j + 2) : /^--output(-directory)?=/.test(xs[j]) ? [Shell.cut(a, xs[j].indexOf("=") + 1)] : o && /^-o./.test(xs[j]) ? [Shell.cut(a, 2)] : []));
   outs.forEach((w) => use(w, true));
   const dash = rest.findIndex((a) => !a.dynamic && a.alts[0] === "--");
   const files = GIT_FILES.test(sub) || has("--no-index");
-  pos.filter((w) => !outs.includes(w) && (!w.dynamic || files || (dash >= 0 && rest.indexOf(w) > dash))).forEach((w) => use(w, !read && !GIT_STAGES.test(sub)));
+  (paths ?? pos.filter((w) => !outs.includes(w) && (!w.dynamic || files || (dash >= 0 && rest.indexOf(w) > dash)))).forEach((w) => use(w, !read && !GIT_STAGES.test(sub)));
   return !read || outs.length > 0;
+}
+
+// git push: what it deletes for good on the remote, each by every value
+// its words can take (asked in every mode but yolo, exactly): its history
+// rewritten (--force, -f in a cluster, --force-with-lease, a +ref; and
+// --force-if-includes, only with one of those), its refs deleted
+// (--delete, -d, an empty source :ref), mirrored or pruned (--mirror,
+// --prune); else, or as a dry run (a word that is one in each value), it
+// sends commits (git push *). A ref or option known only as it runs, or
+// from xargs, is taken as plain
+function push_look(rest: Word[], text: string, flag: Flagger, exact: string): void {
+  const vals = rest.flatMap((a) => (a.dynamic ? [] : a.alts));
+  const any = (re: RegExp) => vals.some((x) => re.test(x));
+  const refs = positional(rest, PUSH_VALUED).slice(1).flatMap((w) => (w.dynamic ? [] : w.alts));
+  const deletes = any(/^(--delete|-[a-zA-Z]*d[a-zA-Z]*)$/);
+  const gone = deletes ? refs : refs.filter((r) => /^:./.test(r)).map((r) => r.slice(1));
+  const dry = rest.some((a) => !a.dynamic && a.alts.every((x) => /^(--dry-run|-[a-zA-Z]*n[a-zA-Z]*)$/.test(x)));
+  const lost = dry ? [] : [
+    ...(any(/^--mirror$/) ? [" rewrites the remote's history and deletes what only it has"] : any(/^(--force|--force-with-lease(=.*)?|-[a-zA-Z]*f[a-zA-Z]*)$/) || refs.some((r) => r.startsWith("+")) ? [" rewrites the remote's history"] : []),
+    ...(deletes || gone.length > 0 ? [" deletes " + (gone.join(" ") || "what it names") + " on the remote"] : []),
+    ...(any(/^--prune$/) ? [" deletes the remote's branches this repository doesn't have"] : []),
+  ];
+  lost.forEach((why) => flag(text + why, null, "all"));
+  if (lost.length === 0) {
+    flag(text + " sends commits to a remote", { kind: "shell", subject: exact, grant: "shell:git push *" });
+  }
+}
+
+// git config: whether it writes; each key it sets judged (git_set) with
+// its value, past the options that take one (-f file, --type bool) and a
+// verb (git config set k v); one renamed into place, or set in an editor
+// (--rename-section, --edit), as one known only as it runs. Unset and
+// removed keys run nothing
+function config_look(rest: Word[], text: string, flag: Flagger): boolean {
+  const xs = rest.map((a) => (a.dynamic ? "" : a.alts[0]));
+  const has = (...names: string[]) => xs.some((x) => names.includes(x) || names.some((n) => n.startsWith("--") && x.startsWith(n + "=")));
+  const words = positional(rest, /^(-f|--file|--blob|--type|--default|--comment|--value)$/);
+  const verb = /^(get|list|set|unset|edit|rename-section|remove-section)$/.test(words[0]?.alts[0] ?? "") ? words[0].alts[0] : "";
+  const [key, value] = verb === "" ? words : words.slice(1);
+  const asks = has("--get", "--get-all", "--get-regexp", "--get-urlmatch", "--list", "-l", "--show-origin", "--show-scope", "--name-only") || verb === "get" || verb === "list";
+  const write = !asks && (words.length >= 2 || has("--unset", "--unset-all", "--add", "--replace-all", "--rename-section", "--remove-section", "-e", "--edit") || verb === "set" || verb === "unset" || verb === "edit");
+  if (!write || has("--unset", "--unset-all", "--remove-section") || verb === "unset" || verb === "remove-section") {
+    return write;
+  }
+  if (has("--rename-section", "-e", "--edit") || verb === "rename-section" || verb === "edit" || key === undefined) {
+    git_set(null, null, text, flag);
+    return write;
+  }
+  const values = value === undefined ? ["true"] : value.dynamic ? [null] : value.alts;
+  for (const k of key.dynamic ? [null] : key.alts) {
+    values.forEach((v) => git_set(k, v, text, flag));
+  }
+  return write;
+}
+
+// a git config key set to a value (null: known only as it runs), judged:
+// one that makes git run a program (GIT_PROGRAMS; an alias or a
+// submodule's update of !...), in every mode but yolo, but if its value
+// runs nothing (a pager or editor of QUIET's, as env_flag's; a yes or
+// no; /dev/null; none of these as a path: a hook folder named true);
+// careful's others (GIT_RUNS); a key known only as it runs, as one that
+// makes git run a program
+function git_set(key: string | null, value: string | null, text: string, flag: Flagger): void {
+  if (key === null) {
+    flag(text + " may set git config that makes git run a program", null, "all");
+    return;
+  }
+  const quiet = value !== null && (value === "/dev/null" || (!/path$/i.test(key) && (QUIET.has(value) || /^(true|false|yes|no|on|off|[01])$/i.test(value))));
+  const bang = /^(alias\..+|submodule\..+\.update)$/i.test(key) && (value === null || value.startsWith("!"));
+  if (GIT_PROGRAMS.test(key) || bang) {
+    if (!quiet) {
+      flag(key + (/^include/i.test(key) ? " makes git read config from another file, which can run a program" : " makes git run a program"), null, "all");
+    }
+  } else if (GIT_RUNS.test(key)) {
+    flag(text + " sets git config that changes what git runs");
+  }
 }
 
 // curl and wget: data sent to a host that isn't this computer flagged;
@@ -1607,6 +1745,55 @@ function publishes(base: string, sub: string, xs: string[]): boolean {
     || (base === "gradle" && xs.some((x) => /^publish/.test(x)));
 }
 
+// whether a program takes a published package back: deleted for good
+// (true: npm's, pnpm's and yarn's unpublish, a gem yanked, whose version
+// can't be pushed again), or only kept from new installs (false: cargo
+// yank, npm deprecate, undone by --undo or an empty message); null:
+// neither
+function unpublishes(base: string, verbs: string[]): boolean | null {
+  const [sub, next] = verbs;
+  if ((/^(npm|pnpm|yarn)$/.test(base) && sub === "unpublish") || (base === "yarn" && sub === "npm" && next === "unpublish") || (base === "gem" && sub === "yank")) {
+    return true;
+  }
+  return (base === "cargo" && sub === "yank") || (base === "npm" && sub === "deprecate") ? false : null;
+}
+
+// whether a cloud CLI deletes for good on another computer: aws by its
+// operation, past its service and its options (aws ec2 delete-vpc, s3
+// rm: GONE, GONE_OF), any other by a bare verb among its words (each part
+// of a topic:command); none under the CLI's own settings (OWN)
+function gone(base: string, args: Word[]): boolean {
+  const words = positional(args, base === "aws" ? AWS_VALUED : undefined).map((w) => (w.dynamic ? "" : w.alts[0]));
+  if (OWN.test(words[0] ?? "")) {
+    return false;
+  }
+  return base === "aws" ? GONE.test(words[1] ?? "") || GONE_OF.test(words[1] ?? "") : words.some((v) => v.split(":").some((x) => GONE.test(x)));
+}
+
+// what gh deletes for good on GitHub (why), or null: a noun's delete,
+// its verb past -R's repository (gh repo delete, release delete-asset,
+// secret remove; under the nouns of nouns, repo deploy-key delete: the
+// nouns said), an api call of DELETE (or of a method known only as it
+// runs), a pull request closed with its branch deleted
+function gh_lost(args: Word[], xs: string[], has: (...names: string[]) => boolean): string | null {
+  const words = positional(args, GH_VALUED).map((w) => (w.dynamic ? "" : w.alts[0]));
+  const [sub = "", verb = ""] = words;
+  if (sub === "api") {
+    const methods = xs.flatMap((x, k) => (x === "-X" || x === "--method" ? [xs[k + 1] ?? ""] : /^-X./.test(x) ? [x.slice(2)] : /^--method=/.test(x) ? [x.slice(9)] : []));
+    return methods.some((m) => m === "" || /^delete$/i.test(m)) ? " deletes what it names on GitHub" : null;
+  }
+  if (sub === "pr" && verb === "close" && has("-d", "--delete-branch")) {
+    return " deletes the pull request's branch on GitHub";
+  }
+  const k = /^(deploy-key|autolink)$/.test(verb) ? 2 : 1;
+  if (OWN.test(sub) || !(GONE.test(words[k] ?? "") || /^delete-[\w-]+$/.test(words[k] ?? ""))) {
+    return null;
+  }
+  const noun = words.slice(0, k).map((w) => (w === "repo" ? "repository" : w)).join(" ");
+  const of = /^\w+-(.+)$/.exec(words[k])?.[1];
+  return " deletes the " + noun + (of === undefined ? "" : "'s " + of) + " on GitHub";
+}
+
 // whether a program installs or removes software for the whole computer
 function installs(base: string, sub: string, xs: string[], has: (...names: string[]) => boolean): boolean {
   const verbs = /^(install|i|add|uninstall|remove|rm|un|update|up|upgrade|reinstall|link|unlink|tap|untap|purge|autoremove|dist-upgrade|full-upgrade)$/;
@@ -1754,13 +1941,15 @@ function path_rule(where: Where, file: string, write: boolean): Rule | null {
 // why a file is asked about, each reason with the modes that ask it:
 // illi's own config written (in every mode); a secret, read or written
 // through any tool (in every mode but yolo), before the folders read
-// freely (illi's skills', a plugin's); a device written; inside the
-// project, a protected file written (careful's, but in home: homely;
-// Claude Code's settings, what it runs unasked, in auto too); outside
-// it, any but scratch, or the system's folders read: a change in every
-// mode but yolo, a read careful's (in auto too if maybe, by a command
-// that may change things: but in a dependency cache), and a folder
-// holding a secret store read, in auto (careful asks it as outside).
+// freely (illi's skills', a plugin's); a device written; git's hooks or
+// config written, anywhere (git_file: in every mode but yolo, never by a
+// folder grant); inside the project, a protected file written
+// (careful's, but in home: homely; Claude Code's settings, what it runs
+// unasked, in auto too); outside it, any but scratch, or the system's
+// folders read: a change in every mode but yolo, a read careful's (in
+// auto too if maybe, by a command that may change things: but in a
+// dependency cache), and a folder holding a secret store read, in auto
+// (careful asks it as outside).
 // The folder a command runs in is a secret's by its place alone, not
 // its name (a project named secrets). None: it isn't asked
 function path_why(where: Where, file: string, write: boolean, maybe = false, folder = false): Reason[] {
@@ -1784,6 +1973,10 @@ function path_why(where: Where, file: string, write: boolean, maybe = false, fol
   if (file.startsWith("/dev/") && write) {
     return [{ why: at + " is a device", wide: false, tier: "all" }];
   }
+  const git = write ? git_file(file) : null;
+  if (git !== null) {
+    return [{ why: at + git, wide: false, tier: "all" }];
+  }
   if (under(file, where.top)) {
     const claude = /^\.claude\/settings(\.local)?\.json$/.test(path.relative(where.top, file));
     return !write ? [] : claude ? [{ why: at + " sets what Claude Code runs unasked", wide: false, tier: "all" }] : guarded(file, where.top) ? [{ why: at + " configures tools or illi (protected)", wide: false, tier: homely(where) }] : [];
@@ -1793,6 +1986,24 @@ function path_why(where: Where, file: string, write: boolean, maybe = false, fol
   }
   const away: Reason = { why: at + " is outside the project", wide: true, tier: write || (maybe && !deps(file)) ? "all" : "careful" };
   return !write && STORES.some((s) => s !== file && under(s, file)) ? [{ why: at + " may hold secrets", wide: false, tier: "auto" }, away] : [away];
+}
+
+// what writing a file does to git, if git finds a program to run there
+// (why), or null: a .git folder's hooks or config, anywhere (a
+// repository's, a submodule's under modules/, a worktree's
+// config.worktree, the common folder a worktree's .git file names, as
+// any write names it), a .git itself (a worktree's file: where they
+// are), git's own config in home or the system's. Neither is in the
+// project's history, so a change there shows in no diff; a hook folder
+// that is (.husky, core.hooksPath's) is the project's
+function git_file(file: string): string | null {
+  const parts = file.split(path.sep);
+  const at = parts.lastIndexOf(".git");
+  const rest = parts.slice(at + 1);
+  if (at < 0) {
+    return GIT_CONFIGS.includes(file) ? " is git's config, which can make git run a program" : null;
+  }
+  return rest.length === 0 ? " is where git finds its hooks and config" : rest.at(-1) === "hooks" ? " is where git finds its hooks" : rest.includes("hooks") ? " is a git hook, which git runs" : /^config(\.worktree)?$/.test(rest.at(-1)!) ? " is git's config, which can make git run a program" : null;
 }
 
 // whether a file is in a dependency cache
@@ -1922,13 +2133,14 @@ function glob_root(dir: string, pattern: string): string {
   return path.resolve(dir, (k < 0 ? parts.slice(0, -1) : parts.slice(0, k)).join("/") || ".");
 }
 
-// a part's words that aren't options, nor -m's message
-function positional(args: Word[]): Word[] {
+// a part's words that aren't options, nor the values of those that take
+// the next word (valued: -m's message, unless told)
+function positional(args: Word[], valued = /^(-m|--message)$/): Word[] {
   const out: Word[] = [];
   let ended = false;
   for (let k = 0; k < args.length; k++) {
     const x = args[k].dynamic ? args[k].alts[0] : args[k].alts[0];
-    if (!ended && !args[k].dynamic && (x === "-m" || x === "--message")) {
+    if (!ended && !args[k].dynamic && valued.test(x)) {
       k++;
     } else if (!ended && !args[k].dynamic && x === "--") {
       ended = true;
