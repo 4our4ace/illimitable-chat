@@ -763,6 +763,18 @@ test("a write or delete is placed as the system finds it, asked in auto and care
   }
 });
 
+test("a group or a loop in a pipeline or the background runs in a subshell, as bash runs it: a cd in it moves the commands after it there (piped on, its first too), not those after it; its redirections are made where the shell was as it began; asked in auto and careful where that is outside the project", () => {
+  asked("true | { cd ~/x-illi-test; rm -rf y; }", "~/x-illi-test/y is outside the project");
+  asked("true | if cd ~/x-illi-test; then rm -rf y; fi", "~/x-illi-test/y is outside the project");
+  asked("cd ~/x-illi-test; { cd " + TOP + "; } | rm -rf y", "~/x-illi-test/y is outside the project");
+  asked("cd ~/x-illi-test; while cd " + TOP + "; do break; done & rm -rf y", "~/x-illi-test/y is outside the project");
+  asked("cd ~/x-illi-test; { cd " + TOP + "; } > y", "~/x-illi-test/y is outside the project");
+  asked("{ cd ~/x-illi-test; } 2>/dev/null; rm -rf y", "~/x-illi-test/y is outside the project");
+  for (const command of ["true | { cd ~/x-illi-test; } ; rm -rf y", "{ cd ~/x-illi-test; } | rm -rf y", "true | while read l; do cd ~/x-illi-test; done; rm -rf y"]) {
+    expect([command, judge(command, { mode: "auto" })]).toEqual([command, "run"]);
+  }
+});
+
 test("an archive or patch tool's value glued to its option names a file as the next word does (tar -cf/x, -C/x, patch -o/x, unzip -d/x, 7z -o/x, cpio -F/x), asked outside the project in auto and careful; one extracting with its names kept whole (tar -P, unzip -:, 7z -spf, cpio without --no-absolute-filenames) asked exactly; other values, scratch and the rest run", () => {
   const asks: [string, string][] = [
     ["tar -cf/work/illi-test/x.tar src", "/work/illi-test/x.tar is outside the project"],

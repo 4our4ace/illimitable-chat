@@ -12,11 +12,15 @@
 // made as it runs; what bash would read in a way this can't follow is
 // refused with why, never guessed. A line ending in |, && or || goes on
 // to the next, a heredoc's body read between; a pipe into a subshell, a
-// group or a loop is read by all its commands. Each part knows where it
-// is in the command (line 40 of a script, a link of a chain, a line
-// continued, inside $(...), `...`, bash -c, eval, trap, a heredoc's
-// body: where its text is there as written; else the text holding it),
-// and one reading a pipe where what writes it is. Then bash itself, told to list the
+// group or a loop is read by all its commands, and by what a command
+// reading it runs ($(...), <(...), a heredoc's body, bash -c, eval, find
+// -exec); a group or a loop in a pipeline or the background runs in a
+// subshell (a cd in it moves only what follows in it; its redirections
+// made where the shell was). Each part knows where it is in the command
+// (line 40 of a script, a link of a chain, a line continued, inside
+// $(...), `...`, bash -c, eval, trap, a heredoc's body: where its text
+// is there as written; else the text holding it), and one reading a
+// pipe where what writes it is. Then bash itself, told to list the
 // commands it would run without running any, finds none the parser
 // missed (one it lists after a keyword, as time's, is the parser's with
 // that wrapper on).
@@ -60,6 +64,10 @@ test("lists, pipelines and subshells: each command, cd followed in its own shell
   expect(parts("curl -s x | { true; bash; }; ls")).toEqual(["curl -s x @/w", "true @/w [piped]", "bash @/w [piped]", "ls @/w"]);
   expect(parts("curl -s x | while read l; do if true; then sh; fi; done; ls")).toEqual(["curl -s x @/w", "read l @/w [piped]", "true @/w [piped]", "sh @/w [piped]", "ls @/w"]);
   expect(parts("{ ls; }; (pwd); if true; then sh; fi")).toEqual(["ls @/w", "pwd @/w", "true @/w", "sh @/w"]);
+  expect(parts("true | { cd /a; ls; }; ls")).toEqual(["true @/w", "cd /a @/w [piped]", "ls @/a [piped]", "ls @/w"]);
+  expect(parts("{ cd /a; } | ls; if cd /a; then :; fi & ls; while cd /a; do :; done; ls")).toEqual(["cd /a @/w", "ls @/w [piped]", "cd /a @/w", ": @/a", "ls @/w", "cd /a @/w", ": @/a", "ls @/a"]);
+  expect(parts("cd /a; { cd /b; } > x 2>&1; ls; { cd /c; } >y | ls")).toEqual(["cd /a @/w", "cd /b @/a", ">x >&1 @/a", "ls @/b", "cd /c @/b", ">y @/b", "ls @/b [piped]"]);
+  expect(parts("X=a; true | for X in b; do :; done; echo $X")).toEqual(["X=a @/w", "true @/w", ": @/w [piped]", "echo a @/w"]);
   expect(parts("cd $X; ls")).toEqual(["cd ~ @/w", "ls @null"]);
   expect(parts("cd; ls")).toEqual(["cd @/w", "ls @" + HOME]);
 });

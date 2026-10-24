@@ -47,16 +47,17 @@ A shell command is read as bash reads it: each command in it, wherever
 it sits (pipes, `&&`, subshells, `$(...)`, heredocs, `bash -c`, `eval`,
 `xargs`, `find -exec`), wrappers such as `sudo`, `timeout`, `env` and
 `flock` taken off, `cd` followed (behind `builtin`, `command` or
-`time` too), variables filled in where known (and `$(pwd)`,
-`$(git rev-parse --show-toplevel)`: the folder), each path placed
-where the system finds it: links followed, a `..` after a link from
-where the link leads, a glob's matches looked at. A pipe is read by
-every command it reaches: past a line's end after `|` (as after `&&`
-and `||`), into a subshell, a group or a loop it feeds, and into what a
-command reading it runs (`$(...)`, `<(...)`, a heredoc's body,
-`bash -c`, `eval`, `find -exec`), so `curl ... | (bash)` is asked as
-`curl ... | bash` is. A program on your
-`PATH` named by its path (`~/.cargo/bin/cargo`) is that program, and
+`time` too; in a subshell, a pipeline or the background, a group or a
+loop there too, only for what follows in it), variables filled in where
+known (and `$(pwd)`, `$(git rev-parse --show-toplevel)`: the folder),
+each path placed where the system finds it: links followed, a `..`
+after a link from where the link leads, a glob's matches looked at. A
+pipe is read by every command it reaches: past a line's end after `|`
+(as after `&&` and `||`), into a subshell, a group or a loop it feeds,
+and into what a command reading it runs (`$(...)`, `<(...)`, a
+heredoc's body, `bash -c`, `eval`, `find -exec`), so `curl ... | (bash)`
+is asked as `curl ... | bash` is. A program on your `PATH` named by its
+path (`~/.cargo/bin/cargo`) is that program, and
 one named in the project (`.venv/bin/python`) is the project's,
 wherever its link leads. A search's pattern (`grep -n '^x==' file`),
 git's branches, tags and revisions (`git checkout -b token-x`) and its

@@ -8,7 +8,9 @@
 // redirections, where it is in the command (its span: a question shows
 // the lines a risk is on; reading a pipe, with what writes it) and the
 // folder it runs in (each cd followed, behind builtin, command or time
-// too; one another program runs leaves it unknown). A pipe goes on past
+// too, in the shell it moves: a subshell's, a pipeline's or the
+// background's, a group's or a loop's there, its own; one another
+// program runs leaves it unknown). A pipe goes on past
 // a line's end after |, as do && and ||, and into every command of a
 // subshell, a group or a loop it feeds, and of what a command reading it
 // runs ($(...), `...`, <(...), a heredoc's body, bash -c's script, an
@@ -130,6 +132,11 @@ type Scan = {
   pipes : Span[];
 };
 
+// what a command run in a subshell changes of the shell, as it was
+// before: the folder, the variables, whether one may have been set
+// unseen (Scan's)
+type State = { cwd: string | null; vars: Map<string, Word>; wild: boolean };
+
 // a wrapper's options: those taking a value; those that don't, and those
 // whose value is only ever attached (-i, -iX); whether -5 is one (nice).
 // With no `flags`, any other option is taken as one without a value (the
@@ -159,7 +166,8 @@ const SKIP = new Set(["if", "then", "elif", "else", "fi", "do", "done", "while",
 const REFUSE = new Set(["case", "esac", "select", "function", "coproc"]);
 
 // the reserved words opening a group or a loop, and those closing one: a
-// pipe into one is read by all its commands
+// pipe into one is read by all its commands, and one in a pipeline runs
+// in a subshell
 const OPENS  = new Set(["{", "if", "while", "until", "for"]);
 const CLOSES = new Set(["}", "fi", "done"]);
 
@@ -349,7 +357,11 @@ export namespace Shell {
 // between), as bash reads it; a subshell, a group or a loop a pipe goes
 // into reads it in all its commands, as does all a command reading it
 // runs, read while it is (Scan inpipe: the group's, or the pipe just
-// read; back as it closes); each pipeline's parts kept (Scan pipes)
+// read; back as it closes). A group or a loop in a pipeline or the
+// background runs in a subshell, as bash runs it: a cd in it moves the
+// commands after it in it, not those after it (State); the redirections
+// after one are made where the shell was as it began. Each pipeline's
+// parts kept (Scan pipes)
 function scan_list(s: Scan, close: string): void {
   let cmd = cmd_new();
   let piped = false;
@@ -357,19 +369,37 @@ function scan_list(s: Scan, close: string): void {
   let head = -1;
   const outer = s.inpipe;
   let level = outer;
-  const groups: boolean[] = [];
-  const group = (word: string) => {
-    if (OPENS.has(word)) {
-      groups.push(level);
+  let closed: State | null = null;
+  const groups: Array<{ level: boolean; piped: boolean; was: State }> = [];
+  const group = (word: string, was: State | null) => {
+    if (was !== null) {
+      groups.push({ level, piped, was });
       level ||= piped;
+      piped = false;
     } else if (CLOSES.has(word) && groups.length > 0) {
-      level = groups.pop()!;
+      const g = groups.pop()!;
+      level = g.level;
+      if (g.piped) {
+        state_put(s, g.was);
+      } else {
+        closed = g.was;
+      }
     }
     s.inpipe = level || piped;
   };
   const end = (op: string) => {
     const pipe = op === "|" || op === "|&";
-    cmd_end(s, cmd, piped, pipe || op === "&");
+    const sub  = pipe || op === "&";
+    const was  = cmd.words.length === 0 && cmd.env.length === 0 ? closed : null;
+    const now  = was === null ? null : state_of(s);
+    closed = null;
+    if (was !== null) {
+      state_put(s, was);
+    }
+    cmd_end(s, cmd, piped, sub);
+    if (now !== null && !sub) {
+      state_put(s, now);
+    }
     if (piped && !pipe) {
       s.pipes.push([head, s.parts.length]);
     }
@@ -460,9 +490,12 @@ function scan_list(s: Scan, close: string): void {
       }
       if ((s.src[s.at] === "<" || s.src[s.at] === ">") && /^(\d+|\{[A-Za-z_]\w*\})$/.test(word.raw)) {
         scan_redir(s, cmd, word.raw);
-      } else if (!cmd_word(s, cmd, word)) {
-        group(word.raw);
-        continue;
+      } else {
+        const was = cmd_empty(cmd) && OPENS.has(word.raw) ? state_of(s) : null;
+        if (!cmd_word(s, cmd, word)) {
+          group(word.raw, was);
+          continue;
+        }
       }
     }
     if (cmd.from < 0) {
@@ -1169,9 +1202,18 @@ function verbatim(w: Word): number | null {
 
 // a subshell's run: the folder and variables it changes are its own
 function scope(s: Scan, run: () => void): void {
-  const [cwd, vars, wild] = [s.cwd, new Map(s.vars), s.wild];
+  const was = state_of(s);
   deeper(s, run);
-  Object.assign(s, { cwd, vars, wild });
+  state_put(s, was);
+}
+
+// the shell as a subshell would leave it (State), to put back
+function state_of(s: Scan): State {
+  return { cwd: s.cwd, vars: new Map(s.vars), wild: s.wild };
+}
+
+function state_put(s: Scan, was: State): void {
+  Object.assign(s, { cwd: was.cwd, vars: was.vars, wild: was.wild });
 }
 
 // a nested reading, NEST deep at most
