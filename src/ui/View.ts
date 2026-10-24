@@ -141,7 +141,9 @@ export const FAILED = "error: ";
 // vendors and models: those offered; use: what its calls use; todo:
 // illi's to-do list; suggest: the user's likely next message, asked as
 // the last turn ended (Suggest.ask; "": none); asks: the questions
-// waiting for an answer, the first shown; perm: the permissions
+// waiting for an answer, the first shown; perm: the permissions. None
+// is ever undefined: a view is told only the fields that move
+// (Chat.tell), and JSON drops an undefined one, so the view's would stay
 export type State = {
   busy    : boolean;
   wait    : Wait;
@@ -202,7 +204,7 @@ export type Server =
   | ({ $: "entry"; agent?: string; id?: number } & Entry)
   | { $: "delta"; agent?: string; kind: Kind; text: string; fresh?: boolean }
   | { $: "live"; agent?: string; live: Live[] }
-  | ({ $: "state" } & Partial<State>)
+  | ({ $: "state" } & Partial<State>) // the fields moved since the view was last told, all as it joins (Chat.tell)
   | { $: "agent"; name: string; found: boolean }
   | { $: "note"; text: string }
   | ({ $: "ack"; id: string } & Answer);

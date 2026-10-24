@@ -36,7 +36,7 @@ import { Plugins } from "../config/Plugins.ts";
 import { Projects } from "./Projects.ts";
 import { MASTER, SEARCHES, Tools, type Agent, type Live, type Reply } from "../tools/Tools.ts";
 import { MODES, type Mode } from "../tools/Guard.ts";
-import { ANSWERED, COMPACTING, IMAGES, live_push, SUMMARIES, TURN, type Answer, type Link, type Part, type Pipe, type Question, type Server as Out, type Wait } from "../ui/View.ts";
+import { ANSWERED, COMPACTING, IMAGES, live_push, SUMMARIES, TURN, type Answer, type Link, type Part, type Pipe, type Question, type Server as Out, type State, type Wait } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
 
 // Types
@@ -942,7 +942,10 @@ export namespace Chat {
 
   // Views
   // -----
-  // A pipe message carries at most one log entry or summary.
+  // A pipe message carries at most one log entry or summary. The chat's
+  // state goes to a view whole as it joins, then only the fields that
+  // moved since what that view was last told, nothing if none did
+  // (Chat.tell); the view takes them over its own.
 
   // a view's way to the chat: its acts reach the chat, the chat's
   // messages reach it, each in order, a step of the event loop later;
@@ -980,7 +983,8 @@ export namespace Chat {
     sock.send(JSON.stringify(msg));
   }
 
-  export function state(chat: Chat): Out {
+  // the chat's state, whole: every field, as a view joining is told it
+  export function state(chat: Chat): { $: "state" } & State {
     const agents = Tools.working(chat.tools).map((a) => a.name);
     const tools  = Tools.state(chat.tools, chat.pick.vendor);
     const window = Pick.window(chat.pick);
@@ -1067,16 +1071,17 @@ export namespace Chat {
   // was last told (View.ts takes a state's fields over its own; a view
   // joining, told none yet, gets it whole), nothing if none moved. So
   // the refused requests, the grants and the catalog go out as they
-  // change, not with every turn's step
+  // change, not with every turn's step. Each field is kept as its JSON
+  // when told, so one changed in place since still moves
   export function tell(chat: Chat, socks: Iterable<Sock>): void {
-    const { $, ...state } = Chat.state(chat) as Out & { $: "state" };
+    const { $, ...state } = Chat.state(chat);
     const now = Object.fromEntries(Object.entries(state).map(([key, value]) => [key, JSON.stringify(value)]));
     for (const sock of socks) {
       const was = chat.told.get(sock) ?? {};
       const moved = Object.keys(now).filter((key) => now[key] !== was[key]);
       chat.told.set(sock, now);
       if (moved.length > 0) {
-        Chat.send(sock, { $: "state", ...Object.fromEntries(moved.map((key) => [key, (state as Record<string, unknown>)[key]])) });
+        Chat.send(sock, { $: "state", ...Object.fromEntries(moved.map((key) => [key, state[key as keyof State]])) });
       }
     }
   }
