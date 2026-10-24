@@ -78,9 +78,10 @@
 // folder grant's own * is kept as one (\*). A change to illi's own
 // config is asked in every mode, yolo too. A verdict says where in a
 // shell command its reasons are (Verdict spots: each flag's part, as
-// Shell.ts places it, with the heredocs' bodies it reads and what writes
-// the pipe it reads; all of a command it can't follow), so a question
-// folding a long command still shows them.
+// Shell.ts places it, with the heredocs' bodies it reads, what writes
+// the pipe it reads and where its group's input is given; all of a
+// command it can't follow), so a question folding a long command still
+// shows them.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -700,10 +701,10 @@ function look_shell(where: Where, look: Look, command: string): void {
 // would let any code piped into it run, `rm -rf $x` any folder. ask
 // mode's family grant covers the part alone (cat * covers no tee piped
 // after it). Its flags are placed at it, the heredocs' bodies it reads
-// and what writes the pipe it reads (Shell.held: what it writes to a
-// file, feeds a shell or an interpreter, sends to another computer is
-// what is asked about, its lines no one line), so a question folding the
-// command shows them
+// and what writes the pipe it reads or gives it its input (Shell.held:
+// what it writes to a file, feeds a shell or an interpreter, sends to
+// another computer is what is asked about, its lines no one line), so a
+// question folding the command shows them
 function look_part(where: Where, look: Look, part: Part, depth: number): void {
   const held  = Shell.held(part);
   const words = [...part.argv, ...part.env.map((e) => e.value), ...part.redirs.map((r) => r.target)];
