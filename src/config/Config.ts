@@ -163,11 +163,6 @@ if (config_value("mode") === "yolo") {
   NOTES.push("mode is yolo: every call runs unasked, but a write to illi's own config and what your permission rules refuse or ask. /mode switches it for this session.");
 }
 
-// a mode of auto (set, or the default) said once ever, at the first start
-// on a terminal (Notices.term_once): auto asks less than it did before
-// 0.3.1, and careful is what it was
-export const AUTO_NOTE = config_value("mode") !== "auto" ? "" : "mode is auto: it now runs most calls unasked, asking before a change outside the project, your secrets, root and the system, remote destruction (a force push, a delete), git's hooks, Claude Code's settings and illi's own config. /mode careful keeps the old rules for this session, /set mode careful for good.";
-
 // the skills, agents, commands, MCP servers, plugins and hooks turned
 // off, and the sticky skills on, by name, in lower case (Custom.ts,
 // Mcp.ts, Plugins.ts, Hooks.ts); each the root's list and the profile's

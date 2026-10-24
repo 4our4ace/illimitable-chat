@@ -182,11 +182,11 @@ test("/ takes the user's commands and skills, then the plugins'; a plugin's winn
   expect(term_named("use /kit:check: then /check.")).toBe("use /kit:check: then /check.\n\nUse your skills kit:check, check.");
 });
 
-test("what is seen is said once, till it changes; a one-time note once ever", () => {
+test("what is seen is said once, till it changes", () => {
   const file = DIR + "/seen.txt";
   put(file, "one");
   expect([Seen.changed("x", [file]), Seen.changed("x", [file])]).toEqual([true, false]);
   put(file, "two");
   expect([Seen.changed("x", [file]), Seen.changed("x", [DIR + "/none"])]).toEqual([true, false]);
-  expect([Seen.first("note y"), Seen.first("note y"), Seen.changed("x", [file])]).toEqual([true, false, false]);
+  expect(Seen.changed("x", [file])).toBe(false);
 });
