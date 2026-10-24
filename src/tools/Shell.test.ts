@@ -151,13 +151,15 @@ test("a nested script's parts are placed in the command itself where its text is
   expect((Shell.parse(body.body!, "/w", [3, 9]) as Part[]).map((p) => p.span)).toEqual([[3, 9], [3, 9]]);
 });
 
-test("a part reading a pipe knows where what writes it is (feed): the commands before it in its pipeline, with the heredocs' bodies they read, a subshell's too, one a line before (after |); not known (a group's), all the command", () => {
+test("a part reading a pipe knows where what writes it is (feed): the commands before it in its pipeline, with the heredocs' bodies they read, a subshell's too, a group's a pipe goes into, one a line before (after |); not known (a group's piped on), all the command", () => {
   const feed = (command: string) => (Shell.parse(command, "/w") as Part[]).flatMap((p) => (p.feed === undefined ? [] : [[p.text, command.slice(...p.feed)]]));
   expect(feed("cat <<'EOF' | bash\necho a\nrm -rf x\nEOF\nls")).toEqual([["bash", "cat <<'EOF' | bash\necho a\nrm -rf x\n"]]);
   expect(feed("a | b |& c; d | e && f")).toEqual([["b", "a"], ["c", "a | b"], ["e", "d"]]);
   expect(feed("( cat <<EOF ) | sh\nrm -rf x\nEOF")).toEqual([["sh", "cat <<EOF ) | sh\nrm -rf x\n"]]);
   expect(feed("curl -s x |\n# then\nbash")).toEqual([["bash", "curl -s x"]]);
   expect(feed("{ cat <<EOF; } | bash\nrm -rf x\nEOF\nls")).toEqual([["bash", "{ cat <<EOF; } | bash\nrm -rf x\nEOF\nls"]]);
+  expect(feed("cat <<'EOF' | { true; bash; }\nrm -rf x\nEOF\nls")).toEqual([["true", "cat <<'EOF' | { true; bash; }\nrm -rf x\n"], ["bash", "cat <<'EOF' | { true; bash; }\nrm -rf x\n"]]);
+  expect(feed("x | while read l; do sh; done | y; z")).toEqual([["read l", "x"], ["sh", "x | while read l"], ["y", "x | while read l; do sh"]]);
   const [cat, sh] = Shell.parse("cat <<EOF | sh\nrm -rf x\nEOF", "/w") as Part[];
   expect([Shell.held(cat), Shell.held(sh)]).toEqual([[0, 24], [0, 24]]);
 });
