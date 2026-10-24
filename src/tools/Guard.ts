@@ -16,15 +16,19 @@
 // (placed as the system finds it: link/.. where the link leads, a glob's
 // matches, a cd behind builtin, command or time), or read there by a
 // command that may change things (a script, a build, a program illi
-// doesn't know), once per folder (a folder grant; scratch, the system's
-// folders, the dependency caches and illi's skills free); a folder there
-// holding a secret store read (home, for its .ssh); a change whose file
-// is known only as it runs ($X, $(...), what xargs adds); an archive
-// extracted with its names kept whole (tar -P, unzip -:, cpio's own
-// way); root (sudoedit too), disks and their volumes (LVM's, ZFS's,
-// diskutil's, dmsetup's), the system's services and settings, power; a
-// secret, through any tool (as in every mode but yolo); what deletes for
-// good on another computer (a push that rewrites or deletes the remote's
+// doesn't know), once per folder (a folder grant; scratch free, and for
+// a read the system's folders, the dependency caches and illi's
+// skills); a folder there holding a secret store read (home, for its
+// .ssh); a change whose file is known only as it runs ($X, $(...), what
+// xargs adds); a device written; deleting what matters whole (the
+// project, its .git, home, /; in a project holding home, any folder, and
+// a protected file changed); an archive extracted with its names kept
+// whole (tar -P, unzip -:, cpio's own way); root (sudoedit too), disks
+// and their volumes (LVM's, ZFS's, diskutil's, dmsetup's), the system's
+// services and settings, power, every process stopped (kill -1), a
+// container given the whole computer or a folder outside; a secret,
+// through any tool (as in every mode but yolo); what deletes for good on
+// another computer (a push that rewrites or deletes the remote's
 // history: --force, +ref, --delete, :ref, --mirror, --prune; a
 // repository, release or package deleted: gh repo delete, npm unpublish;
 // cloud resources and infrastructure deleted: aws s3 rm, kubectl delete,
@@ -32,11 +36,13 @@
 // config written, through any tool; git config's keys that name one,
 // core.hooksPath, credential.helper, an alias of !...; git -c's), each
 // granted only exactly; Claude Code's settings (a .claude folder's at any
-// depth, home's, a .claude folder moved or copied into place) and illi's
-// own config; what Shell.ts can't read. Other reads outside the project
-// run (cat, grep, find, the read tool), as the network, plain pushes and
-// deploys, inline code, project scripts, MCP tools and everything in the
-// project do.
+// depth, home's, a .claude folder moved, copied or linked into place, or
+// deleted) and illi's own config; a command named only as it runs, and
+// what Shell.ts can't read. Other reads outside the project run (cat,
+// grep, find, the read tool), as the network, plain pushes and deploys,
+// inline code (but naming a secret), project scripts, MCP tools and the
+// rest in the project do. Besides, in auto, Tools.ts's loop guard asks
+// the same call made a third time in a row in a turn.
 //
 // careful's, the long list: the danger list (root, deleting trees,
 // wiping disks, losing git work, sending data off, connecting out,
@@ -471,7 +477,8 @@ export namespace Guard {
   // reads (a search of its folder: a glob's fixed head, as /etc/** looks
   // in /etc); Write, Edit, MultiEdit and NotebookEdit changes; an MCP tool
   // by its name (illi's own, mcp__illi__..., judged as it reaches illi);
-  // those that touch nothing here run (HOSTED); any other is asked once
+  // those that touch nothing here run (HOSTED); any other is asked once,
+  // as an MCP tool not marked as only reading is (look_tool)
   export function hosted(where: Where, tool: string, input: any): Verdict {
     const dir = (p: unknown) => (typeof p === "string" && p !== "" ? p : where.cwd);
     switch (tool) {
@@ -1985,9 +1992,10 @@ function installs(base: string, sub: string, xs: string[], has: (...names: strin
 
 // a tool by its name (an MCP tool, or one of Claude Code's illi doesn't
 // know): by the user's rules on its name first (their mcp rules); one
-// that only reads runs (in read-only too); any other runs in auto, and is
-// asked the first time in the other modes (why: what it may do), "don't
-// ask again" covering the tool from then on
+// that only reads runs (in read-only too); any other runs in auto and
+// yolo, is refused in read-only, and is asked the first time in careful
+// and ask (why: what it may do), "don't ask again" covering the tool
+// from then on
 function look_tool(where: Where, look: Look, tool: string, why: string | null): void {
   const rule = rule_of(where, "mcp", [tool], [tool]);
   if (rule === "deny") {

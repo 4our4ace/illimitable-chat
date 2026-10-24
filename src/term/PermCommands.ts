@@ -25,7 +25,7 @@ import type { Grant, Refused } from "../ui/View.ts";
 // the modes in the order the list shows them, and what each does
 const ORDER: Mode[] = ["auto", "careful", "ask", "read-only", "yolo"];
 const ABOUT: Record<Mode, string> = {
-  "auto"      : "all in the project runs; outside it, system and secrets asked",
+  "auto"      : "all runs but changes outside, secrets, system, remote deletes",
   "careful"   : "reads and changes in the project run; risky calls are asked",
   "ask"       : "reads run; every change is asked",
   "read-only" : "reads run; changes are refused",
