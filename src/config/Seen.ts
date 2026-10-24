@@ -3,8 +3,7 @@
 // The project's files that run as you work (its hooks.json, mcp.json and
 // plugins), as illi last saw them, by a hash of their paths and
 // contents: one new or changed since is said once at the start (its
-// caller says what), then kept as seen. A one-time note (first: by its
-// key) is kept the same way, said once ever. Kept in seen.json in illi's
+// caller says what), then kept as seen. Kept in seen.json in illi's
 // folder, out of the repository's reach.
 
 import * as crypto from "node:crypto";
@@ -29,12 +28,6 @@ export namespace Seen {
       }
     }
     return any && seen_keep(key, hash.digest("hex"));
-  }
-
-  // whether a one-time thing (a note, by its key) is new: the first time
-  // asked, then kept as seen
-  export function first(key: string): boolean {
-    return seen_keep(key, "seen");
   }
 
 }
