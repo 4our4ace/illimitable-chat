@@ -133,17 +133,18 @@ const INLINE = /^(--eval|--print|--exec|-eval)(=|$)/;
 
 // inline code (python -c, node -e, a heredoc into an interpreter) that
 // names what can run a program, change files, reach the network or read
-// a secret: asked
-const RISKY = /\b(system|popen|spawn\w*|exec\w*|eval|subprocess|child_process|shutil|rmtree|unlink\w*|remove|rmdir|rename\w*|chmod|chown|kill|socket|urllib|requests|httpx?|fetch|curl|wget|writeFile\w*|appendFile\w*|write_text|write_bytes|__import__|getattr|importlib|compile|ctypes|Deno\.\w+|Bun\.(spawn\w*|write|file|\$)|fs\.\w+|os\.\w+|open\s*\([^)]*['"][wax+])|\bimport\s*\(|\brequire\s*\(\s*['"](node:)?(fs|child_process|net|https?|http2|dgram|dns|tls|vm|worker_threads|cluster|inspector)\b|\bfrom\s+['"](node:)?(fs|child_process|net|https?|dgram|vm|worker_threads)\b|%x[^\w\s]|\bqx\s*[^\w\s]|\bSystem\.\w+|\bFile\.(rm|write|cp|rename|chmod)\w*|\brm\s*\(|(?<![\w)$])\.(env|ssh|aws|netrc|gnupg|git-credentials)\b|\bid_(rsa|dsa|ecdsa|ed25519)\b|\bcredentials\b|\.(pem|key)['"]/;
+// a secret: asked. Its names as whole words (not evaluate, execute, nor
+// a URL's http://)
+const RISKY = /\b(system|popen|spawn\w*|exec(?:Sync|File\w*|[lv]\w*|a\w*)?|eval|subprocess|child_process|shutil|rmtree|unlink\w*|remove|rmdir|rename\w*|chmod|chown|kill|socket|urllib\d?|requests|httpx?|fetch|curl|wget|writeFile\w*|appendFile\w*|write_text|write_bytes|__import__|getattr|importlib|compile|ctypes)\b(?!:\/\/)|\b(Deno\.\w+|Bun\.(spawn\w*|write|file|\$)|fs\.\w+|os\.\w+|open\s*\([^)]*['"][wax+])|\bimport\s*\(|\brequire\s*\(\s*['"](node:)?(fs|child_process|net|https?|http2|dgram|dns|tls|vm|worker_threads|cluster|inspector)\b|\bfrom\s+['"](node:)?(fs|child_process|net|https?|dgram|vm|worker_threads)\b|%x[^\w\s]|\bqx\s*[^\w\s]|\bSystem\.\w+|\bFile\.(rm|write|cp|rename|chmod)\w*|\brm\s*\(|(?<![\w)$])\.(env|ssh|aws|netrc|gnupg|git-credentials)\b|\bid_(rsa|dsa|ecdsa|ed25519)\b|\bcredentials\b|\.(pem|key)['"]/;
 
 // the interpreters whose backticks run a command (perl -e 'print `id`')
 const TICKS = /^(perl|ruby|php|julia)/;
 
-// the programs that run a command given in their words (flock f cmd,
-// strace cmd, parallel ...): asked, as illi doesn't read what they run;
-// tmux's, screen's, perf's and direnv's listings only read (RUNS_READ)
+// the programs that run a command given in their words (strace cmd,
+// parallel ...): asked, as illi doesn't read what they run; tmux's,
+// screen's, perf's and direnv's listings only read (RUNS_READ)
 const RUNNERS = new Set([
-  "flock", "chrt", "taskset", "numactl", "firejail", "bwrap", "systemd-run", "xvfb-run", "dbus-run-session", "dbus-launch",
+  "chrt", "taskset", "numactl", "firejail", "bwrap", "systemd-run", "xvfb-run", "dbus-run-session", "dbus-launch",
   "script", "runuser", "chroot", "nsenter", "unshare", "strace", "ltrace", "valgrind", "gdb", "lldb", "perf", "entr",
   "watchexec", "nodemon", "parallel", "sem", "busybox", "toybox", "expect", "tmux", "screen", "sg", "newgrp",
   "caffeinate", "proxychains", "proxychains4", "torsocks", "torify", "faketime", "direnv", "rlwrap", "cpulimit",
@@ -169,7 +170,8 @@ const CLOUDS = new Set(["aws", "gcloud", "az", "doctl", "fly", "flyctl", "vercel
 const CLOUD_READ = /^(describe|list|ls|get|show|logs?|status|whoami|info|inspect|view|search|wait|head|help|version|find|history|tail|check|validate|explain|print|cat|query|dev)(-[\w-]*)?$/;
 const CLOUD_ACTS = /^(create|delete|deploy|destroy|put|update|remove|rm|terminate|stop|start|restart|reboot|set|unset|apply|scale|cp|mv|sync|release|promote|rollback|add|up|down|run|invoke|exec|ssh|scp|login|logout|auth|configure|publish|attach|detach|import|purge|enable|disable|modify|reset|revoke|grant|tag|untag|copy|move|upload|mb|rb|send|submit|cancel|resize|replace|patch|associate|disassociate|register|deregister|link|unlink|init|open|secrets?|env)(-[\w-]*)?$/;
 
-// the folders inside a project rebuilt by its tools: deleted whole freely
+// the folders inside a project rebuilt by its tools (and Python's
+// *.egg-info: rebuilt_name): deleted whole freely
 const REBUILT = new Set([
   "node_modules", "dist", "build", "out", "target", "coverage", ".next", ".nuxt", ".svelte-kit", ".turbo", ".cache",
   ".parcel-cache", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", ".venv", "venv", ".gradle",
@@ -199,7 +201,9 @@ const SECRET_HOME = [
 const SECRET_SYSTEM = ["/etc/shadow", "/etc/gshadow", "/etc/sudoers", "/etc/sudoers.d", "/etc/ssh"];
 
 // protected inside the project (asked before a write): folders and
-// files that configure tools that run code, or what illi reads
+// files that configure tools that run code, or what illi reads; and,
+// for a project that holds home, home's own (~/.local/bin, ~/bin: not a
+// project's bin/)
 const PROTECTED_DIRS = new Set([".git", ".illi", ".claude", ".vscode", ".idea", ".husky", ".devcontainer", ".cargo", ".mvn", ".yarn"]);
 const PROTECTED_FILES = new Set([
   ".gitmodules", ".gitconfig", ".envrc", ".npmrc", ".yarnrc", ".yarnrc.yml", "bunfig.toml", ".pre-commit-config.yaml",
@@ -213,13 +217,17 @@ const PROTECTED_DEEP = [".config/git", ".config/fish", ".local/bin", "bin"];
 const RUNS = /^(PATH|IFS|CDPATH|ENV|BASH_ENV|SHELLOPTS|BASHOPTS|GLOBIGNORE|BASH_XTRACEFD|PROMPT_COMMAND|PS4|LD_\w+|DYLD_\w+|GIT_SSH_COMMAND|GIT_SSH|GIT_EXTERNAL_DIFF|GIT_EDITOR|GIT_ASKPASS|GIT_EXEC_PATH|GIT_CONFIG\w*|SSH_ASKPASS|SUDO_ASKPASS|NODE_OPTIONS|PERL5OPT|PERL5LIB|RUBYOPT|PYTHONSTARTUP|PYTHONPATH|LESSOPEN|LESSCLOSE|EDITOR|VISUAL|PAGER|GIT_PAGER|MANPAGER|BROWSER)$/;
 const QUIET = new Set(["", "cat", "less", "less -R", "less -FRX", "more", "true", "head"]);
 
-// git's subcommands that only read, and the config keys that run programs
+// git's subcommands that only read; those whose words are files (others'
+// are revisions, or files after --), and of those the ones that only read
+// them (stage, commit); the config keys that run programs
 const GIT_READ = new Set([
   "status", "log", "diff", "show", "blame", "annotate", "shortlog", "describe", "rev-parse", "rev-list", "ls-files",
   "ls-tree", "ls-remote", "cat-file", "grep", "show-ref", "for-each-ref", "merge-base", "name-rev", "count-objects",
   "check-ignore", "check-attr", "check-ref-format", "var", "help", "version", "whatchanged", "range-diff", "diff-tree",
   "diff-files", "diff-index", "cherry", "verify-commit", "verify-tag", "fsck", "show-branch", "get-tar-commit-id",
 ]);
+const GIT_FILES = /^(add|rm|mv|restore|commit|apply|am|blame|clone|init|worktree|submodule|bundle|ls-files|check-ignore|check-attr)$/;
+const GIT_STAGES = /^(add|commit)$/;
 const GIT_RUNS = /^(core\.(pager|editor|sshcommand|fsmonitor|hookspath|askpass|gitproxy|worktree)|alias\.|include\.|includeif\.|diff\.external|sequence\.editor|uploadpack\.|receivepack\.|protocol\.|url\.|http\..*proxy|.*\.(textconv|command|cmd|helper|program|driver|process|clean|smudge))/i;
 
 // the programs that can wipe a disk: make a file system, partition,
@@ -604,7 +612,7 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
         flag(text + " destroys files for good");
       }
       if (base === "rm" && (short("r") || short("R") || has("--recursive"))) {
-        const targets = pos.flatMap((w) => named(w, part.cwd) ?? [null]);
+        const targets = pos.flatMap((w) => named(w, part.cwd, true) ?? [null]);
         const vital = targets.find((f) => f !== null && vital_of(where, f));
         if (vital !== undefined) {
           flag(text + " deletes " + shown(vital!, where.top) + ", a folder that matters");
@@ -795,7 +803,9 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
 }
 
 // git: its own options (-C, -c, --git-dir), the subcommand's danger, and
-// whether it only reads; its positional words are its files
+// whether it only reads; its positional words are its files (written, but
+// those it stages), but one known only as it runs: a revision (git diff
+// $(git merge-base ...)), unless after -- or the subcommand takes files
 function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => void, flag: Flagger): boolean {
   const text = clip(part.text);
   let k = 0;
@@ -974,7 +984,9 @@ function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => vo
   const o = sub === "format-patch" || sub === "archive";
   const outs = rest.flatMap((a, j) => (xs[j] === "--output" || xs[j] === "--output-directory" || (o && xs[j] === "-o") ? rest.slice(j + 1, j + 2) : /^--output(-directory)?=/.test(xs[j]) ? [Shell.cut(a, xs[j].indexOf("=") + 1)] : o && /^-o./.test(xs[j]) ? [Shell.cut(a, 2)] : []));
   outs.forEach((w) => use(w, true));
-  pos.filter((w) => !outs.includes(w)).forEach((w) => use(w, !read));
+  const dash = rest.findIndex((a) => !a.dynamic && a.alts[0] === "--");
+  const files = GIT_FILES.test(sub) || has("--no-index");
+  pos.filter((w) => !outs.includes(w) && (!w.dynamic || files || (dash >= 0 && rest.indexOf(w) > dash))).forEach((w) => use(w, !read && !GIT_STAGES.test(sub)));
   return !read || outs.length > 0;
 }
 
@@ -1374,7 +1386,49 @@ function reader_look(where: Where, part: Part, base: string, args: Word[], use: 
 function sed_safe(script: string): boolean {
   const ADDR = String.raw`(?:\d+|\$|\/(?:\\.|[^\/\\])*\/[IM]*)`;
   const SAFE = new RegExp("^(?:" + ADDR + "(?:,(?:" + ADDR + "|[+~]\\d+))?)?\\s*!?\\s*(?:[pdqQ=nNPDhHgGxlz]|[qQ]\\d+|[aic]\\\\?.*|y(.)(?:\\\\.|(?!\\1).)*\\1(?:\\\\.|(?!\\1).)*\\1|s(.)(?:\\\\.|(?!\\2).)*\\2(?:\\\\.|(?!\\2).)*\\2[gpiImM0-9]*)?$");
-  return script.split(/[;\n]/).map((c) => c.trim().replace(/^\{|\}$/g, "").trim()).every((c) => SAFE.test(c));
+  return sed_split(script).map((c) => c.trim().replace(/^\{|\}$/g, "").trim()).every((c) => SAFE.test(c));
+}
+
+// a sed script's commands: split at each ; and newline, but those inside
+// an address's /regex/, an s or y command's parts, or the text of an a,
+// i or c (to its line's end)
+function sed_split(script: string): string[] {
+  const out: string[] = [];
+  let [from, k, head] = [0, 0, true];
+  const past = (parts: number) => {
+    const d = script[k++];
+    for (let p = 0; p < parts && k < script.length; k++) {
+      if (script[k] === "\\") {
+        k++;
+      } else if (script[k] === d) {
+        p++;
+      }
+    }
+  };
+  while (k < script.length) {
+    const c = script[k];
+    if (c === ";" || c === "\n") {
+      out.push(script.slice(from, k));
+      [from, head] = [++k, true];
+    } else if (!head) {
+      k++;
+    } else if (c === "/") {
+      past(1);
+    } else if (/[\d$,~+!{}\sIM]/.test(c)) {
+      k++;
+    } else if ((c === "s" || c === "y") && k + 1 < script.length) {
+      k++;
+      past(2);
+      head = false;
+    } else if (c === "a" || c === "i" || c === "c") {
+      const nl = script.indexOf("\n", k);
+      k = nl < 0 ? script.length : nl;
+      head = false;
+    } else {
+      [k, head] = [k + 1, false];
+    }
+  }
+  return [...out, script.slice(from)];
 }
 
 // whether a program publishes for everyone
@@ -1560,7 +1614,7 @@ function secret(file: string, top: string): boolean {
 function guarded(file: string, top: string): boolean {
   const rel = path.relative(top, file);
   const parts = rel.split(path.sep);
-  return parts.some((p) => PROTECTED_DIRS.has(p)) || PROTECTED_FILES.has(rel) || PROTECTED_DEEP.some((d) => rel === d || rel.startsWith(d + path.sep)) || parts.at(-1) === ".git";
+  return parts.some((p) => PROTECTED_DIRS.has(p)) || PROTECTED_FILES.has(rel) || PROTECTED_DEEP.some((d) => under(file, path.join(HOME, d))) || parts.at(-1) === ".git";
 }
 
 // whether deleting a folder whole loses what matters: /, a top-level
@@ -1571,19 +1625,28 @@ function vital_of(where: Where, file: string): boolean {
 
 // whether a word names only folders the project's tools rebuild (or,
 // outside the project, scratch's own), so deleting it whole is routine;
-// a project kept in /tmp is still a project
+// a project kept in /tmp is still a project. A glob, only if all it can
+// match is one (*.egg-info), in a folder of the project's
 function rebuilt(where: Where, w: Word, cwd: string | null): boolean {
-  if (w.glob || w.dynamic) {
+  const each = (a: string) => /^\*[^*?[]+$/.test(path.basename(a)) && rebuilt_name("x" + path.basename(a).slice(1));
+  if (w.dynamic || (w.glob && !w.alts.every(each))) {
     return false;
   }
   const files = named(w, cwd);
-  return files !== null && files.every((f) => (under(f, where.top) ? f !== where.top && REBUILT.has(path.basename(f)) : SCRATCH.some((d) => under(f, d) && f !== d) && !under(where.top, f)));
+  return files !== null && files.every((f) => (under(f, where.top) ? w.glob || (f !== where.top && rebuilt_name(path.basename(f))) : SCRATCH.some((d) => under(f, d) && f !== d) && !under(where.top, f)));
+}
+
+// whether a folder's name is one a project's tools rebuild
+function rebuilt_name(name: string): boolean {
+  return REBUILT.has(name) || name.endsWith(".egg-info");
 }
 
 // the files a word names, real paths (links followed): each of its
-// values; for a glob its folder, and the entries its last part matches;
-// null: known only as it runs (a variable, a folder after a cd to one)
-function named(w: Word, cwd: string | null): string[] | null {
+// values; for a glob its folder, and the entries its last part matches
+// (gone: as a delete takes it, its folder only if it can match all of it:
+// *, .*); null: known only as it runs (a variable, a folder after a cd to
+// one)
+function named(w: Word, cwd: string | null, gone = false): string[] | null {
   if (w.dynamic) {
     return null;
   }
@@ -1600,8 +1663,10 @@ function named(w: Word, cwd: string | null): string[] | null {
       continue;
     }
     const dir = head === "" || head.endsWith("/") ? abs : path.dirname(abs);
-    out.push(real(dir));
     const last = alt.slice(alt.lastIndexOf("/", g) + 1);
+    if (!gone || /^[*?.]+$/.test(last)) {
+      out.push(real(dir));
+    }
     if (!last.includes("/")) {
       out.push(...glob_entries(dir, last));
     }

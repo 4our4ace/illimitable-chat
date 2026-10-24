@@ -11,12 +11,15 @@
 // arguments come from its input). A word known only as the command runs
 // (a variable it never sets and the environment lacks, a command's
 // output) is dynamic, its known head kept; a variable the command sets
-// to plain words (X=a, for X in a b) stands for each of them.
+// to plain words (X=a, for X in a b) stands for each of them, and a
+// command's output known before it runs ($(pwd), $(git rev-parse
+// --show-toplevel): the folder) for its value.
 // What bash would read in a way this can't follow (case, functions,
 // arrays, aliases, a script made as it runs) leaves no parts, only why:
 // such a command is asked about. The shell tool runs bash (Machine.ts),
 // so this is the language it runs.
 
+import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
@@ -124,19 +127,23 @@ const REDIRS = ["<<<", "<<-", "&>>", "<<", "<>", "<&", ">>", ">|", ">&", "&>", "
 // the shells whose -c runs a script
 const SHELLS = new Set(["sh", "bash", "dash", "zsh", "ksh", "ash", "mksh"]);
 
-// the folders whose programs are the system's: named by their path, still
-// the same program (/usr/bin/rm is rm); a program elsewhere is its own
-const BINS = new Set(["/bin", "/sbin", "/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin", "/opt/homebrew/bin"]);
+// the folders whose programs are the system's, or the user's own on
+// their PATH (~/.cargo/bin, ~/.bun/bin): named by their path, still the
+// same program (/usr/bin/rm is rm, ~/.cargo/bin/cargo cargo); a program
+// elsewhere is its own
+const SYSTEM_BINS = ["/bin", "/sbin", "/usr/bin", "/usr/sbin", "/usr/local/bin", "/usr/local/sbin", "/opt/homebrew/bin"];
+const BINS = new Set([...SYSTEM_BINS, ...(process.env.PATH ?? "").split(":").filter((d) => path.isAbsolute(d)).map((d) => path.resolve(d))]);
 
 // the wrappers that run the command after their options, each with its
 // options (Opts), and the words after them before the command (timeout's
-// duration)
+// duration, flock's file)
 const WRAPS: Record<string, Opts & { then?: number }> = {
   builtin  : { args: [], flags: [] },
   chronic  : { args: [], flags: ["-e", "-v"] },
   command  : { args: [], flags: ["-p"] },
   env      : { args: ["-u", "--unset", "-C", "--chdir", "-S", "--split-string"], flags: ["-i", "--ignore-environment", "-0", "--null", "-v", "--debug"] },
   exec     : { args: ["-a"], flags: ["-c", "-l"] },
+  flock    : { args: ["-w", "--timeout", "-E", "--conflict-exit-code"], flags: ["-s", "--shared", "-x", "-e", "--exclusive", "-u", "--unlock", "-n", "--nb", "--nonblock", "-o", "--close", "-F", "--no-fork", "--verbose"], then: 1 },
   ionice   : { args: ["-c", "--class", "-n", "--classdata", "-p", "--pid", "-P", "--pgid", "-u", "--uid"], flags: ["-t", "--ignore"] },
   nice     : { args: ["-n", "--adjustment"], flags: [], num: true },
   nohup    : { args: [], flags: [] },
@@ -404,8 +411,7 @@ function scan_word(s: Scan): Word {
     } else if (c === "$") {
       scan_dollar(s, b, !/^[A-Za-z_]\w*\+?=/.test(s.src.slice(start, s.at)));
     } else if (c === "`") {
-      scan_tick(s);
-      b.dynamic = true;
+      output(s, b, scan_tick(s), !/^[A-Za-z_]\w*\+?=/.test(s.src.slice(start, s.at)));
     } else if (c === "~" && (s.at === start || /^[A-Za-z_]\w*\+?=$/.test(s.src.slice(start, s.at)))) {
       scan_tilde(s, b);
     } else if (c === "{" && brace(s.src, s.at) !== null) {
@@ -420,12 +426,35 @@ function scan_word(s: Scan): Word {
         s.at = x.end;
       }
     } else {
-      b.glob ||= "*?[".includes(c);
+      b.glob ||= c === "*" || c === "?" || (c === "[" && closes(s.src, s.at));
       add(b, [c]);
       s.at++;
     }
   }
   return { alts: b.alts, raw: s.src.slice(start, s.at), dynamic: b.dynamic, glob: b.glob, fd: false };
+}
+
+// whether a [ at src[at] opens a bracket expression: a ] closes it
+// before its word ends (else bash takes it as itself, as in [ -f x ])
+function closes(src: string, at: number): boolean {
+  for (let i = at + 1; i < src.length; i++) {
+    const c = src[i];
+    if (c === "]") {
+      return true;
+    }
+    if (META.includes(c)) {
+      return false;
+    }
+    if (c === "\\") {
+      i++;
+    } else if (c === "'" || c === '"') {
+      i = src.indexOf(c, i + 1);
+      if (i < 0) {
+        return false;
+      }
+    }
+  }
+  return false;
 }
 
 // a brace expansion at src[at] (a {): where it ends and its values ({a,b}:
@@ -531,8 +560,7 @@ function scan_quoted(s: Scan, b: Build): void {
     } else if (c === "$") {
       scan_dollar(s, b);
     } else if (c === "`") {
-      scan_tick(s);
-      b.dynamic = true;
+      output(s, b, scan_tick(s));
     } else {
       add(b, [c]);
       s.at++;
@@ -551,9 +579,10 @@ function scan_dollar(s: Scan, b: Build, split = false): void {
     return;
   }
   if (rest.startsWith("$(")) {
-    s.at += 2;
+    const from = s.at + 2;
+    s.at = from;
     scope(s, () => scan_list(s, ")"));
-    b.dynamic = true;
+    output(s, b, s.src.slice(from, s.at - 1), split);
     return;
   }
   if (rest.startsWith("${")) {
@@ -599,6 +628,36 @@ function var_put(s: Scan, b: Build, name: string, split = false): void {
   add(b, known);
   b.glob ||= v?.glob === true || (split && known.some((x) => /[*?[]/.test(x)));
   b.dynamic ||= v?.dynamic === true;
+}
+
+// a command's output put in a word: the folder for pwd (-L, -P), the
+// repository's top (the nearest folder up holding .git) for git rev-parse
+// --show-toplevel; else, or once a source or an assignment (PATH,
+// GIT_DIR) may have changed what they'd say, known only as it runs.
+// Split as var_put's
+function output(s: Scan, b: Build, inner: string, split = false): void {
+  const cmd = inner.trim().replace(/\s+/g, " ");
+  const odd = s.cwd === null || s.wild || ["PATH", "GIT_DIR", "GIT_WORK_TREE"].some((n) => s.vars.has(n));
+  const known = odd ? null : /^pwd( -[LP])?$/.test(cmd) ? s.cwd : cmd === "git rev-parse --show-toplevel" && process.env.GIT_DIR === undefined ? git_top(s.cwd!) : null;
+  if (known === null || (split && /[ \t\n]/.test(known))) {
+    b.dynamic = true;
+    return;
+  }
+  add(b, [known]);
+  b.glob ||= split && /[*?[]/.test(known);
+}
+
+// a folder's repository top: it or the nearest folder above holding a
+// .git (a worktree's file too); null: none
+function git_top(dir: string): string | null {
+  for (let d = path.resolve(dir); ; d = path.dirname(d)) {
+    if (fs.existsSync(path.join(d, ".git"))) {
+      return d;
+    }
+    if (path.dirname(d) === d) {
+      return null;
+    }
+  }
 }
 
 // past a ${...} from its body's start: after its closing }
@@ -653,8 +712,9 @@ function arith(s: Scan, from: number): number {
   throw new Unread("an arithmetic isn't closed");
 }
 
-// a `command`: its text (\`, \$, \\ unescaped) read as a subshell's
-function scan_tick(s: Scan): void {
+// a `command`: its text (\`, \$, \\ unescaped) read as a subshell's;
+// the text returned
+function scan_tick(s: Scan): string {
   let inner = "";
   let i = s.at + 1;
   for (;;) {
@@ -676,6 +736,7 @@ function scan_tick(s: Scan): void {
   }
   s.at = i + 1;
   scope(s, () => scan_text(s, inner));
+  return inner;
 }
 
 // $'...' from after its quote: its text, escapes done
@@ -1092,6 +1153,13 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
       if (name === "xargs") {
         ctx = { ...ctx, fed: true };
         next = next.length === 0 ? [Shell.lit("echo")] : next;
+      }
+      if (name === "flock" && /^(-c|--command)$/.test(next[0]?.raw ?? "")) {
+        nested(s, next[1] ?? DYN, ctx, true);
+        if (redirs.length > 0) {
+          part_push(s, [], env, redirs, full, ctx);
+        }
+        return;
       }
       if (next.length === 0) {
         argv = name === "exec" ? [] : argv;

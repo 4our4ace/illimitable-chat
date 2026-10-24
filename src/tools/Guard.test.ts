@@ -1,7 +1,9 @@
 // Guard test
 // ==========
 // `bun test Guard.test.ts`. Routine work runs unasked in auto; each risk
-// is asked about with why (every bypass the reviews found among them);
+// is asked about with why (every bypass the reviews found among them),
+// and what only looks like one isn't ([ as a test, a project's bin/, a
+// sed s/// holding ;, git's revisions);
 // read-only refuses changes, ask asks them, yolo runs all but what the
 // user's rules refuse or ask and a write to illi's own config; the user's rules come first (deny, ask,
 // allow; a root command's allow names its sudo; deny and ask by a
@@ -20,9 +22,11 @@ import * as os from "node:os";
 
 const TMP = fs.realpathSync(fs.mkdtempSync(os.tmpdir() + "/illi-guard-"));
 process.env.ILLI_DIR = TMP + "/illi";
+process.env.PATH = TMP + "/tools/bin:" + process.env.PATH;
 const TOP = TMP + "/app";
 fs.mkdirSync(TOP + "/.git", { recursive: true });
 fs.mkdirSync(TOP + "/src", { recursive: true });
+fs.mkdirSync(TOP + "/bin", { recursive: true });
 fs.writeFileSync(TOP + "/a.txt", "a\n");
 
 const { Guard } = await import("./Guard.ts");
@@ -133,7 +137,8 @@ test("every risk is asked about in auto, with why: the reviews' bypasses among t
     ["bash -o pipefail < /tmp/x.sh", "runs a script from /tmp"],
     ["python3 -W ignore < /tmp/x.py", "runs a script from /tmp"],
     ["python3 -E /tmp/x.py", "runs a script from /tmp"],
-    ["flock /tmp/l rm -rf ~", "runs a command given in its words"],
+    ["flock /tmp/l rm -rf ~", "a folder that matters"],
+    ["strace -f rm -rf ~", "runs a command given in its words"],
     ["tmux new -d 'rm -rf ~'", "runs a command given in its words"],
     ["fd -x rm", "runs a command on each file it finds"],
     ["git rebase -x 'rm -rf ~' HEAD~3", "runs a command at each commit"],
@@ -175,6 +180,41 @@ test("every risk is asked about in auto, with why: the reviews' bypasses among t
     const got = judge(command);
     expect([command, got.startsWith("ask: "), got.includes(why) ? why : got]).toEqual([command, true, why]);
   }
+});
+
+test("no false alarms: [ as a test, a project's own bin/, *.egg-info, names inside words, a ; in a sed s///, flock and nice as wrappers, a program on the PATH by its path, $(pwd) and the repository's top, git's revisions", () => {
+  const runs = [
+    "if [ -f bun.lock ]; then echo bun; fi",
+    "[[ -d src ]] && ls src",
+    "rm -f bin/server",
+    "rm -rf build *.egg-info",
+    "python3 -c 'print(\"evaluate, execute: https://example.com\")'",
+    "sed -i 's/a;b/c;d/' a.txt",
+    "flock /tmp/illi.lock bun test",
+    "nice -n 10 bun test",
+    TMP + "/tools/bin/cargo build",
+    "docker run --rm -v $(pwd):/app -w /app node:22 npm test",
+    "rm -rf \"$(git rev-parse --show-toplevel)/dist\"",
+    "git diff $(git merge-base HEAD origin/main)",
+    "git add .husky/pre-commit",
+  ];
+  for (const command of runs) {
+    expect([command, judge(command)]).toEqual([command, "run"]);
+  }
+  const asks: [string, string][] = [
+    ["rm -rf *", "deletes ., a folder that matters"],
+    ["flock /tmp/l -c 'rm -rf ~'", "a folder that matters"],
+    ["python3 -c 'import subprocess'", "runs code illi can't check"],
+    ["sed 's/a;b/c/;w /tmp/x' a.txt", "a sed script illi can't check"],
+    ["git checkout -- $UNSET_IN_ILLI_TESTS", "is known only as it runs"],
+    [TMP + "/other/cargo build", "runs a program from"],
+    ["cd $UNSET_IN_ILLI_TESTS && rm -rf \"$(pwd)/dist\"", "is known only as it runs"],
+  ];
+  for (const [command, why] of asks) {
+    const got = judge(command);
+    expect([command, got.startsWith("ask: "), got.includes(why) ? why : got]).toEqual([command, true, why]);
+  }
+  expect(Guard.check(where({ cwd: HOME, top: HOME }), "write", { path: HOME + "/bin/x-illi-test" })).toMatchObject({ $: "ask", why: "bin/x-illi-test configures tools or illi (protected)" });
 });
 
 test("read-only refuses changes, ask asks them (offering the family), yolo runs all but the user's deny and ask rules", () => {
