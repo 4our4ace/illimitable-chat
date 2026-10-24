@@ -12,13 +12,17 @@
 //   auto       all runs but auto's flags (the default)
 //   yolo       all runs
 //
-// auto's flags: a file changed, deleted or moved outside the project, or
-// read there by a command that may change things (a script, a build, a
-// program illi doesn't know), once per folder (a folder grant; scratch,
-// the system's folders, the dependency caches and illi's skills free); a
-// folder there holding a secret store read (home, for its .ssh); a
-// change whose file is known only as it runs ($X, $(...), what xargs
-// adds); root, disks, the system's services and settings, power; a
+// auto's flags: a file changed, deleted or moved outside the project
+// (placed as the system finds it: link/.. where the link leads, a glob's
+// matches, a cd behind builtin, command or time), or read there by a
+// command that may change things (a script, a build, a program illi
+// doesn't know), once per folder (a folder grant; scratch, the system's
+// folders, the dependency caches and illi's skills free); a folder there
+// holding a secret store read (home, for its .ssh); a change whose file
+// is known only as it runs ($X, $(...), what xargs adds); an archive
+// extracted with its names kept whole (tar -P, unzip -:, cpio's own
+// way); root (sudoedit too), disks and their volumes (LVM's, ZFS's,
+// diskutil's, dmsetup's), the system's services and settings, power; a
 // secret, through any tool (as in every mode but yolo); what deletes for
 // good on another computer (a push that rewrites or deletes the remote's
 // history: --force, +ref, --delete, :ref, --mirror, --prune; a
@@ -27,11 +31,12 @@
 // terraform destroy) and what makes git run a program (its hooks and
 // config written, through any tool; git config's keys that name one,
 // core.hooksPath, credential.helper, an alias of !...; git -c's), each
-// granted only exactly; Claude Code's settings and illi's own config;
-// what Shell.ts can't read. Other reads outside the project run (cat,
-// grep, find, the read tool), as the network, plain pushes and deploys,
-// inline code, project scripts, MCP tools and everything in the project
-// do.
+// granted only exactly; Claude Code's settings (a .claude folder's at any
+// depth, home's, a .claude folder moved or copied into place) and illi's
+// own config; what Shell.ts can't read. Other reads outside the project
+// run (cat, grep, find, the read tool), as the network, plain pushes and
+// deploys, inline code, project scripts, MCP tools and everything in the
+// project do.
 //
 // careful's, the long list: the danger list (root, deleting trees,
 // wiping disks, losing git work, sending data off, connecting out,
@@ -122,11 +127,13 @@ type Reason = { why: string; wide: boolean; tier: Tier };
 
 // what a call was found to do: refused by the user's rules (why), its
 // flags, and its changes (flags only the modes read-only and ask act on);
-// a shell command's whole text (look_part)
-type Look = { denied: string[]; flags: Flag[]; changes: Flag[]; whole: string };
+// a shell command's whole text (look_part); the links it makes as it
+// runs (ln's, as named: a .. after one isn't where it seems)
+type Look = { denied: string[]; flags: Flag[]; changes: Flag[]; whole: string; links: string[] };
 
-// a file a part reads or writes, as a word, in its folder
-type Use = { word: Word; write: boolean; cwd: string | null };
+// a file a part reads or writes, as a word, in its folder; one a copy or
+// a move lands in a folder it names, into (land)
+type Use = { word: Word; write: boolean; cwd: string | null; into?: Word };
 
 // Constants
 // =========
@@ -167,9 +174,24 @@ const WORDS = new Set([
 const WRITERS = new Set([
   "rm", "rmdir", "unlink", "shred", "truncate", "touch", "mkdir", "tee", "chmod", "chown", "chgrp", "mv", "tar", "unzip",
   "zip", "gzip", "gunzip", "bzip2", "bunzip2", "xz", "unxz", "7z", "patch", "split", "csplit", "mkfifo", "mknod", "link",
-  "rename", "chattr", "setfacl", "ar", "cpio",
+  "rename", "chattr", "setfacl", "ar", "cpio", "sudoedit",
 ]);
 const COPIERS = new Set(["cp", "ln", "install", "rsync", "scp"]);
+
+// the archive and patch tools' short options that take a value, and of
+// those the ones naming a file or folder (tar's archive, -C's folder,
+// its lists; patch's output, folder, input, rejects, backups; unzip's
+// folder; cpio's folder and archives; 7z's output and working folder,
+// each named by its switch's first letter alone: -aoa names none), so a
+// value glued to its letter (tar -cf/tmp/x.tar, -C/etc) is a file as
+// the next word is, and another's (-p1, -b20) isn't
+const ARCHIVED: Record<string, [string, string]> = {
+  tar   : ["bCfFgHIKLNTVX", "CfgTX"],
+  patch : ["BdDFgioprVYz", "BdiorY"],
+  unzip : ["dP", "d"],
+  "7z"  : ["ow", "ow"],
+  cpio  : ["CDEFHIMOR", "DEFIO"],
+};
 
 // the shells, and the interpreters, that run a script or code given them;
 // the shells whose language isn't bash's (their scripts can't be read)
@@ -323,20 +345,43 @@ const PROTECTED_DEEP = [".config/git", ".config/fish", ".local/bin", "bin"];
 const RUNS = /^(PATH|IFS|CDPATH|ENV|BASH_ENV|SHELLOPTS|BASHOPTS|GLOBIGNORE|BASH_XTRACEFD|PROMPT_COMMAND|PS4|LD_\w+|DYLD_\w+|GIT_SSH_COMMAND|GIT_SSH|GIT_EXTERNAL_DIFF|GIT_EDITOR|GIT_ASKPASS|GIT_EXEC_PATH|GIT_CONFIG\w*|SSH_ASKPASS|SUDO_ASKPASS|NODE_OPTIONS|PERL5OPT|PERL5LIB|RUBYOPT|PYTHONSTARTUP|PYTHONPATH|LESSOPEN|LESSCLOSE|EDITOR|VISUAL|PAGER|GIT_PAGER|MANPAGER|BROWSER)$/;
 const QUIET = new Set(["", "cat", "less", "less -R", "less -FRX", "more", "true", "head"]);
 
-// git's subcommands that only read; those whose words are files (others'
-// are revisions, or files after --; config's are keys and push's refs,
-// never), and of those the ones that only read them (stage, commit); its
-// own options that take the next word (git -C dir, -c k=v, --git-dir x),
-// so none hides the subcommand, and push's (-o ci.skip), so none is
-// taken for its remote or a ref
+// git's subcommands that only read; those whose words are files (a
+// clone's but its URL; worktree's, submodule's and bundle's past their
+// verb); those whose words never are (names of branches and tags,
+// revisions); any other's are files if they exist, or hold a wildcard
+// or a part starting with a dot (no ref's name can), as git tells a file
+// from a revision (git checkout main, git log src '*.ts', git diff .env;
+// ..main a range), checkout's and reset's past their first (a revision,
+// then files), show's and cat-file's after a revision's colon
+// (HEAD:.env), and every one's after -- (config's are keys and push's
+// refs, never); of those taking files, the ones that only read them
+// (stage, commit); the options of a subcommand that take the next word
+// (a branch's name, checkout -b, switch -c; a message, a key, a
+// revision; a message's file, -F: read), -m's elsewhere; its own options
+// that take the next word (git -C dir, -c k=v, --git-dir x), so none
+// hides the subcommand, and push's (-o ci.skip), so none is taken for
+// its remote or a ref
 const GIT_READ = new Set([
   "status", "log", "diff", "show", "blame", "annotate", "shortlog", "describe", "rev-parse", "rev-list", "ls-files",
   "ls-tree", "ls-remote", "cat-file", "grep", "show-ref", "for-each-ref", "merge-base", "name-rev", "count-objects",
   "check-ignore", "check-attr", "check-ref-format", "var", "help", "version", "whatchanged", "range-diff", "diff-tree",
   "diff-files", "diff-index", "cherry", "verify-commit", "verify-tag", "fsck", "show-branch", "get-tar-commit-id",
 ]);
-const GIT_FILES = /^(add|rm|mv|restore|commit|apply|am|blame|clone|init|worktree|submodule|bundle|ls-files|check-ignore|check-attr)$/;
+const GIT_FILES = /^(add|rm|mv|restore|commit|apply|am|clone|init|worktree|submodule|bundle|ls-files|check-ignore|check-attr)$/;
+const GIT_REFS = /^(branch|tag|switch|merge|rebase|cherry-pick|revert|reflog|notes|describe|name-rev|update-ref|symbolic-ref|show-ref|for-each-ref|merge-base|cherry|range-diff|verify-commit|verify-tag|replace)$/;
 const GIT_STAGES = /^(add|commit)$/;
+const GIT_SUB_VALUED: Record<string, RegExp> = {
+  checkout : /^(-b|-B|--orphan)$/,
+  switch   : /^(-c|-C|--create|--force-create|--orphan)$/,
+  worktree : /^(-b|-B|--reason)$/,
+  restore  : /^(-s|--source)$/,
+  clone    : /^(-o|--origin|-b|--branch|-u|--upload-pack|--reference|--reference-if-able|--separate-git-dir|--template|--depth|--shallow-since|--shallow-exclude|-c|--config|-j|--jobs|--filter|--bundle-uri)$/,
+  commit   : /^(-m|--message|-F|--file|-t|--template|-c|-C|--reuse-message|--reedit-message|--author|--date|--fixup|--squash)$/,
+  tag      : /^(-m|--message|-F|--file|-u|--local-user)$/,
+  merge    : /^(-m|--message|-F|--file|-s|--strategy|-X|--strategy-option)$/,
+  notes    : /^(-m|--message|-F|--file|-c|-C|--reuse-message|--reedit-message|--ref)$/,
+};
+const GIT_MESSAGES = /^(-F|--file|-t|--template)$/;
 const GIT_VALUED = /^(-C|-c|--git-dir|--work-tree|--namespace|--config-env|--attr-source|--shallow-file)$/;
 const PUSH_VALUED = /^(-o|--push-option|--repo|--receive-pack|--exec)$/;
 
@@ -356,9 +401,29 @@ const GIT_RUNS = /^(core\.(pager|editor|sshcommand|fsmonitor|hookspath|askpass|g
 // leads too, and the system's): written, asked as a repository's is
 const GIT_CONFIGS = [...new Set([".gitconfig", ".config/git/config"].flatMap((f) => [path.join(HOME, f), real(path.join(HOME, f))])), "/etc/gitconfig"];
 
+// Claude Code's own folder whatever its name (home's .claude where a link
+// there leads, $CLAUDE_CONFIG_DIR), besides any named .claude
+const CLAUDE_DIRS = [...new Set([real(path.join(HOME, ".claude")), ...(process.env.CLAUDE_CONFIG_DIR ? [real(path.resolve(process.env.CLAUDE_CONFIG_DIR))] : [])])];
+
 // the programs that can wipe a disk: make a file system, partition,
 // erase, encrypt
 const DISKS = /^(mkfs(\..+)?|mke2fs|mkdosfs|mkntfs|mkexfatfs|mkswap|wipefs|blkdiscard|fdisk|sfdisk|cfdisk|gdisk|sgdisk|parted|cryptsetup)$/;
+
+// the volume managers (LVM's, its programs' names its verbs: lvremove as
+// lvm lvremove; ZFS's; macOS's diskutil, its apfs, cs and ar verbs those
+// after them; the device mapper's dmsetup), by verb: those that only
+// read, run; those that destroy, make, shrink or overwrite a volume can
+// wipe a disk (lvremove, zfs destroy and rollback, zpool create,
+// diskutil eraseDisk, dmsetup remove); any other changes the system
+// (lvextend, zfs snapshot, diskutil unmount)
+const LVM = /^(lv|vg|pv)(s|display|scan|create|remove|resize|reduce|extend|convert|change|rename|split|merge|move|ck|import|importclone|export|cfgbackup|cfgrestore|mknodes)$/;
+const VOLUMES: Record<string, [RegExp, RegExp]> = {
+  lvm      : [/^((lv|vg|pv)(s|display|scan)|lvmdiskscan|lvmconfig|dumpconfig|config|fullreport|formats|segtypes|types|tags|systemid|version|help)$/, /^(lv(create|remove|resize|reduce|convert)|vg(create|remove|reduce)|pv(create|remove|resize))$/],
+  zfs      : [/^(list|get|holds|userspace|groupspace|projectspace|diff|send|wait|help|version)$/, /^(destroy|rollback|receive|recv)$/],
+  zpool    : [/^(list|status|iostat|get|history|events|wait|help|version)$/, /^(create|destroy|add|attach|replace|labelclear)$/],
+  diskutil : [/^(list|info|information|activity|listFilesystems|verifyVolume|verifyDisk|help)$/i, /^(erase\w*|zeroDisk|randomDisk|secureErase|partitionDisk|reformat|resizeVolume|splitPartition|mergePartitions|addPartition|create\w*|delete\w*)$/i],
+  dmsetup  : [/^(ls|info|status|table|deps|targets|version|help|udevcookies)$/, /^(remove|remove_all|create|load|reload|wipe_table)$/],
+};
 
 // Claude Code's tools that touch nothing on this computer, or only what
 // was already allowed (a shell's output, stopping it): run (Guard.hosted)
@@ -381,7 +446,7 @@ export namespace Guard {
   // a tool call's verdict: shell, read, write, edit, an MCP tool (by its
   // hints); any other tool (illi's own) runs
   export function check(where: Where, tool: string, input: any, hints?: Hints): Verdict {
-    const look: Look = { denied: [], flags: [], changes: [], whole: "" };
+    const look: Look = { denied: [], flags: [], changes: [], whole: "", links: [] };
     try {
       if (tool === "shell") {
         look_shell(where, look, String(input?.command ?? ""));
@@ -426,7 +491,7 @@ export namespace Guard {
     if (tool.startsWith("mcp__")) {
       return Guard.check(where, tool, input);
     }
-    const look: Look = { denied: [], flags: [], changes: [], whole: "" };
+    const look: Look = { denied: [], flags: [], changes: [], whole: "", links: [] };
     look_tool(where, look, tool, " is a Claude Code tool illi doesn't know");
     return verdict(where, look);
   }
@@ -674,7 +739,7 @@ function look_command(where: Where, look: Look, part: Part, uses: Use[], flag: F
   const name = Shell.program(head);
   const args = part.argv.slice(1);
   const text = clip(part.text);
-  const use = (w: Word, write: boolean) => uses.push({ word: w, write, cwd: part.cwd });
+  const use = (w: Word, write: boolean, into?: Word) => uses.push({ word: w, write, cwd: part.cwd, into });
   if (alt.includes("/") && name === "") {
     const file = part.cwd === null && !path.isAbsolute(alt) ? null : placed(path.resolve(part.cwd ?? "/", alt));
     if (file === null || (!under(file, where.top) && !where.plugins.some((d) => under(file, d)))) {
@@ -710,6 +775,10 @@ function look_command(where: Where, look: Look, part: Part, uses: Use[], flag: F
   }
   if (WRITERS.has(base)) {
     args_use(args, true, use);
+    if (base === "mv") {
+      const into = copier_into(args);
+      land(base, args, positional(args).filter((w) => w !== into), into, part.cwd, use);
+    }
     return true;
   }
   if (COPIERS.has(base)) {
@@ -720,9 +789,12 @@ function look_command(where: Where, look: Look, part: Part, uses: Use[], flag: F
       use(into, true);
     }
     if (base === "ln") {
-      ln_use(args, pos, into, part.cwd, uses);
+      look.links.push(...ln_use(args, pos, into, part.cwd, uses));
     } else {
       pos.forEach((w, k) => use(w, dirs || (into === null && k === pos.length - 1)));
+    }
+    if (!dirs) {
+      land(base, args, pos, into, part.cwd, use);
     }
     return true;
   }
@@ -733,7 +805,7 @@ function look_command(where: Where, look: Look, part: Part, uses: Use[], flag: F
 // the danger list, by the command's base name (wherever it lives): its
 // flags pushed, and whether it changes things (null: not on the list,
 // judged as any other)
-function command_danger(where: Where, look: Look, part: Part, base: string, args: Word[], use: (w: Word, write: boolean) => void, flag: Flagger, depth: number): boolean | null {
+function command_danger(where: Where, look: Look, part: Part, base: string, args: Word[], use: (w: Word, write: boolean, into?: Word) => void, flag: Flagger, depth: number): boolean | null {
   const text = clip(part.text);
   const xs = args.map((a) => (a.dynamic ? "" : a.alts[0]));
   const has = (...names: string[]) => xs.some((x) => names.includes(x) || names.some((n) => n.startsWith("--") && x.startsWith(n + "=")));
@@ -749,7 +821,8 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
   if (BUILDS.has(base) && !asks && (part.cwd === null || !under(real(part.cwd), where.top))) {
     flag(text + " runs the code of " + (part.cwd === null ? "a folder known only as it runs" : shown(real(part.cwd), where.top)));
   }
-  switch (DISKS.test(base) ? "mkfs" : base) {
+  const volume = LVM.test(base) ? "lvm" : base;
+  switch (DISKS.test(base) ? "mkfs" : VOLUMES[volume] !== undefined ? "volume" : base) {
     case "make":
     case "gmake": {
       make_look(where, part, args, flag);
@@ -757,6 +830,22 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
     }
     case "git": {
       return git_look(part, args, use, flag);
+    }
+    case "tar":
+    case "patch":
+    case "unzip":
+    case "7z":
+    case "cpio": {
+      archive_look(part, base, args, use, flag);
+      return true;
+    }
+    case "volume": {
+      const [reads, wipes] = VOLUMES[volume];
+      const verb = volume !== base ? base : /^(apfs|ap|cs|coreStorage|appleRAID|ar)$/i.test(base === "diskutil" ? sub : "") ? verbs[1] ?? "" : sub;
+      if (!reads.test(verb) && !asks) {
+        flag(text + (wipes.test(verb) ? " can wipe a disk" : " changes the system"), null, "all");
+      }
+      return !reads.test(verb) && !asks;
     }
     case "rm":
     case "rmdir":
@@ -877,6 +966,7 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
     case "scp":
     case "rsync": {
       pos.forEach((w, k) => use(w, k === pos.length - 1));
+      land(base, args, pos, null, part.cwd, use);
       if (base === "scp" || pos.some((w) => /^[^/\s]*:/.test(w.alts[0]) && !/^[A-Za-z]:\\/.test(w.alts[0]))) {
         flag(text + " copies to or from another computer");
       }
@@ -972,11 +1062,13 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
 // git: its own options (-C, -c, --git-dir: GIT_VALUED, their values
 // skipped; -c's key and --exec-path's folder, and a remote's program
 // given, --upload-pack, asked in auto too, as git config's), the
-// subcommand's danger, and whether it only reads; its positional words
-// are its files (written, but those it stages), but one known only as it
-// runs: a revision (git diff $(git merge-base ...)), unless after -- or
-// the subcommand takes files; config's and push's say which of theirs
-// are (paths)
+// subcommand's danger, and whether it only reads; its files (written,
+// but those it stages), its positional words as the subcommand takes
+// them (GIT_FILES, GIT_REFS: a branch or tag named token-x is no file),
+// but one known only as it runs: a revision (git diff $(git merge-base
+// ...)), unless after -- or the subcommand takes files; a message's file
+// read (commit -F); push's, config's, clone's, worktree's, submodule's
+// and bundle's say which of theirs are (paths)
 function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => void, flag: Flagger): boolean {
   const text = clip(part.text);
   let k = 0;
@@ -1010,7 +1102,7 @@ function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => vo
   const xs = rest.map((a) => (a.dynamic ? "" : a.alts[0]));
   const has = (...names: string[]) => xs.some((x) => names.includes(x) || names.some((n) => n.startsWith("--") && x.startsWith(n + "=")));
   const short = (c: string) => xs.some((x) => /^-[a-zA-Z]+$/.test(x) && x.includes(c));
-  const pos = positional(rest);
+  const pos = positional(rest, GIT_SUB_VALUED[sub]);
   const first = pos[0]?.alts[0] ?? "";
   let read = GIT_READ.has(sub);
   let paths: Word[] | null = null;
@@ -1083,8 +1175,17 @@ function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => vo
       }
       break;
     }
+    case "clone": {
+      paths = pos.filter((w) => w.dynamic || !/^[^/\s]*:/.test(w.alts[0]));
+      break;
+    }
+    case "bundle": {
+      paths = pos.slice(1, 2);
+      break;
+    }
     case "worktree": {
       read = first === "list";
+      paths = first === "add" ? pos.slice(1, 2) : pos.slice(1);
       if (first === "remove" && has("-f", "--force")) {
         flag(text + " deletes a worktree's uncommitted changes");
       }
@@ -1096,6 +1197,7 @@ function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => vo
     }
     case "submodule": {
       read = pos.length === 0 || first === "status" || first === "summary";
+      paths = first === "foreach" ? [] : pos.slice(first === "add" ? 2 : 1);
       if (first === "foreach") {
         flag(text + " runs a command in each submodule");
       }
@@ -1154,9 +1256,15 @@ function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => vo
   const o = sub === "format-patch" || sub === "archive";
   const outs = rest.flatMap((a, j) => (xs[j] === "--output" || xs[j] === "--output-directory" || (o && xs[j] === "-o") ? rest.slice(j + 1, j + 2) : /^--output(-directory)?=/.test(xs[j]) ? [Shell.cut(a, xs[j].indexOf("=") + 1)] : o && /^-o./.test(xs[j]) ? [Shell.cut(a, 2)] : []));
   outs.forEach((w) => use(w, true));
+  if (/^(commit|tag|merge|notes)$/.test(sub)) {
+    option_values(rest, GIT_MESSAGES).filter((w) => w.dynamic || w.alts[0] !== "-").forEach((w) => use(w, false));
+  }
   const dash = rest.findIndex((a) => !a.dynamic && a.alts[0] === "--");
   const files = GIT_FILES.test(sub) || has("--no-index");
-  (paths ?? pos.filter((w) => !outs.includes(w) && (!w.dynamic || files || (dash >= 0 && rest.indexOf(w) > dash)))).forEach((w) => use(w, !read && !GIT_STAGES.test(sub)));
+  const here = (w: Word) => part.cwd === null || w.alts.some((x) => /[*?[]/.test(x) || (!/^\.\.\.?[^./]/.test(x) && x.split("/").some((c) => c.startsWith("."))) || fs.existsSync(path.resolve(part.cwd!, x)));
+  const file = (w: Word) => (dash >= 0 && rest.indexOf(w) > dash) || files || (!GIT_REFS.test(sub) && !w.dynamic && (here(w) || (/^(checkout|reset)$/.test(sub) && w !== pos[0])));
+  const blobs = /^(show|cat-file)$/.test(sub) ? pos.filter((w) => !w.dynamic && !file(w) && /^[^:]*:./.test(w.alts[0])).map((w) => Shell.cut(w, w.alts[0].indexOf(":") + 1)) : [];
+  (paths ?? [...pos.filter((w) => !outs.includes(w) && file(w)), ...blobs]).forEach((w) => use(w, !read && !GIT_STAGES.test(sub)));
   return !read || outs.length > 0;
 }
 
@@ -1526,6 +1634,38 @@ function make_look(where: Where, part: Part, args: Word[], flag: (why: string) =
   }
 }
 
+// an archive or patch tool: its files all written (as WRITERS'), a value
+// glued to its option's letter among them where it names one (ARCHIVED:
+// tar -cf/tmp/x.tar, -xf a.tar -C/out, unzip -d/out, 7z -o/out); one
+// extracting with its names kept whole (tar -P, --absolute-names; unzip
+// -:; 7z -spf; cpio's own way, but --no-absolute-filenames) lands its
+// files anywhere: asked in every mode but yolo, exactly
+function archive_look(part: Part, base: string, args: Word[], use: (w: Word, write: boolean) => void, flag: Flagger): void {
+  const [valued, paths] = ARCHIVED[base];
+  const xs = args.map((a) => (a.dynamic ? "" : a.alts[0]));
+  const long = (name: string) => xs.some((x) => x.length > 3 && name.startsWith(x));
+  const opts = base === "tar" && /^[A-Za-z]+$/.test(xs[0] ?? "") ? [xs[0]] : [];
+  args_use(args, true, use);
+  args.forEach((a, k) => {
+    if (!/^-[^-]/.test(xs[k])) {
+      return;
+    }
+    const at = base === "7z" ? 1 : [...xs[k].slice(1)].findIndex((c) => valued.includes(c)) + 1;
+    opts.push(base === "7z" || at === 0 ? xs[k].slice(1) : xs[k].slice(1, at + 1));
+    if (at > 0 && at + 1 < xs[k].length && paths.includes(xs[k][at])) {
+      use(Shell.cut(a, at + 1), true);
+    }
+  });
+  const letters = opts.join("");
+  const anywhere = base === "tar" ? (letters.includes("x") || long("--extract") || long("--get")) && (letters.includes("P") || long("--absolute-names"))
+    : base === "unzip" ? letters.includes(":")
+    : base === "cpio" ? (letters.includes("i") || long("--extract")) && !long("--no-absolute-filenames")
+    : base === "7z" && /^[ex]$/.test(positional(args)[0]?.alts[0] ?? "") && opts.some((o) => /^spf2?$/.test(o));
+  if (anywhere) {
+    flag(clip(part.text) + " extracts files wherever their names say (absolute names kept)", null, "all");
+  }
+}
+
 // a container's host folders (docker -v src:dst, --mount source=src):
 // those named by a path, not a volume's name
 function mounts(args: Word[], xs: string[]): Word[] {
@@ -1548,10 +1688,41 @@ function mounts(args: Word[], xs: string[]): Word[] {
   return out;
 }
 
+// what a copy, a move or a link into a folder writes there: each
+// source's name in it (cp -r x/.claude . writes ./.claude; a glob's
+// matches' names; rsync's x/ its contents, as x/. any copier's: the
+// folder itself; a lone ln's, the folder it runs in), judged where the
+// folder's own question doesn't ask it already (use_look); none for -T,
+// a remote folder, a target that isn't one (it is the new name), nor one
+// known only as it runs (asked as such)
+function land(base: string, args: Word[], pos: Word[], into: Word | null, cwd: string | null, use: (w: Word, write: boolean, into?: Word) => void): void {
+  const xs = args.map((a) => (a.dynamic ? "" : a.alts[0]));
+  const lone = base === "ln" && into === null && pos.length === 1;
+  const target = into ?? (lone ? Shell.lit(".") : pos.length > 1 ? pos[pos.length - 1] : null);
+  const sources = into === null && !lone ? pos.slice(0, -1) : pos;
+  const plain = base !== "rsync" && base !== "scp" && xs.some((x) => x === "--no-target-directory" || /^-[A-Za-z]*T/.test(x));
+  if (target === null || target.dynamic || target.glob || cwd === null || plain || target.alts.some((t) => /^[^/\s]*:/.test(t))) {
+    return;
+  }
+  const folder = into !== null || lone || sources.length > 1 || target.alts.every((t) => t.endsWith("/") || is_dir(real(Shell.walk(cwd, t))));
+  for (const s of folder ? sources : []) {
+    for (const alt of s.dynamic ? [] : s.alts) {
+      const g = s.glob ? alt.search(/[*?[]/) : -1;
+      const at = alt.lastIndexOf("/", g) + 1;
+      const whole = /(^|\/)\.\.?$/.test(alt) || (base === "rsync" && alt.endsWith("/"));
+      const names = whole ? [] : g < 0 ? [path.basename(alt)] : alt.includes("/", g) ? [] : (glob_names(real(Shell.walk(cwd, alt.slice(0, at) || ".")), alt.slice(at)) ?? []).slice(0, 200);
+      for (const t of target.alts) {
+        names.forEach((n) => use(Shell.lit(path.join(t, n)), true, target));
+      }
+    }
+  }
+}
+
 // ln's files, all written: a link to a file is a way to change it (a
 // hard link's or a symbolic one's), so its target counts as its name
-// does; a symbolic one's target, unless -r, from the link's folder
-function ln_use(args: Word[], pos: Word[], into: Word | null, cwd: string | null, uses: Use[]): void {
+// does; a symbolic one's target, unless -r, from the link's folder. The
+// links it makes, as named (in a folder named, each target's name there)
+function ln_use(args: Word[], pos: Word[], into: Word | null, cwd: string | null, uses: Use[]): string[] {
   const xs = args.map((a) => (a.dynamic ? "" : a.alts[0]));
   const symbolic = xs.some((x) => x === "--symbolic" || (/^-[A-Za-z]+$/.test(x) && x.includes("s")));
   const relative = xs.some((x) => x === "--relative" || (/^-[A-Za-z]+$/.test(x) && x.includes("r")));
@@ -1559,6 +1730,7 @@ function ln_use(args: Word[], pos: Word[], into: Word | null, cwd: string | null
   const at = dest === null || cwd === null ? cwd : dest.dynamic || dest.alts.length !== 1 ? null : path.resolve(cwd, dest.alts[0]);
   const dir = at === null || dest === null ? at : dest === into || dest.alts[0].endsWith("/") || is_dir(at) ? at : path.dirname(at);
   pos.forEach((w) => uses.push({ word: w, write: true, cwd: w !== dest && symbolic && !relative ? dir : cwd }));
+  return at === null || dir === null ? [] : pos.filter((w) => w !== dest && !w.dynamic).flatMap((w) => w.alts.map((x) => (dir === at ? path.join(dir, path.basename(x)) : at)));
 }
 
 // a copier's folder named by -t (cp -t dir a b, -rt dir, -tdir,
@@ -1636,7 +1808,7 @@ function reader_look(where: Where, part: Part, base: string, args: Word[], use: 
       writes.forEach((w) => use(w, true));
       if (deletes) {
         const from = starts.length === 0 ? [Shell.lit(".")] : starts;
-        const files = from.flatMap((w) => named(w, part.cwd) ?? [null]);
+        const files = from.flatMap((w) => named(w, part.cwd, false, true) ?? [null]);
         const vital = files.find((f): f is string => f !== null && vital_of(where, f));
         if (vital !== undefined || files.includes(null)) {
           flag(text + " deletes what it finds in " + (vital === undefined ? "a folder known only as it runs" : shown(vital, where.top) + ", a folder that matters"), null, "all");
@@ -1840,7 +2012,8 @@ function look_tool(where: Where, look: Look, tool: string, why: string | null): 
 // =====
 
 // a file read or written by a file tool (a folder: read, as a search's),
-// judged; a write naming none is asked
+// judged where the tool puts it (Machine.ts: its .. as written, not as a
+// shell's command walks it); a write naming none is asked
 function look_file(where: Where, look: Look, file: unknown, write: boolean): void {
   if (typeof file !== "string" || file === "") {
     if (write) {
@@ -1874,9 +2047,11 @@ function look_file(where: Where, look: Look, file: unknown, write: boolean): voi
 // read by a command that may change things, acts, as one that may be a
 // write); one known only as it runs asked (in auto, a write's; one xargs
 // gives, a write's alone: its reads are its program's, look_command). A
-// glob's entries outside are said by their folder, once
+// glob's entries outside are said by their folder, once; what lands in a
+// folder (land) only where no reason of the folder's own asks it already
+// (in as many modes, cleared by no more than a grant clearing its)
 function use_look(where: Where, look: Look, use: Use, flag: Flagger, acts: boolean): void {
-  const files = named(use.word, use.cwd);
+  const files = named(use.word, use.cwd, false, use.write, use.write ? look.links : []);
   if (files === null) {
     if (use.write || use.word.input !== true) {
       flag((use.word.raw || "what xargs adds") + " is known only as it runs", null, use.write ? "all" : "careful");
@@ -1885,6 +2060,8 @@ function use_look(where: Where, look: Look, use: Use, flag: Flagger, acts: boole
   }
   const kind: Kind = use.write ? "write" : "read";
   const said = new Set<string>();
+  const near = use.into === undefined ? [] : (named(use.into, use.cwd, false, true) ?? []).flatMap((f) => path_why(where, f, true, acts));
+  const covered = (r: Reason) => near.some((f) => (!f.wide || r.wide) && (f.tier === r.tier || f.tier === "self" || (f.tier === "all" && r.tier !== "self")));
   for (const file of files) {
     const rule = path_rule(where, file, use.write);
     if (rule === "deny") {
@@ -1893,7 +2070,7 @@ function use_look(where: Where, look: Look, use: Use, flag: Flagger, acts: boole
       look.flags.push({ why: "your rules ask about " + shown(file, where.top), kind: "shell", subject: "", wide: null, tier: "all", rule: true });
     } else if (rule !== "allow") {
       for (const r of path_why(where, file, use.write, acts)) {
-        if (!(r.wide && use.word.glob && said.has(path.dirname(file)))) {
+        if (!(r.wide && use.word.glob && said.has(path.dirname(file))) && !covered(r)) {
           flag(r.why, r.wide ? folder_wide(kind, file) : null, r.tier);
           said.add(r.wide ? file : "");
         }
@@ -1942,14 +2119,14 @@ function path_rule(where: Where, file: string, write: boolean): Rule | null {
 // illi's own config written (in every mode); a secret, read or written
 // through any tool (in every mode but yolo), before the folders read
 // freely (illi's skills', a plugin's); a device written; git's hooks or
-// config written, anywhere (git_file: in every mode but yolo, never by a
+// config, or Claude Code's settings (what it runs unasked), written
+// anywhere (git_file, claude_file: in every mode but yolo, never by a
 // folder grant); inside the project, a protected file written
-// (careful's, but in home: homely; Claude Code's settings, what it runs
-// unasked, in auto too); outside it, any but scratch, or the system's
-// folders read: a change in every mode but yolo, a read careful's (in
-// auto too if maybe, by a command that may change things: but in a
-// dependency cache), and a folder holding a secret store read, in auto
-// (careful asks it as outside).
+// (careful's, but in home: homely); outside it, any but scratch, or the
+// system's folders read: a change in every mode but yolo, a read
+// careful's (in auto too if maybe, by a command that may change things:
+// but in a dependency cache), and a folder holding a secret store read,
+// in auto (careful asks it as outside).
 // The folder a command runs in is a secret's by its place alone, not
 // its name (a project named secrets). None: it isn't asked
 function path_why(where: Where, file: string, write: boolean, maybe = false, folder = false): Reason[] {
@@ -1973,13 +2150,12 @@ function path_why(where: Where, file: string, write: boolean, maybe = false, fol
   if (file.startsWith("/dev/") && write) {
     return [{ why: at + " is a device", wide: false, tier: "all" }];
   }
-  const git = write ? git_file(file) : null;
-  if (git !== null) {
-    return [{ why: at + git, wide: false, tier: "all" }];
+  const runs = write ? git_file(file) ?? claude_file(file) : null;
+  if (runs !== null) {
+    return [{ why: at + runs, wide: false, tier: "all" }];
   }
   if (under(file, where.top)) {
-    const claude = /^\.claude\/settings(\.local)?\.json$/.test(path.relative(where.top, file));
-    return !write ? [] : claude ? [{ why: at + " sets what Claude Code runs unasked", wide: false, tier: "all" }] : guarded(file, where.top) ? [{ why: at + " configures tools or illi (protected)", wide: false, tier: homely(where) }] : [];
+    return write && guarded(file, where.top) ? [{ why: at + " configures tools or illi (protected)", wide: false, tier: homely(where) }] : [];
   }
   if (SCRATCH.some((d) => under(file, d)) || (!write && SYSTEM.some((d) => under(file, d)))) {
     return [];
@@ -2004,6 +2180,17 @@ function git_file(file: string): string | null {
     return GIT_CONFIGS.includes(file) ? " is git's config, which can make git run a program" : null;
   }
   return rest.length === 0 ? " is where git finds its hooks and config" : rest.at(-1) === "hooks" ? " is where git finds its hooks" : rest.includes("hooks") ? " is a git hook, which git runs" : /^config(\.worktree)?$/.test(rest.at(-1)!) ? " is git's config, which can make git run a program" : null;
+}
+
+// what writing a file does to Claude Code, if it reads its settings
+// there (why), or null: a .claude folder's settings.json or
+// settings.local.json at any depth (home's, a project's, a package's in
+// it; Claude Code's own folder whatever its name, CLAUDE_DIRS), or such a
+// folder itself (a move or copy onto it lands its settings); named in
+// any letter case, as a disk that ignores case finds them
+function claude_file(file: string): string | null {
+  const own = (dir: string) => path.basename(dir).toLowerCase() === ".claude" || CLAUDE_DIRS.includes(dir);
+  return own(file) ? " holds Claude Code's settings (what it runs unasked)" : own(path.dirname(file)) && /^settings(\.local)?\.json$/i.test(path.basename(file)) ? " sets what Claude Code runs unasked" : null;
 }
 
 // whether a file is in a dependency cache
@@ -2074,52 +2261,93 @@ function rebuilt_name(name: string): boolean {
   return REBUILT.has(name) || name.endsWith(".egg-info");
 }
 
-// the files a word names, real paths (links followed): each of its
-// values; for a glob its folder, and the entries its last part matches
-// (gone: as a delete takes it, its folder only if it can match all of it:
-// *, .*); null: known only as it runs (a variable, a folder after a cd to
-// one)
-function named(w: Word, cwd: string | null, gone = false): string[] | null {
+// the files a word names, real paths (links followed; a .. from where
+// the folder before it really is: Shell.walk): each of its values; for a
+// glob its folder, and the entries its last part matches (gone: as a
+// delete takes it, its folder only if it can match all of it: *, .*); a
+// glob before a / (*/x, */../y) each match's path on too, and the path
+// as written (a match made as it runs); null: known only as it runs (a
+// variable, a folder after a cd to one; for a write, a glob before a ..
+// matching too much to look through, or a .. after a link the command
+// makes first: unseen)
+function named(w: Word, cwd: string | null, gone = false, write = gone, links: string[] = []): string[] | null {
   if (w.dynamic) {
     return null;
   }
   const out: string[] = [];
   for (const alt of w.alts) {
     const g = w.glob ? alt.search(/[*?[]/) : -1;
-    const head = g < 0 ? alt : alt.slice(0, g);
-    if (!path.isAbsolute(head) && cwd === null) {
+    if (!path.isAbsolute(alt) && cwd === null) {
       return null;
     }
-    const abs = path.resolve(cwd ?? "/", head);
+    const from = cwd ?? "/";
+    if (links.length > 0 && unseen(from, alt, links)) {
+      return null;
+    }
     if (g < 0) {
-      out.push(real(abs));
+      out.push(real(Shell.walk(from, alt)));
       continue;
     }
-    const dir = head === "" || head.endsWith("/") ? abs : path.dirname(abs);
-    const last = alt.slice(alt.lastIndexOf("/", g) + 1);
-    if (!gone || /^[*?.]+$/.test(last)) {
-      out.push(real(dir));
+    const at = alt.lastIndexOf("/", g) + 1;
+    const end = alt.indexOf("/", g);
+    const dir = real(Shell.walk(from, alt.slice(0, at) || "."));
+    const glob = alt.slice(at, end < 0 ? alt.length : end);
+    if (!gone || (end < 0 && /^[*?.]+$/.test(glob))) {
+      out.push(dir);
     }
-    if (!last.includes("/")) {
-      out.push(...glob_entries(dir, last));
+    if (end < 0) {
+      out.push(...glob_entries(dir, glob));
+      continue;
+    }
+    const names = glob_names(dir, glob);
+    const rest = alt.slice(end);
+    if ((names === null || names.length > 200) && write && /(^|\/)\.\.(\/|$)/.test(rest)) {
+      return null;
+    }
+    out.push(real(Shell.walk(from, alt)));
+    for (const n of names !== null && names.length <= 200 ? names : []) {
+      const more = named({ ...w, alts: [path.join(dir, n) + rest], glob: /[*?[]/.test(rest) }, "/", gone, write);
+      if (more === null) {
+        return null;
+      }
+      out.push(...more);
     }
   }
   return out;
 }
 
-// a folder's entries a glob's last part matches (a leading dot only by
-// one), as real paths; a folder too big to look through: none
-function glob_entries(dir: string, glob: string): string[] {
+// whether a path's .. follows a link not there yet, one of those the
+// command makes first (ln -s /tmp x && rm -rf x/../y climbs from /tmp)
+function unseen(cwd: string, p: string, links: string[]): boolean {
+  let at = path.isAbsolute(p) ? "/" : cwd;
+  for (const name of p.split("/")) {
+    if (name === ".." && !fs.existsSync(at) && links.some((l) => under(at, l))) {
+      return true;
+    }
+    at = Shell.walk(at, name);
+  }
+  return false;
+}
+
+// a folder's names a glob's part matches (a leading dot only by one);
+// null: a folder too big to look through
+function glob_names(dir: string, glob: string): string[] | null {
   try {
     const names = fs.readdirSync(dir);
     if (names.length > 2000) {
-      return [];
+      return null;
     }
     const re = new RegExp("^" + glob.replace(/[.+^${}()|\\]/g, "\\$&").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]") + "$");
-    return names.filter((n) => re.test(n) && (glob.startsWith(".") || !n.startsWith("."))).slice(0, 200).map((n) => real(path.join(dir, n)));
+    return names.filter((n) => re.test(n) && (glob.startsWith(".") || !n.startsWith(".")));
   } catch {
     return [];
   }
+}
+
+// a folder's entries a glob's last part matches, as real paths (200 at
+// most; a folder too big to look through: none)
+function glob_entries(dir: string, glob: string): string[] {
+  return (glob_names(dir, glob) ?? []).slice(0, 200).map((n) => real(path.join(dir, n)));
 }
 
 // Words
@@ -2149,6 +2377,16 @@ function positional(args: Word[], valued = /^(-m|--message)$/): Word[] {
     }
   }
   return out;
+}
+
+// the values of the options a regex names (-F x, -Fx, --file x,
+// --file=x)
+function option_values(args: Word[], names: RegExp): Word[] {
+  return args.flatMap((a, k) => {
+    const x = a.dynamic ? "" : a.alts[0];
+    const eq = /^--[\w-]+=/.exec(x)?.[0] ?? "";
+    return names.test(x) ? args.slice(k + 1, k + 2) : eq !== "" && names.test(eq.slice(0, -1)) ? [Shell.cut(a, eq.length)] : /^-[A-Za-z]./.test(x) && names.test(x.slice(0, 2)) ? [Shell.cut(a, 2)] : [];
+  });
 }
 
 // a part's words used as files: those that aren't options, and long

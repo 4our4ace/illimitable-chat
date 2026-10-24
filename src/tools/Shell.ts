@@ -5,15 +5,16 @@
 // (a pipeline, a list, a subshell, a command's substitution, a heredoc's
 // body, a loop, a bash -c's script, an eval's, a trap's, a find -exec's),
 // each with its words as they'd expand, its assignments, its
-// redirections and the folder it runs in (each cd followed). Wrappers
-// that run the command after them (sudo, timeout, env, xargs, ...) are
-// taken off, the part saying so (root: run as root; fed: some of its
-// arguments come from its input). A word known only as the command runs
-// (a variable it never sets and the environment lacks, a command's
-// output) is dynamic, its known head kept; a variable the command sets
-// to plain words (X=a, for X in a b) stands for each of them, and a
-// command's output known before it runs ($(pwd), $(git rev-parse
-// --show-toplevel): the folder) for its value.
+// redirections and the folder it runs in (each cd followed, behind
+// builtin, command or time too; one another program runs leaves it
+// unknown). Wrappers that run the command after them (sudo, timeout,
+// env, xargs, ...) are taken off, the part saying so (root: run as root,
+// as sudoedit edits; fed: some of its arguments come from its input). A
+// word known only as the command runs (a variable it never sets and the
+// environment lacks, a command's output) is dynamic, its known head
+// kept; a variable the command sets to plain words (X=a, for X in a b)
+// stands for each of them, and a command's output known before it runs
+// ($(pwd), $(git rev-parse --show-toplevel): the folder) for its value.
 // What bash would read in a way this can't follow (case, functions,
 // arrays, aliases, a script made as it runs) leaves no parts, only why:
 // such a command is asked about. The shell tool runs bash (Machine.ts),
@@ -156,6 +157,10 @@ const WRAPS: Record<string, Opts & { then?: number }> = {
   xargs    : { args: ["-a", "--arg-file", "-d", "--delimiter", "-E", "-I", "-L", "--max-lines", "-n", "--max-args", "-P", "--max-procs", "-s", "--max-chars", "--process-slot-var"], flags: ["-0", "--null", "-r", "--no-run-if-empty", "-t", "--verbose", "-p", "--interactive", "-x", "--exit", "-o", "--open-tty", "--show-limits"], tail: ["-e", "-i", "-l"] },
 };
 
+// the wrappers that are this shell's own (a cd after them moves it);
+// time only as the keyword: unquoted, a command's first word
+const OWN = new Set(["builtin", "command", "time"]);
+
 // the wrappers that run it as root, with their options that take a value
 const ROOTS: Record<string, string[]> = {
   sudo   : ["-u", "--user", "-g", "--group", "-h", "--host", "-p", "--prompt", "-C", "--close-from", "-D", "--chdir", "-r", "--role", "-t", "--type", "-T", "--command-timeout", "-U", "--other-user"],
@@ -211,6 +216,22 @@ export namespace Shell {
   // a plain word, as if written unquoted
   export function lit(x: string): Word {
     return { alts: [x], raw: x, dynamic: false, glob: false, fd: false };
+  }
+
+  // a path from a folder as the system finds it: each .. from where the
+  // folder before it really is (link/.. is the folder holding the link's
+  // target, not the one holding the link; only cd takes .. as written),
+  // the rest as named; a name that doesn't exist yet as a plain folder's
+  export function walk(cwd: string, p: string): string {
+    let at = path.isAbsolute(p) ? "/" : cwd;
+    for (const name of p.split("/")) {
+      if (name === "..") {
+        at = path.dirname(really(at));
+      } else if (name !== "" && name !== ".") {
+        at = path.join(at, name);
+      }
+    }
+    return at;
   }
 
   // a word from its nth character on (an option's value: --to=x)
@@ -422,7 +443,9 @@ function scan_word(s: Scan): Word {
         add(b, [c]);
         s.at++;
       } else {
-        add(b, x.alts);
+        const alts = s.at === start ? brace_tilde(s, x.alts, s.src[x.end]) : x.alts;
+        b.dynamic ||= alts === null;
+        add(b, alts ?? []);
         b.glob ||= x.alts.some((a) => /[*?[]/.test(a));
         s.at = x.end;
       }
@@ -778,22 +801,55 @@ function scan_ansi(s: Scan): string {
 }
 
 // a ~ starting a word (or an assignment's value): the home folder; ~+,
-// the folder followed; another user's, or ~-, known only as it runs
+// the folder followed; another user's, or ~-, known only as it runs. One
+// a brace goes on (~{,/x}) as bash takes it: the braces first, then each
+// value's ~ (brace_tilde)
 function scan_tilde(s: Scan, b: Build): void {
-  const m = /^~([A-Za-z0-9._-]*|[+-])(?=\/|[\s;&|()<>]|$)/.exec(s.src.slice(s.at));
+  const rest = s.src.slice(s.at);
+  const m = /^~([A-Za-z0-9._-]*|[+-])(?=\/|[\s;&|()<>]|$)/.exec(rest);
   if (m === null) {
-    add(b, ["~"]);
-    s.at++;
+    const name = /^~[A-Za-z0-9._+-]*/.exec(rest)![0];
+    const x = rest[name.length] === "{" ? brace(s.src, s.at + name.length) : null;
+    const alts = x === null || x === "many" ? null : brace_tilde(s, x.alts.map((a) => name + a), s.src[x.end]);
+    b.dynamic ||= x !== null && alts === null;
+    add(b, alts ?? ["~"]);
+    b.glob ||= x !== null && x !== "many" && x.alts.some((a) => /[*?[]/.test(a));
+    s.at = x === null || x === "many" ? s.at + 1 : x.end;
     return;
   }
   s.at += m[0].length;
-  if (m[1] === "") {
-    var_put(s, b, "HOME");
-  } else if (m[1] === "+" && s.cwd !== null) {
-    add(b, [s.cwd]);
-  } else {
-    b.dynamic = true;
+  const home = tilde(s, m[1]);
+  b.dynamic ||= home === null;
+  add(b, home ?? []);
+}
+
+// a ~'s folder by its name (home's for none, ~+ the folder followed);
+// null: known only as it runs
+function tilde(s: Scan, name: string): string[] | null {
+  if (name !== "") {
+    return name === "+" && s.cwd !== null ? [s.cwd] : null;
   }
+  const b: Build = { alts: [""], dynamic: false, glob: false };
+  var_put(s, b, "HOME");
+  return b.dynamic ? null : b.alts;
+}
+
+// a brace's values at a word's start, a ~ starting one expanded as a
+// word's (bash expands braces first: {~,x}/y is ~/y and x/y); null: one
+// known only as it runs (another user's; a ~ whose name goes on past
+// the brace)
+function brace_tilde(s: Scan, alts: string[], next: string | undefined): string[] | null {
+  const out: string[] = [];
+  for (const a of alts) {
+    const m = /^~[^/]*/.exec(a);
+    const ends = m === null || m[0].length < a.length || next === undefined || next === "/" || META.includes(next);
+    const home = m === null || !ends ? null : tilde(s, m[0].slice(1));
+    if (m !== null && home === null) {
+      return null;
+    }
+    out.push(...(home === null ? [a] : home.map((h) => h + a.slice(m![0].length))));
+  }
+  return out;
 }
 
 // <(...) or >(...): its commands, a subshell's (>(...)'s reading the
@@ -1036,26 +1092,39 @@ function cmd_run(s: Scan, cmd: Cmd, full: string, piped: boolean): void {
     part_push(s, [], cmd.env, cmd.redirs, full, ctx);
     return;
   }
-  unwrap(s, cmd.words, cmd.env, cmd.redirs, full, ctx);
-  cmd_after(s, cmd.words);
+  const run = unwrap(s, cmd.words, cmd.env, cmd.redirs, full, ctx);
+  if (run !== null) {
+    cmd_after(s, run.argv, run.own);
+  }
 }
 
-// what a builtin changes of the shell for the commands after it: the
-// folder (cd, pushd: to its target; to home; popd, cd -: unknown), the
-// variables (set to plain words as written, else known only as it runs),
-// all of them after a source; aliases on, a command hashed to a path or a
-// builtin loaded can't be followed
-function cmd_after(s: Scan, argv: Word[]): void {
+// what a builtin changes of the shell for the commands after it (own: run
+// by this shell, a wrapper of its own before it at most): the folder (cd,
+// pushd: to its target, -P's as the system finds it; to home; popd, cd
+// -: unknown), the variables (set to plain words as written, else known
+// only as it runs), all of them after a source; aliases on, a command
+// hashed to a path or a builtin loaded can't be followed. A cd another
+// program runs (sudo cd, env cd, exec cd) leaves the folder unknown
+function cmd_after(s: Scan, argv: Word[], own: boolean): void {
   const name = Shell.program(argv[0]);
   const args = argv.slice(1);
   const names = args.filter((a) => /^[A-Za-z_]\w*$/.test(a.raw)).map((a) => a.raw);
+  if (!own) {
+    if (name === "cd" || name === "pushd" || name === "popd") {
+      s.cwd = null;
+    }
+    return;
+  }
   switch (name) {
     case "cd":
     case "pushd": {
+      const opts = args.filter((a) => /^-[LPe@]+$/.test(a.raw));
       const to = args.find((a) => !/^-[LPe@]+$/.test(a.raw) && a.raw !== "--");
       const one = to === undefined || (!to.dynamic && to.alts.length === 1) ? to?.alts[0] : null;
       const home = process.env.HOME ?? os.homedir();
-      s.cwd = one === undefined ? (name === "cd" ? home : null) : one === null || one === "-" || /^[+-]\d+$/.test(one) ? null : path.isAbsolute(one) ? path.resolve(one) : s.cwd === null ? null : path.resolve(s.cwd, one);
+      const physical = /P[^L]*$/.test(opts.map((a) => a.raw).join(""));
+      const from = one === undefined || one === null || path.isAbsolute(one) ? "/" : s.cwd;
+      s.cwd = one === undefined ? (name === "cd" ? home : null) : one === null || one === "-" || /^[+-]\d+$/.test(one) || from === null ? null : physical ? Shell.walk(from, one) : path.resolve(from, one);
       return;
     }
     case "popd": {
@@ -1116,19 +1185,26 @@ function cmd_after(s: Scan, argv: Word[]): void {
 // each word holding its mark); a
 // shell's -c script, an eval's words, a trap's action and a watch's
 // command read as commands of their own; find's -exec commands too, each
-// {} standing for what find searches (its start folders)
-function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: string, ctx: Ctx): void {
+// {} standing for what find searches (its start folders). The words then
+// run, and whether this shell runs them (own: no wrapper but its own,
+// OWN, before them; an eval another program runs is a shell of its own);
+// null: a nested script read instead
+function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: string, ctx: Ctx): { argv: Word[]; own: boolean } | null {
   let argv = words;
+  let own = true;
   for (;;) {
     const name = Shell.program(argv[0]);
     const rest = argv.slice(1);
-    if (name === "su") {
+    if (name === "su" || name === "sudoedit") {
       ctx = { ...ctx, root: true };
       break;
     }
     if (ROOTS[name] !== undefined) {
+      const after = Shell.opts(rest, { args: ROOTS[name] }).rest;
+      const edit = name === "sudo" && rest.slice(0, rest.length - after.length).some((w) => w.raw === "--edit" || /^-[^-ughpCDrtTU]*e/.test(w.raw));
       ctx = { ...ctx, root: true };
-      argv = Shell.opts(rest, { args: ROOTS[name] }).rest;
+      own = false;
+      argv = edit ? [Shell.lit("sudoedit"), ...after] : after;
       continue;
     }
     const wrap = WRAPS[name];
@@ -1136,6 +1212,7 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
       if (name === "command" && /^-[vV]/.test(rest[0]?.raw ?? "")) {
         break;
       }
+      own &&= OWN.has(name) && !argv[0].alts[0].includes("/") && (name !== "time" || (argv === words && env.length === 0 && argv[0].raw === "time"));
       const { rest: after, got, odd } = Shell.opts(rest, wrap);
       if (odd !== null) {
         throw new Unread(name + " " + odd + ": an option illi doesn't know");
@@ -1166,7 +1243,7 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
         if (redirs.length > 0) {
           part_push(s, [], env, redirs, full, ctx);
         }
-        return;
+        return null;
       }
       if (next.length === 0) {
         argv = name === "exec" ? [] : argv;
@@ -1182,7 +1259,7 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
         if (redirs.length > 0) {
           part_push(s, [], env, redirs, full, ctx);
         }
-        return;
+        return null;
       }
     }
     const trap = rest[0]?.raw === "--" ? rest.slice(1) : rest;
@@ -1190,16 +1267,17 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
       const words = name === "trap" ? trap.slice(0, 1) : name === "watch" ? watch_words(rest) : rest;
       if (words === null) {
         argv = Shell.opts(rest, { args: WATCH }).rest;
+        own = false;
         continue;
       }
       if (words.some((w) => w.dynamic || w.alts.length !== 1)) {
         throw new Unread(name + " runs a command made as it runs");
       }
-      nested(s, Shell.lit(words.map((w) => w.alts[0]).join(" ")), ctx, name !== "eval");
+      nested(s, Shell.lit(words.map((w) => w.alts[0]).join(" ")), ctx, name !== "eval" || !own);
       if (redirs.length > 0) {
         part_push(s, [], env, redirs, full, ctx);
       }
-      return;
+      return null;
     }
     break;
   }
@@ -1207,6 +1285,7 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
     argv = find_execs(s, argv, ctx);
   }
   part_push(s, argv, env, redirs, full, ctx);
+  return { argv, own };
 }
 
 // a nested script's commands, run by a wrapper (its root, its input):
@@ -1307,4 +1386,13 @@ function found(w: Word, starts: Word[]): Word {
 
 function part_push(s: Scan, argv: Word[], env: Env[], redirs: Redir[], full: string, ctx: Ctx): void {
   s.parts.push({ argv, env, redirs, cwd: ctx.cwd, text: argv.map((w) => w.raw).join(" "), full, root: ctx.root, fed: ctx.fed, piped: ctx.piped });
+}
+
+// a folder's real place (links followed) if it exists, else as named
+function really(dir: string): string {
+  try {
+    return fs.realpathSync(dir);
+  } catch {
+    return dir;
+  }
 }
