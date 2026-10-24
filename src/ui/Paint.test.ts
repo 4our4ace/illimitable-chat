@@ -118,8 +118,8 @@ test("an open run of work is marked whole, each message in it with its gap, a fo
 // a shut run lists its calls under its line, a line each from its words
 // on: how each ended (GLYPH.ok; GLYPH.failed in the error's color; not
 // known: as wide, blank), its tool's name and the call on one line, its
-// control characters dropped, cut to the width; past six, the latest
-// five, the rest counted over them; all in the run's mark, the words
+// control characters dropped, cut to the width (its line too, "…"
+// where); past six, the latest five, the rest counted over them; all in the run's mark, the words
 // tagged as its label. Open, the run lists none: its rows show
 test("a shut run lists its calls, a line each: how each ended, its tool and call cut to the width; past six, the latest", () => {
   const v     = View.view_new();
@@ -147,6 +147,8 @@ test("a shut run lists its calls, a line each: how each ended, its tool and call
     lead + "… 3 earlier",
     ...[3, 4, 5, 6, 7].map((k) => lead + Theme.GLYPH.ok + " shell step " + k),
   ]);
+  const said  = [...call(40, "ls", "ok"), ...View.entry_rows(42, "tool", 'read {"path":"a"}'), ...View.entry_rows(43, "work", "[explorer] found it")];
+  expect(text(Paint.rows_lines(View.view_acts(v, said), 30))[0]).toBe(SHUT + "Ran a command, read a fil…");
   View.view_toggle(v, 3);
   expect(text(Paint.rows_lines(View.view_acts(v, rows), 40))[0]).toBe(OPEN + "Ran 4 commands");
   expect(text(Paint.rows_lines(View.view_acts(v, rows), 40)).filter((l) => l.startsWith(lead))).toEqual([]);
