@@ -15,8 +15,9 @@
 // it, saying why; with autocontinue off, the turn ends at the first,
 // saying a message goes on, the three counted over the user's messages
 // all the same. A view is told the state whole as it joins, then only
-// what moved since its last. A failed turn asks to try again only when a later try
-// may answer, and says a reply was cut off; summaries stuck are told once;
+// what moved since its last, so each view holds the chat's state. A
+// failed turn asks to try again only when a later try may answer, and
+// says a reply was cut off; summaries stuck are told once;
 // a save that fails is told, never thrown (a goal met still ends as
 // met). The suggested reply stays as a message of the user's own goes
 // (to send too) and as the chat closes (for the next start); sent, or a
@@ -282,9 +283,9 @@ test("/clear: the agent gets nothing of the chat so far, not even its lines, and
   chat.socks.add(sock);
   expect(Chat.clear(chat)).toEqual({});
   chat.socks.delete(sock);
-  expect(told.filter((m) => m.$ === "state").at(-1)?.use.fill.used).toBe(0);
   const seen = View.view_new();
   told.forEach((m) => View.view_hear(seen, m));
+  expect(seen.use.fill?.used).toBe(0);
   expect([seen.parts, View.view_count(seen)]).toEqual([[], before]);
   expect(mem.cut).toBe(before);
   expect(mem.view.from).toBe(before);
@@ -578,27 +579,52 @@ test("a save that fails is told to the views, never thrown (what ran, the sugges
 // a view is told the state whole as it joins, then only the fields that
 // moved since what it was told: a refusal its permissions alone, nothing
 // when nothing moved; a view joining meanwhile gets it whole, and each
-// view's own last state is what its next is told against
+// view's own last state is what its next is told against. A field
+// changed in place since it was told moves too; each view, taking what
+// it is told over its own, holds the chat's state; one that leaves and
+// joins again is told it whole
 test("a view is told the state whole as it joins, then only what moved since its last", () => {
   const sock = () => {
     const got: any[] = [];
     return { got, sock: { data: { seen: new Set() }, send: (text: string) => got.push(JSON.parse(text)), close: () => {} } as any };
   };
   const states = (got: any[]) => got.filter((m) => m.$ === "state").map((m) => Object.keys(m).filter((k) => k !== "$").sort());
+  const whole = () => {
+    const { $, ...state } = Chat.state(chat);
+    return JSON.parse(JSON.stringify(state));
+  };
+  const held = (got: any[]) => {
+    const v: ReturnType<typeof View.view_new> = View.view_new();
+    got.forEach((m) => View.view_hear(v, m));
+    return JSON.parse(JSON.stringify(Object.fromEntries(Object.keys(whole()).map((k) => [k, v[k as keyof typeof v]]))));
+  };
   const [a, b] = [sock(), sock()];
   const refused = chat.tools.perm.refused;
+  const r1 = { id: "r1", who: "illi", tool: "shell", what: "rm -rf /x", why: "/x is outside the project", how: "no" as const, said: "", at: 1, exact: [] };
   try {
     Chat.join(chat, a.sock);
     expect(states(a.got)[0]).toEqual(["agent", "agents", "asks", "background", "busy", "catalog", "models", "perm", "pick", "suggest", "todo", "use", "vendors", "wait"]);
     Chat.change(chat);
     expect(states(a.got).length).toBe(1);
-    chat.tools.perm.refused = [...refused, { id: "r1", who: "illi", tool: "shell", what: "rm -rf /x", why: "/x is outside the project", how: "no", said: "", at: 1, exact: [] }];
+    chat.tools.perm.refused = [...refused, r1];
     Chat.join(chat, b.sock);
     chat.tools.perm.refused = refused;
     Chat.change(chat);
     expect(states(a.got).slice(1)).toEqual([]);
     expect(states(b.got)).toEqual([states(a.got)[0], ["perm"]]);
     expect(b.got.at(-1).perm.refused).toEqual(refused);
+    chat.tools.perm.refused = [...refused];
+    Chat.change(chat);
+    chat.tools.perm.refused.push(r1);
+    Chat.change(chat);
+    expect([states(a.got).slice(1), states(b.got).slice(2)]).toEqual([[["perm"]], [["perm"]]]);
+    expect([held(a.got), held(b.got)]).toEqual([whole(), whole()]);
+    Chat.leave(chat, a.sock);
+    chat.tools.perm.refused = refused;
+    Chat.change(chat);
+    Chat.join(chat, a.sock);
+    expect(states(a.got).slice(2)).toEqual([states(a.got)[0]]);
+    expect(held(a.got)).toEqual(whole());
   } finally {
     chat.tools.perm.refused = refused;
     Chat.leave(chat, a.sock);
