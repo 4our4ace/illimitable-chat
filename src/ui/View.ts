@@ -8,7 +8,8 @@
 // work between the person's words and illi's (tool calls, their results,
 // thinking, the agents' reports: ACTIVITY) shows as one line per run
 // (an "Act" row: what was done, counted, keyed by its first message:
-// row_key), opened by a click or all at once (verbose: Ctrl+O; a click
+// row_key), its calls a line each under it while shut (act_calls: how
+// each ended), opened by a click or all at once (verbose: Ctrl+O; a click
 // then closes one alone), each message in an open one folded by a click
 // to a line (a "Fold" row, keyed: row_fold); while closed, what streams
 // of it shows only on the line over the input (Term.ts). A recap
@@ -37,6 +38,11 @@ export type Entry = { kind: Kind; text: string; date?: string; images?: string[]
 export type Node = { text: string; to: string };
 
 export type Live = { kind: Kind; text: string };
+
+// a run's tool call as its shut line lists it (view_acts): the call, and
+// how it ended: true done, false failed (its result FAILED), null not
+// known (stopped before its result, or summed up)
+export type Done = { call: Call.Call; ok: boolean | null };
 
 // log: null while it loads
 export type Page = { name: string; log: Entry[] | null; live: Live[] };
@@ -127,6 +133,9 @@ export type Option = { label: string; about: string };
 // then each query and what was said to it. The view shows them as the
 // user's, not as work (entry_rows)
 export const ANSWERED = "The user answered at illi's screen:\n";
+
+// how a failed call's result starts, as it is logged (Agent.ts, ClaudeCode.ts)
+export const FAILED = "error: ";
 
 // agents: those at work; agent: the main agent (null: illi's own);
 // vendors and models: those offered; use: what its calls use; todo:
@@ -256,7 +265,7 @@ export type Act =
 export type Row =
   | { $: "Sum"; id: number; n: number; text: string; call: Call.Call | null; kind: Kind | null }  // a block: nx, its summary (as written: drawn flat, Paint.ts; call: a tool call's, word for word; kind: its message's, of one known)
   | { $: "Box"; id: number; n: number; rows: Row[] }                                            // a block open: its rows (its bar Paint's: nx · /close #id)
-  | { $: "Act"; id: number; text: string; open: boolean; rows: Row[] }                         // a run of work (ACTIVITY), from message id: what was done, its rows if open
+  | { $: "Act"; id: number; text: string; open: boolean; rows: Row[]; calls: Done[] }          // a run of work (ACTIVITY), from message id: what was done, its rows if open, its calls (listed while shut)
   | { $: "Rule"; id: number; text: string; open: boolean; rows: Row[] }                        // a recap (/compact), message id: a line across the chat naming it, the recap's rows if open
   | { $: "Msg"; id: number | null; kind: Kind; who: string; text: string; body: Md.Block[]; call: Call.Call | null; images: string[]; after?: number; nth?: number } // a message whole: 0x (who: its speaker or "↳ result", named on its block; body: its blocks, none for illi's (drawn from its text); call: a tool call's, drawn as Call.ts reads it; after, nth: a thought's, the message it follows and which of its thoughts)
   | { $: "Fold"; key: string; text: string }                                                    // a message of an open run of work folded by a click (key: View.row_fold): one dim line saying what it is
@@ -608,11 +617,11 @@ export function view_acts(v: View, rows: Row[]): Row[] {
       last.rows.push(row);
     } else {
       const id = row_key(row);
-      out.push({ $: "Act", id, text: "", open: v.verbose !== v.acts.has(id), rows: [row] });
+      out.push({ $: "Act", id, text: "", open: v.verbose !== v.acts.has(id), rows: [row], calls: [] });
     }
   }
   const folded = (rows: Row[]) => rows.map((r) => row_folded(v, r));
-  return out.map((row) => (row.$ === "Act" ? { ...row, text: act_text(row.rows), rows: folded(row.rows) } : row.$ === "Rule" ? { ...row, rows: folded(row.rows) } : row));
+  return out.map((row) => (row.$ === "Act" ? { ...row, text: act_text(row.rows), rows: folded(row.rows), calls: act_calls(row.rows) } : row.$ === "Rule" ? { ...row, rows: folded(row.rows) } : row));
 }
 
 // a message's key as a click folds it in an open run: a logged one's
@@ -698,6 +707,20 @@ function act_text(rows: Row[]): string {
   const text  = parts.length > 0 ? parts.join(" · ") : results + (results === 1 ? " result" : " results");
   const named = did.length === 0 && !mind && who.size > 0;
   return named ? text : text[0].toUpperCase() + text.slice(1);
+}
+
+// a run's tool calls in order (those act_text counts), each with how it
+// ended: by the result logged right after it (Chat.on logs a call with
+// its result), failed if that says so (FAILED); none there (stopped
+// before it answered, summed up): not known
+function act_calls(rows: Row[]): Done[] {
+  const flat = rows.flatMap((r) => (r.$ === "Box" ? r.rows : [r]));
+  return flat.flatMap((r, k) => {
+    const call = r.$ === "Msg" || r.$ === "Sum" ? r.call : null;
+    const next = flat[k + 1];
+    const ok   = r.$ === "Msg" && next?.$ === "Msg" && next.kind === "echo" ? !next.text.startsWith(FAILED) : null;
+    return call === null || call.name === "" ? [] : [{ call, ok }];
+  });
 }
 
 // verbose (Ctrl+O): every run of work open, or none but those opened

@@ -196,7 +196,7 @@ export function term_form_lines(t: Term, w: number, max: number, tab?: number): 
   const bold   = { ...Paint.INK, b: true };
   const accent = { ...bold, c: Draw.draw_tokens().accent };
   const said   = (k: number) => f.each[k].picked.length > 0 || f.each[k].ed.text.trim() !== "";
-  const names  = [...q.queries.map((query, k) => (said(k) ? "✓ " : "") + Paint.text_clean(query.head)), "Review"];
+  const names  = [...q.queries.map((query, k) => (said(k) ? GLYPH.ok + " " : "") + Paint.text_clean(query.head)), "Review"];
   const tabs   = form_tabs(names.map((name, k) => Paint.Run(" " + name + " ", k === shown ? { ...bold, v: true } : k < q.queries.length && said(k) ? Paint.INK : Paint.DIM)), w);
   const keys   = (text: string) => Paint.runs_wrap([Paint.Run(text, Paint.DIM)], w, false);
   const plain  = (l: Paint.Line): [Paint.Line, null] => [l, null];

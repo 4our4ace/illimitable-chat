@@ -229,18 +229,18 @@ function term_side_mcp(t: Term): Item[] {
     const name = s.name + " ".repeat(wide - Paint.text_width(s.name));
     const n    = s.own.size;
     return s.state === "ready" ? [Paint.Run("● ", { ...Paint.INK, c: tone.success }), Paint.Run(name), Paint.Run("  " + n + (n === 1 ? " tool" : " tools"), Paint.DIM)]
-      : s.state === "failed" ? [Paint.Run("✗ ", red), Paint.Run(name, Paint.DIM), Paint.Run("  failed", { ...Paint.DIM, c: tone.error })]
+      : s.state === "failed" ? [Paint.Run(GLYPH.failed + " ", red), Paint.Run(name, Paint.DIM), Paint.Run("  failed", { ...Paint.DIM, c: tone.error })]
       : [Paint.Run("◌ " + name + "  starting", Paint.DIM)];
   };
-  const file = troubles.length === 0 ? [] : [[Paint.Run("✗ ", red), Paint.Run((troubles.length === 1 ? "an MCP file" : troubles.length + " MCP files") + " won't read", Paint.DIM)]];
+  const file = troubles.length === 0 ? [] : [[Paint.Run(GLYPH.failed + " ", red), Paint.Run((troubles.length === 1 ? "an MCP file" : troubles.length + " MCP files") + " won't read", Paint.DIM)]];
   return [...servers.map(line), ...file].map((l): Item => [l, () => term_mcp(t)]);
 }
 
 // the requests refused, the latest REFUSED, newest first, a line each:
-// ✗ (in the theme's error), what, why (dim); a click: /permissions on it
+// GLYPH.failed (in the theme's error), what, why (dim); a click: /permissions on it
 function term_side_refused(t: Term): Item[] {
   const red = { ...Paint.INK, c: Draw.draw_tokens().error };
-  return t.v.perm.refused.slice(-REFUSED).reverse().map((r): Item => [[Paint.Run("✗ ", red), Paint.Run(r.what.replace(/\s+/g, " ").trim() || r.tool, Paint.DIM), Paint.Run(" · " + r.why, Paint.DIM)], () => term_permissions(t, r.id)]);
+  return t.v.perm.refused.slice(-REFUSED).reverse().map((r): Item => [[Paint.Run(GLYPH.failed + " ", red), Paint.Run(r.what.replace(/\s+/g, " ").trim() || r.tool, Paint.DIM), Paint.Run(" · " + r.why, Paint.DIM)], () => term_permissions(t, r.id)]);
 }
 
 // each plugin's lines, w wide, a gap before each plugin's (its first line
@@ -323,7 +323,7 @@ function term_side_subs(t: Term): Item[] {
   const names = shown === null || t.subs.has(shown) ? [...t.subs] : [...t.subs, [shown, t.v.agents.includes(shown)] as [string, boolean]];
   const back  = shown === null ? [] : [[[Paint.Run("<- " + (t.v.agent ?? View.MAIN), Paint.DIM)], () => term_act(t, { $: "Goto", name: null })] as Item];
   const subs  = names.map(([name, working]): Item => [
-    [Paint.Run((working ? spin : "✓") + " ", working ? { ...Paint.INK, c, b: true } : { ...Paint.INK, c: Draw.draw_tokens().success }), Paint.Run(name, name === shown ? { ...Paint.INK, b: true } : working ? Paint.INK : Paint.DIM)],
+    [Paint.Run((working ? spin : GLYPH.ok) + " ", working ? { ...Paint.INK, c, b: true } : { ...Paint.INK, c: Draw.draw_tokens().success }), Paint.Run(name, name === shown ? { ...Paint.INK, b: true } : working ? Paint.INK : Paint.DIM)],
     () => term_act(t, { $: "Goto", name }),
   ]);
   return [...back, ...subs];

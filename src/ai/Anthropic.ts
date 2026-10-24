@@ -18,6 +18,7 @@ import { AskAI, type Ask, type Img, type Usage } from "./AskAI.ts";
 import { Agent, type Emit, type Entry, type Item, type Step, type Tool, type Use, type Wire } from "./Agent.ts";
 import { Pick } from "./Pick.ts";
 import * as config from "../config/Config.ts";
+import { FAILED } from "../ui/View.ts";
 
 // Types
 // =====
@@ -321,7 +322,13 @@ export namespace Anthropic {
     if (!b.type.endsWith("_tool_result")) {
       return null;
     }
-    return { kind: "echo", text: Anthropic.result(c) || "(no output)", of: b.tool_use_id };
+    return { kind: "echo", text: (Anthropic.failed(c) ? FAILED : "") + (Anthropic.result(c) || "(no output)"), of: b.tool_use_id };
+  }
+
+  // whether a server tool's result says it failed: an error in its place
+  // (web_search_tool_result_error, ...), or a command that exited non-zero
+  export function failed(c: any): boolean {
+    return String(c?.type).endsWith("_error") || (typeof c?.return_code === "number" && c.return_code !== 0);
   }
 
   // the text of a server tool's result. Every call gets one, even empty

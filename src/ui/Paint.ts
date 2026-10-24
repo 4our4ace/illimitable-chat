@@ -94,6 +94,9 @@ const GUTTER = 7;
 // the narrowest last line the mode shows on (tabs_mode)
 const MODE_ROOM = 50;
 
+// the most lines a shut run lists its calls on (act_calls)
+const CALLS = 6;
+
 const GRAPHEMES = new Intl.Segmenter("en", { granularity: "grapheme" });
 
 // each row's lines, at the width and look they were laid out at
@@ -481,12 +484,12 @@ function canvas_shade(hex: string): string {
 }
 
 // a run of work: one dim line saying what was done (after GLYPH.shut),
-// or opened (GLYPH.open) over its rows, a dim bar at their left, each
-// message marked (a click folds it to a line, and back); a click on the
-// line or the bar opens or closes the whole run. A recap so too, its
-// line a rule across the chat, its name in the middle. The glyph, the
-// label and the bar tagged, to light with the run (line_lit; a rule's
-// dashes never light)
+// its calls under it (act_calls), or opened (GLYPH.open) over its rows, a
+// dim bar at their left, each message marked (a click folds it to a line,
+// and back); a click on the line, a call's or the bar opens or closes the
+// whole run. A recap so too, its line a rule across the chat, its name in
+// the middle. The glyph, the label, the calls' words and the bar tagged,
+// to light with the run (line_lit; a rule's dashes never light)
 function act_lines(row: View.Row & { $: "Act" | "Rule" }, w: number, marks: Mark[], at: number): Line[] {
   const key   = mark_key(row)!;
   const glyph = Run((row.open ? Theme.GLYPH.open : Theme.GLYPH.shut) + " ", DIM, { key, as: "glyph" });
@@ -495,10 +498,31 @@ function act_lines(row: View.Row & { $: "Act" | "Rule" }, w: number, marks: Mark
   const line  = row.$ === "Rule" ? [Run("─".repeat(fill >> 1) + " ", DIM), glyph, label, Run(" " + "─".repeat(fill - (fill >> 1)), DIM)] : [glyph, label];
   const head  = runs_wrap(line, w, false)[0];
   if (!row.open) {
-    return [head];
+    return row.$ === "Act" ? [head, ...act_calls(row.calls, key, text_width(glyph.x), w)] : [head];
   }
   const bar   = Run("│ ", DIM, { key, as: "bar" });
   return [head, ...rows_lines(row.rows, w - 2, marks, at + 1, key, true).map((l) => [bar, ...l])];
+}
+
+// a shut run's calls, a line each under its head, from its words on
+// (lead: the glyph's width): how it ended (GLYPH.ok, dim; GLYPH.failed in
+// the error's color; not known: as wide, blank), its tool's name in bold
+// and the call on one line (Call.call_line), cut to the width. The last
+// CALLS at most, the rest counted on a line over them; its words tagged
+// as the run's label
+function act_calls(calls: View.Done[], key: string, lead: number, w: number): Line[] {
+  const tag  = { key, as: "label" } as const;
+  const pad  = Run(" ".repeat(lead));
+  const mark = Math.max(text_width(Theme.GLYPH.ok), text_width(Theme.GLYPH.failed));
+  const room = Math.max(1, w - lead);
+  const cut  = (l: Line) => (line_width(l) <= room ? l : [...line_cut(l, 0, room - 1)[1], Run("…", DIM, tag)]);
+  const more = calls.length > CALLS ? [[pad, ...cut([Run("… " + (calls.length - CALLS + 1) + " earlier", DIM, tag)])]] : [];
+  const shown = calls.slice(more.length === 0 ? 0 : -(CALLS - 1));
+  return [...more, ...shown.map(({ call, ok }) => {
+    const glyph = ok === null ? "" : ok ? Theme.GLYPH.ok : Theme.GLYPH.failed;
+    const sign  = Run(glyph + " ".repeat(mark - text_width(glyph) + 1), ok === false ? { ...INK, c: Draw.draw_tokens().error } : DIM);
+    return [pad, ...cut([sign, Run(text_clean(call.name) + " ", { ...DIM, b: true }, tag), Run(text_line(Call.call_line(call)), DIM, tag)])];
+  })];
 }
 
 // an open block: its rows framed, its bar on the top edge, tagged to
