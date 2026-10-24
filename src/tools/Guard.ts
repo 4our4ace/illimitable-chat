@@ -12,9 +12,14 @@
 //   auto       all runs but auto's flags (the default)
 //   yolo       all runs
 //
-// auto's flags: a file changed, deleted or moved outside the project
-// (placed as the system finds it: link/.. where the link leads, a glob's
-// matches, a cd behind builtin, command or time), or read there by a
+// careful's flags hold auto's, so each mode asks all a mode below it
+// does. Options are read as their command reads them where a check
+// needs it: in a cluster, a value glued, and for auto's checks a long
+// one cut short (sed -ne x, curl -sSLo x, git push --forc). auto's
+// flags: a file changed, deleted or moved outside the project (placed
+// as the system finds it: link/.. where the link leads, a glob's
+// matches, a cd behind builtin, command or time; a download named by its
+// URL, by its folder), or read there by a
 // command that may change things (a script, a build, a program illi
 // doesn't know), once per folder (a folder grant; scratch free, and for
 // a read the system's folders, the dependency caches and illi's
@@ -27,22 +32,26 @@
 // and their volumes (LVM's, ZFS's, diskutil's, dmsetup's), the system's
 // services and settings, power, every process stopped (kill -1), a
 // container given the whole computer or a folder outside; a secret,
-// through any tool (as in every mode but yolo); what deletes for good on
+// through any tool (as in every mode but yolo: an awk program's or a sed
+// script's files too, git credential fill); what deletes for good on
 // another computer (a push that rewrites or deletes the remote's
-// history: --force, +ref, --delete, :ref, --mirror, --prune; a
+// history: --force, +ref, --delete, :ref, --mirror, --prune, a long
+// option however cut short; git config that makes a plain push do so,
+// remote.x.mirror, remote.x.push, an alias of one, remote add --mirror; a
 // repository, release or package deleted: gh repo delete, npm unpublish;
 // cloud resources and infrastructure deleted: aws s3 rm, kubectl delete,
 // terraform destroy) and what makes git run a program (its hooks and
 // config written, through any tool; git config's keys that name one,
-// core.hooksPath, credential.helper, an alias of !...; git -c's), each
-// granted only exactly; Claude Code's settings (a .claude folder's at any
-// depth, home's, a .claude folder moved, copied or linked into place, or
+// core.hooksPath, credential.helper, an alias of !...; git -c's, and
+// the environment's: GIT_CONFIG_KEY_n, GIT_CONFIG_GLOBAL), each granted
+// only exactly; Claude Code's settings (a .claude folder's at any depth,
+// home's, a .claude folder moved, copied or linked into place, or
 // deleted) and illi's own config; a command named only as it runs, and
 // what Shell.ts can't read. Other reads outside the project run (cat,
 // grep, find, the read tool), as the network, plain pushes and deploys,
 // inline code (but naming a secret), project scripts, MCP tools and the
-// rest in the project do. Besides, in auto, Tools.ts's loop guard asks
-// the same call made a third time in a row in a turn.
+// rest in the project do. Besides, in every mode but yolo, Tools.ts's
+// loop guard asks the same call made a third time in a row in a turn.
 //
 // careful's, the long list: the danger list (root, deleting trees,
 // wiping disks, losing git work, sending data off, connecting out,
@@ -53,8 +62,9 @@
 // secrets anywhere, protected files inside, devices and network
 // sockets); what is known only as the command runs (a variable, a
 // command's output, a folder after a cd to one, a glob as a command's
-// name); a program, script or makefile from outside the project, a
-// project tool run outside it; what Shell.ts can't read. Whatever these
+// name); a program, script, awk program or makefile from outside the
+// project, an awk library loaded, a project tool run outside it; what
+// Shell.ts can't read. Whatever these
 // checks can't be sure of is asked, never run silently.
 //
 // Before the mode, the user's rules (Rules: allow, ask or deny, by
@@ -63,9 +73,10 @@
 // ("don't ask again" answers, kept by the caller) clear flags: an exact
 // one (kind=subject) any flag of that very call, a pattern (kind:pattern)
 // only flags that offer one (a family of commands, a folder, an MCP
-// tool); danger, secrets and protected files clear only exactly, and
-// inline code offers none. A change to illi's own config is asked in
-// every mode, yolo too.
+// tool); danger, secrets (a folder holding a secret store too) and
+// protected files clear only exactly, and inline code offers none. A
+// folder grant's own * is kept as one (\*). A change to illi's own
+// config is asked in every mode, yolo too.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -111,9 +122,9 @@ export type Verdict =
 
 // the modes that ask a flag: every one, yolo too (self: a change to
 // illi's own config); every one but yolo (all: what auto asks); careful,
-// ask and read-only (careful: the long list); auto alone (auto: what
-// careful asks another way)
-type Tier = "self" | "all" | "careful" | "auto";
+// ask and read-only (careful: the long list). Each tier's modes hold the
+// next one's, so careful asks all auto asks, and auto all yolo asks
+type Tier = "self" | "all" | "careful";
 
 // a reason to ask: why; what an exact grant names (kind=subject); what a
 // pattern grant may clear it for (its kind and subject, the pattern a
@@ -388,6 +399,22 @@ const GIT_SUB_VALUED: Record<string, RegExp> = {
   notes    : /^(-m|--message|-F|--file|-c|-C|--reuse-message|--reedit-message|--ref)$/,
 };
 const GIT_MESSAGES = /^(-F|--file|-t|--template)$/;
+
+// the long options of git's subcommands its checks read, by subcommand
+// (config's every one), as git takes any start of one (whole: git
+// config --fil x is --file x)
+const GIT_LONG: Record<string, string[]> = {
+  config : [
+    "--global", "--system", "--local", "--worktree", "--file", "--blob", "--get", "--get-all", "--get-regexp", "--get-urlmatch", "--replace-all",
+    "--add", "--unset", "--unset-all", "--rename-section", "--remove-section", "--list", "--fixed-value", "--edit", "--type", "--bool", "--int",
+    "--bool-or-int", "--bool-or-str", "--path", "--expiry-date", "--no-type", "--null", "--name-only", "--includes", "--no-includes",
+    "--show-origin", "--show-scope", "--default", "--comment", "--value", "--all", "--regexp", "--url",
+  ],
+  commit : ["--file", "--template", "--message"],
+  tag    : ["--file", "--message"],
+  merge  : ["--file", "--message"],
+  notes  : ["--file", "--message"],
+};
 const GIT_VALUED = /^(-C|-c|--git-dir|--work-tree|--namespace|--config-env|--attr-source|--shallow-file)$/;
 const PUSH_VALUED = /^(-o|--push-option|--repo|--receive-pack|--exec)$/;
 
@@ -510,7 +537,7 @@ export namespace Guard {
       return grant;
     }
     const [, kind, how, what] = m;
-    const folder = how === ":" && what.endsWith("/*") ? shown(what.slice(0, -2), top) : null;
+    const folder = how === ":" && what.endsWith("/*") ? shown(what.slice(0, -2).replace(/\\\*/g, "*"), top) : null;
     if (kind === "shell" || kind === "mcp") {
       return what;
     }
@@ -578,7 +605,7 @@ function verdict(where: Where, look: Look): Verdict {
 
 // whether a mode asks a flag of a tier
 function asked(mode: Mode, tier: Tier): boolean {
-  return tier === "self" || (mode !== "yolo" && (tier === "all" || (tier === "auto") === (mode === "auto")));
+  return tier === "self" || (mode !== "yolo" && (tier === "all" || mode !== "auto"));
 }
 
 // whether a grant clears a flag: an exact one of its very call, or a
@@ -642,15 +669,17 @@ function look_shell(where: Where, look: Look, command: string): void {
 // redirections write), then each value its command's name can take (a
 // loop's), its redirections, assignments and files (what a command that
 // may change things reads may be what it writes: use_look), and the
-// folder it runs in: a secret store (cd ~/.ssh && ls), and, in auto, one
-// outside the project read by a command that may change things (cd ~/x
-// && npm test runs that folder's code) or one holding a secret store
-// read by any (said only if nothing else is). An exact grant names
-// the part as it runs (Guard.norm: git push --force, and the folder a cd
-// moved it to), but one whose input comes from elsewhere (a pipe, xargs,
-// a file or heredoc read in), whose words expand as it runs ($x, $(...),
-// <(...)) or whose folder is known only then names the whole command:
-// `sh` alone would let any code piped into it run, `rm -rf $x` any folder
+// folder it runs in: a secret store (cd ~/.ssh && ls), one outside the
+// project read by a command that may change things (cd ~/x && npm test
+// runs that folder's code) or one holding a secret store read by any
+// (said only if nothing else is). An exact grant names the part as it
+// runs (Guard.norm: git push --force, and the folder a cd moved it to),
+// but one whose input comes from elsewhere (a pipe, xargs, a file or
+// heredoc read in), whose words expand as it runs ($x, $(...), <(...))
+// or whose folder is known only then names the whole command: `sh` alone
+// would let any code piped into it run, `rm -rf $x` any folder. ask
+// mode's family grant covers the part alone (cat * covers no tee piped
+// after it)
 function look_part(where: Where, look: Look, part: Part, depth: number): void {
   const words = [...part.argv, ...part.env.map((e) => e.value), ...part.redirs.map((r) => r.target)];
   const whole = part.piped || part.fed || part.cwd === null || part.redirs.some((r) => r.op.startsWith("<")) || words.some((w) => w.dynamic || w.fd || /[$`]/.test(w.raw));
@@ -695,11 +724,11 @@ function look_part(where: Where, look: Look, part: Part, depth: number): void {
   }
   if (head !== undefined && own && part.cwd !== null && !look.flags.slice(before).some((f) => f.tier === "all")) {
     const dir = real(part.cwd);
-    path_why(where, dir, false, acts, true).filter((r) => r.tier !== "careful").forEach((r) => flag(r.why, r.wide ? folder_wide("read", dir) : null, r.wide ? "auto" : r.tier));
+    path_why(where, dir, false, acts, true).filter((r) => r.tier !== "careful").forEach((r) => flag(r.why, r.wide ? folder_wide("read", dir) : null, r.tier));
   }
   if (acts || writes) {
     const pattern = "shell:" + prefix(part);
-    look.changes.push({ why: where.mode === "read-only" ? clip(plain) + " may change things" : "ask mode asks before " + clip(plain), kind: "shell", subject: exact, wide: where.mode === "ask" ? { kind: "shell", subject: exact, grant: pattern } : null, tier: "careful" });
+    look.changes.push({ why: where.mode === "read-only" ? clip(plain) + " may change things" : "ask mode asks before " + clip(plain), kind: "shell", subject: exact, wide: where.mode === "ask" ? { kind: "shell", subject: bare, grant: pattern } : null, tier: "careful" });
   }
 }
 
@@ -716,10 +745,36 @@ function by_name(part: Part): string[] {
 }
 
 // an assignment that changes what runs (PATH, LD_PRELOAD, a pager that
-// isn't one): flagged
-function env_flag(name: string, value: Word, flag: (why: string) => void): void {
+// isn't one): flagged; one that sets git config, judged as git -c's
+// (git_env)
+function env_flag(name: string, value: Word, flag: Flagger): void {
   if (RUNS.test(name) && !(/^(EDITOR|VISUAL|PAGER|GIT_PAGER|MANPAGER)$/.test(name) && !value.dynamic && value.alts.every((a) => QUIET.has(a)))) {
     flag("it sets " + name + ", which changes what runs");
+  }
+  git_env(name, value, flag);
+}
+
+// git config the environment sets, judged as git -c's (git_set): a key
+// of GIT_CONFIG_KEY_n (its value, GIT_CONFIG_VALUE_n's, taken as one
+// that may run a program), GIT_CONFIG_PARAMETERS' 'key'='value' pairs
+// ('key=value', git's older way);
+// or config read from another file (GIT_CONFIG, GIT_CONFIG_GLOBAL,
+// GIT_CONFIG_SYSTEM, but /dev/null), which can make git run a program
+function git_env(name: string, value: Word, flag: Flagger): void {
+  const text = clip(name + "=" + value.raw);
+  if (/^GIT_CONFIG_KEY_\d+$/.test(name)) {
+    (value.dynamic ? [null] : value.alts).forEach((key) => git_set(key, null, text, flag));
+  } else if (name === "GIT_CONFIG_PARAMETERS") {
+    const pairs = value.dynamic ? [] : value.alts.flatMap((v) => [...v.matchAll(/'([^']*)'(?:=(?:'([^']*)'|(\S*)))?/g)]);
+    for (const [, key, quoted, bare] of pairs) {
+      const [v, at] = [quoted ?? bare, key.indexOf("=")];
+      git_set(v === undefined && at >= 0 ? key.slice(0, at) : key, v ?? (at >= 0 ? key.slice(at + 1) : "true"), text, flag);
+    }
+    if (value.dynamic) {
+      git_set(null, null, text, flag);
+    }
+  } else if (/^GIT_CONFIG(_GLOBAL|_SYSTEM)?$/.test(name) && (value.dynamic || value.alts.some((v) => v !== "/dev/null"))) {
+    flag(text + " makes git read config from another file, which can run a program", null, "all");
   }
 }
 
@@ -862,7 +917,7 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
       if (base === "shred") {
         flag(text + " destroys files for good");
       }
-      if (base === "rm" && (short("r") || short("R") || has("--recursive"))) {
+      if (base === "rm" && (short("r") || short("R") || xs.some((x) => cut_short(x, "--recursive")))) {
         const targets = pos.flatMap((w) => named(w, part.cwd, true) ?? [null]);
         const vital = targets.find((f) => f !== null && vital_of(where, f));
         if (vital !== undefined) {
@@ -894,7 +949,7 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
     case "chown":
     case "chgrp": {
       args_use(args, true, use);
-      if (short("R") || has("--recursive")) {
+      if (short("R") || xs.some((x) => cut_short(x, "--recursive"))) {
         flag(text + " changes the permissions of a whole tree");
       }
       return true;
@@ -1068,8 +1123,10 @@ function command_danger(where: Where, look: Look, part: Part, base: string, args
 
 // git: its own options (-C, -c, --git-dir: GIT_VALUED, their values
 // skipped; -c's key and --exec-path's folder, and a remote's program
-// given, --upload-pack, asked in auto too, as git config's), the
-// subcommand's danger, and whether it only reads; its files (written,
+// given, --upload-pack however cut short, asked in auto too, as git
+// config's), the subcommand's danger (in auto too: a stored login
+// printed, credential fill; a remote added as a push mirror), and
+// whether it only reads; its files (written,
 // but those it stages), its positional words as the subcommand takes
 // them (GIT_FILES, GIT_REFS: a branch or tag named token-x is no file),
 // but one known only as it runs: a revision (git diff $(git merge-base
@@ -1105,7 +1162,7 @@ function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => vo
     }
   }
   const sub = args[k]?.dynamic ? "" : args[k]?.alts[0] ?? "";
-  const rest = args.slice(k + 1);
+  const rest = args.slice(k + 1).map((w) => whole(w, GIT_LONG[sub] ?? []));
   const xs = rest.map((a) => (a.dynamic ? "" : a.alts[0]));
   const has = (...names: string[]) => xs.some((x) => names.includes(x) || names.some((n) => n.startsWith("--") && x.startsWith(n + "=")));
   const short = (c: string) => xs.some((x) => /^-[a-zA-Z]+$/.test(x) && x.includes(c));
@@ -1164,6 +1221,15 @@ function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => vo
     }
     case "remote": {
       read = pos.length === 0 || first === "show" || first === "get-url";
+      if (first === "add" && xs.some((x) => cut_short(x, "--mirror") && !x.endsWith("=fetch"))) {
+        flag(text + " makes a plain git push delete what only the remote has", null, "all");
+      }
+      break;
+    }
+    case "credential": {
+      if (first === "fill") {
+        flag(text + " prints a stored login: its output may hold secrets", null, "all");
+      }
       break;
     }
     case "config": {
@@ -1257,7 +1323,11 @@ function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => vo
       break;
     }
   }
-  if (has("--upload-pack", "--receive-pack", "--exec") || ((sub === "clone" || sub === "ls-remote") && (has("-u") || xs.some((x) => /^-u./.test(x))))) {
+  if (/^credential-/.test(sub) && first === "get") {
+    flag(text + " prints a stored login: its output may hold secrets", null, "all");
+  }
+  const remote = /^(push|fetch|pull|clone|ls-remote|archive)$/.test(sub) && xs.some((x) => cut_short(x, "--upload-pack", "--receive-pack", "--exec"));
+  if (remote || has("--upload-pack", "--receive-pack", "--exec") || ((sub === "clone" || sub === "ls-remote") && (has("-u") || xs.some((x) => /^-u./.test(x))))) {
     flag(text + " runs a program it's given", null, "all");
   }
   const o = sub === "format-patch" || sub === "archive";
@@ -1275,30 +1345,45 @@ function git_look(part: Part, args: Word[], use: (w: Word, write: boolean) => vo
   return !read || outs.length > 0;
 }
 
-// git push: what it deletes for good on the remote, each by every value
-// its words can take (asked in every mode but yolo, exactly): its history
-// rewritten (--force, -f in a cluster, --force-with-lease, a +ref; and
-// --force-if-includes, only with one of those), its refs deleted
-// (--delete, -d, an empty source :ref), mirrored or pruned (--mirror,
-// --prune); else, or as a dry run (a word that is one in each value), it
-// sends commits (git push *). A ref or option known only as it runs, or
-// from xargs, is taken as plain
+// git push: what it deletes for good on the remote (asked in every mode
+// but yolo, exactly); else it sends commits (git push *)
 function push_look(rest: Word[], text: string, flag: Flagger, exact: string): void {
-  const vals = rest.flatMap((a) => (a.dynamic ? [] : a.alts));
-  const any = (re: RegExp) => vals.some((x) => re.test(x));
-  const refs = positional(rest, PUSH_VALUED).slice(1).flatMap((w) => (w.dynamic ? [] : w.alts));
-  const deletes = any(/^(--delete|-[a-zA-Z]*d[a-zA-Z]*)$/);
-  const gone = deletes ? refs : refs.filter((r) => /^:./.test(r)).map((r) => r.slice(1));
-  const dry = rest.some((a) => !a.dynamic && a.alts.every((x) => /^(--dry-run|-[a-zA-Z]*n[a-zA-Z]*)$/.test(x)));
-  const lost = dry ? [] : [
-    ...(any(/^--mirror$/) ? [" rewrites the remote's history and deletes what only it has"] : any(/^(--force|--force-with-lease(=.*)?|-[a-zA-Z]*f[a-zA-Z]*)$/) || refs.some((r) => r.startsWith("+")) ? [" rewrites the remote's history"] : []),
-    ...(deletes || gone.length > 0 ? [" deletes " + (gone.join(" ") || "what it names") + " on the remote"] : []),
-    ...(any(/^--prune$/) ? [" deletes the remote's branches this repository doesn't have"] : []),
-  ];
+  const lost = push_lost(rest);
   lost.forEach((why) => flag(text + why, null, "all"));
   if (lost.length === 0) {
     flag(text + " sends commits to a remote", { kind: "shell", subject: exact, grant: "shell:git push *" });
   }
+}
+
+// what a push's words delete for good on the remote, each by every value
+// they can take: its history rewritten (--force, -f, --force-with-lease,
+// a +ref; and --force-if-includes, only with one of those), its refs
+// deleted (--delete, -d, an empty source :ref), mirrored or pruned
+// (--mirror, --prune); none as a dry run (--dry-run or -n, in each value
+// of a word that is no option's value, and no --no-dry-run). Its options
+// as git takes them, before --: a long one by any start of its name (git
+// refuses one that could be two: --forc, --mirr are these), a cluster's
+// letters up to -o (the rest, or the next word, its value), the next word
+// after one taking it (-o -n is no dry run). A ref or option known only
+// as it runs, or from xargs, is taken as plain
+function push_lost(rest: Word[]): string[] {
+  const end = rest.findIndex((a) => !a.dynamic && a.alts[0] === "--");
+  const opts = (end < 0 ? rest : rest.slice(0, end)).map((a) => (a.dynamic ? [] : a.alts.filter((x) => x.startsWith("-"))));
+  const letters = (x: string) => (/^-[^-]/.test(x) ? x.slice(1).split("o")[0] : "");
+  const any = (is: (x: string) => boolean) => opts.some((alts) => alts.some(is));
+  const valued = (x: string) => /^-[^-]*o$/.test(x) || (!x.includes("=") && cut_short(x, "--push-option", "--repo", "--receive-pack", "--exec", "--recurse-submodules"));
+  const refs = positional(rest, PUSH_VALUED).slice(1).flatMap((w) => (w.dynamic ? [] : w.alts));
+  const deletes = any((x) => cut_short(x, "--delete") || letters(x).includes("d"));
+  const gone = deletes ? refs : refs.filter((r) => /^:./.test(r)).map((r) => r.slice(1));
+  const dry = opts.some((alts, k) => alts.length > 0 && alts.length === rest[k].alts.length && !opts[k - 1]?.some(valued) && alts.every((x) => x === "--dry-run" || letters(x).includes("n")));
+  if (dry && !any((x) => /^--no-d/.test(x) && cut_short(x, "--no-dry-run"))) {
+    return [];
+  }
+  return [
+    ...(any((x) => cut_short(x, "--mirror")) ? [" rewrites the remote's history and deletes what only it has"] : any((x) => cut_short(x, "--force", "--force-with-lease") || letters(x).includes("f")) || refs.some((r) => r.startsWith("+")) ? [" rewrites the remote's history"] : []),
+    ...(deletes || gone.length > 0 ? [" deletes " + (gone.join(" ") || "what it names") + " on the remote"] : []),
+    ...(any((x) => cut_short(x, "--prune")) ? [" deletes the remote's branches this repository doesn't have"] : []),
+  ];
 }
 
 // git config: whether it writes; each key it sets judged (git_set) with
@@ -1333,8 +1418,11 @@ function config_look(rest: Word[], text: string, flag: Flagger): boolean {
 // submodule's update of !...), in every mode but yolo, but if its value
 // runs nothing (a pager or editor of QUIET's, as env_flag's; a yes or
 // no; /dev/null; none of these as a path: a hook folder named true);
-// careful's others (GIT_RUNS); a key known only as it runs, as one that
-// makes git run a program
+// one that makes a plain push delete for good on the remote, as push's
+// own words would (a remote mirrored, unless false; its push refspec
+// forced or deleting, +x or :x; an alias of such a push), in every mode
+// but yolo; careful's others (GIT_RUNS); a key known only as it runs, as
+// one that makes git run a program
 function git_set(key: string | null, value: string | null, text: string, flag: Flagger): void {
   if (key === null) {
     flag(text + " may set git config that makes git run a program", null, "all");
@@ -1342,6 +1430,15 @@ function git_set(key: string | null, value: string | null, text: string, flag: F
   }
   const quiet = value !== null && (value === "/dev/null" || (!/path$/i.test(key) && (QUIET.has(value) || /^(true|false|yes|no|on|off|[01])$/i.test(value))));
   const bang = /^(alias\..+|submodule\..+\.update)$/i.test(key) && (value === null || value.startsWith("!"));
+  const words = value === null ? [] : value.trim().split(/\s+/);
+  const push = /^alias\./i.test(key) && !bang && words.includes("push") ? push_lost(words.slice(words.indexOf("push") + 1).map(Shell.lit)) : [];
+  if (/^remote\..+\.mirror$/i.test(key) && (value === null || !/^(false|no|off|0|)$/i.test(value))) {
+    flag(key + " makes a plain git push delete what only the remote has", null, "all");
+  } else if (/^remote\..+\.push$/i.test(key) && (value === null || /^[+:]/.test(value.trim()))) {
+    flag(key + " makes a plain git push rewrite or delete the remote's history", null, "all");
+  } else if (push.length > 0) {
+    flag(key + " is a push that" + push[0], null, "all");
+  }
   if (GIT_PROGRAMS.test(key) || bang) {
     if (!quiet) {
       flag(key + (/^include/i.test(key) ? " makes git read config from another file, which can run a program" : " makes git run a program"), null, "all");
@@ -1352,49 +1449,77 @@ function git_set(key: string | null, value: string | null, text: string, flag: F
 }
 
 // curl and wget: data sent to a host that isn't this computer flagged;
-// files they write (-o, -O, --output-dir, a cookie jar) and read (-T,
-// -d @file, -K) are its files; a plain fetch only reads (curl's)
+// files they write (-o, -O, --output-dir, a cookie jar; wget's by
+// default and curl -O's, named by the URL: their folder) and read (-T,
+// -d @file, -K) are its files; a plain fetch only reads (curl's). Their
+// options as each takes them: a short one's value glued or the next
+// word, in a cluster too (-ofile, -sSLo file), a long one's by = or the
+// next word, cut short (--out); wget's -e runs a .wgetrc command, judged
+// as the option it sets (-e output_document=x as -O x)
 function net_look(part: Part, base: string, args: Word[], use: (w: Word, write: boolean) => void, flag: (why: string) => void): boolean {
   const text = clip(part.text);
-  const SENDS = base === "curl" ? /^(-d|--data.*|-F|--form.*|-T|--upload-file|--json)$/ : /^(--post-data|--post-file|--body-data|--body-file|--method)$/;
-  const WRITES = base === "curl" ? /^(-o|--output|--output-dir|-c|--cookie-jar|-D|--dump-header|--trace|--trace-ascii|--stderr)$/ : /^(-O|--output-document|-P|--directory-prefix|-o|--output-file|-a|--append-output)$/;
-  const READS_ = base === "curl" ? /^(-K|--config|-T|--upload-file|-b|--cookie)$/ : /^(-i|--input-file|--post-file|--body-file|--load-cookies)$/;
-  const VALUED = base === "curl" ? /^(-[A-Za-z]|--[a-z-]+)$/ : /^-[A-Za-z]$/;
+  const curl = base === "curl";
+  const SENDS = curl ? /^(-d|--data.*|-F|--form.*|-T|--upload-file|--json)$/ : /^(--post-data|--post-file|--body-data|--body-file|--method)$/;
+  const WRITES = curl ? /^(-o|--output|--output-dir|-c|--cookie-jar|-D|--dump-header|--trace|--trace-ascii|--stderr)$/ : /^(-O|--output-document|-P|--directory-prefix|-o|--output-file|-a|--append-output|--save-cookies|--warc-file|--rejected-log)$/;
+  const READS_ = curl ? /^(-K|--config|-T|--upload-file|-b|--cookie)$/ : /^(-i|--input-file|--post-file|--body-file|--load-cookies|--config)$/;
+  const SHORT = curl ? "AbcCdDeEFHKmoPQrtTuUwxXyYz" : "aABDeiIloOPQRtTUwX";
+  const LONG = curl
+    ? ["--data", "--data-ascii", "--data-binary", "--data-raw", "--data-urlencode", "--form", "--form-string", "--upload-file", "--json", "--output", "--output-dir", "--cookie", "--cookie-jar", "--dump-header", "--trace", "--trace-ascii", "--stderr", "--config", "--request", "--header", "--user", "--user-agent", "--proxy", "--max-time", "--url", "--referer", "--write-out"]
+    : ["--output-document", "--directory-prefix", "--output-file", "--append-output", "--input-file", "--post-data", "--post-file", "--body-data", "--body-file", "--method", "--load-cookies", "--save-cookies", "--warc-file", "--rejected-log", "--config", "--execute", "--header", "--user", "--user-agent", "--password", "--tries", "--timeout", "--wait", "--level", "--accept", "--reject", "--domains", "--base", "--referer", "--quota", "--limit-rate"];
+  const FLAGS = curl ? ["--head", "--remote-name", "--remote-name-all", "--remote-header-name"] : [];
+  const RC: Record<string, string> = { outputdocument: "-O", dirprefix: "-P", logfile: "-o", input: "-i", postfile: "--post-file", bodyfile: "--body-file", postdata: "--post-data", bodydata: "--body-data", method: "--method", loadcookies: "--load-cookies", savecookies: "--save-cookies", warcfile: "--warc-file", rejectedlog: "--rejected-log" };
   let sends = false;
-  let writes = base === "wget";
+  let named = !curl;
+  let writes = !curl;
   const urls: string[] = [];
+  const dirs: Word[] = [];
   for (let k = 0; k < args.length; k++) {
     const a = args[k];
     const x = a.dynamic ? "" : a.alts[0];
-    const eq = x.startsWith("--") ? x.indexOf("=") : -1;
-    const opt = eq > 0 ? x.slice(0, eq) : x;
-    const value = eq > 0 ? Shell.cut(a, eq + 1) : null;
     if (!x.startsWith("-") || x === "-") {
       urls.push(x);
       continue;
     }
-    sends ||= SENDS.test(opt) || ((opt === "-X" || opt === "--request") && /^(POST|PUT|PATCH|DELETE)$/i.test(value?.alts[0] ?? args[k + 1]?.alts[0] ?? ""));
-    const takes = WRITES.test(opt) || READS_.test(opt) || SENDS.test(opt) || (opt === "-X" || opt === "--request" || opt === "-H" || opt === "--header" || opt === "-u" || opt === "--user" || opt === "-A" || opt === "-e" || opt === "-x" || opt === "--proxy" || opt === "-w" || opt === "-m" || opt === "--max-time" || opt === "--url");
-    const v = value ?? (takes && VALUED.test(opt) ? args[++k] : undefined);
+    const long = x.startsWith("--");
+    const eq = long ? x.indexOf("=") : -1;
+    const given = eq > 0 ? x.slice(0, eq) : x;
+    const at = long ? 0 : [...x.slice(1)].findIndex((c) => SHORT.includes(c)) + 1;
+    const letters = long ? "" : x.slice(1, at > 0 ? at : x.length);
+    let opt = long ? ([...LONG, ...FLAGS].includes(given) ? given : [...LONG, ...FLAGS].find((n) => n.startsWith(given)) ?? given) : at > 0 ? "-" + x[at] : x;
+    let v = eq > 0 ? Shell.cut(a, eq + 1) : at > 0 && at + 1 < x.length ? Shell.cut(a, at + 1) : (long ? LONG.includes(opt) : at > 0) ? args[++k] : undefined;
+    if (!curl && (opt === "-e" || opt === "--execute") && v !== undefined && !v.dynamic) {
+      const m = /^\s*([\w-]+)\s*=\s*/.exec(v.alts[0]);
+      const set = m === null ? undefined : RC[m[1].replace(/[-_]/g, "").toLowerCase()];
+      [opt, v] = m === null || set === undefined ? [opt, v] : [set, Shell.cut(v, m[0].length)];
+    }
+    if (curl && (/[OJ]/.test(letters) || /^--remote-(name|name-all|header-name)$/.test(opt))) {
+      [named, writes] = [true, true];
+    }
+    sends ||= SENDS.test(opt) || ((opt === "-X" || opt === "--request") && /^(POST|PUT|PATCH|DELETE)$/i.test(v?.alts[0] ?? ""));
     if (v === undefined) {
       continue;
     }
     if (opt === "--url") {
       urls.push(v.alts[0]);
-    } else if (WRITES.test(opt) && !(base === "wget" && v.alts[0] === "-")) {
+    } else if (WRITES.test(opt) && (curl || v.alts[0] !== "-")) {
       use(v, true);
       writes = true;
+      named &&= !/^(-O|--output-document)$/.test(opt);
+      dirs.push(...(/^(-P|--directory-prefix|--output-dir)$/.test(opt) ? [v] : []));
     } else if (READS_.test(opt) || /^@/.test(v.alts[0])) {
       use(/^@/.test(v.alts[0]) ? Shell.cut(v, 1) : v, false);
-    } else if (base === "wget" && (opt === "-O" || opt === "--output-document") && v.alts[0] === "-") {
-      writes = false;
+    } else if (!curl && (opt === "-O" || opt === "--output-document")) {
+      [named, writes] = [false, false];
     }
+  }
+  if (named && writes && dirs.length === 0) {
+    use(Shell.lit("."), true);
   }
   const local = urls.length > 0 && urls.every((u) => /^(https?:\/\/)?(localhost|127\.\d+\.\d+\.\d+|\[::1\]|0\.0\.0\.0)(:\d+)?(\/|$)/.test(u));
   if (sends && !local) {
     flag(text + " sends data off this computer");
   }
-  return writes || (base === "curl" && args.some((a) => a.alts[0] === "-O" || a.alts[0] === "--remote-name"));
+  return writes;
 }
 
 // a shell, an interpreter, source: its inline code (naming what can run,
@@ -1410,8 +1535,8 @@ function runner_look(where: Where, look: Look, part: Part, base: string, args: W
     if (SHELLS.has(base) || inline.some((w) => w.dynamic || risky(base, w.alts.join("\n")))) {
       flag(text + " runs code illi can't check", null, "careful", true);
     }
-    if (!SHELLS.has(base) && inline.some((w) => SECRET_CODE.test(w.alts.join("\n")))) {
-      flag(text + " names a file that may hold secrets", null, "all", true);
+    if (!SHELLS.has(base)) {
+      code_secret(text, inline.map((w) => w.alts.join("\n")).join("\n"), flag);
     }
     const inplace = /^(perl|ruby)/.test(base) && args.some((a) => !a.dynamic && /^-[A-Za-z]*i/.test(a.alts[0]));
     positional(args).filter((w) => !inline.includes(w)).forEach((w) => use(w, inplace));
@@ -1485,7 +1610,17 @@ function stdin_look(where: Where, look: Look, part: Part, base: string, r: Redir
   } else if (!INTERPS.test(base) || risky(base, r.body)) {
     flag(text + " runs code illi can't check", null, "careful", true);
   }
-  if (r.made !== true && INTERPS.test(base) && SECRET_CODE.test(r.body)) {
+  if (r.made !== true && INTERPS.test(base)) {
+    code_secret(text, r.body, flag);
+  }
+}
+
+// inline code that names a secret (SECRET_CODE: an interpreter's, an awk
+// program's strings, a sed script's shell command): asked in every mode
+// but yolo, as reading it any other way is, with no "don't ask again"
+// (once)
+function code_secret(text: string, code: string, flag: Flagger): void {
+  if (SECRET_CODE.test(code)) {
     flag(text + " names a file that may hold secrets", null, "all", true);
   }
 }
@@ -1741,15 +1876,19 @@ function ln_use(args: Word[], pos: Word[], into: Word | null, cwd: string | null
 }
 
 // a copier's folder named by -t (cp -t dir a b, -rt dir, -tdir,
-// --target-directory=dir), or null; a cluster's letters before its t
-// take no value (not install's -o, -g, -m, nor cp's -S)
+// --target-directory=dir, --target dir: cut short), or null; a
+// cluster's letters before its t take no value (not install's -o, -g,
+// -m, nor cp's -S)
 function copier_into(args: Word[]): Word | null {
   for (let k = 0; k < args.length; k++) {
     const x = args[k].dynamic ? "" : args[k].alts[0];
     if (x === "--") {
       break;
     }
-    const m = /^(?:--target-directory=?|-(?:(?![ogmS])[A-Za-z])*?t)(.*)$/s.exec(x);
+    if (cut_short(x, "--target-directory")) {
+      return x.includes("=") ? Shell.cut(args[k], x.indexOf("=") + 1) : args[k + 1] ?? null;
+    }
+    const m = /^-(?:(?![ogmS])[A-Za-z])*?t(.*)$/s.exec(x);
     if (m !== null) {
       return m[1] !== "" ? Shell.cut(args[k], x.length - m[1].length) : args[k + 1] ?? null;
     }
@@ -1795,7 +1934,16 @@ function search_use(name: string, args: Word[], use: (w: Word, write: boolean) =
 }
 
 // find, fd, sed, sort, awk: read-only unless an option or a script makes
-// them write or run things
+// them write or run things. A script's own files are judged as any
+// command's (sed's r, w, s///w; awk's -i inplace edits its files, -o and
+// -p write theirs); its code naming a secret, as an interpreter's
+// (code_secret: sed's e; an awk program's strings, if it may open a file:
+// getline < ".env"; /\.env/ opens none), and an assignment's value (-v
+// f=.env, f=.env; F=.env before it, if it reads ENVIRON) a file the
+// program may open, judged for secrets alone if there is one (-v sep=/,
+// -v key=token name none). careful asks a
+// script it can't check (sed's but its safe grammar, an awk program that
+// runs or writes, one from outside the project, a library loaded)
 function reader_look(where: Where, part: Part, base: string, args: Word[], use: (w: Word, write: boolean) => void, flag: Flagger): boolean {
   const text = clip(part.text);
   const xs = args.map((a) => (a.dynamic ? "" : a.alts[0]));
@@ -1831,39 +1979,165 @@ function reader_look(where: Where, part: Part, base: string, args: Word[], use: 
       return xs.some((x) => /^(-x|--exec|-X|--exec-batch)$/.test(x));
     }
     case "sort": {
-      const out = args.flatMap((a, j) => (xs[j] === "-o" || xs[j] === "--output" ? [args[j + 1]] : /^--output=/.test(xs[j]) ? [Shell.cut(a, 9)] : /^-o./.test(xs[j]) ? [Shell.cut(a, 2)] : [])).filter((w): w is Word => w !== undefined);
+      const out = args.flatMap((a, j) => (xs[j] === "-o" || (cut_short(xs[j], "--output") && !xs[j].includes("=")) ? [args[j + 1]] : cut_short(xs[j], "--output") ? [Shell.cut(a, xs[j].indexOf("=") + 1)] : /^-o./.test(xs[j]) ? [Shell.cut(a, 2)] : [])).filter((w): w is Word => w !== undefined);
       out.forEach((w) => use(w, true));
       positional(args).filter((w) => !out.includes(w)).forEach((w) => use(w, false));
       return out.length > 0;
     }
     case "sed": {
-      const inplace = xs.some((x) => /^-[a-zA-Z]*i/.test(x) && !x.startsWith("--") || x.startsWith("--in-place"));
-      const scripts = args.flatMap((a, j) => (xs[j] === "-e" || xs[j] === "--expression" ? [args[j + 1]] : /^--expression=/.test(xs[j]) ? [Shell.cut(a, 13)] : [])).filter((w): w is Word => w !== undefined);
-      const file = xs.some((x) => x === "-f" || x.startsWith("--file"));
-      const pos = positional(args.filter((a) => !scripts.includes(a)));
-      const all = scripts.length > 0 || file ? scripts : pos.slice(0, 1);
-      const files = scripts.length > 0 || file ? pos : pos.slice(1);
-      if (file || all.some((w) => w.dynamic || !sed_safe(w.alts.join("\n")))) {
-        flag(all.some((w) => /(^|[;{}\n])\s*[^;]*\be(\s|;|$)|s(.).*\2.*\2[a-zA-Z0-9]*e/.test(w.alts.join("\n"))) ? text + " runs a shell command (sed's e)" : text + " runs a sed script illi can't check");
+      const sed = sed_args(args);
+      const cmds = sed.scripts.flatMap((w) => (w.dynamic ? [] : w.alts.map(sed_cmds)));
+      const runs = cmds.flatMap((c) => (c.runs === null ? [] : [c.runs]));
+      const made = cmds.flatMap((c) => c.files);
+      if (sed.progs.length > 0 || sed.scripts.some((w) => w.dynamic || !sed_safe(w.alts.join("\n")))) {
+        flag(text + (runs.length > 0 ? " runs a shell command (sed's e)" : " runs a sed script illi can't check"));
       }
-      files.forEach((w) => use(w, inplace));
-      return inplace;
+      runs.forEach((r) => code_secret(text, r, flag));
+      made.forEach(([name, write]) => use(Shell.lit(name), write));
+      sed.progs.forEach((w) => use(w, false));
+      sed.files.forEach((w) => use(w, sed.inplace));
+      return sed.inplace || made.some(([name, write]) => write && !DEVS.test(name));
     }
     default: {
-      const progs = args.flatMap((_a, j) => (xs[j] === "-f" || xs[j] === "--file" ? [args[j + 1]] : [])).filter((w): w is Word => w !== undefined);
-      const pos = positional(args.filter((a, j) => !progs.includes(a) && !(j > 0 && /^(-F|-v|--assign|--field-separator)$/.test(xs[j - 1]))));
-      const prog = progs.length > 0 ? null : pos[0];
-      const code = prog?.alts.join("\n") ?? "";
-      progs.forEach((w) => use(w, false));
-      (prog === null ? pos : pos.slice(1)).filter((w) => !/^[A-Za-z_]\w*=/.test(w.raw)).forEach((w) => use(w, false));
-      if (prog === undefined || prog?.dynamic || /\bsystem\s*\(|(?<![|])\|(?![|])\s*["\w$(&]|\|\s*getline|\/dev\/(tcp|udp)/.test(code)) {
+      const awk = awk_args(args);
+      const code = awk.code.map((w) => w.alts.join("\n")).join("\n");
+      const opens = awk.progs.length > 0 || awk.loads || awk.code.some((w) => w.dynamic) || /\bgetline\b|\bsystem\s*\(|\bprintf?\b[^;}]*[>|]|\bARGV\b/.test(code);
+      const away = awk.progs.flatMap((w) => named(w, part.cwd) ?? [null]).find((f) => f === null || (!under(f, where.top) && !where.plugins.some((d) => under(f, d))));
+      awk.progs.forEach((w) => use(w, false));
+      awk.outs.forEach((w) => use(w, true));
+      awk.files.forEach((w) => use(w, awk.inplace));
+      if (opens) {
+        code_secret(text, (code.match(/"(?:\\.|[^"\\])*"/g) ?? []).join("\n"), flag);
+        const sets = awk.sets.flatMap((w) => {
+          const eq = /^[A-Za-z_]\w*=(?=.)/.exec(w.dynamic ? "" : w.alts[0]);
+          return eq === null ? [] : [Shell.cut(w, eq[0].length)];
+        });
+        const env = awk.progs.length > 0 || /\bENVIRON\b/.test(code) ? part.env.map((e) => e.value) : [];
+        for (const w of [...sets, ...env]) {
+          const files = named(w, part.cwd) ?? [];
+          files.filter((f) => fs.existsSync(f) && (secret(f, where.top) !== null || where.plugins.some((d) => plugin_kept(f, d)))).forEach((f) => flag(shown(f, where.top) + " may hold secrets", null, "all"));
+        }
+      }
+      if (away !== undefined) {
+        flag(text + " runs an awk program from " + (away === null ? "a place known only as it runs" : shown(path.dirname(away), where.top)));
+      }
+      if (awk.loads) {
+        flag(text + " loads awk code illi can't check (-l, -i)");
+      }
+      if ((awk.code.length === 0 && awk.progs.length === 0) || awk.code.some((w) => w.dynamic) || /\bsystem\s*\(|(?<![|])\|(?![|])\s*["\w$(&]|\|\s*getline|\/dev\/(tcp|udp)/.test(code)) {
         flag(text + " runs a command from awk");
       } else if (/\bprint(f)?\b[^;}]*>|\bfflush\b/.test(code)) {
         flag(text + " writes files from awk");
       }
-      return progs.length > 0;
+      return awk.progs.length > 0 || awk.inplace || awk.loads || awk.outs.length > 0;
     }
   }
+}
+
+// a program's options, getopt's way: a short one's value glued or the
+// next word (valued: its letters; optional: those whose value is only
+// glued), a long one's by = or the next word, by any start of its name
+// (longs: its letter, or "" for none; git and GNU refuse one that could
+// be two, so any of them will do); options anywhere before -- (GNU's
+// way), or only before the first operand (stop: POSIX's, awk's). Each
+// option's letter and value, and the operands
+function getopt(args: Word[], valued: string, optional: string, longs: Record<string, string>, stop: boolean): { opts: [string, Word | undefined][]; operands: Word[] } {
+  const opts: [string, Word | undefined][] = [];
+  const operands: Word[] = [];
+  for (let k = 0; k < args.length; k++) {
+    const a = args[k];
+    const x = a.dynamic ? "" : a.alts[0];
+    if (a.dynamic || !x.startsWith("-") || x === "-" || (stop && operands.length > 0)) {
+      operands.push(a);
+    } else if (x === "--") {
+      operands.push(...args.slice(k + 1));
+      break;
+    } else if (x.startsWith("--")) {
+      const eq = x.indexOf("=");
+      const name = x.slice(2, eq < 0 ? x.length : eq);
+      const c = long_of(longs, name) ?? "?";
+      opts.push([c, eq >= 0 ? Shell.cut(a, eq + 1) : c !== "" && valued.includes(c) ? args[++k] : undefined]);
+    } else {
+      for (let j = 1; j < x.length; j++) {
+        const c = x[j];
+        if (valued.includes(c) || optional.includes(c)) {
+          opts.push([c, j + 1 < x.length ? Shell.cut(a, j + 1) : valued.includes(c) ? args[++k] : undefined]);
+          break;
+        }
+        opts.push([c, undefined]);
+      }
+    }
+  }
+  return { opts, operands };
+}
+
+// a long option's letter, by its name or any start of it (undefined:
+// none)
+function long_of(longs: Record<string, string>, name: string): string | undefined {
+  const hit = Object.keys(longs).includes(name) ? name : name === "" ? undefined : Object.keys(longs).find((n) => n.startsWith(name));
+  return hit === undefined ? undefined : longs[hit];
+}
+
+// sed's words, as GNU's takes them (getopt: options anywhere): its
+// scripts (-e, --expression; with none, the first operand, and as BSD's
+// takes it, the first operand too if an option comes after it), its
+// script files (-f, --file), whether it edits in place (-i, --in-place:
+// a suffix only glued, so -ie is the suffix e, and BSD's -i '' an empty
+// script), the files it reads
+function sed_args(args: Word[]): { scripts: Word[]; progs: Word[]; inplace: boolean; files: Word[] } {
+  const longs = { expression: "e", file: "f", "in-place": "i", "line-length": "l", "null-data": "z", "zero-terminated": "z", quiet: "n", silent: "n", "regexp-extended": "E", separate: "s", sandbox: "", debug: "", posix: "", "follow-symlinks": "", unbuffered: "u", binary: "b", help: "", version: "" };
+  const { opts, operands } = getopt(args, "efl", "i", longs, false);
+  const value = (c: string) => opts.flatMap(([o, v]) => (o === c && v !== undefined ? [v] : []));
+  const [scripts, progs] = [value("e"), value("f")];
+  const first = args.indexOf(operands[0]);
+  const late = first >= 0 && args.slice(first + 1).some((a) => !a.dynamic && /^-./.test(a.alts[0]));
+  const given = scripts.length > 0 || progs.length > 0;
+  return {
+    scripts: given ? [...scripts, ...(late ? operands.slice(0, 1) : [])] : operands.slice(0, 1),
+    progs,
+    inplace: opts.some(([o]) => o === "i"),
+    files: given ? operands : operands.slice(1),
+  };
+}
+
+// awk's words, as gawk's takes them (getopt: options before the program;
+// -W name=x as --name=x): its program files (-f, -E), its program text
+// (-e, --source; with neither, the first operand), its assignments (-v,
+// and the operands var=value), the files its options write (-o, -p, -d:
+// a value glued, or a file of their own in its folder), whether it
+// edits its files in place (-i inplace) or loads code (-l, -i another
+// library), the files it reads
+function awk_args(args: Word[]): { progs: Word[]; code: Word[]; sets: Word[]; outs: Word[]; inplace: boolean; loads: boolean; files: Word[] } {
+  const longs = {
+    "field-separator": "F", file: "f", assign: "v", source: "e", exec: "E", include: "i", load: "l", "dump-variables": "d", debug: "D",
+    lint: "L", "pretty-print": "o", profile: "p", "characters-as-bytes": "b", traditional: "c", copyright: "C", "gen-pot": "g", help: "h",
+    "lint-old": "t", "no-optimize": "s", "non-decimal-data": "n", optimize: "O", posix: "P", "re-interval": "r", sandbox: "S",
+    "use-lc-numeric": "N", version: "V", bignum: "M", csv: "k", nostalgia: "", persist: "", parsedebug: "",
+  };
+  const got = getopt(args, "FfveEilWZ", "dDLop", longs, true);
+  const opts = got.opts.map(([c, v]): [string, Word | undefined] => {
+    const m = c === "W" && v !== undefined && !v.dynamic ? /^([\w-]+)(=?)/.exec(v.alts[0]) : null;
+    const long = m === null ? undefined : long_of(longs, m[1]);
+    return m === null || long === undefined ? [c, v] : [long, m[2] === "=" ? Shell.cut(v!, m[0].length) : undefined];
+  });
+  const value = (c: string) => opts.flatMap(([o, v]) => (o === c && v !== undefined ? [v] : []));
+  const progs = [...value("f"), ...value("E")];
+  const given = value("e");
+  const code = progs.length > 0 || given.length > 0 ? given : got.operands.slice(0, 1);
+  const rest = progs.length > 0 || given.length > 0 ? got.operands : got.operands.slice(1);
+  const set = (w: Word) => /^[A-Za-z_]\w*=/.test(w.raw);
+  const includes = value("i");
+  const outs = opts.flatMap(([o, v]) => (o === "o" || o === "p" ? [v ?? Shell.lit("awkprof.out")] : o === "d" ? [v ?? Shell.lit("awkvars.out")] : []));
+  const inplace = includes.some((w) => w.dynamic || w.alts.some((x) => /^inplace(\.awk)?$/.test(path.basename(x))));
+  return {
+    progs,
+    code,
+    sets: [...value("v"), ...rest.filter(set)],
+    outs,
+    inplace,
+    loads: value("l").length > 0 || includes.some((w) => w.dynamic || w.alts.some((x) => !/^inplace(\.awk)?$/.test(path.basename(x)))),
+    files: rest.filter((w) => !set(w)),
+  };
 }
 
 // whether a sed script fits the safe grammar: substitutions without e or
@@ -1876,8 +2150,9 @@ function sed_safe(script: string): boolean {
 }
 
 // a sed script's commands: split at each ; and newline, but those inside
-// an address's /regex/, an s or y command's parts, or the text of an a,
-// i or c (to its line's end)
+// an address's /regex/ (or \cregexc), an s or y command's parts, or what
+// runs to its line's end: the text of an a, i or c, the file of an r, R,
+// w, W or an s's w flag, the command of an e
 function sed_split(script: string): string[] {
   const out: string[] = [];
   let [from, k, head] = [0, 0, true];
@@ -1900,13 +2175,20 @@ function sed_split(script: string): string[] {
       k++;
     } else if (c === "/") {
       past(1);
+    } else if (c === "\\" && k + 1 < script.length) {
+      k++;
+      past(1);
     } else if (/[\d$,~+!{}\sIM]/.test(c)) {
       k++;
     } else if ((c === "s" || c === "y") && k + 1 < script.length) {
       k++;
       past(2);
       head = false;
-    } else if (c === "a" || c === "i" || c === "c") {
+      if (c === "s" && /^[gpiImMe\d]*w/.test(script.slice(k))) {
+        const nl = script.indexOf("\n", k);
+        k = nl < 0 ? script.length : nl;
+      }
+    } else if ("aicrRwWe".includes(c)) {
       const nl = script.indexOf("\n", k);
       k = nl < 0 ? script.length : nl;
       head = false;
@@ -1915,6 +2197,31 @@ function sed_split(script: string): string[] {
     }
   }
   return [...out, script.slice(from)];
+}
+
+// what a sed script's commands do besides editing (each as sed_split
+// cuts it, its addresses and braces off): the files they read or write
+// (r and R read; w, W and an s's w flag write, the rest of the line
+// naming the file, as sed takes it: no space needed, r.env), and the
+// shell command they run (e's own, ecat .env too; for an s's e flag the
+// command itself, its replacement what runs); null: none
+function sed_cmds(script: string): { files: [string, boolean][]; runs: string | null } {
+  const at = /^(?:[\d$,~+!{}\sIM]|\/(?:\\.|[^/\\])*\/|\\(.)(?:\\.|(?!\1).)*\1)*/s;
+  const files: [string, boolean][] = [];
+  let runs: string | null = null;
+  for (const c of sed_split(script).map((c) => c.replace(at, ""))) {
+    const file = /^([rRwW])\s*(.*?)\s*$/s.exec(c);
+    const sub = /^s(.)(?:\\.|(?!\1).)*\1(?:\\.|(?!\1).)*\1([gpiImMe\d]*)(?:w\s*(.*?)\s*)?$/s.exec(c);
+    if (file !== null && file[2] !== "") {
+      files.push([file[2], /[wW]/.test(file[1])]);
+    } else if (c.startsWith("e")) {
+      runs = (runs ?? "") + c.slice(1) + "\n";
+    } else if (sub !== null) {
+      files.push(...(sub[3] ? [[sub[3], true] as [string, boolean]] : []));
+      runs = sub[2].includes("e") ? (runs ?? "") + c + "\n" : runs;
+    }
+  }
+  return { files, runs };
 }
 
 // whether a program publishes for everyone
@@ -2046,7 +2353,7 @@ function look_file(where: Where, look: Look, file: unknown, write: boolean): voi
     look.flags.push({ why: r.why, kind, subject: abs, wide: r.wide ? folder_wide(kind, abs) : null, tier: r.tier });
   }
   if (write) {
-    look.changes.push({ why: where.mode === "read-only" ? "changing " + shown(abs, where.top) : "ask mode asks before changing " + shown(abs, where.top), kind, subject: abs, wide: where.mode === "ask" ? { kind, subject: abs, grant: "write:" + where.top + "/*" } : null, tier: "careful" });
+    look.changes.push({ why: where.mode === "read-only" ? "changing " + shown(abs, where.top) : "ask mode asks before changing " + shown(abs, where.top), kind, subject: abs, wide: where.mode === "ask" ? { kind, subject: abs, grant: "write:" + where.top.replace(/\*/g, "\\*") + "/*" } : null, tier: "careful" });
   }
 }
 
@@ -2090,12 +2397,13 @@ function use_look(where: Where, look: Look, use: Use, flag: Flagger, acts: boole
 // what "don't ask again" keeps for a file outside the project: its
 // folder (a folder named, itself), for a read the repository holding it
 // (a sibling repo's top); none for home, or / or a folder above home, as
-// that would cover all of home
+// that would cover all of home. A * in its name is kept as one (\*), so
+// a folder named a* covers no ab beside it
 function folder_wide(kind: Kind, file: string): Flag["wide"] {
   const folder = is_dir(file);
   const dir = folder ? file : path.dirname(file);
   const at = (kind === "read" ? repo_of(dir) : null) ?? dir;
-  return under(HOME, at) ? null : { kind, subject: folder ? file + "/" : file, grant: kind + ":" + at + "/*" };
+  return under(HOME, at) ? null : { kind, subject: folder ? file + "/" : file, grant: kind + ":" + at.replace(/\*/g, "\\*") + "/*" };
 }
 
 // whether a path is a folder (one this user can't look at, /root: no)
@@ -2134,7 +2442,8 @@ function path_rule(where: Where, file: string, write: boolean): Rule | null {
 // system's folders read: a change in every mode but yolo, a read
 // careful's (in auto too if maybe, by a command that may change things:
 // but in a dependency cache), and a folder holding a secret store read,
-// in auto (careful asks it as outside).
+// in every mode but yolo, never by a folder grant (careful asks it as
+// outside too).
 // The folder a command runs in is a secret's by its place alone, not
 // its name (a project named secrets). None: it isn't asked
 function path_why(where: Where, file: string, write: boolean, maybe = false, folder = false): Reason[] {
@@ -2169,7 +2478,7 @@ function path_why(where: Where, file: string, write: boolean, maybe = false, fol
     return [];
   }
   const away: Reason = { why: at + " is outside the project", wide: true, tier: write || (maybe && !deps(file)) ? "all" : "careful" };
-  return !write && STORES.some((s) => s !== file && under(s, file)) ? [{ why: at + " may hold secrets", wide: false, tier: "auto" }, away] : [away];
+  return !write && STORES.some((s) => s !== file && under(s, file)) ? [{ why: at + " may hold secrets", wide: false, tier: "all" }, away] : [away];
 }
 
 // what writing a file does to git, if git finds a program to run there
@@ -2385,6 +2694,24 @@ function positional(args: Word[], valued = /^(-m|--message)$/): Word[] {
     }
   }
   return out;
+}
+
+// a word as the long option it cuts short, whole (--fil=x as
+// --file=x), by the first of names it starts: one that could be two
+// getopt and git refuse, so any will do; one named whole is itself
+function whole(w: Word, names: string[]): Word {
+  const x = w.dynamic || w.alts.length !== 1 ? "" : w.alts[0];
+  const name = x.split("=")[0];
+  const hit = !/^--[^-=]/.test(name) || names.includes(name) ? undefined : names.find((n) => n.startsWith(name));
+  return hit === undefined ? w : { ...w, alts: [hit + x.slice(name.length)] };
+}
+
+// whether a word is one of these long options, whole (--force,
+// --force=x) or cut short (--forc), as getopt and git take any start of
+// one: one that could be two they refuse, so either will do
+function cut_short(x: string, ...names: string[]): boolean {
+  const name = x.split("=")[0];
+  return /^--[^-=]/.test(name) && names.some((n) => n.startsWith(name));
 }
 
 // the values of the options a regex names (-F x, -Fx, --file x,

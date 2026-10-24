@@ -16,9 +16,9 @@
 // characters, how many more left out (a note and the refused list, cut
 // short), what don't ask again keeps by its ends past 1,000; a refusal
 // recorded and told to the model; a plugin's hooks come before them and
-// after the tool. The loop guard (auto): a call the same as its caller's
-// two before it asked, illi's own tools too; a yes starts its count
-// again. The projects: their table,
+// after the tool. The loop guard (every mode but yolo): a call the same
+// as its caller's two before it asked, illi's own tools too; a yes starts
+// its count again. The projects: their table,
 // a search across them, a zoom into another's chat. A subagent's view
 // fits its model: the oldest lines left out.
 
@@ -223,7 +223,7 @@ test("illi's own shell, files and MCP tools pass the same checks: the user's rul
   chat.tools.perm.refused.length = 0;
 });
 
-test("the loop guard, in auto: a call the same (tool and input) as its caller's two before it is asked, saying so, illi's own tools too; another call between, another caller or another mode, not", async () => {
+test("the loop guard, in every mode but yolo: a call the same (tool and input) as its caller's two before it is asked, saying so, illi's own tools too; another call between, another caller or yolo, not", async () => {
   const call = (name: string, args: object, who = "main") => Tools.call(chat.tools, who, name, args, new AbortController().signal);
   const looped = "No one is at illi's screen to ask, so it isn't allowed. Asked because the same call a third time in a row";
   chat.tools.perm.calls.clear();
@@ -243,7 +243,11 @@ test("the loop guard, in auto: a call the same (tool and input) as its caller's 
     expect((await call("shell", { command: "echo loop" })).text).toStartWith("loop\n");
     expect((await call("projects", {}, "Scout")).fail).toBe(false);
     expect((await call("shell", { command: "echo loop" })).text).toStartWith(looped);
-    chat.tools.perm.mode = "careful";
+    for (const mode of ["careful", "ask", "read-only"] as const) {
+      chat.tools.perm.mode = mode;
+      expect([mode, (await call("shell", { command: "echo loop" })).text.startsWith(looped)]).toEqual([mode, true]);
+    }
+    chat.tools.perm.mode = "yolo";
     expect((await call("shell", { command: "echo loop" })).text).toStartWith("loop\n");
   } finally {
     chat.tools.perm.mode = null;

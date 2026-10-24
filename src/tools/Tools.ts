@@ -37,10 +37,10 @@
 // mode, /mode's or the setting's, auto by default; one a hook allowed as
 // yolo mode would, one it asks about asked whatever): run, asked about
 // with why, or refused, each refusal recorded for the side panel and
-// /permissions. In auto every call, illi's own too, passes the loop
-// guard: the same call as its caller's two before it in its turn is
-// asked (a yes, the caller's next turn and a name used again start the
-// count fresh). What a call that ran answers goes to the plugins last
+// /permissions. In every mode but yolo every call, illi's own too,
+// passes the loop guard: the same call as its caller's two before it in
+// its turn is asked (a yes, the caller's next turn and a name used again
+// start the count fresh). What a call that ran answers goes to the plugins last
 // (after_tool).
 // The plugins' own tools are theirs to run (plugin__...).
 
@@ -288,8 +288,9 @@ const KEPT  = 1000;
 // the most refused requests kept (Perm)
 const REFUSALS = 50;
 
-// the loop guard (Tools.guard): in auto, a call the same (tool and input)
-// as its caller's LOOP before it, in its turn, is asked, saying why
+// the loop guard (Tools.guard): in every mode but yolo, a call the same
+// (tool and input) as its caller's LOOP before it, in its turn, is asked,
+// saying why
 const LOOP = 2;
 const LOOPED = "the same call a third time in a row";
 
@@ -786,10 +787,11 @@ export namespace Tools {
   // those given this run, and the mode: null runs it, else what the model
   // is told. One a hook allowed is judged as in yolo mode (the user's
   // rules still hold); one it asks about is asked, its why first, with no
-  // "don't ask again". In auto, one the same as its caller's two before
-  // it in its turn (illi's own tools too: a skill loaded again and again)
-  // is asked, saying so first, so a model stuck in a loop stops; a yes
-  // starts that caller's count again (Tools.looped). The question is
+  // "don't ask again". In every mode but yolo (careful asks all auto
+  // does), one the same as its caller's two before it in its turn (illi's
+  // own tools too: a skill loaded again and again) is asked, saying so
+  // first, so a model stuck in a loop stops; a yes starts that caller's
+  // count again (Tools.looped). The question is
   // given what the call would do and why, WHOLE characters of each at
   // most, and what "don't ask again" keeps by its ends past KEPT. One
   // asked runs on the user's yes, "don't ask again" keeping its grants for
@@ -805,7 +807,7 @@ export namespace Tools {
     const broken = "illi can't read your permission rules (" + perms + ")";
     const judged: Verdict = ok || got.$ === "deny" ? got : { $: "ask", why: got.$ === "ask" ? got.why + "; " + broken : broken, always: [], exact: got.$ === "ask" ? got.exact : [] };
     const hooks: Verdict = hooked.ask === undefined || judged.$ === "deny" ? judged : { $: "ask", why: judged.$ === "ask" ? hooked.ask + "; " + judged.why : hooked.ask, always: [], exact: judged.$ === "ask" ? judged.exact : [] };
-    const looped = Tools.looped(tools, who, tool, input) && mode === "auto";
+    const looped = Tools.looped(tools, who, tool, input) && mode !== "yolo";
     const verdict: Verdict = !looped || hooks.$ === "deny" ? hooks : hooks.$ === "ask" ? { ...hooks, why: LOOPED + "; " + hooks.why } : { $: "ask", why: LOOPED, always: [], exact: [] };
     if (verdict.$ === "allow") {
       return null;
