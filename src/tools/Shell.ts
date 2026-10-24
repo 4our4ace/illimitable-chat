@@ -12,11 +12,10 @@
 // background's, a group's or a loop's there, its own; one another
 // program runs leaves it unknown), and its input as given (a heredoc,
 // a file) to the group, the subshell, the loop or the nested script it
-// is in, as its own. A pipe goes on past
-// a line's end after |, as do && and ||, and into every command of a
-// subshell, a group or a loop it feeds, and of what a command reading it
-// runs ($(...), `...`, <(...), a heredoc's body, bash -c's script, an
-// eval's, find -exec's). Wrappers that run the command after them (sudo,
+// is in, as its own. A pipe goes on past a line's end after |, as do &&
+// and ||, and into every command of a subshell, a group or a loop it
+// feeds, and of what a command reading it runs ($(...), `...`, <(...),
+// a heredoc's body, bash -c's script, an eval's, find -exec's). Wrappers that run the command after them (sudo,
 // timeout, env, xargs, ...) are taken off, the part saying so (root: run
 // as root, as sudoedit edits; fed: some of its arguments come from its
 // input). A word known only as the command runs (a variable it never
@@ -113,8 +112,8 @@ type Doc = { delim: string; strip: boolean; expand: boolean; redir: Redir; inpip
 // set unseen (wild: a source), the heredocs waiting; what wrappers
 // around a nested script (bash -c, eval) give its parts; whether its
 // commands read another's output (inpipe: after a |, inside a group, a
-// subshell or >(...) piped on, a nested script or a substitution run by
-// a command that reads one: piped); where the text
+// subshell or a loop a pipe goes into, inside >(...), a nested script or
+// a substitution run by a command that reads one: piped); where the text
 // read lies in the command parsed: from base on, as written (null: a
 // nested script's, changed as it was read: its parts all placed at box,
 // the text there that holds it); the pipelines read, by their parts (the
@@ -1499,13 +1498,14 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
   return { argv, own };
 }
 
-// a nested script's commands, run by a wrapper (its root, its input:
-// fed, and the pipe it reads, which all of them read):
-// in a shell of its own (sub: bash -c, trap, watch: its folder and
-// variables its own, the variables only the environment's), else in this
-// one (eval). Its parts are placed where its words are (one word whose
-// one value is there as written: each where it is in it; else at the
-// words, at the command when they are made up)
+// a nested script's commands, run by a wrapper (its root; its input:
+// fed, the pipe it reads, what its redirections give: its commands'
+// too, stdin_give): in a shell of its own (sub: bash -c, trap, watch:
+// its folder and variables its own, the variables only the
+// environment's), else in this one (eval). Its parts are placed where
+// its words are (one word whose one value is there as written: each
+// where it is in it; else at the words, at the command when they are
+// made up)
 function nested(s: Scan, script: Word, ctx: Ctx, sub: boolean, words: Word[] = [script], redirs: Redir[] = []): void {
   if (script.dynamic) {
     throw new Unread("a shell runs a script made as it runs");
