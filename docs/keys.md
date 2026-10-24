@@ -290,8 +290,8 @@ Mouse and side panel
 - The work between replies (tool calls, results, thinking, agents'
   reports) shows as one line saying what was done, its calls under it,
   one line each: `✓` done, `✗` failed, blank when no result came with
-  it (a call stopped before it answered; a web search OpenAI's and
-  ChatGPT's models run themselves), the tool and what it was called
+  it (a call stopped before it answered; a web search by OpenAI's or
+  ChatGPT's models from before illi 0.3.1), the tool and what it was called
   with; past six, the latest five, under a line counting the rest
   (`… 12 earlier`). A stop answers a call illi's own tools are running,
   as failed; one Claude Code is running gets no answer. A click on a run's
