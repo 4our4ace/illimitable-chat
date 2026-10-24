@@ -27,6 +27,7 @@ import * as Paint from "../ui/Paint.ts";
 import { question_held } from "./Question.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_send, type Form, type Span, type Target, type Term } from "./Term.ts";
+import { GLYPH } from "../ui/Theme.ts";
 import type { Query, Question } from "../ui/View.ts";
 
 
@@ -213,7 +214,7 @@ export function term_form_lines(t: Term, w: number, max: number, tab?: number): 
   const query  = q.queries[shown];
   const lw     = Paint.text_width(Paint.lit_lead(true));
   const lead   = (k: number) => Paint.Run(Paint.lit_lead(k === e.at), bold);
-  const marks  = query.multi ? ["□ ", "■ "] : ["○ ", "● "];
+  const marks  = query.multi ? [GLYPH.pending + " ", GLYPH.done + " "] : [GLYPH.option + " ", GLYPH.here + " "];
   const option = (o: { label: string; about: string }, k: number) => {
     const runs = [Paint.Run(Paint.text_clean(o.label), k === e.at ? bold : Paint.INK), ...(o.about === "" ? [] : [Paint.Run("  " + Paint.text_clean(o.about), Paint.DIM)])];
     const rows = Paint.runs_wrap(runs, Math.max(1, w - lw - 2), false);

@@ -135,7 +135,7 @@ const armed = (t: any) => (t.asking.shown -= 600);
 
 // the question as last painted, cols wide: the rule over it, its lines,
 // the rule under it, each inside the margins
-const asked = (t: any, cols: number) => t.ruled.rows.slice(t.box.row - 1, t.box.row + t.box.h + 1).map((r: any[]) => text(r, cols).slice(2, cols - 3).trimEnd());
+const asked = (t: any, cols: number) => t.ruled.rows.slice(t.box.row - 1, t.box.row + t.box.h + 1).map((r: any[]) => text(r, cols).slice(2, cols - 1).trimEnd());
 
 // the screen row of the question's answer named name, and a column on it
 const row_of = (t: any, name: string) => t.box.row + t.box.rows.findIndex((aim: any) => aim?.k === t.question.names.indexOf(name));
@@ -180,15 +180,15 @@ for (const [what, said] of [[LONG, "a 2,000-character command on one line"], [TA
         expect(inside.filter((l: string) => l.trim() === "")).toEqual([]);
         expect(inside[0]).toBe("Why: it deletes files");
         expect(inside[1]).toStartWith("rm -r ./no-such-folder-here");
-        const yes  = inside.indexOf("> Yes");
+        const yes  = inside.indexOf("> ○ Yes");
         const more = inside.filter((l: string) => l.startsWith("… "));
         expect(more).toEqual(t.box.ahead < t.box.lead ? [inside[yes - 1]] : []);
         expect(more.map((l: string) => l.replace(/\d+/, "N"))).toEqual(more.length === 0 ? [] : ["… N more lines · wheel, PgUp/PgDn"]);
         expect(more.map((l: string) => Number(/\d+/.exec(l)![0]))).toEqual(more.length === 0 ? [] : [t.box.lead - t.box.ahead]);
-        expect(inside[yes + 1]).toStartWith("  Yes, and don't ask again for rm -r ./no-such-folder-here");
+        expect(inside[yes + 1]).toStartWith("  ○ Yes, and don't ask again for rm -r ./no-such-folder-here");
         expect(inside.slice(yes + 1, -2).length).toBeLessThanOrEqual(3);
         expect(inside.at(-3)).toEndWith(" in this project");
-        expect(inside.slice(-2)).toEqual(["  No", "  No, and say why"]);
+        expect(inside.slice(-2)).toEqual(["  ○ No", "  ○ No, and say why"]);
       });
     });
   }
@@ -222,7 +222,7 @@ test("a question takes the input's full width with the side left or right, nothi
       ask(t, "rm -r build");
       expect([t.box.col, t.box.w]).toEqual([2, 155]);
       expect(t.ruled.rows.slice(0, 6).map(seen)).toEqual(none);
-      expect(asked(t, 160).slice(1, -1)).toEqual(["Why: it deletes files", "rm -r build", "> Yes", "  Yes, and don't ask again for rm -r build in this project", "  No", "  No, and say why"]);
+      expect(asked(t, 160).slice(1, -1)).toEqual(["Why: it deletes files", "rm -r build", "> ○ Yes", "  ○ Yes, and don't ask again for rm -r build in this project", "  ○ No", "  ○ No, and say why"]);
     });
   }
 });
@@ -273,13 +273,13 @@ test("too tall, the lead scrolls by the wheel over it and by PgUp, PgDn, the ans
     const first = () => asked(t, 80)[1];
     const tail  = () => asked(t, 80).slice(-5);
     const ends  = tail();
-    expect([first(), t.box.ahead, t.question.past]).toEqual(["Why: it deletes files", 7, 0]);
+    expect([first(), t.box.ahead, t.question.past]).toEqual(["Why: it deletes files", 6, 0]);
     wheel(t, t.box.row + 1, COL);
     paint(t);
     expect([first(), t.question.past, tail()]).toEqual(["echo line 1", 2, ends]);
     term_grab(t, "PgDn");
     paint(t);
-    expect([first(), t.question.past, tail()]).toEqual(["echo line 7", 8, ends]);
+    expect([first(), t.question.past, tail()]).toEqual(["echo line 6", 7, ends]);
     term_grab(t, "PgUp");
     term_grab(t, "PgUp");
     paint(t);
@@ -288,13 +288,13 @@ test("too tall, the lead scrolls by the wheel over it and by PgUp, PgDn, the ans
       term_grab(t, "PgDn");
     }
     paint(t);
-    expect(asked(t, 80).slice(-8, -5)).toEqual(["echo line 298", "echo line 299", "… 294 lines above · wheel, PgUp/PgDn"]);
+    expect(asked(t, 80).slice(-9, -6)).toEqual(["echo line 298", "echo line 299", "… 295 lines above · wheel, PgUp/PgDn"]);
     expect([tail(), lit(t)]).toEqual([ends, "Yes"]);
     wheel(t, 3, COL);
     paint(t);
-    expect([t.scroll, t.question.past]).toEqual([0, 294]);
+    expect([t.scroll, t.question.past]).toEqual([0, 295]);
     Screen.screen_feed(t.scr, sgr(64, 3, COL));
-    expect([t.scroll, t.question.past]).toEqual([3, 294]);
+    expect([t.scroll, t.question.past]).toEqual([3, 295]);
   });
 });
 
@@ -499,7 +499,7 @@ test("a lit mark wider than >: the form's options and words lead as wide, the cu
       expect(t.ruled.at).toEqual({ row: t.box.row + 5, col: 2 + 5 });
       const u = term();
       ask(u, "ls");
-      expect(asked(u, 160).slice(3, 7)).toEqual(["-> Yes", "   Yes, and don't ask again for ls in this project", "   No", "   No, and say why"]);
+      expect(asked(u, 160).slice(3, 7)).toEqual(["-> ○ Yes", "   ○ Yes, and don't ask again for ls in this project", "   ○ No", "   ○ No, and say why"]);
     });
   } finally {
     Theme.GLYPH.lit = was;
@@ -559,13 +559,13 @@ test("too short for its lead and its answers, the lead gives way whole (one row 
     const t = term();
     ask(t, TALL, "rm -r ./no-such-folder-here");
     armed(t);
-    expect(asked(t, 80).slice(1, -1)).toEqual(["Why: it deletes files", "… 300 more lines · wheel, PgUp/PgDn", "> Yes", "  Yes, and don't ask again for rm -r ./no-such-folder-here in this project", "  No", "  No, and say why"]);
+    expect(asked(t, 80).slice(1, -1)).toEqual(["Why: it deletes files", "… 300 more lines · wheel, PgUp/PgDn", "> ○ Yes", "  ○ Yes, and don't ask again for rm -r ./no-such-folder-here in this …", "  ○ No", "  ○ No, and say why"]);
   });
   sized(80, 11, () => {
     const t = term();
     ask(t, TALL, "rm -r ./no-such-folder-here");
     armed(t);
-    expect(asked(t, 80).slice(1, -1)).toEqual(["… 301 more lines", "> Yes", "  Yes, and don't ask again for rm -r ./no-such-folder-here in this project", "  No", "  No, and say why"]);
+    expect(asked(t, 80).slice(1, -1)).toEqual(["… 301 more lines", "> ○ Yes", "  ○ Yes, and don't ask again for rm -r ./no-such-folder-here in this …", "  ○ No", "  ○ No, and say why"]);
     wheel(t, t.box.row + 2, COL);
     term_grab(t, "PgDn");
     paint(t);
@@ -575,11 +575,11 @@ test("too short for its lead and its answers, the lead gives way whole (one row 
     const t = term();
     ask(t, TALL, "rm -r ./no-such-folder-here");
     armed(t);
-    expect(asked(t, 80).slice(1, -1)).toEqual(["> Yes", "  Yes, and don't ask again for rm -r ./no-such-folder-here in this project"]);
+    expect(asked(t, 80).slice(1, -1)).toEqual(["> ○ Yes", "  ○ Yes, and don't ask again for rm -r ./no-such-folder-here in this …"]);
     term_grab(t, "Down");
     term_grab(t, "Down");
     paint(t);
-    expect(asked(t, 80).slice(1, -1)).toEqual(["  Yes, and don't ask again for rm -r ./no-such-folder-here in this project", "> No"]);
+    expect(asked(t, 80).slice(1, -1)).toEqual(["  ○ Yes, and don't ask again for rm -r ./no-such-folder-here in this …", "> ○ No"]);
     click(t, row_of(t, "Yes, and don't ask again for rm -r ./no-such-folder-here in this project"), COL);
     expect(sent(t)).toEqual([{ ask: "q1", yes: true, always: true, said: "" }]);
   });

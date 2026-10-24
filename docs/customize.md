@@ -125,7 +125,9 @@ the full accent).
   question's lit row), `open` and `shut` (`[-]`, `[+]`: what a click
   shuts or opens: a run of work, a message in it, the to-do), `tab` and
   `here` (`◯`, `●`: one of a set, the one in use: the chats' tabs, a
-  list's rows, the side's agents, skills and profiles), `find` (`⌕ `,
+  list's rows, the side's agents, skills and profiles; `here` is a
+  question's answer picked too), `option` (`○`, an answer of a question
+  that takes one), `find` (`⌕ `,
   before a list's search), `pending`, `active` and `done` (`□`, `>`,
   `■`: the to-do's items). Control characters are left out.
 - `tool` (a mark before a tool's name, by tool: none by default),
