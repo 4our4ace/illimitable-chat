@@ -59,12 +59,12 @@ heredoc's body, `bash -c`, `eval`, `find -exec`), so `curl ... | (bash)`
 is asked as `curl ... | bash` is. The input given to a group, a loop or
 a nested script (`{ sh; } <<'EOF'`, `bash -c '…' < x.sh`) is read by
 the commands in it as their own, so its body is checked as
-`sh <<'EOF'`'s is. A program on your `PATH` named by its
-path (`~/.cargo/bin/cargo`) is that program, and
-one named in the project (`.venv/bin/python`) is the project's,
-wherever its link leads. A search's pattern (`grep -n '^x==' file`),
-git's branches, tags and revisions (`git checkout -b token-x`) and its
-config keys are not files. A sed script's own files are files (`sed
+`sh <<'EOF'`'s is. A program on your `PATH` named by its path
+(`~/.cargo/bin/cargo`) is that program, and one named in the project
+(`.venv/bin/python`) is the project's, wherever its link leads. A
+search's pattern (`grep -n '^x==' file`), git's branches, tags and
+revisions (`git checkout -b token-x`) and its config keys are not
+files. A sed script's own files are files (`sed
 'r x'`, `s/a/b/w x`), and awk's are written when it edits them in place
 (`awk -i inplace`). An option is read as its command reads it: in a
 cluster (`sed -ne`, `curl -sSLo x`), a value glued to its letter
