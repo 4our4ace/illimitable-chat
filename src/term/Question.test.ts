@@ -13,13 +13,18 @@
 // short); the wheel elsewhere scrolls the chat. A long command told
 // where its risk is folds to its first line, the lines holding it and
 // its last, a dim line for each run of the rest saying how many lines it
-// hides (one short, one hiding a row at a time, one not told: never;
-// one line: never), its rule saying Ctrl+O all; Ctrl+O shows it whole
-// and folds it again, from its top, the lit answer and the hold kept; a
-// click on such a line shows it whole, the pointer on it lighting it;
-// opened, it reads whole to its end; folded or whole on a screen 80 by
-// 16 or 40 by 10, nothing past the foot, every answer, never two lines
-// saying what is cut one over the other. A line asked
+// hides (one short, one hiding a row at a time, one not told: never),
+// its rule saying Ctrl+O all; a line wrapping to many rows (a
+// 2,000-character one-liner) so too by its rows: its first, those
+// holding the risk (one over two rows: both; found past tabs, control
+// characters cleaned out and wide characters; wrapped anew at another
+// width) and its last, "… N rows" between (never one row alone);
+// Ctrl+O shows it whole and folds it again, from its
+// top, the lit answer and the hold kept; a click on such a line shows it
+// whole, the pointer on it lighting it; opened, it reads whole to its
+// end; folded or whole on a screen 80 by 16 or 40 by 10, nothing past
+// the foot, every answer, never two lines saying what is cut one over
+// the other. A line asked
 // for has the cursor in its words. The input as typed is kept under a
 // question, typing going nowhere meanwhile, and comes back once it is
 // answered. The pointer moving onto an answer lights it; a click does
@@ -203,12 +208,15 @@ for (const [what, said] of [[LONG, "a 2,000-character command on one line"], [TA
   }
 }
 
-test("the permission question shows the command whole, not cut short as a note shows it: a 2,000-character one read to its end, page by page (one line: it doesn't fold, though told where its risk is)", () => {
+test("the permission question shows the command whole, not cut short as a note shows it: a 2,000-character one, folded to the rows holding its risk and its last, read to its end, page by page, once Ctrl+O shows it all", () => {
   sized(80, 24, () => {
     const t = term();
     t.v.asks = [{ id: "q1", who: "illi", tool: "shell", what: LONG.slice(0, 399) + "…", whole: LONG, spots: [[0, 27]], why: "it deletes files", keep: "rm -r ./no-such-folder-here" }];
     paint(t);
-    expect([t.box.folds, asked(t, 80)[0]]).toEqual([false, "── Allow shell? · ↑↓ Enter · Esc no " + "─".repeat(39)]);
+    expect([t.box.folds, asked(t, 80)[0]]).toEqual([true, "── Allow shell? · ↑↓ Enter · Ctrl+O all · Esc no " + "─".repeat(26)]);
+    expect(asked(t, 80).slice(1, 5)).toEqual(["Why: it deletes files", "rm -r ./no-such-folder-here && echo abcdefghijabcdefghijabcdefghijabcdefghi", "… 25 rows", "efghij" + "abcdefghij".repeat(5)]);
+    term_grab(t, "Ctrl+O");
+    paint(t);
     const read: string[] = [];
     for (let k = 0; k < 30; k++) {
       asked(t, 80).slice(1, 1 + t.box.ahead).forEach((l: string, j: number) => (read[t.question.past + j] = l));
@@ -249,7 +257,7 @@ test("a long command folds to its first line, the lines holding what made the ch
   });
 });
 
-test("a command doesn't fold where folding hides nothing: one of four rows or fewer, one whose hidden runs are a row each, one not told where its risk is; its rule says no Ctrl+O, which then does nothing", () => {
+test("a command doesn't fold where folding hides nothing: one of four rows or fewer, one whose hidden runs are a row each (lines or rows of a line), one whose risk is all of it, one not told where its risk is; its rule says no Ctrl+O, which then does nothing", () => {
   sized(80, 24, () => {
     const t = term();
     const short = "cd /tmp\nrm -rf ./x";
@@ -258,6 +266,11 @@ test("a command doesn't fold where folding hides nothing: one of four rows or fe
     const five = "echo a\necho b\nrm -rf ./x\necho c\necho d";
     risky(t, five, [[14, 24]]);
     expect([asked(t, 80).slice(1, 7), t.box.folds]).toEqual([["Why: it deletes files", "echo a", "echo b", "rm -rf ./x", "echo c", "echo d"], false]);
+    const rows = Array.from({ length: 14 }, (_, k) => "mkdir -p out/part-" + k).join(" && ");
+    risky(t, rows, [spot(rows, "mkdir -p out/part-7", "part-7")]);
+    expect([asked(t, 80).slice(2, 7).every((l: string) => l.startsWith("mkdir") || l.startsWith("out/") || l.startsWith("-p ")), asked(t, 80)[7], t.box.folds]).toEqual([true, "> ○ Yes", false]);
+    risky(t, SCRIPT, [[0, SCRIPT.length]]);
+    expect([asked(t, 80)[3], t.box.folds]).toEqual(["echo step 2 >> build.log", false]);
     t.v.asks = [{ id: "q-plain", who: "illi", tool: "shell", what: SCRIPT.slice(0, 399), whole: SCRIPT, why: "it deletes files", keep: "" }];
     paint(t);
     expect([asked(t, 80)[0], asked(t, 80)[2], t.box.folds, t.question.fold]).toEqual(["── Allow shell? · ↑↓ Enter · Esc no " + "─".repeat(39), "set -e", false, undefined]);
@@ -321,29 +334,83 @@ test("opened, a folded command reads whole to its end, page by page", () => {
   });
 });
 
-for (const [cols, rows] of [[80, 16], [40, 10]]) {
-  test("folded or whole at " + cols + "x" + rows + ", the question paints nothing past the screen's foot, every answer shows, no two lines saying what is cut one over the other", () => {
-    sized(cols, rows, () => {
-      const t = term();
-      risky(t);
-      for (const open of [false, true, false]) {
-        expect([open, t.ruled.rows.length, t.box.folds, t.question.fold.open]).toEqual([open, rows, true, open]);
-        expect(t.box.row + t.box.h).toBeLessThan(rows - 1);
-        const inside = asked(t, cols).slice(1, -1);
-        expect(inside.slice(-3).map((l: string) => l.replace(/^> /, "  "))).toEqual(["  ○ Yes", "  ○ No", "  ○ No, and say why"]);
-        expect(inside.filter((l: string, k: number) => l.startsWith("… ") && inside[k + 1]?.startsWith("… "))).toEqual([]);
-        expect(asked(t, cols).at(-1)).toMatch(/^─+$/);
-        for (let k = 0; k < 12; k++) {
-          term_grab(t, "PgDn");
-          paint(t);
-          const now = asked(t, cols).slice(1, -1);
-          expect(now.filter((l: string, j: number) => l.startsWith("… ") && now[j + 1]?.startsWith("… "))).toEqual([]);
-        }
-        term_grab(t, "Ctrl+O");
-        paint(t);
-      }
-    });
+// a 2,000-character one-liner whose risk is in its middle, and one
+// whose risk runs on over two rows at 80 columns; where a risk is in a
+// command, from its first words to its last
+const ONE  = Array.from({ length: 40 }, (_, k) => "mkdir -p out/part-" + k).join(" && ") + " && rm -rf ~/projects/old-site && " + Array.from({ length: 49 }, (_, k) => "touch out/done-" + k).join(" && ");
+const TWO  = Array.from({ length: 40 }, (_, k) => "mkdir -p out/part-" + k).join(" && ") + " && rm -rf ~/projects/old-site ~/projects/older-site ~/projects/oldest-site ~/projects/first-site && " + Array.from({ length: 46 }, (_, k) => "touch out/done-" + k).join(" && ");
+const spot = (what: string, from: string, to: string) => [what.indexOf(from), what.indexOf(to) + to.length];
+
+// the lead of the question as last painted, read whole page by page
+const whole = (t: any, cols: number) => {
+  const read: string[] = [];
+  for (let k = 0; k < 40; k++) {
+    asked(t, cols).slice(1, 1 + t.box.ahead).forEach((l: string, j: number) => (read[t.question.past + j] = l));
+    term_grab(t, "PgDn");
+    paint(t);
+  }
+  return read;
+};
+
+test("a 2,000-character one-liner folds by its rows: its first, the one holding what made the checks ask and its last, each run of the rest one dim line saying how many rows it hides; a risk over two rows shows both; Ctrl+O, or a click on such a line, shows it all", () => {
+  sized(80, 24, () => {
+    const t = term();
+    risky(t, ONE, [spot(ONE, "rm -rf", "old-site")]);
+    expect(asked(t, 80)[0]).toBe("── Allow shell? · ↑↓ Enter · Ctrl+O all · Esc no " + "─".repeat(26));
+    expect(asked(t, 80).slice(1, -1)).toEqual(["Why: it deletes files", "mkdir -p out/part-0 && mkdir -p out/part-1 && mkdir -p out/part-2 && mkdir", "… 12 rows", "out/part-39 && rm -rf ~/projects/old-site && touch out/done-0 && touch", "… 13 rows", "&& touch out/done-47 && touch out/done-48", "> ○ Yes", "  ○ No", "  ○ No, and say why"]);
+    expect([t.box.rows.slice(0, 6), t.ruled.rows[t.box.row + 4][0].line.map((r: any) => r.s.d)]).toEqual([[null, null, { $: "fold", k: 0 }, null, { $: "fold", k: 1 }, null], [true]]);
+    term_grab(t, "Ctrl+O");
+    paint(t);
+    const all = whole(t, 80);
+    expect([all.length, all.slice(1).join(" ")]).toEqual([t.box.lead, ONE]);
+    risky(t, TWO, [spot(TWO, "rm -rf", "first-site")]);
+    expect(asked(t, 80).slice(3, 7)).toEqual(["… 12 rows", "out/part-39 && rm -rf ~/projects/old-site ~/projects/older-site", "~/projects/oldest-site ~/projects/first-site && touch out/done-0 && touch", "… 12 rows"]);
+    click(t, t.box.row + 2, COL);
+    paint(t);
+    expect([t.question.fold.open, sent(t), t.box.rows.some((aim: any) => aim?.$ === "fold"), whole(t, 80).slice(1).join(" ")]).toEqual([true, [], false, TWO]);
   });
+});
+
+test("the rows holding a risk are found where the line shows it, past tabs (two spaces each), control characters cleaned out and wide characters; another width wraps and folds it anew, the risk's row still shown", () => {
+  for (const pad of ["\t".repeat(150), "\x07".repeat(450), "漢字😀".repeat(80)]) {
+    const what = ONE.replace(" && rm -rf", " && printf '" + pad + "' && rm -rf");
+    for (const cols of [80, 120]) {
+      sized(cols, 30, () => {
+        const t = term();
+        risky(t, what, [spot(what, "rm -rf", "old-site")]);
+        const lines = asked(t, cols).slice(2, -4);
+        expect([t.box.folds, lines.join(" ").includes("rm -rf ~/projects/old-site"), lines.filter((l: string) => /^… \d+ rows$/.test(l)).length]).toEqual([true, true, 2]);
+        expect(lines[0]).toStartWith(cols === 80 ? "mkdir -p out/part-0 && mkdir -p out/part-1 && mkdir -p out/part-2 && mkdir" : "mkdir -p out/part-0 && mkdir -p out/part-1 && mkdir -p out/part-2 && mkdir -p out/part-3 && mkdir -p out/part-4");
+      });
+    }
+  }
+});
+
+for (const [cols, rows] of [[80, 16], [40, 10]]) {
+  for (const [what, at, said] of [[SCRIPT, RISK, "a 40-line script"], [ONE, spot(ONE, "rm -rf", "old-site"), "a 2,000-character one-liner"]] as const) {
+    test("folded or whole at " + cols + "x" + rows + ", " + said + ": the question paints nothing past the screen's foot, every answer shows, no two lines saying what is cut one over the other", () => {
+      sized(cols, rows, () => {
+        const t = term();
+        risky(t, what, [at]);
+        for (const open of [false, true, false]) {
+          expect([open, t.ruled.rows.length, t.box.folds, t.question.fold.open]).toEqual([open, rows, true, open]);
+          expect(t.box.row + t.box.h).toBeLessThan(rows - 1);
+          const inside = asked(t, cols).slice(1, -1);
+          expect(inside.slice(-3).map((l: string) => l.replace(/^> /, "  "))).toEqual(["  ○ Yes", "  ○ No", "  ○ No, and say why"]);
+          expect(inside.filter((l: string, k: number) => l.startsWith("… ") && inside[k + 1]?.startsWith("… "))).toEqual([]);
+          expect(asked(t, cols).at(-1)).toMatch(/^─+$/);
+          for (let k = 0; k < 12; k++) {
+            term_grab(t, "PgDn");
+            paint(t);
+            const now = asked(t, cols).slice(1, -1);
+            expect(now.filter((l: string, j: number) => l.startsWith("… ") && now[j + 1]?.startsWith("… "))).toEqual([]);
+          }
+          term_grab(t, "Ctrl+O");
+          paint(t);
+        }
+      });
+    });
+  }
 }
 
 test("a question takes the input's full width with the side left or right, nothing dimmed: the head and the side as with none, only the chat's rows fewer", () => {

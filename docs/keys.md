@@ -203,12 +203,14 @@ and what you were typing comes back once you answer.
   PgDn scroll it; the answers always show (on a screen too short for
   both, what leads them gives way). A permission question's long
   command comes folded: its first line, the lines that made illi ask,
-  and its last, a dim `… 37 lines` for each stretch left out. Ctrl+O
-  (the rule says `Ctrl+O all`) or a click on a `… 37 lines` line shows
-  all of it; Ctrl+O again (`Ctrl+O fold`) folds it. Everywhere else the mouse
-  works as with no question: the wheel scrolls the chat, text is
-  selected and copied (Ctrl+C with text selected copies it, and doesn't
-  answer), the side and the tabs answer; a click outside never answers.
+  and its last, a dim `… 37 lines` for each stretch left out; a line
+  too long for the screen so too by its rows (`… 12 rows`). Ctrl+O
+  (the rule says `Ctrl+O all`) or a click on a `… 37 lines` or
+  `… 12 rows` line shows all of it; Ctrl+O again (`Ctrl+O fold`) folds
+  it. Everywhere else the mouse works as with no question: the wheel
+  scrolls the chat, text is selected and copied (Ctrl+C with text
+  selected copies it, and doesn't answer), the side and the tabs
+  answer; a click outside never answers.
 - Ctrl+L, Ctrl+Z and the leader work as ever; Ctrl+P opens the commands
   in a list's place (in its own, closes it), and over a question, which
   is back as the list closes.

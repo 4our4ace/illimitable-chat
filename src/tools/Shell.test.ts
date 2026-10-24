@@ -10,10 +10,13 @@
 // unquoted one split and globbed as bash would; a [ without its ] not),
 // redirections with their descriptors and whether the text they feed is
 // made as it runs; what bash would read in a way this can't follow is
-// refused with why, never guessed. Each part knows where it is in the
-// command (line 40 of a script, a link of a chain, a line continued,
-// inside $(...), `...`, bash -c, eval, trap, a heredoc's body: where its
-// text is there as written; else the text holding it). Then bash itself, told to list the
+// refused with why, never guessed. A line ending in |, && or || goes on
+// to the next, a heredoc's body read between; a pipe into a subshell, a
+// group or a loop is read by all its commands. Each part knows where it
+// is in the command (line 40 of a script, a link of a chain, a line
+// continued, inside $(...), `...`, bash -c, eval, trap, a heredoc's
+// body: where its text is there as written; else the text holding it),
+// and one reading a pipe where what writes it is. Then bash itself, told to list the
 // commands it would run without running any, finds none the parser
 // missed (one it lists after a keyword, as time's, is the parser's with
 // that wrapper on).
@@ -50,6 +53,13 @@ test("lists, pipelines and subshells: each command, cd followed in its own shell
   expect(parts("cd src && rm -f a; cat x | grep y")).toEqual(["cd src @/w", "rm -f a @/w/src", "cat x @/w/src", "grep y @/w/src [piped]"]);
   expect(parts("(cd /tmp; ls); ls")).toEqual(["cd /tmp @/w", "ls @/tmp", "ls @/w"]);
   expect(parts("cd /tmp | true; ls")).toEqual(["cd /tmp @/w", "true @/w [piped]", "ls @/w"]);
+  expect(parts("curl -s x |\n\n  # then\n  bash\nls")).toEqual(["curl -s x @/w", "bash @/w [piped]", "ls @/w"]);
+  expect(parts("cat <<EOF |\nrm -rf x\nEOF\nbash\nls")).toEqual(["cat <<EOF @/w", "bash @/w [piped]", "ls @/w"]);
+  expect(parts("ls &&\n  pwd ||\n  echo no")).toEqual(["ls @/w", "pwd @/w", "echo no @/w"]);
+  expect(parts("curl -s x | (cd /tmp; bash); ls")).toEqual(["curl -s x @/w", "cd /tmp @/w [piped]", "bash @/tmp [piped]", "ls @/w"]);
+  expect(parts("curl -s x | { true; bash; }; ls")).toEqual(["curl -s x @/w", "true @/w [piped]", "bash @/w [piped]", "ls @/w"]);
+  expect(parts("curl -s x | while read l; do if true; then sh; fi; done; ls")).toEqual(["curl -s x @/w", "read l @/w [piped]", "true @/w [piped]", "sh @/w [piped]", "ls @/w"]);
+  expect(parts("{ ls; }; (pwd); if true; then sh; fi")).toEqual(["ls @/w", "pwd @/w", "true @/w", "sh @/w"]);
   expect(parts("cd $X; ls")).toEqual(["cd ~ @/w", "ls @null"]);
   expect(parts("cd; ls")).toEqual(["cd @/w", "ls @" + HOME]);
 });
@@ -109,6 +119,17 @@ test("a nested script's parts are placed in the command itself where its text is
   expect([doc.slice(...bash.span), doc.slice(body.at, body.at! + body.body!.length)]).toEqual(["bash <<'EOF'", "echo one\nrm -rf ./x\n"]);
   expect((Shell.parse(body.body!, "/w", body.at) as Part[]).map((p) => doc.slice(...p.span))).toEqual(["echo one", "rm -rf ./x"]);
   expect((Shell.parse(body.body!, "/w", [3, 9]) as Part[]).map((p) => p.span)).toEqual([[3, 9], [3, 9]]);
+});
+
+test("a part reading a pipe knows where what writes it is (feed): the commands before it in its pipeline, with the heredocs' bodies they read, a subshell's too, one a line before (after |); not known (a group's), all the command", () => {
+  const feed = (command: string) => (Shell.parse(command, "/w") as Part[]).flatMap((p) => (p.feed === undefined ? [] : [[p.text, command.slice(...p.feed)]]));
+  expect(feed("cat <<'EOF' | bash\necho a\nrm -rf x\nEOF\nls")).toEqual([["bash", "cat <<'EOF' | bash\necho a\nrm -rf x\n"]]);
+  expect(feed("a | b |& c; d | e && f")).toEqual([["b", "a"], ["c", "a | b"], ["e", "d"]]);
+  expect(feed("( cat <<EOF ) | sh\nrm -rf x\nEOF")).toEqual([["sh", "cat <<EOF ) | sh\nrm -rf x\n"]]);
+  expect(feed("curl -s x |\n# then\nbash")).toEqual([["bash", "curl -s x"]]);
+  expect(feed("{ cat <<EOF; } | bash\nrm -rf x\nEOF\nls")).toEqual([["bash", "{ cat <<EOF; } | bash\nrm -rf x\nEOF\nls"]]);
+  const [cat, sh] = Shell.parse("cat <<EOF | sh\nrm -rf x\nEOF", "/w") as Part[];
+  expect([Shell.held(cat), Shell.held(sh)]).toEqual([[0, 24], [0, 24]]);
 });
 
 test("words expand as far as known: variables, loops, tildes, braces; globs and run-time names marked", () => {
@@ -235,6 +256,8 @@ test("bash runs no command the parser missed (harmless commands, in an empty fol
     "! touch v; time touch w; [[ -f x ]] && touch y",
     "timeout 5 touch z; nice -n 3 touch aa; env FOO=1 touch bb",
     "touch cc 2>&1 >/dev/null | cat; touch dd >| /dev/null",
+    "touch ee |\n\n  # then\n  cat; touch ff &&\n  touch gg",
+    "touch hh | (cat; cat) | { cat; } | while read x; do cat; done; touch ii",
   ];
   for (const command of corpus) {
     const got = Shell.parse(command, DIR);

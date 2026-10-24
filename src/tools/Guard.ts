@@ -78,9 +78,9 @@
 // folder grant's own * is kept as one (\*). A change to illi's own
 // config is asked in every mode, yolo too. A verdict says where in a
 // shell command its reasons are (Verdict spots: each flag's part, as
-// Shell.ts places it, with the heredocs' bodies it reads; all of a
-// command it can't follow), so a question folding a long command still
-// shows them.
+// Shell.ts places it, with the heredocs' bodies it reads and what writes
+// the pipe it reads; all of a command it can't follow), so a question
+// folding a long command still shows them.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -120,8 +120,8 @@ export type Where = { mode: Mode; cwd: string; top: string; rules: Rules; grants
 // (why; by the user's rule, which nothing here clears; by the mode, which
 // its exact grants clear). Either says where in a shell command what
 // made it so is (spots: the spans of the parts whose flags or rules
-// ask or refuse it, merged, first to last; none for a file or an MCP
-// tool), so a question folding a long command still shows those lines
+// ask or refuse it, first to last; none for a file or an MCP tool), so
+// a question folding a long command still shows those lines
 export type Verdict =
   | { $: "allow" }
   | { $: "ask"; why: string; always: string[]; exact: string[]; spots: Span[] }
@@ -614,19 +614,12 @@ function verdict(where: Where, look: Look): Verdict {
 }
 
 // where the reasons for a verdict are in a shell command: their spans,
-// merged where they touch or overlap, first to last (none placed: none)
+// first to last, each once (none placed: none); one inside another kept
+// apart, so a risk deep in a heredoc whose shell is asked about too keeps
+// its own place (past what the question is given: Tools.whole)
 function spots(reasons: Array<{ span?: Span }>): Span[] {
-  const each = reasons.flatMap((r) => (r.span === undefined ? [] : [r.span])).sort((a, b) => a[0] - b[0]);
-  const out: Span[] = [];
-  for (const [from, to] of each) {
-    const last = out.at(-1);
-    if (last !== undefined && from <= last[1]) {
-      last[1] = Math.max(last[1], to);
-    } else {
-      out.push([from, to]);
-    }
-  }
-  return out;
+  const each = reasons.flatMap((r) => (r.span === undefined ? [] : [r.span])).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  return each.filter((s, k) => k === 0 || s[0] !== each[k - 1][0] || s[1] !== each[k - 1][1]);
 }
 
 // whether a mode asks a flag of a tier
@@ -706,12 +699,13 @@ function look_shell(where: Where, look: Look, command: string): void {
 // or whose folder is known only then names the whole command: `sh` alone
 // would let any code piped into it run, `rm -rf $x` any folder. ask
 // mode's family grant covers the part alone (cat * covers no tee piped
-// after it). Its flags are placed at it and the heredocs' bodies it reads
-// (held: what it writes to a file, feeds a shell or an interpreter is
+// after it). Its flags are placed at it, the heredocs' bodies it reads
+// and what writes the pipe it reads (Shell.held: what it writes to a
+// file, feeds a shell or an interpreter, sends to another computer is
 // what is asked about, its lines no one line), so a question folding the
 // command shows them
 function look_part(where: Where, look: Look, part: Part, depth: number): void {
-  const held  = part.redirs.reduce<Span>((s, r) => ((r.op !== "<<" && r.op !== "<<-") || r.at === undefined || r.body === undefined ? s : [Math.min(s[0], r.at), Math.max(s[1], r.at + r.body.length)]), part.span);
+  const held  = Shell.held(part);
   const words = [...part.argv, ...part.env.map((e) => e.value), ...part.redirs.map((r) => r.target)];
   const whole = part.piped || part.fed || part.cwd === null || part.redirs.some((r) => r.op.startsWith("<")) || words.some((w) => w.dynamic || w.fd || /[$`]/.test(w.raw));
   const exact = whole ? look.whole : Guard.norm(part, where.cwd);

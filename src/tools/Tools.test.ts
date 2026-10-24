@@ -14,14 +14,15 @@
 // checks (Guard.ts; careful mode, in a throwaway repository): a
 // risk asked with why, the question given the command whole up to 32,000
 // characters, how many more left out (a note and the refused list, cut
-// short), and where its risk is; past 32,000 each line holding a risk
-// still, after a line saying how much was left out (a minified line's
-// from just before it); what don't ask again keeps by its ends past
-// 1,000; a refusal
+// short), and where its risk is (a file's: nowhere); past 32,000 each
+// line holding a risk still (one inside another's too), after a line
+// saying how much was left out (a minified line's from just before it;
+// lines one after another as one); what don't ask again keeps by its
+// ends past 1,000; a refusal
 // recorded and told to the model; a plugin's hooks come before them and
 // after the tool. The loop guard (every mode but yolo): a call the same
-// as its caller's two before it asked, illi's own tools too; a yes starts
-// its count again. The projects: their table,
+// as its caller's two before it asked (all of it its risk), illi's own
+// tools too; a yes starts its count again. The projects: their table,
 // a search across them, a zoom into another's chat. A subagent's view
 // fits its model: the oldest lines left out.
 
@@ -181,7 +182,7 @@ test("Claude Code's permission prompt is judged as illi's own calls: routine wor
   const huge = approve("Bash", { command: doc });
   await until(() => v.asks.length === 1);
   const q = v.asks[0];
-  expect([q.whole!.length, q.more, q.whole + doc.slice(32000) === doc, q.spots!.map((s) => doc.slice(...s)), q.cuts]).toEqual([32000, doc.length - 32000, true, ["git push --force origin main"], undefined]);
+  expect([q.whole!.length, q.more, q.whole + doc.slice(32000) === doc, q.spots!.map((s) => doc.slice(...s)), q.cuts]).toEqual([32000, doc.length - 32000, true, [doc.slice(0, 32000)], undefined]);
   expect([q.keep!.length <= 1003, q.keep!.startsWith("cat <<'EOF' | git push --force origin main\nline 0 of a file"), q.keep!.includes(" … "), q.keep!.endsWith("line 3999 of a file\nEOF")]).toEqual([true, true, true, true]);
   await answer(false, false);
   await huge;
@@ -198,7 +199,7 @@ test("Claude Code's permission prompt is judged as illi's own calls: routine wor
   const count   = chat.tools.perm.refused.length;
   const stopped = approve("Write", { file_path: AWAY + "/a-illi-test.txt", content: "x" }, stop.signal);
   await until(() => v.asks.length === 1);
-  expect(v.asks[0].what).toBe(AWAY + "/a-illi-test.txt");
+  expect([v.asks[0].what, v.asks[0].spots]).toEqual([AWAY + "/a-illi-test.txt", []]);
   stop.abort();
   expect((await stopped).message).toStartWith("The request was stopped. Asked because ");
   expect(chat.tools.perm.refused).toHaveLength(count);
@@ -266,7 +267,7 @@ test("the loop guard: a yes starts that caller's count again from none, so a pol
   const poll  = () => Tools.call(chat.tools, "main", "shell", { command: "echo poll" }, new AbortController().signal);
   const reply = async (yes: boolean) => {
     await until(() => v.asks.length === 1);
-    expect(v.asks[0]).toMatchObject({ tool: "shell", what: "echo poll", why: "the same call a third time in a row", keep: "" });
+    expect(v.asks[0]).toMatchObject({ tool: "shell", what: "echo poll", why: "the same call a third time in a row", keep: "", spots: [[0, 9]] });
     View.link_send(v, { $: "answer", ask: v.asks[0].id, yes, always: false, said: "" });
   };
   chat.tools.perm.calls.clear();
@@ -395,6 +396,10 @@ test("past 32,000 characters the question still gets each line holding a spot (w
   const one  = Tools.whole({ command: line }, [[40000, 40017]]);
   expect([one.whole.slice(32000), one.spots!.map((s) => one.whole.slice(...s)), one.more]).toEqual(["\n… 7,800 characters left out\n" + line.slice(39800, 41800), ["rm -rf ~/old-site"], line.length - 41800]);
   expect(Tools.whole({ command: "ls && rm -rf x" }, [[6, 14]])).toEqual({ whole: "ls && rm -rf x", more: 0, spots: [[6, 14]] });
+  const lines = "x".repeat(33000) + "\nrm -rf ~/a\nrm -rf ~/b\necho done";
+  const [a, b] = [lines.indexOf("rm -rf ~/a"), lines.indexOf("rm -rf ~/b")];
+  const next  = Tools.whole({ command: lines }, [[0, lines.length], [a, a + 10], [b, b + 10]]);
+  expect([next.whole.slice(32000), next.more, next.spots!.slice(-2).map((s) => next.whole.slice(...s))]).toEqual(["\n… 1,001 characters left out\nrm -rf ~/a\nrm -rf ~/b", "\necho done".length, ["rm -rf ~/a", "rm -rf ~/b"]]);
 });
 
 test("a long text by its ends: whole up to the most, else its start and its end about an ellipsis, a surrogate pair kept whole", () => {

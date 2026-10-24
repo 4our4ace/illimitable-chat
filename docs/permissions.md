@@ -209,29 +209,50 @@ git push --force origin main
   characters were left out before it, and a dim line at its end says how
   many more aren't shown. The answers always show; on a screen too short
   for both, what leads them gives way first.
-- A command taller than four lines comes folded: its first line, every
+- A command taller than four rows comes folded: its first line, every
   line holding what made illi ask, and its last, each stretch between
-  them a dim `… 38 lines`. What made it ask always shows, wherever it
-  is: line 40 of a script, a command inside `bash -c '…'` or a heredoc
-  fed to a shell; all of a heredoc the risky command reads (what it
-  writes to a git hook, what it feeds `python`). Ctrl+O, or a click on
-  a `… 38 lines` line, shows the whole command; Ctrl+O again folds it
-  (the rule says which: `Ctrl+O all`, `Ctrl+O fold`). One illi can't
-  follow, and one asked for a reason with no place in it (a hook's ask,
-  the loop guard), shows whole.
+  them a dim `… 37 lines`. A line too long for the screen (a
+  2,000-character `&&` chain, a minified one-liner) folds so too, by
+  its rows: its first, those holding what made illi ask, and its last,
+  a dim `… 12 rows` between (a row alone is never hidden; a new width
+  folds it anew). What made it ask always shows, wherever it is: line
+  40 of a script, the middle of a one-liner, a command inside
+  `bash -c '…'` or a heredoc fed to a shell; all of a heredoc the risky
+  command reads (what it writes to a git hook, what it feeds `python`),
+  and all a pipe brings it (`cat <<'EOF' | bash`, `… | sudo tee
+  /etc/hosts`, `… | ssh host`). Ctrl+O, or a click on a `… 37 lines` or
+  `… 12 rows` line, shows the whole command; Ctrl+O again folds it (the
+  rule says which: `Ctrl+O all`, `Ctrl+O fold`). One illi can't follow,
+  one asked for a reason with no place in it (a hook's ask, the loop
+  guard), and a file tool's or an MCP tool's call show whole.
 
   ```
-  ── Allow shell? · ↑↓ Enter · Ctrl+O all · Esc no ──────────────────────────────
+  ── Allow shell? · ↑↓ Enter · Ctrl+O all · Esc no ──────────────────────────
   Why: rm -rf ~/projects/old-site deletes ~/projects/old-site and all in it;
   ~/projects/old-site is outside the project
   set -e
-  … 38 lines
+  … 37 lines
   rm -rf ~/projects/old-site
   echo done
   > ○ Yes
     ○ No
     ○ No, and say why
-  ───────────────────────────────────────────────────────────────────────────────
+  ───────────────────────────────────────────────────────────────────────────
+  ```
+
+  ```
+  ── Allow shell? · ↑↓ Enter · Ctrl+O all · Esc no ──────────────────────────
+  Why: rm -rf ~/projects/old-site deletes ~/projects/old-site and all in it;
+  ~/projects/old-site is outside the project
+  mkdir -p out/part-0 && mkdir -p out/part-1 && mkdir -p out/part-2 && mkdir
+  … 12 rows
+  out/part-39 && rm -rf ~/projects/old-site && touch out/done-0 && touch
+  … 13 rows
+  && touch out/done-47 && touch out/done-48
+  > ○ Yes
+    ○ No
+    ○ No, and say why
+  ───────────────────────────────────────────────────────────────────────────
   ```
 - "Don't ask again" says what it keeps, for this project: a folder for
   files outside the project (for a read, the repository holding it;

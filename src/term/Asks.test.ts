@@ -7,7 +7,9 @@
 // line saying where text was left out to keep a risk past that, dim and
 // kept while folded, told by where it is, not its words); told where
 // the risk is, it folds, keeping the lines holding it (blank lines left
-// out counted right) and its last; told nothing, it doesn't: Yes
+// out counted right), where on them it is (by character of the line as
+// shown: tabs two spaces, control characters gone) and its last; told
+// nothing, or nowhere (a file's, an MCP tool's), it doesn't: Yes
 // allows; "don't ask again"
 // names what it keeps, on one line (offered only when it keeps
 // something); Esc says no; "No, and say why" asks a line (Esc: back to
@@ -116,9 +118,24 @@ test("told where in a command the checks found its risk (spots), the question fo
   t.v.asks = [{ id: "q1", who: "illi", tool: "Bash", what: whole, whole, spots: [[at, whole.indexOf("~/old") + 5]], why: "it is risky", keep: "" }];
   term_asks(t);
   expect(t.question.lead.map((l: any) => l.map((r: any) => r.x).join(""))).toEqual(["Why: it is risky", "cd app", "npm ci", "rm -rf \\", "  ~/old", "npm test", "echo done"]);
-  expect(t.question.fold).toEqual({ from: 1, keep: [3, 4, 6], open: false });
+  expect(t.question.fold).toEqual({ from: 1, keep: [6], spots: [[3, 0, 8], [4, 0, 7]], open: false });
   asks(t, ["q2", "Bash", whole]);
   expect([t.question.lead.length, t.question.fold]).toEqual([7, undefined]);
+  t.v.asks = [{ id: "q3", who: "illi", tool: "mcp__db__query", what: whole, whole, spots: [], why: "it is risky", keep: "" }];
+  term_asks(t);
+  expect([t.question.lead.length, t.question.fold]).toEqual([7, undefined]);
+});
+
+test("where on its line a spot is, is told by character of the line as the question shows it: a tab two spaces, a control character (a carriage return too) gone; one on a blank line, the next line at its start; one past the last, its end", () => {
+  const t = term();
+  const line  = "a\tb\x01\x02c && rm -rf ~/old \r";
+  const whole = "ls\n" + line + "\n\n\necho done";
+  const at    = whole.indexOf("rm -rf");
+  t.v.asks = [{ id: "q1", who: "illi", tool: "Bash", what: whole, whole, spots: [[at, at + 12], [whole.indexOf("\n\n") + 1, whole.indexOf("\n\n") + 1], [whole.length, whole.length]], why: "it is risky", keep: "" }];
+  term_asks(t);
+  const shown = t.question.lead[2][0].x;
+  expect([shown, t.question.fold.spots]).toEqual(["a  bc && rm -rf ~/old", [[2, 9, 21], [3, 0, 0], [3, 9, 9]]]);
+  expect(shown.slice(9, 21)).toBe("rm -rf ~/old");
 });
 
 test("where a command's whole was cut to keep a spot past what the question is given, the line saying so is dim and kept while folded, as is the line before it, told apart by where it is (cuts), not by its words", () => {
@@ -131,7 +148,7 @@ test("where a command's whole was cut to keep a spot past what the question is g
   const lead = t.question.lead;
   expect(lead.map((l: any) => l.map((r: any) => r.x).join(""))).toEqual(["Why: it is risky", "cat <<EOF > big", "line 1", "line 2", said, "rm -rf ~/x", said, "… 12 more characters not shown"]);
   expect(lead.map((l: any) => l[0].s.d === true)).toEqual([true, false, false, false, true, false, false, true]);
-  expect(t.question.fold).toEqual({ from: 1, keep: [5, 3, 4, 6], open: false });
+  expect(t.question.fold).toEqual({ from: 1, keep: [3, 4, 6], spots: [[5, 0, 10]], open: false });
 });
 
 test("don't ask again keeps what it names; one that keeps nothing isn't offered; Esc says no", () => {

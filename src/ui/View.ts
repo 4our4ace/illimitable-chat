@@ -101,7 +101,8 @@ export type Background = { id: number; command: string; agent: string; since: nu
 // it would do as the question shows it, whole up to Tools.whole's most,
 // and how many characters past that are left out; where in it what made
 // them ask is, spots, offsets into whole: a question folding it shows
-// those lines, none given: it doesn't fold; where whole says that text
+// those lines (a long one, its rows holding them), none given or none
+// placed: it doesn't fold; where whole says that text
 // was left out between the lines it keeps for a spot, cuts; why they
 // stopped it; what a "don't ask again" keeps, as said, "": none offered;
 // the middle of a long why or keep left out); or illi's own (ask: its
