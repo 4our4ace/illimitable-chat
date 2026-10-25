@@ -227,8 +227,9 @@ function setting_sticky(t: Term): void {
 // a setting to a value (null: its default), in config.json, and what
 // the terminal holds of it anew (the side panel, whether replies are
 // suggested; the pick, the chat's too while illi's own agent is the main
-// one); true if set. One a variable sets, or that won't do, isn't: a
-// note says why
+// one; the mode and `related`, the chat's illi's too, another process for
+// a second terminal); true if set. One a variable sets, or that won't
+// do, isn't: a note says why
 export function setting_set(t: Term, key: config.Key, value: unknown): boolean {
   const env = config.config_env_set(key);
   if (env !== null) {
@@ -252,6 +253,9 @@ export function setting_set(t: Term, key: config.Key, value: unknown): boolean {
   }
   if (key === "mode") {
     term_send(t, { $: "mode", mode: config.config_value("mode") as Mode });
+  }
+  if (key === "related") {
+    term_send(t, { $: "related" });
   }
   if (key === "statusline") {
     status_set(t);

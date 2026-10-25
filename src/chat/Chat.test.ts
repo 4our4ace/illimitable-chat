@@ -28,7 +28,8 @@
 // empties the to-do list beside the chat, whatever was said. A view
 // switches this session's mode; a refused request allowed again is told
 // to illi in the user's name, its grants this session's; a grant goes.
-// A radar's line a view dismissed reaches the chat, kept once.
+// A radar's line a view dismissed reaches the chat, kept once; `related`
+// set at a view is read again by the chat's illi.
 // The loop guard counts within a turn (an agent's run too). A
 // message passes the plugins' and hooks' checks (kept back, told more;
 // slow ones waited on in the views' sight, a stop sending it back); their
@@ -138,12 +139,35 @@ test("a radar's line dismissed at a view's side reaches the chat over the pipe, 
   send([40, 8]);
   send([3, 4]);
   send(["x", 1]);
-  await until(() => said.length === 5);
+  send([4, 0.5]);
+  await until(() => said.length === 6);
   expect(said.slice(0, 3)).toEqual(["ok", "ok", "ok"]);
-  expect(said.slice(3)).toEqual(["No line [3,4] to dismiss.", 'No line ["x",1] to dismiss.']);
+  expect(said.slice(3)).toEqual(["No line [3,4] to dismiss.", 'No line ["x",1] to dismiss.', "No line [4,0.5] to dismiss."]);
   expect(chat.tools.gone).toEqual([[16, 32], [40, 48]]);
   v.ws!.close();
   chat.tools.gone.length = 0;
+});
+
+test("related set at a view reaches the chat's illi at once: what another process wrote in config.json is read again", async () => {
+  const v = View.view_new();
+  View.link_open(v, Chat.link(chat, (msg) => View.view_hear(v, msg).forEach((out) => View.link_send(v, out))));
+  await until(() => v.up);
+  const file = config.DIR + "/config.json";
+  const was  = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
+  try {
+    // a second terminal's /settings writes the file in its own process
+    fs.writeFileSync(file, JSON.stringify({ ...(was === null ? {} : JSON.parse(was)), related: "screen" }));
+    expect([config.RELATED, config.RECALL]).toEqual([true, true]);
+    let said = "";
+    View.link_send(v, { $: "related" }, (a) => (said = a.error ?? "ok"));
+    await until(() => said !== "");
+    expect([said, config.RELATED, config.RECALL]).toEqual(["ok", true, false]);
+  } finally {
+    was === null ? fs.rmSync(file, { force: true }) : fs.writeFileSync(file, was);
+    config.config_reread();
+    v.ws!.close();
+  }
+  expect(config.RECALL).toBe(true);
 });
 
 test("a turn's wait names the model it runs on, not one picked since", async () => {
