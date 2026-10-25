@@ -22,11 +22,11 @@ Chat
 | `/compact [focus]` | illi writes a recap of the chat and goes on from it alone (the chat before is kept and looked up when needed, not sent); focus: what the recap should keep |
 | `/image <path>` | attach an image to the next message (or paste or drop the file) |
 | Alt+V, Ctrl+V | attach the clipboard's image (the terminal's own paste brings text) |
-| `/open #id` | open block #id and keep it open (or click it) |
-| `/close #id` | close block #id and keep it closed (or click anywhere in its frame) |
+| `/open #id` | open block #id and keep it open (or click it); a call of a run: open it alone (one past five too, the run showing all) |
+| `/close #id` | close block #id and keep it closed (or click anywhere in its frame); a call of a run: shut it |
 | `/fold`, Ctrl+F | fold the chat into the fewest blocks; again: unfold |
 | Ctrl+Y | copy illi's last reply (a drag copies the text it covers, a double click a word) |
-| Ctrl+O | show or hide the work between replies: tools, thinking, agents' reports, and the recaps under the "Compaction" lines (hidden, a click opens one alone; shown, a click closes one alone; Ctrl+O forgets those clicks, and unfolds what a click folded); on a permission question, its long command all, or folded again |
+| Ctrl+O | show or hide the work between replies: every call of every run open (its input and result whole, the thinking before it, the agents' reports), every run's calls all listed, what streams, and the recaps under the "Compaction" lines (hidden, a click opens one alone; shown, a click closes one alone; Ctrl+O forgets those clicks, and unfolds what a click folded); on a permission question, its long command all, or folded again |
 | `/export` | save this project's memory as ./illi-memory.json |
 | `/tree` | save this project's whole memory tree as ./illi-tree.html |
 | Ctrl+L | draw the screen again |
@@ -296,31 +296,40 @@ Mouse and side panel
   three a line; a reply's code has a copy button. Copying uses OSC 52,
   so the terminal (and tmux) must allow it.
 - The work between replies (tool calls, results, thinking, agents'
-  reports) shows as one line saying what was done, its calls under it,
-  one line each: `✓` done, `✗` failed, blank when no result came with
-  it (a call stopped before it answered; a web search by OpenAI's or
-  ChatGPT's models from before illi 0.3.1), the tool and what it was called
-  with; past six, the latest five, under a line counting the rest
-  (`… 12 earlier`). A stop answers a call illi's own tools are running,
-  as failed; one Claude Code is running gets no answer. A click on a run's
-  line or a call's, or anywhere down the bar at an open run's left,
-  opens or closes the whole run. Inside an open run, a click on a call,
-  a result, a thought or a report folds it to one line (`result · 1,204
-  lines`), wherever you are in it; a click on that line unfolds it. What
-  you clicked stays under the pointer (at the chat's end a close lands
+  reports) shows as a run ([Design language](design.md#runs)): a line
+  saying what was done, then its calls, one line each, what each did in
+  plain words and how it ended (`✓ Run the tests · exit 0`): `✓` done,
+  `✗` failed, blank when no result came with it (a call stopped before
+  it answered; a web search by OpenAI's or ChatGPT's models from before
+  illi 0.3.1). A report, or a thought or a result with no call, is a
+  line of its own. A stop answers a call illi's own tools are running,
+  as failed; one Claude Code is running gets no answer. A click on a
+  call's line opens that call alone, under it behind a bar: the thinking
+  before it, its whole input, its whole result; its siblings stay shut.
+  A click on its line again, anywhere down its bar, or anywhere in it
+  shuts it. The run's own line takes no click. Past five calls, a
+  `+3 more` line under them (while the run is at work, the newest five
+  under a `+3 earlier` line): a click shows them all, and on the line,
+  now `show fewer`, five again. A recap's "Compaction" line opens and
+  closes the recap; inside, a click on a page folds it to one line
+  (`recap · 40 lines`), and a click on that line unfolds it. What you
+  clicked stays under the pointer (at the chat's end a close lands
   lower, as the chat can't scroll past its end).
 - A click on a word waits a moment before it acts, so a double click
-  still copies the word. Past a line's end, on a blank line or a frame's
-  edge, on a run's line, a call's under it or its bar, on a folded
-  message's `[+]`, on a block's `/open` or an open block's top edge, it
-  acts at once. A second click on the same spot right after does
-  nothing, so a slow double click never undoes the fold.
-- What a click would act on lights as the pointer moves over it: a run's
-  line, its calls and its whole bar, heavier; a message's bar beside it
-  (and a folded one's `[+]`); a block's `/open`, an open block's top
-  edge. It goes as you type, as the chat moves on by itself, and as the
-  window loses the focus. While text you chose shows, nothing lights: a
-  click then only lets the text go, and folds nothing.
+  still copies the word (one inside an open call too: a command, a
+  result). Past a line's end, on a blank line or a frame's edge, on a
+  call's line or its bar, on a `+3 more` line, on a recap's line, on a
+  folded page's `[+]`, on a block's `/open` or an open block's top edge,
+  it acts at once. A second click on the same spot right after does
+  nothing, so a slow double click never undoes the fold; nor does a
+  click waiting on what was opened or shut otherwise meanwhile.
+- What a click would act on lights as the pointer moves over it: a
+  call's line, and an open call's whole bar, heavier; a `+3 more` line;
+  a recap's line and its bar; a page's bar beside it (and a folded
+  one's `[+]`); a block's `/open`, an open block's top edge. It goes as
+  you type, as the chat moves on by itself, and as the window loses the
+  focus. While text you chose shows, nothing lights: a click then only
+  lets the text go, and folds nothing.
 - A drag with the right button over the chat quotes what it covers in
   your message, each line after `> `, to reply to it; a right click
   within 5 seconds takes the quote out again. A reply's buttons are left
