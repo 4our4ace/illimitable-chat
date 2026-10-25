@@ -129,8 +129,9 @@ the full accent).
   shuts or opens: a recap, a page in it, the to-do), `run` (`•`, before
   a run of work's line), `tab` and
   `here` (`◯`, `●`: one of a set, the one in use: the chats' tabs, a
-  list's rows, the side's agents, skills and profiles; `here` is a
-  question's answer lit or picked too), `option` (`○`, an answer of a question
+  list's rows, the side's agents, skills and profiles; `here` is also
+  the lit answer of a question you answer with Enter, and what you
+  picked in illi's own form), `option` (`○`, an answer of a question
   that takes one), `find` (`⌕ `, before a list's search), `pending`,
   `active` and `done` (`□`, `>`, `■`: the to-do's items; `pending` and
   `done` a question's options that take several, not picked and picked

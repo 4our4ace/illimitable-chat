@@ -13,9 +13,10 @@
 // rule over it says its title (the form's: who asks), its keys and what
 // the lit answer takes besides (its foot); under it, the lines leading
 // its answers (why it asks; what it would do, bold), then its answers,
-// the lit one marked, or the line asked, as the input shows a message
-// typed; the form, its tabs, the question shown, its options, its words
-// and its keys. As tall as its lines, half the screen's rows at most (and
+// the lit one marked, its dot filled (the answer Enter gives), or the
+// line asked, as the input shows a message typed; the form, its tabs,
+// the question shown, its options (a dot filled on those picked), its
+// words and its keys. As tall as its lines, half the screen's rows at most (and
 // no more than the rest of the screen leaves it: Frame.ts), the chat
 // keeping the rest: too tall, its lead gives way, cut to fit, a dim line
 // after it saying how much more, and scrolls by the wheel over it and
@@ -154,9 +155,9 @@ export function question_laid(t: Term, w: number, h: number, free: number): Aske
 // that line's words after its own, never two such lines one over the
 // other. The line a fold hides under the pointer lit (question_under).
 // Its answers as a list's options are (Popup.ts popup_rows), the lit one
-// marked, its dot filled, each whole up to question_cap's lines (past
-// them: question_cut), all of them (on a screen too short for them:
-// question_view); a line asked, as the input shows a message typed (its
+// marked, its dot filled (Enter gives it), each whole up to
+// question_cap's lines (past them: question_cut), all of them (on a
+// screen too short for them: question_view); a line asked, as the input shows a message typed (its
 // hint while empty), question_words at most (scrolled only as its
 // cursor leaves them: Screen.ts screen_input), the cursor in it. Its
 // rule: its title, then its keys (where it

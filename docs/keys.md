@@ -248,8 +248,8 @@ the input's place, as every question does, a tab each, who asks in the
 rule over them, the input you were typing kept for after them:
 
 - Up and Down move, Space picks an option (one, or several where the
-  question says "pick any"), and typing writes words of your own: beside
-  the options picked, or instead of them.
+  question says "pick any"; ● marks what you picked), and typing writes
+  words of your own: beside the options picked, or instead of them.
 - Enter picks the option you're on and goes to the next question; Tab
   and Shift+Tab (Left and Right, off your words) switch tabs. PgUp and
   Ctrl+Home go to the first option, PgDn and Ctrl+End to your words.

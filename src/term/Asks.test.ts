@@ -235,7 +235,7 @@ test("illi's question shows as a form: who asks, its tabs, the question, its opt
   own(t);
   expect([t.choose, t.question, t.notices]).toEqual([null, null, []]);
   expect(term_form_lines(t, 80, 4)!.who).toBe("illi");
-  expect(text(t)).toEqual([" Database   Review", "Which database?  pick one", "> ● Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
+  expect(text(t)).toEqual([" Database   Review", "Which database?  pick one", "> ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
   expect(term_form_lines(t, 80, 4)!.at).toEqual({ row: 4, col: 4 });
 });
 
@@ -258,6 +258,19 @@ test("one question: Space picks one, typing goes to the words, Enter goes on to 
   term_grab(t, "Enter");
   expect(sent(t)).toEqual([{ ask: "a1", yes: true, always: false, said: "Which database?\npicked: MySQL\nwrote: with backups" }]);
   expect([term_form_lines(t, 80, 4), t.scr.ed.text]).toEqual([null, ""]);
+});
+
+test("in illi's form ● marks only what Space picked: the lit answer hollow till picked, a pick shown as it's made, as the lit row moves off it and back from another tab", () => {
+  const t = term();
+  own(t);
+  expect(text(t).slice(2, 5)).toEqual(["> ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL"]);
+  term_type(t, " ");
+  expect(text(t)[2]).toBe("> ● Postgres  you know it");
+  term_grab(t, "Down");
+  expect(text(t).slice(2, 4)).toEqual(["  ● Postgres  you know it", "> ○ SQLite"]);
+  term_grab(t, "Tab");
+  term_grab(t, "Shift+Tab");
+  expect(text(t).slice(2, 4)).toEqual(["  ● Postgres  you know it", "> ○ SQLite"]);
 });
 
 test("several questions, a tab each: Enter on an option picks it and goes on; several picked where multi; one unanswered says so", () => {

@@ -234,8 +234,9 @@ palette's slots over it; glyph: illi's marks by name, input ("> ",
 before what the user types), lit (">", a list's lit row), open and shut
 ("[-]", "[+]": a recap, a page in it, the to-do), run ("•", before a
 run of work's line), tab and here ("◯", "●": one of a set, the one in use;
-here a question's answer lit or picked too), option ("○", an answer of a
-question that takes one), find ("⌕ "), pending, active and done ("□",
+here also the lit answer of a question answered with Enter, and what was
+picked in illi's own form), option ("○", an answer of a question that
+takes one), find ("⌕ "), pending, active and done ("□",
 ">", "■": the to-do; pending and done a question's options that take
 several, as not picked and picked), ok and
 failed ("✓", "✗": how a run's call ended; a subagent done, a

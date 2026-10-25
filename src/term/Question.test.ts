@@ -591,7 +591,7 @@ test("illi's form takes the input's place, its full width, who asks in the rule:
     own(t, [DB, CACHE]);
     paint(t);
     expect([t.box.of, t.box.col, t.box.w, t.box.h]).toEqual([t.asking.form, 2, 105, 7]);
-    expect(asked(t, 110)).toEqual(["── illi asks " + "─".repeat(92), " Database   Cache   Review", "Which database?  pick one", "> ● Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip", "─".repeat(105)]);
+    expect(asked(t, 110)).toEqual(["── illi asks " + "─".repeat(92), " Database   Cache   Review", "Which database?  pick one", "> ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip", "─".repeat(105)]);
     expect(t.ruled.rows.some((r: any[]) => text(r, 110).includes("my draft"))).toBe(false);
     expect([t.ruled.at, t.scr.blink]).toEqual([{ row: t.box.row + 5, col: 2 + 4 }, true]);
     const chat = (u: any) => u.ruled.rows.slice(0, u.box.row - 1).map((r: any[]) => text(r, 110));
@@ -669,7 +669,7 @@ test("illi's form taller than half the screen: its tabs and keys hold, its lines
     }
     paint(t);
     const shown = asked(t, 100).slice(1, -1).map((l: string) => l.trim());
-    expect([f.top, shown[0], shown[1], shown.at(-2), shown.at(-1)]).toEqual([4, "One   Review", "○ o3", "> ● o10", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
+    expect([f.top, shown[0], shown[1], shown.at(-2), shown.at(-1)]).toEqual([4, "One   Review", "○ o3", "> ○ o10", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
     const turn = (key: string) => {
       term_grab(t, key);
       paint(t);
@@ -697,7 +697,7 @@ test("a lit mark wider than >: the form's options and words lead as wide, the cu
       const t = term();
       own(t, [DB]);
       paint(t);
-      expect(asked(t, 160).slice(3, 7)).toEqual(["-> ● Postgres  you know it", "   ○ SQLite", "   ○ MySQL", "   > Something else: type your own"]);
+      expect(asked(t, 160).slice(3, 7)).toEqual(["-> ○ Postgres  you know it", "   ○ SQLite", "   ○ MySQL", "   > Something else: type your own"]);
       expect(t.ruled.at).toEqual({ row: t.box.row + 5, col: 2 + 5 });
       const u = term();
       ask(u, "ls");

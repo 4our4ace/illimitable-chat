@@ -186,11 +186,10 @@ function term_said(q: Asked, f: Form): string {
 // open): who asks (the title in the rule over them); the tabs (the one
 // shown lit, one answered ticked), wrapped, each where it is on its line
 // (a click goes there); then the question, its options (the lit one
-// marked; one to pick: the lit one filled, the answer Enter gives, else
-// the one picked; several: squares, those picked filled), the words' row
-// as the input looks, each line with the row it stands for (a click
-// takes it), or the answers, each under its question; and the keys,
-// wrapped. The cursor in the words (on the answers: none)
+// marked, those picked filled; several: squares), the words' row as the
+// input looks, each line with the row it stands for (a click takes it),
+// or the answers, each under its question; and the keys, wrapped. The
+// cursor in the words (on the answers: none)
 export function term_form_lines(t: Term, w: number, max: number, tab?: number): { who: string; tabs: Paint.Line[]; spans: Span[][]; body: Array<[Paint.Line, Target | null]>; keys: Paint.Line[]; at: Screen.Spot | null } | null {
   const open = term_form(t);
   if (open === null) {
@@ -223,8 +222,7 @@ export function term_form_lines(t: Term, w: number, max: number, tab?: number): 
   const option = (o: { label: string; about: string }, k: number) => {
     const runs = [Paint.Run(Paint.text_clean(o.label), k === e.at ? bold : Paint.INK), ...(o.about === "" ? [] : [Paint.Run("  " + Paint.text_clean(o.about), Paint.DIM)])];
     const rows = Paint.runs_wrap(runs, Math.max(1, w - lw - 2), false);
-    const full = query.multi ? e.picked.includes(k) : e.at < query.options.length ? k === e.at : e.picked.includes(k);
-    const mark = Paint.Run(marks[full ? 1 : 0], full ? accent : Paint.DIM);
+    const mark = Paint.Run(marks[e.picked.includes(k) ? 1 : 0], e.picked.includes(k) ? accent : Paint.DIM);
     const aim: Target = { $: "row", k, tab: shown };
     return rows.map((l, j): [Paint.Line, Target] => [j === 0 ? [lead(k), mark, ...l] : [Paint.Run(" ".repeat(lw + 2)), ...l], aim]);
   };
