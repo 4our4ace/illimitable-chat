@@ -154,11 +154,12 @@ export function question_laid(t: Term, w: number, h: number, free: number): Aske
 // that line's words after its own, never two such lines one over the
 // other. The line a fold hides under the pointer lit (question_under).
 // Its answers as a list's options are (Popup.ts popup_rows), the lit one
-// marked, each whole up to question_cap's lines (past them:
-// question_cut), all of them (on a screen too short for them:
+// marked, its dot filled, each whole up to question_cap's lines (past
+// them: question_cut), all of them (on a screen too short for them:
 // question_view); a line asked, as the input shows a message typed (its
-// hint while empty), question_words at most (its cursor's and those
-// before), the cursor in it. Its rule: its title, then its keys (where it
+// hint while empty), question_words at most (scrolled only as its
+// cursor leaves them: Screen.ts screen_input), the cursor in it. Its
+// rule: its title, then its keys (where it
 // has answers; Ctrl+O where its command folds: "all" folded, "fold"
 // shown whole) and what the lit one takes besides (its foot; a line's:
 // what it takes, or why it won't do), then Esc, the no every question

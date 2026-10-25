@@ -104,8 +104,9 @@ in plain words, then how it ended:
   did, the outcome alone).
 - **A click on a call** opens it alone, under its line behind a bar:
   the thoughts that led to it, its whole input (the whole command, every
-  query, the URL), its whole result. Its siblings stay shut; a click on
-  its line, its bar or anywhere in it shuts it. A report, or a thought
+  query, the URL), its whole result (a failed one without its logged
+  `error: `: its mark says it failed). Its siblings stay shut; a click
+  on its line, its bar or anywhere in it shuts it. A report, or a thought
   or a result with no call, is a line of its own the same way.
 - **Past five calls** a line counts the rest (`+3 more`, under the
   first five); while the run is at work it shows the newest five, the

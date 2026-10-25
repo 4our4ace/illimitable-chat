@@ -418,7 +418,8 @@ export function popup_page(t: Term, c: Chooser, key: string): void {
 // an entry of the picker's list as its lines, iw wide, each with what it
 // stands for: a group's head (in the accent) or the blank before it;
 // else an option (its index among those shown): its marks (the lit one's
-// GLYPH.lit, then its dot: popup_dot), its name (its first line after
+// GLYPH.lit, then its dot: popup_dot, a question's lit one in the
+// accent), its name (its first line after
 // the marks, the rest indented under it), what it is from the
 // column after the widest name on one line (wide), cut first
 // (popup_about), and at its right end its aside, which gives way next; a
