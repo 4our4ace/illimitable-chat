@@ -12,8 +12,10 @@
 // provider's roles are its own: summaries on its small model or the one
 // set for it, subagents on the chat's pick or the one set for it; the start
 // tells of an API key set whose vendor isn't offered, and of the pick's
-// key missing. autoupdate's values (true and false too) as its mode. An
-// unknown argument is named.
+// key missing. autoupdate's values (true and false too) as its mode;
+// related's (on, screen, off; true and false as the old on and off) as
+// the radar at the side and its lines given to the model. An unknown
+// argument is named.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -140,6 +142,19 @@ test("autoupdate: on by default, notify, or off (true and false too, as config.j
     const run = Bun.spawnSync(["bun", "-e", "console.log((await import(" + JSON.stringify(import.meta.dir + "/Config.ts") + ")).AUTOUPDATE)"], { env: { ...clean, ILLI_DIR: DIR, ILLI_AUTOUPDATE: value }, stdout: "pipe", stderr: "pipe" });
     expect([value, run.stdout.toString().trim()]).toEqual([value, mode]);
   }
+});
+
+test("related: on (the radar at the side, its strong lines given to illi too), screen (the side alone) or off; true and false too, as the old on and off", () => {
+  expect([config.RELATED, config.RECALL]).toEqual([true, true]);
+  expect(config.SETTINGS.related.values).toEqual(["on", "screen", "off"]);
+  const states: Array<[unknown, boolean, boolean]> = [["screen", true, false], ["off", false, false], ["on", true, true], [false, false, false], [true, true, true], ["Screen", true, false], ["0", false, false], ["1", true, true]];
+  for (const [value, side, model] of states) {
+    config.config_set("related", value);
+    expect([value, config.RELATED, config.RECALL]).toEqual([value, side, model]);
+  }
+  expect(config.config_check("related", "side")).toBe("related takes on, screen or off.");
+  config.config_set("related", null);
+  expect([config.RELATED, config.RECALL]).toEqual([true, true]);
 });
 
 test("an unknown argument is named; one meaning to sign in, told where", () => {

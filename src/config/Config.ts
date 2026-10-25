@@ -93,7 +93,7 @@ const TABLE = {
   title      : { def: "on", values: ["on", "off"], now: true, what: "the terminal's title: ∞ illi · project", shape: ON_OFF },
   side       : { def: "right", values: ["right", "left", "off"], now: true, what: "where the side panel shows", shape: [/^(right|left|off)$/, "right, left or off"] },
   side_width : { def: "25%", values: ["20%", "25%", "30%", "35%", "40%"], now: true, what: "the side panel's width", shape: [/^\d+(\.\d+)?%?$/, "columns (40) or a share of the screen (30%)"] },
-  related    : { def: "on", values: ["on", "off"], now: true, what: "past topics related to the work, at the side", shape: ON_OFF },
+  related    : { def: "on", values: ["on", "screen", "off"], now: true, what: "past topics related to the work, at the side; the strong ones given to illi too (screen: the side alone)", shape: [/^(on|screen|off|true|false|0|1)$/i, "on, screen or off"] },
   accent     : { def: "auto", values: ACCENTS, now: true, what: "the color everything is themed in", shape: [new RegExp("^(" + ACCENTS.join("|") + "|#[0-9a-f]{6}|25[0-5]|2[0-4]\\d|1?\\d?\\d)$", "i"), "auto, illi (its aqua), a color's name (" + ACCENTS.slice(2).join(", ") + "), a palette index (0-255) or #rrggbb"] },
   leader     : { def: "Ctrl+X", values: "text", now: true, what: "the key before a shortcut", shape: [/^(ctrl|alt)\+[a-z]$/i, "Ctrl or Alt and a letter, like Ctrl+X"] },
   shortcuts  : { def: "", values: "text", now: true, what: "the keys after the leader, as JSON", none: "illi's own" },
@@ -121,6 +121,12 @@ export const SETTINGS: Record<Key, Setting> = TABLE;
 // the offer is made: a new one is offered (unless `models` names those
 // offered), each one's window known; kept in the root, every profile's
 export const MODELS_FILE = ROOT + "/models.json";
+
+// what happened to the radar's lines at the side (shown, opened, pinned,
+// dismissed), counted by score (Related.ts related_count), and where a
+// line counts as strong enough for the model read from them (Recall.ts);
+// in the root, every profile's
+export const RELATED_FILE = ROOT + "/related.json";
 export const MODELS_SET  = config_value("models") !== "";
 config_models();
 
@@ -217,8 +223,11 @@ export let SIDE       = "";
 export let SIDE_WIDTH = "";
 
 // the radar (Related.ts): past topics related to the work, at the side
-// while illi works: on, unless off (or false, 0)
+// while illi works: on, unless off (or false, 0); and its strong lines
+// given to the model too, appended to a tool's result (Recall.ts): on
+// (true, 1), never with screen (the side alone) or off
 export let RELATED    = true;
+export let RECALL     = true;
 
 // the accent (Theme.theme_tokens): "auto" (the theme's own), illi's
 // aqua, a color's name, a palette index or #rrggbb
@@ -435,6 +444,7 @@ function config_live(): void {
   const roles  = { agents: config_roles("agents", config_value("agents"), OFFER, false), compactor: config_roles("compactor", config_value("compactor"), OFFER, false) };
   const own    = config_object(config_value("autocompacts"));
   const keys   = config_shortcuts(config_value("shortcuts"));
+  const related = String(config_value("related")).trim().toLowerCase();
   RULES       = config_place("rules");
   AFTER       = config_value("after");
   OFF         = [...new Set(config_list(config_value("off").toLowerCase()).filter((name) => name !== ""))];
@@ -446,7 +456,8 @@ function config_live(): void {
   STATUSLINE  = config_statusline(config_raw("statusline"));
   SIDE        = config_value("side");
   SIDE_WIDTH  = config_value("side_width");
-  RELATED     = !OFFS.includes(String(config_value("related")).trim().toLowerCase());
+  RELATED     = !OFFS.includes(related);
+  RECALL      = RELATED && related !== "screen";
   ACCENT      = String(config_value("accent")).trim();
   PICK        = pick;
   ROLES       = roles;
