@@ -10,10 +10,11 @@
 // the caller's view holds at an episode's detail or finer (its lines of
 // Radar EPISODE messages or fewer: a line found there would say no more
 // than they do) and its recent messages left out, and what the user
-// dismissed at the side (tools.gone: Chat.dismiss, from any view). A line found is given only if strong (Radar.strong:
-// anchored by a path or an error's name, two units at least, its score
-// past the bar: Radar.bar, STRONG, then where the lines the user opened
-// and pinned sit, read from related.json), and named nowhere in what the
+// dismissed at the side (tools.gone: Chat.dismiss, from any view). A
+// line found is given only if strong (Radar.strong: anchored by a path
+// or an error's name, two units at least, its score past the bar:
+// Radar.bar, STRONG, then where the lines the user opened and pinned
+// sit, read from related.json), and named nowhere in what the
 // caller holds whole (#16+16, as a pin or a recall before gave it; 16+8|,
 // as a zoom or a search did: Radar.named). That one rule is stateless: it
 // holds across restarts, and a line falls out of it only as its naming
@@ -57,8 +58,9 @@ import { block_name, FAILED } from "../ui/View.ts";
 // Types
 // =====
 
-// a recall under way beside its call (Recall.start): whose call, the step
-// it is of, the line its search finds (null: none, or it failed)
+// a recall under way beside its call (Recall.start; the later calls of
+// that step share it): whose call, the step it is of, the line its
+// search finds (null: none, or it failed)
 export type Pending = { who: string; step: number; found: Promise<Found | null> };
 
 // Constants
