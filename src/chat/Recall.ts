@@ -152,15 +152,26 @@ export namespace Recall {
     const call = name + " " + JSON.stringify(input ?? {});
     if (who === MAIN) {
       const lines = Memory.before(mem.view.parts, mem.cut).map((p): [number, number] => [Memory.span(p)[0], 2 ** p.l]);
-      const { end, out } = Radar.left([...lines, [mem.cut, Math.max(1, mem.count - mem.cut)]], mem.cut, tools.gone, EPISODE);
+      const { end, out } = Recall.left([...lines, [mem.cut, Math.max(1, mem.count - mem.cut)]], mem.cut, tools.gone);
       return { chat: mem.store.chat, log: null, call, end, out, from: mem.cut, bar: Recall.bar() };
     }
     const agent = tools.agents.get(who);
     if (agent === undefined) {
       return null;
     }
-    const { end, out } = Radar.left(Recall.parts(agent.view), Infinity, tools.gone, EPISODE);
+    const { end, out } = Recall.left(Recall.parts(agent.view), Infinity, tools.gone);
     return { chat: mem.store.chat, log: agent.log ?? who, call, end, out, from: 0, bar: Recall.bar() };
+  }
+
+  // what a view leaves out of recall's search (Radar.left, its lines of
+  // EPISODE messages or fewer too), its end kept where the side's is (at
+  // message detail alone), the lines between left out instead: so each
+  // unit's rarity is counted over the episodes the side counts it over,
+  // and a line scores as it would at the side, whose scores set the bar
+  export function left(parts: Array<[number, number]>, turn: number, gone: Array<[number, number]>): { end: number; out: Array<[number, number]> } {
+    const side = Radar.left(parts, turn, gone);
+    const fine = Radar.left(parts, turn, gone, EPISODE);
+    return fine.end >= side.end ? fine : { end: side.end, out: [...fine.out, [fine.end, side.end]] };
   }
 
   // a call's result once it ran, with the line its recall found, if one

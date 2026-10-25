@@ -272,7 +272,12 @@ test("a line the caller's view holds at an episode's detail or finer is never gi
   // a subagent's view alike
   const view = [{ text: "<chat>\n256+8|user: the search thread dies\n264+8|illi: Store.wal\n272+16|x\n</chat>\n", mark: true }];
   tools.agents.set("Cy", { name: "Cy", run: 0, log: "Cy.t1", role: { $: "sub", effort: null, agent: null }, call: null, live: [], calls: {}, stop: false, view, replies: [] });
-  expect(Recall.ask(tools, "Cy", "shell", { command: "ls" })!.end).toBe(EPISODE);
+  const cy = Recall.ask(tools, "Cy", "shell", { command: "ls" })!;
+  expect([cy.end, cy.out]).toEqual([288, [[256, 288]]]);
+  // its end where the side's is, so a unit's rarity is counted alike
+  expect(Recall.left([[0, 256], [256, 8], [264, 8]], Infinity, [])).toEqual({ end: 272, out: [[256, 272]] });
+  expect(Recall.left([[0, 256], [256, 8], [264, 1]], Infinity, [])).toEqual({ end: 264, out: [[256, 264]] });
+  expect(Recall.left([[0, 256], [256, 32]], Infinity, [])).toEqual({ end: 288, out: [] });
   tools.agents.delete("Cy");
 });
 
