@@ -241,7 +241,7 @@ const SPAWN = "Start one subagent per task, in parallel, and return their names 
 const EFFORT = { type: "string", enum: EFFORTS, description: "How hard they think. Leave it out to use their agent's effort (or, with none, yours); set it only to override that." };
 const TELL: Spec = spec("tell", "Send a message to a subagent, by name. One at work reads it between its tool calls, and its report answers it; an idle one goes on from its chat, and its reply reaches you as a message \"[Name] reply\".", { name: STR, message: STR }, ["name", "message"]);
 
-const SKILL  = "Load a skill, the user's or illi's own: instructions for a kind of task, and the folder of any files it comes with. When a task matches a skill's description below, load it before starting and follow it. Loading is all a skill needs: it is never unloaded or turned off after.";
+const SKILL  = "Load a skill, the user's or illi's own: instructions for a kind of task, and the folder of any files it comes with. When a task matches a skill's description below, load it before starting and follow it. Loading is all a skill for a task needs: it is never unloaded after.";
 const STICKY = " A sticky one (marked so below) is for every reply, not a task: when the user asks for it to last, call skill with on: true; when they ask to stop it, on: false.";
 const ON     = { type: "boolean", description: "A sticky skill's only: true turns it on for every reply from now on, false turns it off. Leave it out for any other skill." };
 
