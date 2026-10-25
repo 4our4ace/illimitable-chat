@@ -480,7 +480,9 @@ export function window_run(self = window_self()): void {
         terminal: { ...size(), data: (_t, data) => step({ $: "out", id, data: Buffer.from(data).toString("latin1") }), exit: () => ended(id, { pty: true }) },
       });
       procs.set(id, proc);
-      void proc.exited.then((code) => ended(id, { proc: proc.signalCode === null ? code : 128 + (os.constants.signals[proc.signalCode] ?? 0) }));
+      // a signal with no name (a real-time one) comes as its number
+      const signal = (s: NodeJS.Signals | number) => (typeof s === "number" ? s : os.constants.signals[s] ?? 0);
+      void proc.exited.then((code) => ended(id, { proc: proc.signalCode === null ? code : 128 + signal(proc.signalCode) }));
     } catch (err: any) {
       queueMicrotask(() => step({ $: "exit", id, code: 1, why: "can't start illi in profile " + (profile || "default") + ": " + err.message }));
     }
