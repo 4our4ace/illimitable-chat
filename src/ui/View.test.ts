@@ -1,15 +1,23 @@
 // View test
 // =========
 // `bun test View.test.ts`. What a view draws of the server's messages:
-// runs of work, each keyed apart (a thought-led one too), open as a
-// click or the mode says, each call in one with how it ended; what
-// streams made anew only as it grows.
+// runs of work, each keyed apart (a thought-led one too), a line over
+// its items: each call with what it did and how it ended, opened alone
+// by a click or all by the mode, five at most till a click shows all
+// (the newest while it works); an agent's page so too, its clicks its
+// own; what streams made anew only as it grows.
 
 import { expect, test } from "bun:test";
 import type { Pick } from "../ai/Pick.ts";
 import * as View from "./View.ts";
 
 const tail = (v: View.View) => View.view_tail(v).map((row) => (row.$ === "Cap" ? row.text : row.$));
+
+// a thought (never logged: no id) after message `after`
+const thought = (text: string, after: number): View.Row => ({ ...(View.entry_rows(null, "mind", text)[0] as View.Row & { $: "Msg" }), after, nth: 0 });
+
+// a run's items, each its key, label, outcome, how it ended, whether open
+const items = (run: View.Row) => (run.$ === "Act" ? run.rows.flatMap((r) => (r.$ === "Item" ? [[r.key, r.label, r.outcome, r.ok, r.open]] : [])) : []);
 
 // a turn waiting on its model names the model the server says: the
 // wait holds it, so no pick (none yet) can name none
@@ -60,15 +68,15 @@ test("what runs, in words", () => {
 });
 
 // the work between the person's words and illi's: one Act row per run,
-// saying what was done; open as a click or Ctrl+O says; what streams of
-// it shows only once verbose
-test("each run of work is one line saying what was done", () => {
+// saying what was done, over its items, a line each; what streams of it
+// shows only once verbose
+test("each run of work is one line saying what was done, over its items", () => {
   const v    = View.view_new();
   const rows = [
     ...View.entry_rows(1, "user", "check the logs"),
     ...View.entry_rows(2, "mind", "let me look"),
-    ...View.entry_rows(3, "tool", 'shell {"command":"grep -n x a.log"}'),
-    ...View.entry_rows(4, "echo", "a.log:3: x"),
+    ...View.entry_rows(3, "tool", 'shell {"command":"grep -n x a.log","description":"Find x in the log"}'),
+    ...View.entry_rows(4, "echo", "a.log:3: x\n(exit 0 in 0.1 s)"),
     ...View.entry_rows(5, "tool", 'shell {"command":"wc -l a.log"}'),
     ...View.entry_rows(6, "tool", 'read {"path":"a.log"}'),
     ...View.entry_rows(7, "work", "[explorer] found it on line 3"),
@@ -76,23 +84,56 @@ test("each run of work is one line saying what was done", () => {
   ];
   const acts = View.view_acts(v, rows);
   expect(acts.map((r) => r.$)).toEqual(["Msg", "Act", "Msg"]);
-  expect(acts[1]).toMatchObject({ $: "Act", id: 2, open: false, text: "Ran 2 commands, read a file · thought · explorer reported" });
-  View.view_toggle(v, 2);
-  expect(View.view_acts(v, rows)[1]).toMatchObject({ open: true });
-  View.view_toggle(v, 2);
-  v.verbose = true;
-  expect(View.view_acts(v, rows)[1]).toMatchObject({ open: true });
-  v.verbose = false;
+  expect(acts[1]).toMatchObject({ $: "Act", id: 2, text: "Ran 2 commands, read a file · thought · explorer reported", keys: ["c#3", "c#5", "c#6", "c#7"] });
+  expect(items(acts[1])).toEqual([
+    ["c#3", "Find x in the log", "exit 0", true, false],
+    ["c#5", "wc -l a.log", "", null, false],
+    ["c#6", "Read a.log", "", null, false],
+    ["c#7", "explorer's report", "1 line", null, false],
+  ]);
   v.live = [{ kind: "mind", text: "hm" }, { kind: "illi", text: "So far" }];
   expect(View.view_tail(v, false).map((r) => (r.$ === "Msg" ? r.kind : r.$))).toEqual(["illi"]);
   v.verbose = true;
   expect(View.view_tail(v, false).map((r) => (r.$ === "Msg" ? r.kind : r.$))).toEqual(["mind", "illi"]);
 });
 
-// a run's calls, listed under it while shut, each with how it ended: by
-// the result logged right after it (failed: FAILED), one with none after
-// it (stopped before it answered) not known; a call in a block opened
-// alone among them; a thought between calls changes nothing
+// an item opens alone (a click, /open): its call and its result whole,
+// the thoughts before it (those after the run's last call, after it),
+// its siblings shut; in verbose mode all open, a click shutting one
+// alone; a thought, a report or a result alone an item of its own
+test("an item opens alone: its call, its result and the thoughts before it, whole; its siblings stay shut", () => {
+  const v    = View.view_new();
+  const rows = [
+    ...View.entry_rows(1, "user", "go"),
+    thought("**Checking the logs**\n\nfirst", 1),
+    ...View.entry_rows(2, "tool", 'shell {"command":"ls"}'),
+    ...View.entry_rows(3, "echo", "a.log\n(exit 0 in 0.1 s)"),
+    ...View.entry_rows(4, "tool", 'shell {"command":"cat a.log"}'),
+    ...View.entry_rows(5, "echo", View.FAILED + "denied\n(exit 1 in 0.1 s)"),
+    thought("it was refused", 5),
+  ];
+  const run  = () => View.view_acts(v, rows)[1] as View.Row & { $: "Act" };
+  const kinds = (r: View.Row) => (r.$ === "Item" ? r.rows.map((x) => (x.$ === "Msg" ? x.kind : x.$)) : []);
+  expect(run().rows.map((r) => (r.$ === "Item" ? r.open : r.$))).toEqual([false, false]);
+  View.view_item(v, "c#4");
+  expect(run().rows.map((r) => (r.$ === "Item" ? r.open : r.$))).toEqual([false, true]);
+  expect(run().rows.map(kinds)).toEqual([["mind", "tool", "echo"], ["tool", "echo", "mind"]]);
+  expect(items(run())[1]).toEqual(["c#4", "cat a.log", "exit 1", false, true]);
+  View.view_verbose(v);
+  expect(run().rows.map((r) => (r.$ === "Item" ? r.open : r.$))).toEqual([true, true]);
+  View.view_item(v, "c#2");
+  expect(run().rows.map((r) => (r.$ === "Item" ? r.open : r.$))).toEqual([false, true]);
+  View.view_verbose(v);
+  const alone = View.view_acts(v, [...View.entry_rows(1, "user", "hi"), thought("## Plan\nsay hi", 1), ...View.entry_rows(2, "echo", "sources:\na b"), ...View.entry_rows(3, "illi", "Hi.")]);
+  expect(alone[1]).toMatchObject({ $: "Act", text: "Thought" });
+  expect(items(alone[1])).toEqual([["c#2", "Result", "2 lines", null, false]]);
+  expect(View.view_acts(v, [thought("## Plan\nsay hi", 1)]).flatMap(items)).toEqual([["cm1.0", "Plan …", "", null, false]]);
+});
+
+// a run's calls each end as the result logged right after it says
+// (failed: FAILED), one with none after it (stopped before it answered)
+// not known; a call in a block opened alone among them; a thought
+// between calls changes nothing
 test("a run's calls each say how they ended: done, failed, not known", () => {
   const v    = View.view_new();
   const rows: View.Row[] = [
@@ -107,44 +148,82 @@ test("a run's calls each say how they ended: done, failed, not known", () => {
     ...View.entry_rows(8, "tool", 'read {"path":"a.log"}'),
   ];
   const run = View.view_acts(v, rows)[1];
-  expect(run.$ === "Act" && run.calls.map((d) => [d.call.name, d.call.head, d.ok])).toEqual([
-    ["shell", "bun test", true],
-    ["shell", "git push", false],
-    ["web_search", "bend", true],
-    ["read", "a.log", null],
+  expect(run.$ === "Act" && run.rows.map((r) => (r.$ === "Item" ? [r.call?.name, r.call?.head, r.label, r.ok] : r.$))).toEqual([
+    ["shell", "bun test", "bun test", true],
+    ["shell", "git push", "git push", false],
+    ["web_search", "bend", 'Searched "bend"', true],
+    ["read", "a.log", "Read a.log", null],
   ]);
 });
 
-// a summed-up call (its line the call word for word) ends as its
-// result's message whole says (known by then), summed up or not; illi's
-// question ends as answered, though its answers end the run (shown as
-// the user's words after it)
-test("a summed-up call ends as its result says; illi's question, as answered", () => {
+// a summed-up call ends as its result's message whole says (known by
+// then), and reads as it whole, its line the call word for word or not;
+// open, it shows its call and its result whole; illi's question ends as
+// answered, though its answers end the run (shown as the user's words
+// after it)
+test("a summed-up call keeps its label, ends as its result says, opens whole; illi's question, as answered", () => {
   const v   = View.view_new();
   const log: View.Entry[] = [
     { kind: "user", text: "push it" },
-    { kind: "tool", text: 'shell {"command":"git push"}' },
+    { kind: "tool", text: 'shell {"command":"git push","description":"Push the branch"}' },
     { kind: "echo", text: View.FAILED + "rejected\n(exit 1 in 1s)" },
     { kind: "tool", text: 'shell {"command":"bun test"}' },
     { kind: "echo", text: "642 pass\n(exit 0 in 9s)" },
-    { kind: "tool", text: 'ask {"queries":[{"text":"Push again?"}]}' },
+    { kind: "tool", text: 'ask {"questions":[{"question":"Push again?"}]}' },
     { kind: "echo", text: View.ANSWERED + "Push again? Yes" },
     { kind: "illi", text: "Pushed." },
   ];
-  log.forEach((entry, id) => View.view_hear(v, { $: "know", whole: { [id]: entry }, nodes: { [id + "+1"]: { text: entry.kind + ": " + entry.text.split("\n")[0], to: "" } } }));
+  const line = (id: number, e: View.Entry) => (id === 1 ? "tool: pushed the branch, refused" : e.kind + ": " + e.text.split("\n")[0]);
+  log.forEach((entry, id) => View.view_hear(v, { $: "know", whole: { [id]: entry }, nodes: { [id + "+1"]: { text: line(id, entry), to: "" } } }));
   View.view_hear(v, { $: "view", parts: log.map((_, id): View.Part => [id, 1]), turn: 3 });
   const rows = View.view_body(v);
   expect(rows.map((r) => (r.$ === "Msg" ? r.kind : r.$))).toEqual(["user", "Act", "user", "illi"]);
-  const run  = rows[1];
-  expect(run.$ === "Act" && run.rows.slice(0, 2).map((r) => r.$)).toEqual(["Sum", "Sum"]);
-  expect(run.$ === "Act" && run.calls.map((d) => [d.call.name, d.ok])).toEqual([["shell", false], ["shell", true], ["ask", true]]);
+  const run  = rows[1] as View.Row & { $: "Act" };
+  expect(run.text).toBe("Ran 2 commands, called ask");
+  expect(items(run)).toEqual([
+    ["c#1", "Push the branch", "exit 1", false, false],
+    ["c#3", "bun test", "exit 0", true, false],
+    ["c#5", 'Asked "Push again?"', "", true, false],
+  ]);
+  View.view_item(v, "c#1");
+  const open = (View.view_body(v)[1] as View.Row & { $: "Act" }).rows[0];
+  expect(open.$ === "Item" && open.rows.map((r) => (r.$ === "Msg" ? [r.id, r.kind] : r.$))).toEqual([[1, "tool"], [2, "echo"]]);
+});
+
+// a run of many items shows CALLS of them, the rest counted on a More
+// line: the first and the line under them; while the run is at work, the
+// newest and the line over them (the earlier counted); a click on it
+// shows all (the line then a way back to fewer), as Ctrl+O does; an item
+// among those not shown, opened by /open, shows them all
+test("a long run shows five items and a More line: the first, or the newest while it works; a click shows all", () => {
+  const v    = View.view_new();
+  const rows = Array.from({ length: 8 }, (_, k) => [...View.entry_rows(10 + 2 * k, "tool", "shell " + JSON.stringify({ command: "step " + k })), ...View.entry_rows(11 + 2 * k, "echo", "(exit 0 in 0.1 s)")]).flat();
+  const shown = (working = false) => (View.view_acts(v, rows, v, working)[0] as View.Row & { $: "Act" }).rows.map((r) => (r.$ === "Item" ? r.label : r.$ === "More" ? [r.n, r.open, r.earlier] : r.$));
+  expect(shown()).toEqual(["step 0", "step 1", "step 2", "step 3", "step 4", [3, false, false]]);
+  expect(shown(true)).toEqual([[3, false, true], "step 3", "step 4", "step 5", "step 6", "step 7"]);
+  View.view_more(v, 10);
+  expect(shown()).toEqual(["step 0", "step 1", "step 2", "step 3", "step 4", "step 5", "step 6", "step 7", [3, true, false]]);
+  expect(shown(true)[0]).toEqual([3, true, true]);
+  View.view_more(v, 10);
+  View.view_verbose(v);
+  expect(shown().length).toBe(9);
+  View.view_verbose(v);
+  expect(View.view_acts(v, rows.slice(0, 10))[0]).toMatchObject({ rows: Array(5).fill(expect.objectContaining({ $: "Item" })) });
+  View.view_hear(v, { $: "know", whole: Object.fromEntries(rows.map((r: any) => [r.id, { kind: r.kind, text: r.text }])) });
+  View.view_hear(v, { $: "view", parts: rows.map((r: any): View.Part => [r.id, 1]), turn: 10 });
+  expect(View.view_reach(v, "c#24", true)).toBe(true);
+  const run = View.view_body(v)[0] as View.Row & { $: "Act" };
+  expect([run.rows.length, run.rows.find((r) => r.$ === "Item" && r.key === "c#24")]).toEqual([9, expect.objectContaining({ open: true, label: "step 7" })]);
+  expect(View.view_reach(v, "c#24", true)).toBe(true);
+  expect(v.items.has("c#24")).toBe(true);
+  expect(View.view_reach(v, "c#99", true)).toBe(false);
 });
 
 // runs led by a thought (never logged: no id) each keyed by the message
-// the thought follows, so one opens alone and keeps its key as its first
-// call comes; in verbose mode a toggle shuts that one run, and Ctrl+O
-// forgets the runs toggled by hand
-test("each run of work has its own key, a thought-led one too; verbose mode shuts the run toggled, Ctrl+O forgets them and the messages folded", () => {
+// the thought follows, so no two share one and each keeps its key as
+// its first call comes; Ctrl+O forgets what clicks opened, the items,
+// the More lines, the recaps and their pages folded, on every page
+test("each run of work has its own key, a thought-led one too; Ctrl+O forgets the clicks, on every page", () => {
   const v = View.view_new();
   for (const [id, kind, text] of [[1, "user", "a"], [2, "tool", 'shell {"command":"ls"}'], [3, "illi", "done"], [4, "user", "b"], [5, "tool", 'shell {"command":"pwd"}'], [6, "illi", "here"]] as const) {
     View.view_hear(v, { $: "entry", id, kind, text, at: id } as any);
@@ -153,22 +232,44 @@ test("each run of work has its own key, a thought-led one too; verbose mode shut
   v.minds.set(1, ["think on a"]);
   v.minds.set(4, ["think on b"]);
   v.turn = 0;
-  const keys = () => rows().filter((r) => r.$ === "Act").map((r: any) => [r.id, r.open]);
-  expect(keys()).toEqual([[-3, false], [-6, false]]);
-  View.view_toggle(v, -6);
-  expect(keys()).toEqual([[-3, false], [-6, true]]);
+  const keys = () => rows().filter((r) => r.$ === "Act").map((r: any) => [r.id, r.keys]);
+  expect(keys()).toEqual([[-3, ["c#2"]], [-6, ["c#5"]]]);
+  View.view_act(v, { $: "Goto", name: "Scout" });
+  View.view_item(View.view_shown(v), "c#1");
+  View.view_act(v, { $: "Goto", name: null });
+  [v.acts, v.folds, v.items, v.mores].forEach((s: Set<any>) => s.add(1));
   View.view_verbose(v);
-  expect(keys()).toEqual([[-3, true], [-6, true]]);
-  View.view_toggle(v, -3);
-  expect(keys()).toEqual([[-3, false], [-6, true]]);
-  v.folds.add("#5");
-  View.view_verbose(v);
-  expect([v.verbose, v.acts.size, v.folds.size, keys()]).toEqual([false, 0, 0, [[-3, false], [-6, false]]]);
+  expect([v.verbose, v.acts.size, v.folds.size, v.items.size, v.mores.size, v.pages.get("Scout")?.shown?.items.size]).toEqual([true, 0, 0, 0, 0, 0]);
+});
+
+// an agent's page: its log in runs as the chat's, each message keyed by
+// its place in it, its clicks its own (the chat's item of the same key
+// stays as it was); its last run at work while the agent is
+test("an agent's page shows its work in runs, its clicks its own", () => {
+  const v = View.view_new();
+  View.view_act(v, { $: "Goto", name: "Scout" });
+  View.view_hear(v, { $: "agent", name: "Scout", found: true });
+  const log: Array<[View.Entry["kind"], string]> = [["note", "subagent"], ["user", "look"], ...Array.from({ length: 6 }, (_, k): Array<[View.Entry["kind"], string]> => [["tool", "read " + JSON.stringify({ path: "f" + k })], ["echo", "x\n[lines 1-1 of 1]"]]).flat(), ["illi", "Found it."]];
+  log.forEach(([kind, text], id) => View.view_hear(v, { $: "entry", agent: "Scout", id, kind, text }));
+  View.view_hear(v, { $: "state", ...v, agents: ["Scout"] });
+  const body = () => View.view_body(v);
+  expect(body().map((r) => (r.$ === "Msg" ? r.kind : r.$ === "Cap" ? r.text : r.$))).toEqual(["Scout · at work", "note", "user", "Act", "illi"]);
+  const run  = () => body()[3] as View.Row & { $: "Act" };
+  expect(run().rows.map((r) => (r.$ === "Item" ? r.label : r.$))).toEqual(["Read f0", "Read f1", "Read f2", "Read f3", "Read f4", "More"]);
+  View.view_hear(v, { $: "state", ...v, agents: [] });
+  View.view_item(View.view_shown(v), "c#2");
+  expect(run().rows[0]).toMatchObject({ key: "c#2", label: "Read f0", outcome: "1 line", open: true });
+  expect(v.items.size).toBe(0);
+  View.view_act(v, { $: "Goto", name: null });
+  View.view_act(v, { $: "Goto", name: "Scout" });
+  expect(run().rows[0]).toMatchObject({ key: "c#2", open: true });
+  View.view_hear(v, { $: "entry", agent: "Scout", id: 0, kind: "note", text: "subagent" });
+  expect(View.view_shown(v).items.size).toBe(0);
 });
 
 // a recap (/compact): a line across the chat, "Compaction", closed or
-// open as a run of work is; its pages one line, a run of work after it
-// its own
+// open by a click or the mode; its pages one line, a run of work after
+// it its own
 test("a recap is a line across the chat, its text under it once opened", () => {
   const v    = View.view_new();
   const rows = [
@@ -184,6 +285,10 @@ test("a recap is a line across the chat, its text under it once opened", () => {
   expect((acts[1] as any).rows.map((r: any) => r.id)).toEqual([2, 3]);
   View.view_toggle(v, 2);
   expect(View.view_acts(v, rows)[1]).toMatchObject({ open: true });
+  View.view_verbose(v);
+  expect(View.view_acts(v, rows)[1]).toMatchObject({ open: true });
+  View.view_toggle(v, 2);
+  expect(View.view_acts(v, rows)[1]).toMatchObject({ open: false });
   expect(View.view_acts(v, [{ $: "Sum", id: 2, n: 1, text: "recap: ship it", call: null, kind: "recap" }])[0].$).toBe("Rule");
 });
 

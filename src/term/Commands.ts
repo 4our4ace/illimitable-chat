@@ -841,18 +841,25 @@ function term_agent(t: Term, arg: string): string {
 }
 
 // the person's choice for block #id or #id+n (its name, View.block_name),
-// open or closed, whatever it shows now: it holds until Fold all; the
-// chat scrolls to it
+// open or closed, whatever it shows now: it holds until Fold all; or, #id
+// a call (or another item) of a run on the page shown, that item opened
+// or shut alone, as a click on it does (till Ctrl+O). The chat scrolls
+// to it
 function term_block(t: Term, arg: string, open: boolean): void {
   const name = /^#?(\d+)(?:\+(\d+))?$/.exec(arg);
   const id   = Number(name?.[1]);
   const n    = Number(name?.[2] ?? 1);
+  if (name !== null && n === 1 && View.view_reach(t.v, "c#" + id, open)) {
+    t.find = "c#" + id;
+    t.ver += 1;
+    return;
+  }
   if (name === null || block_row(View.view_body(t.v), id, n) === undefined) {
     term_note(t, arg === "" ? "Which block? " + (open ? "/open" : "/close") + " #id, as each block shows it." : "No block " + arg + " here.");
     return;
   }
   term_act(t, { $: open ? "Open" : "Shut", id, n });
-  t.find = [id, n];
+  t.find = Paint.block_key(id, n);
 }
 
 // the row of block #id+n, among rows or inside their boxes

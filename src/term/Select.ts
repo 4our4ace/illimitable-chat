@@ -13,16 +13,17 @@
 // and as it's let go the text is quoted in the input, to reply to it (not
 // on an agent's read-only page); a right click soon after takes the quote
 // out again. What's under a point is told once for a click and the light
-// (term_target): in the chat, what a click would act on lights (a run of
-// work, a message in it, a block: term_light), one thing at a time, once
+// (term_target): in the chat, what a click would act on lights (an item
+// of a run of work, a run's More line, a recap, a page in it, a block:
+// term_light), one thing at a time, once
 // the pointer itself has moved; it goes as the chat moves by itself while
 // followed, at a key, as the window loses the focus, and while text
 // chosen shows: the press that lets that go acts on nothing in the chat
 // (term_showing), so a click to clear it never folds what it lands on. A
 // click on a word there waits out a double click (Keys.ts term_click), so
-// a second press still chooses the word; on a mark's own control (its
-// glyph, a summary's gutter and /open, an open block's bar: term_wordy)
-// it acts at once. A press again soon on the cell whose click just
+// a second press still chooses the word; on a mark's own control (an
+// item's line and its bar, a glyph, a summary's gutter and /open, an
+// open block's bar: term_wordy) it acts at once. A press again soon on the cell whose click just
 // acted, or one that only focused the window, clicks nothing and chooses
 // no word (term_dead). Under a popup the mouse is its alone (Popup.ts
 // popup_mouse, before all of this): nothing is chosen there, and nothing
@@ -291,7 +292,8 @@ function term_word(line: Paint.Line, col: number): [number, number] {
 // whether a word is under a spot as last painted (a double click there
 // would choose it): none past a line's end, on a blank line, on a frame's
 // edge or a space, nor on a mark's own control, tagged to light with it
-// (Paint.Tag: a glyph, a summary's gutter and /open, an open block's bar)
+// (Paint.Tag: an item's line and its bar, a More line, a glyph, a
+// summary's gutter and /open, an open block's bar)
 export function term_wordy(t: Term, p: Screen.Spot): boolean {
   const area = t.areas.find((a) => p.row >= a.row && p.row < a.row + a.tall && p.col >= a.col && p.col < a.col + a.w);
   const line = area === undefined ? [] : area.lines[area.first + p.row - area.row] ?? [];

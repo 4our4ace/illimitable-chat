@@ -8,15 +8,20 @@
 // work between the person's words and illi's (tool calls, their results,
 // thinking, the agents' reports: ACTIVITY) shows as one line per run
 // (an "Act" row: what was done, counted, keyed by its first message:
-// row_key), its calls a line each under it while shut (act_calls: how
-// each ended), opened by a click or all at once (verbose: Ctrl+O; a click
-// then closes one alone), each message in an open one folded by a click
-// to a line (a "Fold" row, keyed: row_fold); while closed, what streams
-// of it shows only on the line over the input (Term.ts). A recap
-// (/compact) shows as a line across the chat (a "Rule" row), the recap
-// under it once opened the same way, its pages folding so too; what the
-// screen showed before it stays above. An agent's page is its log, kept
-// live, whole.
+// row_key), over its items, a line each (an "Item" row: what a call did
+// in plain words and how it ended, Call.ts; a report, or a thought or a
+// result standing alone, so too). An item opens alone, by a click or
+// /open (its call and its result whole, the thoughts before it), or all
+// at once (verbose: Ctrl+O; a click then closes one alone); past CALLS
+// the rest are counted on a "More" row, a click showing them all (the
+// newest kept in view while the run is at work). What streams of the
+// work shows only on the line over the input (Term.ts), unless verbose.
+// A recap (/compact) shows as a line across the chat (a "Rule" row),
+// the recap under it once opened by a click or verbose, each of its
+// pages folded by a click to a line (a "Fold" row, keyed: row_fold);
+// what the screen showed before it stays above. An agent's page is its
+// log, kept live, whole, its work in runs as the chat's (each page its
+// own clicks: Shown).
 
 import type { Kind, Vendor } from "../ai/AskAI.ts";
 import type { Mode } from "../tools/Guard.ts";
@@ -39,13 +44,15 @@ export type Node = { text: string; to: string };
 
 export type Live = { kind: Kind; text: string };
 
-// a run's tool call as its shut line lists it (view_acts): the call, and
-// how it ended: true done, false failed (its result FAILED), null not
-// known (no result logged with it: row_echo)
-export type Done = { call: Call.Call; ok: boolean | null };
+// what clicks opened or shut in a chat or an agent's page, against the
+// mode (verbose): the recaps (by their key: row_key) and the pages folded
+// in them (row_fold); the items of runs (by key: "c" and their message's,
+// row_name), the runs that show all their items (by key)
+export type Shown = { acts: Set<number>; folds: Set<string>; items: Set<string>; mores: Set<number> };
 
-// log: null while it loads
-export type Page = { name: string; log: Entry[] | null; live: Live[] };
+// log: null while it loads; shown: what clicks opened on it (none yet:
+// view_shown makes it)
+export type Page = { name: string; log: Entry[] | null; live: Live[]; shown?: Shown };
 
 // what a turn waits on while nothing streams: nothing (""), SUMMARIES,
 // or the first piece of the model it names (a request out, no tool
@@ -167,22 +174,20 @@ export type State = {
 
 // fold: the tops shown (null: not folded); nodes and whole: the summaries
 // ("id+n") and messages known; open: the blocks opened (true) or shut by
-// hand; acts: the runs of work opened or shut by hand, against the
-// mode, by their key (row_key); folds: the messages folded in open runs,
-// by their key (row_fold); verbose: every run open (Ctrl+O); minds: the thoughts after each message; pages: the agents' asked
+// hand; the Shown's: what clicks opened or shut in the chat; verbose:
+// every run's items and recap open (Ctrl+O); minds: the thoughts after
+// each message; pages: the agents' asked
 // for; page: the one shown (null: illi's); made: the characters the
 // models streamed (replies, thoughts, calls) since work began; flow:
 // the last RATE ms of them (when, how many); the Link's: acts not
 // answered, the pipe (up: it showed the chat), what sends those not sent
-export type View = State & {
+export type View = State & Shown & {
   parts : Part[];
   turn  : number;
   fold  : Part[] | null;
   nodes : Map<string, Node>;
   whole : Map<number, Entry>;
   open  : Map<string, boolean>;
-  acts  : Set<number>;
-  folds : Set<string>;
   verbose: boolean;
   made  : number;
   flow  : Array<[number, number]>;
@@ -271,10 +276,12 @@ export type Act =
 export type Row =
   | { $: "Sum"; id: number; n: number; text: string; call: Call.Call | null; kind: Kind | null }  // a block: nx, its summary (as written: drawn flat, Paint.ts; call: a tool call's, word for word; kind: its message's, of one known)
   | { $: "Box"; id: number; n: number; rows: Row[] }                                            // a block open: its rows (its bar Paint's: nx · /close #id)
-  | { $: "Act"; id: number; text: string; open: boolean; rows: Row[]; calls: Done[] }          // a run of work (ACTIVITY), from message id: what was done, its rows if open, its calls (listed while shut)
+  | { $: "Act"; id: number; text: string; rows: Row[]; keys: string[] }                         // a run of work (ACTIVITY), from message id: what was done, a line over its items (Item rows; past CALLS, a More row); keys: every item's, shown or not
+  | { $: "Item"; key: string; call: Call.Call | null; label: string; outcome: string; ok: boolean | null; open: boolean; rows: Row[] } // an item of a run: a call (none: a report, or a thought or a result alone), what it did and how it ended (Call.ts; ok: true done, false failed, its result FAILED, null not known: row_echo), a line; open, its rows whole under it
+  | { $: "More"; id: number; n: number; open: boolean; earlier: boolean }                       // a run's items past CALLS, counted (id: the run's): shut, n more not shown (earlier: over the newest, the run at work); open, all shown
   | { $: "Rule"; id: number; text: string; open: boolean; rows: Row[] }                        // a recap (/compact), message id: a line across the chat naming it, the recap's rows if open
   | { $: "Msg"; id: number | null; kind: Kind; who: string; text: string; body: Md.Block[]; call: Call.Call | null; images: string[]; after?: number; nth?: number } // a message whole: 0x (who: its speaker or "↳ result", named on its block; body: its blocks, none for illi's (drawn from its text); call: a tool call's, drawn as Call.ts reads it; after, nth: a thought's, the message it follows and which of its thoughts)
-  | { $: "Fold"; key: string; text: string }                                                    // a message of an open run of work folded by a click (key: View.row_fold): one dim line saying what it is
+  | { $: "Fold"; key: string; text: string }                                                    // a page of an open recap folded by a click (key: View.row_fold): one dim line saying what it is
   | { $: "Cap"; text: string }                                                                  // a line about the page
 
 // a tab: its page (null: the chat), whether it's shown, its mark, its
@@ -312,6 +319,11 @@ const RECAPS = "writing the recap…";
 // the line across the chat at a recap (/compact)
 const RULE = "Compaction";
 
+// the most items a run shows before a click on its More row shows them
+// all (the rest counted on it), so a run of any length lays out about as
+// many lines as a short one
+export const CALLS = 5;
+
 // the kinds an image may be, each by its mark at a byte of its first HEAD
 const MARKS: Array<[string, number, string]> = [
   ["image/png", 0, "\x89PNG"],
@@ -334,19 +346,23 @@ const KINDED   = /^(user|illi|tool|echo|mind|note|work|recap): /;
 // the name on the answers to illi's question
 const ANSWERS = "your answers";
 
-// what a run's tool calls did, by tool: one, many (the rest: "called")
+// what a run's tool calls did, by tool: one, many (the rest: "called");
+// Claude Code's own tools as illi's alike
 const DID: Record<string, [string, string]> = {
-  shell : ["ran a command", "ran # commands"],
-  read  : ["read a file", "read # files"],
-  write : ["wrote a file", "wrote # files"],
-  edit  : ["edited a file", "edited # files"],
-  spawn : ["started an agent", "started # agents"],
-  tell  : ["messaged an agent", "messaged # agents"],
-  zoom  : ["looked back", "looked back # times"],
-  date  : ["checked the date", "checked the date # times"],
-  skill : ["used a skill", "used # skills"],
-  todo  : ["updated the to-do list", "updated the to-do list # times"],
+  shell      : ["ran a command", "ran # commands"],
+  read       : ["read a file", "read # files"],
+  write      : ["wrote a file", "wrote # files"],
+  edit       : ["edited a file", "edited # files"],
+  web_search : ["searched the web", "searched the web # times"],
+  search     : ["searched memory", "searched memory # times"],
+  spawn      : ["started an agent", "started # agents"],
+  tell       : ["messaged an agent", "messaged # agents"],
+  zoom       : ["looked back", "looked back # times"],
+  date       : ["checked the date", "checked the date # times"],
+  skill      : ["used a skill", "used # skills"],
+  todo       : ["updated the to-do list", "updated the to-do list # times"],
 };
+const ALIKE: Record<string, string> = { Bash: "shell", Read: "read", Write: "write", Edit: "edit", MultiEdit: "edit", WebSearch: "web_search", TodoWrite: "todo" };
 
 // Constructors
 // ============
@@ -393,6 +409,8 @@ export function view_new(): View {
     open      : new Map(),
     acts      : new Set(),
     folds     : new Set(),
+    items     : new Set(),
+    mores     : new Set(),
     verbose   : false,
     made      : 0,
     flow      : [],
@@ -595,6 +613,9 @@ export function view_act(v: View, act: Act): Client[] {
   }
 }
 
+// the page shown: an agent's (its runs as the chat's), the chat folded
+// (its tops), or the chat; while its work goes on (the turn running, the
+// agent at work) its last run keeps its newest items in view
 export function view_body(v: View): Row[] {
   if (v.page !== null) {
     return page_rows(v, v.page);
@@ -603,56 +624,209 @@ export function view_body(v: View): Row[] {
     const tops = v.fold.flatMap(([id, n]) => part_rows(v, id, n, Infinity, false));
     return [Cap(FOLD), ...tops];
   }
-  return view_acts(v, view_rows(v, v.parts).flat());
+  return view_acts(v, view_rows(v, v.parts).flat(), v, v.busy);
 }
 
-// rows with each run of work (ACTIVITY) one Act row, and each recap
-// (its pages) a Rule, open as a run of work is; in each, the messages
-// folded by a click one line each (row_folded)
-export function view_acts(v: View, rows: Row[]): Row[] {
+// rows with each run of work (ACTIVITY) one Act row over its items
+// (act_row), and each recap (its pages) a Rule, open by a click or the
+// mode, its pages folded by a click one line each (row_folded): as the
+// clicks on that page say (shown: the chat's, or an agent's page's); the
+// last run, while its work goes on (working), at work
+export function view_acts(v: View, rows: Row[], shown: Shown = v, working = false): Row[] {
   const out: Row[] = [];
   for (const row of rows) {
     const last = out[out.length - 1];
     if (row_recap(row) && last?.$ === "Rule") {
       last.rows.push(row);
-    } else if (row_recap(row) && row.$ !== "Cap" && row.$ !== "Fold" && row.id !== null) {
-      out.push({ $: "Rule", id: row.id, text: RULE, open: v.verbose !== v.acts.has(row.id), rows: [row] });
+    } else if (row_recap(row) && row.$ !== "Cap" && row.$ !== "Fold" && row.$ !== "Item" && row.$ !== "More" && row.id !== null) {
+      out.push({ $: "Rule", id: row.id, text: RULE, open: v.verbose !== shown.acts.has(row.id), rows: [row] });
     } else if (!row_busy(row)) {
       out.push(row);
     } else if (last?.$ === "Act") {
       last.rows.push(row);
     } else {
-      const id = row_key(row);
-      out.push({ $: "Act", id, text: "", open: v.verbose !== v.acts.has(id), rows: [row], calls: [] });
+      out.push({ $: "Act", id: row_key(row), text: "", rows: [row], keys: [] });
     }
   }
-  const folded = (rows: Row[]) => rows.map((r) => row_folded(v, r));
-  return out.map((row, k) => (row.$ === "Act" ? { ...row, text: act_text(row.rows), rows: folded(row.rows), calls: act_calls(v, row.rows, out[k + 1]) } : row.$ === "Rule" ? { ...row, rows: folded(row.rows) } : row));
+  const folded = (rows: Row[]) => rows.map((r) => row_folded(shown, r));
+  return out.map((row, k) => (row.$ === "Act" ? act_row(v, shown, row, out[k + 1], working && k === out.length - 1) : row.$ === "Rule" ? { ...row, rows: folded(row.rows) } : row));
 }
 
-// a message's key as a click folds it in an open run: a logged one's
+// a run of work as shown: what it did (act_text), over its items
+// (act_items): all of them, CALLS at most or the run showing them all
+// (its More row clicked; Ctrl+O); else CALLS of them and a More row
+// counting the rest: the first, the More row under them, or, the run at
+// work (live), the newest, the More row over them. Only the items shown
+// are made
+function act_row(v: View, shown: Shown, run: Row & { $: "Act" }, after: Row | undefined, live: boolean): Row {
+  const items = act_items(v, run.rows, after);
+  const all   = v.verbose !== shown.mores.has(run.id);
+  const some  = items.length <= CALLS || all ? items : live ? items.slice(-CALLS) : items.slice(0, CALLS);
+  const more  : Row[] = items.length <= CALLS ? [] : [{ $: "More", id: run.id, n: items.length - CALLS, open: all, earlier: live }];
+  const each  = some.map((d) => item_row(v, shown, d));
+  return { $: "Act", id: run.id, text: act_text(v, run.rows), rows: live ? [...more, ...each] : [...each, ...more], keys: items.map((d) => d.key) };
+}
+
+// an item of a run, before it is shown (act_items): its key, its call
+// (null: a report, or a thought or a result standing alone), the result
+// logged right after it (null: none), the run's row it is, its rows as
+// it opens
+type Did = { key: string; call: Call.Call | null; echo: string | null; row: Row; rows: Row[] };
+
+// a run's items, in order: each call (row_call) with the result logged
+// right after it (Chat.on logs a call with its result; the row after the
+// run too, `after`: the answers to illi's question end the run, shown as
+// the user's words), the thoughts before it (those after the run's last
+// item, after that one); a report, a result after no call, the thoughts
+// of a run of no other item, an item each. Each opens as its rows whole
+// (row_whole)
+function act_items(v: View, rows: Row[], after: Row | undefined): Did[] {
+  const own   = rows.flatMap((r) => (r.$ === "Box" ? r.rows : [r]));
+  const flat  = [...own, ...(after === undefined ? [] : after.$ === "Box" ? after.rows : [after])];
+  const out   : Did[] = [];
+  let minds   : Row[] = [];
+  for (let k = 0; k < own.length; k++) {
+    const r    = own[k];
+    const call = row_call(v, r);
+    const echo = call === null ? null : row_echo(v, flat[k + 1]);
+    const ends = echo !== null && k + 1 < own.length ? [own[k + 1]] : [];
+    if (call === null && r.$ === "Msg" && r.kind === "mind") {
+      minds.push(r);
+      continue;
+    }
+    out.push({ key: "c" + row_name(r), call, echo, row: r, rows: [...(call === null ? [] : minds), ...[r, ...ends].flatMap((x) => row_whole(v, x))] });
+    minds = call === null ? minds : [];
+    k += ends.length;
+  }
+  if (minds.length > 0 && out.length > 0) {
+    out[out.length - 1].rows.push(...minds);
+  } else if (minds.length > 0) {
+    out.push({ key: "c" + row_name(minds[0]), call: null, echo: null, row: minds[0], rows: minds });
+  }
+  return out;
+}
+
+// an item as a run shows it: what it did and how it ended (item_said),
+// open as a click (on its page: shown) or the mode says
+function item_row(v: View, shown: Shown, d: Did): Row {
+  const ok = d.call === null || d.echo === null ? null : !d.echo.startsWith(FAILED);
+  const { label, outcome } = item_said(d, ok);
+  return { $: "Item", key: d.key, call: d.call, label, outcome, ok, open: v.verbose !== shown.items.has(d.key), rows: d.rows };
+}
+
+// what an item did and how it ended, made once for its row and the
+// result after it (a summed-up call's result known later is read anew):
+// a call's label and outcome (Call.ts, its result without FAILED); a
+// thought, its first line (its markdown's marks left out); a report, its
+// agent's and its lines; a result, its lines; a summary, its line
+const SAID = new WeakMap<Row, { echo: string | null; label: string; outcome: string }>();
+
+function item_said(d: Did, ok: boolean | null): { label: string; outcome: string } {
+  const known = SAID.get(d.row);
+  if (known !== undefined && known.echo === d.echo) {
+    return known;
+  }
+  const result = d.echo === null ? "" : ok === false ? d.echo.slice(FAILED.length) : d.echo;
+  const msg    = d.rows.find((r) => r.$ === "Msg" && r.kind !== "mind") ?? d.rows[0];
+  const said   =
+    d.call !== null ? { label: Call.call_label(d.call, d.echo === null ? null : result), outcome: Call.call_outcome(d.call, ok, result) }
+    : msg?.$ === "Msg" && msg.kind === "mind" ? { label: Call.label_line(msg.text.replace(/\*\*|__|`/g, "").replace(/^\s*#+\s*/, "")) || "Thought", outcome: "" }
+    : msg?.$ === "Msg" && msg.kind === "work" ? { label: msg.who === WHO.work ? "A report" : msg.who + "'s report", outcome: text_lines(Call.report_read(msg.text)?.text ?? msg.text) }
+    : msg?.$ === "Msg" ? { label: "Result", outcome: text_lines(msg.text) }
+    : msg?.$ === "Sum" ? { label: Call.label_line(Md.md_flat(msg.text).replace(KINDED, "")), outcome: "" }
+    : { label: "", outcome: "" };
+  SAID.set(d.row, { echo: d.echo, ...said });
+  return said;
+}
+
+// the call a run's row holds (null: none): a message's; a summed-up
+// one's, word for word in its line (sum_call), else as its message whole
+// reads (known by then: Chat.teach)
+function row_call(v: View, r: Row): Call.Call | null {
+  const call = r.$ === "Msg" ? r.call : r.$ === "Sum" ? r.call ?? sum_whole(v, r)?.find((x) => x.$ === "Msg")?.call ?? null : null;
+  return call === null || call.name === "" ? null : call;
+}
+
+// a summary's message whole, as rows (whole_rows); undefined: not of
+// one message, or not known yet
+function sum_whole(v: View, r: Row & { $: "Sum" }): Row[] | undefined {
+  const entry = r.n === 1 ? v.whole.get(r.id) : undefined;
+  return entry === undefined ? undefined : whole_rows(r.id, entry);
+}
+
+// a run's row as an item open shows it: a summary by its message whole
+// (as it is till that is known), any other as it is
+function row_whole(v: View, r: Row): Row[] {
+  return r.$ === "Sum" ? sum_whole(v, r) ?? [r] : [r];
+}
+
+// the key of a run's row's message, as an item's key takes it: a logged
+// one's "#id", a thought's (row_fold), a summary's "#id"
+function row_name(r: Row): string {
+  return r.$ === "Sum" || r.$ === "Box" ? "#" + r.id : row_fold(r) ?? "";
+}
+
+// a message's key as a click folds it in an open recap: a logged one's
 // "#id", a thought's "m" + the message it follows + "." + which of its
 // thoughts; null: none (a summary, a block)
 export function row_fold(row: Row): string | null {
   return row.$ !== "Msg" ? null : row.id !== null ? "#" + row.id : row.after !== undefined ? "m" + row.after + "." + (row.nth ?? 0) : null;
 }
 
-// a run's row as shown: a message folded by a click, one Fold line saying
-// what it is (a call as its line, else its kind and how long it is)
-function row_folded(v: View, row: Row): Row {
+// a recap's row as shown: a page folded by a click, one Fold line saying
+// what it is (its kind and how long it is)
+function row_folded(shown: Shown, row: Row): Row {
   const key = row_fold(row);
-  if (key === null || !v.folds.has(key) || row.$ !== "Msg") {
+  if (key === null || !shown.folds.has(key) || row.$ !== "Msg") {
     return row;
   }
-  const lines = row.text.split("\n").length.toLocaleString("en-US") + (row.text.includes("\n") ? " lines" : " line");
   const name  = row.kind === "echo" ? "result" : row.kind === "mind" ? "thought" : row.kind === "work" && row.who !== "" ? row.who + " reported" : row.who || row.kind;
-  return { $: "Fold", key, text: row.call !== null ? Call.call_line(row.call) : name + " · " + lines };
+  return { $: "Fold", key, text: row.call !== null ? Call.call_line(row.call) : name + " · " + text_lines(row.text) };
 }
 
-// a message of an open run folded, or unfolded (by its key: row_fold)
-export function view_fold(v: View, key: string): void {
-  if (!v.folds.delete(key)) {
-    v.folds.add(key);
+// a text's lines, counted: `1 line`, `1,204 lines`
+function text_lines(text: string): string {
+  const n = text.split("\n").length;
+  return n.toLocaleString("en-US") + (n === 1 ? " line" : " lines");
+}
+
+// what clicks opened or shut on the page shown: the chat's, or the agent
+// page's (page_shown)
+export function view_shown(v: View): Shown {
+  return v.page === null ? v : page_shown(v.page);
+}
+
+// what clicks opened or shut on an agent's page: none, as it is first
+// asked for
+function page_shown(page: Page): Shown {
+  page.shown ??= { acts: new Set(), folds: new Set(), items: new Set(), mores: new Set() };
+  return page.shown;
+}
+
+// a page of a recap open, folded or unfolded (by its key: row_fold)
+export function view_fold(s: Shown, key: string): void {
+  toggle(s.folds, key);
+}
+
+// an item of a run opened or shut, alone (by its key: Item's)
+export function view_item(s: Shown, key: string): void {
+  toggle(s.items, key);
+}
+
+// a run's items all shown, or CALLS of them again (by its key: row_key)
+export function view_more(s: Shown, id: number): void {
+  toggle(s.mores, id);
+}
+
+// a recap opened or closed (by its key: row_key)
+export function view_toggle(s: Shown, id: number): void {
+  toggle(s.acts, id);
+}
+
+// a key put in a set, or taken out if it was there
+function toggle<T>(set: Set<T>, key: T): void {
+  if (!set.delete(key)) {
+    set.add(key);
   }
 }
 
@@ -661,7 +835,7 @@ export function view_fold(v: View, key: string): void {
 // message 0), so it holds as the run's first call arrives and no two
 // runs share one
 function row_key(row: Row): number {
-  return row.$ === "Cap" || row.$ === "Fold" ? -1 : row.id !== null ? row.id : row.$ === "Msg" && row.after !== undefined ? -2 - row.after : -1;
+  return row.$ === "Cap" || row.$ === "Fold" || row.$ === "Item" || row.$ === "More" ? -1 : row.id !== null ? row.id : row.$ === "Msg" && row.after !== undefined ? -2 - row.after : -1;
 }
 
 // whether a row is a recap's, whole or summed up
@@ -688,19 +862,21 @@ function row_busy(row: Row): boolean {
   }
 }
 
-// a run of work, said: its calls counted by tool, then whether it
+// a run of work, said: its calls (row_call: those its items are)
+// counted by tool (Claude Code's as illi's alike: ALIKE), then whether it
 // thought, then the agents that reported (a run of results alone: their
 // count)
-function act_text(rows: Row[]): string {
+function act_text(v: View, rows: Row[]): string {
   const flat  = rows.flatMap((r) => (r.$ === "Box" ? r.rows : [r]));
   const calls = new Map<string, number>();
   const who   = new Set<string>();
   let [mind, results] = [false, 0];
   for (const r of flat) {
-    const call = r.$ === "Msg" || r.$ === "Sum" ? r.call : null;
+    const call = row_call(v, r);
     const kind = r.$ === "Msg" ? r.kind : r.$ === "Sum" ? r.kind : null;
-    if (call !== null && call.name !== "") {
-      calls.set(call.name, (calls.get(call.name) ?? 0) + 1);
+    const name = call === null ? "" : call.from === "" ? ALIKE[call.name] ?? call.name : Call.call_tool(call);
+    if (name !== "") {
+      calls.set(name, (calls.get(name) ?? 0) + 1);
     }
     mind    ||= kind === "mind";
     results += kind === "echo" ? 1 : 0;
@@ -713,21 +889,6 @@ function act_text(rows: Row[]): string {
   const text  = parts.length > 0 ? parts.join(" · ") : results + (results === 1 ? " result" : " results");
   const named = did.length === 0 && !mind && who.size > 0;
   return named ? text : text[0].toUpperCase() + text.slice(1);
-}
-
-// a run's tool calls in order (those act_text counts), each with how it
-// ended: by the result logged right after it (Chat.on logs a call with
-// its result; the row after the run too, `after`: the answers to illi's
-// question end the run, shown as the user's), failed if that says so
-// (FAILED); none there: not known (row_echo)
-function act_calls(v: View, rows: Row[], after: Row | undefined): Done[] {
-  const own  = rows.flatMap((r) => (r.$ === "Box" ? r.rows : [r]));
-  const flat = [...own, ...(after === undefined ? [] : after.$ === "Box" ? after.rows : [after])];
-  return own.flatMap((r, k) => {
-    const call = r.$ === "Msg" || r.$ === "Sum" ? r.call : null;
-    const echo = row_echo(v, flat[k + 1]);
-    return call === null || call.name === "" ? [] : [{ call, ok: echo === null ? null : !echo.startsWith(FAILED) }];
-  });
 }
 
 // a result's text as logged, of a row (null: no result): a result's, its
@@ -743,22 +904,33 @@ function row_echo(v: View, row: Row | undefined): string | null {
     : null;
 }
 
-// verbose (Ctrl+O): every run of work open, or none but those opened
-// alone; the runs opened or shut by hand, and the messages folded in
-// them, forgotten, so each shows as the mode says
+// verbose (Ctrl+O): every run's items and every recap open, or none but
+// those opened alone; what clicks opened or shut, in the chat and on
+// every agent's page, forgotten, so each shows as the mode says
 export function view_verbose(v: View): void {
   v.verbose = !v.verbose;
-  v.acts.clear();
-  v.folds.clear();
+  for (const s of [v, ...[...v.pages.values()].flatMap((p) => p.shown ?? [])]) {
+    [s.acts, s.folds, s.items, s.mores].forEach((set: Set<unknown>) => set.clear());
+  }
 }
 
-// a run of work, or a recap, opened or closed (by its key: row_key)
-export function view_toggle(v: View, id: number): void {
-  if (v.acts.has(id)) {
-    v.acts.delete(id);
-  } else {
-    v.acts.add(id);
+// an item of a run on the page shown (by its key: an Item's, its mark's
+// too), opened or shut alone, as /open and /close ask; its run made to
+// show all its items if it was among those its More line counts. False:
+// no such item there
+export function view_reach(v: View, key: string, open: boolean): boolean {
+  const run   = view_body(v).find((r) => r.$ === "Act" && r.keys.includes(key));
+  const shown = view_shown(v);
+  if (run?.$ !== "Act") {
+    return false;
   }
+  if (!run.rows.some((r) => r.$ === "Item" && r.key === key)) {
+    toggle(shown.mores, run.id);
+  }
+  if ((v.verbose !== shown.items.has(key)) !== open) {
+    toggle(shown.items, key);
+  }
+  return true;
 }
 
 // the chat's parts given, in order, as rows each
@@ -879,10 +1051,11 @@ function view_entry(v: View, msg: Server & { $: "entry" }): void {
   const { $, agent, id, ...entry } = msg;
   const last = v.parts[v.parts.length - 1];
   if (agent !== undefined) {
-    const log = v.pages.get(agent)?.log;
-    if (Array.isArray(log)) {
-      log.splice(0, id === 0 ? log.length : 0);
-      log.push(entry);
+    const page = v.pages.get(agent);
+    if (Array.isArray(page?.log)) {
+      page.log.splice(0, id === 0 ? page.log.length : 0);
+      page.log.push(entry);
+      page.shown = id === 0 ? undefined : page.shown;
     }
   } else if (id !== undefined) {
     v.whole.set(id, entry);
@@ -1008,10 +1181,15 @@ function sum_rows(id: number, n: number, node: Node = { text: WAIT, to: "" }, ki
 // Page
 // ====
 
-// an agent's page, its log (once it comes) from message `from` on
-export function page_rows(v: View, page: Page, from = 0): Row[] {
-  const head = Cap(page.name + (v.agents.includes(page.name) ? " · at work" : " · done"));
-  return [head, ...(page.log ?? []).slice(from).flatMap((e) => whole_rows(null, e))];
+// an agent's page: its name and whether it works, then its log (once it
+// comes), each message keyed by its place in it, the work in runs as the
+// chat's (view_acts, as the clicks on this page say: view_shown), its
+// last run at work while the agent is
+export function page_rows(v: View, page: Page): Row[] {
+  const work = v.agents.includes(page.name);
+  const head = Cap(page.name + (work ? " · at work" : " · done"));
+  const rows = (page.log ?? []).flatMap((e, k) => whole_rows(k, e));
+  return [head, ...view_acts(v, rows, page_shown(page), work)];
 }
 
 // Live
