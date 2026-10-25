@@ -113,7 +113,9 @@ type Hooks = {
 };
 
 // the tools: their URL (a secret in it), the working dir, the main agent's to-do
-// list (none: not read yet), the permissions of this run (Perm)
+// list (none: not read yet), the permissions of this run (Perm), the
+// radar's lines the user dismissed at the side, as [first, end) (any
+// view's, Chat.act: never given to a model, till illi quits)
 export type Tools = {
   mem    : Memory;
   agents : Map<string, Agent>;
@@ -122,6 +124,7 @@ export type Tools = {
   cwd    : string;
   hooks  : Hooks;
   todo?  : Todo[];
+  gone   : Array<[number, number]>;
 };
 
 // the permissions of this run (Tools.guard): the mode /mode set (null:
@@ -375,7 +378,7 @@ export namespace Tools {
   export function serve(mem: Memory, hooks: Hooks, cwd: string): Tools {
     const key = crypto.randomUUID();
     const url = Tools.base() + key + "/";
-    const tools: Tools = { mem, agents: new Map(), perm: { mode: null, granted: new Set(), refused: [], calls: new Map() }, url, cwd, hooks };
+    const tools: Tools = { mem, agents: new Map(), perm: { mode: null, granted: new Set(), refused: [], calls: new Map() }, url, cwd, hooks, gone: [] };
     CHATS.set(key, tools);
     return tools;
   }

@@ -1251,6 +1251,9 @@ export namespace Chat {
         const why = Tools.revoke(chat.tools, String(msg.grant));
         return why === null ? {} : { error: why };
       }
+      case "dismiss": {
+        return Chat.dismiss(chat, msg.part);
+      }
       case "autocompact": {
         const value = msg.value === null ? null : String(msg.value).trim();
         if (value !== null && config.config_tokens(value, 1) === null) {
@@ -1275,6 +1278,22 @@ export namespace Chat {
       }
     }
     return { error: "No act " + msg.$ + "." };
+  }
+
+  // a radar's line a view dismissed at the side (Related.ts): its
+  // messages left out of every search for the models from now on
+  // (tools.gone: Recall.ts), till illi quits, as the side leaves it out
+  // of its own; one known already, kept once. Not a line ([id, n], n a
+  // power of two, id a multiple of it): refused
+  export function dismiss(chat: Chat, part: unknown): Answer {
+    const [id, n] = Array.isArray(part) ? part.map(Number) : [NaN, NaN];
+    if (!Number.isInteger(id) || !Number.isInteger(Math.log2(n)) || id < 0 || id % n !== 0) {
+      return { error: "No line " + JSON.stringify(part) + " to dismiss." };
+    }
+    if (!chat.tools.gone.some(([a, b]) => a === id && b === id + n)) {
+      chat.tools.gone.push([id, id + n]);
+    }
+    return {};
   }
 
   // a refused request allowed for this run (Tools.allow), and the one who

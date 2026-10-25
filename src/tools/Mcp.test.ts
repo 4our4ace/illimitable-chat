@@ -93,7 +93,7 @@ afterAll(() => {
 // no, at once
 const asked: string[] = [];
 const ask   = async (q: { tool: string }) => (asked.push(q.tool), { yes: false, always: false, said: "No one is at illi's screen to ask, so it isn't allowed." });
-const tools = { mem: null as any, agents: new Map(), perm: { mode: "careful" as const, granted: new Set<string>(), refused: [], calls: new Map<string, string[]>() }, url: "", cwd: CWD, hooks: { main: () => null, ask, change: () => {} } as any };
+const tools = { mem: null as any, agents: new Map(), perm: { mode: "careful" as const, granted: new Set<string>(), refused: [], calls: new Map<string, string[]>() }, url: "", cwd: CWD, hooks: { main: () => null, ask, change: () => {} } as any, gone: [] };
 
 test("each server's tools, named by it, in pages, beside illi's", async () => {
   await Mcp.settle();

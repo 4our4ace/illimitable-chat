@@ -28,6 +28,7 @@
 // empties the to-do list beside the chat, whatever was said. A view
 // switches this session's mode; a refused request allowed again is told
 // to illi in the user's name, its grants this session's; a grant goes.
+// A radar's line a view dismissed reaches the chat, kept once.
 // The loop guard counts within a turn (an agent's run too). A
 // message passes the plugins' and hooks' checks (kept back, told more;
 // slow ones waited on in the views' sight, a stop sending it back); their
@@ -124,6 +125,25 @@ test("permissions over the pipe: the mode switched for this session (the setting
   await until(() => v.perm.mode === "auto");
   expect(fs.existsSync(REPO + "/x-illi-test.txt")).toBe(false);
   v.ws!.close();
+});
+
+test("a radar's line dismissed at a view's side reaches the chat over the pipe, kept once till illi quits; what is no line refused", async () => {
+  const v = View.view_new();
+  View.link_open(v, Chat.link(chat, (msg) => View.view_hear(v, msg).forEach((out) => View.link_send(v, out))));
+  await until(() => v.up);
+  const said: string[] = [];
+  const send = (part: unknown) => View.link_send(v, { $: "dismiss", part } as any, (a) => said.push(a.error ?? "ok"));
+  send([16, 16]);
+  send([16, 16]);
+  send([40, 8]);
+  send([3, 4]);
+  send(["x", 1]);
+  await until(() => said.length === 5);
+  expect(said.slice(0, 3)).toEqual(["ok", "ok", "ok"]);
+  expect(said.slice(3)).toEqual(["No line [3,4] to dismiss.", 'No line ["x",1] to dismiss.']);
+  expect(chat.tools.gone).toEqual([[16, 32], [40, 48]]);
+  v.ws!.close();
+  chat.tools.gone.length = 0;
 });
 
 test("a turn's wait names the model it runs on, not one picked since", async () => {

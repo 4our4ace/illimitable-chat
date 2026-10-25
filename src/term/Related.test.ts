@@ -9,10 +9,12 @@
 // detail (a pane: its messages whole); on its id pins it (the id typed
 // into the input); on the head lists them (Enter opens, Tab pins, Del
 // dismisses, never found again; the list as it is now, however searches
-// changed it since it opened). A line opened or pinned stays till the
-// user's next message. An answer never brings back what was dismissed
-// or what the view holds now; a run with nothing to search fades the
-// lines all the same. Without the side the bottom line counts them.
+// changed it since it opened; a dismissal told the chat, which never
+// gives the line to the model either). A line opened or pinned stays
+// till the user's next message. An answer never brings back what was
+// dismissed or what the view holds now; a run with nothing to search
+// fades the lines all the same. Without the side the bottom line counts
+// them.
 // Each shown, opened, pinned and dismissed is counted by its score in
 // related.json, no text in it. `related` off: nothing, nor an answer
 // asked before.
@@ -140,6 +142,7 @@ test("a click on a line opens it at full detail, on its id pins it, on the head 
   head[1]!();
   expect(t.choose.keys(0, "Delete")).toBe(true);
   expect([t.choose, Related.related_shown(t), related(t)]).toEqual([null, [], []]);
+  expect(t.v.out.map((p: any) => p.msg).filter((m: any) => m.$ === "dismiss").map(({ id, ...m }: any) => m)).toEqual([{ $: "dismiss", part: [16, 16] }]);
   await Related.related_seek(t);
   expect(Related.related_shown(t)).toEqual([]);
 });

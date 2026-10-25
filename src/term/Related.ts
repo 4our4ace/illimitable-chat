@@ -34,7 +34,7 @@ import * as Reply from "../ui/Reply.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_age } from "./Side.ts";
 import { Store, type Store as File } from "../chat/Store.ts";
-import type { Term } from "./Term.ts";
+import { term_send, type Term } from "./Term.ts";
 import { json_object } from "../tools/Clip.ts";
 import * as View from "../ui/View.ts";
 
@@ -291,11 +291,13 @@ export function related_pin(t: Term, s: Shown): void {
 }
 
 // a line dismissed: gone from the side, and left out of every search
-// after, till illi quits; counted
+// after, till illi quits, the chat's for the models too (told over the
+// view's pipe: Chat.dismiss, so recall never gives it to one); counted
 export function related_dismiss(t: Term, s: Shown): void {
   const r = related_of(t);
   r.shown = r.shown.filter((x) => x.first !== s.first || x.n !== s.n);
   r.gone.push([s.first, s.first + s.n]);
+  term_send(t, { $: "dismiss", part: [s.first, s.n] });
   related_count("dismissed", s);
 }
 

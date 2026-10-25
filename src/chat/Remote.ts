@@ -24,7 +24,7 @@ import type { Answer, Link, Pipe } from "../ui/View.ts";
 // =========
 
 // the protocol's version: a view and its chat's illi agree on it
-const VERSION = 2;
+const VERSION = 3;
 
 // how long a view waits for the chat's first message, ms (none: the
 // illi there serves no views; it may be opening a big chat first)
