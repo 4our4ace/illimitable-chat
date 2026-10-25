@@ -665,7 +665,8 @@ hooks added. It is appended only when:
   the call is no slower);
 - no other call of the same round of tool calls got one (`Chat.on`
   counts each caller's rounds);
-- the result holds no images;
+- the result holds no images, and isn't empty (its "(no output)"
+  stays as it is);
 - the line would not push it onto a page of its own.
 
 It is logged with the result, as the model read it, so the next call's
