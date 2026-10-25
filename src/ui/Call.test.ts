@@ -50,7 +50,7 @@ test("a command's label: its description, else its first line", () => {
   expect(performance.now() - start).toBeLessThan(200);
 });
 
-test("a file tool's label names a whole path from the working dir, else from ~ under home; any other as it is", () => {
+test("a file tool's label names a whole path from the working dir (itself `.`), else from ~ under home (itself `~`, a HOME ending in a slash too); any other as it is, the working dir `/` naming none", () => {
   const cwd = process.cwd();
   const home = process.env.HOME;
   try {
@@ -61,7 +61,15 @@ test("a file tool's label names a whole path from the working dir, else from ~ u
     expect(label("edit", { edits: [{ path: cwd + "/a.ts" }, { path: "b.ts" }] })).toBe("Edited a.ts, b.ts");
     expect(label("Write", { file_path: "/etc/hosts" })).toBe("Wrote /etc/hosts");
     expect(label("Read", { file_path: cwd + "-other/x.ts" })).toBe("Read ~/" + cwd.split("/").pop() + "-other/x.ts");
+    expect([cwd, cwd + "/"].map((path) => label("Grep", { pattern: "keep", path }))).toEqual(['Searched for "keep" in .', 'Searched for "keep" in .']);
+    expect(label("Read", { file_path: cwd + "//src/a.ts" })).toBe("Read src/a.ts");
+    process.env.HOME += "/";
+    expect(label("Read", { file_path: process.env.HOME + "notes/todo.md" })).toBe("Read ~/notes/todo.md");
+    expect(label("Grep", { pattern: "keep", path: process.env.HOME })).toBe('Searched for "keep" in ~');
+    process.chdir("/");
+    expect(label("Read", { file_path: "/etc/hosts" })).toBe("Read /etc/hosts");
   } finally {
+    process.chdir(cwd);
     process.env.HOME = home;
   }
 });

@@ -281,21 +281,30 @@ function command_first(v: unknown): string {
   return line.replace(CD, "") || line;
 }
 
-// words about a field's first line (say), or "" when it is missing or
-// blank: the call then reads as any tool's (call_named), never as words
-// left hanging (`Read`, `Messaged`)
-// a path as a label names it: one in the working dir from there
-// (Claude Code's tools give theirs whole), one under home from ~; any
-// other, or not a string, as it is
+// a path as a label names it: one in the working dir from there (the
+// dir itself `.`; Claude Code's tools give theirs whole), one under home
+// from ~ (home itself `~`; a HOME ending in a slash too); any other (the
+// working dir `/` names none), or not a string, as it is
 function path_said(v: unknown): unknown {
-  const home = process.env.HOME ?? "";
   if (typeof v !== "string" || !v.startsWith("/")) {
     return v;
   }
-  const cwd = process.cwd();
-  return v.startsWith(cwd + "/") ? v.slice(cwd.length + 1) : home.length > 1 && v.startsWith(home + "/") ? "~" + v.slice(home.length) : v;
+  const cwd  = process.cwd();
+  const home = (process.env.HOME ?? "").replace(/\/+$/, "");
+  const here = cwd === "/" ? null : path_under(v, cwd);
+  const away = home === "" ? null : path_under(v, home);
+  return here !== null ? here || "." : away !== null ? (away === "" ? "~" : "~/" + away) : v;
 }
 
+// what follows dir in a path, the slashes after it left out ("": dir
+// itself); null: a path not under it
+function path_under(v: string, dir: string): string | null {
+  return v === dir ? "" : v.startsWith(dir + "/") ? v.slice(dir.length + 1).replace(/^\/+/, "") : null;
+}
+
+// words about a field's first line (say), or "" when it is missing or
+// blank: the call then reads as any tool's (call_named), never as words
+// left hanging (`Read`, `Messaged`)
 function about(v: unknown, say: (line: string) => string): string {
   const line = text_first(v);
   return line === "" ? "" : say(line);
