@@ -194,7 +194,7 @@ for (const [what, said] of [[LONG, "a 2,000-character command on one line"], [TA
         expect(inside.filter((l: string) => l.trim() === "")).toEqual([]);
         expect(inside[0]).toBe("Why: it deletes files");
         expect(inside[1]).toStartWith("rm -r ./no-such-folder-here");
-        const yes  = inside.indexOf("> ○ Yes");
+        const yes  = inside.indexOf("> ● Yes");
         const more = inside.filter((l: string) => l.startsWith("… "));
         expect(more).toEqual(t.box.ahead < t.box.lead ? [inside[yes - 1]] : []);
         expect(more.map((l: string) => l.replace(/\d+/, "N"))).toEqual(more.length === 0 ? [] : ["… N more lines · wheel, PgUp/PgDn"]);
@@ -246,7 +246,7 @@ test("a long command folds to its first line, the lines holding what made the ch
     risky(t);
     const lines = asked(t, 80);
     expect(lines[0]).toBe("── Allow shell? · ↑↓ Enter · Ctrl+O all · Esc no " + "─".repeat(26));
-    expect(lines.slice(1, -1)).toEqual([...FOLDED, "> ○ Yes", "  ○ No", "  ○ No, and say why"]);
+    expect(lines.slice(1, -1)).toEqual([...FOLDED, "> ● Yes", "  ○ No", "  ○ No, and say why"]);
     const gap = t.box.rows.findIndex((aim: any) => aim?.$ === "fold");
     expect([gap, t.box.rows[gap], t.box.folds, t.ruled.rows[t.box.row + gap][0].line.map((r: any) => r.s.d)]).toEqual([2, { $: "fold", k: 0 }, true, [true]]);
     const two = SCRIPT.replace("echo step 20 >> build.log", "chmod 777 /etc/shadow");
@@ -268,7 +268,7 @@ test("a command doesn't fold where folding hides nothing: one of four rows or fe
     expect([asked(t, 80).slice(1, 7), t.box.folds]).toEqual([["Why: it deletes files", "echo a", "echo b", "rm -rf ./x", "echo c", "echo d"], false]);
     const rows = Array.from({ length: 14 }, (_, k) => "mkdir -p out/part-" + k).join(" && ");
     risky(t, rows, [spot(rows, "mkdir -p out/part-7", "part-7")]);
-    expect([asked(t, 80).slice(2, 7).every((l: string) => l.startsWith("mkdir") || l.startsWith("out/") || l.startsWith("-p ")), asked(t, 80)[7], t.box.folds]).toEqual([true, "> ○ Yes", false]);
+    expect([asked(t, 80).slice(2, 7).every((l: string) => l.startsWith("mkdir") || l.startsWith("out/") || l.startsWith("-p ")), asked(t, 80)[7], t.box.folds]).toEqual([true, "> ● Yes", false]);
     risky(t, SCRIPT, [[0, SCRIPT.length]]);
     expect([asked(t, 80)[3], t.box.folds]).toEqual(["echo step 2 >> build.log", false]);
     t.v.asks = [{ id: "q-plain", who: "illi", tool: "shell", what: SCRIPT.slice(0, 399), whole: SCRIPT, why: "it deletes files", keep: "" }];
@@ -357,7 +357,7 @@ test("a 2,000-character one-liner folds by its rows: its first, the one holding 
     const t = term();
     risky(t, ONE, [spot(ONE, "rm -rf", "old-site")]);
     expect(asked(t, 80)[0]).toBe("── Allow shell? · ↑↓ Enter · Ctrl+O all · Esc no " + "─".repeat(26));
-    expect(asked(t, 80).slice(1, -1)).toEqual(["Why: it deletes files", "mkdir -p out/part-0 && mkdir -p out/part-1 && mkdir -p out/part-2 && mkdir", "… 12 rows", "out/part-39 && rm -rf ~/projects/old-site && touch out/done-0 && touch", "… 13 rows", "&& touch out/done-47 && touch out/done-48", "> ○ Yes", "  ○ No", "  ○ No, and say why"]);
+    expect(asked(t, 80).slice(1, -1)).toEqual(["Why: it deletes files", "mkdir -p out/part-0 && mkdir -p out/part-1 && mkdir -p out/part-2 && mkdir", "… 12 rows", "out/part-39 && rm -rf ~/projects/old-site && touch out/done-0 && touch", "… 13 rows", "&& touch out/done-47 && touch out/done-48", "> ● Yes", "  ○ No", "  ○ No, and say why"]);
     expect([t.box.rows.slice(0, 6), t.ruled.rows[t.box.row + 4][0].line.map((r: any) => r.s.d)]).toEqual([[null, null, { $: "fold", k: 0 }, null, { $: "fold", k: 1 }, null], [true]]);
     term_grab(t, "Ctrl+O");
     paint(t);
@@ -396,7 +396,7 @@ for (const [cols, rows] of [[80, 16], [40, 10]]) {
           expect([open, t.ruled.rows.length, t.box.folds, t.question.fold.open]).toEqual([open, rows, true, open]);
           expect(t.box.row + t.box.h).toBeLessThan(rows - 1);
           const inside = asked(t, cols).slice(1, -1);
-          expect(inside.slice(-3).map((l: string) => l.replace(/^> /, "  "))).toEqual(["  ○ Yes", "  ○ No", "  ○ No, and say why"]);
+          expect(inside.slice(-3).map((l: string) => l.replace(/^> ●/, "  ○"))).toEqual(["  ○ Yes", "  ○ No", "  ○ No, and say why"]);
           expect(inside.filter((l: string, k: number) => l.startsWith("… ") && inside[k + 1]?.startsWith("… "))).toEqual([]);
           expect(asked(t, cols).at(-1)).toMatch(/^─+$/);
           for (let k = 0; k < 12; k++) {
@@ -424,7 +424,7 @@ test("a question takes the input's full width with the side left or right, nothi
       ask(t, "rm -r build");
       expect([t.box.col, t.box.w]).toEqual([2, 155]);
       expect(t.ruled.rows.slice(0, 6).map(seen)).toEqual(none);
-      expect(asked(t, 160).slice(1, -1)).toEqual(["Why: it deletes files", "rm -r build", "> ○ Yes", "  ○ Yes, and don't ask again for rm -r build in this project", "  ○ No", "  ○ No, and say why"]);
+      expect(asked(t, 160).slice(1, -1)).toEqual(["Why: it deletes files", "rm -r build", "> ● Yes", "  ○ Yes, and don't ask again for rm -r build in this project", "  ○ No", "  ○ No, and say why"]);
     });
   }
 });
@@ -591,7 +591,7 @@ test("illi's form takes the input's place, its full width, who asks in the rule:
     own(t, [DB, CACHE]);
     paint(t);
     expect([t.box.of, t.box.col, t.box.w, t.box.h]).toEqual([t.asking.form, 2, 105, 7]);
-    expect(asked(t, 110)).toEqual(["── illi asks " + "─".repeat(92), " Database   Cache   Review", "Which database?  pick one", "> ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip", "─".repeat(105)]);
+    expect(asked(t, 110)).toEqual(["── illi asks " + "─".repeat(92), " Database   Cache   Review", "Which database?  pick one", "> ● Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip", "─".repeat(105)]);
     expect(t.ruled.rows.some((r: any[]) => text(r, 110).includes("my draft"))).toBe(false);
     expect([t.ruled.at, t.scr.blink]).toEqual([{ row: t.box.row + 5, col: 2 + 4 }, true]);
     const chat = (u: any) => u.ruled.rows.slice(0, u.box.row - 1).map((r: any[]) => text(r, 110));
@@ -669,7 +669,7 @@ test("illi's form taller than half the screen: its tabs and keys hold, its lines
     }
     paint(t);
     const shown = asked(t, 100).slice(1, -1).map((l: string) => l.trim());
-    expect([f.top, shown[0], shown[1], shown.at(-2), shown.at(-1)]).toEqual([4, "One   Review", "○ o3", "> ○ o10", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
+    expect([f.top, shown[0], shown[1], shown.at(-2), shown.at(-1)]).toEqual([4, "One   Review", "○ o3", "> ● o10", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
     const turn = (key: string) => {
       term_grab(t, key);
       paint(t);
@@ -697,11 +697,11 @@ test("a lit mark wider than >: the form's options and words lead as wide, the cu
       const t = term();
       own(t, [DB]);
       paint(t);
-      expect(asked(t, 160).slice(3, 7)).toEqual(["-> ○ Postgres  you know it", "   ○ SQLite", "   ○ MySQL", "   > Something else: type your own"]);
+      expect(asked(t, 160).slice(3, 7)).toEqual(["-> ● Postgres  you know it", "   ○ SQLite", "   ○ MySQL", "   > Something else: type your own"]);
       expect(t.ruled.at).toEqual({ row: t.box.row + 5, col: 2 + 5 });
       const u = term();
       ask(u, "ls");
-      expect(asked(u, 160).slice(3, 7)).toEqual(["-> ○ Yes", "   ○ Yes, and don't ask again for ls in this project", "   ○ No", "   ○ No, and say why"]);
+      expect(asked(u, 160).slice(3, 7)).toEqual(["-> ● Yes", "   ○ Yes, and don't ask again for ls in this project", "   ○ No", "   ○ No, and say why"]);
     });
   } finally {
     Theme.GLYPH.lit = was;
@@ -761,13 +761,13 @@ test("too short for its lead and its answers, the lead gives way whole (one row 
     const t = term();
     ask(t, TALL, "rm -r ./no-such-folder-here");
     armed(t);
-    expect(asked(t, 80).slice(1, -1)).toEqual(["Why: it deletes files", "… 300 more lines · wheel, PgUp/PgDn", "> ○ Yes", "  ○ Yes, and don't ask again for rm -r ./no-such-folder-here in this …", "  ○ No", "  ○ No, and say why"]);
+    expect(asked(t, 80).slice(1, -1)).toEqual(["Why: it deletes files", "… 300 more lines · wheel, PgUp/PgDn", "> ● Yes", "  ○ Yes, and don't ask again for rm -r ./no-such-folder-here in this …", "  ○ No", "  ○ No, and say why"]);
   });
   sized(80, 11, () => {
     const t = term();
     ask(t, TALL, "rm -r ./no-such-folder-here");
     armed(t);
-    expect(asked(t, 80).slice(1, -1)).toEqual(["… 301 more lines", "> ○ Yes", "  ○ Yes, and don't ask again for rm -r ./no-such-folder-here in this …", "  ○ No", "  ○ No, and say why"]);
+    expect(asked(t, 80).slice(1, -1)).toEqual(["… 301 more lines", "> ● Yes", "  ○ Yes, and don't ask again for rm -r ./no-such-folder-here in this …", "  ○ No", "  ○ No, and say why"]);
     wheel(t, t.box.row + 2, COL);
     term_grab(t, "PgDn");
     paint(t);
@@ -777,11 +777,11 @@ test("too short for its lead and its answers, the lead gives way whole (one row 
     const t = term();
     ask(t, TALL, "rm -r ./no-such-folder-here");
     armed(t);
-    expect(asked(t, 80).slice(1, -1)).toEqual(["> ○ Yes", "  ○ Yes, and don't ask again for rm -r ./no-such-folder-here in this …"]);
+    expect(asked(t, 80).slice(1, -1)).toEqual(["> ● Yes", "  ○ Yes, and don't ask again for rm -r ./no-such-folder-here in this …"]);
     term_grab(t, "Down");
     term_grab(t, "Down");
     paint(t);
-    expect(asked(t, 80).slice(1, -1)).toEqual(["  ○ Yes, and don't ask again for rm -r ./no-such-folder-here in this …", "> ○ No"]);
+    expect(asked(t, 80).slice(1, -1)).toEqual(["  ○ Yes, and don't ask again for rm -r ./no-such-folder-here in this …", "> ● No"]);
     click(t, row_of(t, "Yes, and don't ask again for rm -r ./no-such-folder-here in this project"), COL);
     expect(sent(t)).toEqual([{ ask: "q1", yes: true, always: true, said: "" }]);
   });

@@ -235,7 +235,7 @@ test("illi's question shows as a form: who asks, its tabs, the question, its opt
   own(t);
   expect([t.choose, t.question, t.notices]).toEqual([null, null, []]);
   expect(term_form_lines(t, 80, 4)!.who).toBe("illi");
-  expect(text(t)).toEqual([" Database   Review", "Which database?  pick one", "> ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
+  expect(text(t)).toEqual([" Database   Review", "Which database?  pick one", "> ● Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip"]);
   expect(term_form_lines(t, 80, 4)!.at).toEqual({ row: 4, col: 4 });
 });
 
