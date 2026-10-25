@@ -341,8 +341,9 @@ export namespace Custom {
 
   // a file's front matter (`key: value` lines between --- lines; a value
   // of > or | is the indented lines under it, as YAML's: folded into one,
-  // or kept; none, the `- item` lines under it, as YAML's list: each
-  // unquoted, joined by commas, as a tools list reads them) and body
+  // or kept; none, the `- item` lines under it, blank lines between them
+  // too, as YAML's list: each unquoted, joined by commas, as a tools list
+  // reads them) and body
   export function read(file: string): { head: Record<string, string>; body: string } {
     return Custom.parse(fs.readFileSync(file, "utf8"));
   }
@@ -366,8 +367,9 @@ export namespace Custom {
         under.push(lines[++k].trim());
       }
       const items = [];
-      while (value === "" && k + 1 < lines.length && /^\s*-\s+\S/.test(lines[k + 1])) {
-        items.push(unquote(lines[++k].replace(/^\s*-\s+/, "").trim()));
+      for (let next = value === "" ? item_at(lines, k + 1) : -1; next >= 0; next = item_at(lines, k + 1)) {
+        k = next;
+        items.push(unquote(lines[k].replace(/^\s*-\s+/, "").trim()));
       }
       const whole = block !== null ? under.join(block[1] === ">" ? " " : "\n").trim() : value;
       head[key] = items.length > 0 ? items.join(", ") : unquote(whole);
@@ -506,6 +508,15 @@ function agent_builtins(list: string[]): string[] {
     return CLAUDE_OWN.get(own) ?? (own === t && /^[A-Z][A-Za-z]*$/.test(t) ? t : null);
   });
   return [...new Set(out.filter((t): t is string => t !== null))];
+}
+
+// the line of a `- item` at or after line k, past blank lines, as a
+// YAML list goes on over them; -1: the next line not blank is no item
+function item_at(lines: string[], k: number): number {
+  while (k < lines.length && lines[k].trim() === "") {
+    k++;
+  }
+  return k < lines.length && /^\s*-\s+\S/.test(lines[k]) ? k : -1;
 }
 
 // a value without the quotes round it, as YAML reads it

@@ -4,13 +4,13 @@
 // front matter and body (its tools list's Claude Code tools, but those
 // illi gives itself, spawn and todo; the list as YAML writes it too;
 // one empty gives none, one left out all; Agent(worker, researcher)
-// whole, spawn held to those agents), the project's over the
-// user's, its mode, a command's arguments; an agent's model as a pick;
-// /agent makes a primary agent the main agent (its model, instructions
-// and tools, Claude Code's too), noted before the next message, each
-// keeping its pick; spawn's agent runs a subagent as it, with its Claude
-// Code tools (none on a ChatGPT model whose window isn't told: never
-// guessed).
+// whole, spawn held to those agents; a - list over blank lines), the
+// project's over the user's, its mode, a command's arguments; an agent's
+// model as a pick; /agent makes a primary agent the main agent (its
+// model, instructions and tools, Claude Code's too), noted before the
+// next message, each keeping its pick; spawn's agent runs a subagent as
+// it, with its Claude Code tools (none on a ChatGPT model whose window
+// isn't told: never guessed).
 // A skill: its folder's SKILL.md (a folded description), the
 // project's over theirs, listed by the skill tool and loaded by it; a
 // sticky one turned on and off by it, while on in every turn's prompt;
@@ -100,6 +100,15 @@ test("an agent's tools list as YAML writes it: in [ ], each name quoted or not, 
   expect([flow.tools, flow.builtins]).toEqual([["read", "zoom"], ["Read", "Grep"]]);
   const block = Custom.profile("block", DIR + "/lists/block.md");
   expect([block.tools, block.builtins, block.model]).toEqual([["read", "edit", "shell"], ["Read", "Edit", "Bash"], "sonnet"]);
+});
+
+test("a - list goes on over blank lines, as YAML reads it, and ends at the next key", () => {
+  const texts = ["tools:\n  - Read\n\n  - Grep\ndescription: x", "tools:\n\n  - Read\n  - Grep", "tools:\n  - Read\n\ndescription: x", "tools:\n- Read\n\n- Grep"];
+  for (const text of texts) {
+    const yaml = Bun.YAML.parse(text) as Record<string, any>;
+    const { head } = Custom.parse("---\n" + text + "\n---\nbody");
+    expect([text, head.tools, head.description]).toEqual([text, yaml.tools.join(", "), yaml.description]);
+  }
 });
 
 test("Claude Code's Agent, Task, TodoWrite and task tools in a tools list are illi's spawn and todo, never Claude Code's own on claude-code", () => {
