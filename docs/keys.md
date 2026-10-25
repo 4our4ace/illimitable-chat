@@ -354,7 +354,8 @@ illi to zoom if it helps. You never see that line in the result's box:
 the Related lines are where you see what was found. At most one goes
 with a round of tool calls. It never makes a call slower: if the search
 hasn't answered a few milliseconds after the tool is done, nothing is
-added. A line you dismissed is never given.
+added to that call (a later call of the same round, a slower one, may
+still take what it found). A line you dismissed is never given.
 
 How high is high enough starts strict and then follows you. Once you
 have opened or pinned 20 lines that matched a path or an error, the bar

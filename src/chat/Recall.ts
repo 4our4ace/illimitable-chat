@@ -19,10 +19,16 @@
 // holds across restarts, and a line falls out of it only as its naming
 // leaves the caller's recent messages.
 // Never slower: once the tool is done, the search is waited on WAIT ms
-// at most; not answered, no line. One search runs at a time (a call
-// starting meanwhile gets none), and a caller gets one line a step at
-// most (a step's calls, run one after another as illi's loop does or at
-// once as Claude Code may, share it: Chat.on counts each caller's steps).
+// at most; not answered, no line. One search runs at a time: a later
+// call of its caller's step shares it (so the line a fast call's search
+// found too late goes after a slower call of the same step instead of
+// nowhere), any other call starting meanwhile gets none. Its thread
+// starts as a turn does (Recall.wake), so no first search waits out a
+// worker starting. A caller gets one line a step at most (a step's
+// calls, run one after another as illi's loop does or at once as Claude
+// Code may, share it: Chat.on counts each caller's steps; on claude-code
+// a call may reach illi before Claude Code's stream says its step began,
+// so a step may get a line more or less, never a wrong one).
 // The line goes last, after what the hooks told the model, as one line
 // between <history> tags (Clip.ts history_block): its id as zoom and the
 // side take it, how long ago its episode ended, its summary cut short.
@@ -77,9 +83,10 @@ const KEPT = 60000;
 // Globals
 // =======
 
-// whether a search runs; the bar as last read, and when; each subagent's
-// view's lines, read once a view
-let busy = false;
+// the search running, its chat's tools and its recall (null: none); the
+// bar as last read, and when; each subagent's view's lines, read once a
+// view
+let running: { tools: Tools; pending: Pending } | null = null;
 let kept: { at: number; bar: number } | null = null;
 const PARTS = new WeakMap<Block[], Array<[number, number]>>();
 
@@ -89,26 +96,43 @@ const PARTS = new WeakMap<Block[], Array<[number, number]>>();
 export namespace Recall {
 
   // a call's recall started beside its run, if due (null: none): `related`
-  // on, a tool not illi's own memory's or meta's (SKIP), no search running
-  // already, its caller given no line yet this step. Never in the call's
-  // way: what fails here, or in the thread, gives no line
+  // on, a tool not illi's own memory's or meta's (SKIP), its caller given
+  // no line yet this step, no search running already; one running for
+  // the same caller's step is shared (its line goes after whichever of
+  // their calls ends first once it answered: Recall.end). Never in the
+  // call's way: what fails here, or in the thread, gives no line
   export function start(tools: Tools, who: string, name: string, input: unknown): Pending | null {
     try {
       const step = tools.steps.get(who) ?? 0;
-      if (!config.RECALL || SKIP.has(name) || busy || tools.given.get(who) === step) {
+      if (!config.RECALL || SKIP.has(name) || tools.given.get(who) === step) {
         return null;
+      }
+      if (running !== null) {
+        const { pending } = running;
+        return running.tools === tools && pending.who === who && pending.step === step ? pending : null;
       }
       const ask = Recall.ask(tools, who, name, input);
       if (ask === null) {
         return null;
       }
-      busy = true;
-      const found = Projects.recall(tools.mem.store.file, ask).catch(() => null).finally(() => {
-        busy = false;
+      const found   = Projects.recall(tools.mem.store.file, ask).catch(() => null);
+      const pending = { who, step, found };
+      running = { tools, pending };
+      void found.then(() => {
+        running = running?.pending === pending ? null : running;
       });
-      return { who, step, found };
+      return pending;
     } catch {
       return null;
+    }
+  }
+
+  // recall's thread started ahead of the first call's search (a worker
+  // takes longer to start than a call's end waits: WAIT), as a turn
+  // starts with `related` on (Chat.turn)
+  export function wake(): void {
+    if (config.RECALL) {
+      Projects.wake();
     }
   }
 

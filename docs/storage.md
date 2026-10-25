@@ -443,10 +443,12 @@ flowchart TD
 illi from quitting (`ref: false`). `Projects.radar` sends the radar's to
 a second worker of the same module, started at the radar's first, so a
 search the model asks never queues behind one of the radar's, and
-`Projects.recall` sends recall's to a third, so the side's never queues
-behind one of recall's either: a search can't be cut off, and one whose
-answer came too late still runs to its end (`Projects.thread` posts to
-any of them: each its own worker and its own searches waiting). A
+`Projects.recall` sends recall's to a third (started as a turn starts,
+with `related` on: a worker takes longer to start than a call's end
+waits on its search), so the side's never queues behind one of
+recall's either: a search can't be cut off, and one whose answer came
+too late still runs to its end (`Projects.thread` posts to any of
+them: each its own worker and its own searches waiting). A
 message is `{ id, file, $: "search", words, scope }`,
 `{ id, file, $: "radar", ask }` or `{ id, file, $: "recall", ask }`,
 answered `{ id, out }` or `{ id, error }`. For each the worker:
@@ -626,9 +628,11 @@ does alone (when the two shared a worker, it waited 86 ms and 196 ms).
 As a tool call of illi's runs, the chat searches the same index for it
 (`src/chat/Recall.ts`; the search, `Radar.recall`), so the model gets a
 strong match without asking. It starts beside the call's run, past the
-hooks and the permission checks, on recall's own worker, one at a time
-(a call that starts meanwhile gets none). In one read transaction, on
-that worker's connection:
+hooks and the permission checks, on recall's own worker, one at a time:
+a later call of the same caller's round of calls shares the one running
+(so what a fast call's search found too late goes after a slower call
+of that round instead of nowhere), any other call that starts meanwhile
+gets none. In one read transaction, on that worker's connection:
 
 1. **The run**, read from the file: the caller's latest user message,
    then its latest 16 messages after it (the chat's agent's from `msg`,
@@ -668,6 +672,15 @@ hooks added. It is appended only when:
 - the result holds no images, and isn't empty (its "(no output)"
   stays as it is);
 - the line would not push it onto a page of its own.
+
+So a call quicker than its search gets no line of its own. On the
+tests' chat of 1,600 messages a search took 1.4 ms on a worker already
+running and 14 ms on one just started (hence the worker started with
+the turn); a typical run's takes about 10 ms at 20,000 messages and 17
+ms at 200,000 (the radar's table above). A read or an edit, done in a
+millisecond or two, rarely waits long enough: a slower call of its
+round (a command, an MCP tool) takes what the search found, and the
+next round's search reads that call in the run.
 
 It is logged with the result, as the model read it, so the next call's
 cache holds. It is never read as part of the result: `history_bare`
