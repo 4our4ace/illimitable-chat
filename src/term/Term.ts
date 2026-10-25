@@ -68,7 +68,7 @@ import { status_hear, status_new, status_set, type Status } from "./Status.ts";
 import { Run } from "../config/Run.ts";
 import * as Reply from "../ui/Reply.ts";
 import * as Screen from "../ui/Screen.ts";
-import { setting_follow } from "./Settings.ts";
+import { setting_follow, setting_told } from "./Settings.ts";
 import { CLOCK } from "./Side.ts";
 import { Store } from "../chat/Store.ts";
 import { Tools } from "../tools/Tools.ts";
@@ -535,6 +535,9 @@ function term_hear(t: Term, msg: View.Server): void {
   t.dropped = t.v.suggest === "" ? "" : t.dropped;
   term_went(t, was);
   term_subs(t);
+  if (msg.$ === "settings") {
+    setting_told(t);
+  }
   related_hear(t, msg);
   if (t.v.agent !== agent) {
     term_primaries(t);

@@ -12,10 +12,12 @@
 // The view's illi runs no chat of its own, nor agents, nor MCP servers;
 // what it reads itself (an export, the tree, the projects) it reads from
 // the file. A setting it writes in config.json it tells the chat's illi,
-// which reads the file again (Settings.ts setting_follow). When the chat's illi quits, the view's runs again (Term.ts):
-// it holds the chat then, or joins one that got there first. The illi
-// holding a project may be a profile left running hidden in a window
-// (Window.ts): it serves its views all the same.
+// which reads the file again (Settings.ts setting_follow) and tells every
+// view to read it again too (setting_told), whichever terminal wrote it.
+// When the chat's illi quits, the view's runs again (Term.ts): it holds
+// the chat then, or joins one that got there first. The illi holding a
+// project may be a profile left running hidden in a window (Window.ts):
+// it serves its views all the same.
 
 import * as net from "node:net";
 import { Chat, type Chat as Running } from "./Chat.ts";

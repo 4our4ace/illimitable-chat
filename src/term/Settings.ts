@@ -257,7 +257,8 @@ export function setting_set(t: Term, key: config.Key, value: unknown): boolean {
 // each write told to the chat's illi (Chat.act's related: the same
 // process, or the one holding the chat of a second terminal's view),
 // which reads the file again, so a change made in any terminal holds for
-// the chat as one made in its own does
+// the chat as one made in its own does, then tells every view to read it
+// again (setting_told), so every terminal's screen follows
 export function setting_follow(t: Term): void {
   config.config_follow((wrote) => {
     setting_live(t);
@@ -266,6 +267,22 @@ export function setting_follow(t: Term): void {
       term_send(t, { $: "related" });
     }
   });
+}
+
+// the chat's illi read config.json again (View Server `settings`): a
+// view's illi reads it again too, its follower redoing what the terminal
+// keeps of the settings and telling no one, as a read is no write
+// (setting_follow); the holder's own terminal, whose process read it
+// already, has nothing to do. A file that won't read is noted
+export function setting_told(t: Term): void {
+  if (t.chat !== null) {
+    return;
+  }
+  try {
+    config.config_reread();
+  } catch (err: any) {
+    term_note(t, err.message);
+  }
 }
 
 // what the terminal holds of the settings, from them as they are now:
