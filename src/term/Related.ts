@@ -8,7 +8,9 @@
 // them; what comes with it waits out STEP), the turn's end; never as
 // text streams. It runs in a thread of its own (Projects.radar), one at a
 // time: a step while one runs asks again once it ends, the stale answer
-// dropped. Nothing of it reaches the model.
+// dropped. What shows here is never handed to the model: the strong
+// lines reach it by a search of the chat's own as each tool call runs
+// (Recall.ts), never one dismissed here.
 //
 // A click on a line opens it at full detail: a pane over the chat, its
 // messages whole, drawn as the chat draws them. A click on its id pins
@@ -17,11 +19,13 @@
 // it is given: its view's lines are id+n). A line opened or pinned stays
 // till the user's next message (touched), then fades and leaves as any
 // other. A click on the head lists them: Enter opens one, Tab pins it,
-// Del dismisses it (left out from then on, till illi quits). Each line
+// Del dismisses it (left out from then on, till illi quits, the
+// model's too: told the chat, Chat.dismiss). Each line
 // shown, opened, pinned and dismissed is counted by its score (RELATED:
 // counts alone, no text, no id), so where a line counts as a strong
-// match can be set from where those opened sit. `related` off: none of
-// it.
+// match is set from where those opened and pinned sit (Radar.bar).
+// `related` off: none of it (screen: all of it, and nothing for the
+// model).
 
 import * as fs from "node:fs";
 import { term_chooser } from "./Commands.ts";
@@ -32,7 +36,6 @@ import { Projects } from "../chat/Projects.ts";
 import { Radar, type Found, type Said, type Shown } from "../chat/Radar.ts";
 import * as Reply from "../ui/Reply.ts";
 import * as Screen from "../ui/Screen.ts";
-import { term_age } from "./Side.ts";
 import { Store, type Store as File } from "../chat/Store.ts";
 import { term_send, type Term } from "./Term.ts";
 import { json_object } from "../tools/Clip.ts";
@@ -226,9 +229,9 @@ export function related_run(v: View.View): { user: string | null; run: Said[] } 
 // -----
 
 // a line's summary as the side shows it: one line, its first item's kind
-// ("user: ") left out
+// ("user: ") left out (Radar.text: as recall gives it the model too)
 export function related_text(s: Shown): string {
-  return Paint.text_line(s.text).replace(/^(user|illi|tool|echo|mind|note|work|recap): /, "").trim();
+  return Radar.text(s.text);
 }
 
 // a summary cut to w columns at a word's end (one ending in its last
@@ -243,10 +246,10 @@ export function related_cut(text: string, w: number): string {
   return w < 2 ? "" : words.replace(/[\s,;:.]+$/, "") + "…";
 }
 
-// how long ago a line's episode ended: 12m, 3h, 2d ("": not known)
+// how long ago a line's episode ended: 12m, 3h, 2d ("": not known;
+// Radar.age: as recall gives it the model too)
 export function related_age(s: Shown): string {
-  const at = Date.parse(s.date);
-  return Number.isNaN(at) ? "" : term_age(Date.now() - at);
+  return Radar.age(s.date);
 }
 
 // a line opened at full detail: a pane over the chat, titled by its id

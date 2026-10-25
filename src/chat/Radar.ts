@@ -1,10 +1,12 @@
 // Radar
 // =====
 // While the AI works, the summary lines of past topics that may be
-// related, for the user's eye (the side's Related section: Related.ts);
-// nothing of it reaches the model. No model call: the chat's own index
-// of its summary lines (find_<chat>, Store.ts), searched in the search
-// thread (Seeker.ts) after each step of a turn.
+// related: for the user's eye first (the side's Related section,
+// Related.ts), searched after each step of a turn; the strong ones for
+// the model too (Radar.recall, searched as each of its tool calls runs:
+// Recall.ts appends one to the call's result). No model call: the chat's
+// own index of its summary lines (find_<chat>, Store.ts), searched in a
+// thread of its own (Seeker.ts: one for the side's, one for recall's).
 //
 // The query (Radar.units): the run's user message, then the AI's latest
 // words, tool calls (their paths, commands, names) and failed results
@@ -40,7 +42,15 @@
 //
 // Left out: the messages in the view at message detail, those from the
 // view's turn on (recent), and the lines the user dismissed: never found,
-// nor widened into.
+// nor widened into. A result's <history> line (what recall gave the
+// model) is never read as the result's (history_bare), nor indexed: never
+// found again as if it had happened.
+//
+// Strong (Radar.strong): anchored (a path or an error's name among the
+// units it holds), two units at least, its score the bar's at least
+// (Radar.bar: STRONG, then where the lines the user opened and pinned at
+// the side score). Only such a line goes to the model, and only one
+// nothing it holds whole names yet (Radar.named).
 //
 // Kept still while read (Radar.merge): a line found again keeps its
 // place, its score the new one; one not found fades; new lines join at
@@ -69,6 +79,14 @@ export type Said = { kind: string; text: string };
 // message left out with all after it (end), the other messages left out,
 // each [a, b)
 export type Ask = { chat: number; units: Unit[]; end: number; out: Array<[number, number]> };
+
+// a recall asked of the search thread (Recall.ts): the chat; whose run it
+// is (log: a subagent's log; null: the chat's own agent); the call now,
+// as it will be logged (`name {input}`); what its caller's view leaves out
+// (end, out, as an Ask's); the first message it holds whole (from: the
+// chat's agent's recent messages; a subagent holds its whole log); the
+// score a line must reach (bar: Radar.bar)
+export type Recall = { chat: number; log: string | null; call: string; end: number; out: Array<[number, number]>; from: number; bar: number };
 
 // a line found: the messages it covers (first, n), its text, its score,
 // how many units it holds, whether a path or an error's name is among
@@ -121,6 +139,25 @@ export const SHOWN = 4;
 const FADE = 0.85;
 const FAR  = 3;
 
+// the score a line must reach to be given to the model (Radar.strong), as
+// the side shows every line past FLOOR. STRONG, three times FLOOR, till
+// the user's choices say where: in a chat of 100 episodes a unit in one of
+// them weighs idf ln(1 + 99.5/1.5) ≈ 4.2, so a path the call now names
+// scores about 12.6 alone and STRONG asks for about that and a rare word
+// or a name besides (16.8; a name, 21); words alone, a path said only some
+// messages back (each newer one fades it to 0.85) or one common in the
+// chat stay under it, and so does a young chat's line (a unit's rarity
+// is smaller there). Once ENOUGH lines matching a path or an error's
+// name (anchored, as a line given must be) were opened or pinned at the
+// side (related.json), the bar is where their lower QUARTILE starts (a
+// count's best score, rounded down), up or down, never under LOWEST
+// (twice FLOOR: a path and a rare word in a chat of a few dozen
+// episodes, about 12, clears it; one of them alone never)
+export const STRONG   = 15;
+export const LOWEST   = 10;
+export const ENOUGH   = 20;
+const QUARTILE = 0.25;
+
 // a value of a tool call longer than this is code, or a file's text:
 // only its NAMES longest names are read, at half weight; the head of a
 // failed result read for its errors
@@ -168,6 +205,11 @@ const ERRORS = new RegExp("^(?:" + ERROR.source.slice(2, -2) + ")$");
 
 // a tool call as logged: its name, a space, its input's JSON
 const CALL = /^(\S+) (\{[\s\S]*)$/;
+
+// a line named in a message: #16+16 or #16 (as the side pins it and
+// recall gives it: View.block_name), or 16+8| (as the view, a zoom and a
+// search write it: Memory.line; a zoom of one message, 16+0|)
+const NAMED = /#(\d+)(?:\+(\d+))?(?![\d+])|(?<![\w+#])(\d+)\+(\d+)\|/g;
 
 // Radar
 // =====
@@ -414,6 +456,91 @@ export namespace Radar {
     }
     const tail = out[out.length - 1];
     return tail !== undefined && tail[1] >= count ? { end: Math.min(tail[0], count), out: out.slice(0, -1) } : { end: count, out };
+  }
+
+
+  // Recall
+  // ------
+
+  // a recall, run where the index is read (the search thread): of the
+  // lines the caller's run and its call find (Radar.seek, as the side's
+  // search, the call the newest of the run), the best strong one
+  // (Radar.strong) that nothing the caller holds whole names yet
+  // (Radar.named: a pin, a recall before, a zoom); null: none. As the file
+  // was when it began (one read transaction)
+  export function recall(file: File, ask: Recall): Found | null {
+    const store = { ...file, chat: ask.chat };
+    return store.db.transaction(() => {
+      const { user, run } = Radar.ran(store, ask.log);
+      const units  = Radar.units(user, [...run, { kind: "tool", text: ask.call }]);
+      const strong = units.length === 0 ? [] : Radar.seek(store, { chat: ask.chat, units, end: ask.end, out: ask.out }).filter((f) => Radar.strong(f, ask.bar));
+      const named  = strong.length === 0 ? [] : Radar.named(ask.log === null ? Store.naming(store, ask.from) : Store.work_naming(store, ask.log));
+      return strong.find((f) => !named.some(([a, b]) => f.first < b && a < f.first + f.n)) ?? null;
+    })();
+  }
+
+  // a run as the query reads it, from the file: its user message (null:
+  // none), then its latest LATEST messages of the kinds read, oldest
+  // first; the chat's agent's from the chat, a subagent's from its log
+  // (log: its task, or the latest message it was told, as its user's)
+  export function ran(store: File, log: string | null): { user: string | null; run: Said[] } {
+    const kinds = Object.keys(SOURCE);
+    if (log === null) {
+      const at = Store.last(store, "user", Store.count(store));
+      return { user: at < 0 ? null : Store.msg(store, at)?.text ?? null, run: Store.latest(store, at, kinds, LATEST) };
+    }
+    const at = Store.work_last(store, log, "user");
+    return { user: at < 0 ? null : Store.work_text(store, log, at), run: Store.work_latest(store, log, at, kinds, LATEST) };
+  }
+
+  // the spans of the chat the texts name, [a, b) each (NAMED: #a+n, #a,
+  // a+n|; a+0|, one message)
+  export function named(texts: string[]): Array<[number, number]> {
+    return texts.flatMap((text) => [...text.matchAll(NAMED)].map((m): [number, number] => {
+      const a = Number(m[1] ?? m[3]);
+      return [a, a + Math.max(1, Number(m[2] ?? m[4] ?? 1))];
+    }));
+  }
+
+  // whether a line is strong enough to give the model: anchored (a path or
+  // an error's name among its units), two units at least, its score the
+  // bar's at least (STRONG, or where the user's choices put it: Radar.bar)
+  export function strong(f: Found, bar: number): boolean {
+    return f.anchored && f.units >= 2 && f.score >= bar;
+  }
+
+  // the bar a strong line reaches, from the counts kept of the side's
+  // lines (related.json, as Related.ts keeps it; anything else: none):
+  // STRONG while fewer than ENOUGH lines matching a path or an error's
+  // name were opened or pinned; then where their lower QUARTILE starts,
+  // LOWEST at least
+  export function bar(counts: unknown): number {
+    const of    = (e: string): Array<[string, unknown]> => Object.entries((counts as any)?.[e]?.anchored ?? {});
+    const peaks = [...of("opened"), ...of("pinned")].flatMap(([at, n]): Array<[number, number]> => (Number.isFinite(Number(at)) && Number.isInteger(n) && (n as number) > 0 ? [[Number(at), n as number]] : [])).sort((a, b) => a[0] - b[0]);
+    const all   = peaks.reduce((sum, [, n]) => sum + n, 0);
+    let seen    = 0;
+    const at    = all < ENOUGH ? undefined : peaks.find(([, n]) => (seen += n) >= all * QUARTILE)?.[0];
+    return at === undefined ? STRONG : Math.max(LOWEST, at);
+  }
+
+  // Lines
+  // -----
+
+  // a line's summary on one line, as the side and recall show it: its
+  // control characters out (a tab two spaces, a newline one), its spaces
+  // folded, its first item's kind ("user: ") left out
+  export function text(line: string): string {
+    const flat = line.replace(/\t/g, "  ").replace(/\n/g, " ").replace(/[\x00-\x1f\x7f-\x9f]/g, "").replace(/\s+/g, " ").trim();
+    return flat.replace(/^(user|illi|tool|echo|mind|note|work|recap): /, "").trim();
+  }
+
+  // how long ago a line's episode ended, by its last message's date, in
+  // its largest unit (as the side says a duration: Side.ts term_age):
+  // <1m, 12m, 3h, 2d; "": not known
+  export function age(date: string, now = Date.now()): string {
+    const at = Date.parse(date);
+    const m  = Math.floor((now - at) / 60000);
+    return Number.isNaN(at) ? "" : m < 1 ? "<1m" : m < 60 ? m + "m" : m < 1440 ? Math.floor(m / 60) + "h" : Math.floor(m / 1440) + "d";
   }
 
 }
