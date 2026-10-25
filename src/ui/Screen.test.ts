@@ -461,6 +461,12 @@ test("a click inside a chip (an image's, a paste's) puts the cursor at its neare
   expect([wrapped.at(0, 4), wrapped.at(0, 12), wrapped.at(1, 10), wrapped.at(2, 11)]).toEqual([2, 3, 29, 29]);
 });
 
+test("a click on an input a column wide, where a wide character leaves its first row empty, lands on the next row's place, on the mark too", () => {
+  const thin = clicked("世a", 3);
+  expect(thin.rows).toEqual(["> ", "  世", "  a", "  "]);
+  expect([thin.at(0, 0), thin.at(0, 2), thin.at(1, 3), thin.at(2, 2), thin.at(3, 0)]).toEqual([0, 0, 0, 1, 2]);
+});
+
 test("a click on the input follows the prompt's own width", () => {
   const was = Theme.GLYPH.input;
   Theme.GLYPH.input = "❯❯❯ ";
