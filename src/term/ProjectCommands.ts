@@ -22,6 +22,7 @@ import { term_restart } from "./ProfileCommands.ts";
 import { Projects } from "../chat/Projects.ts";
 import { Store, type Project } from "../chat/Store.ts";
 import type { Term } from "./Term.ts";
+import { When } from "../chat/When.ts";
 
 // the list
 export function term_projects(t: Term): void {
@@ -39,9 +40,9 @@ export function term_projects(t: Term): void {
   term_chooser(t, "Projects", list.map((p) => p.name), about, 0, (k) => project_more(t, list[k]), { find: true, keys, foot: () => "Enter more · Del forget" });
 }
 
-// a project's last day and size, its folder
+// a project's last day (in illi's zone: When.ymd) and size, its folder
 function project_about(p: Project): string {
-  const when = p.last === null ? "no messages yet" : "last " + p.last.slice(0, 10) + " · " + project_count(p);
+  const when = p.last === null ? "no messages yet" : "last " + When.ymd(Date.parse(p.last)) + " · " + project_count(p);
   return when + " · " + project_where(p);
 }
 
@@ -55,10 +56,11 @@ function project_count(p: Project): string {
   return p.count + (p.count === 1 ? " message" : " messages");
 }
 
-// more of a project, as a note: its folder, its days, its latest line
+// more of a project, as a note: its folder, its days (in illi's zone),
+// its latest line
 function project_more(t: Term, p: Project): void {
   t.choose = null;
-  const [first, last] = [p.first?.slice(0, 10), p.last?.slice(0, 10)];
+  const [first, last] = [p.first, p.last].map((date) => (date === null ? "" : When.ymd(Date.parse(date))));
   const when = p.first === null ? "no messages yet" : project_count(p) + ", " + (first === last ? last : first + " to " + last);
   term_note(t, p.name + " · " + project_where(p) + " · " + when + (p.lately === "" ? "." : ". Lately: " + Projects.clip(p.lately)));
 }

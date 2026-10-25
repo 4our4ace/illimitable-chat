@@ -99,10 +99,11 @@ export namespace Projects {
   }
 
   // every project, as a model's first look: the one used last first, the
-  // one here marked; each its folder, its first and last day, its
-  // messages, its latest summary line
+  // one here marked; each its folder, its first and last day (in illi's
+  // zone, as the time now each call is told: When.ymd), its messages, its
+  // latest summary line
   export function table(store: File): string {
-    const day = (date: string | null) => date?.slice(0, 10) ?? "";
+    const day = (date: string | null) => (date === null ? "" : When.ymd(Date.parse(date)));
     const lines = Store.projects(store).map((p) => {
       const head = [p.name + (p.file === store.file ? " (this chat's)" : ""), p.path || "outside any git repo"];
       const when = p.count === 0 ? ["no messages yet"] : [day(p.first) === day(p.last) ? day(p.last) : day(p.first) + " to " + day(p.last), p.count + (p.count === 1 ? " message" : " messages")];

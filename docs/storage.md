@@ -394,7 +394,9 @@ The projects table
 `Store.projects` builds what `/projects` shows and what the model's
 `projects` tool returns: each project's name, folder, first and last
 message dates, message count, and latest summary line, the one used last
-first.
+first. Both show each date as its day in illi's zone (`When.ymd`), the
+zone of the time now each call is told, never the UTC day its ISO
+instant starts with.
 
 It lists the `.sqlite` files in the folder and reads each one
 (`Store.visit`, so other projects' files are opened and closed again;
