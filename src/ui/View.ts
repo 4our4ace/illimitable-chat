@@ -1300,7 +1300,8 @@ export function entry_answer(kind: Kind, text: string): boolean {
 }
 
 // a person's words (the user's, a report) as typed; a result as a file's
-// lines (the rest, markdown, draw from their text: Paint.ts)
+// lines, a failed one's FAILED left out (its call's mark says so); the
+// rest, markdown, draw from their text: Paint.ts
 function entry_body(kind: Kind, text: string): Md.Block[] {
-  return kind === "echo" ? Md.md_output(text) : Md.md_plain(text);
+  return kind === "echo" ? Md.md_output(text.startsWith(FAILED) ? text.slice(FAILED.length) : text) : Md.md_plain(text);
 }
