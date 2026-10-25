@@ -14,7 +14,9 @@
 // cursor where the press put it; a scrolled input stays put under it.
 // No press moves it that only focused the window, nor a right one, nor
 // one under a popup, on a question in the input's place or with a pane
-// open; on an agent's page, and with the commands suggested, one does.
+// open (the input as painted before them takes none, though they aren't
+// painted yet); on an agent's page, and with the commands suggested, one
+// does.
 // One on the empty input leaves Up and Down walking the messages sent.
 // (Under a popup the mouse is the popup's: Popup.test.ts.)
 
@@ -282,7 +284,7 @@ test("an input taller than it shows stays put under a press on a row it shows: a
   });
 });
 
-test("no press moves the cursor that only focused the window, nor a right one, nor one under a popup, on a question in the input's place or with a pane open; on an agent's page, and with the commands suggested, one does", () => {
+test("no press moves the cursor that only focused the window, nor a right one, nor one under a popup, on a question in the input's place or with a pane open (painted yet or not: the input painted before takes none); on an agent's page, and with the commands suggested, one does", () => {
   sized(100, 30, () => {
     const t = terminal();
     Screen.ed_set(t.scr.ed, "some text");
@@ -298,15 +300,20 @@ test("no press moves the cursor that only focused the window, nor a right one, n
     click(t, r, 6);
     expect([t.scr.ed.pos, t.choose]).toEqual([9, null]);
     term_question(t, "Sure?", ["Yes", "No"], ["", ""], () => {});
+    click(t, r, 6);
+    expect([t.scr.ed.pos, t.question?.title]).toEqual([9, "Sure?"]);
     paint(t);
-    expect(t.areas.find((a: any) => a.key === "foot").input).toBeUndefined();
+    expect(t.fields.filter((f: any) => f.of === null)).toEqual([]);
     press(t, r, 6);
     let_go(t, 0, 60);
     expect([t.scr.ed.pos, t.question?.title]).toEqual([9, "Sure?"]);
     t.question = null;
-    t.pane = { title: "Help", make: () => [[Paint.Run("some help")]], w: 0, lines: [], scroll: 0 };
     paint(t);
-    expect(t.areas.find((a: any) => a.key === "foot").input).toBeUndefined();
+    t.pane = { title: "Help", make: () => [[Paint.Run("some help")]], w: 0, lines: [], scroll: 0 };
+    click(t, r, 6);
+    expect(t.scr.ed.pos).toBe(9);
+    paint(t);
+    expect(t.fields.filter((f: any) => f.of === null)).toEqual([]);
     click(t, r, 6);
     expect(t.scr.ed.pos).toBe(9);
     t.pane = null;
