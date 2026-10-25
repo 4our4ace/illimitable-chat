@@ -264,7 +264,8 @@ export namespace ClaudeCode {
   }
 
   // what a call with tools leaves out of Claude Code's own MCP servers
-  // (none without: args), so the model reads no tool it isn't to have.
+  // (a call without loads none: args), so the model reads no tool it
+  // isn't to have.
   // With an agent's tools list (Ask.listed): those of the servers last
   // told that the list names (mcp: all; mcp__github: that one; tools
   // alone, mcp__github__get_issue: those) stay, but one off or over;

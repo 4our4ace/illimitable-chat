@@ -471,15 +471,15 @@ function term_skill(t: Term, skill: Skill, arg: string, word: string): void {
 
 // the MCP servers, illi's own (where each is from: a plugin, a file;
 // one `off` names, not started, too), then Claude Code's as its last
-// call told them (ClaudeCode.servers),
-// each how it is (term_mcp_state) and on or off (setting_on); the lit
-// one's tools under them, or why it failed; Enter, Left or Right turns
-// it off or on (setting_toggle: `off`; illi's own at the next start,
-// Claude Code's from the next call); the files that won't read after
-// them. None of either: where the user's go (none there yet:
-// config.MCPS), and on claude-code that Claude Code's own show once a
-// call has loaded them. `at`: the server lit, illi's or Claude Code's
-// (cc: a click on one at the side)
+// call told them (ClaudeCode.servers), each how it is (term_mcp_state)
+// and on or off (setting_on); the lit one's tools under them, or why it
+// failed, or the login it needs; Enter, Left or Right turns it off or on
+// (setting_toggle: `off`; illi's own at the next start, Claude Code's
+// from the next call); the files that won't read after them. None of
+// either: where the user's go (none there yet: config.MCPS), and on
+// claude-code that Claude Code's own show once a call has loaded them.
+// `at`: the server lit, illi's or Claude Code's (cc: a click on one at
+// the side)
 export function term_mcp(t: Term, at = "", cc = false): void {
   const { servers, troubles, files } = Mcp.status();
   const idle   = Object.entries(Mcp.read(process.cwd(), true)).filter(([name]) => config.config_off(name) && !servers.some((s) => s.name === name));
@@ -505,7 +505,7 @@ export function term_mcp(t: Term, at = "", cc = false): void {
       name   : s.name,
       about  : s.over ? "illi's own " + s.name + " in its place" : term_mcp_state(s.status, s.tools?.length ?? null),
       head   : "Claude Code's, as last told",
-      detail : s.over ? "illi's calls use illi's own server of this name instead, so the model gets one copy" : s.status === "needs-auth" ? "Claude Code needs a login to it: claude mcp login" : s.status !== "connected" || s.tools === null ? "" : tools(s.tools.map((x) => x.slice(("mcp__" + ClaudeCode.spell(s.name) + "__").length))),
+      detail : s.over ? "illi's calls use illi's own server of this name instead, so the model gets one copy" : s.status === "needs-auth" ? "Claude Code needs a login to it: claude mcp login \"" + s.name + "\"" : s.status !== "connected" || s.tools === null ? "" : tools(s.tools.map((x) => x.slice(("mcp__" + ClaudeCode.spell(s.name) + "__").length))),
       foot   : "Enter on/off in illi's calls · from the next call",
     })),
     ...troubles.map((x) => ({ name: x, about: "", head: "Won't read", detail: "", foot: "read again at the next start" })),
