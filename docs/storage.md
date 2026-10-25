@@ -416,7 +416,8 @@ Messages by date
 ----------------
 
 The model's `date` tool goes both ways: `date(id)` reads message id's
-`date`; `date(from, to)` finds the messages of a span of time, and
+`date` and says it in illi's zone (`Wed 21 Oct 2026 14:05`,
+`When.moment`); `date(from, to)` finds the messages of a span of time, and
 `search` takes the same `from` and `to`. The span is read in illi's
 local zone (`When.span`, `src/chat/When.ts`): a date alone as `from` is
 its day's start, as `to` its day's end, a time as `to` the instant the

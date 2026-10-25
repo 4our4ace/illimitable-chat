@@ -92,6 +92,7 @@ test("a span's head says it whole; its lines' times only what the head doesn't; 
   expect(When.at(at(2025, 12, 31, 9, 0), years)).toBe("Wed 31 Dec 09:00");
   expect(When.at(at(2026, 1, 2, 9, 0), years)).toBe("Fri 2 Jan 2026 09:00");
   expect(When.at(at(2026, 9, 30, 9, 0), day)).toBe("Wed 30 Sep 09:00");
+  expect(When.moment(at(2026, 10, 21, 14, 5))).toBe("Wed 21 Oct 2026 14:05");
   const now = at(2026, 10, 25, 14, 5);
   expect([day, week, over, years, hours, night].map((s) => When.short(s, now))).toEqual([
     "Wed 21 Oct", "14–20 Oct", "29 Sep–5 Oct", "29 Dec 2025–4 Jan 2026", "Wed 21 Oct 14:00–18:00", "Wed 21 Oct 22:00–Thu 22 Oct 02:00",

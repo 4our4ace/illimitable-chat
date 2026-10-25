@@ -796,9 +796,11 @@ export namespace Memory {
     return Memory.halves(part).map((half) => Memory.line(half, Memory.node(mem, half) ?? WAIT)).join("\n");
   }
 
+  // message id's date and time, in illi's zone, as the date tool's other
+  // answers say a day (When.moment: Wed 21 Oct 2026 14:05)
   export function date(mem: Memory, id: number): string {
     const root = Memory.message(mem, id);
-    return root === null ? "No message " + id + "." : new Date(root.date).toLocaleString("sv-SE");
+    return root === null ? "No message " + id + "." : When.moment(Date.parse(root.date));
   }
 
   // Spans of time
