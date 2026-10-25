@@ -133,6 +133,6 @@ Docs
 License
 -------
 
-Apache 2.0: LICENSE and NOTICE. The libraries compiled in are MIT, but
-an ISC icon and a Unicode table: their licenses are in
+Apache 2.0: LICENSE and NOTICE. The three libraries compiled in are MIT,
+but an ISC icon and a Unicode table: their licenses are in
 THIRD_PARTY_NOTICES.md.
