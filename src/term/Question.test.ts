@@ -481,12 +481,12 @@ test("too tall, the lead scrolls by the wheel over it and by PgUp, PgDn, the ans
     expect([first(), t.question.past, tail()]).toEqual(["echo line 1", 2, ends]);
     term_grab(t, "PgDn");
     paint(t);
-    expect([first(), t.question.past, tail()]).toEqual(["echo line 6", 7, ends]);
+    expect([first(), t.question.past, tail()]).toEqual(["echo line 4", 5, ends]);
     term_grab(t, "PgUp");
     term_grab(t, "PgUp");
     paint(t);
     expect([first(), t.question.past, lit(t)]).toEqual(["Why: it deletes files", 0, "Yes"]);
-    for (let k = 0; k < 60; k++) {
+    for (let k = 0; k < 100; k++) {
       term_grab(t, "PgDn");
     }
     paint(t);

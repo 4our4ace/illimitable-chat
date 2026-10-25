@@ -49,6 +49,10 @@ const AGAIN = 2000;
 // the lines a turn of the wheel scrolls
 const WHEEL = 3;
 
+// the share of what shows PgUp and PgDn scroll text by: half, so the
+// half read before stays in view
+const PAGE = 0.5;
+
 // the commands by their keys (term_keyed), made at the first key, again
 // once the leader changes: only illi's own have keys (the user's commands
 // and skills are typed), and the rest never change
@@ -152,7 +156,7 @@ export function term_grab(t: Term, key: string): boolean {
   if (t.pane === null) {
     return false;
   }
-  const page = Math.max(1, t.seen.tall - 2);
+  const page = term_step(t.seen.tall);
   const move = ({ Up: -1, Down: 1, PgUp: -page, PgDn: page, WheelUp: -WHEEL, WheelDown: WHEEL, "Ctrl+Home": -Infinity, "Ctrl+End": Infinity } as Record<string, number>)[key];
   const shut = key === "Esc" || key === "Enter";
   if (move !== undefined) {
@@ -379,10 +383,16 @@ export function term_verbose(t: Term): void {
   t.ver += 1;
 }
 
-// PgUp, PgDn: a page up, down; Ctrl+Home, Ctrl+End: the chat's top, its
-// end (the paint holds the scroll inside the chat)
+// the lines PgUp and PgDn scroll text rows tall by: PAGE of them, one
+// at least
+export function term_step(rows: number): number {
+  return Math.max(1, Math.floor(rows * PAGE));
+}
+
+// PgUp, PgDn: half a page up, down (term_step); Ctrl+Home, Ctrl+End: the
+// chat's top, its end (the paint holds the scroll inside the chat)
 export function term_page(t: Term, key: string): void {
-  const page = Math.max(1, t.seen.tall - 2);
+  const page = term_step(t.seen.tall);
   const to: Record<string, number> = { PgUp: t.scroll + page, PgDn: t.scroll - page, "Ctrl+Home": Infinity, "Ctrl+End": 0 };
   t.scroll = Math.max(0, to[key] ?? t.scroll);
 }

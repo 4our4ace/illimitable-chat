@@ -38,7 +38,7 @@ Scroll
 
 | Key or command | Does |
 | -------------- | ---- |
-| PgUp, PgDn | a page up, down (or the wheel); at the end, the chat follows what comes |
+| PgUp, PgDn | half a page up, down, so the half read before stays in view (or the wheel); at the end, the chat follows what comes |
 | Ctrl+Home, Ctrl+End | the chat's top, its end |
 
 While a list is open, these keys and the wheel move in it instead; while
@@ -186,7 +186,7 @@ and what you were typing comes back once you answer.
 | Key | Does |
 | --- | ---- |
 | Up, Down (or Tab, Shift+Tab) | move |
-| PgUp, PgDn | a page (of a question's long lead, where it is cut) |
+| PgUp, PgDn | half a page (of a question's long lead, where it is cut) |
 | Ctrl+O | a question's long command: show it all, or fold it again |
 | Ctrl+Home, Ctrl+End | the first, the last (Home and End too, where you can't type) |
 | Enter | pick |
