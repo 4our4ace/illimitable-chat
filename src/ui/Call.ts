@@ -83,9 +83,9 @@ const LABEL = 200;
 // calls; its subagents' tool is Agent, once Task)
 const LABELS = new Map<string, (x: Input, result: string | null) => string>([
   ["shell",      (x) => text_first(x.description) || command_first(x.command)],
-  ["read",       (x) => about(x.path, (path) => "Read " + path + read_lines(x.offset, x.limit))],
-  ["write",      (x) => about(x.path, (path) => "Wrote " + path)],
-  ["edit",       (x) => (Array.isArray(x.edits) ? about(names_few(x.edits.map((e: any) => e?.path)), (files) => "Edited " + files) : "")],
+  ["read",       (x) => about(path_said(x.path), (path) => "Read " + path + read_lines(x.offset, x.limit))],
+  ["write",      (x) => about(path_said(x.path), (path) => "Wrote " + path)],
+  ["edit",       (x) => (Array.isArray(x.edits) ? about(names_few(x.edits.map((e: any) => path_said(e?.path))), (files) => "Edited " + files) : "")],
   ["web_search", (x) => web_label(x)],
   ["search",     (x) => about(x.words, (words) => 'Searched memory for "' + words + '"' + project_in(x.project))],
   ["zoom",       (x) => about(typeof x.id === "string" && x.id !== "" ? x.id + "'s chat" : msg_show(x.id, x.n), (what) => "Looked back at " + what + project_in(x.project))],
@@ -97,13 +97,13 @@ const LABELS = new Map<string, (x: Input, result: string | null) => string>([
   ["todo",       (x) => (Array.isArray(x.items) && x.items.length === 0 ? "Cleared the to-do list" : "Updated the to-do list")],
   ["ask",        (x) => asked(x.questions)],
   ["Bash",       (x) => text_first(x.description) || command_first(x.command)],
-  ["Read",       (x) => about(x.file_path, (path) => "Read " + path + read_lines(x.offset, x.limit))],
-  ["Write",      (x) => about(x.file_path, (path) => "Wrote " + path)],
-  ["Edit",       (x) => about(x.file_path, (path) => "Edited " + path)],
-  ["MultiEdit",  (x) => about(x.file_path, (path) => "Edited " + path)],
-  ["NotebookEdit", (x) => about(x.notebook_path, (path) => "Edited " + path)],
+  ["Read",       (x) => about(path_said(x.file_path), (path) => "Read " + path + read_lines(x.offset, x.limit))],
+  ["Write",      (x) => about(path_said(x.file_path), (path) => "Wrote " + path)],
+  ["Edit",       (x) => about(path_said(x.file_path), (path) => "Edited " + path)],
+  ["MultiEdit",  (x) => about(path_said(x.file_path), (path) => "Edited " + path)],
+  ["NotebookEdit", (x) => about(path_said(x.notebook_path), (path) => "Edited " + path)],
   ["Glob",       (x) => about(x.pattern, (pattern) => "Listed files matching " + pattern)],
-  ["Grep",       (x) => about(x.pattern, (pattern) => 'Searched for "' + pattern + '"' + (typeof x.path === "string" && x.path !== "" ? " in " + text_first(x.path) : ""))],
+  ["Grep",       (x) => about(x.pattern, (pattern) => 'Searched for "' + pattern + '"' + (typeof x.path === "string" && x.path !== "" ? " in " + text_first(path_said(x.path)) : ""))],
   ["WebSearch",  (x) => about(x.query, (query) => 'Searched "' + query + '"')],
   ["WebFetch",   (x) => about(url_short(x.url), (url) => "Opened " + url)],
   ["TodoWrite",  () => "Updated the to-do list"],
@@ -284,6 +284,18 @@ function command_first(v: unknown): string {
 // words about a field's first line (say), or "" when it is missing or
 // blank: the call then reads as any tool's (call_named), never as words
 // left hanging (`Read`, `Messaged`)
+// a path as a label names it: one in the working dir from there
+// (Claude Code's tools give theirs whole), one under home from ~; any
+// other, or not a string, as it is
+function path_said(v: unknown): unknown {
+  const home = process.env.HOME ?? "";
+  if (typeof v !== "string" || !v.startsWith("/")) {
+    return v;
+  }
+  const cwd = process.cwd();
+  return v.startsWith(cwd + "/") ? v.slice(cwd.length + 1) : home.length > 1 && v.startsWith(home + "/") ? "~" + v.slice(home.length) : v;
+}
+
 function about(v: unknown, say: (line: string) => string): string {
   const line = text_first(v);
   return line === "" ? "" : say(line);

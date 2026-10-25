@@ -50,6 +50,22 @@ test("a command's label: its description, else its first line", () => {
   expect(performance.now() - start).toBeLessThan(200);
 });
 
+test("a file tool's label names a whole path from the working dir, else from ~ under home; any other as it is", () => {
+  const cwd = process.cwd();
+  const home = process.env.HOME;
+  try {
+    process.env.HOME = cwd.split("/").slice(0, -1).join("/") || "/x";
+    expect(label("Edit", { file_path: cwd + "/src/cache.ts" })).toBe("Edited src/cache.ts");
+    expect(label("Read", { file_path: process.env.HOME + "/notes/todo.md" })).toBe("Read ~/notes/todo.md");
+    expect(label("Grep", { pattern: "keep", path: cwd + "/src" })).toBe('Searched for "keep" in src');
+    expect(label("edit", { edits: [{ path: cwd + "/a.ts" }, { path: "b.ts" }] })).toBe("Edited a.ts, b.ts");
+    expect(label("Write", { file_path: "/etc/hosts" })).toBe("Wrote /etc/hosts");
+    expect(label("Read", { file_path: cwd + "-other/x.ts" })).toBe("Read ~/" + cwd.split("/").pop() + "-other/x.ts");
+  } finally {
+    process.env.HOME = home;
+  }
+});
+
 test("a file tool's label: the file, a read's lines if only some; an edit's files, two then how many more", () => {
   expect(label("read", { path: "src/a.ts" })).toBe("Read src/a.ts");
   expect(label("read", { path: "src/a.ts", offset: 40, limit: 40 })).toBe("Read src/a.ts, lines 40-79");
