@@ -67,6 +67,9 @@ test("a reply's cited pages it doesn't link already end it, in one line; no resu
   expect(reply("Plain.", cite("https://c.example/?utm_source=openai&p=2", "C [1]"))).toEqual([{ kind: "illi", text: "Plain.\n\nSources: [C \\[1\\]](https://c.example/?p=2)" }]);
   expect(reply("No pages.")).toEqual([{ kind: "illi", text: "No pages." }]);
   expect(reply("utm_source=openaix stays")).toEqual([{ kind: "illi", text: "utm_source=openaix stays" }]);
+  expect(reply("See https://d.example/a/b?utm_source=openai.", cite("https://d.example/a", ""), cite("https://d.example/a/b?utm_source=openai", "B"), cite("https://e.example/Foo_(bar) x?utm_source=openai", "Foo"))).toEqual([
+    { kind: "illi", text: "See https://d.example/a/b.\n\nSources: [https://d.example/a](https://d.example/a) · [Foo](https://e.example/Foo_%28bar%29%20x)" },
+  ]);
 });
 
 test("a web search is logged with its result: searched, or failed as its status says; one left unfinished, alone, as a call stopped before it answered", () => {

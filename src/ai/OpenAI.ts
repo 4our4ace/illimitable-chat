@@ -37,11 +37,6 @@ const BREAKS = 4;
 const INPUT = /^(invalid_prompt|invalid_image)/;
 const FULL  = /^context_length_exceeded/;
 
-// the utm_source=openai a web search adds to each page's link, taken off
-function untracked(text: string): string {
-  return text.replace(/([?&])utm_source=openai(&|(?![\w%.-]))/g, (_, lead: string, tail: string) => tail === "&" ? lead : "");
-}
-
 // OpenAI
 // ======
 
@@ -204,9 +199,12 @@ export namespace OpenAI {
       case "message": {
         const content = o.content ?? [];
         const said = untracked(content.map((c: any) => c.text ?? "").join("").trim());
-        const urls = content.flatMap((c: any) => c.annotations ?? []).filter((a: any) => a.type === "url_citation");
-        const cited = [...new Map<string, string>(urls.map((a: any) => [untracked(a.url), a.title || a.url])).entries()].filter(([url]) => !said.includes(url));
-        const sources = cited.map(([url, title]) => "[" + title.replace(/[[\]]/g, "\\$&") + "](" + url + ")").join(" · ");
+        const cited = new Map<string, string>();
+        for (const a of content.flatMap((c: any) => c.annotations ?? []).filter((a: any) => a.type === "url_citation")) {
+          const url = untracked(String(a.url));
+          cited.has(url) || linked(said, url) || cited.set(url, a.title || url);
+        }
+        const sources = [...cited].map(([url, title]) => "[" + title.replace(/[[\]]/g, "\\$&") + "](" + url.replace(/[()\s]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")) + ")").join(" · ");
         const text = sources === "" ? said : said + (said ? "\n\n" : "") + "Sources: " + sources;
         return text ? [{ kind: "illi", text }] : [];
       }
@@ -236,4 +234,16 @@ export namespace OpenAI {
     usage   : (st) => st.use,
   };
 
+}
+
+// the utm_source=openai a web search adds to each page's link, taken off
+// (a sentence's full stop after it kept)
+function untracked(text: string): string {
+  return text.replace(/([?&])utm_source=openai(&|(?![\w%-])(?!\.[\w%-]))/g, (_, lead: string, tail: string) => tail === "&" ? lead : "");
+}
+
+// whether a text has a url whole: not the start of a longer one (a
+// fragment after it, or a sentence's punctuation, still ends it)
+function linked(text: string, url: string): boolean {
+  return new RegExp(url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?=$|[\\s)\\]>\"'#]|[.,;:!?](?:\\s|$))").test(text);
 }

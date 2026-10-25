@@ -2,10 +2,10 @@
 # illimitable's installer: `illi`, one file, into ~/.local/bin (or
 # $ILLI_INSTALL). The latest release's binary for this system, checked
 # against the release's SHA256SUMS; with none for it (or ILLI_SOURCE=1),
-# built from the source with Bun (installed first if missing), its
-# libraries as bun.lock pins them. A download that fails (offline, a
-# rate limit) stops it. Run again, it replaces the one there; illi
-# updates itself from then on (`illi upgrade` at once).
+# built from the source with Bun 1.4.3 or later (installed first if
+# missing), its libraries as bun.lock pins them. A download that fails
+# (offline, a rate limit) stops it. Run again, it replaces the one
+# there; illi updates itself from then on (`illi upgrade` at once).
 #
 #   curl -fsSL https://raw.githubusercontent.com/4our4ace/illimitable-chat/main/install.sh | bash
 
@@ -16,6 +16,8 @@ BIN="${ILLI_INSTALL:-$HOME/.local/bin}"
 
 say() { printf '\033[1m%s\033[0m\n' "$*"; }
 die() { printf 'illi: %s\n' "$*" >&2; exit 1; }
+# whether version $1 is $2 or later (x.y.z, a -suffix left out)
+later() { local IFS=. i; local -a a=(${1%%-*}) b=(${2%%-*}); for i in 0 1 2; do (( ${a[i]:-0} != ${b[i]:-0} )) && { (( ${a[i]:-0} > ${b[i]:-0} )); return; }; done; return 0; }
 
 case "$(uname -s)" in
   Linux)  os=linux ;;
@@ -78,6 +80,9 @@ else
     curl -fsSL https://bun.sh/install | bash >/dev/null
     export PATH="$HOME/.bun/bin:$PATH"
   fi
+  # Bun 1.4.3 at least: 1.3's spawnSync could spin forever (bun#34069)
+  have="$(bun --version)"
+  later "$have" 1.4.3 || die "building illi needs Bun 1.4.3 or later, and this is $have: run bun upgrade, then this again"
   git clone --quiet --depth 1 "https://github.com/$REPO" "$tmp/repo"
   (cd "$tmp/repo" && bun install --frozen-lockfile --production >/dev/null)
   bun build --compile --minify "$tmp/repo/src/main.ts" "$tmp/repo/src/chat/Seeker.ts" --outfile "$tmp/illi" >/dev/null
