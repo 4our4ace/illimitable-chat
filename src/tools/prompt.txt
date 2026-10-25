@@ -69,6 +69,10 @@ manually; zoom and search are your only allowed mechanisms to navigate them.
 Summaries keep little of tool output, so say in your reply what you learned
 that will matter later.
 
+A tool result may end with a <history> line: the summary of a past episode
+that illi's search found related, its id first (#id+n: zoom(id, n) opens it).
+It tells what was then, not what is now: zoom it if it helps, else ignore it.
+
 Each project has its own chat: the git repo illi runs in, or home for work
 outside any repo. This chat is the project named at the start of each message.
 When the user means work that isn't in your view, call projects for a first look

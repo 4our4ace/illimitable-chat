@@ -13,12 +13,14 @@
 // then a search of their summary lines (Projects.search, in a thread of
 // its own: Seeker.ts), then a zoom into one (Tools.chat_of). The radar's
 // searches (Radar.ts) run in another thread of that module, so the
-// model's never wait on them.
+// model's never wait on them, and recall's (Recall.ts: the radar's strong
+// lines for the model, as its tool calls run) in a third, so neither the
+// side's nor the model's ever waits on one.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { Ask, Found } from "./Radar.ts";
+import type { Ask, Found, Recall } from "./Radar.ts";
 import { HOME, Store, type Cut, type Place, type Store as File } from "./Store.ts";
 
 // Constants
@@ -46,11 +48,14 @@ const SEEK = /\$bunfs|~BUN/.test(import.meta.path) ? "./chat/Seeker.ts" : new UR
 // thread can't run is run here (null: it isn't)
 type Thread = { worker: Worker | null; asked: Map<number, { done: (out: any) => void; fail: (err: Error) => void; here: (() => unknown) | null }> };
 
-// the model's searches' thread, and the radar's (Radar.ts): two workers
-// of the one module, so a search the model asks never waits on the
-// radar's
+// the model's searches' thread, the radar's (Radar.ts) and recall's
+// (Recall.ts): three workers of the one module, so a search the model
+// asks never waits on the radar's, nor the side's on recall's (a search
+// runs to its end however late its answer: recall's would hold the
+// side's line back)
 const SEEKER: Thread = { worker: null, asked: new Map() };
 const RADAR: Thread  = { worker: null, asked: new Map() };
+const RECALL: Thread = { worker: null, asked: new Map() };
 let ASKS = 0;
 
 // Projects
@@ -118,6 +123,13 @@ export namespace Projects {
   // fails, and the screen goes on without it
   export function radar(file: string, ask: Ask): Promise<Found[]> {
     return Projects.thread(RADAR, { $: "radar", file, ask }, null);
+  }
+
+  // recall's search (Radar.recall) of a project's file in its own thread:
+  // the strong line to give the model, if any. Never run here, as the
+  // radar's: the thread failing, it fails, and the call goes on without
+  export function recall(file: string, ask: Recall): Promise<Found | null> {
+    return Projects.thread(RECALL, { $: "recall", file, ask }, null);
   }
 
   // a message to a thread (Seeker.ts), its worker started at the first,

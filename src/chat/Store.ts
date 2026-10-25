@@ -351,6 +351,21 @@ export namespace Store {
     return (query(store.db, "select max(i) as i from msg where chat = ? and kind = ? and i < ?").get(store.chat, kind, end) as { i: number | null }).i ?? -1;
   }
 
+  // the latest `most` messages after message `after` of these kinds, oldest
+  // first, each its kind and text (the radar's query of a run: Radar.ran)
+  export function latest(store: Store, after: number, kinds: string[], most: number): Array<{ kind: string; text: string }> {
+    const rows = query(store.db, "select kind, text from msg where chat = ? and i > ? and kind in (" + kinds.map(() => "?").join(", ") + ") order by i desc limit ?").all(store.chat, after, ...kinds, most);
+    return (rows as Array<{ kind: string; text: string }>).reverse();
+  }
+
+  // the texts of the messages from `from` on that may name a line: a
+  // digit after a #, or a + between digits before a | (#16+16, as the side
+  // pins a line and recall gives one; 16+8|, as the view, a zoom and a
+  // search write one: Radar.named reads them)
+  export function naming(store: Store, from: number): string[] {
+    return (query(store.db, "select text from msg where chat = ? and i >= ? and (text glob '*#[0-9]*' or text glob '*[0-9]+[0-9]*|*')").all(store.chat, from) as Array<{ text: string }>).map((r) => r.text);
+  }
+
   // messages logged in one write, each with the folder illi runs in
   export function push(store: Store, rows: Row[], cwd: string): void {
     const add = query(store.db, "insert into msg (chat, i, kind, text, date, size, images, line, more, cwd) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
@@ -445,6 +460,33 @@ export namespace Store {
   export function work_count(store: Store, log: string): number {
     const id = Store.log_id(store, log);
     return id === null ? 0 : (query(store.db, "select count(*) as n from work where log = ?").get(id) as { n: number }).n;
+  }
+
+  // a log's latest entry of a kind; -1: none (or no such log)
+  export function work_last(store: Store, log: string, kind: Kind): number {
+    const id = Store.log_id(store, log);
+    return id === null ? -1 : (query(store.db, "select max(i) as i from work where log = ? and kind = ?").get(id, kind) as { i: number | null }).i ?? -1;
+  }
+
+  // a log's latest `most` entries after entry `after` of these kinds,
+  // oldest first, each its kind and text (Store.latest's, of an agent)
+  export function work_latest(store: Store, log: string, after: number, kinds: string[], most: number): Array<{ kind: string; text: string }> {
+    const id   = Store.log_id(store, log);
+    const rows = id === null ? [] : query(store.db, "select kind, text from work where log = ? and i > ? and kind in (" + kinds.map(() => "?").join(", ") + ") order by i desc limit ?").all(id, after, ...kinds, most);
+    return (rows as Array<{ kind: string; text: string }>).reverse();
+  }
+
+  // a log's entry `i`, its text; null: none
+  export function work_text(store: Store, log: string, i: number): string | null {
+    const id = Store.log_id(store, log);
+    return id === null ? null : (query(store.db, "select text from work where log = ? and i = ?").get(id, i) as { text: string } | null)?.text ?? null;
+  }
+
+  // the texts of a log's entries that may name a line (Store.naming's, of
+  // an agent: it holds its whole log)
+  export function work_naming(store: Store, log: string): string[] {
+    const id = Store.log_id(store, log);
+    return id === null ? [] : (query(store.db, "select text from work where log = ? and (text glob '*#[0-9]*' or text glob '*[0-9]+[0-9]*|*')").all(id) as Array<{ text: string }>).map((r) => r.text);
   }
 
   // Images

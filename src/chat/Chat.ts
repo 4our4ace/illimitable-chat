@@ -34,6 +34,7 @@ import { Memory, TOKEN, type Root, type Share } from "./Memory.ts";
 import { Pick } from "../ai/Pick.ts";
 import { Plugins } from "../config/Plugins.ts";
 import { Projects } from "./Projects.ts";
+import { Recall } from "./Recall.ts";
 import { MASTER, SEARCHES, Tools, type Agent, type Live, type Reply } from "../tools/Tools.ts";
 import { MODES, type Mode } from "../tools/Guard.ts";
 import { ANSWERED, COMPACTING, IMAGES, live_push, SUMMARIES, TURN, type Answer, type Link, type Part, type Pipe, type Question, type Server as Out, type State, type Wait } from "../ui/View.ts";
@@ -791,7 +792,9 @@ export namespace Chat {
     return roots;
   }
 
-  // a message the call took was logged as it came
+  // a message the call took was logged as it came; a tool call with none
+  // of its caller's waiting begins a step (Recall.step: a step's calls
+  // share one line of recall)
   export function on(chat: Chat, agent: Agent | null, ev: Event): void {
     const at = agent ?? chat;
     const name = agent?.name;
@@ -803,6 +806,9 @@ export namespace Chat {
       return;
     }
     if (ev.kind === "tool" && ev.of !== undefined) {
+      if (Object.keys(at.calls).length === 0) {
+        Recall.step(chat.tools, name ?? MAIN);
+      }
       at.calls[ev.of] = ev.text;
       chat.goings = agent === null ? 0 : chat.goings;
     } else if (ev.kind === "mind") {

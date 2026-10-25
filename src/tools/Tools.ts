@@ -41,7 +41,10 @@
 // passes the loop guard: the same call as its caller's two before it in
 // its turn is asked (a yes, the caller's next turn and a name used again
 // start the count fresh). What a call that ran answers goes to the plugins last
-// (after_tool).
+// (after_tool), then, if it is strong and in time, the radar's line of a
+// past episode related to it goes after it (Recall.ts: searched beside
+// the call's run, one a step, never after illi's own memory and meta
+// tools).
 // The plugins' own tools are theirs to run (plugin__...).
 
 import * as fs from "node:fs";
@@ -67,6 +70,7 @@ import { Memory, TOKEN } from "../chat/Memory.ts";
 import PROMPT from "./prompt.txt" with { type: "text" };
 import { EFFORTS, Pick } from "../ai/Pick.ts";
 import { Projects } from "../chat/Projects.ts";
+import { Recall } from "../chat/Recall.ts";
 import { Store } from "../chat/Store.ts";
 import type { Background, Live, Perms, Plan, Query, Question, Refused, State, Todo } from "../ui/View.ts";
 
@@ -115,7 +119,9 @@ type Hooks = {
 // the tools: their URL (a secret in it), the working dir, the main agent's to-do
 // list (none: not read yet), the permissions of this run (Perm), the
 // radar's lines the user dismissed at the side, as [first, end) (any
-// view's, Chat.act: never given to a model, till illi quits)
+// view's, Chat.act: never given to a model, till illi quits); each
+// caller's steps, counted (Chat.on), and the last it was given a line
+// in (Recall.ts: one a step)
 export type Tools = {
   mem    : Memory;
   agents : Map<string, Agent>;
@@ -125,6 +131,8 @@ export type Tools = {
   hooks  : Hooks;
   todo?  : Todo[];
   gone   : Array<[number, number]>;
+  steps  : Map<string, number>;
+  given  : Map<string, number>;
 };
 
 // the permissions of this run (Tools.guard): the mode /mode set (null:
@@ -191,7 +199,10 @@ the images its "[image <file>]" lines name. Zoom whenever a summary
 only mentions something you need, such as what your last reply said, a
 decision, a past attempt or where a file is, before you act, guess or
 ask. date(id) gives the date and time of message id. zoom("Name") gives
-an agent's whole chat.
+an agent's whole chat. A tool result may end with a <history> line: the
+summary of a past episode that illi's search found related, its id first
+(#id+n: zoom(id, n) opens it). It tells what was then, not what is now:
+zoom it if it helps, else ignore it.
 
 Each project has its own chat: the git repo illi runs in, or home outside
 any repo; this one is named at the start of each message. projects()
@@ -378,7 +389,7 @@ export namespace Tools {
   export function serve(mem: Memory, hooks: Hooks, cwd: string): Tools {
     const key = crypto.randomUUID();
     const url = Tools.base() + key + "/";
-    const tools: Tools = { mem, agents: new Map(), perm: { mode: null, granted: new Set(), refused: [], calls: new Map() }, url, cwd, hooks, gone: [] };
+    const tools: Tools = { mem, agents: new Map(), perm: { mode: null, granted: new Set(), refused: [], calls: new Map() }, url, cwd, hooks, gone: [], steps: new Map(), given: new Map() };
     CHATS.set(key, tools);
     return tools;
   }
@@ -559,9 +570,11 @@ export namespace Tools {
   }
 
   // a call, past the plugins' hooks, then judged (Tools.guard: illi's own
-  // tools run, unless a hook asks of them), run, its answer past the
-  // plugins' hooks again, then what the first hooks added for the model
-  // after it (approve: Claude Code's, which judges its own)
+  // tools run, unless a hook asks of them), run (recall's search beside
+  // it: Recall.start), its answer past the plugins' hooks again, then what
+  // the first hooks added for the model after it, then the line recall
+  // found, if strong and in time (Recall.end) (approve: Claude Code's,
+  // which judges its own)
   export async function call(tools: Tools, who: string, name: string, args: any, signal: AbortSignal): Promise<Out> {
     if (name === "approve") {
       return Tools.approve(tools, who, String(args.tool_name ?? ""), args.input ?? {}, signal);
@@ -575,8 +588,9 @@ export namespace Tools {
     if (stop !== null) {
       return stop;
     }
+    const recall = Recall.start(tools, who, name, told.input);
     const out = await Plugins.after_tool({ ...call, input: told.input }, await Tools.handle(tools, who, name, told.input as any, signal));
-    return told.context === undefined ? out : { ...out, text: out.text + "\n\n" + told.context.join("\n\n") };
+    return Recall.end(tools, recall, told.context === undefined ? out : { ...out, text: out.text + "\n\n" + told.context.join("\n\n") }, signal);
   }
 
   // a call run (judged already: Tools.call): illi's own tools here; shell,
