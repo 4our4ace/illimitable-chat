@@ -23,10 +23,10 @@ Install
 curl -fsSL https://raw.githubusercontent.com/4our4ace/illimitable-chat/main/install.sh | bash
 ```
 
-Then type `illi` in any project. Linux and macOS (on Windows, WSL). It
-asks once whether you trust the folder, then gets to work on its own,
-and asks before anything risky ([Permissions](docs/permissions.md)). It
-keeps itself up to date.
+Then type `illi` in any project. Linux and macOS (on Windows, WSL).
+Once you trust the folder, it gets to work on its own, and asks before
+it touches your secrets or the system, or changes a file outside the
+project ([Permissions](docs/permissions.md)). It keeps itself up to date.
 
 It remembers
 ------------
@@ -44,9 +44,9 @@ and errors light up at the side, a click away.
 
 ```mermaid
 flowchart TD
-  T["last month, in one line"] --> W1["week 1"] & W2["week 2"]
-  W1 --> D1["Monday"] & D2["Tuesday"]
-  D1 --> M1["your exact words"] & M2["illi's exact words"]
+  T["last month, in one line"] --> H1["its first half"] & H2["its second half"]
+  H1 -.-> P["two messages, in one line"]
+  P --> M1["your exact words"] & M2["illi's exact words"]
 ```
 
 The tree only ever grows at its end, so nearly every call is a prompt
@@ -58,7 +58,7 @@ It works in parallel
 Send a reviewer and a tester off together. They work side by side,
 report back, and illi merges what they found.
 
-![A reviewer and a tester at work in the side panel while illi waits for their reports](assets/screens/subagents.webp)
+![A reviewer and a tester in the side panel: the reviewer's report is in, the tester still at work](assets/screens/subagents.webp)
 
 Every project, every you
 ------------------------
