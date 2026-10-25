@@ -1262,6 +1262,10 @@ export namespace Chat {
       case "dismiss": {
         return Chat.dismiss(chat, msg.part);
       }
+      case "related": {
+        config.config_reread();
+        return {};
+      }
       case "autocompact": {
         const value = msg.value === null ? null : String(msg.value).trim();
         if (value !== null && config.config_tokens(value, 1) === null) {
@@ -1292,10 +1296,10 @@ export namespace Chat {
   // messages left out of every search for the models from now on
   // (tools.gone: Recall.ts), till illi quits, as the side leaves it out
   // of its own; one known already, kept once. Not a line ([id, n], n a
-  // power of two, id a multiple of it): refused
+  // power of two, 1 at least, id a multiple of it): refused
   export function dismiss(chat: Chat, part: unknown): Answer {
     const [id, n] = Array.isArray(part) ? part.map(Number) : [NaN, NaN];
-    if (!Number.isInteger(id) || !Number.isInteger(Math.log2(n)) || id < 0 || id % n !== 0) {
+    if (!Number.isInteger(id) || !Number.isInteger(n) || n < 1 || !Number.isInteger(Math.log2(n)) || id < 0 || id % n !== 0) {
       return { error: "No line " + JSON.stringify(part) + " to dismiss." };
     }
     if (!chat.tools.gone.some(([a, b]) => a === id && b === id + n)) {

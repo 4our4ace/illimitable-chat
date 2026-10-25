@@ -252,6 +252,7 @@ export type Client =
   | { $: "background"; stop: number } // a background job (State background, by its id) stopped (/background)
   | { $: "revoke"; grant: string } // a grant let go, kept or this run's (/permissions)
   | { $: "dismiss"; part: Part } // a radar's line dismissed at the side (Related.ts): never given to the model either (Recall.ts), till illi quits
+  | { $: "related" } // the `related` setting changed at a view (/settings): the chat's illi reads it again, so on, screen or off holds for what it gives the model (Recall.ts) at once
   | { $: "autocompact"; label: string; value: string | null }; // a model's autocompact set (/autocompact, /model), or its own taken out
 
 // an act not answered: with its id, whether it was sent, what its

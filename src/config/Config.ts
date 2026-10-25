@@ -689,6 +689,15 @@ export function config_set(key: Key, value: unknown, root = false): void {
   config_live();
 }
 
+// config.json read again, and what changes while illi runs with it
+// (config_live): a setting another illi changed in the file, as a second
+// terminal's /settings does (its config_set reaches its own process
+// alone: Chat.act's related)
+export function config_reread(): void {
+  FILE = config_files();
+  config_live();
+}
+
 // why a key can't take a value (null: it can), the other keys as they
 // are: its shape (a number or a yes taken as its text); the picks
 // offered both by this illi (read anew at once) and at the next start (a
