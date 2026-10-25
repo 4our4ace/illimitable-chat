@@ -241,7 +241,7 @@ const RECAP_STOP = "Compaction stopped; the chat is as it was.";
 
 // a new chat's first message, its node written with it, so no compactor
 // call summarizes it
-const HELLO      = "Hi, I'm illi, short for illimitable: an AI, so I can make mistakes. One chat that never ends, kept in a memory tree, recent days in more detail. I work in the folder you start me in; each git repo gets a chat of its own. Ask me anything, for days, weeks, years; /help lists the commands.";
+const HELLO      = "Hi, I'm illi, short for illimitable: an AI, so I can make mistakes. One chat that never ends, kept in a memory tree, the newest messages in the most detail. I work in the folder you start me in; each git repo gets a chat of its own. Ask me anything, for days, weeks, years; /help lists the commands.";
 const HELLO_LINE = "illi: hello: illi (illimitable), one endless chat in a memory tree, one per git repo; works in the folder it starts in; /help for commands.";
 
 // Chat
