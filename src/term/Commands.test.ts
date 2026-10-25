@@ -395,7 +395,7 @@ test("/tab finds the chat's tab by the main agent's name, or illi's; none lists 
   expect(note(t)).toMatch(/^Tabs: /);
 });
 
-test("/open #id and /close #id: a call of a run opens or shuts alone (one its More line counts too, all then shown), scrolled to; a block as ever; neither, says so", () => {
+test("/open #id and /close #id: a call of a run (by its id or its result's) opens or shuts alone (one its More line counts shows once opened, shut it stays counted), scrolled to; a block as ever; neither, says so", () => {
   const t = term();
   const whole: Record<string, any> = { 1: { kind: "user", text: "go" }, 16: { kind: "illi", text: "Done." } };
   for (let k = 0; k < 7; k++) {
@@ -411,7 +411,9 @@ test("/open #id and /close #id: a call of a run opens or shuts alone (one its Mo
   expect(items()[1]).toEqual(["c#4", true]);
   run(t, "/close", "#4");
   expect(items()[1]).toEqual(["c#4", false]);
-  run(t, "/open", "#14");
+  run(t, "/close", "#12");
+  expect([items().length, note(t)]).toEqual([5, ""]);
+  run(t, "/open", "#15");
   expect([items().length, items().at(-1), t.find]).toEqual([7, ["c#14", true], "c#14"]);
   run(t, "/open", "#16");
   expect([note(t), t.find]).toEqual(["No block #16 here.", "c#14"]);

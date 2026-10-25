@@ -102,8 +102,8 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/compact [focus]",  "",                        "illi writes a recap of the chat and goes on from it alone (the chat before is kept and looked up when needed, not sent); focus: what the recap should keep", (t, a) => term_say(t, ("/compact " + a).trim())],
       ["/image <path>",     "",                        "attach an image to the next message (or paste or drop the file)", term_image],
       ["",                  "Alt+V, Ctrl+V",           "attach the clipboard's image (the terminal's own paste brings text)", term_clip],
-      ["/open #id",         "",                        "open block #id and keep it open (or click it)",  (t, a) => term_block(t, a, true)],
-      ["/close #id",        "",                        "close block #id and keep it closed (or click anywhere in its frame)", (t, a) => term_block(t, a, false)],
+      ["/open #id",         "",                        "open block #id, or a run's call #id, and keep it open (or click it)",  (t, a) => term_block(t, a, true)],
+      ["/close #id",        "",                        "close block #id, or a run's call #id, and keep it closed (or click anywhere in its frame, or the call's line)", (t, a) => term_block(t, a, false)],
       ["/fold",             "Ctrl+F",                  "fold the chat into the fewest blocks; again: unfold", term_fold],
       ["",                  "Ctrl+Y",                  "copy illi's last reply (a drag copies the text it covers, a double click a word)", term_copy],
       ["",                  "Ctrl+O",                  "show or hide the work between replies: every call open, thinking, agents' reports", term_verbose],
@@ -842,15 +842,16 @@ function term_agent(t: Term, arg: string): string {
 
 // the person's choice for block #id or #id+n (its name, View.block_name),
 // open or closed, whatever it shows now: it holds until Fold all; or, #id
-// a call (or another item) of a run on the page shown, that item opened
-// or shut alone, as a click on it does (till Ctrl+O). The chat scrolls
-// to it
+// a message an item of a run on the page shown holds (a call, its
+// result, a report, a thought), that item opened or shut alone, as a
+// click on it does (till Ctrl+O). The chat scrolls to it
 function term_block(t: Term, arg: string, open: boolean): void {
   const name = /^#?(\d+)(?:\+(\d+))?$/.exec(arg);
   const id   = Number(name?.[1]);
   const n    = Number(name?.[2] ?? 1);
-  if (name !== null && n === 1 && View.view_reach(t.v, "c#" + id, open)) {
-    t.find = "c#" + id;
+  const item = name !== null && n === 1 ? View.view_reach(t.v, "#" + id, open) : null;
+  if (item !== null) {
+    t.find = item;
     t.ver += 1;
     return;
   }

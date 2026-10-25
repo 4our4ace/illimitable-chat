@@ -52,7 +52,7 @@ function chat(): View.Row[] {
       item("c#" + (id + 2) + "c", 'read {"path":"a.log"}', null),
     ];
     out.push({ $: "Box", id, n: 2, rows: [sum(id, 1), sum(id + 1, 1)] });
-    out.push({ $: "Act", id: id + 2, text: "Ran a command", rows: id % 8 === 0 ? [...items, { $: "More", id: id + 2, n: 4, open: false, earlier: false }] : items, keys: [] });
+    out.push({ $: "Act", id: id + 2, text: "Ran a command", rows: id % 8 === 0 ? [...items, { $: "More", id: id + 2, n: 4, open: false, earlier: false }] : items, held: [] });
     out.push(...View.entry_rows(id + 3, id % 8 === 0 ? "user" : "illi", "Words " + id + "\n\n- one\n- two", id === 8 ? ["a.png"] : []));
   }
   return out;
@@ -185,10 +185,17 @@ test("a run lists its items, a line each: how each ended, what it did cut to the
     Theme.TOOL.shell = "$";
     expect(text(Paint.rows_lines(View.view_acts(v, rows), 40))[1]).toBe(lead + Theme.GLYPH.ok + " $ bun test · exit 0");
     delete Theme.TOOL.shell;
+    Theme.TOOL.mcp__github__get_issue = "◆";
+    View.view_item(v, "c#60");
+    const issue = text(Paint.rows_lines(View.view_acts(v, View.entry_rows(60, "tool", 'mcp__github__get_issue {"id":4}')), 40));
+    View.view_item(v, "c#60");
+    expect([issue[0], issue[1], issue.slice(2).some((l) => l.includes("│  ◆ github: get_issue 4"))]).toEqual([run + "Called github: get_issue", lead + "  ◆ github: get_issue 4", true]);
+    delete Theme.TOOL.mcp__github__get_issue;
     [Theme.GLYPH.ok, Theme.GLYPH.failed, Theme.GLYPH.run] = ["ok", "FAIL", "*"];
     expect(text(Paint.rows_lines(View.view_acts(v, rows), 40)).map((l) => l.slice(0, 12))).toEqual(["* Ran 4 comm", "  ok   bun t", "  FAIL git p", "  ok   Print", "       ls"]);
   } finally {
     delete Theme.TOOL.shell;
+    delete Theme.TOOL.mcp__github__get_issue;
     [Theme.GLYPH.ok, Theme.GLYPH.failed, Theme.GLYPH.run] = glyphs;
   }
 });
@@ -197,7 +204,8 @@ test("a run lists its items, a line each: how each ended, what it did cut to the
 // would cross the edge left out, the "…" after what fits (so a line may
 // end a column short), the outcome kept whole while it fits; its line so
 // too, and an open item's rows; at a width under its lead, the lead cut
-// as well. A call of any
+// as well; with no room for what it did, how it ended alone, no " · "
+// before it. A call of any
 // length costs about what a short one does: past the width nothing of it
 // is taken apart, and its label is made once
 test("a run's lines never pass the width: wide characters, a width under the lead, a call of any length", () => {
@@ -221,6 +229,9 @@ test("a run's lines never pass the width: wide characters, a width under the lea
   }
   View.view_item(v, "c#3");
   expect(text(Paint.rows_lines(View.view_acts(v, rows), 3))).toEqual([Theme.GLYPH.run + " …", "  …", "  …"]);
+  const lost  = View.view_acts(v, [...View.entry_rows(9, "tool", 'shell {"command":"nope"}'), ...View.entry_rows(10, "echo", View.FAILED + "nope: not found\n(exit 127 in 0 s)")]);
+  expect(text(Paint.rows_lines(lost, 12))[1]).toBe(lead + Theme.GLYPH.failed + " exit 127");
+  expect(text(Paint.rows_lines(lost, 16))[1]).toBe(lead + Theme.GLYPH.failed + " … · exit 127");
   const big   = View.view_acts(v, [...View.entry_rows(7, "tool", "shell " + JSON.stringify({ command: "cat > a.txt <<EOF\n" + "lorem ipsum dolor ".repeat(60000) + "\nEOF" })), ...View.entry_rows(8, "echo", "ok")]);
   expect(text(Paint.rows_lines(big, 80))[1]).toBe(lead + Theme.GLYPH.ok + " cat > a.txt <<EOF …");
   const start = performance.now();

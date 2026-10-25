@@ -47,7 +47,7 @@ Marks
 | `<-` | back | the side's way back from an agent's page |
 | `·` | between the parts of one line | everywhere |
 | `…` | cut here | any text cut to fit; the lines a folded command leaves out (`… 37 lines`; a long line's rows, `… 12 rows`: a click shows them); a command's first line when more follow |
-| `+3` | that many more, not shown | a run's calls past five (`+3 more`, `+3 earlier`: a click shows them); a web search's queries past the first (`Searched "bun test" +2`); an edit's files past two |
+| `+3` | that many more, not shown | a run's calls past five (`+3 more`, `+3 earlier`: a click shows them); a web search's queries past the first (`Searched "bun test" +2`); an edit's files past two, in words (`Edited a.ts, b.ts and 3 more`), so the count never reads as lines added |
 | `│` | an open call's rows, an open recap's (lit, `┃`: a click there shuts it) | the chat |
 | `─ ╭ ╮ ╰ ╯` | frames and rules | popups, the commands suggested, messages and open blocks in the chat; panes, and the input (or a question in its place, its title in the rule over it) between rules |
 | `█ ▌ ░` | a gauge: full, half, empty | the auto compact in `/model` |
@@ -77,8 +77,11 @@ in plain words, then how it ended:
 ```
 
 - **The line** says what was done, counted by tool (`Ran 3 commands`,
-  `Searched the web`), then `thought`, then the agents that reported.
-  It takes no click: each call does.
+  `Searched the web`; Claude Code's tools as illi's alike, or in words
+  of their own: `Searched the code 3 times`; any other tool,
+  `Called github: get_issue`), then `thought`, then the agents that
+  reported (a run of results alone, `Got 2 results`). It takes no
+  click: each call does.
 - **A call's line** is `✓ <what it did> · <how it ended>`: `✗` in the
   error's color for one that failed, blank for one with no result (a
   call stopped before it answered). What it did is the shell call's
@@ -90,11 +93,14 @@ in plain words, then how it ended:
   illi's own tools in words (`Searched memory for "auto compact"`,
   `Looked back at #123`, `Started FireAnt`, `Updated the to-do list`); an
   MCP server's or a plugin's tool as `server: tool` and its first
-  telling value; any other tool, its name and its most telling short
-  value. How it ended: a command's exit (`exit 0`, `exit 2`, `stopped`,
-  `killed by SIGKILL`), a read's lines, a change's lines (`+12 -3`),
+  telling value; any other tool, or one whose input lacks the field its
+  words are about, its name and its most telling short value; a call
+  logged not as `name {input}`, its first line. How it ended: a
+  command's exit (`exit 0`, `exit 2`, `stopped`, `killed by SIGKILL`,
+  `killed by signal 34`), a read's lines, a change's lines (`+12 -3`),
   `failed`; nothing where the mark says all. Never a raw input: what
-  doesn't fit is cut, the outcome kept whole.
+  doesn't fit is cut, the outcome kept whole (with no room for what it
+  did, the outcome alone).
 - **A click on a call** opens it alone, under its line behind a bar:
   the thoughts that led to it, its whole input (the whole command, every
   query, the URL), its whole result. Its siblings stay shut; a click on
@@ -102,8 +108,10 @@ in plain words, then how it ended:
   or a result with no call, is a line of its own the same way.
 - **Past five calls** a line counts the rest (`+3 more`, under the
   first five); while the run is at work it shows the newest five, the
-  count over them (`+3 earlier`). A click on it shows them all (it then
-  reads `show fewer`), again five.
+  count over them (`+3 earlier`). A call opened alone (a click, `/open`)
+  stays in view with them, counted no more. The line counts two at
+  least: a run of six shows all six. A click on it shows them all (it
+  then reads `show fewer`), again five.
 - Ctrl+O opens every call of every run, and shows what streams; a click
   then shuts one alone.
 - An agent's page shows its work the same way.

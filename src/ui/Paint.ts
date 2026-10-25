@@ -567,8 +567,8 @@ function run_lines(row: View.Row & { $: "Act" }, w: number, marks: Mark[], at: n
 // the words line up whatever the theme makes the marks), the theme's
 // mark for its tool if any, what it did and after " · " how it ended
 // (View.ts, Call.ts): what it did cut to the room the rest leaves ("…"
-// where: line_fit), and the whole line fit to the width too, lead and
-// all. Open, its rows under it laid out as a chat's, behind a bar under
+// where: line_fit; no room, how it ended alone, no " · " before it), and
+// the whole line fit to the width too, lead and all. Open, its rows under it laid out as a chat's, behind a bar under
 // its mark (each line fit to the width, on one too narrow for a frame),
 // nothing in them marked but a summary not yet known whole (a block: a
 // click opens it): a click anywhere else in it shuts it (on a word once
@@ -579,12 +579,13 @@ function item_lines(row: View.Row & { $: "Item" }, w: number, lead: number, mark
   const wide  = Math.max(text_width(Theme.GLYPH.ok), text_width(Theme.GLYPH.failed));
   const glyph = row.ok === null ? "" : row.ok ? Theme.GLYPH.ok : Theme.GLYPH.failed;
   const sign  = Run(glyph + " ".repeat(wide - text_width(glyph) + 1), row.ok === false ? { ...INK, c: Draw.draw_tokens().error } : DIM, tag);
-  const mark  = row.call !== null && row.call.from === "" ? Theme.tool_glyph(row.call.name) : "";
+  const mark  = row.call === null ? "" : tool_mark(row.call);
   const tool  = mark === "" ? [] : [Run(text_clean(mark) + " ", DIM, tag)];
-  const end   = row.outcome === "" ? [] : [Run(" · " + text_clean(row.outcome), DIM, tag)];
+  const said  = text_clean(row.outcome);
   const pad   = Run(" ".repeat(lead));
-  const room  = w - lead - text_width(sign.x) - line_width(tool) - line_width(end);
-  const label = room > 0 ? line_fit([Run(text_clean(row.label), DIM, tag)], room, Run("…", DIM, tag)) : [];
+  const room  = w - lead - text_width(sign.x) - line_width(tool) - (said === "" ? 0 : text_width(" · " + said));
+  const label = room > 0 && row.label !== "" ? line_fit([Run(text_clean(row.label), DIM, tag)], room, Run("…", DIM, tag)) : [];
+  const end   = said === "" ? [] : [Run((label.length > 0 ? " · " : "") + said, DIM, tag)];
   const line  = line_fit([pad, sign, ...tool, ...label, ...end], w, Run("…", DIM, tag));
   if (!row.open) {
     return [line];
@@ -751,8 +752,15 @@ function call_lines(c: Call.Call, w: number): Line[] {
 // server: Call.call_tool), after its mark if the theme gives one
 function verb_runs(c: Call.Call): Line {
   const ink  = { ...INK, b: true };
-  const mark = c.from === "" ? Theme.tool_glyph(c.name) : "";
+  const mark = tool_mark(c);
   return [...(mark === "" ? [] : [Run(mark + " ", ink)]), ...(c.name === "" ? [] : [Run(Call.call_tool(c) + " ", ink)])];
+}
+
+// the mark a theme gives a call's tool ("": none), by its name as logged
+// (Call's raw: an MCP server's or a plugin's tool by its whole name,
+// `mcp__github__get_issue`)
+function tool_mark(c: Call.Call): string {
+  return c.raw === "" ? "" : Theme.tool_glyph(c.raw);
 }
 
 // Block

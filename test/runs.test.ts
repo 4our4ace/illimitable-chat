@@ -9,7 +9,8 @@
 // anywhere in it (a gap line too) shuts it; shown by Ctrl+O, a click
 // shuts one alone, and Ctrl+O again forgets the clicks. Past five items,
 // a click on the More line shows them all (the newest while the run
-// works), and again fewer. An open block shuts from any line of its
+// works), and again fewer. A click on a recap's line opens it and closes
+// it, one on a page in it folds that page to a line and back. An open block shuts from any line of its
 // frame, a block inside it opening itself. What a click acted on keeps
 // its first line on the row clicked, the chat scrolled up or at its end
 // (an open there leaves the end, the jump to it shown; a close there
@@ -272,6 +273,39 @@ test("past five items, a click on the More line shows them all, again five; whil
   expect(w.seen.marks.filter((m: Paint.Mark) => m.item === true).map((m: Paint.Mark) => m.key)).toEqual(["c#8", "c#10", "c#12", "c#14", "c#16"]);
   expect(text(area)[mark(w, "+2").from]).toBe("  +3 earlier");
   expect(mark(w, "+2").to).toBe(mark(w, "c#8").from);
+});
+
+// a recap (/compact): a click on its line opens it, and again closes it;
+// a click on a page inside it folds that page to a line, a click on the
+// line unfolds it, the other page as it was
+test("a click on a recap's line opens and closes it; on a page in it, folds that page to a line, and back", () => {
+  const v     = View.view_new();
+  const whole : Record<string, View.Entry> = {
+    1: { kind: "user", text: "Ship it" },
+    2: { kind: "recap", text: "## Objective\n- ship it\n- tag it" },
+    3: { kind: "recap", text: "## Next move\n1. push the tag" },
+    4: { kind: "illi", text: "Tagged." },
+  };
+  View.view_hear(v, { $: "know", whole });
+  View.view_hear(v, { $: "view", parts: Object.keys(whole).map((id): View.Part => [Number(id), 1]), turn: 0 });
+  const t     = term(v);
+  let area    = paint(t);
+  const named = () => left(t) + text(area)[mark(t, "r2").from].indexOf("Compaction") + 2;
+  expect([mark(t, "r2")?.act, mark(t, "r2")?.open, mark(t, "#2")]).toEqual([true, false, undefined]);
+  click(t, row_of(t, "r2"), named());
+  area = paint(t);
+  expect([mark(t, "r2").open, mark(t, "#2")?.fold, mark(t, "#2")?.open, mark(t, "#3")?.open]).toEqual([true, true, true, true]);
+  expect(text(area).slice(mark(t, "#2").from, mark(t, "#2").to).join("\n")).toContain("tag it");
+  click(t, row_of(t, "#2", 1), left(t) + 80);
+  area = paint(t);
+  expect([mark(t, "#2").open, text(area).slice(mark(t, "#2").from, mark(t, "#2").to).join("\n").includes("tag it"), mark(t, "#3").open]).toEqual([false, false, true]);
+  expect(text(area)[mark(t, "#2").from]).toContain("3 lines");
+  click(t, row_of(t, "#2"), left(t) + 80);
+  area = paint(t);
+  expect([mark(t, "#2").open, text(area).slice(mark(t, "#2").from, mark(t, "#2").to).join("\n").includes("tag it")]).toEqual([true, true]);
+  click(t, row_of(t, "r2"), named());
+  paint(t);
+  expect([mark(t, "r2").open, mark(t, "#2"), t.v.acts.size, t.v.folds.size]).toEqual([false, undefined, 0, 0]);
 });
 
 test("an open block shuts from any line of its frame; a summary opens itself", () => {

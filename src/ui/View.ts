@@ -14,7 +14,8 @@
 // /open (its call and its result whole, the thoughts before it), or all
 // at once (verbose: Ctrl+O; a click then closes one alone); past CALLS
 // the rest are counted on a "More" row, a click showing them all (the
-// newest kept in view while the run is at work). What streams of the
+// newest kept in view while the run is at work; any opened alone kept
+// too). What streams of the
 // work shows only on the line over the input (Term.ts), unless verbose.
 // A recap (/compact) shows as a line across the chat (a "Rule" row),
 // the recap under it once opened by a click or verbose, each of its
@@ -276,7 +277,7 @@ export type Act =
 export type Row =
   | { $: "Sum"; id: number; n: number; text: string; call: Call.Call | null; kind: Kind | null }  // a block: nx, its summary (as written: drawn flat, Paint.ts; call: a tool call's, word for word; kind: its message's, of one known)
   | { $: "Box"; id: number; n: number; rows: Row[] }                                            // a block open: its rows (its bar Paint's: nx · /close #id)
-  | { $: "Act"; id: number; text: string; rows: Row[]; keys: string[] }                         // a run of work (ACTIVITY), from message id: what was done, a line over its items (Item rows; past CALLS, a More row); keys: every item's, shown or not
+  | { $: "Act"; id: number; text: string; rows: Row[]; held: Array<[name: string, key: string]> } // a run of work (ACTIVITY), from message id: what was done, a line over its items (Item rows; past CALLS, a More row); held: each message its items hold (its name: row_name), with that item's key, shown or not
   | { $: "Item"; key: string; call: Call.Call | null; label: string; outcome: string; ok: boolean | null; open: boolean; rows: Row[] } // an item of a run: a call (none: a report, or a thought or a result alone), what it did and how it ended (Call.ts; ok: true done, false failed, its result FAILED, null not known: row_echo), a line; open, its rows whole under it
   | { $: "More"; id: number; n: number; open: boolean; earlier: boolean }                       // a run's items past CALLS, counted (id: the run's): shut, n more not shown (earlier: over the newest, the run at work); open, all shown
   | { $: "Rule"; id: number; text: string; open: boolean; rows: Row[] }                        // a recap (/compact), message id: a line across the chat naming it, the recap's rows if open
@@ -320,8 +321,9 @@ const RECAPS = "writing the recap…";
 const RULE = "Compaction";
 
 // the most items a run shows before a click on its More row shows them
-// all (the rest counted on it), so a run of any length lays out about as
-// many lines as a short one
+// all (the rest counted on it, two at least: a line for one is as long
+// as the item), so a run of any length lays out about as many lines as a
+// short one
 export const CALLS = 5;
 
 // the kinds an image may be, each by its mark at a byte of its first HEAD
@@ -347,7 +349,7 @@ const KINDED   = /^(user|illi|tool|echo|mind|note|work|recap): /;
 const ANSWERS = "your answers";
 
 // what a run's tool calls did, by tool: one, many (the rest: "called");
-// Claude Code's own tools as illi's alike
+// Claude Code's own tools as illi's alike (ALIKE), or as their own
 const DID: Record<string, [string, string]> = {
   shell      : ["ran a command", "ran # commands"],
   read       : ["read a file", "read # files"],
@@ -359,10 +361,15 @@ const DID: Record<string, [string, string]> = {
   tell       : ["messaged an agent", "messaged # agents"],
   zoom       : ["looked back", "looked back # times"],
   date       : ["checked the date", "checked the date # times"],
+  projects   : ["listed the projects", "listed the projects # times"],
   skill      : ["used a skill", "used # skills"],
   todo       : ["updated the to-do list", "updated the to-do list # times"],
+  ask        : ["asked you", "asked you # times"],
+  Glob       : ["listed files", "listed files # times"],
+  Grep       : ["searched the code", "searched the code # times"],
+  WebFetch   : ["opened a page", "opened # pages"],
 };
-const ALIKE: Record<string, string> = { Bash: "shell", Read: "read", Write: "write", Edit: "edit", MultiEdit: "edit", WebSearch: "web_search", TodoWrite: "todo" };
+const ALIKE: Record<string, string> = { Bash: "shell", Read: "read", Write: "write", Edit: "edit", MultiEdit: "edit", NotebookEdit: "edit", WebSearch: "web_search", TodoWrite: "todo", Task: "spawn", Agent: "spawn" };
 
 // Constructors
 // ============
@@ -645,7 +652,7 @@ export function view_acts(v: View, rows: Row[], shown: Shown = v, working = fals
     } else if (last?.$ === "Act") {
       last.rows.push(row);
     } else {
-      out.push({ $: "Act", id: row_key(row), text: "", rows: [row], keys: [] });
+      out.push({ $: "Act", id: row_key(row), text: "", rows: [row], held: [] });
     }
   }
   const folded = (rows: Row[]) => rows.map((r) => row_folded(shown, r));
@@ -653,25 +660,29 @@ export function view_acts(v: View, rows: Row[], shown: Shown = v, working = fals
 }
 
 // a run of work as shown: what it did (act_text), over its items
-// (act_items): all of them, CALLS at most or the run showing them all
-// (its More row clicked; Ctrl+O); else CALLS of them and a More row
-// counting the rest: the first, the More row under them, or, the run at
-// work (live), the newest, the More row over them. Only the items shown
-// are made
+// (act_items): all of them, the run showing them all (its More row
+// clicked; Ctrl+O), or two at most left out; else those kept (CALLS of
+// them: the first, or, the run at work (live), the newest; and any a
+// click opened alone, Ctrl+O not on) and a More row counting the rest:
+// under them, or, live, over them. Only the items shown are made
 function act_row(v: View, shown: Shown, run: Row & { $: "Act" }, after: Row | undefined, live: boolean): Row {
   const items = act_items(v, run.rows, after);
   const all   = v.verbose !== shown.mores.has(run.id);
-  const some  = items.length <= CALLS || all ? items : live ? items.slice(-CALLS) : items.slice(0, CALLS);
-  const more  : Row[] = items.length <= CALLS ? [] : [{ $: "More", id: run.id, n: items.length - CALLS, open: all, earlier: live }];
+  const kept  = (d: Did, k: number) => (live ? k >= items.length - CALLS : k < CALLS) || (!v.verbose && shown.items.has(d.key));
+  const left  = items.filter((d, k) => !kept(d, k)).length;
+  const some  = left < 2 || all ? items : items.filter(kept);
+  const more  : Row[] = left < 2 ? [] : [{ $: "More", id: run.id, n: left, open: all, earlier: live }];
   const each  = some.map((d) => item_row(v, shown, d));
-  return { $: "Act", id: run.id, text: act_text(v, run.rows), rows: live ? [...more, ...each] : [...each, ...more], keys: items.map((d) => d.key) };
+  const held  = items.flatMap((d) => d.names.map((name): [string, string] => [name, d.key]));
+  return { $: "Act", id: run.id, text: act_text(v, run.rows), rows: live ? [...more, ...each] : [...each, ...more], held };
 }
 
 // an item of a run, before it is shown (act_items): its key, its call
 // (null: a report, or a thought or a result standing alone), the result
 // logged right after it (null: none), the run's row it is, its rows as
-// it opens
-type Did = { key: string; call: Call.Call | null; echo: string | null; row: Row; rows: Row[] };
+// it opens, the names of the messages it holds (row_name: its own, its
+// result's, its thoughts')
+type Did = { key: string; call: Call.Call | null; echo: string | null; row: Row; rows: Row[]; names: string[] };
 
 // a run's items, in order: each call (row_call) with the result logged
 // right after it (Chat.on logs a call with its result; the row after the
@@ -694,14 +705,16 @@ function act_items(v: View, rows: Row[], after: Row | undefined): Did[] {
       minds.push(r);
       continue;
     }
-    out.push({ key: "c" + row_name(r), call, echo, row: r, rows: [...(call === null ? [] : minds), ...[r, ...ends].flatMap((x) => row_whole(v, x))] });
+    const lead = call === null ? [] : minds;
+    out.push({ key: "c" + row_name(r), call, echo, row: r, rows: [...lead, ...[r, ...ends].flatMap((x) => row_whole(v, x))], names: [...lead, r, ...ends].map(row_name) });
     minds = call === null ? minds : [];
     k += ends.length;
   }
   if (minds.length > 0 && out.length > 0) {
     out[out.length - 1].rows.push(...minds);
+    out[out.length - 1].names.push(...minds.map(row_name));
   } else if (minds.length > 0) {
-    out.push({ key: "c" + row_name(minds[0]), call: null, echo: null, row: minds[0], rows: minds });
+    out.push({ key: "c" + row_name(minds[0]), call: null, echo: null, row: minds[0], rows: minds, names: minds.map(row_name) });
   }
   return out;
 }
@@ -714,21 +727,21 @@ function item_row(v: View, shown: Shown, d: Did): Row {
   return { $: "Item", key: d.key, call: d.call, label, outcome, ok, open: v.verbose !== shown.items.has(d.key), rows: d.rows };
 }
 
-// what an item did and how it ended, made once for its row, its call and
-// the result after it (a summed-up call, or its result, known later is
-// read anew):
+// what an item did and how it ended, made once for its row, its call,
+// the result after it and the message it reads (a summed-up call, or its
+// result, or a summed-up report or result, known later is read anew):
 // a call's label and outcome (Call.ts, its result without FAILED); a
 // thought, its first line (its markdown's marks left out); a report, its
 // agent's and its lines; a result, its lines; a summary, its line
-const SAID = new WeakMap<Row, { call: Call.Call | null; echo: string | null; label: string; outcome: string }>();
+const SAID = new WeakMap<Row, { call: Call.Call | null; echo: string | null; msg: Row | undefined; label: string; outcome: string }>();
 
 function item_said(d: Did, ok: boolean | null): { label: string; outcome: string } {
   const known = SAID.get(d.row);
-  if (known !== undefined && known.call === d.call && known.echo === d.echo) {
+  const msg   = d.rows.find((r) => r.$ === "Msg" && r.kind !== "mind") ?? d.rows[0];
+  if (known !== undefined && known.call === d.call && known.echo === d.echo && known.msg === msg) {
     return known;
   }
   const result = d.echo === null ? "" : ok === false ? d.echo.slice(FAILED.length) : d.echo;
-  const msg    = d.rows.find((r) => r.$ === "Msg" && r.kind !== "mind") ?? d.rows[0];
   const said   =
     d.call !== null ? { label: Call.call_label(d.call, d.echo === null ? null : result), outcome: Call.call_outcome(d.call, ok, result) }
     : msg?.$ === "Msg" && msg.kind === "mind" ? { label: Call.label_line(msg.text.replace(/\*\*|__|`/g, "").replace(/^\s*#+\s*/, "")) || "Thought", outcome: "" }
@@ -736,16 +749,16 @@ function item_said(d: Did, ok: boolean | null): { label: string; outcome: string
     : msg?.$ === "Msg" ? { label: "Result", outcome: text_lines(msg.text) }
     : msg?.$ === "Sum" ? { label: Call.label_line(Md.md_flat(msg.text).replace(KINDED, "")), outcome: "" }
     : { label: "", outcome: "" };
-  SAID.set(d.row, { call: d.call, echo: d.echo, ...said });
+  SAID.set(d.row, { call: d.call, echo: d.echo, msg, ...said });
   return said;
 }
 
-// the call a run's row holds (null: none): a message's; a summed-up
+// the call a run's row holds (null: none): a message's (a tool's, even
+// one not read as `name {input}`: its first line its label); a summed-up
 // one's, word for word in its line (sum_call), else as its message whole
 // reads (known by then: Chat.teach)
 function row_call(v: View, r: Row): Call.Call | null {
-  const call = r.$ === "Msg" ? r.call : r.$ === "Sum" ? r.call ?? sum_whole(v, r)?.find((x) => x.$ === "Msg")?.call ?? null : null;
-  return call === null || call.name === "" ? null : call;
+  return r.$ === "Msg" ? r.call : r.$ === "Sum" ? r.call ?? sum_whole(v, r)?.find((x) => x.$ === "Msg")?.call ?? null : null;
 }
 
 // a summary's message whole, as rows (whole_rows); undefined: not of
@@ -864,9 +877,9 @@ function row_busy(row: Row): boolean {
 }
 
 // a run of work, said: its calls (row_call: those its items are)
-// counted by tool (Claude Code's as illi's alike: ALIKE), then whether it
-// thought, then the agents that reported (a run of results alone: their
-// count)
+// counted by tool (Claude Code's as illi's alike: ALIKE; one not read as
+// `name {input}` by its first word), then whether it thought, then the
+// agents that reported (a run of results alone: that it got them)
 function act_text(v: View, rows: Row[]): string {
   const flat  = rows.flatMap((r) => (r.$ === "Box" ? r.rows : [r]));
   const calls = new Map<string, number>();
@@ -875,7 +888,8 @@ function act_text(v: View, rows: Row[]): string {
   for (const r of flat) {
     const call = row_call(v, r);
     const kind = r.$ === "Msg" ? r.kind : r.$ === "Sum" ? r.kind : null;
-    const name = call === null ? "" : call.from === "" ? ALIKE[call.name] ?? call.name : Call.call_tool(call);
+    const own  = call === null ? "" : call.name === "" ? /^\S*/.exec(call.head.trim())![0] : call.name;
+    const name = call === null ? "" : call.from === "" ? ALIKE[own] ?? own : Call.call_tool(call);
     if (name !== "") {
       calls.set(name, (calls.get(name) ?? 0) + 1);
     }
@@ -887,7 +901,7 @@ function act_text(v: View, rows: Row[]): string {
   }
   const did   = [...calls].map(([name, n]) => (DID[name] === undefined ? "called " + (n === 1 ? name : name + " ×" + n) : DID[name][n === 1 ? 0 : 1].replace("#", String(n))));
   const parts = [did.join(", "), mind ? "thought" : "", who.size === 0 ? "" : [...who].join(", ") + " reported"].filter((x) => x !== "");
-  const text  = parts.length > 0 ? parts.join(" · ") : results + (results === 1 ? " result" : " results");
+  const text  = parts.length > 0 ? parts.join(" · ") : results === 1 ? "got a result" : "got " + results + " results";
   const named = did.length === 0 && !mind && who.size > 0;
   return named ? text : text[0].toUpperCase() + text.slice(1);
 }
@@ -915,23 +929,26 @@ export function view_verbose(v: View): void {
   }
 }
 
-// an item of a run on the page shown (by its key: an Item's, its mark's
-// too), opened or shut alone, as /open and /close ask; its run made to
-// show all its items if it was among those its More line counts. False:
-// no such item there
-export function view_reach(v: View, key: string, open: boolean): boolean {
-  const run   = view_body(v).find((r) => r.$ === "Act" && r.keys.includes(key));
+// the item of a run on the page shown holding a message (by its name:
+// row_name, "#id": its call's, its result's, a thought's), opened or shut
+// alone, as /open and /close ask: opened, it shows (kept: act_row; Ctrl+O
+// on, its run made to show all its items, if its More line still counts
+// it). Its key (an Item's, its mark's too); null: no such item there
+export function view_reach(v: View, name: string, open: boolean): string | null {
+  const find  = () => view_body(v).find((r): r is Row & { $: "Act" } => r.$ === "Act" && r.held.some(([n]) => n === name));
+  const run   = find();
+  const key   = run?.held.find(([n]) => n === name)?.[1];
   const shown = view_shown(v);
-  if (run?.$ !== "Act") {
-    return false;
-  }
-  if (!run.rows.some((r) => r.$ === "Item" && r.key === key)) {
-    toggle(shown.mores, run.id);
+  if (run === undefined || key === undefined) {
+    return null;
   }
   if ((v.verbose !== shown.items.has(key)) !== open) {
     toggle(shown.items, key);
   }
-  return true;
+  if (open && !find()!.rows.some((r) => r.$ === "Item" && r.key === key)) {
+    toggle(shown.mores, run.id);
+  }
+  return key;
 }
 
 // the chat's parts given, in order, as rows each
