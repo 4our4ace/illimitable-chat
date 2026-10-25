@@ -398,9 +398,9 @@ export function popup_wheel(t: Term, c: Chooser, d: number): void {
 
 // PgUp, PgDn in the picker: a question's lead half a page (Keys.ts
 // term_step), while it is cut, some of it showing (as last painted); else
-// the lit option a page
-// (those shown, less one), stopping at the ends. Ctrl+Home, Ctrl+End (and
-// Home, End where nothing is typed): the first option, the last
+// the lit option a page (those shown, less one), stopping at the ends.
+// Ctrl+Home, Ctrl+End (and Home, End where nothing is typed): the first
+// option, the last
 export function popup_page(t: Term, c: Chooser, key: string): void {
   const box = t.box?.of === c ? t.box : null;
   const n   = c.shown.length;

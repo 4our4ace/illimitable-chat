@@ -49,7 +49,10 @@ keys out of the environment its profiles start with. A profile's illi is
 a session leader on its PTY: the window's death, however it comes, hangs
 it up. From a pipe, or with `ILLI_WINDOW=off`, illi runs alone.
 
-After `bun install`:
+illi needs Bun 1.4.3 or later, the version the release is built and
+tested on (`release.yml`; `@types/bun` matches it): 1.3's `spawnSync`
+could spin forever over a child already gone (bun#34069), which hung
+the tests. After `bun install`:
 
     bun run test     the tests
     bun run check    the type check (unused code fails it too)

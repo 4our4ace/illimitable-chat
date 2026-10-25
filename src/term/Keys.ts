@@ -213,7 +213,8 @@ function term_shut(t: Term, c: Chooser): void {
 // question illi asks, just shown, holds Enter (Question.ts
 // question_held); the lit option's own keys first (the model picker's
 // effort and speed, the permission question's Esc); then Up and Down (or
-// Tab, Shift+Tab) move round the options shown, PgUp and PgDn a page,
+// Tab, Shift+Tab) move round the options shown, PgUp and PgDn a page (a
+// question's lead, where it is cut, half one: Popup.ts popup_page),
 // Ctrl+Home and Ctrl+End to the first and the last (Home and End too,
 // with nothing to type in), the wheel scrolls (Popup.ts), Enter picks the
 // lit one (none matching the search: nothing; a line asked for: given,

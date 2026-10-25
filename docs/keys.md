@@ -186,7 +186,7 @@ and what you were typing comes back once you answer.
 | Key | Does |
 | --- | ---- |
 | Up, Down (or Tab, Shift+Tab) | move |
-| PgUp, PgDn | half a page (of a question's long lead, where it is cut) |
+| PgUp, PgDn | a page (a question's long lead, where it is cut: half a page) |
 | Ctrl+O | a question's long command: show it all, or fold it again |
 | Ctrl+Home, Ctrl+End | the first, the last (Home and End too, where you can't type) |
 | Enter | pick |
