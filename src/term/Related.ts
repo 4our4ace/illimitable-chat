@@ -60,12 +60,13 @@ const STEP = 250;
 // the most of a line's summary its list names it by (columns)
 const NAME = 60;
 
-// the counts, in a file of the root's (every profile's, every illi's):
-// by what happened to a line, whether a path or an error's name was among
+// the counts, in a file of the root's (every profile's, every illi's:
+// config.RELATED_FILE, which recall reads its bar from, Recall.ts): by
+// what happened to a line, whether a path or an error's name was among
 // what it matched (anchored) or words alone, its best score (a whole
 // number, rounded down), how many; those counted since, kept KEEP after
 // the last (ms), added to the file as it is then
-export const RELATED = config.ROOT + "/related.json";
+export const RELATED = config.RELATED_FILE;
 const KEEP = 2000;
 let queued: Array<{ e: Event; s: Shown }> = [];
 let keep: Timer | undefined;
