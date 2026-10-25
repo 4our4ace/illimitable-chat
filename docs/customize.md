@@ -300,7 +300,10 @@ over. What differs:
   `Write` or `Edit` is listed too (else it can't search, said in
   `/agents`). `model: inherit` is your pick; `sonnet`, `opus`, `haiku`
   or `fable` alone the newest of it offered, else your pick. (Your own
-  agents are read so too.)
+  agents are read so too.) On claude-code, the list also limits Claude
+  Code's own tools to those it names, as Claude Code does (illi's
+  `read`, `write`, `edit` and `shell` as `Read`, `Write`, `Edit` and
+  `Bash`).
 - Hooks: a `Bash` matcher takes illi's `shell` ([Beside Claude
   Code's](#beside-claude-codes)); one naming only Claude Code's other
   tools runs only on `claude-code`'s own calls, said at the start.

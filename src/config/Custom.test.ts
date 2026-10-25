@@ -1,11 +1,13 @@
 // Custom test
 // ===========
 // `bun test Custom.test.ts`. The user's agents and commands: a file's
-// front matter and body, the project's over the user's, its mode, a
+// front matter and body (its tools list's Claude Code tools), the
+// project's over the user's, its mode, a
 // command's arguments; an agent's model as a pick; /agent makes a primary
 // agent the main agent (its model, instructions and tools), noted before
 // the next message, each keeping its pick; spawn's agent runs a subagent
-// as it (none on a ChatGPT model whose window isn't told: never guessed).
+// as it, with its Claude Code tools (none on a ChatGPT model whose window
+// isn't told: never guessed).
 // A skill: its folder's SKILL.md (a folded description), the
 // project's over theirs, listed by the skill tool and loaded by it; a
 // sticky one turned on and off by it, while on in every turn's prompt;
@@ -78,10 +80,11 @@ async function until(ok: () => boolean): Promise<void> {
   }
 }
 
-test("an agent file's front matter and body; the project's wins", () => {
+test("an agent file's front matter and body (its tools list's Claude Code tools as well); the project's wins", () => {
   const r = Custom.agent(CWD, "reviewer")!;
-  expect(r).toMatchObject({ name: "reviewer", description: "Reviews", mode: "all", model: "gpt-6-luna", effort: "high", tools: ["zoom", "read"], body: "You review." });
+  expect(r).toMatchObject({ name: "reviewer", description: "Reviews", mode: "all", model: "gpt-6-luna", effort: "high", tools: ["zoom", "read"], builtins: ["Read"], body: "You review." });
   expect(Custom.agent(CWD, "coder")!.description).toBe("Codes");
+  expect(Custom.agent(CWD, "coder")!.builtins).toBeNull();
   expect(Custom.agent(CWD, "Coder")!.name).toBe("coder");
   expect(Custom.agent(CWD, "nobody")).toBeNull();
   expect(Custom.agents(CWD).map((a) => a.name)).toEqual(["bad", "coder", "planner", "reviewer", "scout"]);
@@ -185,7 +188,9 @@ test("a subagent on a ChatGPT model whose window isn't told starts on no guess: 
   try {
     const out = await Tools.call(chat.tools, "main", "spawn", { tasks: ["review it"], agent: "reviewer" }, new AbortController().signal);
     expect(out.text).toBe("Not started: ChatGPT hasn't told gpt-6-luna's context window (its model list didn't answer), and illi never guesses one.");
-    expect(Tools.ask(chat.tools, { name: "x", run: 0, log: "x", role: { $: "sub", effort: null, agent: "reviewer" }, call: null, live: [], calls: {}, stop: false, view: [{ text: "first\n", mark: false }, { text: "middle\n", mark: false }, { text: "last\n", mark: false }], replies: [] } as any).blocks.map((b: any) => b.text).join("")).toStartWith("first\n(older lines left out to fit your model: zoom and search find them)\nlast\n");
+    const ask = Tools.ask(chat.tools, { name: "x", run: 0, log: "x", role: { $: "sub", effort: null, agent: "reviewer" }, call: null, live: [], calls: {}, stop: false, view: [{ text: "first\n", mark: false }, { text: "middle\n", mark: false }, { text: "last\n", mark: false }], replies: [] } as any);
+    expect(ask.blocks.map((b: any) => b.text).join("")).toStartWith("first\n(older lines left out to fit your model: zoom and search find them)\nlast\n");
+    expect(ask.builtins).toEqual(["Read"]);
     await Bun.sleep(20);
     expect(asks).toEqual([]);
   } finally {

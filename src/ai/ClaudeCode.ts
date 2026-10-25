@@ -7,7 +7,8 @@
 // token. A call is one `claude -p`, streamed both ways (stream-json),
 // leaving no session in Claude Code's history. One with tools
 // (Ask.server) adds illi's over MCP, those Claude Code lacks (Tools.list
-// `lean`), allowed to run (as `-p` asks no one), its permission prompts
+// `lean`), an agent's tools list keeping Claude Code's own to those it
+// names (Ask.builtins), allowed to run (as `-p` asks no one), its permission prompts
 // asked of the user at illi's screen (Tools.approve), and illi's prompt after
 // Claude Code's (from a file, so no argument limit); one without (a summary, a goal check), or
 // `once` (a recap: Claude Code can't name tools it won't run, so it reads
@@ -193,8 +194,8 @@ export namespace ClaudeCode {
   // hooks file is the one that runs, and a repository's .claude settings
   // would run its hooks in a folder never trusted: -p trusts any); with
   // tools, illi's (its MCP server, the lean list, allowed; illi's ask for
-  // Claude Code's own), else (or once) none, nor Claude Code's servers or
-  // commands
+  // Claude Code's own, only those an agent's tools list names, if it has
+  // one), else (or once) none, nor Claude Code's servers or commands
   export function args(ask: Ask, file: string): string[] {
     const io = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--replay-user-messages", "--no-session-persistence"];
     const pick = ["--model", ask.model, "--effort", ask.effort, "--append-system-prompt-file", file, "--settings", JSON.stringify({ disableAllHooks: true })];
@@ -202,7 +203,8 @@ export namespace ClaudeCode {
       return [...io, ...pick, "--tools", "", "--strict-mcp-config", "--disable-slash-commands"];
     }
     const mcp = { mcpServers: { illi: { type: "http", url: ask.server + "?lean", timeout: WAIT } } };
-    return [...io, ...pick, "--mcp-config", JSON.stringify(mcp), "--allowedTools", "mcp__illi", "--disallowedTools", "AskUserQuestion", "--permission-prompt-tool", "mcp__illi__approve"];
+    const own = ask.builtins == null ? [] : ["--tools", ask.builtins.join(",")];
+    return [...io, ...pick, ...own, "--mcp-config", JSON.stringify(mcp), "--allowedTools", "mcp__illi", "--disallowedTools", "AskUserQuestion", "--permission-prompt-tool", "mcp__illi__approve"];
   }
 
   // illi's prompt in a file of its own, readable by the user alone
