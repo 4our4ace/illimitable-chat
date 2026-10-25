@@ -9,7 +9,8 @@
 // and writes only the rows that changed. A drag anywhere chooses text
 // and copies it as it's let go (Select.ts); in the chat, a click opens,
 // closes or folds what's under it, which lights as the pointer goes over
-// it, and it stays under the pointer (Keys.ts, Select.ts). Every act is a command
+// it, and it stays under the pointer (Keys.ts, Select.ts); in the input,
+// a press puts the cursor where it lands. Every act is a command
 // (Commands.ts, /help), a key's too (Keys.ts), and so is each of the
 // user's commands (Custom.ts) and skills; images attach by a path, a
 // drop or the clipboard (Attach.ts). The user's MCP servers start with
@@ -224,8 +225,12 @@ type Seen = { total: number; marks: Paint.Mark[]; row: number; first: number; ta
 // a part of the screen a drag chooses text in: which (chat, pane, side,
 // head, foot), its lines, the first shown (at screen row `row`, column
 // `col`), how wide and tall it shows; scroll: it moved a line up (d -1)
-// or down (1), for a drag past its edge (none: it holds still)
-export type Area = { key: string; lines: Paint.Line[]; first: number; row: number; col: number; w: number; tall: number; scroll?: (d: number) => void };
+// or down (1), for a drag past its edge (none: it holds still); input:
+// the input in it as painted, where a press puts the cursor (Select.ts):
+// the line its first row is on, how many lines it takes (its rows, the
+// rule under them), the first of its rows shown and its layout (the
+// foot's; none while a question or a pane is in its place)
+export type Area = { key: string; lines: Paint.Line[]; first: number; row: number; col: number; w: number; tall: number; scroll?: (d: number) => void; input?: { line: number; tall: number; top: number; laid: Screen.Laid } };
 
 // a place in an area's lines: a line, a column
 export type Cell = { line: number; col: number };

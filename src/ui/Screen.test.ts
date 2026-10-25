@@ -2,7 +2,11 @@
 // end anywhere (a reader held up lets the terminal's writes split at any
 // byte), and no text typed or pasted may slow a key down; the mouse's
 // reports (the wheel's place too), the focus told (a press that only
-// focuses the window marked, its loss told). A paint writes only the rows that changed, those moved as a
+// focuses the window marked, its loss told). A click on the input puts
+// the cursor where it lands: on a character before it, whole; past a
+// row's text after it; on the mark at the row's start; under the last
+// row at the end; in a chip at its nearer edge; a tall input scrolls
+// only as the cursor leaves the rows shown. A paint writes only the rows that changed, those moved as a
 // block moved by the terminal. Then the lines Paint lays out: a link
 // wider than a line breaks at its edge, its pieces each opening it whole;
 // a word of several runs is kept whole; a frame never passes its width;
@@ -389,6 +393,102 @@ test("the input: the mark on its first row alone, the rest indented; as tall as 
     Screen.ed_key(scr.ed, "Backspace");
   }
   expect(rows()).toEqual(["> first"]);
+});
+
+// the input holding text, w wide, max rows at most, the cursor at pos:
+// its rows as shown, the first of them, where the cursor shows, and
+// where a click at a row and column of what shows puts it (ed_at)
+function clicked(text: string, w: number, max = 10, pos = text.length): { rows: string[]; top: number; spot: Screen.Spot; at: (row: number, col: number) => number } {
+  const scr = fresh(true, Screen.ed_new(), () => {});
+  Screen.ed_set(scr.ed, text);
+  scr.ed.pos = pos;
+  const { lines, at, top, laid } = Screen.screen_input(scr, w, max, "hint", false);
+  return { rows: lines.map((l) => l.map((r) => r.x).join("")), top, spot: at, at: (row, col) => Screen.ed_at(laid, top, row, col) };
+}
+
+test("a click on the input: before the character it lands on (a wide one by either half, a letter and its marks whole), after a row's text past it, at a row's start on the mark or the indent", () => {
+  const one = clicked("hello world", 20);
+  expect([2, 4, 12, 13, 19].map((c) => one.at(0, c))).toEqual([0, 2, 10, 11, 11]);
+  expect([0, 1].map((c) => one.at(0, c))).toEqual([0, 0]);
+  const lines = clicked("ab\ncdef\n", 20);
+  expect(lines.rows).toEqual(["> ab", "  cdef", "  "]);
+  expect([lines.at(0, 9), lines.at(1, 0), lines.at(1, 1), lines.at(1, 3), lines.at(1, 9), lines.at(2, 5)]).toEqual([2, 3, 3, 4, 7, 8]);
+  const wide = clicked("a世😀b", 20);
+  expect([3, 4, 5, 6, 7, 8].map((c) => wide.at(0, c))).toEqual([1, 1, 2, 2, 4, 5]);
+  const marked = clicked("café x", 20);
+  expect([5, 6, 7].map((c) => marked.at(0, c))).toEqual([3, 5, 6]);
+});
+
+test("a click past a wrapped row's text puts the cursor after its last character (shown where the next row starts), where typing lands right after it; a row a wide character left short too", () => {
+  const wrap = clicked("abcdefgh\nxy", 6);
+  expect(wrap.rows).toEqual(["> abcd", "  efgh", "  xy"]);
+  expect([wrap.at(0, 5), wrap.at(0, 6), wrap.at(0, 7), wrap.at(1, 2), wrap.at(1, 6), wrap.at(2, 3)]).toEqual([3, 4, 4, 4, 8, 10]);
+  expect(clicked("abcdefgh\nxy", 6, 10, 4).spot).toEqual({ row: 1, col: 2 });
+  const short = clicked("abc世d", 6);
+  expect(short.rows).toEqual(["> abc", "  世d"]);
+  expect([short.at(0, 5), short.at(1, 2), short.at(1, 3), short.at(1, 4), short.at(1, 5)]).toEqual([3, 3, 3, 4, 5]);
+  const typed = Screen.ed_new();
+  Screen.ed_set(typed, "abc世d");
+  typed.pos = short.at(0, 5);
+  Screen.ed_type(typed, "x");
+  expect(clicked(typed.text, 6).rows).toEqual(["> abcx", "  世d"]);
+  const full = clicked("abcd", 6);
+  expect(full.rows).toEqual(["> abcd", "  "]);
+  expect([full.at(0, 6), full.at(1, 4)]).toEqual([4, 4]);
+});
+
+test("a click on an input scrolled to its cursor lands on the row shown there; past the text's last row, at its end (past the rows shown, on one laid out under them: that one); before its first, at its start; on an empty input's hint, at 0", () => {
+  const text = Array.from({ length: 10 }, (_, k) => "line " + k).join("\n");
+  const end  = clicked(text, 20, 3);
+  expect([end.top, end.rows]).toEqual([7, ["  line 7", "  line 8", "  line 9"]]);
+  expect([end.at(0, 2), end.at(1, 4), end.at(3, 4), end.at(5, 0)]).toEqual([49, 58, text.length, text.length]);
+  const start = clicked(text, 20, 3, 0);
+  expect([start.top, start.rows]).toEqual([0, ["> line 0", "  line 1", "  line 2"]]);
+  expect([start.at(3, 4), start.at(-1, 4)]).toEqual([23, 0]);
+  const empty = clicked("", 20);
+  expect(empty.rows).toEqual(["> hint"]);
+  expect([empty.at(0, 4), empty.at(1, 0)]).toEqual([0, 0]);
+});
+
+test("a click inside a chip (an image's, a paste's) puts the cursor at its nearer edge, never inside it; a chip wrapped over rows too", () => {
+  const chips = clicked("see [Image #1] and [Pasted text #2 +12 lines] ok", 80);
+  expect([6, 7, 10, 11, 15, 16].map((c) => chips.at(0, c))).toEqual([4, 4, 4, 14, 14, 14]);
+  expect([24, 33, 34, 47].map((c) => chips.at(0, c))).toEqual([19, 19, 45, 45]);
+  const wrapped = clicked("ab [Pasted text #2 +12 lines]", 12);
+  expect(wrapped.rows).toEqual(["> ab [Pasted", "   text #2 +", "  12 lines]"]);
+  expect([wrapped.at(0, 4), wrapped.at(0, 12), wrapped.at(1, 10), wrapped.at(2, 11)]).toEqual([2, 3, 29, 29]);
+});
+
+test("a click on the input follows the prompt's own width", () => {
+  const was = Theme.GLYPH.input;
+  Theme.GLYPH.input = "❯❯❯ ";
+  try {
+    const wide = clicked("hello", 20);
+    expect([0, 3, 4, 5, 12].map((c) => wide.at(0, c))).toEqual([0, 0, 0, 1, 5]);
+  } finally {
+    Theme.GLYPH.input = was;
+  }
+});
+
+test("an input taller than it shows scrolls only as the cursor leaves the rows shown (so a click leaves them in place), and back as rows go, as many shown as fit", () => {
+  const { scr } = screen();
+  const top = () => Screen.screen_input(scr, 20, 3, "", false).top;
+  Screen.ed_set(scr.ed, Array.from({ length: 10 }, (_, k) => "line " + k).join("\n"));
+  expect(top()).toBe(7);
+  const tops: number[] = [];
+  for (const key of ["Up", "Up", "Up", "Down", "Down", "Down"]) {
+    Screen.ed_key(scr.ed, key);
+    tops.push(top());
+  }
+  expect(tops).toEqual([7, 7, 6, 6, 6, 7]);
+  const { laid } = Screen.screen_input(scr, 20, 3, "", false);
+  scr.ed.pos = Screen.ed_at(laid, 7, 0, 4);
+  expect([scr.ed.pos, top()]).toEqual([51, 7]);
+  Screen.ed_key(scr.ed, "Ctrl+E");
+  for (let k = 0; k < "\nline 8\nline 9".length; k++) {
+    Screen.ed_key(scr.ed, "Backspace");
+  }
+  expect(top()).toBe(5);
 });
 
 test("the mouse: the wheel, the left button pressed, dragged, let go, the pointer moved, the right button the same, the middle one nothing; never typed, whatever the reads", () => {
