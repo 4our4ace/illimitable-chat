@@ -34,7 +34,7 @@ import { term_asks, term_form, term_form_key, term_form_type } from "./Asks.ts";
 import { term_suggest, term_suggest_key } from "./Commands.ts";
 import * as Draw from "../ui/Draw.ts";
 import { MARGIN, term_draw } from "./Frame.ts";
-import { term_choose_key } from "./Keys.ts";
+import { term_choose_key, term_step } from "./Keys.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_let_go } from "./Select.ts";
 import * as Screen from "../ui/Screen.ts";
@@ -396,8 +396,9 @@ export function popup_wheel(t: Term, c: Chooser, d: number): void {
   }
 }
 
-// PgUp, PgDn in the picker: a question's lead a page, while it is cut,
-// some of it showing (as last painted); else the lit option a page
+// PgUp, PgDn in the picker: a question's lead half a page (Keys.ts
+// term_step), while it is cut, some of it showing (as last painted); else
+// the lit option a page
 // (those shown, less one), stopping at the ends. Ctrl+Home, Ctrl+End (and
 // Home, End where nothing is typed): the first option, the last
 export function popup_page(t: Term, c: Chooser, key: string): void {
@@ -405,7 +406,7 @@ export function popup_page(t: Term, c: Chooser, key: string): void {
   const n   = c.shown.length;
   const d   = key === "PgUp" ? -1 : key === "PgDn" ? 1 : 0;
   if (d !== 0 && box !== null && box.ahead > 0 && box.ahead < box.lead) {
-    c.past = Math.max(0, Math.min(box.lead - box.ahead, (c.past ?? 0) + d * Math.max(1, box.ahead - 1)));
+    c.past = Math.max(0, Math.min(box.lead - box.ahead, (c.past ?? 0) + d * term_step(box.ahead)));
   } else if (d !== 0) {
     c.at = Math.max(0, Math.min(n - 1, c.at + d * Math.max(1, (box?.tall ?? n) - 1)));
   } else {

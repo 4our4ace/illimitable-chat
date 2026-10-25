@@ -114,7 +114,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/help",             "",                        "this list",                                      term_help],
     ]],
     ["Scroll", [
-      ["",                  "PgUp, PgDn",              "a page up, down (or the wheel); at the end, the chat follows what comes", term_page],
+      ["",                  "PgUp, PgDn",              "half a page up, down (or the wheel); at the end, the chat follows what comes", term_page],
       ["",                  "Ctrl+Home, Ctrl+End",     "the chat's top, its end",                        term_page],
     ]],
     ["Pick", [

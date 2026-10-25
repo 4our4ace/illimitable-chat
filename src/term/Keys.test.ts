@@ -32,7 +32,7 @@ process.env.ILLI_DIR = DIR;
 const { term_asks } = await import("./Asks.ts");
 const { term_paste } = await import("./Attach.ts");
 const { term_chooser } = await import("./Commands.ts");
-const { term_grab, term_hint, term_next, term_press, term_type } = await import("./Keys.ts");
+const { term_grab, term_hint, term_next, term_press, term_step, term_type } = await import("./Keys.ts");
 const Paint = await import("../ui/Paint.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
@@ -98,9 +98,19 @@ test("a key runs the command whose keys name it, the second of its keys too", ()
   const t = term("");
   t.seen = { tall: 20 };
   Screen.screen_feed(t.scr, "\x1b[5~");
-  expect(t.scroll).toBe(18);
+  expect(t.scroll).toBe(10);
   Screen.screen_feed(t.scr, "\x1b[6~");
   expect(t.scroll).toBe(0);
+});
+
+test("PgUp and PgDn scroll half of what shows, so the half read before stays in view; one line at least", () => {
+  const t = term("");
+  t.seen = { tall: 41 };
+  Screen.screen_feed(t.scr, "\x1b[5~\x1b[5~");
+  expect(t.scroll).toBe(40);
+  Screen.screen_feed(t.scr, "\x1b[6~");
+  expect(t.scroll).toBe(20);
+  expect([term_step(41), term_step(2), term_step(1), term_step(0)]).toEqual([20, 1, 1, 1]);
 });
 
 test("the picker keeps its Tab while a suggested reply shows", () => {
