@@ -107,7 +107,8 @@ in plain words, then how it ended:
   query, the URL), its whole result (a failed one without its logged
   `error: `: its mark says it failed). Its siblings stay shut; a click
   on its line, its bar or anywhere in it shuts it. A report, or a thought
-  or a result with no call, is a line of its own the same way.
+  or a result with no call, is a line of its own the same way (a failed
+  result with no call, so no mark, keeps its `error: `).
 - **Past five calls** a line counts the rest (`+3 more`, under the
   first five); while the run is at work it shows the newest five, the
   count over them (`+3 earlier`). A call opened alone (a click, `/open`)

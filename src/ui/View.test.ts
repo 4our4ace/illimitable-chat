@@ -4,9 +4,9 @@
 // runs of work, each keyed apart (a thought-led one too), a line over
 // its items: each call with what it did and how it ended, opened alone
 // by a click or all by the mode, five at most till a click shows all
-// (the newest while it works), a failed result's lines without FAILED;
-// an agent's page so too, its clicks its own; what streams made anew
-// only as it grows.
+// (the newest while it works), a failed result's lines without FAILED
+// after its call, with it standing alone; an agent's page so too, its
+// clicks its own; what streams made anew only as it grows.
 
 import { expect, test } from "bun:test";
 import type { Pick } from "../ai/Pick.ts";
@@ -27,6 +27,27 @@ test("a failed result's lines leave out FAILED (its call's mark says so); its te
   expect(row.text).toStartWith(View.FAILED);
   expect(JSON.stringify(row.body)).not.toContain(View.FAILED);
   expect(JSON.stringify(row.body)).toContain("no such file");
+});
+
+// a failed result standing alone (no call before it, so no mark saying
+// it failed) keeps FAILED in its lines as it opens, made once a row; one
+// after its call leaves it out
+test("a failed result standing alone keeps FAILED in its lines as it opens; one after its call leaves it out", () => {
+  const v    = View.view_new();
+  const rows = [
+    ...View.entry_rows(1, "user", "go"),
+    ...View.entry_rows(2, "echo", View.FAILED + "no such file\n(exit 1 in 0.1 s)"),
+    ...View.entry_rows(3, "tool", 'shell {"command":"ls"}'),
+    ...View.entry_rows(4, "echo", View.FAILED + "denied\n(exit 1 in 0.1 s)"),
+  ];
+  View.view_verbose(v);
+  const opened = () => (View.view_acts(v, rows)[1] as View.Row & { $: "Act" }).rows.flatMap((r) => (r.$ === "Item" ? [r] : []));
+  const [alone, called] = opened();
+  const body = (r: View.Row) => (r.$ === "Msg" ? JSON.stringify(r.body) : "");
+  expect([alone.ok, alone.open, called.ok]).toEqual([null, true, false]);
+  expect(body(alone.rows[0])).toContain(View.FAILED + "no such file");
+  expect(body(called.rows[1])).not.toContain(View.FAILED);
+  expect(opened()[0].rows[0]).toBe(alone.rows[0]);
 });
 
 // a turn waiting on its model names the model the server says: the
