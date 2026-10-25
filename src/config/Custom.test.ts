@@ -2,13 +2,14 @@
 // ===========
 // `bun test Custom.test.ts`. The user's agents and commands: a file's
 // front matter and body (its tools list's Claude Code tools, but those
-// illi gives itself, spawn and todo; the list as YAML writes it too),
-// the project's over the user's, its mode, a
-// command's arguments; an agent's model as a pick; /agent makes a primary
-// agent the main agent (its model, instructions and tools, Claude Code's
-// too), noted before the next message, each keeping its pick; spawn's
-// agent runs a subagent as it, with its Claude Code tools (none on a
-// ChatGPT model whose window isn't told: never guessed).
+// illi gives itself, spawn and todo; the list as YAML writes it too;
+// one empty gives none, one left out all), the project's over the
+// user's, its mode, a command's arguments; an agent's model as a pick;
+// /agent makes a primary agent the main agent (its model, instructions
+// and tools, Claude Code's too), noted before the next message, each
+// keeping its pick; spawn's agent runs a subagent as it, with its Claude
+// Code tools (none on a ChatGPT model whose window isn't told: never
+// guessed).
 // A skill: its folder's SKILL.md (a folded description), the
 // project's over theirs, listed by the skill tool and loaded by it; a
 // sticky one turned on and off by it, while on in every turn's prompt;
@@ -107,6 +108,20 @@ test("Claude Code's Agent, Task and TodoWrite in a tools list are illi's spawn a
   expect([lead.tools, lead.builtins]).toEqual([["read", "spawn", "todo", "shell"], ["Read", "Bash"]]);
   const boss = Custom.profile("boss", DIR + "/lists/boss.md");
   expect([boss.tools, boss.builtins]).toEqual([["spawn", "todo"], []]);
+});
+
+test("an empty tools list gives an agent none of illi's tools nor Claude Code's built-in ones, as Claude Code reads it; only one left out gives all", () => {
+  put(DIR + "/lists/all.md", "---\ndescription: All\n---\n");
+  put(DIR + "/lists/bare.md", "---\ntools:\ndescription: Bare\n---\n");
+  put(DIR + "/lists/quoted.md", "---\ntools: \"\"\n---\n");
+  put(DIR + "/lists/brackets.md", "---\ntools: []\n---\n");
+  const all = Custom.profile("all", DIR + "/lists/all.md");
+  expect([all.tools, all.builtins]).toEqual([null, null]);
+  for (const name of ["bare", "quoted", "brackets"]) {
+    const none = Custom.profile(name, DIR + "/lists/" + name + ".md");
+    expect([name, none.tools, none.builtins]).toEqual([name, [], []]);
+  }
+  expect(Custom.allow(Custom.profile("bare", DIR + "/lists/bare.md"), [{ name: "zoom" }, { name: "shell" }])).toEqual([]);
 });
 
 test("an agent's mode: primary, a subagent, or both", () => {

@@ -25,7 +25,8 @@
 // spawn's `agent`), or both (all, the default). Its front matter also says what
 // it does (description), runs on (model: a label or
 // vendor:model:effort:speed; effort), may use (tools, by name, on
-// claude-code Claude Code's built-in tools too; none: all its role has)
+// claude-code Claude Code's built-in tools too; left out: all its role
+// has; empty: none, as Claude Code reads an empty list)
 // and the color of its mark (color: #rrggbb; none: one made for it); its
 // body is its instructions, added to the system prompt of its calls.
 //
@@ -301,7 +302,10 @@ export namespace Custom {
   // (a plugin's own MCP servers, as mcp__plugin_<plugin>_<server>, as
   // illi names them), and the Claude Code built-in tools it gives
   // (agent_builtins); a search it can't do said. The list as YAML writes
-  // it too: in [ ], each name quoted or not (a `- name` list: parse)
+  // it too: in [ ], each name quoted or not (a `- name` list: parse).
+  // One empty (tools: with no value, "" or []) gives none of illi's tools
+  // nor of Claude Code's built-in ones, as Claude Code reads an empty
+  // list; only one left out gives all
   export function profile(name: string, file: string, plugin: Bundle | null = null): Profile {
     const { head, body } = safe_read(file);
     const list = head.tools?.replace(/^\[|\]$/g, "").split(",").map((t) => unquote(t.trim())).filter(Boolean);
