@@ -19,17 +19,19 @@
 // (Away), so what the pointer lit goes out. The terminal is asked its
 // background (OSC 11), which diagrams draw over (Draw.ts); its answer
 // comes as input, and is never typed. The input (Ed) draws as rows
-// starting `> ` and takes its editing keys (ed_key, EDITING) here, and
-// the place a click on it puts the cursor (ed_at; the press is
-// Select.ts's); taller than it shows, it scrolls only as the cursor
-// leaves the rows shown, so what a click lands on stays put; Up and
-// Down past its ends walk the messages sent. A long paste shows in it as
-// one token, [Pasted text #n +L lines], an attached image as [Image #n]:
-// each erased whole, a paste's text put back in its place as it's sent
-// (ed_expand). A lone /word is a command being typed, and one the
-// cursor ends mid-message a skill's name, matched to the names (ed_slash,
-// ed_rank, ed_find: Term.ts lists them under the input). A list open (grab) takes keys before the input does, and a
-// list searched (type) the text typed.
+// starting `> `, wrapped between words (ed_wrap: a chip one word, a word
+// wider than a row at any character), and takes its editing keys
+// (ed_key, EDITING) here, and the place a click on it puts the cursor
+// (ed_at; the press is Select.ts's); taller than it shows, it scrolls
+// only as the cursor leaves the rows shown, so what a click lands on
+// stays put; Up and Down past its ends walk the messages sent. A long
+// paste shows in it as one token, [Pasted text #n +L lines], an
+// attached image as [Image #n]: each erased whole, a paste's text put
+// back in its place as it's sent (ed_expand). A lone /word is a command
+// being typed, and one the cursor ends mid-message a skill's name,
+// matched to the names (ed_slash, ed_rank, ed_find: Term.ts lists them
+// under the input). A list open (grab) takes keys before the input
+// does, and a list searched (type) the text typed.
 //
 // In a window (term/Window.ts, which owns the terminal for every
 // profile's illi under it; Member.ts sets it up), the screen is a PTY of
