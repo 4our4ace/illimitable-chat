@@ -621,10 +621,18 @@ export namespace Store {
   }
 
   // the lines the store's chat's index holds (its last rowid: lines are
-  // never deleted)
+  // never deleted; the radar's: Radar.ts)
   export function indexed(store: Store): number {
     const table = "find_" + store.chat;
     return (query(store.db, `select rowid from ${table} order by rowid desc limit 1`).get() as { rowid: number } | null)?.rowid ?? 0;
+  }
+
+  // how many lines of the store's chat hold a phrase (its words side by
+  // side), anywhere, `most` at most, from the index's lists of where each
+  // word is alone, no line read (the radar's: Radar.ts)
+  export function hits(store: Store, phrase: string, most: number): number {
+    const table = "find_" + store.chat;
+    return (query(store.db, `select count(*) as n from (select 1 from ${table} where ${table} match ? limit ?)`).get('"' + phrase.replace(/"/g, '""') + '"', most) as { n: number }).n;
   }
 
   // the lines of the store's chat holding a phrase (its words side by

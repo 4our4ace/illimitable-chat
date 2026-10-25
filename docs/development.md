@@ -17,7 +17,7 @@ Development
                    the summaries written (Compactor.ts), its SQLite file (Store.ts),
                    its lock (Lock.ts), suggested replies (Suggest.ts), agents' logs
                    (Logs.ts), /export and /tree (Export.ts), projects (Projects.ts)
-                   and their search's thread (Seeker.ts), the radar's search of
+                   and their searches' threads (Seeker.ts), the radar's search of
                    past topics (Radar.ts), a second terminal's view (Remote.ts),
                    the disk
     src/ai/        model vendors, the agent loop, picks, token usage

@@ -181,6 +181,7 @@ note, illi going on.
 | **A view**: an illi started where another holds the project's chat, in the same profile (a second terminal's, a pipe's) | read-write to the same file, kept open until illi quits | to read exports, the tree and the projects list; the chat itself comes from the holder over a socket | `Term.ts term_reader` |
 | **A look at other projects**: the projects list, a zoom or date into another project, an export of one, the image count before a forget | read-write to that project's file, opened for the read and closed right after | each time | `Store.visit` → `Store.peek` |
 | **The search thread** (`Seeker.ts`) | its own connections, to each file a search covers, each closed after | each `search` the model calls | `Projects.seek` |
+| **The radar's thread** (`Seeker.ts`, a second worker) | its own connection to this project's file, closed after each search | after each step of a turn, with `related` on | `Projects.radar` |
 | **A profile export** | read-write to each file, for a snapshot | `/profile` export | `Profiles.ts profile_snapshot` |
 
 Other projects' files are opened read-write even just to read, because
@@ -415,8 +416,8 @@ Search
 The model's `search` tool finds summary lines by their words, in this
 project, in another one by name, or in `all`. Every line ever written can
 be found, however old: nothing is capped by age. The radar (the side
-panel's Related lines, [below](#the-radar)) reads the same index, in the
-same thread.
+panel's Related lines, [below](#the-radar)) reads the same index, in a
+thread of its own, so a search the model asks never waits on it.
 
 ```mermaid
 flowchart TD
@@ -435,10 +436,13 @@ flowchart TD
 
 ### The thread
 
-`Projects.seek` sends each search to one worker thread
+`Projects.seek` sends each search to a worker thread
 (`src/chat/Seeker.ts`), started at the first search and never keeping
-illi from quitting (`ref: false`); `Projects.radar` sends the radar's
-there too (`Projects.thread` posts both). A message is
+illi from quitting (`ref: false`). `Projects.radar` sends the radar's to
+a second worker of the same module, started at the radar's first, so a
+search the model asks never queues behind one of the radar's
+(`Projects.thread` posts to either: each its own worker and its own
+searches waiting). A message is
 `{ id, file, $: "search", words, scope }` or `{ id, file, $: "radar", ask }`,
 answered `{ id, out }` or `{ id, error }`. For each the worker:
 
@@ -452,13 +456,14 @@ answered `{ id, out }` or `{ id, error }`. For each the worker:
 The main thread never waits: during a 2.9 s search on a 2-million-line
 chat it kept drawing the screen (its longest gap was 14 ms). If the
 worker can't start, or a message can't be posted, the search runs on the
-main thread instead (`Projects.here`). If the worker dies, every search
-still waiting on it runs on the main thread, and the next search starts
-a new worker. The radar's never runs on the main thread: it fails, and
-the side shows nothing new till the next step. In the compiled binary,
-the worker's code is a second entry of the build (`src/chat/Seeker.ts`
-in `package.json`'s `build`, `install.sh` and the release workflow),
-found at `./chat/Seeker.ts`.
+main thread instead (`Projects.here`). If a worker dies, every search
+still waiting on it runs on the main thread, and that thread's next
+search starts a new worker; the other worker goes on. The radar's never
+runs on the main thread: it fails, and the side shows nothing new till
+the next step. In the compiled binary, the workers' code is a second
+entry of the build (`src/chat/Seeker.ts` in `package.json`'s `build`,
+`install.sh` and the release workflow), found at `./chat/Seeker.ts`:
+both workers start from that one entry.
 
 ### Projects.search
 
@@ -558,35 +563,55 @@ While illi works, the terminal searches the chat after each step for
 past topics that may be related, and shows them at the side
 (`src/term/Related.ts`; the search, `src/chat/Radar.ts`). One runs at a
 time; a step that comes meanwhile asks again once it ends, and the stale
-answer is dropped. In one read transaction, on the worker's connection:
+answer is dropped. In one read transaction, on the radar's worker's
+connection:
 
-1. **Each unit's lines** (`Store.held`): a unit is a phrase of index
+1. **Each unit counted** (`Store.hits`): a unit is a phrase of index
    words made from the run (a path `src/chat/Memory.ts` as `"memory ts"`,
-   a name `term_side_drawn` as `"term side drawn"`, an error's name, a
-   rare word). `select first, n from find_<chat> where find_<chat>
-   match ? and first + n <= ? limit 4001`: only lines before the
-   messages left out at the chat's end (the recent ones, and those the
-   view holds at message detail just before them), 4,000 at most.
-2. **Too common, dropped:** a unit found nowhere, in more than 4,000
-   lines, or in more than a tenth of the chat's episodes (each 16
-   messages; two at least). Of the rest, once every unit sent (24 at
-   most) is counted, the 12 that weigh most (weight × idf).
-3. **Widened** (`Store.node`): each line over nothing left out (the
+   a short one too, `db.ts`; a name `term_side_drawn` as
+   `"term side drawn"`, an acronym like `MCP`; an error's name, an errno
+   only by its name, `ENOENT`; a rare word). Every unit the run gives is
+   sent, 200 at most. `select count(*) from (select 1 from find_<chat>
+   where find_<chat> match ? limit 4001)`: read from the index's lists of
+   where each word is, no line's columns. A unit in none, or in more
+   than 4,000 lines, is dropped. Of the rest, the 24 that weigh most by
+   that count go on (weight × idf, by lines: `Store.indexed`, the lines
+   in all), so a rare word is never cut for where it sorts.
+2. **Their lines** (`Store.held`): `select first, n from find_<chat>
+   where find_<chat> match ? and first + n <= ? limit 4000`: only lines
+   before the messages left out at the chat's end (the recent ones, and
+   those the view holds at message detail just before them).
+3. **Too common, dropped:** a unit in more than a tenth of the chat's
+   episodes (each 16 messages; three at least, so a topic come back
+   twice in a young chat still counts). Of the rest, the 12 that weigh
+   most (weight × idf, by episodes).
+4. **Widened** (`Store.node`): each line over nothing left out (the
    other messages at message detail, the dismissed) goes up to the
    highest built node over it of at most 16 messages that holds nothing
    left out.
-4. **Scored**: each episode, the sum over the units it holds of
+5. **Scored**: each episode, the sum over the units it holds of
    weight × idf (by episodes). The 8 best that pass the floor get the
    date of their last message (`Store.date`).
 
-So a search reads at most 24 × 4,001 rows of `(first, n)` (every unit
-sent is looked up before the 12 are kept), a few dozen nodes and 8
-dates. Measured on synthetic chats (WSL2, ext4): at 20,000 messages
-about 29 ms for a typical run, about 110 ms when all 24 units are in
-4,000 lines or more; at 200,000 messages 130–170 ms. The rows' lookups
-are most of it. It runs in the worker, so the screen never waits, but
-the model's `search` shares that worker: one asked meanwhile waits for
-the radar's to end.
+So a search counts each unit sent (each count stops at 4,001), reads at
+most 24 × 4,000 rows of `(first, n)`, a few dozen nodes and 8 dates.
+Measured on synthetic chats (WSL2, ext4, Bun 1.4.3; the median of 7):
+
+| The run's units | 20,000 messages | 200,000 messages |
+| --- | --- | --- |
+| a typical run's 14 | 10 ms | 17 ms |
+| 24, each in more than 4,000 lines (dropped at the count) | 5 ms | 6 ms |
+| 200, each in more than 4,000 lines | (only 20 such words) | 49 ms |
+| 200 rare words (a long paste) | 20 ms | 31 ms |
+| 200, each in just under 4,000 lines | 34 ms | 147 ms |
+| 24, each in just under 4,000 lines: every row read, the worst | 93 ms | 183 ms |
+
+The rows' lookups are most of it; a count costs little beside them
+(looked up whole, before counting, the 24 common units took 79 ms and
+98 ms). It runs in its own worker, so neither the screen nor the
+model's `search` waits on it: a search the model asked during the worst
+case above took 1.5 ms at 20,000 messages and 1.8 ms at 200,000, as it
+does alone (when the two shared a worker, it waited 86 ms and 196 ms).
 
 Forgetting a project
 --------------------

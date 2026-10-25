@@ -302,7 +302,7 @@ recent messages, and those its view holds one by one) is left out, and
 so is what you dismissed. The list holds still while you read it: a new
 line joins at its foot, and a line leaves only once it has gone
 unmatched for a while, or for one far stronger, one at a time (one you
-opened or pinned stays).
+opened or pinned stays till your next message, then goes the same way).
 
 - A click on a line opens it at full detail: its messages whole, in a
   pane over the chat (Esc closes it).

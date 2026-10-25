@@ -11,22 +11,28 @@
 // (their errors' names), each a unit: a phrase of the index's words, so
 // `src/chat/Memory.ts` asks for "memory ts" (the two words side by side),
 // never the bare word memory, and `term_side_drawn` for "term side
-// drawn". What every chat holds drops out: stop words, the kinds a
-// summary tags its items with, tool names, their arguments' keys, file
-// endings and folders like src, shell commands and flags, numbers and
-// hashes. Each unit weighs by what it is (a path or an error's name
-// most), by where it came from and by how recent it is.
+// drawn"; a short name counts too (MCP, db.ts). What every chat holds
+// drops out: stop words, the kinds a summary tags its items with, tool
+// names, their arguments' keys, file endings and folders like src, shell
+// commands and flags, numbers and hashes. Each unit weighs by what it is
+// (a path or an error's name most), by where it came from and by how
+// recent it is. All are sent (ASKED at most, far more than are used):
+// the search, which knows how rare each is, chooses.
 //
-// The search (Radar.search): each unit's lines before the messages left
-// out at the chat's end (Ask's end), counted by episode (each EPISODE
-// messages of the chat, those left out among them too); a unit in
-// more than a tenth of them (two at least) is too common here to tell
-// anything, as one found nowhere is: both dropped (so is one in more than
-// LINES lines, however big the chat); the UNITS weighing most of the
-// rest. Each line found is widened to the summary node over it of up to
-// EPISODE messages (the highest built that leaves out what is left out),
-// so a line says what the episode was, not one message of it; the index
-// holds every level of the tree, so the lines of one episode meet in it.
+// The search (Radar.search): each unit counted by the lines holding it
+// (the index's lists of where each word is: no line read); one in none,
+// or in more than LINES (however big the chat), dropped; of the rest,
+// the CHOSEN weighing most by that count (weight × idf, by lines) have
+// their lines before the messages left out at the chat's end (Ask's end)
+// read, and counted by episode (each EPISODE messages of the chat, those
+// left out among them too); a unit in more than a tenth of them (LEAST
+// at least) is too common here to tell anything, as one found in none
+// is: both dropped; the UNITS weighing most of the rest are used (weight
+// × idf, by episodes). Each line found is widened to the summary node
+// over it of up to EPISODE messages (the highest built that leaves out
+// what is left out), so a line says what the episode was, not one
+// message of it; the index holds every level of the tree, so the lines
+// of one episode meet in it.
 // An episode scores the sum of weight × rarity (idf, by episodes) over the
 // units it holds, each once: comparable from one query to the next, as
 // bm25 is not. One with a single unit shows only if it is a path or an
@@ -40,7 +46,8 @@
 // place, its score the new one; one not found fades; new lines join at
 // the foot while there is room; a line leaves once faded under FLOOR, or
 // from a full list for one FAR stronger, one a step; a line the user
-// opened or pinned stays.
+// opened or pinned stays through that turn (touched: Related.ts lets it
+// go at the user's next message, and it fades and leaves as any other).
 
 import { Store, type Store as File } from "./Store.ts";
 
@@ -68,7 +75,7 @@ export type Ask = { chat: number; units: Unit[]; end: number; out: Array<[number
 export type Found = { first: number; n: number; text: string; score: number; units: number; anchored: boolean; date: string };
 
 // a line shown: as found, its best score yet (peak), whether the user
-// opened or pinned it (touched: it stays)
+// opened or pinned it this turn (touched: it stays)
 export type Shown = Found & { peak: number; touched: boolean };
 
 // Constants
@@ -86,13 +93,16 @@ const LATEST  = 16;
 const AGAIN   = 0.2;
 const RISE    = 1.6;
 
-// the most units a query sends, and searches; a unit in more than this
-// share of the chat's episodes (LEAST at least), or in more than LINES
-// lines, is too common to search
-const ASKED  = 24;
+// the most units a query sends (a bound for a pasted log: a run's own
+// say far fewer), whose lines a search reads, and that it uses; a
+// unit in more than this share of the chat's episodes (LEAST at least:
+// a topic come back twice is still told in a young chat), or in more
+// than LINES lines, is too common to search
+const ASKED  = 200;
+const CHOSEN = 24;
 const UNITS  = 12;
 const COMMON = 0.1;
-const LEAST  = 2;
+const LEAST  = 3;
 const LINES  = 4000;
 
 // the most messages a line covers, as widened; the episodes looked into
@@ -127,7 +137,7 @@ user illi tool echo mind note work recap error errors
 shell read write edit zoom date projects search spawn tell todo skill approve bash grep glob webfetch websearch fetch
 command commands query path paths file_path filepath old new old_string new_string old_text new_text content contents pattern patterns words project name names tasks task agent agents effort message messages items item text status timeout description limit offset replace_all edits input output args cwd prompt type value values true false null undefined
 src lib libs test tests spec specs dist build node modules node_modules home usr tmp var etc bin opt docs doc app apps packages pkg internal cmd scripts script assets public static vendor github workflows index main
-cd ls cat rg sed awk git bun bunx npm npx pnpm yarn deno python python3 pip echo printf head tail wc find xargs sort uniq mkdir rm cp mv touch chmod chown ln diff tee curl wget make cargo tsc jq env export sudo kill ps exit set source which sleep tmux ssh docker
+cd ls cat rg sed awk git bun bunx npm npx pnpm yarn deno python python3 pip echo printf head tail wc find xargs sort uniq mkdir rm cp mv touch chmod chown ln diff tee curl wget make cargo tsc jq env export sudo kill ps exit set source which sleep tmux docker
 status log show add commit push pull fetch checkout branch merge rebase stash reset worktree run install check
 const let var function return import class interface async await this void string number boolean object switch case break continue default throw catch finally typeof instanceof extends implements public private static readonly def self none print elif lambda pass impl struct enum match crate
 ts tsx js jsx mjs cjs json jsonl md txt py rs go rb java kt swift cpp hpp cs sh zsh fish toml yaml yml lock html htm css scss sql sqlite db log xml svg png jpg jpeg gif webp pdf cfg ini conf
@@ -136,9 +146,23 @@ ts tsx js jsx mjs cjs json jsonl md txt py rs go rb java kt swift cpp hpp cs sh 
 // the file endings a path without a slash is known by
 const ENDS = new Set("ts tsx js jsx mjs cjs json jsonl md txt py rs go rb java kt swift c h cpp hpp cs sh zsh fish toml yaml yml lock html htm css scss sql sqlite db log xml svg png jpg jpeg gif webp pdf cfg ini conf env".split(" "));
 
+// a word in capitals that is said loud, or a label, never a name: three
+// letters of English, and what heads a note
+const LOUD = new Set(`
+the and for not but you all are can get has had its now any our off put top end fix bug wip fyi imo btw lol omg eta yes why how who one two out use was did may too see way day let got try ask own new old etc
+fixme important warning asap tldr imho
+`.split(/\s+/).filter((w) => w !== ""));
+
+// the errnos a failed system call is known by (Node's err.code): by
+// name, as a word in capitals (ENTER, EMPTY) is none
+const ERRNO = `
+ENOENT EACCES EPERM EEXIST EISDIR ENOTDIR EMFILE ENFILE ECONNREFUSED ECONNRESET ETIMEDOUT EADDRINUSE EPIPE EAGAIN EBADF EBUSY ENOMEM ENOSPC
+EINVAL EINTR EHOSTUNREACH ENETUNREACH ENOTEMPTY EXDEV EROFS ELOOP ENAMETOOLONG ESRCH ECHILD ENOTSUP EOPNOTSUPP ENOEXEC E2BIG ENOTCONN ECONNABORTED EPROTO
+`.split(/\s+/).filter((w) => w !== "");
+
 // an error's name: TypeError, an errno (ENOENT), SQLITE_BUSY, Node's
 // ERR_MODULE_NOT_FOUND; a word that is one, whole
-const ERROR  = /\b(?:[A-Z][A-Za-z]*(?:Error|Exception)|E[A-Z]{3,}|SQLITE_[A-Z_]+|ERR_[A-Z0-9_]+)\b/g;
+const ERROR  = new RegExp("\\b(?:[A-Z][A-Za-z]*(?:Error|Exception)|" + ERRNO.join("|") + "|SQLITE_[A-Z_]+|ERR_[A-Z0-9_]+)\\b", "g");
 const ERRORS = new RegExp("^(?:" + ERROR.source.slice(2, -2) + ")$");
 
 // a tool call as logged: its name, a space, its input's JSON
@@ -221,8 +245,9 @@ export namespace Radar {
   // a text's units, weight `w` each: its errors' names; then, word by
   // word (a link left out), a path (a slash, or a known ending) as its
   // file's name with its ending ("memory ts"), a folder's as a name; a
-  // name in code (snake_case, camelCase, a.b, CAPS) as its words; a flag
-  // left out; any other a word, of four letters or more
+  // name in code (snake_case, camelCase, a.b, CAPS of three or more, not
+  // LOUD: MCP, SIDE_WIDTH) as its words; a flag left out; any other a
+  // word, of four letters or more
   export function read(text: string, w: number): Unit[] {
     const out = Radar.errors(text, w);
     for (const raw of text.replace(/\bhttps?:\/\/\S+/g, " ").split(/\s+/)) {
@@ -234,7 +259,7 @@ export namespace Radar {
       const base = bare.replace(/\/+$/, "").split("/").pop() ?? "";
       if (bare.includes("/") || (end !== undefined && ENDS.has(end))) {
         out.push(...(/\.[A-Za-z0-9]+$/.test(base) ? Radar.unit(base, "path", w) : Radar.unit(base, "name", w * 0.75)));
-      } else if (/^[A-Za-z_$][\w$]*(?:[.:#][A-Za-z_$][\w$]*)*$/.test(bare) && (/[a-z][A-Z]|[A-Za-z0-9]_[A-Za-z0-9]|[.:#]/.test(bare) || /^[A-Z][A-Z0-9]{3,}$/.test(bare))) {
+      } else if (/^[A-Za-z_$][\w$]*(?:[.:#][A-Za-z_$][\w$]*)*$/.test(bare) && (/[a-z][A-Z]|[A-Za-z0-9]_[A-Za-z0-9]|[.:#]/.test(bare) || (/^[A-Z][A-Z0-9]{2,}$/.test(bare) && !LOUD.has(bare.toLowerCase())))) {
         out.push(...Radar.unit(bare, "name", w));
       } else {
         out.push(...Radar.words(bare).flatMap((x) => Radar.unit(x, "word", w)));
@@ -245,12 +270,15 @@ export namespace Radar {
 
   // a unit of `text`'s words, of a kind, weight `w` × the kind's; none if
   // it says nothing: no word but a number, a hash, one under three letters
-  // or a stop word (a file's name may be one: index.ts, new.ts; a word is
-  // four letters at least, and letters only)
+  // or a stop word (a word is four letters at least, and letters only). A
+  // file's name is judged by its name without its ending, where two
+  // letters say enough (db.ts), and a stop word too (index.ts, new.ts)
   export function unit(text: string, k: Kind, w: number): Unit[] {
     const ws   = Radar.words(text);
-    const real = (x: string) => x.length >= (k === "word" ? 4 : 3) && (k === "path" || !STOP.has(x)) && !/^\d+$/.test(x) && !(/\d/.test(x) && /^[0-9a-f]{7,}$/.test(x)) && (k !== "word" || /^\p{L}+$/u.test(x));
-    return ws.length === 0 || ws.length > 6 || !ws.some(real) ? [] : [{ q: ws.join(" "), w: w * WEIGHT[k], k }];
+    const said = (x: string) => !/^\d+$/.test(x) && !(/\d/.test(x) && /^[0-9a-f]{7,}$/.test(x));
+    const real = (x: string) => x.length >= (k === "word" ? 4 : 3) && !STOP.has(x) && said(x) && (k !== "word" || /^\p{L}+$/u.test(x));
+    const some = k === "path" ? Radar.words(text.replace(/\.[A-Za-z0-9]+$/, "")).some((x) => x.length >= 2 && said(x)) : ws.some(real);
+    return ws.length === 0 || ws.length > 6 || !some ? [] : [{ q: ws.join(" "), w: w * WEIGHT[k], k }];
   }
 
   // Search
@@ -268,23 +296,37 @@ export namespace Radar {
   export function seek(store: File, ask: Ask): Found[] {
     const all   = Math.max(1, Math.ceil(ask.end / EPISODE));
     const most  = Math.max(LEAST, Math.floor(all * COMMON));
+    const total = Math.max(1, Store.indexed(store));
+    const idf   = (n: number, of: number) => Math.log(1 + (of - n + 0.5) / (n + 0.5));
     const left  = (first: number, n: number) => ask.out.some(([a, b]) => first < b && first + n > a);
-    const held  = ask.units.map((u) => {
-      const at = Store.held(store, u.q, ask.end, LINES + 1);
+    // each unit counted by its lines, anywhere (no line read); those
+    // read, the CHOSEN weighing most by that count
+    const chosen = ask.units.map((u) => ({ u, lines: Store.hits(store, u.q, LINES + 1) })).filter((c) => c.lines > 0 && c.lines <= LINES)
+      .map((c) => ({ u: c.u, guess: c.u.w * idf(c.lines, total) })).sort((a, b) => b.guess - a.guess).slice(0, CHOSEN);
+    const held  = chosen.map(({ u }) => {
+      const at = Store.held(store, u.q, ask.end, LINES);
       return { u, at, in: new Set(at.filter(({ n }) => n <= EPISODE).map(({ first }) => Math.floor(first / EPISODE))).size };
-    }).filter((h) => h.in > 0 && h.at.length <= LINES && h.in <= most);
-    const used  = held.map((h) => ({ ...h, idf: Math.log(1 + (all - h.in + 0.5) / (h.in + 0.5)) })).sort((a, b) => b.u.w * b.idf - a.u.w * a.idf).slice(0, UNITS);
+    }).filter((h) => h.in > 0 && h.in <= most);
+    const used  = held.map((h) => ({ ...h, idf: idf(h.in, all) })).sort((a, b) => b.u.w * b.idf - a.u.w * a.idf).slice(0, UNITS);
     // each line found, by the unit that found it, under its episode's top
     // node (EPISODE messages), so the levels of one episode meet
     const tops = new Map<number, Array<{ unit: number; first: number; n: number }>>();
     used.forEach(({ at }, unit) => {
-      for (const { first, n } of at.filter(({ first, n }) => n <= EPISODE && !left(first, n))) {
-        const top = Math.floor(first / EPISODE) * EPISODE;
-        tops.set(top, [...(tops.get(top) ?? []), { unit, first, n }]);
+      for (const { first, n } of at) {
+        if (n > EPISODE || left(first, n)) {
+          continue;
+        }
+        const top  = Math.floor(first / EPISODE) * EPISODE;
+        const hits = tops.get(top);
+        if (hits === undefined) {
+          tops.set(top, [{ unit, first, n }]);
+        } else {
+          hits.push({ unit, first, n });
+        }
       }
     });
     const worth = (hits: Array<{ unit: number }>) => [...new Set(hits.map((h) => h.unit))].reduce((s, k) => s + used[k].u.w * used[k].idf, 0);
-    const looked = [...tops].sort((a, b) => worth(b[1]) - worth(a[1]) || b[0] - a[0]).slice(0, LOOKED);
+    const looked = [...tops].map(([top, hits]) => ({ top, hits, worth: worth(hits) })).sort((a, b) => b.worth - a.worth || b.top - a.top).slice(0, LOOKED);
     // an episode: the node over the hits, if built and nothing in it is
     // left out; else each half over its own hits (a hit's own node is in
     // the index, so built, and never left out)
@@ -304,7 +346,7 @@ export namespace Radar {
         widen(first + half, half, high);
       }
     };
-    looked.forEach(([top, hits]) => widen(top, EPISODE, hits));
+    looked.forEach(({ top, hits }) => widen(top, EPISODE, hits));
     const found = episodes.map((e) => {
       const units = [...new Set(e.hits.map((h) => h.unit))];
       const anchored = units.some((k) => used[k].u.k === "path" || used[k].u.k === "error");
@@ -321,10 +363,10 @@ export namespace Radar {
   // them overlapping what is left out), `most` at most: each line shown
   // found again (it, or a node in or over it) keeps its place, its score
   // the new one; one not found fades (FADE); at most one leaves a step
-  // (one opened or pinned never): the weakest, once faded under FLOOR,
-  // else, from a full list, for the best new one if that is FAR stronger;
-  // new ones join at the foot while there is room. Never two lines over
-  // the same messages
+  // (one opened or pinned this turn never: touched): the weakest, once
+  // faded under FLOOR, else, from a full list, for the best new one if
+  // that is FAR stronger; new ones join at the foot while there is room.
+  // Never two lines over the same messages
   export function merge(shown: Shown[], found: Found[], most = SHOWN): Shown[] {
     const over = (a: { first: number; n: number }, b: { first: number; n: number }) => a.first < b.first + b.n && b.first < a.first + a.n;
     const kept = shown.map((s): Shown => {
@@ -342,10 +384,10 @@ export namespace Radar {
     return weak !== undefined && fresh[0].score >= FAR * weak.score ? [...kept.filter((s) => s !== weak), join(fresh[0])] : kept;
   }
 
-  // the lines shown, those over messages now left out gone (the view
-  // holds them at message detail, or the user dismissed them)
-  export function prune(shown: Shown[], end: number, out: Array<[number, number]>): Shown[] {
-    return shown.filter((s) => s.first + s.n <= end && !out.some(([a, b]) => s.first < b && s.first + s.n > a));
+  // the lines shown, or found, those over messages now left out gone (the
+  // view holds them at message detail, or the user dismissed them)
+  export function prune<T extends { first: number; n: number }>(lines: T[], end: number, out: Array<[number, number]>): T[] {
+    return lines.filter((s) => s.first + s.n <= end && !out.some(([a, b]) => s.first < b && s.first + s.n > a));
   }
 
   // what a view leaves out, from its parts ([id, n]) and its turn (the

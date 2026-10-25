@@ -1,10 +1,12 @@
 // Seeker
 // ======
-// The searches of the summary lines in a thread of its own, so however
-// long one takes, the screen goes on: the model's (Projects.search) and
-// the radar's (Radar.search). Each runs on connections of its own to the
-// projects' files (WAL: it reads beside the writes), each closed after it
-// (Store.close: its statements finalized, so it closes at once). Asked
+// The searches of the summary lines in a thread of their own, so however
+// long one takes, the screen goes on: the model's (Projects.search) in
+// one, the radar's (Radar.search) in another of this module, so neither
+// waits on the other (Projects.thread). Each runs on connections of its
+// own to the projects' files (WAL: it reads beside the writes), each
+// closed after it (Store.close: its statements finalized, so it closes
+// at once). Asked
 // { id, file, $: "search", words, scope } or { id, file, $: "radar", ask },
 // file the asking chat's; answers { id, out } (the search's text, the
 // radar's lines), or { id, error }.
