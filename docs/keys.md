@@ -288,6 +288,32 @@ process that left its group (`setsid`, a daemon) isn't listed but is
 stopped at the quit all the same. On the `claude-code` provider, Claude Code runs the shell, so its
 background jobs don't show here.
 
+Related
+-------
+
+While illi works, a small search runs over the whole chat after each
+step (your message, each round of tool results, the turn's end) and
+shows past topics that may be related in the side panel's Related
+section: up to 4 lines, each how long ago it ended, its summary and its
+id (`#1234+16`: the 16 messages from #1234). It reads the chat's own
+index of its summaries, on a thread of its own: no model call, and
+nothing of it is sent to illi. What illi already sees in detail (the
+recent messages, and those its view holds one by one) is left out, and
+so is what you dismissed. The list holds still while you read it: a new
+line joins at its foot, and a line leaves only once it has gone
+unmatched for a while, or for one far stronger, one at a time (one you
+opened or pinned stays).
+
+- A click on a line opens it at full detail: its messages whole, in a
+  pane over the chat (Esc closes it).
+- A click on its id pins it: the id goes into your message, naming that
+  episode; illi can zoom it.
+- A click on the head lists them: Enter opens one, Tab pins its id, Del
+  dismisses it (until illi quits).
+
+Without the side panel, the bottom line counts them (`3 related`, a
+click lists them). The `related` setting turns it off.
+
 Mouse and side panel
 --------------------
 
@@ -349,14 +375,15 @@ Mouse and side panel
   switches; one open in this terminal shows a spinner while it works,
   `?` while it asks you something, `● 2` while only its background jobs
   run), a ChatGPT plan's use (once ChatGPT has told it), the context
-  and the memory, the MCP servers (a click opens `/mcp`), the latest
+  and the memory, past topics related to the work ([Related](#related)),
+  the MCP servers (a click opens `/mcp`), the latest
   requests refused (a click opens `/permissions` on one) and illi's
   to-do list, gone once every item is done or on `/clear`. The `side`
   and `side_width` settings place it.
 - The bottom line ends with the mode (a click opens `/mode`):
   `read-only` in the warning color, `yolo` in the error color. Before
   it, the background jobs are counted when the side panel doesn't show
-  them.
+  them, and before those the related lines when there is no side panel.
 - The terminal's title says `∞ illi · <project>`, one cell of dots
   tracing a figure of eight in the ∞'s place while illi works (`⠋`),
   `?` while a question waits on you (here or in another profile open

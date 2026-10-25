@@ -20,6 +20,7 @@ this page needs fixing.
 - [Search](#search)
 - [Forgetting a project](#forgetting-a-project)
 - [Usage counts](#usage-counts)
+- [Related counts](#related-counts)
 - [Models](#models)
 - [Known limits](#known-limits)
 
@@ -413,7 +414,9 @@ Search
 
 The model's `search` tool finds summary lines by their words, in this
 project, in another one by name, or in `all`. Every line ever written can
-be found, however old: nothing is capped by age.
+be found, however old: nothing is capped by age. The radar (the side
+panel's Related lines, [below](#the-radar)) reads the same index, in the
+same thread.
 
 ```mermaid
 flowchart TD
@@ -434,12 +437,16 @@ flowchart TD
 
 `Projects.seek` sends each search to one worker thread
 (`src/chat/Seeker.ts`), started at the first search and never keeping
-illi from quitting (`ref: false`). For each search the worker:
+illi from quitting (`ref: false`); `Projects.radar` sends the radar's
+there too (`Projects.thread` posts both). A message is
+`{ id, file, $: "search", words, scope }` or `{ id, file, $: "radar", ask }`,
+answered `{ id, out }` or `{ id, error }`. For each the worker:
 
 1. opens this project's file (`Store.peek`);
 2. runs `Projects.search`, the same code the main thread would run,
-   which opens every other file the search covers and closes each after;
-3. sends back the text, or the error;
+   which opens every other file the search covers and closes each after
+   (the radar's: `Radar.search`, on this file alone);
+3. sends back the text (the radar's lines), or the error;
 4. closes its connection (`Store.close`, so it really closes at once).
 
 The main thread never waits: during a 2.9 s search on a 2-million-line
@@ -447,7 +454,8 @@ chat it kept drawing the screen (its longest gap was 14 ms). If the
 worker can't start, or a message can't be posted, the search runs on the
 main thread instead (`Projects.here`). If the worker dies, every search
 still waiting on it runs on the main thread, and the next search starts
-a new worker. In the compiled binary, the worker's code is a second
+a new worker. The radar's never runs on the main thread: it fails, and
+the side shows nothing new till the next step. In the compiled binary, the worker's code is a second
 entry of the build (`src/chat/Seeker.ts` in `package.json`'s `build`,
 `install.sh` and the release workflow), found at `./chat/Seeker.ts`.
 
@@ -542,6 +550,35 @@ Measured on a 2-million-message chat (8.6 GB, in RAM):
 Across projects, each file is opened anew for each search (about 0.4 ms
 a file). Measured on WSL2, ext4: an `all` search of 100 small projects
 took 47–107 ms, and of 6 projects of 150,000 lines each 172–181 ms.
+
+### The radar
+
+While illi works, the terminal searches the chat after each step for
+past topics that may be related, and shows them at the side
+(`src/term/Related.ts`; the search, `src/chat/Radar.ts`). One runs at a
+time; a step that comes meanwhile asks again once it ends, and the stale
+answer is dropped. In one read transaction, on the worker's connection:
+
+1. **Each unit's lines** (`Store.held`): a unit is a phrase of index
+   words made from the run (a path `src/chat/Memory.ts` as `"memory ts"`,
+   a name `term_side_drawn` as `"term side drawn"`, an error's name, a
+   rare word). `select first, n from find_<chat> where find_<chat>
+   match ? and first + n <= ? limit 4001`: only lines before the
+   messages left out (those the view holds at message detail, the
+   recent ones), 4,000 at most.
+2. **Too common, dropped:** a unit found nowhere, in more than 4,000
+   lines, or in more than a tenth of the chat's episodes (each 16
+   messages; two at least). Of the rest, once every unit sent (24 at
+   most) is counted, the 12 that weigh most (weight × idf).
+3. **Widened** (`Store.node`): each line goes up to the highest built
+   node over it of at most 16 messages that holds nothing left out.
+4. **Scored**: each episode, the sum over the units it holds of
+   weight × idf (by episodes). The 8 best that pass the floor get the
+   date of their last message (`Store.date`).
+
+So a search reads at most 24 × 4,001 rows of `(first, n)`, a few dozen
+nodes and 8 dates: about 25 ms on a synthetic chat of 20,000 messages,
+in the worker.
 
 Forgetting a project
 --------------------
@@ -642,6 +679,32 @@ Usage counts
    Uses queued when illi quits within those 2 s are not kept.
 
 Fading counts uses, not days: a month away from illi changes nothing.
+
+Related counts
+--------------
+
+`~/.illi/related.json` counts what happened to the radar's lines
+(`Related.ts related_count`), so the score a line must reach to count as
+a strong match can be set from where the lines you opened score. It
+holds counts and scores alone: no text, no id, no project.
+
+```json
+{
+ "shown":     { "anchored": { "12": 4, "17": 1 }, "words": { "6": 9 } },
+ "opened":    { "anchored": { "17": 1 } },
+ "pinned":    {},
+ "dismissed": { "words": { "6": 2 } }
+}
+```
+
+1. A line is counted `shown` as it joins the list, then `opened`,
+   `pinned` or `dismissed` as you do that; `anchored` if a path or an
+   error's name was among what it matched, else `words`; under its best
+   score, rounded down to a whole number.
+2. Counts are queued, and 2 s after the last (a timer that never holds
+   illi open, `related_keep`) added to the file as it is then, written to
+   `related.json.<pid>` and renamed over it, as the usage counts are.
+   Counts queued when illi quits within those 2 s are not kept.
 
 Models
 ------

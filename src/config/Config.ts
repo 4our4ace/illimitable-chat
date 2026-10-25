@@ -93,6 +93,7 @@ const TABLE = {
   title      : { def: "on", values: ["on", "off"], now: true, what: "the terminal's title: ∞ illi · project", shape: ON_OFF },
   side       : { def: "right", values: ["right", "left", "off"], now: true, what: "where the side panel shows", shape: [/^(right|left|off)$/, "right, left or off"] },
   side_width : { def: "25%", values: ["20%", "25%", "30%", "35%", "40%"], now: true, what: "the side panel's width", shape: [/^\d+(\.\d+)?%?$/, "columns (40) or a share of the screen (30%)"] },
+  related    : { def: "on", values: ["on", "off"], now: true, what: "past topics related to the work, at the side", shape: ON_OFF },
   accent     : { def: "auto", values: ACCENTS, now: true, what: "the color everything is themed in", shape: [new RegExp("^(" + ACCENTS.join("|") + "|#[0-9a-f]{6}|25[0-5]|2[0-4]\\d|1?\\d?\\d)$", "i"), "auto, illi (its aqua), a color's name (" + ACCENTS.slice(2).join(", ") + "), a palette index (0-255) or #rrggbb"] },
   leader     : { def: "Ctrl+X", values: "text", now: true, what: "the key before a shortcut", shape: [/^(ctrl|alt)\+[a-z]$/i, "Ctrl or Alt and a letter, like Ctrl+X"] },
   shortcuts  : { def: "", values: "text", now: true, what: "the keys after the leader, as JSON", none: "illi's own" },
@@ -214,6 +215,10 @@ export let STATUSLINE: Statusline | null = null;
 // wide (columns, or a share of the screen: "25%")
 export let SIDE       = "";
 export let SIDE_WIDTH = "";
+
+// the radar (Related.ts): past topics related to the work, at the side
+// while illi works: on, unless off (or false, 0)
+export let RELATED    = true;
 
 // the accent (Theme.theme_tokens): "auto" (the theme's own), illi's
 // aqua, a color's name, a palette index or #rrggbb
@@ -441,6 +446,7 @@ function config_live(): void {
   STATUSLINE  = config_statusline(config_raw("statusline"));
   SIDE        = config_value("side");
   SIDE_WIDTH  = config_value("side_width");
+  RELATED     = !OFFS.includes(String(config_value("related")).trim().toLowerCase());
   ACCENT      = String(config_value("accent")).trim();
   PICK        = pick;
   ROLES       = roles;

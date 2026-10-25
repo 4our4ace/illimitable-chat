@@ -23,7 +23,8 @@ sessions.
   either one can type.
 - **Nothing is forgotten.** Old messages fold into a tree of summary
   lines, coarser with age, and illi can zoom any line back down to the
-  exact words.
+  exact words. While it works, past topics that may be related show at
+  the side, a click away.
 - **Built for the prompt cache.** The memory only changes at its end, so
   nearly every call is a cache hit: a long chat stays fast and cheap.
 - **Your plan, or your keys.** ChatGPT Plus or Pro, or Anthropic and
