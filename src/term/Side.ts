@@ -4,8 +4,9 @@
 // skills beside them, the subagents of this run, the background jobs,
 // the profiles (two or more; those open in this window marked as they
 // are), a ChatGPT plan's use, the chat's (the
-// context, the memory), the MCP servers, the requests refused, the
-// plugins' lines, a hint for the keys or illi's to-do list; the side and
+// context, the memory), the past topics related to the work (the radar:
+// Related.ts), the MCP servers, the requests refused, the plugins'
+// lines, a hint for the keys or illi's to-do list; the side and
 // side_width settings place it.
 
 import { term_background, term_choose, term_mcp, term_stick } from "./Commands.ts";
@@ -14,6 +15,8 @@ import { Custom, type Skill } from "../config/Custom.ts";
 import * as Draw from "../ui/Draw.ts";
 import { term_spinner } from "./Frame.ts";
 import { member_others } from "./Member.ts";
+import type { Shown } from "../chat/Radar.ts";
+import { related_age, related_cut, related_list, related_open, related_pin, related_shown, related_text } from "./Related.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
 import * as Paint from "../ui/Paint.ts";
 import { Plugins } from "../config/Plugins.ts";
@@ -51,14 +54,19 @@ export const CLOCK   = 60000;
 const STICKY = "Sticky skills";
 const GAP    = 3;
 
+// the least of a related line's summary shown beside its id (narrower:
+// the id left out)
+const SUMMARY = 12;
+
 // the side, w wide and tall: illi and the primary agents by name (a click
 // makes one the main agent), the sticky skills beside them (a click
 // turns one on or off; under them when a name won't fit whole:
 // term_side_beside), the tabs (a click shows one), the background jobs
 // (a click: /background), the profiles, once there are two (a click on
 // the head: /profile), a ChatGPT plan's use, the chat's (its context, the
-// memory), the MCP servers (a click: /mcp), the requests refused (a
-// click: /permissions on it), each plugin's lines (Plugins.side); at its
+// memory), the past topics related to the work (term_side_related), the
+// MCP servers (a click: /mcp), the requests refused (a click:
+// /permissions on it), each plugin's lines (Plugins.side); at its
 // foot illi's to-do list, which, longer than the room, pushes the rest up
 // (its head stays); with none, a faint hint for the keys (HINT), if it
 // fits
@@ -78,12 +86,13 @@ export function term_side_drawn(t: Term, w: number, tall: number): { items: Item
   const bg    = term_side_background(t, w);
   const mcp   = term_side_mcp(t);
   const nos   = term_side_refused(t);
+  const rel   = term_side_related(t, w);
   const todo  = term_side_todo(t, w);
   const keys  = [[[Paint.Run(HINT, Paint.DIM)], null] as Item];
   const gap   = [[], null] as Item;
   const fill  = (n: number) => Array.from({ length: n }, (): Item => [[], null]);
   const plan  = term_side_plan(t, w);
-  const top   = [...term_side_beside([head("Agents"), ...mains], (room, whole) => term_side_sticky(t, room, whole), w), gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...(bg.length === 0 ? [] : [...bg, gap]), ...term_side_profiles(t), ...(plan.length === 0 ? [] : [...plan, gap]), head("Chat"), ...term_side_use(t, w), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp]), ...(nos.length === 0 ? [] : [gap, head("Refused", () => term_permissions(t)), ...nos]), ...term_side_plugins(w)];
+  const top   = [...term_side_beside([head("Agents"), ...mains], (room, whole) => term_side_sticky(t, room, whole), w), gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...(bg.length === 0 ? [] : [...bg, gap]), ...term_side_profiles(t), ...(plan.length === 0 ? [] : [...plan, gap]), head("Chat"), ...term_side_use(t, w), ...(rel.length === 0 ? [] : [gap, ...rel]), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp]), ...(nos.length === 0 ? [] : [gap, head("Refused", () => term_permissions(t)), ...nos]), ...term_side_plugins(w)];
   const foot  = todo.length === 0 ? keys : todo;
   const room  = tall - top.length - foot.length;
   const items = room > 0 ? [...top, ...fill(room), ...foot]
@@ -129,6 +138,34 @@ function term_side_background(t: Term, w: number): Item[] {
   };
   const more  = jobs.length - shown.length;
   return [[[Paint.Run("Background", { ...Paint.INK, b: true })], open], ...shown.map(line), ...(more > 0 ? [[[Paint.Run("… " + more + " more", Paint.DIM)], open] as Item] : [])];
+}
+
+// the radar's lines (Related.ts), w wide (none: nothing): its head (a
+// click lists them: Enter opens, Tab pins, Del dismisses), then a line
+// each: how long ago its episode ended (dim, the ages aligned), its
+// summary cut to fit at a word's end, and at the line's end its id
+// (dim), where that leaves the summary SUMMARY columns; a click on a
+// line opens it at full detail, one on its id pins it (Item's aside)
+function term_side_related(t: Term, w: number): Item[] {
+  const shown = related_shown(t);
+  if (shown.length === 0) {
+    return [];
+  }
+  const ages = shown.map(related_age);
+  const wide = Math.max(...ages.map((a) => Paint.text_width(a)));
+  const line = (s: Shown, k: number): Item => {
+    const age  = wide === 0 ? "" : ages[k] + " ".repeat(wide - Paint.text_width(ages[k]) + 2);
+    const id   = View.block_name(s.first, s.n);
+    const room = w - Paint.text_width(age) - 2 - Paint.text_width(id);
+    const open = () => related_open(t, s);
+    if (room < SUMMARY) {
+      return [[Paint.Run(age, Paint.DIM), Paint.Run(related_cut(related_text(s), w - Paint.text_width(age)))], open];
+    }
+    const text = related_cut(related_text(s), room);
+    const pad  = w - Paint.text_width(age) - Paint.text_width(text) - Paint.text_width(id);
+    return [[Paint.Run(age, Paint.DIM), Paint.Run(text), Paint.Run(" ".repeat(pad)), Paint.Run(id, Paint.DIM)], open, { col: w - Paint.text_width(id), run: () => related_pin(t, s) }];
+  };
+  return [[[Paint.Run("Related", { ...Paint.INK, b: true })], () => related_list(t)], ...shown.map(line)];
 }
 
 // a text cut to w columns, an ellipsis ending it if cut

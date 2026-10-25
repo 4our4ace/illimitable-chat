@@ -25,6 +25,7 @@ import { term_profile_pick } from "./ProfileCommands.ts";
 import { question_kept, question_laid, question_of, question_shown } from "./Question.ts";
 import { DEFAULT } from "../config/Profiles.ts";
 import { Projects } from "../chat/Projects.ts";
+import { related_list, related_shown } from "./Related.ts";
 import * as Screen from "../ui/Screen.ts";
 import { term_area, term_light, term_under } from "./Select.ts";
 import { term_side, term_side_drawn, term_side_width, term_tokens } from "./Side.ts";
@@ -232,7 +233,7 @@ export function term_paint(t: Term): void {
   const sided = term_area(t, { key: "side", lines: sides.map((s) => s[0]), first: 0, row: 1, col: left > 0 ? 1 : at + 2, w: sw, tall: sides.length });
   const lit   = { ...Paint.INK, c: Draw.draw_tokens().accent };
   const toast = box !== null ? [] : [...lead, Paint.Run(" ".repeat(Math.max(1, left + cw - Paint.line_width(lead) - Paint.text_width(said.toast)))), Paint.Run(said.toast, lit)];
-  const lines = [...above, toast, term_rule(t, iw, ruled, asked?.rule), ...input.lines, ...(paned ? [] : [Paint.rule(iw)]), ...status, Paint.tabs_line(t.v, iw, side === 0, jobs)];
+  const lines = [...above, toast, term_rule(t, iw, ruled, asked?.rule), ...input.lines, ...(paned ? [] : [Paint.rule(iw)]), ...status, Paint.tabs_line(t.v, iw, side === 0, jobs, side === 0 ? related_shown(t).length : 0)];
   const foot  = term_area(t, { key: "foot", lines, first: 0, row: 1 + tall, col: MARGIN, w: iw, tall: lines.length });
   const head  = term_area(t, { key: "head", lines: [term_head(t, full)], first: 0, row: 0, col: 0, w: full, tall: 1 });
   const rows  = ROWS;
@@ -710,10 +711,12 @@ function term_found(text: string, about: string, at: number[], ink: Paint.Ink): 
 
 // the pages' line at screen row `row`, w wide (all of them, or the one
 // shown alone: the side lists them), then the profile's name, if shown,
-// the background jobs' count (jobs: shown) and the mode at its end: a
-// click on a page shows it, on the name opens the profiles, on the count
-// /background, on the mode /mode. The right end's first: a click takes
-// the first hit, and tabs too many for the line run under it
+// the related lines' count (all: the side doesn't show), the background
+// jobs' count (jobs: shown) and the mode at its end: a click on a page
+// shows it, on the name opens the profiles, on the related count lists
+// them, on the jobs' /background, on the mode /mode. The right end's
+// first: a click takes the first hit, and tabs too many for the line run
+// under it
 function term_tabs(t: Term, row: number, all: boolean, w: number, jobs: boolean): void {
   const mw = Paint.line_width(Paint.tabs_mode(t.v, w));
   if (mw > 0) {
@@ -723,6 +726,11 @@ function term_tabs(t: Term, row: number, all: boolean, w: number, jobs: boolean)
   if (bw > 0) {
     const end = MARGIN + w - mw - (mw > 0 ? 3 : 0);
     term_hit(t, row, end - bw, end, () => term_background(t));
+  }
+  const rw = Paint.line_width(Paint.tabs_related(all ? related_shown(t).length : 0, w));
+  if (rw > 0) {
+    const end = MARGIN + w - mw - (mw > 0 ? 3 : 0) - bw - (bw > 0 ? 3 : 0);
+    term_hit(t, row, end - rw, end, () => related_list(t));
   }
   let col = MARGIN;
   for (const tab of View.view_tabs(t.v).filter((tab) => all || tab.here)) {

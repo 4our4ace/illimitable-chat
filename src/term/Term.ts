@@ -60,6 +60,7 @@ import * as Paint from "../ui/Paint.ts";
 import { term_restart } from "./ProfileCommands.ts";
 import * as Profiles from "../config/Profiles.ts";
 import { Projects } from "../chat/Projects.ts";
+import { related_hear } from "./Related.ts";
 import { Remote } from "../chat/Remote.ts";
 import { status_hear, status_new, status_set, type Status } from "./Status.ts";
 import { Run } from "../config/Run.ts";
@@ -498,7 +499,7 @@ export function term_send(t: Term, msg: View.Client, sent?: View.Sent, ok?: stri
 }
 
 // a message of the chat: to the view (all but a stream's piece changes
-// its rows), then to the screen, or a pipe
+// its rows) and the radar (Related.ts), then to the screen, or a pipe
 function term_hear(t: Term, msg: View.Server): void {
   const first = msg.$ === "view" && t.v.parts.length === 0;
   const was   = t.v.page;
@@ -510,6 +511,7 @@ function term_hear(t: Term, msg: View.Server): void {
   t.dropped = t.v.suggest === "" ? "" : t.dropped;
   term_went(t, was);
   term_subs(t);
+  related_hear(t, msg);
   if (t.v.agent !== agent) {
     term_primaries(t);
   }

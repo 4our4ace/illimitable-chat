@@ -16,6 +16,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import type { Ask, Found } from "./Radar.ts";
 import { HOME, Store, type Cut, type Place, type Store as File } from "./Store.ts";
 
 // Constants
@@ -38,9 +39,11 @@ const SEEK = /\$bunfs|~BUN/.test(import.meta.path) ? "./chat/Seeker.ts" : new UR
 // =======
 
 // the thread searches run in (Seeker.ts), started at the first (null:
-// none yet, or it failed), and the searches asked of it, by number
+// none yet, or it failed), and the searches asked of it, by number: what
+// takes each one's answer, or its failure, and how one the thread can't
+// run is run here (null: it isn't: the radar's)
 let SEEKER: Worker | null = null;
-const ASKED = new Map<number, { store: File; words: string; project: string; done: (text: string) => void; fail: (err: Error) => void }>();
+const ASKED = new Map<number, { done: (out: any) => void; fail: (err: Error) => void; here: (() => unknown) | null }>();
 let ASKS = 0;
 
 // Projects
@@ -100,12 +103,26 @@ export namespace Projects {
   // connections to the files, so however long it takes the screen goes
   // on; one the thread can't run is run here
   export function seek(store: File, words: string, project = ""): Promise<string> {
+    return Projects.thread({ $: "search", file: store.file, words, scope: project }, () => Projects.search(store, words, project));
+  }
+
+  // the radar's search (Radar.search) of a project's file in the thread:
+  // the lines found. Never run here: the thread failing, it fails, and
+  // the screen goes on without it
+  export function radar(file: string, ask: Ask): Promise<Found[]> {
+    return Projects.thread({ $: "radar", file, ask }, null);
+  }
+
+  // a message to the thread (Seeker.ts), started at the first, answered
+  // by its `out`; one the thread can't run is run here (here; null:
+  // failed)
+  export function thread<T>(msg: object, here: (() => T) | null): Promise<T> {
     return new Promise((done, fail) => {
       const id = ++ASKS;
-      ASKED.set(id, { store, words, project, done, fail });
+      ASKED.set(id, { done, fail, here });
       try {
         SEEKER ??= Projects.seeker();
-        SEEKER.postMessage({ id, file: store.file, words, scope: project });
+        SEEKER.postMessage({ id, ...msg });
       } catch {
         Projects.here(id);
       }
@@ -116,10 +133,10 @@ export namespace Projects {
   // searches asked of it run here, and the next search starts another
   export function seeker(): Worker {
     const worker = new Worker(SEEK, { ref: false });
-    worker.onmessage = (e: MessageEvent<{ id: number; text?: string; error?: string }>) => {
+    worker.onmessage = (e: MessageEvent<{ id: number; out?: unknown; error?: string }>) => {
       const ask = ASKED.get(e.data.id);
       ASKED.delete(e.data.id);
-      e.data.text === undefined ? ask?.fail(new Error(e.data.error)) : ask?.done(e.data.text);
+      e.data.error !== undefined ? ask?.fail(new Error(e.data.error)) : ask?.done(e.data.out);
     };
     worker.onerror = () => {
       worker.terminate();
@@ -131,8 +148,8 @@ export namespace Projects {
     return worker;
   }
 
-  // an ask the thread couldn't run, run here (one answered already:
-  // nothing)
+  // an ask the thread couldn't run, run here, or failed if it isn't run
+  // here (one answered already: nothing)
   export function here(id: number): void {
     const ask = ASKED.get(id);
     if (ask === undefined) {
@@ -140,7 +157,10 @@ export namespace Projects {
     }
     ASKED.delete(id);
     try {
-      ask.done(Projects.search(ask.store, ask.words, ask.project));
+      if (ask.here === null) {
+        throw new Error("the search thread failed");
+      }
+      ask.done(ask.here());
     } catch (err: any) {
       ask.fail(err);
     }

@@ -6,9 +6,9 @@ Development
                    every list in one popup (Popup.ts), every question at the
                    input (Question.ts), the trust question at the start
                    (Trust.ts), /mode and /permissions (PermCommands.ts), the
-                   status line (Status.ts), the window that owns a terminal
-                   for every profile's illi (Window.ts; their wire, Wire.ts;
-                   a profile's end, Member.ts)
+                   status line (Status.ts), the side's related lines (Related.ts),
+                   the window that owns a terminal for every profile's illi
+                   (Window.ts; their wire, Wire.ts; a profile's end, Member.ts)
     src/ui/        the chat's view, replies drawn from their markdown (its parser,
                    Markdown.ts; the palettes, Palettes.ts; code's languages,
                    Prism.ts), diagrams, the screen and the terminal's modes
@@ -17,8 +17,9 @@ Development
                    the summaries written (Compactor.ts), its SQLite file (Store.ts),
                    its lock (Lock.ts), suggested replies (Suggest.ts), agents' logs
                    (Logs.ts), /export and /tree (Export.ts), projects (Projects.ts)
-                   and their search's thread (Seeker.ts), a second terminal's view
-                   (Remote.ts), the disk
+                   and their search's thread (Seeker.ts), the radar's search of
+                   past topics (Radar.ts), a second terminal's view (Remote.ts),
+                   the disk
     src/ai/        model vendors, the agent loop, picks, token usage
     src/tools/     shell and files, MCP servers, the prompts; the permission
                    checks: bash read as bash reads it (Shell.ts), each call

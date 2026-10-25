@@ -620,6 +620,26 @@ export namespace Store {
     return query(db, `select first, n, text, bm25(${table}) as score from ${table} where ${table} match ? order by score limit ${FOUND}`).all(quote(rare.length > 0 ? rare : terms)) as Array<Line & { score: number }>;
   }
 
+  // the lines the store's chat's index holds (its last rowid: lines are
+  // never deleted)
+  export function indexed(store: Store): number {
+    const table = "find_" + store.chat;
+    return (query(store.db, `select rowid from ${table} order by rowid desc limit 1`).get() as { rowid: number } | null)?.rowid ?? 0;
+  }
+
+  // the lines of the store's chat holding a phrase (its words side by
+  // side), each before message `end` (it and all after left out), `most`
+  // at most: the messages each covers (the radar's: Radar.ts)
+  export function held(store: Store, phrase: string, end: number, most: number): Array<{ first: number; n: number }> {
+    const table = "find_" + store.chat;
+    return query(store.db, `select first, n from ${table} where ${table} match ? and first + n <= ? limit ?`).all('"' + phrase.replace(/"/g, '""') + '"', end, most) as Array<{ first: number; n: number }>;
+  }
+
+  // the date of message i (null: none), its text not read
+  export function date(store: Store, i: number): string | null {
+    return (query(store.db, "select date from msg where chat = ? and i = ?").get(store.chat, i) as { date: string } | null)?.date ?? null;
+  }
+
   // the store's project's chats
   export function chats(store: Store): number[] {
     return (query(store.db, "select id from chat where project = ? order by id").all(store.project) as Array<{ id: number }>).map((c) => c.id);

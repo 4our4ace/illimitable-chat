@@ -886,11 +886,13 @@ export function rule(w: number): Line {
 // brand's; else Draw.draw_agent), the shown bold, then the profile
 // running (tabs_profile), then the pick (the standard speed left out),
 // then the plugins' pieces (Plugins.status), all cut before the right
-// end: the background jobs counted (jobs: the side doesn't show them
-// whole; tabs_background) and the mode (tabs_mode; neither on a line too
-// narrow); with agents, the keys that move along them, if they fit
-export function tabs_line(v: View.View, w: number, all = true, jobs = all): Line {
-  const bg   = tabs_background(v, w, jobs);
+// end: the related lines counted (related: where the side doesn't show
+// them; tabs_related), the background jobs counted (jobs: the side
+// doesn't show them whole; tabs_background) and the mode (tabs_mode; none
+// on a line too narrow); with agents, the keys that move along them, if
+// they fit
+export function tabs_line(v: View.View, w: number, all = true, jobs = all, related = 0): Line {
+  const bg   = [tabs_related(related, w), tabs_background(v, w, jobs)].filter((l) => l.length > 0).flatMap((l, k) => (k === 0 ? l : [Run(" · ", DIM), ...l]));
   const mode = [...bg, ...(bg.length === 0 ? [] : [Run(" · ", DIM)]), ...tabs_mode(v, w)];
   const room = w - line_width(mode);
   const left = tabs_left(v, mode.length === 0 ? w : room - 2, all);
@@ -911,6 +913,12 @@ export function tabs_mode(v: View.View, w: number): Line {
 export function tabs_background(v: View.View, w: number, jobs: boolean): Line {
   const n = v.background.length;
   return !jobs || n === 0 || w < MODE_ROOM ? [] : [Run("● ", { ...INK, c: Draw.draw_tokens().success }), Run(n + " in background", DIM)];
+}
+
+// the radar's lines counted for the last line (Related.ts; none, or a
+// line under MODE_ROOM: nothing): how many, dim
+export function tabs_related(n: number, w: number): Line {
+  return n === 0 || w < MODE_ROOM ? [] : [Run(n + " related", DIM)];
 }
 
 // the last line but the mode, w wide
