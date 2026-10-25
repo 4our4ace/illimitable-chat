@@ -416,8 +416,9 @@ Messages by date
 ----------------
 
 The model's `date` tool goes both ways: `date(id)` reads message id's
-`date`; `date(from, to)` finds the messages of a span of time. The span is
-read in illi's local zone (`When.span`, `src/chat/When.ts`): a date alone as `from` is
+`date`; `date(from, to)` finds the messages of a span of time, and
+`search` takes the same `from` and `to`. The span is read in illi's
+local zone (`When.span`, `src/chat/When.ts`): a date alone as `from` is
 its day's start, as `to` its day's end, a time as `to` the instant the
 span stops before, and `to` left out the end of `from`'s day. Each
 message's `date` is an ISO instant, compared as one (`Date.parse`),
@@ -492,7 +493,7 @@ search the model asks never waits on it.
 
 ```mermaid
 flowchart TD
-  T["model calls search(words, project)"] --> S["Projects.seek: post to the search thread"]
+  T["model calls search(words, project, from, to)"] --> S["Projects.seek: post to the search thread"]
   S --> W["Seeker.ts: open this project's file"]
   W --> P["Projects.search: split words, pick the files"]
   P --> R["Store.search: each file in turn (Store.lines)"]
@@ -517,10 +518,11 @@ with `related` on: a worker takes longer to start than a call's end
 waits on its search), so the side's never queues behind one of
 recall's either: a search can't be cut off, and one whose answer came
 too late still runs to its end (`Projects.thread` posts to any of
-them: each its own worker and its own searches waiting). A
-message is `{ id, file, $: "search", words, scope }`,
-`{ id, file, $: "radar", ask }` or `{ id, file, $: "recall", ask }`,
-answered `{ id, out }` or `{ id, error }`. For each the worker:
+them: each its own worker and its own searches waiting). A message is
+`{ id, file, $: "search", words, scope, span }` (span: the `from` and
+`to` asked, in ms, or null), `{ id, file, $: "radar", ask }` or
+`{ id, file, $: "recall", ask }`, answered `{ id, out }` or
+`{ id, error }`. For each the worker:
 
 1. opens this project's file (`Store.peek`);
 2. runs `Projects.search`, the same code the main thread would run,
@@ -553,7 +555,7 @@ all three workers start from that one entry.
    X: projects lists them.*); `all` means every project's.
 3. Calls `Store.search`, then writes each line as `project first+n|text`,
    its newlines flattened to spaces. With nothing found it says so,
-   naming the scope.
+   naming the scope, and the span if one was asked.
 4. In `all`, if lines were left out (step 4 of `Store.search` keeps 20),
    it adds a last line naming the projects they're in, the most first,
    with how many: *More lines in: app-k3f9x2 (12+), site-7q2m0d (3);
@@ -572,7 +574,9 @@ all three workers start from that one entry.
    Another project's file that won't open (forgotten meanwhile) gives no
    lines; an error in this project's own file is thrown.
 3. **Each chat** gives up to 20 lines from its own index (`Store.seek`),
-   ranked by bm25.
+   ranked by bm25. With a span, each chat's messages in it are found
+   first ([Messages by date](#messages-by-date)), and only lines over
+   those messages alone count.
 4. **Merge.** Sorted by rank within its chat first, then by score: every
    chat's best line, best first; then every chat's second; and so on.
    The first 20 are kept; the rest are counted by project (`cut`), for
@@ -619,6 +623,9 @@ all three workers start from that one entry.
      all. That is the slow case, and it runs in the worker.
 5. **The query.** `select first, n, text, bm25(...) ... where ... match
    ? order by score limit 20`. A lower bm25 score is a better match.
+   With a span `[a, b)`, `and first >= ? and first + n <= ?` joins the
+   `where`, so the best lines in the span are found, not the best of all
+   cut down to it. An empty span asks nothing.
 
 ### What search costs
 

@@ -48,7 +48,7 @@ Tools:
   day)
 - projects() lists the user's projects, each with a chat of its own
 - search(words) finds summary lines holding the words; with project, in that
-  project's chat, or in all ("all")
+  project's chat, or in all ("all"); with from and to, only in that span
 - zoom and date take a project too: its chat's line or message
 
 # Turns

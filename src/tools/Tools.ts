@@ -8,7 +8,8 @@
 // project and the time now). A request dropped (its call stopped) stops
 // its job. zoom and date read the chat, or another project's
 // (Tools.chat_of): date a message's date, or a span of time's lines
-// (Memory.days); projects and search look across them all (Projects.ts).
+// (Memory.days); projects and search look across them all (Projects.ts),
+// search in a span too.
 // An agent (a subagent) has a name and a log (one spawned as a user's
 // subagent: that agent's name, numbered while another so named is at
 // work or of this run, as reviewer-2; else a random one; a name freed
@@ -210,8 +211,8 @@ then, not what is now: zoom it if it helps, else ignore it.
 Each project has its own chat: the git repo illi runs in, or home outside
 any repo; this one is named at the start of each message. projects()
 lists them all; search(words) finds summary lines holding the words,
-with project in that project's chat, or in all ("all"); zoom and date
-take a project too.`;
+with project in that project's chat, or in all ("all"), with from and
+to only in that span; zoom and date take a project too.`;
 
 // an agent's log starts with a note of what it is: SUB_NOTE, the user's
 // agent it runs as, and its effort if not the configured one
@@ -255,7 +256,7 @@ const OWN: Spec[] = [
   spec("zoom", "Open the line id+n of the view into the two lines of n/2 under it; n = 1 gives the message whole. With an agent's name as id, give that agent's whole chat. A long text comes in pages from character at, saying where to go on. With project (its name, from projects), the line, message or agent of that project's chat.", { id: { type: ["integer", "string"] }, n: INT, at: INT, project: STR }, ["id"]),
   spec("date", "The date and time of message id. Or, with from (and to), local times as 2026-10-21 or 2026-10-21 14:00 (no to: that day), the lines of that span. With project, in that project's chat.", { id: INT, from: STR, to: STR, project: STR }, []),
   spec("projects", "The user's projects, each with a chat of its own (a git repo illi ran in, or home: outside any repo), the one used last first: its folder, its first and last day, its messages, its latest summary line. Look here first when the user means work that isn't in your view.", {}, []),
-  spec("search", "Find summary lines holding all the words (else any of them), the best first, as \"project id+n|text\": in this project's chat; with project (its name, from projects), in that one's; with project \"all\", in every one, then the projects with more lines named, to search in. Zoom a line with its project.", { words: STR, project: STR }, ["words"]),
+  spec("search", "Find summary lines holding all the words (else any of them), the best first, as \"project id+n|text\": in this project's chat; with project (its name, from projects), in that one's; with project \"all\", in every one, then the projects with more lines named, to search in. Zoom a line with its project. With from and to (as date's), only lines inside that span.", { words: STR, project: STR, from: STR, to: STR }, ["words"]),
 ];
 const SPAWN = "Start one subagent per task, in parallel, and return their names at once. Each one's report reaches you as a message \"[Name] report\" when it finishes. A subagent sees the view and the user's instructions, but knows what you want only from its task.";
 const EFFORT = { type: "string", enum: EFFORTS, description: "How hard they think. Leave it out to use their agent's effort (or, with none, yours); set it only to override that." };
@@ -637,7 +638,11 @@ export namespace Tools {
         return { text: Projects.table(mem.store), fail: false };
       }
       case "search": {
-        return { text: await Projects.seek(mem.store, String(args.words ?? ""), args.project === undefined ? "" : String(args.project)), fail: false };
+        const span = args.from === undefined && args.to === undefined ? null : When.span(args.from, args.to);
+        if (typeof span === "string") {
+          return { text: span, fail: true };
+        }
+        return { text: await Projects.seek(mem.store, String(args.words ?? ""), args.project === undefined ? "" : String(args.project), span), fail: false };
       }
       case "spawn": {
         const effort = args.effort === undefined ? null : String(args.effort);
