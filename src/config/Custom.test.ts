@@ -3,7 +3,8 @@
 // `bun test Custom.test.ts`. The user's agents and commands: a file's
 // front matter and body (its tools list's Claude Code tools, but those
 // illi gives itself, spawn and todo; the list as YAML writes it too;
-// one empty gives none, one left out all), the project's over the
+// one empty gives none, one left out all; Agent(worker, researcher)
+// whole, spawn held to those agents), the project's over the
 // user's, its mode, a command's arguments; an agent's model as a pick;
 // /agent makes a primary agent the main agent (its model, instructions
 // and tools, Claude Code's too), noted before the next message, each
@@ -127,6 +128,19 @@ test("an empty tools list gives an agent none of illi's tools nor Claude Code's 
   expect(Custom.allow(Custom.profile("bare", DIR + "/lists/bare.md"), [{ name: "zoom" }, { name: "shell" }])).toEqual([]);
 });
 
+test("Agent(worker, researcher) keeps its comma, as Claude Code writes it, in a list of either form: spawn held to those agents; Agent alone, any", () => {
+  put(DIR + "/lists/plain.md", "---\ntools: Agent(worker, Researcher), Read\n---\n");
+  put(DIR + "/lists/dashes.md", "---\ntools:\n  - Task(worker, researcher)\n  - Read\n---\n");
+  put(DIR + "/lists/quoted.md", "---\ntools: [\"Agent(worker, researcher)\", Read]\n---\n");
+  for (const name of ["plain", "dashes", "quoted"]) {
+    const p = Custom.profile(name, DIR + "/lists/" + name + ".md");
+    expect([name, p.tools, p.builtins, p.spawns]).toEqual([name, ["spawn", "read"], ["Read"], ["worker", "researcher"]]);
+  }
+  put(DIR + "/lists/any.md", "---\ntools: Agent(worker), Agent, Bash(git *)\n---\n");
+  const any = Custom.profile("any", DIR + "/lists/any.md");
+  expect([any.tools, any.builtins, any.spawns]).toEqual([["spawn", "Bash(git *)"], [], null]);
+});
+
 test("an agent's mode: primary, a subagent, or both", () => {
   expect(Custom.primaries(CWD).map((a) => a.name)).toEqual(["bad", "coder", "planner", "reviewer"]);
   expect(Custom.subagents(CWD).map((a) => a.name)).toEqual(["bad", "coder", "reviewer", "scout"]);
@@ -214,6 +228,22 @@ test("spawn's agent runs a subagent as it, and names the user's agents", async (
   chat.tools.agents.delete(name);
   expect(Tools.agent(chat.tools, name)!.role).toEqual({ $: "sub", effort: null, agent: "reviewer" });
   await until(() => !chat.busy);
+});
+
+test("a main agent whose tools list holds spawn to some agents is offered those alone, and spawn refuses another or a plain subagent", async () => {
+  put(CWD + "/.illi/agents/lead.md", "---\ndescription: Leads\nmode: primary\ntools: Agent(reviewer, Scout), zoom\n---\nYou lead.");
+  try {
+    expect(Chat.main(chat, "lead")).toEqual({});
+    const spawn = Tools.list(chat.tools, "main").find((t) => t.name === "spawn")!;
+    expect([JSON.stringify(spawn.schema).includes("reviewer (Reviews)"), JSON.stringify(spawn.schema).includes("scout (Scouts)"), JSON.stringify(spawn.schema).includes("coder"), (spawn.schema as any).required]).toEqual([true, true, false, ["tasks", "agent"]]);
+    const other = await Tools.call(chat.tools, "main", "spawn", { tasks: ["x"], agent: "coder" }, new AbortController().signal);
+    expect(other).toMatchObject({ fail: true, text: "coder isn't one this agent may spawn; name one of: reviewer, scout." });
+    const plain = await Tools.call(chat.tools, "main", "spawn", { tasks: ["x"] }, new AbortController().signal);
+    expect(plain).toMatchObject({ fail: true, text: "A plain subagent isn't one this agent may spawn; name one of: reviewer, scout." });
+  } finally {
+    Chat.main(chat, null);
+    fs.rmSync(CWD + "/.illi/agents/lead.md", { force: true });
+  }
 });
 
 test("a subagent on a ChatGPT model whose window isn't told starts on no guess: spawn says why, no model asked; its view, if asked, its opening and last block alone", async () => {

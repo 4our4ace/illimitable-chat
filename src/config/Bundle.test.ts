@@ -11,7 +11,8 @@
 // user's by name, a later plugin's over an earlier's, the one hidden
 // listed as plugin:name, which names a winner too; its bodies get its
 // folder; a Claude Code agent's tools and model are read as illi's
-// (Claude Code's own tools kept as named, for claude-code).
+// (Claude Code's own tools kept as named, for claude-code), and it
+// answers to plugin:name in another's Agent(...) too.
 // Its hooks run before the user's, its file's disableAllHooks ignored,
 // its folder and the project's in their environment, a Bash matcher
 // taking illi's shell, its own MCP servers' names as illi gives them;
@@ -149,6 +150,7 @@ test("a Claude Code agent's tools and model, read as illi's: its own MCP servers
   const reviewer = Custom.agent(REPO, "reviewer")!;
   expect([reviewer.tools, reviewer.plugin]).toEqual([["read", "shell", "mcp__docs__search"], "kit"]);
   expect(reviewer.builtins).toEqual(["Read", "Grep", "Bash"]);
+  expect(Custom.called(reviewer)).toEqual(["reviewer", "kit:reviewer"]);
   const base = { vendor: "claude-api" as const, model: "opus-5.5", effort: "high", speed: "slow" };
   const pick = Custom.pick(reviewer, base, config.OFFER) as { vendor: string; model: string };
   expect([pick.vendor, pick.model.startsWith("sonnet-")]).toEqual(["claude-api", true]);

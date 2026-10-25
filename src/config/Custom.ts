@@ -78,7 +78,9 @@ export type Mode = "primary" | "subagent" | "all";
 // color (#rrggbb; null: one made for it), its instructions, its file, its
 // plugin (null: the user's own), what to know of it (a tool it lost), the
 // Claude Code built-in tools it may use on claude-code (null: it has no
-// tools list, so all; a list naming none of them: none)
+// tools list, so all; a list naming none of them: none), the subagents it
+// may spawn, by name (null: any; Claude Code's Agent(worker, researcher):
+// those alone)
 export type Profile = {
   name        : string;
   description : string;
@@ -92,6 +94,7 @@ export type Profile = {
   plugin?     : string | null;
   notes?      : string[];
   builtins?   : string[] | null;
+  spawns?     : string[] | null;
 };
 
 // a command: its name (as listed), what it does, its message, its file,
@@ -129,6 +132,10 @@ const YES = /^\s*(true|yes|on)\s*$/i;
 // the newest of it offered (inherit: the pick's)
 const CLAUDE_TOOLS = new Map([["Read", "read"], ["Write", "write"], ["Edit", "edit"], ["MultiEdit", "edit"], ["Bash", "shell"], ["Agent", "spawn"], ["Task", "spawn"], ["TodoWrite", "todo"], ["TaskCreate", "todo"], ["TaskUpdate", "todo"], ["TaskList", "todo"], ["TaskGet", "todo"]]);
 const CLAUDE_SEARCH = ["Glob", "Grep", "LS"];
+
+// Claude Code's subagents' tool held to some of the user's agents, by
+// name: Agent(worker, researcher), or Task(...), its old name
+const SPAWNS = /^(Agent|Task)\((.*)\)$/s;
 const CLAUDE_STRONG = ["Bash", "Write", "Edit", "MultiEdit", "shell", "write", "edit"];
 
 // illi's tools in an agent's tools list as Claude Code's built-in ones,
@@ -303,13 +310,15 @@ export namespace Custom {
   // (a plugin's own MCP servers, as mcp__plugin_<plugin>_<server>, as
   // illi names them), and the Claude Code built-in tools it gives
   // (agent_builtins); a search it can't do said. The list as YAML writes
-  // it too: in [ ], each name quoted or not (a `- name` list: parse).
+  // it too: in [ ], each name quoted or not (a `- name` list: parse);
+  // a comma inside ( ) is the entry's own, as in Agent(worker,
+  // researcher), which reads as spawn held to those agents (spawns).
   // One empty (tools: with no value, "" or []) gives none of illi's tools
   // nor of Claude Code's built-in ones, as Claude Code reads an empty
   // list; only one left out gives all
   export function profile(name: string, file: string, plugin: Bundle | null = null): Profile {
     const { head, body } = safe_read(file);
-    const list = head.tools?.replace(/^\[|\]$/g, "").split(",").map((t) => unquote(t.trim())).filter(Boolean);
+    const list = head.tools === undefined ? undefined : tools_split(head.tools.replace(/^\[|\]$/g, "")).map(unquote).filter(Boolean);
     const mode = (head.mode ?? "").toLowerCase() as Mode;
     const tools = list === undefined ? null : agent_tools(list, plugin?.name ?? null);
     const lost = list !== undefined && list.some((t) => CLAUDE_SEARCH.includes(t)) && !list.some((t) => CLAUDE_STRONG.includes(t));
@@ -326,6 +335,7 @@ export namespace Custom {
       plugin      : plugin?.name ?? null,
       notes       : lost ? ["its tools name Claude Code's searches (Glob, Grep, LS), which illi does with shell; it names no Bash, Write or Edit, so it gets no shell"] : [],
       builtins    : list === undefined ? null : agent_builtins(list),
+      spawns      : list === undefined ? null : agent_spawns(list),
     };
   }
 
@@ -392,6 +402,14 @@ export namespace Custom {
     return profile === null || profile.body === "" ? "" : "\n\n# Agent: " + profile.name + "\n\n" + profile.body;
   }
 
+  // the names an agent answers to in another's Agent(...), in lower case:
+  // its name as listed, and a plugin's as plugin:name too, as Claude Code
+  // names a plugin's agents
+  export function called(profile: Profile): string[] {
+    const own = profile.plugin == null ? null : profile.plugin + ":" + profile.name.slice(profile.name.indexOf(":") + 1);
+    return [...new Set([profile.name, ...(own === null ? [] : [own])].map((n) => n.toLowerCase()))];
+  }
+
   // the tools of a role its agent may use: each named, or each under a
   // name (mcp__github: all of that server's; mcp: every server's)
   export function allow<T extends { name: string }>(profile: Profile | null, tools: T[]): T[] {
@@ -426,13 +444,48 @@ function safe_read(file: string): { head: Record<string, string>; body: string }
 }
 
 // an agent's tools list with Claude Code's names as illi's: each as
-// CLAUDE_TOOLS says, its searches as shell where it may have it, its
-// plugin's own MCP servers as illi names them; any other as written
+// CLAUDE_TOOLS says (Agent(...) as Agent), its searches as shell where it
+// may have it, its plugin's own MCP servers as illi names them; any other
+// as written (Bash(git *) too: it names no tool of illi's)
 function agent_tools(list: string[], plugin: string | null): string[] {
   const strong = list.some((t) => CLAUDE_STRONG.includes(t));
   const own = plugin === null ? null : "mcp__plugin_" + plugin + "_";
-  const out = list.flatMap((t) => (CLAUDE_TOOLS.has(t) ? [CLAUDE_TOOLS.get(t)!] : CLAUDE_SEARCH.includes(t) ? (strong ? ["shell"] : []) : own !== null && t.startsWith(own) ? ["mcp__" + t.slice(own.length)] : [t]));
+  const out = list.map(claude_name).flatMap((t) => (CLAUDE_TOOLS.has(t) ? [CLAUDE_TOOLS.get(t)!] : CLAUDE_SEARCH.includes(t) ? (strong ? ["shell"] : []) : own !== null && t.startsWith(own) ? ["mcp__" + t.slice(own.length)] : [t]));
   return [...new Set(out)];
+}
+
+// the subagents an agent's tools list lets it spawn, by name, in lower
+// case: those its Agent(...) entries name, as Claude Code holds an agent
+// run as the main one to them; null: any (Agent alone, or none of them,
+// so no spawn at all)
+function agent_spawns(list: string[]): string[] | null {
+  const held = list.map((t) => SPAWNS.exec(t));
+  if (list.some((t) => t === "Agent" || t === "Task") || held.every((m) => m === null)) {
+    return null;
+  }
+  return [...new Set(held.flatMap((m) => (m === null ? [] : tools_split(m[2]).map((n) => unquote(n).toLowerCase()).filter(Boolean))))];
+}
+
+// a tools list's text split at its commas, but those inside ( ), each
+// entry trimmed
+function tools_split(text: string): string[] {
+  const out = [""];
+  let depth = 0;
+  for (const c of text) {
+    depth += c === "(" ? 1 : c === ")" && depth > 0 ? -1 : 0;
+    if (c === "," && depth === 0) {
+      out.push("");
+    } else {
+      out[out.length - 1] += c;
+    }
+  }
+  return out.map((t) => t.trim());
+}
+
+// a tools list's entry as Claude Code's tool name: Agent(...) and
+// Task(...) as Agent and Task; any other as written
+function claude_name(entry: string): string {
+  return SPAWNS.exec(entry)?.[1] ?? entry;
 }
 
 // the Claude Code built-in tools an agent's tools list gives on
@@ -448,7 +501,7 @@ function agent_tools(list: string[], plugin: string | null): string[] {
 // list). --tools reaches only Claude Code's built-in tools: its own MCP
 // servers and plugins stay
 function agent_builtins(list: string[]): string[] {
-  const out = list.map((t) => {
+  const out = list.map(claude_name).map((t) => {
     const own = CLAUDE_TOOLS.get(t) ?? t;
     return CLAUDE_OWN.get(own) ?? (own === t && /^[A-Z][A-Za-z]*$/.test(t) ? t : null);
   });

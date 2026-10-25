@@ -373,12 +373,14 @@ function skill_files(dir: string): string[] {
 }
 
 // the master's tools: spawn, with the user's subagents to run tasks as,
-// if any; tell; todo
-function boss(cwd: string): Spec[] {
-  const agents = Custom.subagents(cwd).map((a) => a.name + (a.description === "" ? "" : " (" + a.description + ")"));
-  const agent = { type: "string", description: "The user's agent to run each task as, by name, with its own instructions, model and tools: " + agents.join("; ") + ". None: a plain subagent." };
+// if any (only: those its agent may spawn, one of which it must name;
+// null: any, or none for a plain subagent); tell; todo
+function boss(cwd: string, only: string[] | null = null): Spec[] {
+  const subs = Custom.subagents(cwd).filter((a) => only === null || Custom.called(a).some((n) => only.includes(n)));
+  const agents = subs.map((a) => a.name + (a.description === "" ? "" : " (" + a.description + ")"));
+  const agent = { type: "string", description: "The user's agent to run each task as, by name, with its own instructions, model and tools: " + agents.join("; ") + (only === null ? ". None: a plain subagent." : ". Name one of them: no other is allowed.") };
   const fields = agents.length === 0 ? { tasks: { type: "array", items: STR }, effort: EFFORT } : { tasks: { type: "array", items: STR }, agent, effort: EFFORT };
-  return [spec("spawn", SPAWN, fields, ["tasks"]), TELL, TODO, ASK];
+  return [spec("spawn", SPAWN, fields, only === null || agents.length === 0 ? ["tasks"] : ["tasks", "agent"]), TELL, TODO, ASK];
 }
 
 // Tools
@@ -564,7 +566,8 @@ export namespace Tools {
     const here = lean ? [] : TOOLS;
     const asks = lean ? [APPROVE] : [];
     if (who === MAIN) {
-      return [...Custom.allow(Custom.agent(tools.cwd, tools.hooks.main()), [...OWN, ...boss(tools.cwd), ...here, ...user]), ...asks];
+      const lead = Custom.agent(tools.cwd, tools.hooks.main());
+      return [...Custom.allow(lead, [...OWN, ...boss(tools.cwd, lead?.spawns ?? null), ...here, ...user]), ...asks];
     }
     return [...Custom.allow(Custom.agent(tools.cwd, tools.agents.get(who)?.role.agent ?? null), [...OWN, ...here, ...user]), ...asks];
   }
@@ -631,6 +634,12 @@ export namespace Tools {
           const names = Custom.subagents(tools.cwd).map((a) => a.name).join(", ") || "none";
           const what  = profile === null ? "No agent " + agent : agent + " is a primary agent, never spawned";
           return { text: what + "; the user's subagents: " + names + ".", fail: true };
+        }
+        // the main agent's tools list may hold spawn to some agents
+        // (Agent(worker, researcher)): another, or none, is refused
+        const only = who === MAIN ? (Custom.agent(tools.cwd, tools.hooks.main())?.spawns ?? null) : null;
+        if (only !== null && (profile === null || !Custom.called(profile).some((n) => only.includes(n)))) {
+          return { text: (profile === null ? "A plain subagent" : profile.name) + " isn't one this agent may spawn; name one of: " + (only.join(", ") || "none") + ".", fail: true };
         }
         return { text: await Tools.spawn(tools, (args.tasks ?? []).map(String), { $: "sub", effort, agent: profile?.name ?? null }), fail: false };
       }
