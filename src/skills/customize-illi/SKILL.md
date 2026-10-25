@@ -155,9 +155,10 @@ one:
   is always asked: offer the rule, and let the user say yes
 - side: right, left or off; side_width: "25%" or columns; jobs: summaries
   built at once
-- related: on or off, past topics that may be related to the work, in
-  the side panel while illi works (a local search of the chat's
-  summaries; nothing of it goes to the model)
+- related: on, screen or off, past topics that may be related to the
+  work, in the side panel while illi works (a local search of the chat's
+  summaries); on also gives you a strong match as one <history> line
+  after a tool's result, screen keeps it to the side panel
 - accent: the color everything on the screen is themed in, at once: auto
   (the theme's; illi's aqua by default), illi, blue, magenta, cyan,
   green, yellow, red, a palette index or #rrggbb. For "make it orange",

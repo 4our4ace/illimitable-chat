@@ -317,23 +317,51 @@ step (your message, each round of tool results, the turn's end) and
 shows past topics that may be related in the side panel's Related
 section: up to 4 lines, each how long ago it ended, its summary and its
 id (`#1234+16`: the 16 messages from #1234). It reads the chat's own
-index of its summaries, on a thread of its own: no model call, and
-nothing of it is sent to illi. What illi already sees in detail (the
-recent messages, and those its view holds one by one) is left out, and
-so is what you dismissed. The list holds still while you read it: a new
-line joins at its foot, and a line leaves only once it has gone
-unmatched for a while, or for one far stronger, one at a time (one you
-opened or pinned stays till your next message, then goes the same way).
+index of its summaries, on a thread of its own: no model call. What
+illi already sees in detail (the recent messages, and those its view
+holds one by one) is left out, and so is what you dismissed. The list
+holds still while you read it: a new line joins at its foot, and a line
+leaves only once it has gone unmatched for a while, or for one far
+stronger, one at a time (one you opened or pinned stays till your next
+message, then goes the same way).
 
 - A click on a line opens it at full detail: its messages whole, in a
   pane over the chat (Esc closes it).
 - A click on its id pins it: the id goes into your message, naming that
   episode; illi can zoom it.
 - A click on the head lists them: Enter opens one, Tab pins its id, Del
-  dismisses it (until illi quits).
+  dismisses it (until illi quits; illi isn't given it either).
 
 Without the side panel, the bottom line counts them (`3 related`, a
-click lists them). The `related` setting turns it off.
+click lists them).
+
+Only strong matches reach illi itself, and each one only once. As
+each of its tool calls runs (a command, a file read or changed, an MCP
+or plugin tool; a subagent's too), the same search runs beside it. A
+line it finds is added after the call's result, as one line, only if:
+
+- it matched a path or an error's name, with something else besides;
+- it scored high enough;
+- nothing illi holds in full already names it (a pin, a zoom, a line
+  given before).
+
+The line is `<history>#1234+16 · 3d ago · its summary</history>`, for
+illi to zoom if it helps. You never see that line in the result's box:
+the Related lines are where you see what was found. At most one goes
+with a round of tool calls. It never makes a call slower: if the search
+hasn't answered a few milliseconds after the tool is done, nothing is
+added. A line you dismissed is never given.
+
+How high is high enough starts strict and then follows you. Once you
+have opened or pinned 20 lines that matched a path or an error, the bar
+moves to where the lowest quarter of those lines scored, never below a
+floor. The memory tools (zoom, search, date) and illi's own steps
+(todo, a subagent started or told) never get a line. On the
+`claude-code` provider, Claude Code runs its own files and shell, so
+only the MCP and plugin tools illi serves it get one.
+
+The `related` setting is `on` (the side, and the strong lines given to
+illi), `screen` (the side only) or `off`.
 
 Mouse and side panel
 --------------------

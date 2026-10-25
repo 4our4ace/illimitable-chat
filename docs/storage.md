@@ -182,6 +182,7 @@ note, illi going on.
 | **A look at other projects**: the projects list, a zoom or date into another project, an export of one, the image count before a forget | read-write to that project's file, opened for the read and closed right after | each time | `Store.visit` → `Store.peek` |
 | **The search thread** (`Seeker.ts`) | its own connections, to each file a search covers, each closed after | each `search` the model calls | `Projects.seek` |
 | **The radar's thread** (`Seeker.ts`, a second worker) | its own connection to this project's file, closed after each search | after each step of a turn, with `related` on | `Projects.radar` |
+| **Recall's thread** (`Seeker.ts`, a third worker) | its own connection to this project's file, closed after each search | as a tool call runs, one at a time, with `related` on | `Projects.recall` |
 | **A profile export** | read-write to each file, for a snapshot | `/profile` export | `Profiles.ts profile_snapshot` |
 
 Other projects' files are opened read-write even just to read, because
@@ -416,8 +417,9 @@ Search
 The model's `search` tool finds summary lines by their words, in this
 project, in another one by name, or in `all`. Every line ever written can
 be found, however old: nothing is capped by age. The radar (the side
-panel's Related lines, [below](#the-radar)) reads the same index, in a
-thread of its own, so a search the model asks never waits on it.
+panel's Related lines, and the strong ones given to the model,
+[below](#the-radar)) reads the same index, in threads of its own, so a
+search the model asks never waits on it.
 
 ```mermaid
 flowchart TD
@@ -440,17 +442,22 @@ flowchart TD
 (`src/chat/Seeker.ts`), started at the first search and never keeping
 illi from quitting (`ref: false`). `Projects.radar` sends the radar's to
 a second worker of the same module, started at the radar's first, so a
-search the model asks never queues behind one of the radar's
-(`Projects.thread` posts to either: each its own worker and its own
-searches waiting). A message is
-`{ id, file, $: "search", words, scope }` or `{ id, file, $: "radar", ask }`,
+search the model asks never queues behind one of the radar's, and
+`Projects.recall` sends recall's to a third, so the side's never queues
+behind one of recall's either: a search can't be cut off, and one whose
+answer came too late still runs to its end (`Projects.thread` posts to
+any of them: each its own worker and its own searches waiting). A
+message is `{ id, file, $: "search", words, scope }`,
+`{ id, file, $: "radar", ask }` or `{ id, file, $: "recall", ask }`,
 answered `{ id, out }` or `{ id, error }`. For each the worker:
 
 1. opens this project's file (`Store.peek`);
 2. runs `Projects.search`, the same code the main thread would run,
    which opens every other file the search covers and closes each after
-   (the radar's: `Radar.search`, on this file alone);
-3. sends back the text (the radar's lines), or the error;
+   (the radar's: `Radar.search`; recall's: `Radar.recall`; both on this
+   file alone);
+3. sends back the text (the radar's lines, recall's line or none), or
+   the error;
 4. closes its connection (`Store.close`, so it really closes at once).
 
 The main thread never waits: during a 2.9 s search on a 2-million-line
@@ -458,12 +465,13 @@ chat it kept drawing the screen (its longest gap was 14 ms). If the
 worker can't start, or a message can't be posted, the search runs on the
 main thread instead (`Projects.here`). If a worker dies, every search
 still waiting on it runs on the main thread, and that thread's next
-search starts a new worker; the other worker goes on. The radar's never
-runs on the main thread: it fails, and the side shows nothing new till
-the next step. In the compiled binary, the workers' code is a second
+search starts a new worker; the other workers go on. The radar's and
+recall's never run on the main thread: they fail, and the side shows
+nothing new till the next step, or the call's result goes without a
+line. In the compiled binary, the workers' code is a second
 entry of the build (`src/chat/Seeker.ts` in `package.json`'s `build`,
 `install.sh` and the release workflow), found at `./chat/Seeker.ts`:
-both workers start from that one entry.
+all three workers start from that one entry.
 
 ### Projects.search
 
@@ -613,6 +621,66 @@ model's `search` waits on it: a search the model asked during the worst
 case above took 1.5 ms at 20,000 messages and 1.8 ms at 200,000, as it
 does alone (when the two shared a worker, it waited 86 ms and 196 ms).
 
+### Recall: the strong lines given to the model
+
+As a tool call of illi's runs, the chat searches the same index for it
+(`src/chat/Recall.ts`; the search, `Radar.recall`), so the model gets a
+strong match without asking. It starts beside the call's run, past the
+hooks and the permission checks, on recall's own worker, one at a time
+(a call that starts meanwhile gets none). In one read transaction, on
+that worker's connection:
+
+1. **The run**, read from the file: the caller's latest user message,
+   then its latest 16 messages after it (the chat's agent's from `msg`,
+   a subagent's from its log in `work`), then the call itself, as it will
+   be logged. Its units are made as the radar's are.
+2. **The search** is the radar's (above), with what the caller's view
+   leaves out:
+   - the chat's agent: the view's lines before its cut, those at message
+     detail left out, and its recent messages from the cut on;
+   - a subagent: the lines of the view it was given, those at message
+     detail left out;
+   - and, for both, what the user dismissed at the side (sent to the
+     chat over the view's pipe: `Chat.dismiss`, kept till illi quits).
+3. **Strong only**: a line matching a path or an error's name, of two
+   units at least, scoring at least the bar:
+   - `STRONG` (15: three times the side's floor);
+   - then, once 20 such lines were opened or pinned at the side, where
+     the lowest quarter of them starts in `related.json` (up or down,
+     never under 10). It is read again at most once a minute.
+4. **Not named already**: `select text from msg where chat = ? and i >= ?
+   and (text glob '*#[0-9]*' or text glob '*[0-9]+[0-9]*|*')` over the
+   recent messages (a subagent's whole log, from `work`), each read for
+   `#1234+16`, `#1234` and `1234+16|`. A line overlapping one named
+   there is skipped: a pin, a line given before, a zoom's or a search's
+   output. Nothing is kept beside the chat, so this holds across
+   restarts.
+
+The best line left is appended to the call's result as one line,
+`\n\n<history>#1234+16 · 3d ago · its summary</history>`, after what the
+hooks added. It is appended only when:
+
+- the search answered within 5 ms of the tool ending (else nothing, and
+  the call is no slower);
+- no other call of the same round of tool calls got one (`Chat.on`
+  counts each caller's rounds);
+- the result holds no images;
+- the line would not push it onto a page of its own.
+
+It is logged with the result, as the model read it, so the next call's
+cache holds. It is never read as part of the result: `history_bare`
+(`Clip.ts`) takes that exact line off a result's end wherever one is
+read.
+
+- `Memory.source` gives a result's leaf without it, so the line is never
+  summarized, indexed in `find_<chat>`, or found again as if it had
+  happened.
+- The radar's query and its failure check, how a call ended (an exit
+  code at the result's end), a result's lines as drawn, and their counts
+  all read the result without it.
+
+The screen never shows it.
+
 Forgetting a project
 --------------------
 
@@ -718,8 +786,9 @@ Related counts
 
 `~/.illi/related.json` counts what happened to the radar's lines
 (`Related.ts related_count`), so the score a line must reach to count as
-a strong match can be set from where the lines you opened score. It
-holds counts and scores alone: no text, no id, no project.
+a strong match is set from where the lines you opened and pinned score
+(`Radar.bar`, read by recall: [above](#recall-the-strong-lines-given-to-the-model)).
+It holds counts and scores alone: no text, no id, no project.
 
 ```json
 {
