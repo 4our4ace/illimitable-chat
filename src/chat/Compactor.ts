@@ -30,15 +30,24 @@ const TRIES = 5;
 const SCALE = "-".repeat(NODE);
 
 // what a compactor puts before its line though the prompt asks for none:
-// a label naming the job ("Merged line:", "Compacted line for msgs
-// 32-35:", "Line (under 512 bytes):"), or a line's head as the view
-// shows one ("<line>0+2|", "0+2|"); a word that only starts the line
-// ("line 42: the bug", "user: ...") is none
-const LABEL = /^(?:(?:merged|compressed|compacted|combined)\b[^:\n]{0,60}|(?:one\s+)?(?:line|summary)(?:\s*\([^)\n]*\))?):\s*|^(?:<line>\s*)?\d+\+\d+\|\s*/i;
+// a label naming the job ("Merged:", "Merged line:", "Compacted line for
+// msgs 32-35:", "Compacted msgs 80-87:", "Line (under 512 bytes):"), or a
+// line's head as the view shows one ("<line>", "0+2|"); the job's verb
+// only with what it made (a line, a summary, messages) or a bracket, so
+// a line that starts with what happened keeps it ("Merged PR #12 into
+// main: ...", "Combined the configs: ..."), as one that only starts with
+// a word ("line 42: the bug", "user: ...")
+const LABEL = /^(?:(?:merged|compressed|compacted|combined)(?:\s+(?:lines?|summary|msgs?|messages?|nodes?)\b[^:\n]{0,40}|\s*\([^)\n]*\))?|(?:one\s+)?(?:line|summary)(?:\s*\([^)\n]*\))?):\s*|^<line>\s*|^\d+\+\d+\|\s*/i;
 
 // an answer that declines the job in words ("I can't write the merged
-// line..."): no line, though one came back
-const REFUSAL = /^(?:i\s+(?:can(?:no|'|’)?t|am\s+unable|'m\s+unable|won(?:'|’)t)|sorry\b|unable\s+to\b)/i;
+// line...", "I'm sorry, but..."): no line, though one came back, unless
+// its input opens so too (Compactor.declined)
+const REFUSAL = /^(?:i\s+(?:can(?:no|['’])?t|am\s+(?:unable|not\s+able)|won['’]t)|i['’]m\s+(?:unable|not\s+able|sorry)|(?:i\s+am\s+)?sorry\b|unable\s+to\b)/i;
+
+// how many of an answer's first words, found in its input, make it the
+// input's own words, not a refusal ("I can't log" of "user: I can't log
+// in to the box")
+const QUOTED = 3;
 
 // the note a try after such an answer adds
 const AGAIN = `Your last answer for this <input> was no line. Write the line itself:
@@ -126,29 +135,31 @@ export namespace Compactor {
   // tries at most, the shortest line kept. Each try sends those blocks,
   // never a try's words or thoughts; one after a line too long adds only
   // its size and where the limit cuts it (`over`), one after an answer
-  // declining in words (REFUSAL: never kept as a line) says to write the
-  // line (AGAIN): never more than the first and that note. No line (a
-  // refusal, the vendor's or in words: its input's doing; or too long
-  // for the compactor's window): its source clipped; a try cut (a stop)
-  // throws, unless a line came
+  // that is no line (declining in words: Compactor.declined; or a label
+  // alone, nothing left once bare) says to write the line (AGAIN): never
+  // more than the first and that note. No line (a refusal, the vendor's
+  // or in words: its input's doing; or too long for the compactor's
+  // window): its source clipped; a try cut (a stop) throws, unless a line
+  // came
   export async function build(mem: Memory, l: number, i: number, text: string): Promise<void> {
     const task = { text: Compactor.task(l, i) + text + "\n</input>", mark: false };
     const upto = Math.min(Memory.ctx(l, i), Memory.first(mem));
     const blocks = [...Memory.view(mem, upto, mem.seen.parts), task];
     const lines: string[] = [];
-    let [tries, declined] = [1, false];
+    let tries = 1;
+    let none: string | null = null;
     let end = await Compactor.compact(mem, l, i, Compactor.ask(mem, blocks));
     while (end.ok && end.text.trim() !== "") {
       const said = Compactor.bare(end.text.trim());
       const line = Compactor.tagged(l, text, said);
-      declined = REFUSAL.test(said);
-      if (!declined) {
+      none = said === "" ? "an empty line" : Compactor.declined(said, text) ? "it declined in words" : null;
+      if (none === null) {
         lines.push(line);
       }
-      if ((!declined && Memory.bytes(line) <= NODE) || tries === TRIES || mem.done) {
+      if ((none === null && Memory.bytes(line) <= NODE) || tries === TRIES || mem.done) {
         break;
       }
-      const note = { text: declined ? AGAIN : Compactor.over(line), mark: false };
+      const note = { text: none !== null ? AGAIN : Compactor.over(line), mark: false };
       tries += 1;
       end = await Compactor.compact(mem, l, i, Compactor.ask(mem, [...blocks, note]));
     }
@@ -156,7 +167,7 @@ export namespace Compactor {
       throw new Error(end.text);
     }
     if (lines.length === 0) {
-      console.error("compactor: node " + l + "/" + i + ": " + (!end.ok ? end.text : declined ? "it declined in words" : "an empty line") + "; clipped");
+      console.error("compactor: node " + l + "/" + i + ": " + (!end.ok ? end.text : none ?? "an empty line") + "; clipped");
     }
     const line = lines.length === 0 ? Compactor.clip(Memory.flat(text)) : lines.reduce((a, b) => (Memory.bytes(b) < Memory.bytes(a) ? b : a));
     Memory.keep(mem, [{ l, i, text: line }]);
@@ -172,6 +183,20 @@ export namespace Compactor {
       line = line.replace(LABEL, "").replace(/\s*<\/line>\s*$/i, "").trim();
     }
     return line;
+  }
+
+  // whether an answer (bare) declines the job in words (REFUSAL) rather
+  // than compresses an input that opens so: its first QUOTED words, run
+  // together in the input as well, are the input's own ("I can't log in
+  // to the box" of "user: I can't log in..."), so a line that keeps them
+  // is kept. Case, curly quotes and the marks between words aside
+  export function declined(said: string, input: string): boolean {
+    if (!REFUSAL.test(said)) {
+      return false;
+    }
+    const words = (s: string) => s.toLowerCase().replace(/[‘’]/g, "'").split(/[^\p{L}\p{N}']+/u).filter((w) => w !== "");
+    const head  = words(said).slice(0, QUOTED).join(" ");
+    return !(" " + words(input).join(" ") + " ").includes(" " + head + " ");
   }
 
   // a leaf's line starting with its message's kind, as the task asks
