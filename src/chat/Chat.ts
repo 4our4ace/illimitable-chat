@@ -579,8 +579,8 @@ export namespace Chat {
     const told = context.length === 0 ? [] : [{ text: context.join("\n\n") + "\n\n", mark: false }];
     const blocks = [...view, Tools.here(chat.tools, chat.pick.vendor), ...told, Tools.at_work(chat.tools), { text: HEAD + text, mark: true }];
     const window  = Pick.window(chat.pick);
-    const builtins = Custom.agent(chat.tools.cwd, chat.mem.agent)?.builtins;
-    const ask     = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server, blocks, imgs, keep: true, builtins, room: window === undefined ? undefined : Math.round(window * (Pick.room(chat.pick) ?? config.ROOM)) };
+    const agent   = Custom.agent(chat.tools.cwd, chat.mem.agent);
+    const ask     = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server, blocks, imgs, keep: true, builtins: agent?.builtins, listed: agent?.tools, room: window === undefined ? undefined : Math.round(window * (Pick.room(chat.pick) ?? config.ROOM)) };
     const carried = { model: chat.pick.vendor + ":" + chat.pick.model, tokens: Math.round(Memory.fill(mem) / TOKEN) };
     chat.model = chat.pick.model;
     chat.asked = true;
