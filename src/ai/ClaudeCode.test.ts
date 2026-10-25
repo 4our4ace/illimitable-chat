@@ -10,7 +10,9 @@
 // of Claude Code's; a message sent mid-run is taken as it is echoed, one
 // sent after the end is left; a plan's limit, a missing login, a chat
 // too long and a crash end it in plain words; a stop cuts it; a missing
-// CLI says to install it.
+// CLI says to install it. A rate limit event's 5-hour and weekly windows
+// are the Claude plan's use (each its share used and reset, kept till
+// told again; a model's own window left out).
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";

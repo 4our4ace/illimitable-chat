@@ -84,18 +84,19 @@ const KILL = 5e3;
 
 // what a failure says: a plan's limit, a login missing, a busy service
 const LIMIT = /usage limit|limit reached|rate.?limit|\b429\b/i;
+const LOGIN = /not logged in|please run \/login|invalid api key|authentication|oauth token|\b401\b/i;
+const BUSY  = /overloaded|\b529\b|\b5\d\d\b|unavailable|timed? ?out|ECONN|network/i;
 
 // the plan's windows a rate limit event tells the share used of
-// (unifiedWindows), by their length in minutes, as a ChatGPT plan's show
-// (5 hours, a week); any other (one model's own week) left out
+// (unifiedWindows: its utilization a fraction, 1 the whole), by their
+// length in minutes, as a ChatGPT plan's show (5 hours, a week); any
+// other (one model's own week) left out
 const WINDOWS: Record<string, number> = { five_hour: 300, seven_day: 10080 };
 
 // the plan's windows as last told, each its share used (%) and when it
-// starts anew: the side shows them (ClaudeCode.told). One Claude Code
-// login a machine, so one record
+// starts anew: the side shows them (ClaudeCode.told; one past its reset
+// as 0%). One Claude Code login a machine, so one record
 let limits: Limit[] = [];
-const LOGIN = /not logged in|please run \/login|invalid api key|authentication|oauth token|\b401\b/i;
-const BUSY  = /overloaded|\b529\b|\b5\d\d\b|unavailable|timed? ?out|ECONN|network/i;
 
 const NO_CLAUDE = "Claude Code isn't installed here: install it (code.claude.com), log in with claude, then send a message";
 const NO_LOGIN  = "Claude Code isn't logged in: run claude in a terminal, log in there (/login), then send a message";

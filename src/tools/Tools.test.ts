@@ -8,8 +8,10 @@
 // back; one all done is let go (as a turn starts and ends, and at the
 // start), one still going kept. What the views are told
 // of the calls: the input the main agent's last request read. A caller in
-// Claude Code gets only the tools it lacks (?lean), and prompts that say
-// it works inside illi, the project's CLAUDE.md left to Claude Code. Its
+// Claude Code gets only the tools it lacks (?lean), its permission prompt
+// whatever tools its agent lists (no other caller ever gets it), and
+// prompts that say it works inside illi, the project's CLAUDE.md left to
+// Claude Code. Its
 // permission prompt, and illi's own shell, files and MCP tools, pass the
 // checks (Guard.ts; careful mode, in a throwaway repository): a
 // risk asked with why, the question given the command whole up to 32,000

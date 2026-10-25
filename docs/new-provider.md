@@ -184,7 +184,8 @@ plan's name.
   answer for the account it was asked for, and drop one that comes back
   after a change of account.
 - Keep it current from each response's headers where the vendor sends
-  them (`heard`).
+  them (`heard`), or, for a runner, from what its stream tells
+  (claude-code's rate limit events: `ClaudeCode.windows`).
 - A limit used up must say which one and when it resets
   (`ChatGPT.spent`), through `Agent.spent`.
 

@@ -69,8 +69,9 @@ export type Wait = string;
 // streams)
 export type Doing = { verb: string; tokens: number; rate: number };
 
-// a plan's rate limit, as its last response told it (ChatGPT.ts): its
-// window (minutes), the share of it used (%), when it starts anew (ms)
+// a plan's rate limit, as its last response told it (ChatGPT.ts,
+// ClaudeCode.ts): its window (minutes), the share of it used (%), when it
+// starts anew (ms)
 export type Limit = { window: number; used: number; reset: number };
 
 // how full the chat a turn sends is (tokens), the most it holds before
@@ -84,9 +85,10 @@ export type Fill = { used: number; cap: number; window: number; set: string; own
 // (the /model gauge's, whatever the chat's model's window)
 export type Compacts = { global: string; sets: Record<string, string> };
 
-// a plan, as its vendor tells it (ChatGPT.ts told): whose it is
-// (ChatGPT), which one (plus, pro…; "": not known), its limits (none:
-// not told, and the side shows no plan)
+// a plan, as its vendor tells it (ChatGPT.ts, ClaudeCode.ts told): whose
+// it is (ChatGPT, Claude), which one (plus, pro…; "": not known, as
+// Claude's always is), its limits (none: not told, and the side shows no
+// plan)
 export type Plan = { brand: string; tier: string; limits: Limit[] };
 
 // what the main agent's calls use: the plan of the vendor picked (null:
