@@ -458,8 +458,27 @@ test("a click inside a chip (an image's, a paste's) puts the cursor at its neare
   expect([6, 7, 10, 11, 15, 16].map((c) => chips.at(0, c))).toEqual([4, 4, 4, 14, 14, 14]);
   expect([24, 33, 34, 47].map((c) => chips.at(0, c))).toEqual([19, 19, 45, 45]);
   const wrapped = clicked("ab [Pasted text #2 +12 lines]", 12);
-  expect(wrapped.rows).toEqual(["> ab [Pasted", "   text #2 +", "  12 lines]"]);
-  expect([wrapped.at(0, 4), wrapped.at(0, 12), wrapped.at(1, 10), wrapped.at(2, 11)]).toEqual([2, 3, 29, 29]);
+  expect(wrapped.rows).toEqual(["> ab ", "  [Pasted te", "  xt #2 +12 ", "  lines]"]);
+  expect([wrapped.at(0, 4), wrapped.at(0, 12), wrapped.at(1, 10), wrapped.at(2, 11), wrapped.at(3, 8)]).toEqual([2, 3, 3, 29, 29]);
+});
+
+test("the input wraps between words: one that would cross the edge starts the next row whole, the space before it left behind (hung past a full row, unshown, the cursor before it there); a chip is one word; a word wider than a row starts one and breaks at any character, as text with no spaces does", () => {
+  expect(clicked("hello n", 10).rows).toEqual(["> hello n"]);
+  expect(clicked("hello not", 10).rows).toEqual(["> hello ", "  not"]);
+  const hung = clicked("abcd efg", 6, 10, 4);
+  expect([hung.rows, hung.spot]).toEqual([["> abcd", "  efg"], { row: 0, col: 6 }]);
+  expect([clicked("abcd efg", 6, 10, 5).spot, clicked("abcd ", 6).spot]).toEqual([{ row: 1, col: 2 }, { row: 1, col: 2 }]);
+  expect([hung.at(0, 9), hung.at(1, 2)]).toEqual([5, 5]);
+  expect(clicked("abcd  efg", 6).rows).toEqual(["> abcd", "   efg", "  "]);
+  expect(clicked("see [Image #1]", 14).rows).toEqual(["> see ", "  [Image #1]"]);
+  expect(clicked("ab cdefgh", 6).rows).toEqual(["> ab ", "  cdef", "  gh"]);
+  expect(clicked("世界世界世", 6).rows).toEqual(["> 世界", "  世界", "  世"]);
+  const ed = Screen.ed_new();
+  Screen.ed_set(ed, "abcd efg");
+  ed.w = 4;
+  ed.pos = 6;
+  Screen.ed_key(ed, "Up");
+  expect(ed.pos).toBe(1);
 });
 
 test("a click on an input a column wide, where a wide character leaves its first row empty, lands on the next row's place, on the mark too", () => {

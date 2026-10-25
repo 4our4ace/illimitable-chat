@@ -1000,15 +1000,24 @@ function ed_layout(ed: Ed): Laid {
   return (ed.laid = { text: ed.text, w: ed.w, rows, lines, wraps });
 }
 
-// a line's rows, wrapped at w columns (a character at a time), and each
-// place of the cursor (before each character, and the end: the last
-// line's on a row of its own once its last row is full); each character
-// cleaned and measured once (sized: those measured)
+// a line's rows, wrapped at w columns between words, and each place of
+// the cursor (before each character, and the end: the last line's on a
+// row of its own once its last row is full). A word that would cross
+// the edge starts the next row whole, the space before it left at the
+// end of its row; a space that finds its row full hangs past the edge,
+// unshown, as in a textarea (the row then full: what follows starts the
+// next, a second space too); a chip (a paste's token, an image's) is
+// one word, its spaces none to break at; a word wider than a row, at
+// any character. Each character cleaned and measured once (sized: those
+// measured); cuts: where each character starts in its row's text
 function ed_wrap(text: string, w: number, last: boolean, sized: Map<string, [string, number]>): Wrap {
   const rows = [""];
   const places: Place[] = [];
-  let col = 0;
-  let pos = 0;
+  const cuts: number[] = [];
+  const chips = [...text.matchAll(TOKEN)].map((m) => [m.index!, m.index! + m[0].length]);
+  let [col, pos] = [0, 0];
+  let word = -1;
+  let [gap, hung] = [false, false];
   for (const g of Paint.text_graphemes(text)) {
     let shown = sized.get(g);
     if (shown === undefined) {
@@ -1016,16 +1025,39 @@ function ed_wrap(text: string, w: number, last: boolean, sized: Map<string, [str
       sized.set(g, (shown = [x, Paint.text_width(x)]));
     }
     const [x, cw] = shown;
-    if (col + cw > w) {
-      rows.push("");
-      col = 0;
+    const space = /^\s+$/.test(g) && !chips.some(([a, b]) => a < pos && pos < b);
+    if (space && !hung && col + cw > w) {
+      places.push({ pos, row: rows.length - 1, col });
+      cuts.push(rows[rows.length - 1].length);
+      [pos, col, word, gap, hung] = [pos + g.length, w, -1, true, true];
+      continue;
+    }
+    word = !space && gap ? places.length : word;
+    if (col + cw > w || hung) {
+      const r    = rows.length - 1;
+      const from = word >= 0 && word < places.length ? places[word].col : col;
+      if (!space && word >= 0 && col - from + cw <= w) {
+        const cut = word < places.length ? cuts[word] : rows[r].length;
+        rows.push(rows[r].slice(cut));
+        rows[r] = rows[r].slice(0, cut);
+        for (let k = word; k < places.length; k++) {
+          [places[k], cuts[k]] = [{ ...places[k], row: r + 1, col: places[k].col - from }, cuts[k] - cut];
+        }
+        col -= from;
+      } else {
+        rows.push("");
+        col = 0;
+      }
+      [word, hung] = [-1, false];
     }
     places.push({ pos, row: rows.length - 1, col });
+    cuts.push(rows[rows.length - 1].length);
     pos += g.length;
     rows[rows.length - 1] += x;
     col += cw;
+    gap = space;
   }
-  if (last && col >= w) {
+  if ((last || hung) && col >= w) {
     rows.push("");
     col = 0;
   }
