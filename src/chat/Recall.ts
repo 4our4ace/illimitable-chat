@@ -7,9 +7,10 @@
 // nor the model's own searches ever wait on it): its caller's run since
 // the user's last message (the chat's agent's, or a subagent's log) with
 // the call itself the newest of it, over the chat's summary lines, what
-// the caller's view holds at message detail and its recent messages left
-// out, and what the user dismissed at the side (tools.gone: Chat.dismiss,
-// from any view). A line found is given only if strong (Radar.strong:
+// the caller's view holds at an episode's detail or finer (its lines of
+// Radar EPISODE messages or fewer: a line found there would say no more
+// than they do) and its recent messages left out, and what the user
+// dismissed at the side (tools.gone: Chat.dismiss, from any view). A line found is given only if strong (Radar.strong:
 // anchored by a path or an error's name, two units at least, its score
 // past the bar: Radar.bar, STRONG, then where the lines the user opened
 // and pinned sit, read from related.json), and named nowhere in what the
@@ -41,7 +42,7 @@ import * as config from "../config/Config.ts";
 import { MAIN } from "./Logs.ts";
 import { Memory } from "./Memory.ts";
 import { Projects } from "./Projects.ts";
-import { Radar, type Found, type Recall as Ask } from "./Radar.ts";
+import { EPISODE, Radar, type Found, type Recall as Ask } from "./Radar.ts";
 import { clip_pages, history_block, json_object } from "../tools/Clip.ts";
 import type { Tools } from "../tools/Tools.ts";
 import { block_name, FAILED } from "../ui/View.ts";
@@ -112,25 +113,26 @@ export namespace Recall {
 
   // what a call's search asks (null: its caller not known): its call as it
   // will be logged; what its caller's view leaves out and what it holds
-  // whole: the chat's agent's view's lines before its cut, those at
-  // message detail left out, and its recent messages from the cut on
+  // whole: the chat's agent's view's lines before its cut, those of
+  // EPISODE messages or fewer left out (what the view says of them is as
+  // fine as a line found there), and its recent messages from the cut on
   // (Memory.turn); a subagent's view's lines as it was spawned or told
-  // (its log is its own, never in the chat's lines), those at message
-  // detail left out, the chat after them not searched. The dismissed
-  // left out of both
+  // (its log is its own, never in the chat's lines), those of EPISODE
+  // messages or fewer left out, the chat after them not searched. The
+  // dismissed left out of both
   export function ask(tools: Tools, who: string, name: string, input: unknown): Ask | null {
     const mem  = tools.mem;
     const call = name + " " + JSON.stringify(input ?? {});
     if (who === MAIN) {
       const lines = Memory.before(mem.view.parts, mem.cut).map((p): [number, number] => [Memory.span(p)[0], 2 ** p.l]);
-      const { end, out } = Radar.left([...lines, [mem.cut, Math.max(1, mem.count - mem.cut)]], mem.cut, tools.gone);
+      const { end, out } = Radar.left([...lines, [mem.cut, Math.max(1, mem.count - mem.cut)]], mem.cut, tools.gone, EPISODE);
       return { chat: mem.store.chat, log: null, call, end, out, from: mem.cut, bar: Recall.bar() };
     }
     const agent = tools.agents.get(who);
     if (agent === undefined) {
       return null;
     }
-    const { end, out } = Radar.left(Recall.parts(agent.view), Infinity, tools.gone);
+    const { end, out } = Radar.left(Recall.parts(agent.view), Infinity, tools.gone, EPISODE);
     return { chat: mem.store.chat, log: agent.log ?? who, call, end, out, from: 0, bar: Recall.bar() };
   }
 

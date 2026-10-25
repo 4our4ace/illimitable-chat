@@ -50,7 +50,10 @@
 // units it holds), two units at least, its score the bar's at least
 // (Radar.bar: STRONG, then where the lines the user opened and pinned at
 // the side score). Only such a line goes to the model, and only one
-// nothing it holds whole names yet (Radar.named).
+// nothing it holds whole names yet (Radar.named), nor one its view holds
+// at an episode's detail or finer (its lines of EPISODE messages or
+// fewer left out too, as those at message detail: Radar.left `fine`; a
+// line found there would tell it no more than its view does).
 //
 // Kept still while read (Radar.merge): a line found again keeps its
 // place, its score the new one; one not found fades; new lines join at
@@ -127,7 +130,7 @@ const LINES  = 4000;
 // the most messages a line covers, as widened; the episodes looked into
 // whole, by the units they hold; the lines a search gives; the least
 // score a line shows at
-const EPISODE = 16;
+export const EPISODE = 16;
 const LOOKED  = 24;
 const FOUND   = 8;
 const FLOOR   = 5;
@@ -439,12 +442,13 @@ export namespace Radar {
 
   // what a view leaves out, from its parts ([id, n]) and its turn (the
   // first message shown whole; Infinity: none yet): each message at
-  // message detail (n 1) or from the turn on, and the spans dismissed,
-  // as the first message left out with all after it (end: the count, if
-  // none) and the rest, [a, b) each
-  export function left(parts: Array<[number, number]>, turn: number, gone: Array<[number, number]>): { end: number; out: Array<[number, number]> } {
+  // message detail (n 1; `fine`, each part of that many messages or
+  // fewer: recall's, Recall.ask) or from the turn on, and the spans
+  // dismissed, as the first message left out with all after it (end: the
+  // count, if none) and the rest, [a, b) each
+  export function left(parts: Array<[number, number]>, turn: number, gone: Array<[number, number]>, fine = 1): { end: number; out: Array<[number, number]> } {
     const count  = parts.reduce((m, [id, n]) => Math.max(m, id + n), 0);
-    const ranges = [...parts.filter(([id, n]) => n === 1 || id >= turn).map(([id, n]): [number, number] => [id, id + n]), ...(turn < count ? [[turn, count] as [number, number]] : []), ...gone].sort((a, b) => a[0] - b[0]);
+    const ranges = [...parts.filter(([id, n]) => n <= fine || id >= turn).map(([id, n]): [number, number] => [id, id + n]), ...(turn < count ? [[turn, count] as [number, number]] : []), ...gone].sort((a, b) => a[0] - b[0]);
     const out: Array<[number, number]> = [];
     for (const [a, b] of ranges) {
       const last = out[out.length - 1];

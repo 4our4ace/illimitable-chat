@@ -7,8 +7,9 @@
 // never under its floor; words alone and counts that won't read change
 // nothing). A line the caller holds whole already (its id as the side
 // pins it and recall gives it, or as a zoom or a search wrote it) is
-// never given again, #16 never naming #160; a subagent's run and what it
-// holds are its log. illi's own memory and meta tools never start a
+// never given again, #16 never naming #160, nor one its view holds at an
+// episode's detail or finer; a subagent's run and what it holds are its
+// log. illi's own memory and meta tools never start a
 // search. Never slower: a search not answered a few ms after the tool is
 // done gives no line and keeps the call no longer; one search at a time;
 // one line a step, a step's calls sharing it. A line the user dismissed
@@ -243,6 +244,34 @@ test("a subagent's run is its log, from its task on; what it holds whole is its 
   expect(peek((store) => Radar.recall(store, asked))).toBeNull();
   expect(Recall.ask(tools, "Nobody", "shell", {})).toBeNull();
   tools.agents.delete("Ada");
+});
+
+test("a line the caller's view holds at an episode's detail or finer is never given: its view says as much; one it holds coarser is", () => {
+  const was = mem.view.parts;
+  const tile = (parts: Array<{ l: number; i: number }>) => [...parts, ...Memory.roots(START, parts.reduce((m, p) => Math.max(m, Memory.span(p)[1]), 0))];
+  const line = () => peek((store) => Radar.recall(store, recall()));
+  try {
+    // the episode in two lines of 8: what the side's search leaves out
+    // (message detail alone) finds the view's own line, never given
+    mem.view.parts = tile([{ l: 8, i: 0 }, { l: 3, i: 32 }, { l: 3, i: 33 }]);
+    const side = Radar.left(Memory.before(mem.view.parts, START).map((p): [number, number] => [Memory.span(p)[0], 2 ** p.l]), START, []);
+    expect(peek((store) => Radar.recall(store, { ...recall(), ...side }))).toMatchObject({ first: EPISODE, n: 8 });
+    expect(recall().out.some(([a, b]) => a <= EPISODE && b >= EPISODE + 16)).toBe(true);
+    expect(line()?.first ?? -1).not.toBe(EPISODE);
+    // as one line of 16, the same
+    mem.view.parts = tile([{ l: 8, i: 0 }, { l: 4, i: 16 }]);
+    expect(line()?.first ?? -1).not.toBe(EPISODE);
+    // inside a line of 512: given
+    mem.view.parts = tile([{ l: 9, i: 0 }]);
+    expect(line()).toMatchObject({ first: EPISODE, n: 16 });
+  } finally {
+    mem.view.parts = was;
+  }
+  // a subagent's view alike
+  const view = [{ text: "<chat>\n256+8|user: the search thread dies\n264+8|illi: Store.wal\n272+16|x\n</chat>\n", mark: true }];
+  tools.agents.set("Cy", { name: "Cy", run: 0, log: "Cy.t1", role: { $: "sub", effort: null, agent: null }, call: null, live: [], calls: {}, stop: false, view, replies: [] });
+  expect(Recall.ask(tools, "Cy", "shell", { command: "ls" })!.end).toBe(EPISODE);
+  tools.agents.delete("Cy");
 });
 
 // When
