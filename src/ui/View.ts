@@ -690,7 +690,8 @@ type Did = { key: string; call: Call.Call | null; echo: string | null; row: Row;
 // the user's words), the thoughts before it (those after the run's last
 // item, after that one); a report, a result after no call, the thoughts
 // of a run of no other item, an item each. Each opens as its rows whole
-// (row_whole; a failed result alone, FAILED kept: row_alone)
+// (row_whole; a failed result after its call, FAILED left out:
+// row_marked)
 function act_items(v: View, rows: Row[], after: Row | undefined): Did[] {
   const own   = rows.flatMap((r) => (r.$ === "Box" ? r.rows : [r]));
   const flat  = [...own, ...(after === undefined ? [] : after.$ === "Box" ? after.rows : [after])];
@@ -707,7 +708,7 @@ function act_items(v: View, rows: Row[], after: Row | undefined): Did[] {
     }
     const lead = call === null ? [] : minds;
     const mine = [r, ...ends].flatMap((x) => row_whole(v, x));
-    out.push({ key: "c" + row_name(r), call, echo, row: r, rows: [...lead, ...(call === null ? mine.map(row_alone) : mine)], names: [...lead, r, ...ends].map(row_name) });
+    out.push({ key: "c" + row_name(r), call, echo, row: r, rows: [...lead, ...(call === null ? mine : mine.map(row_marked))], names: [...lead, r, ...ends].map(row_name) });
     minds = call === null ? minds : [];
     k += ends.length;
   }
@@ -720,18 +721,19 @@ function act_items(v: View, rows: Row[], after: Row | undefined): Did[] {
   return out;
 }
 
-// a failed result standing alone, no call before it to mark it failed:
-// its lines with FAILED kept (entry_body leaves it out for the mark),
-// made once a row (KEPT); any other row as it is
-const KEPT = new WeakMap<Row, Row>();
+// a failed result opened under its call, whose mark says it failed: its
+// lines without FAILED, made once a row (MARKED); any other row as it
+// is. Drawn anywhere with no mark (a result with no call, a pipe, a
+// related block's pane, a block of the chat folded) it keeps FAILED
+const MARKED = new WeakMap<Row, Row>();
 
-function row_alone(r: Row): Row {
+function row_marked(r: Row): Row {
   if (r.$ !== "Msg" || r.kind !== "echo" || !r.text.startsWith(FAILED)) {
     return r;
   }
-  const kept = KEPT.get(r) ?? { ...r, body: Md.md_output(r.text) };
-  KEPT.set(r, kept);
-  return kept;
+  const shed = MARKED.get(r) ?? { ...r, body: Md.md_output(r.text.slice(FAILED.length)) };
+  MARKED.set(r, shed);
+  return shed;
 }
 
 // an item as a run shows it: what it did and how it ended (item_said),
@@ -1315,9 +1317,8 @@ export function entry_answer(kind: Kind, text: string): boolean {
 }
 
 // a person's words (the user's, a report) as typed; a result as a file's
-// lines, a failed one's FAILED left out (its call's mark says so; one
-// with no call gets it back: row_alone); the rest, markdown, draw from
-// their text: Paint.ts
+// lines, a failed one's FAILED kept (only its call's mark leaves it out:
+// row_marked); the rest, markdown, draw from their text: Paint.ts
 function entry_body(kind: Kind, text: string): Md.Block[] {
-  return kind === "echo" ? Md.md_output(text.startsWith(FAILED) ? text.slice(FAILED.length) : text) : Md.md_plain(text);
+  return kind === "echo" ? Md.md_output(text) : Md.md_plain(text);
 }

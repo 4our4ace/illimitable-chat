@@ -5,8 +5,9 @@
 // its items: each call with what it did and how it ended, opened alone
 // by a click or all by the mode, five at most till a click shows all
 // (the newest while it works), a failed result's lines without FAILED
-// after its call, with it standing alone; an agent's page so too, its
-// clicks its own; what streams made anew only as it grows.
+// under its call, with it anywhere else (standing alone, as logged); an
+// agent's page so too, its clicks its own; what streams made anew only
+// as it grows.
 
 import { expect, test } from "bun:test";
 import type { Pick } from "../ai/Pick.ts";
@@ -20,18 +21,20 @@ const thought = (text: string, after: number): View.Row => ({ ...(View.entry_row
 // a run's items, each its key, label, outcome, how it ended, whether open
 const items = (run: View.Row) => (run.$ === "Act" ? run.rows.flatMap((r) => (r.$ === "Item" ? [[r.key, r.label, r.outcome, r.ok, r.open]] : [])) : []);
 
-// a failed result as its lines draw: its FAILED left out (its call's
-// mark says it failed), its text as logged
-test("a failed result's lines leave out FAILED (its call's mark says so); its text keeps it", () => {
+// a failed result as logged, its lines as drawn where no call marks it
+// (printed to a pipe, a related block's pane, a block of the chat
+// folded): FAILED kept, so it still says it failed; one with no words
+// after FAILED still a row
+test("a failed result's lines keep FAILED as logged, drawn where no call marks it; one with nothing after FAILED still shows", () => {
   const [row] = View.entry_rows(3, "echo", View.FAILED + "no such file\n(exit 1 in 0.1 s)") as Array<View.Row & { $: "Msg" }>;
   expect(row.text).toStartWith(View.FAILED);
-  expect(JSON.stringify(row.body)).not.toContain(View.FAILED);
-  expect(JSON.stringify(row.body)).toContain("no such file");
+  expect(JSON.stringify(row.body)).toContain(View.FAILED + "no such file");
+  expect(View.entry_rows(4, "echo", View.FAILED)).toHaveLength(1);
 });
 
 // a failed result standing alone (no call before it, so no mark saying
-// it failed) keeps FAILED in its lines as it opens, made once a row; one
-// after its call leaves it out
+// it failed) keeps FAILED in its lines as it opens, the row as logged;
+// one after its call leaves it out, made once a row
 test("a failed result standing alone keeps FAILED in its lines as it opens; one after its call leaves it out", () => {
   const v    = View.view_new();
   const rows = [
@@ -47,7 +50,8 @@ test("a failed result standing alone keeps FAILED in its lines as it opens; one 
   expect([alone.ok, alone.open, called.ok]).toEqual([null, true, false]);
   expect(body(alone.rows[0])).toContain(View.FAILED + "no such file");
   expect(body(called.rows[1])).not.toContain(View.FAILED);
-  expect(opened()[0].rows[0]).toBe(alone.rows[0]);
+  expect(alone.rows[0]).toBe(rows[1]);
+  expect(opened()[1].rows[1]).toBe(called.rows[1]);
 });
 
 // a turn waiting on its model names the model the server says: the
