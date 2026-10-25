@@ -1001,7 +1001,7 @@ export namespace Chat {
     const fill   = window === undefined ? null : { used: Math.round(Memory.fill(chat.mem) / TOKEN), cap: Chat.cap(chat), window, ...config.config_autocompact_of(chat.pick.model), most: config.config_most(window, beside, Pick.room(chat.pick)) };
     const asks   = chat.asks.map(({ done, ...q }) => q);
     const catalog = Object.fromEntries(config.OFFER.vendors.map((v) => [v, Pick.list(v)]));
-    return { $: "state", busy: chat.busy || chat.checking !== null, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, catalog, ...tools, use: { ...tools.use, fill, compacts: config.config_autocompacts() }, suggest: chat.suggest.on ? chat.suggest.text : "", asks };
+    return { $: "state", busy: chat.busy || chat.checking !== null, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, catalog, ...tools, use: { ...tools.use, fill, compacts: config.config_autocompacts() }, suggest: chat.suggest.on && config.SUGGEST ? chat.suggest.text : "", asks };
   }
 
   // a reply left with no message after it: the hooks hear the user is
@@ -1262,8 +1262,19 @@ export namespace Chat {
       case "dismiss": {
         return Chat.dismiss(chat, msg.part);
       }
+      // config.json written by a terminal's illi (Settings.ts
+      // setting_follow: this one's, or a second terminal's view's): read
+      // again, every key, so a setting changed in any terminal holds for
+      // the chat as one changed in this one's does; a suggested reply let
+      // go while `suggest` is off; the views told. The act keeps the name it had when it told
+      // of `related` alone, so a view and a chat of protocol 3 still agree
+      // (an older chat reads every key on it too)
       case "related": {
         config.config_reread();
+        if (!config.SUGGEST) {
+          Suggest.drop(chat);
+        }
+        Chat.change(chat);
         return {};
       }
       case "autocompact": {

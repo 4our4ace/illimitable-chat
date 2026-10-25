@@ -28,8 +28,10 @@
 // empties the to-do list beside the chat, whatever was said. A view
 // switches this session's mode; a refused request allowed again is told
 // to illi in the user's name, its grants this session's; a grant goes.
-// A radar's line a view dismissed reaches the chat, kept once; `related`
-// set at a view is read again by the chat's illi.
+// A radar's line a view dismissed reaches the chat, kept once; a setting
+// written at a view, whatever its key, is read again by the chat's illi
+// (`related`, `sticky`, `off`, `suggest`: a suggested reply let go while
+// off), the views told.
 // The loop guard counts within a turn (an agent's run too). A
 // message passes the plugins' and hooks' checks (kept back, told more;
 // slow ones waited on in the views' sight, a stop sending it back); their
@@ -148,26 +150,34 @@ test("a radar's line dismissed at a view's side reaches the chat over the pipe, 
   chat.tools.gone.length = 0;
 });
 
-test("related set at a view reaches the chat's illi at once: what another process wrote in config.json is read again", async () => {
+test("a setting written at a view reaches the chat's illi at once, whatever its key: what another process wrote in config.json is read again, the views told", async () => {
   const v = View.view_new();
   View.link_open(v, Chat.link(chat, (msg) => View.view_hear(v, msg).forEach((out) => View.link_send(v, out))));
   await until(() => v.up);
   const file = config.DIR + "/config.json";
   const was  = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
+  const on   = chat.suggest.on;
   try {
+    chat.suggest.on = true;
+    chat.suggest.text = chat.mem.suggest = "Commit it";
+    Chat.change(chat);
+    await until(() => v.suggest === "Commit it");
     // a second terminal's /settings writes the file in its own process
-    fs.writeFileSync(file, JSON.stringify({ ...(was === null ? {} : JSON.parse(was)), related: "screen" }));
-    expect([config.RELATED, config.RECALL]).toEqual([true, true]);
+    fs.writeFileSync(file, JSON.stringify({ ...(was === null ? {} : JSON.parse(was)), related: "screen", sticky: "terse", off: "reviewer", suggest: "off", autocontinue: "off" }));
+    expect([config.RELATED, config.RECALL, config.STICKY, config.OFF, config.SUGGEST, config.AUTOCONTINUE]).toEqual([true, true, [], [], true, true]);
     let said = "";
     View.link_send(v, { $: "related" }, (a) => (said = a.error ?? "ok"));
     await until(() => said !== "");
-    expect([said, config.RELATED, config.RECALL]).toEqual(["ok", true, false]);
+    expect([said, config.RELATED, config.RECALL, config.STICKY, config.OFF, config.SUGGEST, config.AUTOCONTINUE]).toEqual(["ok", true, false, ["terse"], ["reviewer"], false, false]);
+    await until(() => v.suggest === "");
+    expect([chat.suggest.text, chat.mem.suggest]).toEqual(["", ""]);
   } finally {
     was === null ? fs.rmSync(file, { force: true }) : fs.writeFileSync(file, was);
     config.config_reread();
+    chat.suggest.on = on;
     v.ws!.close();
   }
-  expect(config.RECALL).toBe(true);
+  expect([config.RECALL, config.STICKY, config.OFF, config.SUGGEST, config.AUTOCONTINUE]).toEqual([true, [], [], true, true]);
 });
 
 test("a turn's wait names the model it runs on, not one picked since", async () => {

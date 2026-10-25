@@ -10,10 +10,13 @@
 // offered (a file named needn't be there); a key alone opens the picker
 // at it. A pick set while illi's own
 // agent is the main one is the chat's at once: not over a variable, nor
-// into a config.json that won't read. Each
-// setting is in docs/config.md and the customize-illi skill.
+// into a config.json that won't read. A setting written at a view, in
+// any way, is told to the chat's illi once (it reads the file again:
+// Chat.test.ts), the terminal's own of it anew; one only read again is
+// told to no one. Each setting is in docs/config.md and the
+// customize-illi skill.
 
-import { afterAll, expect, test } from "bun:test";
+import { afterAll, afterEach, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 
@@ -28,20 +31,30 @@ delete process.env.ILLI_AFTER;
 delete process.env.ILLI_JOBS;
 
 const config = await import("../config/Config.ts");
+const { Custom } = await import("../config/Custom.ts");
+const { setting_follow } = await import("./Settings.ts");
+const { status_new } = await import("./Status.ts");
 const { term_commands } = await import("./Commands.ts");
 const { term_grab, term_type } = await import("./Keys.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
+afterEach(() => config.config_follow(() => {}));
 
-// a terminal with no screen, its chat on sonnet at medium effort; a
-// paint always due, so none is asked for
+// a terminal with no screen, a second terminal's view (no chat of its
+// own), its chat on sonnet at medium effort, the settings followed as
+// illi's terminal follows them; a paint always due, so none is asked for
 const term = () => {
   const v = View.view_new();
   View.view_hear(v, { $: "state", ...v, vendors: ["claude-api"], pick: { vendor: "claude-api", model: "sonnet-5.5", effort: "medium", speed: "slow" } });
-  return { v, scr: { tty: true, ed: Screen.ed_new() }, side: { place: "right", width: "25%" }, choose: null, question: null, wait: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], due: true } as any;
+  const t = { v, chat: null, scr: { tty: true, ed: Screen.ed_new() }, side: { place: "right", width: "25%" }, status: status_new(), choose: null, question: null, wait: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], due: true } as any;
+  setting_follow(t);
+  return t;
 };
+
+// the acts a terminal sent the chat, by name
+const acts = (t: any) => t.v.out.map((p: any) => p.msg.$);
 
 // a command typed, by its name
 const run = (t: any, name: string, arg = "") => term_commands().find(([use]) => use.split(" ")[0] === name)![3](t, arg);
@@ -150,11 +163,11 @@ test("the pick set while illi's own agent is the main one is the chat's at once;
   try {
     const t = term();
     run(t, "/set", "pick claude-api:haiku-5.5:high:slow");
-    expect(t.v.out.map((p: any) => p.msg.$ === "pick" && p.msg.to)).toEqual([{ vendor: "claude-api", model: "haiku-5.5", effort: "high", speed: "slow" }]);
+    expect(t.v.out.filter((p: any) => p.msg.$ === "pick").map((p: any) => p.msg.to)).toEqual([{ vendor: "claude-api", model: "haiku-5.5", effort: "high", speed: "slow" }]);
     const other = term();
     other.v.agent = "reviewer";
     run(other, "/set", "pick claude-api:opus-5.5:high:slow");
-    expect([file().pick, other.v.out]).toEqual(["claude-api:opus-5.5:high:slow", []]);
+    expect([file().pick, acts(other)]).toEqual(["claude-api:opus-5.5:high:slow", ["related"]]);
     run(other, "/set", "pick default");
   } finally {
     process.env.ILLI_PICK = pick;
@@ -182,6 +195,33 @@ test("/set side: not over a variable, nor into a config.json that won't read", (
     fs.writeFileSync(DIR + "/config.json", kept);
   }
   run(t, "/set", "side right");
+});
+
+test("a setting written at a view, by /settings, a sticky skill or a shortcut, is told to the chat's illi once, whatever its key; the terminal's own of it anew", () => {
+  fs.mkdirSync(DIR + "/skills/terse", { recursive: true });
+  fs.writeFileSync(DIR + "/skills/terse/SKILL.md", "---\ndescription: Short replies\nsticky: true\n---\nBe short.");
+  const t = term();
+  run(t, "/set", "tps off");
+  expect([config.TPS, acts(t)]).toEqual([false, ["related"]]);
+  t.v.out = [];
+  expect(Custom.stick(Custom.skill(process.cwd(), "terse")!, true)).toBeNull();
+  expect([config.STICKY, acts(t)]).toEqual([["terse"], ["related"]]);
+  t.v.out = [];
+  config.config_shortcut("z", "/help");
+  expect([config.SHORTCUTS.z, acts(t)]).toEqual(["/help", ["related"]]);
+  t.v.out = [];
+  config.config_set("side", "left");
+  expect([t.side.place, acts(t)]).toEqual(["left", ["related"]]);
+  t.v.out = [];
+  // another illi writes the file: read again, as the chat's illi reads
+  // it when told, the terminal follows, telling no one
+  fs.writeFileSync(DIR + "/config.json", JSON.stringify({ ...file(), side: "off" }));
+  config.config_reread();
+  expect([t.side.place, acts(t)]).toEqual(["off", []]);
+  for (const key of ["tps", "sticky", "shortcuts", "side"] as const) {
+    config.config_set(key, null);
+  }
+  fs.rmSync(DIR + "/skills/terse", { recursive: true, force: true });
 });
 
 test("a vendor or a model taken out that a pick runs on won't do", () => {

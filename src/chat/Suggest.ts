@@ -10,18 +10,19 @@
 import { AskAI, type Call } from "../ai/AskAI.ts";
 import { Chat, type Chat as Running } from "./Chat.ts";
 import { Tools } from "../tools/Tools.ts";
+import * as config from "../config/Config.ts";
 
 // Types
 // =====
 
-// a suggested reply (Suggest.ask): whether one is asked (a screen shows
-// it: Term.ts, config.SUGGEST), whether the turn's last call was answered
-// (one is asked as the turn ends), the one shown ("": none; kept in the
-// memory's state, mem.suggest, so a start shows it again), its call
-// running, whether a message of the user's own went while it showed
-// (passed over: it counts unused once the turn is answered; an agent's
-// report or a resumed turn passes over none), how many in a row went
-// unused
+// a suggested reply (Suggest.ask): whether a screen shows one (Term.ts;
+// one is asked while config.SUGGEST is on, read as each is), whether the
+// turn's last call was answered (one is asked as the turn ends), the one
+// shown ("": none; kept in the memory's state, mem.suggest, so a start
+// shows it again), its call running, whether a message of the user's own
+// went while it showed (passed over: it counts unused once the turn is
+// answered; an agent's report or a resumed turn passes over none), how
+// many in a row went unused
 export type Suggested = { on: boolean; due: boolean; text: string; call: Call | null; passed: boolean; unused: number };
 
 // Constants
@@ -51,7 +52,8 @@ const NONE        = /^\W*(nothing|none|no suggestion|silence|n\/a|thanks|thank y
 export namespace Suggest {
 
   // the user's likely next message, asked as a turn ends answered (not
-  // from a pipe, nor once UNUSED in a row went unused): after the turn's
+  // from a pipe, nor while `suggest` is off, nor once UNUSED in a row went
+  // unused): after the turn's
   // last request and its answer (AskAI.last), SUGGEST, on what it ran on,
   // with its system prompt and tools, so all before SUGGEST is read from
   // the cache. Its line is shown till it is sent or a turn ends answered
@@ -61,7 +63,7 @@ export namespace Suggest {
   export function ask(chat: Running): void {
     const s = chat.suggest;
     const last = AskAI.last(Tools.at(chat.tools, "main"));
-    if (!s.on || s.unused >= UNUSED || last === null || last.ask.vendor !== chat.pick.vendor) {
+    if (!s.on || !config.SUGGEST || s.unused >= UNUSED || last === null || last.ask.vendor !== chat.pick.vendor) {
       return;
     }
     const blocks = [{ text: SUGGEST, mark: false }];

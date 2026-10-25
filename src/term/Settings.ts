@@ -16,9 +16,8 @@
 // changes one by its words; `/set <key>` alone opens the picker at it
 // (as a /word's setting suggested does: Commands.term_setting_rows).
 
-import { Chat } from "../chat/Chat.ts";
-import { Suggest } from "../chat/Suggest.ts";
 import { term_chooser, term_model_pick } from "./Commands.ts";
+import { term_draw } from "./Frame.ts";
 import * as config from "../config/Config.ts";
 import { Custom } from "../config/Custom.ts";
 import type { Mode } from "../tools/Guard.ts";
@@ -224,11 +223,10 @@ function setting_sticky(t: Term): void {
   term_chooser(t, "Sticky skills", skills.map((s) => s.name), about, -1, () => {}, { find: true, keys, foot: () => "Enter on/off · from the next turn", aside: aside() });
 }
 
-// a setting to a value (null: its default), in config.json, and what
-// the terminal holds of it anew (the side panel, whether replies are
-// suggested; the pick, the chat's too while illi's own agent is the main
-// one; the mode and `related`, the chat's illi's too, another process for
-// a second terminal); true if set. One a variable sets, or that won't
+// a setting to a value (null: its default), in config.json, read anew
+// by the terminal and the chat's illi as every write is (setting_follow);
+// the pick also the chat's while illi's own agent is the main one, the
+// mode this session's; true if set. One a variable sets, or that won't
 // do, isn't: a note says why
 export function setting_set(t: Term, key: config.Key, value: unknown): boolean {
   const env = config.config_env_set(key);
@@ -242,25 +240,43 @@ export function setting_set(t: Term, key: config.Key, value: unknown): boolean {
     term_note(t, err.message);
     return false;
   }
-  t.side = { place: config.SIDE, width: config.SIDE_WIDTH };
-  if (key === "suggest" && t.chat !== null) {
-    t.chat.suggest.on = t.scr.tty && config.SUGGEST;
-    Suggest.drop(t.chat);
-    Chat.change(t.chat);
-  }
   if (key === "pick" && t.v.agent === null) {
     term_act(t, { $: "Pick", to: config.PICK });
   }
   if (key === "mode") {
     term_send(t, { $: "mode", mode: config.config_value("mode") as Mode });
   }
-  if (key === "related") {
-    term_send(t, { $: "related" });
-  }
-  if (key === "statusline") {
+  return true;
+}
+
+// the settings followed, whatever key changed (config_follow): as this
+// illi writes config.json (/settings, a sticky skill turned on or off,
+// the shortcuts, a model's autocompact) or reads it again, what the
+// terminal holds of them anew (setting_live), then a paint, as what it
+// reads where used may have changed (the accent, the tokens a second);
+// each write told to the chat's illi (Chat.act's related: the same
+// process, or the one holding the chat of a second terminal's view),
+// which reads the file again, so a change made in any terminal holds for
+// the chat as one made in its own does
+export function setting_follow(t: Term): void {
+  config.config_follow((wrote) => {
+    setting_live(t);
+    term_draw(t);
+    if (wrote) {
+      term_send(t, { $: "related" });
+    }
+  });
+}
+
+// what the terminal holds of the settings, from them as they are now:
+// where the side panel shows and how wide, and the status line (run anew
+// only once it changed, as that kills a run in flight); every other key
+// is read where it is used
+export function setting_live(t: Term): void {
+  t.side = { place: config.SIDE, width: config.SIDE_WIDTH };
+  if (JSON.stringify(t.scr.tty ? config.STATUSLINE : null) !== JSON.stringify(t.status.set)) {
     status_set(t);
   }
-  return true;
 }
 
 // a setting's value (now, else the one given) as shown: a pick as a
