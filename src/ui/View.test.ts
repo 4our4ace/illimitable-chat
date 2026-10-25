@@ -157,7 +157,8 @@ test("a run's calls each say how they ended: done, failed, not known", () => {
 });
 
 // a summed-up call ends as its result's message whole says (known by
-// then), and reads as it whole, its line the call word for word or not;
+// then, else as soon as it is), and reads as it whole, its line the call
+// word for word or not;
 // open, it shows its call and its result whole; illi's question ends as
 // answered, though its answers end the run (shown as the user's words
 // after it)
@@ -187,6 +188,12 @@ test("a summed-up call keeps its label, ends as its result says, opens whole; il
   ]);
   View.view_item(v, "c#1");
   const open = (View.view_body(v)[1] as View.Row & { $: "Act" }).rows[0];
+  const late = View.view_new();
+  View.view_hear(late, { $: "know", nodes: { "1+1": { text: "tool: pushed the branch, refused", to: "" } } });
+  View.view_hear(late, { $: "view", parts: [[1, 1]], turn: 3 });
+  expect(View.view_body(late).flatMap(items)).toEqual([["c#1", "pushed the branch, refused", "", null, false]]);
+  View.view_hear(late, { $: "know", whole: { 1: log[1] } });
+  expect(View.view_body(late).flatMap(items)).toEqual([["c#1", "Push the branch", "", null, false]]);
   expect(open.$ === "Item" && open.rows.map((r) => (r.$ === "Msg" ? [r.id, r.kind] : r.$))).toEqual([[1, "tool"], [2, "echo"]]);
 });
 

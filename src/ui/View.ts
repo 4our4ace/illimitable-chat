@@ -714,16 +714,17 @@ function item_row(v: View, shown: Shown, d: Did): Row {
   return { $: "Item", key: d.key, call: d.call, label, outcome, ok, open: v.verbose !== shown.items.has(d.key), rows: d.rows };
 }
 
-// what an item did and how it ended, made once for its row and the
-// result after it (a summed-up call's result known later is read anew):
+// what an item did and how it ended, made once for its row, its call and
+// the result after it (a summed-up call, or its result, known later is
+// read anew):
 // a call's label and outcome (Call.ts, its result without FAILED); a
 // thought, its first line (its markdown's marks left out); a report, its
 // agent's and its lines; a result, its lines; a summary, its line
-const SAID = new WeakMap<Row, { echo: string | null; label: string; outcome: string }>();
+const SAID = new WeakMap<Row, { call: Call.Call | null; echo: string | null; label: string; outcome: string }>();
 
 function item_said(d: Did, ok: boolean | null): { label: string; outcome: string } {
   const known = SAID.get(d.row);
-  if (known !== undefined && known.echo === d.echo) {
+  if (known !== undefined && known.call === d.call && known.echo === d.echo) {
     return known;
   }
   const result = d.echo === null ? "" : ok === false ? d.echo.slice(FAILED.length) : d.echo;
@@ -735,7 +736,7 @@ function item_said(d: Did, ok: boolean | null): { label: string; outcome: string
     : msg?.$ === "Msg" ? { label: "Result", outcome: text_lines(msg.text) }
     : msg?.$ === "Sum" ? { label: Call.label_line(Md.md_flat(msg.text).replace(KINDED, "")), outcome: "" }
     : { label: "", outcome: "" };
-  SAID.set(d.row, { echo: d.echo, ...said });
+  SAID.set(d.row, { call: d.call, echo: d.echo, ...said });
   return said;
 }
 
