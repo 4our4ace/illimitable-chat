@@ -47,7 +47,7 @@ and errors light up at the side, a click away.
 flowchart TD
   T["1,024 messages, in one line"] --> H1["the first 512, in one line"] & H2["the last 512, in one line"]
   H1 -.-> P["two messages, in one line"]
-  P --> M1["one message, word for word"] & M2["the next, word for word"]
+  P --> M1["one message, in one line"] & M2["the next, in one line"]
 ```
 
 The tree only ever grows at its end, so nearly every call is a prompt
@@ -78,7 +78,7 @@ Rules that stick
 
 A sticky skill is on for every reply, and no summary ever drops it.
 Drop this in `~/.illi/skills/ship-log/SKILL.md`, type `/ship-log`, and
-every answer ends with a ship log (the ⛵ line in the screenshot above):
+every answer ends with a ship log (the ⛵ line in the screenshots above):
 
 ```markdown
 ---
@@ -91,11 +91,11 @@ End every reply with one line:
 ```
 
 Agents, commands, skills, MCP servers and hooks work in Claude Code's
-formats, its plugins as they are, and plugins of your own are TypeScript
-([Customize](docs/customize.md)).
+formats, its plugins copy in as they are, and plugins of your own can
+run TypeScript inside illi ([Customize](docs/customize.md)).
 
-Any model you pay for
----------------------
+Your plan or your keys
+----------------------
 
 Your ChatGPT plan (`/login`), your Claude plan through your own
 [Claude Code](https://code.claude.com), or Anthropic and OpenAI API
@@ -133,5 +133,6 @@ Docs
 License
 -------
 
-Apache 2.0: LICENSE and NOTICE. The libraries compiled in are MIT: their
-licenses are in THIRD_PARTY_NOTICES.md.
+Apache 2.0: LICENSE and NOTICE. The libraries compiled in are MIT, but
+an ISC icon and a Unicode table: their licenses are in
+THIRD_PARTY_NOTICES.md.
