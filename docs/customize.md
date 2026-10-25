@@ -449,8 +449,10 @@ digits, `_`, `-`, spaces, `|` and commas takes those names exactly
 (`write|edit`); anything else is a regular expression found anywhere in
 the name (`mcp__.*`).
 
-Tool names and inputs are illi's: `shell` `{ command }`, `read`
-`{ path, offset, limit, at }`, `write` `{ path, content }`, `edit`
+Tool names and inputs are illi's: `shell` `{ command, description }`
+(the description, if the model gave one, is the words the chat lists
+the call by), `read` `{ path, offset, limit, at }`, `write`
+`{ path, content }`, `edit`
 `{ edits: [{ path, old, new, all }] }` (the file tools' paths given
 whole, from `/`), `zoom`, `date`, `spawn`, `tell`, `todo`, `skill`,
 `ask`, `mcp__<server>__<tool>`, `plugin__<plugin>__<tool>`.
@@ -529,7 +531,8 @@ its input:
 
 - illi's tool names and inputs (above), not Claude Code's. A matcher
   naming `Bash` takes illi's `shell` too (its input is alike,
-  `{ command }`), and the command is told `tool_name: "Bash"`; one
+  `{ command, description }`), and the command is told
+  `tool_name: "Bash"`; one
   naming only Claude Code's other tools (`Write|Edit`: their inputs
   differ) is said at the start. On `claude-code`, its own tools come
   under their names as they ask leave; illi turns

@@ -570,7 +570,8 @@ function run_lines(row: View.Row & { $: "Act" }, w: number, marks: Mark[], at: n
 // where: line_fit), and the whole line fit to the width too, lead and
 // all. Open, its rows under it laid out as a chat's, behind a bar under
 // its mark (each line fit to the width, on one too narrow for a frame),
-// nothing in them marked: a click anywhere in it shuts it (on a word once
+// nothing in them marked but a summary not yet known whole (a block: a
+// click opens it): a click anywhere else in it shuts it (on a word once
 // a double click is ruled out: Keys.ts). Its line's runs and its bar
 // tagged, to light with it
 function item_lines(row: View.Row & { $: "Item" }, w: number, lead: number, marks: Mark[], at: number): Line[] {

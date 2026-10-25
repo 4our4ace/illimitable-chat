@@ -229,14 +229,16 @@ github-light, one-dark, solarized-dark, solarized-light, mono, or auto
 (the default: by the terminal's background); colors: any of the
 palette's slots over it; glyph: illi's marks by name, input ("> ",
 before what the user types), lit (">", a list's lit row), open and shut
-("[-]", "[+]"), tab and here ("◯", "●": one of a set, the one in use;
+("[-]", "[+]": a recap, a page in it, the to-do), run ("•", before a
+run of work's line), tab and here ("◯", "●": one of a set, the one in use;
 here a question's answer picked too), option ("○", an answer of a
 question that takes one), find ("⌕ "), pending, active and done ("□",
 ">", "■": the to-do; pending and done a question's options that take
 several, as not picked and picked), ok and
-failed ("✓", "✗": how a shut run's calls ended; a subagent done, a
+failed ("✓", "✗": how a run's call ended; a subagent done, a
 question answered; an MCP server down, a request refused); tool: a mark
-before a tool's name, by tool; ansi and syntax entries too. The accent
+before a tool's name, and before what a call did on its run's line, by
+tool; ansi and syntax entries too. The accent
 setting goes over the file's accent.
 
 ## Plugins: plugins/<name>/
@@ -278,8 +280,9 @@ touch Y": a hook, not a plugin.
 Events: PreToolUse (refuse, change, allow or ask a tool's call; exit 2
 refuses, stderr why), PostToolUse, UserPromptSubmit, Stop, Notification,
 SessionStart, SessionEnd. Matchers and tool inputs are illi's, not Claude
-Code's: shell {command}, read/write {path, ...}, edit {edits: [{path, old,
-new}]}; `Bash` takes shell too (told tool_name "Bash"); Claude Code's
+Code's: shell {command, description}, read/write {path, ...}, edit
+{edits: [{path, old, new}]}; `Bash` takes shell too (told tool_name
+"Bash"); Claude Code's
 other names (Write, Edit...) match only Claude Code's own calls on the
 claude-code vendor, said at the start. A command gets the event as JSON on stdin;
 docs/customize.md lists the fields and answers. Say what a hook will run

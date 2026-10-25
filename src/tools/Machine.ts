@@ -88,7 +88,7 @@ export const INT = { type: "integer" };
 const EDIT = { type: "object", properties: { path: STR, old: STR, new: STR, all: { type: "boolean" } }, required: ["path", "old", "new"] };
 
 // what a command does, in words: the user's chat lists the call by them
-// (Call.ts call_label), never by the command
+// (Call.ts call_label), else by the command's first line
 const SAYS = { type: "string", description: "What the command does, in 5-10 words, active voice: List the files in src" };
 
 export const TOOLS: Spec[] = [

@@ -107,7 +107,7 @@ const LABELS = new Map<string, (x: Input, result: string | null) => string>([
 ]);
 
 // the input's fields that tell most what an unknown tool's call did, in
-// turn (Tools.does reads them so too)
+// turn (Tools.does reads those from command to pattern so too)
 const TELLING = ["description", "command", "file_path", "path", "notebook_path", "url", "query", "pattern", "name", "id"];
 
 // a command's leading `cd <dir> &&` (or `;`), left out of its label: the
