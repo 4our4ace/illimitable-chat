@@ -2,15 +2,15 @@
 // ============
 // `bun test Related.test.ts`. The radar on screen: a search in the
 // search thread after a step of a turn (the user's message, the last of
-// its results, the turn's end), never as text streams, finds the past episode the run
-// shares a path and an error with, and the side shows it under Related:
-// its age, its summary, its id (left out when narrow). A click on it
-// opens it at full detail (a pane: its messages whole); on its id pins
-// it (the id typed into the input); on the head lists them (Enter opens,
-// Tab pins, Del dismisses, never found again). Without the side the
-// bottom line counts them. Each shown, opened, pinned and dismissed is
-// counted by its score in related.json, no text in it. `related` off:
-// nothing.
+// its results, the turn's end), never as text streams, finds the past
+// episode the run shares a path and an error with, and the side shows
+// it under Related: its age, its summary, its id (left out when
+// narrow). A click on it opens it at full detail (a pane: its messages
+// whole); on its id pins it (the id typed into the input); on the head
+// lists them (Enter opens, Tab pins, Del dismisses, never found again).
+// Without the side the bottom line counts them. Each shown, opened,
+// pinned and dismissed is counted by its score in related.json, no text
+// in it. `related` off: nothing.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";

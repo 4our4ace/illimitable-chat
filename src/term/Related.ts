@@ -6,20 +6,20 @@
 // runs after each step of a turn: a message the user sent, a step's
 // results all logged (its calls run one after another: the last of
 // them; what comes with it waits out STEP), the turn's end; never as
-// text streams. It runs in
-// the search thread (Projects.radar), one at a time: a step while one
-// runs asks again once it ends, the stale answer dropped. Nothing of it
-// reaches the model.
+// text streams. It runs in the search thread (Projects.radar), one at a
+// time: a step while one runs asks again once it ends, the stale answer
+// dropped. Nothing of it reaches the model.
 //
 // A click on a line opens it at full detail: a pane over the chat, its
 // messages whole, drawn as the chat draws them. A click on its id pins
-// it: the id typed into the input (#1234+16, as /open takes it), for the
-// next message to name (the model zooms an id it is given). A click on
-// the head lists them: Enter opens one, Tab pins it, Del dismisses it
-// (left out from then on, till illi quits). Each line shown, opened,
-// pinned and dismissed is counted by its score (RELATED: counts alone,
-// no text, no id), so where a line counts as a strong match can be set
-// from where those opened sit. `related` off: none of it.
+// it: the id typed into the input (#1234+16, a block's name:
+// View.block_name), for the next message to name (the model zooms an id
+// it is given: its view's lines are id+n). A click on the head lists
+// them: Enter opens one, Tab pins it, Del dismisses it (left out from
+// then on, till illi quits). Each line shown, opened, pinned and
+// dismissed is counted by its score (RELATED: counts alone, no text, no
+// id), so where a line counts as a strong match can be set from where
+// those opened sit. `related` off: none of it.
 
 import * as fs from "node:fs";
 import { term_chooser } from "./Commands.ts";
