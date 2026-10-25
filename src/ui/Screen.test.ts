@@ -2,14 +2,17 @@
 // end anywhere (a reader held up lets the terminal's writes split at any
 // byte), and no text typed or pasted may slow a key down; the mouse's
 // reports (the wheel's place too), the focus told (a press that only
-// focuses the window marked, its loss told). A click on the input puts
-// the cursor where it lands: on a character before it, whole; past a
-// row's text after it; on the mark at the row's start; under the last
-// row at the end; in a chip at its nearer edge; a tall input scrolls
-// only as the cursor leaves the rows shown. Up and Down walk the
-// messages sent from an empty input moved in, and on from one brought
-// back. A click on a text on one row (a list's search) puts the cursor
-// as on the input. A paint writes only the rows that changed, those
+// focuses the window marked, its loss told). The input wraps between
+// words: one that would cross the edge starts the next row, the space
+// before it hung past a full row; a chip one word; a word wider than a
+// row broken at any character. A click on the input puts the cursor
+// where it lands: on a character before it, whole; past a row's text
+// after it; on the mark at the row's start; under the last row at the
+// end; in a chip at its nearer edge; a tall input scrolls only as the
+// cursor leaves the rows shown. Up and Down walk the messages sent from
+// an empty input moved in, and on from one brought back. A click on a
+// text on one row (a list's search) puts the cursor as on the input. A
+// paint writes only the rows that changed, those
 // moved as a block moved by the terminal. Then the lines Paint lays
 // out: a link wider than a line breaks at its edge, its pieces each
 // opening it whole; a word of several runs is kept whole; a frame never
