@@ -475,6 +475,7 @@ test("the input wraps between words: one that would cross the edge starts the ne
   expect(clicked("abcd  efg", 6).rows).toEqual(["> abcd", "   efg", "  "]);
   expect(clicked("see [Image #1]", 14).rows).toEqual(["> see ", "  [Image #1]"]);
   expect(clicked("ab cdefgh", 6).rows).toEqual(["> ab ", "  cdef", "  gh"]);
+  expect(clicked("ab cd\u00a0ef", 8).rows).toEqual(["> ab ", "  cd\u00a0ef"]);
   expect(clicked("世界世界世", 6).rows).toEqual(["> 世界", "  世界", "  世"]);
   const ed = Screen.ed_new();
   Screen.ed_set(ed, "abcd efg");
