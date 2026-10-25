@@ -300,7 +300,7 @@ function popup_list(c: Chooser, w: number, h: number): Omit<Laid, "place"> {
   const room  = h - 2;
   const fits  = iw - 1 - Paint.text_width(GLYPH.find);
   const text  = c.find?.text ?? "";
-  const typed = Paint.text_width(text) <= fits ? text : "…" + Paint.text_graphemes(text).slice(1 - fits).join("");
+  const typed = Paint.text_width(text) <= fits ? text : "…" + popup_tail(text, fits - Paint.text_width("…"));
   const find  = c.find === null ? [] : [[Paint.Run(GLYPH.find, Paint.DIM), typed === "" ? Paint.Run("type to search", Paint.DIM) : Paint.Run(typed)]];
   const all   = (c.heads === undefined ? 0 : 2 * new Set(c.heads).size - 1) + c.names.reduce((n, name) => n + popup_name_tall(c, name, iw), 0);
   const more  = c.detail === undefined || c.shown.length === 0 ? [] : c.detail(c.shown[c.at].k, iw);
@@ -322,6 +322,18 @@ function popup_list(c: Chooser, w: number, h: number): Omit<Laid, "place"> {
   const from  = typed === text ? 0 : text.length - (typed.length - "…".length);
   const field = c.find === null ? undefined : { ed: c.find, row: 1, col: 2, w: iw, tall: 1, at: (_: number, col: number) => popup_find_at(text, typed !== text, from, col - Paint.text_width(GLYPH.find)) };
   return { lines: Paint.frame(fill.map(([l]) => l), w, title, foot), rows: [null, ...fill.map(([, aim]) => aim), null], at, shape: { list: 1 + find.length, lines: rows, tall: view.length, ahead: 0, lead: 0, folds: false }, field };
+}
+
+// the end of a text, as many of its last characters as fit in w
+// columns (a list's search too long to show whole: a wide character
+// takes two)
+function popup_tail(text: string, w: number): string {
+  const all = Paint.text_graphemes(text);
+  let [k, room] = [all.length, w];
+  while (k > 0 && Paint.text_width(all[k - 1]) <= room) {
+    room -= Paint.text_width(all[--k]);
+  }
+  return all.slice(k).join("");
 }
 
 // where a press at column col of a list's search as shown puts its
