@@ -35,9 +35,11 @@ import { GLYPH } from "./Theme.ts";
 
 // name: the bare tool name ("": no call), shown bold; from: the MCP
 // server or plugin whose tool it is ("": illi's own, or its vendor's);
-// head: the rest of its line (a command's lines); input: what it was
-// called with, as read (a label reads it: call_label)
-export type Call = { name: string; from: string; head: string; blocks: Md.Code[]; input: Input };
+// raw: its name as logged (illi's own as Claude Code names them, by
+// their own name; a theme may mark a tool by it: Paint.ts); head: the
+// rest of its line (a command's lines); input: what it was called with,
+// as read (a label reads it: call_label)
+export type Call = { name: string; from: string; raw: string; head: string; blocks: Md.Code[]; input: Input };
 
 type Input = Record<string, unknown>;
 
@@ -75,35 +77,38 @@ const READS = new Map<string, (x: Input) => Shown>([
 const LABEL = 200;
 
 // what each tool's call did, in plain words, by its input (and its
-// result: spawn's names); "": none of its own (call_named). illi's tools
-// first, then Claude Code's (the claude-code vendor's calls)
+// result: spawn's names); "": none of its own, or the field it is about
+// missing or blank (about), so it reads as any tool's (call_named).
+// illi's tools first, then Claude Code's (the claude-code vendor's
+// calls; its subagents' tool is Agent, once Task)
 const LABELS = new Map<string, (x: Input, result: string | null) => string>([
   ["shell",      (x) => text_first(x.description) || command_first(x.command)],
-  ["read",       (x) => "Read " + text_first(x.path) + read_lines(x.offset, x.limit)],
-  ["write",      (x) => "Wrote " + text_first(x.path)],
-  ["edit",       (x) => (Array.isArray(x.edits) ? "Edited " + names_few(x.edits.map((e: any) => e?.path)) : "")],
+  ["read",       (x) => about(x.path, (path) => "Read " + path + read_lines(x.offset, x.limit))],
+  ["write",      (x) => about(x.path, (path) => "Wrote " + path)],
+  ["edit",       (x) => (Array.isArray(x.edits) ? about(names_few(x.edits.map((e: any) => e?.path)), (files) => "Edited " + files) : "")],
   ["web_search", (x) => web_label(x)],
-  ["search",     (x) => "Searched memory for " + quoted(x.words) + project_in(x.project)],
-  ["zoom",       (x) => "Looked back at " + (typeof x.id === "string" ? x.id + "'s chat" : msg_show(x.id, x.n)) + project_in(x.project)],
-  ["date",       (x) => "Checked the date of " + msg_show(x.id, 1) + project_in(x.project)],
+  ["search",     (x) => about(x.words, (words) => 'Searched memory for "' + words + '"' + project_in(x.project))],
+  ["zoom",       (x) => about(typeof x.id === "string" && x.id !== "" ? x.id + "'s chat" : msg_show(x.id, x.n), (what) => "Looked back at " + what + project_in(x.project))],
+  ["date",       (x) => about(msg_show(x.id, 1), (what) => "Checked the date of " + what + project_in(x.project))],
   ["projects",   () => "Listed the projects"],
-  ["spawn",      (x, result) => "Started " + (started(result) || agents_said(x.tasks, x.agent))],
-  ["tell",       (x) => "Messaged " + text_first(x.name)],
-  ["skill",      (x) => (x.on === true ? "Turned on skill " : x.on === false ? "Turned off skill " : "Loaded skill ") + text_first(x.name)],
+  ["spawn",      (x, result) => about(started(result) || agents_said(x.tasks, x.agent), (who) => "Started " + who)],
+  ["tell",       (x) => about(x.name, (name) => "Messaged " + name)],
+  ["skill",      (x) => about(x.name, (name) => (x.on === true ? "Turned on skill " : x.on === false ? "Turned off skill " : "Loaded skill ") + name)],
   ["todo",       (x) => (Array.isArray(x.items) && x.items.length === 0 ? "Cleared the to-do list" : "Updated the to-do list")],
   ["ask",        (x) => asked(x.questions)],
   ["Bash",       (x) => text_first(x.description) || command_first(x.command)],
-  ["Read",       (x) => "Read " + text_first(x.file_path) + read_lines(x.offset, x.limit)],
-  ["Write",      (x) => "Wrote " + text_first(x.file_path)],
-  ["Edit",       (x) => "Edited " + text_first(x.file_path)],
-  ["MultiEdit",  (x) => "Edited " + text_first(x.file_path)],
-  ["NotebookEdit", (x) => "Edited " + text_first(x.notebook_path)],
-  ["Glob",       (x) => "Listed files matching " + text_first(x.pattern)],
-  ["Grep",       (x) => "Searched for " + quoted(x.pattern) + (typeof x.path === "string" ? " in " + text_first(x.path) : "")],
-  ["WebSearch",  (x) => "Searched " + quoted(x.query)],
-  ["WebFetch",   (x) => "Opened " + url_short(x.url)],
+  ["Read",       (x) => about(x.file_path, (path) => "Read " + path + read_lines(x.offset, x.limit))],
+  ["Write",      (x) => about(x.file_path, (path) => "Wrote " + path)],
+  ["Edit",       (x) => about(x.file_path, (path) => "Edited " + path)],
+  ["MultiEdit",  (x) => about(x.file_path, (path) => "Edited " + path)],
+  ["NotebookEdit", (x) => about(x.notebook_path, (path) => "Edited " + path)],
+  ["Glob",       (x) => about(x.pattern, (pattern) => "Listed files matching " + pattern)],
+  ["Grep",       (x) => about(x.pattern, (pattern) => 'Searched for "' + pattern + '"' + (typeof x.path === "string" && x.path !== "" ? " in " + text_first(x.path) : ""))],
+  ["WebSearch",  (x) => about(x.query, (query) => 'Searched "' + query + '"')],
+  ["WebFetch",   (x) => about(url_short(x.url), (url) => "Opened " + url)],
   ["TodoWrite",  () => "Updated the to-do list"],
   ["Task",       (x) => "Started " + (text_first(x.subagent_type) || "an agent")],
+  ["Agent",      (x) => "Started " + (text_first(x.subagent_type) || "an agent")],
 ]);
 
 // the input's fields that tell most what an unknown tool's call did, in
@@ -115,11 +120,12 @@ const TELLING = ["description", "command", "file_path", "path", "notebook_path",
 const CD = /^cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s*(?:&&|;)\s*/;
 
 // how a shell call ended, at its result's end (Machine.shell: exit 0,
-// stopped, killed by a signal); Claude Code's Bash, failing, says its
+// stopped, killed by a signal, by its name or its number: `killed by
+// signal 34`); Claude Code's Bash, failing, says its
 // code first; a read's lines shown, at its result's end (Machine.read);
 // what a call stopped answers (Agent.use); how far from a result's end
 // each is looked for
-const EXIT    = /\((exit -?\d+|stopped|killed by \S+) in [\d.]+ ?s\)\s*$/;
+const EXIT    = /\((exit -?\d+|stopped|killed by (?:signal )?\S+) in [\d.]+ ?s\)\s*$/;
 const CODE    = /^Exit code (-?\d+)/;
 const SHOWN   = /\[lines (\d+)-(\d+) of \d+[^\]\n]*\]\s*$/;
 const STOPPED = "(stopped)";
@@ -148,11 +154,11 @@ export function call_parse(text: string): Call {
   const m     = CALL.exec(text);
   const input = m === null ? null : input_parse(m[2]);
   if (m === null || input === null) {
-    return { name: "", from: "", head: text, blocks: [], input: {} };
+    return { name: "", from: "", raw: "", head: text, blocks: [], input: {} };
   }
   const [from, name] = call_name(m[1]);
   const read = from === "" ? READS.get(name) : undefined;
-  return { name, from, input, ...(read ?? input_shown)(input) };
+  return { name, from, raw: m[1].replace(OWN, ""), input, ...(read ?? input_shown)(input) };
 }
 
 // a tool's name as logged: the server or plugin whose tool it is ("":
@@ -182,11 +188,12 @@ export function call_line(c: Call): string {
 
 // what a call did, in plain words: its tool's own (LABELS; spawn's agents
 // named by its result, if given), else its name and its most telling
-// short value (call_named); on one line, LABEL characters at most
+// short value (call_named); a tool message that isn't `name {input}`,
+// its first line; on one line, LABEL characters at most
 export function call_label(c: Call, result: string | null = null): string {
   const own  = c.from === "" ? LABELS.get(c.name) : undefined;
   const said = own === undefined ? "" : own(c.input, result).trim();
-  return text_cap(said !== "" ? said : call_named(c));
+  return text_cap(c.name === "" ? text_first(c.head) : said !== "" ? said : call_named(c));
 }
 
 // how a call ended, in a word or a few ("": nothing to say past its mark,
@@ -254,7 +261,8 @@ function text_first(v: unknown): string {
   }
   const end  = v.indexOf("\n", from);
   const stop = end < 0 ? v.length : end;
-  const line = v.slice(from, Math.min(stop, from + LABEL - 2)).replace(/\s+/g, " ").trim();
+  const cut  = Math.min(stop, from + LABEL - 2);
+  const line = v.slice(from, cut < v.length && v.charCodeAt(cut - 1) >> 10 === 0x36 ? cut - 1 : cut).replace(/\s+/g, " ").trim();
   const more = /\S/g;
   more.lastIndex = stop;
   return line + (stop - from > LABEL - 2 || more.test(v) ? " …" : "");
@@ -273,9 +281,12 @@ function command_first(v: unknown): string {
   return line.replace(CD, "") || line;
 }
 
-// a text in quotes, its first line
-function quoted(v: unknown): string {
-  return '"' + text_first(v) + '"';
+// words about a field's first line (say), or "" when it is missing or
+// blank: the call then reads as any tool's (call_named), never as words
+// left hanging (`Read`, `Messaged`)
+function about(v: unknown, say: (line: string) => string): string {
+  const line = text_first(v);
+  return line === "" ? "" : say(line);
 }
 
 // a read's lines, if only some: `, lines 40-79`, ` from line 40` ("":
@@ -285,10 +296,11 @@ function read_lines(offset: unknown, limit: unknown): string {
   return typeof limit === "number" ? ", lines " + from + "-" + (from + limit - 1) : from > 1 ? " from line " + from : "";
 }
 
-// names, each once: two at most, then how many more (`a.ts, b.ts +3`)
+// names, each once: two at most, then how many more, in words, so the
+// count never reads as an edit's lines added (`a.ts, b.ts and 3 more`)
 function names_few(xs: unknown[]): string {
   const names = [...new Set(xs.map(text_first).filter((x) => x !== ""))];
-  return names.slice(0, 2).join(", ") + (names.length > 2 ? " +" + (names.length - 2) : "");
+  return names.slice(0, 2).join(", ") + (names.length > 2 ? " and " + (names.length - 2) + " more" : "");
 }
 
 // the first of several texts, quoted, then how many more (`"bend" +2`;
@@ -311,7 +323,7 @@ function web_label(x: Input): string {
     return "Opened " + (url_short(x.url) || "a page");
   }
   if (x.type === "find" || x.type === "find_in_page") {
-    return "Found " + quoted(x.pattern) + " in " + (url_short(x.url) || "page");
+    return about(x.pattern, (pattern) => 'Found "' + pattern + '" in ' + (url_short(x.url) || "page"));
   }
   const said = firsts(Array.isArray(x.queries) && x.queries.length > 0 ? x.queries : [x.query]);
   return said === "" ? "Searched the web" : "Searched " + said;
@@ -344,11 +356,11 @@ function started(result: string | null): string {
 }
 
 // a spawn's agents before its result names them: one (the user's agent
-// it runs as, else "an agent"), or how many
+// it runs as, else "an agent"), or how many ("": no tasks)
 function agents_said(tasks: unknown, agent: unknown): string {
   const n   = Array.isArray(tasks) ? tasks.length : 0;
   const who = typeof agent === "string" ? agent : "";
-  return n === 1 ? who || "an agent" : n + " " + (who === "" ? "agents" : who + " agents");
+  return n === 0 ? "" : n === 1 ? who || "an agent" : n + " " + (who === "" ? "agents" : who + " agents");
 }
 
 // an ask's questions: the first (its tab's label, else its text), then

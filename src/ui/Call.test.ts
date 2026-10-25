@@ -18,7 +18,8 @@ const call = (name: string, input: object) => Call.call_parse(name + " " + JSON.
 const label = (name: string, input: object, result: string | null = null) => Call.call_label(call(name, input), result);
 
 test("a call's tool: an MCP server's and a plugin's after their server (read as any tool's, whatever its name), illi's own as Claude Code names them by their own name", () => {
-  expect([call("shell", { command: "ls" })].map((c) => [c.name, c.from, Call.call_tool(c)])).toEqual([["shell", "", "shell"]]);
+  expect([call("shell", { command: "ls" })].map((c) => [c.name, c.from, c.raw, Call.call_tool(c)])).toEqual([["shell", "", "shell", "shell"]]);
+  expect([call("mcp__github__get_issue", {}), call("plugin__notes__add", {}), call("mcp__illi__zoom", {}), Call.call_parse("projects")].map((c) => c.raw)).toEqual(["mcp__github__get_issue", "plugin__notes__add", "zoom", ""]);
   expect(Call.call_tool(call("mcp__github__get_issue", { id: 4 }))).toBe("github: get_issue");
   expect(Call.call_tool(call("plugin__notes__add", { text: "x" }))).toBe("notes: add");
   expect(call("mcp__illi__zoom", { id: 12 })).toMatchObject({ name: "zoom", from: "", head: "#12" });
@@ -58,7 +59,7 @@ test("a file tool's label: the file, a read's lines if only some; an edit's file
   expect(label("write", { path: "notes.md", content: "x" })).toBe("Wrote notes.md");
   expect(label("edit", { edits: [{ path: "a.ts", old: "x", new: "y" }, { path: "a.ts", old: "z", new: "w" }] })).toBe("Edited a.ts");
   expect(label("edit", { edits: [{ path: "a.ts" }, { path: "b.ts" }] })).toBe("Edited a.ts, b.ts");
-  expect(label("edit", { edits: ["a", "b", "c", "d"].map((f) => ({ path: f + ".ts" })) })).toBe("Edited a.ts, b.ts +2");
+  expect(label("edit", { edits: ["a", "b", "c", "d"].map((f) => ({ path: f + ".ts" })) })).toBe("Edited a.ts, b.ts and 2 more");
   expect(label("edit", { path: "a.ts", old: "x", new: "y" })).toBe("edit a.ts");
   expect(label("Read", { file_path: "/w/a.ts", offset: 5, limit: 2 })).toBe("Read /w/a.ts, lines 5-6");
   expect(label("Write", { file_path: "/w/a.ts" })).toBe("Wrote /w/a.ts");
@@ -102,6 +103,31 @@ test("illi's own tools' labels: memory, agents, skills, the to-do list, question
   expect(label("ask", { questions: [{ question: "Push again?" }] })).toBe('Asked "Push again?"');
   expect(label("ask", { queries: [{ text: "Push again?" }] })).toBe("ask");
   expect([label("Glob", { pattern: "src/**/*.ts" }), label("Grep", { pattern: "TODO", path: "src" }), label("Task", { subagent_type: "explorer", prompt: "x" })]).toEqual(["Listed files matching src/**/*.ts", 'Searched for "TODO" in src', "Started explorer"]);
+  expect([label("Agent", { subagent_type: "explorer", prompt: "x" }), label("Agent", { prompt: "x" })]).toEqual(["Started explorer", "Started an agent"]);
+});
+
+// a label whose field it is about is missing or blank reads as any
+// tool's (its name, then its most telling value), never as words left
+// hanging; a tool message that isn't `name {input}`, its first line
+test("a label with its field missing reads as any tool's; a call not read as one, its first line", () => {
+  const bare = (name: string, input: object) => [name, label(name, input)];
+  expect([bare("read", {}), bare("write", { path: " " }), bare("tell", { message: "go on" }), bare("zoom", {}), bare("date", {}), bare("search", { words: "" }), bare("skill", { on: true })]).toEqual([
+    ["read", "read"], ["write", "write"], ["tell", 'tell "go on"'], ["zoom", "zoom"], ["date", "date"], ["search", "search"], ["skill", "skill"],
+  ]);
+  expect([label("spawn", { tasks: [] }), label("edit", { edits: [{}] }), label("web_search", { type: "find", url: "https://a.io" }), label("Read", { limit: 10 }), label("Grep", { path: "src" }), label("Glob", {}), label("WebSearch", {}), label("WebFetch", {})]).toEqual([
+    "spawn", "edit", "web_search https://a.io", "Read 10", "Grep src", "Glob", "WebSearch", "WebFetch",
+  ]);
+  expect([Call.call_label(Call.call_parse("projects")), Call.call_label(Call.call_parse("look up the thing\nand more"))]).toEqual(["projects", "look up the thing …"]);
+});
+
+// a label cut where it is too long never splits a character drawn by
+// two UTF-16 units (an emoji): the cut falls before it
+test("a long label is cut whole characters at a time", () => {
+  const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  for (const k of [195, 196, 197, 198, 199, 200]) {
+    const text = "a".repeat(k) + "😀".repeat(10);
+    expect([label("shell", { command: "ls", description: text }), label("write", { path: text }), label("lookup", { key: text })].filter((l) => lone.test(l))).toEqual([]);
+  }
 });
 
 // any other call: its name (an MCP server's or a plugin's after its
@@ -128,6 +154,7 @@ test("a call's outcome: a command's exit, a read's lines, a change's lines; a fa
   expect(out("shell", { command: "bun test" }, false, "1 fail\n(exit 2 in 9.4 s)")).toBe("exit 2");
   expect(out("shell", { command: "sleep 9" }, false, "(stopped in 1.2 s)")).toBe("stopped");
   expect(out("shell", { command: "yes" }, false, "y\n(killed by SIGKILL in 3.0 s)")).toBe("killed by SIGKILL");
+  expect(out("shell", { command: "yes" }, false, "y\n(killed by signal 34 in 1.2 s)")).toBe("killed by signal 34");
   expect(out("shell", { command: "rm -rf /" }, false, "Not run: the user's permission rules refuse it (rm).")).toBe("failed");
   expect(out("shell", { command: "ls" }, true, "x".repeat(100000) + "\n(exit 0 in 0.1 s)")).toBe("exit 0");
   expect(out("Bash", { command: "false" }, false, "Exit code 1\nboom")).toBe("exit 1");
