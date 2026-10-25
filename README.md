@@ -32,7 +32,8 @@ It remembers
 ------------
 
 Most agents wake up with amnesia: every session starts empty, and a
-full one is squashed into a summary and lost. illi has no sessions.
+full one is squashed into a summary, its details gone. illi has no
+sessions.
 
 Every message is kept, for weeks, months, years, and saved before illi
 answers, so not even a crash loses one. Old messages fold into a tree
@@ -44,9 +45,9 @@ and errors light up at the side, a click away.
 
 ```mermaid
 flowchart TD
-  T["last month, in one line"] --> H1["its first half"] & H2["its second half"]
+  T["1,024 messages, in one line"] --> H1["the first 512, in one line"] & H2["the last 512, in one line"]
   H1 -.-> P["two messages, in one line"]
-  P --> M1["your exact words"] & M2["illi's exact words"]
+  P --> M1["one message, word for word"] & M2["the next, word for word"]
 ```
 
 The tree only ever grows at its end, so nearly every call is a prompt
@@ -89,8 +90,9 @@ End every reply with one line:
 ⛵ shipped: <what changed> · next: <the next step>
 ```
 
-Agents, commands, skills, MCP servers, hooks and plugins all work in
-Claude Code's formats ([Customize](docs/customize.md)).
+Agents, commands, skills, MCP servers and hooks work in Claude Code's
+formats, its plugins as they are, and plugins of your own are TypeScript
+([Customize](docs/customize.md)).
 
 Any model you pay for
 ---------------------
@@ -103,15 +105,15 @@ keys. The side shows how much of your plan is used
 The keys you need
 -----------------
 
-| Key                 | Does                                  |
-| ------------------- | ------------------------------------- |
-| Enter / Esc twice   | send / stop                           |
-| `/`                 | commands                              |
-| Ctrl+P              | every command and setting, searchable |
-| Shift+Tab           | switch agent                          |
-| Ctrl+O              | open every tool call                  |
-| Tab                 | take the suggested reply              |
-| Ctrl+D              | quit (the next start picks up there)  |
+| Key                 | Does                                              |
+| ------------------- | ------------------------------------------------- |
+| Enter / Esc twice   | send / stop                                       |
+| `/`                 | commands                                          |
+| Ctrl+P              | every command and setting, searchable             |
+| Shift+Tab           | switch agent                                      |
+| Ctrl+O              | open every tool call                              |
+| Tab                 | take the suggested reply                          |
+| Ctrl+D              | on an empty input, quit (the next start resumes)  |
 
 Everything else: `/help` and [Keys](docs/keys.md).
 
