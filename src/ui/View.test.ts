@@ -21,6 +21,13 @@ const items = (run: View.Row) => (run.$ === "Act" ? run.rows.flatMap((r) => (r.$
 
 // a turn waiting on its model names the model the server says: the
 // wait holds it, so no pick (none yet) can name none
+test("a failed result's lines leave out FAILED (its call's mark says so); its text keeps it", () => {
+  const [row] = View.entry_rows(3, "echo", View.FAILED + "no such file\n(exit 1 in 0.1 s)") as Array<View.Row & { $: "Msg" }>;
+  expect(row.text).toStartWith(View.FAILED);
+  expect(JSON.stringify(row.body)).not.toContain(View.FAILED);
+  expect(JSON.stringify(row.body)).toContain("no such file");
+});
+
 test("a turn's wait names its model", () => {
   const v = View.view_new();
   View.view_hear(v, { $: "state", ...v, wait: "claude-opus-5-5", pick: null });
