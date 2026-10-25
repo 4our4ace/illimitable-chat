@@ -146,7 +146,8 @@ export function term_mouse(t: Term, key: string): void {
 // a press on the input as last painted (Area input): its cursor put
 // where it landed on its rows (Screen.ed_at), and on the rule under them
 // at the text's end (rows hidden under the view too), as Left or Right
-// moves it (moved: so Up and Down past its ends stay in it); none if its
+// moves it (moved, on text typed: Up and Down past its ends then stay in
+// it; on an empty input they walk the messages sent still); none if its
 // text changed since it was painted
 function term_put(t: Term, area: Area, at: Cell): void {
   const put = area.input;
@@ -154,7 +155,7 @@ function term_put(t: Term, area: Area, at: Cell): void {
   const row = at.line - (put?.line ?? 0);
   if (put !== undefined && row >= 0 && row < put.tall && put.laid.text === ed.text) {
     ed.pos   = Screen.ed_at(put.laid, put.top, row < put.tall - 1 ? row : Infinity, at.col);
-    ed.moved = true;
+    ed.moved = ed.moved || ed.text !== "";
   }
 }
 

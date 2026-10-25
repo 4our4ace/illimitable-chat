@@ -1268,7 +1268,7 @@ function ed_word(text: string, pos: number, d: number): number {
 
 // Up (d < 0) or Down: a row, at the nearest column; past the ends (unless
 // Left or Right moved the cursor in a typed input), the message sent
-// before/after
+// before/after, the cursor not moved in it yet
 function ed_vert(ed: Ed, laid: Laid, at: Place, d: number): void {
   const row = ed_row(laid, at.row + d);
   if (row.length > 0) {
@@ -1282,9 +1282,10 @@ function ed_vert(ed: Ed, laid: Laid, at: Place, d: number): void {
   if (ed.at === ed.hist.length) {
     ed.draft = ed.text;
   }
-  ed.at   = to;
-  ed.text = to === ed.hist.length ? ed.draft : ed.hist[to];
-  ed.pos  = ed.text.length;
+  ed.at    = to;
+  ed.text  = to === ed.hist.length ? ed.draft : ed.hist[to];
+  ed.pos   = ed.text.length;
+  ed.moved = false;
 }
 
 // the input taken (Enter), kept in the history; empty again
