@@ -28,8 +28,9 @@
 // side take it, how long ago its episode ended, its summary cut short.
 // illi's own memory and meta tools never get one (SKIP), nor a result
 // with images (Claude Code joins their names after its text, so the line
-// would not end it), nor one the line would make a page longer (it would
-// start a page alone: Clip.ts clip_pages). `related` on alone
+// would not end it), nor an empty one (it would stand in for its "(no
+// output)"), nor one the line would make a page longer (it would start a
+// page alone: Clip.ts clip_pages). `related` on alone
 // (config.RECALL; screen: the side alone; off: nothing). Covered: illi's
 // own loop (chatgpt, claude-api, openai-api: shell, files, MCP and plugin
 // tools), the chat's agent and its subagents alike; on claude-code only
@@ -140,8 +141,10 @@ export namespace Recall {
   // is still due: its search waited on WAIT ms at most (not answered: no
   // line, and the call no slower); none once the call was stopped,
   // `related` turned from on, another call of its step was given one, or
-  // the user dismissed it meanwhile; nor after a result with images, or
-  // one the line would make a page longer
+  // the user dismissed it meanwhile; nor after a result with images, an
+  // empty one (the loop, Agent.use, and Claude Code's echo say "(no
+  // output)" of it, which the line would take the place of), or one the
+  // line would make a page longer
   export async function end(tools: Tools, pending: Pending | null, out: Out, signal: AbortSignal): Promise<Out> {
     if (pending === null) {
       return out;
@@ -151,7 +154,7 @@ export namespace Recall {
     const found = await Promise.race([pending.found, late]).finally(() => clearTimeout(timer));
     try {
       const gone = found === null || tools.gone.some(([a, b]) => found.first < b && a < found.first + found.n);
-      if (gone || signal.aborted || !config.RECALL || (out.imgs?.length ?? 0) > 0 || tools.given.get(pending.who) === pending.step) {
+      if (gone || signal.aborted || !config.RECALL || (out.imgs?.length ?? 0) > 0 || out.text === "" || tools.given.get(pending.who) === pending.step) {
         return out;
       }
       const block  = history_block(Recall.line(found));

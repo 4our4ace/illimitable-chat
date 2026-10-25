@@ -15,7 +15,8 @@
 // one line a step, a step's calls sharing it. A line the user dismissed
 // is left out of the search, and dropped if dismissed while it ran.
 // `related` screen or off: no search. No line after a result with
-// images, nor one the line would push onto a page of its own. End to end
+// images, an empty one, nor one the line would push onto a page of its
+// own. End to end
 // on the search thread: a command naming a path and an error the chat
 // met before gets that episode's line, last, after what it printed,
 // under its <history> tags, and the leaf of its result holds none of it.
@@ -378,13 +379,15 @@ test("related screen or off: no search, no line; on: both", async () => {
   });
 });
 
-test("no line after a result with images, nor one the line would push onto a page of its own; a long result's line ends its last page", async () => {
+test("no line after a result with images, an empty one, nor one the line would push onto a page of its own; a long result's line ends its last page", async () => {
   await stood(async () => found(EPISODE, 16), async () => {
     const give = async (out: Out) => {
       Recall.step(tools, "main");
       return Recall.end(tools, Recall.start(tools, "main", "read", { path: "a.png" }), out, signal);
     };
     expect((await give(result("Image a.png", { imgs: [{ type: "image/png", data: "" }] }))).text).toBe("Image a.png");
+    // an empty one keeps its "(no output)" (Agent.use)
+    expect((await give(result(""))).text).toBe("");
     const full = "x".repeat(CAP - 50);
     expect((await give(result(full))).text).toBe(full);
     expect((await give(result("y".repeat(CAP - 400)))).text).toContain("<history>");
