@@ -19,7 +19,8 @@
 //
 // A run of work (View.ts) lists each call on one line instead: what it
 // did in plain words (call_label, by its tool: LABELS; a command by the
-// description its caller gave it, else its first line), then how it
+// description its caller gave it, else its first line; a file by its
+// path from the working dir, else from ~: path_said), then how it
 // ended (call_outcome: a command's exit, the lines a read showed, the
 // lines a write or an edit changed; a failure, how).
 //

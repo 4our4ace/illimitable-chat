@@ -4,7 +4,8 @@
 // name (an MCP server's or a plugin's after its server; illi's own as
 // Claude Code names them, by their own), what it did in plain words (a
 // label: each tool's own, else its name and its most telling short
-// value; calls from before descriptions read well too), and how it
+// value; a file's path from the working dir, else from ~; calls from
+// before descriptions read well too), and how it
 // ended (a command's exit, a read's lines, a change's lines; a failure,
 // how).
 
