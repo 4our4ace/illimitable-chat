@@ -1145,6 +1145,9 @@ function once(command: string, why: string, over: Partial<Where> = {}): void {
 test("careful asks all auto asks: a command that may change things run in a folder outside the project (cd /x && tool), a folder holding a secret store read (a folder grant clearing it in neither); yolo runs them", () => {
   asked("cd /work/illi-test/lib && fmt-tool", "/work/illi-test/lib is outside the project");
   asked("cd /work/illi-test/lib && make", "/work/illi-test/lib is outside the project");
+  // ~/.config as the folder it is on a desktop (a CI runner's bare home
+  // may have none, and a path that isn't there reads as a file in ~)
+  fs.mkdirSync(HOME + "/.config", { recursive: true });
   const config = { grants: new Set(["read:" + HOME + "/.config/*", "read:" + HOME + "/.claude/*"]) };
   for (const command of ["ls ~/.config", "grep -r token ~/.config", "cd ~/.config && ls", "ls ~/.claude"]) {
     asked(command, "may hold secrets", config);
