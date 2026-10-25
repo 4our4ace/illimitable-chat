@@ -878,13 +878,15 @@ function row_busy(row: Row): boolean {
 
 // a run of work, said: its calls (row_call: those its items are)
 // counted by tool (Claude Code's as illi's alike: ALIKE; one not read as
-// `name {input}` by its first word), then whether it thought, then the
-// agents that reported (a run of results alone: that it got them)
+// `name {input}` by its first word; a summed-up one not known yet, as a
+// tool used), then whether it thought, then the agents that reported
+// (by name, a summed-up report's read off its message whole; not known
+// yet, how many) (a run of results alone: that it got them)
 function act_text(v: View, rows: Row[]): string {
   const flat  = rows.flatMap((r) => (r.$ === "Box" ? r.rows : [r]));
   const calls = new Map<string, number>();
   const who   = new Set<string>();
-  let [mind, results] = [false, 0];
+  let [mind, results, tools, reports] = [false, 0, 0, 0];
   for (const r of flat) {
     const call = row_call(v, r);
     const kind = r.$ === "Msg" ? r.kind : r.$ === "Sum" ? r.kind : null;
@@ -895,12 +897,18 @@ function act_text(v: View, rows: Row[]): string {
     }
     mind    ||= kind === "mind";
     results += kind === "echo" ? 1 : 0;
-    if (kind === "work" && r.$ === "Msg" && r.who !== "") {
-      who.add(r.who);
+    tools   += kind === "tool" && call === null ? 1 : 0;
+    const msg  = kind !== "work" ? undefined : r.$ === "Msg" ? r : r.$ === "Sum" ? sum_whole(v, r)?.find((x) => x.$ === "Msg") : undefined;
+    if (msg?.$ === "Msg" && msg.who !== "" && msg.who !== WHO.work) {
+      who.add(msg.who);
+    } else if (kind === "work") {
+      reports += 1;
     }
   }
-  const did   = [...calls].map(([name, n]) => (DID[name] === undefined ? "called " + (n === 1 ? name : name + " ×" + n) : DID[name][n === 1 ? 0 : 1].replace("#", String(n))));
-  const parts = [did.join(", "), mind ? "thought" : "", who.size === 0 ? "" : [...who].join(", ") + " reported"].filter((x) => x !== "");
+  const used  = tools === 0 ? [] : [tools === 1 ? "used a tool" : "used " + tools + " tools"];
+  const did   = [...[...calls].map(([name, n]) => (DID[name] === undefined ? "called " + (n === 1 ? name : name + " ×" + n) : DID[name][n === 1 ? 0 : 1].replace("#", String(n)))), ...used];
+  const told  = who.size > 0 ? [...who].join(", ") + " reported" : reports === 0 ? "" : reports === 1 ? "an agent reported" : reports + " agents reported";
+  const parts = [did.join(", "), mind ? "thought" : "", told].filter((x) => x !== "");
   const text  = parts.length > 0 ? parts.join(" · ") : results === 1 ? "got a result" : "got " + results + " results";
   const named = did.length === 0 && !mind && who.size > 0;
   return named ? text : text[0].toUpperCase() + text.slice(1);

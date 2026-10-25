@@ -121,9 +121,10 @@ test("a summed-up report or result reads anew once its message whole is known", 
   const lines = { "1+1": { text: "work: the explorer found it", to: "" }, "2+1": { text: "echo: two names", to: "" } };
   View.view_hear(v, { $: "know", nodes: lines });
   View.view_hear(v, { $: "view", parts: [[1, 1], [2, 1]], turn: 3 });
-  expect(View.view_body(v).flatMap(items)).toEqual([["c#1", "the explorer found it", "", null, false], ["c#2", "two names", "", null, false]]);
+  const text = () => (View.view_body(v)[0] as View.Row & { $: "Act" }).text;
+  expect([text(), View.view_body(v).flatMap(items)]).toEqual(["An agent reported", [["c#1", "the explorer found it", "", null, false], ["c#2", "two names", "", null, false]]]);
   View.view_hear(v, { $: "know", whole: { 1: { kind: "work", text: "[explorer] found it\non line 3" }, 2: { kind: "echo", text: "a\nb" } } });
-  expect(View.view_body(v).flatMap(items)).toEqual([["c#1", "explorer's report", "2 lines", null, false], ["c#2", "Result", "2 lines", null, false]]);
+  expect([text(), View.view_body(v).flatMap(items)]).toEqual(["explorer reported", [["c#1", "explorer's report", "2 lines", null, false], ["c#2", "Result", "2 lines", null, false]]]);
 });
 
 // an item opens alone (a click, /open): its call and its result whole,
@@ -220,9 +221,9 @@ test("a summed-up call keeps its label, ends as its result says, opens whole; il
   const late = View.view_new();
   View.view_hear(late, { $: "know", nodes: { "1+1": { text: "tool: pushed the branch, refused", to: "" } } });
   View.view_hear(late, { $: "view", parts: [[1, 1]], turn: 3 });
-  expect(View.view_body(late).flatMap(items)).toEqual([["c#1", "pushed the branch, refused", "", null, false]]);
+  expect([(View.view_body(late)[0] as View.Row & { $: "Act" }).text, View.view_body(late).flatMap(items)]).toEqual(["Used a tool", [["c#1", "pushed the branch, refused", "", null, false]]]);
   View.view_hear(late, { $: "know", whole: { 1: log[1] } });
-  expect(View.view_body(late).flatMap(items)).toEqual([["c#1", "Push the branch", "", null, false]]);
+  expect([(View.view_body(late)[0] as View.Row & { $: "Act" }).text, View.view_body(late).flatMap(items)]).toEqual(["Ran a command", [["c#1", "Push the branch", "", null, false]]]);
   expect(open.$ === "Item" && open.rows.map((r) => (r.$ === "Msg" ? [r.id, r.kind] : r.$))).toEqual([[1, "tool"], [2, "echo"]]);
 });
 

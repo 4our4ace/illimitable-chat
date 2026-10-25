@@ -79,9 +79,10 @@ in plain words, then how it ended:
 - **The line** says what was done, counted by tool (`Ran 3 commands`,
   `Searched the web`; Claude Code's tools as illi's alike, or in words
   of their own: `Searched the code 3 times`; any other tool,
-  `Called github: get_issue`), then `thought`, then the agents that
-  reported (a run of results alone, `Got 2 results`). It takes no
-  click: each call does.
+  `Called github: get_issue`; a call summed up before its message is
+  known, `Used a tool`), then `thought`, then the agents that reported
+  (a run of results alone, `Got 2 results`). It takes no click: each
+  call does.
 - **A call's line** is `✓ <what it did> · <how it ended>`: `✗` in the
   error's color for one that failed, blank for one with no result (a
   call stopped before it answered). What it did is the shell call's
