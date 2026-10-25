@@ -40,14 +40,7 @@ answers, so not even a crash loses one. Old messages fold into a tree
 of summary lines, coarser with age, and any line unfolds back to the
 exact words.
 
-![illi's memory tree: eight messages on the right, kept word for word; summary lines to their left, each covering twice the messages of the column to its right, up to one line for all eight; in cyan, what illi reads when it answers; in violet, zooms from a line down to two of its messages](assets/screens/memory-tree.webp)
-
-Read it right to left. Each message, kept word for word, gets a line
-of its own: the message itself if it is short, else a summary of it.
-Two lines fold into one, and so on up. Each time illi answers, it
-reads the older messages as summary lines and the newest in full
-(cyan), and it can zoom any line down, half by half, to the exact
-words (violet).
+![illi's memory tree: eight messages on the right; to their left, lines that each cover the two beside them, up to one line for all eight; in cyan, what illi reads to answer; in violet, zooming from a line down to two of its messages](assets/screens/memory-tree.webp)
 
 The tree only ever grows at its end, so nearly every call is a prompt
 cache hit: a chat a year long stays fast and cheap.
