@@ -1007,11 +1007,13 @@ function ed_layout(ed: Ed): Laid {
 // row of its own once its last row is full). A word that would cross
 // the edge starts the next row whole, the space before it left at the
 // end of its row; a space that finds its row full hangs past the edge,
-// unshown, as in a textarea (the row then full: what follows starts the
-// next, a second space too); a chip (a paste's token, an image's) is
-// one word, its spaces none to break at; a word wider than a row, at
-// any character. Each character cleaned and measured once (sized: those
-// measured); cuts: where each character starts in its row's text
+// unshown (the row then full: what follows starts the next, a second
+// space too, and the line's end, which gets a row of its own, so no
+// two places show at one spot); a chip (a paste's token, an image's) is
+// one word, its spaces none to break at, as a no-break space is none; a
+// word wider than a row, at any character. Each character cleaned and
+// measured once (sized: those measured); cuts: where each character
+// starts in its row's text
 function ed_wrap(text: string, w: number, last: boolean, sized: Map<string, [string, number]>): Wrap {
   const rows = [""];
   const places: Place[] = [];
@@ -1027,7 +1029,7 @@ function ed_wrap(text: string, w: number, last: boolean, sized: Map<string, [str
       sized.set(g, (shown = [x, Paint.text_width(x)]));
     }
     const [x, cw] = shown;
-    const space = /^\s+$/.test(g) && !chips.some(([a, b]) => a < pos && pos < b);
+    const space = /^[^\S\u00a0\u2007\u202f\ufeff]+$/.test(g) && !chips.some(([a, b]) => a < pos && pos < b);
     if (space && !hung && col + cw > w) {
       places.push({ pos, row: rows.length - 1, col });
       cuts.push(rows[rows.length - 1].length);
