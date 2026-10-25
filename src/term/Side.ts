@@ -64,10 +64,11 @@ const SUMMARY = 20;
 // turns one on or off; under them when a name won't fit whole:
 // term_side_beside), the tabs (a click shows one), the background jobs
 // (a click: /background), the profiles, once there are two (a click on
-// the head: /profile), a plan's use (ChatGPT's, Claude's), the chat's (its context, the
-// memory), the past topics related to the work (term_side_related), the
-// MCP servers (a click: /mcp), the requests refused (a click:
-// /permissions on it), each plugin's lines (Plugins.side); at its
+// the head: /profile), a plan's use (ChatGPT's, Claude's), the chat's
+// (its context, the memory), the past topics related to the work
+// (term_side_related), the MCP servers (a click: /mcp), the requests
+// refused (a click: /permissions on it), each plugin's lines
+// (Plugins.side); at its
 // foot illi's to-do list, which, longer than the room, pushes the rest up
 // (its head stays); with none, a faint hint for the keys (HINT), if it
 // fits

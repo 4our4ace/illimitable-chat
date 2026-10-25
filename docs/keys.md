@@ -399,10 +399,10 @@ Mouse and side panel
   opens `/background`), the profiles once you have two (a click
   switches; one open in this terminal shows a spinner while it works,
   `?` while it asks you something, `● 2` while only its background jobs
-  run), your plan's use (ChatGPT's or Claude's, once it has told it), the context
-  and the memory, past topics related to the work ([Related](#related)),
-  the MCP servers (a click opens `/mcp`), the latest
-  requests refused (a click opens `/permissions` on one) and illi's
+  run), your plan's use (ChatGPT's or Claude's, once it has told it),
+  the context and the memory, past topics related to the work
+  ([Related](#related)), the MCP servers (a click opens `/mcp`), the
+  latest requests refused (a click opens `/permissions` on one) and illi's
   to-do list, gone once every item is done or on `/clear`. The `side`
   and `side_width` settings place it.
 - The bottom line ends with the mode (a click opens `/mode`):
