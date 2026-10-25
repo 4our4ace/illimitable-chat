@@ -32,8 +32,9 @@ Marks
 
 | Mark | Means | Where |
 | ---- | ----- | ----- |
-| `[+]` | shut: a click opens it (`GLYPH.shut`) | a run of work's head, a recap's line, a message folded in a run, the side's to-do folded |
-| `[-]` | open: a click shuts it (`GLYPH.open`) | an open run's head, an open recap's line, the side's to-do shown whole |
+| `[+]` | shut: a click opens it (`GLYPH.shut`) | a recap's line, a page folded in a recap, the side's to-do folded |
+| `[-]` | open: a click shuts it (`GLYPH.open`) | an open recap's line, the side's to-do shown whole |
+| `•` | a run of work (`GLYPH.run`) | the line over a run's calls ([Runs](#runs)) |
 | `>` | the lit row: Enter picks it (`GLYPH.lit`) | lists, questions, the trust question, the commands suggested |
 | `> ` | the message you type (`GLYPH.input`) | the input, your words in a question, a line a question asks for |
 | `>` | the to-do item at work (`GLYPH.active`) | the side's to-do, the todo tool |
@@ -42,11 +43,12 @@ Marks
 | `◯` `●` | one of a set, the one in use (`GLYPH.tab`, `GLYPH.here`) | the tabs; the model, agent, profile, mode or project in use in a list; the side's agents, sticky skills (on, off) and profiles |
 | `●` | running (success) | background jobs, MCP servers ready |
 | `◌` | starting | MCP servers at the side |
-| `✓` `✗` | done, failed (`GLYPH.ok`, `GLYPH.failed`) | a shut run's calls (`✓` dim, `✗` in the error's color); `✓` a subagent at the side, a question answered (its tab); `✗` an MCP server, a refused request |
+| `✓` `✗` | done, failed (`GLYPH.ok`, `GLYPH.failed`) | a run's calls (`✓` dim, `✗` in the error's color); `✓` a subagent at the side, a question answered (its tab); `✗` an MCP server, a refused request |
 | `<-` | back | the side's way back from an agent's page |
 | `·` | between the parts of one line | everywhere |
-| `…` | cut here | any text cut to fit; the lines a folded command leaves out (`… 37 lines`; a long line's rows, `… 12 rows`: a click shows them) |
-| `│` | an open run's rows (lit, `┃`: a click there opens or closes the run) | the chat |
+| `…` | cut here | any text cut to fit; the lines a folded command leaves out (`… 37 lines`; a long line's rows, `… 12 rows`: a click shows them); a command's first line when more follow |
+| `+3` | that many more, not shown | a run's calls past five (`+3 more`, `+3 earlier`: a click shows them); a web search's queries past the first (`Searched "bun test" +2`); an edit's files past two |
+| `│` | an open call's rows, an open recap's (lit, `┃`: a click there shuts it) | the chat |
 | `─ ╭ ╮ ╰ ╯` | frames and rules | popups, the commands suggested, messages and open blocks in the chat; panes, and the input (or a question in its place, its title in the rule over it) between rules |
 | `█ ▌ ░` | a gauge: full, half, empty | the auto compact in `/model` |
 | `█` | a bar: the share used (in the accent; warning past 70%, error past 90%), the rest dim | the side's context and plan use |
@@ -57,6 +59,54 @@ Marks
 | `[ ⧉ copy ]` | a button: a click copies (`⧉ md`, `⧉ art`, `⧉ source`, `⧉ copy reply`) | over or beside a reply's lists, tables, code, diagrams, quotes and alerts; a reply's end |
 | `•` `◦` | a list's item, one nested deeper | replies |
 | `[✓]` `[ ]` | a task done, to do | replies' lists |
+
+Runs
+----
+
+The work between your words and illi's reply (its tool calls, their
+results, its thinking, the agents' reports) shows as a run: one dim
+line saying what was done, then its calls, a line each, what each did
+in plain words, then how it ended:
+
+```
+• Ran 3 commands, read a file · thought
+  ✓ List the files in src · exit 0
+  ✓ Read src/ui/View.ts · 1,204 lines
+  ✗ Run the tests · exit 1
+  ✓ Check git status · exit 0
+```
+
+- **The line** says what was done, counted by tool (`Ran 3 commands`,
+  `Searched the web`), then `thought`, then the agents that reported.
+  It takes no click: each call does.
+- **A call's line** is `✓ <what it did> · <how it ended>`: `✗` in the
+  error's color for one that failed, blank for one with no result (a
+  call stopped before it answered). What it did is the shell call's
+  `description` (the model gives it, in five to ten words), else the
+  command's first line (a leading `cd <dir> &&` left out, `…` when more
+  lines follow); a file tool's file (`Read src/a.ts, lines 40-79`,
+  `Edited a.ts, b.ts`); a web search's query, page or text looked for
+  (`Searched "bend"`, `Opened example.com/path`, `Found "x" in page`);
+  illi's own tools in words (`Searched memory for "auto compact"`,
+  `Looked back at #123`, `Started Scout`, `Updated the to-do list`); an
+  MCP server's or a plugin's tool as `server: tool` and its first
+  telling value; any other tool, its name and its most telling short
+  value. How it ended: a command's exit (`exit 0`, `exit 2`, `stopped`,
+  `killed by SIGKILL`), a read's lines, a change's lines (`+12 -3`),
+  `failed`; nothing where the mark says all. Never a raw input: what
+  doesn't fit is cut, the outcome kept whole.
+- **A click on a call** opens it alone, under its line behind a bar:
+  the thoughts that led to it, its whole input (the whole command, every
+  query, the URL), its whole result. Its siblings stay shut; a click on
+  its line, its bar or anywhere in it shuts it. A report, or a thought
+  or a result with no call, is a line of its own the same way.
+- **Past five calls** a line counts the rest (`+3 more`, under the
+  first five); while the run is at work it shows the newest five, the
+  count over them (`+3 earlier`). A click on it shows them all (it then
+  reads `show fewer`), again five.
+- Ctrl+O opens every call of every run, and shows what streams; a click
+  then shuts one alone.
+- An agent's page shows its work the same way.
 
 Replies
 -------

@@ -123,7 +123,7 @@ Keys and commands
 | `/settings`          | change any setting                    |
 | `/profile`           | switch (the one left runs on), make or export a profile |
 | `/tree`, `/export`   | the memory as a page, as JSON, written into the current folder |
-| Ctrl+O               | show tool calls and thinking          |
+| Ctrl+O               | open every tool call, show thinking   |
 | Drag, double-click   | copy text                             |
 | Right drag           | quote the text in your message        |
 | Ctrl+Y               | copy the last reply                   |

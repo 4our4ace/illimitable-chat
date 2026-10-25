@@ -106,7 +106,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/close #id",        "",                        "close block #id and keep it closed (or click anywhere in its frame)", (t, a) => term_block(t, a, false)],
       ["/fold",             "Ctrl+F",                  "fold the chat into the fewest blocks; again: unfold", term_fold],
       ["",                  "Ctrl+Y",                  "copy illi's last reply (a drag copies the text it covers, a double click a word)", term_copy],
-      ["",                  "Ctrl+O",                  "show or hide the work between replies: tools, thinking, agents' reports", term_verbose],
+      ["",                  "Ctrl+O",                  "show or hide the work between replies: every call open, thinking, agents' reports", term_verbose],
       ["/export",           "",                        "save this project's memory as ./illi-memory.json",          term_export],
       ["/tree",             "",                        "save this project's whole memory tree as ./illi-tree.html", term_tree],
       ["",                  "Ctrl+L",                  "draw the screen again",                          term_redraw],
