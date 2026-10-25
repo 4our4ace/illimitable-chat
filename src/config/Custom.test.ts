@@ -246,11 +246,21 @@ test("illi's own skill, customize-illi: listed first, loaded with its folders na
   fs.rmSync(DIR + "/skills/customize-illi", { recursive: true });
 });
 
-test("a sticky skill: listed so, turned on by the skill tool (illi's own turns only) and then in every turn's prompt, never a summary's; off again", async () => {
+test("with no skill sticky, the skill tool offers no switch: nothing to turn on or off", () => {
+  const skill = Tools.list(chat.tools, "main").find((t) => t.name === "skill")!;
+  expect(skill.schema).toEqual({ type: "object", properties: { name: expect.any(Object) }, required: ["name"] });
+  expect(skill.info).not.toContain("on: true");
+  expect(skill.info).toContain("never unloaded or turned off");
+});
+
+test("a sticky skill: listed so, turned on by the skill tool (illi's own turns only) and then in every turn's prompt, never a summary's; off again; on or off for one not sticky does nothing and fails nothing", async () => {
   put(DIR + "/skills/terse/SKILL.md", "---\ndescription: Short replies\nsticky: true\n---\nBe terse.");
   const call = (who: string, args: object) => Tools.call(chat.tools, who, "skill", args, new AbortController().signal);
   expect(Tools.list(chat.tools, "main").find((t) => t.name === "skill")!.info).toContain("- terse (sticky): Short replies");
-  expect((await call("main", { name: "pdf", on: true })).text).toBe("pdf isn't sticky: load it without on, for the task at hand.");
+  expect(Tools.list(chat.tools, "main").find((t) => t.name === "skill")!.schema).toMatchObject({ properties: { on: expect.any(Object) } });
+  const pdf = await call("main", { name: "pdf", on: true });
+  expect([pdf.fail, pdf.text]).toEqual([false, expect.stringMatching(/^pdf isn't sticky: loaded for the task at hand\.\n\nSkill pdf: /)]);
+  expect(await call("main", { name: "pdf", on: false })).toEqual({ text: "pdf isn't sticky, so it was never on: nothing to turn off.", fail: false });
   expect((await call("Scout", { name: "terse", on: true })).fail).toBe(true);
   expect(Chat.system(chat)).not.toContain("Be terse.");
   const on = await call("main", { name: "terse", on: true });

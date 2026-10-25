@@ -21,7 +21,9 @@ skill, `customize-illi`, and writes these files itself.
   is for every reply (a tone, a format): `/name` turns it on and off (so
   does a click on it in the side panel, which lists each one, on or
   off), and while on it is in every turn's prompt, so no summary drops
-  it.
+  it. A skill for a task is loaded, never switched off: the model's
+  skill tool offers the on and off switch only while one of your skills
+  is sticky, and on or off for one that isn't does nothing.
   customize-illi suggests it when it installs a skill. Skills shared with
   other agents (opencode's, Codex's) load too: `~/.agents/skills`, under
   yours of the same name, and a trusted project's `.agents/skills`, from
@@ -127,7 +129,7 @@ the full accent).
   a run of work's line), `tab` and
   `here` (`◯`, `●`: one of a set, the one in use: the chats' tabs, a
   list's rows, the side's agents, skills and profiles; `here` is a
-  question's answer picked too), `option` (`○`, an answer of a question
+  question's answer lit or picked too), `option` (`○`, an answer of a question
   that takes one), `find` (`⌕ `, before a list's search), `pending`,
   `active` and `done` (`□`, `>`, `■`: the to-do's items; `pending` and
   `done` a question's options that take several, not picked and picked
