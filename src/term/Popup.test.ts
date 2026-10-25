@@ -346,6 +346,28 @@ test("a press on a list's search puts its cursor where it lands, typing going in
   });
 });
 
+test("a list's search of wide characters too long for the box shows its end inside the box, the cursor after it; a press on its ellipsis puts the cursor where what shows starts, on a wide one by either half before it", () => {
+  sized(60, 20, () => {
+    const t = term();
+    term_chooser(t, "Agent", ["illi", "reviewer"], ["", ""], -1, () => {}, { find: true });
+    paint(t);
+    const find = t.choose.find;
+    Screen.ed_set(find, "世界".repeat(20));
+    paint(t);
+    const row  = t.box.row + 1;
+    const left = t.box.col + 4;
+    const line = t.ruled.rows[row].at(-1).line;
+    expect([Paint.line_width(line), line.map((r: any) => r.x).join("").trimEnd()]).toEqual([t.box.w, "│ ⌕ …" + "世界".repeat(8) + "  │"]);
+    expect(t.ruled.at).toEqual({ row, col: left + 33 });
+    click(t, row, left);
+    expect(find.pos).toBe(24);
+    click(t, row, left + 2);
+    expect(find.pos).toBe(24);
+    click(t, row, left + 3);
+    expect(find.pos).toBe(25);
+  });
+});
+
 test("a click outside closes a list and goes no further (no side, no tab, no block)", () => {
   sized(160, 40, () => {
     const t = term();
