@@ -1,157 +1,132 @@
 ![illimitable: one chat that never ends. The illimitable logo, an infinity sign with an i at its crossing, sits left of the wordmark, which leads into a binary memory tree.](assets/banner.webp)
 
-A terminal AI agent with one chat that never ends. illi (short for
-illimitable) folds old messages into a memory tree it can zoom back
-into, so it forgets nothing.
+<p align="center">
+  <b>One chat. It never ends, and it never forgets.</b><br>
+  A terminal AI agent that keeps every word you've ever said to it,<br>
+  folded into a memory tree it can unfold again.
+</p>
 
-![illi on a Claude plan, answering with a sequence diagram and a table](assets/screens/hero.webp)
+<p align="center">
+  <a href="#install">Install</a> ·
+  <a href="docs/keys.md">Keys</a> ·
+  <a href="docs/providers.md">Providers</a> ·
+  <a href="docs/customize.md">Customize</a> ·
+  <a href="docs/config.md">Config</a>
+</p>
 
-Why illi
---------
-
-Most coding agents work in sessions: each starts empty, and once it fills
-up it is squashed into a summary and the details are gone. illi has no
-sessions.
-
-- **One chat, forever.** Every message stays on disk, for days, weeks,
-  years. You never start over or explain things again.
-- **A chat per project.** Each git repo gets its own chat, picked by the
-  folder you start illi in; outside any repo, a home chat. illi looks
-  into your other projects when you mention them, and `/projects` lists
-  them, to forget one for good. Start illi in a second terminal in the
-  same project and it joins the running chat: both screens show it, and
-  either one can type.
-- **Nothing is forgotten.** Old messages fold into a tree of summary
-  lines, coarser with age, and illi can zoom any line back down to the
-  exact words. While it works, past topics that may be related show at
-  the side, a click away.
-- **Built for the prompt cache.** The memory only changes at its end, so
-  nearly every call is a cache hit: a long chat stays fast and cheap.
-- **Your plan, or your keys.** ChatGPT Plus or Pro, or Anthropic and
-  OpenAI API keys, in illi's own loop with no SDKs; or your Claude plan,
-  through your own Claude Code.
-- **Crash-proof.** A message is on disk before illi answers. Quit or
-  crash mid-turn, and the next start goes on where it was.
-- **Yours to change.** Agents, commands, skills, MCP servers, shell
-  hooks and a status line in Claude Code's formats, its plugins as they
-  are, and plugins of your own in TypeScript
-  ([Customize](docs/customize.md)).
+![illi drawing a sequence diagram of a cache. At the side: its agents and a sticky skill, three profiles, the Claude plan's usage, the chat's context, and a related past topic.](assets/screens/hero-diagram.webp)
 
 Install
 -------
 
-    curl -fsSL https://raw.githubusercontent.com/4our4ace/illimitable-chat/main/install.sh | bash
+```bash
+curl -fsSL https://raw.githubusercontent.com/4our4ace/illimitable-chat/main/install.sh | bash
+```
 
-Then run `illi` in any project folder. The first time in a folder, it
-asks, full screen, whether you trust it: illi reads, edits and runs
-files there and follows its `AGENTS.md` or `CLAUDE.md`. A yes is kept
-for the whole repo; your home folder is asked at every start. Then
-illi runs your work unasked, pushes and deploys too, and asks, saying
-why, before a change outside the project, your secrets, root and the
-system, what deletes for good on a remote (a force push), and a write
-to git's hooks or Claude Code's settings (`/mode careful` asks before
-every risky call: [Permissions](docs/permissions.md)). It goes
-in `~/.local/bin` (or
-`ILLI_INSTALL`) and updates itself: once a day, as it starts or while
-it runs, it looks for a new release, downloads and checks it in the
-background, and runs it from the next start (`autoupdate` in [Config](docs/config.md) makes
-it only tell, or never look). `illi upgrade` updates it now, `illi
-version` says which it is. Linux and macOS; on Windows, use WSL. Each
-release is checked against its SHA256SUMS; with no release for your
-system (or `ILLI_SOURCE=1`) the installer builds from the source.
+Then type `illi` in any project. Linux and macOS (on Windows, WSL). It
+asks once whether you trust the folder, then gets to work on its own,
+and asks before anything risky ([Permissions](docs/permissions.md)). It
+keeps itself up to date.
 
-From source, with [Bun](https://bun.sh): see
-[Development](docs/development.md).
-
-Sign in
--------
-
-In the chat, type `/login` to sign in with your ChatGPT plan (Plus or
-Pro). Your Claude plan (Pro or Max) works through your own
-[Claude Code](https://code.claude.com), and Anthropic and OpenAI API
-keys work too: see [Providers](docs/providers.md).
-
-![/model: every vendor's models in one picker, with effort and speed](assets/screens/models.webp)
-
-How it works
+It remembers
 ------------
+
+Most agents wake up with amnesia: every session starts empty, and a
+full one is squashed into a summary and lost. illi has no sessions.
+
+Every message is kept, for weeks, months, years, and saved before illi
+answers, so not even a crash loses one. Old messages fold into a tree
+of summary lines, coarser with age, and any line unfolds back to the
+exact words. While illi works, past moments that touch the same files
+and errors light up at the side, a click away.
+
+![A related past topic opened from the side: its summary line on top, the original messages under it](assets/screens/recall.webp)
 
 ```mermaid
 flowchart TD
-  A["line: messages 1-4"] --> B["line: 1-2"] & C["line: 3-4"]
-  B --> m1["message 1"] & m2["message 2"]
-  C --> m3["message 3"] & m4["message 4"]
+  T["last month, in one line"] --> W1["week 1"] & W2["week 2"]
+  W1 --> D1["Monday"] & D2["Tuesday"]
+  D1 --> M1["your exact words"] & M2["illi's exact words"]
 ```
 
-- **Memory tree.** Each message is summarized into one line, and lines
-  merge in pairs into a binary tree, written in the background by a
-  smaller model. A turn sends the latest messages whole, up to the
-  model's auto compact (60% of its window by default, `/autocompact`);
-  older ones go as lines, merged as they age. A turn that
-  outgrows the model's window anyway goes on by itself, more of it
-  summarized (`autocontinue`, on by default).
-- **Zoom.** illi can open any line back down to the original messages.
-  `/compact` has illi write a recap of the chat and go on from it
-  alone, as other agents compact (the screen keeps the chat, a
-  "Compaction" line across it); `/clear` starts a fresh topic. Either
-  way the chat before isn't sent at all, yet stays kept and
-  summarized, so illi finds any of it by search or zoom. `/tree`
-  writes yours as a web page into the current folder.
-- **Tools.** Shell, file edits, subagents, a to-do list, MCP servers,
-  questions with options you pick at the input, your answers kept in
-  the chat.
-  `/goal <message>` keeps it working until the goal is met.
-- **Drawn replies.** Mermaid diagrams, code highlighted in 40 languages
-  and boxed tables, in one of 15 palettes or your terminal's own colors.
+The tree only ever grows at its end, so nearly every call is a prompt
+cache hit: a chat a year long stays fast and cheap.
 
-Two subagents at work side by side, then illi merging what they found:
+It works in parallel
+--------------------
 
-![illi with two subagents, a reviewer and a tester, then their findings merged into one table](assets/screens/working.webp)
+Send a reviewer and a tester off together. They work side by side,
+report back, and illi merges what they found.
 
-Keys and commands
+![A reviewer and a tester at work in the side panel while illi waits for their reports](assets/screens/subagents.webp)
+
+Every project, every you
+------------------------
+
+Each git repo gets a chat of its own, picked by the folder you start
+in. Profiles keep work and home apart, and one you leave keeps running
+in the background.
+
+<p>
+  <img src="assets/screens/projects.webp" width="49%" alt="/projects: three projects, each with its own chat">
+  <img src="assets/screens/profiles.webp" width="49%" alt="/profile: default, side-quest and work">
+</p>
+
+Rules that stick
+----------------
+
+A sticky skill is on for every reply, and no summary ever drops it.
+Drop this in `~/.illi/skills/ship-log/SKILL.md`, type `/ship-log`, and
+every answer ends with a ship log (the ⛵ line in the screenshot above):
+
+```markdown
+---
+name: ship-log
+description: Ends every reply with a one-line ship log
+sticky: true
+---
+End every reply with one line:
+⛵ shipped: <what changed> · next: <the next step>
+```
+
+Agents, commands, skills, MCP servers, hooks and plugins all work in
+Claude Code's formats ([Customize](docs/customize.md)).
+
+Any model you pay for
+---------------------
+
+Your ChatGPT plan (`/login`), your Claude plan through your own
+[Claude Code](https://code.claude.com), or Anthropic and OpenAI API
+keys. The side shows how much of your plan is used
+([Providers](docs/providers.md)).
+
+The keys you need
 -----------------
 
-| Key or command       | Does                                  |
-| -------------------- | ------------------------------------- |
-| Enter / Esc twice    | send / stop                           |
-| Tab                  | take the suggested reply              |
-| `/`                  | command list                          |
-| Ctrl+P               | every command and setting, searchable |
-| Ctrl+X, then a key   | a shortcut (m model, s settings…); `/shortcuts` changes them |
-| Shift+Tab            | switch primary agent                  |
-| `/login`             | sign in with your ChatGPT plan        |
-| `/model`             | pick the model, its effort, speed and auto compact |
-| `/settings`          | change any setting                    |
-| `/profile`           | switch (the one left runs on), make or export a profile |
-| `/tree`, `/export`   | the memory as a page, as JSON, written into the current folder |
-| Ctrl+O               | open every tool call, show thinking   |
-| Drag, double-click   | copy text                             |
-| Click in the input   | put the cursor there                  |
-| Right drag           | quote the text in your message        |
-| Ctrl+Y               | copy the last reply                   |
-| Alt+V                | paste an image                        |
-| PgUp/PgDn, Ctrl+End  | scroll, jump to the bottom            |
-| Ctrl+D               | quit (the next start resumes)         |
+| Key                 | Does                                  |
+| ------------------- | ------------------------------------- |
+| Enter / Esc twice   | send / stop                           |
+| `/`                 | commands                              |
+| Ctrl+P              | every command and setting, searchable |
+| Shift+Tab           | switch agent                          |
+| Ctrl+O              | open every tool call                  |
+| Tab                 | take the suggested reply              |
+| Ctrl+D              | quit (the next start picks up there)  |
 
-`/help` lists everything, as does [docs/keys.md](docs/keys.md). From a
-pipe, each line is a message: `echo "what changed?" | illi`.
+Everything else: `/help` and [Keys](docs/keys.md).
 
 Docs
 ----
 
-- [Keys](docs/keys.md): every key and command, the mouse, the side panel.
-- [Providers](docs/providers.md): ChatGPT, your Claude plan through
-  Claude Code, API keys, and which models do what.
-- [Customize](docs/customize.md): agents, commands, skills, MCP servers,
-  plugins, hooks, a status line, the theme and its accent, rules.
-- [Permissions](docs/permissions.md): what runs without asking, the
-  modes, the question, your rules.
-- [Profiles](docs/profiles.md): separate chats on one global setup, e.g.
-  work and home.
-- [Config](docs/config.md): every setting and variable, the files illi
-  keeps, troubleshooting.
-- [Design language](docs/design.md): illi's marks, keys and words (a draft).
-- [Development](docs/development.md) and what is [Planned](docs/planned.md).
+[Keys](docs/keys.md) ·
+[Providers](docs/providers.md) ·
+[Customize](docs/customize.md) ·
+[Permissions](docs/permissions.md) ·
+[Profiles](docs/profiles.md) ·
+[Config](docs/config.md) ·
+[Design](docs/design.md) ·
+[Development](docs/development.md) ·
+[Planned](docs/planned.md)
 
 License
 -------
