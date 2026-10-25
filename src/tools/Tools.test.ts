@@ -227,7 +227,7 @@ test("illi's own shell, files and MCP tools pass the same checks: the user's rul
   chat.tools.perm.refused.length = 0;
 });
 
-test("the loop guard, in every mode but yolo: a call the same (tool and input) as its caller's two before it is asked, saying so, illi's own tools too; another call between, another caller or yolo, not", async () => {
+test("the loop guard, in every mode but yolo: a call the same (tool and input; a command in other words too) as its caller's two before it is asked, saying so, illi's own tools too; another call between, another caller or yolo, not", async () => {
   const call = (name: string, args: object, who = "main") => Tools.call(chat.tools, who, name, args, new AbortController().signal);
   const looped = "No one is at illi's screen to ask, so it isn't allowed. Asked because the same call a third time in a row";
   chat.tools.perm.calls.clear();
@@ -243,8 +243,8 @@ test("the loop guard, in every mode but yolo: a call the same (tool and input) a
     expect((await call("shell", { command: "echo loop" })).text).toStartWith("loop\n");
     expect((await call("shell", { command: "echo loop" })).text).toStartWith("loop\n");
     expect((await call("shell", { command: "echo loop", timeout: 5 })).text).toStartWith("loop\n");
-    expect((await call("shell", { command: "echo loop" })).text).toStartWith("loop\n");
-    expect((await call("shell", { command: "echo loop" })).text).toStartWith("loop\n");
+    expect((await call("shell", { command: "echo loop", description: "Print loop" })).text).toStartWith("loop\n");
+    expect((await call("shell", { command: "echo loop", description: "Say loop again" })).text).toStartWith("loop\n");
     expect((await call("projects", {}, "Scout")).fail).toBe(false);
     expect((await call("shell", { command: "echo loop" })).text).toStartWith(looped);
     for (const mode of ["careful", "ask", "read-only"] as const) {

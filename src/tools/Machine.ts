@@ -87,8 +87,12 @@ export const INT = { type: "integer" };
 
 const EDIT = { type: "object", properties: { path: STR, old: STR, new: STR, all: { type: "boolean" } }, required: ["path", "old", "new"] };
 
+// what a command does, in words: the user's chat lists the call by them
+// (Call.ts call_label), never by the command
+const SAYS = { type: "string", description: "What the command does, in 5-10 words, active voice: List the files in src" };
+
 export const TOOLS: Spec[] = [
-  spec("shell", "Run a command with bash (bash -c), stdout and stderr together, and return its output, then its exit code and time, as (exit 0 in 0.4 s); output past " + CAP + " characters keeps its head and tail. Each call is a new shell. The call waits until the command and everything holding its output end, so give a background job its own output file (cmd > file.log 2>&1 &). A background job shows to the user, who may stop it, and lives only while illi is open: quitting it kills every process the calls started.", { command: STR }, ["command"]),
+  spec("shell", "Run a command with bash (bash -c), stdout and stderr together, and return its output, then its exit code and time, as (exit 0 in 0.4 s); output past " + CAP + " characters keeps its head and tail. Each call is a new shell. The call waits until the command and everything holding its output end, so give a background job its own output file (cmd > file.log 2>&1 &). A background job shows to the user, who may stop it, and lives only while illi is open: quitting it kills every process the calls started.", { command: STR, description: SAYS }, ["command"]),
   spec("read", "Read a text file, or look at an image (png, jpeg, gif, webp: you see it, in this result only). offset: the first line to show (from 1); limit: how many lines; at: the character of the first line to start from. It ends saying the lines shown, as [lines 4-7 of 15]; output past " + CAP + " characters comes in pages, saying where to go on. To look at an image on the web, download it with shell (curl -o) and read the file.", { path: STR, offset: INT, limit: INT, at: INT }, ["path"]),
   spec("write", "Write a whole file, making its directories. Answers a unified diff of what changed (a new file: all its lines added).", { path: STR, content: STR }, ["path", "content"]),
   spec("edit", "Replace text in files: the edits in order, each on its file as the edits before it left it. old must match exactly, whitespace included, and only once, unless all is true, which replaces every match. If any edit fails, no file is changed. Answers a unified diff of each file.", { edits: { type: "array", items: EDIT, minItems: 1 } }, ["edits"]),

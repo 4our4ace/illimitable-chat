@@ -110,7 +110,7 @@ test("a run's calls each say how they ended: done, failed, not known", () => {
   expect(run.$ === "Act" && run.calls.map((d) => [d.call.name, d.call.head, d.ok])).toEqual([
     ["shell", "bun test", true],
     ["shell", "git push", false],
-    ["web_search", '"bend"', true],
+    ["web_search", "bend", true],
     ["read", "a.log", null],
   ]);
 });
