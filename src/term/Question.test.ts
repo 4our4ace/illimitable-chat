@@ -24,33 +24,37 @@
 // whole, the pointer on it lighting it; opened, it reads whole to its
 // end; folded or whole on a screen 80 by 16 or 40 by 10, nothing past
 // the foot, every answer, never two lines saying what is cut one over
-// the other. A line asked
-// for has the cursor in its words. The input as typed is kept under a
-// question, typing going nowhere meanwhile, and comes back once it is
-// answered. The pointer moving onto an answer lights it; a click does
-// what Enter does, held just after the question shows and never from
-// the click that only focuses the window; a double click picks once; a
-// question answered elsewhere takes no click. A click outside never
-// answers it: text is chosen and copied there, Ctrl+C copies it, the
-// tabs answer, the line asked stays. Ctrl+P's palette pops up over a
-// question; closed, the question is back, held again as it shows anew.
+// the other. A line asked for has the cursor in its words; a press
+// there puts it where it lands (past them or on the rule under them, at
+// their end), a drag choosing text, a double click keeping it, none from
+// the click that only focuses the window nor on text changed since the
+// paint. The input as typed is kept under a question, typing going
+// nowhere meanwhile, and comes back once it is answered. The pointer
+// moving onto an answer lights it; a click does what Enter does, held
+// just after the question shows and never from the click that only
+// focuses the window; a double click picks once; a question answered
+// elsewhere takes no click. A click outside never answers it: text is
+// chosen and copied there, Ctrl+C copies it, the tabs answer, the line
+// asked stays. Ctrl+P's palette pops up over a question; closed, the
+// question is back, held again as it shows anew.
 // illi's form takes the input's place too, who asks in the rule: its
 // tabs, the question, its options, its words and its keys, as tall as
 // its tallest tab (a shorter one blank over its keys: tabbing never
 // moves the chat), the cursor in the words; over a pane, typing and a
 // paste going to the words. A click on an option picks it (one to pick:
 // and goes on; of any: toggled), on a tab goes there, on the words
-// lights them, outside does nothing. Taller than half the screen, its
-// tabs and keys hold and its lines scroll, by the keys (the lit row kept
-// in view) and by the wheel over it (the lit row held while it shows,
-// else the nearest; the one under the pointer lit). A theme's lit mark
-// of any width leads every row as wide. Never a row past the screen's
-// last, from 7 rows up, whatever else shows (the side, work running,
-// many notes, a status line), and no control character from a lead; too
-// short for its lead and its answers, the lead gives way whole (one row
-// free: it says how many lines it has); too short for its answers, a
-// line each, as many as fit about the lit one. A paste never answers it:
-// the line asked takes it as one line.
+// lights them, their cursor put where it lands, outside does nothing.
+// Taller than half the screen, its tabs and keys hold and its lines
+// scroll, by the keys (the lit row kept in view) and by the wheel over
+// it (the lit row held while it shows, else the nearest; the one under
+// the pointer lit). A theme's lit mark of any width leads every row as
+// wide. Never a row past the screen's last, from 7 rows up, whatever
+// else shows (the side, work running, many notes, a status line), and
+// no control character from a lead; too short for its lead and its
+// answers, the lead gives way whole (one row free: it says how many
+// lines it has); too short for its answers, a line each, as many as fit
+// about the lit one. A paste never answers it: the line asked takes it
+// as one line.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -77,7 +81,7 @@ function term(): any {
   const t: any = {
     v: View.view_new(), scr, due: false, notices: [], scroll: 0, seen: { total: 0, marks: [], row: 0, first: 0, tall: 1, col: 0, end: 0 }, ver: 0, body: null, find: null,
     pane: null, agents: [], choose: null, question: null, profs: [], hits: [], since: 0, spin: undefined, ruled: null, doing: null, subs: new Map(), side: { place: "right", width: "25%" }, status: status_new(),
-    todo: false, areas: [], sel: null, sug: null, dropped: "", asking: null, box: null, aim: { row: -1, in: false, press: null, first: null }, pin: null, lit: null, pointed: false, wait: null, acted: null, quit: 0, pending: 0, imgs: new Map(), quoted: null, lead: false,
+    todo: false, areas: [], fields: [], sel: null, sug: null, dropped: "", asking: null, box: null, aim: { row: -1, in: false, press: null, first: null }, pin: null, lit: null, pointed: false, wait: null, acted: null, quit: 0, pending: 0, imgs: new Map(), quoted: null, lead: false,
   };
   [scr.grab, scr.on, scr.type] = [(k: string) => term_grab(t, k), (k: string) => term_press(t, k), (x: string) => term_type(t, x)];
   return t;
@@ -451,6 +455,46 @@ test("a line asked for (No, and say why) takes the input's rows, its title and k
   });
 });
 
+test("a press on a line asked puts its cursor where it lands, typing going in there: past its text or on the rule under it, at its end; a drag chooses text as on the input, a double click keeps the cursor; none from the click that only focuses the window, nor on text changed since the paint", () => {
+  sized(80, 24, () => {
+    const t = term();
+    term_ask(t, "New profile", "its name", "hello world", "letters, digits", () => null);
+    paint(t);
+    const find = t.question.find;
+    const row  = t.box.row;
+    expect([asked(t, 80)[1], t.ruled.at]).toEqual(["> hello world", { row, col: 15 }]);
+    click(t, row, 10);
+    term_type(t, "X");
+    paint(t);
+    expect([find.text, find.pos, t.ruled.at]).toEqual(["hello Xworld", 7, { row, col: 11 }]);
+    click(t, row, 40);
+    expect(find.pos).toBe(12);
+    click(t, row, 4);
+    expect(find.pos).toBe(0);
+    click(t, row + t.box.h, 6);
+    expect(find.pos).toBe(12);
+    const copied = written(() => {
+      press(t, row, 4);
+      drag(t, row, 9);
+      let_go(t, row, 9);
+    });
+    expect([find.pos, t.sel?.key, t.sel?.moved, copied]).toEqual([0, "foot", true, ["\x1b]52;c;" + Buffer.from("hello").toString("base64") + "\x07"]]);
+    written(() => {
+      click(t, row, 8);
+      again(t, row, 8);
+      let_go(t, row, 8);
+    });
+    expect([find.pos, t.scr.clicks]).toEqual([4, 2]);
+    t.scr.gained = Date.now();
+    click(t, row, 12);
+    t.scr.gained = undefined;
+    expect(find.pos).toBe(4);
+    term_type(t, "Y");
+    click(t, row, 12);
+    expect([find.text, find.pos, t.question.title]).toEqual(["hellYo Xworld", 5, "New profile"]);
+  });
+});
+
 test("the input as typed is kept under a question, typing going nowhere meanwhile, and comes back once it is answered", () => {
   sized(80, 24, () => {
     const t = term();
@@ -653,6 +697,38 @@ test("a click in illi's form: on an option, one to pick picks it and goes on, of
     click(t, t.box.row + t.box.h - 1, COL);
     click(t, t.box.row - 1, COL);
     expect([f.tab, f.each[0].picked, t.v.out, t.asking.done]).toEqual([0, [1], [], false]);
+  });
+});
+
+test("a press on illi's form's words puts their cursor where it lands, lighting them, typing going in there; past them, at their end; none from the click that only focuses the window, nor on the margin, nor on words changed since the paint", () => {
+  sized(110, 34, () => {
+    const t = term();
+    own(t, [DB]);
+    paint(t);
+    const f    = t.asking.form;
+    const ed   = f.each[0].ed;
+    const row  = form_row(t, 3);
+    const left = t.box.col + 4;
+    term_type(t, "near by");
+    paint(t);
+    expect([asked(t, 110)[6], t.ruled.at]).toEqual(["> > near by", { row, col: left + 7 }]);
+    term_grab(t, "Up");
+    expect(f.each[0].at).toBe(2);
+    click(t, row, left + 4);
+    expect([ed.pos, f.each[0].at]).toEqual([4, 3]);
+    term_type(t, "X");
+    paint(t);
+    expect([ed.text, t.ruled.at]).toEqual(["nearX by", { row, col: left + 5 }]);
+    click(t, row, left + 40);
+    expect(ed.pos).toBe(8);
+    t.scr.gained = Date.now();
+    click(t, row, left);
+    t.scr.gained = undefined;
+    click(t, row, 0);
+    expect(ed.pos).toBe(8);
+    term_type(t, "!");
+    click(t, row, left);
+    expect([ed.text, ed.pos, t.asking.done]).toEqual(["nearX by!", 9, false]);
   });
 });
 

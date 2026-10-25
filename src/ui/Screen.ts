@@ -1099,6 +1099,22 @@ export function ed_at(laid: Laid, top: number, row: number, col: number): number
   return ed_chip(laid.text, line.pos + at.pos);
 }
 
+// where a click at column col of a text shown on one row from its start
+// puts the cursor (a list's search: Popup.ts): on a character, before it
+// (a wide one by either half); before the text, at its start; past it,
+// at its end; inside a chip, at its nearer edge
+export function ed_col(text: string, col: number): number {
+  let [at, pos] = [0, 0];
+  for (const g of Paint.text_graphemes(text)) {
+    const w = Paint.text_width(g);
+    if (col < at + w) {
+      break;
+    }
+    [at, pos] = [at + w, pos + g.length];
+  }
+  return ed_chip(text, pos);
+}
+
 // a place inside a chip (TOKEN) moved to its nearer edge; any other kept
 function ed_chip(text: string, pos: number): number {
   const hit = [...text.matchAll(TOKEN)].find((m) => m.index! < pos && pos < m.index! + m[0].length);

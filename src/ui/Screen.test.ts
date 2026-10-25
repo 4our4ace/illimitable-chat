@@ -8,21 +8,22 @@
 // row at the end; in a chip at its nearer edge; a tall input scrolls
 // only as the cursor leaves the rows shown. Up and Down walk the
 // messages sent from an empty input moved in, and on from one brought
-// back. A paint writes only the rows that changed, those moved as a
-// block moved by the terminal. Then the lines Paint lays out: a link
-// wider than a line breaks at its edge, its pieces each opening it whole;
-// a word of several runs is kept whole; a frame never passes its width;
-// each block's lines are marked. A word finds options by name, then by
-// a word of what they do, then by its letters. The window's title, written as it
-// changes, put back as illi's goes. In a window (Window.ts), frames in
-// the input are heard, never typed, however the reads cut them (one
-// written between two reads of a key or a paste leaves them whole; one
-// cut is awaited however slow); keys reaching a hidden screen, or read
-// after one that hid it, are dropped; hidden, the screen writes nothing;
-// shown, it says it's up, asks the kitty flags and the background, then
-// writes every row, the focus told before it hid no longer held; Ctrl+Z
-// goes to the window, leaving writes nothing, and the PTY's end tells
-// the window gone.
+// back. A click on a text on one row (a list's search) puts the cursor
+// as on the input. A paint writes only the rows that changed, those
+// moved as a block moved by the terminal. Then the lines Paint lays
+// out: a link wider than a line breaks at its edge, its pieces each
+// opening it whole; a word of several runs is kept whole; a frame never
+// passes its width; each block's lines are marked. A word finds options
+// by name, then by a word of what they do, then by its letters. The
+// window's title, written as it changes, put back as illi's goes. In a
+// window (Window.ts), frames in the input are heard, never typed,
+// however the reads cut them (one written between two reads of a key or
+// a paste leaves them whole; one cut is awaited however slow); keys
+// reaching a hidden screen, or read after one that hid it, are dropped;
+// hidden, the screen writes nothing; shown, it says it's up, asks the
+// kitty flags and the background, then writes every row, the focus told
+// before it hid no longer held; Ctrl+Z goes to the window, leaving
+// writes nothing, and the PTY's end tells the window gone.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -465,6 +466,15 @@ test("a click on an input a column wide, where a wide character leaves its first
   const thin = clicked("世a", 3);
   expect(thin.rows).toEqual(["> ", "  世", "  a", "  "]);
   expect([thin.at(0, 0), thin.at(0, 2), thin.at(1, 3), thin.at(2, 2), thin.at(3, 0)]).toEqual([0, 0, 0, 1, 2]);
+});
+
+test("a click on a text shown on one row from its start (a list's search): before the character it lands on (a wide one by either half, a letter and its marks whole), before the text at its start, past it at its end, in a chip at its nearer edge", () => {
+  expect([0, 1, 4, 5, 6, 11, 40].map((c) => Screen.ed_col("hello world", c))).toEqual([0, 1, 4, 5, 6, 11, 11]);
+  expect([-3, -1].map((c) => Screen.ed_col("hello", c))).toEqual([0, 0]);
+  expect([0, 1, 2, 3, 4, 5, 6, 9].map((c) => Screen.ed_col("a世😀b", c))).toEqual([0, 1, 1, 2, 2, 4, 5, 5]);
+  expect([3, 4, 5].map((c) => Screen.ed_col("cafe\u0301 x", c))).toEqual([3, 5, 6]);
+  expect([0, 9].map((c) => Screen.ed_col("", c))).toEqual([0, 0]);
+  expect([4, 5, 8, 9, 10].map((c) => Screen.ed_col("see [Image #1] ok", c))).toEqual([4, 4, 4, 14, 14]);
 });
 
 test("a click on the input follows the prompt's own width", () => {

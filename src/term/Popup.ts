@@ -19,14 +19,16 @@
 // pages moving in it (popup_wheel, popup_page), and the whole mouse
 // (popup_mouse): the pointer moving to a row lights it (one lit row,
 // shared with the keys), a click on an option does what Enter does
-// there, a click outside closes it, the click that only focuses the
-// terminal does nothing; nothing reaches the chat, a pane, the side, the
-// tabs or the input under it (no button lights, no text is chosen), and
-// a paste goes to its search, if any. What is at the input takes only
-// the mouse on it: a question there (the row under the pointer lit, a
-// press on an answer, a tab or a row of illi's form its, or on a line of
-// a folded command saying what it hides; its lead's text may be chosen),
-// the commands suggested as a /word is typed (no popup,
+// there, a press on its search puts the cursor where it lands (Select.ts
+// term_put; one too long to show whole, on the ellipsis where what shows
+// starts: popup_find_at), a click outside closes it, the click that only
+// focuses the terminal does nothing; nothing reaches the chat, a pane,
+// the side, the tabs or the input under it (no button lights, no text
+// is chosen), and a paste goes to its search, if any. What is at the
+// input takes only the mouse on it: a question there (the row under the
+// pointer lit, a press on an answer, a tab or a row of illi's form its,
+// or on a line of a folded command saying what it hides; its lead's text
+// may be chosen), the commands suggested as a /word is typed (no popup,
 // they belong to typing, but a press on them is theirs: no text chosen;
 // a click does what Enter does there). Panes stay in the chat's place.
 
@@ -36,10 +38,10 @@ import * as Draw from "../ui/Draw.ts";
 import { MARGIN, term_draw } from "./Frame.ts";
 import { term_choose_key, term_step } from "./Keys.ts";
 import * as Paint from "../ui/Paint.ts";
-import { term_let_go } from "./Select.ts";
+import { term_let_go, term_put } from "./Select.ts";
 import * as Screen from "../ui/Screen.ts";
 import { question_of, question_toggle } from "./Question.ts";
-import type { Box, Chooser, Target, Term } from "./Term.ts";
+import type { Box, Chooser, Target, Term, Typed } from "./Term.ts";
 import { GLYPH } from "../ui/Theme.ts";
 
 // the narrowest a popup is (a two-option list still reads as one), the
@@ -84,8 +86,8 @@ type Shape = Pick<Box, "list" | "lines" | "tall" | "ahead" | "lead" | "folds">;
 
 // a popup laid out: its place, its lines framed, what each stands for
 // (Box rows), the cursor's spot in it (none: it takes no typing), its
-// Shape
-type Laid = { place: Place; lines: Paint.Line[]; rows: Box["rows"]; at?: Screen.Spot; shape: Shape };
+// Shape, its search as typed in (none: it has none)
+type Laid = { place: Place; lines: Paint.Line[]; rows: Box["rows"]; at?: Screen.Spot; shape: Shape; field?: Typed };
 
 // what a popup's content asks of its box, in columns with its frame: its
 // options' names whole, with their marks (names); all it shows whole
@@ -136,6 +138,10 @@ export function popup_paint(t: Term, rows: Screen.Piece[][], w: number, h: numbe
     rows[at.row + k].push({ col: at.col, w: at.w, line: panel === undefined ? line : line.map((r) => ({ ...r, s: { ...r.s, g: panel } })) });
   });
   t.box = { of, ...at, inset: 2, rows: box.rows, ...box.shape };
+  if (box.field !== undefined) {
+    const f = box.field;
+    t.fields.push({ of, ed: f.ed, text: f.ed.text, row: at.row + f.row, col: at.col + f.col, w: f.w, tall: f.tall, at: f.at });
+  }
   if (was === null) {
     t.aim.row = t.scr.point.row;
     t.aim.in  = popup_at(t.box, t.scr.point) !== "out";
@@ -313,7 +319,17 @@ function popup_list(c: Chooser, w: number, h: number): Omit<Laid, "place"> {
   const fill  = [...items, ...blank(room - items.length)];
   const after = Paint.text_width(text.slice(c.find?.pos ?? 0));
   const at    = c.find === null ? undefined : { row: 1, col: Math.min(w - 3, 2 + Paint.text_width(GLYPH.find) + Math.max(0, Paint.text_width(typed) - after)) };
-  return { lines: Paint.frame(fill.map(([l]) => l), w, title, foot), rows: [null, ...fill.map(([, aim]) => aim), null], at, shape: { list: 1 + find.length, lines: rows, tall: view.length, ahead: 0, lead: 0, folds: false } };
+  const from  = typed === text ? 0 : text.length - (typed.length - "…".length);
+  const field = c.find === null ? undefined : { ed: c.find, row: 1, col: 2, w: iw, tall: 1, at: (_: number, col: number) => popup_find_at(text, typed !== text, from, col - Paint.text_width(GLYPH.find)) };
+  return { lines: Paint.frame(fill.map(([l]) => l), w, title, foot), rows: [null, ...fill.map(([, aim]) => aim), null], at, shape: { list: 1 + find.length, lines: rows, tall: view.length, ahead: 0, lead: 0, folds: false }, field };
+}
+
+// where a press at column col of a list's search as shown puts its
+// cursor (col 0: the text's first; Screen.ed_col): a search too long,
+// shown from `from` behind "…" (cut), on the "…" where what shows starts
+function popup_find_at(text: string, cut: boolean, from: number, col: number): number {
+  const dots = Paint.text_width("…");
+  return !cut ? Screen.ed_col(text, col) : col < dots ? from : from + Screen.ed_col(text.slice(from), col - dots);
 }
 
 // the picker's entries in view (view: their indices in list), laid out
@@ -509,6 +525,9 @@ export function popup_mouse(t: Term, key: string): boolean {
     const live  = key === "Press" && !again && box !== null && !(open !== null && t.scr.focusing);
     aim.first   = key === "Press" && t.scr.clicks === 1 ? open : aim.first;
     aim.press   = again || over ? { of: live ? on : null, on: live ? at : null } : null;
+    if (live && aim.press !== null && at !== "out") {
+      term_put(t, on!);
+    }
     return aim.press !== null;
   }
   const took = of !== null || aim.press !== null;

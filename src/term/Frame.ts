@@ -178,8 +178,9 @@ export function term_draw(t: Term): void {
 // floats over the chat's foot, in its middle: a jump to its end (a click
 // goes there, as Ctrl+End does). What a click in the chat would act on
 // lit, once every hit is placed (Select.ts term_light). The input as
-// painted (its rows, the rule under them) kept in the foot's area, where
-// a press puts its cursor (Select.ts). A list's popup open (Popup.ts)
+// painted (its rows, the rule under them) kept as a field, where a press
+// puts its cursor (Select.ts term_put; a question's and a list's lines
+// typed in too: question_kept, popup_paint). A list's popup open (Popup.ts)
 // over all of it, all else dimmed, the cursor in its search (none:
 // hidden), and nothing under it takes a click or lights; with
 // none, the cursor in the question's line or words, if it takes typing
@@ -195,8 +196,9 @@ export function term_paint(t: Term): void {
     return;
   }
   term_title(t);
-  t.hits  = [];
-  t.areas = [];
+  t.hits   = [];
+  t.areas  = [];
+  t.fields = [];
   const { w, h } = Screen.screen_size();
   const full  = w - 1;
   const side  = term_side_width(t, w);
@@ -237,8 +239,7 @@ export function term_paint(t: Term): void {
   const lit   = { ...Paint.INK, c: Draw.draw_tokens().accent };
   const toast = box !== null ? [] : [...lead, Paint.Run(" ".repeat(Math.max(1, left + cw - Paint.line_width(lead) - Paint.text_width(said.toast)))), Paint.Run(said.toast, lit)];
   const lines = [...above, toast, term_rule(t, iw, ruled, asked?.rule), ...input.lines, ...(paned ? [] : [Paint.rule(iw)]), ...status, Paint.tabs_line(t.v, iw, side === 0, jobs, side === 0 ? related_shown(t).length : 0)];
-  const put   = typed === null ? undefined : { line: above.length + 2, tall: typed.lines.length + 1, top: typed.top, laid: typed.laid };
-  const foot  = term_area(t, { key: "foot", lines, first: 0, row: 1 + tall, col: MARGIN, w: iw, tall: lines.length, input: put });
+  const foot  = term_area(t, { key: "foot", lines, first: 0, row: 1 + tall, col: MARGIN, w: iw, tall: lines.length });
   const head  = term_area(t, { key: "head", lines: [term_head(t, full)], first: 0, row: 0, col: 0, w: full, tall: 1 });
   const rows  = ROWS;
   const with_: number[] = [];
@@ -262,6 +263,9 @@ export function term_paint(t: Term): void {
   for (const line of foot) {
     rows.push([{ col: MARGIN, w: iw, line }]);
   }
+  if (typed !== null) {
+    term_typed(t, typed, 3 + tall + above.length);
+  }
   if (box !== null) {
     term_over(t, rows, box, top, MARGIN, iw);
   } else if (asked !== null && !pop) {
@@ -284,6 +288,14 @@ export function term_paint(t: Term): void {
   t.scr.blink = idle || asked !== null;
   Screen.screen_paint(t.scr, drawn, cursor);
   painted = Date.now();
+}
+
+// the input as painted from screen row `row`, kept for a press to put
+// its cursor (Select.ts term_put): its rows whole and the rule under
+// them (the text's end), from MARGIN in
+function term_typed(t: Term, typed: { lines: Paint.Line[]; top: number; laid: Screen.Laid }, row: number): void {
+  const rows = typed.lines.length;
+  t.fields.push({ of: null, ed: t.scr.ed, text: t.scr.ed.text, row, col: 0, w: Infinity, tall: rows + 1, at: (r, c) => Screen.ed_at(typed.laid, typed.top, r < rows ? r : Infinity, c - MARGIN) });
 }
 
 // a line of the side, w wide, with its edge toward the chat: the side

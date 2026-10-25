@@ -105,7 +105,8 @@ import * as View from "../ui/View.ts";
 // (config.SIDE, SIDE_WIDTH); todo: whether illi's to-do list shows
 // whole there (else folded); login: the device login waiting for
 // the person (/login; null: none); areas: the parts of the screen as last
-// painted, sel: the text chosen in one (null: none), hover: the button
+// painted, fields: the lines typed in as last painted (a press puts the
+// cursor in one), sel: the text chosen in one (null: none), hover: the button
 // under the pointer as last painted, drift: a drag's scrolling past an
 // area's edge; sug: the commands suggested as a /word is typed (null:
 // closed); dropped: the suggested reply typing dismissed, till a message
@@ -161,6 +162,7 @@ export type Term = {
   todo    : boolean;
   login   : AbortController | null;
   areas   : Area[];
+  fields  : Field[];
   sel     : Sel | null;
   hover   : (() => string) | undefined;
   drift   : { d: number; timer: Timer } | undefined;
@@ -225,12 +227,23 @@ type Seen = { total: number; marks: Paint.Mark[]; row: number; first: number; ta
 // a part of the screen a drag chooses text in: which (chat, pane, side,
 // head, foot), its lines, the first shown (at screen row `row`, column
 // `col`), how wide and tall it shows; scroll: it moved a line up (d -1)
-// or down (1), for a drag past its edge (none: it holds still); input:
-// the input in it as painted, where a press puts the cursor (Select.ts):
-// the line its first row is on, how many lines it takes (its rows, the
-// rule under them), the first of its rows shown and its layout (the
-// foot's; none while a question or a pane is in its place)
-export type Area = { key: string; lines: Paint.Line[]; first: number; row: number; col: number; w: number; tall: number; scroll?: (d: number) => void; input?: { line: number; tall: number; top: number; laid: Screen.Laid } };
+// or down (1), for a drag past its edge (none: it holds still)
+export type Area = { key: string; lines: Paint.Line[]; first: number; row: number; col: number; w: number; tall: number; scroll?: (d: number) => void };
+
+// a line typed in as painted, where a press puts its cursor (Select.ts
+// term_put): the input, a question's line asked, illi's form's words, a
+// list's search. What it was painted for (a picker, illi's form; the
+// input: null), its editor and the text it showed; the rows and columns
+// a press there takes, from its first row and column on the screen (the
+// input's and a line asked's: their rows whole, the rule under them too,
+// for the text's end); where a press at a row and column of those, from
+// its first, puts the cursor
+export type Field = { of: object | null; ed: Screen.Ed; text: string; row: number; col: number; w: number; tall: number; at: (row: number, col: number) => number };
+
+// a line typed in as laid out in a box (a picker's, illi's form), before
+// it is painted (Field): its rows and columns from the box's first; wide:
+// its rows whole, past the box (a line asked, as the input)
+export type Typed = Omit<Field, "of" | "text"> & { wide?: true };
 
 // a place in an area's lines: a line, a column
 export type Cell = { line: number; col: number };
@@ -398,6 +411,7 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
     todo    : false,
     login   : null,
     areas   : [],
+    fields  : [],
     sel     : null,
     hover   : undefined,
     drift   : undefined,

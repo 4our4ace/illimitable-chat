@@ -40,7 +40,7 @@ afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 // a terminal with no screen, one area of three lines 20 wide (its middle
 // blank) at the screen's top left; a paint always due
 const AREA = { key: "chat", lines: [[Paint.Run("hello world")], [], [Paint.Run("hi")]], first: 0, row: 0, col: 0, w: 20, tall: 3 };
-const term = () => ({ areas: [], sel: null, due: true, acted: null, scr: { point: { row: 0, col: 0 }, clicks: 1 } }) as any;
+const term = () => ({ areas: [], fields: [], sel: null, due: true, acted: null, scr: { point: { row: 0, col: 0 }, clicks: 1 } }) as any;
 
 // a drag from one spot to another; the area's rows as then shown
 function drag(t: any, from: [number, number], to: [number, number]): Line[] {
@@ -144,7 +144,7 @@ function terminal(): any {
   const t: any = {
     v: View.view_new(), scr, due: false, notices: [], scroll: 0, seen: { total: 0, marks: [], row: 0, first: 0, tall: 1, col: 0, end: 0 }, ver: 0, body: null, find: null,
     pane: null, agents: [], choose: null, question: null, profs: [], hits: [], since: 0, spin: undefined, ruled: null, doing: null, subs: new Map(), side: { place: "right", width: "25%" }, status: status_new(),
-    todo: false, areas: [], sel: null, sug: null, dropped: "", asking: null, box: null, aim: { row: -1, in: false, press: null, first: null }, pin: null, lit: null, pointed: false, wait: null, acted: null, quit: 0, pending: 0, imgs: new Map(), quoted: null, lead: false,
+    todo: false, areas: [], fields: [], sel: null, sug: null, dropped: "", asking: null, box: null, aim: { row: -1, in: false, press: null, first: null }, pin: null, lit: null, pointed: false, wait: null, acted: null, quit: 0, pending: 0, imgs: new Map(), quoted: null, lead: false,
   };
   [scr.grab, scr.on, scr.type] = [(k: string) => term_grab(t, k), (k: string) => term_press(t, k), (x: string) => term_type(t, x)];
   return t;

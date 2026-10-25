@@ -41,8 +41,9 @@ import { term_click, term_unwait } from "./Keys.ts";
 import { term_toast } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_popup } from "./Popup.ts";
+import { question_of } from "./Question.ts";
 import * as Screen from "../ui/Screen.ts";
-import type { Area, Box, Cell, Ink, Sel, Term, Under } from "./Term.ts";
+import type { Area, Box, Cell, Field, Ink, Sel, Term, Under } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
 // a drag past a chat's edge scrolls it a line each DRIFT ms; text chosen
@@ -83,8 +84,8 @@ function term_button(line: Paint.Line, col: number): (() => string) | undefined 
 // it (twice in a row there: from the word under it, a word at a time;
 // three times: from its line, a line at a time; a button's own click
 // comes first, and a press that acts on nothing chooses no word:
-// term_dead; on the input, one that acts puts its cursor there first:
-// term_put); dragged, the choice follows the pointer (a chat scrolls
+// term_dead; on a line typed in, one that acts puts its cursor there
+// first: term_put); dragged, the choice follows the pointer (a chat scrolls
 // while it's past an edge); let go, the text chosen is copied, else it
 // was a click (none from a press that acts on nothing; none on the chat's
 // marks from one that let text chosen go: term_showing). The right
@@ -119,9 +120,9 @@ export function term_mouse(t: Term, key: string): void {
       const unit = term_under(t, p) === undefined && !dead ? t.scr.clicks : 1;
       const root = term_unit(area, at, unit);
       t.sel = { key: area.key, a: root[0], b: root[1], held: true, moved: unit > 1 && !term_after(root[0], root[1]), unit, root, ...drop };
-      if (!dead) {
-        term_put(t, area, at);
-      }
+    }
+    if (!dead) {
+      term_put(t);
     }
   } else if ((key === "Drag" || key === "RightDrag") && t.sel?.held) {
     const area = t.areas.find((a) => a.key === t.sel!.key);
@@ -143,20 +144,29 @@ export function term_mouse(t: Term, key: string): void {
   }
 }
 
-// a press on the input as last painted (Area input): its cursor put
-// where it landed on its rows (Screen.ed_at), and on the rule under them
-// at the text's end (rows hidden under the view too), as Left or Right
-// moves it (moved, on text typed: Up and Down past its ends then stay in
-// it; on an empty input they walk the messages sent still); none if its
-// text changed since it was painted
-function term_put(t: Term, area: Area, at: Cell): void {
-  const put = area.input;
-  const ed  = t.scr.ed;
-  const row = at.line - (put?.line ?? 0);
-  if (put !== undefined && row >= 0 && row < put.tall && put.laid.text === ed.text) {
-    ed.pos   = Screen.ed_at(put.laid, put.top, row < put.tall - 1 ? row : Infinity, at.col);
-    ed.moved = ed.moved || ed.text !== "";
+// a press on a line typed in as last painted (Field: the input, a
+// question's line asked, illi's form's words, a list's search; of: one a
+// picker or the form painted, from Popup.ts popup_mouse, which takes the
+// presses in its box), still shown: its cursor put where the press
+// landed (its rows: Screen.ed_at; the rule under the input or a line
+// asked: the text's end), as Left or Right moves it (moved, on text
+// typed: Up and Down past its ends then stay in it; on an empty input
+// they walk the messages sent still); none if its text changed since it
+// was painted
+export function term_put(t: Term, of?: object): void {
+  const p = t.scr.point;
+  const f = t.fields.find((f) => (of === undefined || f.of === of) && term_shows(t, f) && p.row >= f.row && p.row < f.row + f.tall && p.col >= f.col && p.col < f.col + f.w);
+  if (f !== undefined && f.text === f.ed.text) {
+    f.ed.pos   = f.at(p.row - f.row, p.col - f.col);
+    f.ed.moved = f.ed.moved || f.ed.text !== "";
   }
+}
+
+// whether a line typed in, as last painted, shows still: the input with
+// nothing in its place (a question, a pane); one a picker or illi's form
+// painted while it is open (a list's popup closed since: none)
+function term_shows(t: Term, f: Field): boolean {
+  return f.of === null ? question_of(t) === null && t.pane === null : f.of === t.choose || f.of === question_of(t);
 }
 
 // whether text chosen shows: dragged, or let go and on a row its area

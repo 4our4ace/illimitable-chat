@@ -205,8 +205,11 @@ and what you were typing comes back once you answer.
 | typing | search, where the list has one, by name (Ctrl+P's by the words of what each row does too, as `/` does), or the line a question asks; it edits as the input does, and a paste goes there as one line |
 
 - In a list the wheel scrolls it; the row under the pointer lights as it
-  moves; a click does what Enter does; a click outside closes it.
-  Shift+drag selects text in it, as the terminal does.
+  moves; a click does what Enter does; a click in its search puts the
+  cursor where it lands, as in your message (on a search too long to
+  show whole, a click on the `…` goes to where what shows starts); a
+  click outside closes it. Shift+drag selects text in it, as the
+  terminal does.
 - On a question the row under the pointer lights and a click does what
   Enter does. What leads its answers (a command, why it is asked) shows
   whole up to half the screen, then cut, a dim line saying how much more
@@ -218,10 +221,11 @@ and what you were typing comes back once you answer.
   too long for the screen so too by its rows (`… 12 rows`). Ctrl+O
   (the rule says `Ctrl+O all`) or a click on a `… 37 lines` or
   `… 12 rows` line shows all of it; Ctrl+O again (`Ctrl+O fold`) folds
-  it. Everywhere else the mouse works as with no question: the wheel
-  scrolls the chat, text is selected and copied (Ctrl+C with text
-  selected copies it, and doesn't answer), the side and the tabs
-  answer; a click outside never answers.
+  it. A click in the line a question asks for (a name, a reason) puts
+  the cursor where it lands, as in your message. Everywhere else the
+  mouse works as with no question: the wheel scrolls the chat, text is
+  selected and copied (Ctrl+C with text selected copies it, and doesn't
+  answer), the side and the tabs answer; a click outside never answers.
 - Ctrl+L, Ctrl+Z and the leader work as ever; Ctrl+P opens the commands
   in a list's place (in its own, closes it), and over a question, which
   is back as the list closes.
@@ -254,7 +258,8 @@ rule over them, the input you were typing kept for after them:
   and Shift+Tab (Left and Right, off your words) switch tabs. PgUp and
   Ctrl+Home go to the first option, PgDn and Ctrl+End to your words.
 - A click on an option picks it (one: and goes on; several: on or off),
-  on a tab goes there, on your words' row puts you there.
+  on a tab goes there, on your words' row puts you there, the cursor
+  where it lands.
 - They keep one height, their tallest tab's, so the chat stays put as
   you switch tabs. Taller than half the screen, the tabs and keys stay
   and the rest scrolls, with the option you're on, or by the wheel over
@@ -333,7 +338,9 @@ Mouse and side panel
   three a line; a reply's code has a copy button. Copying uses OSC 52,
   so the terminal (and tmux) must allow it.
 - A click in your message puts the cursor there ([Typing](#typing)), on
-  an agent's page too; a drag over it still copies.
+  an agent's page too; a drag over it still copies. A click in a list's
+  search, the line a question asks for or your words to illi's
+  questions puts the cursor there too.
 - The work between replies (tool calls, results, thinking, agents'
   reports) shows as a run ([Design language](design.md#runs)): a line
   saying what was done, then its calls, one line each, what each did in
