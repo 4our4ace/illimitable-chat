@@ -596,7 +596,7 @@ function term_chat(t: Term, w: number, tall: number, row: number, col: number): 
     const total = 1 + body.lines.length + below;
     t.scroll = wider ? Math.round((t.scroll * total) / t.seen.total) : t.scroll + Math.max(0, total - t.seen.total);
   }
-  const aim   = t.find !== null ? { key: Paint.block_key(t.find[0], t.find[1]), row: row + 1 } : t.pin;
+  const aim   = t.find !== null ? { key: t.find, row: row + 1 } : t.pin;
   const at    = aim === null ? -1 : Paint.rows_find(body.rows, aim.key);
   const up    = Paint.laid_up(body, 0, at < 0 ? Infinity : at);
   const kept  = aim === null ? undefined : body.marks.find((m) => m.key === aim.key);

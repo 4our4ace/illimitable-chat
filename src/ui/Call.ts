@@ -119,7 +119,7 @@ const CD = /^cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s*(?:&&|;)\s*/;
 // code first; a read's lines shown, at its result's end (Machine.read);
 // what a call stopped answers (Agent.use); how far from a result's end
 // each is looked for
-const EXIT    = /\((exit -?\d+|stopped|killed by \S+) in [\d.]+ s\)\s*$/;
+const EXIT    = /\((exit -?\d+|stopped|killed by \S+) in [\d.]+ ?s\)\s*$/;
 const CODE    = /^Exit code (-?\d+)/;
 const SHOWN   = /\[lines (\d+)-(\d+) of \d+[^\]\n]*\]\s*$/;
 const STOPPED = "(stopped)";
@@ -232,6 +232,12 @@ function call_named(c: Call): string {
 function arg_said(v: unknown, most: number): string {
   const line = typeof v === "number" ? String(v) : text_first(v);
   return line === "" || line.length > most ? "" : /\s/.test(line) ? '"' + line + '"' : line;
+}
+
+// a text's first line as a label shows it (text_first): a thought's,
+// a summary's
+export function label_line(text: string): string {
+  return text_first(text);
 }
 
 // a string's first line that holds anything, its spaces folded, " …"

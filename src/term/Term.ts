@@ -85,7 +85,7 @@ import * as View from "../ui/View.ts";
 // chat's end (0: following it); seen: the chat as last painted; ver: a
 // count of the changes to the chat's rows (a stream's aside), body: its
 // lines as laid
-// out at one; find: a block to scroll to; pane: a text over the chat
+// out at one; find: the mark of a block or an item to scroll to (Paint.mark_key); pane: a text over the chat
 // (/help, /agents); agents: the user's primary agents, as last read; choose: the
 // picker of a list, a popup (Popup.ts; null: closed); question: the
 // picker of a question, in the input's place (Question.ts: a
@@ -142,7 +142,7 @@ export type Term = {
   seen    : Seen;
   ver     : number;
   body    : Body | null;
-  find    : View.Part | null;
+  find    : string | null;
   pane    : Pane | null;
   agents  : Profile[];
   choose  : Chooser | null;

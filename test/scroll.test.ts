@@ -101,7 +101,7 @@ test("scrolled up, the lines read stay as more come; text chosen stays on its li
 test("a block asked for shows at the top, all under it laid out", () => {
   const t = term(chat(400));
   paint(t);
-  t.find = [0, 4];
+  t.find = Paint.block_key(0, 4);
   const { area } = paint(t);
   const mark = t.seen.marks.find((m: Paint.Mark) => m.id === 0 && m.n === 4);
   expect(area.first).toBe(mark.from - 1);

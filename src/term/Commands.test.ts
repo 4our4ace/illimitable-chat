@@ -395,6 +395,28 @@ test("/tab finds the chat's tab by the main agent's name, or illi's; none lists 
   expect(note(t)).toMatch(/^Tabs: /);
 });
 
+test("/open #id and /close #id: a call of a run opens or shuts alone (one its More line counts too, all then shown), scrolled to; a block as ever; neither, says so", () => {
+  const t = term();
+  const whole: Record<string, any> = { 1: { kind: "user", text: "go" }, 16: { kind: "illi", text: "Done." } };
+  for (let k = 0; k < 7; k++) {
+    whole[2 + 2 * k] = { kind: "tool", text: "shell " + JSON.stringify({ command: "./step " + k }) };
+    whole[3 + 2 * k] = { kind: "echo", text: "(exit 0 in 0.1 s)" };
+  }
+  View.view_hear(t.v, { $: "know", whole });
+  View.view_hear(t.v, { $: "view", parts: Object.keys(whole).map((id) => [Number(id), 1]), turn: 0 });
+  const items = () => (View.view_body(t.v).find((r: any) => r.$ === "Act") as any).rows.filter((r: any) => r.$ === "Item").map((r: any) => [r.key, r.open]);
+  run(t, "/open", "#4");
+  expect([items().slice(0, 3), t.find]).toEqual([[["c#2", false], ["c#4", true], ["c#6", false]], "c#4"]);
+  run(t, "/open", "4");
+  expect(items()[1]).toEqual(["c#4", true]);
+  run(t, "/close", "#4");
+  expect(items()[1]).toEqual(["c#4", false]);
+  run(t, "/open", "#14");
+  expect([items().length, items().at(-1), t.find]).toEqual([7, ["c#14", true], "c#14"]);
+  run(t, "/open", "#16");
+  expect([note(t), t.find]).toEqual(["No block #16 here.", "c#14"]);
+});
+
 test("the dead ends say something: /stop with nothing running, /fold on an agent's tab, /image with no path, /mcp with no servers", () => {
   const t = term();
   run(t, "/stop");

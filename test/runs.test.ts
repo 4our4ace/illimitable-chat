@@ -1,31 +1,35 @@
 // Runs test
 // =========
 // `bun test runs.test.ts`. Runs of work in a chat painted (Frame.ts),
-// clicked as a terminal reports it. A click on a run's head, or anywhere
-// down its bar, opens or closes the whole run, the runs led by a thought
-// each its own (shown by Ctrl+O, a click closes one alone, and Ctrl+O
-// again forgets the clicks); a click inside a message of an open run folds it to one
-// line, its siblings staying, and a click on that line unfolds it; an
-// open block shuts from any line of its frame, a block inside it opening
-// itself; a gap line in a run is the block's above it. What a click
-// acted on keeps its first line on the row clicked, the chat scrolled up
-// or at its end (an open there leaves the end, the jump to it shown; a
-// close there lands lower, as the chat never scrolls past its end). The
-// live tail takes no click. What a click would act on lights, one thing
-// at a time, once the pointer has moved: a run's head and its whole bar
-// (heavier), a message's bar beside it, a folded line's glyph, a
-// summary's gutter and /open, an open block's bar; never under a hit
-// (the jump to the end); gone as the pointer leaves, as the chat moves
-// by itself while followed, at a key, as the window loses the focus,
-// while text chosen shows (the click that lets it go folds nothing;
-// scrolled away, it holds no click back). A click on a word inside a
-// message or a summary waits out a double click, what it acts on shown
-// pressed meanwhile (a second press chooses the word; a key, the wheel,
-// a right press give it up; a drag never folds; its mark gone by then,
-// nothing), on a mark's own control (a summary's gutter and /open, an
-// open block's bar) at once; a press again soon on the cell whose click
-// just acted does nothing, nor does the press that only focuses the
-// window. A pin past the chat's rows is held inside them.
+// clicked as a terminal reports it. A run is a line saying what was
+// done, over its items, a line each; the line takes no click. A click on
+// an item's line opens it alone (its call and its result whole, the
+// thoughts before it), its siblings staying shut, in a run led by a
+// thought too; a click on that line again, anywhere down its bar or
+// anywhere in it (a gap line too) shuts it; shown by Ctrl+O, a click
+// shuts one alone, and Ctrl+O again forgets the clicks. Past five items,
+// a click on the More line shows them all (the newest while the run
+// works), and again fewer. An open block shuts from any line of its
+// frame, a block inside it opening itself. What a click acted on keeps
+// its first line on the row clicked, the chat scrolled up or at its end
+// (an open there leaves the end, the jump to it shown; a close there
+// lands lower, as the chat never scrolls past its end). The live tail
+// takes no click. What a click would act on lights, one thing at a time,
+// once the pointer has moved: an item's line and, open, its whole bar
+// (heavier), a More line, a summary's gutter and /open, an open block's
+// bar; never the run's own line, never under a hit (the jump to the
+// end); gone as the pointer leaves, as the chat moves by itself while
+// followed, at a key, as the window loses the focus, while text chosen
+// shows (the click that lets it go acts on nothing; scrolled away, it
+// holds no click back). A click on a word inside an open item or a
+// summary waits out a double click, what it acts on shown pressed
+// meanwhile (a second press chooses the word; a key, the wheel, a right
+// press give it up; a drag never acts; its mark gone, or opened or shut
+// otherwise by then, nothing), on a mark's own control (an item's line
+// and its bar, a summary's gutter and /open, an open block's bar) at
+// once; a press again soon on the cell whose click just acted does
+// nothing, nor does the press that only focuses the window. A pin past
+// the chat's rows is held inside them.
 
 import { expect, test } from "bun:test";
 import { term_paint } from "../src/term/Frame.ts";
@@ -36,9 +40,8 @@ import * as Screen from "../src/ui/Screen.ts";
 import * as View from "../src/ui/View.ts";
 import * as Theme from "../src/ui/Theme.ts";
 
-// a run's marks, open and shut, as the theme draws them
-const OPEN = Theme.GLYPH.open + " ";
-const SHUT = Theme.GLYPH.shut + " ";
+// a done item's mark, as the theme draws it, and the space after it
+const OK = Theme.GLYPH.ok + " ";
 
 // a chat: the user's words (`top` lines more), a run of work (two
 // calls, a long result, a short one), illi's reply; again, a run of one
@@ -143,81 +146,146 @@ const left = (t: any) => t.areas.find((a: any) => a.key === "chat").col;
 // the chat's lines as last painted, as text
 const text = (area: any) => area.lines.map((l: Paint.Line) => l.map((r) => r.x).join("").trimEnd());
 
-test("a click on a run's head, or anywhere down its bar, closes the whole run; on its line again, opens it", () => {
+// the column of a word in the chat's line k of the mark keyed `key` (k
+// below 0: from the line past its last), as last painted
+const col_of = (t: any, key: string, k: number, word: string) => {
+  const area = t.areas.find((a: any) => a.key === "chat");
+  const m    = mark(t, key);
+  return area.col + text(area)[(k < 0 ? m.to : m.from) + k].indexOf(word);
+};
+
+// a chat of one run of n calls (none answered yet, the last ones, while
+// it is at work), the user's words before it, illi's reply after it (none
+// while at work)
+function many(n: number, working = false): View.View {
+  const v = View.view_new();
+  const whole: Record<string, View.Entry> = { 1: { kind: "user", text: "Run each step" } };
+  for (let k = 0; k < n; k++) {
+    whole[2 + 2 * k] = { kind: "tool", text: "shell " + JSON.stringify({ command: "./step " + k, description: "Run step " + k }) };
+    whole[3 + 2 * k] = { kind: "echo", text: "done\n(exit 0 in 0.1 s)" };
+  }
+  if (!working) {
+    whole[2 + 2 * n] = { kind: "illi", text: "All done." };
+  }
+  View.view_hear(v, { $: "know", whole });
+  View.view_hear(v, { $: "view", parts: Object.keys(whole).map((id): View.Part => [Number(id), 1]), turn: 0 });
+  v.busy = working;
+  return v;
+}
+
+test("a click on an item's line opens it alone, its siblings shut; on its line again, or anywhere down its bar, shuts it; the run's own line takes no click", () => {
   const t = term(chat());
-  View.view_toggle(t.v, 2);
+  let area = paint(t);
+  expect([mark(t, "c#2").open, mark(t, "c#4").open, mark(t, "r2")]).toEqual([false, false, undefined]);
+  expect(text(area)[mark(t, "c#2").from - 1]).toBe(Theme.GLYPH.run + " Ran 2 commands");
+  expect(text(area).slice(mark(t, "c#2").from, mark(t, "c#4").to)).toEqual(["  " + OK + "npm test", "  " + OK + "ls"]);
+  const ver = t.ver;
+  click(t, row_of(t, "c#2") - 1, left(t) + 4);
   paint(t);
-  expect(mark(t, "r2").open).toBe(true);
-  click(t, row_of(t, "r2", -5), left(t));
+  expect([t.ver, t.v.items.size]).toEqual([ver, 0]);
+  click(t, row_of(t, "c#2"), left(t) + 6);
+  area = paint(t);
+  expect([mark(t, "c#2").open, mark(t, "c#4").open, mark(t, "c#8").open]).toEqual([true, false, false]);
+  expect(text(area).slice(mark(t, "c#2").from, mark(t, "c#2").to).join("\n")).toContain("ok 29");
+  click(t, row_of(t, "c#2"), left(t) + 7);
   paint(t);
-  expect(mark(t, "r2").open).toBe(false);
-  click(t, row_of(t, "r2"), left(t) + 4);
+  expect(mark(t, "c#2").open).toBe(false);
+  click(t, row_of(t, "c#4"), left(t) + 5);
   paint(t);
-  expect(mark(t, "r2").open).toBe(true);
-  click(t, row_of(t, "r2", 3), left(t) + 1);
+  expect([mark(t, "c#2").open, mark(t, "c#4").open]).toEqual([false, true]);
+  click(t, row_of(t, "c#4", 2), left(t) + 2);
   paint(t);
-  expect(mark(t, "r2").open).toBe(false);
-  click(t, row_of(t, "r2"), left(t));
-  paint(t);
-  expect([mark(t, "r2").open, mark(t, "r8").open]).toEqual([true, false]);
+  expect([mark(t, "c#2").open, mark(t, "c#4").open, mark(t, "c#8").open]).toEqual([false, false, false]);
 });
 
-test("shown by Ctrl+O, a click closes the run it lights, alone; Ctrl+O again forgets the clicks", () => {
+test("shown by Ctrl+O, every item is open; a click shuts the one it lights, alone; Ctrl+O again forgets the clicks", () => {
   const t = term(chat());
   paint(t);
   Screen.screen_feed(t.scr, "\x0f");
   paint(t);
-  expect([mark(t, "r2").open, mark(t, "r8").open]).toEqual([true, true]);
-  move(t, row_of(t, "r8"), left(t) + 4);
+  expect([mark(t, "c#2").open, mark(t, "c#4").open, mark(t, "c#8").open]).toEqual([true, true, true]);
+  move(t, row_of(t, "c#8"), left(t) + 6);
   paint(t);
-  expect(lit(t)[0]).toEqual([row_of(t, "r8"), OPEN]);
-  click(t, row_of(t, "r8"), left(t) + 4);
+  expect(lit(t)[0]).toEqual([row_of(t, "c#8"), OK]);
+  click(t, row_of(t, "c#8"), left(t) + 6);
   paint(t);
-  expect([mark(t, "r2").open, mark(t, "r8").open]).toEqual([true, false]);
+  expect([mark(t, "c#2").open, mark(t, "c#4").open, mark(t, "c#8").open]).toEqual([true, true, false]);
   Screen.screen_feed(t.scr, "\x0f\x0f");
   paint(t);
-  expect([mark(t, "r2").open, mark(t, "r8").open, t.v.acts.size]).toEqual([true, true, 0]);
+  expect([mark(t, "c#2").open, mark(t, "c#8").open, t.v.items.size]).toEqual([true, true, 0]);
 });
 
-test("runs led by a thought each open and close alone", () => {
+test("items in runs led by a thought each open alone, the thought before the call in it", () => {
   const v = chat();
   v.minds.set(1, ["think on the tests"]);
   v.minds.set(7, ["think again"]);
   v.turn = 0;
   const t = term(v);
-  paint(t);
-  expect([mark(t, "r-3").open, mark(t, "r-9").open]).toEqual([false, false]);
-  click(t, row_of(t, "r-9"), left(t));
-  paint(t);
-  expect([mark(t, "r-3").open, mark(t, "r-9").open]).toEqual([false, true]);
-});
-
-test("a click inside a message of an open run folds it to one line, its siblings staying; a click on that line unfolds it", () => {
-  const t = term(chat());
-  View.view_toggle(t.v, 2);
-  paint(t);
-  click(t, row_of(t, "#3", -5), left(t) + 80);
   let area = paint(t);
-  expect([mark(t, "#3").open, mark(t, "#3").to - mark(t, "#3").from, mark(t, "#2").open, mark(t, "#4").open]).toEqual([false, 2, true, true]);
-  expect(text(area)[mark(t, "#3").from]).toBe("│ " + SHUT + "result · 30 lines");
-  click(t, row_of(t, "#3"), left(t) + 2);
+  expect(text(area)[mark(t, "c#8").from - 1]).toBe(Theme.GLYPH.run + " Ran a command · thought");
+  expect([mark(t, "c#2").open, mark(t, "c#8").open]).toEqual([false, false]);
+  click(t, row_of(t, "c#8"), left(t));
   area = paint(t);
-  expect(mark(t, "#3").open).toBe(true);
-  expect(text(area).slice(mark(t, "#3").from, mark(t, "#3").to).join("\n")).toContain("ok 29");
+  expect([mark(t, "c#2").open, mark(t, "c#8").open]).toEqual([false, true]);
+  const inside = text(area).slice(mark(t, "c#8").from, mark(t, "c#8").to).join("\n");
+  expect([inside.indexOf("think again") > 0, inside.indexOf("think again") < inside.indexOf("npm test", 20)]).toEqual([true, true]);
 });
 
-test("an open block shuts from any line of its frame; a gap line in a run is the summary's above it", () => {
+test("a click anywhere in an open item, past a line's end or on a gap line, shuts it at once, its siblings staying; a summed-up call opens whole", () => {
   const t = term(chat(11));
-  View.view_toggle(t.v, 2);
   paint(t);
-  const sum = mark(t, Paint.block_key(2, 1));
-  click(t, row_of(t, sum.key, -1), left(t) + 20);
+  click(t, row_of(t, "c#4"), left(t) + 6);
   paint(t);
-  const box = mark(t, sum.key);
-  expect([box.open, box.up]).toEqual([true, "r2"]);
-  click(t, row_of(t, box.key, -2), left(t) + 3);
+  click(t, row_of(t, "c#2"), left(t) + 6);
+  let area = paint(t);
+  const item = mark(t, "c#2");
+  expect(text(area).slice(item.from, item.to).join("\n")).toContain("ok 29");
+  const gap  = text(area).slice(item.from, item.to).findIndex((l: string, k: number) => k > 0 && l.trim() === "│");
+  expect(gap).toBeGreaterThan(0);
+  click(t, row_of(t, "c#2", gap), left(t) + 10);
+  expect(t.wait).toBeNull();
+  area = paint(t);
+  expect([mark(t, "c#2").open, mark(t, "c#4").open]).toEqual([false, true]);
+  click(t, row_of(t, "c#4", -1), left(t) + 80);
   paint(t);
-  expect(mark(t, sum.key).open).toBe(false);
+  expect(mark(t, "c#4").open).toBe(false);
+});
+
+test("past five items, a click on the More line shows them all, again five; while the run works, the newest show, the More line over them", () => {
+  const t = term(many(8));
+  let area = paint(t);
+  const items = () => t.seen.marks.filter((m: Paint.Mark) => m.item === true).map((m: Paint.Mark) => m.key);
+  expect(items()).toEqual(["c#2", "c#4", "c#6", "c#8", "c#10"]);
+  expect(text(area)[mark(t, "+2").from]).toBe("  +3 more");
+  move(t, row_of(t, "+2"), left(t) + 4);
+  paint(t);
+  expect(lit(t)).toEqual([[row_of(t, "+2"), "+3 more"]]);
+  const row = row_of(t, "+2");
+  click(t, row, left(t) + 4);
+  area = paint(t);
+  expect([items().length, text(area)[mark(t, "+2").from]]).toEqual([8, "  show fewer"]);
+  click(t, row_of(t, "+2"), left(t) + 5);
+  paint(t);
+  expect(items().length).toBe(5);
+  const w = term(many(8, true));
+  area = paint(w);
+  expect(w.seen.marks.filter((m: Paint.Mark) => m.item === true).map((m: Paint.Mark) => m.key)).toEqual(["c#8", "c#10", "c#12", "c#14", "c#16"]);
+  expect(text(area)[mark(w, "+2").from]).toBe("  +3 earlier");
+  expect(mark(w, "+2").to).toBe(mark(w, "c#8").from);
+});
+
+test("an open block shuts from any line of its frame; a summary opens itself", () => {
+  const t = term(chat(11));
+  t.v.open.set("1+1", false);
+  paint(t);
+  const sum = Paint.block_key(1, 1);
+  click(t, row_of(t, sum), left(t) + 1);
+  paint(t);
+  const box = mark(t, sum);
+  expect([box.open, box.up]).toEqual([true, undefined]);
+  click(t, row_of(t, box.key, -1), left(t) + 3);
+  paint(t);
+  expect(mark(t, sum).open).toBe(false);
 });
 
 test("in an open block, a summary opens itself, an open block inside shuts itself, the frame around them shuts the whole", () => {
@@ -240,42 +308,40 @@ test("in an open block, a summary opens itself, an open block inside shuts itsel
   expect(mark(t, outer.key).open).toBe(false);
 });
 
-
-test("a fold or an open keeps the first line of what it acted on on the row clicked, the chat scrolled up", () => {
+test("an open or a shut keeps the first line of what it acted on on the row clicked, the chat scrolled up", () => {
   const t = term(chat(0, 40, 40));
-  View.view_toggle(t.v, 2);
+  View.view_item(t.v, "c#2");
   t.scroll = Infinity;
   paint(t);
-  t.scroll = t.seen.total - t.seen.tall - mark(t, "r2").from + 2;
+  t.scroll = t.seen.total - t.seen.tall - mark(t, "c#2").from + 2;
   paint(t);
-  const row = row_of(t, "#3", 10);
-  click(t, row, left(t) + 60);
+  const row = row_of(t, "c#2", 10);
+  click(t, row, left(t) + 80);
   paint(t);
-  expect([mark(t, "#3").open, row_of(t, "#3"), t.scroll > 0]).toEqual([false, row, true]);
-  click(t, row, left(t) + 2);
+  expect([mark(t, "c#2").open, row_of(t, "c#2"), t.scroll > 0]).toEqual([false, row, true]);
+  click(t, row, left(t) + 6);
   paint(t);
-  expect([mark(t, "#3").open, row_of(t, "#3")]).toEqual([true, row]);
-  const head = row_of(t, "r2");
-  click(t, head, left(t) + 4);
+  expect([mark(t, "c#2").open, row_of(t, "c#2")]).toEqual([true, row]);
+  click(t, row, left(t) + 7);
   paint(t);
-  expect([mark(t, "r2").open, row_of(t, "r2")]).toEqual([false, head]);
+  expect([mark(t, "c#2").open, row_of(t, "c#2")]).toEqual([false, row]);
 });
 
-test("at the chat's end, an open keeps its head, leaving the end (the jump shown); a close lands lower, the chat never past its end", () => {
+test("at the chat's end, an open keeps its line, leaving the end (the jump shown); a shut lands lower, the chat never past its end", () => {
   const t = term(chat(0, 40));
   paint(t);
-  const row = row_of(t, "r8");
-  click(t, row, left(t) + 4);
+  const row = row_of(t, "c#8");
+  click(t, row, left(t) + 6);
   paint(t);
   const jump = t.ruled.rows.some((r: any[]) => r.some((p: any) => p.line.some((x: Paint.Run) => x.x.includes("Jump to Bottom"))));
-  expect([mark(t, "r8").open, row_of(t, "r8"), t.scroll > 0, jump]).toEqual([true, row, true, true]);
+  expect([mark(t, "c#8").open, row_of(t, "c#8"), t.scroll > 0, jump]).toEqual([true, row, true, true]);
   t.scroll = 0;
   paint(t);
-  const bar = row_of(t, "r8", 2);
-  click(t, bar, left(t));
+  const bar = row_of(t, "c#8", 2);
+  click(t, bar, left(t) + 2);
   paint(t);
-  expect([mark(t, "r8").open, t.scroll]).toEqual([false, 0]);
-  expect(row_of(t, "r8")).toBeGreaterThan(bar);
+  expect([mark(t, "c#8").open, t.scroll]).toEqual([false, 0]);
+  expect(row_of(t, "c#8")).toBeGreaterThan(bar);
 });
 
 test("the live tail takes no click", () => {
@@ -285,49 +351,43 @@ test("the live tail takes no click", () => {
   const area = paint(t);
   const ver  = t.ver;
   click(t, area.row + area.tall - 2, left(t) + 3);
-  expect([t.ver, t.v.acts.size, t.v.folds.size, t.v.open.size]).toEqual([ver, 0, 0, 0]);
+  expect([t.ver, t.v.items.size, t.v.mores.size, t.v.open.size]).toEqual([ver, 0, 0, 0]);
 });
 
-test("what a click would act on lights once the pointer moves: a message's bar beside it, a run's head and its whole bar heavier, a folded line's glyph", () => {
+test("what a click would act on lights once the pointer moves: an item's line and, open, its whole bar heavier; never the run's own line", () => {
   const t = term(chat());
-  View.view_toggle(t.v, 2);
+  View.view_item(t.v, "c#4");
   t.scroll = Infinity;
   paint(t);
-  t.scr.point = { row: row_of(t, "#3", 3), col: left(t) + 8 };
+  t.scr.point = { row: row_of(t, "c#4", 3), col: left(t) + 8 };
   paint(t);
   expect(lit(t)).toEqual([]);
-  move(t, row_of(t, "#3", 3), left(t) + 8);
+  move(t, row_of(t, "c#4", 3), left(t) + 8);
   paint(t);
-  const area = t.areas.find((a: any) => a.key === "chat");
-  const rows = (key: string) => Array.from({ length: mark(t, key).to - mark(t, key).from }, (_, k) => row_of(t, key, k)).filter((r) => r < area.row + area.tall);
-  expect(lit(t)).toEqual(rows("#3").map((r) => [r, "│ "]));
-  move(t, row_of(t, "r2"), left(t) + 30);
+  const rows = (key: string) => Array.from({ length: mark(t, key).to - mark(t, key).from }, (_, k) => row_of(t, key, k));
+  expect(lit(t)).toEqual([[row_of(t, "c#4"), OK], [row_of(t, "c#4"), "ls"], ...rows("c#4").slice(1).map((r): [number, string] => [r, "┃ "])]);
+  move(t, row_of(t, "c#2"), left(t) + 30);
   paint(t);
-  expect(lit(t)).toEqual([[row_of(t, "r2"), OPEN], [row_of(t, "r2"), "Ran 2 commands"], ...rows("r2").slice(1).map((r): [number, string] => [r, "┃ "])]);
-  click(t, row_of(t, "#2"), left(t) + 80);
+  expect(lit(t)).toEqual([[row_of(t, "c#2"), OK], [row_of(t, "c#2"), "npm test"]]);
+  move(t, row_of(t, "c#2") - 1, left(t) + 4);
   paint(t);
-  expect(lit(t)).toEqual([[row_of(t, "#2"), "│ "], [row_of(t, "#2"), SHUT], [row_of(t, "#2", 1), "│ "]]);
+  expect(lit(t)).toEqual([]);
 });
 
-test("a summary lights its gutter and /open, an open block its bar, each its bar in the run beside it; nothing over a line no click acts on", () => {
+test("a summary lights its gutter and /open, an open block its bar; nothing over a line no click acts on", () => {
   const t = term(chat(11));
-  View.view_toggle(t.v, 2);
+  t.v.open.set("1+1", false);
   paint(t);
-  const sum = Paint.block_key(4, 1);
+  const sum = Paint.block_key(1, 1);
   move(t, row_of(t, sum), left(t) + 12);
   paint(t);
-  expect(lit(t)).toEqual([[row_of(t, sum), "│ "], [row_of(t, sum), " 1x     "], [row_of(t, sum), "/open #4"], [row_of(t, sum, 1), "│ "]]);
+  expect(lit(t)).toEqual([[row_of(t, sum), " 1x     "], [row_of(t, sum), "/open #1"]]);
   click(t, row_of(t, sum), left(t) + 2);
   paint(t);
-  const box = lit(t);
-  expect(box[1]).toEqual([row_of(t, sum), " 1x · /close #4 "]);
-  expect(box.filter(([, x]) => x !== "│ ").length).toBe(1);
-  t.v.open.set("1+1", false);
-  t.ver += 1;
+  expect(lit(t)).toEqual([[row_of(t, sum), " 1x · /close #1 "]]);
+  move(t, row_of(t, "c#2") - 1, left(t) + 4);
   paint(t);
-  move(t, row_of(t, Paint.block_key(1, 1)), left(t) + 12);
-  paint(t);
-  expect(lit(t)).toEqual([[row_of(t, Paint.block_key(1, 1)), " 1x     "], [row_of(t, Paint.block_key(1, 1)), "/open #1"]]);
+  expect(lit(t)).toEqual([]);
   move(t, 0, 4);
   paint(t);
   expect(lit(t)).toEqual([]);
@@ -335,9 +395,9 @@ test("a summary lights its gutter and /open, an open block its bar, each its bar
 
 test("the light goes as the chat moves by itself while followed, at a key, as the focus is lost; and never under the jump to the end", () => {
   const t = term(chat());
-  View.view_toggle(t.v, 8);
+  View.view_item(t.v, "c#8");
   paint(t);
-  const at = () => move(t, row_of(t, "#9", -3), left(t) + 8);
+  const at = () => move(t, row_of(t, "c#8", -3), left(t) + 8);
   at();
   paint(t);
   expect(lit(t).length).toBeGreaterThan(0);
@@ -371,106 +431,120 @@ test("the light goes as the chat moves by itself while followed, at a key, as th
   expect(lit(t)).toEqual([]);
 });
 
-test("a click on a word in a message waits out a double click, shown pressed, then folds; a second press chooses the word instead", async () => {
+test("a click on a word in an open item waits out a double click, shown pressed, then shuts it; a second press chooses the word instead", async () => {
   const t = term(chat());
-  View.view_toggle(t.v, 2);
+  View.view_item(t.v, "c#2");
+  View.view_item(t.v, "c#4");
   paint(t);
-  const row = row_of(t, "#3", -5);
-  click(t, row, left(t) + 8);
+  const row = row_of(t, "c#2", -5);
+  click(t, row, col_of(t, "c#2", -5, "ok") + 1);
   paint(t);
   const pressed = t.ruled.rows[row][0].line.filter((x: Paint.Run) => x.mark !== undefined);
-  expect([mark(t, "#3").open, pressed.map((x: Paint.Run) => [x.x, x.s.v])]).toEqual([true, [["│ ", true]]]);
+  expect([mark(t, "c#2").open, pressed.map((x: Paint.Run) => [x.x, x.s.v])]).toEqual([true, [["┃ ", true]]]);
   await waited();
   paint(t);
-  expect(mark(t, "#3").open).toBe(false);
-  const word = row_of(t, "#4");
+  expect(mark(t, "c#2").open).toBe(false);
+  const word = row_of(t, "c#4", 1);
+  const col  = col_of(t, "c#4", 1, "shell") + 1;
   const out  = written(() => {
-    click(t, word, left(t) + 6);
-    again(t, word, left(t) + 6);
+    click(t, word, col);
+    again(t, word, col);
   });
   await waited();
   paint(t);
-  expect([mark(t, "#4").open, out]).toEqual([true, "\x1b]52;c;" + Buffer.from("shell").toString("base64") + "\x07"]);
+  expect([mark(t, "c#4").open, out]).toEqual([true, "\x1b]52;c;" + Buffer.from("shell").toString("base64") + "\x07"]);
 });
 
-test("a key, the wheel or a right press gives a waiting fold up; a drag never folds", async () => {
+test("a key, the wheel or a right press gives a waiting click up; a drag never acts", async () => {
   const t = term(chat());
-  View.view_toggle(t.v, 2);
+  View.view_item(t.v, "c#2");
   paint(t);
-  const row = row_of(t, "#3", -5);
+  const row = row_of(t, "c#2", -5);
+  const col = col_of(t, "c#2", -5, "ok") + 1;
   for (const then of ["x", sgr(65, row, 10), sgr(2, row, 10) + sgr(2, row, 10, "m")]) {
-    click(t, row, left(t) + 8);
-    expect(t.wait?.key).toBe("#3");
+    click(t, row, col);
+    expect(t.wait?.key).toBe("c#2");
     Screen.screen_feed(t.scr, then);
     expect(t.wait).toBeNull();
   }
-  written(() => Screen.screen_feed(t.scr, sgr(0, row, left(t) + 8) + sgr(32, row, left(t) + 20) + sgr(0, row, left(t) + 20, "m")));
+  written(() => Screen.screen_feed(t.scr, sgr(0, row, col) + sgr(32, row, left(t) + 20) + sgr(0, row, left(t) + 20, "m")));
   await waited();
   paint(t);
-  expect([mark(t, "#3").open, t.wait]).toEqual([true, null]);
+  expect([mark(t, "c#2").open, t.wait]).toEqual([true, null]);
 });
 
 test("a press again soon on the cell whose click just acted does nothing, chooses no word; later, it acts", () => {
   const t = term(chat());
   paint(t);
-  const row = row_of(t, "r8");
-  click(t, row, left(t) + 4);
-  const out = written(() => again(t, row, left(t) + 4));
+  const row = row_of(t, "c#8");
+  click(t, row, left(t) + 6);
+  const out = written(() => again(t, row, left(t) + 6));
   paint(t);
-  expect([mark(t, "r8").open, out, t.sel]).toEqual([true, "", null]);
+  expect([mark(t, "c#8").open, out, t.sel]).toEqual([true, "", null]);
   t.acted.until -= 1000;
-  click(t, row, left(t) + 4);
+  click(t, row, left(t) + 6);
   paint(t);
-  expect(mark(t, "r8").open).toBe(false);
+  expect(mark(t, "c#8").open).toBe(false);
 });
 
 test("the press that only focuses the window acts on nothing: one while the focus is lost, or just after it comes back", () => {
   const t = term(chat());
   paint(t);
-  const row = row_of(t, "r8");
+  const row = row_of(t, "c#8");
   Screen.screen_feed(t.scr, "\x1b[O");
   click(t, row, left(t) + 4);
   Screen.screen_feed(t.scr, "\x1b[I");
   click(t, row, left(t) + 5);
   paint(t);
-  expect(mark(t, "r8").open).toBe(false);
+  expect(mark(t, "c#8").open).toBe(false);
   t.scr.gained -= 200;
   click(t, row, left(t) + 6);
   paint(t);
-  expect(mark(t, "r8").open).toBe(true);
+  expect(mark(t, "c#8").open).toBe(true);
 });
 
 test("while text chosen shows, nothing lights and the click that lets it go acts on nothing in the chat; scrolled away, a click acts", async () => {
   const t = term(chat());
-  View.view_toggle(t.v, 2);
+  View.view_item(t.v, "c#2");
   t.scroll = Infinity;
   paint(t);
-  const row = row_of(t, "#3", 4);
+  const row = row_of(t, "c#2", 4);
   written(() => Screen.screen_feed(t.scr, sgr(0, row, left(t) + 8) + sgr(32, row, left(t) + 20) + sgr(0, row, left(t) + 20, "m")));
   paint(t);
-  move(t, row_of(t, "#3", 8), left(t) + 8);
+  move(t, row_of(t, "c#2", 8), left(t) + 8);
   paint(t);
   expect([t.sel?.moved, lit(t)]).toEqual([true, []]);
-  click(t, row_of(t, "#3", 8), left(t) + 8);
+  click(t, row_of(t, "c#2", 8), left(t) + 8);
   paint(t);
-  expect([t.sel, t.wait, lit(t).length > 0]).toEqual([null, null, true]);
-  click(t, row_of(t, "#2"), left(t) + 80);
+  expect([t.sel, t.wait, mark(t, "c#2").open, lit(t).length > 0]).toEqual([null, null, true, true]);
+  click(t, row_of(t, "c#2"), left(t) + 6);
   paint(t);
-  expect(mark(t, "#2").open).toBe(false);
+  expect(mark(t, "c#2").open).toBe(false);
+  View.view_item(t.v, "c#2");
+  t.ver += 1;
+  t.scroll = Infinity;
+  paint(t);
   written(() => Screen.screen_feed(t.scr, sgr(0, row, left(t) + 8) + sgr(32, row, left(t) + 20) + sgr(0, row, left(t) + 20, "m")));
   t.scroll = 0;
   paint(t);
   expect(t.sel.b.line).toBeLessThan(t.areas.find((a: any) => a.key === "chat").first);
-  click(t, row_of(t, "r8"), left(t) + 4);
+  click(t, row_of(t, "c#8"), left(t) + 6);
   paint(t);
-  expect([t.sel, mark(t, "r8").open]).toEqual([null, true]);
+  expect([t.sel, mark(t, "c#8").open]).toEqual([null, true]);
 });
 
-test("a click on a mark's own control acts at once: a summary's /open and gutter, an open block's bar; on a summary's words it waits", async () => {
+test("a click on a mark's own control acts at once: an item's line and its bar, a summary's /open and gutter, an open block's bar; on a summary's words it waits", async () => {
   const t = term(chat(11));
-  View.view_toggle(t.v, 2);
+  t.v.open.set("1+1", false);
   paint(t);
-  const sum  = Paint.block_key(4, 1);
+  click(t, row_of(t, "c#2"), col_of(t, "c#2", 0, "npm") + 1);
+  expect([t.wait, t.v.items.has("c#2")]).toEqual([null, true]);
+  paint(t);
+  t.acted = null;
+  click(t, row_of(t, "c#2", 3), left(t) + 2);
+  expect([t.wait, t.v.items.has("c#2")]).toEqual([null, false]);
+  paint(t);
+  const sum  = Paint.block_key(1, 1);
   const line = (k = 0) => t.areas.find((a: any) => a.key === "chat").lines[mark(t, sum).from + k].map((r: Paint.Run) => r.x).join("");
   click(t, row_of(t, sum), left(t) + line().indexOf("/open") + 2);
   expect([t.wait, mark(t, sum).open]).toEqual([null, false]);
@@ -484,40 +558,52 @@ test("a click on a mark's own control acts at once: a summary's /open and gutter
   click(t, row_of(t, sum), left(t) + line().indexOf("1x"));
   paint(t);
   expect([t.wait, mark(t, sum).open]).toEqual([null, true]);
-  View.view_act(t.v, { $: "Shut", id: 4, n: 1 });
+  View.view_act(t.v, { $: "Shut", id: 1, n: 1 });
   t.ver += 1;
   paint(t);
-  click(t, row_of(t, sum), left(t) + line().indexOf("ls") + 1);
+  click(t, row_of(t, sum), left(t) + line().indexOf("Run") + 1);
   expect(t.wait?.key).toBe(sum);
   await waited();
   paint(t);
   expect(mark(t, sum).open).toBe(true);
 });
 
-test("a click's fold waiting acts on its mark as painted then: gone by then (its run closed), nothing", async () => {
+test("a click's wait acts on its mark as painted then: shut otherwise by then (by /close), or gone, nothing", async () => {
   const t = term(chat());
-  View.view_toggle(t.v, 2);
+  View.view_item(t.v, "c#2");
   paint(t);
-  click(t, row_of(t, "#3", -5), left(t) + 8);
-  expect(t.wait?.key).toBe("#3");
-  View.view_toggle(t.v, 2);
+  click(t, row_of(t, "c#2", -5), col_of(t, "c#2", -5, "ok") + 1);
+  expect(t.wait?.key).toBe("c#2");
+  View.view_item(t.v, "c#2");
   t.ver += 1;
   paint(t);
   await waited();
   paint(t);
-  expect([t.wait, t.v.folds.size, mark(t, "r2").open]).toEqual([null, 0, false]);
+  expect([t.wait, t.v.items.size, mark(t, "c#2").open]).toEqual([null, 0, false]);
+  View.view_item(t.v, "c#2");
+  t.ver += 1;
+  paint(t);
+  click(t, row_of(t, "c#2", -5), col_of(t, "c#2", -5, "ok") + 1);
+  View.view_act(t.v, { $: "Goto", name: "Scout" });
+  t.ver += 1;
+  paint(t);
+  await waited();
+  View.view_act(t.v, { $: "Goto", name: null });
+  t.ver += 1;
+  paint(t);
+  expect([t.wait, mark(t, "c#2").open]).toEqual([null, true]);
 });
 
 test("a pin past the chat's rows (a new size since the click) is held inside them", () => {
   const t = term(chat(0, 40, 40));
-  View.view_toggle(t.v, 2);
+  View.view_item(t.v, "c#2");
   t.scroll = Infinity;
   paint(t);
   const area = t.areas.find((a: any) => a.key === "chat");
-  t.pin = { key: "#3", row: area.row + area.tall + 20 };
+  t.pin = { key: "c#2", row: area.row + area.tall + 20 };
   paint(t);
-  expect(row_of(t, "#3")).toBe(area.row + area.tall - 1);
-  t.pin = { key: "#3", row: 0 };
+  expect(row_of(t, "c#2")).toBe(area.row + area.tall - 1);
+  t.pin = { key: "c#2", row: 0 };
   paint(t);
-  expect(row_of(t, "#3")).toBe(area.row);
+  expect(row_of(t, "c#2")).toBe(area.row);
 });

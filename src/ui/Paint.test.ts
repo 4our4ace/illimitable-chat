@@ -4,16 +4,15 @@
 // and look: the background told again as it was lays nothing out anew,
 // another lays all of it out again. A chat laid out from its last row
 // up, a few rows at a time, is the chat laid out whole; a block asked
-// for is laid out with all under it. An open run of work is marked
-// whole, each message in it too (a folded one as its one line), a gap
-// line the block's above it; its glyph, label and bar tagged with its
-// key. A shut run lists its calls under its line, a line each, the
-// latest six at most, each fit to the width whatever it holds. An open
-// block is marked over its whole frame, the innermost mark the smaller.
-// A recap's pages fold as a run's messages do. A mark lit lights its
-// tagged runs: a run's glyph in the accent, its label in the ink, its
-// bar heavier; a message its own and its run's bar beside it; pressed,
-// reversed.
+// for is laid out with all under it. A run of work lists its items
+// under its line, a line each (what it did · how it ended, cut to the
+// width whatever it holds), five at most, then a More line; an open item
+// is marked over its line and its rows, nothing inside it marked, its
+// line and its bar tagged with its key. An open block is marked over its
+// whole frame, the innermost mark the smaller. A recap's pages fold to a
+// line. A mark lit lights its tagged runs: a glyph in the accent, a
+// label in the ink, a bar heavier; a page its own and its recap's bar
+// beside it; pressed, reversed.
 
 import { expect, test } from "bun:test";
 import * as Call from "./Call.ts";
@@ -36,17 +35,24 @@ test("the background told again as it was lays nothing out anew; another, all", 
   expect(Paint.rows_lines(rows, 60)[1]).not.toBe(lit[1]);
 });
 
-// a chat of every kind of row: blocks, an open one, runs of work open
-// and closed (a shut one's calls listed: done, failed, cut, not known),
-// messages (one with an image), a caption
+// a chat of every kind of row: blocks, an open one, runs of work (their
+// items done, failed, cut, not known; an open one's rows a summary and a
+// call; past five, a More line), messages (one with an image), a caption
 function chat(): View.Row[] {
   const sum   = (id: number, n: number): View.Row => ({ $: "Sum", id, n, text: "a summary of what was said " + id, call: null, kind: null });
-  const call  = (text: string, ok: boolean | null): View.Done => ({ call: Call.call_parse(text), ok });
-  const calls = [call('shell {"command":"bun test"}', true), call('shell {"command":"git push ' + "中".repeat(40) + '"}', false), call('read {"path":"a.log"}', null)];
+  const item  = (key: string, text: string, ok: boolean | null, open = false, rows: View.Row[] = []): View.Row => {
+    const call = Call.call_parse(text);
+    return { $: "Item", key, call, label: Call.call_label(call), outcome: Call.call_outcome(call, ok, "(exit 1 in 1 s)"), ok, open, rows };
+  };
   const out: View.Row[] = [View.Cap("The whole chat."), sum(0, 4)];
   for (let id = 4; id < 40; id += 4) {
+    const items = [
+      item("c#" + (id + 2), 'shell {"command":"bun test"}', true, id % 8 === 0, [sum(id + 2, 1), ...View.entry_rows(id + 2, "tool", 'shell {"command":"bun test"}')]),
+      item("c#" + (id + 2) + "b", 'shell {"command":"git push ' + "中".repeat(40) + '"}', false),
+      item("c#" + (id + 2) + "c", 'read {"path":"a.log"}', null),
+    ];
     out.push({ $: "Box", id, n: 2, rows: [sum(id, 1), sum(id + 1, 1)] });
-    out.push({ $: "Act", id: id + 2, text: "Ran a command", open: id % 8 === 0, rows: [sum(id + 2, 1)], calls });
+    out.push({ $: "Act", id: id + 2, text: "Ran a command", rows: id % 8 === 0 ? [...items, { $: "More", id: id + 2, n: 4, open: false, earlier: false }] : items, keys: [] });
     out.push(...View.entry_rows(id + 3, id % 8 === 0 ? "user" : "illi", "Words " + id + "\n\n- one\n- two", id === 8 ? ["a.png"] : []));
   }
   return out;
@@ -74,14 +80,17 @@ test("rows laid out from the last up are the rows laid out whole", () => {
 });
 
 // a block asked for (by its mark's key) is found among the rows, inside
-// an open block or a run of work too, and the rows laid out as far as it;
-// a run of work by its key too
+// an open block, a run of work or an open item too, and the rows laid out
+// as far as it; a run of work by its key, an item by its own
 test("a block's row is found, and the rows laid out as far as it", () => {
   const rows = chat();
   expect(Paint.rows_find(rows, Paint.block_key(0, 4))).toBe(1);
   expect(Paint.rows_find(rows, Paint.block_key(13, 1))).toBe(rows.findIndex((r) => r.$ === "Box" && r.id === 12));
-  expect(Paint.rows_find(rows, Paint.block_key(14, 1))).toBe(rows.findIndex((r) => r.$ === "Act" && r.id === 14));
+  expect(Paint.rows_find(rows, Paint.block_key(10, 1))).toBe(rows.findIndex((r) => r.$ === "Act" && r.id === 10));
+  expect(Paint.rows_find(rows, Paint.block_key(14, 1))).toBe(-1);
   expect(Paint.rows_find(rows, "r14")).toBe(rows.findIndex((r) => r.$ === "Act" && r.id === 14));
+  expect(Paint.rows_find(rows, "c#14b")).toBe(rows.findIndex((r) => r.$ === "Act" && r.id === 14));
+  expect(Paint.rows_find(rows, "+10")).toBe(rows.findIndex((r) => r.$ === "Act" && r.id === 10));
   expect(Paint.rows_find(rows, Paint.block_key(99, 1))).toBe(-1);
   const laid = Paint.laid_new(rows, 60, 1);
   Paint.laid_up(laid, 0, 1);
@@ -91,111 +100,132 @@ test("a block's row is found, and the rows laid out as far as it", () => {
   expect(Paint.laid_stale(laid, 61)).toBe(true);
 });
 
-// an open run: marked whole, its head and every line under it; each
-// message in it with the gap under it (a folded one as its one line), its
-// run noted; the head's glyph and label and the bar tagged with the
-// run's key, a folded line's glyph with its own
-test("an open run of work is marked whole, each message in it with its gap, a folded one as its one line; its glyph, label and bar tagged", () => {
+// a run: its line (no mark: it takes no click) over its items, a line
+// each; an open item marked over its line and its rows, behind a bar
+// under its mark, a gap line inside it its own, nothing inside it marked
+// (a click anywhere in it is the item's); its line's runs and its bar
+// tagged with its key; the More line marked and tagged with its own
+test("an open item is marked over its line and its rows, nothing inside it marked; its line and its bar tagged; the run's line takes no click", () => {
   const v    = View.view_new();
   const rows = [
-    ...View.entry_rows(3, "tool", 'shell {"command":"npm test"}'),
-    ...View.entry_rows(4, "echo", "ok\n".repeat(1204).trimEnd()),
+    ...View.entry_rows(3, "tool", 'shell {"command":"npm test","description":"Run the tests"}'),
+    ...View.entry_rows(4, "echo", "ok\n".repeat(1204) + "(exit 0 in 9.1 s)"),
+    ...View.entry_rows(5, "tool", 'shell {"command":"ls"}'),
+    ...View.entry_rows(6, "echo", "a\n(exit 0 in 0.1 s)"),
   ];
-  View.view_toggle(v, 3);
-  View.view_fold(v, "#4");
-  const run   = View.view_acts(v, rows);
+  View.view_item(v, "c#3");
   const marks: Paint.Mark[] = [];
-  const lines = Paint.rows_lines(run, 60, marks);
-  const text  = (l: Paint.Line) => l.map((r) => r.x).join("");
-  expect(marks.map((m) => [m.key, m.act ?? false, m.fold ?? false, m.open, m.from, m.to, m.up ?? ""])).toEqual([
-    ["r3", true, false, true, 0, 6, ""],
-    ["#3", false, true, true, 1, 5, "r3"],
-    ["#4", false, true, false, 5, 6, "r3"],
+  const lines = Paint.rows_lines(View.view_acts(v, rows), 60, marks);
+  const run   = Theme.GLYPH.run + " ";
+  const lead  = " ".repeat(run.length);
+  expect(marks.map((m) => [m.key, m.item ?? false, m.open, m.from, m.to, m.act ?? false, m.up ?? ""])).toEqual([
+    ["c#3", true, true, 1, lines.length - 1, false, ""],
+    ["c#5", true, false, lines.length - 1, lines.length, false, ""],
   ]);
-  expect(lines[0].map((r) => [r.x, r.mark])).toEqual([[OPEN, { key: "r3", as: "glyph" }], ["Ran a command", { key: "r3", as: "label" }]]);
-  expect(lines.slice(1).map((l) => l[0].mark)).toEqual(Array(5).fill({ key: "r3", as: "bar" }));
-  expect(text(lines[5])).toBe("│ " + SHUT + "result · 1,204 lines");
-  expect(lines[5][1].mark).toEqual({ key: "#4", as: "glyph" });
-  View.view_fold(v, "#4");
-  expect(Paint.rows_lines(View.view_acts(v, rows), 60).length).toBeGreaterThan(10);
+  expect(text(lines)[0]).toBe(run + "Ran 2 commands");
+  expect(lines[0].every((r) => r.mark === undefined)).toBe(true);
+  expect(text(lines)[1]).toBe(lead + Theme.GLYPH.ok + " Run the tests · exit 0");
+  expect(lines[1].slice(1).map((r) => r.mark)).toEqual(Array(lines[1].length - 1).fill({ key: "c#3", as: "label" }));
+  const inside = lines.slice(2, lines.length - 1);
+  expect(inside.map((l) => [l[0].x, l[1].x, l[1].mark])).toEqual(inside.map(() => [lead, "│ ", { key: "c#3", as: "bar" }]));
+  expect(text(inside).join("\n")).toContain("npm test");
+  expect(text(inside).some((l) => l === lead + "│ ")).toBe(true);
+  expect(text(inside).join("\n")).toContain("1204 ok");
+  expect(text(lines).at(-1)).toBe(lead + Theme.GLYPH.ok + " ls · exit 0");
+  const many  = Array.from({ length: 7 }, (_, k) => View.entry_rows(20 + k, "tool", 'read {"path":"f' + k + '"}')).flat();
+  const more: Paint.Mark[] = [];
+  const said  = Paint.rows_lines(View.view_acts(v, many), 60, more);
+  expect(text(said).slice(-1)).toEqual([lead + "+2 more"]);
+  expect(more.at(-1)).toMatchObject({ key: "+20", id: 20, more: true, open: false, from: 6, to: 7 });
+  expect(said[6][1].mark).toEqual({ key: "+20", as: "label" });
+  View.view_more(v, 20);
+  expect(text(Paint.rows_lines(View.view_acts(v, many), 60)).slice(-2)).toEqual([lead + "  Read f6", lead + "show fewer"]);
+  expect(text(Paint.rows_lines(View.view_acts(v, many, v, true), 60))[1]).toBe(lead + "show fewer");
+  View.view_more(v, 20);
+  expect(text(Paint.rows_lines(View.view_acts(v, many, v, true), 60)).slice(1, 3)).toEqual([lead + "+2 earlier", lead + "  Read f2"]);
 });
 
-// a shut run lists its calls under its line, a line each from its words
-// on: how each ended (GLYPH.ok; GLYPH.failed in the error's color; not
-// known: as wide, blank; the names line up whatever the theme makes the
-// marks), its tool's name (after the theme's mark for it, if any) and
-// the call on one line, its control characters dropped, cut to the
-// width (its line too, "…" where); past six, the latest five, the rest
-// counted over them; all in the run's mark, the words tagged as its
-// label. Open, the run lists none: its rows show
-test("a shut run lists its calls, a line each: how each ended, its tool and call cut to the width; past six, the latest", () => {
+// a run lists its items under its line, a line each from its words on:
+// how each ended (GLYPH.ok; GLYPH.failed in the error's color; not
+// known: as wide, blank; the words line up whatever the theme makes the
+// marks), the theme's mark for its tool if any, what it did and how it
+// ended, its control characters dropped; what it did cut to the room its
+// outcome leaves ("…" where); no raw input. Past five, a More line
+test("a run lists its items, a line each: how each ended, what it did cut to the room its outcome leaves; past five, a More line", () => {
   const v     = View.view_new();
-  const call  = (id: number, command: string, out: string | null) => [
-    ...View.entry_rows(id, "tool", "shell " + JSON.stringify({ command })),
+  const call  = (id: number, command: string, out: string | null, description?: string) => [
+    ...View.entry_rows(id, "tool", "shell " + JSON.stringify({ command, description })),
     ...(out === null ? [] : View.entry_rows(id + 1, "echo", out)),
   ];
-  const rows  = [...call(3, "bun test", "ok"), ...call(5, "git push \x1b[31m--tags", View.FAILED + "rejected"), ...call(7, "echo " + "x".repeat(80), "x"), ...call(9, "ls", null)];
+  const rows  = [...call(3, "bun test", "ok\n(exit 0 in 1 s)"), ...call(5, "git push \x1b[31m--tags", View.FAILED + "rejected\n(exit 1 in 1 s)"), ...call(7, "echo " + "x".repeat(80), "x\n(exit 0 in 1 s)", "Print a long line of x, to see where it is cut"), ...call(9, "ls", null)];
   const marks: Paint.Mark[] = [];
   const lines = Paint.rows_lines(View.view_acts(v, rows), 40, marks);
-  const lead  = " ".repeat(SHUT.length);
+  const run   = Theme.GLYPH.run + " ";
+  const lead  = " ".repeat(run.length);
   expect(text(lines)).toEqual([
-    SHUT + "Ran 4 commands",
-    lead + Theme.GLYPH.ok + " shell bun test",
-    lead + Theme.GLYPH.failed + " shell git push [31m--tags",
-    lead + Theme.GLYPH.ok + " shell echo " + "x".repeat(22) + "…",
-    lead + "  shell ls",
+    run + "Ran 4 commands",
+    lead + Theme.GLYPH.ok + " bun test · exit 0",
+    lead + Theme.GLYPH.failed + " git push [31m--tags · exit 1",
+    lead + Theme.GLYPH.ok + " Print a long line of x, to… · exit 0",
+    lead + "  ls",
   ]);
   expect(lines.every((l) => Paint.line_width(l) <= 40)).toBe(true);
-  expect(marks).toEqual([{ from: 0, to: 5, key: "r3", id: 3, n: 0, open: false, act: true }]);
+  expect(marks.map((m) => [m.key, m.from, m.to])).toEqual([["c#3", 1, 2], ["c#5", 2, 3], ["c#7", 3, 4], ["c#9", 4, 5]]);
   expect(lines[2][1].s.c).toBe(Draw.draw_tokens().error);
-  expect(lines[1].slice(2).map((r) => r.mark)).toEqual([{ key: "r3", as: "label" }, { key: "r3", as: "label" }]);
-  const many  = Array.from({ length: 8 }, (_, k) => call(20 + 2 * k, "step " + k, "ok")).flat();
+  expect(lines.slice(1).every((l) => l.slice(1).every((r) => r.mark?.key === marks[lines.indexOf(l) - 1].key && r.s.d !== false || r.s.c === Draw.draw_tokens().error))).toBe(true);
+  const many  = Array.from({ length: 8 }, (_, k) => call(20 + 2 * k, "step " + k, "ok\n(exit 0 in 1 s)")).flat();
   expect(text(Paint.rows_lines(View.view_acts(v, many), 40)).slice(1)).toEqual([
-    lead + "… 3 earlier",
-    ...[3, 4, 5, 6, 7].map((k) => lead + Theme.GLYPH.ok + " shell step " + k),
+    ...[0, 1, 2, 3, 4].map((k) => lead + Theme.GLYPH.ok + " step " + k + " · exit 0"),
+    lead + "+3 more",
   ]);
   const said  = [...call(40, "ls", "ok"), ...View.entry_rows(42, "tool", 'read {"path":"a"}'), ...View.entry_rows(43, "work", "[explorer] found it")];
-  expect(text(Paint.rows_lines(View.view_acts(v, said), 30))[0]).toBe(SHUT + "Ran a command, read a fil…");
-  const glyphs = [Theme.GLYPH.ok, Theme.GLYPH.failed];
+  expect(text(Paint.rows_lines(View.view_acts(v, said), 29))[0]).toBe(run + "Ran a command, read a file…");
+  const glyphs = [Theme.GLYPH.ok, Theme.GLYPH.failed, Theme.GLYPH.run];
   try {
     Theme.TOOL.shell = "$";
-    expect(text(Paint.rows_lines(View.view_acts(v, rows), 40))[1]).toBe(lead + Theme.GLYPH.ok + " $ shell bun test");
+    expect(text(Paint.rows_lines(View.view_acts(v, rows), 40))[1]).toBe(lead + Theme.GLYPH.ok + " $ bun test · exit 0");
     delete Theme.TOOL.shell;
-    [Theme.GLYPH.ok, Theme.GLYPH.failed] = ["ok", "FAIL"];
-    expect(text(Paint.rows_lines(View.view_acts(v, rows), 40)).slice(1, 5).map((l) => l.slice(0, lead.length + 10))).toEqual([lead + "ok   shell", lead + "FAIL shell", lead + "ok   shell", lead + "     shell"]);
+    [Theme.GLYPH.ok, Theme.GLYPH.failed, Theme.GLYPH.run] = ["ok", "FAIL", "*"];
+    expect(text(Paint.rows_lines(View.view_acts(v, rows), 40)).map((l) => l.slice(0, 12))).toEqual(["* Ran 4 comm", "  ok   bun t", "  FAIL git p", "  ok   Print", "       ls"]);
   } finally {
     delete Theme.TOOL.shell;
-    [Theme.GLYPH.ok, Theme.GLYPH.failed] = glyphs;
+    [Theme.GLYPH.ok, Theme.GLYPH.failed, Theme.GLYPH.run] = glyphs;
   }
-  View.view_toggle(v, 3);
-  expect(text(Paint.rows_lines(View.view_acts(v, rows), 40))[0]).toBe(OPEN + "Ran 4 commands");
-  expect(text(Paint.rows_lines(View.view_acts(v, rows), 40)).filter((l) => l.startsWith(lead))).toEqual([]);
 });
 
-// a shut run's lines fit the width whatever they hold: a wide character
-// that would cross the edge left out, the "…" after what fits (so a line
-// may end a column short); its head so too; at a width under its lead,
-// the lead cut as well. A call of any length costs about what a short one
-// does: past the width nothing of it is taken apart
-test("a shut run's lines never pass the width: wide characters, a width under the lead, a call of any length", () => {
+// a run's lines fit the width whatever they hold: a wide character that
+// would cross the edge left out, the "…" after what fits (so a line may
+// end a column short), the outcome kept whole while it fits; its line so
+// too, and an open item's rows; at a width under its lead, the lead cut
+// as well. A call of any
+// length costs about what a short one does: past the width nothing of it
+// is taken apart, and its label is made once
+test("a run's lines never pass the width: wide characters, a width under the lead, a call of any length", () => {
   const v     = View.view_new();
   const rows  = [
-    ...View.entry_rows(3, "tool", 'shell {"command":"echo a' + "中".repeat(40) + '"}'),
-    ...View.entry_rows(4, "echo", "ok"),
+    ...View.entry_rows(3, "tool", 'shell {"command":"echo ab' + "中".repeat(40) + '"}'),
+    ...View.entry_rows(4, "echo", "ok\n(exit 0 in 1 s)"),
     ...View.entry_rows(5, "tool", '工具 {"emoji":"' + "😀".repeat(30) + '"}'),
   ];
-  const lead  = " ".repeat(SHUT.length);
+  const lead  = " ".repeat((Theme.GLYPH.run + " ").length);
   const lines = Paint.rows_lines(View.view_acts(v, rows), 40);
-  expect(text(lines)[1]).toBe(lead + Theme.GLYPH.ok + " shell echo a" + "中".repeat(10) + "…");
+  expect(text(lines)[1]).toBe(lead + Theme.GLYPH.ok + " echo ab" + "中".repeat(9) + "… · exit 0");
   expect(Paint.line_width(lines[1])).toBe(39);
+  expect(text(lines)[2]).toBe(lead + "  工具 " + "😀".repeat(15) + "…");
   for (let w = 0; w <= 48; w++) {
     expect(Paint.rows_lines(View.view_acts(v, rows), w).map((l) => Paint.line_width(l)).filter((n) => n > w)).toEqual([]);
   }
-  expect(text(Paint.rows_lines(View.view_acts(v, rows), 3))).toEqual([SHUT.slice(0, 2) + "…", "  …", "  …"]);
+  View.view_item(v, "c#3");
+  for (let w = 0; w <= 48; w++) {
+    expect(Paint.rows_lines(View.view_acts(v, rows), w).map((l) => Paint.line_width(l)).filter((n) => n > w)).toEqual([]);
+  }
+  View.view_item(v, "c#3");
+  expect(text(Paint.rows_lines(View.view_acts(v, rows), 3))).toEqual([Theme.GLYPH.run + " …", "  …", "  …"]);
   const big   = View.view_acts(v, [...View.entry_rows(7, "tool", "shell " + JSON.stringify({ command: "cat > a.txt <<EOF\n" + "lorem ipsum dolor ".repeat(60000) + "\nEOF" })), ...View.entry_rows(8, "echo", "ok")]);
+  expect(text(Paint.rows_lines(big, 80))[1]).toBe(lead + Theme.GLYPH.ok + " cat > a.txt <<EOF …");
   const start = performance.now();
   for (let k = 0; k < 5; k++) {
-    Paint.rows_lines(big, 80);
+    Paint.rows_lines(View.view_acts(v, [...View.entry_rows(7, "tool", "shell " + JSON.stringify({ command: "cat > a.txt <<EOF\n" + "lorem ipsum dolor ".repeat(60000) + "\nEOF" })), ...View.entry_rows(8, "echo", "ok")]), 80);
   }
   expect(performance.now() - start).toBeLessThan(400);
 });
@@ -215,7 +245,7 @@ test("an open block is marked over its whole frame, the blocks in it with their 
   expect(tagged).toEqual(["1x", "/open #4"]);
 });
 
-// a recap opened: its pages fold to a line as a run's messages do
+// a recap opened: its pages fold to a line by their key
 test("a recap's pages fold to a line by their key", () => {
   const v    = View.view_new();
   const rows = View.entry_rows(9, "recap", "a\nb\nc");
@@ -227,22 +257,34 @@ test("a recap's pages fold to a line by their key", () => {
   expect(lines[1].map((r) => r.x).join("")).toBe("│ " + SHUT + "recap · 3 lines");
 });
 
-// lit by its tags alone: a run's glyph in the accent, its label in the
-// ink, its bar heavier in the accent, nothing else; a message in it, its
-// glyph and its run's bar beside it (the bar as it was), pressed reversed
-test("a mark lit lights its tagged runs alone: a run's glyph, label and heavier bar; a message's glyph and its run's bar, pressed reversed", () => {
+// lit by its tags alone: a recap's glyph in the accent, its label in the
+// ink, its bar heavier in the accent, nothing else; a page in it, its
+// glyph and its recap's bar beside it (the bar as it was); an item's
+// line in the ink (a failed one's mark keeping its color), its bar
+// heavier in the accent; pressed reversed
+test("a mark lit lights its tagged runs alone: a recap's glyph, label and heavier bar, a page's glyph and its recap's bar; an item's line and heavier bar; pressed reversed", () => {
   const v = View.view_new();
   View.view_toggle(v, 3);
   View.view_fold(v, "#4");
   const marks: Paint.Mark[] = [];
-  const rows  = [...View.entry_rows(3, "tool", 'shell {"command":"ls"}'), ...View.entry_rows(4, "echo", "a\nb")];
+  const rows  = [...View.entry_rows(3, "recap", "a\nb"), ...View.entry_rows(4, "recap", "c\nd")];
   const lines = Paint.rows_lines(View.view_acts(v, rows), 60, marks);
-  const [run, , msg] = marks;
+  const [rule, , page] = marks;
   const c     = Draw.draw_tokens().accent;
-  const head  = Paint.line_lit(lines[0], run, false);
-  expect(head.map((r) => [r.x, r.s.d, r.s.c])).toEqual([[OPEN, false, c], ["Ran a command", false, ""]]);
-  const fold  = lines[msg.from];
-  expect(Paint.line_lit(fold, run, false).map((r) => r.x).join("")).toBe("┃ " + SHUT + "result · 2 lines");
-  const own   = Paint.line_lit(fold, msg, true);
-  expect(own.map((r) => [r.x, r.s.d, r.s.c, r.s.v])).toEqual([["│ ", false, c, true], [SHUT, false, c, true], ["result · 2 lines", true, "", false]]);
+  const head  = Paint.line_lit(lines[0], rule, false).filter((r) => r.mark !== undefined);
+  expect(head.map((r) => [r.x, r.s.d, r.s.c])).toEqual([[OPEN, false, c], ["Compaction", false, ""]]);
+  const fold  = lines[page.from];
+  expect(Paint.line_lit(fold, rule, false).map((r) => r.x).join("")).toBe("┃ " + SHUT + "recap · 2 lines");
+  const own   = Paint.line_lit(fold, page, true);
+  expect(own.map((r) => [r.x, r.s.d, r.s.c, r.s.v])).toEqual([["│ ", false, c, true], [SHUT, false, c, true], ["recap · 2 lines", true, "", false]]);
+  const items = [...View.entry_rows(5, "tool", 'shell {"command":"false"}'), ...View.entry_rows(6, "echo", View.FAILED + "(exit 1 in 0.1 s)")];
+  View.view_item(v, "c#5");
+  const said: Paint.Mark[] = [];
+  const call  = Paint.rows_lines(View.view_acts(v, items), 60, said);
+  const item  = said[0];
+  const line  = Paint.line_lit(call[1], item, false);
+  expect(line.slice(1).map((r) => [r.x, r.s.d, r.s.c])).toEqual([[Theme.GLYPH.failed + " ", false, Draw.draw_tokens().error], ["false", false, ""], [" · exit 1", false, ""]]);
+  expect(line[0].s.d).toBe(false);
+  const bar   = Paint.line_lit(call[2], item, true);
+  expect(bar.slice(0, 2).map((r) => [r.x, r.s.c, r.s.v])).toEqual([[call[2][0].x, "", false], ["┃ ", c, true]]);
 });

@@ -132,14 +132,15 @@ export const GLYPH = {
   option  : "○",  // an answer of a question that takes one (picked: here)
   input   : "> ", // before the message typed (its other lines indented as far)
   find    : "⌕ ", // before a list's search
-  open    : "[-]", // an open run's head, the side's to-do shown whole (a click shuts it)
-  shut    : "[+]", // a shut run's head, a message folded, the side's to-do folded (a click opens it)
+  open    : "[-]", // an open recap's line, the side's to-do shown whole (a click shuts it)
+  shut    : "[+]", // a shut recap's line, a recap's page folded, the side's to-do folded (a click opens it)
+  run     : "•",  // a run of work's line, over its items
   lit     : ">",  // the lit row of a list or a question
   pending : "□",  // a to-do item not begun
   active  : ">",  // the one at work
   done    : "■",  // one done
-  ok      : "✓",  // done well: a call in a shut run, a subagent finished, a question answered
-  failed  : "✗",  // failed: a call in a shut run, an MCP server, a refused request
+  ok      : "✓",  // done well: a run's item, a subagent finished, a question answered
+  failed  : "✗",  // failed: a run's item, an MCP server, a refused request
   ...OWN.glyph,
 };
 

@@ -305,15 +305,17 @@ export function term_type(t: Term, text: string): boolean {
 // Select.ts), on what's under it (Select.ts term_target): what was drawn
 // there does its own (the side, the tabs, the jump, a reply's button
 // copies); in the chat (marks false: nothing, the click let text chosen
-// go), a run of work's head or its bar opens or closes the whole run, at
-// once; inside an open one, a message folds to a line, or unfolds; a
-// block opens, and an open one shuts from any line of its frame (the
-// innermost thing holding the line acts). Those wait
-// till TWICE after the press (term_wait), so a double click still
-// chooses the word under it; where no word is (past a line's end, a
-// blank line, a frame's edge, a mark's own control: its glyph, a
-// summary's gutter and /open, an open block's bar), at once. Whatever a
-// click acted on keeps its place under the pointer
+// go), an item of a run of work opens or shuts alone, from its line, its
+// bar or anywhere in it open; a run's More line shows all its items, or
+// fewer; a recap's line or its bar opens or closes it, at once; inside
+// an open one, a page folds to a line, or unfolds; a block opens, and an
+// open one shuts from any line of its frame (the innermost thing holding
+// the line acts). Those wait till TWICE after the press (term_wait), so
+// a double click still chooses the word under it; where no word is (past
+// a line's end, a blank line, a frame's edge, a mark's own control: an
+// item's line and its bar, a More line, a glyph, a summary's gutter and
+// /open, an open block's bar), at once. Whatever a click acted on keeps
+// its place under the pointer
 export function term_click(t: Term, marks = true): void {
   const at  = t.scr.click;
   const aim = term_target(t, at);
@@ -333,16 +335,16 @@ export function term_click(t: Term, marks = true): void {
 // a click's fold waiting out a double click: done at the press's TWICE
 // (the screen painted), unless a press, the wheel or a key comes first
 // (term_unwait); meanwhile what it acts on shows pressed (Select.ts).
-// Done on the mark by its key as painted then, if it still is and
-// nothing came over the chat (a popup, a pane): what changed by itself
-// meanwhile (a turn's end summing its messages up) is never acted on
-// stale
+// Done on the mark by its key as painted then, if it still is, open or
+// shut as it was, and nothing came over the chat (a popup, a pane): what
+// changed meanwhile (a turn's end summing its messages up, an item shut
+// by /close) is never acted on stale
 function term_wait(t: Term, m: Paint.Mark, at: Screen.Spot): void {
   term_unwait(t);
   const timer = setTimeout(() => {
     t.wait    = null;
     const now = t.seen.marks.find((x) => x.key === m.key);
-    if (now !== undefined && !term_popup(t) && t.pane === null) {
+    if (now !== undefined && now.open === m.open && !term_popup(t) && t.pane === null) {
       term_fold(t, now, at);
     }
     term_draw(t);
@@ -358,27 +360,34 @@ export function term_unwait(t: Term): void {
   }
 }
 
-// a mark acted on by a click at a spot: a run of work (or a recap)
-// opened or closed, a message in one folded or unfolded, a block opened
-// or shut; its first line kept on the row clicked (t.pin), so what was
-// under the pointer stays there, and a press on that cell within TWICE
-// acts on nothing (t.acted: a slow double click never undoes it)
+// a mark acted on by a click at a spot, on the page shown (the chat, an
+// agent's: View.view_shown): an item of a run opened or shut alone, a
+// run's items all shown or fewer, a recap opened or closed, a page in
+// one folded or unfolded, a block opened or shut; its first line kept on
+// the row clicked (t.pin), so what was under the pointer stays there,
+// and a press on that cell within TWICE acts on nothing (t.acted: a slow
+// double click never undoes it)
 function term_fold(t: Term, m: Paint.Mark, at: Screen.Spot): void {
+  const shown = View.view_shown(t.v);
   t.pin   = { key: m.key, row: at.row };
   t.acted = { at, until: Date.now() + Screen.TWICE };
-  if (m.act === true) {
-    View.view_toggle(t.v, m.id);
-    t.ver += 1;
+  if (m.item === true) {
+    View.view_item(shown, m.key);
+  } else if (m.more === true) {
+    View.view_more(shown, m.id);
+  } else if (m.act === true) {
+    View.view_toggle(shown, m.id);
   } else if (m.fold === true) {
-    View.view_fold(t.v, m.key);
-    t.ver += 1;
+    View.view_fold(shown, m.key);
   } else {
     term_act(t, { $: m.open ? "Shut" : "Open", id: m.id, n: m.n });
+    return;
   }
+  t.ver += 1;
 }
 
-// Ctrl+O: every run of work (and recap) shown whole, or each one line
-// again
+// Ctrl+O: every run's items, and every recap, shown whole, or each one
+// line again
 export function term_verbose(t: Term): void {
   View.view_verbose(t.v);
   t.ver += 1;
