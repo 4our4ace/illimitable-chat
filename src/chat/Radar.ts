@@ -49,6 +49,7 @@
 // opened or pinned stays through that turn (touched: Related.ts lets it
 // go at the user's next message, and it fades and leaves as any other).
 
+import { history_bare } from "../tools/Clip.ts";
 import { Store, type Store as File } from "./Store.ts";
 
 // Types
@@ -201,13 +202,16 @@ export namespace Radar {
   }
 
   // a message's units, its source's weight `w`: a tool call's values (its
-  // keys left out), a failed result's errors' names, any other's text
+  // keys left out), a failed result's errors' names (the result's own:
+  // the <history> line recall appended to it never counts, history_bare),
+  // any other's text
   export function said(m: Said, w: number): Unit[] {
     if (m.kind === "tool") {
       return Radar.call(m.text, w);
     }
     if (m.kind === "echo") {
-      return Radar.failed(m.text) ? Radar.errors(m.text.slice(0, HEAD) + "\n" + m.text.slice(-HEAD), w) : [];
+      const text = history_bare(m.text);
+      return Radar.failed(text) ? Radar.errors(text.slice(0, HEAD) + "\n" + text.slice(-HEAD), w) : [];
     }
     return Radar.read(m.text, w);
   }
@@ -232,9 +236,10 @@ export namespace Radar {
   }
 
   // whether a result failed: logged with View.FAILED's "error: ", or a
-  // command's that exited other than 0 (Machine.ts's last line)
+  // command's that exited other than 0 (Machine.ts's last line, before
+  // the <history> line recall may have appended: history_bare)
   export function failed(text: string): boolean {
-    return text.startsWith("error: ") || /\(exit [1-9]\d* in [^)]*\)\s*$/.test(text);
+    return text.startsWith("error: ") || /\(exit [1-9]\d* in [^)]*\)\s*$/.test(history_bare(text));
   }
 
   // the errors' names a text holds
