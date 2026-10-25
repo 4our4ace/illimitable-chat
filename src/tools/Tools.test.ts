@@ -119,6 +119,19 @@ test("a list all done is let go, so it leaves the side; one with an item left is
   expect([Tools.todo(chat.tools), kept()]).toEqual([[], []]);
 });
 
+test("a user's subagent that lists its tools, in Claude Code, still gets the permission prompt Claude Code asks through", () => {
+  fs.mkdirSync(DIR + "/agents", { recursive: true });
+  fs.writeFileSync(DIR + "/agents/limited.md", "---\ndescription: reads only\nmode: subagent\ntools: zoom\n---\nRead, never edit.\n");
+  chat.tools.agents.set("limited", { name: "limited", run: 0, role: { $: "sub", effort: null, agent: "limited" }, call: null, live: [], calls: {}, stop: false, view: [], replies: [] });
+  try {
+    expect(Tools.list(chat.tools, "limited", true).map((t) => t.name)).toEqual(["zoom", "approve"]);
+    expect(Tools.list(chat.tools, "limited", false).map((t) => t.name)).toEqual(["zoom"]);
+  } finally {
+    chat.tools.agents.delete("limited");
+    fs.rmSync(DIR + "/agents/limited.md");
+  }
+});
+
 test("a caller in Claude Code gets only the tools it lacks, served at ?lean; its prompts say it works inside illi, CLAUDE.md left to Claude Code", async () => {
   const names = (lean: boolean) => Tools.list(chat.tools, "main", lean).map((t) => t.name);
   expect(names(false)).toEqual(expect.arrayContaining(["shell", "read", "write", "edit"]));

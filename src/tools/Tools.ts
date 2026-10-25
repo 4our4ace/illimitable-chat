@@ -543,13 +543,16 @@ export namespace Tools {
 
   // a caller's tools, as its agent allows; `lean`, a caller in Claude
   // Code, none it has (shell, files: TOOLS), and its permission prompt
+  // whatever the agent allows (Claude Code is told to ask through it,
+  // and won't start without it)
   export function list(tools: Tools, who: string, lean = false): Spec[] {
-    const user = [...skill_tools(tools.cwd), ...Mcp.tools(), ...Plugins.tools(), ...(lean ? [APPROVE] : [])];
+    const user = [...skill_tools(tools.cwd), ...Mcp.tools(), ...Plugins.tools()];
     const here = lean ? [] : TOOLS;
+    const asks = lean ? [APPROVE] : [];
     if (who === MAIN) {
-      return Custom.allow(Custom.agent(tools.cwd, tools.hooks.main()), [...OWN, ...boss(tools.cwd), ...here, ...user]);
+      return [...Custom.allow(Custom.agent(tools.cwd, tools.hooks.main()), [...OWN, ...boss(tools.cwd), ...here, ...user]), ...asks];
     }
-    return Custom.allow(Custom.agent(tools.cwd, tools.agents.get(who)?.role.agent ?? null), [...OWN, ...here, ...user]);
+    return [...Custom.allow(Custom.agent(tools.cwd, tools.agents.get(who)?.role.agent ?? null), [...OWN, ...here, ...user]), ...asks];
   }
 
   // a call, past the plugins' hooks, then judged (Tools.guard: illi's own
