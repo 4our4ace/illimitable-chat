@@ -55,8 +55,9 @@ const STICKY = "Sticky skills";
 const GAP    = 3;
 
 // the least of a related line's summary shown beside its id (narrower:
-// the id left out)
-const SUMMARY = 12;
+// the id left out, the summary all the line: a few words say more than
+// an id, which the list and the pane show too)
+const SUMMARY = 20;
 
 // the side, w wide and tall: illi and the primary agents by name (a click
 // makes one the main agent), the sticky skills beside them (a click

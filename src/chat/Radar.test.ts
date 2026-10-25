@@ -1,13 +1,16 @@
 // Radar test
 // ==========
 // `bun test Radar.test.ts`. A query keeps what is distinctive (a path as
-// its file's name with its ending, an error's name, a name in code, a
-// rare word) and drops what every chat holds (stop words, tool names and
-// their keys, folders, endings, shell commands, flags, numbers, hashes);
-// a result counts only if it failed, and then only its errors' names. On
-// a synthetic chat full of boilerplate, the episodes sharing a path or an
-// error with the query rank first, each widened to its summary node;
-// boilerplate alone finds nothing; what the view holds at message detail
+// its file's name with its ending, short ones too, an error's name, an
+// errno by name alone, a name in code, an acronym, a rare word) and
+// drops what every chat holds (stop words, tool names and their keys,
+// folders, endings, shell commands, flags, numbers, hashes, words in
+// capitals said loud); a result counts only if it failed, and then only
+// its errors' names. On a synthetic chat full of boilerplate, the
+// episodes sharing a path or an error with the query rank first, each
+// widened to its summary node; boilerplate alone finds nothing; a rare
+// word is found however many words come with it; a topic come back in a
+// young chat is still told; what the view holds at message detail
 // or recent, or the user dismissed, is never found nor widened into. The
 // list shown stays still: found again it keeps its place, new lines join
 // at the foot; one not found fades, and leaves under the floor, or for
@@ -226,4 +229,46 @@ test("a line faded under the floor leaves, one a step, a new one joining at the 
   expect(Radar.merge(one, []).map((s) => s.first)).toEqual([32]);
   expect(Radar.merge([shown(0, 5.5), shown(16, 12), shown(32, 14), shown(48, 16)], [line(64, 8)]).map((s) => s.first)).toEqual([16, 32, 48, 64]);
   expect(Radar.merge([shown(0, 1, true)], []).map((s) => s.first)).toEqual([0]);
+});
+
+// Short names, errnos, many words, young chats
+// --------------------------------------------
+
+const qs = (text: string) => Radar.units(text, []).map((u) => u.k + ":" + u.q);
+
+test("an errno is an error by its name alone: a word in capitals that starts with E is none (a name, as any word in capitals)", () => {
+  expect(qs("ENTER the EMPTY state; EXPECTED an EXCEPTION")).toEqual(["name:empty", "name:enter", "name:exception", "name:expected", "word:state"]);
+  expect(qs("press enter on an empty line")).toEqual(["word:empty", "word:enter", "word:press"]);
+  expect(qs("ENOENT, then E2BIG and EADDRINUSE")).toEqual(["error:e2big", "error:eaddrinuse", "error:enoent"]);
+});
+
+test("an acronym of three letters is a name, a word said loud not; a file's short name counts", () => {
+  expect(qs("the MCP server's JWT over SSH, TLS and the API's CSV; OOM on CJK")).toEqual(["name:api", "name:cjk", "name:csv", "name:jwt", "name:mcp", "name:oom", "name:ssh", "name:tls", "word:server"]);
+  expect(qs("NOT now, FYI: THE fix is IMPORTANT, TODO")).toEqual(["word:important"]);
+  expect(qs("src/db.ts and io.go, not a.ts nor 01.md")).toEqual(["path:db ts", "path:io go"]);
+});
+
+// a young chat: ten episodes, a pool's resets met in three of them (2,
+// 5, 8), and the zebu and the yurt and the kiwi in one (6), the rest
+// noise; then a run at 160
+const POOL = (k: number): Array<[string, string]> => [
+  ["user", "the pool drops connections again " + k],
+  ["tool", 'read {"path":"src/net/Pool.ts"}'],
+  ["echo", "error: ECONNRESET on the socket\n(exit 1 in 0.4 s)"],
+  ...noise(k).slice(3),
+];
+const ZOO: Array<[string, string]> = [["user", "the zebu sleeps in the yurt beside the kiwi"], ...noise(60).slice(1)];
+const YOUNG = chat("young", [...noise(10), ...noise(11), ...POOL(12), ...noise(13), ...noise(14), ...POOL(15), ...ZOO, ...noise(17), ...POOL(18), ...noise(19), ["user", "next"]]);
+
+test("in a young chat a topic come back in three episodes is still told", () => {
+  const units = Radar.units("ECONNRESET in Pool.ts again", []);
+  expect(Radar.search(YOUNG, { chat: YOUNG.chat, units, end: 160, out: [] }).map((f) => f.first + "+" + f.n).sort()).toEqual(["128+16", "32+16", "80+16"]);
+});
+
+test("rare words are found however many words come with them, wherever they sort", () => {
+  const many = "accordingly beforehand candidates delightful elaborate fortunately generously happiness imagination juxtaposed knowledgeable lighthearted magnificent nevertheless outstanding particularly quarterbacks remarkable spectacular tremendously undoubtedly vocabulary wonderfully xenophobic yesterdays zealously";
+  const zoo  = Radar.units(many + " kiwi yurt zebu", []);
+  expect(Radar.search(YOUNG, { chat: YOUNG.chat, units: zoo, end: 160, out: [] }).map((f) => f.first + "+" + f.n)).toEqual(["96+16"]);
+  expect(zoo.length).toBe(29);
+  expect(zoo.map((u) => u.q)).toEqual(expect.arrayContaining(["kiwi", "yurt", "zebu"]));
 });

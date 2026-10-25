@@ -1,16 +1,21 @@
 // Related test
 // ============
-// `bun test Related.test.ts`. The radar on screen: a search in the
-// search thread after a step of a turn (the user's message, the last of
-// its results, the turn's end), never as text streams, finds the past
-// episode the run shares a path and an error with, and the side shows
-// it under Related: its age, its summary, its id (left out when
-// narrow). A click on it opens it at full detail (a pane: its messages
-// whole); on its id pins it (the id typed into the input); on the head
-// lists them (Enter opens, Tab pins, Del dismisses, never found again).
-// Without the side the bottom line counts them. Each shown, opened,
-// pinned and dismissed is counted by its score in related.json, no text
-// in it. `related` off: nothing.
+// `bun test Related.test.ts`. The radar on screen: a search in a thread
+// of its own (the model's search never waits on it) after a step of a
+// turn (the user's message, the last of its results, the turn's end),
+// never as text streams, finds the past episode the run shares a path
+// and an error with, and the side shows it under Related: its age, its
+// summary, its id (left out when narrow). A click on it opens it at full
+// detail (a pane: its messages whole); on its id pins it (the id typed
+// into the input); on the head lists them (Enter opens, Tab pins, Del
+// dismisses, never found again; the list as it is now, however searches
+// changed it since it opened). A line opened or pinned stays till the
+// user's next message. An answer never brings back what was dismissed
+// or what the view holds now; a run with nothing to search fades the
+// lines all the same. Without the side the bottom line counts them.
+// Each shown, opened, pinned and dismissed is counted by its score in
+// related.json, no text in it. `related` off: nothing, nor an answer
+// asked before.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -26,6 +31,7 @@ const { Store } = await import("../chat/Store.ts");
 const Related = await import("./Related.ts");
 const { term_side_drawn } = await import("./Side.ts");
 const Paint = await import("../ui/Paint.ts");
+const { popup_foot } = await import("./Popup.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
 
@@ -202,4 +208,135 @@ test("without the side the bottom line counts them, a narrow one doesn't; `relat
     config.config_set("related", null);
   }
   expect(Related.related_shown(t).length).toBe(1);
+});
+
+// a line found over messages [first, first + n), of a score
+const found = (first: number, score: number, n = 8) => ({ first, n, text: "user: line " + first, score, units: 2, anchored: true, date: "" });
+const spans = (t: any) => Related.related_shown(t).map((s) => s.first + "+" + s.n);
+
+// the counts kept since `f` ran (the file emptied first)
+const counted = (f: () => void) => {
+  Related.related_keep();
+  fs.rmSync(Related.RELATED, { force: true });
+  f();
+  Related.related_keep();
+  return fs.existsSync(Related.RELATED) ? JSON.parse(fs.readFileSync(Related.RELATED, "utf8")) : {};
+};
+
+// Projects.radar answered by hand while `f` runs: each ask's answer
+// given by the function it gets
+const answered = async (f: (asked: Array<(found: any[]) => void>) => Promise<void>) => {
+  const radar = Projects.radar;
+  const asked: Array<(found: any[]) => void> = [];
+  (Projects as any).radar = () => new Promise((done) => asked.push(done));
+  try {
+    await f(asked);
+  } finally {
+    (Projects as any).radar = radar;
+  }
+};
+
+test("Del in the list, after searches dropped lines since it opened, lights the line under it as listed now, never past the list's end", () => {
+  const t = term();
+  Related.related_found(t, [found(0, 50), found(8, 5.5), found(16, 5.5)]);
+  Related.related_list(t);
+  expect(t.choose.names.length).toBe(3);
+  Related.related_found(t, []);
+  Related.related_found(t, []);
+  expect(spans(t)).toEqual(["0+8"]);
+  expect(t.choose.keys(2, "Delete")).toBe(true);
+  expect([t.choose.names.length, t.choose.at, popup_foot(t.choose)]).toEqual([1, 0, "Enter opens · Tab pins its id · Del dismisses"]);
+  const u = term();
+  Related.related_found(u, [found(0, 20), found(8, 20), found(16, 20)]);
+  Related.related_list(u);
+  Related.related_list(u, 9);
+  expect(u.choose.at).toBe(2);
+  expect(u.choose.keys(1, "Delete")).toBe(true);
+  expect([spans(u), u.choose.at, u.choose.names[u.choose.at]]).toEqual([["0+8", "16+8"], 1, "line 16"]);
+});
+
+test("an answer never brings back a line dismissed since it was asked, nor one the view holds now; neither counted as shown", () => {
+  const t = term();
+  Related.related_found(t, [found(0, 20), found(8, 20)]);
+  const kept = counted(() => {
+    Related.related_dismiss(t, Related.related_shown(t)[1]);
+    Related.related_found(t, [found(0, 20), found(8, 20), found(56, 30), found(62, 30, 1)]);
+  });
+  expect(spans(t)).toEqual(["0+8"]);
+  expect(kept.shown).toBeUndefined();
+  expect(kept.dismissed).toEqual({ anchored: { "20": 1 } });
+});
+
+test("a line opened or pinned stays through its turn, however weak; from the user's next message on it fades and leaves as any other", async () => {
+  await answered(async () => {
+    const t = term();
+    Related.related_found(t, [found(0, 10), found(8, 10), found(16, 10), found(24, 10)]);
+    Related.related_shown(t).slice(0, 2).forEach((s) => Related.related_open(t, s));
+    Related.related_shown(t).slice(2).forEach((s) => Related.related_pin(t, s));
+    for (let k = 0; k < 12; k++) {
+      Related.related_found(t, [found(40, 30)]);
+    }
+    expect(spans(t)).toEqual(["0+8", "8+8", "16+8", "24+8"]);
+    Related.related_hear(t, { $: "entry", id: 67, kind: "user", text: "next" } as any);
+    expect(Related.related_shown(t).some((s) => s.touched)).toBe(false);
+    Related.related_found(t, [found(40, 30)]);
+    expect(spans(t)).toEqual(["8+8", "16+8", "24+8", "40+8"]);
+    Related.related_found(t, []);
+    expect(spans(t)).toEqual(["16+8", "24+8", "40+8"]);
+  });
+});
+
+test("`related` turned off: a step's search waiting on its timer never asks, and an answer asked before is dropped, not counted", async () => {
+  await answered(async (asked) => {
+    const t = term();
+    const kept = counted(() => {
+      Related.related_hear(t, { $: "entry", id: 67, kind: "user", text: "SQLITE_BUSY" } as any);
+      config.config_set("related", "off");
+    });
+    try {
+      await Bun.sleep(400);
+      expect(asked.length).toBe(0);
+      config.config_set("related", null);
+      const seek = Related.related_seek(t);
+      expect(asked.length).toBe(1);
+      config.config_set("related", "off");
+      const late = counted(() => asked[0]([found(0, 20)]));
+      await seek;
+      expect([kept, late]).toEqual([{}, {}]);
+    } finally {
+      config.config_set("related", null);
+    }
+    await Bun.sleep(0);
+    expect(Related.related_shown(t)).toEqual([]);
+  });
+});
+
+test("a run with nothing to search finds nothing, so the lines shown fade, the weakest leaving under the floor, all the same", async () => {
+  await answered(async (asked) => {
+    const t = term();
+    [[64, "user", "ok thanks"], [65, "illi", "Done."], [66, "illi", "Sure."]].forEach(([id, kind, text]) => t.v.whole.set(id, { kind, text }));
+    Related.related_found(t, [found(0, 20), found(8, 5.5)]);
+    await Related.related_seek(t);
+    expect(asked.length).toBe(0);
+    expect(Related.related_shown(t).map((s) => [s.first, s.score])).toEqual([[0, 17]]);
+  });
+});
+
+test("the radar asks a thread of its own: a search the model asks meanwhile goes to another worker, never behind the radar's", async () => {
+  const post = Worker.prototype.postMessage;
+  const to: Array<[string, Worker]> = [];
+  Worker.prototype.postMessage = function (this: Worker, msg: any, ...rest: any[]) {
+    to.push([msg.$, this]);
+    return (post as any).call(this, msg, ...rest);
+  };
+  try {
+    const units = [{ q: "seeker ts", w: 3, k: "path" as const }, { q: "sqlite busy", w: 3, k: "error" as const }];
+    const [lines, text] = await Promise.all([Projects.radar(store.file, { chat: store.chat, units, end: 62, out: [] }), Projects.seek(store, "seeker")]);
+    expect(lines.map((f) => f.first + "+" + f.n)).toEqual(["16+16"]);
+    expect(text).toContain("search thread dies");
+  } finally {
+    Worker.prototype.postMessage = post;
+  }
+  expect(to.map(([$]) => $)).toEqual(["radar", "search"]);
+  expect(to[0][1]).not.toBe(to[1][1]);
 });
