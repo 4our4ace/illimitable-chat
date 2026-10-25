@@ -1,18 +1,27 @@
 // Call
 // ====
 // A tool call as people read it. Logged as its tool's name, a space and its
-// input's JSON (`zoom {"id":6243,"n":1}`; an MCP client's prefix,
-// `mcp__illi__`, dropped), it shows as its name in bold (after a mark,
-// if the theme gives it one: Theme.TOOL) and a head, as its tool reads (READS): a command as itself; a file
-// tool its path, read's lines after it, edit's files (the diff comes in its
-// result); zoom and date the message (`#6243`, a line `#6243+8`, an agent by
-// name); spawn its tasks, tell its agent's name and its text in blocks; todo
-// how far its list is, its items in a block, each marked. Any other call, or an
-// edit whose edits are no list, shows its name and short values as arguments
-// (`web_search "bend"`; short: JSON within SHORT chars, and a string without
-// spaces or escapes), over a code block for each other value, keyed by its name
-// unless alone. A call still streaming reads as its input so far: its open
-// string and brackets closed, else up to its last whole field.
+// input's JSON (`zoom {"id":6243,"n":1}`; illi's own as Claude Code names
+// them, `mcp__illi__zoom`, by their own name), it shows as its name in bold
+// (after a mark, if the theme gives it one: Theme.TOOL; an MCP server's or
+// a plugin's tool after its server, `github: get_issue`) and a head, as its
+// tool reads (READS): a command as itself; a file tool its path, read's
+// lines after it, edit's files (the diff comes in its result); zoom and
+// date the message (`#6243`, a line `#6243+8`, an agent by name); spawn
+// its tasks, tell its agent's name and its text in blocks; todo how far
+// its list is, its items in a block, each marked; a web search its
+// queries, or the page it opened. Any other call, or an edit whose edits
+// are no list, shows its name and short values as arguments (`get_issue
+// 42`; short: JSON within SHORT chars, and a string without spaces or
+// escapes), over a code block for each other value, keyed by its name
+// unless alone. A call still streaming reads as its input so far: its
+// open string and brackets closed, else up to its last whole field.
+//
+// A run of work (View.ts) lists each call on one line instead: what it
+// did in plain words (call_label, by its tool: LABELS; a command by the
+// description its caller gave it, else its first line), then how it
+// ended (call_outcome: a command's exit, the lines a read showed, the
+// lines a write or an edit changed; a failure, how).
 //
 // An agent's report is logged as `[Name]` on its own line, its replies,
 // and a line naming its whole chat (the model reads who sent it); it
@@ -24,9 +33,11 @@ import { GLYPH } from "./Theme.ts";
 // Types
 // =====
 
-// name: the bare tool name ("": no call), shown bold; head: the rest of
-// its line (a command's lines)
-export type Call = { name: string; head: string; blocks: Md.Code[] };
+// name: the bare tool name ("": no call), shown bold; from: the MCP
+// server or plugin whose tool it is ("": illi's own, or its vendor's);
+// head: the rest of its line (a command's lines); input: what it was
+// called with, as read (a label reads it: call_label)
+export type Call = { name: string; from: string; head: string; blocks: Md.Code[]; input: Input };
 
 type Input = Record<string, unknown>;
 
@@ -39,19 +50,80 @@ const SHORT = 60;
 
 const CALL = /^(\S+) (\{[\s\S]*)$/;
 
-const MCP = /^mcp__.+?__/;
+// illi's own tools as Claude Code names them (its MCP server's); a tool
+// of the user's MCP servers (Mcp.ts) or of a plugin (Plugins.ts), its
+// server and its name
+const OWN  = /^mcp__illi__/;
+const FROM = /^(?:mcp|plugin)__(.+?)__(.+)$/;
 
 const READS = new Map<string, (x: Input) => Shown>([
-  ["shell",    (x) => ({ head: String(x.command ?? ""), blocks: [] })],
-  ["read",     (x) => ({ head: String(x.path ?? "") + lines_show(x.offset, x.limit), blocks: [] })],
-  ["write",    (x) => ({ head: String(x.path ?? ""), blocks: [] })],
-  ["edit",     (x) => (Array.isArray(x.edits) ? { head: edits_files(x.edits), blocks: [] } : input_shown(x))],
-  ["zoom",     (x) => ({ head: msg_show(x.id, x.n) + (x.at === undefined ? "" : " from char " + x.at), blocks: [] })],
-  ["date",     (x) => ({ head: msg_show(x.id, 1), blocks: [] })],
-  ["spawn",    (x) => ({ head: tasks_show(x.tasks, x.agent, x.effort), blocks: (Array.isArray(x.tasks) ? x.tasks : []).flatMap(text_block) })],
-  ["tell",     (x) => ({ head: String(x.name ?? ""), blocks: text_block(x.message) })],
-  ["todo",     (x) => todo_shown(x.items)],
+  ["shell",      (x) => ({ head: String(x.command ?? ""), blocks: [] })],
+  ["read",       (x) => ({ head: String(x.path ?? "") + lines_show(x.offset, x.limit), blocks: [] })],
+  ["write",      (x) => ({ head: String(x.path ?? ""), blocks: [] })],
+  ["edit",       (x) => (Array.isArray(x.edits) ? { head: edits_files(x.edits), blocks: [] } : input_shown(x))],
+  ["zoom",       (x) => ({ head: msg_show(x.id, x.n) + (x.at === undefined ? "" : " from char " + x.at), blocks: [] })],
+  ["date",       (x) => ({ head: msg_show(x.id, 1), blocks: [] })],
+  ["spawn",      (x) => ({ head: tasks_show(x.tasks, x.agent, x.effort), blocks: (Array.isArray(x.tasks) ? x.tasks : []).flatMap(text_block) })],
+  ["tell",       (x) => ({ head: String(x.name ?? ""), blocks: text_block(x.message) })],
+  ["todo",       (x) => todo_shown(x.items)],
+  ["web_search", (x) => web_shown(x)],
 ]);
+
+// the most characters of a label (call_label) kept before it is laid out
+// (Paint.ts fits it to the row): a command of any length costs about
+// what a short one does
+const LABEL = 200;
+
+// what each tool's call did, in plain words, by its input (and its
+// result: spawn's names); "": none of its own (call_named). illi's tools
+// first, then Claude Code's (the claude-code vendor's calls)
+const LABELS = new Map<string, (x: Input, result: string | null) => string>([
+  ["shell",      (x) => text_first(x.description) || command_first(x.command)],
+  ["read",       (x) => "Read " + text_first(x.path) + read_lines(x.offset, x.limit)],
+  ["write",      (x) => "Wrote " + text_first(x.path)],
+  ["edit",       (x) => (Array.isArray(x.edits) ? "Edited " + names_few(x.edits.map((e: any) => e?.path)) : "")],
+  ["web_search", (x) => web_label(x)],
+  ["search",     (x) => "Searched memory for " + quoted(x.words) + project_in(x.project)],
+  ["zoom",       (x) => "Looked back at " + (typeof x.id === "string" ? x.id + "'s chat" : msg_show(x.id, x.n)) + project_in(x.project)],
+  ["date",       (x) => "Checked the date of " + msg_show(x.id, 1) + project_in(x.project)],
+  ["projects",   () => "Listed the projects"],
+  ["spawn",      (x, result) => "Started " + (started(result) || agents_said(x.tasks, x.agent))],
+  ["tell",       (x) => "Messaged " + text_first(x.name)],
+  ["skill",      (x) => (x.on === true ? "Turned on skill " : x.on === false ? "Turned off skill " : "Loaded skill ") + text_first(x.name)],
+  ["todo",       (x) => (Array.isArray(x.items) && x.items.length === 0 ? "Cleared the to-do list" : "Updated the to-do list")],
+  ["ask",        (x) => asked(x.questions)],
+  ["Bash",       (x) => text_first(x.description) || command_first(x.command)],
+  ["Read",       (x) => "Read " + text_first(x.file_path) + read_lines(x.offset, x.limit)],
+  ["Write",      (x) => "Wrote " + text_first(x.file_path)],
+  ["Edit",       (x) => "Edited " + text_first(x.file_path)],
+  ["MultiEdit",  (x) => "Edited " + text_first(x.file_path)],
+  ["NotebookEdit", (x) => "Edited " + text_first(x.notebook_path)],
+  ["Glob",       (x) => "Listed files matching " + text_first(x.pattern)],
+  ["Grep",       (x) => "Searched for " + quoted(x.pattern) + (typeof x.path === "string" ? " in " + text_first(x.path) : "")],
+  ["WebSearch",  (x) => "Searched " + quoted(x.query)],
+  ["WebFetch",   (x) => "Opened " + url_short(x.url)],
+  ["TodoWrite",  () => "Updated the to-do list"],
+  ["Task",       (x) => "Started " + (text_first(x.subagent_type) || "an agent")],
+]);
+
+// the input's fields that tell most what an unknown tool's call did, in
+// turn (Tools.does reads them so too)
+const TELLING = ["description", "command", "file_path", "path", "notebook_path", "url", "query", "pattern", "name", "id"];
+
+// a command's leading `cd <dir> &&` (or `;`), left out of its label: the
+// command after it says what it does
+const CD = /^cd\s+(?:"[^"]*"|'[^']*'|[^\s;&|]+)\s*(?:&&|;)\s*/;
+
+// how a shell call ended, at its result's end (Machine.shell: exit 0,
+// stopped, killed by a signal); Claude Code's Bash, failing, says its
+// code first; a read's lines shown, at its result's end (Machine.read);
+// what a call stopped answers (Agent.use); how far from a result's end
+// each is looked for
+const EXIT    = /\((exit -?\d+|stopped|killed by \S+) in [\d.]+ s\)\s*$/;
+const CODE    = /^Exit code (-?\d+)/;
+const SHOWN   = /\[lines (\d+)-(\d+) of \d+[^\]\n]*\]\s*$/;
+const STOPPED = "(stopped)";
+const TAIL    = 160;
 
 // Report
 // ======
@@ -76,10 +148,26 @@ export function call_parse(text: string): Call {
   const m     = CALL.exec(text);
   const input = m === null ? null : input_parse(m[2]);
   if (m === null || input === null) {
-    return { name: "", head: text, blocks: [] };
+    return { name: "", from: "", head: text, blocks: [], input: {} };
   }
-  const name = m[1].replace(MCP, "");
-  return { name, ...(READS.get(name) ?? input_shown)(input) };
+  const [from, name] = call_name(m[1]);
+  const read = from === "" ? READS.get(name) : undefined;
+  return { name, from, input, ...(read ?? input_shown)(input) };
+}
+
+// a tool's name as logged: the server or plugin whose tool it is ("":
+// none; illi's own as Claude Code names them, by their own name), and
+// its own name
+function call_name(logged: string): [string, string] {
+  const bare = logged.replace(OWN, "");
+  const m    = FROM.exec(bare);
+  return m === null ? ["", bare] : [m[1], m[2]];
+}
+
+// a call's name as its head shows it: an MCP server's or a plugin's tool
+// after its server
+export function call_tool(c: Call): string {
+  return c.from === "" ? c.name : c.from + ": " + c.name;
 }
 
 // the call on one line, after its name: its head, then each block,
@@ -87,6 +175,202 @@ export function call_parse(text: string): Call {
 export function call_line(c: Call): string {
   const blocks = c.blocks.map((b) => (b.k === "" ? "" : b.k + ": ") + b.x);
   return [c.head, ...blocks].join(" ").replace(/\s+/g, " ").trim();
+}
+
+// Label
+// =====
+
+// what a call did, in plain words: its tool's own (LABELS; spawn's agents
+// named by its result, if given), else its name and its most telling
+// short value (call_named); on one line, LABEL characters at most
+export function call_label(c: Call, result: string | null = null): string {
+  const own  = c.from === "" ? LABELS.get(c.name) : undefined;
+  const said = own === undefined ? "" : own(c.input, result).trim();
+  return text_cap(said !== "" ? said : call_named(c));
+}
+
+// how a call ended, in a word or a few ("": nothing to say past its mark,
+// or not known: ok null): a command's exit (EXIT; Claude Code's Bash
+// failing, CODE), else stopped (Agent.use) or failed; a read's lines
+// shown, the lines a write or an edit added and removed (diff_said).
+// Only a result's TAIL is looked at for its end, so a long one costs
+// what a short one does
+export function call_outcome(c: Call, ok: boolean | null, result: string): string {
+  const own  = c.from === "" ? c.name : "";
+  const tail = result.slice(-TAIL);
+  const code = own === "shell" || own === "Bash" ? EXIT.exec(tail)?.[1] ?? CODE.exec(result.slice(0, TAIL))?.[1] : undefined;
+  if (ok === null) {
+    return "";
+  }
+  if (code !== undefined) {
+    return /^-?\d+$/.test(code) ? "exit " + code : code;
+  }
+  if (!ok) {
+    return result === STOPPED ? "stopped" : "failed";
+  }
+  if (own === "read") {
+    const m = SHOWN.exec(tail);
+    return m === null ? "" : lines_said(Number(m[2]) - Number(m[1]) + 1);
+  }
+  return own === "write" || own === "edit" ? diff_said(result) : "";
+}
+
+// an unknown tool's call (any other of illi's, an MCP server's, a
+// plugin's, a vendor's): its name (after its server: call_tool), then the
+// first of its telling fields given (TELLING), else its first short value
+function call_named(c: Call): string {
+  const x    = c.input;
+  const tell = TELLING.find((k) => arg_said(x[k], LABEL) !== "");
+  const key  = tell ?? Object.keys(x).find((k) => arg_said(x[k], SHORT) !== "");
+  const arg  = key === undefined ? "" : arg_said(x[key], tell === undefined ? SHORT : LABEL);
+  return call_tool(c) + (arg === "" ? "" : " " + arg);
+}
+
+// a value as a label shows it: a number as it is, a string's first line,
+// quoted if it holds a space; "": anything else, a blank string, one
+// longer than most
+function arg_said(v: unknown, most: number): string {
+  const line = typeof v === "number" ? String(v) : text_first(v);
+  return line === "" || line.length > most ? "" : /\s/.test(line) ? '"' + line + '"' : line;
+}
+
+// a string's first line that holds anything, its spaces folded, " …"
+// after it when it goes on (cut, or more lines after it), LABEL
+// characters in all at most; "": not a string, or blank. A long text is
+// never copied whole
+function text_first(v: unknown): string {
+  if (typeof v !== "string") {
+    return "";
+  }
+  const from = v.search(/\S/);
+  if (from < 0) {
+    return "";
+  }
+  const end  = v.indexOf("\n", from);
+  const stop = end < 0 ? v.length : end;
+  const line = v.slice(from, Math.min(stop, from + LABEL - 2)).replace(/\s+/g, " ").trim();
+  const more = /\S/g;
+  more.lastIndex = stop;
+  return line + (stop - from > LABEL - 2 || more.test(v) ? " …" : "");
+}
+
+// a label LABEL characters at most (a character in two halves kept
+// whole), "…" where it was cut
+function text_cap(s: string): string {
+  const end = s.length <= LABEL ? s.length : s.charCodeAt(LABEL - 1) >> 10 === 0x36 ? LABEL - 1 : LABEL;
+  return end === s.length ? s : s.slice(0, end) + "…";
+}
+
+// a command's first line, a leading `cd <dir> &&` left out (CD)
+function command_first(v: unknown): string {
+  const line = text_first(v);
+  return line.replace(CD, "") || line;
+}
+
+// a text in quotes, its first line
+function quoted(v: unknown): string {
+  return '"' + text_first(v) + '"';
+}
+
+// a read's lines, if only some: `, lines 40-79`, ` from line 40` ("":
+// the whole file)
+function read_lines(offset: unknown, limit: unknown): string {
+  const from = typeof offset === "number" && offset > 1 ? offset : 1;
+  return typeof limit === "number" ? ", lines " + from + "-" + (from + limit - 1) : from > 1 ? " from line " + from : "";
+}
+
+// names, each once: two at most, then how many more (`a.ts, b.ts +3`)
+function names_few(xs: unknown[]): string {
+  const names = [...new Set(xs.map(text_first).filter((x) => x !== ""))];
+  return names.slice(0, 2).join(", ") + (names.length > 2 ? " +" + (names.length - 2) : "");
+}
+
+// the first of several texts, quoted, then how many more (`"bend" +2`;
+// "": none)
+function firsts(xs: unknown[]): string {
+  const said = xs.map(text_first).filter((x) => x !== "");
+  return said.length === 0 ? "" : '"' + said[0] + '"' + (said.length > 1 ? " +" + (said.length - 1) : "");
+}
+
+// a URL as a label shows it: no scheme, no www.
+function url_short(v: unknown): string {
+  return text_first(v).replace(/^https?:\/\//, "").replace(/^www\./, "");
+}
+
+// a web search's call (OpenAI's and ChatGPT's action; Anthropic's, its
+// query alone): its query (several: the first, then how many more), the
+// page it opened, the text it looked for in a page
+function web_label(x: Input): string {
+  if (x.type === "open_page") {
+    return "Opened " + (url_short(x.url) || "a page");
+  }
+  if (x.type === "find" || x.type === "find_in_page") {
+    return "Found " + quoted(x.pattern) + " in " + (url_short(x.url) || "page");
+  }
+  const said = firsts(Array.isArray(x.queries) && x.queries.length > 0 ? x.queries : [x.query]);
+  return said === "" ? "Searched the web" : "Searched " + said;
+}
+
+// a web search's call as its head shows it: its queries, a line each;
+// the page it opened; the page it looked in, the text it looked for in a
+// block (an action of another kind: as any tool's input)
+function web_shown(x: Input): Shown {
+  const queries = Array.isArray(x.queries) && x.queries.length > 0 ? x.queries : x.query === undefined ? [] : [x.query];
+  if (x.type === "open_page") {
+    return { head: String(x.url ?? ""), blocks: [] };
+  }
+  if (x.type === "find" || x.type === "find_in_page") {
+    return { head: String(x.url ?? ""), blocks: typeof x.pattern === "string" ? [{ $: "Code", k: "find", x: x.pattern }] : [] };
+  }
+  return queries.length === 0 ? input_shown(x) : { head: queries.map(String).join("\n"), blocks: [] };
+}
+
+// the project a memory tool looked in, after its words (" in every
+// project"; "": this one's)
+function project_in(project: unknown): string {
+  return typeof project !== "string" || project === "" ? "" : project === "all" ? " in every project" : " in " + project;
+}
+
+// a spawn's agents as its result names them (Tools.spawn: `Started A,
+// B.`); "": no result, or none named
+function started(result: string | null): string {
+  return /^Started (.+?)\.(?:\s|$)/.exec(result ?? "")?.[1] ?? "";
+}
+
+// a spawn's agents before its result names them: one (the user's agent
+// it runs as, else "an agent"), or how many
+function agents_said(tasks: unknown, agent: unknown): string {
+  const n   = Array.isArray(tasks) ? tasks.length : 0;
+  const who = typeof agent === "string" ? agent : "";
+  return n === 1 ? who || "an agent" : n + " " + (who === "" ? "agents" : who + " agents");
+}
+
+// an ask's questions: the first (its tab's label, else its text), then
+// how many more
+function asked(questions: unknown): string {
+  const said = Array.isArray(questions) ? firsts(questions.map((q: any) => q?.head || q?.question)) : "";
+  return said === "" ? "" : "Asked " + said;
+}
+
+// lines counted: `1 line`, `1,204 lines`
+function lines_said(n: number): string {
+  return n.toLocaleString("en-US") + (n === 1 ? " line" : " lines");
+}
+
+// a unified diff's lines added and removed (Machine.ts text_diff, a
+// file's after another's; each one's head left out, `--- ` and `+++ `
+// over its first hunk's `@@`): `+12 -3`, `+40`; none: unchanged
+function diff_said(text: string): string {
+  const lines = text.split("\n");
+  const head_at = (k: number) => lines[k]?.startsWith("--- ") === true && lines[k + 1]?.startsWith("+++ ") === true && lines[k + 2]?.startsWith("@@") === true;
+  let [adds, dels] = [0, 0];
+  for (const [k, l] of lines.entries()) {
+    const head = head_at(k) || head_at(k - 1);
+    adds += !head && l.startsWith("+") ? 1 : 0;
+    dels += !head && l.startsWith("-") ? 1 : 0;
+  }
+  const said = [adds > 0 ? "+" + adds : "", dels > 0 ? "-" + dels : ""].filter((x) => x !== "");
+  return said.length === 0 ? "unchanged" : said.join(" ");
 }
 
 // any tool's input: its short values as arguments, the rest in blocks

@@ -844,9 +844,12 @@ export namespace Tools {
   // whether a call is the same (tool and input) as its caller's LOOP
   // before it; it is kept as the latest. A different call between starts
   // the count again, as does a yes to a question (Tools.guard), the
-  // caller's next turn (Chat.turn, Tools.run) and a name used again
+  // caller's next turn (Chat.turn, Tools.run) and a name used again. A
+  // shell call's description is words for the user (Call.ts), so the
+  // same command in other words is the same call
   export function looped(tools: Tools, who: string, tool: string, input: unknown): boolean {
-    const call = String(Bun.hash(tool + "\0" + JSON.stringify(input ?? null)));
+    const does = tool === "shell" && typeof input === "object" && input !== null ? { ...input, description: undefined } : input;
+    const call = String(Bun.hash(tool + "\0" + JSON.stringify(does ?? null)));
     const last = tools.perm.calls.get(who) ?? [];
     tools.perm.calls.set(who, [...last, call].slice(-LOOP));
     return last.length === LOOP && last.every((c) => c === call);

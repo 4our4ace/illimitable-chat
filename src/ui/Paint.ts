@@ -685,11 +685,12 @@ function call_lines(c: Call.Call, w: number): Line[] {
   return [top, ...heads, ...c.blocks.flatMap((b) => code_lines(b.k, b.x, w))];
 }
 
-// a call's name, bold, after its mark if the theme gives one
+// a call's name, bold (an MCP server's or a plugin's tool after its
+// server: Call.call_tool), after its mark if the theme gives one
 function verb_runs(c: Call.Call): Line {
   const ink  = { ...INK, b: true };
-  const mark = Theme.tool_glyph(c.name);
-  return [...(mark === "" ? [] : [Run(mark + " ", ink)]), ...(c.name === "" ? [] : [Run(c.name + " ", ink)])];
+  const mark = c.from === "" ? Theme.tool_glyph(c.name) : "";
+  return [...(mark === "" ? [] : [Run(mark + " ", ink)]), ...(c.name === "" ? [] : [Run(Call.call_tool(c) + " ", ink)])];
 }
 
 // Block
