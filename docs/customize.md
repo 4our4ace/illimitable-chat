@@ -135,7 +135,8 @@ the full accent).
   subagent done, a question answered; an MCP server down, a request
   refused). Control characters are left out.
 - `tool` (a mark before a tool's name, and before what a call did on
-  its run's line, by tool: none by default),
+  its run's line, by tool, as its calls are logged: `shell`, `Bash`,
+  an MCP server's `mcp__github__get_issue`; none by default),
   `syntax` (code's colors by the kinds Prism names: `keyword`,
   `string`, `function`, `comment`, `class-name`, `tag`..., any of them,
   `operator` and `punctuation` too; while replies draw in the

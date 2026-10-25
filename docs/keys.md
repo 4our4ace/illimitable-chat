@@ -22,8 +22,8 @@ Chat
 | `/compact [focus]` | illi writes a recap of the chat and goes on from it alone (the chat before is kept and looked up when needed, not sent); focus: what the recap should keep |
 | `/image <path>` | attach an image to the next message (or paste or drop the file) |
 | Alt+V, Ctrl+V | attach the clipboard's image (the terminal's own paste brings text) |
-| `/open #id` | open block #id and keep it open (or click it); a call of a run: open it alone (one past five too, the run showing all) |
-| `/close #id` | close block #id and keep it closed (or click anywhere in its frame); a call of a run: shut it |
+| `/open #id` | open block #id and keep it open (or click it); a call of a run, by its id or its result's: open it alone (one past five too, kept in view with them) |
+| `/close #id` | close block #id and keep it closed (or click anywhere in its frame); a call of a run: shut it (one past five stays counted) |
 | `/fold`, Ctrl+F | fold the chat into the fewest blocks; again: unfold |
 | Ctrl+Y | copy illi's last reply (a drag copies the text it covers, a double click a word) |
 | Ctrl+O | show or hide the work between replies: every call of every run open (its input and result whole, the thinking before it, the agents' reports), every run's calls all listed, what streams, and the recaps under the "Compaction" lines (hidden, a click opens one alone; shown, a click closes one alone; Ctrl+O forgets those clicks, and unfolds what a click folded); on a permission question, its long command all, or folded again |
@@ -309,8 +309,9 @@ Mouse and side panel
   A click on its line again, anywhere down its bar, or anywhere in it
   shuts it. The run's own line takes no click. Past five calls, a
   `+3 more` line under them (while the run is at work, the newest five
-  under a `+3 earlier` line): a click shows them all, and on the line,
-  now `show fewer`, five again. A recap's "Compaction" line opens and
+  under a `+3 earlier` line; a call you opened stays in view, counted
+  no more; it counts two at least, so a run of six shows all six): a
+  click shows them all, and on the line, now `show fewer`, five again. A recap's "Compaction" line opens and
   closes the recap; inside, a click on a page folds it to one line
   (`recap · 40 lines`), and a click on that line unfolds it. What you
   clicked stays under the pointer (at the chat's end a close lands
