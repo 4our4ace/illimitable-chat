@@ -6,8 +6,8 @@
 // (lean), the view's marked block cached for an hour, its stream shown
 // live and logged, illi's tools by their own
 // names, and the model's window learned (by its canonical id) and kept;
-// a call without tools has none
-// of Claude Code's; a message sent mid-run is taken as it is echoed, one
+// a call without tools has none of Claude Code's, an agent's tools list
+// only those it names; a message sent mid-run is taken as it is echoed, one
 // sent after the end is left; a plan's limit, a missing login, a chat
 // too long and a crash end it in plain words; a stop cuts it; a missing
 // CLI says to install it. A rate limit event's 5-hour and weekly windows
@@ -139,6 +139,19 @@ test("a call without tools has none of Claude Code's, nor its MCP servers, comma
   expect(log.args).toContain("--disable-slash-commands");
   expect(log.args).not.toContain("--mcp-config");
   expect(JSON.parse(log.args[log.args.indexOf("--settings") + 1])).toEqual({ disableAllHooks: true });
+});
+
+test("an agent's tools list keeps Claude Code's own to those it names (none named: none); no list keeps them all", () => {
+  const ask = { vendor: "claude-code", model: "claude-opus-5-5", effort: "high", speed: "slow", system: "", blocks: [], searches: 0, server: "http://127.0.0.1:1/key/sub" } as any;
+  const tools = (builtins?: string[] | null) => {
+    const args = ClaudeCode.args({ ...ask, builtins }, "prompt.md");
+    expect(args.slice(args.indexOf("--permission-prompt-tool"), args.indexOf("--permission-prompt-tool") + 2)).toEqual(["--permission-prompt-tool", "mcp__illi__approve"]);
+    return args.includes("--tools") ? args[args.indexOf("--tools") + 1] : null;
+  };
+  expect(tools(["Read", "Grep", "Bash"])).toBe("Read,Grep,Bash");
+  expect(tools([])).toBe("");
+  expect(tools(null)).toBeNull();
+  expect(tools()).toBeNull();
 });
 
 test("a message sent mid-run is taken as Claude Code echoes it; one sent after the end is left", async () => {

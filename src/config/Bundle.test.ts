@@ -10,7 +10,8 @@
 // take is said. Loaded (Plugins.load), a plugin's parts go under the
 // user's by name, a later plugin's over an earlier's, the one hidden
 // listed as plugin:name, which names a winner too; its bodies get its
-// folder; a Claude Code agent's tools and model are read as illi's.
+// folder; a Claude Code agent's tools and model are read as illi's
+// (Claude Code's own tools kept as named, for claude-code).
 // Its hooks run before the user's, its file's disableAllHooks ignored,
 // its folder and the project's in their environment, a Bash matcher
 // taking illi's shell, its own MCP servers' names as illi gives them;
@@ -144,9 +145,10 @@ test("a plugin's bodies get its folder; its commands take $1..$9; a skill not fo
   expect(Custom.skill(REPO, "check")!).toMatchObject({ body: "Check in " + KIT + "/skills/check.", model: false, plugin: "kit", global: true });
 });
 
-test("a Claude Code agent's tools and model, read as illi's: its own MCP servers by illi's names; a family's newest model", () => {
+test("a Claude Code agent's tools and model, read as illi's: its own MCP servers by illi's names, Claude Code's own tools as named; a family's newest model", () => {
   const reviewer = Custom.agent(REPO, "reviewer")!;
   expect([reviewer.tools, reviewer.plugin]).toEqual([["read", "shell", "mcp__docs__search"], "kit"]);
+  expect(reviewer.builtins).toEqual(["Read", "Grep", "Bash"]);
   const base = { vendor: "claude-api" as const, model: "opus-5.5", effort: "high", speed: "slow" };
   const pick = Custom.pick(reviewer, base, config.OFFER) as { vendor: string; model: string };
   expect([pick.vendor, pick.model.startsWith("sonnet-")]).toEqual(["claude-api", true]);

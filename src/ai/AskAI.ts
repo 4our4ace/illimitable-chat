@@ -62,7 +62,9 @@ export type Block = { text: string; mark: boolean };
 // thinking's too (none: the model's cap); room: the most tokens a step
 // may read before the call ends `full` once its tools ran (a turn's:
 // Chat.refit goes on from the chat as it then is; none: no end); stuck:
-// a patient call's try failed, why, as it waits to ask again
+// a patient call's try failed, why, as it waits to ask again; builtins:
+// the Claude Code tools it may use on claude-code, as its agent's tools
+// list gives them (Custom.profile; none: all)
 export type Ask = Pick & {
   system    : string;
   blocks    : Block[];
@@ -76,6 +78,7 @@ export type Ask = Pick & {
   max?      : number;
   room?     : number;
   stuck?    : (why: string) => void;
+  builtins? : string[] | null;
 };
 
 // a request kept whole (Ask.keep): what it asked, the items it sent with

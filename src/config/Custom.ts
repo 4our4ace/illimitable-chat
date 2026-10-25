@@ -75,7 +75,8 @@ export type Mode = "primary" | "subagent" | "all";
 // plugin:name), what it does, what it may be, runs on and may use (null:
 // as its role has; Claude Code's tool names read as illi's), its mark's
 // color (#rrggbb; null: one made for it), its instructions, its file, its
-// plugin (null: the user's own), what to know of it (a tool it lost)
+// plugin (null: the user's own), what to know of it (a tool it lost), the
+// Claude Code tools it may use on claude-code (null: it lists none: all)
 export type Profile = {
   name        : string;
   description : string;
@@ -88,6 +89,7 @@ export type Profile = {
   file        : string;
   plugin?     : string | null;
   notes?      : string[];
+  builtins?   : string[] | null;
 };
 
 // a command: its name (as listed), what it does, its message, its file,
@@ -124,6 +126,10 @@ const YES = /^\s*(true|yes|on)\s*$/i;
 const CLAUDE_TOOLS = new Map([["Read", "read"], ["Write", "write"], ["Edit", "edit"], ["MultiEdit", "edit"], ["Bash", "shell"], ["Task", "spawn"], ["TodoWrite", "todo"]]);
 const CLAUDE_SEARCH = ["Glob", "Grep", "LS"];
 const CLAUDE_STRONG = ["Bash", "Write", "Edit", "MultiEdit", "shell", "write", "edit"];
+
+// illi's tools in an agent's tools list as Claude Code's own, which an
+// agent on claude-code uses in their place (Tools.list `lean`)
+const CLAUDE_OWN = new Map([["read", "Read"], ["write", "Write"], ["edit", "Edit"], ["shell", "Bash"]]);
 const FAMILIES = ["sonnet", "opus", "haiku", "fable"];
 
 // the skills illi comes with: SKILL.md files, named in their front
@@ -291,7 +297,8 @@ export namespace Custom {
 
   // an agent's file read: its tools list's Claude Code names as illi's
   // (a plugin's own MCP servers, as mcp__plugin_<plugin>_<server>, as
-  // illi names them); a search it can't do said
+  // illi names them), and the Claude Code tools it gives (agent_builtins);
+  // a search it can't do said
   export function profile(name: string, file: string, plugin: Bundle | null = null): Profile {
     const { head, body } = safe_read(file);
     const list = head.tools?.replace(/^\[|\]$/g, "").split(",").map((t) => t.trim()).filter(Boolean);
@@ -310,6 +317,7 @@ export namespace Custom {
       file,
       plugin      : plugin?.name ?? null,
       notes       : lost ? ["its tools name Claude Code's searches (Glob, Grep, LS), which illi does with shell; it names no Bash, Write or Edit, so it gets no shell"] : [],
+      builtins    : list === undefined ? null : agent_builtins(list),
     };
   }
 
@@ -411,6 +419,15 @@ function agent_tools(list: string[], plugin: string | null): string[] {
   const own = plugin === null ? null : "mcp__plugin_" + plugin + "_";
   const out = list.flatMap((t) => (CLAUDE_TOOLS.has(t) ? [CLAUDE_TOOLS.get(t)!] : CLAUDE_SEARCH.includes(t) ? (strong ? ["shell"] : []) : own !== null && t.startsWith(own) ? ["mcp__" + t.slice(own.length)] : [t]));
   return [...new Set(out)];
+}
+
+// the Claude Code tools an agent's tools list gives on claude-code, as
+// Claude Code's own subagent would have them: Claude Code's names as
+// they are (Glob, Grep: searches kept, though illi's own loop has none
+// without a shell), illi's as Claude Code's (CLAUDE_OWN); illi's other
+// tools and MCP servers none, as illi gives those itself
+function agent_builtins(list: string[]): string[] {
+  return [...new Set(list.flatMap((t) => (/^[A-Z][A-Za-z]*$/.test(t) ? [t] : CLAUDE_OWN.has(t) ? [CLAUDE_OWN.get(t)!] : [])))];
 }
 
 // an agent's model as its pick reads it: inherit, none (the pick's); a

@@ -769,7 +769,7 @@ export namespace Tools {
     const most = window === undefined ? 0 : (config.config_context(pick.model, window, 0, Pick.room(pick)) * TOKEN) / 2;
     const blocks = [...Tools.fitted(agent.view, most), Tools.here(tools), log];
     const effort = agent.role.effort ?? run.effort;
-    return { ...run, effort, system, blocks, searches: SEARCHES, server };
+    return { ...run, effort, system, blocks, searches: SEARCHES, server, builtins: profile?.builtins };
   }
 
   // a view (Memory.view's blocks) in `bytes`: its oldest blocks of lines
