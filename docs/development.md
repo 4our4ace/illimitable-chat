@@ -18,8 +18,8 @@ Development
                    its lock (Lock.ts), suggested replies (Suggest.ts), agents' logs
                    (Logs.ts), /export and /tree (Export.ts), projects (Projects.ts)
                    and their searches' threads (Seeker.ts), the radar's search of
-                   past topics (Radar.ts), a second terminal's view (Remote.ts),
-                   the disk
+                   past topics (Radar.ts) and its strong lines given to the model
+                   (Recall.ts), a second terminal's view (Remote.ts), the disk
     src/ai/        model vendors, the agent loop, picks, token usage
     src/tools/     shell and files, MCP servers, the prompts; the permission
                    checks: bash read as bash reads it (Shell.ts), each call
