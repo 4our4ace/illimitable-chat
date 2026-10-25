@@ -4,11 +4,15 @@
 // chat, a pane, the side, the head, the foot) chooses the text it goes
 // over and copies it as it's let go; a double click a word (a path, a
 // link), three a line, dragged on, more of them; past a chat's edge, it
-// scrolls. Empty space is chosen too, as in Claude Code: past a line's
-// text and on a blank line, the choice lights to its end (or the area's
-// width); what's copied drops each line's end spaces. A reply's button
-// under the pointer lights, and a click copies what it holds; buttons
-// are no text, so what's copied or quoted leaves them out. The right
+// scrolls. A press on the input (its rows, the rule under them) puts its
+// cursor where it lands first, as a key moves it (Screen.ts ed_at): a
+// drag from there still chooses, a double click still a word, the cursor
+// left where the press put it. Empty space is chosen too, as in Claude
+// Code: past a line's text and on a blank line, the choice lights to its
+// end (or the area's width); what's copied drops each line's end spaces.
+// A reply's button under the pointer lights, and a click copies what it
+// holds; buttons are no text, so what's copied or quoted leaves them
+// out. The right
 // button dragged over the chat chooses the same way (not from a button),
 // and as it's let go the text is quoted in the input, to reply to it (not
 // on an agent's read-only page); a right click soon after takes the quote
@@ -80,7 +84,8 @@ function term_button(line: Paint.Line, col: number): (() => string) | undefined 
 // it (twice in a row there: from the word under it, a word at a time;
 // three times: from its line, a line at a time; a button's own click
 // comes first, and a press that acts on nothing chooses no word:
-// term_dead); dragged, the choice follows the pointer (a chat scrolls
+// term_dead; on the input, one that acts puts its cursor there first:
+// term_put); dragged, the choice follows the pointer (a chat scrolls
 // while it's past an edge); let go, the text chosen is copied, else it
 // was a click (none from a press that acts on nothing; none on the chat's
 // marks from one that let text chosen go: term_showing). The right
@@ -115,6 +120,9 @@ export function term_mouse(t: Term, key: string): void {
       const unit = term_under(t, p) === undefined && !dead ? t.scr.clicks : 1;
       const root = term_unit(area, at, unit);
       t.sel = { key: area.key, a: root[0], b: root[1], held: true, moved: unit > 1 && !term_after(root[0], root[1]), unit, root, ...drop };
+      if (!dead) {
+        term_put(t, area, at);
+      }
     }
   } else if ((key === "Drag" || key === "RightDrag") && t.sel?.held) {
     const area = t.areas.find((a) => a.key === t.sel!.key);
@@ -133,6 +141,21 @@ export function term_mouse(t: Term, key: string): void {
         term_click(t, sel?.drop !== true);
       }
     }
+  }
+}
+
+// a press on the input as last painted (Area input): its cursor put
+// where it landed on its rows (Screen.ed_at), and on the rule under them
+// at the text's end (rows hidden under the view too), as Left or Right
+// moves it (moved: so Up and Down past its ends stay in it); none if its
+// text changed since it was painted
+function term_put(t: Term, area: Area, at: Cell): void {
+  const put = area.input;
+  const ed  = t.scr.ed;
+  const row = at.line - (put?.line ?? 0);
+  if (put !== undefined && row >= 0 && row < put.tall && put.laid.text === ed.text) {
+    ed.pos   = Screen.ed_at(put.laid, put.top, row < put.tall - 1 ? row : Infinity, at.col);
+    ed.moved = true;
   }
 }
 

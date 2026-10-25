@@ -138,8 +138,19 @@ Typing
 - Arrows, Home, End, Ctrl+A, Ctrl+E, Ctrl+U, Ctrl+K, Ctrl+W, Alt+B,
   Alt+F, Alt+D, Ctrl+Left, Ctrl+Right and Ctrl+Backspace edit as in a
   shell.
+- A click in your message puts the cursor where it lands, and typing
+  goes there: before the character clicked (a wide one by either half);
+  past a line's text, after its last character (a line that wraps shows
+  the cursor at the start of the next); on the `>` or the indent under
+  it, at the line's start; on the rule under the input, at the end; in
+  a pasted text's or an image's token, at its nearer edge. A message
+  taller than the input scrolls only as the cursor leaves the lines
+  shown, so what you click stays put. A drag over it still copies, a
+  double click a word; the click that only brings the window to the
+  front moves nothing.
 - Shift+Enter or Ctrl+J: a new line. Up and Down past the ends: the
-  messages sent before.
+  messages sent before (not once you moved the cursor along what you
+  typed, by a key or a click).
 - illi sees an image file it reads (png, jpeg, gif or webp, up to 20 MB;
   scaled to 1568 px on its longest side), in that tool result only: the
   chat keeps the line saying what it was, so a later turn reads it again
@@ -321,6 +332,8 @@ Mouse and side panel
   closes it. A drag copies the text it covers, a double click a word,
   three a line; a reply's code has a copy button. Copying uses OSC 52,
   so the terminal (and tmux) must allow it.
+- A click in your message puts the cursor there ([Typing](#typing)), on
+  an agent's page too; a drag over it still copies.
 - The work between replies (tool calls, results, thinking, agents'
   reports) shows as a run ([Design language](design.md#runs)): a line
   saying what was done, then its calls, one line each, what each did in

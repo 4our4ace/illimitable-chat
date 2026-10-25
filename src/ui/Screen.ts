@@ -19,7 +19,10 @@
 // (Away), so what the pointer lit goes out. The terminal is asked its
 // background (OSC 11), which diagrams draw over (Draw.ts); its answer
 // comes as input, and is never typed. The input (Ed) draws as rows
-// starting `> ` and takes its editing keys (ed_key, EDITING) here; Up and
+// starting `> ` and takes its editing keys (ed_key, EDITING) here, and
+// the place a click on it puts the cursor (ed_at; the press is
+// Select.ts's); taller than it shows, it scrolls only as the cursor
+// leaves the rows shown, so what a click lands on stays put; Up and
 // Down past its ends walk the messages sent. A long paste shows in it as
 // one token, [Pasted text #n +L lines], an attached image as [Image #n]:
 // each erased whole, a paste's text put back in its place as it's sent
@@ -55,9 +58,10 @@ import { CAP, wire_cut, wire_head, wire_take } from "../term/Wire.ts";
 
 // the input: its text, cursor, the messages sent before, the one Up and
 // Down are at (hist.length: the new one), the new one meanwhile, whether
-// Left or Right moved the cursor, the width its rows wrap at; the long
-// pastes by their token's number, the last number given; its layout as
-// last made (ed_layout)
+// Left or Right (or a click) moved the cursor, the width its rows wrap
+// at, the first of its rows shown (screen_input); the long pastes by
+// their token's number, the last number given; its layout as last made
+// (ed_layout)
 export type Ed = {
   text  : string;
   pos   : number;
@@ -66,6 +70,7 @@ export type Ed = {
   draft : string;
   moved : boolean;
   w     : number;
+  top   : number;
   pastes: Map<number, string>;
   n     : number;
   laid? : Laid;
@@ -79,7 +84,7 @@ type Wrap = { rows: string[]; places: Place[] };
 // each line's first character and first row, and its wrap; the wraps by
 // line, for the next layout at that width (a key changes one line: only
 // it is wrapped again, so a long text costs a key little)
-type Laid = { text: string; w: number; rows: string[]; lines: { pos: number; row: number; wrap: Wrap }[]; wraps: Map<string, Wrap> };
+export type Laid = { text: string; w: number; rows: string[]; lines: { pos: number; row: number; wrap: Wrap }[]; wraps: Map<string, Wrap> };
 
 // where the cursor shows: a row, a column
 export type Spot = { row: number; col: number };
@@ -153,7 +158,7 @@ export type Windowed = { nonce: string; hidden: boolean; heard: (msg: object, sc
 // =========
 
 // the editing keys, as /help lists them
-export const EDITING = "Arrows, Home, End, Ctrl+A, E, U, K, W, Alt+B, F, D, as in a shell; Shift+Enter or Ctrl+J, a new line; Up and Down past the ends, the messages sent. A / first lists the commands that match as you type (by name, then by a word of what they do), in a box over the input: Up and Down choose, Tab fills one in, Enter (or a click) runs it (or fills it in, if it needs an argument or was found by what it does), Esc closes the list.";
+export const EDITING = "Arrows, Home, End, Ctrl+A, E, U, K, W, Alt+B, F, D, as in a shell; a click puts the cursor where it lands; Shift+Enter or Ctrl+J, a new line; Up and Down past the ends, the messages sent. A / first lists the commands that match as you type (by name, then by a word of what they do), in a box over the input: Up and Down choose, Tab fills one in, Enter (or a click) runs it (or fills it in, if it needs an argument or was found by what it does), Esc closes the list.";
 
 // the fewest characters a word finds options by what they do (ed_find):
 // a shorter one would find most
@@ -879,11 +884,13 @@ function seq_name(params: string, end: string): string {
   return mods.join("") + key;
 }
 
-// the input's rows in w columns, at most max of them (the cursor's and
-// those before it), as many as it holds; its first row after the mark,
-// the rest indented as far; a hint when empty, grey when off; and where
-// the cursor shows
-export function screen_input(scr: Screen, w: number, max: number, hint: string, off: boolean): { lines: Paint.Line[]; at: Spot } {
+// the input's rows in w columns, at most max of them, as many as it
+// holds: from the first shown last (ed.top), moved only as far as shows
+// the cursor's row, and up as rows go (all that fit show); its first row
+// after the mark, the rest indented as far; a hint when empty, grey when
+// off; where the cursor shows, and the first row shown and the layout (a
+// click's place in them: ed_at)
+export function screen_input(scr: Screen, w: number, max: number, hint: string, off: boolean): { lines: Paint.Line[]; at: Spot; top: number; laid: Laid } {
   const mark = Paint.Run(Theme.GLYPH.input, Paint.DIM);
   const pad  = Paint.Run(" ".repeat(Paint.text_width(Theme.GLYPH.input)));
   const ink  = off ? Paint.DIM : Paint.INK;
@@ -892,10 +899,12 @@ export function screen_input(scr: Screen, w: number, max: number, hint: string, 
   ed.w = w - mw;
   const laid = ed_layout(ed);
   const spot = ed_place(laid, ed.pos);
-  const top  = Math.max(0, spot.row - Math.max(1, max) + 1);
-  const seen = laid.rows.slice(top, top + Math.max(1, max));
+  const most = Math.max(1, max);
+  const top  = Math.min(Math.max(ed.top, spot.row - most + 1), spot.row, Math.max(0, laid.rows.length - most));
+  const seen = laid.rows.slice(top, top + most);
   const text = ed.text === "" ? [[mark, Paint.Run(Paint.text_clean(hint), Paint.DIM)]] : seen.map((x, k) => [top + k === 0 ? mark : pad, ...input_runs(x, ink)]);
-  return { lines: text, at: { row: spot.row - top, col: spot.col + mw } };
+  ed.top = top;
+  return { lines: text, at: { row: spot.row - top, col: spot.col + mw }, top, laid };
 }
 
 // a row of the input: its chips (a pasted text, an image) in the
@@ -909,7 +918,7 @@ function input_runs(row: string, ink: Paint.Run["s"]): Paint.Line {
 // ==
 
 export function ed_new(): Ed {
-  return { text: "", pos: 0, hist: [], at: 0, draft: "", moved: false, w: 80, pastes: new Map(), n: 0 };
+  return { text: "", pos: 0, hist: [], at: 0, draft: "", moved: false, w: 80, top: 0, pastes: new Map(), n: 0 };
 }
 
 // a paste: a long one kept, its token typed; a short one typed. A long
@@ -1065,6 +1074,37 @@ function ed_row(laid: Laid, r: number): Place[] {
   }
   const line = laid.lines[ed_line(laid, (l) => l.row <= r)];
   return line.wrap.places.filter((p) => p.row === r - line.row).map((p) => ({ pos: line.pos + p.pos, row: r, col: p.col }));
+}
+
+// where a click puts the cursor in the input laid out (laid), shown from
+// its row top: at row and column col of what shows, as screen_input lays
+// it out (the mark first, the other rows indented as far). On a
+// character, before it (a wide one by either half); on the mark or the
+// indent, at the row's start; past the row's text, after its last
+// character (a row wrapped: where the next row starts, which shows the
+// cursor); past the last row, at the text's end (before the first, its
+// start); inside a chip (a paste's token, an image's), at its nearer edge
+export function ed_at(laid: Laid, top: number, row: number, col: number): number {
+  const r = top + row;
+  if (r < 0 || r >= laid.rows.length) {
+    return r < 0 ? 0 : laid.text.length;
+  }
+  const line = laid.lines[ed_line(laid, (l) => l.row <= r)];
+  const here = line.wrap.places.filter((p) => p.row === r - line.row);
+  const next = line.wrap.places.find((p) => p.row > r - line.row);
+  const c    = col - Paint.text_width(Theme.GLYPH.input);
+  const at   = c >= Paint.text_width(laid.rows[r]) ? next ?? here[here.length - 1] : here.filter((p) => p.col <= c).pop() ?? here[0];
+  return ed_chip(laid.text, line.pos + at.pos);
+}
+
+// a place inside a chip (TOKEN) moved to its nearer edge; any other kept
+function ed_chip(text: string, pos: number): number {
+  const hit = [...text.matchAll(TOKEN)].find((m) => m.index! < pos && pos < m.index! + m[0].length);
+  if (hit === undefined) {
+    return pos;
+  }
+  const [from, to] = [hit.index!, hit.index! + hit[0].length];
+  return pos - from < to - pos ? from : to;
 }
 
 // text typed or pasted, at the cursor

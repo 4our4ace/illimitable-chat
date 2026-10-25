@@ -126,6 +126,7 @@ Keys and commands
 | `/tree`, `/export`   | the memory as a page, as JSON, written into the current folder |
 | Ctrl+O               | open every tool call, show thinking   |
 | Drag, double-click   | copy text                             |
+| Click in the input   | put the cursor there                  |
 | Right drag           | quote the text in your message        |
 | Ctrl+Y               | copy the last reply                   |
 | Alt+V                | paste an image                        |
