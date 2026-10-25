@@ -16,7 +16,9 @@
 // along while a rarer one is in, a word common only of late kept. A
 // project forgotten is gone, its file deleted; a reader of it goes on
 // as it was, and its close leaves the place's new file alone. A file
-// that won't open is named.
+// that won't open is named. A span of time is found by bisection, in
+// point reads alone: whole messages (one of three pages stands where its
+// first is dated), a clock set back ending it all the same.
 
 import { afterAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -218,3 +220,66 @@ test("a chat file that won't open is said by its name", () => {
   fs.writeFileSync(DIR + "/junk/projects/app-k3f9x2.sqlite", "not a database, a few bytes more than a header would take".repeat(4));
   expect(() => Store.open(DIR + "/junk", APP)).toThrow("chat: app-k3f9x2.sqlite won't open: file is not a database");
 });
+
+// the reads of a statement on a store's connection, counted as it runs
+// (prepared on its first use: Store's own cache keeps it after)
+function reads(store: any, sql: string): { n: number } {
+  const count = { n: 0 };
+  const prepare = store.db.prepare.bind(store.db);
+  store.db.prepare = (text: string) => {
+    const st = prepare(text);
+    if (text === sql) {
+      const get = st.get.bind(st);
+      st.get = (...args: any[]) => (count.n++, get(...args));
+    }
+    return st;
+  };
+  return count;
+}
+
+test("a span of time by bisection, in point reads: whole messages, one of three pages standing where its first is dated", () => {
+  const store = Store.open(DIR + "/span", APP);
+  const t0 = Date.parse("2026-10-21T08:00:00.000Z");
+  const iso = (ms: number) => new Date(ms).toISOString();
+  // 1,000 messages a minute apart, 500 to 502 one message in three pages a millisecond apart
+  Store.push(store, Array.from({ length: 1000 }, (_, i) => {
+    const page = i >= 500 && i <= 502;
+    const at = page ? t0 + 500 * 60e3 + (i - 500) : t0 + i * 60e3;
+    return { i, kind: "user" as const, text: "m" + i, date: iso(at), size: 2, more: page && i < 502 ? true : undefined };
+  }), "/work");
+  const probes = reads(store, "select date, more from msg where chat = ? and i = ?");
+  expect(Store.span(store, { from: t0 + 100 * 60e3, to: t0 + 200 * 60e3 })).toEqual([100, 200]);
+  expect(probes.n).toBeGreaterThan(10);
+  expect(probes.n).toBeLessThanOrEqual(2 * Math.ceil(Math.log2(1001)) + 2);
+  expect(Store.span(store, { from: t0 + 100 * 60e3 + 1, to: t0 + 100 * 60e3 + 2 })).toEqual([101, 101]);
+  expect(Store.span(store, { from: t0 - 3600e3, to: t0 })).toEqual([0, 0]);
+  expect(Store.span(store, { from: t0 + 2000 * 60e3, to: t0 + 3000 * 60e3 })).toEqual([1000, 1000]);
+  expect(Store.span(store, { from: 0, to: Infinity })).toEqual([0, 1000]);
+  // its first page before from: the message is before the span; before to: in it
+  expect(Store.span(store, { from: t0 + 500 * 60e3 + 1, to: t0 + 600 * 60e3 })).toEqual([503, 600]);
+  expect(Store.span(store, { from: t0 + 400 * 60e3, to: t0 + 500 * 60e3 + 1 })).toEqual([400, 503]);
+  expect(Store.span(store, { from: t0 + 400 * 60e3, to: t0 + 500 * 60e3 })).toEqual([400, 500]);
+  Store.close(store);
+});
+
+test("a clock set back: the bisection ends all the same, at a message dated from or later whose one before is earlier, the span never inverted", () => {
+  const store = Store.open(DIR + "/back", APP);
+  const t0 = Date.parse("2026-10-21T08:00:00.000Z");
+  // 0 to 599 a minute apart; at 600 the clock goes back 5 hours, then on a minute apart
+  const at = (i: number) => t0 + (i < 600 ? i : i - 300) * 60e3;
+  Store.push(store, Array.from({ length: 1200 }, (_, i) => ({ i, kind: "user" as const, text: "m" + i, date: new Date(at(i)).toISOString(), size: 2 })), "/work");
+  for (const [from, to] of [[350, 400], [250, 450], [590, 620], [0, 900], [400, 900], [899, 905]]) {
+    const span = { from: t0 + from * 60e3, to: t0 + to * 60e3 };
+    const [a, b] = Store.span(store, span);
+    expect(a).toBeLessThanOrEqual(b);
+    for (const [k, ms] of [[a, span.from], [b, span.to]]) {
+      expect(k === 0 || at(k - 1) < ms).toBe(true);
+      expect(k === 1200 || at(k) >= ms).toBe(true);
+    }
+  }
+  expect(Store.span(store, { from: t0 + 850 * 60e3, to: t0 + 880 * 60e3 })).toEqual([1150, 1180]);
+  const [a, b] = Store.span(store, { from: t0 + 400 * 60e3, to: t0 + 351 * 60e3 });
+  expect(a).toBeLessThanOrEqual(b);
+  Store.close(store);
+});
+

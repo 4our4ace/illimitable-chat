@@ -26,7 +26,9 @@
 // work, cut...), never rebuilt from the facts (the cache holds by it);
 // and its to-do list (todo), the agent's, given whole each time.
 // Derived from node: each chat's index of its summary lines' words, for
-// search (find_<chat>, an FTS table made with the chat).
+// search (find_<chat>, an FTS table made with the chat). Messages are
+// logged as they come, so their dates rise: a span of time is found by
+// bisection over their keys (Store.span), with no index of dates.
 //
 // Durable as files were: each write is one transaction, in WAL mode at
 // synchronous NORMAL, so a crash never leaves half a write and no write
@@ -52,6 +54,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Kind } from "../ai/AskAI.ts";
 import { Disk } from "./Disk.ts";
+import type { Span } from "./When.ts";
 
 // Types
 // =====
@@ -344,6 +347,45 @@ export namespace Store {
       out.more = true;
     }
     return out;
+  }
+
+  // the messages of the store's chat dated in a span (When.Span), as
+  // [a, b): the first, and the one after the last (a = b: none). Each end
+  // is a bisection (Store.since), then moved on to a message's first page
+  // (Store.first): a message stands where its first page is dated, so the
+  // span holds whole messages. Point reads, never a scan: about 2 log2(n)
+  // rows, and a long message's later pages
+  export function span(store: Store, span: Span): [number, number] {
+    const n = Store.count(store);
+    const a = Store.first(store, n, Store.since(store, n, span.from));
+    return [a, Math.max(a, Store.first(store, n, Store.since(store, n, span.to)))];
+  }
+
+  // the first of the n messages dated `ms` or later (n: none), by
+  // bisection: messages are logged as they come, so their dates rise. A
+  // clock set back makes them fall somewhere, and the bisection ends all
+  // the same, at a message dated `ms` or later whose one before is dated
+  // earlier (or at 0, or n): a message logged while the clock was off may
+  // fall on the wrong side of a span's end
+  export function since(store: Store, n: number, ms: number): number {
+    const row = query(store.db, "select date, more from msg where chat = ? and i = ?");
+    let [a, z] = [0, n];
+    while (a < z) {
+      const m = (a + z) >> 1;
+      const at = row.get(store.chat, m) as { date: string } | null;
+      [a, z] = at !== null && Date.parse(at.date) < ms ? [m + 1, z] : [a, m];
+    }
+    return a;
+  }
+
+  // the first index from i on that is a message's first page, not a
+  // later one (n: none)
+  export function first(store: Store, n: number, i: number): number {
+    const row = query(store.db, "select date, more from msg where chat = ? and i = ?");
+    while (i > 0 && i < n && (row.get(store.chat, i - 1) as { more: number | null } | null)?.more) {
+      i += 1;
+    }
+    return i;
   }
 
   // the latest message of a kind before `end`; -1: none
