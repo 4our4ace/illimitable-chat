@@ -50,20 +50,22 @@
 // pointer lights and a click does what Enter does (Popup.ts popup_mouse;
 // on a tab of the form, goes there; on a line saying what a fold hides,
 // lit while the pointer is on it, shows the command whole, held by
-// nothing as it answers nothing), the wheel scrolls its lead or the
-// form's lines (its answers never move by it); all else on the screen
-// works as with no question (the wheel scrolls the chat, text is chosen
-// and copied, the side and the tabs answer; a click outside never answers
-// it). A question illi asks (the permission question, its form) holds
-// Enter, Space and a click for ARM after it first shows (question_held),
-// so the key that ended a sentence never answers it; Esc, its no, never
-// waits.
+// nothing as it answers nothing); a press on the line asked or the
+// form's words puts their cursor where it lands, as on the input
+// (Select.ts term_put, from question_kept; held by nothing, as it
+// answers nothing), the wheel scrolls its lead or the form's lines (its
+// answers never move by it); all else on the screen works as with no
+// question (the wheel scrolls the chat, text is chosen and copied, the
+// side and the tabs answer; a click outside never answers it). A
+// question illi asks (the permission question, its form) holds Enter,
+// Space and a click for ARM after it first shows (question_held), so the
+// key that ended a sentence never answers it; Esc, its no, never waits.
 
 import { term_form, term_form_lines } from "./Asks.ts";
 import * as Paint from "../ui/Paint.ts";
 import { STEP, popup_at, popup_entries, popup_foot, popup_rows, popup_view } from "./Popup.ts";
 import * as Screen from "../ui/Screen.ts";
-import type { Box, Chooser, Form, Target, Term } from "./Term.ts";
+import type { Box, Chooser, Form, Target, Term, Typed } from "./Term.ts";
 
 // how long a question just shown holds Enter, Space and a click (ms):
 // less than it takes to read it
@@ -90,8 +92,9 @@ const LEADS = new WeakMap<Paint.Line[], { fold: Chooser["fold"]; w: number; all:
 // a question laid out at the input: what it was laid out for (its
 // picker, illi's form), the rule over it, its lines and what each stands
 // for (Box rows), the cursor's spot in them (null: hidden), its answers
-// and lead as laid out (Box's)
-export type Asked = { of: object; rule: Paint.Line; lines: Paint.Line[]; rows: Box["rows"]; at: Screen.Spot | null; shape: Pick<Box, "list" | "lines" | "tall" | "ahead" | "lead" | "folds"> };
+// and lead as laid out (Box's), the line it has typed in, if shown (its
+// line asked, the form's words: Term Typed)
+export type Asked = { of: object; rule: Paint.Line; lines: Paint.Line[]; rows: Box["rows"]; at: Screen.Spot | null; shape: Pick<Box, "list" | "lines" | "tall" | "ahead" | "lead" | "folds">; field?: Typed };
 
 // the question shown at the input: its picker, else illi's form (null:
 // none)
@@ -194,9 +197,10 @@ function question_picker(t: Term, c: Chooser, w: number, h: number, free: number
   const read  = [...shown.map(lit).map((l, j) => (joins && j === ahead - 1 ? [...l, Paint.Run(tail, Paint.DIM)] : l)), ...(cuts && !joins ? [[Paint.Run(tail, Paint.DIM)]] : [])];
   const rows  = [...read.map((_, j) => (j < ahead ? aim(past + j) : null)), ...(line === null ? opts.map(([, aim]) => aim) : line.lines.map(() => null))];
   const at    = line === null ? null : { row: read.length + line.at.row, col: line.at.col };
+  const field: Typed | undefined = line === null ? undefined : { ed: c.find!, row: read.length, col: 0, w, tall: line.lines.length + 1, wide: true, at: (r, col) => Screen.ed_at(line.laid, line.top, r < line.lines.length ? r : Infinity, col) };
   const foot  = popup_foot(c);
   const rule  = question_rule(w, c.title, [c.ask === null ? "↑↓ Enter" : "", folds ? (shut ? "Ctrl+O all" : "Ctrl+O fold") : "", foot, /\bEsc\b/.test(foot) ? "" : "Esc"]);
-  return { of: c, rule, lines: [...read, ...(line === null ? opts.map(([l]) => l) : line.lines)], rows, at, shape: { list: read.length, lines: opts.length, tall: view.length, ahead, lead: lead.length, folds } };
+  return { of: c, rule, lines: [...read, ...(line === null ? opts.map(([l]) => l) : line.lines)], rows, at, shape: { list: read.length, lines: opts.length, tall: view.length, ahead, lead: lead.length, folds }, field };
 }
 
 // the lines leading a question's answers (Chooser lead) wrapped w wide,
@@ -382,7 +386,11 @@ function question_form(t: Term, f: Form, w: number, h: number, free: number): As
   const cur  = laid.at;
   const at   = cur === null || cur.row < f.top || cur.row >= f.top + room ? null : { row: head.length + cur.row - f.top, col: cur.col };
   const rows = [...laid.spans.slice(0, head.length), ...[...view, ...pad].map(([, aim]) => aim), ...keys.map(() => null)];
-  return { of: f, rule: question_rule(w, laid.who + " asks", []), lines: [...head, ...[...view, ...pad].map(([l]) => l), ...keys], rows, at, shape: { list: head.length, lines: room, tall: laid.body.length, ahead: 0, lead: 0, folds: false } };
+  const own  = laid.words;
+  const from = own === undefined ? 0 : Math.max(own.row, f.top);
+  const to   = own === undefined ? 0 : Math.min(own.row + own.tall, f.top + room);
+  const field: Typed | undefined = own === undefined || from >= to ? undefined : { ...own, row: head.length + from - f.top, tall: to - from, at: (r, c) => own.at(r + from - own.row, c) };
+  return { of: f, rule: question_rule(w, laid.who + " asks", []), lines: [...head, ...[...view, ...pad].map(([l]) => l), ...keys], rows, at, shape: { list: head.length, lines: room, tall: laid.body.length, ahead: 0, lead: 0, folds: false }, field };
 }
 
 // the lines row k of illi's form takes in its lines as laid out (body,
@@ -409,11 +417,18 @@ function question_rule(w: number, title: string, said: string[]): Paint.Line {
 
 // the question at the input as painted, its first line on screen row
 // `row`, column `col`, w wide, kept (t.box: the mouse over it is
-// Popup.ts's); the pointer's row seen as it first shows (it lights a row
-// once it moves)
+// Popup.ts's), and its line typed in (t.fields: a press puts its cursor,
+// Select.ts term_put; a line asked takes its rows whole, as the input,
+// the form's words the box's columns); the pointer's row seen as it
+// first shows (it lights a row once it moves)
 export function question_kept(t: Term, asked: Asked, row: number, col: number, w: number): void {
   const was = t.box?.of === asked.of;
+  const f   = asked.field;
   t.box     = { of: asked.of, row, col, w, h: asked.lines.length, inset: 0, rows: asked.rows, ...asked.shape };
+  if (f !== undefined) {
+    const at = f.wide ? (r: number, c: number) => f.at(r, c - col - f.col) : f.at;
+    t.fields.push({ of: asked.of, ed: f.ed, text: f.ed.text, row: row + f.row, col: f.wide ? 0 : col + f.col, w: f.wide ? Infinity : f.w, tall: f.tall, at });
+  }
   if (!was) {
     t.aim.row = t.scr.point.row;
     t.aim.in  = popup_at(t.box, t.scr.point) !== "out";

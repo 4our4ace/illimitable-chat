@@ -16,8 +16,9 @@
 // illi's own questions (ask) show at the input too (Question.ts), as a
 // form, a tab each: the question, its options (one to pick, or several),
 // and a row for words of the user's own, which they may type beside the
-// options they pick or instead of them; then a tab with all the answers,
-// to look over and send. Esc skips them all.
+// options they pick or instead of them (a click there lights it, the
+// cursor put where it lands); then a tab with all the answers, to look
+// over and send. Esc skips them all.
 // One answered elsewhere, or dropped (a stop), closes its picker; one
 // that comes while a list or another question is open waits for it to
 // close (a list opened over it, Ctrl+P's, leaves it waiting at the
@@ -30,7 +31,7 @@ import { term_note } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { question_held } from "./Question.ts";
 import * as Screen from "../ui/Screen.ts";
-import { term_send, type Form, type Span, type Target, type Term } from "./Term.ts";
+import { term_send, type Form, type Span, type Target, type Term, type Typed } from "./Term.ts";
 import { GLYPH } from "../ui/Theme.ts";
 import type { Query, Question } from "../ui/View.ts";
 
@@ -189,8 +190,10 @@ function term_said(q: Asked, f: Form): string {
 // marked, those picked filled; several: squares), the words' row as the
 // input looks, each line with the row it stands for (a click takes it),
 // or the answers, each under its question; and the keys, wrapped. The
-// cursor in the words (on the answers: none)
-export function term_form_lines(t: Term, w: number, max: number, tab?: number): { who: string; tabs: Paint.Line[]; spans: Span[][]; body: Array<[Paint.Line, Target | null]>; keys: Paint.Line[]; at: Screen.Spot | null } | null {
+// cursor in the words (on the answers: none), and the words as typed in
+// (Term Typed: from the body's first line and its column; Question.ts
+// places them)
+export function term_form_lines(t: Term, w: number, max: number, tab?: number): { who: string; tabs: Paint.Line[]; spans: Span[][]; body: Array<[Paint.Line, Target | null]>; keys: Paint.Line[]; at: Screen.Spot | null; words?: Typed } | null {
   const open = term_form(t);
   if (open === null) {
     return null;
@@ -231,7 +234,8 @@ export function term_form_lines(t: Term, w: number, max: number, tab?: number): 
   const words  = Screen.screen_input({ ...t.scr, ed: e.ed }, w - lw, max, "Something else: type your own", false);
   const mine: Target = { $: "row", k: query.options.length, tab: shown };
   const own    = words.lines.map((l, j): [Paint.Line, Target] => [[j === 0 ? lead(query.options.length) : Paint.Run(" ".repeat(lw)), ...l], mine]);
-  return { who: q.who, ...tabs, body: [...ask.map(plain), ...opts, ...own], keys: keys(KEYS), at: { row: ask.length + opts.length + words.at.row, col: lw + words.at.col } };
+  const typed: Typed = { ed: e.ed, row: ask.length + opts.length, col: 0, w, tall: words.lines.length, at: (r, c) => Screen.ed_at(words.laid, words.top, r, c - lw) };
+  return { who: q.who, ...tabs, body: [...ask.map(plain), ...opts, ...own], keys: keys(KEYS), at: { row: ask.length + opts.length + words.at.row, col: lw + words.at.col }, words: typed };
 }
 
 // the form's tabs, each a run, laid on lines w wide a space apart (one

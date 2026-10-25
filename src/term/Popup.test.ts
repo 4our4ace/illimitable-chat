@@ -17,17 +17,19 @@
 // moves, nor the chat. The mouse is the popup's alone: the pointer
 // moving to another row lights it (along its row, at rest, or as the
 // popup first shows under it: not); a press and a release on one option
-// do what Enter does there, on two rows nothing; a click outside closes
-// a list and goes no further; no text is chosen, no button lights or
-// copies, the right button does nothing; a double click picks once; a
-// box no longer open (a new size) does nothing; the click that only
-// focuses the terminal's window picks nothing and closes nothing. The
-// wheel over a group's head scrolls on. The commands suggested as a
-// /word is typed: a click on one does what Enter does there, a press on
-// them chooses no text; a drag from elsewhere goes on over them. A
-// theme's lit mark of any width leads every row as wide, lists and
-// commands alike. Only a list with one in use dots its rows (the palette
-// and /permissions none), what /mode's say whole on 100 columns.
+// do what Enter does there, on two rows nothing; a press on its search
+// puts the cursor where it lands (one too long to show whole: on its
+// ellipsis, where what shows starts); a click outside closes a list and
+// goes no further; no text is chosen, no button lights or copies, the
+// right button does nothing; a double click picks once; a box no longer
+// open (a new size) does nothing; the click that only focuses the
+// terminal's window picks nothing and closes nothing. The wheel over a
+// group's head scrolls on. The commands suggested as a /word is typed:
+// a click on one does what Enter does there, a press on them chooses no
+// text; a drag from elsewhere goes on over them. A theme's lit mark of
+// any width leads every row as wide, lists and commands alike. Only a
+// list with one in use dots its rows (the palette and /permissions
+// none), what /mode's say whole on 100 columns.
 // (Questions, illi's form too, take the input's place instead, their
 // answers dotted: Question.test.ts.)
 
@@ -60,7 +62,7 @@ function term(): any {
   const t: any = {
     v: View.view_new(), scr, due: false, notices: [], scroll: 0, seen: { total: 0, marks: [], row: 0, first: 0, tall: 1, col: 0, end: 0 }, ver: 0, body: null, find: null,
     pane: null, agents: [], choose: null, question: null, profs: [], hits: [], since: 0, spin: undefined, ruled: null, doing: null, subs: new Map(), side: { place: "right", width: "25%" }, status: status_new(),
-    todo: false, areas: [], sel: null, sug: null, dropped: "", asking: null, box: null, aim: { row: -1, in: false, press: null, first: null }, pin: null, lit: null, pointed: false, wait: null, acted: null, quit: 0, pending: 0, imgs: new Map(), quoted: null, lead: false,
+    todo: false, areas: [], fields: [], sel: null, sug: null, dropped: "", asking: null, box: null, aim: { row: -1, in: false, press: null, first: null }, pin: null, lit: null, pointed: false, wait: null, acted: null, quit: 0, pending: 0, imgs: new Map(), quoted: null, lead: false,
   };
   [scr.grab, scr.on, scr.type] = [(k: string) => term_grab(t, k), (k: string) => term_press(t, k), (x: string) => term_type(t, x)];
   return t;
@@ -294,6 +296,53 @@ test("a press and a release on one option do what Enter does there: a setting st
     paint(t);
     click(t, row_of(t, "Ctrl+O"), col(t));
     expect([t.choose, t.v.verbose]).toEqual([null, true]);
+  });
+});
+
+test("a press on a list's search puts its cursor where it lands, typing going in there: on its mark at its start, past it at its end; one too long for the box, on the ellipsis where what shows starts; a double click keeps the cursor; none from the click that only focuses the window, nor on a search changed since the paint; a click outside closes the list, the search as it was", () => {
+  sized(100, 30, () => {
+    const t = term();
+    term_chooser(t, "Agent", ["illi", "reviewer"], ["", ""], -1, () => {}, { find: true });
+    paint(t);
+    const find = t.choose.find;
+    const row  = t.box.row + 1;
+    const left = t.box.col + 4;
+    term_type(t, "review");
+    paint(t);
+    expect([inside(t, 100)[0].trimEnd(), t.ruled.at]).toEqual(["⌕ review", { row, col: left + 6 }]);
+    click(t, row, left + 3);
+    term_type(t, "x");
+    paint(t);
+    expect([find.text, find.pos, t.ruled.at, t.choose.title]).toEqual(["revxiew", 4, { row, col: left + 4 }, "Agent"]);
+    click(t, row, left - 2);
+    expect(find.pos).toBe(0);
+    click(t, row, left + 20);
+    expect(find.pos).toBe(7);
+    const long = "abcdefghij".repeat(5);
+    Screen.ed_set(find, long);
+    paint(t);
+    const shown = inside(t, 100)[0].trimEnd();
+    expect([shown, t.ruled.at]).toEqual(["⌕ …" + long.slice(18), { row, col: left + 33 }]);
+    click(t, row, left);
+    expect(find.pos).toBe(18);
+    click(t, row, left + 3);
+    expect(find.pos).toBe(20);
+    click(t, row, left + 33);
+    expect(find.pos).toBe(50);
+    click(t, row, left + 6);
+    again(t, row, left + 6);
+    let_go(t, row, left + 6);
+    expect([find.pos, t.scr.clicks]).toEqual([23, 2]);
+    t.scr.gained = Date.now();
+    click(t, row, left + 9);
+    t.scr.gained = undefined;
+    expect([find.pos, t.choose.title]).toEqual([23, "Agent"]);
+    term_type(t, "!");
+    click(t, row, left + 9);
+    expect([find.text, find.pos]).toEqual([long.slice(0, 23) + "!" + long.slice(23), 24]);
+    paint(t);
+    click(t, 29, left + 3);
+    expect([t.choose, find.pos]).toEqual([null, 24]);
   });
 });
 
