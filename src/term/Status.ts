@@ -147,14 +147,15 @@ export function status_rows(t: Term, w: number, room: number): Paint.Line[] {
 // what the command is told, as Claude Code's statusLine is (its fields
 // where illi has them; illi's own beside them): the view's state (its
 // pick known), the folder, the chat's id. A field illi doesn't know is
-// left out, but the context's shares, null till told, as Claude Code's
+// left out, but the context's shares, null till told, as Claude Code's;
+// a plan's limit past its reset is 0% used, as the side shows it
 export function status_input(v: View.State, cwd: string, id: string): object {
   const pick = v.pick!;
   const top = Trusted.folder(cwd);
   const fill = v.use.fill ?? null;
   const used = fill === null || fill.window <= 0 ? null : Math.min(100, Math.round((fill.used / fill.window) * 100));
   const limit = (minutes: number) => v.use.plan?.limits.find((l) => l.window === minutes);
-  const rate = (l: View.Limit) => ({ used_percentage: l.used, resets_at: Math.round(l.reset / 1000) });
+  const rate = (l: View.Limit) => ({ used_percentage: l.reset > Date.now() ? l.used : 0, resets_at: Math.round(l.reset / 1000) });
   const [hours, week] = [limit(300), limit(10080)];
   return {
     hook_event_name: "Status",

@@ -7,12 +7,12 @@
 // the clipboard, device strings, one cut short), as they carry across
 // lines. What it is told: Claude Code's fields from the chat's state,
 // the context's shares null till told, the plan's limits by their
-// windows, the main agent only when there is one. It runs once the state
-// is known, its rows drawn between the input and the bottom line (3 at
-// most, cut to the width, padded, the height held); the same state runs
-// it no more, a change meanwhile again once it ends; a non-zero exit
-// blanks them, said once; a change of the setting kills the run in
-// flight and drops its result.
+// windows (one past its reset 0% used), the main agent only when there
+// is one. It runs once the state is known, its rows drawn between the
+// input and the bottom line (3 at most, cut to the width, padded, the
+// height held); the same state runs it no more, a change meanwhile
+// again once it ends; a non-zero exit blanks them, said once; a change
+// of the setting kills the run in flight and drops its result.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -93,14 +93,17 @@ test("refreshInterval: 1 to a day in seconds; none, 0 or not a number: none", ()
   expect([config.config_statusline("{ echo a; }")?.command, config.config_statusline("{\"type\": \"command\"}"), config.config_statusline("  ")]).toEqual(["{ echo a; }", null, null]);
 });
 
-test("what it is told: Claude Code's fields from the chat's state; the shares null till told; the plan's limits by window; the agent only when one", () => {
+test("what it is told: Claude Code's fields from the chat's state; the shares null till told; the plan's limits by window, one past its reset 0% used; the agent only when one", () => {
   const v = term().v;
   const cwd = DIR;
   const bare = status_input(v, cwd, "id1") as any;
   expect(bare).toMatchObject({ hook_event_name: "Status", session_id: "id1", cwd, workspace: { current_dir: cwd, project_dir: cwd }, model: { id: "sonnet-5.5", display_name: "sonnet-5.5", vendor: "claude-api" }, effort: { level: "high" }, fast_mode: false, permission_mode: "auto", busy: false, agents: [] });
   expect([bare.context_window, "agent" in bare, "rate_limits" in bare, typeof bare.version]).toEqual([{ used_percentage: null, remaining_percentage: null }, false, false, "string"]);
-  const told = status_input({ ...v, agent: "coder", busy: true, use: { fill: { used: 32000, cap: 90000, window: 128000 }, plan: { brand: "ChatGPT", tier: "pro", limits: [{ window: 300, used: 23, reset: 1_800_000_000_000 }, { window: 60, used: 5, reset: 0 }] } } }, cwd, "id1") as any;
-  expect([told.context_window, told.agent, told.rate_limits]).toEqual([{ context_window_size: 128000, total_input_tokens: 32000, used_percentage: 25, remaining_percentage: 75, summarize_at: 90000 }, { name: "coder" }, { five_hour: { used_percentage: 23, resets_at: 1_800_000_000 } }]);
+  const [later, past] = [(Math.floor(Date.now() / 1000) + 3600) * 1000, (Math.floor(Date.now() / 1000) - 60) * 1000];
+  const told = status_input({ ...v, agent: "coder", busy: true, use: { fill: { used: 32000, cap: 90000, window: 128000 }, plan: { brand: "ChatGPT", tier: "pro", limits: [{ window: 300, used: 23, reset: later }, { window: 60, used: 5, reset: 0 }] } } }, cwd, "id1") as any;
+  expect([told.context_window, told.agent, told.rate_limits]).toEqual([{ context_window_size: 128000, total_input_tokens: 32000, used_percentage: 25, remaining_percentage: 75, summarize_at: 90000 }, { name: "coder" }, { five_hour: { used_percentage: 23, resets_at: later / 1000 } }]);
+  const reset = status_input({ ...v, use: { plan: { brand: "Claude", tier: "", limits: [{ window: 300, used: 40, reset: later }, { window: 10080, used: 95, reset: past }] } } }, cwd, "id1") as any;
+  expect(reset.rate_limits).toEqual({ five_hour: { used_percentage: 40, resets_at: later / 1000 }, seven_day: { used_percentage: 0, resets_at: past / 1000 } });
 });
 
 test("it runs once the state is known: its rows above the bottom line, 3 at most, cut and padded, the height held; the same state runs it no more", async () => {
