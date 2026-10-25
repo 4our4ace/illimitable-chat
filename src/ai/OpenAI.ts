@@ -37,6 +37,11 @@ const BREAKS = 4;
 const INPUT = /^(invalid_prompt|invalid_image)/;
 const FULL  = /^context_length_exceeded/;
 
+// the utm_source=openai a web search adds to each page's link, taken off
+function untracked(text: string): string {
+  return text.replace(/([?&])utm_source=openai(&|(?![\w%.-]))/g, (_, lead: string, tail: string) => tail === "&" ? lead : "");
+}
+
 // OpenAI
 // ======
 
@@ -182,8 +187,10 @@ export namespace OpenAI {
     return { ...step, stop: uses.length > 0 ? "tools" : "done" };
   }
 
-  // the messages of an output item: a thought; a reply and the web
-  // sources it cites; a tool call; a web search with its result, as
+  // the messages of an output item: a thought; a reply, the web pages it
+  // cites but doesn't link said in its last line (no call found them, so
+  // they are no result), OpenAI's utm_source taken off each link; a tool
+  // call; a web search with its result, as
   // every call is logged with one (its status: failed, else searched;
   // the pages it read are the reply's sources), but one left unfinished
   // (searching, in a response that failed or stopped short) logged
@@ -196,12 +203,12 @@ export namespace OpenAI {
       }
       case "message": {
         const content = o.content ?? [];
-        const text = content.map((c: any) => c.text ?? "").join("").trim();
+        const said = untracked(content.map((c: any) => c.text ?? "").join("").trim());
         const urls = content.flatMap((c: any) => c.annotations ?? []).filter((a: any) => a.type === "url_citation");
-        const cited = [...new Set(urls.map((a: any) => a.title + " " + a.url))];
-        const reply: Entry[] = text ? [{ kind: "illi", text }] : [];
-        const sources: Entry[] = cited.length > 0 ? [{ kind: "echo", text: "sources:\n" + cited.join("\n") }] : [];
-        return [...reply, ...sources];
+        const cited = [...new Map<string, string>(urls.map((a: any) => [untracked(a.url), a.title || a.url])).entries()].filter(([url]) => !said.includes(url));
+        const sources = cited.map(([url, title]) => "[" + title.replace(/[[\]]/g, "\\$&") + "](" + url + ")").join(" · ");
+        const text = sources === "" ? said : said + (said ? "\n\n" : "") + "Sources: " + sources;
+        return text ? [{ kind: "illi", text }] : [];
       }
       case "function_call": {
         return [{ kind: "tool", text: o.name + " " + o.arguments, of: o.call_id }];
