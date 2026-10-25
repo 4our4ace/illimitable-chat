@@ -38,9 +38,10 @@ const LIMIT = "This request would exceed your organization's rate limit of 80,00
 const BUSY  = "the AI service is busy or unavailable right now";
 
 // messages, each too long to be its own summary; the one whose summary
-// the model refuses
-const COUNT   = 16;
-const REFUSED = 5;
+// the model refuses; the one it first declines in words, then writes
+const COUNT    = 16;
+const REFUSED  = 5;
+const DECLINED = 7;
 const MSGS    = Array.from({ length: COUNT }, (_, k) => ({ kind: "illi" as const, text: k + " " + "word ".repeat(200) }));
 
 const real = { setTimeout, fetch, error: console.error };
@@ -67,7 +68,8 @@ function answer(text: string, stop: string): Response {
 
 async function vendor(_url: string, init: any): Promise<Response> {
   const content = JSON.parse(init.body).messages[0].content;
-  const task: string = content[content.length - 1].text;
+  const last: string = content[content.length - 1].text;
+  const task: string = content.map((c: any) => c.text).reverse().find((t: string) => t.startsWith("Compaction:")) ?? last;
   if (broke) {
     refused += 1;
     return Response.json({ type: "error", error: { type: "invalid_request_error", message: BROKE } }, { status: 400 });
@@ -77,6 +79,9 @@ async function vendor(_url: string, init: any): Promise<Response> {
     return Response.json({ type: "error", error: { type: "rate_limit_error", message: LIMIT } }, { status: 429, headers: { "retry-after": "1" } });
   }
   const leaf = /compress message (\d+)/.exec(task)?.[1];
+  if (leaf === String(DECLINED) && last === task) {
+    return answer("I can't write the merged line: the input is only a tool call.", "end_turn");
+  }
   return leaf === String(REFUSED) ? answer("", "refusal") : answer("line for " + task.split("\n")[0], "end_turn");
 }
 

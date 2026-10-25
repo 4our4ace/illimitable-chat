@@ -29,6 +29,21 @@ const TRIES = 5;
 // a ruler, not a sample line: the compactor copied a sample's content
 const SCALE = "-".repeat(NODE);
 
+// what a compactor puts before its line though the prompt asks for none:
+// a label naming the job ("Merged line:", "Compacted line for msgs
+// 32-35:", "Line (under 512 bytes):"), or a line's head as the view
+// shows one ("<line>0+2|", "0+2|"); a word that only starts the line
+// ("line 42: the bug", "user: ...") is none
+const LABEL = /^(?:(?:merged|compressed|compacted|combined)\b[^:\n]{0,60}|(?:one\s+)?(?:line|summary)(?:\s*\([^)\n]*\))?):\s*|^(?:<line>\s*)?\d+\+\d+\|\s*/i;
+
+// an answer that declines the job in words ("I can't write the merged
+// line..."): no line, though one came back
+const REFUSAL = /^(?:i\s+(?:can(?:no|'|’)?t|am\s+unable|'m\s+unable|won(?:'|’)t)|sorry\b|unable\s+to\b)/i;
+
+// the note a try after such an answer adds
+const AGAIN = `Your last answer for this <input> was no line. Write the line itself:
+compress <input> as it is, however short or plain, never a note about the task.`;
+
 // a compaction's task, before its <input>: one message to compress
 // (level 0), or two lines to merge
 const LEAF = `Compaction: compress message {id} into one line of at most ${NODE} bytes
@@ -108,42 +123,55 @@ export namespace Compactor {
 
   // node (l,i)'s summary: its view to the node and its task, asked till
   // a line fits (a leaf's tagged with its message's kind: tagged), TRIES
-  // lines at most, the shortest kept. Each try sends those blocks, never
-  // a try's words or thoughts; one after a line too long adds only its
-  // size and where the limit cuts it (`over`): never more than the first
-  // and that note. No line (a refusal: its input's
-  // doing; or too long for the compactor's window): its source clipped;
-  // a try cut (a stop) throws, unless a line came
+  // tries at most, the shortest line kept. Each try sends those blocks,
+  // never a try's words or thoughts; one after a line too long adds only
+  // its size and where the limit cuts it (`over`), one after an answer
+  // declining in words (REFUSAL: never kept as a line) says to write the
+  // line (AGAIN): never more than the first and that note. No line (a
+  // refusal, the vendor's or in words: its input's doing; or too long
+  // for the compactor's window): its source clipped; a try cut (a stop)
+  // throws, unless a line came
   export async function build(mem: Memory, l: number, i: number, text: string): Promise<void> {
     const task = { text: Compactor.task(l, i) + text + "\n</input>", mark: false };
     const upto = Math.min(Memory.ctx(l, i), Memory.first(mem));
     const blocks = [...Memory.view(mem, upto, mem.seen.parts), task];
     const lines: string[] = [];
+    let [tries, declined] = [1, false];
     let end = await Compactor.compact(mem, l, i, Compactor.ask(mem, blocks));
     while (end.ok && end.text.trim() !== "") {
-      const line = Compactor.tagged(l, text, Compactor.bare(end.text.trim()));
-      lines.push(line);
-      if (Memory.bytes(line) <= NODE || lines.length === TRIES || mem.done) {
+      const said = Compactor.bare(end.text.trim());
+      const line = Compactor.tagged(l, text, said);
+      declined = REFUSAL.test(said);
+      if (!declined) {
+        lines.push(line);
+      }
+      if ((!declined && Memory.bytes(line) <= NODE) || tries === TRIES || mem.done) {
         break;
       }
-      const note = { text: Compactor.over(line), mark: false };
+      const note = { text: declined ? AGAIN : Compactor.over(line), mark: false };
+      tries += 1;
       end = await Compactor.compact(mem, l, i, Compactor.ask(mem, [...blocks, note]));
     }
     if (lines.length === 0 && !end.ok && end.stop !== "fail" && end.stop !== "full") {
       throw new Error(end.text);
     }
     if (lines.length === 0) {
-      console.error("compactor: node " + l + "/" + i + ": " + (end.ok ? "an empty line" : end.text) + "; clipped");
+      console.error("compactor: node " + l + "/" + i + ": " + (!end.ok ? end.text : declined ? "it declined in words" : "an empty line") + "; clipped");
     }
     const line = lines.length === 0 ? Compactor.clip(Memory.flat(text)) : lines.reduce((a, b) => (Memory.bytes(b) < Memory.bytes(a) ? b : a));
     Memory.keep(mem, [{ l, i, text: line }]);
     mem.stuck?.("");
   }
 
-  // a line without a label the compactor put first ("Merged line:"),
-  // though the prompt asks for none
+  // a line without the labels and heads the compactor put first (LABEL),
+  // though the prompt asks for none, nor a closing </line>
   export function bare(line: string): string {
-    return line.replace(/^(?:(?:merged|compressed|combined|one) )?(?:line|summary):\s*/i, "");
+    let was = "";
+    while (was !== line) {
+      was  = line;
+      line = line.replace(LABEL, "").replace(/\s*<\/line>\s*$/i, "").trim();
+    }
+    return line;
   }
 
   // a leaf's line starting with its message's kind, as the task asks

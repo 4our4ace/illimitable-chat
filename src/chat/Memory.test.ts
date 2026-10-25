@@ -149,6 +149,13 @@ test("a leaf's summary starts with its message's kind, added where the compactor
   expect(Compactor.bare("Line: done")).toBe("done");
   expect(Compactor.bare("line 42: the bug")).toBe("line 42: the bug");
   expect(Compactor.bare("user: Summary: none yet")).toBe("user: Summary: none yet");
+  expect(Compactor.bare("Compacted line for msgs 32–35: user msg 16: add /health")).toBe("user msg 16: add /health");
+  expect(Compactor.bare("Compacted line (under 512 bytes):\n\nCompacted: `src/server.ts` has /health")).toBe("`src/server.ts` has /health");
+  expect(Compactor.bare("Merged line (msg 28–31): README.md gained a line")).toBe("README.md gained a line");
+  expect(Compactor.bare("Compacted msgs 80-87: tests pass")).toBe("tests pass");
+  expect(Compactor.bare("<line>0+2|user: bun test fails</line>")).toBe("user: bun test fails");
+  expect(Compactor.bare("16+8|illi: done")).toBe("illi: done");
+  expect(Compactor.bare("one test failed: TypeError")).toBe("one test failed: TypeError");
 });
 
 test("past a /clear, the chat's view waits on no summary before it, nor holds a node wholly before it", async () => {
