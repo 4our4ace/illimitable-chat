@@ -57,6 +57,18 @@ test("a tool's result with an image goes as its function_call_output's list: its
   expect(OpenAI.input(item)).toEqual([{ type: "function_call_output", call_id: "c1", output: [{ type: "input_text", text: "Image a.png" }, { type: "input_image", image_url: "data:image/webp;base64,UklG" }] }]);
 });
 
+test("a reply's cited pages it doesn't link already end it, in one line; no result is logged for them, as no call found them; utm_source taken off", () => {
+  const cite = (url: string, title: string) => ({ type: "url_citation", url, title });
+  const reply = (text: string, ...annotations: object[]) => OpenAI.entries({ type: "message", content: [{ type: "output_text", text, annotations }] });
+  const linked = "https://a.example/x?utm_source=openai";
+  expect(reply("It is so ([a.example](" + linked + ")).", cite(linked, "A"), cite("https://b.example/y?q=1&utm_source=openai", "B again"))).toEqual([
+    { kind: "illi", text: "It is so ([a.example](https://a.example/x)).\n\nSources: [B again](https://b.example/y?q=1)" },
+  ]);
+  expect(reply("Plain.", cite("https://c.example/?utm_source=openai&p=2", "C [1]"))).toEqual([{ kind: "illi", text: "Plain.\n\nSources: [C \\[1\\]](https://c.example/?p=2)" }]);
+  expect(reply("No pages.")).toEqual([{ kind: "illi", text: "No pages." }]);
+  expect(reply("utm_source=openaix stays")).toEqual([{ kind: "illi", text: "utm_source=openaix stays" }]);
+});
+
 test("a web search is logged with its result: searched, or failed as its status says; one left unfinished, alone, as a call stopped before it answered", () => {
   const search = (status: string) => OpenAI.entries({ type: "web_search_call", id: "ws_1", status, action: { type: "search", query: "bend" } });
   expect(search("completed")).toEqual([
