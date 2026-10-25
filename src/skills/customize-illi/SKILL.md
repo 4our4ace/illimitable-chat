@@ -238,7 +238,8 @@ several, as not picked and picked), ok and
 failed ("✓", "✗": how a run's call ended; a subagent done, a
 question answered; an MCP server down, a request refused); tool: a mark
 before a tool's name, and before what a call did on its run's line, by
-tool; ansi and syntax entries too. The accent
+tool, as its calls are logged (shell, Bash, an MCP server's
+mcp__github__get_issue); ansi and syntax entries too. The accent
 setting goes over the file's accent.
 
 ## Plugins: plugins/<name>/
