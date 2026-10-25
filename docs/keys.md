@@ -345,7 +345,9 @@ line it finds is added after the call's result, as one line, only if:
 - it matched a path or an error's name, with something else besides;
 - it scored high enough;
 - nothing illi holds in full already names it (a pin, a zoom, a line
-  given before).
+  given before);
+- illi's view doesn't already sum up that stretch as finely (in lines
+  of 16 messages or fewer).
 
 The line is `<history>#1234+16 · 3d ago · its summary</history>`, for
 illi to zoom if it helps. You never see that line in the result's box:

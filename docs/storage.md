@@ -636,10 +636,11 @@ that worker's connection:
    be logged. Its units are made as the radar's are.
 2. **The search** is the radar's (above), with what the caller's view
    leaves out:
-   - the chat's agent: the view's lines before its cut, those at message
-     detail left out, and its recent messages from the cut on;
-   - a subagent: the lines of the view it was given, those at message
-     detail left out;
+   - the chat's agent: the view's lines before its cut, those of 16
+     messages or fewer left out (what the view says of them is as fine
+     as any line found there), and its recent messages from the cut on;
+   - a subagent: the lines of the view it was given, those of 16
+     messages or fewer left out;
    - and, for both, what the user dismissed at the side (sent to the
      chat over the view's pipe: `Chat.dismiss`, kept till illi quits).
 3. **Strong only**: a line matching a path or an error's name, of two
