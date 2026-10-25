@@ -335,7 +335,9 @@ message, then goes the same way).
 Without the side panel, the bottom line counts them (`3 related`, a
 click lists them).
 
-Only strong matches reach illi itself, and each one only once. As
+Only strong matches reach illi itself, and not again while illi still
+holds one in full (once it folds into the view's summary lines, it may
+be given again). As
 each of its tool calls runs (a command, a file read or changed, an MCP
 or plugin tool; a subagent's too), the same search runs beside it. A
 line it finds is added after the call's result, as one line, only if:
