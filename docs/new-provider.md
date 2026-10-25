@@ -196,7 +196,9 @@ definitions in its body. A vendor running its own agent (Claude Code)
 gets illi's tools over MCP instead, its system prompt adapted
 (`Tools.system`'s `hosted`, which names claude-code), and its permission
 prompts routed to illi's checks. Web search is a server tool where the
-vendor has one (`Ask.searches`).
+vendor has one (`Ask.searches`): each search logged as a call with its
+result, and the pages a reply cites but doesn't link ending the reply,
+in one `Sources:` line (`OpenAI.entries`), never a result no call made.
 
 8. Tests
 --------

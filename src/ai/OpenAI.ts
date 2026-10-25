@@ -190,11 +190,11 @@ export namespace OpenAI {
   // the messages of an output item: a thought; a reply, the web pages it
   // cites but doesn't link said in its last line (no call found them, so
   // they are no result), OpenAI's utm_source taken off each link; a tool
-  // call; a web search with its result, as
-  // every call is logged with one (its status: failed, else searched;
-  // the pages it read are the reply's sources), but one left unfinished
-  // (searching, in a response that failed or stopped short) logged
-  // alone, as a call stopped before it answered
+  // call; a web search with its result, as every call is logged with one
+  // (its status: failed, else searched; the pages it read are the reply's
+  // sources), but one left unfinished (searching, in a response that
+  // failed or stopped short) logged alone, as a call stopped before it
+  // answered
   export function entries(o: any): Entry[] {
     switch (o.type) {
       case "reasoning": {
