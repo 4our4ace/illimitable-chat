@@ -13,8 +13,11 @@
 // recap). An agent spawned as the user's is named after it;
 // a freed name is used again, each log its own; one named main, the
 // chat's own caller, is refused. A leaf's summary starts with its
-// message's kind, the compactor's or added. Past a /clear, the chat's
-// view waits on no summary before it, nor holds a node wholly before it.
+// message's kind, the compactor's or added; its labels taken off (never
+// what happened at a line's head), and an answer declining the job in
+// words is no line (one in its input's own words is). Past a /clear, the
+// chat's view waits on no summary before it, nor holds a node wholly
+// before it.
 // As a chat grows, each view tiles it (the chat's from its first message,
 // a /clear's too), its lines before the cut merging to fit (none more
 // than a level coarser than the older one before it), those from the cut
@@ -156,6 +159,26 @@ test("a leaf's summary starts with its message's kind, added where the compactor
   expect(Compactor.bare("<line>0+2|user: bun test fails</line>")).toBe("user: bun test fails");
   expect(Compactor.bare("16+8|illi: done")).toBe("illi: done");
   expect(Compactor.bare("one test failed: TypeError")).toBe("one test failed: TypeError");
+  // what happened kept at a line's head, the job's own labels alone taken
+  expect(Compactor.bare("Merged PR #12 into main: tests pass")).toBe("Merged PR #12 into main: tests pass");
+  expect(Compactor.bare("Combined the configs: one file now")).toBe("Combined the configs: one file now");
+  expect(Compactor.bare("Compressed images in assets/: 2 MB saved")).toBe("Compressed images in assets/: 2 MB saved");
+  expect(Compactor.bare("Merged: a then b")).toBe("a then b");
+  expect(Compactor.bare("Combined lines 4 and 5: a then b")).toBe("a then b");
+  expect(Compactor.bare("<line>user: bun test fails</line>")).toBe("user: bun test fails");
+  // a label alone is no line
+  expect(Compactor.bare("Merged line (msg 28–31):")).toBe("");
+});
+
+test("an answer declining the job in words is no line, however it says so; one opening as its input does is the input's own words", () => {
+  const leaf = "illi: here is the plan";
+  for (const said of ["I can't write the merged line: the input is only a tool call.", "I cannot compress this.", "I can’t help with that.", "I'm unable to summarize it.", "I’m sorry, but I can't.", "I am sorry", "Sorry, I won't.", "I won't do that.", "I am not able to.", "Unable to compress: no content."]) {
+    expect([said, Compactor.declined(said, leaf)]).toEqual([said, true]);
+  }
+  expect(Compactor.declined("I can't log in to the box; asks for the VPN steps", "user: I can't log in to the box since the update")).toBe(false);
+  expect(Compactor.declined("I’m sorry, the build broke: reverted", "illi: I'm sorry, the build broke because of the lockfile")).toBe(false);
+  expect(Compactor.declined("user: I can't log in", "user: hello")).toBe(false);
+  expect(Compactor.declined("the user is sorry", "user: x")).toBe(false);
 });
 
 test("past a /clear, the chat's view waits on no summary before it, nor holds a node wholly before it", async () => {
