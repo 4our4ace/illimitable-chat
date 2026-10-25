@@ -128,8 +128,8 @@ export const TOOL: Record<string, string> = { ...OWN.tool };
 
 export const GLYPH = {
   tab     : "◯",  // one of a set: a chat's tab, a list's row, the side's agents, skills, profiles
-  here    : "●",  // the one in use: the tab shown, the model, agent or profile picked, a skill on; a question's answer picked
-  option  : "○",  // an answer of a question that takes one (lit or picked: here)
+  here    : "●",  // the one in use: the tab shown, the model, agent or profile picked, a skill on; a question's answer lit (Enter answers it) or picked (illi's form)
+  option  : "○",  // an answer of a question that takes one (lit, where Enter answers, or picked in illi's form: here)
   input   : "> ", // before the message typed (its other lines indented as far)
   find    : "⌕ ", // before a list's search
   open    : "[-]", // an open recap's line, the side's to-do shown whole (a click shuts it)
