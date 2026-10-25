@@ -9,11 +9,14 @@
 // `md_output` reads a tool's result as a file's lines: a read's as its
 // lines, a unified diff (Machine.ts writes them, git too) as its file
 // and hunks, any other text as lines named "result" (a command's exit
-// and time in that name), so every result looks as a read does. Tokens
+// and time in that name), so every result looks as a read does (the
+// <history> line recall may have appended never shown: history_bare,
+// Clip.ts). Tokens
 // hold raw text; each emitter escapes it. A span is the first mark at
 // its point.
 
 import * as Names from "../chat/Names.ts";
+import { history_bare } from "../tools/Clip.ts";
 
 // Types
 // =====
@@ -165,9 +168,11 @@ export function paste_label(n: number | string, x: string): string {
 // a tool's result: a read's lines a File, each unified diff in it a
 // Diff, the text around them a File named "result" (none if blank); a
 // command's exit and time, its last line (Machine.ts), in the last
-// result's name, never a numbered line (no output: a result of its own)
+// result's name, never a numbered line (no output: a result of its own).
+// Its own text: the <history> line recall appended left out
+// (history_bare), so its last line is the result's
 export function md_output(s: string): Block[] {
-  const all   = s.replace(/\r/g, "").split("\n");
+  const all   = history_bare(s).replace(/\r/g, "").split("\n");
   const read  = READ.exec(all[all.length - 1]);
   if (read !== null) {
     return [{ $: "File", k: read[1], n: Number(read[2]), x: all.slice(0, -1) }];

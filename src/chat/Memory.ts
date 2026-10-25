@@ -5,7 +5,8 @@
 // images).
 //
 // Over the messages grows a binary tree: node (0,i) is message i (or
-// the line it was logged with) in at most NODE bytes, node (l,i) merges
+// the line it was logged with; a result without the <history> line
+// recall appended: Memory.source) in at most NODE bytes, node (l,i) merges
 // (l-1,2i) and (l-1,2i+1). A node is ready once its halves are built
 // (`ready`, by level, in order); the compactor builds it (Compactor.ts),
 // a source that fits as it is.
@@ -34,7 +35,7 @@
 
 import type { Ask, Block, Call, Img, Kind, Say } from "../ai/AskAI.ts";
 import { Compactor } from "./Compactor.ts";
-import { clip_page, clip_pages } from "../tools/Clip.ts";
+import { clip_page, clip_pages, history_bare } from "../tools/Clip.ts";
 import { HOME, Store, type Place } from "./Store.ts";
 import { FIT, IMAGE, PICS, PIXELS, image_fit } from "../ai/Image.ts";
 import { image_kind } from "../ui/View.ts";
@@ -464,10 +465,15 @@ export namespace Memory {
     return part.l === 0 ? [] : [{ l: part.l - 1, i: 2 * part.i }, { l: part.l - 1, i: 2 * part.i + 1 }];
   }
 
+  // node (l,i)'s source, what the compactor builds it from (null: a half
+  // not built yet): a leaf's, its message as models read it (or the line
+  // it was logged with), a result without the <history> line recall
+  // appended (history_bare: never summarized, so never indexed nor found
+  // again as if it had happened); a merge's, its halves' lines
   export function source(mem: Memory, l: number, i: number): string | null {
     if (l === 0) {
       const root = Memory.message(mem, i);
-      return root === null ? null : root.line ?? Memory.plain(root);
+      return root === null ? null : root.line ?? Memory.plain(root.kind === "echo" ? { ...root, text: history_bare(root.text) } : root);
     }
     const [a, b] = Memory.halves({ l, i }).map((half) => Memory.node(mem, half));
     return a === null || b === null ? null : Memory.flat(a) + "\n" + Memory.flat(b);

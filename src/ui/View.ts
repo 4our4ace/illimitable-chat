@@ -17,6 +17,10 @@
 // newest kept in view while the run is at work; any opened alone kept
 // too). What streams of the
 // work shows only on the line over the input (Term.ts), unless verbose.
+// A result's <history> line (what recall gave the model of its memory:
+// Recall.ts) never shows: a result's lines, how its call ended and its
+// count of lines read the result without it (history_bare, Clip.ts); the
+// side's Related lines are where the user sees what the radar found.
 // A recap (/compact) shows as a line across the chat (a "Rule" row),
 // the recap under it once opened by a click or verbose, each of its
 // pages folded by a click to a line (a "Fold" row, keyed: row_fold);
@@ -27,6 +31,7 @@
 import type { Kind, Vendor } from "../ai/AskAI.ts";
 import type { Mode } from "../tools/Guard.ts";
 import * as Call from "./Call.ts";
+import { history_bare } from "../tools/Clip.ts";
 import * as Md from "./Md.ts";
 import { LABELS, type Model, type Move, Pick } from "../ai/Pick.ts";
 import { GLYPH, WHO } from "./Theme.ts";
@@ -724,9 +729,11 @@ function act_items(v: View, rows: Row[], after: Row | undefined): Did[] {
 }
 
 // a failed result opened under its call, whose mark says it failed: its
-// lines without FAILED, made once a row (MARKED); any other row as it
-// is. Drawn anywhere with no mark (a result with no call, a pipe, a
-// related block's pane, a block of the chat folded) it keeps FAILED
+// lines without FAILED (nor the <history> line recall appended, as
+// md_output reads every result: history_bare), made once a row (MARKED);
+// any other row as it is. Drawn anywhere with no mark (a result with no
+// call, a pipe, a related block's pane, a block of the chat folded) it
+// keeps FAILED
 const MARKED = new WeakMap<Row, Row>();
 
 function row_marked(r: Row): Row {
@@ -765,7 +772,7 @@ function item_said(d: Did, ok: boolean | null): { label: string; outcome: string
     d.call !== null ? { label: Call.call_label(d.call, d.echo === null ? null : result), outcome: Call.call_outcome(d.call, ok, result) }
     : msg?.$ === "Msg" && msg.kind === "mind" ? { label: Call.label_line(msg.text.replace(/\*\*|__|`/g, "").replace(/^\s*#+\s*/, "")) || "Thought", outcome: "" }
     : msg?.$ === "Msg" && msg.kind === "work" ? { label: msg.who === WHO.work ? "A report" : msg.who + "'s report", outcome: text_lines(Call.report_read(msg.text)?.text ?? msg.text) }
-    : msg?.$ === "Msg" ? { label: "Result", outcome: text_lines(msg.text) }
+    : msg?.$ === "Msg" ? { label: "Result", outcome: text_lines(msg.kind === "echo" ? history_bare(msg.text) : msg.text) }
     : msg?.$ === "Sum" ? { label: Call.label_line(Md.md_flat(msg.text).replace(KINDED, "")), outcome: "" }
     : { label: "", outcome: "" };
   SAID.set(d.row, { call: d.call, echo: d.echo, msg, ...said });
@@ -814,7 +821,7 @@ function row_folded(shown: Shown, row: Row): Row {
     return row;
   }
   const name  = row.kind === "echo" ? "result" : row.kind === "mind" ? "thought" : row.kind === "work" && row.who !== "" ? row.who + " reported" : row.who || row.kind;
-  return { $: "Fold", key, text: row.call !== null ? Call.call_line(row.call) : name + " · " + text_lines(row.text) };
+  return { $: "Fold", key, text: row.call !== null ? Call.call_line(row.call) : name + " · " + text_lines(row.kind === "echo" ? history_bare(row.text) : row.text) };
 }
 
 // a text's lines, counted: `1 line`, `1,204 lines`
@@ -1319,7 +1326,8 @@ export function entry_answer(kind: Kind, text: string): boolean {
 }
 
 // a person's words (the user's, a report) as typed; a result as a file's
-// lines, a failed one's FAILED kept (only its call's mark leaves it out:
+// lines (Md.md_output: the <history> line recall appended never drawn),
+// a failed one's FAILED kept (only its call's mark leaves it out:
 // row_marked); the rest, markdown, draw from their text: Paint.ts
 function entry_body(kind: Kind, text: string): Md.Block[] {
   return kind === "echo" ? Md.md_output(text) : Md.md_plain(text);

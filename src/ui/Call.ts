@@ -28,6 +28,7 @@
 // and a line naming its whole chat (the model reads who sent it); it
 // shows as its replies alone, framed and named by its agent.
 
+import { history_bare } from "../tools/Clip.ts";
 import type * as Md from "./Md.ts";
 import { GLYPH } from "./Theme.ts";
 
@@ -202,11 +203,13 @@ export function call_label(c: Call, result: string | null = null): string {
 // failing, CODE), else stopped (Agent.use) or failed; a read's lines
 // shown, the lines a write or an edit added and removed (diff_said).
 // Only a result's TAIL is looked at for its end, so a long one costs
-// what a short one does
+// what a short one does: its own end, the <history> line recall may have
+// appended left out (history_bare)
 export function call_outcome(c: Call, ok: boolean | null, result: string): string {
   const own  = c.from === "" ? c.name : "";
-  const tail = result.slice(-TAIL);
-  const code = own === "shell" || own === "Bash" ? EXIT.exec(tail)?.[1] ?? CODE.exec(result.slice(0, TAIL))?.[1] : undefined;
+  const bare = history_bare(result);
+  const tail = bare.slice(-TAIL);
+  const code = own === "shell" || own === "Bash" ? EXIT.exec(tail)?.[1] ?? CODE.exec(bare.slice(0, TAIL))?.[1] : undefined;
   if (ok === null) {
     return "";
   }
@@ -214,13 +217,13 @@ export function call_outcome(c: Call, ok: boolean | null, result: string): strin
     return /^-?\d+$/.test(code) ? "exit " + code : code;
   }
   if (!ok) {
-    return result === STOPPED ? "stopped" : "failed";
+    return bare === STOPPED ? "stopped" : "failed";
   }
   if (own === "read") {
     const m = SHOWN.exec(tail);
     return m === null ? "" : lines_said(Number(m[2]) - Number(m[1]) + 1);
   }
-  return own === "write" || own === "edit" ? diff_said(result) : "";
+  return own === "write" || own === "edit" ? diff_said(bare) : "";
 }
 
 // an unknown tool's call (any other of illi's, an MCP server's, a
