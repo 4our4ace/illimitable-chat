@@ -122,11 +122,12 @@ const MODES: Mode[] = ["primary", "subagent", "all"];
 const YES = /^\s*(true|yes|on)\s*$/i;
 
 // Claude Code's tool names in an agent's tools list, as illi's (its
-// subagents' tool, Agent, once Task, as spawn); its searches (Glob, Grep,
-// LS) are illi's shell, given only where the list gives that power
-// already (Bash, Write, Edit); its model families, each the newest of it
-// offered (inherit: the pick's)
-const CLAUDE_TOOLS = new Map([["Read", "read"], ["Write", "write"], ["Edit", "edit"], ["MultiEdit", "edit"], ["Bash", "shell"], ["Agent", "spawn"], ["Task", "spawn"], ["TodoWrite", "todo"]]);
+// subagents' tool, Agent, once Task, as spawn; its to-do list, TodoWrite
+// or the task tools it is off by default in favor of, as todo); its
+// searches (Glob, Grep, LS) are illi's shell, given only where the list
+// gives that power already (Bash, Write, Edit); its model families, each
+// the newest of it offered (inherit: the pick's)
+const CLAUDE_TOOLS = new Map([["Read", "read"], ["Write", "write"], ["Edit", "edit"], ["MultiEdit", "edit"], ["Bash", "shell"], ["Agent", "spawn"], ["Task", "spawn"], ["TodoWrite", "todo"], ["TaskCreate", "todo"], ["TaskUpdate", "todo"], ["TaskList", "todo"], ["TaskGet", "todo"]]);
 const CLAUDE_SEARCH = ["Glob", "Grep", "LS"];
 const CLAUDE_STRONG = ["Bash", "Write", "Edit", "MultiEdit", "shell", "write", "edit"];
 
@@ -440,7 +441,8 @@ function agent_tools(list: string[], plugin: string | null): string[] {
 // loop has none without a shell), but one illi reads as its read, write,
 // edit or shell, and illi's own of those, as the Claude Code tool for it
 // (CLAUDE_OWN: MultiEdit, gone from Claude Code, as Edit); one illi reads
-// as another of its own (Agent, Task: spawn; TodoWrite: todo) none, nor
+// as another of its own (Agent, Task: spawn; TodoWrite, TaskCreate,
+// TaskUpdate, TaskList, TaskGet: todo) none, nor
 // illi's other tools and MCP servers, as illi gives those itself (so the
 // agent spawns one way, its subagents at illi's side, and keeps one to-do
 // list). --tools reaches only Claude Code's built-in tools: its own MCP
