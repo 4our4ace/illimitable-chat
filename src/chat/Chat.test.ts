@@ -37,6 +37,8 @@
 // slow ones waited on in the views' sight, a stop sending it back); their
 // turn.stop makes a turn go on before its goal is checked, 8 times in a
 // row at most; what they tell every call comes after where illi works.
+// The time now is in where illi works, after every cache mark a later
+// call reads.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -853,6 +855,25 @@ test("what the plugins and hooks tell every call of the run comes after where il
   }
   const at = blocks.findIndex((b) => b.text.startsWith("Working dir: "));
   expect(blocks[at + 1]).toEqual({ text: "From your hooks:\nOn branch main.\n\n", mark: false });
+});
+
+test("the time now opens where illi works: unmarked, after every mark a later call reads, so a new minute never changes a cached prefix", async () => {
+  await until(() => !chat.busy);
+  const ask = AskAI.ask;
+  let asked: any = null;
+  AskAI.ask = (a, on) => ((asked = a), ask(a, on));
+  try {
+    expect(await Chat.say(chat, [], Buffer.from("what day is it"))).toEqual({});
+    await until(() => asked !== null && !chat.busy);
+  } finally {
+    AskAI.ask = ask;
+  }
+  const at = asked.blocks.findIndex((b: any) => b.text.startsWith("Working dir: "));
+  expect(asked.blocks[at].text).toMatch(/\nNow: [A-Z][a-z]{2} \d{4}-\d\d-\d\d \d\d:\d\d UTC\S*\n\n$/);
+  expect(asked.blocks.slice(at, -1).every((b: any) => !b.mark)).toBe(true);
+  expect(asked.blocks.at(-1).mark).toBe(true);
+  expect(AskAI.keys(asked).length).toBeGreaterThan(0);
+  expect(AskAI.keys(asked).length).toBeLessThanOrEqual(at);
 });
 
 test("background jobs over the pipe: a shell call's in every view's state, its caller named, and in what illi's calls start with; a view's stop ends it; as illi quits, those left are noted", async () => {

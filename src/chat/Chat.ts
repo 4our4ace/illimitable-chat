@@ -577,7 +577,7 @@ export namespace Chat {
     chat.eye = Chat.eye(mem, mem.show);
     chat.socks.forEach((sock) => Chat.show(chat, sock));
     const told = context.length === 0 ? [] : [{ text: context.join("\n\n") + "\n\n", mark: false }];
-    const blocks = [...view, Tools.here(chat.tools), ...told, Tools.at_work(chat.tools), { text: HEAD + text, mark: true }];
+    const blocks = [...view, Tools.here(chat.tools, chat.pick.vendor), ...told, Tools.at_work(chat.tools), { text: HEAD + text, mark: true }];
     const window  = Pick.window(chat.pick);
     const builtins = Custom.agent(chat.tools.cwd, chat.mem.agent)?.builtins;
     const ask     = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server, blocks, imgs, keep: true, builtins, room: window === undefined ? undefined : Math.round(window * (Pick.room(chat.pick) ?? config.ROOM)) };
@@ -1424,7 +1424,7 @@ export namespace Chat {
         return;
       }
       const task = { text: RECAP + (focus === "" ? "" : RECAP_KEEP + focus), mark: false };
-      const blocks = [...Memory.chat(mem, mem.cut, mem.count), Tools.here(chat.tools), Tools.at_work(chat.tools), task];
+      const blocks = [...Memory.chat(mem, mem.cut, mem.count), Tools.here(chat.tools, chat.pick.vendor), Tools.at_work(chat.tools), task];
       const ask = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server: Tools.at(chat.tools, "main"), blocks, once: true };
       const call = AskAI.ask(ask, (ev) => ev.$ === "Delta" && Chat.delta(chat, null, ev));
       halt.signal.addEventListener("abort", () => call.stop(), { once: true });

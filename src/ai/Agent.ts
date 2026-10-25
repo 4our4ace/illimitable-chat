@@ -47,6 +47,7 @@ import { stream_events } from "../tools/Clip.ts";
 import { Machine, type Spec } from "../tools/Machine.ts";
 import * as config from "../config/Config.ts";
 import { PICS } from "./Image.ts";
+import { When } from "../chat/When.ts";
 
 // Types
 // =====
@@ -330,16 +331,13 @@ export namespace Agent {
     return secs > 0 ? secs : Math.min(MOST, 2 ** k);
   }
 
-  // a time, as a person reads it: 14:05 today, Mon 14:05 within a week,
-  // else Oct 30 14:05
+  // a time to come, as a person reads it now (When.ts words): 14:05
+  // today, Mon 14:05 within a week, else 30 Oct 14:05
   export function when(ms: number): string {
-    const at = new Date(ms);
-    const hm = String(at.getHours()).padStart(2, "0") + ":" + String(at.getMinutes()).padStart(2, "0");
-    if (at.toDateString() === new Date().toDateString()) {
-      return hm;
+    if (When.start(ms) === When.start(Date.now())) {
+      return When.hm(ms);
     }
-    const day = ms - Date.now() < 6 * 86400e3 ? at.toLocaleDateString("en-US", { weekday: "short" }) : at.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    return day + " " + hm;
+    return (ms - Date.now() < 6 * 86400e3 ? When.week(ms) : When.date(ms)) + " " + When.hm(ms);
   }
 
   // what a call busy past its tries says: that its host can't be reached,
