@@ -39,8 +39,9 @@ illi then runs Claude Code itself, as it ships, on your login:
 - **Claude Code's own prompt and tools** (its shell, files, search), with
   illi's added through MCP: zoom into the memory, the date, subagents,
   messages to them, the to-do list and skills. An agent's `tools:`
-  limits both, as in Claude Code: `tools: zoom, Read, Grep` gives that
-  agent illi's zoom and Claude Code's Read and Grep, nothing more.
+  limits both: `tools: zoom, Read, Grep` gives that agent illi's zoom
+  and, of Claude Code's built-in tools, Read and Grep alone (its MCP
+  servers and plugins stay).
 - **Your token stays with Claude Code.** illi never sees it, and its
   turns stay out of Claude Code's session history.
 - **Your Claude Code setup applies**: its permission rules, MCP servers

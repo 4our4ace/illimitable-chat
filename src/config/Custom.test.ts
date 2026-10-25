@@ -1,13 +1,13 @@
 // Custom test
 // ===========
 // `bun test Custom.test.ts`. The user's agents and commands: a file's
-// front matter and body (its tools list's Claude Code tools), the
-// project's over the user's, its mode, a
+// front matter and body (its tools list's Claude Code tools; the list as
+// YAML writes it too), the project's over the user's, its mode, a
 // command's arguments; an agent's model as a pick; /agent makes a primary
-// agent the main agent (its model, instructions and tools), noted before
-// the next message, each keeping its pick; spawn's agent runs a subagent
-// as it, with its Claude Code tools (none on a ChatGPT model whose window
-// isn't told: never guessed).
+// agent the main agent (its model, instructions and tools, Claude Code's
+// too), noted before the next message, each keeping its pick; spawn's
+// agent runs a subagent as it, with its Claude Code tools (none on a
+// ChatGPT model whose window isn't told: never guessed).
 // A skill: its folder's SKILL.md (a folded description), the
 // project's over theirs, listed by the skill tool and loaded by it; a
 // sticky one turned on and off by it, while on in every turn's prompt;
@@ -90,6 +90,15 @@ test("an agent file's front matter and body (its tools list's Claude Code tools 
   expect(Custom.agents(CWD).map((a) => a.name)).toEqual(["bad", "coder", "planner", "reviewer", "scout"]);
 });
 
+test("an agent's tools list as YAML writes it: in [ ], each name quoted or not, or as - lines; illi's own as Claude Code's, MultiEdit as Edit", () => {
+  put(DIR + "/lists/flow.md", "---\ntools: [\"Read\", 'Grep', zoom]\n---\n");
+  put(DIR + "/lists/block.md", "---\ntools:\n  - Read\n  - \"MultiEdit\"\n  - shell\nmodel: sonnet\n---\n");
+  const flow = Custom.profile("flow", DIR + "/lists/flow.md");
+  expect([flow.tools, flow.builtins]).toEqual([["read", "zoom"], ["Read", "Grep"]]);
+  const block = Custom.profile("block", DIR + "/lists/block.md");
+  expect([block.tools, block.builtins, block.model]).toEqual([["read", "edit", "shell"], ["Read", "Edit", "Bash"], "sonnet"]);
+});
+
 test("an agent's mode: primary, a subagent, or both", () => {
   expect(Custom.primaries(CWD).map((a) => a.name)).toEqual(["bad", "coder", "planner", "reviewer"]);
   expect(Custom.subagents(CWD).map((a) => a.name)).toEqual(["bad", "coder", "reviewer", "scout"]);
@@ -130,6 +139,7 @@ test("/agent makes a primary agent the main agent: its model, instructions and t
   await until(() => asks.length > 0 && !chat.busy);
   expect(asks.at(-1).system).toContain("You review.");
   expect(asks.at(-1).model).toBe("gpt-6-luna");
+  expect(asks.at(-1).builtins).toEqual(["Read"]);
   const log = Array.from({ length: chat.mem.count }, (_, i) => Memory.message(chat.mem, i)!.text);
   expect(log.indexOf("hi") - log.indexOf("Main agent: reviewer, on gpt-6-luna · high.")).toBe(1);
   expect(Chat.main(chat, null)).toEqual({});
