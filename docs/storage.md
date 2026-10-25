@@ -455,9 +455,10 @@ worker can't start, or a message can't be posted, the search runs on the
 main thread instead (`Projects.here`). If the worker dies, every search
 still waiting on it runs on the main thread, and the next search starts
 a new worker. The radar's never runs on the main thread: it fails, and
-the side shows nothing new till the next step. In the compiled binary, the worker's code is a second
-entry of the build (`src/chat/Seeker.ts` in `package.json`'s `build`,
-`install.sh` and the release workflow), found at `./chat/Seeker.ts`.
+the side shows nothing new till the next step. In the compiled binary,
+the worker's code is a second entry of the build (`src/chat/Seeker.ts`
+in `package.json`'s `build`, `install.sh` and the release workflow),
+found at `./chat/Seeker.ts`.
 
 ### Projects.search
 
@@ -564,21 +565,28 @@ answer is dropped. In one read transaction, on the worker's connection:
    a name `term_side_drawn` as `"term side drawn"`, an error's name, a
    rare word). `select first, n from find_<chat> where find_<chat>
    match ? and first + n <= ? limit 4001`: only lines before the
-   messages left out (those the view holds at message detail, the
-   recent ones), 4,000 at most.
+   messages left out at the chat's end (the recent ones, and those the
+   view holds at message detail just before them), 4,000 at most.
 2. **Too common, dropped:** a unit found nowhere, in more than 4,000
    lines, or in more than a tenth of the chat's episodes (each 16
    messages; two at least). Of the rest, once every unit sent (24 at
    most) is counted, the 12 that weigh most (weight × idf).
-3. **Widened** (`Store.node`): each line goes up to the highest built
-   node over it of at most 16 messages that holds nothing left out.
+3. **Widened** (`Store.node`): each line over nothing left out (the
+   other messages at message detail, the dismissed) goes up to the
+   highest built node over it of at most 16 messages that holds nothing
+   left out.
 4. **Scored**: each episode, the sum over the units it holds of
    weight × idf (by episodes). The 8 best that pass the floor get the
    date of their last message (`Store.date`).
 
-So a search reads at most 24 × 4,001 rows of `(first, n)`, a few dozen
-nodes and 8 dates: about 25 ms on a synthetic chat of 20,000 messages,
-in the worker.
+So a search reads at most 24 × 4,001 rows of `(first, n)` (every unit
+sent is looked up before the 12 are kept), a few dozen nodes and 8
+dates. Measured on synthetic chats (WSL2, ext4): at 20,000 messages
+about 29 ms for a typical run, about 110 ms when all 24 units are in
+4,000 lines or more; at 200,000 messages 130–170 ms. The rows' lookups
+are most of it. It runs in the worker, so the screen never waits, but
+the model's `search` shares that worker: one asked meanwhile waits for
+the radar's to end.
 
 Forgetting a project
 --------------------
@@ -704,7 +712,9 @@ holds counts and scores alone: no text, no id, no project.
 2. Counts are queued, and 2 s after the last (a timer that never holds
    illi open, `related_keep`) added to the file as it is then, written to
    `related.json.<pid>` and renamed over it, as the usage counts are.
-   Counts queued when illi quits within those 2 s are not kept.
+   Two illis (two profiles share the file) writing in the same instant
+   can still lose one's batch; a failure to write is silent and keeps
+   nothing. Counts queued when illi quits within those 2 s are not kept.
 
 Models
 ------

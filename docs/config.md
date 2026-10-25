@@ -88,6 +88,7 @@ What else illi keeps in `~/.illi`:
 | `models.json`   | the models the vendors told last: each one's window, speeds and efforts (ChatGPT's for the account named in it: [Storage](storage.md#models)) |
 | `used.json`     | how often you ran each command: among those a `/word` matches alike, the most used come first; a use counts half as much 100 uses later, and a command you stopped using drops out (two illis at once each add theirs: [Storage](storage.md#usage-counts)) |
 | `picked.json`   | the same for what you pick in Ctrl+P's list, kept apart |
+| `related.json`  | what happened to the side's Related lines (shown, opened, pinned, dismissed), counted by each line's score, every profile's: counts and scores alone, no text, no id, no project ([Storage](storage.md#related-counts)) |
 | `profile`       | the profile used last, for a project illi hasn't run in yet |
 | `project-profiles.json` | the profile used last in each project: illi opens a project in it |
 | `seen.json`     | what of each project runs as you work (its `hooks.json`, `mcp.json` and plugins), as illi last saw it (each one's hash), so one new or changed is said at the start |

@@ -18,7 +18,8 @@
 // most), by where it came from and by how recent it is.
 //
 // The search (Radar.search): each unit's lines before the messages left
-// out, counted by episode (each EPISODE messages of the chat); a unit in
+// out at the chat's end (Ask's end), counted by episode (each EPISODE
+// messages of the chat, those left out among them too); a unit in
 // more than a tenth of them (two at least) is too common here to tell
 // anything, as one found nowhere is: both dropped (so is one in more than
 // LINES lines, however big the chat); the UNITS weighing most of the
