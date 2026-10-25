@@ -24,10 +24,10 @@
 // in the view), a subagent (subagent: only an agent spawns it, as
 // spawn's `agent`), or both (all, the default). Its front matter also says what
 // it does (description), runs on (model: a label or
-// vendor:model:effort:speed; effort), may use (tools, by name; none:
-// all its role has) and the color of its mark (color: #rrggbb; none: one
-// made for it); its body is its instructions, added to the system prompt
-// of its calls.
+// vendor:model:effort:speed; effort), may use (tools, by name, on
+// claude-code Claude Code's built-in tools too; none: all its role has)
+// and the color of its mark (color: #rrggbb; none: one made for it); its
+// body is its instructions, added to the system prompt of its calls.
 //
 // A command (commands/<name>.md) is a message typed as /name: its body,
 // $ARGUMENTS in it the words after the name (none there: they go after
@@ -76,7 +76,8 @@ export type Mode = "primary" | "subagent" | "all";
 // as its role has; Claude Code's tool names read as illi's), its mark's
 // color (#rrggbb; null: one made for it), its instructions, its file, its
 // plugin (null: the user's own), what to know of it (a tool it lost), the
-// Claude Code tools it may use on claude-code (null: it lists none: all)
+// Claude Code built-in tools it may use on claude-code (null: it has no
+// tools list, so all; a list naming none of them: none)
 export type Profile = {
   name        : string;
   description : string;
@@ -127,8 +128,8 @@ const CLAUDE_TOOLS = new Map([["Read", "read"], ["Write", "write"], ["Edit", "ed
 const CLAUDE_SEARCH = ["Glob", "Grep", "LS"];
 const CLAUDE_STRONG = ["Bash", "Write", "Edit", "MultiEdit", "shell", "write", "edit"];
 
-// illi's tools in an agent's tools list as Claude Code's own, which an
-// agent on claude-code uses in their place (Tools.list `lean`)
+// illi's tools in an agent's tools list as Claude Code's built-in ones,
+// which an agent on claude-code uses in their place (Tools.list `lean`)
 const CLAUDE_OWN = new Map([["read", "Read"], ["write", "Write"], ["edit", "Edit"], ["shell", "Bash"]]);
 const FAMILIES = ["sonnet", "opus", "haiku", "fable"];
 
@@ -297,11 +298,12 @@ export namespace Custom {
 
   // an agent's file read: its tools list's Claude Code names as illi's
   // (a plugin's own MCP servers, as mcp__plugin_<plugin>_<server>, as
-  // illi names them), and the Claude Code tools it gives (agent_builtins);
-  // a search it can't do said
+  // illi names them), and the Claude Code built-in tools it gives
+  // (agent_builtins); a search it can't do said. The list as YAML writes
+  // it too: in [ ], each name quoted or not (a `- name` list: parse)
   export function profile(name: string, file: string, plugin: Bundle | null = null): Profile {
     const { head, body } = safe_read(file);
-    const list = head.tools?.replace(/^\[|\]$/g, "").split(",").map((t) => t.trim()).filter(Boolean);
+    const list = head.tools?.replace(/^\[|\]$/g, "").split(",").map((t) => unquote(t.trim())).filter(Boolean);
     const mode = (head.mode ?? "").toLowerCase() as Mode;
     const tools = list === undefined ? null : agent_tools(list, plugin?.name ?? null);
     const lost = list !== undefined && list.some((t) => CLAUDE_SEARCH.includes(t)) && !list.some((t) => CLAUDE_STRONG.includes(t));
@@ -323,7 +325,8 @@ export namespace Custom {
 
   // a file's front matter (`key: value` lines between --- lines; a value
   // of > or | is the indented lines under it, as YAML's: folded into one,
-  // or kept) and body
+  // or kept; none, the `- item` lines under it, as YAML's list: each
+  // unquoted, joined by commas, as a tools list reads them) and body
   export function read(file: string): { head: Record<string, string>; body: string } {
     return Custom.parse(fs.readFileSync(file, "utf8"));
   }
@@ -339,14 +342,19 @@ export namespace Custom {
       if (at <= 0 || /^\s/.test(lines[k])) {
         continue;
       }
+      const key = lines[k].slice(0, at).trim().toLowerCase();
       const value = lines[k].slice(at + 1).trim();
       const block = /^([>|])[-+]?$/.exec(value);
       const under = [];
       while (block !== null && k + 1 < lines.length && (/^\s/.test(lines[k + 1]) || lines[k + 1].trim() === "")) {
         under.push(lines[++k].trim());
       }
-      const whole = block === null ? value : under.join(block[1] === ">" ? " " : "\n").trim();
-      head[lines[k - under.length].slice(0, at).trim().toLowerCase()] = whole.replace(/^(["'])(.*)\1$/, "$2");
+      const items = [];
+      while (value === "" && k + 1 < lines.length && /^\s*-\s+\S/.test(lines[k + 1])) {
+        items.push(unquote(lines[++k].replace(/^\s*-\s+/, "").trim()));
+      }
+      const whole = block !== null ? under.join(block[1] === ">" ? " " : "\n").trim() : value;
+      head[key] = items.length > 0 ? items.join(", ") : unquote(whole);
     }
     return { head, body: text.slice(match?.[0].length ?? 0).trim() };
   }
@@ -421,13 +429,23 @@ function agent_tools(list: string[], plugin: string | null): string[] {
   return [...new Set(out)];
 }
 
-// the Claude Code tools an agent's tools list gives on claude-code, as
-// Claude Code's own subagent would have them: Claude Code's names as
-// they are (Glob, Grep: searches kept, though illi's own loop has none
-// without a shell), illi's as Claude Code's (CLAUDE_OWN); illi's other
-// tools and MCP servers none, as illi gives those itself
+// the Claude Code built-in tools an agent's tools list gives on
+// claude-code, as Claude Code's own subagent would have them: Claude
+// Code's names as they are (Glob, Grep: searches kept, though illi's own
+// loop has none without a shell; Task and TodoWrite too, beside illi's
+// spawn and todo), but one illi reads as its read, write, edit or shell,
+// and illi's own of those, as the Claude Code tool for it (CLAUDE_OWN:
+// MultiEdit, gone from Claude Code, as Edit); illi's other tools and MCP
+// servers none, as illi gives those itself. --tools reaches only Claude
+// Code's built-in tools: its own MCP servers and plugins stay
 function agent_builtins(list: string[]): string[] {
-  return [...new Set(list.flatMap((t) => (/^[A-Z][A-Za-z]*$/.test(t) ? [t] : CLAUDE_OWN.has(t) ? [CLAUDE_OWN.get(t)!] : [])))];
+  const out = list.map((t) => CLAUDE_OWN.get(CLAUDE_TOOLS.get(t) ?? t) ?? (/^[A-Z][A-Za-z]*$/.test(t) ? t : null));
+  return [...new Set(out.filter((t): t is string => t !== null))];
+}
+
+// a value without the quotes round it, as YAML reads it
+function unquote(text: string): string {
+  return text.replace(/^(["'])(.*)\1$/, "$2");
 }
 
 // an agent's model as its pick reads it: inherit, none (the pick's); a

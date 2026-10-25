@@ -63,8 +63,8 @@ export type Block = { text: string; mark: boolean };
 // may read before the call ends `full` once its tools ran (a turn's:
 // Chat.refit goes on from the chat as it then is; none: no end); stuck:
 // a patient call's try failed, why, as it waits to ask again; builtins:
-// the Claude Code tools it may use on claude-code, as its agent's tools
-// list gives them (Custom.profile; none: all)
+// the Claude Code built-in tools it may use on claude-code, as its
+// agent's tools list gives them (Custom.profile; none: all)
 export type Ask = Pick & {
   system    : string;
   blocks    : Block[];

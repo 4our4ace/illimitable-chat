@@ -7,7 +7,8 @@
 // live and logged, illi's tools by their own
 // names, and the model's window learned (by its canonical id) and kept;
 // a call without tools has none of Claude Code's, an agent's tools list
-// only those it names; a message sent mid-run is taken as it is echoed, one
+// only the built-in ones it names (--tools); a message sent mid-run is
+// taken as it is echoed, one
 // sent after the end is left; a plan's limit, a missing login, a chat
 // too long and a crash end it in plain words; a stop cuts it; a missing
 // CLI says to install it. A rate limit event's 5-hour and weekly windows

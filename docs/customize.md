@@ -298,12 +298,14 @@ over. What differs:
   read, `Write` write, `Edit` and `MultiEdit` edit, `Bash` shell, `Task`
   spawn, `TodoWrite` todo; `Glob`, `Grep` and `LS` shell, if `Bash`,
   `Write` or `Edit` is listed too (else it can't search, said in
-  `/agents`). `model: inherit` is your pick; `sonnet`, `opus`, `haiku`
-  or `fable` alone the newest of it offered, else your pick. (Your own
-  agents are read so too.) On claude-code, the list also limits Claude
-  Code's own tools to those it names, as Claude Code does (illi's
-  `read`, `write`, `edit` and `shell` as `Read`, `Write`, `Edit` and
-  `Bash`).
+  `/agents`; on claude-code, Claude Code's own `Glob` and `Grep` do).
+  `model: inherit` is your pick; `sonnet`, `opus`, `haiku` or `fable`
+  alone the newest of it offered, else your pick. (Your own agents are
+  read so too, and the list may be YAML's: `[Read, "Grep"]`, or `- Read`
+  lines.) On claude-code, the list also limits Claude Code's built-in
+  tools to those it names (illi's `read`, `write`, `edit` and `shell` as
+  `Read`, `Write`, `Edit` and `Bash`; `MultiEdit` as `Edit`); its MCP
+  servers and plugins stay.
 - Hooks: a `Bash` matcher takes illi's `shell` ([Beside Claude
   Code's](#beside-claude-codes)); one naming only Claude Code's other
   tools runs only on `claude-code`'s own calls, said at the start.
