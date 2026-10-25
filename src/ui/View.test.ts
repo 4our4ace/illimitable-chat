@@ -4,8 +4,9 @@
 // runs of work, each keyed apart (a thought-led one too), a line over
 // its items: each call with what it did and how it ended, opened alone
 // by a click or all by the mode, five at most till a click shows all
-// (the newest while it works); an agent's page so too, its clicks its
-// own; what streams made anew only as it grows.
+// (the newest while it works), a failed result's lines without FAILED;
+// an agent's page so too, its clicks its own; what streams made anew
+// only as it grows.
 
 import { expect, test } from "bun:test";
 import type { Pick } from "../ai/Pick.ts";
@@ -19,8 +20,8 @@ const thought = (text: string, after: number): View.Row => ({ ...(View.entry_row
 // a run's items, each its key, label, outcome, how it ended, whether open
 const items = (run: View.Row) => (run.$ === "Act" ? run.rows.flatMap((r) => (r.$ === "Item" ? [[r.key, r.label, r.outcome, r.ok, r.open]] : [])) : []);
 
-// a turn waiting on its model names the model the server says: the
-// wait holds it, so no pick (none yet) can name none
+// a failed result as its lines draw: its FAILED left out (its call's
+// mark says it failed), its text as logged
 test("a failed result's lines leave out FAILED (its call's mark says so); its text keeps it", () => {
   const [row] = View.entry_rows(3, "echo", View.FAILED + "no such file\n(exit 1 in 0.1 s)") as Array<View.Row & { $: "Msg" }>;
   expect(row.text).toStartWith(View.FAILED);
@@ -28,6 +29,8 @@ test("a failed result's lines leave out FAILED (its call's mark says so); its te
   expect(JSON.stringify(row.body)).toContain("no such file");
 });
 
+// a turn waiting on its model names the model the server says: the
+// wait holds it, so no pick (none yet) can name none
 test("a turn's wait names its model", () => {
   const v = View.view_new();
   View.view_hear(v, { $: "state", ...v, wait: "claude-opus-5-5", pick: null });

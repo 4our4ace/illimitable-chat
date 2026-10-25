@@ -11,11 +11,11 @@
 // once, the side on either hand or none (typing goes there; nothing
 // sent, the text as it was; on the rule under it, the text's end); a
 // drag from there still chooses and copies, a double click a word, the
-// cursor where the press put it; a scrolled input stays put under it. No press
-// moves it that only focused the window, nor a right one, nor one under
-// a popup, on a question in the input's place or with a pane open; on an
-// agent's page, and with the commands suggested, one does. (Under a popup
-// the mouse is the popup's: Popup.test.ts.)
+// cursor where the press put it; a scrolled input stays put under it.
+// No press moves it that only focused the window, nor a right one, nor
+// one under a popup, on a question in the input's place or with a pane
+// open; on an agent's page, and with the commands suggested, one does.
+// (Under a popup the mouse is the popup's: Popup.test.ts.)
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";

@@ -243,7 +243,7 @@ git push --force origin main
   … 37 lines
   rm -rf ~/projects/old-site
   echo done
-  > ○ Yes
+  > ● Yes
     ○ No
     ○ No, and say why
   ───────────────────────────────────────────────────────────────────────────
@@ -258,7 +258,7 @@ git push --force origin main
   out/part-39 && rm -rf ~/projects/old-site && touch out/done-0 && touch
   … 13 rows
   && touch out/done-47 && touch out/done-48
-  > ○ Yes
+  > ● Yes
     ○ No
     ○ No, and say why
   ───────────────────────────────────────────────────────────────────────────

@@ -21,13 +21,14 @@ skill, `customize-illi`, and writes these files itself.
   is for every reply (a tone, a format): `/name` turns it on and off (so
   does a click on it in the side panel, which lists each one, on or
   off), and while on it is in every turn's prompt, so no summary drops
-  it. A skill for a task is loaded, never switched off: the model's
-  skill tool offers the on and off switch only while one of your skills
-  is sticky, and on or off for one that isn't does nothing.
-  customize-illi suggests it when it installs a skill. Skills shared with
-  other agents (opencode's, Codex's) load too: `~/.agents/skills`, under
-  yours of the same name, and a trusted project's `.agents/skills`, from
-  the repo's top down to the folder you start in, under its `.illi/`.
+  it. customize-illi suggests it when it installs a skill. A skill for a
+  task is loaded, never switched off: the model's skill tool offers the
+  on and off switch only while one of your skills is sticky, and on or
+  off for one that isn't fails nothing (on loads it, off does nothing).
+  Skills shared with other agents (opencode's, Codex's) load too:
+  `~/.agents/skills`, under yours of the same name, and a trusted
+  project's `.agents/skills`, from the repo's top down to the folder you
+  start in, under its `.illi/`.
 - `mcp.json`: MCP servers, in Claude Code's `mcpServers` shape (below).
 - `theme.json`: the accent, the other colors, the palette and glyphs
   ([Theme](#theme), below). The `accent` setting alone recolors
