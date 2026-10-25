@@ -99,13 +99,14 @@ test("a list past blank lines, its paragraphs, owners and depths", () => {
 
 // a backslash before ASCII punctuation: the character, no mark (money
 // written \$5 too); no mark closes on one escaped; italics hold bold
-test("escapes, and bold inside italics", () => {
+test("escapes (a link's bracket too), and bold inside italics", () => {
   expect(Markdown.markdown_text(marks("\\$5 and \\*not\\* a \\| b snake\\_case"))).toBe("$5 and *not* a | b snake_case");
   expect(marks("\\*not\\*").some((m) => m.kind !== "text")).toBe(false);
   expect(marks("*a\\*").some((m) => m.kind === "emphasis")).toBe(false);
   expect(marks("`a\\*b`")).toEqual([{ kind: "code", text: "a\\*b" }]);
   expect(marks("*a **b** c*")).toEqual([{ kind: "emphasis", children: [{ kind: "text", text: "a " }, { kind: "strong", children: [{ kind: "text", text: "b" }] }, { kind: "text", text: " c" }] }]);
   expect(marks("a * b * c")).toEqual([{ kind: "text", text: "a * b * c" }]);
+  expect(marks("[\\[PDF\\] a \\ b](https://x.example/a%28b%29)")).toEqual([{ kind: "link", text: "[PDF] a \\ b", href: "https://x.example/a%28b%29" }]);
 });
 
 // a separator row of a count other than the header's: no table

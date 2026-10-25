@@ -85,14 +85,15 @@ const MORE   = /^\s{2,}\S/;
 
 // the inline marks, in the order they win a tie: an ASCII punctuation
 // character escaped, code (a run of backticks, closed by a run exactly
-// as long), a link, bold (***x*** bold and italic), struck, italics
-// (bold inside them too), a bare url (trailing punctuation left out),
-// inline math (not after \, $ or a word, nor spaced inside its
-// dollars). No mark but code closes on a character escaped
+// as long), a link (a bracket in its words escaped), bold (***x*** bold
+// and italic), struck, italics (bold inside them too), a bare url
+// (trailing punctuation left out), inline math (not after \, $ or a
+// word, nor spaced inside its dollars). No mark but code closes on a
+// character escaped
 const MARKS = new RegExp([
   /\\(?<escaped>[!-/:-@[-`{-~])/.source,
   /(?<ticks>`+)(?!`)(?<code>[\s\S]+?)(?<!`)\k<ticks>(?!`)/.source,
-  /\[(?<label>[^\]]+)\]\((?<href>[^)\s]+)\)/.source,
+  /\[(?<label>(?:\\.|[^\]\\])+)\]\((?<href>[^)\s]+)\)/.source,
   /\*\*\*(?<both>[^*]+)(?<!\\)\*\*\*/.source,
   /\*\*(?!\*)(?<bold>(?:[^*]|\*(?!\*))+?)(?<!\\)\*\*/.source,
   /(?<!\w)__(?!_)(?<under>(?:[^_]|_(?!_))+?)(?<!\\)__(?!\w)/.source,
@@ -433,7 +434,7 @@ function inline_mark(g: Record<string, string | undefined>, hl: Highlight): Inli
     return { kind: "code", text: spaced ? g.code.slice(1, -1) : g.code };
   }
   if (g.label !== undefined) {
-    return { kind: "link", text: g.label, href: g.href! };
+    return { kind: "link", text: g.label.replace(/\\([!-/:-@[-`{-~])/g, "$1"), href: g.href! };
   }
   if (g.both !== undefined) {
     return { kind: "emphasis", children: [{ kind: "strong", children: markdown_inline(g.both, hl) }] };
