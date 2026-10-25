@@ -51,6 +51,7 @@ import { AskAI, type Ask, type Block, type Call, type Event, type Kind, type Ven
 import type { Out } from "../ai/Agent.ts";
 import { report_text } from "../ui/Call.ts";
 import { ChatGPT } from "../ai/ChatGPT.ts";
+import { ClaudeCode } from "../ai/ClaudeCode.ts";
 import { clip_page } from "./Clip.ts";
 import * as config from "../config/Config.ts";
 import { Custom, type Skill } from "../config/Custom.ts";
@@ -141,7 +142,7 @@ const CHATS = new Map<string, Tools>();
 
 // the vendors that tell a plan (View.Plan: its limits shown at the side),
 // each by how: one added here shows as the others do
-const PLANS: Partial<Record<Vendor, () => Plan | null>> = { chatgpt: ChatGPT.told };
+const PLANS: Partial<Record<Vendor, () => Plan | null>> = { chatgpt: ChatGPT.told, "claude-code": ClaudeCode.told };
 let HTTP: ReturnType<typeof Bun.serve> | null = null;
 
 // the master's prompt (a turn's and a compaction's): prompt.txt

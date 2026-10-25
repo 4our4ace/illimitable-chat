@@ -399,7 +399,7 @@ Mouse and side panel
   opens `/background`), the profiles once you have two (a click
   switches; one open in this terminal shows a spinner while it works,
   `?` while it asks you something, `● 2` while only its background jobs
-  run), a ChatGPT plan's use (once ChatGPT has told it), the context
+  run), your plan's use (ChatGPT's or Claude's, once it has told it), the context
   and the memory, past topics related to the work ([Related](#related)),
   the MCP servers (a click opens `/mcp`), the latest
   requests refused (a click opens `/permissions` on one) and illi's

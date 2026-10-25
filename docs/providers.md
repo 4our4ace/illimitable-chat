@@ -53,8 +53,10 @@ illi then runs Claude Code itself, as it ships, on your login:
   grants apply.
 - **Summaries run with nothing extra**: `claude -p` calls with no tools,
   MCP servers, commands or hooks.
-- **Plan limits are said plainly**: when your plan's limit is reached,
-  illi says when it resets.
+- **Your plan's use at the side**: the Usage section shows how much of
+  your 5-hour and weekly limits is used and when each resets, as each
+  reply tells it (Claude Code names no plan, so none is named). When a
+  limit is reached, illi says when it resets.
 
 API keys
 --------
