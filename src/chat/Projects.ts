@@ -132,6 +132,14 @@ export namespace Projects {
     return Projects.thread(RECALL, { $: "recall", file, ask }, null);
   }
 
+  // recall's thread started before its first search (Recall.wake): one
+  // that won't start starts at that search, or runs none
+  export function wake(): void {
+    try {
+      RECALL.worker ??= Projects.seeker(RECALL);
+    } catch {}
+  }
+
   // a message to a thread (Seeker.ts), its worker started at the first,
   // answered by its `out`; one the thread can't run is run here (here;
   // null: failed)

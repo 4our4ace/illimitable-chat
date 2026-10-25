@@ -9,17 +9,18 @@
 // pins it and recall gives it, or as a zoom or a search wrote it) is
 // never given again, #16 never naming #160, nor one its view holds at an
 // episode's detail or finer; a subagent's run and what it holds are its
-// log. illi's own memory and meta tools never start a
-// search. Never slower: a search not answered a few ms after the tool is
-// done gives no line and keeps the call no longer; one search at a time;
-// one line a step, a step's calls sharing it. A line the user dismissed
-// is left out of the search, and dropped if dismissed while it ran.
-// `related` screen or off: no search. No line after a result with
-// images, an empty one, nor one the line would push onto a page of its
-// own. End to end
-// on the search thread: a command naming a path and an error the chat
-// met before gets that episode's line, last, after what it printed,
-// under its <history> tags, and the leaf of its result holds none of it.
+// log. illi's own memory and meta tools never start a search. Never
+// slower: a search not answered a few ms after the tool is done gives no
+// line and keeps the call no longer; one search at a time, a later call
+// of its step sharing it (the line a fast call's search found late goes
+// after a slower call of the step); one line a step, a step's calls
+// sharing it. A line the user dismissed is left out of the search, and
+// dropped if dismissed while it ran. `related` screen or off: no search.
+// No line after a result with images, an empty one, nor one the line
+// would push onto a page of its own. End to end on the search thread: a
+// command naming a path and an error the chat met before gets that
+// episode's line, last, after what it printed, under its <history> tags,
+// and the leaf of its result holds none of it.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -296,21 +297,34 @@ test("illi's own memory and meta tools never start a search; shell, files, MCP a
   expect([...SKIP].sort()).toEqual(["approve", "ask", "date", "projects", "search", "skill", "spawn", "tell", "todo", "zoom"]);
 });
 
-test("never slower: a search not answered a few ms after the tool is done gives no line and holds the call no longer; one answered gives its line, last", async () => {
+test("never slower: a search not answered a few ms after the tool is done gives no line and holds the call no longer; a later call of its step shares it, and gets the line once it answers; one answered gives its line, last", async () => {
   let let_go = () => {};
   const slow = new Promise<Found | null>((done) => (let_go = () => done(found(EPISODE, 16))));
   await stood(() => slow, async (asks) => {
-    const pending = Recall.start(tools, "main", "shell", { command: "ls" })!;
-    // one search at a time: none for a call that starts meanwhile
-    expect(Recall.start(tools, "main", "read", { path: "a.ts" })).toBeNull();
+    tools.given.clear();
+    Recall.step(tools, "main");
+    const pending = Recall.start(tools, "main", "read", { path: "a.ts" })!;
+    // one search at a time: a later call of the same step shares it,
+    // another caller's gets none
+    const later = Recall.start(tools, "main", "shell", { command: "bun test" });
+    expect(later).toBe(pending);
+    expect(Recall.start(tools, "Di", "shell", { command: "ls" })).toBeNull();
     const at  = performance.now();
-    const out = await Recall.end(tools, pending, result("a\n(exit 0 in 0.1 s)"), signal);
+    const out = await Recall.end(tools, pending, result("a"), signal);
     expect(performance.now() - at).toBeLessThan(WAIT + 40);
-    expect(out.text).toBe("a\n(exit 0 in 0.1 s)");
+    expect(out.text).toBe("a");
     expect(asks).toHaveLength(1);
     let_go();
     await slow;
     await Bun.sleep(0);
+    // the slower call, ending after it answered, takes the line
+    expect((await Recall.end(tools, later, result("12 pass\n(exit 0 in 2.0 s)"), signal)).text).toEndWith("</history>");
+    // the next step's first call starts a search of its own
+    Recall.step(tools, "main");
+    const next = Recall.start(tools, "main", "read", { path: "b.ts" });
+    expect(next).not.toBe(pending);
+    expect(asks).toHaveLength(2);
+    await next!.found;
   });
   await stood(async () => found(EPISODE, 16), async () => {
     tools.given.clear();

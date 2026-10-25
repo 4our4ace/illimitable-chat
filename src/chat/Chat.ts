@@ -473,14 +473,16 @@ export namespace Chat {
   // next. The messages sent as a stopped one wound down start a new one.
   // A to-do list all done goes as it starts and ends (Tools.todo_finished);
   // the loop guard starts the main agent's count fresh (Tools.fresh: a
-  // command polled once a turn is never a loop). The plugins are told it
-  // starts and ends (why it stopped, if it did)
+  // command polled once a turn is never a loop); recall's thread is
+  // started, if it isn't (Recall.wake). The plugins are told it starts
+  // and ends (why it stopped, if it did)
   export async function turn(chat: Chat): Promise<void> {
     chat.busy = true;
     clearTimeout(chat.idle);
     void Plugins.emit("turn.start", { cwd: chat.tools.cwd });
     Tools.todo_finished(chat.tools);
     Tools.fresh(chat.tools, MAIN);
+    Recall.wake();
     try {
       let go = true;
       while (go && chat.wait.length > 0) {
