@@ -206,14 +206,15 @@ function popup_act(c: Chooser, name: string): boolean {
 
 // whether the options carry a dot after the lit mark: a list with one in
 // use (GLYPH.here on it, GLYPH.tab on the rest), a question's answers
-// (GLYPH.option each); with the columns it takes, before an option's name
-// (none for one that makes something new: its "+" in the dot's place)
+// (GLYPH.option each, the lit one filled: the answer Enter gives); with
+// the columns it takes, before an option's name (none for one that makes
+// something new: its "+" in the dot's place)
 function popup_dotted(c: Chooser): boolean {
   return c.here >= 0 || c.answers === true;
 }
 
 function popup_dot(c: Chooser, k: number): string | null {
-  return !popup_dotted(c) || popup_act(c, c.names[k]) ? null : c.here >= 0 ? (k === c.here ? GLYPH.here : GLYPH.tab) : GLYPH.option;
+  return !popup_dotted(c) || popup_act(c, c.names[k]) ? null : c.here >= 0 ? (k === c.here ? GLYPH.here : GLYPH.tab) : c.shown[c.at]?.k === k ? GLYPH.here : GLYPH.option;
 }
 
 function popup_dot_width(c: Chooser, name: string): number {
@@ -432,7 +433,7 @@ function popup_entry(c: Chooser, e: string | number, iw: number, wide: number): 
   const name  = c.names[m.k];
   const here  = e === c.at;
   const dot   = popup_dot(c, m.k);
-  const marks = [Paint.Run(Paint.lit_lead(here), bold), ...(dot === null ? [] : [Paint.Run(dot + " ", Paint.DIM)])];
+  const marks = [Paint.Run(Paint.lit_lead(here), bold), ...(dot === null ? [] : [Paint.Run(dot + " ", dot === GLYPH.here && c.answers === true ? { ...Paint.INK, c: Draw.draw_tokens().accent } : Paint.DIM)])];
   const lines = popup_name_lines(c, name, iw, here ? bold : Paint.INK, lit, m.hay === true ? [] : m.at);
   const aim: Target = { $: "option", k: m.k };
   const pad   = Paint.Run(" ".repeat(Paint.line_width(marks)));

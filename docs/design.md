@@ -39,7 +39,7 @@ Marks
 | `> ` | the message you type (`GLYPH.input`) | the input, your words in a question, a line a question asks for |
 | `>` | the to-do item at work (`GLYPH.active`) | the side's to-do, the todo tool |
 | `□` `■` | to do, done; an option among several | the to-do; a question that takes several |
-| `○` `●` | an answer, the one picked (`GLYPH.option`, `GLYPH.here`) | every question that takes one (the permission question, a confirmation, illi's own); the picks on the questions' Review tab |
+| `○` `●` | an answer, the one lit (the answer Enter gives) or picked (`GLYPH.option`, `GLYPH.here`) | every question that takes one (the permission question, a confirmation, illi's own); the picks on the questions' Review tab |
 | `◯` `●` | one of a set, the one in use (`GLYPH.tab`, `GLYPH.here`) | the tabs; the model, agent, profile, mode or project in use in a list; the side's agents, sticky skills (on, off) and profiles |
 | `●` | running (success) | background jobs, MCP servers ready |
 | `◌` | starting | MCP servers at the side |
