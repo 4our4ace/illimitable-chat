@@ -3,7 +3,7 @@
 // The side panel, on a wide screen: the primary agents and the sticky
 // skills beside them, the subagents of this run, the background jobs,
 // the profiles (two or more; those open in this window marked as they
-// are), a ChatGPT plan's use, the chat's (the
+// are), a plan's use (ChatGPT's, Claude's), the chat's (the
 // context, the memory), the past topics related to the work (the radar:
 // Related.ts), the MCP servers, the requests refused, the plugins'
 // lines, a hint for the keys or illi's to-do list; the side and
@@ -64,7 +64,7 @@ const SUMMARY = 20;
 // turns one on or off; under them when a name won't fit whole:
 // term_side_beside), the tabs (a click shows one), the background jobs
 // (a click: /background), the profiles, once there are two (a click on
-// the head: /profile), a ChatGPT plan's use, the chat's (its context, the
+// the head: /profile), a plan's use (ChatGPT's, Claude's), the chat's (its context, the
 // memory), the past topics related to the work (term_side_related), the
 // MCP servers (a click: /mcp), the requests refused (a click:
 // /permissions on it), each plugin's lines (Plugins.side); at its

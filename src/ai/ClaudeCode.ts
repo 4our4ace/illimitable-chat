@@ -26,7 +26,9 @@
 // long for the window: `full`, a busy service). A stop interrupts it
 // (SIGINT, then SIGKILL), what streamed of its message logged as cut
 // off. A model's window, as a result tells it, is learned (Pick.told, by
-// its canonical id) and kept for the next start.
+// its canonical id) and kept for the next start; the plan's use, as each
+// rate limit event tells it (its 5-hour and weekly windows), shows at
+// the side (ClaudeCode.told).
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -35,7 +37,7 @@ import { AskAI, type Ask, type Block, type End, type Event, type Img, type Say, 
 import { Agent, type Emit, type Entry } from "./Agent.ts";
 import { Anthropic } from "./Anthropic.ts";
 import { Pick } from "./Pick.ts";
-import { FAILED, live_push } from "../ui/View.ts";
+import { FAILED, live_push, type Limit, type Plan } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
 
 // Types
@@ -82,6 +84,16 @@ const KILL = 5e3;
 
 // what a failure says: a plan's limit, a login missing, a busy service
 const LIMIT = /usage limit|limit reached|rate.?limit|\b429\b/i;
+
+// the plan's windows a rate limit event tells the share used of
+// (unifiedWindows), by their length in minutes, as a ChatGPT plan's show
+// (5 hours, a week); any other (one model's own week) left out
+const WINDOWS: Record<string, number> = { five_hour: 300, seven_day: 10080 };
+
+// the plan's windows as last told, each its share used (%) and when it
+// starts anew: the side shows them (ClaudeCode.told). One Claude Code
+// login a machine, so one record
+let limits: Limit[] = [];
 const LOGIN = /not logged in|please run \/login|invalid api key|authentication|oauth token|\b401\b/i;
 const BUSY  = /overloaded|\b529\b|\b5\d\d\b|unavailable|timed? ?out|ECONN|network/i;
 
@@ -246,12 +258,32 @@ export namespace ClaudeCode {
       case "rate_limit_event": {
         const info = m.rate_limit_info ?? {};
         run.reset = info.status === "rejected" && Number(info.resetsAt) > 0 ? Number(info.resetsAt) * 1000 : run.reset;
+        ClaudeCode.windows(info);
         return;
       }
       case "system": {
         return ClaudeCode.system(run, m);
       }
     }
+  }
+
+  // a rate limit event's windows (unifiedWindows), each its share used
+  // and when it starts anew, kept for the side (ClaudeCode.told); those
+  // it doesn't tell kept as last told
+  export function windows(info: any): void {
+    const told = Object.entries<any>(info?.unifiedWindows ?? {}).flatMap(([name, w]): Limit[] => {
+      const window = WINDOWS[name];
+      const used   = Number(w?.utilization);
+      const reset  = Number(w?.resetsAt) * 1000;
+      return window === undefined || !Number.isFinite(used) || !(reset > 0) ? [] : [{ window, used: Math.round(used * 1000) / 10, reset }];
+    });
+    limits = [...limits.filter((l) => !told.some((t) => t.window === l.window)), ...told].sort((a, b) => a.window - b.window);
+  }
+
+  // the Claude plan as the views show it, once a call told its usage
+  // (null: none told yet); Claude Code names no plan, so none is named
+  export function told(): Plan | null {
+    return limits.length === 0 ? null : { brand: "Claude", tier: "", limits };
   }
 
   // an API event, shown live: a message starts its own stream read

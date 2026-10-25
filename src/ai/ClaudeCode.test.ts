@@ -180,3 +180,13 @@ test("a missing CLI says to install it", async () => {
     ClaudeCode.bin = bin;
   }
 });
+
+test("a rate limit event's windows are the Claude plan's use at the side: each window's share and reset, kept till told again; one a model's own left out", () => {
+  const at = Math.floor(Date.now() / 1000) + 3600;
+  ClaudeCode.windows({ status: "allowed", unifiedWindows: { five_hour: { utilization: 0.34, resetsAt: at, status: "allowed" } } });
+  expect(ClaudeCode.told()).toEqual({ brand: "Claude", tier: "", limits: [{ window: 300, used: 34, reset: at * 1000 }] });
+  ClaudeCode.windows({ unifiedWindows: { seven_day: { utilization: 0.071, resetsAt: at + 86400 }, seven_day_opus: { utilization: 0.5, resetsAt: at } } });
+  expect(ClaudeCode.told()!.limits).toEqual([{ window: 300, used: 34, reset: at * 1000 }, { window: 10080, used: 7.1, reset: (at + 86400) * 1000 }]);
+  ClaudeCode.windows({ status: "rejected", resetsAt: at });
+  expect(ClaudeCode.told()!.limits.length).toBe(2);
+});
