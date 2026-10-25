@@ -6,7 +6,9 @@
 // the cursor where it lands: on a character before it, whole; past a
 // row's text after it; on the mark at the row's start; under the last
 // row at the end; in a chip at its nearer edge; a tall input scrolls
-// only as the cursor leaves the rows shown. A paint writes only the rows that changed, those moved as a
+// only as the cursor leaves the rows shown. Up and Down walk the
+// messages sent from an empty input moved in, and on from one brought
+// back. A paint writes only the rows that changed, those moved as a
 // block moved by the terminal. Then the lines Paint lays out: a link
 // wider than a line breaks at its edge, its pieces each opening it whole;
 // a word of several runs is kept whole; a frame never passes its width;
@@ -468,6 +470,23 @@ test("a click on the input follows the prompt's own width", () => {
   } finally {
     Theme.GLYPH.input = was;
   }
+});
+
+test("Up and Down walk every message sent from an empty input moved in first (Left), and from one brought back; once moved along what's typed, they stay in it", () => {
+  const ed = Screen.ed_new();
+  ed.hist  = ["first", "second"];
+  ed.at    = 2;
+  Screen.ed_key(ed, "Left");
+  Screen.ed_key(ed, "Up");
+  Screen.ed_key(ed, "Up");
+  expect([ed.text, ed.moved]).toEqual(["first", false]);
+  Screen.ed_key(ed, "Down");
+  Screen.ed_key(ed, "Down");
+  expect(ed.text).toBe("");
+  Screen.ed_type(ed, "draft");
+  Screen.ed_key(ed, "Left");
+  Screen.ed_key(ed, "Up");
+  expect(ed.text).toBe("draft");
 });
 
 test("an input taller than it shows scrolls only as the cursor leaves the rows shown (so a click leaves them in place), and back as rows go, as many shown as fit", () => {

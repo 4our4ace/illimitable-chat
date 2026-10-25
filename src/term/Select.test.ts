@@ -15,6 +15,7 @@
 // No press moves it that only focused the window, nor a right one, nor
 // one under a popup, on a question in the input's place or with a pane
 // open; on an agent's page, and with the commands suggested, one does.
+// One on the empty input leaves Up and Down walking the messages sent.
 // (Under a popup the mouse is the popup's: Popup.test.ts.)
 
 import { afterAll, expect, test } from "bun:test";
@@ -319,5 +320,33 @@ test("no press moves the cursor that only focused the window, nor a right one, n
     expect(t.box?.of).toBe(t.sug);
     click(t, row_of(t, "> /hel"), 5);
     expect([t.scr.ed.pos, t.scr.ed.text, t.pane, t.v.out]).toEqual([1, "/hel", null, []]);
+  });
+});
+
+test("a click on the empty input leaves Up and Down walking the messages sent: from it, and after typing in it; one on what's typed keeps them in it, as Left does", () => {
+  sized(100, 30, () => {
+    const t   = terminal();
+    const key = (seq: string) => Screen.screen_feed(t.scr, seq);
+    t.scr.ed.hist = ["first", "second"];
+    t.scr.ed.at   = 2;
+    paint(t);
+    click(t, row_of(t, ">"), 10);
+    key("\x1b[A");
+    key("\x1b[A");
+    expect(t.scr.ed.text).toBe("first");
+    key("\x1b[B");
+    key("\x1b[B");
+    expect(t.scr.ed.text).toBe("");
+    paint(t);
+    click(t, row_of(t, ">"), 10);
+    key("draft");
+    key("\x1b[A");
+    expect(t.scr.ed.text).toBe("second");
+    key("\x1b[B");
+    expect(t.scr.ed.text).toBe("draft");
+    paint(t);
+    click(t, row_of(t, "> draft"), 5);
+    key("\x1b[A");
+    expect([t.scr.ed.text, t.scr.ed.pos]).toEqual(["draft", 1]);
   });
 });
