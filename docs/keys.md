@@ -148,6 +148,11 @@ Typing
   shown, so what you click stays put. A drag over it still copies, a
   double click a word; the click that only brings the window to the
   front moves nothing.
+- A message wraps between words: a word that would cross the input's
+  edge starts the next line whole, and a space that finds its line full
+  stays at its end, unshown. A pasted text's or an image's token counts
+  as one word. A word wider than the input breaks at any character, as
+  text with no spaces does.
 - Shift+Enter or Ctrl+J: a new line. Up and Down past the ends: the
   messages sent before (not once you moved the cursor along what you
   typed, by a key or a click).
