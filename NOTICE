@@ -7,4 +7,7 @@ Version 2.0 (LICENSE). The changes are by 4our4ace.
 
 The libraries compiled into illi (package.json's dependencies) are under
 the MIT License; one holds a table generated from the Unicode Character
-Database, under the Unicode License v3. See THIRD_PARTY_NOTICES.md.
+Database, under the Unicode License v3. illi's release files, made with
+bun build --compile, also hold Bun's runtime, under the licenses Bun
+lists for it: MIT for Bun itself, the LGPL for JavaScriptCore, WebKit
+and TinyCC, others for the rest. See THIRD_PARTY_NOTICES.md.
