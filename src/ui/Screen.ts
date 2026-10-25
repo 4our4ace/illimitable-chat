@@ -1083,7 +1083,9 @@ function ed_row(laid: Laid, r: number): Place[] {
 // indent, at the row's start; past the row's text, after its last
 // character (a row wrapped: where the next row starts, which shows the
 // cursor); past the last row, at the text's end (before the first, its
-// start); inside a chip (a paste's token, an image's), at its nearer edge
+// start); inside a chip (a paste's token, an image's), at its nearer
+// edge. A row with no place (a character wider than the input put on the
+// next): the next row's first
 export function ed_at(laid: Laid, top: number, row: number, col: number): number {
   const r = top + row;
   if (r < 0 || r >= laid.rows.length) {
@@ -1093,7 +1095,7 @@ export function ed_at(laid: Laid, top: number, row: number, col: number): number
   const here = line.wrap.places.filter((p) => p.row === r - line.row);
   const next = line.wrap.places.find((p) => p.row > r - line.row);
   const c    = col - Paint.text_width(Theme.GLYPH.input);
-  const at   = c >= Paint.text_width(laid.rows[r]) ? next ?? here[here.length - 1] : here.filter((p) => p.col <= c).pop() ?? here[0];
+  const at   = c >= Paint.text_width(laid.rows[r]) ? next ?? here[here.length - 1] : here.filter((p) => p.col <= c).pop() ?? here[0] ?? next;
   return ed_chip(laid.text, line.pos + at.pos);
 }
 
