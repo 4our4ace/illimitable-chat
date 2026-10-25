@@ -22,6 +22,7 @@ import * as config from "../config/Config.ts";
 import { Custom } from "../config/Custom.ts";
 import type { Mode } from "../tools/Guard.ts";
 import { Mcp } from "../tools/Mcp.ts";
+import { ClaudeCode } from "../ai/ClaudeCode.ts";
 import { Plugins } from "../config/Plugins.ts";
 import { term_note } from "./Notices.ts";
 import { Pick } from "../ai/Pick.ts";
@@ -31,6 +32,9 @@ import { term_act, term_send, type Term } from "./Term.ts";
 
 // the widest a value shows in the picker, so what it is fits beside it
 const WIDE = 24;
+
+// what `off`'s list says of a server of Claude Code's own
+const CLAUDE_CODE = "MCP server · Claude Code";
 
 // the settings, in their order
 const KEYS = Object.keys(config.SETTINGS) as config.Key[];
@@ -158,13 +162,14 @@ export function setting_open(t: Term, key: config.Key): void {
   t.scr.typed = true;
 }
 
-// Enter on `off`: each skill, agent, command, MCP server and plugin, what
-// it is and where it's from (built in, global, the profile, the
-// project, a plugin: its part by the name it is listed by), on or off; Enter, Left or Right turns the lit one on or off,
-// kept in `off` at once (a server or plugin starts or stops at the next
-// start). In a
-// profile, one off globally stays off: a note says where to turn it on
-// (Config ADDS)
+// Enter on `off`: each skill, agent, command, MCP server (illi's own,
+// then Claude Code's as its last call told them: ClaudeCode.servers) and
+// plugin, what it is and where it's from (built in, global, the profile,
+// the project, a plugin: its part by the name it is listed by; Claude
+// Code), on or off (setting_on); Enter, Left or Right turns the lit one
+// on or off (setting_toggle), kept in `off` at once (illi's own server or
+// a plugin starts or stops at the next start; Claude Code's server leaves
+// illi's calls, or comes back, from the next call)
 function setting_off(t: Term): void {
   const cwd   = process.cwd();
   const own   = config.DIR !== config.ROOT;
@@ -174,28 +179,46 @@ function setting_off(t: Term): void {
     ...Custom.parts(cwd, "agents", true).map((p) => [p.name, "agent · " + (p.plugin === null ? where(p.file) : "plugin " + p.plugin.name)]),
     ...Custom.parts(cwd, "commands", true).map((p) => [p.name, "command · " + (p.plugin === null ? where(p.file) : "plugin " + p.plugin.name)]),
     ...Object.entries(Mcp.read(cwd, true)).map(([name, f]) => [name, "MCP server · " + (f.plugin !== null ? "plugin " + f.plugin : where(f.file))]),
+    ...(ClaudeCode.servers() ?? []).map((s) => [s.name, CLAUDE_CODE]),
     ...Plugins.found().map((p) => [p.name, "plugin · " + where(p.dir || p.file)]),
   ];
-  const global = (name: string) => own && config.config_names("off", true).includes(name.toLowerCase());
-  const aside  = () => rows.map(([name]) => (!config.config_off(name) ? "on" : global(name) ? "off globally" : "off"));
-  const keys   = (k: number, press: string) => {
+  const aside = () => rows.map(([name]) => setting_on(name));
+  const keys  = (k: number, press: string) => {
     if (!["Enter", "Left", "Right"].includes(press)) {
       return false;
     }
-    const name = rows[k][0].toLowerCase();
-    const list = config.config_names("off", false);
-    if (global(name)) {
-      term_note(t, rows[k][0] + " is off globally: turn it on in the default profile.");
-      return true;
-    }
-    const next = list.includes(name) ? list.filter((n) => n !== name) : [...list, name];
-    if (setting_set(t, "off", next.length === 0 ? null : next.join(", ")) && t.choose !== null) {
+    if (setting_toggle(t, rows[k][0]) && t.choose !== null) {
       t.choose.aside = aside();
     }
     return true;
   };
-  const foot = (k: number) => "Enter on/off · " + (/^(MCP|plugin)/.test(rows[k][1]) ? "at the next start" : "applies now");
+  const foot = (k: number) => "Enter on/off · " + (rows[k][1] === CLAUDE_CODE ? "from the next call" : /^(MCP|plugin)/.test(rows[k][1]) ? "at the next start" : "applies now");
   term_chooser(t, "Turned off" + (own ? " in " + config.PROFILE : ""), rows.map(([name]) => name), rows.map(([, about]) => about), -1, () => {}, { find: true, keys, foot, aside: aside() });
+}
+
+// what `off` holds of a name: on, off, or, in a profile, off globally
+// (the default profile's list, every profile's: Config ADDS)
+export function setting_on(name: string): string {
+  return !config.config_off(name) ? "on" : setting_global(name) ? "off globally" : "off";
+}
+
+// a name turned off, or on again, in `off` (setting_set); true if it
+// was. In a profile, one off globally stays off: a note says where to
+// turn it on
+export function setting_toggle(t: Term, name: string): boolean {
+  if (setting_global(name)) {
+    term_note(t, name + " is off globally: turn it on in the default profile.");
+    return false;
+  }
+  const list = config.config_names("off", false);
+  const low  = name.toLowerCase();
+  const next = list.includes(low) ? list.filter((n) => n !== low) : [...list, low];
+  return setting_set(t, "off", next.length === 0 ? null : next.join(", "));
+}
+
+// whether a profile's illi has a name off by the default profile's list
+function setting_global(name: string): boolean {
+  return config.DIR !== config.ROOT && config.config_names("off", true).includes(name.toLowerCase());
 }
 
 // Enter on `sticky`: each sticky skill, where its on and off is kept

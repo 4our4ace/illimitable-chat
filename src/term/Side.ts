@@ -5,11 +5,12 @@
 // the profiles (two or more; those open in this window marked as they
 // are), a plan's use (ChatGPT's, Claude's), the chat's (the
 // context, the memory), the past topics related to the work (the radar:
-// Related.ts), the MCP servers, the requests refused, the plugins'
-// lines, a hint for the keys or illi's to-do list; the side and
-// side_width settings place it.
+// Related.ts), the MCP servers (illi's own, Claude Code's), the requests
+// refused, the plugins' lines, a hint for the keys or illi's to-do list;
+// the side and side_width settings place it.
 
-import { term_background, term_choose, term_mcp, term_stick } from "./Commands.ts";
+import { ClaudeCode, type Theirs } from "../ai/ClaudeCode.ts";
+import { term_background, term_choose, term_mcp, term_mcp_state, term_stick } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Custom, type Skill } from "../config/Custom.ts";
 import * as Draw from "../ui/Draw.ts";
@@ -258,21 +259,26 @@ function term_bar(f: number, w: number, c: string): Item {
 
 // the user's MCP servers, a line each, their names aligned: ● ready
 // (in the theme's success; its tools counted), ✗ failed (its error), ◌
-// starting; a file that won't read; a click on any: /mcp
+// starting; a file that won't read; then, under a dim line, Claude
+// Code's own as its last call told them (ClaudeCode.servers), but one
+// illi's own of its name stands in for: ● connected (its tools counted,
+// once told), ✗ failed, dim one `off` names, or as Claude Code says it
+// is (term_mcp_state); a click on any: /mcp, lit on it
 function term_side_mcp(t: Term): Item[] {
   const { servers, troubles } = Mcp.status();
-  const wide = Math.max(0, ...servers.map((s) => Paint.text_width(s.name)));
+  const theirs = (ClaudeCode.servers() ?? []).filter((s) => !s.over);
+  const wide = Math.max(0, ...[...servers, ...theirs].map((s) => Paint.text_width(s.name)));
   const tone = Draw.draw_tokens();
   const red  = { ...Paint.INK, c: tone.error };
-  const line = (s: Server): Paint.Line => {
-    const name = s.name + " ".repeat(wide - Paint.text_width(s.name));
-    const n    = s.own.size;
-    return s.state === "ready" ? [Paint.Run("● ", { ...Paint.INK, c: tone.success }), Paint.Run(name), Paint.Run("  " + n + (n === 1 ? " tool" : " tools"), Paint.DIM)]
-      : s.state === "failed" ? [Paint.Run(GLYPH.failed + " ", red), Paint.Run(name, Paint.DIM), Paint.Run("  failed", { ...Paint.DIM, c: tone.error })]
-      : [Paint.Run("◌ " + name + "  starting", Paint.DIM)];
-  };
+  const pad  = (name: string) => name + " ".repeat(wide - Paint.text_width(name));
+  const ok   = (name: string, n: number | null): Paint.Line => [Paint.Run("● ", { ...Paint.INK, c: tone.success }), Paint.Run(pad(name)), ...(n === null ? [] : [Paint.Run("  " + term_mcp_state("connected", n), Paint.DIM)])];
+  const bad  = (name: string): Paint.Line => [Paint.Run(GLYPH.failed + " ", red), Paint.Run(pad(name), Paint.DIM), Paint.Run("  failed", { ...Paint.DIM, c: tone.error })];
+  const line = (s: Server): Paint.Line => (s.state === "ready" ? ok(s.name, s.own.size) : s.state === "failed" ? bad(s.name) : [Paint.Run("◌ " + pad(s.name) + "  starting", Paint.DIM)]);
+  const their = (s: Theirs): Paint.Line => (s.off ? [Paint.Run("  " + pad(s.name) + "  off", Paint.DIM)] : s.status === "connected" ? ok(s.name, s.tools?.length ?? null) : s.status === "failed" ? bad(s.name) : [Paint.Run("  " + pad(s.name) + "  " + term_mcp_state(s.status, null), Paint.DIM)]);
   const file = troubles.length === 0 ? [] : [[Paint.Run(GLYPH.failed + " ", red), Paint.Run((troubles.length === 1 ? "an MCP file" : troubles.length + " MCP files") + " won't read", Paint.DIM)]];
-  return [...servers.map(line), ...file].map((l): Item => [l, () => term_mcp(t)]);
+  const cc   = theirs.length === 0 ? [] : [[Paint.Run("Claude Code's", Paint.DIM)] as Paint.Line, ...theirs.map(their)];
+  const at   = [...servers.map((s) => s.name), ...file.map(() => ""), ...cc.map((_, k) => (k === 0 ? "" : theirs[k - 1].name))];
+  return [...servers.map(line), ...file, ...cc].map((l, k): Item => [l, () => term_mcp(t, at[k], k >= servers.length + file.length)]);
 }
 
 // the requests refused, the latest REFUSED, newest first, a line each:
