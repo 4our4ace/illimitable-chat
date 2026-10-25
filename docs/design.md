@@ -88,7 +88,7 @@ in plain words, then how it ended:
   `Edited a.ts, b.ts`); a web search's query, page or text looked for
   (`Searched "bend"`, `Opened example.com/path`, `Found "x" in page`);
   illi's own tools in words (`Searched memory for "auto compact"`,
-  `Looked back at #123`, `Started Scout`, `Updated the to-do list`); an
+  `Looked back at #123`, `Started FireAnt`, `Updated the to-do list`); an
   MCP server's or a plugin's tool as `server: tool` and its first
   telling value; any other tool, its name and its most telling short
   value. How it ended: a command's exit (`exit 0`, `exit 2`, `stopped`,
