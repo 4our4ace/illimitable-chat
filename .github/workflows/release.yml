@@ -1,7 +1,9 @@
 # A tag v* builds illi as one file for each system and releases them,
 # the latest of which install.sh downloads and illi updates itself to.
 # Only a tag that names package.json's version, on code whose type check
-# and tests pass, is built; only the release job may write.
+# and tests pass, is built; only the release job may write. Each job has
+# a time limit some times its usual length, so a hang fails in minutes
+# instead of running the runner's six hours.
 name: release
 
 on:
@@ -14,6 +16,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -40,6 +43,7 @@ jobs:
           - { runner: macos-latest,  target: darwin-x64 }
           - { runner: macos-latest,  target: darwin-arm64 }
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -58,6 +62,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
