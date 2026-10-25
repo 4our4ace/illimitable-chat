@@ -9,8 +9,9 @@
 // and writes only the rows that changed. A drag anywhere chooses text
 // and copies it as it's let go (Select.ts); in the chat, a click opens,
 // closes or folds what's under it, which lights as the pointer goes over
-// it, and it stays under the pointer (Keys.ts, Select.ts); in the input,
-// a press puts the cursor where it lands. Every act is a command
+// it, and it stays under the pointer (Keys.ts, Select.ts); in a line
+// typed in (the input, a question's, a list's search), a press puts the
+// cursor where it lands. Every act is a command
 // (Commands.ts, /help), a key's too (Keys.ts), and so is each of the
 // user's commands (Custom.ts) and skills; images attach by a path, a
 // drop or the clipboard (Attach.ts). The user's MCP servers start with
