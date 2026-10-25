@@ -182,7 +182,7 @@ export namespace Machine {
       Machine.look();
     }
     const time = ((performance.now() - start) / 1000).toFixed(1) + " s";
-    const exit = signal.aborted ? "stopped" : proc.signalCode ? "killed by " + proc.signalCode : "exit " + code;
+    const exit = signal.aborted ? "stopped" : proc.signalCode ? "killed by " + (typeof proc.signalCode === "number" ? "signal " : "") + proc.signalCode : "exit " + code;
     const text = out.text().replace(/\n$/, "");
     return { text: (text === "" ? "" : text + "\n") + "(" + exit + " in " + time + ")", fail: exit !== "exit 0" };
   }
