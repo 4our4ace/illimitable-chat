@@ -31,7 +31,7 @@ function git(cwd: string, ...args: string[]): { code: number; out: string } {
 // the tools of a chat on the throwaway repository, in auto mode, no one
 // there to ask (a question: a no, said so)
 const ask   = async () => ({ yes: false, always: false, said: "No one is at illi's screen to ask, so it isn't allowed." });
-const tools = { mem: null as any, agents: new Map(), perm: { mode: "auto" as const, granted: new Set<string>(), refused: [], calls: new Map<string, string[]>() }, url: "", cwd: REPO, hooks: { main: () => null, ask, change: () => {} } as any };
+const tools = { mem: null as any, agents: new Map(), perm: { mode: "auto" as const, granted: new Set<string>(), refused: [], calls: new Map<string, string[]>() }, url: "", cwd: REPO, hooks: { main: () => null, ask, change: () => {} } as any, gone: [] };
 const shell = (command: string) => Tools.call(tools, "main", "shell", { command }, new AbortController().signal);
 
 test("a test's repository is new, in the temp folder outside this checkout, its own top, with no remote", () => {
