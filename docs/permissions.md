@@ -281,7 +281,9 @@ git push --force origin main
   command you saw. The answer names it on one line; one too long for
   three shows how it starts and how it ends.
 - No tells illi you refused, with your words if you say why; Esc is No.
-  A subagent's question names it.
+  A click in the line asking why puts the cursor where it lands, as in
+  your message ([Typing](keys.md#typing)). A subagent's question names
+  it.
 - A click picks as Enter does; a click outside never answers it (the
   chat scrolls, text is selected and copied as ever). For half a second
   after it appears it takes no Enter or click, so a key meant for the

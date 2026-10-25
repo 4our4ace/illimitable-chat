@@ -4,12 +4,15 @@
 // chat, a pane, the side, the head, the foot) chooses the text it goes
 // over and copies it as it's let go; a double click a word (a path, a
 // link), three a line, dragged on, more of them; past a chat's edge, it
-// scrolls. A press on the input (its rows, the rule under them) puts its
-// cursor where it lands first, as a key moves it (Screen.ts ed_at): a
-// drag from there still chooses, a double click still a word, the cursor
-// left where the press put it. Empty space is chosen too, as in Claude
-// Code: past a line's text and on a blank line, the choice lights to its
-// end (or the area's width); what's copied drops each line's end spaces.
+// scrolls. A press on a line typed in puts its cursor where it lands
+// first, as a key moves it (term_put): on the input or a question's line
+// asked (their rows, the rule under them: Screen.ts ed_at) a drag from
+// there still chooses, a double click still a word, the cursor left
+// where the press put it; on illi's form's words or a list's search, the
+// press is the popup's (Popup.ts popup_mouse). Empty space is chosen
+// too, as in Claude Code: past a line's text and on a blank line, the
+// choice lights to its end (or the area's width); what's copied drops
+// each line's end spaces.
 // A reply's button under the pointer lights, and a click copies what it
 // holds; buttons are no text, so what's copied or quoted leaves them out.
 // The right button dragged over the chat chooses the same way (not from a

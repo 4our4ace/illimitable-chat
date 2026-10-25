@@ -1076,9 +1076,10 @@ function ed_row(laid: Laid, r: number): Place[] {
   return line.wrap.places.filter((p) => p.row === r - line.row).map((p) => ({ pos: line.pos + p.pos, row: r, col: p.col }));
 }
 
-// where a click puts the cursor in the input laid out (laid), shown from
-// its row top: at row and column col of what shows, as screen_input lays
-// it out (the mark first, the other rows indented as far). On a
+// where a click puts the cursor in the input laid out (laid; or a line
+// laid out as it: a question's line asked, illi's form's words), shown
+// from its row top: at row and column col of what shows, as screen_input
+// lays it out (the mark first, the other rows indented as far). On a
 // character, before it (a wide one by either half); on the mark or the
 // indent, at the row's start; past the row's text, after its last
 // character (a row wrapped: where the next row starts, which shows the
