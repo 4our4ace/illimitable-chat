@@ -192,7 +192,8 @@ export namespace When {
   }
 
   // the times of a stretch, first to last, in a span's lines (When.at):
-  // one if both fall in one minute; the last's day left out if the first's
+  // one if both fall in one minute; the last's day left out if the
+  // first's, or if it is the span's one day, as When.at leaves it out
   // (14:05–16:40, Tue 20 23:10–00:40 in a span of the 21st)
   export function range(first: number, last: number, span: Span): string {
     if (Math.floor(first / 60000) === Math.floor(last / 60000)) {

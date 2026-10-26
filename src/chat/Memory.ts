@@ -150,8 +150,9 @@ const WAIT = "(not summarized yet: zoom it)";
 
 // the date tool's cap on a span's lines (Memory.lines): they split finer
 // only while they stay SPAN_LINES at most and their texts SPAN_BYTES
-// (TOKEN each: about 1,200 tokens), so a longer span gets coarser lines,
-// never more of them; only the tree's roots over a span, if more, pass it
+// (TOKEN each: about 1,200 tokens), so a span of more messages (or
+// longer lines) gets coarser lines, never more of them, however long or
+// short it is in time; only the tree's roots over a span, if more, pass it
 const SPAN_LINES = 12;
 const SPAN_BYTES = 4800;
 
@@ -831,8 +832,9 @@ export namespace Memory {
   // coarsest lines that tile the chat), then, a batch at a time, those not
   // built, else all of the largest, each split into the halves it was
   // made from that reach [a, b), while the lines stay SPAN_LINES at most
-  // and their texts SPAN_BYTES (a line not built as WAIT): so a short span
-  // gets its messages, a long one coarser lines, never more of them. A
+  // and their texts SPAN_BYTES (a line not built as WAIT): so a span of a
+  // few messages gets them each, one of many coarser lines, never more of
+  // them. A
   // line not built that can't split (a message, or no room) is left so,
   // and zoom opens it all the same. The roots alone can pass both (one for
   // each set bit of the chat's count: 13 over a chat of 8,191), and stay:
