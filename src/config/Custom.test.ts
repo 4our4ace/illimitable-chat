@@ -12,7 +12,7 @@
 // it, with its Claude Code tools (none on a ChatGPT model whose window
 // isn't told: never guessed); one started fresh (its agent's fresh:
 // true, listed so to spawn, or spawn's) gets none of the chat, told
-// again after a restart too.
+// again after a restart too, its role read back from any first note.
 // A skill: its folder's SKILL.md (a folded description), the
 // project's over theirs, listed by the skill tool and loaded by it; a
 // sticky one turned on and off by it, while on in every turn's prompt;
@@ -280,6 +280,29 @@ test("an agent with fresh: true (listed so to spawn), or spawn's fresh, starts i
     await until(() => !chat.busy);
   } finally {
     fs.rmSync(CWD + "/.illi/agents/tester.md", { force: true });
+  }
+});
+
+test("a subagent's log gives back its role after a restart, whatever its first note says: an old one, an agent named at, a plugin's agent, one started fresh", () => {
+  const roles: Array<[string, { effort: string | null; agent: string | null; fresh?: boolean } | null]> = [
+    ["subagent", { effort: null, agent: null }],
+    ["subagent reviewer", { effort: null, agent: "reviewer" }],
+    ["subagent reviewer at effort high", { effort: "high", agent: "reviewer" }],
+    ["subagent at effort low", { effort: "low", agent: null }],
+    ["subagent at", { effort: null, agent: "at" }],
+    ["subagent at at effort max", { effort: "max", agent: "at" }],
+    ["subagent kit:reviewer at effort high", { effort: "high", agent: "kit:reviewer" }],
+    ["subagent, without the chat", { effort: null, agent: null, fresh: true }],
+    ["subagent at, without the chat", { effort: null, agent: "at", fresh: true }],
+    ["subagent kit:reviewer at effort low, without the chat", { effort: "low", agent: "kit:reviewer", fresh: true }],
+    ["subagent reviewer without the chat", null],
+    ["a note of another kind", null],
+  ];
+  for (const [note, role] of roles) {
+    const name = Logs.start(chat.mem, null, () => false);
+    Logs.push(chat.mem, name, "note", note);
+    expect([note, Tools.agent(chat.tools, name)?.role ?? null]).toEqual([note, role === null ? null : { $: "sub", ...role }]);
+    chat.tools.agents.delete(name);
   }
 });
 
