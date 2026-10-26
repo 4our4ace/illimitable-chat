@@ -27,17 +27,17 @@
 // tools by their own names; a subagent's own steps (inside its Task)
 // aren't shown. The last result ends the call: answered, or in plain
 // words (a plan's limit and when it resets, a login missing, a chat too
-// long for the window: `full`, a busy service); a turn's call runs with
-// Claude Code's compaction off, so one outgrowing the window ends `full`
-// and illi folds the chat (ClaudeCode.env); the tokens its first
-// request read, as its stream tells, go with its end (End.first), so the
-// chat learns what Claude Code's own prompt and tools take beside it
-// (Chat.cap). A stop interrupts it
-// (SIGINT, then SIGKILL), what streamed of its message logged as cut
-// off. A model's window, as a result tells it, is learned (Pick.told, by
-// its canonical id) and kept for the next start; the plan's use, as each
-// rate limit event tells it (its 5-hour and weekly windows), shows at
-// the side (ClaudeCode.told).
+// long for the window: `full`, a busy service); a turn's call, and an
+// illi agent's, runs with Claude Code's compaction off, so one
+// outgrowing the window ends `full` and illi folds the chat, or recaps
+// the agent's log (ClaudeCode.env); the tokens its first request read,
+// as its stream tells, go with its end (End.first), so the chat learns
+// what Claude Code's own prompt and tools take beside it (Chat.cap). A
+// stop interrupts it (SIGINT, then SIGKILL), what streamed of its
+// message logged as cut off. A model's window, as a result tells it, is
+// learned (Pick.told, by its canonical id) and kept for the next start;
+// the plan's use, as each rate limit event tells it (its 5-hour and
+// weekly windows), shows at the side (ClaudeCode.told).
 //
 // Claude Code's own MCP servers (claude mcp add, its plugins', the
 // claude.ai connectors) load in a call with tools beside illi's server.

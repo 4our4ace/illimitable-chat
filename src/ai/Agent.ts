@@ -25,18 +25,18 @@
 // a stop reason: its input's doing) or not: `full`, the request too long
 // for the model's window (a vendor's refusal saying so, or a step past
 // the call's `room` in tokens once its tools ran: Chat.refit makes the
-// chat fit and goes on; End.grew once a step's tool results went in,
-// that step having fit); `down`, the vendor's (a
-// refusal of the request, as when the API key is wrong or its credit or
-// plan used up, or busy past the tries: End.again); `lost`, ours (a
-// stop), saying why. A vendor's why goes to the log (a refused body
-// whole); a refusal's is the call's end too, in plain words and with
-// what to do about it (the keys are the user's own), while a busy
-// vendor's reads only that the AI service is busy, or that its host
-// can't be reached (no connection), as the call's end and each retry's
-// thought; a reply cut short is marked so. A stop ends the call and cuts
-// its request at once. A request takes its place in single flight
-// (AskAI.wait) as it is sent.
+// chat fit and goes on, Tools.refit an agent's from its recap; End.grew
+// once a step's tool results went in, that step having fit); `down`,
+// the vendor's (a refusal of the request, as when the API key is wrong
+// or its credit or plan used up, or busy past the tries: End.again);
+// `lost`, ours (a stop), saying why. A vendor's why goes to the log (a
+// refused body whole); a refusal's is the call's end too, in plain words
+// and with what to do about it (the keys are the user's own), while a
+// busy vendor's reads only that the AI service is busy, or that its
+// host can't be reached (no connection), as the call's end and each
+// retry's thought; a reply cut short is marked so. A stop ends the call
+// and cuts its request at once. A request takes its place in single
+// flight (AskAI.wait) as it is sent.
 
 import { AskAI, type Ask, type Block, type Flight, type Try, type End, type Event, type Img, type Kind, type Say, type Usage, type Vendor } from "./AskAI.ts";
 import { Anthropic } from "./Anthropic.ts";
