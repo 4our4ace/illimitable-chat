@@ -147,7 +147,7 @@ one:
   set it; autocontinue: on or off, whether a turn whose chat outgrows
   the model's window mid-run goes on by itself (on: as often as its work
   needs; a chat too long in itself ends it past three times in a row)
-  or ends there
+  or ends there; a subagent always goes on, from a recap of its own work
 - rules: the rules file, RULES.md in illi's folder (else the global
   folder's) unless set; after: a shell command run after each turn
 - off: skills, agents, commands, MCP servers and plugins turned off, by
