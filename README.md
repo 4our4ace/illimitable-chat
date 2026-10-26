@@ -38,21 +38,25 @@ sessions.
 Every message is kept, for weeks, months, years, and saved before illi
 answers, so not even a crash loses one. Old messages fold into a tree
 of summary lines, coarser with age, and any line unfolds back to the
-exact words. While illi works, past moments that touch the same files
-and errors light up at the side, a click away, and the strongest one
-is handed to illi too, as one line it can unfold.
+exact words.
 
-![A related past topic opened from the side: its summary line on top, the original messages under it](assets/screens/recall.webp)
+![illi's memory tree: eight messages on the right, kept word for word; summary lines to their left, each covering twice the messages of the column to its right, up to one line for all eight; in cyan, what illi reads when it answers; in violet, zooms from a line down to two of its messages](assets/screens/memory-tree.webp)
 
-```mermaid
-flowchart TD
-  T["1,024 messages, in one line"] --> H1["the first 512, in one line"] & H2["the last 512, in one line"]
-  H1 -.-> P["two messages, in one line"]
-  P --> M1["one message, in one line"] & M2["the next, in one line"]
-```
+Read it right to left. Each message, kept word for word, gets a line
+of its own: the message itself if it is short, else a summary of it.
+Two lines fold into one, and so on up. Each time illi answers, it
+reads the older messages as summary lines and the newest in full
+(cyan), and it can zoom any line down, half by half, to the exact
+words (violet).
 
 The tree only ever grows at its end, so nearly every call is a prompt
 cache hit: a chat a year long stays fast and cheap.
+
+While illi works, past moments that touch the same files and errors
+light up at the side, a click away, and the strongest one is handed to
+illi too, as one line it can unfold.
+
+![A related past topic opened from the side: its summary line on top, the original messages under it](assets/screens/recall.webp)
 
 It works in parallel
 --------------------
