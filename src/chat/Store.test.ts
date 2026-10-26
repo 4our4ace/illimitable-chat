@@ -18,7 +18,9 @@
 // as it was, and its close leaves the place's new file alone. A file
 // that won't open is named. A span of time is found by bisection, in
 // point reads alone: whole messages (one of three pages stands where its
-// first is dated), a clock set back ending it all the same.
+// first is dated), a clock set back ending it all the same; a search in
+// a span keeps the lines over its messages alone, the best of those, not
+// the best of all cut down, in each chat's own span.
 
 import { afterAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -283,3 +285,26 @@ test("a clock set back: the bisection ends all the same, at a message dated from
   Store.close(store);
 });
 
+test("a search in a span keeps the lines over its messages alone, the best of those, not the best of all cut down, in each chat's own span", () => {
+  const home = Store.open(DIR + "/spans");
+  const app = Store.open(DIR + "/spans", APP);
+  const site = Store.open(DIR + "/spans", SITE);
+  const day = (d: number, h: number) => new Date(Date.UTC(2026, 9, d, h)).toISOString();
+  // app: 40 messages on the 20th, 4 on the 21st; site: 2 on the 21st
+  Store.push(app, Array.from({ length: 44 }, (_, i) => ({ i, kind: "user" as const, text: "m", date: i < 40 ? day(20, 8) : day(21, 9), size: 1 })), "/work/app");
+  Store.push(site, [0, 1].map((i) => ({ i, kind: "user" as const, text: "m", date: day(21, 12), size: 1 })), "/work/site");
+  Store.nodes(app, [
+    ...Array.from({ length: 40 }, (_, k) => ({ first: k, n: 1, text: "user: the cache bug cache bug again " + k })),
+    { first: 40, n: 1, text: "user: a cache bug, found at last" },
+    { first: 40, n: 4, text: "user: the cache bug day" },
+    { first: 32, n: 16, text: "user: weeks on the cache bug" },
+  ]);
+  Store.nodes(site, [{ first: 0, n: 2, text: "user: no cache bug here" }]);
+  const where = (found: any[]) => found.map((f) => f.project + " " + f.first + "+" + f.n).sort();
+  const span = { from: Date.parse(day(21, 0)), to: Date.parse(day(22, 0)) };
+  expect(Store.search(home, ["cache", "bug"], [app.file]).length).toBe(20);
+  expect(where(Store.search(home, ["cache", "bug"], [app.file], undefined, span))).toEqual(["app-k3f9x2 40+1", "app-k3f9x2 40+4"]);
+  expect(where(Store.search(home, ["cache", "bug"], null, undefined, span))).toEqual(["app-k3f9x2 40+1", "app-k3f9x2 40+4", "site-7q2m0d 0+2"]);
+  expect(Store.search(home, ["cache"], null, undefined, { from: Date.parse(day(23, 0)), to: Date.parse(day(24, 0)) })).toEqual([]);
+  [home, app, site].forEach(Store.close);
+});

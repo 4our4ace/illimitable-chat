@@ -22,6 +22,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { Ask, Found, Recall } from "./Radar.ts";
 import { HOME, Store, type Cut, type Place, type Store as File } from "./Store.ts";
+import { When, type Span } from "./When.ts";
 
 // Constants
 // =========
@@ -114,8 +115,8 @@ export namespace Projects {
   // a search (Projects.search) in a thread of its own, on its own
   // connections to the files, so however long it takes the screen goes
   // on; one the thread can't run is run here
-  export function seek(store: File, words: string, project = ""): Promise<string> {
-    return Projects.thread(SEEKER, { $: "search", file: store.file, words, scope: project }, () => Projects.search(store, words, project));
+  export function seek(store: File, words: string, project = "", span: Span | null = null): Promise<string> {
+    return Projects.thread(SEEKER, { $: "search", file: store.file, words, scope: project, span }, () => Projects.search(store, words, project, span));
   }
 
   // the radar's search (Radar.search) of a project's file in its own
@@ -195,19 +196,21 @@ export namespace Projects {
   }
 
   // summary lines with these words, as a model reads them ("project
-  // id+n|text"): in this project, one by its name, or "all"; in all, the
+  // id+n|text"): in this project, one by its name, or "all"; with a span,
+  // only lines over messages all dated in it (Store.search); in all, the
   // projects with lines left out are named after, by how many, so the
   // model can search in one for them
-  export function search(store: File, words: string, project = ""): string {
+  export function search(store: File, words: string, project = "", span: Span | null = null): string {
     const terms = words.split(/\s+/).filter((w) => w !== "");
     const file  = project === "" ? store.file : project === "all" ? null : Store.lookup(store, project);
     if (project !== "" && project !== "all" && file === null) {
       return "No project " + project + ": projects lists them.";
     }
     const cut   = new Map<string, Cut>();
-    const found = Store.search(store, terms, file === null ? null : [file], cut);
+    const found = Store.search(store, terms, file === null ? null : [file], cut, span);
     if (found.length === 0) {
-      return "No summary line holds " + (terms.length === 1 ? "that word" : "those words") + (project === "all" ? " in any project." : " in " + (project || "this project") + ".");
+      const when = span === null ? "" : " " + When.on(span);
+      return "No summary line holds " + (terms.length === 1 ? "that word" : "those words") + (project === "all" ? " in any project" : " in " + (project || "this project")) + when + ".";
     }
     const lines = found.map((f) => f.project + " " + f.first + "+" + f.n + "|" + f.text.replace(/\s*\n\s*/g, " ")).join("\n");
     const more  = [...cut].sort((a, b) => b[1].n - a[1].n).map(([name, c]) => name + " (" + c.n + (c.more ? "+" : "") + ")");

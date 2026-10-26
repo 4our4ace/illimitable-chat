@@ -653,15 +653,16 @@ export namespace Store {
   // index (Store.seek): each chat's best first, the best of those first,
   // then each one's second, and so on, as one index's scores weigh its
   // words by how rare they are in it, not in all, so a big chat's would
-  // crowd out every small one's. The lines past the FOUND given are
-  // counted in `cut`, by project (more: a chat of it had FOUND lines, its
-  // most, so it may hold more still)
-  export function search(store: Store, words: string[], files: string[] | null, cut?: Map<string, Cut>): Found[] {
+  // crowd out every small one's. With a span (When.Span), only lines over
+  // messages all dated in it, each chat's own (Store.span). The lines past
+  // the FOUND given are counted in `cut`, by project (more: a chat of it
+  // had FOUND lines, its most, so it may hold more still)
+  export function search(store: Store, words: string[], files: string[] | null, cut?: Map<string, Cut>, span: Span | null = null): Found[] {
     const terms = words.filter((w) => /[\p{L}\p{N}\p{Co}]/u.test(w));
     if (terms.length === 0) {
       return [];
     }
-    const ask = (or: boolean) => (files ?? Store.files(store)).flatMap((file) => Store.lines(store, file, terms, or)).sort((a, b) => a.k - b.k || a.score - b.score);
+    const ask = (or: boolean) => (files ?? Store.files(store)).flatMap((file) => Store.lines(store, file, terms, or, span)).sort((a, b) => a.k - b.k || a.score - b.score);
     const and = ask(false);
     const all = and.length > 0 || terms.length === 1 ? and : ask(true);
     for (const { project, full } of all.slice(FOUND)) {
@@ -673,11 +674,13 @@ export namespace Store {
 
   // a project's lines with the words (or: any), each chat's best
   // (Store.seek) with its rank in it (k), as its file was when they began
-  // (one read transaction); another project's file that won't read (gone
+  // (one read transaction); with a span, each chat's messages in it found
+  // first (Store.span); another project's file that won't read (gone
   // meanwhile): none
-  export function lines(store: Store, file: string, terms: string[], or: boolean): Array<Found & { score: number; k: number; full: boolean }> {
+  export function lines(store: Store, file: string, terms: string[], or: boolean, span: Span | null = null): Array<Found & { score: number; k: number; full: boolean }> {
     const project = Store.name(file);
-    const read = (s: Store) => s.db.transaction(() => Store.chats(s).flatMap((chat) => Store.seek(s.db, chat, terms, or).map((l, k, all) => ({ project, chat, k, full: all.length === FOUND, ...l }))))();
+    const seek = (s: Store, chat: number) => Store.seek(s.db, chat, terms, or, span === null ? null : Store.span({ ...s, chat }, span));
+    const read = (s: Store) => s.db.transaction(() => Store.chats(s).flatMap((chat) => seek(s, chat).map((l, k, all) => ({ project, chat, k, full: all.length === FOUND, ...l }))))();
     try {
       return Store.visit(store, file, read);
     } catch (err) {
@@ -689,19 +692,25 @@ export namespace Store {
   }
 
   // one chat's best lines with the words (or: any), by bm25, with their
-  // scores: every match ranked, however old. In a chat of more lines than
-  // LARGE, a word in most lines all along (over half of each of three
+  // scores: every match ranked, however old; with `within` ([a, b)), only
+  // lines over messages a… b - 1, kept by the query itself, so the best of
+  // those are found, not the best of all cut down. In a chat of more lines
+  // than LARGE, a word in most lines all along (over half of each of three
   // stretches of SAMPLE: the oldest, the middle, the newest) is left out
   // while a rarer one is in: bm25 gives it next to no weight, so the
   // ranking stays, and its lines are the most to read
-  export function seek(db: Database, chat: number, terms: string[], or: boolean): Array<Line & { score: number }> {
+  export function seek(db: Database, chat: number, terms: string[], or: boolean, within: [number, number] | null = null): Array<Line & { score: number }> {
     const table = "find_" + chat;
+    if (within !== null && within[0] === within[1]) {
+      return [];
+    }
     const quote = (words: string[]) => words.map((w) => '"' + w.replace(/"/g, '""') + '"').join(or ? " OR " : " ");
     const lines = (query(db, `select rowid from ${table} order by rowid desc limit 1`).get() as { rowid: number } | null)?.rowid ?? 0;
     const held = query(db, `select count(*) as n from (select 1 from ${table} where ${table} match ? and rowid >= ? and rowid < ?)`);
     const most = (word: string) => lines > LARGE && [lines - SAMPLE + 1, Math.floor((lines - SAMPLE) / 2) + 1, 1].every((from) => (held.get(quote([word]), from, from + SAMPLE) as { n: number }).n > SAMPLE / 2);
     const rare = terms.filter((w) => !most(w));
-    return query(db, `select first, n, text, bm25(${table}) as score from ${table} where ${table} match ? order by score limit ${FOUND}`).all(quote(rare.length > 0 ? rare : terms)) as Array<Line & { score: number }>;
+    const span = within === null ? "" : " and first >= ? and first + n <= ?";
+    return query(db, `select first, n, text, bm25(${table}) as score from ${table} where ${table} match ?${span} order by score limit ${FOUND}`).all(quote(rare.length > 0 ? rare : terms), ...(within ?? [])) as Array<Line & { score: number }>;
   }
 
   // the lines the store's chat's index holds (its last rowid: lines are
