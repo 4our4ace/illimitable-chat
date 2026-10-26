@@ -85,8 +85,9 @@ illi then runs Claude Code itself, as it ships, on your login:
 - **illi's memory, not Claude Code's compaction**: a turn runs with
   Claude Code's own compaction off. When a long turn fills the window,
   illi folds more of the chat into its tree and goes on where it was,
-  as on the other providers, so nothing is squashed into Claude Code's
-  summary. A subagent keeps Claude Code's compaction.
+  as on the other providers (`autocontinue`: [Config](config.md)), so
+  nothing is squashed into Claude Code's summary. A subagent keeps
+  Claude Code's compaction.
 - **Summaries run with nothing extra**: `claude -p` calls with no tools,
   MCP servers, commands or hooks.
 - **Your plan's use at the side**: the Usage section shows how much of

@@ -7,9 +7,10 @@
 // nor the model's own searches ever wait on it): its caller's run since
 // the user's last message (the chat's agent's, or a subagent's log) with
 // the call itself the newest of it, over the chat's summary lines, what
-// the caller's view holds at an episode's detail or finer (its lines of
-// Radar EPISODE messages or fewer: a line found there would say no more
-// than they do) and its recent messages left out, and what the user
+// the caller's view (a subagent's map) holds at an episode's detail or
+// finer (its lines of Radar EPISODE messages or fewer: a line found
+// there would say no more than they do) and its recent messages left
+// out, and what the user
 // dismissed at the side (tools.gone: Chat.dismiss, from any view). A
 // line found is given only if strong (Radar.strong: anchored by a path
 // or an error's name, two units at least, its score past the bar:

@@ -16,8 +16,9 @@
 // is used again, each log its own); each call gets its context and its
 // whole log, so a told agent goes on even after a restart; its replies
 // reach the chat as one "[Name]" message. It starts with a map of the
-// chat (Memory.map: a few dozen lines over it all, the newest messages
-// each its own), and zooms or searches for what its task needs. One
+// chat (Memory.map: a few dozen lines over it from the view's first
+// message, a /clear's or a recap's, the newest messages each its own),
+// and zooms or searches for what its task needs. One
 // started fresh (its agent's `fresh: true`, or spawn's) gets none of the
 // chat: no map, no tool reading it (MEMORY), no radar's line; its own
 // log alone. One spawned as a user's subagent (Custom.ts) runs on its

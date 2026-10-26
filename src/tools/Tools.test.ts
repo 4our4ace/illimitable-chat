@@ -10,9 +10,9 @@
 // of the calls: the input the main agent's last request read. A caller in
 // Claude Code gets only the tools it lacks (?lean), its permission prompt
 // whatever tools its agent lists (no other caller ever gets it), and
-// prompts that say it works inside illi (a subagent started fresh named
-// none of illi's tools that read the chat), the project's CLAUDE.md left
-// to Claude Code. Its
+// prompts that say it works inside illi (a subagent named only illi's
+// tools it has, one started fresh none that read the chat), the
+// project's CLAUDE.md left to Claude Code. Its
 // permission prompt, and illi's own shell, files and MCP tools, pass the
 // checks (Guard.ts; careful mode, in a throwaway repository): a
 // risk asked with why, the question given the command whole up to 32,000

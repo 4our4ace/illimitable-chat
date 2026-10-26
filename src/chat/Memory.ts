@@ -1,8 +1,8 @@
 // Memory
 // ======
-// The chat, kept forever, and the view of it every call sees. Sizes are
-// bytes of UTF-8. A message is logged in pages (Clip.ts CAP chars, PICS
-// images).
+// The chat, kept forever, and the views of it calls see (a subagent's,
+// a map of it). Sizes are bytes of UTF-8. A message is logged in pages
+// (Clip.ts CAP chars, PICS images).
 //
 // Over the messages grows a binary tree: node (0,i) is message i (or
 // the line it was logged with; a result without the <history> line
@@ -36,7 +36,9 @@
 // A span of time (the date tool's: Memory.days) is told from the lines
 // built already, no model asked: its messages found by date (Store.span),
 // then the coarsest lines over them split while a cap holds
-// (Memory.lines).
+// (Memory.lines); so is a subagent's map of the chat (Memory.map): the
+// chat's view's messages in a few dozen lines, the newest each its own,
+// detail fading with age.
 
 import type { Ask, Block, Call, Img, Kind, Say } from "../ai/AskAI.ts";
 import { Compactor } from "./Compactor.ts";
