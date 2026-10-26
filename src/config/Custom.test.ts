@@ -11,7 +11,8 @@
 // next message, each keeping its pick; spawn's agent runs a subagent as
 // it, with its Claude Code tools (none on a ChatGPT model whose window
 // isn't told: never guessed); one started fresh (its agent's fresh:
-// true, or spawn's) gets none of the chat, told again after a restart too.
+// true, listed so to spawn, or spawn's) gets none of the chat, told
+// again after a restart too.
 // A skill: its folder's SKILL.md (a folded description), the
 // project's over theirs, listed by the skill tool and loaded by it; a
 // sticky one turned on and off by it, while on in every turn's prompt;
@@ -240,12 +241,14 @@ test("spawn's agent runs a subagent as it, and names the user's agents", async (
   await until(() => !chat.busy);
 });
 
-test("an agent with fresh: true, or spawn's fresh, starts its subagent without the chat: no view, a prompt saying so, no tool reading the chat, and so again when told after a restart", async () => {
+test("an agent with fresh: true (listed so to spawn), or spawn's fresh, starts its subagent without the chat: no view, a prompt saying so, no tool reading the chat, and so again when told after a restart", async () => {
   put(CWD + "/.illi/agents/tester.md", "---\ndescription: Tests\nmode: subagent\nfresh: true\n---\nYou test.\n");
   const memory = ["zoom", "date", "projects", "search"];
   const signal = new AbortController().signal;
   try {
     expect([Custom.agent(CWD, "tester")!.fresh, Custom.agent(CWD, "reviewer")!.fresh]).toEqual([true, false]);
+    const listed = JSON.stringify(Tools.list(chat.tools, "main").find((t) => t.name === "spawn")!.schema);
+    expect([listed.includes("tester (Tests), fresh"), listed.includes("reviewer (Reviews), fresh")]).toEqual([true, false]);
     asks.length = 0;
     const out = await Tools.call(chat.tools, "main", "spawn", { tasks: ["test it"], agent: "tester" }, signal);
     const name = /Started (\w+)/.exec(out.text)![1];

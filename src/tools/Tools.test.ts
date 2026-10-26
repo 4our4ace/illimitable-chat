@@ -10,8 +10,9 @@
 // of the calls: the input the main agent's last request read. A caller in
 // Claude Code gets only the tools it lacks (?lean), its permission prompt
 // whatever tools its agent lists (no other caller ever gets it), and
-// prompts that say it works inside illi, the project's CLAUDE.md left to
-// Claude Code. Its
+// prompts that say it works inside illi (a subagent started fresh named
+// none of illi's tools that read the chat), the project's CLAUDE.md left
+// to Claude Code. Its
 // permission prompt, and illi's own shell, files and MCP tools, pass the
 // checks (Guard.ts; careful mode, in a throwaway repository): a
 // risk asked with why, the question given the command whole up to 32,000
@@ -163,6 +164,9 @@ test("a caller in Claude Code gets only the tools it lacks, served at ?lean; its
   expect(Tools.hosted(SUB)).toStartWith("Here you work as a subagent of illi");
   expect(Tools.hosted(SUB_FRESH)).toStartWith("Here you work as a subagent of illi");
   expect(Tools.hosted(SUB_FRESH)).not.toContain("Your shell, read, write and edit tools");
+  expect(Tools.hosted(SUB_FRESH + "\n\n# Agent: tester")).toContain("mcp__illi__");
+  expect(Tools.hosted(SUB_FRESH + "\n\n# Agent: tester")).not.toMatch(/\b(zoom|date|projects|search|todo)\b/);
+  expect(Tools.hosted(SUB)).toContain("zoom");
   expect(Tools.hosted(SUB)).not.toContain("Your shell, read, write and edit tools");
   const project = temp_repo("illi-tools-project-");
   fs.writeFileSync(project + "/CLAUDE.md", "a rule of the project");
