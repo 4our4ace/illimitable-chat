@@ -872,17 +872,27 @@ export namespace Memory {
   // before is a search away), oldest first, the newest MAP_RECENT each
   // its line, those before them tiled by the tree's largest nodes
   // (Memory.roots), then split one at a time, the most due first (one
-  // not built, else the most messages for its distance from the chat's
-  // end: detail fades with age, as in a view), while MAP_LINES and
-  // MAP_BYTES hold. Read from the lines built, no model asked: one not
-  // built says so, and zoom opens it. Lines past MAP_BYTES as they
-  // start (the roots, many over a long chat) each cut to a share of it
+  // not built over a half that is, else the most messages for its
+  // distance from the chat's end, built or not: detail fades with age,
+  // as in a view, so summaries lagging or stuck never spend the lines on
+  // the oldest messages), while MAP_LINES and MAP_BYTES hold. Read from
+  // the lines built (each read once), no model asked: one not built says
+  // so, and zoom opens it. Lines past MAP_BYTES as they start (the
+  // roots, many over a long chat) each cut to a share of it
   export function map(mem: Memory): Block[] {
     const from   = Math.min(mem.view.from, mem.count);
     const recent = Math.max(from, mem.count - MAP_RECENT);
-    const read   = (part: Part) => ({ part, text: Memory.node(mem, part) });
+    const texts  = new Map<number, string | null>();
+    const read   = (part: Part) => {
+      const slot = Memory.slot(part.l, part.i);
+      if (!texts.has(slot)) {
+        texts.set(slot, Memory.node(mem, part));
+      }
+      return { part, text: texts.get(slot) ?? null };
+    };
     const bytes  = (all: Array<{ text: string | null }>) => all.reduce((n, line) => n + Memory.bytes(line.text ?? WAIT), 0);
-    const due    = (line: { part: Part; text: string | null }) => (line.text === null ? Infinity : 2 ** line.part.l / (mem.count - Memory.span(line.part)[0]));
+    const shows  = (line: { part: Part; text: string | null }) => line.text === null && Memory.halves(line.part).some((half) => read(half).text !== null);
+    const due    = (line: { part: Part; text: string | null }) => (shows(line) ? Infinity : 2 ** line.part.l / (mem.count - Memory.span(line.part)[0]));
     let lines = [...Memory.roots(recent, from), ...Array.from({ length: mem.count - recent }, (_, k) => ({ l: 0, i: recent + k }))].map(read);
     for (;;) {
       const open = lines.filter((line) => line.part.l > 0);

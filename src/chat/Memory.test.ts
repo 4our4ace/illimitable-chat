@@ -31,7 +31,10 @@
 // the bytes stay, each text cut to its share. A span with no message says so, with the lines
 // just before and after it. A subagent's map: the chat (from the view's
 // first message) in a few dozen lines, the newest messages each its own,
-// detail fading with age, within its bytes; lines not built said so.
+// detail fading with age, within its bytes; lines not built said so, one
+// over a line built opened first, and with summaries lagging detail
+// still fading with age; its first lines past its bytes stay, each text
+// cut to its share.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -388,6 +391,14 @@ test("a map whose first lines pass its bytes: they stay, each text cut to its sh
   expect(lines.map((l) => l.split("|")[0])).toEqual([...roots.map((p) => Memory.ref(p)), ...Array.from({ length: 8 }, (_, k) => 8183 + k + "+1")]);
   const share = Math.floor(16000 / lines.length);
   expect(lines.slice(0, roots.length).every((l) => Buffer.byteLength(l.split("|")[1]) <= share && l.endsWith("…") && !l.includes("\uFFFD"))).toBe(true);
+});
+
+test("a map over summaries lagging or stuck (each message summarized, no line merged): detail fades with age all the same, never the oldest messages opened first", () => {
+  const times = Array.from({ length: 600 }, (_, k) => ny(21, 9) + k * 60e3);
+  const text = Memory.map(dated("map-unmerged", times, 100, 0))[0].text;
+  const refs = text.split("\n").filter((l) => /^\d+\+\d+\|/.test(l)).map((l) => l.split("|")[0]);
+  expect(refs).toEqual(["0+64", "64+64", "128+64", "192+64", "256+32", "288+32", "320+32", "352+32", "384+32", "416+16", "432+16", "448+16", "464+16", "480+16", "496+16", "512+8", "520+8", "528+8", "536+8", "544+8", "552+4", "556+4", "560+4", "564+4", "568+4", "572+4", "576+2", "578+2", ...Array.from({ length: 20 }, (_, k) => 580 + k + "+1")]);
+  expect([text.includes("\n0+64|(not summarized yet: zoom it)\n"), text.includes("\n580+1|l0i580 ")]).toEqual([true, true]);
 });
 
 test("a span with no message says so, with the lines just before and after it; at the chat's start or end, the one side; none at all, so", () => zoned(() => {
