@@ -748,7 +748,9 @@ gets none. In one read transaction, on that worker's connection:
      never under 10). It is read again at most once a minute.
 4. **Not named already**: `select text from msg where chat = ? and i >= ?
    and (text glob '*#[0-9]*' or text glob '*[0-9]+[0-9]*|*')` over the
-   recent messages (a subagent's whole log, from `work`), each read for
+   recent messages (a subagent's log in `work` as its calls get it: all
+   of it till a recap; past one, its first entry, illi's messages to it
+   and all from the last recap on), each read for
    `#1234+16`, `#1234` and `1234+16|`. A line overlapping one named
    there is skipped: a pin, a line given before, a zoom's or a search's
    output. Nothing is kept beside the chat, so this holds across
