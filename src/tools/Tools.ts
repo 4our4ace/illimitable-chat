@@ -265,6 +265,10 @@ const HOSTED_TOOLS = `illi's own tools (zoom, date, projects, search, todo, spaw
 and the user's MCP servers in illi) come from illi, as its MCP server's (mcp__illi__):
 keep your to-do list with illi's todo, which the user sees beside the
 chat.`;
+// illi's tools named to a subagent started fresh: none that reads the
+// chat (MEMORY)
+const HOSTED_ALONE = `illi's own tools (skill and the user's MCP servers in illi) come from
+illi, as its MCP server's (mcp__illi__).`;
 
 // the tools of everyone (OWN), the main agent's (boss), and those that run
 // on this computer (Machine.ts's TOOLS); those of OWN that read the chat
@@ -277,7 +281,7 @@ const OWN: Spec[] = [
   spec("search", "Find summary lines holding all the words (else any of them), the best first, as \"project id+n|text\": in this project's chat; with project (its name, from projects), in that one's; with project \"all\", in every one, then the projects with more lines named, to search in. Zoom a line with its project. With from and to (as date's), only lines inside that span.", { words: STR, project: STR, from: STR, to: STR }, ["words"]),
 ];
 const SPAWN = "Start one subagent per task, in parallel, and return their names at once. Each one's report reaches you as a message \"[Name] report\" when it finishes. A subagent sees the view and the user's instructions, but knows what you want only from its task. With fresh, it sees no view nor any of the chat, only its task and the user's instructions: for a test or review that must not be swayed by what came before.";
-const FRESH = { type: "boolean", description: "Start them without the chat: no view, and no tools that read it. Leave it out to give them the view (their agent may start fresh always)." };
+const FRESH = { type: "boolean", description: "Start them without the chat: no view, and no tools that read it. Leave it out to give them the view (an agent listed as fresh starts so always)." };
 const EFFORT = { type: "string", enum: EFFORTS, description: "How hard they think. Leave it out to use their agent's effort (or, with none, yours); set it only to override that." };
 const TELL: Spec = spec("tell", "Send a message to a subagent, by name. One at work reads it between its tool calls, and its report answers it; an idle one goes on from its chat, and its reply reaches you as a message \"[Name] reply\".", { name: STR, message: STR }, ["name", "message"]);
 
@@ -398,12 +402,13 @@ function skill_files(dir: string): string[] {
 }
 
 // the master's tools: spawn, with the user's subagents to run tasks as,
-// if any (only: those its agent may spawn, one of which it must name;
-// null: any, or none for a plain subagent; none of them there: no spawn,
-// as it could start nothing); tell; todo
+// if any, each one started fresh said so (only: those its agent may
+// spawn, one of which it must name; null: any, or none for a plain
+// subagent; none of them there: no spawn, as it could start nothing);
+// tell; todo
 function boss(cwd: string, only: string[] | null = null): Spec[] {
   const subs = Custom.subagents(cwd).filter((a) => only === null || Custom.called(a).some((n) => only.includes(n)));
-  const agents = subs.map((a) => a.name + (a.description === "" ? "" : " (" + a.description + ")"));
+  const agents = subs.map((a) => a.name + (a.description === "" ? "" : " (" + a.description + ")") + (a.fresh ? ", fresh" : ""));
   const agent = { type: "string", description: "The user's agent to run each task as, by name, with its own instructions, model and tools: " + agents.join("; ") + (only === null ? ". None: a plain subagent." : ". Name one of them: no other is allowed.") };
   const fields = agents.length === 0 ? { tasks: { type: "array", items: STR }, effort: EFFORT, fresh: FRESH } : { tasks: { type: "array", items: STR }, agent, effort: EFFORT, fresh: FRESH };
   const spawn = only !== null && agents.length === 0 ? [] : [spec("spawn", SPAWN, fields, only === null ? ["tasks"] : ["tasks", "agent"])];
@@ -442,9 +447,10 @@ export namespace Tools {
   }
 
   // a prompt as Claude Code gets it, after its own: who it is and its
-  // tools left to Claude Code (HOSTED), illi's tools named
+  // tools left to Claude Code (HOSTED), illi's tools named (a subagent
+  // started fresh, those it has: HOSTED_ALONE)
   export function hosted(head: string): string {
-    return HOSTED.reduce((text, [from, to]) => text.replace(from, to), head) + "\n\n" + HOSTED_TOOLS;
+    return HOSTED.reduce((text, [from, to]) => text.replace(from, to), head) + "\n\n" + (head.startsWith(SUB_FRESH) ? HOSTED_ALONE : HOSTED_TOOLS);
   }
 
   // the working dir and the computer it is on, the project as kept, and
