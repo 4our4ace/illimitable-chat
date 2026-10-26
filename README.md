@@ -49,11 +49,14 @@ illi too, as one line it can unfold.
 
 ![A related past topic opened from the side: its summary line on top, the original messages under it](assets/screens/recall.webp)
 
-It works in parallel
---------------------
+Its subagents know the story
+----------------------------
 
-Send a reviewer and a tester off together. They work side by side,
-report back, and illi merges what they found.
+Send a reviewer and a tester off together. Each subagent starts with
+illi's memory of the chat, as much as fits its model, not just a
+one-line task, and can open any old moment back to the exact words.
+What it reports stays in the chat for good. For a test that has to
+start blind, illi starts one fresh, without the chat.
 
 ![A reviewer and a tester in the side panel: the reviewer's report is in, the tester still at work](assets/screens/subagents.webp)
 
