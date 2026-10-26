@@ -9,8 +9,8 @@
 // refused), and the model's window learned (by its canonical id) and kept;
 // a call without tools has none of Claude Code's, an agent's tools list
 // only the built-in ones it names (--tools); a message sent mid-run is
-// taken as it is echoed, one
-// sent after the end is left; a plan's limit, a missing login, a chat
+// taken as it is echoed, one sent after the end left, as is one sent to
+// a call once (a recap), never written; a plan's limit, a missing login, a chat
 // too long (grown, once a tool's result came back; the message its API
 // error stands in never a reply) and a crash end it in plain words, a
 // turn's call (its room set) with Claude Code's compaction off, so illi
@@ -259,6 +259,15 @@ test("a message sent mid-run is taken as Claude Code echoes it; one sent after t
   expect(end).toMatchObject({ ok: true, text: "got both", left: [] });
   c.send({ text: "too late", imgs: [] });
   expect(end.left).toEqual([]);
+});
+
+test("a call once (a recap) takes no message sent mid-run: it is left for the next call, never written to Claude Code", async () => {
+  const { events, end, log } = await call("send", true, async (c) => {
+    await until(() => fs.existsSync(DIR + "/log.json") && JSON.parse(fs.readFileSync(DIR + "/log.json", "utf8")).input.length === 1);
+    c.send({ text: "and this", imgs: [] });
+  }, { once: true });
+  expect(events.filter((e) => e.$ === "Entry" && e.kind === "user")).toEqual([]);
+  expect([end.ok, end.left, log.input.length]).toEqual([true, [{ text: "and this", imgs: [] }], 1]);
 });
 
 test("a plan's limit, a missing login, a chat too long (grown once a tool's result came back) and a crash end the call in plain words", async () => {

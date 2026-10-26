@@ -7,7 +7,8 @@
 // long), else grown, as one refused as too long after them is (a step
 // asked again, or a message sent mid-run, grows nothing); what its
 // first request read is told, none when that one was refused. A call
-// once (a recap) runs no tool: one that calls one ends unanswered. A call
+// once (a recap) runs no tool: one that calls one ends unanswered; it
+// takes one step, a message sent meanwhile left for the next. A call
 // going on from another's keeps its vendor's cache marks in all: the
 // other's count. A request carries at most PICS images, the oldest left
 // out by halves (so its prefix holds for steps), the newest results'
@@ -30,9 +31,10 @@ test("a refusal's body says the request is too long for the window, each vendor'
 });
 
 // a call run on scripted steps (each reading `read` tokens, all but the
-// last calling a tool), its room `room`, maybe once: how it ended, the
-// tools it ran
-async function scripted(reads: number[], room?: number, once?: boolean) {
+// last calling a tool), its room `room`, maybe once, `sent` waiting as
+// it starts: how it ended, the tools it ran, the steps it took, the
+// messages left
+async function scripted(reads: number[], room?: number, once?: boolean, sent: any[] = []) {
   const step = Agent.step;
   const use = Agent.use;
   const ran: string[] = [];
@@ -46,9 +48,9 @@ async function scripted(reads: number[], room?: number, once?: boolean) {
   Agent.use = async (_run, _tools, u) => (ran.push(u.id), { text: "ok", fail: false });
   try {
     const ask = { vendor: "chatgpt", model: "m", effort: "low", speed: "slow", system: "", blocks: [{ text: "hi", mark: false }], searches: 0, server: "", room, once } as any;
-    const run = { ask, on: () => {}, sent: [], abort: new AbortController(), end: AskAI.end("") };
+    const run = { ask, on: () => {}, sent: [...sent], abort: new AbortController(), end: AskAI.end("") };
     await Agent.loop({ auth: { token: async () => "", spoil: () => {} }, marks: () => 0 } as any, run);
-    return { end: run.end, ran };
+    return { end: run.end, ran, steps: k, left: run.sent };
   } finally {
     Agent.step = step;
     Agent.use = use;
@@ -119,11 +121,14 @@ test("a call full past its first step with no tool results gone in (a step asked
   }
 });
 
-test("a call once runs no tool: one calling a tool ends unanswered, one writing ends answered", async () => {
+test("a call once runs no tool: one calling a tool ends unanswered, one writing ends answered; one step only, a message sent meanwhile left for the next call", async () => {
   const tool = await scripted([10, 10], undefined, true);
   expect([tool.end.ok, tool.end.text, tool.ran]).toEqual([false, "it called a tool", []]);
   const text = await scripted([10], undefined, true);
   expect([text.end.ok, text.end.text, text.ran]).toEqual([true, "the recap", []]);
+  const told = { text: "also count the files", imgs: [] };
+  const sent = await scripted([10], undefined, true, [told]);
+  expect([sent.end.ok, sent.end.text, sent.steps, sent.left]).toEqual([true, "the recap", 1, [told]]);
 });
 
 test("a call going on from another's keeps its vendor's cache marks in all, the other's counted", async () => {
