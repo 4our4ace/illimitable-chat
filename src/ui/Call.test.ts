@@ -132,6 +132,9 @@ test("illi's own tools' labels: memory, agents, skills, the to-do list, question
   expect(call("search", { words: "cache bug", project: "site", from: year + "-10-14", to: year + "-10-20" }).head).toBe('"cache bug" · site · 14–20 Oct');
   expect(call("date", { from: year + "-10-14", to: year + "-10-20", project: "site" }).head).toBe("14–20 Oct · site");
   expect(call("date", { id: 7 }).head).toBe("#7");
+  // a field the model leaves out may come as null or "": left out all the same
+  expect([label("date", { id: 7, from: null, to: null }), call("date", { id: 7, from: "" }).head]).toEqual(["Checked the date of #7", "#7"]);
+  expect([label("search", { words: "cache bug", from: null, to: "" }), call("search", { words: "cache bug", project: null, from: null }).head]).toEqual(['Searched memory for "cache bug"', '"cache bug"']);
   expect(label("projects", {})).toBe("Listed the projects");
   expect(label("spawn", { tasks: ["look"] })).toBe("Started an agent");
   expect(label("spawn", { tasks: ["a", "b"], agent: "reviewer" })).toBe("Started 2 reviewer agents");
@@ -215,4 +218,5 @@ test("a call's outcome: a command's exit, a read's lines, a change's lines; a fa
   expect(out("date", { from: "2026-10-21 09:00", to: "2026-10-21 09:05" }, true, "Wed 21 Oct 2026 09:00–09:05 · 1 message · 09:02\n7+1|09:02 x")).toBe("1 message");
   expect(out("date", { from: "2026-10-18" }, true, "Nothing on Sun 18 Oct 2026. After it:\n0+8|Mon 19 10:00–10:07 x")).toBe("nothing");
   expect(out("date", { id: 4 }, true, "Wed 21 Oct 2026 09:12")).toBe("");
+  expect(out("date", { id: 4, from: null }, true, "Nothing like a head")).toBe("");
 });
