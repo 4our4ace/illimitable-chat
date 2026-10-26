@@ -4,14 +4,16 @@
 // reports (the wheel's place too), the focus told (a press that only
 // focuses the window marked, its loss told). The input wraps between
 // words: one that would cross the edge starts the next row, the space
-// before it hung past a full row; a chip one word; a word wider than a
-// row broken at any character. A click on the input puts the cursor
-// where it lands: on a character before it, whole; past a row's text
-// after it; on the mark at the row's start; under the last row at the
-// end; in a chip at its nearer edge; a tall input scrolls only as the
-// cursor leaves the rows shown. Up and Down walk the messages sent from
-// an empty input moved in, and on from one brought back. A click on a
-// text on one row (a list's search) puts the cursor as on the input. A
+// before it hung past a full row; none ends in a row's last column but
+// one that starts the row, nothing typed after it taking it back up; a
+// chip one word; a word wider than a row starts one, broken at any
+// character. Ctrl+Shift+J is a new line, as Ctrl+J. A click on the input
+// puts the cursor where it lands: on a character before it, whole; past a
+// row's text after it; on the mark at the row's start; under the last row
+// at the end; in a chip at its nearer edge; a tall input scrolls only as
+// the cursor leaves the rows shown. Up and Down walk the messages sent
+// from an empty input moved in, and on from one brought back. A click on
+// a text on one row (a list's search) puts the cursor as on the input. A
 // paint writes only the rows that changed, those
 // moved as a block moved by the terminal. Then the lines Paint lays
 // out: a link wider than a line breaks at its edge, its pieces each
@@ -314,6 +316,12 @@ test("Shift with an editing key edits as the key alone, however the terminal tel
   expect(scr.ed.text).toBe("\n");
 });
 
+test("Ctrl+Shift+J is a new line, as Ctrl+J (as a legacy terminal sends both), however the terminal tells it (kitty's keys, modifyOtherKeys)", () => {
+  const { scr, keys } = screen();
+  Screen.screen_feed(scr, "a\nb\x1b[106;6uc\x1b[27;6;74~");
+  expect([scr.ed.text, keys]).toEqual(["a\nb\nc\n", []]);
+});
+
 test("a word move goes over a decomposed letter whole", () => {
   const ed = Screen.ed_new();
   Screen.ed_type(ed, "cafe\u0301 noir");
@@ -517,6 +525,15 @@ test("a word never ends in a row's last column but one that starts its row: the 
   expect(clicked("hello world", 13, 10, 11).spot).toEqual({ row: 1, col: 7 });
   expect(clicked("abcdefghijk xy", 13).rows).toEqual(["> abcdefghijk", "  xy"]);
   expect(clicked("ab cd  efgh", 9).rows).toEqual(["> ab cd  ", "  efgh"]);
+});
+
+test("a space of any width typed after a word gone down to the next row leaves it there (a tab's or an ideographic space's two columns, a form feed's none), as a wide character typed on in it does, the word then broken where it starts; a tab after a word a column short of the edge hangs, the word kept on its row", () => {
+  expect(clicked(" abc\t", 6).rows).toEqual([">  ", "  abc", "  "]);
+  expect(clicked(" abc\u3000x", 6).rows).toEqual([">  ", "  abc", "  x"]);
+  expect([clicked("hello world\f", 13).rows, clicked("hello world\f", 13, 10, 11).spot]).toEqual([["> hello ", "  world"], { row: 1, col: 7 }]);
+  expect(clicked(" abc世", 6).rows).toEqual([">  ", "  abc", "  世"]);
+  expect(clicked("ab cd\t", 8).rows).toEqual(["> ab cd", "  "]);
+  expect(clicked("ab あい\u3000う", 10).rows).toEqual(["> ab あい", "  う"]);
 });
 
 test("a click on an input a column wide, where a wide character leaves its first row empty, lands on the next row's place, on the mark too", () => {

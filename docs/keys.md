@@ -150,16 +150,16 @@ Typing
   double click a word; the click that only brings the window to the
   front moves nothing.
 - A message wraps between words: a word that would cross the input's
-  edge starts the next line whole, and a space that finds its line full
-  stays at its end, unshown. No word ends in the line's last column
-  unless it fills the line, so the cursor or the space after it fits
-  beside it: the word you type up to the edge goes to the next line at
-  once, and nothing you type after it moves it back. A pasted text's or an image's token
-  counts as one word. A word wider than the input breaks at any
-  character, as text with no spaces does.
-- Shift+Enter or Ctrl+J: a new line. Up and Down past the ends: the
-  messages sent before (not once you moved the cursor along what you
-  typed, by a key or a click).
+  edge starts the next line whole, and a space that finds no room left
+  on its line stays at its end, unshown. No word ends in the line's last
+  column unless it fills the line, so the cursor after it shows beside
+  it: the word you type up to the edge goes to the next line at once,
+  and nothing you type after it moves it back. A pasted text's or an
+  image's token counts as one word. A word wider than the input starts a
+  line and breaks at any character, as text with no spaces does.
+- Shift+Enter or Ctrl+J (Ctrl+Shift+J too): a new line. Up and Down
+  past the ends: the messages sent before (not once you moved the cursor
+  along what you typed, by a key or a click).
 - illi sees an image file it reads (png, jpeg, gif or webp, up to 20 MB;
   scaled to 1568 px on its longest side), in that tool result only: the
   chat keeps the line saying what it was, so a later turn reads it again
