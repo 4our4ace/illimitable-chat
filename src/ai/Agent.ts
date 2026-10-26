@@ -8,15 +8,15 @@
 // its wire's to read (chatgpt's plan limits), and a turn's last request
 // is kept whole, with its answer (AskAI.last).
 // Each step sends every item (at most PICS images: Agent.thin) and
-// streams one output; tool calls run in order, a message sent mid-run follows the next results, and the call
-// ends at a step with no tools and nothing sent. A call `once` (a recap)
-// takes one step, naming its tools but running none, unanswered if it
-// calls one, a message sent meanwhile left for the next call (End.left:
-// an agent told while it writes its recap, Tools.recap); so does one
-// that goes on from another's request (AskAI.ts `from`: a suggested
-// reply), sending that one's items and answer before its own. A request
-// goes again,
-// TRIES times at most, after its retry-after or a doubling wait, for a
+// streams one output; tool calls run in order, a message sent mid-run
+// follows the next results, and the call ends at a step with no tools
+// and nothing sent. A call `once` (a recap) takes one step, naming its
+// tools but running none, unanswered if it calls one, a message sent
+// meanwhile left for the next call (End.left: an agent told while it
+// writes its recap, Tools.recap); so does one that goes on from
+// another's request (AskAI.ts `from`: a suggested reply), sending that
+// one's items and answer before its own. A request goes again, TRIES
+// times at most, after its retry-after or a doubling wait, for a
 // passing reason (`busy`: no connection, a retry status, a stream error,
 // cut short or silent for the wire's `idle`), dropping what it streamed;
 // no wait longer than MOST, and none begun past LONGEST (a retry-after

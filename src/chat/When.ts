@@ -46,8 +46,8 @@ export namespace When {
   // it names (a year, a month or a date alone: the next one's start;
   // today and yesterday, their day's), none for an instant (a time, now,
   // an ISO time with its zone); null: not one (no such month, day, hour,
-  // minute or offset). A local time the clocks skip (spring's lost hour)
-  // moves on by the hour skipped: 02:30 is 03:30
+  // minute, second or offset). A local time the clocks skip (spring's
+  // lost hour) moves on by the hour skipped: 02:30 is 03:30
   export function parse(text: unknown, now = Date.now()): { at: number; end: number | null } | null {
     const said = typeof text === "string" ? text.trim() : "";
     const word = said.toLowerCase();

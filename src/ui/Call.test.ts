@@ -6,7 +6,8 @@
 // label: each tool's own, else its name and its most telling short
 // value; a file's path from the working dir, else from ~; calls from
 // before descriptions read well too; a date or search call's span in
-// words, never as the dates it was given), and how it ended (a command's
+// words, as of when it was made, never as the dates it was given; one
+// from the first message on by its end), and how it ended (a command's
 // exit, a read's lines, a change's lines, a span's messages; a failure,
 // how).
 

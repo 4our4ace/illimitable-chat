@@ -4,14 +4,16 @@
 // clocks go back an hour on 1 Nov 2026), whatever the machine's: a
 // model's local date or date and time read as that zone's (a year, a
 // month, today and yesterday too; an ISO time with its zone as it
-// says), a day being its calendar day (25 hours as the clocks go back),
-// a span to the end of what from names when to is left out (or sent as
-// null or blank), through to's day (month, year) when it is a date, from
-// the first message on when only to is given; what isn't a date
-// refused, saying why. The time now in one short line (on claude-code
-// without the date its prompt gives). A span's words: its head, the
-// times its lines show (only what the head doesn't), the screen's short
-// form.
+// says; a fraction of a second with or without one), a day being its
+// calendar day (25 hours as the clocks go back), a span to the end of
+// what from names when to is left out (or sent as null or blank),
+// through to's day (month, year) when it is a date, from the first
+// message on when only to is given; what isn't a date (no such day,
+// hour or offset) refused, saying why. The time now in one short line
+// (on claude-code without the date its prompt gives). A span's words:
+// its head, the times its lines show (only what the head doesn't), the
+// screen's short form; one from the first message on said by its end
+// (up to Wed 21 Oct, before Wed 21 Oct 14:00).
 
 import { afterAll, expect, test } from "bun:test";
 

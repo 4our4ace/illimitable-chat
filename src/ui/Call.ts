@@ -8,8 +8,9 @@
 // tool reads (READS): a command as itself; a file tool its path, read's
 // lines after it, edit's files (the diff comes in its result); zoom and
 // date the message (`#6243`, a line `#6243+8`, an agent by name), date a
-// span in words (`14–20 Oct`, When.short), search its words, project and
-// span, never a date as the model wrote it; spawn
+// span in words (`14–20 Oct`, When.short; its today or yesterday as of
+// the call's `at`), search its words, project and span (to alone: `up
+// to Wed 21 Oct`), never a date as the model wrote it; spawn
 // its tasks, tell its agent's name and its text in blocks; todo how far
 // its list is, its items in a block, each marked; a web search its
 // queries, or the page it opened. Any other call, or an edit whose edits
