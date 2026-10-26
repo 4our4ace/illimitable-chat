@@ -32,6 +32,11 @@
 // over. A message's pages are logged in one write. Memory holds only the
 // view's nodes and those built above them; any other is read from the
 // file, and so are images, by their hash.
+//
+// A span of time (the date tool's: Memory.days) is told from the lines
+// built already, no model asked: its messages found by date (Store.span),
+// then the coarsest lines over them split while a cap holds
+// (Memory.lines).
 
 import type { Ask, Block, Call, Img, Kind, Say } from "../ai/AskAI.ts";
 import { Compactor } from "./Compactor.ts";
@@ -39,6 +44,7 @@ import { clip_page, clip_pages, history_bare } from "../tools/Clip.ts";
 import { HOME, Store, type Place } from "./Store.ts";
 import { FIT, IMAGE, PICS, PIXELS, image_fit } from "../ai/Image.ts";
 import { image_kind } from "../ui/View.ts";
+import { When, type Span } from "./When.ts";
 
 // Types
 // =====
@@ -141,6 +147,20 @@ const BLOCK = 4;
 export const PIECE = 2 ** 20;
 
 const WAIT = "(not summarized yet: zoom it)";
+
+// the date tool's cap on a span's lines (Memory.lines): they split finer
+// only while they stay SPAN_LINES at most and their texts SPAN_BYTES
+// (TOKEN each: about 1,200 tokens), so a longer span gets coarser lines,
+// never more of them; only the tree's roots over a span, if more, pass it
+const SPAN_LINES = 12;
+const SPAN_BYTES = 4800;
+
+// the most messages a line covers just before or after a span with none
+// (Memory.near)
+const NEAR = 8;
+
+// what the date tool's lines end with: how to go deeper
+const DEEPER = "Zoom a line to go deeper";
 
 
 // Memory
@@ -779,6 +799,87 @@ export namespace Memory {
   export function date(mem: Memory, id: number): string {
     const root = Memory.message(mem, id);
     return root === null ? "No message " + id + "." : new Date(root.date).toLocaleString("sv-SE");
+  }
+
+  // Spans of time
+  // -------------
+
+  // a span of time (When.Span) as the date tool gives it: a head (the
+  // span, its messages, the times of its first and last), its lines
+  // (Memory.lines), oldest first, each "id+n|" then its times (When.range:
+  // only what the head doesn't say) and its text, then how to go deeper
+  // (with the project named: zoom takes it too). A span with no message:
+  // said so, with the lines just before and after it (Memory.near)
+  export function days(mem: Memory, span: Span, project = ""): string {
+    const [a, b] = Store.span(mem.store, span);
+    const date = (i: number) => Date.parse(Store.date(mem.store, i) ?? "");
+    const said = (part: Part, text: string | null) => Memory.ref(part) + "|" + When.range(date(Memory.span(part)[0]), date(Memory.span(part)[1]), span) + " " + Memory.flat(text ?? WAIT);
+    const deeper = DEEPER + (project === "" ? "." : ", with project " + project + ".");
+    if (a === b) {
+      const near = Memory.near(mem, a);
+      const head = "Nothing " + When.on(span) + (near.length === 0 ? ": no messages yet." : a === 0 ? ". After it:" : a === mem.count ? ". Before it:" : ". Before and after it:");
+      return [head, ...near.map((part) => said(part, Memory.node(mem, part))), ...(near.length === 0 ? [] : [deeper])].join("\n");
+    }
+    const head = When.said(span) + " · " + (b - a).toLocaleString("en-US") + (b - a === 1 ? " message" : " messages") + " · " + When.range(date(a), date(b - 1), span);
+    return [head, ...Memory.lines(mem, a, b).map((line) => said(line.part, line.text)), deeper].join("\n");
+  }
+
+  // the lines over messages [a, b), oldest first, each its text (null:
+  // not built): first the tree's roots over them (Memory.roots, the
+  // coarsest lines that tile the chat), then, a batch at a time, those not
+  // built, else all of the largest, each split into the halves it was
+  // made from that reach [a, b), while the lines stay SPAN_LINES at most
+  // and their texts SPAN_BYTES (a line not built as WAIT): so a short span
+  // gets its messages, a long one coarser lines, never more of them. A
+  // line not built that can't split (a message, or no room) is left so,
+  // and zoom opens it all the same. The roots alone can pass both (one for
+  // each set bit of the chat's count: 13 over a chat of 8,191), and stay:
+  // past SPAN_BYTES, each text is cut to an even share of it
+  export function lines(mem: Memory, a: number, b: number): Array<{ part: Part; text: string | null }> {
+    const reach = (part: Part) => Memory.span(part)[0] < b && Memory.span(part)[1] >= a;
+    const read  = (part: Part) => ({ part, text: Memory.node(mem, part) });
+    const bytes = (all: Array<{ text: string | null }>) => all.reduce((n, line) => n + Memory.bytes(line.text ?? WAIT), 0);
+    let lines = Memory.roots(mem.count).filter(reach).map(read);
+    for (;;) {
+      const open  = lines.filter((line) => line.part.l > 0);
+      const top   = Math.max(...open.map((line) => line.part.l));
+      const bare  = open.filter((line) => line.text === null);
+      const batch = new Set(bare.length > 0 ? bare : open.filter((line) => line.part.l === top));
+      const next  = lines.flatMap((line) => (batch.has(line) ? Memory.halves(line.part).filter(reach).map(read) : [line]));
+      if (batch.size === 0 || next.length > SPAN_LINES || bytes(next) > SPAN_BYTES) {
+        break;
+      }
+      lines = next;
+    }
+    const share = Math.floor(SPAN_BYTES / lines.length);
+    return bytes(lines) <= SPAN_BYTES ? lines : lines.map((line) => ({ ...line, text: line.text === null ? null : Memory.cut(line.text, share) }));
+  }
+
+  // the lines just before and after message a, where a span of time with
+  // no message falls: before it, the largest built node of NEAR messages
+  // at most that ends just before a; after it, the largest that starts
+  // at a (none built: the message alone); none past the chat's start or
+  // end
+  export function near(mem: Memory, a: number): Part[] {
+    const out: Part[] = [];
+    for (const after of [false, true]) {
+      if (after ? a >= mem.count : a === 0) {
+        continue;
+      }
+      const sizes = Array.from({ length: Math.log2(NEAR) + 1 }, (_, k) => Math.log2(NEAR) - k);
+      const fits  = sizes.map((l) => ({ l, i: a / 2 ** l - (after ? 0 : 1) })).filter((part) => Number.isInteger(part.i) && Memory.span(part)[1] < mem.count);
+      out.push(fits.find((part) => Memory.node(mem, part) !== null) ?? { l: 0, i: after ? a : a - 1 });
+    }
+    return out;
+  }
+
+  // a text in `most` bytes at most: whole, else its start and an ellipsis
+  // (a character never cut in two)
+  export function cut(text: string, most: number): string {
+    if (Memory.bytes(text) <= most) {
+      return text;
+    }
+    return Buffer.from(text, "utf8").subarray(0, Math.max(0, most - 3)).toString("utf8").replace(/\uFFFD+$/, "") + "…";
   }
 
 }

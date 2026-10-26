@@ -17,6 +17,7 @@ this page needs fixing.
 - [Writing and durability](#writing-and-durability)
 - [Project locks](#project-locks)
 - [The projects table](#the-projects-table)
+- [Messages by date](#messages-by-date)
 - [Search](#search)
 - [Forgetting a project](#forgetting-a-project)
 - [Usage counts](#usage-counts)
@@ -410,6 +411,74 @@ chat's rows: 161 ms for one query on a 2-million-line chat, against
 0.0 ms by index.
 
 With 100 projects, the list takes 39 ms.
+
+Messages by date
+----------------
+
+The model's `date` tool goes both ways: `date(id)` reads message id's
+`date`; `date(from, to)` finds the messages of a span of time. The span is
+read in illi's local zone (`When.span`, `src/chat/When.ts`): a date alone as `from` is
+its day's start, as `to` its day's end, a time as `to` the instant the
+span stops before, and `to` left out the end of `from`'s day. Each
+message's `date` is an ISO instant, compared as one (`Date.parse`),
+never as text.
+
+`Store.span(store, span)` gives the span's messages as `[a, b)`, the
+first and the one after the last, with no index and no scan:
+
+1. **The count:** `max(i) + 1` by the primary key (`Store.count`).
+2. **Each end by bisection** (`Store.since`): the first message dated at
+   the bound or later, by point reads of `select date, more from msg
+   where chat = ? and i = ?`, planned as `SEARCH msg USING PRIMARY KEY
+   (chat=? AND i=?)`. Messages are logged as they come, so their dates
+   rise, and about log2(n) reads find the bound: 21 for 2 million.
+3. **Whole messages** (`Store.first`): a bound that falls on a later page
+   of a message moves on past its pages, so a message stands where its
+   first page is dated. Each page takes the time as it is logged
+   (`Memory.root`), so a message's pages may differ by a millisecond;
+   a span never splits one.
+4. **A clock set back** leaves dates out of order. The bisection ends all
+   the same, at a message dated at the bound or later whose one before
+   is dated earlier (or at 0, or the count): a message logged while the
+   clock was off may fall on the wrong side of a span's end, never
+   anything worse. `b` is held at `a` or later.
+
+No schema change was needed. Measured on synthetic chats (WSL2, ext4,
+Bun 1.4.3; each message 200 characters, the median of 9 random days):
+0.18 ms at 200,000 messages, 0.21 ms at 2 million.
+
+`Memory.days` turns `[a, b)` into the tool's answer, from lines the
+compactor built already (no model is asked):
+
+1. **A head:** the span (`Wed 21 Oct 2026`), its messages (`214
+   messages`), the times of the first and the last (`09:12–23:40`).
+2. **The lines** (`Memory.lines`): first the tree's roots over `[a, b)`
+   (`Memory.roots`, the coarsest lines that tile the chat), then a batch
+   at a time, those not built first, else every line of the largest
+   size, each split into its two halves (those that reach `[a, b)`),
+   while the lines stay 12 at most (`SPAN_LINES`) and their texts 4,800
+   bytes (`SPAN_BYTES`, about 1,200 tokens). A few messages each get a
+   line; a busy month gets lines of many messages, never more lines. A
+   line not built that can't split (a message, or no room) reads
+   *(not summarized yet: zoom it)*, and zoom opens it all the same. The
+   roots alone can pass both, one for each set bit of the chat's count
+   (13 roots over a chat of 8,191), and nothing coarser covers them: they
+   stay, and past the bytes each text is cut to an even share. Each line
+   reads its first and last message's dates (`Store.date`), two point
+   reads.
+3. **Each line** is `id+n|` (so zoom takes it), its times with only what
+   the head doesn't say (`When.range`: `14:05–16:40` within the span's
+   one day; `Thu 22 09:10` off it, or in a span of days), then its text.
+4. **Last,** how to go deeper: *Zoom a line to go deeper* (in another
+   project's chat, naming it: zoom takes the project too).
+
+A span with no message says so (*Nothing on Sun 18 Oct 2026*) with the
+lines just before and after it (`Memory.near`): the largest built line
+of at most 8 messages ending just before it, and the one starting where
+it ends (none built: the message alone).
+
+With `project`, it reads that project's chat, its file opened and closed
+again (`Tools.chat_of`, as zoom and `date(id)` do).
 
 Search
 ------

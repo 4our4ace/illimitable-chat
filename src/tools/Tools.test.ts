@@ -25,9 +25,11 @@
 // after the tool. The loop guard (every mode but yolo): a call the same
 // as its caller's two before it asked (all of it its risk), illi's own
 // tools too; a yes starts its count again. The projects: their table,
-// a search across them, a zoom into another's chat. The time now in
-// each call's message, short on claude-code, after every cache mark a
-// later call reads. A subagent's view fits its model:
+// a search across them, a zoom into another's chat. date both ways: a
+// message's date, a span's lines (another project's too, its project
+// named for the zoom), what isn't a span refused. The time now in each
+// call's message, short on claude-code, after every cache mark a later
+// call reads. A subagent's view fits its model:
 // the oldest lines left out.
 
 import { expect, setSystemTime, test } from "bun:test";
@@ -409,6 +411,25 @@ async function zoned(at: number, run: () => Promise<void> | void): Promise<void>
     }
   }
 }
+
+test("date both ways: a span's lines in another project's chat, its project named for the zoom; what isn't a span refused", () => zoned(Date.UTC(2026, 9, 25, 18, 5), async () => {
+  const other = Store.open(DIR + "/chat", { key: "git:/work/shop", name: "shop-9x1a2b", path: "/work/shop" });
+  const dates = ["2026-10-20T16:00:00.000Z", "2026-10-20T17:00:00.000Z", "2026-10-22T16:00:00.000Z"];
+  const texts = ["user: the cache bug in checkout", "illi: fixed the cache bug", "user: cache warmup"];
+  Store.push(other, dates.map((date, i) => ({ i, kind: "user" as const, text: "m" + i, date, size: 2 })), "/work/shop");
+  Store.nodes(other, [...texts.map((text, first) => ({ first, n: 1, text })), { first: 0, n: 2, text: "user, illi: the cache bug, fixed" }]);
+  const call = (name: string, args: object) => Tools.call(chat.tools, "main", name, args, new AbortController().signal);
+  expect((await call("date", { from: "2026-10-20", project: "shop-9x1a2b" })).text).toBe([
+    "Tue 20 Oct 2026 · 2 messages · 12:00–13:00", "0+1|12:00 user: the cache bug in checkout", "1+1|13:00 illi: fixed the cache bug", "Zoom a line to go deeper, with project shop-9x1a2b.",
+  ].join("\n"));
+  expect((await call("date", { from: "2026-10-21", project: "shop-9x1a2b" })).text).toBe("Nothing on Wed 21 Oct 2026. Before and after it:\n0+2|Tue 20 12:00–13:00 user, illi: the cache bug, fixed\n2+1|Thu 22 12:00 user: cache warmup\nZoom a line to go deeper, with project shop-9x1a2b.");
+  expect((await call("date", { id: 2, project: "shop-9x1a2b" })).text).toBe(new Date(dates[2]).toLocaleString("sv-SE"));
+  expect(await call("date", { from: "last Tuesday" })).toEqual({ text: "from: a local date or date and time, as 2026-10-21 or 2026-10-21 14:00.", fail: true });
+  expect(await call("date", { from: "2026-10-21", to: "2026-10-20 12:00" })).toEqual({ text: "to comes before from.", fail: true });
+  expect(await call("date", {})).toEqual({ text: "Give id, or from (and to).", fail: true });
+  expect(await call("date", { from: "2026-10-21", project: "nope" })).toEqual({ text: "No project nope: projects lists them.", fail: true });
+  Store.close(other);
+}));
 
 test("the time now, after where illi works, in about ten tokens (on claude-code without the date its own prompt gives); in a subagent's call too, unmarked, after every mark a later call reads", () => zoned(Date.UTC(2026, 9, 25, 18, 5), () => {
   expect(Tools.here(chat.tools).text).toEndWith(", project " + Projects.place(REPO).name + "\nNow: Sun 2026-10-25 14:05 UTC-4\n\n");

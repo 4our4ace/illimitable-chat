@@ -7,8 +7,8 @@
 // working dir: where illi was started (each call's message names it, its
 // project and the time now). A request dropped (its call stopped) stops
 // its job. zoom and date read the chat, or another project's
-// (Tools.chat_of); projects and search look across them all
-// (Projects.ts).
+// (Tools.chat_of): date a message's date, or a span of time's lines
+// (Memory.days); projects and search look across them all (Projects.ts).
 // An agent (a subagent) has a name and a log (one spawned as a user's
 // subagent: that agent's name, numbered while another so named is at
 // work or of this run, as reviewer-2; else a random one; a name freed
@@ -200,11 +200,12 @@ messages it was made from; zoom(id, 1) gives message id in full, with
 the images its "[image <file>]" lines name. Zoom whenever a summary
 only mentions something you need, such as what your last reply said, a
 decision, a past attempt or where a file is, before you act, guess or
-ask. date(id) gives the date and time of message id. zoom("Name") gives
-an agent's whole chat. A tool result may end with a <history> line: the
-summary of a past episode that illi's search found related, its id first
-(#id+n: zoom(id, n) opens it). It tells what was then, not what is now:
-zoom it if it helps, else ignore it.
+ask. date(id) gives the date and time of message id; date(from, to) the
+lines of a span, as 2026-10-21 or 2026-10-21 14:00 (no to: that day).
+zoom("Name") gives an agent's whole chat. A tool result may end with a
+<history> line: the summary of a past episode that illi's search found
+related, its id first (#id+n: zoom(id, n) opens it). It tells what was
+then, not what is now: zoom it if it helps, else ignore it.
 
 Each project has its own chat: the git repo illi runs in, or home outside
 any repo; this one is named at the start of each message. projects()
@@ -252,7 +253,7 @@ chat.`;
 // on this computer (Machine.ts's TOOLS)
 const OWN: Spec[] = [
   spec("zoom", "Open the line id+n of the view into the two lines of n/2 under it; n = 1 gives the message whole. With an agent's name as id, give that agent's whole chat. A long text comes in pages from character at, saying where to go on. With project (its name, from projects), the line, message or agent of that project's chat.", { id: { type: ["integer", "string"] }, n: INT, at: INT, project: STR }, ["id"]),
-  spec("date", "The date and time of message id; with project, of that project's chat.", { id: INT, project: STR }, ["id"]),
+  spec("date", "The date and time of message id. Or, with from (and to), local times as 2026-10-21 or 2026-10-21 14:00 (no to: that day), the lines of that span. With project, in that project's chat.", { id: INT, from: STR, to: STR, project: STR }, []),
   spec("projects", "The user's projects, each with a chat of its own (a git repo illi ran in, or home: outside any repo), the one used last first: its folder, its first and last day, its messages, its latest summary line. Look here first when the user means work that isn't in your view.", {}, []),
   spec("search", "Find summary lines holding all the words (else any of them), the best first, as \"project id+n|text\": in this project's chat; with project (its name, from projects), in that one's; with project \"all\", in every one, then the projects with more lines named, to search in. Zoom a line with its project.", { words: STR, project: STR }, ["words"]),
 ];
@@ -625,7 +626,12 @@ export namespace Tools {
         });
       }
       case "date": {
-        return Tools.chat_of(mem, args.project, (of) => ({ text: Memory.date(of, Number(args.id)), fail: false }));
+        const span = args.from === undefined ? null : When.span(args.from, args.to);
+        if (typeof span === "string" || (span === null && args.id === undefined)) {
+          return { text: span ?? "Give id, or from (and to).", fail: true };
+        }
+        const project = args.project === undefined || args.project === null ? "" : String(args.project);
+        return Tools.chat_of(mem, args.project, (of) => ({ text: span === null ? Memory.date(of, Number(args.id)) : Memory.days(of, span, project), fail: false }));
       }
       case "projects": {
         return { text: Projects.table(mem.store), fail: false };
