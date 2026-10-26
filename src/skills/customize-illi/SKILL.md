@@ -89,12 +89,13 @@ You review code changes. ...
   edit, spawn, tell, todo, skill; mcp__<server> for all of a server's;
   Claude Code's names too, Agent or Task as spawn, TodoWrite or
   TaskCreate, TaskUpdate, TaskList, TaskGet as todo; Agent(worker,
-  researcher): spawn of those agents alone, while it is the main agent);
-  left out: every tool its role has; empty: none. On claude-code it
-  limits Claude Code's built-in tools too: those named (Grep, WebFetch),
-  and shell, read, write and edit as Bash, Read, Write and Edit; never
-  its Agent, Task, TodoWrite or task tools, as illi's spawn and todo take
-  their place
+  researcher): spawn of those agents alone, while it is the main agent,
+  none of the user's agents named: no spawn); left out: every tool its
+  role has; empty: none. On claude-code it limits Claude Code's built-in
+  tools too: those named (Grep, WebFetch), and shell, read, write and
+  edit as Bash, Read, Write and Edit; never its Agent, Task, TodoWrite or
+  task tools, as illi's spawn and todo take their place; and Claude
+  Code's own MCP servers to those its mcp__<server> names name
 - color: its mark's color; none: one is made for it
 - the body: its instructions, added to its system prompt
 
@@ -114,6 +115,11 @@ over:
 ```
 
 Secrets go in as ${VAR}, read from the environment, never in the file.
+
+On claude-code, the servers added to Claude Code itself (claude mcp add,
+its plugins', claude.ai connectors) load in illi's calls too; /mcp lists
+them once a call has, and off takes one out of illi's calls by its name
+as /mcp lists it, Claude Code itself unchanged.
 
 ## Settings: config.json
 
@@ -138,9 +144,10 @@ one:
 - rules: the rules file, RULES.md in illi's folder (else the global
   folder's) unless set; after: a shell command run after each turn
 - off: skills, agents, commands, MCP servers and plugins turned off, by
-  name (a plugin's part as plugin:name; hooks.json: all hooks),
-  comma-separated; a profile's adds to the global list (one off globally
-  is off in every profile)
+  name (a plugin's part as plugin:name; hooks.json: all hooks; on
+  claude-code a server of Claude Code's own too; a name turns off each
+  thing so named), comma-separated; a profile's adds to the global list
+  (one off globally is off in every profile)
 - sticky: the sticky skills on, by name, the same way; /<name> keeps it
   for the user
 - mode: what runs without asking: auto (the default: everything in the

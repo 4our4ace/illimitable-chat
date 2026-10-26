@@ -84,9 +84,9 @@ turns one off or on (the `off` setting), from the next start.
 On `claude-code`, the servers you added to Claude Code itself load in
 illi's calls too, and `/mcp` lists them under yours once a call has
 loaded them, while the pick is on `claude-code`: Enter there (or
-`off`) takes one out of illi's calls alone, from the next call, its
-tools out of the model's context; `off` holds names, so one of yours by
-the same name goes off with it, from the next start. A server of yours
+`off`) takes one out of illi's calls, from the next call, its tools out
+of the model's context, Claude Code itself unchanged; `off` holds names,
+so one of yours by the same name goes off with it, from the next start. A server of yours
 by the same name wins while it runs, so the model gets one copy; an
 agent's `tools:` keeps only those it names
 ([Providers](providers.md#claude-plan)).
