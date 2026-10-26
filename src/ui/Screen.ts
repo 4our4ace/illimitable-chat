@@ -274,6 +274,10 @@ const WORD = /[\p{L}\p{M}\p{N}_]/u;
 // modifiers, as bits of (mods - 1)
 const MODS: [number, string][] = [[4, "Ctrl+"], [2, "Alt+"], [1, "Shift+"]];
 
+// the keys with Shift that are no editing key, though the key alone is
+// one: Shift and an arrow, the pick's moves (Commands.ts ARROWS)
+const SHIFT_OWN = new Set(["Shift+Left", "Shift+Right", "Shift+Up", "Shift+Down"]);
+
 // a mouse report's button: the wheel's bit, its down bit, its sideways
 // bit (66, 67), a move's bit (with no button down: NONE), the right
 // button; the modifiers' bits (ignored); how soon a press again in the
@@ -1272,7 +1276,10 @@ function ed_closest(have: string[], want: string[]): number[] | null {
 }
 
 // an editing key: a new line, a move, a character or word erased;
-// whether key is one
+// whether key is one. Shift with one edits as the key alone, as legacy
+// terminals send it (kitty's keys and modifyOtherKeys tell Shift apart:
+// Shift+Backspace erases as Backspace does), but where Shift means
+// something of its own (SHIFT_OWN); Shift+Enter is a new line
 export function ed_key(ed: Ed, key: string): boolean {
   const laid = ed_layout(ed);
   const back = ed_step(laid, ed.pos, -1);
@@ -1290,13 +1297,14 @@ export function ed_key(ed: Ed, key: string): boolean {
     "Ctrl+Delete": [ed.pos, word_next], "Alt+Delete": [ed.pos, word_next], "Alt+D": [ed.pos, word_next],
     "Ctrl+U": [0, ed.pos], "Ctrl+K": [ed.pos, ed.text.length],
   };
-  if (key in move) {
-    ed.pos   = move[key];
+  const bare = key.includes("Shift+") && !SHIFT_OWN.has(key) ? key.replace("Shift+", "") : key;
+  if (bare in move) {
+    ed.pos   = move[bare];
     ed.moved = true;
     return true;
   }
-  if (key in erase) {
-    const [a, b] = erase[key];
+  if (bare in erase) {
+    const [a, b] = erase[bare];
     ed.text = ed.text.slice(0, a) + ed.text.slice(b);
     ed.pos  = a;
     return true;

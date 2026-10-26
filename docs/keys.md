@@ -137,7 +137,8 @@ Typing
 
 - Arrows, Home, End, Ctrl+A, Ctrl+E, Ctrl+U, Ctrl+K, Ctrl+W, Alt+B,
   Alt+F, Alt+D, Ctrl+Left, Ctrl+Right and Ctrl+Backspace edit as in a
-  shell.
+  shell. With Shift they edit the same (Shift+Backspace erases a
+  character), but Shift and an arrow change the model and effort.
 - A click in your message puts the cursor where it lands, and typing
   goes there: before the character clicked (a wide one by either half);
   past a line's text, after its last character (a line that wraps shows

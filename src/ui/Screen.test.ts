@@ -301,6 +301,19 @@ test("a bare ESC from a kitty terminal is Esc after a moment, never held till th
   expect(scr.ed.text).toBe("a");
 });
 
+test("Shift with an editing key edits as the key alone, however the terminal tells it (kitty's keys, modifyOtherKeys): Shift+Backspace erases; Shift and an arrow pass on, and Shift+Enter is a new line", () => {
+  const { scr, keys } = screen();
+  Screen.screen_feed(scr, "abcdef\x1b[127;2u\x1b[27;2;127~");
+  expect(scr.ed.text).toBe("abcd");
+  Screen.screen_feed(scr, "\x1b[1;2H\x1b[3;2~");
+  expect([scr.ed.text, scr.ed.pos]).toEqual(["bcd", 0]);
+  Screen.screen_feed(scr, "\x1b[1;2F\x1b[127;6u");
+  expect(scr.ed.text).toBe("");
+  Screen.screen_feed(scr, "\x1b[1;2D\x1b[1;2A\x1b[13;2u");
+  expect(keys).toEqual(["Shift+Left", "Shift+Up"]);
+  expect(scr.ed.text).toBe("\n");
+});
+
 test("a word move goes over a decomposed letter whole", () => {
   const ed = Screen.ed_new();
   Screen.ed_type(ed, "cafe\u0301 noir");
