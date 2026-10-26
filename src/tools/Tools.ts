@@ -218,7 +218,7 @@ touches, down to the messages, for a decision, what the user prefers, a
 past attempt or where a file is; search when the map names no line for
 it. date(id) gives the date and time of message id; date(from, to) the
 lines of a span, as 2026-10-21 or 2026-10-21 14:00, a month (2026-10),
-today or yesterday (no to: all of from's day or month).
+today or yesterday (no to: till the end of from's day, month or year).
 zoom("Name") gives an agent's whole chat. A tool result may end with a
 <history> line: the summary of a past episode that illi's search found
 related, its id first (#id+n: zoom(id, n) opens it). It tells what was
@@ -282,7 +282,7 @@ illi, as its MCP server's (mcp__illi__).`;
 const MEMORY = new Set(["zoom", "date", "projects", "search"]);
 const OWN: Spec[] = [
   spec("zoom", "Open the line id+n of the view into the two lines of n/2 under it; n = 1 gives the message whole. With an agent's name as id, give that agent's whole chat. A long text comes in pages from character at, saying where to go on. With project (its name, from projects), the line, message or agent of that project's chat.", { id: { type: ["integer", "string"] }, n: INT, at: INT, project: STR }, ["id"]),
-  spec("date", "The date and time of message id. Or, with from (and to), local times as 2026-10-21 or 2026-10-21 14:00, a month (2026-10), a year, today or yesterday (no to: all that from names, its day, month or year), the lines of that span. With project, in that project's chat.", { id: INT, from: STR, to: STR, project: STR }, []),
+  spec("date", "The date and time of message id. Or, with from (and to), local times as 2026-10-21 or 2026-10-21 14:00, a month (2026-10), a year, today or yesterday (no to: till the end of from's day, month or year), the lines of that span. With project, in that project's chat.", { id: INT, from: STR, to: STR, project: STR }, []),
   spec("projects", "The user's projects, each with a chat of its own (a git repo illi ran in, or home: outside any repo), the one used last first: its folder, its first and last day, its messages, its latest summary line. Look here first when the user means work that isn't in your view.", {}, []),
   spec("search", "Find summary lines holding all the words (else any of them), the best first, as \"project id+n|text\": in this project's chat; with project (its name, from projects), in that one's; with project \"all\", in every one, then the projects with more lines named, to search in. Zoom a line with its project. With from, to or both (as date's; to alone: all up to it), only lines inside that span; a span that won't read is left out, saying so.", { words: STR, project: STR, from: STR, to: STR }, ["words"]),
 ];

@@ -28,11 +28,11 @@ export type Span = { from: number; to: number };
 const WEEK   = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-// a local year, month or date, or a date and a time to the minute or
-// the second, a space or a T between; an instant with its zone, as
-// models write ISO times (Z or an offset, a fraction of a second too)
-const LOCAL = /^(\d{4})(?:-(\d{2})(?:-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?)?)?$/;
-const ZONED = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/i;
+// a year, a month or a date, or a date and a time to the minute or the
+// second (a fraction of it too), a space or a T between: local, else in
+// the zone after it (Z or an offset, a space before it or none), as
+// models write ISO times
+const WHEN = /^(\d{4})(?:-(\d{2})(?:-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?(?: ?(Z|([+-])(\d{2}):?(\d{2})))?)?)?)?$/i;
 
 // what a model is told of a date it wrote that isn't one
 const FORM = "a local date or date and time, as 2026-10-21 or 2026-10-21 14:00 (or a month, 2026-10; a year, 2026; today, yesterday or now).";
@@ -45,9 +45,9 @@ export namespace When {
   // a time as a model writes it: its instant, and the end of the stretch
   // it names (a year, a month or a date alone: the next one's start;
   // today and yesterday, their day's), none for an instant (a time, now,
-  // an ISO time with its zone); null: not one (no such month, day, hour
-  // or minute). A time the clocks skip (spring's lost hour) moves on by
-  // the hour skipped: 02:30 is 03:30
+  // an ISO time with its zone); null: not one (no such month, day, hour,
+  // minute or offset). A local time the clocks skip (spring's lost hour)
+  // moves on by the hour skipped: 02:30 is 03:30
   export function parse(text: unknown, now = Date.now()): { at: number; end: number | null } | null {
     const said = typeof text === "string" ? text.trim() : "";
     const word = said.toLowerCase();
@@ -58,21 +58,21 @@ export namespace When {
       const at = When.start(word === "today" ? now : When.start(now) - 1);
       return { at, end: When.next(at) };
     }
-    if (ZONED.test(said)) {
-      const at = Date.parse(said.toUpperCase().replace(" ", "T").replace(/([+-]\d{2})(\d{2})$/, "$1:$2"));
-      return Number.isNaN(at) ? null : { at, end: null };
-    }
-    const m = LOCAL.exec(said);
+    const m = WHEN.exec(said);
     if (m === null) {
       return null;
     }
-    const [y, mo, d, h, mi, s] = [m[1], m[2] ?? "1", m[3] ?? "1", m[4] ?? "0", m[5] ?? "0", m[6] ?? "0"].map(Number);
-    const day = new Date(y, mo - 1, d);
-    if (day.getFullYear() !== y || day.getMonth() !== mo - 1 || day.getDate() !== d || h > 23 || mi > 59 || s > 59) {
+    const [y, mo, d, h, mi, s, oh, om] = [m[1], m[2] ?? "1", m[3] ?? "1", m[4] ?? "0", m[5] ?? "0", m[6] ?? "0", m[10] ?? "0", m[11] ?? "0"].map(Number);
+    const ms = m[7] === undefined ? 0 : Math.floor(Number("0." + m[7]) * 1000);
+    const day = new Date(Date.UTC(y, mo - 1, d));
+    if (day.getUTCFullYear() !== y || day.getUTCMonth() !== mo - 1 || day.getUTCDate() !== d || h > 23 || mi > 59 || s > 59 || oh > 23 || om > 59) {
       return null;
     }
+    if (m[8] !== undefined) {
+      return { at: Date.UTC(y, mo - 1, d, h, mi, s, ms) - (m[9] === "-" ? -1 : 1) * (oh * 60 + om) * 60000, end: null };
+    }
     const end = m[4] !== undefined ? null : m[3] !== undefined ? new Date(y, mo - 1, d + 1) : m[2] !== undefined ? new Date(y, mo, 1) : new Date(y + 1, 0, 1);
-    return { at: new Date(y, mo - 1, d, h, mi, s).getTime(), end: end?.getTime() ?? null };
+    return { at: new Date(y, mo - 1, d, h, mi, s, ms).getTime(), end: end?.getTime() ?? null };
   }
 
   // whether a model gave a field: neither left out nor sent as null or
@@ -192,9 +192,19 @@ export namespace When {
     return When.whole(span) && When.start(span.from) === When.start(When.last(span));
   }
 
+  // whether a span runs from the first message on (When.span: `to` alone)
+  export function open(span: Span): boolean {
+    return span.from === 0;
+  }
+
   // a span with the word before it: on one whole day (on Wed 21 Oct
-  // 2026), within any other (within Wed 14–Tue 20 Oct 2026)
+  // 2026), within any other (within Wed 14–Tue 20 Oct 2026); one from the
+  // first message on, by its end: up to its last day (up to Wed 21 Oct
+  // 2026), else before the time it stops (before Wed 21 Oct 2026 14:00)
   export function on(span: Span): string {
+    if (When.open(span)) {
+      return When.start(span.to) === span.to ? "up to " + When.day(When.last(span)) : "before " + When.moment(span.to);
+    }
     return (When.one(span) ? "on " : "within ") + When.said(span);
   }
 
@@ -227,11 +237,17 @@ export namespace When {
   // Oct; 14–20 Oct; 29 Sep–5 Oct), else its times (Wed 21 Oct
   // 14:00–18:00; Wed 21 Oct 22:00–Thu 22 Oct 02:00); a year only off this
   // one (Wed 21 Oct 2026 in 2027; 29 Sep–5 Oct 2025; 29 Dec 2025–4 Jan
-  // 2026), never on a time's end
+  // 2026), never on a time's end. One from the first message on, by its
+  // end: up to Wed 21 Oct, before Wed 21 Oct 14:00 (When.on)
   export function short(span: Span, now = Date.now()): string {
     const [a, z] = [new Date(span.from), new Date(When.last(span))];
     const year = new Date(now).getFullYear();
     const yr = (d: Date) => (a.getFullYear() === year && z.getFullYear() === year ? "" : " " + d.getFullYear());
+    if (When.open(span)) {
+      const off = (d: Date) => (d.getFullYear() === year ? "" : " " + d.getFullYear());
+      const t = new Date(span.to);
+      return When.start(span.to) === span.to ? "up to " + When.week(When.last(span)) + " " + When.date(When.last(span)) + off(z) : "before " + When.week(span.to) + " " + When.date(span.to) + off(t) + " " + When.hm(span.to);
+    }
     if (When.whole(span)) {
       if (When.start(span.from) === When.start(When.last(span))) {
         return When.week(span.from) + " " + When.date(span.from) + yr(a);

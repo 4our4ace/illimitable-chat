@@ -1219,7 +1219,7 @@ function part_rows(v: View, id: number, n: number, t: number, talk: boolean): Ro
 const ROWS = new WeakMap<Entry | Node, Row[]>();
 
 function whole_rows(id: number | null, entry: Entry): Row[] {
-  const rows = ROWS.get(entry) ?? entry_rows(id, entry.kind, entry.text, entry.images);
+  const rows = ROWS.get(entry) ?? entry_rows(id, entry.kind, entry.text, entry.images, entry.date);
   ROWS.set(entry, rows);
   return rows;
 }
@@ -1228,7 +1228,7 @@ function whole_rows(id: number | null, entry: Entry): Row[] {
 // if not known, read off its line
 function sum_rows(id: number, n: number, node: Node = { text: WAIT, to: "" }, kind?: Kind): Row[] {
   const said = n === 1 ? (KINDED.exec(node.text)?.[1] as Kind | undefined) : undefined;
-  const rows = ROWS.get(node) ?? [{ $: "Sum", id, n, text: node.text, call: sum_call(n, node.text), kind: kind ?? said ?? null }];
+  const rows = ROWS.get(node) ?? [{ $: "Sum", id, n, text: node.text, call: sum_call(n, node.text, node.to), kind: kind ?? said ?? null }];
   ROWS.set(node, rows);
   return rows;
 }
@@ -1286,10 +1286,17 @@ function live_set(live: Live[], now: Live[]): void {
 }
 
 // the call a line of one message holds, when the line is a tool call
-// word for word (the compactor keeps a short message as it is)
-function sum_call(n: number, text: string): Call.Call | null {
-  const call = n === 1 && text.startsWith(TOOL) ? Call.call_parse(text.slice(TOOL.length)) : null;
+// word for word (the compactor keeps a short message as it is), made
+// when that message was (date)
+function sum_call(n: number, text: string, date: string): Call.Call | null {
+  const call = n === 1 && text.startsWith(TOOL) ? Call.call_parse(text.slice(TOOL.length), when(date)) : null;
   return call === null || call.name === "" ? null : call;
+}
+
+// a message's date as ms (none, or not one: now)
+function when(date: string | undefined): number {
+  const at = date === undefined ? NaN : Date.parse(date);
+  return Number.isNaN(at) ? Date.now() : at;
 }
 
 // Image
@@ -1308,13 +1315,14 @@ export function image_kind(head: Uint8Array): string | null {
 // a message's row (none: nothing to show); illi's reply is drawn from its
 // text (Reply.ts), so only whether it has any is asked, never its blocks
 // (a reply streaming would be parsed at every paint). The answers to
-// illi's question show as the user's words, framed so, named
-export function entry_rows(id: number | null, kind: Kind, text: string, images: string[] = []): Row[] {
+// illi's question show as the user's words, framed so, named. A tool
+// call reads as of its date (none: now; Call.call_parse)
+export function entry_rows(id: number | null, kind: Kind, text: string, images: string[] = [], date?: string): Row[] {
   if (entry_answer(kind, text)) {
     const said = text.slice(ANSWERED.length);
     return [{ $: "Msg", id, kind: "user", who: ANSWERS, text: said, body: Md.md_plain(said), call: null, images }];
   }
-  const call = kind === "tool" ? Call.call_parse(text) : null;
+  const call = kind === "tool" ? Call.call_parse(text, when(date)) : null;
   const report = kind === "work" ? Call.report_read(text) : null;
   const plain = kind === "user" || kind === "work" || kind === "echo";
   const body = call === null && plain ? entry_body(kind, report?.text ?? text) : [];
