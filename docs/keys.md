@@ -80,8 +80,8 @@ Setup
 | `/shortcuts` | the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one |
 | `/set <key> [value]` | change a setting (default: back to its default); no value: opens `/settings` at it. A `/word` finds every setting too, by its key or what it does |
 | `/mcp` | your MCP servers and, on `claude-code`, Claude Code's own: how each is, on or off, the lit one's tools or why it failed; Enter turns one off or on (`off`) |
-| `/mode [mode]` | what runs without asking, this session: `auto`, `careful`, `ask`, `read-only` or `yolo`; no mode: opens a list (or click it on the bottom line) |
-| `/permissions` | the requests refused (Enter allows one again, this session), the grants kept (Del removes one), your rules |
+| `/mode [mode]` | what runs without asking, this session: `default` or `trust`; no mode: opens a list (in `trust` mode, click it on the bottom line too) |
+| `/permissions` | the requests refused (Enter allows one again, this session), the approvals saved (Del removes one), your rules |
 
 Projects and profiles
 ---------------------
@@ -280,10 +280,10 @@ rule over them, the input you were typing kept for after them:
 A call the permission checks stop ([Permissions](permissions.md)) asks
 at the input: why, and what it would do (a command by its lines; a
 long one folded to the lines that matter, Ctrl+O for all), then
-Yes; Yes, and don't ask again (only where it keeps something, which it
-names); No; No, and say why (a line typed, which illi reads). Up and
-Down move, Enter or a click picks, Esc is No. A subagent's question
-names it.
+Yes; Yes, and don't ask again (only where it saves something, which it
+names); No (which also stops the turn); No, and say why (a line typed,
+which illi reads, and goes on). Up and Down move, Enter or a click
+picks, Esc is No. A subagent's question names it.
 
 A question that has just appeared takes no Enter, Space or click for
 half a second, so a key or a click meant for the chat doesn't answer it;
@@ -445,10 +445,10 @@ Mouse and side panel
   latest requests refused (a click opens `/permissions` on one) and illi's
   to-do list, gone once every item is done or on `/clear`. The `side`
   and `side_width` settings place it.
-- The bottom line ends with the mode (a click opens `/mode`):
-  `read-only` in the warning color, `yolo` in the error color. Before
-  it, the background jobs are counted when the side panel doesn't show
-  them, and before those the related lines when there is no side panel.
+- The bottom line ends with `trust mode` in the error color while
+  that mode is on (a click opens `/mode`). Before it, the background
+  jobs are counted when the side panel doesn't show them, and before
+  those the related lines when there is no side panel.
 - The terminal's title says `∞ <project> · illi`, one cell of dots
   tracing a figure of eight in the ∞'s place while illi works (`⠋`),
   `?` while a question waits on you (here or in another profile open

@@ -222,7 +222,7 @@ width its rows may take), `LINES`, `ILLI_PROJECT_DIR` and
 | `context_window.context_window_size`, `total_input_tokens` | the model's window, the tokens a turn sends now (once told) |
 | `context_window.summarize_at` | illi's: the tokens past which old messages fold into the memory tree |
 | `agent.name` | the main agent, when not illi's own |
-| `permission_mode` | illi's mode: `auto`, `careful`, `ask`, `read-only`, `yolo` |
+| `permission_mode` | illi's mode: `default` or `trust` |
 | `rate_limits.five_hour`, `seven_day` | the plan's limits as its vendor tells them, for the account in use: `used_percentage` (0 once `resets_at` has passed), `resets_at` (epoch seconds); only when told |
 | `profile`, `busy`, `agents` | illi's: the profile, whether a turn runs, the subagents at work |
 
@@ -433,8 +433,8 @@ own, so it doesn't see theirs).
 - `tool.before` hooks run before you're asked to allow a call, so you
   are asked about what will run; each sees the input as the one before
   left it. The first refusal is final; else an ask is asked (the first
-  one's why, with no "don't ask again"); else an allow runs it as `yolo`
-  mode would (your rules and illi's own config are still asked:
+  one's why, with no "don't ask again"); else an allow runs it as `trust`
+  mode would (your deny rules still refuse:
   [Permissions](permissions.md)). An allow vouches for the input it saw:
   a later hook's change takes it back. One that fails or takes over
   30 s refuses the call: a check never lets one through by failing.
@@ -464,8 +464,9 @@ new, or changed since illi last started there, is said at the start.
 or the `off` setting naming `hooks.json`, turns them all off.
 
 A hook runs as you, like a plugin: a project's hooks file runs its
-commands on your computer as you work there. illi asks before it writes
-one (any file in `~/.illi` or a project's `.illi`), even in `yolo` mode.
+commands on your computer as you work there. illi's own folder is
+outside the project, so illi asks before it writes your hooks there (in
+`default` mode; `trust` asks nothing).
 
 ```json
 {
@@ -520,7 +521,7 @@ its input:
 
 | Field | Events |
 | ----- | ------ |
-| `hook_event_name`, `cwd`, `permission_mode` (illi's mode: `auto`, `careful`, `ask`, `read-only`, `yolo`) | all |
+| `hook_event_name`, `cwd`, `permission_mode` (illi's mode: `default` or `trust`) | all |
 | `tool_name`, `tool_input` | `PreToolUse`, `PostToolUse` |
 | `agent_id`, `agent_type` (the subagent's name) | the same, on a subagent's call |
 | `tool_response`: `{ text, fail }` (an image a tool gives, as a read of one, isn't in it) | `PostToolUse` |
@@ -565,8 +566,8 @@ its input:
   yours: each `PreToolUse` sees the input
   as the one before left it, and decisions fold as plugins' do (a
   refusal is final; then an ask; then an allow, taken back by a later
-  change of the input). An allow runs the call as `yolo` mode would:
-  your rules and illi's own config are still asked.
+  change of the input). An allow runs the call as `trust` mode would:
+  your deny rules still refuse.
 - `timeout` beside a command, in seconds; illi's own: 60 s, 30 s for
   `UserPromptSubmit`, 1.5 s for `SessionEnd` (at most 60: illi waits for
   them as it quits). Past it a command is asked to end, then killed 2 s

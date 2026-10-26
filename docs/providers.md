@@ -79,9 +79,9 @@ illi then runs Claude Code itself, as it ships, on your login:
   one call, which shows it).
 - **Permission prompts come to illi.** When Claude Code wants to run
   something its settings don't allow, illi checks it as it checks its
-  own calls ([Permissions](permissions.md)): routine work runs, a risky
-  call is asked about at illi's screen, saying why, and your rules and
-  grants apply.
+  own calls ([Permissions](permissions.md)): what stays in the project
+  runs, a folder outside it is asked about at illi's screen, saying
+  why, and your rules and saved approvals apply.
 - **illi's memory, not Claude Code's compaction**: a turn runs with
   Claude Code's own compaction off. When a long turn fills the window,
   illi folds more of the chat into its tree and goes on where it was,

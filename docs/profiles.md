@@ -57,7 +57,7 @@ folder holds only what is its own:
 | `skills/`, `agents/`, `commands/` | beside the global ones; by name, its own win |
 | `mcp.json`                   | servers beside the global ones; by name, its own win |
 | `plugins/`, `hooks.json`     | beside the global ones; by name, its own plugins win |
-| `permissions.json`           | its own rules and grants; the global file isn't read |
+| `permissions.json`           | its own rules and saved approvals; the global file isn't read |
 | `RULES.md`, `theme.json`     | used instead of the global ones, if there |
 
 - In a profile, `/settings` changes the profile's own value. Each row
