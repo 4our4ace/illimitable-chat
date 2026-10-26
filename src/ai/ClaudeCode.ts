@@ -171,10 +171,12 @@ export namespace ClaudeCode {
       return none("Claude Code can't go on from another request", "fail");
     }
     const file = ClaudeCode.prompt(ask.system);
+    // what the call leaves out of Claude Code's servers, as its arguments
+    // say it (args reads it too, at once, from the same state)
     const cut = ClaudeCode.cut(ask);
     let proc: Subprocess<"pipe", "pipe", "pipe">;
     try {
-      proc = Bun.spawn([ClaudeCode.bin, ...ClaudeCode.args(ask, file, cut)], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: ClaudeCode.env() });
+      proc = Bun.spawn([ClaudeCode.bin, ...ClaudeCode.args(ask, file)], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: ClaudeCode.env() });
     } catch (err: any) {
       fs.rmSync(file, { force: true });
       return none(/ENOENT|not found/i.test(String(err?.message)) ? NO_CLAUDE : String(err?.message ?? err), "down");
@@ -248,7 +250,7 @@ export namespace ClaudeCode {
   // Claude Code's own, of its built-in ones only those an agent's tools
   // list names, if it has one, but those illi gives itself: --tools),
   // else (or once) none, nor Claude Code's servers or commands
-  export function args(ask: Ask, file: string, cut = ClaudeCode.cut(ask)): string[] {
+  export function args(ask: Ask, file: string): string[] {
     const io = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--replay-user-messages", "--no-session-persistence"];
     const pick = ["--model", ask.model, "--effort", ask.effort, "--append-system-prompt-file", file, "--settings", JSON.stringify({ disableAllHooks: true })];
     if (ask.server === "" || ask.once) {
@@ -256,6 +258,7 @@ export namespace ClaudeCode {
     }
     const mcp = { mcpServers: { illi: { type: "http", url: ask.server + "?lean", timeout: WAIT } } };
     const own = ask.builtins == null ? [] : ["--tools", ask.builtins.join(",")];
+    const cut = ClaudeCode.cut(ask);
     const strict = cut.strict ? ["--strict-mcp-config"] : [];
     return [...io, ...pick, ...own, "--mcp-config", JSON.stringify(mcp), ...strict, "--allowedTools", "mcp__illi", "--disallowedTools", ["AskUserQuestion", ...cut.deny].join(","), "--permission-prompt-tool", "mcp__illi__approve"];
   }

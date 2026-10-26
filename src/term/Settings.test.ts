@@ -33,7 +33,6 @@ delete process.env.ILLI_AFTER;
 delete process.env.ILLI_JOBS;
 
 const config = await import("../config/Config.ts");
-const { ClaudeCode } = await import("../ai/ClaudeCode.ts");
 const { Custom } = await import("../config/Custom.ts");
 const { setting_follow, setting_told } = await import("./Settings.ts");
 const { status_new } = await import("./Status.ts");
@@ -41,6 +40,7 @@ const { term_commands } = await import("./Commands.ts");
 const { term_grab, term_type } = await import("./Keys.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
+const { ClaudeCode } = await import("../ai/ClaudeCode.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 afterEach(() => config.config_follow(() => {}));
