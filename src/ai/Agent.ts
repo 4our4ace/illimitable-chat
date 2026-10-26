@@ -11,9 +11,11 @@
 // streams one output; tool calls run in order, a message sent mid-run follows the next results, and the call
 // ends at a step with no tools and nothing sent. A call `once` (a recap)
 // takes one step, naming its tools but running none, unanswered if it
-// calls one; so does one that goes on from another's request (AskAI.ts
-// `from`: a suggested reply), sending that one's items and answer before
-// its own. A request goes again,
+// calls one, a message sent meanwhile left for the next call (End.left:
+// an agent told while it writes its recap, Tools.recap); so does one
+// that goes on from another's request (AskAI.ts `from`: a suggested
+// reply), sending that one's items and answer before its own. A request
+// goes again,
 // TRIES times at most, after its retry-after or a doubling wait, for a
 // passing reason (`busy`: no connection, a retry status, a stream error,
 // cut short or silent for the wire's `idle`), dropping what it streamed;
@@ -262,7 +264,7 @@ export namespace Agent {
         end.grew = backed;
         return;
       }
-      const says = run.sent.splice(0);
+      const says = ask.once || ask.from !== undefined ? [] : run.sent.splice(0);
       const replies = step.entries.filter((e) => e.kind === "illi");
       const text = replies.map((e) => e.text).join("\n\n");
       if (backs.length === 0 && says.length === 0) {
