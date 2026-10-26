@@ -27,7 +27,9 @@
 // tools by their own names; a subagent's own steps (inside its Task)
 // aren't shown. The last result ends the call: answered, or in plain
 // words (a plan's limit and when it resets, a login missing, a chat too
-// long for the window: `full`, a busy service). A stop interrupts it
+// long for the window: `full`, a busy service); a turn's call runs with
+// Claude Code's compaction off, so one outgrowing the window ends `full`
+// and illi folds the chat (ClaudeCode.env). A stop interrupts it
 // (SIGINT, then SIGKILL), what streamed of its message logged as cut
 // off. A model's window, as a result tells it, is learned (Pick.told, by
 // its canonical id) and kept for the next start; the plan's use, as each
@@ -179,7 +181,7 @@ export namespace ClaudeCode {
     const cut = ClaudeCode.cut(ask);
     let proc: Subprocess<"pipe", "pipe", "pipe">;
     try {
-      proc = Bun.spawn([ClaudeCode.bin, ...ClaudeCode.args(ask, file)], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: ClaudeCode.env() });
+      proc = Bun.spawn([ClaudeCode.bin, ...ClaudeCode.args(ask, file)], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: ClaudeCode.env(ask) });
     } catch (err: any) {
       fs.rmSync(file, { force: true });
       return none(/ENOENT|not found/i.test(String(err?.message)) ? NO_CLAUDE : String(err?.message ?? err), "down");
@@ -396,10 +398,17 @@ export namespace ClaudeCode {
   }
 
   // the environment Claude Code runs in: illi's, but the mark of a Claude
-  // Code session around illi (as when illi runs inside one)
-  export function env(): Record<string, string> {
+  // Code session around illi (as when illi runs inside one); a call illi
+  // refits (Ask.room: a turn's) with Claude Code's compaction off
+  // (DISABLE_COMPACT), so one outgrowing the window ends "Prompt is too
+  // long" (`full`) and illi folds the chat into its tree, never Claude
+  // Code's summary; an agent's keeps it, as nothing refits an agent
+  export function env(ask: Ask): Record<string, string> {
     const env = { ...process.env } as Record<string, string>;
     delete env.CLAUDECODE;
+    if (ask.room !== undefined) {
+      env.DISABLE_COMPACT = "1";
+    }
     return env;
   }
 
@@ -413,7 +422,9 @@ export namespace ClaudeCode {
     return { type: "user", message: { role: "user", content: [...content, ...imgs.map(Anthropic.image)] } };
   }
 
-  // one line of the stream; a subagent's own steps skipped
+  // one line of the stream; a subagent's own steps skipped, and the
+  // message an API error stands in (is_api_error_message: "Prompt is too
+  // long", a plan's limit), whose why the result tells, never a reply
   export function read(run: Run, m: any): void {
     if (m.parent_tool_use_id) {
       return;
@@ -423,6 +434,9 @@ export namespace ClaudeCode {
         return ClaudeCode.live(run, ClaudeCode.named(m.event));
       }
       case "assistant": {
+        if (m.is_api_error_message === true) {
+          return;
+        }
         const entries = Anthropic.entries((m.message?.content ?? []).map(ClaudeCode.named));
         run.said ||= entries.some((e) => e.kind === "illi");
         entries.forEach((e) => run.on({ $: "Entry", ...e }));
