@@ -472,7 +472,7 @@ test("the input wraps between words: one that would cross the edge starts the ne
   expect([hung.rows, hung.spot]).toEqual([["> abcd", "  efg"], { row: 0, col: 6 }]);
   expect([clicked("abcd efg", 6, 10, 5).spot, clicked("abcd ", 6).spot]).toEqual([{ row: 1, col: 2 }, { row: 1, col: 2 }]);
   expect([hung.at(0, 9), hung.at(1, 2)]).toEqual([5, 5]);
-  expect(clicked("abcd  efg", 6).rows).toEqual(["> abcd", "   efg", "  "]);
+  expect(clicked("abcd  efg", 6).rows).toEqual(["> abcd", "   ", "  efg"]);
   expect(clicked("see [Image #1]", 14).rows).toEqual(["> see ", "  [Image #1]"]);
   expect(clicked("ab cdefgh", 6).rows).toEqual(["> ab ", "  cdef", "  gh"]);
   expect(clicked("ab cd\u00a0ef", 8).rows).toEqual(["> ab ", "  cd\u00a0ef"]);
@@ -483,6 +483,18 @@ test("the input wraps between words: one that would cross the edge starts the ne
   ed.pos = 6;
   Screen.ed_key(ed, "Up");
   expect(ed.pos).toBe(1);
+});
+
+test("the message's last word, typed up to the input's edge, starts the next row with the cursor at its end, where its next letter leaves it; a space after it, or a word that starts or fills its row, leaves the cursor a row of its own", () => {
+  const full = clicked("hello world", 13);
+  expect([full.rows, full.spot]).toEqual([["> hello ", "  world"], { row: 1, col: 7 }]);
+  expect(clicked("hello worldx", 13).rows).toEqual(["> hello ", "  worldx"]);
+  expect(clicked("hello world", 13, 10, 3).rows).toEqual(["> hello ", "  world"]);
+  expect(clicked("hello wor\nld", 13).rows).toEqual(["> hello wor", "  ld"]);
+  expect(clicked("ab cde ", 9).rows).toEqual(["> ab cde ", "  "]);
+  expect(clicked("abcdefg", 9).rows).toEqual(["> abcdefg", "  "]);
+  expect(clicked("ab cdefghi", 9).rows).toEqual(["> ab ", "  cdefghi", "  "]);
+  expect(clicked("ab 世界", 8).rows).toEqual(["> ab ", "  世界"]);
 });
 
 test("a click on an input a column wide, where a wide character leaves its first row empty, lands on the next row's place, on the mark too", () => {

@@ -1003,8 +1003,10 @@ function ed_layout(ed: Ed): Laid {
 }
 
 // a line's rows, wrapped at w columns between words, and each place of
-// the cursor (before each character, and the end: the last line's on a
-// row of its own once its last row is full). A word that would cross
+// the cursor (before each character, and the end). The last line's end
+// past a full row takes the word it ends with down to the next row, so
+// the cursor typing it stays at its end (a word that starts its row, or
+// fills one, can't go: the end gets a row of its own). A word that would cross
 // the edge starts the next row whole, the space before it left at the
 // end of its row; a space that finds its row full hangs past the edge,
 // unshown (the row then full: what follows starts the next, a second
@@ -1022,6 +1024,18 @@ function ed_wrap(text: string, w: number, last: boolean, sized: Map<string, [str
   let [col, pos] = [0, 0];
   let word = -1;
   let [gap, hung] = [false, false];
+  // the word (from places[word] on, starting at column from) moved to the
+  // start of a row of its own
+  const down = (from: number) => {
+    const r   = rows.length - 1;
+    const cut = word < places.length ? cuts[word] : rows[r].length;
+    rows.push(rows[r].slice(cut));
+    rows[r] = rows[r].slice(0, cut);
+    for (let k = word; k < places.length; k++) {
+      [places[k], cuts[k]] = [{ ...places[k], row: r + 1, col: places[k].col - from }, cuts[k] - cut];
+    }
+    col -= from;
+  };
   for (const g of Paint.text_graphemes(text)) {
     let shown = sized.get(g);
     if (shown === undefined) {
@@ -1038,16 +1052,9 @@ function ed_wrap(text: string, w: number, last: boolean, sized: Map<string, [str
     }
     word = !space && gap ? places.length : word;
     if (col + cw > w || hung) {
-      const r    = rows.length - 1;
       const from = word >= 0 && word < places.length ? places[word].col : col;
       if (!space && word >= 0 && col - from + cw <= w) {
-        const cut = word < places.length ? cuts[word] : rows[r].length;
-        rows.push(rows[r].slice(cut));
-        rows[r] = rows[r].slice(0, cut);
-        for (let k = word; k < places.length; k++) {
-          [places[k], cuts[k]] = [{ ...places[k], row: r + 1, col: places[k].col - from }, cuts[k] - cut];
-        }
-        col -= from;
+        down(from);
       } else {
         rows.push("");
         col = 0;
@@ -1061,7 +1068,10 @@ function ed_wrap(text: string, w: number, last: boolean, sized: Map<string, [str
     col += cw;
     gap = space;
   }
-  if ((last || hung) && col >= w) {
+  const from = word >= 0 && word < places.length ? places[word].col : 0;
+  if (last && !hung && !gap && col >= w && from > 0 && col - from < w) {
+    down(from);
+  } else if ((last || hung) && col >= w) {
     rows.push("");
     col = 0;
   }
