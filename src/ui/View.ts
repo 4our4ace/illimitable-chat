@@ -316,6 +316,10 @@ export const MAIN = "illi";
 // illi's turn, as a stop names it among the agents at work
 export const TURN = "illi's turn";
 
+// the kinds a model writes in words: illi's replies and thoughts, an
+// agent's report
+const MODEL = new Set<Kind>(["illi", "mind", "work"]);
+
 // what a model writes, as the work's count of tokens takes it (made);
 // about how many characters make a token; the time its speed is taken
 // over, and how often it is taken anew (ms)
@@ -1230,7 +1234,7 @@ function whole_rows(id: number | null, entry: Entry): Row[] {
 // if not known, read off its line
 function sum_rows(id: number, n: number, node: Node = { text: WAIT, to: "" }, kind?: Kind): Row[] {
   const said = n === 1 ? (KINDED.exec(node.text)?.[1] as Kind | undefined) : undefined;
-  const rows = ROWS.get(node) ?? [{ $: "Sum", id, n, text: node.text, call: sum_call(n, node.text, node.to), kind: kind ?? said ?? null }];
+  const rows = ROWS.get(node) ?? [{ $: "Sum", id, n, text: Md.cites_hide(node.text), call: sum_call(n, node.text, node.to), kind: kind ?? said ?? null }];
   ROWS.set(node, rows);
   return rows;
 }
@@ -1318,8 +1322,10 @@ export function image_kind(head: Uint8Array): string | null {
 // text (Reply.ts), so only whether it has any is asked, never its blocks
 // (a reply streaming would be parsed at every paint). The answers to
 // illi's question show as the user's words, framed so, named. A tool
-// call reads as of its date (none: now; Call.call_parse)
-export function entry_rows(id: number | null, kind: Kind, text: string, images: string[] = [], date?: string): Row[] {
+// call reads as of its date (none: now; Call.call_parse); a model's text
+// (MODEL) shows without its citation marks (Md.cites_hide)
+export function entry_rows(id: number | null, kind: Kind, raw: string, images: string[] = [], date?: string): Row[] {
+  const text = MODEL.has(kind) ? Md.cites_hide(raw) : raw;
   if (entry_answer(kind, text)) {
     const said = text.slice(ANSWERED.length);
     return [{ $: "Msg", id, kind: "user", who: ANSWERS, text: said, body: Md.md_plain(said), call: null, images }];

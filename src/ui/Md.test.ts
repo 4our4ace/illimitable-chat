@@ -3,7 +3,8 @@
 // `bun test Md.test.ts`. A message typed keeps its blank lines; a
 // command's exit names its result; a note or a thought draws as a reply
 // does, in its look; the answers to illi's questions as the user's words.
-// Italics and a bare url read as a reply reads them.
+// Italics and a bare url read as a reply reads them. A ChatGPT model's
+// citation marks show nowhere, its words all kept.
 
 import { expect, test } from "bun:test";
 import * as Md from "./Md.ts";
@@ -63,4 +64,29 @@ test("italics and a bare url, as a reply reads them", () => {
   expect(Md.span_parse("(https://x.co/a?b=1)")).toEqual([Md.Text("("), { $: "Link", x: "https://x.co/a?b=1", k: "https://x.co/a?b=1" }, Md.Text(")")]);
   expect(Md.span_parse("\"https://x.co\"")).toEqual([Md.Text("\""), { $: "Link", x: "https://x.co", k: "https://x.co" }, Md.Text("\"")]);
   expect(Md.md_flat("*a* at https://ab")).toBe("a at https://ab");
+});
+
+// a ChatGPT model's citation marks: U+E200, the kind, U+E202 before each
+// reference, U+E201
+test("a model's citation marks show nowhere on screen, every word kept; the user's and a tool's text as it came", () => {
+  const cite = (...refs: string[]) => "cite" + refs.map((r) => "" + r).join("") + "";
+  expect(Md.cites_hide("REA is a skill. " + cite("turn0view0") + " It uses the shell.")).toBe("REA is a skill. It uses the shell.");
+  expect(Md.cites_hide("It runs tools " + cite("turn0search0", "turn0search3") + ".")).toBe("It runs tools.");
+  expect(Md.cites_hide("See the file fileciteturn0file0 here")).toBe("See the file here");
+  expect(Md.cites_hide("plain text, no marks")).toBe("plain text, no marks");
+  // one still streaming at the end: gone while it can still become a cite's
+  for (const going of ["", "ci", "cite", "citeturn0vi", "filecite"]) {
+    expect([going, Md.cites_hide("Done. " + going)]).toEqual([going, "Done."]);
+  }
+  // marks of other kinds carry words, and an unclosed one followed by words was never a cite in the making: as written
+  const entity = "entity[\"city\", \"Paris\"]";
+  expect(Md.cites_hide("Go to " + entity + ".")).toBe("Go to " + entity + ".");
+  expect(Md.cites_hide("a citeturn0view0 then words")).toBe("a citeturn0view0 then words");
+  expect(Md.cites_hide("a entity")).toBe("a entity");
+  // a reply and a thought drawn without them; the user's own words, a tool's result untouched
+  const text = (rows: View.Row[]) => rows.map((r) => ("text" in r ? r.text : "")).join("");
+  const said = "Yes. " + cite("turn0view0");
+  expect([text(View.entry_rows(1, "illi", said)), text(View.entry_rows(2, "mind", said)), text(View.entry_rows(3, "user", said)), text(View.entry_rows(4, "echo", said))]).toEqual(["Yes.", "Yes.", said, said]);
+  const lines = Paint.rows_lines(View.entry_rows(5, "illi", "A skill " + cite("turn0view0") + ", not a server."), 40).map((l) => l.map((r) => r.x).join("").trim()).filter((x) => x !== "");
+  expect(lines).toEqual(["A skill, not a server."]);
 });

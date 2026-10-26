@@ -13,7 +13,8 @@
 // <history> line recall may have appended never shown: history_bare,
 // Clip.ts). Tokens
 // hold raw text; each emitter escapes it. A span is the first mark at
-// its point.
+// its point. `cites_hide` takes off the citation marks a ChatGPT model
+// writes in its text, for the screen only: the chat keeps them.
 
 import * as Names from "../chat/Names.ts";
 import { history_bare } from "../tools/Clip.ts";
@@ -65,6 +66,14 @@ const NEW   = /^\+\+\+ (.*)$/;
 const READ  = /^\[(lines (\d+)-\d+ of \d+[^\]]*)\]$/;
 const HUNK  = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
 const EXIT  = /^\((exit -?\d+|stopped|killed by \w+) in (\d+(?:\.\d+)?) s\)$/;
+
+// a citation mark as a ChatGPT model writes one: U+E200, its kind (cite,
+// filecite), each reference after a U+E202 (turn0search3, turn0view0),
+// U+E201; the spaces before it go with it. Only ChatGPT's own app knows
+// the pages they name (the links the reply gives are its Sources line:
+// OpenAI.ts). Marks of other kinds carry words, so stay as written
+const CITE  = /[ \t]*\uE200(?:cite|filecite)\uE202[^\uE200\uE201]*\uE201/g;
+const CITES = ["cite", "filecite"];
 
 // Constructors
 // ============
@@ -119,6 +128,20 @@ function span_mark(m: RegExpMatchArray): Span {
     return { $: "Ital", x: m[6] };
   }
   return { $: "Link", x: m[7], k: m[7] };
+}
+
+// a model's text without its citation marks (CITE), as the screen shows
+// it; one still streaming at its end (no U+E201 yet, no space in it, a
+// kind that is or may become a cite's) left out too
+export function cites_hide(s: string): string {
+  if (!s.includes("\uE200")) {
+    return s;
+  }
+  const open = s.lastIndexOf("\uE200");
+  const tail = s.includes("\uE201", open) ? null : s.slice(open + 1);
+  const kind = tail?.split("\uE202")[0] ?? "";
+  const going = tail !== null && !/\s/.test(tail) && CITES.some((k) => (tail.includes("\uE202") ? k === kind : k.startsWith(kind)));
+  return (going ? s.slice(0, open).replace(/[ \t]+$/, "") : s).replace(CITE, "");
 }
 
 // a line's text, its marks dropped (a summary is plain text: Paint.ts)
