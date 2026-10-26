@@ -87,7 +87,8 @@ export type Ask = { chat: number; units: Unit[]; end: number; out: Array<[number
 // is (log: a subagent's log; null: the chat's own agent); the call now,
 // as it will be logged (`name {input}`); what its caller's view leaves out
 // (end, out, as an Ask's); the first message it holds whole (from: the
-// chat's agent's recent messages; a subagent holds its whole log); the
+// chat's agent's recent messages; a subagent holds its log as its calls
+// get it: Store.work_naming); the
 // score a line must reach (bar: Radar.bar)
 export type Recall = { chat: number; log: string | null; call: string; end: number; out: Array<[number, number]>; from: number; bar: number };
 

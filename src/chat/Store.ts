@@ -525,10 +525,13 @@ export namespace Store {
   }
 
   // the texts of a log's entries that may name a line (Store.naming's, of
-  // an agent: it holds its whole log)
+  // an agent: those its calls get, Logs.view: its whole log till a
+  // recap; past one, its first entry, illi's messages to it and all from
+  // its last recap on)
   export function work_naming(store: Store, log: string): string[] {
     const id = Store.log_id(store, log);
-    return id === null ? [] : (query(store.db, "select text from work where log = ? and (text glob '*#[0-9]*' or text glob '*[0-9]+[0-9]*|*')").all(id) as Array<{ text: string }>).map((r) => r.text);
+    const held = "(i = 0 or kind = 'user' or i >= coalesce((select max(i) from work where log = ?1 and kind = 'recap'), 0))";
+    return id === null ? [] : (query(store.db, "select text from work where log = ?1 and " + held + " and (text glob '*#[0-9]*' or text glob '*[0-9]+[0-9]*|*')").all(id) as Array<{ text: string }>).map((r) => r.text);
   }
 
   // Images

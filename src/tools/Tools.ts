@@ -244,9 +244,10 @@ const SUB_RE      = /^subagent(?: ([a-z0-9][a-z0-9_-]*(?::[a-z0-9][a-z0-9_-]*)?)
 
 // an agent outgrowing its model's window (Tools.refit): its recap's task
 // (Chat's RECAP, an agent's), after its log as its calls get it, cut to
-// fit (Logs.fit: at most MOST of the window, TOKEN characters a token);
-// the note it goes on from (#: how it reads what the recap left out,
-// RECAP_ZOOM, $ its name; none for one started fresh); the most recaps in
+// fit (Logs.fit: at most MOST of the window, TOKEN bytes a token); what
+// the views are told as it is written (a thought); the note it goes on
+// from (#: how it reads what the recap left out, RECAP_ZOOM, $ its log;
+// none for one started fresh); the most recaps in
 // a row with no work between (a call answered or grown starts the count
 // anew), the most tries of one, its log's cut halved each time, and why
 // it ends past either (#: the model)
@@ -293,6 +294,7 @@ Rules:
 - Call no tools; output only the recap.`;
 const RECAPPED   = "Your context filled up: your log before the recap above is summarized in it, but for what you are and illi's messages to you, kept whole#. Go on where you were: your final reply is still your report to illi.";
 const RECAP_ZOOM = ' (zoom("$") reads all of it)';
+const RECAPPING  = "Its context is full: writing a recap of its work to go on from.";
 const REFITS     = 3;
 const NO_FIT     = "its work won't fit #'s window even recapped";
 
@@ -919,21 +921,26 @@ export namespace Tools {
   // an agent's recap of its own work (RECAP_SUB), by its model, after its
   // log as its calls get it, on their cache but for the log (not Claude
   // Code's, run without tools), cut to fit (Logs.fit: at most MOST of
-  // the window, halved while the request is still too long, REFITS
-  // tries at most, then NO_FIT; a window not told: the log whole first);
-  // once (no tool runs), its pieces streamed to the views as its work's
-  // are (none of its entries), then logged as the log's recap. Its call
-  // is the agent's while it runs, so a stop reaches it and a message
-  // told meanwhile is logged (kept whole past the recap: Logs.view).
-  // null: logged; else its failed end, saying why
+  // the window in bytes, TOKEN a token, halved while the request is
+  // still too long, REFITS tries at most, then NO_FIT; a window not
+  // told: the log whole first) and left unmarked (no later request reads
+  // it: the next call's log differs, as a halved try's does); once (no
+  // tool runs), the views told it is being written (RECAPPING, a thought:
+  // never logged), its pieces streamed as its work's are (none of its
+  // entries), then logged as the log's recap. Its call is the agent's
+  // while it runs, so a stop reaches it (its why the stop's, as a
+  // call's) and a message told meanwhile is logged, left by the recap's
+  // one step (Agent.ts once) and kept whole past it (Logs.view). null:
+  // logged; else its failed end, saying why
   export async function recap(tools: Tools, agent: Agent): Promise<End | null> {
     const ask = Tools.ask(tools, agent);
     const pick = Tools.pick(tools, agent.role);
     const log = Logs.view(tools.mem, agent.name);
     const window = Pick.window(pick);
-    let most = window === undefined ? Logs.fit(log).length : config.config_most(window, 0, Pick.room(pick)) * TOKEN;
+    let most = window === undefined ? Memory.bytes(Logs.fit(log)) : config.config_most(window, 0, Pick.room(pick)) * TOKEN;
+    tools.hooks.on(agent, { $: "Entry", kind: "mind", text: RECAPPING });
     for (let k = 0; k < REFITS; k++, most /= 2) {
-      const blocks = [...ask.blocks.slice(0, -1), { text: Logs.fit(log, most), mark: true }, { text: RECAP_SUB, mark: false }];
+      const blocks = [...ask.blocks.slice(0, -1), { text: Logs.fit(log, most), mark: false }, { text: RECAP_SUB, mark: false }];
       agent.call = AskAI.ask({ ...ask, blocks, once: true, room: undefined }, (ev) => ev.$ === "Delta" && tools.hooks.on(agent, ev));
       tools.hooks.change();
       const end = await agent.call.done;
@@ -944,7 +951,7 @@ export namespace Tools {
         return null;
       }
       if (agent.stop || end.stop !== "full") {
-        return { ...end, ok: false, text: "no recap: " + (end.ok ? "none came" : end.text), left: [] };
+        return { ...end, ok: false, text: agent.stop ? end.text : "no recap: " + (end.ok ? "none came" : end.text), left: [] };
       }
     }
     return AskAI.end(NO_FIT.replace("#", pick.model));

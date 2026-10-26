@@ -86,20 +86,24 @@ async function until(ok: () => boolean): Promise<void> {
 }
 
 // a plain subagent given `task`, its model a window of `window` tokens
-// (asked by its label, as the catalog knows it):
+// (asked by its label, as the catalog knows it) till it reports, so the
+// chat's turn then gets its own:
 // the agent's calls answered in turn by `work` (k: the call's place
 // among them), its recaps by `recap` (k: the recap's), any other call
 // (the chat's turn as the report comes, a summary) at once; its calls,
-// its recaps' and the report the chat got
+// its recaps', the report the chat got and the turns it started
 async function sub(task: string, window: number, work: (k: number, feed: any, name: string) => void, recap: (k: number, feed: any, name: string) => void) {
-  const real = { ask: AskAI.ask, window: Pick.window };
-  const [calls, recaps]: [any[], any[]] = [[], []];
+  const real = { ask: AskAI.ask, window: Pick.window, report: chat.tools.hooks.report };
+  let running = true;
+  chat.tools.hooks.report = (agent, text, stopped) => ((running = false), real.report(agent, text, stopped));
+  const [calls, recaps, turns]: [any[], any[], any[]] = [[], [], []];
   let name = "";
-  Pick.window = (p) => (Pick.model(p.vendor, p.model) === undefined ? undefined : window);
+  Pick.window = (p) => (!running ? real.window(p) : Pick.model(p.vendor, p.model) === undefined ? undefined : window);
   AskAI.ask = (a, on) => {
     const [call, feed] = AskAI.tie(on, () => {}, () => {});
     const list = !a.system.includes("You are a subagent of illi") ? null : a.once ? recaps : calls;
     list?.push(a);
+    (a.keep ? turns : []).push(a);
     queueMicrotask(() => (list === null ? feed.end({ ok: true, text: "noted", left: [] }) : (list === calls ? work : recap)(list.length - 1, feed, name)));
     return call;
   };
@@ -107,10 +111,11 @@ async function sub(task: string, window: number, work: (k: number, feed: any, na
     name = Tools.start(chat.tools, { $: "sub", effort: null, agent: null }, task, []);
     const report = () => Array.from({ length: chat.mem.count }, (_, i) => Memory.message(chat.mem, i)!).find((m) => m.kind === "work" && m.text.startsWith("[" + name + "]"));
     await until(() => report() !== undefined);
+    await Bun.sleep(20);
     await until(() => !chat.busy);
-    return { name, calls, recaps, report: report()!.text };
+    return { name, calls, recaps, report: report()!.text, turns: turns.length };
   } finally {
-    [AskAI.ask, Pick.window] = [real.ask, real.window];
+    [AskAI.ask, Pick.window, chat.tools.hooks.report] = [real.ask, real.window, real.report];
   }
 }
 
@@ -542,7 +547,7 @@ test("a long text by its ends: whole up to the most, else its start and its end 
   expect(Tools.ends("ab😀cdefgh😀ij", 6)).toBe("ab … 😀ij");
 });
 
-test("an agent's log as its calls get it: whole till a recap; past one, what it is and illi's messages whole, then the last recap on; cut to fit, each line past a common length to its head and tail, a surrogate pair kept whole", () => {
+test("an agent's log as its calls get it: whole till a recap; past one, what it is and illi's messages whole, then the last recap on, and only those name lines it holds (recall); cut to fit in bytes, marks counted, each line past a common length to its head and tail, a surrogate pair kept whole, none cut longer", () => {
   const root = (i: number, kind: any, text: string) => Memory.root(i, { kind, text });
   const log = [root(0, "note", "subagent"), root(1, "user", "list it"), root(2, "echo", "a".repeat(50)), root(3, "recap", "r1"), root(4, "user", "and count"), root(5, "echo", "b"), root(6, "recap", "r2"), root(7, "echo", "c")];
   expect(Logs.fit(log.slice(0, 3))).toBe("0|note: subagent\n\n1|user: list it\n\n2|echo: " + "a".repeat(50));
@@ -550,12 +555,33 @@ test("an agent's log as its calls get it: whole till a recap; past one, what it 
   log.forEach((e) => Logs.push(chat.mem, name, e.kind, e.text));
   expect(Logs.view(chat.mem, name).map((e) => e.i)).toEqual([0, 1, 4, 6, 7]);
   expect(Logs.view(chat.mem, "nobody")).toEqual([]);
+  const whole = Logs.start(chat.mem, null, () => false);
+  log.slice(0, 3).forEach((e) => Logs.push(chat.mem, whole, e.kind, e.text));
+  expect(Logs.view(chat.mem, whole).map((e) => e.i)).toEqual([0, 1, 2]);
+  // what names a line counts as held only while the agent's calls get it
+  const named = Logs.start(chat.mem, null, () => false);
+  for (const [kind, text] of [["note", "subagent"], ["user", "look at #12"], ["echo", "0+2|the cache bug"], ["recap", "## Task"], ["echo", "#30+4 · warmup"]]) {
+    Logs.push(chat.mem, named, kind as any, text);
+  }
+  expect(Store.work_naming(chat.mem.store, Logs.log(chat.mem, named)!)).toEqual(["look at #12", "#30+4 · warmup"]);
+  Logs.push(chat.mem, whole, "echo", "0+2|the cache bug");
+  expect(Store.work_naming(chat.mem.store, Logs.log(chat.mem, whole)!)).toEqual(["0+2|the cache bug"]);
   const cut = Logs.fit([root(0, "user", "short"), root(1, "echo", "h".repeat(400) + "t".repeat(400))], 200);
   expect(cut).toStartWith("0|user: short\n\n1|echo: hhh");
   expect(cut).toEndWith("ttt");
   expect(cut).toContain("characters cut ...]");
   expect(cut.length).toBeLessThan(300);
-  expect(Logs.fit([root(0, "echo", "😀".repeat(400))], 101)).not.toMatch(/[\uD800-\uDFFF](?![\uDC00-\uDFFF])(?<![\uD800-\uDBFF][\uDC00-\uDFFF])/);
+  for (const most of [101, 102, 103, 150, 151]) {
+    const pairs = Logs.fit([root(0, "echo", "😀".repeat(400))], most);
+    expect([most, /\uFFFD/.test(pairs), pairs.replace(/\n\[\.\.\. \d+ characters cut \.\.\.\]\n/, "").replace(/^0\|echo: /, "").replace(/😀/g, "")]).toEqual([most, false, ""]);
+  }
+  const many = Array.from({ length: 3000 }, (_, i) => root(i, "echo", "line " + i + " of a short result"));
+  const uncut = Memory.bytes(Logs.fit(many));
+  for (const part of [2, 8]) {
+    expect(Memory.bytes(Logs.fit(many, uncut / part))).toBeLessThanOrEqual(uncut);
+  }
+  const cjk = Logs.fit([root(0, "echo", "漢".repeat(3000))], 3000);
+  expect(Memory.bytes(cjk)).toBeLessThan(3000 + 60);
 });
 
 test("a subagent outgrowing its model's window recaps its own log and goes on from the recap, unasked: its room a turn's; the recap's request cut to fit, halved while still too long; its task, and a message told meanwhile, kept whole; after a restart its calls start at the recap", async () => {
@@ -594,7 +620,7 @@ test("a subagent outgrowing its model's window recaps its own log and goes on fr
   expect(Tools.ask(chat.tools, Tools.agent(chat.tools, got.name)!).blocks.at(-1)!.text).toBe(view);
 });
 
-test("a subagent's recaps that never let a call grow end its run after three in a row, saying why; a call that grew starts the count anew", async () => {
+test("a subagent's recaps that never let a call grow end its run after three in a row, saying why; a call that grew starts the count anew; a recap refused ends it answered, one the vendor was too busy for unanswered, as a call's", async () => {
   const full = (grew: boolean[]) => (k: number, feed: any) => feed.end({ ok: false, text: "HTTP 400: prompt is too long", left: [], stop: "full", grew: grew[k] ?? false });
   const recap = (k: number, feed: any) => feed.end({ ok: true, text: "recap " + k, left: [] });
   const stuck = await sub("look", 10000, full([]), recap);
@@ -602,7 +628,9 @@ test("a subagent's recaps that never let a call grow end its run after three in 
   expect(stuck.report).toContain("failed: its work won't fit " + Tools.pick(chat.tools, { $: "sub", effort: null, agent: null }).model + "'s window even recapped");
   const grown = await sub("look", 10000, full([false, true]), recap);
   expect([grown.calls.length, grown.recaps.length]).toEqual([5, 4]);
-  const none = await sub("look", 10000, full([]), (_, feed) => feed.end({ ok: false, text: "the AI service is busy", left: [], stop: "down" }));
-  expect([none.calls.length, none.recaps.length]).toEqual([1, 1]);
-  expect(none.report).toContain("failed: no recap: the AI service is busy");
+  const none = await sub("look", 10000, full([]), (_, feed) => feed.end({ ok: false, text: "your Anthropic API credit is used up", left: [], stop: "down" }));
+  expect([none.calls.length, none.recaps.length, none.turns]).toEqual([1, 1, 1]);
+  expect(none.report).toContain("failed: no recap: your Anthropic API credit is used up");
+  const busy = await sub("look", 10000, full([]), (_, feed) => feed.end({ ok: false, text: "the AI service is busy or unavailable right now", left: [], stop: "down", again: true }));
+  expect([busy.report.includes("failed: no recap: the AI service is busy"), busy.turns]).toEqual([true, 0]);
 });

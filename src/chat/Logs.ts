@@ -25,6 +25,10 @@ const LOG   = /^([A-Za-z][A-Za-z0-9_-]*)(?:\.([0-9a-z]+))?$/;
 // never an agent's
 export const MAIN = "main";
 
+// the bytes a line's mark of what Logs.fit cut takes, at most ("\n[...
+// 123456789 characters cut ...]\n")
+const CUT = 40;
+
 // Logs
 // ====
 
@@ -104,27 +108,38 @@ export namespace Logs {
     return at < 0 ? log : log.filter((e, k) => k === 0 || k >= at || e.kind === "user");
   }
 
-  // a log's lines (line) in `most` characters or so (UTF-16 units; the
-  // marks of what it cut and the gaps between lines not counted): past
-  // it, each line longer than a common length (the longest first: tool
-  // results, as a rule) keeps its head and tail to it, saying how much
-  // it cut (a surrogate pair cut in two made U+FFFD: toWellFormed), so
-  // no result, however long, pushes a recap's request past its model's
-  // window (Tools.recap)
+  // a log's lines (line) in `most` bytes or so (UTF-8, as models read
+  // it; the gaps between lines and the marks of what it cut counted, CUT
+  // bytes each): past it, each line longer than a common length (the
+  // longest first: tool results, as a rule) keeps its head and tail to
+  // it, saying how many characters it cut (a surrogate pair kept whole),
+  // and none is cut that its mark wouldn't make shorter, so no result,
+  // however long, pushes a recap's request past its model's window
+  // (Tools.recap). A log of more lines than even their marks fit in
+  // `most` comes cut as far as it goes
   export function fit(log: Root[], most = Infinity): string {
     const lines = log.map(Logs.line);
-    const sum = (cap: number) => lines.reduce((n, s) => n + Math.min(s.length, cap), 0);
+    const sizes = lines.map(Memory.bytes);
+    const gaps  = 2 * Math.max(0, lines.length - 1);
+    const sum   = (cap: number) => sizes.reduce((n, b) => n + (b > cap + CUT ? cap + CUT : b), gaps);
     if (sum(Infinity) <= most) {
       return lines.join("\n\n");
     }
-    let [lo, hi] = [0, lines.reduce((n, s) => Math.max(n, s.length), 0)];
+    let [lo, hi] = [0, sizes.reduce((n, b) => Math.max(n, b), 0)];
     while (lo < hi) {
       const mid = Math.ceil((lo + hi) / 2);
       [lo, hi] = sum(mid) <= most ? [mid, hi] : [lo, mid - 1];
     }
-    const half = Math.floor(lo / 2);
-    const cut  = (s: string) => (s.length <= lo ? s : (s.slice(0, half) + "\n[... " + (s.length - 2 * half) + " characters cut ...]\n" + s.slice(s.length - half)).toWellFormed());
-    return lines.map(cut).join("\n\n");
+    const cut = (s: string, b: number) => {
+      if (b <= lo + CUT) {
+        return s;
+      }
+      const half = Math.floor((lo * s.length) / b / 2);
+      const head = half - (half > 0 && s.charCodeAt(half - 1) >> 10 === 0x36 ? 1 : 0);
+      const tail = s.length - half - (half > 0 && s.charCodeAt(s.length - half) >> 10 === 0x37 ? 1 : 0);
+      return s.slice(0, head) + "\n[... " + (tail - head) + " characters cut ...]\n" + s.slice(tail);
+    };
+    return lines.map((s, k) => cut(s, sizes[k])).join("\n\n");
   }
 
   export function line(root: Root): string {
