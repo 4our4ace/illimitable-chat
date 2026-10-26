@@ -29,7 +29,9 @@
 // coarser past them, never more; lines not built opened to their halves,
 // a message not summarized as such; the roots alone past the lines and
 // the bytes stay, each text cut to its share. A span with no message says so, with the lines
-// just before and after it.
+// just before and after it. A subagent's map: the chat (from the view's
+// first message) in a few dozen lines, the newest messages each its own,
+// detail fading with age, within its bytes; lines not built said so.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -352,6 +354,40 @@ test("the roots alone past the lines and the bytes: they stay, each text cut to 
   expect(lines.map((l) => l.part)).toEqual(roots);
   expect(lines.length).toBe(13);
   expect(lines.every((l) => Buffer.byteLength(l.text!) <= Math.floor(4800 / 13) && l.text!.endsWith("…") && !l.text!.includes("\uFFFD"))).toBe(true);
+});
+
+test("a subagent's map: the chat in 48 lines at most, the newest 8 messages each its own, detail fading with age, from the view's first message; lines not built said so; one block, marked", () => {
+  const times = Array.from({ length: 600 }, (_, k) => ny(21, 9) + k * 60e3);
+  const mem = dated("map", times, 100);
+  const refs = (blocks: Array<{ text: string }>) => blocks[0].text.split("\n").filter((l) => /^\d+\+\d+\|/.test(l)).map((l) => l.split("|")[0]);
+  const map = Memory.map(mem);
+  expect([map.length, map[0].mark]).toEqual([1, true]);
+  expect(refs(map)).toEqual(["0+64", "64+64", "128+64", "192+32", "224+32", "256+32", "288+32", "320+32", "352+32", "384+16", "400+16", "416+16", "432+16", "448+16", "464+16", "480+16", "496+8", "504+8", "512+8", "520+8", "528+8", "536+8", "544+4", "548+4", "552+4", "556+4", "560+4", "564+4", "568+4", "572+4", "576+2", "578+2", "580+2", "582+2", "584+2", "586+2", "588+1", "589+1", "590+1", "591+1", "592+1", "593+1", "594+1", "595+1", "596+1", "597+1", "598+1", "599+1"]);
+  expect(map[0].text).toStartWith("<chat>\n0+64|l6i0 ");
+  expect(map[0].text).toEndWith("\n599+1|l0i599 " + "x".repeat(100) + "\n</chat>\n");
+  // past a /clear, from its first message
+  mem.view.from = 100;
+  expect(refs(Memory.map(mem)).slice(0, 4)).toEqual(["100+4", "104+8", "112+16", "128+64"]);
+  // longer lines: fewer, within the bytes
+  const long = Memory.map(dated("map-long", times, 600));
+  expect([refs(long).length, Buffer.byteLength(long[0].text) <= 16000 + "<chat>\n</chat>\n".length]).toEqual([26, true]);
+  // a message not summarized: its line says so, the lines over it opened first
+  const bare = Memory.map(dated("map-bare", times, 100, Infinity, new Set([300, 597])))[0].text;
+  expect([bare.includes("\n300+1|(not summarized yet: zoom it)\n"), bare.includes("\n597+1|(not summarized yet: zoom it)\n")]).toEqual([true, true]);
+  // a short chat: each message
+  expect(Memory.map(dated("map-few", times.slice(0, 3)))).toEqual([{ text: "<chat>\n0+1|l0i0 \n1+1|l0i1 \n2+1|l0i2 \n</chat>\n", mark: true }]);
+});
+
+test("a map whose first lines pass its bytes: they stay, each text cut to its share", () => {
+  const mem = Memory.load(DIR + "/map-roots", () => ({}) as any);
+  mem.hold = true;
+  Memory.push(mem, Array.from({ length: 8191 }, (_, k) => ({ kind: "user" as const, text: "m" + k })));
+  const roots = Memory.roots(8183);
+  Store.nodes(mem.store, roots.map((p) => ({ first: p.i * 2 ** p.l, n: 2 ** p.l, text: "é".repeat(4000) })));
+  const lines = Memory.map(mem)[0].text.split("\n").filter((l) => /^\d+\+\d+\|/.test(l));
+  expect(lines.map((l) => l.split("|")[0])).toEqual([...roots.map((p) => Memory.ref(p)), ...Array.from({ length: 8 }, (_, k) => 8183 + k + "+1")]);
+  const share = Math.floor(16000 / lines.length);
+  expect(lines.slice(0, roots.length).every((l) => Buffer.byteLength(l.split("|")[1]) <= share && l.endsWith("…") && !l.includes("\uFFFD"))).toBe(true);
 });
 
 test("a span with no message says so, with the lines just before and after it; at the chat's start or end, the one side; none at all, so", () => zoned(() => {

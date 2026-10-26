@@ -233,6 +233,7 @@ test("spawn's agent runs a subagent as it, and names the user's agents", async (
   await until(() => asks.length > 0);
   expect(asks[0].system).toContain("You are a subagent of illi");
   expect(asks[0].system).toContain("# Agent: reviewer\n\nYou review.");
+  expect(asks[0].blocks[0].text).toStartWith("<chat>\n");
   expect(asks[0]).toMatchObject({ model: "gpt-6-luna", effort: "high" });
   expect(Tools.list(chat.tools, name).map((t) => t.name)).toEqual(["zoom", "read"]);
   expect(Logs.read(chat.mem, name)![0].text).toBe("subagent reviewer");
@@ -325,7 +326,7 @@ test("a main agent whose tools list holds spawn to some agents is offered those 
   }
 });
 
-test("a subagent on a ChatGPT model whose window isn't told starts on no guess: spawn says why, no model asked; its view, if asked, its opening and last block alone", async () => {
+test("a subagent on a ChatGPT model whose window isn't told starts on no guess: spawn says why, no model asked; its call carries its map whole, no window needed", async () => {
   const luna = Pick.model("chatgpt", "gpt-6-luna")!;
   const [window, listed, models] = [luna.window, ChatGPT.listed, ChatGPT.models];
   ChatGPT.listed = async () => {};
@@ -336,7 +337,7 @@ test("a subagent on a ChatGPT model whose window isn't told starts on no guess: 
     const out = await Tools.call(chat.tools, "main", "spawn", { tasks: ["review it"], agent: "reviewer" }, new AbortController().signal);
     expect(out.text).toBe("Not started: ChatGPT hasn't told gpt-6-luna's context window (its model list didn't answer), and illi never guesses one.");
     const ask = Tools.ask(chat.tools, { name: "x", run: 0, log: "x", role: { $: "sub", effort: null, agent: "reviewer" }, call: null, live: [], calls: {}, stop: false, view: [{ text: "first\n", mark: false }, { text: "middle\n", mark: false }, { text: "last\n", mark: false }], replies: [] } as any);
-    expect(ask.blocks.map((b: any) => b.text).join("")).toStartWith("first\n(older lines left out to fit your model: zoom and search find them)\nlast\n");
+    expect(ask.blocks.map((b: any) => b.text).join("")).toStartWith("first\nmiddle\nlast\n");
     expect(ask.builtins).toEqual(["Read"]);
     await Bun.sleep(20);
     expect(asks).toEqual([]);

@@ -32,7 +32,7 @@
 // refused, a field sent as null or "" read as left out; a search kept to
 // a span; the projects' days in illi's zone. The time now in each call's
 // message, short on claude-code, after every cache mark a later call
-// reads. A subagent's view fits its model: the oldest lines left out.
+// reads.
 
 import { expect, setSystemTime, test } from "bun:test";
 import * as fs from "node:fs";
@@ -502,13 +502,4 @@ test("a long text by its ends: whole up to the most, else its start and its end 
   expect(Tools.ends("abcdef", 6)).toBe("abcdef");
   expect(Tools.ends("abcdefgh", 6)).toBe("abc … fgh");
   expect(Tools.ends("ab😀cdefgh😀ij", 6)).toBe("ab … 😀ij");
-});
-
-test("a subagent's view within its model's budget: the oldest lines left out, said so; the opening and the newest kept", () => {
-  const view = [{ text: "<chat>\n", mark: false }, ...["a", "b", "c", "d"].map((x) => ({ text: x.repeat(100), mark: false })), { text: "</chat>\n", mark: true }];
-  expect(Tools.fitted(view, 10000)).toBe(view);
-  const cut = Tools.fitted(view, 250);
-  expect(cut.map((b) => b.text[0])).toEqual(["<", "(", "c", "d", "<"]);
-  expect(cut[1].text).toContain("zoom and search find them");
-  expect(Tools.fitted(view, 1).map((b) => b.text[0])).toEqual(["<", "(", "<"]);
 });

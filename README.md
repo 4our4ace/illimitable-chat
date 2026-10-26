@@ -52,9 +52,8 @@ illi too, as one line it can unfold.
 Its subagents know the story
 ----------------------------
 
-Send a reviewer and a tester off together. Each subagent starts with
-illi's memory of the chat (up to half of what illi's own turn sends on
-its model), not just a one-line task, and can open any old moment back
+Send a reviewer and a tester off together. Each subagent gets a map of
+the whole chat, not just a one-line task, and opens what it needs, back
 to the exact words. What it reports stays in the chat for good. For a
 test that has to start blind, illi can start one fresh, without the
 chat.

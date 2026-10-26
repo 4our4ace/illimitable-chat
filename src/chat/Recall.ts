@@ -86,8 +86,8 @@ const KEPT = 60000;
 // =======
 
 // the search running, its chat's tools and its recall (null: none); the
-// bar as last read, and when; each subagent's view's lines, read once a
-// view
+// bar as last read, and when; each subagent's map's lines, read once a
+// map
 let running: { tools: Tools; pending: Pending } | null = null;
 let kept: { at: number; bar: number } | null = null;
 const PARTS = new WeakMap<Block[], Array<[number, number]>>();
@@ -144,7 +144,7 @@ export namespace Recall {
   // whole: the chat's agent's view's lines before its cut, those of
   // EPISODE messages or fewer left out (what the view says of them is as
   // fine as a line found there), and its recent messages from the cut on
-  // (Memory.turn); a subagent's view's lines as it was spawned or told
+  // (Memory.turn); a subagent's map's lines as it was spawned or told
   // (its log is its own, never in the chat's lines), those of EPISODE
   // messages or fewer left out, the chat after them not searched. The
   // dismissed left out of both
@@ -242,8 +242,8 @@ export namespace Recall {
     tools.steps.set(who, (tools.steps.get(who) ?? 0) + 1);
   }
 
-  // a subagent's view's lines, [id, n] each (its blocks are Memory.view's,
-  // "id+n|text" a line), read once a view
+  // a subagent's map's lines, [id, n] each (its blocks are Memory.map's,
+  // "id+n|text" a line), read once a map
   export function parts(view: Block[]): Array<[number, number]> {
     let parts = PARTS.get(view);
     if (parts === undefined) {
