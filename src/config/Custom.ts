@@ -501,7 +501,7 @@ function claude_name(entry: string): string {
 // illi's other tools and MCP servers, as illi gives those itself (so the
 // agent spawns one way, its subagents at illi's side, and keeps one to-do
 // list). --tools reaches only Claude Code's built-in tools: its own MCP
-// servers and plugins stay
+// servers are cut by name (ClaudeCode.cut), its plugins stay
 function agent_builtins(list: string[]): string[] {
   const out = list.map(claude_name).map((t) => {
     const own = CLAUDE_TOOLS.get(t) ?? t;
