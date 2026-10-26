@@ -107,6 +107,12 @@ export namespace When {
     return When.week(ms) + " " + When.date(ms) + " " + new Date(ms).getFullYear();
   }
 
+  // a day as a date: 2026-10-21
+  export function ymd(ms: number): string {
+    const at = new Date(ms);
+    return at.getFullYear() + "-" + String(at.getMonth() + 1).padStart(2, "0") + "-" + String(at.getDate()).padStart(2, "0");
+  }
+
   // a day and its time: Wed 21 Oct 2026 14:05
   export function moment(ms: number): string {
     return When.day(ms) + " " + When.hm(ms);
@@ -123,9 +129,7 @@ export namespace When {
   // 2026-10-25 14:05 UTC-4; short, its date left out (claude-code, whose
   // own prompt gives the day's date alone): Sun 14:05 UTC-4
   export function now(short = false, ms = Date.now()): string {
-    const at = new Date(ms);
-    const ymd = at.getFullYear() + "-" + String(at.getMonth() + 1).padStart(2, "0") + "-" + String(at.getDate()).padStart(2, "0");
-    return When.week(ms) + (short ? "" : " " + ymd) + " " + When.hm(ms) + " " + When.zone(ms);
+    return When.week(ms) + (short ? "" : " " + When.ymd(ms)) + " " + When.hm(ms) + " " + When.zone(ms);
   }
 
   // A span's words

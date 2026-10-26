@@ -28,7 +28,7 @@
 // a search across them, a zoom into another's chat. date both ways: a
 // message's date (Wed 21 Oct 2026 14:05), a span's lines (another project's too, its project
 // named for the zoom), what isn't a span refused; a search kept to a
-// span. The time now in each call's message, short on claude-code, after
+// span; the projects' days in illi's zone. The time now in each call's message, short on claude-code, after
 // every cache mark a later call reads. A subagent's view fits its model:
 // the oldest lines left out.
 
@@ -434,6 +434,12 @@ test("date both ways: a span's lines in another project's chat, its project name
   expect(await found({ from: "2026-10-22" })).toEqual(["shop-9x1a2b 2+1|user: cache warmup"]);
   expect(await found({ from: "2026-10-20 12:30", to: "2026-10-22" })).toEqual(["shop-9x1a2b 1+1|illi: fixed the cache bug", "shop-9x1a2b 2+1|user: cache warmup"]);
   expect(await call("search", { words: "cache", to: "2026-10-22" })).toEqual({ text: "from: a local date or date and time, as 2026-10-21 or 2026-10-21 14:00.", fail: true });
+  // the projects' days are local: 02:00 UTC on the 2nd is the 1st's evening in New York
+  const late = Store.open(DIR + "/chat", { key: "git:/work/late", name: "late-4k2p9q", path: "/work/late" });
+  Store.push(late, [0, 1].map((i) => ({ i, kind: "user" as const, text: "m", date: ["2026-10-01T14:00:00.000Z", "2026-10-02T02:00:00.000Z"][i], size: 1 })), "/work/late");
+  expect((await call("projects", {})).text).toContain("late-4k2p9q · /work/late · 2026-10-01 · 2 messages");
+  expect((await call("projects", {})).text).toContain("shop-9x1a2b · /work/shop · 2026-10-20 to 2026-10-22 · 3 messages");
+  Store.close(late);
   Store.close(other);
 }));
 
