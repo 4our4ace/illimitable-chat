@@ -717,9 +717,10 @@ does alone (when the two shared a worker, it waited 86 ms and 196 ms).
 
 As a tool call of illi's runs, the chat searches the same index for it
 (`src/chat/Recall.ts`; the search, `Radar.recall`), so the model gets a
-strong match without asking. It starts beside the call's run, past the
-hooks and the permission checks, on recall's own worker, one at a time:
-a later call of the same caller's round of calls shares the one running
+strong match without asking (a subagent started fresh, which gets
+nothing of the chat, starts none). It starts beside the call's run, past
+the hooks and the permission checks, on recall's own worker, one at a
+time: a later call of the same caller's round of calls shares the one running
 (so what a fast call's search found too late goes after a slower call
 of that round instead of nowhere), any other call that starts meanwhile
 gets none. In one read transaction, on that worker's connection:

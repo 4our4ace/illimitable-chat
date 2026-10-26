@@ -17,9 +17,10 @@
 // whole log, so a told agent goes on even after a restart; its replies
 // reach the chat as one "[Name]" message. One started fresh (its
 // agent's `fresh: true`, or spawn's) gets none of the chat: no view, no
-// tool reading it (MEMORY), no radar's line; its own log alone. One spawned as a user's
-// subagent (Custom.ts) runs on its model, with its instructions and
-// tools; so does the master, given a primary agent (Shift+Tab, /agent).
+// tool reading it (MEMORY), no radar's line; its own log alone. One
+// spawned as a user's subagent (Custom.ts) runs on its model, with its
+// instructions and tools; so does the master, given a primary agent
+// (Shift+Tab, /agent).
 // Beside these, the user's: their skills (one tool, skill, listing them;
 // it turns a sticky one on and off too, Custom.ts)
 // and their MCP servers' tools (Mcp.ts), for the master and agents alike;
