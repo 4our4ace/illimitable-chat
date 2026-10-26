@@ -7,7 +7,9 @@
 // a plugin's tool after its server, `github: get_issue`) and a head, as its
 // tool reads (READS): a command as itself; a file tool its path, read's
 // lines after it, edit's files (the diff comes in its result); zoom and
-// date the message (`#6243`, a line `#6243+8`, an agent by name); spawn
+// date the message (`#6243`, a line `#6243+8`, an agent by name), date a
+// span in words (`14–20 Oct`, When.short), search its words, project and
+// span, never a date as the model wrote it; spawn
 // its tasks, tell its agent's name and its text in blocks; todo how far
 // its list is, its items in a block, each marked; a web search its
 // queries, or the page it opened. Any other call, or an edit whose edits
@@ -22,7 +24,8 @@
 // description its caller gave it, else its first line; a file by its
 // path from the working dir, else from ~: path_said), then how it
 // ended (call_outcome: a command's exit, the lines a read showed, the
-// lines a write or an edit changed; a failure, how).
+// lines a write or an edit changed, the messages a span of time held; a
+// failure, how).
 //
 // An agent's report is logged as `[Name]` on its own line, its replies,
 // and a line naming its whole chat (the model reads who sent it); it
@@ -31,6 +34,7 @@
 import { history_bare } from "../tools/Clip.ts";
 import type * as Md from "./Md.ts";
 import { GLYPH } from "./Theme.ts";
+import { When, type Span } from "../chat/When.ts";
 
 // Types
 // =====
@@ -66,7 +70,8 @@ const READS = new Map<string, (x: Input) => Shown>([
   ["write",      (x) => ({ head: String(x.path ?? ""), blocks: [] })],
   ["edit",       (x) => (Array.isArray(x.edits) ? { head: edits_files(x.edits), blocks: [] } : input_shown(x))],
   ["zoom",       (x) => ({ head: msg_show(x.id, x.n) + (x.at === undefined ? "" : " from char " + x.at), blocks: [] })],
-  ["date",       (x) => ({ head: msg_show(x.id, 1), blocks: [] })],
+  ["date",       (x) => ({ head: x.from === undefined ? msg_show(x.id, 1) : heads([span_said(x) || "a span", x.project]), blocks: [] })],
+  ["search",     (x) => ({ head: heads([x.words === undefined ? "" : '"' + String(x.words) + '"', x.project, span_said(x)]), blocks: [] })],
   ["spawn",      (x) => ({ head: tasks_show(x.tasks, x.agent, x.effort), blocks: (Array.isArray(x.tasks) ? x.tasks : []).flatMap(text_block) })],
   ["tell",       (x) => ({ head: String(x.name ?? ""), blocks: text_block(x.message) })],
   ["todo",       (x) => todo_shown(x.items)],
@@ -89,9 +94,9 @@ const LABELS = new Map<string, (x: Input, result: string | null) => string>([
   ["write",      (x) => about(path_said(x.path), (path) => "Wrote " + path)],
   ["edit",       (x) => (Array.isArray(x.edits) ? about(names_few(x.edits.map((e: any) => path_said(e?.path))), (files) => "Edited " + files) : "")],
   ["web_search", (x) => web_label(x)],
-  ["search",     (x) => about(x.words, (words) => 'Searched memory for "' + words + '"' + project_in(x.project))],
+  ["search",     (x) => about(x.words, (words) => 'Searched memory for "' + words + '"' + project_in(x.project) + span_in(x))],
   ["zoom",       (x) => about(typeof x.id === "string" && x.id !== "" ? x.id + "'s chat" : msg_show(x.id, x.n), (what) => "Looked back at " + what + project_in(x.project))],
-  ["date",       (x) => about(msg_show(x.id, 1), (what) => "Checked the date of " + what + project_in(x.project))],
+  ["date",       (x) => (x.from === undefined ? about(msg_show(x.id, 1), (what) => "Checked the date of " + what + project_in(x.project)) : "Looked back at " + (span_said(x) || "a span") + project_in(x.project))],
   ["projects",   () => "Listed the projects"],
   ["spawn",      (x, result) => about(started(result) || agents_said(x.tasks, x.agent), (who) => "Started " + who)],
   ["tell",       (x) => about(x.name, (name) => "Messaged " + name)],
@@ -132,6 +137,10 @@ const CODE    = /^Exit code (-?\d+)/;
 const SHOWN   = /\[lines (\d+)-(\d+) of \d+[^\]\n]*\]\s*$/;
 const STOPPED = "(stopped)";
 const TAIL    = 160;
+
+// a span's messages, in the head of the date tool's answer (Memory.days:
+// `Wed 21 Oct 2026 · 214 messages · 09:12–23:40`)
+const DATED = /^[^\n]* · ([\d,]+ messages?) · /;
 
 // Report
 // ======
@@ -201,7 +210,8 @@ export function call_label(c: Call, result: string | null = null): string {
 // how a call ended, in a word or a few ("": nothing to say past its mark,
 // or not known: ok null): a command's exit (EXIT; Claude Code's Bash
 // failing, CODE), else stopped (Agent.use) or failed; a read's lines
-// shown, the lines a write or an edit added and removed (diff_said).
+// shown, the lines a write or an edit added and removed (diff_said), a
+// span's messages as date's head counts them (DATED; none: `nothing`).
 // Only a result's TAIL is looked at for its end, so a long one costs
 // what a short one does: its own end, the <history> line recall may have
 // appended left out (history_bare)
@@ -222,6 +232,9 @@ export function call_outcome(c: Call, ok: boolean | null, result: string): strin
   if (own === "read") {
     const m = SHOWN.exec(tail);
     return m === null ? "" : lines_said(Number(m[2]) - Number(m[1]) + 1);
+  }
+  if (own === "date" && c.input.from !== undefined) {
+    return bare.startsWith("Nothing ") ? "nothing" : DATED.exec(bare.slice(0, TAIL))?.[1] ?? "";
   }
   return own === "write" || own === "edit" ? diff_said(bare) : "";
 }
@@ -372,6 +385,32 @@ function web_shown(x: Input): Shown {
 // project"; "": this one's)
 function project_in(project: unknown): string {
   return typeof project !== "string" || project === "" ? "" : project === "all" ? " in every project" : " in " + project;
+}
+
+// the span a date or search call asks, its from and to read as the tool
+// reads them (When.span); null: none asked, or not one
+function span_of(x: Input): Span | null {
+  const span = x.from === undefined && x.to === undefined ? null : When.span(x.from, x.to);
+  return typeof span === "string" ? null : span;
+}
+
+// a call's span as the screen says it (When.short: `Wed 21 Oct`, `14–20
+// Oct`); "": none, or not one (never the model's own words: a raw date)
+function span_said(x: Input): string {
+  const span = span_of(x);
+  return span === null ? "" : When.short(span);
+}
+
+// a search's span after its words: ` on Wed 21 Oct` (one whole day), `
+// over 14–20 Oct`; "": none
+function span_in(x: Input): string {
+  const span = span_of(x);
+  return span === null ? "" : (When.one(span) ? " on " : " over ") + When.short(span);
+}
+
+// a head's parts, those given, between dots: `"cache bug" · site · 14–20 Oct`
+function heads(parts: unknown[]): string {
+  return parts.filter((p) => typeof p === "string" && p !== "").join(" · ");
 }
 
 // a spawn's agents as its result names them (Tools.spawn: `Started A,

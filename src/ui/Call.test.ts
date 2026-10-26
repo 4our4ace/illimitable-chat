@@ -5,8 +5,9 @@
 // Claude Code names them, by their own), what it did in plain words (a
 // label: each tool's own, else its name and its most telling short
 // value; a file's path from the working dir, else from ~; calls from
-// before descriptions read well too), and how it
-// ended (a command's exit, a read's lines, a change's lines; a failure,
+// before descriptions read well too; a date or search call's span in
+// words, never as the dates it was given), and how it ended (a command's
+// exit, a read's lines, a change's lines, a span's messages; a failure,
 // how).
 
 import { expect, test } from "bun:test";
@@ -92,6 +93,9 @@ test("a file tool's label: the file, a read's lines if only some; an edit's file
 });
 
 // the web search OpenAI's and ChatGPT's models log (their action), and
+// a day's weekday, as the screen says it
+const day = (y: number, m: number, d: number) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date(y, m - 1, d).getDay()];
+
 // Anthropic's (its query alone); Claude Code's own
 test("a web search's label: its query (several: the first, then how many more), the page it opened, the text it looked for", () => {
   expect(label("web_search", { type: "search", query: "bun test isolate" })).toBe('Searched "bun test isolate"');
@@ -117,6 +121,17 @@ test("illi's own tools' labels: memory, agents, skills, the to-do list, question
   expect(label("zoom", { id: "Scout" })).toBe("Looked back at Scout's chat");
   expect(label("mcp__illi__zoom", { id: 7, project: "site" })).toBe("Looked back at #7 in site");
   expect(label("date", { id: 123 })).toBe("Checked the date of #123");
+  const year = new Date().getFullYear();
+  expect(label("date", { from: year + "-10-21" })).toBe("Looked back at " + day(year, 10, 21) + " 21 Oct");
+  expect(label("date", { from: year + "-10-14", to: year + "-10-20", project: "site" })).toBe("Looked back at 14–20 Oct in site");
+  expect(label("date", { from: year + "-10-21 14:00", to: year + "-10-21 18:00" })).toBe("Looked back at " + day(year, 10, 21) + " 21 Oct 14:00–18:00");
+  expect(label("date", { from: "2025-12-29", to: "2026-01-04" })).toBe("Looked back at 29 Dec 2025–4 Jan 2026");
+  expect(label("date", { from: "2026-10-21T14:00:00Z" })).toBe("Looked back at a span");
+  expect(label("search", { words: "cache bug", from: year + "-10-21" })).toBe('Searched memory for "cache bug" on ' + day(year, 10, 21) + " 21 Oct");
+  expect(label("search", { words: "cache bug", project: "all", from: year + "-10-14", to: year + "-10-20" })).toBe('Searched memory for "cache bug" in every project over 14–20 Oct');
+  expect(call("search", { words: "cache bug", project: "site", from: year + "-10-14", to: year + "-10-20" }).head).toBe('"cache bug" · site · 14–20 Oct');
+  expect(call("date", { from: year + "-10-14", to: year + "-10-20", project: "site" }).head).toBe("14–20 Oct · site");
+  expect(call("date", { id: 7 }).head).toBe("#7");
   expect(label("projects", {})).toBe("Listed the projects");
   expect(label("spawn", { tasks: ["look"] })).toBe("Started an agent");
   expect(label("spawn", { tasks: ["a", "b"], agent: "reviewer" })).toBe("Started 2 reviewer agents");
@@ -172,7 +187,8 @@ test("any other call's label: its name, then its most telling short value", () =
 
 // how a call ended: a command's exit (stopped, killed: Machine.shell;
 // Claude Code's Bash, failing, by its code), a read's lines, a change's
-// lines added and removed; failed, else stopped; not known, nothing
+// lines added and removed; a span's messages; failed, else stopped; not
+// known, nothing
 test("a call's outcome: a command's exit, a read's lines, a change's lines; a failure, how; not known, none", () => {
   const out = (name: string, input: object, ok: boolean | null, result: string) => Call.call_outcome(call(name, input), ok, result);
   expect(out("shell", { command: "ls" }, true, "a\nb\n(exit 0 in 0.1 s)")).toBe("exit 0");
@@ -195,4 +211,8 @@ test("a call's outcome: a command's exit, a read's lines, a change's lines; a fa
   expect(out("zoom", { id: 4 }, true, "user: hi")).toBe("");
   expect(out("web_search", { query: "bend" }, null, "")).toBe("");
   expect(out("mcp__x__shell", { command: "ls" }, true, "(exit 0 in 0.1 s)")).toBe("");
+  expect(out("date", { from: "2026-10-21" }, true, "Wed 21 Oct 2026 · 1,214 messages · 09:12–23:40\n0+512|09:12–11:00 x")).toBe("1,214 messages");
+  expect(out("date", { from: "2026-10-21 09:00", to: "2026-10-21 09:05" }, true, "Wed 21 Oct 2026 09:00–09:05 · 1 message · 09:02\n7+1|09:02 x")).toBe("1 message");
+  expect(out("date", { from: "2026-10-18" }, true, "Nothing on Sun 18 Oct 2026. After it:\n0+8|Mon 19 10:00–10:07 x")).toBe("nothing");
+  expect(out("date", { id: 4 }, true, "2026-10-21 09:12:00")).toBe("");
 });

@@ -92,14 +92,17 @@ in plain words, then how it ended:
   `Edited a.ts, b.ts`); a web search's query, page or text looked for
   (`Searched "bend"`, `Opened example.com/path`, `Found "x" in page`);
   illi's own tools in words (`Searched memory for "auto compact"`,
-  `Looked back at #123`, `Started FireAnt`, `Updated the to-do list`); an
+  `Looked back at #123`, a span of days in words, `Looked back at 14–20
+  Oct`, never a date as the model wrote it, `Started FireAnt`, `Updated
+  the to-do list`); an
   MCP server's or a plugin's tool as `server: tool` and its first
   telling value; any other tool, or one whose input lacks the field its
   words are about, its name and its most telling short value; a call
   logged not as `name {input}`, its first line. How it ended: a
   command's exit (`exit 0`, `exit 2`, `stopped`, `killed by SIGKILL`,
   `killed by signal 34`), a read's lines, a change's lines (`+12 -3`),
-  `failed`; nothing where the mark says all. Never a raw input: what
+  a span's messages (`214 messages`, `nothing`), `failed`; nothing where
+  the mark says all. Never a raw input: what
   doesn't fit is cut, the outcome kept whole (with no room for what it
   did, the outcome alone).
 - **A click on a call** opens it alone, under its line behind a bar:
