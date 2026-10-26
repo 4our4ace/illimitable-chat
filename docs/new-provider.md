@@ -61,11 +61,13 @@ Failures must land in the right `stop`, since each is handled apart:
 - `full`: too long for the model's window. Match the vendor's words in
   `FULL` (Agent.ts), and have `step` say `full` for the stream's own
   sign (Anthropic's `model_context_window_exceeded`); `Chat.refit` then
-  folds more of the chat and goes on. One that comes once a step's tool
-  results went in is `grew` (the turn's own work outgrew the window: its
-  share stays, and the count of refits starts anew); `Agent.loop` sets
-  it for a wire, a runner of its own loop must set it itself (Claude
-  Code's, once a tool's result came back).
+  folds more of the chat and goes on (a subagent's call: `Tools.refit`
+  recaps its log and it goes on from the recap). One that comes once a
+  step's tool results went in is `grew` (the turn's own work outgrew the
+  window: its share stays, and the count of refits starts anew, a
+  subagent's too); `Agent.loop` sets it for a wire, a runner of its own
+  loop must set it itself (Claude Code's, once a tool's result came
+  back).
 - `down`: the vendor refused (a wrong key, credit or plan used up).
   `Agent.spent` says what to do in plain words: add the vendor's case
   there (and to `CREDIT` for an API key).
