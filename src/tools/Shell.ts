@@ -1433,7 +1433,8 @@ function cmd_run(s: Scan, cmd: Cmd, full: string, piped: boolean, top: boolean, 
 // A cd another program runs (sudo cd, env cd, exec cd) leaves the folder
 // unknown. errexit (set -e, as -euo pipefail; set -o errexit) turns on
 // only by a set the command runs whenever it runs (top: cmd_end); off by
-// any (+e, +o errexit), or a set of words known only as it runs
+// any (+e, +o errexit), a set of words known only as it runs, or any
+// shopt -o (shopt -uo errexit)
 function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
   const name = Shell.program(argv[0]);
   const args = argv.slice(1);
@@ -1515,6 +1516,7 @@ function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
     case "shopt":
     case "hash":
     case "enable": {
+      s.errexit &&= name !== "shopt" || !args.some((a) => a.dynamic || /^-\w*o/.test(a.raw));
       if (args.some((a) => a.raw === "expand_aliases" || (name === "hash" && a.raw === "-p") || (name === "enable" && /^-\w*[fn]/.test(a.raw)))) {
         throw new Unread(name + " " + args.map((a) => a.raw).join(" "));
       }
@@ -1531,7 +1533,8 @@ function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
 // {} standing for what find searches (its start folders). The words then
 // run, and whether this shell runs them (own: no wrapper but its own,
 // OWN, before them; an eval another program runs is a shell of its own);
-// null: a nested script read instead
+// null: a nested script read instead. A trap's action that may run set
+// or shopt turns errexit off: it runs in this shell, whenever it fires
 function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: string, ctx: Ctx): { argv: Word[]; own: boolean } | null {
   let argv = words;
   let own = true;
@@ -1616,6 +1619,7 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
       if (words.some((w) => w.dynamic || w.alts.length !== 1)) {
         throw new Unread(name + " runs a command made as it runs");
       }
+      s.errexit &&= name !== "trap" || !/\b(?:set|shopt)\b/.test(words[0].alts[0]);
       nested(s, Shell.lit(words.map((w) => w.alts[0]).join(" ")), ctx, name !== "eval" || !own, words, name === "trap" ? [] : redirs, env);
       if (redirs.length > 0) {
         part_push(s, [], env, redirs, full, ctx);
