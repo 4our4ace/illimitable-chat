@@ -23,7 +23,8 @@ import * as Draw from "../ui/Draw.ts";
 import { Custom, type Command, type Profile, type Skill } from "../config/Custom.ts";
 import { term_redraw } from "./Frame.ts";
 import { term_away, term_clear, term_cycle, term_enter, term_esc, term_next, term_page, term_shots, term_take, term_verbose } from "./Keys.ts";
-import { Mcp, type Server } from "../tools/Mcp.ts";
+import { Mcp } from "../tools/Mcp.ts";
+import { ClaudeCode } from "../ai/ClaudeCode.ts";
 import { Export } from "../chat/Export.ts";
 import { Plugins, type Command as Plugged, type Found } from "../config/Plugins.ts";
 import { Hooks, type Entry } from "../config/Hooks.ts";
@@ -36,7 +37,7 @@ import { term_profile } from "./ProfileCommands.ts";
 import { term_projects } from "./ProjectCommands.ts";
 import * as Reply from "../ui/Reply.ts";
 import * as Screen from "../ui/Screen.ts";
-import { setting_value, term_set, term_settings } from "./Settings.ts";
+import { setting_on, setting_toggle, setting_value, term_set, term_settings } from "./Settings.ts";
 import { Trusted } from "../config/Trusted.ts";
 import { term_age, term_tokens } from "./Side.ts";
 import { term_act, term_idle, term_primaries, term_send, term_unhint, type Chooser, type Cmd, type Sug, type Term } from "./Term.ts";
@@ -52,6 +53,9 @@ const ARROWS: Record<string, Move> = { "Shift+Left": "prev", "Shift+Right": "nex
 
 // the shortcuts' list's title (term_shortcuts)
 const LEAD = "Shortcuts";
+
+// the most lines /mcp's lit server shows of its tools (… past them)
+const MCP_DETAIL = 4;
 
 // the /model gauge: a model's auto compact as set (as written), its
 // tokens, the most it may be, the model's window; the gauge's bar at most
@@ -139,7 +143,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/settings",         "",                        "all the settings: type to search, Left, Right or Enter change one, Del puts its default back", (t) => term_settings(t)],
       ["/shortcuts",        "",                        "the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one", (t) => term_shortcuts(t)],
       ["/set <key> [value]", "",                       "change a setting (default: back to its default); no value: /settings at it. / finds each setting by its key or what it does", term_set],
-      ["/mcp",              "",                        "your MCP servers: their tools, or why one failed", term_mcp],
+      ["/mcp",              "",                        "your MCP servers and Claude Code's: on or off, their tools, or why one failed", term_mcp],
       ["/mode [mode]",      "",                        "what runs without asking, this session: auto, careful, ask, read-only or yolo; no mode: opens a list (or click it on the bottom line)", term_mode],
       ["/permissions",      "",                        "the requests refused (Enter allows one again, this session), the grants kept (Del removes one), your rules", (t) => term_permissions(t)],
     ]],
@@ -465,19 +469,75 @@ function term_skill(t: Term, skill: Skill, arg: string, word: string): void {
   }
 }
 
-// the MCP servers: each one's tools, or how it is, and where it is from;
-// the files that won't read; the user's files (none yet: where they go)
-export function term_mcp(t: Term): void {
+// the MCP servers, illi's own (where each is from: a plugin, a file),
+// then Claude Code's as its last call told them (ClaudeCode.servers),
+// each how it is (term_mcp_state) and on or off (setting_on); the lit
+// one's tools under them, or why it failed; Enter, Left or Right turns
+// it off or on (setting_toggle: `off`; illi's own at the next start,
+// Claude Code's from the next call); the files that won't read after
+// them. None of either: where the user's go (none there yet:
+// config.MCPS), and on claude-code that Claude Code's own show once a
+// call has loaded them. `at`: the server lit, illi's or Claude Code's
+// (cc: a click on one at the side)
+export function term_mcp(t: Term, at = "", cc = false): void {
   const { servers, troubles, files } = Mcp.status();
+  const theirs = ClaudeCode.servers() ?? [];
   const where  = files.map((f, k) => config.config_home(f) + (files.length === 1 ? "" : k === 0 ? " (every profile)" : " (this profile's)")).join(" or ");
-  const from   = (s: Server) => (s.plugin !== null ? "plugin " + s.plugin : config.config_home(s.file));
-  const server = (s: Server) => "- **" + s.name + "** (" + from(s) + "): " + (s.state === "ready" ? s.own.size + " tools: " + [...s.own.values()].join(", ") : s.state === "starting" ? "starting…" : "failed: " + s.why);
-  const text = [
-    servers.length === 0 ? "No MCP servers yet. Add them to " + where + ", as Claude Code's mcpServers (illi's docs/customize.md shows the shape); they run from illi's next start." : "MCP servers (their tools are named mcp__<server>__<tool>):", ...servers.map(server),
-    ...(troubles.length === 0 ? [] : ["", "Won't read:", ...troubles.map((x) => "- " + x)]),
-    ...(servers.length === 0 ? [] : ["", "They are in " + where + ", as Claude Code's mcpServers; illi's docs/customize.md shows the shape. A change there applies at illi's next start."]),
+  if (servers.length === 0 && theirs.length === 0) {
+    const later = t.v.vendors.includes("claude-code") ? " Claude Code's own servers show here once a call on claude-code has loaded them." : "";
+    const text  = ["No MCP servers yet. Add them to " + where + ", as Claude Code's mcpServers (illi's docs/customize.md shows the shape); they run from illi's next start." + later, ...(troubles.length === 0 ? [] : ["", "Won't read:", ...troubles.map((x) => "- " + x)])];
+    return term_pane_text(t, "MCP", text.join("\n"));
+  }
+  const tools = (names: string[]) => (names.length === 0 ? "no tools" : names.join(", "));
+  const rows: Array<{ name: string; about: string; head: string; detail: string; foot: string }> = [
+    ...servers.map((s) => ({
+      name   : s.name,
+      about  : term_mcp_state(s.state === "ready" ? "connected" : s.state, s.own.size) + " · " + (s.plugin !== null ? "plugin " + s.plugin : config.config_home(s.file)),
+      head   : "illi's",
+      detail : s.state === "ready" ? tools([...s.own.values()]) : s.state === "failed" ? "failed: " + s.why : "",
+      foot   : "Enter on/off · at the next start",
+    })),
+    ...theirs.map((s) => ({
+      name   : s.name,
+      about  : s.over ? "illi's own " + s.name + " in its place" : term_mcp_state(s.status, s.tools?.length ?? null),
+      head   : "Claude Code's, as last told",
+      detail : s.over ? "illi's calls use illi's own server of this name instead, so the model gets one copy" : s.status === "needs-auth" ? "Claude Code needs a login to it: claude mcp login" : s.status !== "connected" || s.tools === null ? "" : tools(s.tools.map((x) => x.slice(("mcp__" + ClaudeCode.spell(s.name) + "__").length))),
+      foot   : "Enter on/off in illi's calls · from the next call",
+    })),
+    ...troubles.map((x) => ({ name: x, about: "", head: "Won't read", detail: "", foot: "read again at the next start" })),
   ];
-  term_pane_text(t, "MCP", text.join("\n"));
+  const named  = servers.length + theirs.length;
+  const aside  = () => rows.map((r, k) => (k < named ? setting_on(r.name) : ""));
+  const detail = (k: number, w: number) => {
+    const lines = rows[k].detail === "" ? [] : Paint.runs_wrap([Paint.Run(rows[k].detail, Paint.DIM)], Math.max(2, w), false);
+    return lines.length <= MCP_DETAIL ? lines : [...lines.slice(0, MCP_DETAIL - 1), [...Paint.line_cut(lines[MCP_DETAIL - 1], 0, Math.max(1, w - 1))[1], Paint.Run("…", Paint.DIM)]];
+  };
+  const keys   = (k: number, press: string) => {
+    if (!["Enter", "Left", "Right"].includes(press)) {
+      return false;
+    }
+    if (k < named && setting_toggle(t, rows[k].name) && t.choose !== null) {
+      t.choose.aside = aside();
+    }
+    return true;
+  };
+  term_chooser(t, "MCP servers", rows.map((r) => r.name), rows.map((r) => r.about), -1, () => {}, { find: true, keys, foot: (k) => rows[k].foot, detail, aside: aside(), heads: rows.map((r) => r.head) });
+  const lit = rows.findIndex((r, k) => r.name === at && (k >= servers.length) === cc && k < named);
+  if (lit >= 0 && t.choose !== null) {
+    t.choose.at = Math.max(0, t.choose.shown.findIndex((m) => m.k === lit));
+  }
+}
+
+// how an MCP server is, in words: connected, its tools counted (once
+// told), else failed, starting, or as Claude Code says it (needs-auth: a
+// login it needs, disabled: turned off in Claude Code itself)
+export function term_mcp_state(state: string, tools: number | null): string {
+  switch (state) {
+    case "connected"  : return tools === null ? "connected" : tools + (tools === 1 ? " tool" : " tools");
+    case "needs-auth" : return "needs a login";
+    case "disabled"   : return "off in Claude Code";
+    default           : return state;
+  }
 }
 
 // the background jobs (Machine.ts), each its command, who started it and

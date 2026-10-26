@@ -5,7 +5,8 @@
 // and Enter step one through its values, kept in config.json at once and
 // read anew; Delete puts its default back; Enter on a pick opens the
 // model picker, its choice the setting's; on one typed in, /set in the
-// input; on `off`, what it may turn off, Enter turning one off and on.
+// input; on `off`, what it may turn off (Claude Code's own MCP servers
+// too, as its last call told them), Enter turning one off and on.
 // /set checks a value first: its shape and the picks still
 // offered (a file named needn't be there); a key alone opens the picker
 // at it. A pick set while illi's own
@@ -32,6 +33,7 @@ delete process.env.ILLI_AFTER;
 delete process.env.ILLI_JOBS;
 
 const config = await import("../config/Config.ts");
+const { ClaudeCode } = await import("../ai/ClaudeCode.ts");
 const { Custom } = await import("../config/Custom.ts");
 const { setting_follow, setting_told } = await import("./Settings.ts");
 const { status_new } = await import("./Status.ts");
@@ -267,6 +269,20 @@ test("Enter on off lists each skill, agent, command and MCP server; Enter turns 
   expect([t.choose.title, lit(t), about(t), t.choose.aside[0]]).toEqual(["Turned off", "customize-illi", "skill · built in", "on"]);
   term_grab(t, "Enter");
   expect([file().off, config.OFF, t.choose.aside[0]]).toEqual(["customize-illi", ["customize-illi"], "off"]);
+  term_grab(t, "Enter");
+  expect([file().off, config.OFF]).toEqual([undefined, []]);
+});
+
+test("off lists Claude Code's own MCP servers too, as its last call told them: Enter turns one off in illi's calls, from the next call", () => {
+  ClaudeCode.learn({ mcp_servers: [{ name: "illi", status: "connected" }, { name: "claude.ai Gmail", status: "connected" }], tools: [] }, { strict: false, deny: [] });
+  const t = term();
+  run(t, "/settings");
+  term_type(t, "off");
+  term_grab(t, "Enter");
+  term_type(t, "gmail");
+  expect([lit(t), about(t), foot(t)]).toEqual(["claude.ai Gmail", "MCP server · Claude Code", "Enter on/off · from the next call"]);
+  term_grab(t, "Enter");
+  expect([file().off, config.OFF, ClaudeCode.cut({ server: "http://127.0.0.1:1/key/main" } as any).deny]).toEqual(["claude.ai gmail", ["claude.ai gmail"], ["mcp__claude_ai_Gmail__*"]]);
   term_grab(t, "Enter");
   expect([file().off, config.OFF]).toEqual([undefined, []]);
 });
