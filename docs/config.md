@@ -89,7 +89,7 @@ What else illi keeps in `~/.illi`:
 | --------------- | ----------------------------------------------------- |
 | `login.json`    | the ChatGPT login `/login` makes (else opencode's, in `~/.local/share/opencode/auth.json`) |
 | `models.json`   | the models the vendors told last: each one's window, speeds and efforts (ChatGPT's for the account named in it: [Storage](storage.md#models)) |
-| `claude-code.json` | the name of each of Claude Code's own MCP servers illi has seen, case and all, so `off` leaves one out of the first call after a start too ([Providers](providers.md#claude-plan)) |
+| `claude-code.json` | the name of each of Claude Code's own MCP servers illi has seen, case and all, so `off` and an agent's `tools:` leave one out of the first call after a start too ([Providers](providers.md#claude-plan)) |
 | `used.json`     | how often you ran each command: among those a `/word` matches alike, the most used come first; a use counts half as much 100 uses later, and a command you stopped using drops out (two illis at once each add theirs: [Storage](storage.md#usage-counts)) |
 | `picked.json`   | the same for what you pick in Ctrl+P's list, kept apart |
 | `related.json`  | what happened to the side's Related lines (shown, opened, pinned, dismissed), counted by each line's score, every profile's: counts and scores alone, no text, no id, no project; where those you opened and pinned score sets how strong a line must be to be given to illi ([Storage](storage.md#related-counts)) |

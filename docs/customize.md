@@ -84,11 +84,10 @@ turns one off or on (the `off` setting), from the next start.
 On `claude-code`, the servers you added to Claude Code itself load in
 illi's calls too, and `/mcp` lists them under yours once a call has
 loaded them, while the pick is on `claude-code`: Enter there (or
-`off`) takes one out of illi's calls
-alone, from the next call, its tools out of the model's context. A
-server of yours by the same name wins while it runs, so the model gets
-one copy; an agent's `tools:` keeps, of those illi has seen, only those
-it names ([Providers](providers.md#claude-plan)).
+`off`) takes one out of illi's calls alone, from the next call, its
+tools out of the model's context. A server of yours by the same name
+wins while it runs, so the model gets one copy; an agent's `tools:`
+keeps only those it names ([Providers](providers.md#claude-plan)).
 
 Theme
 -----
@@ -325,8 +324,8 @@ over. What differs:
   `MultiEdit` as `Edit`), but never to its `Agent`, `Task`, `TodoWrite`
   or task tools: illi's spawn and todo take their place, so the agent's
   subagents show at the side and its to-do list is illi's. Its MCP
-  servers illi has seen go but those it names (`mcp__github`); its
-  plugins stay.
+  servers go but those it names (`mcp__github`; one illi has never seen
+  loads in one call, which shows it); its plugins stay.
 - Hooks: a `Bash` matcher takes illi's `shell` ([Beside Claude
   Code's](#beside-claude-codes)); one naming only Claude Code's other
   tools runs only on `claude-code`'s own calls, said at the start.
