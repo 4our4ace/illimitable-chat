@@ -3,8 +3,9 @@
 // `bun test Agent.test.ts`. A refusal saying the request is too long for
 // the model's window is told apart from any other; a call whose step
 // read past its room ends `full` once that step's tools ran, saying so
-// only if it was the first step (the request itself too long), else
-// grown, as one refused as too long past its first step is; what its
+// unless a step's tool results went in before (the request itself too
+// long), else grown, as one refused as too long after them is (a step
+// asked again, or a message sent mid-run, grows nothing); what its
 // first request read is told, none when that one was refused. A call
 // once (a recap) runs no tool: one that calls one ends unanswered. A call
 // going on from another's keeps its vendor's cache marks in all: the
@@ -87,6 +88,31 @@ test("a request refused as too long past the first step, its tools' results grow
     const run = { ask, on: () => {}, sent: [], abort: new AbortController(), end: AskAI.end("") };
     await Agent.loop({ auth: { token: async () => "", spoil: () => {} }, marks: () => 0 } as any, run);
     expect([run.end.stop, run.end.text, run.end.first, run.end.grew]).toEqual(["full", "prompt is too long", 100, true]);
+  } finally {
+    Agent.step = step;
+    Agent.use = use;
+  }
+});
+
+test("a call full past its first step with no tool results gone in (a step asked again, a message sent mid-run) isn't grown: its chat itself didn't fit", async () => {
+  const step = Agent.step;
+  const use = Agent.use;
+  const wire = { auth: { token: async () => "", spoil: () => {} }, marks: () => 0 } as any;
+  const ask = { vendor: "chatgpt", model: "m", effort: "low", speed: "slow", system: "", blocks: [{ text: "hi", mark: false }], searches: 0, server: "", room: 400 } as any;
+  const steps = (...all: any[]) => {
+    let k = 0;
+    Agent.step = async () => ({ out: [], uses: [], entries: [], why: "", note: "", ...all[k++] }) as any;
+  };
+  Agent.use = async () => ({ text: "ok", fail: false });
+  try {
+    steps({ stop: "again", read: 500 }, { stop: "full", why: "prompt is too long", read: 0 });
+    const paused = { ask, on: () => {}, sent: [], abort: new AbortController(), end: AskAI.end("") };
+    await Agent.loop(wire, paused);
+    expect([paused.end.stop, paused.end.grew]).toEqual(["full", false]);
+    steps({ stop: "done", entries: [{ kind: "illi", text: "on it" }], read: 500 }, { stop: "tools", uses: [{ id: "t1", name: "shell", input: {} }], entries: [{ kind: "tool", text: "shell" }], read: 600 });
+    const told = { ask, on: () => {}, sent: [{ text: "and this", imgs: [] }], abort: new AbortController(), end: AskAI.end("") };
+    await Agent.loop(wire, told);
+    expect([told.end.stop, told.end.text, told.end.grew]).toEqual(["full", "the turn starts past 400 tokens", false]);
   } finally {
     Agent.step = step;
     Agent.use = use;
