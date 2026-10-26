@@ -729,11 +729,11 @@ function term_found(text: string, about: string, at: number[], ink: Paint.Ink): 
 // the pages' line at screen row `row`, w wide (all of them, or the one
 // shown alone: the side lists them), then the profile's name, if shown,
 // the related lines' count (all: the side doesn't show), the background
-// jobs' count (jobs: shown) and the mode at its end: a click on a page
-// shows it, on the name opens the profiles, on the related count lists
-// them, on the jobs' /background, on the mode /mode. The right end's
-// first: a click takes the first hit, and tabs too many for the line run
-// under it
+// jobs' count (jobs: shown) and trust mode at its end (Paint.tabs_mode:
+// nothing in the default mode): a click on a page shows it, on the name
+// opens the profiles, on the related count lists them, on the jobs'
+// /background, on the mode /mode. The right end's first: a click takes
+// the first hit, and tabs too many for the line run under it
 function term_tabs(t: Term, row: number, all: boolean, w: number, jobs: boolean): void {
   const mw = Paint.line_width(Paint.tabs_mode(t.v, w));
   if (mw > 0) {

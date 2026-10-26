@@ -137,10 +137,11 @@ const GOAL       = "You check a goal. Below is a chat between a user and illi, a
 const GOAL_ASK   = "\nThe goal:\n\n";
 const GOAL_NO    = "The goal isn't satisfied yet: keep working.";
 
-// a no to a question (Chat.question): the user's, without a reason and
-// before one; no one at the screen to ask; its request stopped. illi's
-// own skipped, or no one there to answer (answered: View ANSWERED, then
-// the answers)
+// a no to a question (Chat.question): the user's, without a reason (a
+// plain no; the note it stops the master's turn with, its subagents
+// too, as Esc does: SAID_STOP, Tools.question) and before one; no one
+// at the screen to ask; its request stopped. illi's own skipped, or no
+// one there to answer (answered: View ANSWERED, then the answers)
 const SAID_NO    = "The user said no, asked at illi's screen.";
 const SAID_STOP  = "Stopped: you said no.";
 const SAID_WHY   = "The user said no, asked at illi's screen: ";
@@ -266,7 +267,7 @@ export namespace Chat {
       change : () => Chat.change(chat),
       pick   : () => chat.pick,
       halt   : () => chat.halt.signal,
-      stop   : (who) => (who === MAIN ? Chat.interrupt(chat, SAID_STOP) : Tools.stop(chat.tools, who)),
+      stop   : (who) => (who === MAIN ? Chat.stop(chat, SAID_STOP) : Tools.stop(chat.tools, who)),
       main   : () => chat.mem.agent,
     }, cwd);
     const pick = Pick.load(mem.pick, config.OFFER, config.PICK);
@@ -1047,7 +1048,9 @@ export namespace Chat {
   }
 
   // a question answered (none: one answered already); said: what the
-  // user said, for the model (a no's reason, the answer to illi's own)
+  // user said, for the model (a no's reason, the answer to illi's own);
+  // stop: the user's plain no to a request (Reply stop: its caller's work
+  // stops)
   export function answered(chat: Chat, id: string, yes: boolean, always: boolean, said: string, stop = false): void {
     const k = chat.asks.findIndex((q) => q.id === id);
     if (k < 0) {
@@ -1086,7 +1089,7 @@ export namespace Chat {
   // the state told views: to each, only the fields moved since what it
   // was last told (View.ts takes a state's fields over its own; a view
   // joining, told none yet, gets it whole), nothing if none moved. So
-  // the refused requests, the grants and the catalog go out as they
+  // the refused requests, the approvals and the catalog go out as they
   // change, not with every turn's step. Each field is kept as its JSON
   // when told, so one changed in place since still moves
   export function tell(chat: Chat, socks: Iterable<Sock>): void {

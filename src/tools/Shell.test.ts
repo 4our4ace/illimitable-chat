@@ -373,11 +373,11 @@ test("a cd behind builtin, command or the keyword time moves this shell; one ano
   expect(parts("sudoedit /etc/hosts; sudo -e /etc/hosts")).toEqual(["sudoedit /etc/hosts @/w [root]", "sudoedit /etc/hosts @/w [root]"]);
 });
 
-test("braces expand before tildes, as bash does: {~,x}/y is home's y, ~{,/x} home and its x; a ~ another user's, or one whose name goes on past the brace, known only as it runs", () => {
+test("braces expand before tildes, as bash does: {~,x}/y is home's y, ~{,/x} home and its x, ~root root's; a ~ whose name goes on past the brace known only as it runs", () => {
   expect(parts("rm -rf {~,x}/y ~{,/x}")).toEqual(["rm -rf " + HOME + "/y|x/y " + HOME + "|" + HOME + "/x @/w"]);
   expect(parts("echo > {~/.bashrc,}")).toEqual(["echo >" + HOME + "/.bashrc| @/w"]);
   expect(parts("ls {~+,x} a{~,b}")).toEqual(["ls /w|x a~|ab @/w"]);
-  expect(parts("ls {~root,x}; ls {~,x}y")).toEqual(["ls ~ @/w", "ls ~ @/w"]);
+  expect(parts("ls {~root,x}; ls {~,x}y")).toEqual(["ls /root|x @/w", "ls ~ @/w"]);
 });
 
 test("a path is walked as the system walks it: a .. from where the folder before it really is (link/.. where the link leads), a name not made yet as a plain folder; cd takes .. as written, cd -P as the system does", () => {

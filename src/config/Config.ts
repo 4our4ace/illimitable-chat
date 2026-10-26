@@ -31,6 +31,7 @@ import { LABELS, VENDORS, Pick, type Offer } from "../ai/Pick.ts";
 import { profile_pick } from "./Profiles.ts";
 import type { Mode } from "./Update.ts";
 import { json_object } from "../tools/Clip.ts";
+import { Permissions } from "../tools/Permissions.ts";
 
 // Constants
 // =========
@@ -175,6 +176,17 @@ if (MODE === "trust" || MODE === "yolo") {
   NOTES.push("mode is " + (MODE === "yolo" ? "yolo, now called trust" : "trust") + ": every call runs unasked, but what your permission rules deny. /mode switches it for this session.");
 } else if (MODE !== "default") {
   NOTES.push("mode " + MODE + " is gone: illi has two modes now, default and trust, and runs " + MODE + " as default. /settings sets it.");
+}
+// a deny or ask rule a later one overrides whole (Permissions.shadowed:
+// an older illi took deny over ask over allow, whatever their order)
+{
+  const got = Permissions.parse(PERMISSIONS);
+  const rules = got !== null && typeof got === "object" && got.rules !== undefined ? Permissions.rules(got.rules) : [];
+  const over = typeof rules === "string" ? [] : Permissions.shadowed(rules);
+  if (over.length > 0) {
+    const say = (r: { action: string; resource: string; effect: string }) => r.action + " " + JSON.stringify(r.resource) + " " + r.effect;
+    NOTES.push("a permission rule never applies: " + say(over[0].rule) + " comes before " + say(over[0].by) + ", which matches all it does, and the last match wins" + (over.length > 1 ? " (and " + (over.length - 1) + " more)" : "") + ". Move it after, in " + PERMISSIONS + ".");
+  }
 }
 
 // the skills, agents, commands, MCP servers, plugins and hooks turned
