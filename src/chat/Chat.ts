@@ -150,7 +150,8 @@ const NO_ANSWER  = "No one is at illi's screen to answer: decide yourself, or as
 
 // a chat that outgrew its model's window (Chat.refit): a turn's share of
 // the context made this much smaller, when the request itself was too
-// long; the most refits in a row; the note the turn goes on from (#: the
+// long; the most refits in a row with no work between (a call grown
+// starts the count anew); the note the turn goes on from (#: the
 // model; an account found to take less of its window: CAPPED_NOTE, #
 // that window, $ the model), its last words (GO_ON) the user's instead
 // with autocontinue off (STAY), the turn ending there; the one it ends
@@ -706,7 +707,8 @@ export namespace Chat {
 
   // a call refused as too long on ChatGPT at its first request (it read
   // nothing: end.first none; one past its room, or refused at a later
-  // step as its tools' output grew, tells nothing of the account) while
+  // step as its tools' output grew: End.grew, tells nothing of the
+  // account) while
   // it carried (carried: the chat's tokens, and on what, with what a
   // request takes beside it) past its model's standard window, yet well
   // within its whole one (no misjudged size explains it): the account
@@ -716,14 +718,15 @@ export namespace Chat {
     const at    = carried.model.indexOf(":");
     const model = Pick.model(carried.model.slice(0, at) as Vendor, carried.model.slice(at + 1));
     const sent  = carried.tokens + (chat.beside.get(carried.model) ?? 0);
-    return end.first === undefined && carried.model.startsWith("chatgpt:") && model?.standard !== undefined && model.window !== undefined && sent > model.standard && sent < model.window * CAPPED && ChatGPT.refused(model.label);
+    return end.first === undefined && !end.grew && carried.model.startsWith("chatgpt:") && model?.standard !== undefined && model.window !== undefined && sent > model.standard && sent < model.window * CAPPED && ChatGPT.refused(model.label);
   }
 
   // the chat outgrew the model's window (a call ended `full`): the
-  // request itself too long (shrink: its first request refused, or past
-  // its room: the chat's text is more tokens than its bytes told), a
-  // turn's share made FIT smaller; else the turn's own work grew past it
-  // (End.grew: its tools' results, however long the turn has worked).
+  // request itself too long (shrink: refused, or past its room, before
+  // any of its tools' results went in: the chat's text is more tokens
+  // than its bytes told), a turn's share made FIT smaller; else the
+  // turn's own work grew past it (End.grew: its tools' results, however
+  // long the turn has worked).
   // Either way a note says so, and the turn goes on from it, the chat as
   // it now is, its work so far logged, more of it as summary lines
   // (Chat.cut moves on); why: the note it goes on from. Past REFITS in a

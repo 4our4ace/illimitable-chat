@@ -11,11 +11,11 @@
 // lowers the chat's budget; a view sets its model's autocompact; a model
 // whose window no one told moves no cut, its turn saying why (a stop
 // while it waits for the catalog ends it at once). A call too long for the model's window makes the
-// chat refit and the turn go on from a note, unasked (a call grown past
-// its first request starts the count anew, its share kept); three in a row end
-// it, saying why; with autocontinue off, the turn ends at the first,
-// saying a message goes on, the three counted over the user's messages
-// all the same. A view is told the state whole as it joins, then only
+// chat refit and the turn go on from a note, unasked (a call its own
+// tools' results grew past it starts the count anew, its share kept);
+// three in a row end it, saying why; with autocontinue off, the turn
+// ends at the first, saying a message goes on, the three counted over
+// the user's messages all the same (a grown call starting them anew). A view is told the state whole as it joins, then only
 // what moved since its last, so each view holds the chat's state. A
 // failed turn asks to try again only when a later try may answer, and
 // says a reply was cut off; summaries stuck are told once;
@@ -544,7 +544,7 @@ test("a turn grown past its room goes on without shrinking; three refits in a ro
   expect(chat.refits).toBe(0);
 });
 
-test("a turn working past its window again and again goes on, each call grown past its first request starting the count anew, its share kept, even one refused as too long", async () => {
+test("a turn working past its window again and again goes on, each call its tools' results grew starting the count anew, its share kept, even one refused as too long", async () => {
   const fit = chat.fit;
   const grown = Array.from({ length: 6 }, (_, k) => ({ text: k % 2 === 0 ? "" : "HTTP 400: prompt is too long", grew: true }));
   const from = chat.mem.count;
@@ -557,7 +557,7 @@ test("a turn working past its window again and again goes on, each call grown pa
   expect(chat.refits).toBe(0);
 });
 
-test("autocontinue off: a turn whose chat outgrew the window ends there, its note saying a message goes on, the share still made smaller; the refits counted over the user's messages, so past three in a row it says it won't fit", async () => {
+test("autocontinue off: a turn whose chat outgrew the window ends there, its note saying a message goes on, the share still made smaller; the refits counted over the user's messages, so past three in a row it says it won't fit, a call its tools' results grew starting them anew", async () => {
   const fit = chat.fit;
   const long = [{ text: "HTTP 400: prompt is too long: 210000 tokens > 200000 maximum" }];
   config.config_set("autocontinue", "off");
@@ -569,6 +569,11 @@ test("autocontinue off: a turn whose chat outgrew the window ends there, its not
     expect(await refitted(long)).toHaveLength(1);
     expect(last()).toBe("No reply: the chat won't fit " + chat.model + "'s window even summarized. /clear starts a new topic (the chat before it is kept, not sent), or /model picks a model with a bigger window.");
     expect(chat.refits).toBe(0);
+    // a call its tools' results grew starts the count anew, its share kept
+    [chat.refits, chat.fit] = [3, fit * 0.8];
+    expect(await refitted([{ text: "", grew: true }])).toHaveLength(1);
+    expect(last()).toEndWith("Send a message to go on (autocontinue is off).");
+    expect([chat.fit, chat.refits]).toEqual([fit * 0.8, 1]);
   } finally {
     config.config_set("autocontinue", null);
     [chat.fit, chat.refits] = [fit * 0.8, 0];

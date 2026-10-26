@@ -105,9 +105,9 @@ export type Event =
 // too long for the model's window, or past its room), we (`lost`: a
 // stop), the vendor (`down`), or none (our setup threw); again: down, but
 // a later try may answer (the vendor busy or out of reach); grew: full
-// past its first request, which fit (its tools' results outgrew the
-// window, not what it was sent: Chat.ended); cut: a reply
-// had begun; first: the tokens its first request read, as its vendor told
+// once a step's tool results went in, that step having fit (the call's
+// own work outgrew the window, not what it was sent: Chat.ended); cut: a
+// reply had begun; first: the tokens its first request read, as its vendor told
 // (the chat learns from it what a request takes beside the chat: Chat.cap;
 // none: that request was refused, or read nothing told)
 export type End = {

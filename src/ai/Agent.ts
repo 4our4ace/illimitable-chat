@@ -25,7 +25,8 @@
 // a stop reason: its input's doing) or not: `full`, the request too long
 // for the model's window (a vendor's refusal saying so, or a step past
 // the call's `room` in tokens once its tools ran: Chat.refit makes the
-// chat fit and goes on); `down`, the vendor's (a
+// chat fit and goes on; End.grew once a step's tool results went in,
+// that step having fit); `down`, the vendor's (a
 // refusal of the request, as when the API key is wrong or its credit or
 // plan used up, or busy past the tries: End.again); `lost`, ours (a
 // stop), saying why. A vendor's why goes to the log (a refused body
@@ -211,7 +212,9 @@ export namespace Agent {
     const before = (ask.from?.items ?? []).flatMap((item) => (item.$ === "User" ? item.parts : [])).filter((p) => p.mark).length;
     const parts = AskAI.marks(ask.blocks.filter((b) => b.text !== ""), Math.max(0, wire.marks(ask) - before));
     const items: Item[] = [...(ask.from?.items ?? []), { $: "User", parts, imgs: ask.imgs ?? [] }];
-    let steps = 0;
+    // backed: a step's tool results went in, so that step fit (End.grew)
+    let steps  = 0;
+    let backed = false;
     while (!signal.aborted) {
       const step = await Agent.step(wire, run, key, (max) => wire.body(ask, Agent.thin(items), tools, max));
       steps += 1;
@@ -225,7 +228,7 @@ export namespace Agent {
         end.text ||= step.why;
         end.stop  = step.stop;
         end.again = step.again;
-        end.grew  = step.stop === "full" && steps > 1;
+        end.grew  = step.stop === "full" && backed;
         end.cut   = step.entries.some((e) => e.kind === "illi");
         return;
       }
@@ -254,9 +257,9 @@ export namespace Agent {
         return;
       }
       if (backs.length > 0 && ask.room !== undefined && (step.read ?? 0) > ask.room) {
-        end.text = steps === 1 ? "the turn starts past " + ask.room + " tokens" : "";
+        end.text = backed ? "" : "the turn starts past " + ask.room + " tokens";
         end.stop = "full";
-        end.grew = steps > 1;
+        end.grew = backed;
         return;
       }
       const says = run.sent.splice(0);
@@ -272,6 +275,7 @@ export namespace Agent {
       }
       if (backs.length > 0) {
         items.push({ $: "Back", backs });
+        backed = true;
       }
       if (says.length > 0) {
         const parts = says.filter((say) => say.text !== "").map((say) => ({ text: say.text, mark: false }));
