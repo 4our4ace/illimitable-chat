@@ -14,8 +14,10 @@
 // subagent: that agent's name, numbered while another so named is at
 // work or of this run, as reviewer-2; else a random one; a name freed
 // is used again, each log its own); each call gets its context and its
-// whole log, so a told agent goes on even after a restart; its replies
-// reach the chat as one "[Name]" message. It starts with a map of the
+// log (whole till a call outgrows its model's window: then its own
+// recap stands for what came before, Tools.refit), so a told agent goes
+// on even after a restart; its replies reach the chat as one "[Name]"
+// message. It starts with a map of the
 // chat (Memory.map: a few dozen lines over it from the view's first
 // message, a /clear's or a recap's, the newest messages each its own),
 // and zooms or searches for what its task needs. One
@@ -58,7 +60,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { AskAI, type Ask, type Block, type Call, type Event, type Kind, type Vendor } from "../ai/AskAI.ts";
+import { AskAI, type Ask, type Block, type Call, type End, type Event, type Kind, type Vendor } from "../ai/AskAI.ts";
 import type { Out } from "../ai/Agent.ts";
 import { report_text } from "../ui/Call.ts";
 import { ChatGPT } from "../ai/ChatGPT.ts";
@@ -74,7 +76,7 @@ import { Permissions } from "./Permissions.ts";
 import { INT, STR, TOOLS, Machine, spec, type Spec } from "./Machine.ts";
 import { Mcp } from "./Mcp.ts";
 import { Logs, MAIN } from "../chat/Logs.ts";
-import { Memory } from "../chat/Memory.ts";
+import { Memory, TOKEN } from "../chat/Memory.ts";
 import PROMPT from "./prompt.txt" with { type: "text" };
 import { EFFORTS, Pick } from "../ai/Pick.ts";
 import { Projects } from "../chat/Projects.ts";
@@ -180,19 +182,21 @@ they want work done.`;
 // one started fresh, its own chat alone
 const SUB_VIEW = `Your first message holds the map below, then your chat with illi so far,
 its lines as "i|kind: text": what you are (note), your task (user), and
-later all you did and were told. The map shows, coarsely, all that illi
-knows: what the user wants, decided and taught, each a zoom away. Use it
-as context only, and do what your task says, not what the user's last
-message says, since illi may have given you just part of the work. Your
-final reply is your report to illi. illi may send you more messages,
-even while you work: answer the last.`;
+later all you did and were told; once your context fills, your recap
+(recap) stands for what came before it. The map shows, coarsely, all
+that illi knows: what the user wants, decided and taught, each a zoom
+away. Use it as context only, and do what your task says, not what the
+user's last message says, since illi may have given you just part of the
+work. Your final reply is your report to illi. illi may send you more
+messages, even while you work: answer the last.`;
 
 const SUB_ALONE = `You start fresh: you see none of illi's chat with the user, only what
 illi tells you. Your first message holds your chat with illi so far, its
 lines as "i|kind: text": what you are (note), your task (user), and
-later all you did and were told. Your final reply is your report to
-illi. illi may send you more messages, even while you work: answer the
-last.`;
+later all you did and were told; once your context fills, your recap
+(recap) stands for what came before it. Your final reply is your report
+to illi. illi may send you more messages, even while you work: answer
+the last.`;
 
 const VIEW_DOC = `The map: the chat between illi and the user (since its last new session,
 if any: search finds what came before), oldest first, inside <chat> tags,
@@ -236,6 +240,59 @@ const SUB_NOTE    = "subagent";
 const SUB_AT      = " at effort ";
 const SUB_WITHOUT = ", without the chat";
 const SUB_RE      = /^subagent(?: ([a-z0-9][a-z0-9_-]*(?::[a-z0-9][a-z0-9_-]*)?))?(?: at effort ([^\s,]+))?(, without the chat)?$/i;
+
+// an agent outgrowing its model's window (Tools.refit): its recap's task
+// (Chat's RECAP, an agent's), after its log as its calls get it, cut to
+// fit (Logs.fit: at most MOST of the window, TOKEN characters a token);
+// the note it goes on from (#: how it reads what the recap left out,
+// RECAP_ZOOM, $ its name; none for one started fresh); the most recaps in
+// a row with no work between (a call grown starts the count anew), and
+// why it ends past them (#: the model)
+const RECAP_SUB  = `Recap: your context is full. Write your recap of your work so far: from
+now on, your log starts at it, and what came before it leaves your view,
+but for what you are and illi's messages to you, kept whole. Write it for
+yourself, to go on working from it alone, as well as if you remembered
+everything.
+
+Output exactly this Markdown, every section in this order, "(none)" for an
+empty one:
+
+## Task
+- what illi asked of you, and what your report must give it, in a
+  sentence or two; what it asked since
+
+## Important details
+- decisions and why, facts learned, the exact context needed to go on
+
+## Work state
+### Done
+- finished and verified work, changes made
+### Active
+- work under way, partial changes, the state of an investigation
+### Blocked
+- blockers, failing commands, unknowns
+
+## Next move
+1. the immediate concrete action
+2. the next one, if known
+
+## Relevant files
+- path: why it matters
+
+Rules:
+- Terse bullets, not paragraphs.
+- Copy names, paths, symbols, commands, errors, URLs, ids, numbers and
+  versions exactly.
+- Keep what was tried and ruled out, and the evidence.
+- An earlier recap in your log: carry forward what still matters from it;
+  where later lines differ, they win.
+- Never make anything look further along than it was.
+- Don't mention the recap.
+- Call no tools; output only the recap.`;
+const RECAPPED   = "Your context filled up: your log before the recap above is summarized in it, but for what you are and illi's messages to you, kept whole#. Go on where you were: your final reply is still your report to illi.";
+const RECAP_ZOOM = ' (zoom("$") reads all of it)';
+const REFITS     = 3;
+const NO_FIT     = "its work won't fit #'s window even recapped";
 
 // where the tools run, in the system prompt (HERE_DOC); the working dir
 // and the time now, at the start of each call's message (Tools.here), so
@@ -805,28 +862,87 @@ export namespace Tools {
   }
 
   // calls while a message waits in its log (told too late for the call
-  // before); then its report, unanswered if stopped or the vendor was busy
+  // before), or once one outgrew its model's window and its log was
+  // recapped (Tools.refit; refits: those in a row with no work between,
+  // a call answered or grown starting them anew); then its report,
+  // unanswered if stopped or the vendor was busy
   // or out of reach (End.again). Its run is its turn: the loop guard starts
   // it fresh (Tools.fresh), a name used again too. Detached: a throw ends
   // it as a failed reply, still reported
   export async function run(tools: Tools, agent: Agent, call: Call | null = null): Promise<void> {
     Tools.fresh(tools, agent.name);
     let away = false;
+    let refits = 0;
     try {
       for (let more = true; more; call = null) {
         agent.call = call ?? AskAI.ask(Tools.ask(tools, agent), (ev) => tools.hooks.on(agent, ev));
         tools.hooks.change();
         const end = await agent.call.done;
         agent.call = null;
-        agent.replies.push(end.ok ? end.text : "failed: " + end.text);
-        more = end.ok && end.left.length > 0;
-        away = !end.ok && end.again === true;
+        refits = end.ok || end.grew ? 0 : refits;
+        const last = end.stop === "full" && !agent.stop ? await Tools.refit(tools, agent, ++refits) : end;
+        if (last === null) {
+          continue;
+        }
+        agent.replies.push(last.ok ? last.text : "failed: " + last.text);
+        more = last.ok && last.left.length > 0;
+        away = !last.ok && last.again === true;
       }
     } catch (err: any) {
       agent.call = null;
       agent.replies.push("failed: " + String(err?.message ?? err));
     }
     tools.hooks.report(agent, report_text(agent.name, agent.log ?? agent.name, agent.replies.join("\n\n")), agent.stop || away);
+  }
+
+  // an agent's call outgrew its model's window (it ended `full`): its log
+  // recapped (Tools.recap), and its run goes on from the recap and a note
+  // (RECAPPED), as a turn goes on from the chat refitted (Chat.refit);
+  // the refits-th in a row with no work between past REFITS, it ends
+  // instead (a call that grew starts the count anew, so an agent may
+  // work for hours). null: it goes on; else how its run ends (failed:
+  // why; again: the vendor busy, so its report stays unanswered)
+  export async function refit(tools: Tools, agent: Agent, refits: number): Promise<End | null> {
+    if (refits > REFITS) {
+      return AskAI.end(NO_FIT.replace("#", Tools.pick(tools, agent.role).model));
+    }
+    const end = await Tools.recap(tools, agent);
+    if (end === null) {
+      tools.hooks.push(agent, "note", RECAPPED.replace("#", agent.role.fresh ? "" : RECAP_ZOOM.replace("$", agent.log ?? agent.name)));
+    }
+    return end;
+  }
+
+  // an agent's recap of its own work (RECAP_SUB), by its model, after its
+  // log as its calls get it, on their cache but for the log, cut to fit
+  // (Logs.fit: MOST of the window, halved while the request is still too
+  // long; a window not told: the log whole first); once (no tool runs),
+  // streamed to the views as its work is, then logged as the log's
+  // recap. Its call is the agent's while it runs, so a stop reaches it
+  // and a message told meanwhile is logged (kept whole past the recap:
+  // Logs.view). null: logged; else its failed end, saying why
+  export async function recap(tools: Tools, agent: Agent): Promise<End | null> {
+    const ask = Tools.ask(tools, agent);
+    const pick = Tools.pick(tools, agent.role);
+    const log = Logs.view(tools.mem, agent.name);
+    const window = Pick.window(pick);
+    let most = window === undefined ? Logs.fit(log).length : config.config_most(window, 0, Pick.room(pick)) * TOKEN;
+    for (let k = 0; k < REFITS; k++, most /= 2) {
+      const blocks = [...ask.blocks.slice(0, -1), { text: Logs.fit(log, most), mark: true }, { text: RECAP_SUB, mark: false }];
+      agent.call = AskAI.ask({ ...ask, blocks, once: true, room: undefined }, (ev) => ev.$ === "Delta" && tools.hooks.on(agent, ev));
+      tools.hooks.change();
+      const end = await agent.call.done;
+      agent.call = null;
+      const text = end.ok ? end.text.trim() : "";
+      if (text !== "") {
+        tools.hooks.on(agent, { $: "Entry", kind: "recap", text });
+        return null;
+      }
+      if (agent.stop || end.stop !== "full") {
+        return { ...end, ok: false, text: "no recap: " + (end.ok ? "none came" : end.text), left: [] };
+      }
+    }
+    return AskAI.end(NO_FIT.replace("#", pick.model));
   }
 
   // what an agent of this role runs on: its user's agent's model, else
@@ -840,10 +956,13 @@ export namespace Tools {
   }
 
   // a call of an agent, on its pick (Tools.pick): its map of the chat
-  // (Agent.view), where it works and its log; one started fresh, no map,
-  // nor the map's docs (SUB_FRESH)
+  // (Agent.view), where it works and its log (from its last recap on:
+  // Logs.view); one started fresh, no map, nor the map's docs
+  // (SUB_FRESH). Its room is a turn's (Chat.call), so one outgrowing its
+  // model's window ends `full` and its log is recapped (Tools.refit), on
+  // claude-code too (Claude Code's compaction off: ClaudeCode.env)
   export function ask(tools: Tools, agent: Agent): Ask {
-    const log = { text: Logs.show(tools.mem, agent.name), mark: true };
+    const log = { text: Logs.fit(Logs.view(tools.mem, agent.name)), mark: true };
     const server = Tools.at(tools, agent.name);
     const profile = Custom.agent(tools.cwd, agent.role.agent);
     const pick = Tools.pick(tools, agent.role);
@@ -851,7 +970,9 @@ export namespace Tools {
     const system = Tools.system((agent.role.fresh ? SUB_FRESH : SUB) + Custom.section(profile), tools.cwd, run.vendor);
     const blocks = [...agent.view, Tools.here(tools, run.vendor), log];
     const effort = agent.role.effort ?? run.effort;
-    return { ...run, effort, system, blocks, searches: SEARCHES, server, builtins: profile?.builtins, listed: profile?.tools };
+    const window = Pick.window(pick);
+    const room = window === undefined ? undefined : Math.round(window * (Pick.room(pick) ?? config.ROOM));
+    return { ...run, effort, system, blocks, searches: SEARCHES, server, builtins: profile?.builtins, listed: profile?.tools, room };
   }
 
   // Claude Code asking leave to use a tool (its permission prompt): past

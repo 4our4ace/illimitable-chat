@@ -61,7 +61,8 @@ export type Block = { text: string; mark: boolean };
 // suggested reply's: Suggest.ask); max: the most tokens it writes, its
 // thinking's too (none: the model's cap); room: the most tokens a step
 // may read before the call ends `full` once its tools ran (a turn's:
-// Chat.refit goes on from the chat as it then is; none: no end); stuck:
+// Chat.refit goes on from the chat as it then is; an agent's: Tools.refit
+// from its recap; none: no end); stuck:
 // a patient call's try failed, why, as it waits to ask again; builtins:
 // the Claude Code built-in tools it may use on claude-code, as its
 // agent's tools list gives them (Custom.profile; none: all); listed: its

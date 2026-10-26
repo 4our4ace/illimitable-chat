@@ -405,10 +405,11 @@ export namespace ClaudeCode {
 
   // the environment Claude Code runs in: illi's, but the mark of a Claude
   // Code session around illi (as when illi runs inside one); a call illi
-  // refits (Ask.room: a turn's) with Claude Code's compaction off
-  // (DISABLE_COMPACT), so one outgrowing the window ends "Prompt is too
-  // long" (`full`) and illi folds the chat into its tree, never Claude
-  // Code's summary; an agent's keeps it, as nothing refits an agent
+  // refits (Ask.room: a turn's, an agent's) with Claude Code's compaction
+  // off (DISABLE_COMPACT), so one outgrowing the window ends "Prompt is
+  // too long" (`full`) and illi folds the chat into its tree, or recaps
+  // the agent's log (Tools.refit), never Claude Code's summary; one
+  // without room (a summary, a goal check, a recap) keeps it
   export function env(ask: Ask): Record<string, string> {
     const env = { ...process.env } as Record<string, string>;
     delete env.CLAUDECODE;
