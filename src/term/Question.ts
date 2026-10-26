@@ -4,11 +4,11 @@
 // person to decide, whether illi asks or a command confirms. Its picker
 // (Term question, never a list's popup): the permission question
 // (Asks.ts), a confirmation (Switch to X?, Delete profile X?, Forget X?,
-// Read-only mode refused it, what a new profile starts with), a line
-// asked for (Commands.ts term_ask: a name, a path, why not); else illi's
-// own questions, their form (Asks.ts). The lists a person opens are
-// popups (Popup.ts); one opened over a question (Ctrl+P) shows over it,
-// the question back as it closes. A question has the rows between the
+// what a new profile starts with), a line asked for (Commands.ts
+// term_ask: a name, a path, why not); else illi's own questions, their
+// form (Asks.ts). The lists a person opens are popups (Popup.ts); one
+// opened over a question (Ctrl+P) shows over it, the question back as
+// it closes. A question has the rows between the
 // rules round the input, its full width (under the side panel too): the
 // rule over it says its title (the form's: who asks), its keys and what
 // the lit answer takes besides (its foot); under it, the lines leading

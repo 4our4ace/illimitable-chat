@@ -5,11 +5,14 @@
 // whatever was saved, a saved approval clears an ask, trust runs what is
 // asked; illi's own rules (.env reads asked, a folder outside asked but
 // illi's places). The file: none is no rules and nothing saved; rules by
-// action read in order, a hand edit seen at the next read; one that
+// action read in order, a hand edit seen at the next read, a deny or ask
+// a later rule overrides whole found (shadowed); an exact approval
+// meeting only itself; one that
 // won't read, or an effect that isn't allow, ask or deny, said (never
 // taken as no rules); a save adds to what the file has, a revoke leaves
-// the rest; an older illi's rules and grants read as this one's, a save
-// turning that project's grants into approvals; a file that won't read
+// the rest; an older illi's rules and grants read as this one's (its
+// mcp * as MCP tools', a folder's reads as none), a save turning that
+// project's grants into approvals; a file that won't read
 // is never written over.
 
 import { afterAll, expect, test } from "bun:test";
@@ -54,6 +57,17 @@ test("evaluate: the last matching rule wins, by action and resource; none asks",
   expect(Permissions.evaluate("read", "x", rules).effect).toBe("allow");
   expect(Permissions.evaluate("read", "x", []).effect).toBe("ask");
   expect(Permissions.evaluate("mcp__gh__merge", "*", [rule("mcp__gh__*", "*", "deny")]).effect).toBe("deny");
+  const just = { ...rule("shell", "rm -rf *", "allow"), exact: true };
+  expect(Permissions.evaluate("shell", "rm -rf *", [just]).effect).toBe("allow");
+  expect(Permissions.evaluate("shell", "rm -rf ~", [just]).effect).toBe("ask");
+});
+
+test("shadowed: a deny or ask a later rule of another effect matches whole never decides; one a later like rule repeats, or that a later one meets in part, does", () => {
+  const rules = [rule("shell", "git push --force*", "deny"), rule("shell", "git *", "allow"), rule("read", "*.pem", "ask"), rule("*", "*", "allow"), rule("shell", "rm *", "deny"), rule("shell", "rm -rf *", "ask"), rule("edit", "*.lock", "deny"), rule("edit", "*", "allow"), rule("edit", "*.lock", "deny")];
+  expect(Permissions.shadowed(rules)).toEqual([
+    { rule: rules[0], by: rules[3] },
+    { rule: rules[2], by: rules[3] },
+  ]);
 });
 
 test("decide: a configured deny refuses whatever is saved; a saved approval clears an ask; trust runs what is asked, never what is denied", () => {
@@ -101,17 +115,17 @@ test("rules by action, in the file's order: a pattern's effect, or one for all; 
   expect(JSON.parse(fs.readFileSync(FILE, "utf8"))).toEqual({ rules: { shell: { "ls ~/x": "deny" } }, mine: 1, projects: { "/w/y": { saved: [{ action: "mcp__gh__merge", resource: "*" }] } } });
 });
 
-test("an older illi's file: write rules as edit's (a folder allowed, the folder too), mcp rules as their tools'; grants as approvals, a save making them so", () => {
-  write({ rules: { write: { "~/scratch/*": "allow", "*.lock": "deny" }, mcp: { "mcp__github__*": "ask" } }, projects: { "/w/x": { granted: ["shell:git push *", "shell=ls -la", "read:/w/lib/*", "write:/w/a\\*b/*", "write=/w/x/.npmrc", "mcp:mcp__gh__*", "mcp=mcp__gh__merge", "odd"] } } });
+test("an older illi's file: write rules as edit's (a folder allowed, the folder too), mcp rules as their tools' (* as all MCP tools, not every action); grants as approvals (a folder's reads as none), a save making them so", () => {
+  write({ rules: { write: { "~/scratch/*": "allow", "*.lock": "deny" }, mcp: { "mcp__github__*": "ask", "*": "allow", "notes*": "deny" } }, projects: { "/w/x": { granted: ["shell:git push *", "shell=ls -la", "read:/w/lib/*", "write:/w/a\\*b/*", "write=/w/x/.npmrc", "mcp:mcp__gh__*", "mcp=mcp__gh__merge", "mcp:linear*", "odd"] } } });
   expect(Permissions.read(FILE, "/w/x")).toEqual({
-    rules: [rule("edit", HOME + "/scratch/*", "allow"), rule("external_directory", HOME + "/scratch/*", "allow"), rule("edit", "*.lock", "deny"), rule("mcp__github__*", "*", "ask")],
-    saved: [rule("shell", "git push *", "allow"), rule("shell", "ls -la", "allow"), rule("external_directory", "/w/lib/*", "allow"), rule("external_directory", "/w/a*b/*", "allow"), rule("mcp__gh__*", "*", "allow"), rule("mcp__gh__merge", "*", "allow")],
+    rules: [rule("edit", HOME + "/scratch/*", "allow"), rule("external_directory", HOME + "/scratch/*", "allow"), rule("edit", "*.lock", "deny"), rule("mcp__github__*", "*", "ask"), rule("mcp__*", "*", "allow"), rule("mcp__notes*", "*", "deny")],
+    saved: [rule("shell", "git push *", "allow"), rule("shell", "ls -la", "allow"), rule("external_directory", "/w/a*b/*", "allow"), rule("mcp__gh__*", "*", "allow"), rule("mcp__gh__merge", "*", "allow"), rule("mcp__linear*", "*", "allow")],
   });
   expect(Permissions.save(FILE, "/w/x", "shell", ["git push *", "bun test *"])).toBeNull();
   const kept = JSON.parse(fs.readFileSync(FILE, "utf8"));
-  expect(kept.rules).toEqual({ write: { "~/scratch/*": "allow", "*.lock": "deny" }, mcp: { "mcp__github__*": "ask" } });
+  expect(kept.rules).toEqual({ write: { "~/scratch/*": "allow", "*.lock": "deny" }, mcp: { "mcp__github__*": "ask", "*": "allow", "notes*": "deny" } });
   expect(kept.projects["/w/x"].granted).toBeUndefined();
-  expect(kept.projects["/w/x"].saved.map((s: any) => s.action + " " + s.resource)).toEqual(["shell git push *", "shell ls -la", "external_directory /w/lib/*", "external_directory /w/a*b/*", "mcp__gh__* *", "mcp__gh__merge *", "shell bun test *"]);
+  expect(kept.projects["/w/x"].saved.map((s: any) => s.action + " " + s.resource)).toEqual(["shell git push *", "shell ls -la", "external_directory /w/a*b/*", "mcp__gh__* *", "mcp__gh__merge *", "mcp__linear* *", "shell bun test *"]);
 });
 
 test("a file that won't read, or an effect that isn't allow, ask or deny, is said; such a file is never written over", () => {

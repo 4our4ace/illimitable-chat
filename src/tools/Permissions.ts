@@ -32,14 +32,16 @@
 // as written). saved, by project (its folder: Trusted.folder), each an
 // action and resource allowed. Read again whenever the file changes, so
 // a hand edit counts at the next call. An older illi's file is read as
-// this one (legacy: its write rules as edit's, its mcp rules as their
-// tools', its grants as saved approvals; a save changes a project's
-// grants into approvals for good, the rules never). A file that won't
+// this one (legacy: its write rules as edit's, its mcp rules as rules
+// on the MCP tools they name, its grants as saved approvals; a save
+// changes a project's grants into approvals for good, the rules never;
+// the new rules' order and paths hold for it). A file that won't
 // read, or a rule that isn't allow, ask or deny, is said, never taken as
-// no rules: the caller asks about everything then (Tools.guard). A save
-// reads the file again just before, so what another illi or a hand edit
-// put there stays, then writes a temporary file and renames it over, so
-// a crash never leaves half a file; one that won't read isn't written.
+// no rules: the caller asks about everything but illi's chat tools then
+// (Tools.guard). A save reads the file again just before, so what
+// another illi or a hand edit put there stays, then writes a temporary
+// file and renames it over, so a crash never leaves half a file; one
+// that won't read isn't written.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -51,8 +53,9 @@ import * as path from "node:path";
 export type Effect = "allow" | "ask" | "deny";
 
 // a rule: the action it is about (a pattern: * any), the resources (a
-// pattern), its effect
-export type Rule = { action: string; resource: string; effect: Effect };
+// pattern; exact: the resource itself, its * and ? as they are, as an
+// approval of just what was refused is: Tools.allow), its effect
+export type Rule = { action: string; resource: string; effect: Effect; exact?: boolean };
 
 // what runs without asking: what the rules allow (default); also what
 // they ask (trust)
@@ -105,7 +108,19 @@ export namespace Permissions {
   // the rule a resource falls under: the last matching it and its action
   // (none: ask)
   export function evaluate(action: string, resource: string, ...rules: Rule[][]): Rule {
-    return rules.flat().findLast((r) => match(action, r.action) && match(resource, r.resource)) ?? { action, resource: "*", effect: "ask" };
+    return rules.flat().findLast((r) => match(action, r.action) && (r.exact === true ? resource === r.resource : match(resource, r.resource))) ?? { action, resource: "*", effect: "ask" };
+  }
+
+  // the denies and asks that never decide, as the last match wins: each
+  // whose last later rule matching it whole (on its action or all, its
+  // pattern taken as a resource: git * after git push --force*) says
+  // otherwise. An older illi took deny over ask over allow, whatever the
+  // order, so its file may hold such a rule; said at the start
+  export function shadowed(rules: Rule[]): Array<{ rule: Rule; by: Rule }> {
+    return rules.flatMap((rule, k) => {
+      const by = rule.effect === "allow" ? undefined : rules.slice(k + 1).findLast((o) => match(rule.action, o.action) && match(rule.resource, o.resource));
+      return by === undefined || by.effect === rule.effect ? [] : [{ rule, by }];
+    });
   }
 
   // a request's verdict: denied if any resource is, by the configured
@@ -269,14 +284,20 @@ export namespace Permissions {
 // Legacy
 // ======
 // An older illi's file, read as this one: its rules by kind (shell, read,
-// write, mcp) and its grants (kind:pattern, kind=exact).
+// write, mcp) and its grants (kind:pattern, kind=exact). Its rules are
+// taken as the new ones are: the last match winning (an older illi took
+// deny over ask over allow, whatever their order), a relative path from
+// the working dir (it took one from the project's top), a backslash as
+// a slash (its \* was a star).
 
 // a rule as read: its pattern's ~/ as home; an older illi's write rule
 // as edit's (one allowing a folder outside also allowing the folder: it
-// let changes there run), its mcp rule as one for the tools it names
+// let changes there run; its read rule allows no folder), its mcp rule
+// as one for the MCP tools its pattern names (mcp__ before it if not
+// there: * as mcp__*, never every action)
 function legacy(action: string, resource: string, effect: Effect): Rule[] {
   if (action === "mcp") {
-    return [{ action: resource, resource: "*", effect }];
+    return [{ action: mcp(resource), resource: "*", effect }];
   }
   const kind = action === "write" ? "edit" : action;
   const pattern = Permissions.home(kind, resource);
@@ -285,10 +306,11 @@ function legacy(action: string, resource: string, effect: Effect): Rule[] {
 }
 
 // an older illi's grant as the approval it stands for: a family of
-// commands or an exact one, as a shell approval; a folder's reads or
-// changes, as the folder's (external_directory); an MCP tool's, as its
-// own action. An exact file's (a secret, a protected file) stands for
-// none: asked again, if still asked
+// commands or an exact one, as a shell approval; a folder's changes, as
+// the folder's (external_directory); an MCP tool's, as its own action.
+// A folder's reads stand for none (the folder's approval would let
+// changes there run), nor does an exact file's (a secret, a protected
+// file): asked again, if still asked
 function legacy_grant(grant: string): Rule[] {
   const m = /^(shell|read|write|mcp)([:=])(.*)$/s.exec(grant);
   if (m === null) {
@@ -300,7 +322,12 @@ function legacy_grant(grant: string): Rule[] {
     return allow("shell", what.replace(/\\\*/g, "*"));
   }
   if (kind === "mcp") {
-    return allow(what, "*");
+    return allow(mcp(what), "*");
   }
-  return how === ":" && what.endsWith("/*") ? allow("external_directory", what.replace(/\\\*/g, "*")) : [];
+  return kind === "write" && how === ":" && what.endsWith("/*") ? allow("external_directory", what.replace(/\\\*/g, "*")) : [];
+}
+
+// an older illi's mcp pattern as the actions it names: MCP tools'
+function mcp(pattern: string): string {
+  return pattern.startsWith("mcp__") ? pattern : "mcp__" + pattern;
 }

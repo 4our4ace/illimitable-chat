@@ -145,8 +145,8 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/shortcuts",        "",                        "the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one", (t) => term_shortcuts(t)],
       ["/set <key> [value]", "",                       "change a setting (default: back to its default); no value: /settings at it. / finds each setting by its key or what it does", term_set],
       ["/mcp",              "",                        "your MCP servers and, on claude-code, Claude Code's: on or off, their tools, or why one failed", term_mcp],
-      ["/mode [mode]",      "",                        "what runs without asking, this session: auto, careful, ask, read-only or yolo; no mode: opens a list (or click it on the bottom line)", term_mode],
-      ["/permissions",      "",                        "the requests refused (Enter allows one again, this session), the grants kept (Del removes one), your rules", (t) => term_permissions(t)],
+      ["/mode [mode]",      "",                        "what runs without asking, this session: default or trust; no mode: opens a list (in trust mode, click it on the bottom line too)", term_mode],
+      ["/permissions",      "",                        "the requests refused (Enter allows one again, this session), the approvals saved (Del removes one), your rules", (t) => term_permissions(t)],
     ]],
     ["Projects and profiles", [
       ["/projects",         "",                        "your projects, each a git repo with its own chat (outside any: home), this one first: Enter says more, Del forgets one", term_projects],

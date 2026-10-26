@@ -5,13 +5,16 @@
 // folder's request (a file's folder, a folder's own; saving its git
 // repository's); illi's own RULES.md alone of its folder; a shell
 // command's simple commands as written (assignments off, wrappers kept,
-// a wrapper's script and what it runs both), a cd only for its folder,
-// the folders its words and redirections name (not a device, not a
-// pattern that only looks like a path), a heredoc's body never a
-// command; one Shell.ts can't read split crudely, so a rule still finds
-// what is in it; the families "don't ask again" saves; Claude Code's
-// tools as illi's like ones. And the rules on them: sudo * denies sudo's commands,
-// bash * a bash -c, rm * an rm in a case.
+// a wrapper's script and what it runs both) and unquoted (a system
+// program by name), a cd only for its folder, the folders its words and
+// redirections name (not a stream device, not a pattern that only looks
+// like a path; one with a space or a quote, a ~user, a value glued to an
+// option or a name, a redirection made as it runs, a disk's device all
+// the same), a heredoc's body never a command; one Shell.ts can't read
+// split crudely, so a rule still finds what is in it; the families
+// "don't ask again" saves; Claude Code's tools as illi's like ones. And
+// the rules on them: sudo * denies sudo's commands, bash * a bash -c, rm
+// * an rm in a case, rm -rf /* a quoted 'rm' -rf "/" and /bin/rm.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -69,8 +72,8 @@ test("shell: each simple command as written, assignments off, wrappers kept, the
   expect(shell("npm run build && bun test src/x.test.ts | tail -5")).toEqual([["shell", ["npm run build", "bun test src/x.test.ts", "tail -5"], ["npm run build *", "bun test *", "tail *"]]]);
   expect(shell("sudo rm -rf build")).toEqual([["shell", ["sudo rm -rf build", "rm -rf build"], ["sudo *", "rm *"]]]);
   expect(shell("bash -c 'ls -la; rm x'")).toEqual([["shell", ["ls -la", "rm x", "bash -c 'ls -la; rm x'"], ["ls *", "rm *", "bash *"]]]);
-  expect(shell("git commit -m 'a; b'")).toEqual([["shell", ["git commit -m 'a; b'"], ["git commit *"]]]);
-  expect(shell("for f in *.ts; do wc -l $f; done")).toEqual([["shell", ["wc -l $f"], ["wc *"]]]);
+  expect(shell("git commit -m 'a; b'")).toEqual([["shell", ["git commit -m 'a; b'", "git commit -m a; b"], ["git commit *"]]]);
+  expect(shell("for f in *.ts; do wc -l $f; done")).toEqual([["shell", ["wc -l $f", "wc -l *.ts"], ["wc *"]]]);
   expect(shell("cat <<EOF > out.txt\nrm -rf /\nEOF\necho done")[0][1]).toEqual(["cat <<EOF > out.txt", "cat", "echo done"]);
   expect(shell("echo $(git rev-parse HEAD)")[0][1]).toEqual(["git rev-parse HEAD", "echo $(git rev-parse HEAD)"]);
 });
@@ -87,6 +90,18 @@ test("shell's folders outside: a cd's (the cd no command), words and redirection
   expect(shell("echo hi >> " + DIR + "/illi/RULES.md")[0]).toEqual(["external_directory", [DIR + "/illi/RULES.md"], [DIR + "/illi/RULES.md"]]);
 });
 
+test("shell's folders outside however written: a space or quote in the path, a ~user, a value glued to an option or a name, a redirection made as it runs; a disk's device", () => {
+  fs.mkdirSync(LIB + "/My Dir", { recursive: true });
+  expect(shell("rm -rf \"" + LIB + "/My Dir\"")[0]).toEqual(["external_directory", [LIB + "/My Dir/*"], [LIB + "/My Dir/*"]]);
+  expect(shell("echo x > '" + LIB + "/a b,c'")[0][1]).toEqual([LIB + "/*"]);
+  expect(shell("dd if=x of=" + LIB + "/out")[0][1]).toEqual([LIB + "/*"]);
+  expect(shell("curl -o" + LIB + "/x https://x.dev")[0][1]).toEqual([LIB + "/*"]);
+  expect(shell("echo x >> " + LIB + "/rc$N")[0][1]).toEqual([LIB + "/*"]);
+  expect(shell("cat ~root/x")[0]).toEqual(["external_directory", ["/root/*"], ["/root/*"]]);
+  expect(shell("cp x /dev/sda")[0]).toEqual(["external_directory", ["/dev/*"], ["/dev/*"]]);
+  expect(shell("ls > /dev/null 2> /dev/stderr < /dev/tty")).toHaveLength(1);
+});
+
 test("shell Shell.ts can't read: split crudely, its paths found by their look", () => {
   expect(shell("case x in *) rm -rf " + LIB + " ;; esac")).toEqual([["external_directory", [LIB + "/*"], [LIB + "/*"]], ["shell", ["rm -rf " + LIB], ["rm *"]]]);
   expect(shell("f() { cat ~/x; }; f")[1][1]).toContain("cat ~/x");
@@ -97,6 +112,8 @@ test("rules on shell: sudo * denies sudo's commands, bash * a bash -c's, rm * an
   expect(judge("bash -c 'ls'", [rule("shell", "bash *", "deny")])).toEqual(["deny"]);
   expect(judge("case x in *) rm -rf y ;; esac", [rule("shell", "rm *", "deny")])).toEqual(["deny"]);
   expect(judge("X=1 rm -rf y", [rule("shell", "rm -rf *", "deny")])).toEqual(["deny"]);
+  expect(judge("rm -rf \"/\"; 'rm' -rf /; /bin/rm -rf /", [rule("shell", "rm -rf /*", "deny")])).toEqual(["ask", "deny"]);
+  expect(Access.shell(WHERE, "/bin/rm -rf '/'").at(-1)!.resources).toEqual(["/bin/rm -rf '/'", "rm -rf /"]);
   expect(judge("git push && git status", [rule("shell", "git push *", "ask")])).toEqual(["ask"]);
   expect(judge("git status", [rule("shell", "git push *", "ask")])).toEqual(["allow"]);
   expect(judge("cd " + LIB + " && ls", [])).toEqual(["ask", "allow"]);

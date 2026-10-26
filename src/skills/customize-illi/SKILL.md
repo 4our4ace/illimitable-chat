@@ -158,17 +158,16 @@ one:
 - sticky: the sticky skills on, by name, the same way; /<name> keeps it
   for the user
 - mode: what runs without asking: default (everything inside the
-  project; a folder outside it, a .env read and what the user's rules
-  ask are asked about, saying why), trust (everything, but what the
-  user's rules deny); /mode switches it for a session, /permissions
-  lists what was refused and the approvals saved
+  project; a folder outside it, the read tool's .env read and what the
+  user's rules ask are asked about, saying why), trust (everything, but
+  what the user's rules deny); /mode switches it for a session,
+  /permissions lists what was refused and the approvals saved
 - permissions: the permission file, permissions.json in illi's folder
   unless set: the user's rules ({"rules": {"shell": {"git push *":
   "ask"}, "external_directory": {"/tmp/*": "allow"}}}: allow, ask or
-  deny by action and pattern) and what "don't ask
-  again" saved per project. It is outside the project, so writing it
-  is asked (but in trust mode): offer the rule, and let the user say
-  yes
+  deny by action and pattern) and what "don't ask again" saved per
+  project. It is outside the project, so writing it is asked (but in
+  trust mode): offer the rule, and let the user say yes
 - side: right, left or off; side_width: "25%" or columns; jobs: summaries
   built at once
 - related: on, screen or off, past topics that may be related to the
@@ -310,8 +309,11 @@ Code's: shell {command, description}, read/write {path, ...}, edit
 other names (Write, Edit...) match only Claude Code's own calls on the
 claude-code vendor, said at the start. A command gets the event as JSON on stdin;
 docs/customize.md lists the fields and answers. Say what a hook will run
-before writing it: it runs as the user, on every matching event. The user
-is asked before you write the file, whatever the mode.
+before writing it: it runs as the user, on every matching event. illi
+asks the user before you write illi's own hooks.json or a plugin's
+hooks outside the project, but in trust mode; a project's
+.illi/hooks.json (or its plugin's) is written unasked, so wait for the
+user's yes first.
 
 # Doing it cleanly
 

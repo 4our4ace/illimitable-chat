@@ -316,10 +316,13 @@ plugin that one skill. Install one by copying or cloning it in:
   as they're used, so one added to it works at once.
 
 A plugin runs as you: its code, hooks and MCP servers run on your
-computer with all illi can do. Install only what you trust. illi reads
-a plugin's folder without asking, as a skill's (but its `.mcp.json`,
-`settings.json`, manifest and secrets), runs its scripts as a
-project's, and asks before it writes there.
+computer with all illi can do. Install only what you trust. The
+`skills`, `commands` and `agents` folders of a plugin found as illi
+started are among its customization places: illi writes there without
+asking. The rest of a plugin, its code, hooks and `.mcp.json`, and a
+new plugin, are asked for in `default` mode, as anything outside the
+project is; a project's plugin is inside it
+([Permissions](permissions.md)).
 
 ### Claude Code plugins
 
@@ -417,7 +420,7 @@ it follows the theme) or a list of those.
 | `message` | `{ id, kind, text, agent }`, each message logged (`agent`: `null` for the chat's) | |
 | `message.before` | `{ text, cwd, signal }`: a message of yours, before it is sent | `{ block: "why" }`: kept back, why said, the text back in your input; `{ context }`: a note after it, which the model reads |
 | `notify` | `{ cwd, type, text }`: illi waits on you (`permission_prompt`: a question for leave, unanswered 6 s; `question`: its question tool's; `idle_prompt`: a reply left 60 s) | |
-| `tool.before` | `{ tool, input, agent, cwd, signal }` | `{ block: "why" }` to refuse the call; `{ input }` to run it on other input; `{ allow: true }` to run it without illi's own checks; `{ ask: "why" }` to have it asked; `{ context }` to add to what the model reads after its answer |
+| `tool.before` | `{ tool, input, agent, cwd, signal }` | `{ block: "why" }` to refuse the call; `{ input }` to run it on other input; `{ allow: true }` to run it as `trust` mode would (a deny rule still refuses it); `{ ask: "why" }` to have it asked; `{ context }` to add to what the model reads after its answer |
 | `tool.after` | the same, and `output: { text, fail }` | `{ text, fail }`: what the model reads |
 
 `tool.before` sees every tool call, Claude Code's own tools too (as
@@ -466,7 +469,10 @@ or the `off` setting naming `hooks.json`, turns them all off.
 A hook runs as you, like a plugin: a project's hooks file runs its
 commands on your computer as you work there. illi's own folder is
 outside the project, so illi asks before it writes your hooks there (in
-`default` mode; `trust` asks nothing).
+`default` mode; `trust` asks nothing). A project's `.illi/hooks.json`
+is inside it, so illi writes it unasked; the next start says it
+changed. A plugin's hooks are asked for as its folder is: unasked in a
+project's plugin, asked in yours.
 
 ```json
 {

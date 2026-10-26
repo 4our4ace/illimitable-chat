@@ -75,9 +75,11 @@ export type ToolCall = { tool: string; input: any; agent: string | null; cwd: st
 export type Output = { text: string; fail: boolean };
 
 // what a tool's check decides: refused, and why (the model reads it), or
-// run on this input: allowed (illi's own checks passed over, the user's
-// rules kept: Tools.guard), or asked of the user whatever they find
-// (why); with what the model reads after its answer (each, whose)
+// run on this input: allowed (judged as in trust mode: what would be
+// asked runs, the user's deny rules kept, all but illi's chat tools
+// asked while they won't read: Tools.guard), or asked of the user
+// whatever they find (why); with what the model reads after its answer
+// (each, whose)
 export type Verdict = { block: string } | { input: unknown; allow?: boolean; ask?: string; context?: string[] };
 
 // what a hook may answer before a tool's call: refuse it, run it on

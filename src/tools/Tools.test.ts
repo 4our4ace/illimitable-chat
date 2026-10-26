@@ -256,7 +256,7 @@ test("Claude Code's permission prompt is judged as illi's own calls: what stays 
   await huge;
   await until(() => v.asks.length === 0);
   fs.writeFileSync(config.PERMISSIONS, JSON.stringify({ rules: { shell: { "git push *": "ask" } } }));
-  const always = approve("Bash", { command: "git push origin main" });
+  const always = approve("Bash", { command: "ls && git push origin main" });
   await until(() => v.asks.length === 1);
   expect(v.asks[0]).toMatchObject({ why: "your rule asks about git push *", keep: "git push *" });
   await answer(true, true);

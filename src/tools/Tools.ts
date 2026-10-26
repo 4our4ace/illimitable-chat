@@ -47,12 +47,12 @@
 // illi's rules, the user's and the approvals saved, Permissions.ts, in
 // the mode, /mode's or the setting's, default unless trust; one a hook
 // allowed as trust mode would, one it asks about asked whatever): run,
-// asked about with why, or refused, each refusal
-// recorded for the side panel and /permissions. What a call that ran answers goes to the plugins last
-// (after_tool), then, if it is strong and in time, the radar's line of a
-// past episode related to it goes after it (Recall.ts: searched beside
-// the call's run, one a step, never after illi's own memory and meta
-// tools).
+// asked about with why, or refused, each refusal recorded for the side
+// panel and /permissions. What a call that ran answers goes to the
+// plugins last (after_tool), then, if it is strong and in time, the
+// radar's line of a past episode related to it goes after it (Recall.ts:
+// searched beside the call's run, one a step, never after illi's own
+// memory and meta tools).
 // The plugins' own tools are theirs to run (plugin__...).
 
 import * as fs from "node:fs";
@@ -109,8 +109,9 @@ export type Agent = {
 
 // what the chat does for agents (report: work stopped, or cut by the
 // vendor busy or out of reach, stays unanswered: a turn would fail alike;
-// pick: the chat's pick; halt: what stops its turn; main: the master's
-// agent, null: none)
+// pick: the chat's pick; halt: what stops its turn; stop: a caller's work
+// stopped, the master's turn or an agent's, after the user's plain no to
+// its question: Tools.question; main: the master's agent, null: none)
 // a question's answer (Hooks ask): yes (illi's own: answered), and
 // whether not to ask again (its approvals saved: Tools.question); what
 // the user said, for the model: a no's reason, the answer to illi's own;
@@ -692,11 +693,12 @@ export namespace Tools {
   }
 
   // a call, past the plugins' hooks, then judged (Tools.guard: illi's own
-  // tools run, unless a hook asks of them), run (recall's search beside
-  // it: Recall.start), its answer past the plugins' hooks again, then what
-  // the first hooks added for the model after it, then the line recall
-  // found, if strong and in time (Recall.end) (approve: Claude Code's,
-  // which judges its own)
+  // tools run, unless a hook or a rule of the user's asks or denies them,
+  // or, but its chat tools, the rules won't read), run (recall's search
+  // beside it: Recall.start), its answer past the plugins' hooks again,
+  // then what the first hooks added for the model after it, then the line
+  // recall found, if strong and in time (Recall.end) (approve: Claude
+  // Code's, which judges its own)
   export async function call(tools: Tools, who: string, name: string, args: any, signal: AbortSignal): Promise<Out> {
     if (name === "approve") {
       return Tools.approve(tools, who, String(args.tool_name ?? ""), args.input ?? {}, signal);
@@ -1014,20 +1016,21 @@ export namespace Tools {
   // -----------
 
   // a call judged before it runs (Permissions.ts): its requests
-  // (Access.ts), by illi's rules and the user's, the
-  // approvals saved for the project and those given this run (Tools.rules),
-  // in the mode: null runs it, else what the model is told. Any request
-  // denied refuses it, before anything is asked; then each one asked is
-  // asked in turn (one an earlier answer approved meanwhile, not), given
-  // what the call would do and why, WHOLE characters of each at most
-  // (Tools.whole: past that, the lines holding what made it ask: the
-  // request's spots), and what "don't ask again" saves (its save, in
-  // words, by its ends past KEPT). One a hook allowed is judged as in
-  // trust mode (the rules' denies still hold); one it asks about is
-  // asked, its why first, with no "don't ask again" (asked though the
-  // rules allow it). A rules file that won't read leaves nothing that
-  // touches the computer or beyond run unasked (no "don't ask again"),
-  // trust mode too. The answer (Tools.question): yes runs it, "don't ask
+  // (Access.ts; ones it fails to make: the whole call, asked), by illi's
+  // rules and the user's, the approvals saved for the project and those
+  // given this run (Tools.ruleset), in the mode: null runs it, else what
+  // the model is told. Any request denied refuses it, before anything is
+  // asked; then each one asked is asked in turn (one an earlier answer
+  // approved meanwhile, not), given what the call would do and why, WHOLE
+  // characters of each at most (Tools.whole: past that, the lines holding
+  // what made it ask: the request's spots), and what "don't ask again"
+  // saves (its save, in words, by its ends past KEPT). One a hook allowed
+  // is judged as in trust mode (the rules' denies still hold); one it
+  // asks about is asked though the rules allow it, its why first on the
+  // call's first question, which offers no "don't ask again". A rules
+  // file that won't read leaves nothing that touches the computer or
+  // beyond run unasked (no "don't ask again"), trust mode and a hook's
+  // allow too. The answer (Tools.question): yes runs it, "don't ask
   // again" saving the request's approvals for the project (one that can't
   // be saved: for this run) and answering every question waiting that
   // they now allow; no refuses it, and every other question its caller
@@ -1074,17 +1077,20 @@ export namespace Tools {
   }
 
   // a request asked of the user, waiting (Perm pending) till answered or
-  // settled by another answer; null: yes. Yes, and don't ask again: its
-  // approvals saved (for this run, if the file won't take them), every
-  // question waiting that they now allow answered yes. No: refused, and
-  // every other question of its caller waiting with it, the same answer;
-  // a plain no stops the caller's turn too
+  // settled by another answer; null: yes. Yes, and don't ask again: the
+  // approvals of what asked saved (a shell request's, the families of
+  // the commands that asked, not of its every one; for this run, if the
+  // file won't take them), every question waiting that they now allow
+  // answered yes. No: refused, and every other question of its caller
+  // waiting with it, the same answer; a plain no stops the caller's turn
+  // too (the master's: its subagents with it)
   export async function question(tools: Tools, who: string, asked: { who: string; tool: string; what: string }, input: unknown, ask: Asking, signal: AbortSignal): Promise<Out | null> {
     const folder = Trusted.folder(tools.cwd);
     const entry: Pending = { who, ask, ctl: new AbortController() };
     const id = crypto.randomUUID();
     const spots = ask.all === true ? [[0, Tools.does(input).length] as Span] : ask.by.flatMap((k) => (ask.req.spots[k] === null ? [] : [ask.req.spots[k]!]));
-    const keep = ask.keep ? [...new Set(ask.req.save.map((s) => Access.said(ask.req.action, s, folder)))].join(", ") : "";
+    const saves = ask.req.save.filter((s) => ask.by.some((k) => Permissions.match(ask.req.resources[k], s)));
+    const keep = ask.keep ? [...new Set(saves.map((s) => Access.said(ask.req.action, s, folder)))].join(", ") : "";
     tools.perm.pending.set(id, entry);
     let reply: Reply;
     try {
@@ -1096,9 +1102,9 @@ export namespace Tools {
     const exact = ask.keep ? ask.by.map((k) => ({ action: ask.req.action, resource: ask.req.resources[k] })) : [];
     if (got.yes) {
       if (got.always && ask.keep && entry.outcome === undefined) {
-        const unsaved = Permissions.save(config.PERMISSIONS, folder, ask.req.action, ask.req.save);
+        const unsaved = Permissions.save(config.PERMISSIONS, folder, ask.req.action, saves);
         if (unsaved !== null) {
-          tools.perm.allowed.push(...ask.req.save.map((resource): Rule => ({ action: ask.req.action, resource, effect: "allow" })));
+          tools.perm.allowed.push(...saves.map((resource): Rule => ({ action: ask.req.action, resource, effect: "allow" })));
           console.error("illi: an approval kept for this run only: " + unsaved);
         }
         for (const p of tools.perm.pending.values()) {
@@ -1178,15 +1184,17 @@ export namespace Tools {
   }
 
   // a refused request allowed for this run (/permissions): its very
-  // resources approved, and every refusal they now clear taken off the
-  // list; null: none such, or one only the user's rules can allow
+  // resources approved (exact: a command's * and ? as they are; a
+  // folder's request, that folder and those in it), and every refusal
+  // they now clear taken off the list; null: none such, or one only the
+  // user's rules can allow
   export function allow(tools: Tools, id: string): Refused | null {
     const refused = tools.perm.refused.find((r) => r.id === id);
     if (refused === undefined || refused.exact.length === 0) {
       return null;
     }
     const has = (e: { action: string; resource: string }) => tools.perm.allowed.some((a) => a.action === e.action && a.resource === e.resource);
-    refused.exact.filter((e) => !has(e)).forEach((e) => tools.perm.allowed.push({ ...e, effect: "allow" }));
+    refused.exact.filter((e) => !has(e)).forEach((e) => tools.perm.allowed.push({ ...e, effect: "allow", exact: e.action !== "external_directory" }));
     tools.perm.refused = tools.perm.refused.filter((r) => r.exact.length === 0 || !r.exact.every(has));
     tools.hooks.change();
     return refused;

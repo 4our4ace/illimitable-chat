@@ -1,34 +1,36 @@
 // Shell
 // =====
 // A shell tool's command read as bash reads it, so Access.ts can find
-// what it asks leave for
-// before it runs: every simple command in it (a part), wherever it sits
-// (a pipeline, a list, a subshell, a command's substitution, a heredoc's
-// body, a loop, a bash -c's script, an eval's, a trap's, a find -exec's),
-// each with its words as they'd expand, its assignments, its
-// redirections, where it is in the command (its span: a question shows
-// the lines a risk is on; reading a pipe, with what writes it) and the
-// folder it runs in (each cd followed, behind builtin, command or time
-// too, in the shell it moves: a subshell's, a pipeline's or the
-// background's, a group's or a loop's there, its own; one another
-// program runs leaves it unknown), and its input as given (a heredoc,
-// a file) to the group, the subshell, the loop or the nested script it
-// is in, as its own. A pipe goes on past a line's end after |, as do &&
-// and ||, and into every command of a subshell, a group or a loop it
-// feeds, and of what a command reading it runs ($(...), `...`, <(...),
-// a heredoc's body, bash -c's script, an eval's, find -exec's). Wrappers that run the command after them (sudo,
-// timeout, env, xargs, ...) are taken off, the part saying so (root: run
-// as root, as sudoedit edits; fed: some of its arguments come from its
-// input). A word known only as the command runs (a variable it never
-// sets and the environment lacks, a command's output) is dynamic, its
-// known head kept; a variable the command sets to plain words (X=a, for
-// X in a b) stands for each of them, and a command's output known before
-// it runs ($(pwd), $(git rev-parse --show-toplevel): the folder;
-// $(mktemp): where it makes its file, its X's kept) for its value.
-// What bash would read in a way this can't follow (case, functions,
-// arrays, aliases, a script made as it runs) leaves no parts, only why:
-// such a command is asked about. The shell tool runs bash (Machine.ts),
-// so this is the language it runs.
+// what it asks leave for before it runs: every simple command in it (a
+// part), wherever it sits (a pipeline, a list, a subshell, a command's
+// substitution, a heredoc's body, a loop, a bash -c's script, an
+// eval's, a trap's, a find -exec's), each with its words as they'd
+// expand, its assignments, its redirections, where it is in the command
+// (its span: a question shows the lines holding what made the checks
+// ask; reading a pipe, with what writes it) and the folder it runs in
+// (each cd followed, behind builtin, command or time too, in the shell
+// it moves: a subshell's, a pipeline's or the background's, a group's
+// or a loop's there, its own; one another program runs leaves it
+// unknown), and its input as given (a heredoc, a file) to the group,
+// the subshell, the loop or the nested script it is in, as its own. A
+// pipe goes on past a line's end after |, as do && and ||, and into
+// every command of a subshell, a group or a loop it feeds, and of what
+// a command reading it runs ($(...), `...`, <(...), a heredoc's body,
+// bash -c's script, an eval's, find -exec's). Wrappers that run the
+// command after them (sudo, timeout, env, xargs, ...) are taken off,
+// the part saying so (root: run as root, as sudoedit edits; fed: some
+// of its arguments come from its input). A word known only as the
+// command runs (a variable it never sets and the environment lacks, a
+// command's output) is dynamic, its known head kept; a variable the
+// command sets to plain words (X=a, for X in a b) stands for each of
+// them, and a command's output known before it runs ($(pwd), $(git
+// rev-parse --show-toplevel): the folder; $(mktemp): where it makes its
+// file, its X's kept) for its value. What bash would read in a way this
+// can't follow (case, functions, arrays, aliases, a script made as it
+// runs) leaves no parts, only why: Access.ts then splits such a command
+// crudely (its rules still meet most of what is in it, its paths found
+// by their look). The shell tool runs bash (Machine.ts), so this is the
+// language it runs.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -1079,9 +1081,9 @@ function scan_ansi(s: Scan): string {
 }
 
 // a ~ starting a word (or an assignment's value): the home folder; ~+,
-// the folder followed; another user's, or ~-, known only as it runs. One
-// a brace goes on (~{,/x}) as bash takes it: the braces first, then each
-// value's ~ (brace_tilde)
+// the folder followed; another user's, by their passwd entry (one not
+// there, or ~-, known only as it runs). One a brace goes on (~{,/x}) as
+// bash takes it: the braces first, then each value's ~ (brace_tilde)
 function scan_tilde(s: Scan, b: Build): void {
   const rest = s.src.slice(s.at);
   const m = /^~([A-Za-z0-9._-]*|[+-])(?=\/|[\s;&|()<>]|$)/.exec(rest);
@@ -1105,11 +1107,22 @@ function scan_tilde(s: Scan, b: Build): void {
   add(b, home ?? []);
 }
 
-// a ~'s folder by its name (home's for none, ~+ the folder followed);
-// null: known only as it runs
+// a ~'s folder by its name (home's for none, ~+ the folder followed,
+// another user's their passwd entry's); null: known only as it runs (a
+// user not there may be in the system's other user databases)
 function tilde(s: Scan, name: string): string[] | null {
-  if (name !== "") {
+  if (name === "+" || name === "-") {
     return name === "+" && s.cwd !== null ? [s.cwd] : null;
+  }
+  if (name !== "") {
+    const home = (() => {
+      try {
+        return fs.readFileSync("/etc/passwd", "utf8").split("\n").find((l) => l.startsWith(name + ":"))?.split(":")[5];
+      } catch {
+        return undefined;
+      }
+    })();
+    return home ? [home] : null;
   }
   const b: Build = { alts: [""], dynamic: false, glob: false };
   var_put(s, b, "HOME");
@@ -1118,8 +1131,8 @@ function tilde(s: Scan, name: string): string[] | null {
 
 // a brace's values at a word's start, a ~ starting one expanded as a
 // word's (bash expands braces first: {~,x}/y is ~/y and x/y); null: one
-// known only as it runs (another user's; a ~ whose name goes on past
-// the brace)
+// known only as it runs (another user's not in passwd; a ~ whose name
+// goes on past the brace)
 function brace_tilde(s: Scan, alts: string[], next: string | undefined): string[] | null {
   const out: string[] = [];
   for (const a of alts) {

@@ -11,15 +11,20 @@
 //                       ask again" saves * (every file)
 //   shell               each simple command, as written (shell): its
 //                       leading assignments left out, wrappers kept
-//                       (sudo rm -rf /), each command a wrapper or a
+//                       (sudo rm -rf /), and its words unquoted, a system
+//                       program by name ('rm' -rf "/" and /bin/rm -rf /
+//                       as rm -rf /: bare); each command a wrapper or a
 //                       script runs (rm -rf /, bash -c's script's) and the
 //                       wrapper's or script's own; "don't ask again" saves
 //                       each one's head and * (git push *: arity). Folders
 //                       outside: those it cds into, and paths its words or
-//                       redirections name (absolute, ~, ..), the system's
-//                       devices left out. A command Shell.ts can't read is
-//                       split crudely into pieces, its paths found by
-//                       their look, so a rule still finds what is in it
+//                       redirections name (absolute, ~, ~user, ..; a value
+//                       glued to an option, --file=/x or -o/x, or after a
+//                       name, of=/x; one made as it runs by its head), the
+//                       stream devices left out (/dev/null, /dev/tty). A
+//                       command Shell.ts can't read is split crudely into pieces,
+//                       its paths found by their look, so a rule still
+//                       finds most of what is in it
 //   spawn, skill, ask   subagent (its agent's name), skill (its name),
 //                       question
 //   an MCP tool, any    its own name, on *
@@ -27,17 +32,20 @@
 // A folder outside is the path's own if it is one, else its file's: its
 // request's resource the folder and * (/x/y/*), saving its project's
 // (the git repository holding it, but home or /) and *. Inside: the
-// working dir, the project's top (the git repository's; not /), and
-// illi's customization places (places: its skills', commands' and
-// agents' folders, the plugins', its RULES.md and theme.json, which
-// alone of their folder have their own path as resource, so allowing
-// them allows nothing beside them). Paths are taken as written, links
-// not followed. Claude Code's tools (hosted) ask as illi's like ones
-// do: Bash a shell command, Monitor its command too (or its WebSocket's
-// URL as a web fetch), Read a read, Write, Edit, MultiEdit and
-// NotebookEdit an edit, Grep, Glob and LS a search of a folder (grep,
-// glob, list), WebFetch and WebSearch theirs, Task and Agent a subagent,
-// illi's own (mcp__illi__...) none here: they ask as they reach illi.
+// working dir and the project's top (the git repository's; not /).
+// illi's customization places are outside, allowed by its own rules
+// (places, Permissions.base: its skills', commands' and agents' folders,
+// a plugin's too, found at the load, by its real path: not the rest of
+// a plugin, its code, hooks and MCP servers; its RULES.md and
+// theme.json, which alone of their folder have their own
+// path as resource, so allowing them allows nothing beside them). Paths
+// are taken as written (. and .. worked out), links not followed.
+// Claude Code's tools (hosted) ask as illi's like ones do: Bash a shell
+// command, Monitor its command too (or its WebSocket's URL as a web
+// fetch), Read a read, Write, Edit, MultiEdit and NotebookEdit an edit,
+// Grep, Glob and LS a search of a folder (grep, glob, list), WebFetch
+// and WebSearch theirs, Task and Agent a subagent, illi's own
+// (mcp__illi__...) none here: they ask as they reach illi.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -45,7 +53,7 @@ import * as path from "node:path";
 import * as config from "../config/Config.ts";
 import { Custom } from "../config/Custom.ts";
 import { Plugins } from "../config/Plugins.ts";
-import { Shell, type Span, type Word } from "./Shell.ts";
+import { Shell, type Part, type Span, type Word } from "./Shell.ts";
 
 // Types
 // =====
@@ -96,9 +104,9 @@ const ARITY: Record<string, number> = {
   "systemctl": 2, "service": 3, "launchctl": 2, "tmux": 2, "illi": 2,
 };
 
-// the system's devices and the process's own descriptors: no folder
-// asked for
-const DEVICES = /^\/(?:dev|proc\/self)(?:\/|$)/;
+// the devices a command reads or writes as a stream, and the process's
+// own descriptors: no folder asked for (any other device, a disk's, is)
+const DEVICES = /^\/(?:dev\/(?:null|zero|u?random|tty|std(?:in|out|err)|fd(?:\/\d+)?)|proc\/self\/fd(?:\/\d+)?)$/;
 
 // the top folders known to exist, by name (a path whose top folder
 // doesn't is no path: a regex, a pattern, /start/,/end/p)
@@ -174,7 +182,7 @@ export namespace Access {
           t !== null && found.push({ target: t, span: p.span });
         }));
         for (const r of p.redirs) {
-          if (r.op.startsWith("<<") || (r.op.includes("&") && /^(?:\d+|-)$/.test(r.target.alts[0] ?? "")) || r.target.dynamic) {
+          if (r.op.startsWith("<<") || (r.op.includes("&") && /^(?:\d+|-)$/.test(r.target.alts[0] ?? ""))) {
             continue;
           }
           r.target.alts.forEach((v) => {
@@ -183,7 +191,7 @@ export namespace Access {
           });
         }
         if (!cd) {
-          pieces.push({ text: p.full, span: p.span }, { text: p.text, span: p.span });
+          pieces.push({ text: p.full, span: p.span }, { text: p.text, span: p.span }, { text: bare(p), span: p.span });
         }
       }
       pieces.push(...outer(command));
@@ -194,7 +202,8 @@ export namespace Access {
 
   // a path's place (Target), from the working dir (~ as home); outside,
   // its folder's request: a folder's own (kind, else as the system has
-  // it), a file's its folder's
+  // it), a file's its folder's, one of illi's own files (Where files)
+  // the file itself
   export function target(where: Where, p: string, kind?: "file" | "directory"): Target {
     const absolute = path.resolve(where.cwd, p === "~" ? os.homedir() : p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p);
     if (inside(where, absolute)) {
@@ -216,11 +225,11 @@ export namespace Access {
 
   // illi's customization places, as the patterns its own rules allow
   // folders outside by (Permissions.base): its skills', commands' and
-  // agents' folders (its root's, its profile's, those shared, a
-  // project's), the plugins' folders, and its own files (own)
+  // agents' folders (its root's, its profile's, each plugin's, those
+  // shared, a project's), and its own files (own)
   export function places(cwd: string): string[] {
-    const dirs = (["skills", "commands", "agents"] as const).flatMap((k) => [...[config.ROOT, config.DIR].map((d) => path.join(d, k)), ...Custom.dirs(cwd, k)]);
-    return [...new Set([...dirs, ...Plugins.roots()].map((d) => slash(path.join(d, "*")))), ...Access.own().map(slash)];
+    const dirs = (["skills", "commands", "agents"] as const).flatMap((k) => [...[config.ROOT, config.DIR, ...Plugins.roots()].map((d) => path.join(d, k)), ...Custom.dirs(cwd, k)]);
+    return [...new Set(dirs.map((d) => slash(path.join(d, "*")))), ...Access.own().map(slash)];
   }
 
   // illi's own files allowed alone of their folders: its RULES.md and
@@ -426,19 +435,29 @@ function crude(cmd: string): Piece[] {
 // glob's head before its first wild character
 function paths(w: Word, cd: boolean): string[] {
   return w.alts.flatMap((v) => {
-    const value = v.startsWith("-") && !cd ? (v.includes("=") ? v.slice(v.indexOf("=") + 1) : "") : v;
-    const plain = w.glob ? value.slice(0, value.search(/[*?[{]|$/)) : value;
-    return plain === "" ? [] : [plain];
+    const option = v.startsWith("-") && !cd;
+    const glued = v.includes("=") ? [v.slice(v.indexOf("=") + 1)] : [];
+    const values = option ? [...glued, ...(/^-[^-]/.test(v) ? [v.slice(2)] : [])] : [v, ...glued];
+    return values.map((value) => (w.glob ? value.slice(0, value.search(/[*?[{]|$/)) : value)).filter((plain) => plain !== "");
   });
 }
 
+// a command's words unquoted, its program by name if a system one
+// (/bin/rm as rm): so a rule on rm -rf /* meets 'rm' -rf "/" too
+function bare(p: Part): string {
+  const [head, ...rest] = p.argv;
+  const value = (w: Word) => (w.dynamic ? w.raw : w.alts.join(" "));
+  return [head === undefined ? "" : Shell.program(head) || value(head), ...rest.map(value)].join(" ").trim();
+}
+
+
 // a path a command names (absolute, ~ or holding ..; a redirection's
-// any), from its folder, if a path at all: not a device, nothing in it a
-// path rarely holds (spaces, braces, quotes, $), its top folder there.
+// any), from its folder, if a path at all: not a stream device, its top
+// folder there (/start/,/end/p is none)
 // null: none
 function path_target(where: Where, v: string, from: string, kind: "directory" | null, any = false): ReturnType<typeof Access.target> | null {
   const named = any || v.startsWith("/") || v.startsWith("~") || v.split("/").includes("..");
-  if (!named || /[\s{}()<>|;$`'"\\,]/.test(v)) {
+  if (!named) {
     return null;
   }
   const absolute = path.resolve(from, v === "~" ? os.homedir() : v.startsWith("~/") ? path.join(os.homedir(), v.slice(2)) : v);

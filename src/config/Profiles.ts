@@ -78,7 +78,7 @@ const HERE = "project-profiles.json";
 // login, other servers, another theme, another permissions file, a
 // status line's command); an import's files that run commands or allow
 // calls, kept aside as <file>.imported (its hooks, its permission rules
-// and grants), and its plugins' folder, each plugin turned off
+// and saved approvals), and its plugins' folder, each plugin turned off
 const CLEANED = ["config.json", "mcp.json"];
 const LOCAL   = ["login"];
 const UNSAFE  = ["after", "rules", "login", "mcp", "theme", "permissions", "statusline"];

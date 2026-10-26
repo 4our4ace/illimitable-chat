@@ -2,10 +2,12 @@ Permissions
 ===========
 
 Each tool call asks for an action on resources: the shell's commands, a
-file's path, a folder outside the project. Rules say `allow`, `ask` or `deny` for them.
-Everything inside the project runs unasked; a folder outside it is
-asked about, and so is a `.env` file read. There are two modes:
-`default`, and `trust`, where nothing is asked. No model judges a call.
+file's path, a folder outside the project. Rules say `allow`, `ask` or
+`deny` for them. Everything inside the project runs unasked; a folder
+outside it is asked about, and so is a `.env` file the read tool reads
+(a shell command's `cat .env` isn't). There are two modes: `default`,
+and `trust`, where nothing is asked while your rules read. No model
+judges a call.
 
 Trust in a folder comes first: on a terminal, illi starts in a folder
 only once you've said you trust it (the full-screen question at its
@@ -20,8 +22,8 @@ Modes
 
 | Mode | Runs | Asked about | Refused |
 | ---- | ---- | ----------- | ------- |
-| `default` | everything inside the project | a folder outside it, a `.env` read, what your rules ask | what your rules deny |
-| `trust` | everything | nothing | what your rules deny |
+| `default` | everything inside the project | a folder outside it, the read tool's `.env` read, what your rules ask | what your rules deny |
+| `trust` | everything | nothing (but while your rules won't read) | what your rules deny |
 
 - `/mode` switches it for this session. In `trust` mode the bottom
   line ends with `trust mode` in the error color; a click on it opens
@@ -32,8 +34,11 @@ Modes
   `careful`, `ask` and `read-only` as `default`, said at the start.
 - In `default` mode, what stays inside the project runs whatever it
   does: deleting files, `git push --force`, `curl … | sh`, `sudo`, a
-  change to `.git/hooks` or to a `.claude` folder. Add `ask` or `deny`
-  rules for what you want stopped ([Rules](#rules-permissionsjson)).
+  `.env` read by a shell command, a change to `.git/hooks`, to a
+  `.claude` folder or to the project's `.illi` (its hooks, plugins and
+  MCP servers run from the next start, which says they changed). Add
+  `ask` or `deny` rules for what you want stopped
+  ([Rules](#rules-permissionsjson)).
 
 What a call asks for
 --------------------
@@ -53,54 +58,67 @@ project always comes first:
 | an MCP tool | its name (`mcp__github__merge_pr`) | `*` | `*` |
 | illi's other tools | their name (`zoom`, `todo`) | `*` | `*` |
 
-- A path inside the project is matched as written from the working
-  folder (`src/a.ts`, `../README.md` from a subfolder); one outside by
-  its full path. Inside means the working folder or the project's top
-  (its git repository's).
+- A path inside the project is matched by its path from the working
+  folder (`src/a.ts`, `../README.md` from a subfolder; an absolute one
+  inside too, its `.` and `..` worked out); one outside by its full
+  path. Inside means the working folder or the project's top (its git
+  repository's).
 - A file outside asks for its folder; a folder outside, for itself.
-- A shell command's resources are each simple command in it, with its
-  redirections (`git push origin main > log`), its leading assignments
-  left out (`X=1 rm -rf build` is `rm -rf build`), its wrappers kept
-  (`sudo rm -rf build`). A command a wrapper or a script runs is one
-  too, beside the wrapper's own: `sudo rm -rf build` gives `sudo rm -rf
-  build` and `rm -rf build`; `bash -c 'ls; rm x'` gives `ls`, `rm x` and
-  `bash -c 'ls; rm x'`. So a rule matches either. A `cd` is no command:
-  it asks only for its folder, if outside.
+- A shell command's resources are each simple command in it, whole (its
+  wrappers and redirections kept: `sudo rm -rf build > log`) and as the
+  command it runs (`rm -rf build`), and that command unquoted, a system
+  program by its name (`'rm' -rf "/"` and `/bin/rm -rf /` as `rm -rf
+  /`), its leading assignments left out (`X=1 rm -rf build` is `rm -rf
+  build`). A script a wrapper runs gives its commands too, beside the
+  wrapper's own: `bash -c 'ls; rm x'` gives `ls`, `rm x` and `bash -c
+  'ls; rm x'`. So a rule matches either. A `cd` is no command: it asks
+  only for its folder, if outside.
 - A shell command's folders outside: those it `cd`s into, and the paths
-  its words and redirections name (an absolute path, `~`, a `..`), from
-  the folder each command runs in. Devices (`/dev/null`) and what only
-  looks like a path (`grep -r '/api/v1'`, whose top folder `/api` isn't
-  there) aren't asked.
+  its words and redirections name (an absolute path, `~`, `~user`, a
+  `..`; spaces and quotes in it or not; a value glued to an option,
+  `--out=/x` or `-o/x`, or after a name, `dd of=/x`), from the folder
+  each command runs in. Streams (`/dev/null`, `/dev/zero`, `/dev/random`,
+  `/dev/tty`, `/dev/stdin`, `/dev/stdout`, `/dev/stderr`, `/dev/fd`) and
+  what only looks like a path (`grep -r '/api/v1'`, whose top folder
+  `/api` isn't there) aren't asked; a disk's device (`/dev/sda`) is.
 - A command illi's shell reader can't follow (`case`, a function, an
   array) is split crudely at `;`, `&`, `|`, newlines, `$(`, backticks
   and parentheses, quotes or not, and its paths are found by their look,
-  so a rule still finds what is in it.
+  so a rule still finds most of what is in it: a script quoted whole
+  with none of those in it stays one piece (in a `case`, `bash -c 'rm
+  x'` matches a rule on `bash *`, not one on `rm *`).
 - illi's own customization places are allowed outside the project: its
   skills, commands and agents folders (its own, a profile's, those
-  shared in `~/.agents/skills`), the plugins' folders, and its
-  `RULES.md` and `theme.json`. So illi writes a skill or a rule for
-  itself as you ask, unasked. `RULES.md` and `theme.json` are allowed
-  alone of their folder: illi's settings, permissions, hooks and MCP
-  servers beside them are still asked.
+  shared in `~/.agents/skills`, and each plugin's found as illi started,
+  by its real path, not one turned off), and its `RULES.md` and
+  `theme.json` (where the `rules` and `theme` settings put them too).
+  So illi writes a skill or a rule for itself as you ask, unasked.
+  `RULES.md` and `theme.json` are allowed alone of their folder: in
+  `default` mode, illi's settings, permissions, hooks and MCP servers
+  beside them are still asked, and so are a plugin's code, hooks and
+  MCP servers.
 
 On `claude-code`, Claude Code's own settings apply first (yours in
 `~/.claude`, a project's in its `.claude`): what they allow runs
 unasked, and so does what Claude Code allows by itself (a read inside
-the project, a `.env` file's too). What it asks about comes to illi and
+the project, a `.env` file's too); illi never sees those calls, so your
+deny rules don't refuse them. What it asks about comes to illi and
 is checked the same way: `Bash` as the shell, `Monitor` too (its
 command, or its WebSocket's URL as `webfetch`), `Read` as a read,
 `Write`, `Edit`, `MultiEdit` and `NotebookEdit` as edits, `Grep`,
 `Glob` and `LS` as `grep`, `glob` and `list` (their pattern, or the
 folder's path) after their folder if outside, `WebFetch` and
 `WebSearch` as `webfetch` (the URL) and `websearch` (the query), `Task`
-and `Agent` as `subagent`, any other tool as its own name.
+and `Agent` as `subagent`, any other tool as its own name. illi's own
+tools in it (`mcp__illi__…`) are checked as they reach illi.
 
 How rules decide
 ----------------
 
 - illi's own rules come first, then yours, then the approvals saved for
   the project ("don't ask again") and those given this session
-  (`/permissions`).
+  (`/permissions`): an approval, saved for the project or this
+  session's, undoes an `ask`, yours too, never a `deny`.
 - A resource takes the effect of the last rule that matches its action
   and itself; none matches: ask. illi's own rules: everything `allow`;
   `read` of `*.env` and `*.env.*` `ask`, of `*.env.example` `allow`;
@@ -115,9 +133,10 @@ How rules decide
 Plugins' `tool.before` hooks and your `PreToolUse` hooks run before the
 check, so it judges the input they leave
 ([Customize](customize.md#hooks)). One may refuse the call; have it
-asked (its why first, with no "don't ask again"), even if the rules
-allow it; or allow it, so it runs as in `trust` mode: your deny rules
-still refuse.
+asked, even if the rules allow it (its why first, on the call's first
+question, which offers no "don't ask again"); or allow it, so it runs
+as in `trust` mode: your deny rules still refuse, and while your rules
+won't read it is asked all the same.
 
 The question
 ------------
@@ -137,8 +156,9 @@ cat ~/notes/todo.md
 ● illi
 ```
 
-- Why it asks comes first: a folder outside (which), a `.env` read, or
-  your rule (`your rule asks about git push *`). Then what it would do:
+- Why it asks comes first: a folder outside (which), a `.env` read,
+  your rule (`your rule asks about git push *`), a hook's why, or that
+  illi can't read your rules. Then what it would do:
   the whole command, by its lines (the side panel and `/permissions`
   show it cut short). One too long for half the screen is cut to fit, a
   dim line saying how much more; the wheel over it, or PgUp and PgDn,
@@ -157,8 +177,9 @@ cat ~/notes/todo.md
   dim `… 12 rows` between (a row alone is never hidden; a new width
   folds it anew). Ctrl+O, or a click on a `… 37 lines` or `… 12 rows`
   line, shows the whole command; Ctrl+O again folds it (the rule says
-  which: `Ctrl+O all`, `Ctrl+O fold`). A hook's ask shows all of the
-  command; a file tool's or an MCP tool's call shows whole.
+  which: `Ctrl+O all`, `Ctrl+O fold`). A hook's ask with nothing else
+  in the call asked shows all of the command; a file tool's or an MCP
+  tool's call shows whole.
 
   ```
   ── Allow shell? · ↑↓ Enter · Ctrl+O all · Esc no ──────────────────────────
@@ -173,15 +194,17 @@ cat ~/notes/todo.md
     ○ No, and say why
   ───────────────────────────────────────────────────────────────────────────
   ```
-- "Don't ask again" says what it saves, for this project: a folder
-  outside (its repository's), a command's family (`git push *`), every
+- "Don't ask again" says what it saves, for this project (for this
+  session, if the file won't take it): a folder outside (its
+  repository's), a command's family (`git push *`; for a shell command,
+  each that asked: `ls && git push` saves `git push *` alone), every
   read or change, an MCP tool, a skill. It answers yes, too, every
-  question waiting that it now allows. It isn't offered for a hook's
-  ask, nor while your rules won't read. A `.env` read's saves every
-  read: a later `.env` read isn't asked either.
+  question waiting that it now allows. It isn't offered on a question a
+  hook asked for, nor while your rules won't read. A `.env` read's saves
+  every read: a later `.env` read isn't asked either.
 - No refuses the call and every other question of the one who asked
-  (illi, or a subagent) waiting with it, and stops its turn: illi waits
-  for you to say how to go on. Esc is No.
+  (illi, or a subagent) waiting with it, and stops its turn (illi's, its
+  subagents with it): illi waits for you to say how to go on. Esc is No.
 - No, and say why refuses them too, and tells the one who asked your
   words: it goes on, doing it another way. A click in the line asking
   why puts the cursor where it lands, as in your message
@@ -201,10 +224,10 @@ opens `/permissions` on one. `/permissions` lists them all, then the
 approvals (saved for this project, then this session's), then your
 rules:
 
-- Enter on one you said no to allows just what it asked for (that
-  folder, that command) for this session, and tells whoever asked
-  (illi, by a message in your name; a subagent, by a message to it) that
-  it may run it again.
+- Enter on one you said no to allows just what it asked for (that folder
+  and those in it, that command exactly) for this session, and tells
+  whoever asked (illi, by a message in your name; a subagent, by a
+  message to it) that it may run it again.
 - One your rules refuse is allowed only by changing them.
 - One asked each time (a hook's ask, or while your rules won't read)
   has nothing to allow: run it again, and say yes.
@@ -237,8 +260,11 @@ saved:
   rule wins over the earlier, in the file's order.
 - `*` matches anything, `/` too; `?` one character; a pattern that ends
   in a space and `*` matches the bare command too (`git push *` matches
-  `git push`). A path pattern's `~/` is your home; a shell pattern is
-  matched as the command is written.
+  `git push`). A `\` reads as `/`, in the pattern and what it matches,
+  so no pattern names a `*` itself. A path pattern's `~/` is your home,
+  a relative one is matched from the working folder (a file inside the
+  project, as its path from there); a shell pattern is matched as the
+  command is written.
 - `/tmp` is outside the project, so it is asked. To allow it:
   `"external_directory": { "/tmp/*": "allow" }`.
 - `saved` is illi's: each an action and a resource allowed, by project.
@@ -248,12 +274,21 @@ saved:
   beyond (all but its own chat tools: `zoom`, `date`, `projects`,
   `search`, `todo`, `tell`, its questions, skills and subagents), in
   `trust` mode too.
-- An older illi's file still reads: its `write` rules as `edit`'s (one
-  allowing a folder outside allowing the folder too), its `mcp` rules
-  as rules for the tools they name, its grants as saved approvals (a
-  family of commands, a folder outside, an MCP tool; one for a single
-  file is dropped). The next save writes them as approvals; your rules
-  are never rewritten.
+- An older illi's file still reads, though not all of it as it did: its
+  `write` rules as `edit`'s (one allowing a folder outside allowing the
+  folder too; a `read` rule allowing one doesn't, so reads there are
+  asked), its `mcp` rules as rules on the MCP tools they name (`"*"` as
+  `mcp__*`), its grants as saved approvals (a command or a family of
+  them; a folder outside by a `write` grant, a `read` grant's dropped,
+  so reads there are asked again; an MCP tool; one for a single file is
+  dropped). Its rules took `deny` over `ask` over `allow` whatever their
+  order, a relative path from the project's top and `\*` as a star, and
+  its `read` and `write` rules met what a shell command reads and writes
+  too; now the last match wins (put a deny after the allow it narrows:
+  illi says at the start when a deny or ask of yours never applies), a
+  relative path is from the working folder, `\` reads as `/`, and file
+  rules meet the file tools alone. The next save writes the grants as
+  approvals; your rules are never rewritten.
 
 Limits
 ------
@@ -263,12 +298,19 @@ Limits
   `ask` and `deny` rules are what stop such commands.
 - Folders outside are found as a command is written, with the
   variables it sets and illi's environment filled in (`$HOME/x`). A path
-  known only as it runs (a command's output, `$(…)`), one inside inline
-  code (`python -c`), and what a script or program opens itself aren't
-  seen. A path that is only text (`echo /etc`) is asked about all the
-  same.
-- A rule matches a command as written: `rm -rf "$HOME"` isn't `rm -rf
-  /home/me`.
+  known only as it runs (a command's output, `$(…)`) is asked by what
+  is known of it (`> /etc/$(date).log` asks for `/etc`), else not
+  (`> $(mktemp)`); one inside inline code (`python -c`), and what a
+  script or program opens itself aren't seen. A path that is only text
+  (`echo /etc`) is asked about all the same.
+- A rule matches a command as written or unquoted: `rm -rf "$HOME"`
+  isn't `rm -rf /home/me`, `rm -fr /` isn't `rm -rf /*`, `git -C app
+  push` isn't `git push *`.
+- A file rule (`read`, `edit`) is for the file tools, illi's and Claude
+  Code's: a shell command that reads or writes a file meets your
+  `shell` rules alone (and, outside the project, the folder's
+  `external_directory` ones): an `edit` rule denying `*.lock` doesn't
+  stop `echo x > bun.lock`.
 - Paths are matched as written: a link inside the project that leads
   outside isn't asked.
 - No sandbox yet: [Planned](planned.md).
