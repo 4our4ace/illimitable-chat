@@ -298,6 +298,19 @@ export namespace Shell {
     }
   }
 
+  // a user's home folder, as ~name names it: their passwd entry's, the
+  // user illi runs as by that name its home; null: not found (the
+  // system's other user databases may know them)
+  export function home(name: string): string | null {
+    try {
+      const entry = fs.readFileSync("/etc/passwd", "utf8").split("\n").find((l) => l.startsWith(name + ":"))?.split(":")[5];
+      if (entry) {
+        return entry;
+      }
+    } catch {}
+    return name === os.userInfo().username ? os.homedir() : null;
+  }
+
   // the program a word names: its name ("" for one known only as it
   // runs, a glob, or named by a path outside the system's folders: its
   // own)
@@ -1108,21 +1121,14 @@ function scan_tilde(s: Scan, b: Build): void {
 }
 
 // a ~'s folder by its name (home's for none, ~+ the folder followed,
-// another user's their passwd entry's); null: known only as it runs (a
-// user not there may be in the system's other user databases)
+// another user's: Shell.home); null: known only as it runs
 function tilde(s: Scan, name: string): string[] | null {
   if (name === "+" || name === "-") {
     return name === "+" && s.cwd !== null ? [s.cwd] : null;
   }
   if (name !== "") {
-    const home = (() => {
-      try {
-        return fs.readFileSync("/etc/passwd", "utf8").split("\n").find((l) => l.startsWith(name + ":"))?.split(":")[5];
-      } catch {
-        return undefined;
-      }
-    })();
-    return home ? [home] : null;
+    const home = Shell.home(name);
+    return home === null ? null : [home];
   }
   const b: Build = { alts: [""], dynamic: false, glob: false };
   var_put(s, b, "HOME");

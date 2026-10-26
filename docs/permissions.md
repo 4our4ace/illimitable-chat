@@ -6,8 +6,8 @@ file's path, a folder outside the project. Rules say `allow`, `ask` or
 `deny` for them. Everything inside the project runs unasked; a folder
 outside it is asked about, and so is a `.env` file the read tool reads
 (a shell command's `cat .env` isn't). There are two modes: `default`,
-and `trust`, where nothing is asked while your rules read. No model
-judges a call.
+and `trust`, where nothing but a hook's ask is asked while your rules
+read. No model judges a call.
 
 Trust in a folder comes first: on a terminal, illi starts in a folder
 only once you've said you trust it (the full-screen question at its
@@ -23,7 +23,7 @@ Modes
 | Mode | Runs | Asked about | Refused |
 | ---- | ---- | ----------- | ------- |
 | `default` | everything inside the project | a folder outside it, the read tool's `.env` read, what your rules ask | what your rules deny |
-| `trust` | everything | nothing (but while your rules won't read) | what your rules deny |
+| `trust` | everything | nothing (but a hook's ask, and while your rules won't read) | what your rules deny |
 
 - `/mode` switches it for this session. In `trust` mode the bottom
   line ends with `trust mode` in the error color; a click on it opens
@@ -66,27 +66,33 @@ project always comes first:
 - A file outside asks for its folder; a folder outside, for itself.
 - A shell command's resources are each simple command in it, whole (its
   wrappers and redirections kept: `sudo rm -rf build > log`) and as the
-  command it runs (`rm -rf build`), and that command unquoted, a system
-  program by its name (`'rm' -rf "/"` and `/bin/rm -rf /` as `rm -rf
-  /`), its leading assignments left out (`X=1 rm -rf build` is `rm -rf
-  build`). A script a wrapper runs gives its commands too, beside the
-  wrapper's own: `bash -c 'ls; rm x'` gives `ls`, `rm x` and `bash -c
-  'ls; rm x'`. So a rule matches either. A `cd` is no command: it asks
-  only for its folder, if outside.
+  command it runs (`rm -rf build`), and that command as its words expand
+  (unquoted, `~` and the variables known filled in: `rm -rf "$HOME"` as
+  `rm -rf /home/me`), a system program by its name (`'rm' -rf "/"` and
+  `/bin/rm -rf /` as `rm -rf /`), its leading assignments left out (`X=1
+  rm -rf build` is `rm -rf build`), a word of several values giving a
+  command for each (`for d in /tmp /var; do rm -rf $d; done` gives `rm
+  -rf /tmp` and `rm -rf /var`). A script a wrapper runs gives its
+  commands too, beside the wrapper's own: `bash -c 'ls; rm x'` gives
+  `ls`, `rm x` and `bash -c 'ls; rm x'`. So a rule matches either. A
+  `cd` is no command: it asks only for its folder, if outside.
 - A shell command's folders outside: those it `cd`s into, and the paths
   its words and redirections name (an absolute path, `~`, `~user`, a
   `..`; spaces and quotes in it or not; a value glued to an option,
-  `--out=/x` or `-o/x`, or after a name, `dd of=/x`), from the folder
-  each command runs in. Streams (`/dev/null`, `/dev/zero`, `/dev/random`,
-  `/dev/tty`, `/dev/stdin`, `/dev/stdout`, `/dev/stderr`, `/dev/fd`) and
-  what only looks like a path (`grep -r '/api/v1'`, whose top folder
-  `/api` isn't there) aren't asked; a disk's device (`/dev/sda`) is.
+  `--out=/x` or `-o/x`, but a lone `/`, `cut -d/`; after a name, `dd
+  of=/x`, but a variable `export` or `declare` sets; each of a list,
+  `--path=/a:/b`), from the folder each command runs in. Streams
+  (`/dev/null`, `/dev/zero`, `/dev/random`, `/dev/tty`, `/dev/stdin`,
+  `/dev/stdout`, `/dev/stderr`, `/dev/fd`) and what only looks like a
+  path (`grep -r '/api/v1'`, whose top folder `/api` isn't there) aren't
+  asked; a disk's device (`/dev/sda`) is.
 - A command illi's shell reader can't follow (`case`, a function, an
   array) is split crudely at `;`, `&`, `|`, newlines, `$(`, backticks
-  and parentheses, quotes or not, and its paths are found by their look,
-  so a rule still finds most of what is in it: a script quoted whole
-  with none of those in it stays one piece (in a `case`, `bash -c 'rm
-  x'` matches a rule on `bash *`, not one on `rm *`).
+  and parentheses, quotes or not, and its paths are found by their look
+  (one with a space in it up to the space), so a rule still finds most
+  of what is in it: a script quoted whole with none of those in it stays
+  one piece (in a `case`, `bash -c 'rm x'` matches a rule on `bash *`,
+  not one on `rm *`).
 - illi's own customization places are allowed outside the project: its
   skills, commands and agents folders (its own, a profile's, those
   shared in `~/.agents/skills`, and each plugin's found as illi started,
@@ -285,10 +291,10 @@ saved:
   order, a relative path from the project's top and `\*` as a star, and
   its `read` and `write` rules met what a shell command reads and writes
   too; now the last match wins (put a deny after the allow it narrows:
-  illi says at the start when a deny or ask of yours never applies), a
-  relative path is from the working folder, `\` reads as `/`, and file
-  rules meet the file tools alone. The next save writes the grants as
-  approvals; your rules are never rewritten.
+  illi says at the start when a later, looser rule of yours overrides a
+  deny or an ask whole), a relative path is from the working folder, `\`
+  reads as `/`, and file rules meet the file tools alone. The next save
+  writes the grants as approvals; your rules are never rewritten.
 
 Limits
 ------
@@ -296,16 +302,19 @@ Limits
 - `default` mode stops nothing that stays in the project: a script, a
   build, `rm -rf`, `git push --force`, code piped into a shell. Your
   `ask` and `deny` rules are what stop such commands.
-- Folders outside are found as a command is written, with the
-  variables it sets and illi's environment filled in (`$HOME/x`). A path
-  known only as it runs (a command's output, `$(…)`) is asked by what
-  is known of it (`> /etc/$(date).log` asks for `/etc`), else not
-  (`> $(mktemp)`); one inside inline code (`python -c`), and what a
-  script or program opens itself aren't seen. A path that is only text
-  (`echo /etc`) is asked about all the same.
-- A rule matches a command as written or unquoted: `rm -rf "$HOME"`
-  isn't `rm -rf /home/me`, `rm -fr /` isn't `rm -rf /*`, `git -C app
-  push` isn't `git push *`.
+- Folders outside are found as a command is written, with the variables
+  it sets and illi's environment filled in (`$HOME/x`). A path known
+  only as it runs (a command's output, `$(…)`) is asked by what is known
+  of it (`> /etc/$(date).log` asks for `/etc`), else not (`>
+  $(mktemp)`); one inside inline code (`python -c`), and what a script
+  or program opens itself aren't seen. A `~user` that `/etc/passwd`
+  doesn't list (known to another user database alone) is taken as a
+  folder beside your home. A path that is only text (`echo /etc`) is
+  asked about all the same.
+- A rule matches a command as written or as its words expand: a word
+  known only as it runs stays as written (`rm -rf "$(cat dir)"` isn't
+  `rm -rf /*`), `rm -fr /` isn't `rm -rf /*`, `git -C app push` isn't
+  `git push *`.
 - A file rule (`read`, `edit`) is for the file tools, illi's and Claude
   Code's: a shell command that reads or writes a file meets your
   `shell` rules alone (and, outside the project, the folder's

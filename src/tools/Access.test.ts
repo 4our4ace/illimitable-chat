@@ -19,6 +19,7 @@
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
+import * as path from "node:path";
 import { Access, type Where } from "./Access.ts";
 import { Permissions, type Rule } from "./Permissions.ts";
 
@@ -26,6 +27,7 @@ const DIR   = fs.realpathSync(fs.mkdtempSync(os.tmpdir() + "/illi-access-"));
 const APP   = DIR + "/app";
 const LIB   = DIR + "/lib";
 const WHERE: Where = { cwd: APP + "/src", top: APP, files: [DIR + "/illi/RULES.md"] };
+const ROOT  = fs.readFileSync("/etc/passwd", "utf8").split("\n").find((l) => l.startsWith("root:"))!.split(":")[5];
 
 fs.mkdirSync(APP + "/src", { recursive: true });
 fs.mkdirSync(APP + "/.git");
@@ -97,9 +99,14 @@ test("shell's folders outside however written: a space or quote in the path, a ~
   expect(shell("dd if=x of=" + LIB + "/out")[0][1]).toEqual([LIB + "/*"]);
   expect(shell("curl -o" + LIB + "/x https://x.dev")[0][1]).toEqual([LIB + "/*"]);
   expect(shell("echo x >> " + LIB + "/rc$N")[0][1]).toEqual([LIB + "/*"]);
-  expect(shell("cat ~root/x")[0]).toEqual(["external_directory", ["/root/*"], ["/root/*"]]);
+  expect(shell("cat ~root/x")[0]).toEqual(["external_directory", [ROOT + "/*"], [ROOT + "/*"]]);
+  expect(shell("ls ~nosuchuser-illi/x")[0][1]).toEqual([path.join(path.dirname(os.homedir()), "nosuchuser-illi") + "/*"]);
+  expect(shell("x --path=" + LIB + "/a:" + APP + "/b")[0][1]).toEqual([LIB + "/*"]);
   expect(shell("cp x /dev/sda")[0]).toEqual(["external_directory", ["/dev/*"], ["/dev/*"]]);
   expect(shell("ls > /dev/null 2> /dev/stderr < /dev/tty")).toHaveLength(1);
+  expect(shell("cut -d/ -f2 a.txt; awk -F/ '{print $NF}' x; sort -t/ -k2 a")).toHaveLength(1);
+  expect(shell("export PATH=\"$HOME/.local/bin:$PATH\"; declare X=" + LIB)).toHaveLength(1);
+  expect(shell("case x in *) cat ~root/x; curl -o" + LIB + "/x u; cut -d/ y ;; esac").map((r) => r[1])[0]).toEqual([ROOT + "/*", LIB + "/*"]);
 });
 
 test("shell Shell.ts can't read: split crudely, its paths found by their look", () => {
@@ -113,6 +120,7 @@ test("rules on shell: sudo * denies sudo's commands, bash * a bash -c's, rm * an
   expect(judge("case x in *) rm -rf y ;; esac", [rule("shell", "rm *", "deny")])).toEqual(["deny"]);
   expect(judge("X=1 rm -rf y", [rule("shell", "rm -rf *", "deny")])).toEqual(["deny"]);
   expect(judge("rm -rf \"/\"; 'rm' -rf /; /bin/rm -rf /", [rule("shell", "rm -rf /*", "deny")])).toEqual(["ask", "deny"]);
+  expect(judge("for d in /tmp /var; do rm -rf \"$d/x\"; done", [rule("shell", "rm -rf /var/*", "deny")]).at(-1)).toBe("deny");
   expect(Access.shell(WHERE, "/bin/rm -rf '/'").at(-1)!.resources).toEqual(["/bin/rm -rf '/'", "rm -rf /"]);
   expect(judge("git push && git status", [rule("shell", "git push *", "ask")])).toEqual(["ask"]);
   expect(judge("git status", [rule("shell", "git push *", "ask")])).toEqual(["allow"]);

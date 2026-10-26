@@ -13,9 +13,9 @@
 // the later folder's wins, and one named in the `off` setting is left
 // out, all of it. Which plugins there are is read once, as illi starts
 // (find); a project's new or changed since illi last started there is
-// said (Seen.ts). Code runs inside illi, with all illi's rights (as
-// OpenCode's plugins do). Its default export is a function, called once as
-// illi starts with what it may use (Api): hooks on what the chat does
+// said (Seen.ts). Code runs inside illi, with all illi's rights. Its
+// default export is a function, called once as illi starts with what it
+// may use (Api): hooks on what the chat does
 // (Hooks: illi's start and quit, a turn's start and end, a message
 // logged; context for the model in every call of the run; a message of
 // the user's before it is sent, to keep it back or add context; a turn

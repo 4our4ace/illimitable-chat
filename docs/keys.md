@@ -94,7 +94,7 @@ Projects and profiles
 Shortcuts
 ---------
 
-Press the leader, Ctrl+X, then a key, as in OpenCode: Ctrl+X then m opens
+Press the leader, Ctrl+X, then a key: Ctrl+X then m opens
 the model list. A list open (a picker, or the commands matched as you
 type a `/word`) closes first; a question at the input stays as it is.
 While illi waits for that key the screen turns grey; Esc, the leader

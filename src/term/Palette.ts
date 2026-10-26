@@ -1,7 +1,7 @@
 // Palette
 // =======
-// Ctrl+P: all a person can do, in one list typed to search, as OpenCode's
-// command palette (a popup, as every list: Popup.ts), in groups (/help's,
+// Ctrl+P: all a person can do, in one list typed to search, a command
+// palette (a popup, as every list: Popup.ts), in groups (/help's,
 // then the settings) while nothing is searched: each command (term_groups:
 // its /name, else its first key), what it does (its first clause) and, at
 // the right, its keys (the others, and the leader's shortcut to it, as
