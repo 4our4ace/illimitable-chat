@@ -584,16 +584,16 @@ export function term_background(t: Term): void {
   term_chooser(t, "Background jobs", names, about, -1, stop, { keys, foot: () => "Enter or Del stop it; all stop when illi quits" });
 }
 
-// the user's agents, primary (the main one marked) and subagents, their
-// commands and skills (as / takes them: term_yours), plugins (each
-// one's parts, what illi doesn't use of it, what to know; off, or its
-// code failed, said so), folders that look meant as plugins and aren't,
-// hooks (all off, said why), and the dirs of all; a plugin's part says
-// so
+// the user's agents, primary (the main one marked) and subagents (one
+// started fresh said so), their commands and skills (as / takes them:
+// term_yours), plugins (each one's parts, what illi doesn't use of it,
+// what to know; off, or its code failed, said so), folders that look
+// meant as plugins and aren't, hooks (all off, said why), and the dirs
+// of all; a plugin's part says so
 function term_agents(t: Term): void {
   const cwd   = process.cwd();
   const from  = (plugin: string | null | undefined) => (plugin == null ? "" : " (plugin " + plugin + ")");
-  const agent = (a: Profile) => ["- **" + a.name + "**" + (a.name === t.v.agent ? " (main)" : "") + from(a.plugin) + (a.description === "" ? "" : ": " + a.description) + [a.model, a.effort].filter(Boolean).map((x) => " · " + x).join("") + (a.tools === null ? "" : " · tools: " + a.tools.join(", ")), ...(a.notes ?? []).map((n) => "  - " + n)];
+  const agent = (a: Profile) => ["- **" + a.name + "**" + (a.name === t.v.agent ? " (main)" : "") + from(a.plugin) + (a.description === "" ? "" : ": " + a.description) + [a.model, a.effort, a.fresh ? "fresh" : null].filter(Boolean).map((x) => " · " + x).join("") + (a.tools === null ? "" : " · tools: " + a.tools.join(", ")), ...(a.notes ?? []).map((n) => "  - " + n)];
   const yours = term_yours(term_builtin());
   const about = (description: string) => (description === "" ? "" : ": " + description);
   const list  = (title: string, xs: string[]) => ["", title + (xs.length === 0 ? ": none yet." : ":"), ...xs];
