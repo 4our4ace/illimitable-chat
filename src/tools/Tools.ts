@@ -4,10 +4,11 @@
 // local port, at a URL with the chat's secret and the caller ("main", an
 // agent; a compaction has none).
 // shell, read, write and edit run here, on the user's computer, in the
-// working dir: where illi was started (each call's message names it, and
-// its project). A request dropped (its call stopped) stops its job.
-// zoom and date read the chat, or another project's (Tools.chat_of);
-// projects and search look across them all (Projects.ts).
+// working dir: where illi was started (each call's message names it, its
+// project and the time now). A request dropped (its call stopped) stops
+// its job. zoom and date read the chat, or another project's
+// (Tools.chat_of); projects and search look across them all
+// (Projects.ts).
 // An agent (a subagent) has a name and a log (one spawned as a user's
 // subagent: that agent's name, numbered while another so named is at
 // work or of this run, as reviewer-2; else a random one; a name freed
@@ -72,6 +73,7 @@ import { EFFORTS, Pick } from "../ai/Pick.ts";
 import { Projects } from "../chat/Projects.ts";
 import { Recall } from "../chat/Recall.ts";
 import { Store } from "../chat/Store.ts";
+import { When } from "../chat/When.ts";
 import type { Background, Live, Perms, Plan, Query, Question, Refused, State, Todo } from "../ui/View.ts";
 
 export type { Live };
@@ -216,12 +218,14 @@ const SUB_NOTE = "subagent";
 const SUB_AT   = " at effort ";
 const SUB_RE   = /^subagent(?: ([a-z0-9][a-z0-9_-]*))?(?: at effort (\S+))?$/i;
 
-// where the tools run, in the system prompt (HERE_DOC); the working dir,
-// at the start of each call's message (Tools.here), so a start elsewhere
-// changes a call's tail, never its cached prefix
+// where the tools run, in the system prompt (HERE_DOC); the working dir
+// and the time now, at the start of each call's message (Tools.here), so
+// a start elsewhere, or a later minute, changes a call's tail, never its
+// cached prefix
 const HERE_DOC = `Your shell, read, write and edit tools run on the user's computer, in
 the working dir named at the start of each message: the folder where the
-user started illi. Relative paths start there.`;
+user started illi. Relative paths start there. The user's time follows
+it (Now:): work out "yesterday" or "last Tuesday" from it.`;
 
 // a subagent's prompt: its part, then the view's and the tools' docs
 export const SUB = SUB_HEAD + "\n\n" + VIEW_DOC + "\n\n" + HERE_DOC;
@@ -420,11 +424,17 @@ export namespace Tools {
     return HOSTED.reduce((text, [from, to]) => text.replace(from, to), head) + "\n\n" + HOSTED_TOOLS;
   }
 
-  // the working dir and the computer it is on, the project as kept
-  export function here(tools: Tools): Block {
+  // the working dir and the computer it is on, the project as kept, and
+  // the time now (When.now; on claude-code, short: its own prompt gives
+  // the day's date). Built once a call (Chat.call, Chat.recap, Tools.ask)
+  // and sent with every step of it; unmarked, after every mark a later
+  // call reads (the view's and recent's), so a new minute changes only
+  // what a call sends anew (as at_work's running minutes do), never a
+  // cached prefix
+  export function here(tools: Tools, vendor?: Vendor): Block {
     const place = Store.named(tools.mem.store);
     const project = place.path === "" ? "home (outside any git repo)" : place.name;
-    return { text: "Working dir: " + tools.cwd + " on " + os.hostname() + " (" + process.platform + "), project " + project + "\n\n", mark: false };
+    return { text: "Working dir: " + tools.cwd + " on " + os.hostname() + " (" + process.platform + "), project " + project + "\nNow: " + When.now(vendor === "claude-code") + "\n\n", mark: false };
   }
 
   // what a tool reads of a chat (`read`): this one, or a project's by its
@@ -793,7 +803,7 @@ export namespace Tools {
     const system = Tools.system(SUB + Custom.section(profile), tools.cwd, run.vendor);
     const window = Pick.window(pick);
     const most = window === undefined ? 0 : (config.config_context(pick.model, window, 0, Pick.room(pick)) * TOKEN) / 2;
-    const blocks = [...Tools.fitted(agent.view, most), Tools.here(tools), log];
+    const blocks = [...Tools.fitted(agent.view, most), Tools.here(tools, run.vendor), log];
     const effort = agent.role.effort ?? run.effort;
     return { ...run, effort, system, blocks, searches: SEARCHES, server, builtins: profile?.builtins };
   }

@@ -25,10 +25,12 @@
 // after the tool. The loop guard (every mode but yolo): a call the same
 // as its caller's two before it asked (all of it its risk), illi's own
 // tools too; a yes starts its count again. The projects: their table,
-// a search across them, a zoom into another's chat. A subagent's view
-// fits its model: the oldest lines left out.
+// a search across them, a zoom into another's chat. The time now in
+// each call's message, short on claude-code, after every cache mark a
+// later call reads. A subagent's view fits its model:
+// the oldest lines left out.
 
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import * as fs from "node:fs";
 import { temp_dir, temp_repo } from "../../test/repo.ts";
 
@@ -50,6 +52,8 @@ const config = await import("../config/Config.ts");
 const { MASTER, SUB, Tools } = await import("./Tools.ts");
 const { Projects } = await import("../chat/Projects.ts");
 const { Store } = await import("../chat/Store.ts");
+const { Memory } = await import("../chat/Memory.ts");
+const { AskAI } = await import("../ai/AskAI.ts");
 const View = await import("../ui/View.ts");
 
 const chat = Chat.open(REPO);
@@ -388,6 +392,35 @@ test("projects: the table, this chat's marked; a search in this project, another
   expect(Tools.here(chat.tools).text).toContain(", project " + here + "\n");
   Store.close(other);
 });
+
+// a run in New York's zone at a set time, whatever the machine's
+async function zoned(at: number, run: () => Promise<void> | void): Promise<void> {
+  const zone = process.env.TZ;
+  process.env.TZ = "America/New_York";
+  setSystemTime(new Date(at));
+  try {
+    await run();
+  } finally {
+    setSystemTime();
+    if (zone === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = zone;
+    }
+  }
+}
+
+test("the time now, after where illi works, in about ten tokens (on claude-code without the date its own prompt gives); in a subagent's call too, unmarked, after every mark a later call reads", () => zoned(Date.UTC(2026, 9, 25, 18, 5), () => {
+  expect(Tools.here(chat.tools).text).toEndWith(", project " + Projects.place(REPO).name + "\nNow: Sun 2026-10-25 14:05 UTC-4\n\n");
+  expect(Tools.here(chat.tools, "claude-code").text).toEndWith("\nNow: Sun 14:05 UTC-4\n\n");
+  const agent = { name: "Ada", run: 0, role: { $: "sub" as const, effort: null, agent: null }, call: null, live: [], calls: {}, stop: false, view: Memory.view(chat.mem), replies: [] };
+  const ask = Tools.ask(chat.tools, agent);
+  const at = ask.blocks.findIndex((b) => b.text.startsWith("Working dir: "));
+  expect(ask.blocks[at]).toEqual(Tools.here(chat.tools, ask.vendor));
+  expect(ask.blocks[at].mark).toBe(false);
+  expect(AskAI.keys(ask).length).toBeLessThanOrEqual(at);
+  expect(SUB).toContain("(Now:)");
+}));
 
 test("what a tool would do: a command, a file, a URL or a query, else the input; whole for the question, cut short elsewhere", () => {
   expect(Tools.what({ command: "git status", description: "x" })).toBe("git status");
