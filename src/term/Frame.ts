@@ -355,9 +355,10 @@ function term_working(t: Term, doing: View.Doing, w: number, now: number): Paint
   return [...head, Paint.Run(" · " + said + " ", Paint.DIM), Paint.Run("─".repeat(Math.max(0, w - used)), Paint.DIM)];
 }
 
-// the terminal's title, unless the title setting is off: `∞ illi ·
-// <project>` (its git repo's folder, or home outside any), the profile
-// after it but for the default; while work runs, a cell's dots going
+// the terminal's title, unless the title setting is off: `∞ <project>
+// · illi` (its git repo's folder, or home outside any: the project
+// first, so a tab cut short still names it), the profile after it but
+// for the default; while work runs, a cell's dots going
 // round (term_orbit), and a question waiting on the user, here or in a profile
 // open hidden in this window, ? (Screen writes it only as it changes)
 export function term_title(t: Term): void {
@@ -370,7 +371,7 @@ export function term_title(t: Term): void {
     const top = Projects.place(cwd).path;
     titled = { cwd, name: top === "" ? "home" : path.basename(top) };
   }
-  Screen.screen_title(t.scr, mark + " illi · " + titled.name + (config.PROFILE === DEFAULT ? "" : " · " + config.PROFILE));
+  Screen.screen_title(t.scr, mark + " " + titled.name + " · illi" + (config.PROFILE === DEFAULT ? "" : " · " + config.PROFILE));
 }
 
 // the trace's clock: it starts as work does (when kept), stops as it
