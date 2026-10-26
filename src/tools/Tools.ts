@@ -206,8 +206,8 @@ A summary tags each item with its kind: user (the user's words), illi
 recap (illi's recap of the chat before it, at the user's /compact), or
 work (the report of an agent, starting "[Name]"). A short message is its own line, word for word. The newest
 lines cover one message each; the others many, so a line only hints at
-what happened. A message not summarized yet shows as "(not summarized
-yet: zoom it)". No message appears in full, not even the last ones. A
+what happened. A line not summarized yet shows as "(not summarized yet:
+zoom it)". No message appears in full, not even the last ones. A
 text too long for one message is split over several in a row.
 
 Navigating: zoom(id, n) opens line id+n into the two lines of n/2
