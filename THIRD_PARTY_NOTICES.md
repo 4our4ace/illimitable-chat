@@ -178,8 +178,9 @@ from Bun's build scripts at that tag), not from a look into the files:
   at the same tag
 
 The two lists differ a little, as the table below marks, and Bun's
-build scripts at that tag also compile `rust-argon2` (for
-`Bun.password`: [`scripts/build/deps/rust-argon2.ts`](https://github.com/oven-sh/bun/blob/bun-v1.4.3/scripts/build/deps/rust-argon2.ts)),
+build at that tag also compiles `rust-argon2` (for `Bun.password`), a
+Cargo dependency its build scripts fetch
+([`scripts/build/deps/rust-argon2.ts`](https://github.com/oven-sh/bun/blob/bun-v1.4.3/scripts/build/deps/rust-argon2.ts)),
 which neither names.
 
 Bun itself is under the MIT License.
