@@ -431,12 +431,17 @@ The model's `date` tool goes both ways: `date(id)` reads message id's
 `When.moment`); `date(from, to)` finds the messages of a span of time, and
 `search` takes the same `from` and `to`. The span is read in illi's
 local zone (`When.span`, `src/chat/When.ts`): a date alone as `from` is
-its day's start, as `to` its day's end, a time as `to` the instant the
-span stops before, and `to` left out the end of `from`'s day (a field
-sent as null or `""`, as a model may send one it means to leave out,
-counts as left out: `When.given`). A date that isn't one, or a `to`
-before `from`, is refused, saying why. Each message's `date` is an ISO
-instant, compared as one (`Date.parse`), never as text.
+its day's start, as `to` its day's end (a month, `2026-10`, or a year
+alike; `today` and `yesterday` are days, `now` an instant), a time as
+`to` the instant the span stops before, and `to` left out the end of
+what `from` names (a time's day). An ISO time with its zone
+(`2026-10-21T14:00:00Z`, `+02:00`) is that instant. A field sent as
+null or blank, as a model may send one it means to leave out, counts
+as left out (`When.given`); `to` alone spans from the first message on.
+A date that isn't one, or a `to` before `from`, is refused by `date`,
+saying why; `search` then searches every date, its result saying the
+span was left out and why. Each message's `date` is an ISO instant,
+compared as one (`Date.parse`), never as text.
 
 `Store.span(store, span)` gives the span's messages as `[a, b)`, the
 first and the one after the last, with no index and no scan:

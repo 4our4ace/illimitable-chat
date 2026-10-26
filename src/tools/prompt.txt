@@ -44,11 +44,11 @@ Tools:
 - zoom(id, 1) gives message id whole, with its images
 - zoom("Name") gives an agent's whole chat
 - date(id) gives the date and time of message id; date(from, to) the lines of
-  a day or span, from and to as 2026-10-21 or 2026-10-21 14:00 (no to: that
-  day)
+  a day or span, from and to as 2026-10-21 or 2026-10-21 14:00, a month
+  (2026-10), today or yesterday (no to: all of from's day or month)
 - projects() lists the user's projects, each with a chat of its own
 - search(words) finds summary lines holding the words; with project, in that
-  project's chat, or in all ("all"); with from and to, only in that span
+  project's chat, or in all ("all"); with from, to or both, only in that span
 - zoom and date take a project too: its chat's line or message
 
 # Turns

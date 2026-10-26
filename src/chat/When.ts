@@ -2,7 +2,8 @@
 // ====
 // Times as people say them, in the zone illi runs in (the process's own,
 // read at each use: TZ, else the system's), never UTC: the dates a model
-// gives the date and search tools ("2026-10-21", "2026-10-21 14:00"), the
+// gives the date and search tools ("2026-10-21", "2026-10-21 14:00",
+// "2026-10", "today"; an ISO time with its zone is its own instant), the
 // time now that opens each call's message (Tools.here), and the times of
 // a stretch of the chat as its lines, its head and the screen say them.
 // Messages keep their dates as ISO instants (Store.ts, msg); only the
@@ -10,7 +11,8 @@
 // thread (Seeker.ts) and the screen (Call.ts) use it as the tools do.
 //
 // A span is [from, to): a date alone as `from` is its day's start; as
-// `to`, its day's end, so a span names its last day; a time as `to` is
+// `to`, its day's end, so a span names its last day (a month's or a
+// year's alike); a time as `to` is
 // the instant the span stops before. A day is a calendar day, 23 or 25
 // hours where the clocks change, never 24 hours added.
 
@@ -26,53 +28,72 @@ export type Span = { from: number; to: number };
 const WEEK   = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-// a local date, or a date and a time to the minute or the second, a
-// space or a T between
-const LOCAL = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/;
+// a local year, month or date, or a date and a time to the minute or
+// the second, a space or a T between; an instant with its zone, as
+// models write ISO times (Z or an offset, a fraction of a second too)
+const LOCAL = /^(\d{4})(?:-(\d{2})(?:-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?)?)?$/;
+const ZONED = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})$/i;
 
 // what a model is told of a date it wrote that isn't one
-const FORM = "a local date or date and time, as 2026-10-21 or 2026-10-21 14:00.";
+const FORM = "a local date or date and time, as 2026-10-21 or 2026-10-21 14:00 (or a month, 2026-10; a year, 2026; today, yesterday or now).";
 
 // When
 // ====
 
 export namespace When {
 
-  // a local date or date and time as a model writes it: its instant, and
-  // whether it is a date alone; null: not one (no such day, hour or
-  // minute). A time the clocks skip (spring's lost hour) moves on by the
-  // hour skipped: 02:30 is 03:30
-  export function parse(text: unknown): { at: number; day: boolean } | null {
-    const m = typeof text === "string" ? LOCAL.exec(text.trim()) : null;
+  // a time as a model writes it: its instant, and the end of the stretch
+  // it names (a year, a month or a date alone: the next one's start;
+  // today and yesterday, their day's), none for an instant (a time, now,
+  // an ISO time with its zone); null: not one (no such month, day, hour
+  // or minute). A time the clocks skip (spring's lost hour) moves on by
+  // the hour skipped: 02:30 is 03:30
+  export function parse(text: unknown, now = Date.now()): { at: number; end: number | null } | null {
+    const said = typeof text === "string" ? text.trim() : "";
+    const word = said.toLowerCase();
+    if (word === "now") {
+      return { at: now, end: null };
+    }
+    if (word === "today" || word === "yesterday") {
+      const at = When.start(word === "today" ? now : When.start(now) - 1);
+      return { at, end: When.next(at) };
+    }
+    if (ZONED.test(said)) {
+      const at = Date.parse(said.toUpperCase().replace(" ", "T").replace(/([+-]\d{2})(\d{2})$/, "$1:$2"));
+      return Number.isNaN(at) ? null : { at, end: null };
+    }
+    const m = LOCAL.exec(said);
     if (m === null) {
       return null;
     }
-    const [y, mo, d, h, mi, s] = [m[1], m[2], m[3], m[4] ?? "0", m[5] ?? "0", m[6] ?? "0"].map(Number);
+    const [y, mo, d, h, mi, s] = [m[1], m[2] ?? "1", m[3] ?? "1", m[4] ?? "0", m[5] ?? "0", m[6] ?? "0"].map(Number);
     const day = new Date(y, mo - 1, d);
     if (day.getFullYear() !== y || day.getMonth() !== mo - 1 || day.getDate() !== d || h > 23 || mi > 59 || s > 59) {
       return null;
     }
-    return { at: new Date(y, mo - 1, d, h, mi, s).getTime(), day: m[4] === undefined };
+    const end = m[4] !== undefined ? null : m[3] !== undefined ? new Date(y, mo - 1, d + 1) : m[2] !== undefined ? new Date(y, mo, 1) : new Date(y + 1, 0, 1);
+    return { at: new Date(y, mo - 1, d, h, mi, s).getTime(), end: end?.getTime() ?? null };
   }
 
   // whether a model gave a field: neither left out nor sent as null or
-  // "", as a model may send a field it means to leave out
+  // blank, as a model may send a field it means to leave out
   export function given(x: unknown): boolean {
-    return x !== undefined && x !== null && x !== "";
+    return x !== undefined && x !== null && (typeof x !== "string" || x.trim() !== "");
   }
 
   // the span a model asks: from `from` to `to` (left out: to the end of
-  // from's day; a date alone: through its day); a string: why there is
-  // none (not a date; `to` before `from`, or a day before from's)
-  export function span(from: unknown, to: unknown): Span | string {
-    const a = When.parse(from);
+  // what from names, a time's day; a year, a month or a date as to:
+  // through it); from left out, to given: from the first message on; a
+  // string: why there is none (not a time; `to` before `from`)
+  export function span(from: unknown, to: unknown, now = Date.now()): Span | string {
+    const a = When.given(from) || !When.given(to) ? When.parse(from, now) : { at: 0, end: null };
     const none = !When.given(to);
-    const b = none ? null : When.parse(to);
+    const b = none ? null : When.parse(to, now);
     if (a === null || (!none && b === null)) {
       return (a === null ? "from: " : "to: ") + FORM;
     }
-    const end = b === null ? When.next(a.at) : b.day ? When.next(b.at) : b.at;
-    const back = b !== null && (b.day ? b.at < When.start(a.at) : b.at < a.at);
+    const end = b === null ? (a.end ?? When.next(a.at)) : (b.end ?? b.at);
+    const back = b !== null && (b.end === null ? b.at < a.at : b.end <= a.at);
     return back ? "to comes before from." : { from: a.at, to: end };
   }
 
