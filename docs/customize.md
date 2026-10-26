@@ -59,15 +59,15 @@ Agents
     ---
     You review code changes. ...
 
-A subagent gets a map of the chat: a few dozen summary lines over all of
-it, the newest messages each its own, coarser with age. It zooms and
-searches for what its task needs. `fresh: true` starts each one of an
-agent fresh instead: no map, no `zoom`, `date`, `projects` or
-`search`, no past moments handed to it, only its task and your
-instructions, for a test or a review that mustn't lean on what came
-before (`/agents` marks such an agent fresh). illi starts any subagent
-fresh when you ask for it ("a fresh tester"); it stays so when told
-more later, even after a restart.
+A subagent gets a map of the chat since the last `/clear`: a few dozen
+summary lines, the newest messages each its own, coarser with age. It
+zooms and searches for what its task needs, the chat before too.
+`fresh: true` starts each one of an agent fresh instead: no map, no
+`zoom`, `date`, `projects` or `search`, no past moments handed to it,
+only its task and your instructions, for a test or a review that
+mustn't lean on what came before (`/agents` marks such an agent fresh).
+illi starts any subagent fresh when you ask for it ("a fresh tester");
+it stays so when told more later, even after a restart.
 
 MCP servers
 -----------

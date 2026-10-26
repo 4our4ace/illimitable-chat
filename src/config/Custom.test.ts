@@ -9,8 +9,9 @@
 // model as a pick; /agent makes a primary agent the main agent (its
 // model, instructions and tools, Claude Code's too), noted before the
 // next message, each keeping its pick; spawn's agent runs a subagent as
-// it, with its Claude Code tools (none on a ChatGPT model whose window
-// isn't told: never guessed); one started fresh (its agent's fresh:
+// it, with the chat's map (whole, needing no window) and its Claude Code
+// tools (none on a ChatGPT model whose window isn't told: never
+// guessed); one started fresh (its agent's fresh:
 // true, listed so to spawn, or spawn's) gets none of the chat, told
 // again after a restart too, its role read back from any first note.
 // A skill: its folder's SKILL.md (a folded description), the
