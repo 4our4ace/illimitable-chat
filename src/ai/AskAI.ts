@@ -107,9 +107,9 @@ export type Event =
 // a later try may answer (the vendor busy or out of reach); grew: full
 // once a step's tool results went in, that step having fit (the call's
 // own work outgrew the window, not what it was sent: Chat.ended); cut: a
-// reply had begun; first: the tokens its first request read, as its vendor told
-// (the chat learns from it what a request takes beside the chat: Chat.cap;
-// none: that request was refused, or read nothing told)
+// reply had begun; first: the tokens its first request read, as its
+// vendor told (the chat learns from it what a request takes beside the
+// chat: Chat.cap; none: that request was refused, or read nothing told)
 export type End = {
   ok     : boolean;
   text   : string;

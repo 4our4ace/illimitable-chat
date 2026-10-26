@@ -708,12 +708,11 @@ export namespace Chat {
   // a call refused as too long on ChatGPT at its first request (it read
   // nothing: end.first none; one past its room, or refused at a later
   // step as its tools' output grew: End.grew, tells nothing of the
-  // account) while
-  // it carried (carried: the chat's tokens, and on what, with what a
-  // request takes beside it) past its model's standard window, yet well
-  // within its whole one (no misjudged size explains it): the account
-  // takes no more than the standard window, learned for it
-  // (ChatGPT.refused). true: learned, the turn goes on fitted to it
+  // account) while it carried (carried: the chat's tokens, and on what,
+  // with what a request takes beside it) past its model's standard
+  // window, yet well within its whole one (no misjudged size explains
+  // it): the account takes no more than the standard window, learned for
+  // it (ChatGPT.refused). true: learned, the turn goes on fitted to it
   export function capped(chat: Chat, end: End, carried: { model: string; tokens: number }): boolean {
     const at    = carried.model.indexOf(":");
     const model = Pick.model(carried.model.slice(0, at) as Vendor, carried.model.slice(at + 1));
