@@ -475,7 +475,8 @@ function term_skill(t: Term, skill: Skill, arg: string, word: string): void {
 // each how it is (term_mcp_state) and on or off (setting_on); the lit
 // one's tools under them, or why it failed, or the login it needs;
 // Enter, Left or Right turns it off or on (setting_toggle: `off`; illi's
-// own at the next start, Claude Code's from the next call); the files
+// own at the next start, Claude Code's from the next call; by name, so
+// one of each so named together); the files
 // that won't read after them. None of either: where the user's go (none
 // there yet: config.MCPS), and, claude-code offered, that Claude Code's
 // own show while the pick is on it, once a call has loaded them. `at`:
@@ -493,21 +494,25 @@ export function term_mcp(t: Term, at = "", cc = false): void {
     return term_pane_text(t, "MCP", text.join("\n"));
   }
   const tools = (names: string[]) => (names.length === 0 ? "no tools" : names.join(", "));
+  // `off` holds names: one of illi's and one of Claude Code's so named
+  // go off and on together, as each one's foot says
+  const twin  = (name: string, cc: boolean) => (cc ? [...servers.map((s) => s.name), ...idle.map(([n]) => n)] : theirs.map((s) => s.name)).some((n) => n.toLowerCase() === name.toLowerCase());
+  const own   = (name: string) => "Enter on/off · at the next start" + (twin(name, false) ? ", Claude Code's of this name too" : "");
   const rows: Array<{ name: string; about: string; head: string; detail: string; foot: string }> = [
     ...servers.map((s) => ({
       name   : s.name,
       about  : term_mcp_state(s.state === "ready" ? "connected" : s.state, s.own.size) + " · " + from(s),
       head   : "illi's",
       detail : s.state === "ready" ? tools([...s.own.values()]) : s.state === "failed" ? "failed: " + s.why : "",
-      foot   : "Enter on/off · at the next start",
+      foot   : own(s.name),
     })),
-    ...idle.map(([name, f]) => ({ name, about: "not started · " + from(f), head: "illi's", detail: "", foot: "Enter on/off · at the next start" })),
+    ...idle.map(([name, f]) => ({ name, about: "not started · " + from(f), head: "illi's", detail: "", foot: own(name) })),
     ...theirs.map((s) => ({
       name   : s.name,
       about  : s.over ? "illi's own " + s.name + " in its place" : term_mcp_state(s.status, s.tools?.length ?? null),
       head   : "Claude Code's, as last told",
       detail : s.over ? "illi's calls use illi's own server of this name instead, so the model gets one copy" : s.status === "needs-auth" ? "Claude Code needs a login to it: claude mcp login \"" + s.name + "\"" : s.status !== "connected" || s.tools === null ? "" : tools(s.tools.map((x) => x.slice(("mcp__" + ClaudeCode.spell(s.name) + "__").length))),
-      foot   : "Enter on/off in illi's calls · from the next call",
+      foot   : "Enter on/off in illi's calls · from the next call" + (twin(s.name, true) ? ", illi's own of this name too at the next start" : ""),
     })),
     ...troubles.map((x) => ({ name: x, about: "", head: "Won't read", detail: "", foot: "read again at the next start" })),
   ];

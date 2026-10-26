@@ -68,12 +68,14 @@ illi then runs Claude Code itself, as it ships, on your login:
   `off`, or Enter on one in `/mcp`, takes one out of illi's calls by its
   name as `/mcp` lists it, from the next call: Claude Code still starts
   it, but its tools leave the model's context, so they cost no tokens,
-  and Claude Code itself is never changed. While illi runs a server of
-  its own by the same name, illi's alone reaches the model (failed,
-  Claude Code's stays), so the model gets one copy. illi keeps the
-  names it has seen (`claude-code.json`), so `off` and an agent's
-  `tools:` take one out from the first call after a start too (one it
-  has never seen loads in one call, which shows it).
+  and Claude Code itself is never changed. Being by name, it turns off a
+  server of illi's own by that name too, from illi's next start (`/mcp`
+  says so on both). While illi runs a server of its own by the same
+  name, illi's alone reaches the model (failed, Claude Code's stays), so
+  the model gets one copy. illi keeps the names it has seen
+  (`claude-code.json`), so `off` and an agent's `tools:` take one out
+  from the first call after a start too (one it has never seen loads in
+  one call, which shows it).
 - **Permission prompts come to illi.** When Claude Code wants to run
   something its settings don't allow, illi checks it as it checks its
   own calls ([Permissions](permissions.md)): routine work runs, a risky

@@ -684,3 +684,21 @@ test("Claude Code's own servers show at the side and in /mcp only while the pick
   config.config_set("off", null);
   fs.rmSync(DIR + "/mcp.json");
 });
+
+test("/mcp says that one of illi's and one of Claude Code's of the same name turn off and on together, as `off` holds names", () => {
+  ClaudeCode.learn({ mcp_servers: [{ name: "Web", status: "connected" }, { name: "github", status: "connected" }], tools: ["mcp__Web__fetch", "mcp__github__get_issue"] }, { strict: false, deny: [] });
+  fs.writeFileSync(DIR + "/mcp.json", JSON.stringify({ mcpServers: { web: { type: "http", url: "https://example.com/mcp" } } }));
+  config.config_set("off", "web");
+  const t = coded();
+  run(t, "/mcp");
+  expect([t.choose.names, t.choose.aside]).toEqual([["web", "Web", "github"], ["off", "off", "on"]]);
+  expect(foot(t)).toBe("Enter on/off · at the next start, Claude Code's of this name too");
+  term_grab(t, "Down");
+  expect(foot(t)).toBe("Enter on/off in illi's calls · from the next call, illi's own of this name too at the next start");
+  term_grab(t, "Enter");
+  expect([config.OFF, t.choose.aside]).toEqual([[], ["on", "on", "on"]]);
+  term_grab(t, "Down");
+  expect(foot(t)).toBe("Enter on/off in illi's calls · from the next call");
+  config.config_set("off", null);
+  fs.rmSync(DIR + "/mcp.json");
+});
