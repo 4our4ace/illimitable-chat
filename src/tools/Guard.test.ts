@@ -29,7 +29,7 @@
 // why (every bypass the reviews found among them; inline code with no
 // "don't ask again"), and what only looks like one isn't ([ as a test, a
 // project's bin/, a sed s/// holding ;, git's revisions, a search's
-// pattern, a project's own linked interpreter);
+// pattern, a project's own linked interpreter, a folder mktemp makes);
 // read-only refuses changes, ask asks them, yolo runs all but what the
 // user's rules refuse or ask and a write to illi's own config; the user's rules come first (deny, ask,
 // allow; a root command's allow names its sudo; deny and ask by a
@@ -242,7 +242,7 @@ test("every risk is asked about in careful, with why: the reviews' bypasses amon
   }
 });
 
-test("no false alarms: [ as a test, a project's own bin/, *.egg-info, names inside words, a ; in a sed s///, flock and nice as wrappers, a program on the PATH by its path, $(pwd) and the repository's top, git's revisions", () => {
+test("no false alarms: [ as a test, a project's own bin/, *.egg-info, names inside words, a ; in a sed s///, flock and nice as wrappers, a program on the PATH by its path, $(pwd) and the repository's top, git's revisions, a temp folder mktemp makes (where it makes it: /etc's asked; only while a failed one, leaving its variable empty, ends the script)", () => {
   const runs = [
     "if [ -f bun.lock ]; then echo bun; fi",
     "[[ -d src ]] && ls src",
@@ -257,6 +257,8 @@ test("no false alarms: [ as a test, a project's own bin/, *.egg-info, names insi
     "rm -rf \"$(git rev-parse --show-toplevel)/dist\"",
     "git diff $(git merge-base HEAD origin/main)",
     "git add .husky/pre-commit",
+    "set -euo pipefail\nstage=$(mktemp -d /tmp/illi-x.XXXXXX)\ngit clone --depth 1 https://github.com/a/b.git \"$stage/repo\"\nsed -n 1,5p \"$stage/repo/README.md\"\nrm -rf \"$stage\"",
+    "f=$(mktemp) || exit 1; echo hi > \"$f\"",
   ];
   for (const command of runs) {
     expect([command, judge(command)]).toEqual([command, "run"]);
@@ -270,6 +272,10 @@ test("no false alarms: [ as a test, a project's own bin/, *.egg-info, names insi
     [TMP + "/other/cargo build", "runs a program from"],
     ["cd $UNSET_IN_ILLI_TESTS && rm -rf \"$(pwd)/dist\"", "is known only as it runs"],
     ["grep -e x ~/notes-illi-test.txt", "~/notes-illi-test.txt is outside the project"],
+    ["set -e; d=$(mktemp -d -p /etc); touch \"$d/x\"", "/etc/tmp.XXXXXXXXXX/x is outside the project"],
+    ["set -e; TMPDIR=/etc; d=$(mktemp -d); touch \"$d/x\"", "is known only as it runs"],
+    ["d=$(mktemp -d); rm -rf \"$d\"/*", "is known only as it runs"],
+    ["rm -rf \"$(mktemp -d)\"/*", "is known only as it runs"],
   ];
   for (const [command, why] of asks) {
     const got = judge(command);

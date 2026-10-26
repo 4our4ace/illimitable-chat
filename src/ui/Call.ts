@@ -44,8 +44,9 @@ import { When, type Span } from "../chat/When.ts";
 // raw: its name as logged (illi's own as Claude Code names them, by
 // their own name; a theme may mark a tool by it: Paint.ts); head: the
 // rest of its line (a command's lines); input: what it was called with,
-// as read (a label reads it: call_label)
-export type Call = { name: string; from: string; raw: string; head: string; blocks: Md.Code[]; input: Input };
+// as read (a label reads it: call_label); at: when it was called (a
+// span's today or yesterday is that day's, as the tool read it)
+export type Call = { name: string; from: string; raw: string; head: string; blocks: Md.Code[]; input: Input; at: number };
 
 type Input = Record<string, unknown>;
 
@@ -64,14 +65,14 @@ const CALL = /^(\S+) (\{[\s\S]*)$/;
 const OWN  = /^mcp__illi__/;
 const FROM = /^(?:mcp|plugin)__(.+?)__(.+)$/;
 
-const READS = new Map<string, (x: Input) => Shown>([
+const READS = new Map<string, (x: Input, at: number) => Shown>([
   ["shell",      (x) => ({ head: String(x.command ?? ""), blocks: [] })],
   ["read",       (x) => ({ head: String(x.path ?? "") + lines_show(x.offset, x.limit), blocks: [] })],
   ["write",      (x) => ({ head: String(x.path ?? ""), blocks: [] })],
   ["edit",       (x) => (Array.isArray(x.edits) ? { head: edits_files(x.edits), blocks: [] } : input_shown(x))],
   ["zoom",       (x) => ({ head: msg_show(x.id, x.n) + (x.at === undefined ? "" : " from char " + x.at), blocks: [] })],
-  ["date",       (x) => ({ head: !When.given(x.from) ? msg_show(x.id, 1) : heads([span_said(x) || "a span", x.project]), blocks: [] })],
-  ["search",     (x) => ({ head: heads([x.words === undefined ? "" : '"' + String(x.words) + '"', x.project, span_said(x)]), blocks: [] })],
+  ["date",       (x, at) => ({ head: !When.given(x.from) ? msg_show(x.id, 1) : heads([span_said(x, at) || "a span", x.project]), blocks: [] })],
+  ["search",     (x, at) => ({ head: heads([x.words === undefined ? "" : '"' + String(x.words) + '"', x.project, span_said(x, at)]), blocks: [] })],
   ["spawn",      (x) => ({ head: tasks_show(x.tasks, x.agent, x.effort), blocks: (Array.isArray(x.tasks) ? x.tasks : []).flatMap(text_block) })],
   ["tell",       (x) => ({ head: String(x.name ?? ""), blocks: text_block(x.message) })],
   ["todo",       (x) => todo_shown(x.items)],
@@ -88,15 +89,15 @@ const LABEL = 200;
 // missing or blank (about), so it reads as any tool's (call_named).
 // illi's tools first, then Claude Code's (the claude-code vendor's
 // calls; its subagents' tool is Agent, once Task)
-const LABELS = new Map<string, (x: Input, result: string | null) => string>([
+const LABELS = new Map<string, (x: Input, result: string | null, at: number) => string>([
   ["shell",      (x) => text_first(x.description) || command_first(x.command)],
   ["read",       (x) => about(path_said(x.path), (path) => "Read " + path + read_lines(x.offset, x.limit))],
   ["write",      (x) => about(path_said(x.path), (path) => "Wrote " + path)],
   ["edit",       (x) => (Array.isArray(x.edits) ? about(names_few(x.edits.map((e: any) => path_said(e?.path))), (files) => "Edited " + files) : "")],
   ["web_search", (x) => web_label(x)],
-  ["search",     (x) => about(x.words, (words) => 'Searched memory for "' + words + '"' + project_in(x.project) + span_in(x))],
+  ["search",     (x, _, at) => about(x.words, (words) => 'Searched memory for "' + words + '"' + project_in(x.project) + span_in(x, at))],
   ["zoom",       (x) => about(typeof x.id === "string" && x.id !== "" ? x.id + "'s chat" : msg_show(x.id, x.n), (what) => "Looked back at " + what + project_in(x.project))],
-  ["date",       (x) => (!When.given(x.from) ? about(msg_show(x.id, 1), (what) => "Checked the date of " + what + project_in(x.project)) : "Looked back at " + (span_said(x) || "a span") + project_in(x.project))],
+  ["date",       (x, _, at) => (!When.given(x.from) ? about(msg_show(x.id, 1), (what) => "Checked the date of " + what + project_in(x.project)) : "Looked back at " + (span_said(x, at) || "a span") + project_in(x.project))],
   ["projects",   () => "Listed the projects"],
   ["spawn",      (x, result) => about(started(result) || agents_said(x.tasks, x.agent), (who) => "Started " + who)],
   ["tell",       (x) => about(x.name, (name) => "Messaged " + name)],
@@ -161,15 +162,15 @@ export function report_read(text: string): Report | null {
 // Parse
 // =====
 
-export function call_parse(text: string): Call {
+export function call_parse(text: string, at = Date.now()): Call {
   const m     = CALL.exec(text);
   const input = m === null ? null : input_parse(m[2]);
   if (m === null || input === null) {
-    return { name: "", from: "", raw: "", head: text, blocks: [], input: {} };
+    return { name: "", from: "", raw: "", head: text, blocks: [], input: {}, at };
   }
   const [from, name] = call_name(m[1]);
   const read = from === "" ? READS.get(name) : undefined;
-  return { name, from, raw: m[1].replace(OWN, ""), input, ...(read ?? input_shown)(input) };
+  return { name, from, raw: m[1].replace(OWN, ""), input, at, ...(read ?? input_shown)(input, at) };
 }
 
 // a tool's name as logged: the server or plugin whose tool it is ("":
@@ -203,7 +204,7 @@ export function call_line(c: Call): string {
 // its first line; on one line, LABEL characters at most
 export function call_label(c: Call, result: string | null = null): string {
   const own  = c.from === "" ? LABELS.get(c.name) : undefined;
-  const said = own === undefined ? "" : own(c.input, result).trim();
+  const said = own === undefined ? "" : own(c.input, result, c.at).trim();
   return text_cap(c.name === "" ? text_first(c.head) : said !== "" ? said : call_named(c));
 }
 
@@ -388,25 +389,27 @@ function project_in(project: unknown): string {
 }
 
 // the span a date or search call asks, its from and to read as the tool
-// reads them (When.span; one sent as null or "" left out: When.given);
-// null: none asked, or not one
-function span_of(x: Input): Span | null {
-  const span = !When.given(x.from) && !When.given(x.to) ? null : When.span(x.from, x.to);
+// read them when called (When.span, as of at; one sent as null or blank
+// left out: When.given); null: none asked, or not one
+function span_of(x: Input, at: number): Span | null {
+  const span = !When.given(x.from) && !When.given(x.to) ? null : When.span(x.from, x.to, at);
   return typeof span === "string" ? null : span;
 }
 
 // a call's span as the screen says it (When.short: `Wed 21 Oct`, `14–20
-// Oct`); "": none, or not one (never the model's own words: a raw date)
-function span_said(x: Input): string {
-  const span = span_of(x);
+// Oct`, `up to Wed 21 Oct`); "": none, or not one (never the model's own
+// words: a raw date)
+function span_said(x: Input, at: number): string {
+  const span = span_of(x, at);
   return span === null ? "" : When.short(span);
 }
 
 // a search's span after its words: ` on Wed 21 Oct` (one whole day), `
-// over 14–20 Oct`; "": none
-function span_in(x: Input): string {
-  const span = span_of(x);
-  return span === null ? "" : (When.one(span) ? " on " : " over ") + When.short(span);
+// over 14–20 Oct`, ` up to Wed 21 Oct` (from the first message on); "":
+// none
+function span_in(x: Input, at: number): string {
+  const span = span_of(x, at);
+  return span === null ? "" : (When.open(span) ? " " : When.one(span) ? " on " : " over ") + When.short(span);
 }
 
 // a head's parts, those given, between dots: `"cache bug" · site · 14–20 Oct`
