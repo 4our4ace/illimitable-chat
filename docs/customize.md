@@ -63,8 +63,9 @@ A subagent sees illi's memory of the chat. `fresh: true` starts each
 one of an agent fresh instead: no view, no `zoom`, `date`, `projects`
 or `search`, no past moments handed to it, only its task and your
 instructions, for a test or a review that mustn't lean on what came
-before. illi starts any subagent fresh when you ask for it ("a fresh
-tester"); it stays so when told more later, even after a restart.
+before (`/agents` marks such an agent fresh). illi starts any subagent
+fresh when you ask for it ("a fresh tester"); it stays so when told
+more later, even after a restart.
 
 MCP servers
 -----------
