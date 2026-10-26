@@ -260,7 +260,7 @@ export function related_open(t: Term, s: Shown): void {
   if (store === null) {
     return;
   }
-  const rows  = Array.from({ length: s.n }, (_, k) => Store.msg(store, s.first + k)).flatMap((m) => (m === null ? [] : View.entry_rows(m.i, m.kind, m.text, m.images)));
+  const rows  = Array.from({ length: s.n }, (_, k) => Store.msg(store, s.first + k)).flatMap((m) => (m === null ? [] : View.entry_rows(m.i, m.kind, m.text, m.images, m.date)));
   const age   = related_age(s);
   const title = View.block_name(s.first, s.n) + (age === "" ? "" : " · " + age + " ago");
   const lead  = [Paint.Run(related_text(s), { ...Paint.DIM, i: true })];

@@ -42,10 +42,13 @@ test("a local date or date and time, read in the zone illi runs in, a year or a 
   expect(When.parse("2026-10-21T14:05:00.250z")).toEqual({ at: Date.UTC(2026, 9, 21, 14, 5, 0, 250), end: null });
   expect(When.parse("2026-10-21 14:05+0200")).toEqual({ at: Date.UTC(2026, 9, 21, 12, 5), end: null });
   expect(When.parse("2026-10-21T14:05-04:00")).toEqual({ at: Date.UTC(2026, 9, 21, 18, 5), end: null });
+  expect(When.parse("2026-10-21 14:05 Z")).toEqual({ at: Date.UTC(2026, 9, 21, 14, 5), end: null });
+  expect(When.parse("2026-10-21T14:05:30.5 +05:30")).toEqual({ at: Date.UTC(2026, 9, 21, 8, 35, 30, 500), end: null });
+  expect(When.parse("2026-10-21 14:05:30.25")).toEqual({ at: Date.UTC(2026, 9, 21, 18, 5, 30, 250), end: null });
   expect(When.parse("Today", now)).toEqual({ at: at(2026, 10, 21), end: at(2026, 10, 22) });
   expect(When.parse("yesterday", at(2026, 11, 2, 0, 30))).toEqual({ at: at(2026, 11, 1), end: at(2026, 11, 2) });
   expect(When.parse(" now ", now)).toEqual({ at: now, end: null });
-  for (const bad of ["2026-02-30", "2026-13-01", "2026-13", "2026-10-21 24:00", "2026-10-21 14:60", "21 Oct", "2026-10-21Z", "2026-10-32T10:00Z", "", "last week", 20261021, null]) {
+  for (const bad of ["2026-02-30", "2026-13-01", "2026-13", "2026-10-21 24:00", "2026-10-21 14:60", "21 Oct", "2026-10-21Z", "2026-10-32T10:00Z", "2026-02-30T10:00Z", "2026-10-21T25:00Z", "2026-10-21T10:00+24:00", "2026-10-21T10:00+02:60", "2026-10-21T10:00:00.Z", "", "last week", 20261021, null]) {
     expect(When.parse(bad)).toBeNull();
   }
 });
@@ -122,5 +125,11 @@ test("a span's head says it whole; its lines' times only what the head doesn't; 
   ]);
   expect(When.short(day, at(2027, 1, 2))).toBe("Wed 21 Oct 2026");
   expect(When.short(over, at(2027, 1, 2))).toBe("29 Sep–5 Oct 2026");
+  // to alone: from the first message on, said by its end
+  const upto = When.span(undefined, "2026-10-21") as { from: number; to: number };
+  const before = When.span(null, "2026-10-21 14:00") as { from: number; to: number };
+  expect([When.on(upto), When.on(before), When.short(upto, now), When.short(before, now), When.short(upto, at(2027, 1, 2))]).toEqual([
+    "up to Wed 21 Oct 2026", "before Wed 21 Oct 2026 14:00", "up to Wed 21 Oct", "before Wed 21 Oct 14:00", "up to Wed 21 Oct 2026",
+  ]);
   expect(When.parse("2026-03-08 02:30")).toEqual({ at: at(2026, 3, 8, 3, 30), end: null });
 });
