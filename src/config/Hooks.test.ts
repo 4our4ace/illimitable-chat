@@ -53,7 +53,7 @@ beforeEach(() => {
   notes = [];
   halts.length = 0;
   Plugins.attach({ note: (text) => notes.push(text), send: () => {}, redraw: () => {} });
-  Plugins.attach_chat({ mode: () => "auto", halt: (why) => halts.push(why) });
+  Plugins.attach_chat({ mode: () => "default", halt: (why) => halts.push(why) });
   for (const file of [ROOT + "/hooks.json", OWN + "/hooks.json", REPO + "/.illi/hooks.json"]) {
     fs.rmSync(file, { force: true });
   }
@@ -211,7 +211,7 @@ esac`);
   expect(await Plugins.before_tool(shell("pwd"))).toEqual({ input: { command: "pwd" } });
   fs.rmSync(DIR + "/pre.log");
   await Plugins.before_tool({ tool: "read", input: { path: "src/a.ts" }, agent: "Scout-1", cwd: REPO });
-  expect(JSON.parse(fs.readFileSync(DIR + "/pre.log", "utf8"))).toEqual({ hook_event_name: "PreToolUse", cwd: REPO, permission_mode: "auto", agent_id: "Scout-1", agent_type: "Scout-1", tool_name: "read", tool_input: { path: REPO + "/src/a.ts" } });
+  expect(JSON.parse(fs.readFileSync(DIR + "/pre.log", "utf8"))).toEqual({ hook_event_name: "PreToolUse", cwd: REPO, permission_mode: "default", agent_id: "Scout-1", agent_type: "Scout-1", tool_name: "read", tool_input: { path: REPO + "/src/a.ts" } });
   const edit = { tool: "edit", input: { edits: [{ path: "a", old: "x", new: "y" }] }, agent: null, cwd: REPO };
   expect(await Plugins.before_tool(edit)).toEqual({ block: "Your PreToolUse hook " + BIN + "/broken.sh exited 1, so the call was refused." });
   expect(await Plugins.before_tool(edit)).toMatchObject({ block: expect.any(String) });
@@ -260,7 +260,7 @@ case "$input" in *'"stop_hook_active":true'*) exit 0 ;; esac
 echo '{"decision":"block","reason":"Run the tests first."}'`)]] });
   Hooks.load(REPO, () => false);
   expect(await Plugins.before_stop({ cwd: REPO, again: false, reply: "All done." })).toBe("From your hooks:\nRun the tests first.");
-  expect(JSON.parse(fs.readFileSync(DIR + "/stop.json", "utf8"))).toEqual({ hook_event_name: "Stop", cwd: REPO, permission_mode: "auto", stop_hook_active: false, last_assistant_message: "All done." });
+  expect(JSON.parse(fs.readFileSync(DIR + "/stop.json", "utf8"))).toEqual({ hook_event_name: "Stop", cwd: REPO, permission_mode: "default", stop_hook_active: false, last_assistant_message: "All done." });
   expect(await Plugins.before_stop({ cwd: REPO, again: true, reply: "Tests pass." })).toBeNull();
 });
 
@@ -291,7 +291,7 @@ test("a wait on the user: its kind's Notification hooks, not waited for", async 
   const at = Date.now();
   await Plugins.emit("notify", { cwd: REPO, type: "idle_prompt", text: "illi is waiting for your input" });
   expect(Date.now() - at).toBeLessThan(150);
-  expect(JSON.parse(await written(DIR + "/idle.json"))).toEqual({ hook_event_name: "Notification", cwd: REPO, permission_mode: "auto", message: "illi is waiting for your input", title: "illi", notification_type: "idle_prompt" });
+  expect(JSON.parse(await written(DIR + "/idle.json"))).toEqual({ hook_event_name: "Notification", cwd: REPO, permission_mode: "default", message: "illi is waiting for your input", title: "illi", notification_type: "idle_prompt" });
   expect(fs.existsSync(DIR + "/perm.json")).toBe(false);
 });
 

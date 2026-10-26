@@ -202,7 +202,7 @@ test("a step's end searches, once its results are all in: the user's message, th
 test("without the side the bottom line counts them, a narrow one doesn't; `related` off, nothing", async () => {
   const t = term();
   await Related.related_seek(t);
-  expect(Paint.tabs_line(t.v, 80, true, true, Related.related_shown(t).length).map((r) => r.x).join("")).toMatch(/1 related · auto mode$/);
+  expect(Paint.tabs_line(t.v, 80, true, true, Related.related_shown(t).length).map((r) => r.x).join("")).toMatch(/1 related$/);
   expect(Paint.tabs_line(t.v, 30, true, true, 1).map((r) => r.x).join("")).not.toContain("related");
   config.config_set("related", "off");
   try {

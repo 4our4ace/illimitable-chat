@@ -590,6 +590,7 @@ test("a confirmation at the input: a double click on an answer picks once, its s
 test("a click outside never answers a question: text is chosen and copied there, Ctrl+C copies it again, the tabs answer", () => {
   sized(80, 24, () => {
     const t = term();
+    t.v.perm = { ...t.v.perm, mode: "trust" };
     ask(t, "ls");
     armed(t);
     t.areas.unshift({ key: "chat", lines: [[Paint.Run("some words here")]], first: 0, row: 2, col: 2, w: 20, tall: 1 });

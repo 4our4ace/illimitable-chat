@@ -128,9 +128,9 @@ const mem = Memory.load(DIR + "/chat", () => ({}) as any, PLACE);
 mem.hold = true;
 mem.cut = mem.show = START;
 
-// the chat's tools, auto mode, no one to ask
+// the chat's tools, the default mode, no one to ask
 const ask   = async () => ({ yes: false, always: false, said: "No one is at illi's screen to ask, so it isn't allowed." });
-const tools = { mem, agents: new Map(), perm: { mode: "auto" as const, granted: new Set<string>(), refused: [], calls: new Map<string, string[]>() }, url: "", cwd: REPO, hooks: { main: () => null, ask, change: () => {}, halt: () => new AbortController().signal } as any, gone: [] as Array<[number, number]>, steps: new Map<string, number>(), given: new Map<string, number>() };
+const tools = { mem, agents: new Map(), perm: { mode: null, allowed: [], refused: [], pending: new Map() }, url: "", cwd: REPO, hooks: { main: () => null, ask, change: () => {}, stop: () => {}, halt: () => new AbortController().signal } as any, gone: [] as Array<[number, number]>, steps: new Map<string, number>(), given: new Map<string, number>() };
 const signal = new AbortController().signal;
 
 // the call now, as logged

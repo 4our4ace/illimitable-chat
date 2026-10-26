@@ -28,10 +28,10 @@ function git(cwd: string, ...args: string[]): { code: number; out: string } {
   return { code: p.exitCode, out: (p.stdout.toString() + p.stderr.toString()).trim() };
 }
 
-// the tools of a chat on the throwaway repository, in auto mode, no one
-// there to ask (a question: a no, said so)
+// the tools of a chat on the throwaway repository, in the default mode,
+// no one there to ask (a question: a no, said so)
 const ask   = async () => ({ yes: false, always: false, said: "No one is at illi's screen to ask, so it isn't allowed." });
-const tools = { mem: null as any, agents: new Map(), perm: { mode: "auto" as const, granted: new Set<string>(), refused: [], calls: new Map<string, string[]>() }, url: "", cwd: REPO, hooks: { main: () => null, ask, change: () => {} } as any, gone: [], steps: new Map(), given: new Map() };
+const tools = { mem: null as any, agents: new Map(), perm: { mode: null, allowed: [], refused: [], pending: new Map() }, url: "", cwd: REPO, hooks: { main: () => null, ask, change: () => {}, stop: () => {} } as any, gone: [], steps: new Map(), given: new Map() };
 const shell = (command: string) => Tools.call(tools, "main", "shell", { command }, new AbortController().signal);
 
 test("a test's repository is new, in the temp folder outside this checkout, its own top, with no remote", () => {
@@ -52,7 +52,7 @@ test("git's repository variables are cleared, here and in a shell illi runs; the
   expect(out).toMatchObject({ text: expect.stringMatching(new RegExp("^none none none file\n" + REPO + "\n\\(exit 0 in ")), fail: false });
 });
 
-test("a push over ssh or https fails before it contacts anything: git's own, and one through illi's shell tool, unasked in auto", async () => {
+test("a push over ssh or https fails before it contacts anything: git's own, and one through illi's shell tool, unasked", async () => {
   expect(git(REPO, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "--allow-empty", "-m", "x").code).toBe(0);
   for (const url of ["https://example.invalid/x.git", "ssh://git@example.invalid/x.git", "git@example.invalid:x.git"]) {
     const got = git(REPO, "push", url, "HEAD");
@@ -63,8 +63,6 @@ test("a push over ssh or https fails before it contacts anything: git's own, and
   const ssh   = await shell("git push git@example.invalid:x.git HEAD");
   expect(https).toMatchObject({ text: expect.stringMatching(new RegExp("^fatal: transport 'https' not allowed\n\\(exit 128 in ")), fail: true });
   expect(ssh).toMatchObject({ text: expect.stringMatching(new RegExp("^fatal: transport 'ssh' not allowed\n\\(exit 128 in ")), fail: true });
-  tools.perm.mode = "yolo" as any;
   expect(await shell("git push --force git@example.invalid:x.git HEAD")).toMatchObject({ text: expect.stringMatching(new RegExp("^fatal: transport 'ssh' not allowed\n\\(exit 128 in ")), fail: true });
-  tools.perm.mode = "auto";
   expect(fs.readdirSync(REPO)).toEqual([".git"]);
 });

@@ -5,8 +5,8 @@
 // stopped and cancelled at it), a URL's (its session, an answer in an
 // event stream), one that dies, one that is no program, one disabled;
 // their tools beside illi's, named apart, and an agent's allowing them by
-// server; what a server says of a tool (only reads) kept, so that one
-// runs unasked and another is asked first (Tools.guard).
+// server; a tool runs unasked, unless a rule asks about it
+// (Tools.guard).
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -89,11 +89,10 @@ afterAll(() => {
   web.stop(true);
 });
 
-// the tools of a chat no one is at, in careful mode: a question is a
-// no, at once
+// the tools of a chat no one is at: a question is a no, at once
 const asked: string[] = [];
 const ask   = async (q: { tool: string }) => (asked.push(q.tool), { yes: false, always: false, said: "No one is at illi's screen to ask, so it isn't allowed." });
-const tools = { mem: null as any, agents: new Map(), perm: { mode: "careful" as const, granted: new Set<string>(), refused: [], calls: new Map<string, string[]>() }, url: "", cwd: CWD, hooks: { main: () => null, ask, change: () => {} } as any, gone: [], steps: new Map(), given: new Map() };
+const tools = { mem: null as any, agents: new Map(), perm: { mode: null, allowed: [], refused: [], pending: new Map() }, url: "", cwd: CWD, hooks: { main: () => null, ask, change: () => {}, stop: () => {} } as any, gone: [], steps: new Map(), given: new Map() };
 
 test("each server's tools, named by it, in pages, beside illi's", async () => {
   await Mcp.settle();
@@ -112,16 +111,14 @@ test("a call: its text and images, run in the working dir with its env (the test
   expect(await Mcp.call("mcp__fake__gone", {}, new AbortController().signal)).toMatchObject({ fail: true });
 });
 
-test("what a server says of a tool is kept: one that only reads runs unasked, another is asked first (in auto, run)", async () => {
-  expect(Mcp.hints("mcp__fake__echo")).toEqual({ read: true, destructive: false });
-  expect(Mcp.hints("mcp__web__add")).toEqual({ read: false, destructive: false });
-  expect(Mcp.hints("mcp__fake__gone")).toBeUndefined();
+test("a tool runs unasked; a rule asking about it asks (no one there: refused, saying why)", async () => {
+  expect(await Tools.call(tools, "main", "mcp__web__add", { a: 2, b: 3 }, new AbortController().signal)).toMatchObject({ text: "5", fail: false });
+  expect(asked).toEqual([]);
+  fs.writeFileSync(DIR + "/permissions.json", JSON.stringify({ rules: { "mcp__web__*": "ask" } }));
   const out = await Tools.call(tools, "main", "mcp__web__add", { a: 2, b: 3 }, new AbortController().signal);
-  expect(out.text).toStartWith("No one is at illi's screen to ask, so it isn't allowed. Asked because mcp__web__add isn't marked by its server as only reading.");
+  expect(out.text).toStartWith("No one is at illi's screen to ask, so it isn't allowed. Asked because your rule asks about mcp__web__* *.");
   expect(asked).toEqual(["mcp__web__add"]);
-  const auto = { ...tools, perm: { ...tools.perm, mode: "auto" as const } };
-  expect(await Tools.call(auto, "main", "mcp__web__add", { a: 2, b: 3 }, new AbortController().signal)).toMatchObject({ text: "5", fail: false });
-  expect(asked).toEqual(["mcp__web__add"]);
+  fs.rmSync(DIR + "/permissions.json");
 });
 
 test("names alike after sanitising or cutting are numbered, and each called at its own tool", async () => {

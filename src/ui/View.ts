@@ -30,7 +30,7 @@
 // page its own clicks: Shown).
 
 import type { Kind, Vendor } from "../ai/AskAI.ts";
-import type { Mode } from "../tools/Guard.ts";
+import type { Mode } from "../tools/Permissions.ts";
 import * as Call from "./Call.ts";
 import { history_bare } from "../tools/Clip.ts";
 import * as Md from "./Md.ts";
@@ -126,21 +126,22 @@ export type Background = { id: number; command: string; agent: string; since: nu
 export type Question = { id: string; who: string; tool: string; what: string; whole?: string; more?: number; spots?: Array<[number, number]>; cuts?: Array<[number, number]>; why?: string; keep?: string; queries?: Query[] };
 
 // a request refused (Tools.guard): its id, who asked (illi, an agent),
-// the tool, what (a command, a file), why; how: the user said no (or no
-// one was there to), the mode refused it, the user's rules did; what the
-// user said, when (ms), the exact grants that would let it run (none:
-// only the user's rules can)
-export type Refused = { id: string; who: string; tool: string; what: string; why: string; how: "no" | "mode" | "rule"; said: string; at: number; exact: string[] };
+// the tool, what (a command, a file), why; how: the user said no with
+// words (or no one was there to), said a plain no (stopping the turn),
+// or the user's rules refused it; what the user said, when (ms), the
+// very approvals that would let it run (each an action on a resource;
+// none: only the user's rules can, or it is asked each time)
+export type Refused = { id: string; who: string; tool: string; what: string; why: string; how: "no" | "stop" | "rule"; said: string; at: number; exact: Array<{ action: string; resource: string }> };
 
 // the permissions (Tools.perms): the mode now and the one the setting
-// gives, the requests refused (newest last), the grants (kept for the
+// gives, the requests refused (newest last), the approvals (saved for the
 // project, or this run's), the rules file and why it won't read ("": it
 // reads)
 export type Perms = { mode: Mode; set: Mode; refused: Refused[]; grants: Grant[]; file: string; broken: string };
 
-// a grant: as kept (Guard: kind=subject, kind:pattern), as said, whether
-// kept in the file (else for this run only)
-export type Grant = { grant: string; said: string; saved: boolean };
+// an approval: its action and resource (Permissions Rule), as said,
+// whether saved in the file (else for this run only)
+export type Grant = { action: string; resource: string; said: string; saved: boolean };
 
 // one of illi's questions: what it asks, its tab's label, the options it
 // offers, whether several may be picked
@@ -252,7 +253,7 @@ export type Client =
   | { $: "mode"; mode: Mode | null } // the mode for this run (/mode), or back to the setting's
   | { $: "allow"; refused: string } // a refused request (State perm, by its id) allowed for this run, the one who asked told (/permissions)
   | { $: "background"; stop: number } // a background job (State background, by its id) stopped (/background)
-  | { $: "revoke"; grant: string } // a grant let go, kept or this run's (/permissions)
+  | { $: "revoke"; action: string; resource: string } // an approval let go, saved or this run's (/permissions)
   | { $: "dismiss"; part: Part } // a radar's line dismissed at the side (Related.ts): never given to the model either (Recall.ts), till illi quits
   | { $: "related" } // config.json written by a terminal (any setting; named for `related`, the first it told of): the chat's illi reads it again, so the change holds for the chat as one made in its own terminal does (Settings.ts setting_follow)
   | { $: "autocompact"; label: string; value: string | null }; // a model's autocompact set (/autocompact, /model), or its own taken out
@@ -423,7 +424,7 @@ export function view_new(): View {
     background: [],
     suggest   : "",
     asks      : [],
-    perm      : { mode: "auto", set: "auto", refused: [], grants: [], file: "", broken: "" },
+    perm      : { mode: "default", set: "default", refused: [], grants: [], file: "", broken: "" },
     parts     : [],
     turn      : Infinity,
     fold      : null,

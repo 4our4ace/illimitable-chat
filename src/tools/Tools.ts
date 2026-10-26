@@ -41,17 +41,14 @@
 // project's CLAUDE.md left to Claude Code, which reads it itself.
 // Every call goes first to the user's plugins and hooks
 // (Plugins.before_tool: they may refuse it, change its input, allow it,
-// have it asked or add to what the model reads after it), then, for
-// shell, read, write, edit or an MCP tool, and as Claude Code asks leave
-// for one of its own (approve), it is judged on that input (Tools.guard:
-// Guard.ts, by the user's rules and grants in Permissions.ts and the
-// mode, /mode's or the setting's, auto by default; one a hook allowed as
-// yolo mode would, one it asks about asked whatever): run, asked about
-// with why, or refused, each refusal recorded for the side panel and
-// /permissions. In every mode but yolo every call, illi's own too,
-// passes the loop guard: the same call as its caller's two before it in
-// its turn is asked (a yes, the caller's next turn and a name used again
-// start the count fresh). What a call that ran answers goes to the plugins last
+// have it asked or add to what the model reads after it), then, as
+// Claude Code asks leave for one of its own too (approve), it is judged
+// on that input (Tools.guard: what it asks leave for, Access.ts, by
+// illi's rules, the user's and the approvals saved, Permissions.ts, in
+// the mode, /mode's or the setting's, default unless trust; one a hook
+// allowed as trust mode would, one it asks about asked whatever): run,
+// asked about with why, or refused, each refusal
+// recorded for the side panel and /permissions. What a call that ran answers goes to the plugins last
 // (after_tool), then, if it is strong and in time, the radar's line of a
 // past episode related to it goes after it (Recall.ts: searched beside
 // the call's run, one a step, never after illi's own memory and meta
@@ -71,9 +68,9 @@ import * as config from "../config/Config.ts";
 import { Custom, type Skill } from "../config/Custom.ts";
 import { Plugins } from "../config/Plugins.ts";
 import { Trusted } from "../config/Trusted.ts";
-import { Guard, MODES, type Mode, type Verdict, type Where } from "./Guard.ts";
+import { Access, type Request as Want, type Where } from "./Access.ts";
 import type { Span } from "./Shell.ts";
-import { Permissions } from "./Permissions.ts";
+import { Permissions, type Effect, type Mode, type Rule } from "./Permissions.ts";
 import { INT, STR, TOOLS, Machine, spec, type Spec } from "./Machine.ts";
 import { Mcp } from "./Mcp.ts";
 import { Logs, MAIN } from "../chat/Logs.ts";
@@ -115,9 +112,10 @@ export type Agent = {
 // pick: the chat's pick; halt: what stops its turn; main: the master's
 // agent, null: none)
 // a question's answer (Hooks ask): yes (illi's own: answered), and
-// whether not to ask again (its grants kept: Tools.guard); what the user
-// said, for the model: a no's reason, the answer to illi's own
-export type Reply = { yes: boolean; always: boolean; said: string };
+// whether not to ask again (its approvals saved: Tools.question); what
+// the user said, for the model: a no's reason, the answer to illi's own;
+// whether it was the user's plain no (no words: the caller's turn stops)
+export type Reply = { yes: boolean; always: boolean; said: string; stop?: boolean };
 
 type Hooks = {
   ask    : (q: Omit<Question, "id">, signal: AbortSignal) => Promise<Reply>;
@@ -127,6 +125,7 @@ type Hooks = {
   change : () => void;
   pick   : () => Pick;
   halt   : () => AbortSignal;
+  stop   : (who: string) => void;
   main   : () => string | null;
 };
 
@@ -150,11 +149,22 @@ export type Tools = {
 };
 
 // the permissions of this run (Tools.guard): the mode /mode set (null:
-// the `mode` setting's), the grants /permissions gave (exact, for this
-// run only), the requests refused (the latest REFUSALS, oldest first),
-// each caller's last calls (LOOP of them, each its tool and input as a
-// hash: the loop guard's)
-export type Perm = { mode: Mode | null; granted: Set<string>; refused: Refused[]; calls: Map<string, string[]> };
+// the `mode` setting's), the approvals given for this run only (by
+// /permissions, or kept as the file wouldn't take them), the requests
+// refused (the latest REFUSALS, oldest first), the questions waiting
+// for an answer, by id (Pending)
+export type Perm = { mode: Mode | null; allowed: Rule[]; refused: Refused[]; pending: Map<string, Pending> };
+
+// a request to ask (Tools.guard): the request, which of its resources
+// asked (by index), why, the mode it was judged in, whether "don't ask
+// again" is offered (not for a hook's ask, nor while the rules won't
+// read); all: it stands for the whole call (a hook's ask), so the
+// question shows all of it
+export type Asking = { req: Want; by: number[]; why: string; mode: Mode; keep: boolean; all?: boolean };
+
+// a question waiting: who asked, what, how to drop it, and the answer
+// another answer settled it with (Tools.settle)
+export type Pending = { who: string; ask: Asking; ctl: AbortController; outcome?: Reply };
 
 // Constants
 // =========
@@ -399,12 +409,6 @@ const WHAT  = 400;
 const WHOLE = 32000;
 const KEPT  = 1000;
 
-// how "don't ask again" names the very command asked about, kept
-// exactly, past a line or SHORT characters (Tools.kept): it shows
-// above, never said again here with a script's lines run together
-const EXACT = "this exact command";
-const SHORT = 72;
-
 // past WHOLE, the most characters the question shows of a line holding a
 // spot (what made the checks ask: Tools.whole), from REACH before the
 // spot on (a minified script is one long line)
@@ -414,20 +418,18 @@ const REACH = 200;
 // the most refused requests kept (Perm)
 const REFUSALS = 50;
 
-// the loop guard (Tools.guard): in every mode but yolo, a call the same
-// (tool and input) as its caller's LOOP before it, in its turn, is asked,
-// saying why
-const LOOP = 2;
-const LOOPED = "the same call a third time in a row";
-
 // what the model is told of a call refused (Tools.refuse): after the
-// user's no (or no one there to ask), why it was asked; the mode's
-// refusal; the user's rules'
+// user's no with words (or no one there to ask), why it was asked; after
+// their plain no, which stopped the turn; the user's rules' refusal
 const REFUSED = {
   no   : "Asked because #. Don't run it again as is: ask the user, or do it another way. They can allow it in /permissions.",
-  mode : "Not run: illi is in #. The user can switch with /mode, or allow just this in /permissions.",
-  rule : "Not run: the user's permission rules refuse it (#). Don't run it, nor anything that does the same: ask the user if you need it.",
+  stop : "The user said no (asked because #) and stopped the turn: wait for them to say how to go on.",
+  rule : "Not run: #. Don't run it, nor anything that does the same: ask the user if you need it.",
 };
+
+// illi's tools that touch nothing but the chat: run while the rules
+// won't read (Tools.guard), as all else is asked
+const CHAT = new Set(["zoom", "date", "projects", "search", "todo", "tell", "question", "skill", "subagent"]);
 
 // the most bytes of a rules file sent (a longer one cut, saying so), and
 // a project's rules files, in each folder the first there
@@ -497,7 +499,7 @@ export namespace Tools {
   export function serve(mem: Memory, hooks: Hooks, cwd: string): Tools {
     const key = crypto.randomUUID();
     const url = Tools.base() + key + "/";
-    const tools: Tools = { mem, agents: new Map(), perm: { mode: null, granted: new Set(), refused: [], calls: new Map() }, url, cwd, hooks, gone: [], steps: new Map(), given: new Map() };
+    const tools: Tools = { mem, agents: new Map(), perm: { mode: null, allowed: [], refused: [], pending: new Map() }, url, cwd, hooks, gone: [], steps: new Map(), given: new Map() };
     CHATS.set(key, tools);
     return tools;
   }
@@ -877,11 +879,9 @@ export namespace Tools {
   // recapped (Tools.refit; refits: those in a row with no work between,
   // a call answered or grown starting them anew); then its report,
   // unanswered if stopped or the vendor was busy or out of reach
-  // (End.again), its recap's too. Its run is its turn: the loop guard
-  // starts it fresh (Tools.fresh), a name used again too. Detached: a
-  // throw ends it as a failed reply, still reported
+  // (End.again), its recap's too. Detached: a throw ends it as a failed
+  // reply, still reported
   export async function run(tools: Tools, agent: Agent, call: Call | null = null): Promise<void> {
-    Tools.fresh(tools, agent.name);
     let away = false;
     let refits = 0;
     try {
@@ -999,13 +999,13 @@ export namespace Tools {
   // Claude Code asking leave to use a tool (its permission prompt): past
   // the plugins' hooks first (they may refuse it or change its input; what
   // it answers stays Claude Code's), then judged as illi's own would be
-  // (Guard.hosted), so the same rules, grants and mode hold there. Its
-  // answer as Claude Code reads it: the input to run, or a no with what
-  // the model is told
+  // (Access.hosted: what illi's like tool asks), so the same rules,
+  // approvals and mode hold there. Its answer as Claude Code reads it:
+  // the input to run, or a no with what the model is told
   export async function approve(tools: Tools, who: string, tool: string, input: unknown, signal: AbortSignal): Promise<Out> {
     const told = await Plugins.before_tool({ tool, input, agent: who === MAIN ? null : who, cwd: tools.cwd, signal });
     const used = "block" in told ? undefined : told.input;
-    const stop = "block" in told ? { text: told.block, fail: true } : await Tools.guard(tools, who, tool, used, signal, (where) => Guard.hosted(where, tool, used), told);
+    const stop = "block" in told ? { text: told.block, fail: true } : await Tools.guard(tools, who, tool, used, signal, (where) => Access.hosted(where, tool, used), told);
     const answer = stop === null ? { behavior: "allow", updatedInput: used } : { behavior: "deny", message: stop.text };
     return { text: JSON.stringify(answer), fail: false };
   }
@@ -1013,87 +1013,147 @@ export namespace Tools {
   // Permissions
   // -----------
 
-  // a call judged before it runs (Guard.check: shell, read, write, edit,
-  // an MCP tool by what its server says of it; any other runs), by the
-  // user's rules and the grants kept for the project (Permissions.ts),
-  // those given this run, and the mode: null runs it, else what the model
-  // is told. One a hook allowed is judged as in yolo mode (the user's
-  // rules still hold); one it asks about is asked, its why first, with no
-  // "don't ask again". In every mode but yolo (careful asks all auto
-  // does), one the same as its caller's two before it in its turn (illi's
-  // own tools too: a skill loaded again and again) is asked, saying so
-  // first, so a model stuck in a loop stops; a yes starts that caller's
-  // count again (Tools.looped). The question is
-  // given what the call would do and why, WHOLE characters of each at
-  // most (Tools.whole: past that, the lines holding what made it ask),
-  // where in it that is (Verdict spots; a hook's ask, the loop guard,
-  // rules that won't read: all of it; a file's, an MCP tool's reasons have
-  // no place in it: none, so the question doesn't fold it either), and
-  // what "don't ask again" keeps by its ends past KEPT (the command
-  // itself, long: EXACT). One
-  // asked runs on the user's yes, "don't ask again" keeping its grants for
-  // the project (one that can't be saved: for this run). A rules file that
-  // won't read leaves nothing run unasked
-  export async function guard(tools: Tools, who: string, tool: string, input: unknown, signal: AbortSignal, judge = (where: Where) => Guard.check(where, tool, input, Mcp.hints(tool)), hooked: { allow?: boolean; ask?: string } = {}): Promise<Out | null> {
+  // a call judged before it runs (Permissions.ts): its requests
+  // (Access.ts), by illi's rules and the user's, the
+  // approvals saved for the project and those given this run (Tools.rules),
+  // in the mode: null runs it, else what the model is told. Any request
+  // denied refuses it, before anything is asked; then each one asked is
+  // asked in turn (one an earlier answer approved meanwhile, not), given
+  // what the call would do and why, WHOLE characters of each at most
+  // (Tools.whole: past that, the lines holding what made it ask: the
+  // request's spots), and what "don't ask again" saves (its save, in
+  // words, by its ends past KEPT). One a hook allowed is judged as in
+  // trust mode (the rules' denies still hold); one it asks about is
+  // asked, its why first, with no "don't ask again" (asked though the
+  // rules allow it). A rules file that won't read leaves nothing that
+  // touches the computer or beyond run unasked (no "don't ask again"),
+  // trust mode too. The answer (Tools.question): yes runs it, "don't ask
+  // again" saving the request's approvals for the project (one that can't
+  // be saved: for this run) and answering every question waiting that
+  // they now allow; no refuses it, and every other question its caller
+  // has waiting; a plain no (no words) also stops the caller's turn,
+  // while a no with words goes to the model as the user's, which goes on
+  export async function guard(tools: Tools, who: string, tool: string, input: unknown, signal: AbortSignal, requests = (where: Where) => Access.requests(where, tool, input), hooked: { allow?: boolean; ask?: string } = {}): Promise<Out | null> {
     const folder = Trusted.folder(tools.cwd);
-    const perms  = Permissions.read(config.PERMISSIONS, folder);
-    const ok     = typeof perms !== "string";
-    const grants = new Set([...(ok ? perms.granted : []), ...tools.perm.granted]);
-    const mode   = hooked.allow === true ? "yolo" : Tools.mode(tools);
-    const got    = judge({ mode, cwd: Projects.real(tools.cwd), top: folder, rules: ok ? perms.rules : {}, grants, reads: (["skills", "commands", "agents"] as const).flatMap((k) => Custom.dirs(tools.cwd, k)).map(Projects.real), plugins: Plugins.roots() });
-    const broken = "illi can't read your permission rules (" + perms + ")";
-    const all: Span[] = [[0, Tools.does(input).length]];
-    const judged: Verdict = ok || got.$ === "deny" ? got : { $: "ask", why: got.$ === "ask" ? got.why + "; " + broken : broken, always: [], exact: got.$ === "ask" ? got.exact : [], spots: all };
-    const hooks: Verdict = hooked.ask === undefined || judged.$ === "deny" ? judged : { $: "ask", why: judged.$ === "ask" ? hooked.ask + "; " + judged.why : hooked.ask, always: [], exact: judged.$ === "ask" ? judged.exact : [], spots: all };
-    const looped = Tools.looped(tools, who, tool, input) && mode !== "yolo";
-    const verdict: Verdict = !looped || hooks.$ === "deny" ? hooks : hooks.$ === "ask" ? { ...hooks, why: LOOPED + "; " + hooks.why, spots: all } : { $: "ask", why: LOOPED, always: [], exact: [], spots: all };
-    if (verdict.$ === "allow") {
-      return null;
+    const where: Where = { cwd: path.resolve(tools.cwd), top: folder, files: Access.own() };
+    const mode = hooked.allow === true ? "trust" : Tools.mode(tools);
+    const rules = Tools.ruleset(tools);
+    const asked = { who: who === MAIN ? "illi" : who, tool, what: Tools.what(input) };
+    const all: Want[] = (() => {
+      try {
+        return requests(where);
+      } catch (err: any) {
+        return [{ action: tool, resources: [Tools.does(input)], save: [], spots: [null], failed: String(err?.message ?? err) }];
+      }
+    })();
+    const asks: Asking[] = [];
+    for (const req of all) {
+      const v = Permissions.decide(req.action, req.resources, [...rules.base, ...rules.user], rules.saved, mode);
+      if (v.effect === "deny") {
+        return Tools.refuse(tools, { ...asked, why: Tools.why(rules, req, v, folder), how: "rule", said: "", exact: [] });
+      }
+      const failed = (req as { failed?: string }).failed;
+      const unread = failed !== undefined ? "illi's check of it failed (" + failed + ")" : rules.broken !== null && !CHAT.has(req.action) ? "illi can't read your permission rules (" + rules.broken + ")" : null;
+      if (unread !== null || v.effect === "ask") {
+        asks.push({ req, by: unread !== null ? req.resources.map((_, k) => k) : v.by, why: unread ?? Tools.why(rules, req, v, folder), mode, keep: unread === null });
+      }
     }
-    const asked = { who: who === MAIN ? "illi" : who, tool, what: Tools.what(input), why: verdict.why };
-    if (verdict.$ === "deny") {
-      return Tools.refuse(tools, { ...asked, how: verdict.rule ? "rule" : "mode", said: "", exact: verdict.exact });
+    if (hooked.ask !== undefined) {
+      asks.splice(0, 1, asks.length === 0 ? { req: { action: tool, resources: [], save: [], spots: [] }, by: [], why: hooked.ask, mode, keep: false, all: true } : { ...asks[0], why: hooked.ask + "; " + asks[0].why, keep: false });
     }
-    const reply = await tools.hooks.ask({ ...asked, ...Tools.whole(input, verdict.spots), why: Tools.ends(verdict.why, WHOLE), keep: Tools.ends(Tools.kept(verdict.always, input, folder), KEPT) }, signal);
-    if (!reply.yes) {
-      return Tools.refuse(tools, { ...asked, how: "no", said: reply.said, exact: verdict.exact }, !signal.aborted);
-    }
-    Tools.fresh(tools, who);
-    const unsaved = reply.always && verdict.always.length > 0 ? Permissions.grant(config.PERMISSIONS, folder, verdict.always) : null;
-    if (unsaved !== null) {
-      verdict.always.forEach((g) => tools.perm.granted.add(g));
-      console.error("illi: a grant kept for this run only: " + unsaved);
+    for (const ask of asks) {
+      if (ask.keep && Tools.decided(tools, ask) === "allow") {
+        continue;
+      }
+      const out = await Tools.question(tools, who, asked, input, ask, signal);
+      if (out !== null) {
+        return out;
+      }
     }
     return null;
   }
 
-  // what "don't ask again" keeps, as the question names it (Guard.said):
-  // the command asked about itself, past a line or SHORT characters, EXACT
-  export function kept(always: string[], input: unknown, folder: string): string {
-    const command = (input as { command?: unknown } | null)?.command;
-    const long = typeof command === "string" && (command.trim().includes("\n") || command.trim().length > SHORT);
-    const whole = long ? "shell=" + String(command).trim() : null;
-    return [...new Set(always.map((g) => (g === whole ? EXACT : Guard.said(g, folder))))].join(", ");
+  // a request asked of the user, waiting (Perm pending) till answered or
+  // settled by another answer; null: yes. Yes, and don't ask again: its
+  // approvals saved (for this run, if the file won't take them), every
+  // question waiting that they now allow answered yes. No: refused, and
+  // every other question of its caller waiting with it, the same answer;
+  // a plain no stops the caller's turn too
+  export async function question(tools: Tools, who: string, asked: { who: string; tool: string; what: string }, input: unknown, ask: Asking, signal: AbortSignal): Promise<Out | null> {
+    const folder = Trusted.folder(tools.cwd);
+    const entry: Pending = { who, ask, ctl: new AbortController() };
+    const id = crypto.randomUUID();
+    const spots = ask.all === true ? [[0, Tools.does(input).length] as Span] : ask.by.flatMap((k) => (ask.req.spots[k] === null ? [] : [ask.req.spots[k]!]));
+    const keep = ask.keep ? [...new Set(ask.req.save.map((s) => Access.said(ask.req.action, s, folder)))].join(", ") : "";
+    tools.perm.pending.set(id, entry);
+    let reply: Reply;
+    try {
+      reply = await tools.hooks.ask({ ...asked, ...Tools.whole(input, spots.length === 0 ? undefined : spots), why: Tools.ends(ask.why, WHOLE), keep: Tools.ends(keep, KEPT) }, AbortSignal.any([signal, entry.ctl.signal]));
+    } finally {
+      tools.perm.pending.delete(id);
+    }
+    const got = entry.outcome ?? reply;
+    const exact = ask.keep ? ask.by.map((k) => ({ action: ask.req.action, resource: ask.req.resources[k] })) : [];
+    if (got.yes) {
+      if (got.always && ask.keep && entry.outcome === undefined) {
+        const unsaved = Permissions.save(config.PERMISSIONS, folder, ask.req.action, ask.req.save);
+        if (unsaved !== null) {
+          tools.perm.allowed.push(...ask.req.save.map((resource): Rule => ({ action: ask.req.action, resource, effect: "allow" })));
+          console.error("illi: an approval kept for this run only: " + unsaved);
+        }
+        for (const p of tools.perm.pending.values()) {
+          if (p.ask.keep && Tools.decided(tools, p.ask) === "allow") {
+            Tools.settle(p, { yes: true, always: false, said: "" });
+          }
+        }
+        tools.hooks.change();
+      }
+      return null;
+    }
+    if (entry.outcome === undefined && !signal.aborted) {
+      [...tools.perm.pending.values()].filter((p) => p.who === who).forEach((p) => Tools.settle(p, { ...got, always: false }));
+      if (got.stop === true) {
+        tools.hooks.stop(who);
+      }
+    }
+    return Tools.refuse(tools, { ...asked, why: ask.why, how: got.stop === true ? "stop" : "no", said: got.said, exact }, !signal.aborted);
   }
 
-  // whether a call is the same (tool and input) as its caller's LOOP
-  // before it; it is kept as the latest. A different call between starts
-  // the count again, as does a yes to a question (Tools.guard), the
-  // caller's next turn (Chat.turn, Tools.run) and a name used again. A
-  // shell call's description is words for the user (Call.ts), so the
-  // same command in other words is the same call
-  export function looped(tools: Tools, who: string, tool: string, input: unknown): boolean {
-    const does = tool === "shell" && typeof input === "object" && input !== null ? { ...input, description: undefined } : input;
-    const call = String(Bun.hash(tool + "\0" + JSON.stringify(does ?? null)));
-    const last = tools.perm.calls.get(who) ?? [];
-    tools.perm.calls.set(who, [...last, call].slice(-LOOP));
-    return last.length === LOOP && last.every((c) => c === call);
+  // a question waiting, answered by another answer: its question dropped
+  // (Chat.question: its signal), its call reading this answer instead
+  export function settle(p: Pending, reply: Reply): void {
+    if (p.outcome === undefined) {
+      p.outcome = reply;
+      p.ctl.abort();
+    }
   }
 
-  // a caller's calls forgotten by the loop guard: its turn starts, or a
-  // question about its call was answered yes
-  export function fresh(tools: Tools, who: string): void {
-    tools.perm.calls.delete(who);
+  // a request asked, judged again by the rules now (an approval saved
+  // since may allow it)
+  export function decided(tools: Tools, ask: Asking): Effect {
+    const rules = Tools.ruleset(tools);
+    return Permissions.decide(ask.req.action, ask.req.resources, [...rules.base, ...rules.user], rules.saved, ask.mode).effect;
+  }
+
+  // the rules a call is judged by: illi's own (Permissions.base, with its
+  // customization places: Access.places), the user's, the approvals saved
+  // for the project and those given this run; while the file won't read,
+  // the user's none, and why
+  export function ruleset(tools: Tools): { base: Rule[]; user: Rule[]; saved: Rule[]; broken: string | null } {
+    const read = Permissions.read(config.PERMISSIONS, Trusted.folder(tools.cwd));
+    const ok = typeof read !== "string";
+    return { base: Permissions.base(Access.places(tools.cwd)), user: ok ? read.rules : [], saved: [...(ok ? read.saved : []), ...tools.perm.allowed], broken: ok ? null : read };
+  }
+
+  // why a request is asked or refused: a folder outside, which; a .env
+  // read; the user's rule that says so
+  export function why(rules: { base: Rule[]; user: Rule[]; saved: Rule[] }, req: Want, v: { effect: Effect; by: number[] }, top: string): string {
+    const folder = (r: string) => Access.said("external_directory", r, top).replace(/^files in /, "");
+    const rule = Permissions.evaluate(req.action, req.resources[v.by[0]] ?? "*", v.effect === "deny" ? [...rules.base, ...rules.user] : [...rules.base, ...rules.user, ...rules.saved]);
+    if (rules.base.includes(rule)) {
+      return req.action === "external_directory" ? "it reaches outside the project: " + v.by.map((k) => folder(req.resources[k])).join(", ") : req.action === "read" ? "it reads a .env file, which may hold secrets" : "illi's rules ask about " + req.action;
+    }
+    return "your rule " + (v.effect === "deny" ? "denies " : "asks about ") + (rule.action === "shell" ? "" : rule.action + " ") + rule.resource;
   }
 
   // the mode now: /mode's for this run, else the setting's
@@ -1101,41 +1161,42 @@ export namespace Tools {
     return tools.perm.mode ?? Tools.mode_set();
   }
 
-  // the `mode` setting's (one not known: ask)
+  // the `mode` setting's (Permissions.mode_of: an older illi's too)
   export function mode_set(): Mode {
-    const mode = config.config_value("mode");
-    return MODES.includes(mode as Mode) ? (mode as Mode) : "ask";
+    return Permissions.mode_of(config.config_value("mode"));
   }
 
-  // the permissions as the views show them: the grants kept for the
+  // the permissions as the views show them: the approvals saved for the
   // project (none while the file won't read), then this run's
   export function perms(tools: Tools): Perms {
     const folder = Trusted.folder(tools.cwd);
     const read   = Permissions.read(config.PERMISSIONS, folder);
-    const saved  = typeof read === "string" ? [] : read.granted;
-    const grants = [...saved.map((grant) => ({ grant, saved: true })), ...[...tools.perm.granted].filter((g) => !saved.includes(g)).map((grant) => ({ grant, saved: false }))];
-    return { mode: Tools.mode(tools), set: Tools.mode_set(), refused: tools.perm.refused, grants: grants.map((g) => ({ ...g, said: Guard.said(g.grant, folder) })), file: config.PERMISSIONS, broken: typeof read === "string" ? read : "" };
+    const saved  = typeof read === "string" ? [] : read.saved;
+    const run    = tools.perm.allowed.filter((a) => !saved.some((s) => s.action === a.action && s.resource === a.resource));
+    const grants = [...saved.map((r) => ({ r, saved: true })), ...run.map((r) => ({ r, saved: false }))];
+    return { mode: Tools.mode(tools), set: Tools.mode_set(), refused: tools.perm.refused, grants: grants.map(({ r, saved }) => ({ action: r.action, resource: r.resource, said: Access.said(r.action, r.resource, folder), saved })), file: config.PERMISSIONS, broken: typeof read === "string" ? read : "" };
   }
 
-  // a refused request allowed for this run (/permissions): its exact
-  // grants given, and every refusal they now clear taken off the list;
-  // null: none such, or one only the user's rules can allow
+  // a refused request allowed for this run (/permissions): its very
+  // resources approved, and every refusal they now clear taken off the
+  // list; null: none such, or one only the user's rules can allow
   export function allow(tools: Tools, id: string): Refused | null {
     const refused = tools.perm.refused.find((r) => r.id === id);
     if (refused === undefined || refused.exact.length === 0) {
       return null;
     }
-    refused.exact.forEach((g) => tools.perm.granted.add(g));
-    tools.perm.refused = tools.perm.refused.filter((r) => r.exact.length === 0 || !r.exact.every((g) => tools.perm.granted.has(g)));
+    const has = (e: { action: string; resource: string }) => tools.perm.allowed.some((a) => a.action === e.action && a.resource === e.resource);
+    refused.exact.filter((e) => !has(e)).forEach((e) => tools.perm.allowed.push({ ...e, effect: "allow" }));
+    tools.perm.refused = tools.perm.refused.filter((r) => r.exact.length === 0 || !r.exact.every(has));
     tools.hooks.change();
     return refused;
   }
 
-  // a grant let go (/permissions): this run's, and the project's kept
-  // one; null: done, else why the file wasn't changed
-  export function revoke(tools: Tools, grant: string): string | null {
-    tools.perm.granted.delete(grant);
-    const why = Permissions.revoke(config.PERMISSIONS, Trusted.folder(tools.cwd), grant);
+  // an approval let go (/permissions): this run's, and the project's
+  // saved one; null: done, else why the file wasn't changed
+  export function revoke(tools: Tools, action: string, resource: string): string | null {
+    tools.perm.allowed = tools.perm.allowed.filter((a) => a.action !== action || a.resource !== resource);
+    const why = Permissions.revoke(config.PERMISSIONS, Trusted.folder(tools.cwd), action, resource);
     tools.hooks.change();
     return why;
   }
@@ -1179,7 +1240,7 @@ export namespace Tools {
   // what a tool would do (Tools.does) as the question shows it: WHOLE
   // characters at most (a character in two halves, a surrogate pair, kept
   // whole); past them, each line holding a spot (where the checks found
-  // what made them ask: Guard Verdict spots), PIECE characters of it at
+  // what made them ask: Request spots), PIECE characters of it at
   // most from REACH before the spot, WHOLE of all such at most (spots
   // past that: only the why names them), lines one after another kept
   // as one, a line before each saying how many characters were left out

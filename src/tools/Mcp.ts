@@ -42,7 +42,6 @@ import * as config from "../config/Config.ts";
 import { Plugins } from "../config/Plugins.ts";
 import { Seen } from "../config/Seen.ts";
 import { Trusted } from "../config/Trusted.ts";
-import type { Hints } from "./Guard.ts";
 import type { Spec } from "./Machine.ts";
 
 // Types
@@ -76,8 +75,7 @@ type Link = {
 
 // a server: its name, where it is from (its file, its plugin: Found),
 // how it is (why: what failed), its tools as illi names them, each one's
-// name at the server and what the server says it does (its annotations:
-// only reads, may destroy; Guard.ts), its link
+// name at the server, its link
 export type Server = {
   name   : string;
   file   : string;
@@ -86,7 +84,6 @@ export type Server = {
   why   : string;
   tools : Spec[];
   own   : Map<string, string>;
-  hints : Map<string, Hints>;
   link  : Link | null;
 };
 
@@ -185,7 +182,7 @@ export namespace Mcp {
   // a server started: its link, its start, its tools; or why it failed
   export async function open(name: string, found: Found, cwd: string): Promise<void> {
     const { def, vars } = found;
-    const server: Server = { name, file: found.file, plugin: found.plugin, state: "starting", why: "", tools: [], own: new Map(), hints: new Map(), link: null };
+    const server: Server = { name, file: found.file, plugin: found.plugin, state: "starting", why: "", tools: [], own: new Map(), link: null };
     SERVERS.set(name, server);
     try {
       server.link = def.url !== undefined ? Mcp.http(def, vars) : Mcp.stdio(server, def, cwd, vars);
@@ -211,17 +208,14 @@ export namespace Mcp {
       cursor = page?.nextCursor;
     } while (cursor !== undefined && cursor !== null);
     const own = new Map<string, string>();
-    const hints = new Map<string, Hints>();
     const taken = new Set([...SERVERS.values()].filter((s) => s !== server).flatMap((s) => [...s.own.keys()]));
     server.tools = got.map((t) => {
       const name = Mcp.name(server.name, String(t.name), taken);
       taken.add(name);
       own.set(name, String(t.name));
-      hints.set(name, { read: t.annotations?.readOnlyHint === true, destructive: t.annotations?.destructiveHint === true });
       return { name, info: "(" + server.name + ") " + (t.description ?? t.title ?? ""), schema: Mcp.schema(t.inputSchema) };
     });
     server.own = own;
-    server.hints = hints;
     told();
   }
 
@@ -247,7 +241,6 @@ export namespace Mcp {
     server.why   = why;
     server.tools = [];
     server.own   = new Map();
-    server.hints = new Map();
     server.link?.close();
     console.error("illi: mcp " + server.name + ": " + why);
     told();
@@ -256,11 +249,6 @@ export namespace Mcp {
   // the tools of the servers ready, by server name
   export function tools(): Spec[] {
     return [...SERVERS.values()].filter((s) => s.state === "ready").sort((a, b) => a.name.localeCompare(b.name)).flatMap((s) => s.tools);
-  }
-
-  // what a tool's server says it does (none: no such tool ready)
-  export function hints(name: string): Hints | undefined {
-    return [...SERVERS.values()].find((s) => s.state === "ready" && s.own.has(name))?.hints.get(name);
   }
 
   // a tool called at its server: its text (clipped as a command's output

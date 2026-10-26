@@ -57,6 +57,7 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Bundle, type Scope } from "./Bundle.ts";
 import * as config from "./Config.ts";
+import { Permissions } from "../tools/Permissions.ts";
 import { Seen } from "./Seen.ts";
 import type { Spec } from "../tools/Machine.ts";
 import * as Theme from "../ui/Theme.ts";
@@ -319,9 +320,9 @@ export namespace Plugins {
   }
 
   // the mode the chat's tools are judged in now (no chat here: the
-  // setting's)
+  // setting's: Permissions.mode_of)
   export function mode(): string {
-    return CHAT?.mode() ?? config.config_value("mode");
+    return CHAT?.mode() ?? Permissions.mode_of(config.config_value("mode"));
   }
 
   // the chat's turn stopped (illi's own plugin's: a hook said not to go

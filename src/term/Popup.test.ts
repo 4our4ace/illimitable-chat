@@ -420,6 +420,7 @@ test("a double click on an option picks once, its second press going nowhere onc
     let_go(t, r, c);
     expect([picked, t.scr.clicks, t.sel, t.notices]).toEqual([[1], 2, null, []]);
     const u = term();
+    u.v.perm = { ...u.v.perm, mode: "trust" };
     paint(u);
     const mode = u.hits.find((h: any) => h.row === 29 && h.to === 2 + 115);
     click(u, 29, mode.col);
@@ -549,21 +550,21 @@ test("only a list with one in use dots its rows: the palette and /permissions no
     term_paint(palette);
     expect([options(palette).length > 10, dotted(palette)]).toEqual([true, []]);
     const perms = term();
-    perms.v.perm = { ...perms.v.perm, refused: [{ id: "r1", who: "illi", tool: "shell", what: "git push --force", why: "it rewrites history", how: "no", said: "", at: 1, exact: [] }], grants: [{ grant: "shell=ls", said: "ls", saved: false }] };
+    perms.v.perm = { ...perms.v.perm, refused: [{ id: "r1", who: "illi", tool: "shell", what: "git push --force", why: "it rewrites history", how: "no", said: "", at: 1, exact: [] }], grants: [{ action: "shell", resource: "ls *", said: "ls *", saved: false }] };
     term_permissions(perms);
     term_paint(perms);
     expect([options(perms).map((r: string) => r.slice(2, 4)), dotted(perms)]).toEqual([["gi", "ls", "Yo"], []]);
   });
-  for (const [cols, set] of [[160, "yolo"], [100, "yolo"], [100, "auto"]] as const) {
+  for (const [cols, set] of [[160, "trust"], [100, "trust"], [100, "default"]] as const) {
     sized(cols, 40, () => {
       const mode = term();
-      mode.v.perm = { ...mode.v.perm, mode: "yolo", set };
+      mode.v.perm = { ...mode.v.perm, mode: "trust", set };
       term_mode(mode, "");
       term_paint(mode);
       const rows = dotted(mode);
       const at   = mode.choose.names.indexOf(set);
-      expect(rows.map((r: string) => r.slice(2, 4))).toEqual(["◯ ", "◯ ", "◯ ", "◯ ", "● "]);
-      expect(rows[at]).toEndWith(mode.choose.about[at] + "  the setting's");
+      expect(rows.map((r: string) => r.slice(2, 4))).toEqual(["◯ ", "● "]);
+      expect(rows[at]).toMatch(new RegExp(mode.choose.about[at] + " +the setting's$"));
       expect(rows.map((r: string) => r.replace(/^.{4}\S+ +/, "").replace(/ +the setting's$/, "").trimEnd())).toEqual(mode.choose.about);
     });
   }

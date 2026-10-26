@@ -101,7 +101,7 @@ const alive = (pid: number) => {
 
 test("on a terminal, illi runs under a window: its modes on once the screen is up, off as illi quits", async () => {
   const illi = start();
-  expect(await illi.seen("auto mode")).toBe(true);
+  expect(await illi.seen("● illi")).toBe(true);
   expect(illi.out()).toContain(WINDOW_ON + RESET);
   illi.type("\x04");
   expect(await illi.proc.exited).toBe(0);
@@ -119,7 +119,7 @@ test("from a pipe, illi runs alone, as before", async () => {
 test("a switch while a turn runs shows the other profile at once, the one left at work and marked; back, it still streams, the input as typed; a quit says so; its end is a note", async () => {
   fs.rmSync(DONE, { force: true });
   const illi = start(CLAUDE);
-  expect(await illi.seen("auto mode")).toBe(true);
+  expect(await illi.seen("● illi")).toBe(true);
   illi.type("go\r");
   expect(await illi.seen("tick tick")).toBe(true);
   illi.type("my draft");
@@ -152,7 +152,7 @@ test("a switch while a turn runs shows the other profile at once, the one left a
 test("closing the terminal leaves no illi running, the profile hidden at work included", async () => {
   fs.rmSync(DONE, { force: true });
   const illi = start(CLAUDE);
-  expect(await illi.seen("auto mode")).toBe(true);
+  expect(await illi.seen("● illi")).toBe(true);
   illi.type("go\r");
   expect(await illi.seen("tick")).toBe(true);
   const from = illi.mark();

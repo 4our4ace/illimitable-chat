@@ -888,23 +888,21 @@ export function rule(w: number): Line {
 // then the plugins' pieces (Plugins.status), all cut before the right
 // end: the related lines counted (related: where the side doesn't show
 // them; tabs_related), the background jobs counted (jobs: the side
-// doesn't show them whole; tabs_background) and the mode (tabs_mode; none
+// doesn't show them whole; tabs_background) and trust mode (tabs_mode; none
 // on a line too narrow); with agents, the keys that move along them, if
 // they fit
 export function tabs_line(v: View.View, w: number, all = true, jobs = all, related = 0): Line {
-  const bg   = [tabs_related(related, w), tabs_background(v, w, jobs)].filter((l) => l.length > 0).flatMap((l, k) => (k === 0 ? l : [Run(" · ", DIM), ...l]));
-  const mode = [...bg, ...(bg.length === 0 ? [] : [Run(" · ", DIM)]), ...tabs_mode(v, w)];
+  const mode = [tabs_related(related, w), tabs_background(v, w, jobs), tabs_mode(v, w)].filter((l) => l.length > 0).flatMap((l, k) => (k === 0 ? l : [Run(" · ", DIM), ...l]));
   const room = w - line_width(mode);
   const left = tabs_left(v, mode.length === 0 ? w : room - 2, all);
   return mode.length === 0 ? left : [...left, Run(" ".repeat(Math.max(2, room - line_width(left)))), ...mode];
 }
 
-// the mode (Guard.ts), as the last line ends: dim, read-only in the
-// theme's warning, yolo bold in its error; none on a line under MODE_ROOM
+// trust mode (Permissions.ts), as the last line ends, bold in the
+// theme's error; the default mode, nothing; none on a line under
+// MODE_ROOM
 export function tabs_mode(v: View.View, w: number): Line {
-  const tone = Draw.draw_tokens();
-  const mode = v.perm.mode;
-  return w < MODE_ROOM ? [] : [Run(mode + " mode", mode === "yolo" ? { ...INK, b: true, c: tone.error } : mode === "read-only" ? { ...INK, c: tone.warning } : DIM)];
+  return w < MODE_ROOM || v.perm.mode !== "trust" ? [] : [Run("trust mode", { ...INK, b: true, c: Draw.draw_tokens().error })];
 }
 
 // the background jobs running, counted for the last line (jobs false:
