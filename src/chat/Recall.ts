@@ -99,14 +99,15 @@ export namespace Recall {
 
   // a call's recall started beside its run, if due (null: none): `related`
   // on, a tool not illi's own memory's or meta's (SKIP), its caller given
-  // no line yet this step, no search running already; one running for
+  // no line yet this step nor an agent started fresh (none of the chat:
+  // Tools.ts), no search running already; one running for
   // the same caller's step is shared (its line goes after whichever of
   // their calls ends first once it answered: Recall.end). Never in the
   // call's way: what fails here, or in the thread, gives no line
   export function start(tools: Tools, who: string, name: string, input: unknown): Pending | null {
     try {
       const step = tools.steps.get(who) ?? 0;
-      if (!config.RECALL || SKIP.has(name) || tools.given.get(who) === step) {
+      if (!config.RECALL || SKIP.has(name) || tools.given.get(who) === step || tools.agents.get(who)?.role.fresh) {
         return null;
       }
       if (running !== null) {

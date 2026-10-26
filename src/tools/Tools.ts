@@ -15,7 +15,9 @@
 // work or of this run, as reviewer-2; else a random one; a name freed
 // is used again, each log its own); each call gets its context and its
 // whole log, so a told agent goes on even after a restart; its replies
-// reach the chat as one "[Name]" message. One spawned as a user's
+// reach the chat as one "[Name]" message. One started fresh (its
+// agent's `fresh: true`, or spawn's) gets none of the chat: no view, no
+// tool reading it (MEMORY), no radar's line; its own log alone. One spawned as a user's
 // subagent (Custom.ts) runs on its model, with its instructions and
 // tools; so does the master, given a primary agent (Shift+Tab, /agent).
 // Beside these, the user's: their skills (one tool, skill, listing them;
@@ -83,14 +85,15 @@ export type { Live };
 // =====
 
 // at work, the view its calls get and its replies so far; its role: its
-// effort if spawned with one, the user's agent it runs as (null: none);
+// effort if spawned with one, the user's agent it runs as (null: none),
+// whether it started fresh (none of the chat: Tools.ask);
 // the run it was spawned in (Memory.run; -1: taken back from its log),
 // its log (Logs.log: the name may go on to another agent)
 export type Agent = {
   name    : string;
   run     : number;
   log?    : string;
-  role    : { $: "sub"; effort: string | null; agent: string | null };
+  role    : { $: "sub"; effort: string | null; agent: string | null; fresh?: boolean };
   call    : Call | null;
   live    : Live[];
   calls   : Record<string, string>; // its tool calls awaiting their results, by id (Chat.on)
@@ -166,15 +169,24 @@ const SUB_HEAD = `You are a subagent of illi, an AI agent that works for one use
 single chat that never ends. illi gave you a task. Do it yourself, with
 your tools, following the user's instructions at the end of this
 prompt: they say who the user is, how their files are organized and how
-they want work done.
+they want work done.`;
 
-Your first message holds the view below, then your chat with illi so far,
+// what a subagent's first message holds: the view, then its own chat;
+// one started fresh, its own chat alone
+const SUB_VIEW = `Your first message holds the view below, then your chat with illi so far,
 its lines as "i|kind: text": what you are (note), your task (user), and
 later all you did and were told. The view shows you what illi knows: what the user wants,
 decided and taught. Use it as context only, and do what your task says,
 not what the user's last message says, since illi may have given you
 just part of the work. Your final reply is your report to illi. illi may
 send you more messages, even while you work: answer the last.`;
+
+const SUB_ALONE = `You start fresh: you see none of illi's chat with the user, only what
+illi tells you. Your first message holds your chat with illi so far, its
+lines as "i|kind: text": what you are (note), your task (user), and
+later all you did and were told. Your final reply is your report to
+illi. illi may send you more messages, even while you work: answer the
+last.`;
 
 // what stands for a subagent's view's oldest lines, left out to fit its
 // model (Tools.fitted)
@@ -215,10 +227,12 @@ with project in that project's chat, or in all ("all"), with from and
 to only in that span; zoom and date take a project too.`;
 
 // an agent's log starts with a note of what it is: SUB_NOTE, the user's
-// agent it runs as, and its effort if not the configured one
-const SUB_NOTE = "subagent";
-const SUB_AT   = " at effort ";
-const SUB_RE   = /^subagent(?: ([a-z0-9][a-z0-9_-]*))?(?: at effort (\S+))?$/i;
+// agent it runs as, its effort if not the configured one, and
+// SUB_WITHOUT if it started fresh
+const SUB_NOTE    = "subagent";
+const SUB_AT      = " at effort ";
+const SUB_WITHOUT = ", without the chat";
+const SUB_RE    = /^subagent(?: ([a-z0-9][a-z0-9_-]*))?(?: at effort ([^\s,]+))?(, without the chat)?$/i;
 
 // where the tools run, in the system prompt (HERE_DOC); the working dir
 // and the time now, at the start of each call's message (Tools.here), so
@@ -229,8 +243,10 @@ the working dir named at the start of each message: the folder where the
 user started illi. Relative paths start there. The user's time follows
 it (Now:): work out "yesterday" or "last Tuesday" from it.`;
 
-// a subagent's prompt: its part, then the view's and the tools' docs
-export const SUB = SUB_HEAD + "\n\n" + VIEW_DOC + "\n\n" + HERE_DOC;
+// a subagent's prompt: its part, then the view's and the tools' docs;
+// one started fresh, no view's
+export const SUB       = SUB_HEAD + "\n\n" + SUB_VIEW + "\n\n" + VIEW_DOC + "\n\n" + HERE_DOC;
+export const SUB_FRESH = SUB_HEAD + "\n\n" + SUB_ALONE + "\n\n" + HERE_DOC;
 
 // a prompt's words for a call in Claude Code (Tools.hosted): who it is
 // is Claude Code's to say, its tools its own; illi's come from illi
@@ -251,14 +267,17 @@ keep your to-do list with illi's todo, which the user sees beside the
 chat.`;
 
 // the tools of everyone (OWN), the main agent's (boss), and those that run
-// on this computer (Machine.ts's TOOLS)
+// on this computer (Machine.ts's TOOLS); those of OWN that read the chat
+// (MEMORY: none for an agent started fresh)
+const MEMORY = new Set(["zoom", "date", "projects", "search"]);
 const OWN: Spec[] = [
   spec("zoom", "Open the line id+n of the view into the two lines of n/2 under it; n = 1 gives the message whole. With an agent's name as id, give that agent's whole chat. A long text comes in pages from character at, saying where to go on. With project (its name, from projects), the line, message or agent of that project's chat.", { id: { type: ["integer", "string"] }, n: INT, at: INT, project: STR }, ["id"]),
   spec("date", "The date and time of message id. Or, with from (and to), local times as 2026-10-21 or 2026-10-21 14:00 (no to: that day), the lines of that span. With project, in that project's chat.", { id: INT, from: STR, to: STR, project: STR }, []),
   spec("projects", "The user's projects, each with a chat of its own (a git repo illi ran in, or home: outside any repo), the one used last first: its folder, its first and last day, its messages, its latest summary line. Look here first when the user means work that isn't in your view.", {}, []),
   spec("search", "Find summary lines holding all the words (else any of them), the best first, as \"project id+n|text\": in this project's chat; with project (its name, from projects), in that one's; with project \"all\", in every one, then the projects with more lines named, to search in. Zoom a line with its project. With from and to (as date's), only lines inside that span.", { words: STR, project: STR, from: STR, to: STR }, ["words"]),
 ];
-const SPAWN = "Start one subagent per task, in parallel, and return their names at once. Each one's report reaches you as a message \"[Name] report\" when it finishes. A subagent sees the view and the user's instructions, but knows what you want only from its task.";
+const SPAWN = "Start one subagent per task, in parallel, and return their names at once. Each one's report reaches you as a message \"[Name] report\" when it finishes. A subagent sees the view and the user's instructions, but knows what you want only from its task. With fresh, it sees no view nor any of the chat, only its task and the user's instructions: for a test or review that must not be swayed by what came before.";
+const FRESH = { type: "boolean", description: "Start them without the chat: no view, and no tools that read it. Leave it out to give them the view (their agent may start fresh always)." };
 const EFFORT = { type: "string", enum: EFFORTS, description: "How hard they think. Leave it out to use their agent's effort (or, with none, yours); set it only to override that." };
 const TELL: Spec = spec("tell", "Send a message to a subagent, by name. One at work reads it between its tool calls, and its report answers it; an idle one goes on from its chat, and its reply reaches you as a message \"[Name] reply\".", { name: STR, message: STR }, ["name", "message"]);
 
@@ -386,7 +405,7 @@ function boss(cwd: string, only: string[] | null = null): Spec[] {
   const subs = Custom.subagents(cwd).filter((a) => only === null || Custom.called(a).some((n) => only.includes(n)));
   const agents = subs.map((a) => a.name + (a.description === "" ? "" : " (" + a.description + ")"));
   const agent = { type: "string", description: "The user's agent to run each task as, by name, with its own instructions, model and tools: " + agents.join("; ") + (only === null ? ". None: a plain subagent." : ". Name one of them: no other is allowed.") };
-  const fields = agents.length === 0 ? { tasks: { type: "array", items: STR }, effort: EFFORT } : { tasks: { type: "array", items: STR }, agent, effort: EFFORT };
+  const fields = agents.length === 0 ? { tasks: { type: "array", items: STR }, effort: EFFORT, fresh: FRESH } : { tasks: { type: "array", items: STR }, agent, effort: EFFORT, fresh: FRESH };
   const spawn = only !== null && agents.length === 0 ? [] : [spec("spawn", SPAWN, fields, only === null ? ["tasks"] : ["tasks", "agent"])];
   return [...spawn, TELL, TODO, ASK];
 }
@@ -583,7 +602,9 @@ export namespace Tools {
       const lead = Custom.agent(tools.cwd, tools.hooks.main());
       return [...Custom.allow(lead, [...OWN, ...boss(tools.cwd, lead?.spawns ?? null), ...here, ...user]), ...asks];
     }
-    return [...Custom.allow(Custom.agent(tools.cwd, tools.agents.get(who)?.role.agent ?? null), [...OWN, ...here, ...user]), ...asks];
+    const role = tools.agents.get(who)?.role;
+    const own  = role?.fresh ? OWN.filter((t) => !MEMORY.has(t.name)) : OWN;
+    return [...Custom.allow(Custom.agent(tools.cwd, role?.agent ?? null), [...own, ...here, ...user]), ...asks];
   }
 
   // a call, past the plugins' hooks, then judged (Tools.guard: illi's own
@@ -665,7 +686,8 @@ export namespace Tools {
         if (only !== null && (profile === null || !Custom.called(profile).some((n) => only.includes(n)))) {
           return { text: (profile === null ? "A plain subagent" : profile.name) + " isn't one this agent may spawn; name one of: " + (only.join(", ") || "none") + ".", fail: true };
         }
-        return { text: await Tools.spawn(tools, (args.tasks ?? []).map(String), { $: "sub", effort, agent: profile?.name ?? null }), fail: false };
+        const fresh = args.fresh === true || profile?.fresh === true;
+        return { text: await Tools.spawn(tools, (args.tasks ?? []).map(String), { $: "sub", effort, agent: profile?.name ?? null, ...(fresh ? { fresh } : {}) }), fail: false };
       }
       case "tell": {
         return { text: await Tools.tell(tools, String(args.name), String(args.message)), fail: false };
@@ -748,7 +770,7 @@ export namespace Tools {
     });
     const agent = { name, run, log: Logs.log(tools.mem, name) ?? name, role, call: null, live: [], calls: {}, stop: false, view, replies: [] };
     tools.agents.set(name, agent);
-    tools.hooks.push(agent, "note", SUB_NOTE + (role.agent === null ? "" : " " + role.agent) + (role.effort === null ? "" : SUB_AT + role.effort));
+    tools.hooks.push(agent, "note", SUB_NOTE + (role.agent === null ? "" : " " + role.agent) + (role.effort === null ? "" : SUB_AT + role.effort) + (role.fresh ? SUB_WITHOUT : ""));
     tools.hooks.push(agent, "user", task);
     Tools.run(tools, agent);
     return name;
@@ -763,7 +785,7 @@ export namespace Tools {
     const note = log !== null && log.length > 0 && log[0].kind === "note" ? log[0].text : "";
     const sub = SUB_RE.exec(note);
     if (sub !== null) {
-      const role = { $: "sub" as const, effort: sub[2] ?? null, agent: sub[1] ?? null };
+      const role = { $: "sub" as const, effort: sub[2] ?? null, agent: sub[1] ?? null, ...(sub[3] ? { fresh: true } : {}) };
       tools.agents.set(name, { name, run: -1, log: Logs.log(tools.mem, name) ?? name, role, call: null, live: [], calls: {}, stop: false, view: [], replies: [] });
     }
     return tools.agents.get(name) ?? null;
@@ -807,14 +829,15 @@ export namespace Tools {
   // a call of an agent, on its pick (Tools.pick): the chat's view as much
   // as half its model's autocompact holds (a smaller model's window than
   // the chat's; its window not told, which Tools.view waits on: its
-  // opening and last block alone, as a window is never guessed)
+  // opening and last block alone, as a window is never guessed); one
+  // started fresh, none, nor the view's docs (SUB_FRESH)
   export function ask(tools: Tools, agent: Agent): Ask {
     const log = { text: Logs.show(tools.mem, agent.name), mark: true };
     const server = Tools.at(tools, agent.name);
     const profile = Custom.agent(tools.cwd, agent.role.agent);
     const pick = Tools.pick(tools, agent.role);
     const run = Pick.ask(pick);
-    const system = Tools.system(SUB + Custom.section(profile), tools.cwd, run.vendor);
+    const system = Tools.system((agent.role.fresh ? SUB_FRESH : SUB) + Custom.section(profile), tools.cwd, run.vendor);
     const window = Pick.window(pick);
     const most = window === undefined ? 0 : (config.config_context(pick.model, window, 0, Pick.room(pick)) * TOKEN) / 2;
     const blocks = [...Tools.fitted(agent.view, most), Tools.here(tools, run.vendor), log];
@@ -1080,12 +1103,13 @@ export namespace Tools {
   // the chat's view, once its summaries are built, for an agent of this
   // role once its model's window is told too (on ChatGPT: ChatGPT.ready,
   // as a turn waits; never guessed); a string: why there is none
-  // (Memory.settle, the window)
+  // (Memory.settle, the window). One started fresh gets none, waiting on
+  // no summary
   export async function view(tools: Tools, role?: Agent["role"]): Promise<Block[] | string> {
-    const why = await Memory.settle(tools.mem, tools.mem.count, tools.hooks.halt());
+    const why = role?.fresh ? null : await Memory.settle(tools.mem, tools.mem.count, tools.hooks.halt());
     const pick = role === undefined ? null : Tools.pick(tools, role);
     const unready = why === null && pick?.vendor === "chatgpt" ? await ChatGPT.ready(pick.model, tools.hooks.halt()) : null;
-    return why ?? (unready === null ? Memory.view(tools.mem) : "Not started: " + unready + ".");
+    return why ?? (unready !== null ? "Not started: " + unready + "." : role?.fresh ? [] : Memory.view(tools.mem));
   }
 
   export function working(tools: Tools): Agent[] {
