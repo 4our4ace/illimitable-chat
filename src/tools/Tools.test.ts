@@ -26,7 +26,7 @@
 // as its caller's two before it asked (all of it its risk), illi's own
 // tools too; a yes starts its count again. The projects: their table,
 // a search across them, a zoom into another's chat. date both ways: a
-// message's date, a span's lines (another project's too, its project
+// message's date (Wed 21 Oct 2026 14:05), a span's lines (another project's too, its project
 // named for the zoom), what isn't a span refused; a search kept to a
 // span. The time now in each call's message, short on claude-code, after
 // every cache mark a later call reads. A subagent's view fits its model:
@@ -56,6 +56,7 @@ const { Projects } = await import("../chat/Projects.ts");
 const { Store } = await import("../chat/Store.ts");
 const { Memory } = await import("../chat/Memory.ts");
 const { AskAI } = await import("../ai/AskAI.ts");
+const { When } = await import("../chat/When.ts");
 const View = await import("../ui/View.ts");
 
 const chat = Chat.open(REPO);
@@ -388,7 +389,7 @@ test("projects: the table, this chat's marked; a search in this project, another
   expect((await call("search", { words: "landing waveform", project: "all" })).text).toBe("site-7q2m0d 0+1|user: the waveform on the landing page");
   expect((await call("search", { words: "waveform", project: "site-7q2m0d" })).text).toStartWith("site-7q2m0d 0+1|");
   expect((await call("zoom", { id: 0, n: 1, project: "site-7q2m0d" })).text).toBe("0+0|user: the waveform on the landing page");
-  expect((await call("date", { id: 0, project: "site-7q2m0d" })).text).toBe(new Date(date).toLocaleString("sv-SE"));
+  expect((await call("date", { id: 0, project: "site-7q2m0d" })).text).toBe(When.moment(Date.parse(date)));
   expect(await call("zoom", { id: 0, project: "nope" })).toEqual({ text: "No project nope: projects lists them.", fail: true });
   expect((await call("zoom", { id: 0, n: 1, project: here })).text).toStartWith("0+0|");
   expect(Tools.here(chat.tools).text).toContain(", project " + here + "\n");
@@ -423,7 +424,7 @@ test("date both ways: a span's lines in another project's chat, its project name
     "Tue 20 Oct 2026 · 2 messages · 12:00–13:00", "0+1|12:00 user: the cache bug in checkout", "1+1|13:00 illi: fixed the cache bug", "Zoom a line to go deeper, with project shop-9x1a2b.",
   ].join("\n"));
   expect((await call("date", { from: "2026-10-21", project: "shop-9x1a2b" })).text).toBe("Nothing on Wed 21 Oct 2026. Before and after it:\n0+2|Tue 20 12:00–13:00 user, illi: the cache bug, fixed\n2+1|Thu 22 12:00 user: cache warmup\nZoom a line to go deeper, with project shop-9x1a2b.");
-  expect((await call("date", { id: 2, project: "shop-9x1a2b" })).text).toBe(new Date(dates[2]).toLocaleString("sv-SE"));
+  expect((await call("date", { id: 2, project: "shop-9x1a2b" })).text).toBe("Thu 22 Oct 2026 12:00");
   expect(await call("date", { from: "last Tuesday" })).toEqual({ text: "from: a local date or date and time, as 2026-10-21 or 2026-10-21 14:00.", fail: true });
   expect(await call("date", { from: "2026-10-21", to: "2026-10-20 12:00" })).toEqual({ text: "to comes before from.", fail: true });
   expect(await call("date", {})).toEqual({ text: "Give id, or from (and to).", fail: true });

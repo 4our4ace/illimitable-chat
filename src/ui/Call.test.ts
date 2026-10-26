@@ -214,5 +214,5 @@ test("a call's outcome: a command's exit, a read's lines, a change's lines; a fa
   expect(out("date", { from: "2026-10-21" }, true, "Wed 21 Oct 2026 · 1,214 messages · 09:12–23:40\n0+512|09:12–11:00 x")).toBe("1,214 messages");
   expect(out("date", { from: "2026-10-21 09:00", to: "2026-10-21 09:05" }, true, "Wed 21 Oct 2026 09:00–09:05 · 1 message · 09:02\n7+1|09:02 x")).toBe("1 message");
   expect(out("date", { from: "2026-10-18" }, true, "Nothing on Sun 18 Oct 2026. After it:\n0+8|Mon 19 10:00–10:07 x")).toBe("nothing");
-  expect(out("date", { id: 4 }, true, "2026-10-21 09:12:00")).toBe("");
+  expect(out("date", { id: 4 }, true, "Wed 21 Oct 2026 09:12")).toBe("");
 });

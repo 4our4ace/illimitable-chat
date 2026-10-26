@@ -107,6 +107,11 @@ export namespace When {
     return When.week(ms) + " " + When.date(ms) + " " + new Date(ms).getFullYear();
   }
 
+  // a day and its time: Wed 21 Oct 2026 14:05
+  export function moment(ms: number): string {
+    return When.day(ms) + " " + When.hm(ms);
+  }
+
   // the zone's offset from UTC at an instant: UTC-4, UTC+5:30, UTC
   export function zone(ms: number): string {
     const off = -new Date(ms).getTimezoneOffset();
