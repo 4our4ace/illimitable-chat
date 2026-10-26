@@ -223,7 +223,8 @@ touches, down to the messages, for a decision, what the user prefers, a
 past attempt or where a file is; search when the map names no line for
 it. date(id) gives the date and time of message id; date(from, to) the
 lines of a span, as 2026-10-21 or 2026-10-21 14:00, a month (2026-10),
-today or yesterday (no to: till the end of from's day, month or year).
+a year (2026), today or yesterday (no to: till the end of from's day,
+month or year).
 zoom("Name") gives an agent's whole chat. A tool result may end with a
 <history> line: the summary of a past episode that illi's search found
 related, its id first (#id+n: zoom(id, n) opens it). It tells what was

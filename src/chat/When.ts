@@ -19,8 +19,9 @@
 // Types
 // =====
 
-// a span of time, ms since the epoch: from on, to left out
-export type Span = { from: number; to: number };
+// a span of time, ms since the epoch: from on, to left out; open: from
+// the first message on (a span given only its end: When.span)
+export type Span = { from: number; to: number; open?: boolean };
 
 // Constants
 // =========
@@ -63,7 +64,7 @@ export namespace When {
       return null;
     }
     const [y, mo, d, h, mi, s, oh, om] = [m[1], m[2] ?? "1", m[3] ?? "1", m[4] ?? "0", m[5] ?? "0", m[6] ?? "0", m[10] ?? "0", m[11] ?? "0"].map(Number);
-    const ms = m[7] === undefined ? 0 : Math.floor(Number("0." + m[7]) * 1000);
+    const ms = m[7] === undefined ? 0 : Number((m[7] + "00").slice(0, 3));
     const day = new Date(Date.UTC(y, mo - 1, d));
     if (day.getUTCFullYear() !== y || day.getUTCMonth() !== mo - 1 || day.getUTCDate() !== d || h > 23 || mi > 59 || s > 59 || oh > 23 || om > 59) {
       return null;
@@ -86,7 +87,8 @@ export namespace When {
   // through it); from left out, to given: from the first message on; a
   // string: why there is none (not a time; `to` before `from`)
   export function span(from: unknown, to: unknown, now = Date.now()): Span | string {
-    const a = When.given(from) || !When.given(to) ? When.parse(from, now) : { at: 0, end: null };
+    const open = !When.given(from) && When.given(to);
+    const a = open ? { at: 0, end: null } : When.parse(from, now);
     const none = !When.given(to);
     const b = none ? null : When.parse(to, now);
     if (a === null || (!none && b === null)) {
@@ -94,7 +96,7 @@ export namespace When {
     }
     const end = b === null ? (a.end ?? When.next(a.at)) : (b.end ?? b.at);
     const back = b !== null && (b.end === null ? b.at < a.at : b.end <= a.at);
-    return back ? "to comes before from." : { from: a.at, to: end };
+    return back ? "to comes before from." : { from: a.at, to: end, ...(open ? { open } : {}) };
   }
 
   // the start of the day an instant is in
@@ -194,7 +196,7 @@ export namespace When {
 
   // whether a span runs from the first message on (When.span: `to` alone)
   export function open(span: Span): boolean {
-    return span.from === 0;
+    return span.open === true;
   }
 
   // a span with the word before it: on one whole day (on Wed 21 Oct
