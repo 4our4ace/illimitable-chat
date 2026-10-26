@@ -510,6 +510,15 @@ test("the message's last word, typed up to the input's edge, starts the next row
   expect(clicked("ab 世界", 8).rows).toEqual(["> ab ", "  世界"]);
 });
 
+test("a word never ends in a row's last column but one that starts its row: the space typed after it, the next word, a new line, all leave it where it went, a space after another hung past the edge as ever", () => {
+  expect(clicked("hello world ", 13).rows).toEqual(["> hello ", "  world "]);
+  expect(clicked("hello world x", 13).rows).toEqual(["> hello ", "  world x"]);
+  expect(clicked("hello world\nab", 13).rows).toEqual(["> hello ", "  world", "  ab"]);
+  expect(clicked("hello world", 13, 10, 11).spot).toEqual({ row: 1, col: 7 });
+  expect(clicked("abcdefghijk xy", 13).rows).toEqual(["> abcdefghijk", "  xy"]);
+  expect(clicked("ab cd  efgh", 9).rows).toEqual(["> ab cd  ", "  efgh"]);
+});
+
 test("a click on an input a column wide, where a wide character leaves its first row empty, lands on the next row's place, on the mark too", () => {
   const thin = clicked("世a", 3);
   expect(thin.rows).toEqual(["> ", "  世", "  a", "  "]);
