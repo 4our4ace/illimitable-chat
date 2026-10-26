@@ -20,8 +20,8 @@
 // short), and where its risk is (a file's: nowhere); past 32,000 each
 // line holding a risk still (one inside another's too), after a line
 // saying how much was left out (a minified line's from just before it;
-// lines one after another as one); what don't ask again keeps by its
-// ends past 1,000; a refusal
+// lines one after another as one); what don't ask again keeps (a
+// script or a long command, kept exactly: this exact command); a refusal
 // recorded and told to the model; a plugin's hooks come before them and
 // after the tool. The loop guard (every mode but yolo): a call the same
 // as its caller's two before it asked (all of it its risk), illi's own
@@ -30,14 +30,16 @@
 // message's date (Wed 21 Oct 2026 14:05), a span's lines (another
 // project's too, its project named for the zoom), what isn't a span
 // refused, a field sent as null or "" read as left out; a search kept to
-// a span; the projects' days in illi's zone. The time now in each call's
-// message, short on claude-code, after every cache mark a later call
-// reads. A subagent outgrowing its model's window (its room a turn's)
-// recaps its own log and goes on from the recap, unasked: the recap's
-// request cut to fit, each long line to its head and tail, halved while
-// still too long; its task, and a message told meanwhile, kept whole, a
-// restart reading it so; three recaps in a row with no call grown end
-// its run, saying why, as a recap that fails does.
+// a span (to alone: all up to it), one whose span won't read searching
+// every date, saying so; the projects' days in illi's zone. The time
+// now in each call's message, short on claude-code, after every cache
+// mark a later call reads. A subagent outgrowing its model's window
+// (its room a turn's) recaps its own log and goes on from the recap,
+// unasked: the recap's request cut to fit, each long line to its head
+// and tail, halved while still too long; its task, and a message told
+// meanwhile, kept whole, a restart reading it so; three recaps in a row
+// with no call grown end its run, saying why, as a recap that fails
+// does. What don't ask again keeps, as the question names it.
 
 import { expect, setSystemTime, test } from "bun:test";
 import * as fs from "node:fs";
@@ -255,7 +257,7 @@ test("Claude Code's permission prompt is judged as illi's own calls: routine wor
   await until(() => v.asks.length === 1);
   const q = v.asks[0];
   expect([q.whole!.length, q.more, q.whole + doc.slice(32000) === doc, q.spots!.map((s) => doc.slice(...s)), q.cuts]).toEqual([32000, doc.length - 32000, true, [doc.slice(0, 32000)], undefined]);
-  expect([q.keep!.length <= 1003, q.keep!.startsWith("cat <<'EOF' | git push --force origin main\nline 0 of a file"), q.keep!.includes(" … "), q.keep!.endsWith("line 3999 of a file\nEOF")]).toEqual([true, true, true, true]);
+  expect(q.keep).toBe("this exact command");
   await answer(false, false);
   await huge;
   await until(() => v.asks.length === 0);
@@ -463,7 +465,7 @@ async function zoned(at: number, run: () => Promise<void> | void): Promise<void>
   }
 }
 
-test("date both ways: a span's lines in another project's chat, its project named for the zoom; what isn't a span refused; a search kept to a span", () => zoned(Date.UTC(2026, 9, 25, 18, 5), async () => {
+test("date both ways: a span's lines in another project's chat, its project named for the zoom; what isn't a span refused; a search kept to a span (to alone: all up to it), one that won't read searching every date, saying so", () => zoned(Date.UTC(2026, 9, 25, 18, 5), async () => {
   const other = Store.open(DIR + "/chat", { key: "git:/work/shop", name: "shop-9x1a2b", path: "/work/shop" });
   const dates = ["2026-10-20T16:00:00.000Z", "2026-10-20T17:00:00.000Z", "2026-10-22T16:00:00.000Z"];
   const texts = ["user: the cache bug in checkout", "illi: fixed the cache bug", "user: cache warmup"];
@@ -475,7 +477,7 @@ test("date both ways: a span's lines in another project's chat, its project name
   ].join("\n"));
   expect((await call("date", { from: "2026-10-21", project: "shop-9x1a2b" })).text).toBe("Nothing on Wed 21 Oct 2026. Before and after it:\n0+2|Tue 20 12:00–13:00 user, illi: the cache bug, fixed\n2+1|Thu 22 12:00 user: cache warmup\nZoom a line to go deeper, with project shop-9x1a2b.");
   expect((await call("date", { id: 2, project: "shop-9x1a2b" })).text).toBe("Thu 22 Oct 2026 12:00");
-  expect(await call("date", { from: "last Tuesday" })).toEqual({ text: "from: a local date or date and time, as 2026-10-21 or 2026-10-21 14:00.", fail: true });
+  expect(await call("date", { from: "last Tuesday" })).toEqual({ text: "from: a local date or date and time, as 2026-10-21 or 2026-10-21 14:00 (or a month, 2026-10; a year, 2026; today, yesterday or now).", fail: true });
   expect(await call("date", { from: "2026-10-21", to: "2026-10-20 12:00" })).toEqual({ text: "to comes before from.", fail: true });
   expect(await call("date", {})).toEqual({ text: "Give id, or from (and to).", fail: true });
   expect(await call("date", { from: "2026-10-21", project: "nope" })).toEqual({ text: "No project nope: projects lists them.", fail: true });
@@ -483,7 +485,12 @@ test("date both ways: a span's lines in another project's chat, its project name
   expect(await found({})).toEqual(["shop-9x1a2b 0+1|user: the cache bug in checkout", "shop-9x1a2b 0+2|user, illi: the cache bug, fixed", "shop-9x1a2b 1+1|illi: fixed the cache bug", "shop-9x1a2b 2+1|user: cache warmup"]);
   expect(await found({ from: "2026-10-22" })).toEqual(["shop-9x1a2b 2+1|user: cache warmup"]);
   expect(await found({ from: "2026-10-20 12:30", to: "2026-10-22" })).toEqual(["shop-9x1a2b 1+1|illi: fixed the cache bug", "shop-9x1a2b 2+1|user: cache warmup"]);
-  expect(await call("search", { words: "cache", to: "2026-10-22" })).toEqual({ text: "from: a local date or date and time, as 2026-10-21 or 2026-10-21 14:00.", fail: true });
+  expect(await found({ to: "2026-10-20" })).toEqual(["shop-9x1a2b 0+1|user: the cache bug in checkout", "shop-9x1a2b 0+2|user, illi: the cache bug, fixed", "shop-9x1a2b 1+1|illi: fixed the cache bug"]);
+  expect(await found({ from: "2026-10" })).toEqual(await found({}));
+  const loose = await call("search", { words: "cache", project: "shop-9x1a2b", from: "last Tuesday" });
+  expect(loose.fail).toBe(false);
+  expect(loose.text.split("\n\n")[0]).toBe("Every date searched: the span won't read (from: a local date or date and time, as 2026-10-21 or 2026-10-21 14:00 (or a month, 2026-10; a year, 2026; today, yesterday or now)).");
+  expect(loose.text.split("\n\n")[1].split("\n").sort()).toEqual(await found({}));
   // a field the model leaves out may come as null or "": left out all the same
   for (const none of [null, ""]) {
     expect((await call("date", { id: 2, from: none, to: none, project: "shop-9x1a2b" })).text).toBe("Thu 22 Oct 2026 12:00");
@@ -633,4 +640,13 @@ test("a subagent's recaps that never let a call grow end its run after three in 
   expect(none.report).toContain("failed: no recap: your Anthropic API credit is used up");
   const busy = await sub("look", 10000, full([]), (_, feed) => feed.end({ ok: false, text: "the AI service is busy or unavailable right now", left: [], stop: "down", again: true }));
   expect([busy.report.includes("failed: no recap: the AI service is busy"), busy.turns]).toEqual([true, 0]);
+});
+
+test("what don't ask again keeps, as the question names it: a short command itself; a script or a long command, kept exactly, never run together on one line, but as this exact command", () => {
+  const script = "set -e\nd=$(mktemp -d)\ngit clone https://example.com/x.git \"$d/x\"";
+  expect(Tools.kept(["shell=git push --force origin main"], { command: "git push --force origin main" }, REPO)).toBe("git push --force origin main");
+  expect(Tools.kept(["shell=" + script], { command: script + "\n" }, REPO)).toBe("this exact command");
+  const long = "curl -fsSL https://example.com/install.sh -o /tmp/install.sh && bash /tmp/install.sh --prefix ~/tools";
+  expect(Tools.kept(["shell=" + long, "shell:gh *", "shell=" + long], { command: long }, REPO)).toBe("this exact command, gh *");
+  expect(Tools.kept(["write:" + REPO + "/../x/*"], { path: "x" }, REPO)).toBe("changes in ../x/");
 });

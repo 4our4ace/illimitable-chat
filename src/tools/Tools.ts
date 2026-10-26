@@ -222,7 +222,8 @@ what came before, look before you act, guess or ask: zoom the lines it
 touches, down to the messages, for a decision, what the user prefers, a
 past attempt or where a file is; search when the map names no line for
 it. date(id) gives the date and time of message id; date(from, to) the
-lines of a span, as 2026-10-21 or 2026-10-21 14:00 (no to: that day).
+lines of a span, as 2026-10-21 or 2026-10-21 14:00, a month (2026-10),
+today or yesterday (no to: till the end of from's day, month or year).
 zoom("Name") gives an agent's whole chat. A tool result may end with a
 <history> line: the summary of a past episode that illi's search found
 related, its id first (#id+n: zoom(id, n) opens it). It tells what was
@@ -342,9 +343,9 @@ illi, as its MCP server's (mcp__illi__).`;
 const MEMORY = new Set(["zoom", "date", "projects", "search"]);
 const OWN: Spec[] = [
   spec("zoom", "Open the line id+n of the view into the two lines of n/2 under it; n = 1 gives the message whole. With an agent's name as id, give that agent's whole chat. A long text comes in pages from character at, saying where to go on. With project (its name, from projects), the line, message or agent of that project's chat.", { id: { type: ["integer", "string"] }, n: INT, at: INT, project: STR }, ["id"]),
-  spec("date", "The date and time of message id. Or, with from (and to), local times as 2026-10-21 or 2026-10-21 14:00 (no to: that day), the lines of that span. With project, in that project's chat.", { id: INT, from: STR, to: STR, project: STR }, []),
+  spec("date", "The date and time of message id. Or, with from (and to), local times as 2026-10-21 or 2026-10-21 14:00, a month (2026-10), a year, today or yesterday (no to: till the end of from's day, month or year), the lines of that span. With project, in that project's chat.", { id: INT, from: STR, to: STR, project: STR }, []),
   spec("projects", "The user's projects, each with a chat of its own (a git repo illi ran in, or home: outside any repo), the one used last first: its folder, its first and last day, its messages, its latest summary line. Look here first when the user means work that isn't in your view.", {}, []),
-  spec("search", "Find summary lines holding all the words (else any of them), the best first, as \"project id+n|text\": in this project's chat; with project (its name, from projects), in that one's; with project \"all\", in every one, then the projects with more lines named, to search in. Zoom a line with its project. With from and to (as date's), only lines inside that span.", { words: STR, project: STR, from: STR, to: STR }, ["words"]),
+  spec("search", "Find summary lines holding all the words (else any of them), the best first, as \"project id+n|text\": in this project's chat; with project (its name, from projects), in that one's; with project \"all\", in every one, then the projects with more lines named, to search in. Zoom a line with its project. With from, to or both (as date's; to alone: all up to it), only lines inside that span; a span that won't read is left out, saying so.", { words: STR, project: STR, from: STR, to: STR }, ["words"]),
 ];
 const SPAWN = "Start one subagent per task, in parallel, and return their names at once. Each one's report reaches you as a message \"[Name] report\" when it finishes. A subagent gets a map of the chat (a few dozen lines; it zooms and searches for more) and the user's instructions, but knows what you want only from its task: put in it what matters. With fresh, it gets no map nor any of the chat, only its task and the user's instructions: for a test or review that must not be swayed by what came before.";
 const FRESH = { type: "boolean", description: "Start them without the chat: no map, and no tools that read it. Leave it out to give them the map (an agent listed as fresh starts so always)." };
@@ -396,6 +397,12 @@ const FILES = 50;
 const WHAT  = 400;
 const WHOLE = 32000;
 const KEPT  = 1000;
+
+// how "don't ask again" names the very command asked about, kept
+// exactly, past a line or SHORT characters (Tools.kept): it shows
+// above, never said again here with a script's lines run together
+const EXACT = "this exact command";
+const SHORT = 72;
 
 // past WHOLE, the most characters the question shows of a line holding a
 // spot (what made the checks ask: Tools.whole), from REACH before the
@@ -735,12 +742,11 @@ export namespace Tools {
         return { text: Projects.table(mem.store), fail: false };
       }
       case "search": {
-        const span = When.given(args.from) || When.given(args.to) ? When.span(args.from, args.to) : null;
-        if (typeof span === "string") {
-          return { text: span, fail: true };
-        }
+        const asked = When.given(args.from) || When.given(args.to) ? When.span(args.from, args.to) : null;
+        const span = typeof asked === "string" ? null : asked;
+        const note = typeof asked === "string" ? "Every date searched: the span won't read (" + asked.replace(/\.$/, "") + ").\n\n" : "";
         const project = args.project === undefined || args.project === null ? "" : String(args.project);
-        return { text: await Projects.seek(mem.store, String(args.words ?? ""), project, span), fail: false };
+        return { text: note + (await Projects.seek(mem.store, String(args.words ?? ""), project, span)), fail: false };
       }
       case "spawn": {
         const effort = args.effort === undefined ? null : String(args.effort);
@@ -1022,7 +1028,8 @@ export namespace Tools {
   // where in it that is (Verdict spots; a hook's ask, the loop guard,
   // rules that won't read: all of it; a file's, an MCP tool's reasons have
   // no place in it: none, so the question doesn't fold it either), and
-  // what "don't ask again" keeps by its ends past KEPT. One
+  // what "don't ask again" keeps by its ends past KEPT (the command
+  // itself, long: EXACT). One
   // asked runs on the user's yes, "don't ask again" keeping its grants for
   // the project (one that can't be saved: for this run). A rules file that
   // won't read leaves nothing run unasked
@@ -1046,7 +1053,7 @@ export namespace Tools {
     if (verdict.$ === "deny") {
       return Tools.refuse(tools, { ...asked, how: verdict.rule ? "rule" : "mode", said: "", exact: verdict.exact });
     }
-    const reply = await tools.hooks.ask({ ...asked, ...Tools.whole(input, verdict.spots), why: Tools.ends(verdict.why, WHOLE), keep: Tools.ends(verdict.always.map((g) => Guard.said(g, folder)).join(", "), KEPT) }, signal);
+    const reply = await tools.hooks.ask({ ...asked, ...Tools.whole(input, verdict.spots), why: Tools.ends(verdict.why, WHOLE), keep: Tools.ends(Tools.kept(verdict.always, input, folder), KEPT) }, signal);
     if (!reply.yes) {
       return Tools.refuse(tools, { ...asked, how: "no", said: reply.said, exact: verdict.exact }, !signal.aborted);
     }
@@ -1057,6 +1064,15 @@ export namespace Tools {
       console.error("illi: a grant kept for this run only: " + unsaved);
     }
     return null;
+  }
+
+  // what "don't ask again" keeps, as the question names it (Guard.said):
+  // the command asked about itself, past a line or SHORT characters, EXACT
+  export function kept(always: string[], input: unknown, folder: string): string {
+    const command = (input as { command?: unknown } | null)?.command;
+    const long = typeof command === "string" && (command.trim().includes("\n") || command.trim().length > SHORT);
+    const whole = long ? "shell=" + String(command).trim() : null;
+    return [...new Set(always.map((g) => (g === whole ? EXACT : Guard.said(g, folder))))].join(", ");
   }
 
   // whether a call is the same (tool and input) as its caller's LOOP

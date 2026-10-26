@@ -22,8 +22,8 @@
 // sets and the environment lacks, a command's output) is dynamic, its
 // known head kept; a variable the command sets to plain words (X=a, for
 // X in a b) stands for each of them, and a command's output known before
-// it runs ($(pwd), $(git rev-parse --show-toplevel): the folder) for its
-// value.
+// it runs ($(pwd), $(git rev-parse --show-toplevel): the folder;
+// $(mktemp): where it makes its file, its X's kept) for its value.
 // What bash would read in a way this can't follow (case, functions,
 // arrays, aliases, a script made as it runs) leaves no parts, only why:
 // such a command is asked about. The shell tool runs bash (Machine.ts),
@@ -41,8 +41,11 @@ import * as path from "node:path";
 // is known before it runs; glob: an unquoted *, ?, [ or {; fd: a
 // process substitution's /dev/fd file; input: one xargs gives from its
 // input; at: where it starts in the text read (a nested script's own:
-// Scan src)
-export type Word = { alts: string[]; raw: string; dynamic: boolean; glob: boolean; fd: boolean; input?: boolean; at?: number };
+// Scan src); made: its values if each mktemp in it made its file, all
+// else in it known (dynamic all the same: a mktemp may fail, its output
+// then empty, "$d"/* then /*, so only an assignment a failure ends the
+// script at takes them: cmd_run's trust)
+export type Word = { alts: string[]; raw: string; dynamic: boolean; glob: boolean; fd: boolean; input?: boolean; at?: number; made?: string[] };
 
 // a redirection: its operator (">", ">>", "<", "&>", "<<", ">&", ...) and
 // its target (a file; a descriptor for >& and <&; a heredoc's delimiter),
@@ -98,14 +101,17 @@ type Cmd = { words: Word[]; env: Env[]; redirs: Redir[]; from: number; to: numbe
 // command is in the command parsed (Part span)
 type Ctx = { cwd: string | null; root: boolean; fed: boolean; piped: boolean; span: Span };
 
-// a word's values as it is read
-type Build = { alts: string[]; dynamic: boolean; glob: boolean };
+// a word's values as it is read; made: as Word's (undefined: no mktemp
+// in it yet; null: something else in it known only as it runs, or too
+// many values)
+type Build = { alts: string[]; dynamic: boolean; glob: boolean; made?: string[] | null };
 
 // a heredoc waiting for its body (the lines after its command's):
 // its end line, whether tabs before that are dropped (<<-), whether its
 // body expands (an unquoted delimiter), whether its command reads a
-// pipe (Scan inpipe as it was read: so does what its body runs)
-type Doc = { delim: string; strip: boolean; expand: boolean; redir: Redir; inpipe: boolean };
+// pipe (Scan inpipe as it was read: so does what its body runs), the
+// shell as it was then (its body expands so)
+type Doc = { delim: string; strip: boolean; expand: boolean; redir: Redir; inpipe: boolean; was: State };
 
 // the reading: the text and where in it; the parts found; the folder
 // (null: unknown), the variables set so far, whether one may have been
@@ -127,6 +133,7 @@ type Scan = {
   cwd   : string | null;
   vars  : Map<string, Word>;
   wild  : boolean;
+  errexit: boolean;
   docs  : Doc[];
   root  : boolean;
   fed   : boolean;
@@ -137,8 +144,8 @@ type Scan = {
 
 // what a command run in a subshell changes of the shell, as it was
 // before: the folder, the variables, whether one may have been set
-// unseen (Scan's)
-type State = { cwd: string | null; vars: Map<string, Word>; wild: boolean };
+// unseen, whether a failure ends the script (set -e) (Scan's)
+type State = { cwd: string | null; vars: Map<string, Word>; wild: boolean; errexit: boolean };
 
 // a wrapper's options: those taking a value; those that don't, and those
 // whose value is only ever attached (-i, -iX); whether -5 is one (nice).
@@ -161,6 +168,11 @@ const NEST = 64;
 
 // what ends a word unquoted
 const META = " \t\n;&|()<>";
+
+// an exit, as the command after a || (its own: not piped nor in the
+// background, which would run it in a subshell). A return, at the top
+// of a script not sourced, fails and goes on
+const EXITS = /^\s*exit(?:[ \t]+[\w$?-]+)?(?:[ \t]*(?:[;\n]|$)|[ \t]+#)/;
 
 // the reserved words that only group commands: read past
 const SKIP = new Set(["if", "then", "elif", "else", "fi", "do", "done", "while", "until", "!", "{", "}"]);
@@ -248,7 +260,7 @@ export namespace Shell {
   // whose text isn't there as written)
   export function parse(command: string, cwd: string, at: number | Span = 0): Part[] | string {
     const [base, box]: [number | null, Span] = typeof at === "number" ? [at, [at, at + command.length]] : [null, at];
-    const s: Scan = { src: command, at: 0, base, box, parts: [], cwd, vars: new Map(), wild: false, docs: [], root: false, fed: false, inpipe: false, depth: 0, pipes: [] };
+    const s: Scan = { src: command, at: 0, base, box, parts: [], cwd, vars: new Map(), wild: false, errexit: false, docs: [], root: false, fed: false, inpipe: false, depth: 0, pipes: [] };
     try {
       scan_list(s, "");
       pipe_feeds(s);
@@ -302,7 +314,9 @@ export namespace Shell {
     const known = w.alts.every((a) => a.length >= n);
     const raw = w.raw.startsWith(w.alts[0].slice(0, n)) ? w.raw.slice(n) : w.raw;
     const at = w.at === undefined || raw === w.raw ? w.at : w.at + n;
-    return known ? { ...w, alts: w.alts.map((a) => a.slice(n)), raw, at } : { ...DYN, raw };
+    const { made, ...rest } = w;
+    const cut = made?.every((a) => a.length >= n) ? { made: made.map((a) => a.slice(n)) } : {};
+    return known ? { ...rest, alts: w.alts.map((a) => a.slice(n)), raw, at, ...cut } : { ...DYN, raw };
   }
 
   // a wrapper's options (Opts), taken off its words: the words after
@@ -371,6 +385,8 @@ function scan_list(s: Scan, close: string): void {
   let piped = false;
   let goes = false;
   let head = -1;
+  let neg = false;
+  let andor = false;
   const outer = s.inpipe;
   let level = outer;
   let closed: { was: State | null; from: number } | null = null;
@@ -399,11 +415,15 @@ function scan_list(s: Scan, close: string): void {
     const to    = s.parts.length;
     const at    = place(s, cmd.from, cmd.to);
     const now   = after?.was == null ? null : state_of(s);
+    const list  = op === "&&" || op === "||";
+    const exits = op === "||" && EXITS.test(s.src.slice(s.at));
+    const plain = s.depth === 0 && groups.length === 0 && !neg && !piped && !sub && !andor;
     closed = null;
     if (after?.was != null) {
       state_put(s, after.was);
     }
-    cmd_end(s, cmd, piped, sub);
+    cmd_end(s, cmd, piped, sub, plain && !list, plain && (list ? exits : s.errexit));
+    [andor, neg] = [list, false];
     if (after !== null) {
       stdin_give(s, after.from, to, cmd.redirs, s.cwd, at);
     }
@@ -505,6 +525,7 @@ function scan_list(s: Scan, close: string): void {
       } else {
         const was = cmd_empty(cmd) && OPENS.has(word.raw) ? state_of(s) : null;
         if (!cmd_word(s, cmd, word)) {
+          neg ||= word.raw === "!";
           group(word.raw, was);
           continue;
         }
@@ -570,12 +591,14 @@ function scan_word(s: Scan): Word {
     } else if (c === "{" && brace(s.src, s.at) !== null) {
       const x = brace(s.src, s.at)!;
       if (x === "many") {
-        b.dynamic = true;
+        unknown(b);
         add(b, [c]);
         s.at++;
       } else {
         const alts = s.at === start ? brace_tilde(s, x.alts, s.src[x.end]) : x.alts;
-        b.dynamic ||= alts === null;
+        if (alts === null) {
+          unknown(b);
+        }
         add(b, alts ?? []);
         b.glob ||= x.alts.some((a) => /[*?[]/.test(a));
         s.at = x.end;
@@ -586,7 +609,7 @@ function scan_word(s: Scan): Word {
       s.at++;
     }
   }
-  return { alts: b.alts, raw: s.src.slice(start, s.at), dynamic: b.dynamic, glob: b.glob, fd: false, at: start };
+  return { alts: b.alts, raw: s.src.slice(start, s.at), dynamic: b.dynamic, glob: b.glob, fd: false, at: start, ...(Array.isArray(b.made) ? { made: b.made } : {}) };
 }
 
 // whether a [ at src[at] opens a bracket expression: a ] closes it
@@ -686,13 +709,24 @@ function brace_seq(item: string): string[] | "many" | null {
 // text added to each value a word can take (none once it is dynamic: its
 // known head stays); past MOST values, nothing of it is known
 function add(b: Build, xs: string[]): void {
+  if (Array.isArray(b.made)) {
+    b.made = b.made.flatMap((a) => xs.map((x) => a + x));
+    b.made = b.made.length > MOST ? null : b.made;
+  }
   if (!b.dynamic) {
     b.alts = b.alts.flatMap((a) => xs.map((x) => a + x));
     if (b.alts.length > MOST) {
-      b.dynamic = true;
+      unknown(b);
       b.alts = [""];
     }
   }
+}
+
+// a word known only as it runs from here on, whatever a mktemp in it
+// makes (Build made: none)
+function unknown(b: Build): void {
+  b.dynamic = true;
+  b.made = null;
 }
 
 // inside double quotes, from after the opening one: $ and ` still expand
@@ -725,12 +759,13 @@ function scan_quoted(s: Scan, b: Build): void {
 
 // a $: an arithmetic, a command's output, a variable, or itself; split:
 // unquoted, outside an assignment, where bash splits a value into words
-// and globs it (var_put)
+// and globs it (var_put). A ${x=...} or ${x:=...} sets x: known only as
+// it runs after
 function scan_dollar(s: Scan, b: Build, split = false): void {
   const rest = s.src.slice(s.at, s.at + 3);
   if (rest === "$((") {
     s.at = arith(s, s.at + 3);
-    b.dynamic = true;
+    unknown(b);
     return;
   }
   if (rest.startsWith("$(")) {
@@ -747,10 +782,14 @@ function scan_dollar(s: Scan, b: Build, split = false): void {
     if (/`|\$\(/.test(body)) {
       throw new Unread("a command inside ${...}");
     }
+    const set = /^([A-Za-z_]\w*):?=/.exec(body);
     if (/^[A-Za-z_]\w*$/.test(body)) {
       var_put(s, b, body, split);
     } else {
-      b.dynamic = true;
+      unknown(b);
+    }
+    if (set !== null) {
+      s.vars.set(set[1], DYN);
     }
     return;
   }
@@ -760,7 +799,7 @@ function scan_dollar(s: Scan, b: Build, split = false): void {
     var_put(s, b, name[1], split);
   } else if (/^\$[0-9@*#?$!-]/.test(rest)) {
     s.at += 2;
-    b.dynamic = true;
+    unknown(b);
   } else {
     add(b, ["$"]);
     s.at++;
@@ -777,31 +816,91 @@ function var_put(s: Scan, b: Build, name: string, split = false): void {
   const v = s.vars.get(name);
   const known = v !== undefined ? v.alts : name === "PWD" ? (s.cwd === null ? null : [s.cwd]) : s.wild || name === "OLDPWD" || process.env[name] === undefined ? null : [process.env[name]!];
   if (known === null || (split && known.some((x) => /[ \t\n]/.test(x)))) {
-    b.dynamic = true;
+    unknown(b);
     return;
   }
   add(b, known);
   b.glob ||= v?.glob === true || (split && known.some((x) => /[*?[]/.test(x)));
-  b.dynamic ||= v?.dynamic === true;
+  if (v?.dynamic === true) {
+    unknown(b);
+  }
 }
 
 // a command's output put in a word: the folder for pwd (-L, -P), the
 // repository's top (the nearest folder up holding .git) for git rev-parse
 // --show-toplevel; else, or once a source or an assignment (PATH,
-// GIT_DIR) may have changed what they'd say, or while the environment's
-// GIT_DIR or GIT_WORK_TREE points git elsewhere, known only as it runs.
+// GIT_DIR, TMPDIR) may have changed what they'd say, or while the
+// environment's GIT_DIR or GIT_WORK_TREE points git elsewhere, known only
+// as it runs. The file or folder mktemp makes (temp) is known only if
+// it makes it (Word made: a failed one's output is empty; a command's
+// output after it, whose status the assignment's would be, drops it).
 // Split as var_put's
 function output(s: Scan, b: Build, inner: string, split = false): void {
   const cmd = inner.trim().replace(/\s+/g, " ");
-  const odd = s.cwd === null || s.wild || ["PATH", "GIT_DIR", "GIT_WORK_TREE"].some((n) => s.vars.has(n));
+  b.made = Array.isArray(b.made) ? null : b.made;
+  const odd = s.cwd === null || s.wild || ["PATH", "GIT_DIR", "GIT_WORK_TREE", "TMPDIR"].some((n) => s.vars.has(n));
   const git = cmd === "git rev-parse --show-toplevel" && process.env.GIT_DIR === undefined && process.env.GIT_WORK_TREE === undefined;
   const known = odd ? null : /^pwd( -[LP])?$/.test(cmd) ? s.cwd : git ? git_top(s.cwd!) : null;
-  if (known === null || (split && /[ \t\n]/.test(known))) {
+  const made = odd || known !== null ? null : temp(cmd, s.cwd!);
+  const was = b.made === null ? null : (b.made ?? (b.dynamic ? null : b.alts));
+  if (made !== null && was !== null && !(split && /[ \t\n*?[]/.test(made))) {
+    b.made = was.length > MOST ? null : was.map((a) => a + made);
     b.dynamic = true;
+    return;
+  }
+  if (known === null || (split && /[ \t\n]/.test(known))) {
+    unknown(b);
     return;
   }
   add(b, [known]);
   b.glob ||= split && /[*?[]/.test(known);
+}
+
+// where mktemp makes its file or folder, its X's kept (a new name in that
+// folder, so a check judges where it is): its template (tmp.XXXXXXXXXX
+// if none) in -p's or --tmpdir's folder; in TMPDIR's (else /tmp) with -t,
+// a bare --tmpdir or no template; else as the template says, from the
+// folder it runs in. Only where it would make it: a template ending in
+// three X's at least (GNU's -t takes a template, BSD's a prefix; with
+// those X's either lands there), a suffix with no /, a folder there now.
+// null: not mktemp, not read so (a word quoted or expanded, an option
+// it doesn't know, -t with -p: TMPDIR's or -p's), or one that fails
+function temp(cmd: string, cwd: string): string | null {
+  const words = cmd.split(" ");
+  if (words[0] !== "mktemp" || words.some((w) => !/^[\w.\/@%+=:,-]+$/.test(w))) {
+    return null;
+  }
+  let [dir, template, suffix, t, tmpdir]: [string | null, string | null, string, boolean, boolean] = [null, null, "", false, false];
+  for (let k = 1; k < words.length; k++) {
+    const w = words[k];
+    if (/^-[dqu]+$/.test(w) || ["--directory", "--quiet", "--dry-run"].includes(w)) {
+      continue;
+    }
+    if (w === "-t" || w === "--tmpdir" || w === "--tmpdir=") {
+      [t, tmpdir] = [t || w === "-t", true];
+    } else if (w.startsWith("--tmpdir=")) {
+      dir = w.slice("--tmpdir=".length);
+    } else if (w.startsWith("--suffix=")) {
+      suffix = w.slice("--suffix=".length);
+    } else if (w === "-p" && k + 1 < words.length) {
+      dir = words[++k];
+    } else if (!w.startsWith("-") && template === null) {
+      template = w;
+    } else {
+      return null;
+    }
+  }
+  const away = dir !== null || tmpdir || template === null;
+  const name = template ?? "tmp.XXXXXXXXXX";
+  if ((t && dir !== null) || (away && name.includes("/")) || !/X{3,}$/.test(name) || suffix.includes("/")) {
+    return null;
+  }
+  const at = path.resolve(cwd, away ? (dir ?? (process.env.TMPDIR || "/tmp")) : ".", name);
+  try {
+    return fs.statSync(path.dirname(at)).isDirectory() ? at + suffix : null;
+  } catch {
+    return null;
+  }
 }
 
 // a folder's repository top: it or the nearest folder above holding a
@@ -945,7 +1044,9 @@ function scan_tilde(s: Scan, b: Build): void {
     const name = /^~[A-Za-z0-9._+-]*/.exec(rest)![0];
     const x = rest[name.length] === "{" ? brace(s.src, s.at + name.length) : null;
     const alts = x === null || x === "many" ? null : brace_tilde(s, x.alts.map((a) => name + a), s.src[x.end]);
-    b.dynamic ||= x !== null && alts === null;
+    if (x !== null && alts === null) {
+      unknown(b);
+    }
     add(b, alts ?? ["~"]);
     b.glob ||= x !== null && x !== "many" && x.alts.some((a) => /[*?[]/.test(a));
     s.at = x === null || x === "many" ? s.at + 1 : x.end;
@@ -953,7 +1054,9 @@ function scan_tilde(s: Scan, b: Build): void {
   }
   s.at += m[0].length;
   const home = tilde(s, m[1]);
-  b.dynamic ||= home === null;
+  if (home === null) {
+    unknown(b);
+  }
   add(b, home ?? []);
 }
 
@@ -1020,14 +1123,15 @@ function scan_redir(s: Scan, cmd: Cmd, num?: string): void {
   const as = op === "<<<" ? verbatim(target) : null;
   const redir: Redir = op === "<<<" ? { op, target, num, body: target.alts[0] + "\n", made: target.dynamic || target.alts.length !== 1, ...(as === null || s.base === null ? {} : { at: s.base + as }) } : { op, target, num };
   if (op === "<<" || op === "<<-") {
-    s.docs.push({ delim: target.alts[0], strip: op === "<<-", expand: !/['"\\]/.test(target.raw), redir, inpipe: s.inpipe });
+    s.docs.push({ delim: target.alts[0], strip: op === "<<-", expand: !/['"\\]/.test(target.raw), redir, inpipe: s.inpipe, was: state_of(s) });
   }
   cmd.redirs.push(redir);
 }
 
 // the heredocs' bodies, from the line after their command's, each where
 // it starts in the command parsed: an unquoted delimiter's body expands,
-// so the commands in it run
+// so the commands in it run, with the shell as its command had it (was:
+// not as the commands after it on its line leave it)
 function docs_read(s: Scan): void {
   const docs = s.docs;
   s.docs = [];
@@ -1050,7 +1154,10 @@ function docs_read(s: Scan): void {
       doc.redir.at = s.base + from;
     }
     if (doc.expand) {
+      const now = state_of(s);
+      state_put(s, doc.was);
       scan_body(s, body, from, doc.inpipe);
+      state_put(s, now);
     }
   }
 }
@@ -1222,11 +1329,11 @@ function scope(s: Scan, run: () => void): void {
 
 // the shell as a subshell would leave it (State), to put back
 function state_of(s: Scan): State {
-  return { cwd: s.cwd, vars: new Map(s.vars), wild: s.wild };
+  return { cwd: s.cwd, vars: new Map(s.vars), wild: s.wild, errexit: s.errexit };
 }
 
 function state_put(s: Scan, was: State): void {
-  Object.assign(s, { cwd: was.cwd, vars: was.vars, wild: was.wild });
+  Object.assign(s, { cwd: was.cwd, vars: was.vars, wild: was.wild, errexit: was.errexit });
 }
 
 // a nested reading, NEST deep at most
@@ -1280,12 +1387,16 @@ function cmd_word(s: Scan, cmd: Cmd, word: Word): boolean {
 }
 
 // a command read whole, ended by op: its parts. One in a pipeline or in
-// the background runs in a subshell: its cd and variables don't last
-function cmd_end(s: Scan, cmd: Cmd, piped: boolean, forked: boolean): void {
+// the background runs in a subshell: its cd and variables don't last.
+// top: it runs whenever the command does (the command's own, not in a
+// subshell, a group, a loop, an if, a pipeline, the background, nor on
+// either side of && or ||, nor negated); trust: so, a failure in it ends
+// the script (set -e, or || exit after it)
+function cmd_end(s: Scan, cmd: Cmd, piped: boolean, forked: boolean, top = false, trust = false): void {
   if (cmd_empty(cmd)) {
     return;
   }
-  const run = () => cmd_run(s, cmd, s.src.slice(cmd.from, cmd.to).trim(), piped);
+  const run = () => cmd_run(s, cmd, s.src.slice(cmd.from, cmd.to).trim(), piped, top, trust);
   if (piped || forked) {
     scope(s, run);
   } else {
@@ -1294,17 +1405,22 @@ function cmd_end(s: Scan, cmd: Cmd, piped: boolean, forked: boolean): void {
 }
 
 // a command's parts (an assignment alone: one without words, its
-// variables set), and what it changes of the shell after it (cmd_after)
-function cmd_run(s: Scan, cmd: Cmd, full: string, piped: boolean): void {
+// variables set), and what it changes of the shell after it (cmd_after).
+// One variable set alone to what a mktemp makes (Word made), its failure
+// ending the script (trust: so the variable never stays empty), stands
+// for where it makes it
+function cmd_run(s: Scan, cmd: Cmd, full: string, piped: boolean, top: boolean, trust: boolean): void {
   const ctx = { cwd: s.cwd, root: s.root, fed: s.fed, piped: piped || s.inpipe, span: place(s, cmd.from, cmd.to) };
   if (cmd.words.length === 0) {
-    cmd.env.forEach((e) => s.vars.set(e.name, e.value));
-    part_push(s, [], cmd.env, cmd.redirs, full, ctx);
+    const one = trust && cmd.env.length === 1 && cmd.redirs.length === 0 ? cmd.env[0] : null;
+    const env = one?.value.made === undefined ? cmd.env : [{ name: one.name, value: { ...one.value, alts: one.value.made, dynamic: false, made: undefined } }];
+    env.forEach((e) => s.vars.set(e.name, e.value));
+    part_push(s, [], env, cmd.redirs, full, ctx);
     return;
   }
   const run = unwrap(s, cmd.words, cmd.env, cmd.redirs, full, ctx);
   if (run !== null) {
-    cmd_after(s, run.argv, run.own);
+    cmd_after(s, run.argv, run.own, top);
   }
 }
 
@@ -1313,9 +1429,13 @@ function cmd_run(s: Scan, cmd: Cmd, full: string, piped: boolean): void {
 // pushd: to its target, -P's as the system finds it; to home; popd, cd
 // -: unknown), the variables (set to plain words as written, else known
 // only as it runs), all of them after a source; aliases on, a command
-// hashed to a path or a builtin loaded can't be followed. A cd another
-// program runs (sudo cd, env cd, exec cd) leaves the folder unknown
-function cmd_after(s: Scan, argv: Word[], own: boolean): void {
+// hashed to a path, a builtin loaded or one turned off can't be followed.
+// A cd another program runs (sudo cd, env cd, exec cd) leaves the folder
+// unknown. errexit (set -e, as -euo pipefail; set -o errexit) turns on
+// only by a set the command runs whenever it runs (top: cmd_end); off by
+// any (+e, +o errexit), a set of words known only as it runs, or any
+// shopt -o (shopt -uo errexit)
+function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
   const name = Shell.program(argv[0]);
   const args = argv.slice(1);
   const names = args.filter((a) => /^[A-Za-z_]\w*$/.test(a.raw)).map((a) => a.raw);
@@ -1369,6 +1489,20 @@ function cmd_after(s: Scan, argv: Word[], own: boolean): void {
       }
       return;
     }
+    case "set": {
+      for (let k = 0; k < args.length; k++) {
+        const flag = args[k].dynamic || args[k].alts.length !== 1 ? null : /^([-+])([A-Za-z]+)$/.exec(args[k].alts[0]);
+        const opt  = flag?.[2].includes("o") ? args[++k] : undefined;
+        if (flag === null || opt?.dynamic || (opt !== undefined && opt.alts.length !== 1)) {
+          s.errexit &&= !args[k].dynamic && args[k].alts.length === 1;
+          break;
+        }
+        if (flag[2].includes("e") || opt?.alts[0] === "errexit") {
+          s.errexit = flag[1] === "-" ? s.errexit || top : false;
+        }
+      }
+      return;
+    }
     case "let": {
       args.forEach((a) => [...a.alts[0].matchAll(SETS)].forEach((m) => s.vars.set(m[1] ?? m[2] ?? m[3], DYN)));
       return;
@@ -1382,7 +1516,8 @@ function cmd_after(s: Scan, argv: Word[], own: boolean): void {
     case "shopt":
     case "hash":
     case "enable": {
-      if (args.some((a) => a.raw === "expand_aliases" || (name === "hash" && a.raw === "-p") || (name === "enable" && a.raw === "-f"))) {
+      s.errexit &&= name !== "shopt" || !args.some((a) => a.dynamic || /^-\w*o/.test(a.raw));
+      if (args.some((a) => a.raw === "expand_aliases" || (name === "hash" && a.raw === "-p") || (name === "enable" && /^-\w*[fn]/.test(a.raw)))) {
         throw new Unread(name + " " + args.map((a) => a.raw).join(" "));
       }
       return;
@@ -1398,7 +1533,8 @@ function cmd_after(s: Scan, argv: Word[], own: boolean): void {
 // {} standing for what find searches (its start folders). The words then
 // run, and whether this shell runs them (own: no wrapper but its own,
 // OWN, before them; an eval another program runs is a shell of its own);
-// null: a nested script read instead
+// null: a nested script read instead. A trap's action that may run set
+// or shopt turns errexit off: it runs in this shell, whenever it fires
 function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: string, ctx: Ctx): { argv: Word[]; own: boolean } | null {
   let argv = words;
   let own = true;
@@ -1449,7 +1585,7 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
         next = mark === null || got.get("-I")?.dynamic ? [...next, { ...DYN, input: true }] : next.map((w) => (w.alts.some((a) => a.includes(mark)) ? { ...DYN, raw: w.raw, input: true } : w));
       }
       if (name === "flock" && /^(-c|--command)$/.test(next[0]?.raw ?? "")) {
-        nested(s, next[1] ?? DYN, ctx, true, undefined, redirs);
+        nested(s, next[1] ?? DYN, ctx, true, undefined, redirs, env);
         if (redirs.length > 0) {
           part_push(s, [], env, redirs, full, ctx);
         }
@@ -1465,7 +1601,7 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
     if (SHELLS.has(name)) {
       const script = shell_script(rest);
       if (script !== null) {
-        nested(s, script, ctx, true, undefined, redirs);
+        nested(s, script, ctx, true, undefined, redirs, env);
         if (redirs.length > 0) {
           part_push(s, [], env, redirs, full, ctx);
         }
@@ -1483,7 +1619,8 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
       if (words.some((w) => w.dynamic || w.alts.length !== 1)) {
         throw new Unread(name + " runs a command made as it runs");
       }
-      nested(s, Shell.lit(words.map((w) => w.alts[0]).join(" ")), ctx, name !== "eval" || !own, words, name === "trap" ? [] : redirs);
+      s.errexit &&= name !== "trap" || !/\b(?:set|shopt)\b/.test(words[0].alts[0]);
+      nested(s, Shell.lit(words.map((w) => w.alts[0]).join(" ")), ctx, name !== "eval" || !own, words, name === "trap" ? [] : redirs, env);
       if (redirs.length > 0) {
         part_push(s, [], env, redirs, full, ctx);
       }
@@ -1502,11 +1639,13 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
 // fed, the pipe it reads, what its redirections give: its commands'
 // too, stdin_give): in a shell of its own (sub: bash -c, trap, watch:
 // its folder and variables its own, the variables only the
-// environment's), else in this one (eval). Its parts are placed where
-// its words are (one word whose one value is there as written: each
-// where it is in it; else at the words, at the command when they are
-// made up)
-function nested(s: Scan, script: Word, ctx: Ctx, sub: boolean, words: Word[] = [script], redirs: Redir[] = []): void {
+// environment's; those this shell set or the command gives (env), which
+// it may export, known only as it runs; errexit off), else in this one
+// (eval; the variables the command gives known only as it runs). Its
+// parts are placed where its words are (one word whose one value is
+// there as written: each where it is in it; else at the words, at the
+// command when they are made up)
+function nested(s: Scan, script: Word, ctx: Ctx, sub: boolean, words: Word[] = [script], redirs: Redir[] = [], env: Env[] = []): void {
   if (script.dynamic) {
     throw new Unread("a shell runs a script made as it runs");
   }
@@ -1520,10 +1659,12 @@ function nested(s: Scan, script: Word, ctx: Ctx, sub: boolean, words: Word[] = [
     for (const text of script.alts) {
       if (sub) {
         scope(s, () => {
-          s.vars = new Map();
+          s.vars = new Map([...s.vars.keys(), ...env.map((e) => e.name)].map((n) => [n, DYN]));
+          s.errexit = false;
           scan_text(s, text, at, box);
         });
       } else {
+        env.forEach((e) => s.vars.set(e.name, DYN));
         scan_text(s, text, at, box);
       }
     }
