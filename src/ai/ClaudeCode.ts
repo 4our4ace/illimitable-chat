@@ -29,7 +29,10 @@
 // words (a plan's limit and when it resets, a login missing, a chat too
 // long for the window: `full`, a busy service); a turn's call runs with
 // Claude Code's compaction off, so one outgrowing the window ends `full`
-// and illi folds the chat (ClaudeCode.env). A stop interrupts it
+// and illi folds the chat (ClaudeCode.env); the tokens its first
+// request read, as its stream tells, go with its end (End.first), so the
+// chat learns what Claude Code's own prompt and tools take beside it
+// (Chat.cap). A stop interrupts it
 // (SIGINT, then SIGKILL), what streamed of its message logged as cut
 // off. A model's window, as a result tells it, is learned (Pick.told, by
 // its canonical id) and kept for the next start; the plan's use, as each
@@ -72,10 +75,12 @@ import { Mcp } from "../tools/Mcp.ts";
 // a call as it runs: the message streaming (its stream read so far,
 // null between messages; what it showed), the messages sent mid-run
 // written but not echoed yet, whether the call's own was, whether a
-// reply came, the last result, when a plan's limit resets (ms; 0: none
-// told), whether the input ended; what it left out of Claude Code's own
-// MCP servers (ClaudeCode.cut: none loaded, or the rules), its init
-// telling them all (ClaudeCode.learn) where some loaded
+// reply came, the last result, whether a tool's result came back, when
+// a plan's limit resets (ms; 0: none told), whether the input ended;
+// what it left out of Claude Code's own MCP servers (ClaudeCode.cut:
+// none loaded, or the rules), its init telling them all
+// (ClaudeCode.learn) where some loaded; the tokens its first request
+// read, as its stream's start tells (End.first; null: none began)
 type Run = {
   ask    : Ask;
   on     : (ev: Event) => void;
@@ -89,6 +94,7 @@ type Run = {
   reset  : number;
   shut   : boolean;
   cut    : Cut;
+  first  : number | null;
 };
 
 // what a call with tools leaves out of Claude Code's own MCP servers:
@@ -186,7 +192,7 @@ export namespace ClaudeCode {
       fs.rmSync(file, { force: true });
       return none(/ENOENT|not found/i.test(String(err?.message)) ? NO_CLAUDE : String(err?.message ?? err), "down");
     }
-    const run: Run = { ask, on, st: null, seen: [], sent: [], own: false, said: false, result: null, grew: false, reset: 0, shut: false, cut };
+    const run: Run = { ask, on, st: null, seen: [], sent: [], own: false, said: false, result: null, grew: false, reset: 0, shut: false, cut, first: null };
     let stopped = false;
     // a line to Claude Code's input; false: it ended (it exited)
     const write = (msg: unknown) => {
@@ -484,7 +490,9 @@ export namespace ClaudeCode {
     return limits.length === 0 ? null : { brand: "Claude", tier: "", limits };
   }
 
-  // an API event, shown live: a message starts its own stream read
+  // an API event, shown live: a message starts its own stream read; the
+  // first, the tokens its request read (the chat, and all Claude Code's
+  // prompt and tools take beside it: End.first)
   export function live(run: Run, ev: any): void {
     if (ev.type === "message_start") {
       run.st = Anthropic.wire.start(run.ask);
@@ -499,6 +507,8 @@ export namespace ClaudeCode {
     };
     if (Anthropic.read(run.st, ev, on)) {
       run.st = null;
+    } else if (ev.type === "message_start") {
+      run.first ??= run.st.use.input + run.st.use.write + run.st.use.read;
     }
   }
 
@@ -553,18 +563,20 @@ export namespace ClaudeCode {
 
   // the call's end from its last result (none: Claude Code's own words,
   // or its exit code); one too long for the window after a tool's result
-  // came back grew (End.grew)
+  // came back grew (End.grew); the tokens its first request read, if told
+  // (End.first)
   export function end(run: Run, err: string, code: number): End {
     const r = run.result;
+    const first = run.first ? { first: run.first } : {};
     if (r !== null && r.subtype === "success" && !r.is_error) {
-      return { ok: true, text: String(r.result ?? ""), left: [] };
+      return { ok: true, text: String(r.result ?? ""), left: [], ...first };
     }
     const said = r === null ? err || "Claude Code ended (exit code " + code + ") with no reply" : String(r.result || (r.errors ?? []).join("\n") || r.subtype);
     if (r !== null || err !== "") {
       console.error("claude-code: " + said.slice(0, 300));
     }
     const end = ClaudeCode.failed(said, r?.api_error_status ?? null, run.reset);
-    return { ...end, left: [], cut: run.said, grew: end.stop === "full" && run.grew };
+    return { ...end, left: [], cut: run.said, grew: end.stop === "full" && run.grew, ...first };
   }
 
   // a failure in plain words: too long for the window; a plan's limit

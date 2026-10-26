@@ -5,7 +5,8 @@
 // Code whole with illi's prompt after its own and illi's tools added
 // (lean), the view's marked block cached for an hour, its stream shown
 // live and logged, illi's tools by their own
-// names, and the model's window learned (by its canonical id) and kept;
+// names, the tokens its first request read told (none if that was
+// refused), and the model's window learned (by its canonical id) and kept;
 // a call without tools has none of Claude Code's, an agent's tools list
 // only the built-in ones it names (--tools); a message sent mid-run is
 // taken as it is echoed, one
@@ -115,6 +116,7 @@ if (scene.includes("turn")) {
 } else if (scene.includes("long")) {
   result({ is_error: true, result: "Prompt is too long" });
 } else if (scene.includes("grown")) {
+  ev({ type: "message_start", message: { usage: { input_tokens: 5, cache_creation_input_tokens: 20, cache_read_input_tokens: 175 } } });
   out({ type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "mcp__illi__zoom", input: { id: 3 } }] }, parent_tool_use_id: null });
   out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: [{ type: "text", text: "line 3" }] }] }, parent_tool_use_id: null });
   out({ type: "assistant", message: { model: "<synthetic>", content: [{ type: "text", text: "Prompt is too long" }] }, error: "invalid_request", is_api_error_message: true, parent_tool_use_id: null });
@@ -201,7 +203,7 @@ test("before any call of the run has told Claude Code's servers: by name, those 
   Mcp.fail(Mcp.status().servers.find((s) => s.name === "github")!, "stopped");
 });
 
-test("a turn runs Claude Code whole, illi's prompt after its own and illi's tools added; its stream shown and logged", async () => {
+test("a turn runs Claude Code whole, illi's prompt after its own and illi's tools added; its stream shown and logged, the tokens its first request read told", async () => {
   const { events, end, log } = await call("turn");
   expect(log.args).toContain("--mcp-config");
   expect(JSON.parse(log.args[log.args.indexOf("--mcp-config") + 1])).toEqual({ mcpServers: { illi: { type: "http", url: "http://127.0.0.1:1/key/main?lean", timeout: 86400000 } } });
@@ -220,7 +222,7 @@ test("a turn runs Claude Code whole, illi's prompt after its own and illi's tool
     { kind: "tool", text: 'zoom {"id":3}', of: "t1" },
     { kind: "echo", text: "line 3", of: "t1" },
   ]);
-  expect(end).toMatchObject({ ok: true, text: "Hello", left: [] });
+  expect(end).toMatchObject({ ok: true, text: "Hello", left: [], first: 100 });
   expect(Pick.window({ vendor: "claude-code", model: "opus-5.5", effort: "high", speed: "slow" })).toBe(1000000);
   expect(JSON.parse(fs.readFileSync(DIR + "/models.json", "utf8")).vendors["claude-code"].find((m: any) => m.label === "opus-5.5").window).toBe(1000000);
   expect(fs.existsSync(log.args[log.args.indexOf("--append-system-prompt-file") + 1])).toBe(false);
@@ -264,9 +266,10 @@ test("a plan's limit, a missing login, a chat too long (grown once a tool's resu
   expect(limit).toMatchObject({ ok: false, stop: "down", again: true });
   expect(limit.text).toMatch(/^your Claude plan's usage limit is reached: it resets at (\w{3} )?\d\d:\d\d; \/model picks another model meanwhile$/);
   expect((await call("login")).end).toMatchObject({ ok: false, stop: "down", text: "Claude Code isn't logged in: run claude in a terminal, log in there (/login), then send a message" });
-  expect((await call("long")).end).toMatchObject({ ok: false, stop: "full", grew: false });
+  const long = (await call("long")).end;
+  expect([long, long.first]).toMatchObject([{ ok: false, stop: "full", grew: false }, undefined]);
   const grown = await call("grown", true, undefined, { room: 900 });
-  expect(grown.end).toMatchObject({ ok: false, stop: "full", grew: true, cut: false });
+  expect(grown.end).toMatchObject({ ok: false, stop: "full", grew: true, cut: false, first: 200 });
   expect(grown.events.filter((e) => e.$ === "Entry" && e.kind === "illi")).toEqual([]);
   expect(grown.log.compact).toBe("1");
   expect((await call("long", true)).log.compact).toBeNull();
