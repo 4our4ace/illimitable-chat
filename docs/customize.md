@@ -303,8 +303,12 @@ over. What differs:
   too (else it can't search, said in `/agents`; on claude-code, Claude
   Code's own `Glob` and `Grep` do). `model: inherit` is your pick;
   `sonnet`, `opus`, `haiku` or `fable` alone the newest of it offered,
-  else your pick.
-  (Your own agents are read so too, and the list may be YAML's:
+  else your pick. `Agent(worker, researcher)` (or `Task(…)`) keeps its
+  comma and reads as spawn held to those agents (a plugin's by its name
+  or as `plugin:name`), as Claude Code holds an agent run as the main
+  one: illi's main agent is offered them alone, and spawn refuses any
+  other, or a plain subagent (`Agent` alone allows any). (Your own
+  agents are read so too, and the list may be YAML's:
   `[Read, "Grep"]`, or `- Read` lines.) On claude-code, the list also
   limits Claude Code's built-in tools to those it names (illi's `read`,
   `write`, `edit` and `shell` as `Read`, `Write`, `Edit` and `Bash`;
