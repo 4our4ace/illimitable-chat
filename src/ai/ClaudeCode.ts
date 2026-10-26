@@ -42,15 +42,15 @@
 // mcp__<name>__*: Claude Code drops their tools from the model's
 // context, though it still starts them), each illi runs its own server
 // of, by its name as Claude Code spells it (illi's wins: the model gets
-// one copy), and each of those told that `off` names (before any is
-// told, each `off` names); with an agent's tools list, each of those
-// told the list doesn't name too (one it names by tools alone: its
-// other tools), and all where it names none of those told, or none is
-// told yet (--strict-mcp-config, illi's own server kept). One added to
-// Claude Code since the last told loads in one more call, which tells
-// it. Claude Code's settings are never touched. Their names, case and
-// all, are kept (claude-code.json), so `off`'s rules are right before a
-// start's first call has told them.
+// one copy), and each told that `off` names; with an agent's tools
+// list, each told the list doesn't name too (one it names by tools
+// alone: its other tools, once told), and all where it names none that
+// could load (--strict-mcp-config, illi's own server kept). Till a call
+// of the run has told them, those ever told stand in, by their names
+// kept, case and all (claude-code.json), so `off`'s rules and a list's
+// hold from a start's first call. One never told (added to Claude Code
+// since, or new to illi) loads in one more call, which tells it. Claude
+// Code's settings are never touched.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -250,8 +250,11 @@ export namespace ClaudeCode {
   // would run its hooks in a folder never trusted: -p trusts any); with
   // tools, illi's (its MCP server, the lean list, allowed; illi's ask for
   // Claude Code's own, of its built-in ones only those an agent's tools
-  // list names, if it has one, but those illi gives itself: --tools),
-  // else (or once) none, nor Claude Code's servers or commands
+  // list names, if it has one, but those illi gives itself: --tools), and
+  // Claude Code's own MCP servers but what the call leaves out
+  // (ClaudeCode.cut: all, --strict-mcp-config, or by rule,
+  // --disallowedTools beside AskUserQuestion), else (or once) none, nor
+  // Claude Code's servers or commands
   export function args(ask: Ask, file: string): string[] {
     const io = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--replay-user-messages", "--no-session-persistence"];
     const pick = ["--model", ask.model, "--effort", ask.effort, "--append-system-prompt-file", file, "--settings", JSON.stringify({ disableAllHooks: true })];
@@ -267,42 +270,56 @@ export namespace ClaudeCode {
 
   // what a call with tools leaves out of Claude Code's own MCP servers
   // (a call without loads none: args), so the model reads no tool it
-  // isn't to have. With an agent's tools list (Ask.listed): those of the
-  // servers last told that the list names (mcp: all; mcp__github: that
-  // one; tools alone, mcp__github__get_issue: those) stay, but one off or
-  // over; none such, or none told yet, and the call loads none (strict).
-  // Else, by rule: each server illi runs its own of, by name, whether
-  // told or not (over: illi's wins, so the model gets one copy), whole;
-  // of those told, each `off` names, whole, each the list doesn't name,
-  // whole, and each it names by tools alone, its other tools last told
-  // (none told: whole). One added to Claude Code since the last told
-  // loads in the call (whose init then tells it). Before any call has
-  // told the servers, those `off` names leave by name too (case and all
-  // as told before, else as written). A rule never reaches illi's own
-  // tools (mcp__illi__...)
+  // isn't to have. The servers weighed: those last told, else, till a
+  // call of this run tells them, those ever told, by the names kept
+  // (ClaudeCode.cased; their tools not known). By rule, whole: each
+  // server illi runs its own of, by name, told or not (over: illi's wins,
+  // so the model gets one copy); each weighed that `off` names (none told
+  // yet: each name `off` holds, case and all as told before, else as
+  // written); with an agent's tools list (Ask.listed: mcp all,
+  // mcp__github that server, mcp__github__get_issue those tools), each
+  // weighed it doesn't name, and of one it names by tools alone its other
+  // tools once told (not yet: none, so the call tells them). A server
+  // never told loads in the call, whose init then tells it (one added to
+  // Claude Code since, or one a list names that this run hasn't seen), so
+  // a list never waits on a call without one to learn them. A list whose
+  // names could load none (it names none, or only servers off or illi's
+  // own) loads none (strict). A rule never reaches illi's own tools
+  // (mcp__illi__...)
   export function cut(ask: Ask): Cut {
     if (ask.server === "" || ask.once) {
       return { strict: true, deny: [] };
     }
-    const listed = ask.listed?.filter((t) => t === "mcp" || t.startsWith("mcp__")) ?? null;
-    const known  = ClaudeCode.servers();
-    const head   = (name: string) => "mcp__" + ClaudeCode.spell(name);
-    const named  = (s: Theirs) => (listed ?? ["mcp"]).filter((t) => t === "mcp" || t === head(s.name) || t.startsWith(head(s.name) + "__"));
-    if (listed !== null && !(known ?? []).some((s) => !s.off && !s.over && named(s).length > 0)) {
+    const listed  = ask.listed?.filter((t) => t === "mcp" || t.startsWith("mcp__")) ?? null;
+    const known   = ClaudeCode.servers();
+    const own     = ClaudeCode.own().map(ClaudeCode.spell);
+    const offs    = config.OFF.map((name) => ClaudeCode.spell(ClaudeCode.cased().get(name) ?? name));
+    const weighed = known ?? [...ClaudeCode.cased().values()].map((name) => ({ name, tools: null, off: config.config_off(name), over: own.includes(ClaudeCode.spell(name)) }));
+    const head    = (name: string) => "mcp__" + ClaudeCode.spell(name);
+    const names   = (name: string, t: string) => t === head(name) || t.startsWith(head(name) + "__");
+    const named   = (s: { name: string }) => (listed ?? ["mcp"]).filter((t) => t === "mcp" || names(s.name, t));
+    // whether a name of a list could load a server: mcp, one weighed
+    // neither off nor over, or one never told, unless off or illi's own
+    const could = (t: string) => {
+      const s = weighed.find((w) => names(w.name, t));
+      const bare = t.slice("mcp__".length).split("__")[0];
+      return t === "mcp" || (s === undefined ? !own.includes(bare) && !offs.includes(bare) : !s.off && !s.over);
+    };
+    if (listed !== null && !listed.some(could)) {
       return { strict: true, deny: [] };
     }
-    const over = ClaudeCode.own().map((name) => head(name) + "__*");
-    const told = known === null ? config.OFF.map((name) => head(ClaudeCode.cased().get(name) ?? name) + "__*") : known.flatMap((s) => {
+    const told = weighed.flatMap((s) => {
       const these = named(s);
       if (s.off || s.over || these.length === 0) {
         return [head(s.name) + "__*"];
       }
-      if (these.some((t) => !t.startsWith(head(s.name) + "__"))) {
+      if (s.tools === null || these.some((t) => !t.startsWith(head(s.name) + "__"))) {
         return [];
       }
-      return s.tools === null ? [head(s.name) + "__*"] : s.tools.filter((t) => !these.includes(t));
+      return s.tools.filter((t) => !these.includes(t));
     });
-    return { strict: false, deny: [...new Set([...over, ...told])].filter((rule) => !rule.startsWith(OURS)) };
+    const by = (spelled: string[]) => spelled.map((name) => "mcp__" + name + "__*");
+    return { strict: false, deny: [...new Set([...by(own), ...told, ...(known === null ? by(offs) : [])])].filter((rule) => !rule.startsWith(OURS)) };
   }
 
   // Claude Code's own MCP servers as its last call that loaded them told

@@ -20,10 +20,13 @@
 // list keeps those it names (a server, its tools, mcp: all), naming
 // none its call loads none (--strict-mcp-config); illi's own server of
 // a name wins while it runs, told or not (failed: Claude Code's stays).
-// Before any call told them, an agent's list loads none, and the rules
-// are by name: those `off` names (case and all as told before) and
-// illi's own servers'. A name is spelled as Claude Code spells it in
-// its tools'.
+// Before any call of the run told them, the rules are by name: those
+// `off` names (case and all as told before), illi's own servers' and,
+// for an agent's list, those ever told it doesn't name; a list naming
+// one that could load loads it, and the call tells them, one named by
+// its tools alone whole, its tools then told; a list naming only
+// servers off or illi's own loads none. A name is spelled as Claude
+// Code spells it in its tools'.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -159,27 +162,32 @@ const until = async (ok: () => boolean) => {
   }
 };
 
-test("before any call has told Claude Code's servers: an agent's tools list loads none; else, by name, those off (case and all as told before) and those illi runs its own of leave the call", async () => {
-  fs.writeFileSync(DIR + "/claude-code.json", JSON.stringify({ servers: ["claude.ai Gmail"] }));
+test("before any call of the run has told Claude Code's servers: by name, those off (case and all as told before), illi's own and, for an agent's list, those ever told it doesn't name leave the call; a list that names one that could load loads it, and the call tells them all; one naming only servers off or illi's own loads none", async () => {
+  fs.writeFileSync(DIR + "/claude-code.json", JSON.stringify({ servers: ["claude.ai Gmail", "notes", "slack"] }));
   config.config_set("off", "claude.ai gmail, linear, illi");
   await own("github");
   await own("docs", false);
-  const listed = (await call("turn", true, undefined, { listed: ["read", "mcp__github"] })).log.args;
+  const listed = (await call("turn", true, undefined, { listed: ["read", "mcp__github", "mcp__linear__find"] })).log.args;
   expect(strict(listed)).toBe(true);
   expect(JSON.parse(listed[listed.indexOf("--mcp-config") + 1]).mcpServers.illi.url).toBe("http://127.0.0.1:1/key/main?lean");
   expect(denied(listed)).toBe("AskUserQuestion");
   expect(ClaudeCode.servers()).toBeNull();
+  const main = "http://127.0.0.1:1/key/main";
+  expect(ClaudeCode.cut({ server: main } as any)).toEqual({ strict: false, deny: ["mcp__github__*", "mcp__claude_ai_Gmail__*", "mcp__linear__*"] });
+  expect(ClaudeCode.cut({ server: main, listed: ["mcp__docs"] } as any)).toEqual({ strict: false, deny: ["mcp__github__*", "mcp__claude_ai_Gmail__*", "mcp__notes__*", "mcp__slack__*", "mcp__linear__*"] });
+  // notes, never told its tools, loads whole in the call, which tells them
   fs.writeFileSync(DIR + "/init.json", JSON.stringify(INIT));
-  const first = (await call("turn")).log.args;
+  const first = (await call("turn", true, undefined, { listed: ["read", "mcp__notes__find"] })).log.args;
   expect(strict(first)).toBe(false);
-  expect(denied(first)).toBe("AskUserQuestion,mcp__github__*,mcp__claude_ai_Gmail__*,mcp__linear__*");
+  expect(denied(first)).toBe("AskUserQuestion,mcp__github__*,mcp__claude_ai_Gmail__*,mcp__slack__*,mcp__linear__*");
   expect(ClaudeCode.servers()).toEqual([
     { name: "github", status: "connected", tools: null, off: false, over: true },
     { name: "claude.ai Gmail", status: "connected", tools: null, off: true, over: false },
     { name: "plugin:p:db", status: "needs-auth", tools: [], off: false, over: false },
     { name: "notes", status: "connected", tools: ["mcp__notes__add", "mcp__notes__find", "mcp__notes__drop"], off: false, over: false },
   ]);
-  expect(JSON.parse(fs.readFileSync(DIR + "/claude-code.json", "utf8"))).toEqual({ servers: ["claude.ai Gmail", "github", "notes", "plugin:p:db"] });
+  expect(JSON.parse(fs.readFileSync(DIR + "/claude-code.json", "utf8"))).toEqual({ servers: ["claude.ai Gmail", "github", "notes", "plugin:p:db", "slack"] });
+  expect(denied((await call("turn", true, undefined, { listed: ["read", "mcp__notes__find"] })).log.args)).toBe("AskUserQuestion,mcp__github__*,mcp__claude_ai_Gmail__*,mcp__plugin_p_db__*,mcp__notes__add,mcp__notes__drop");
   config.config_set("off", null);
   fs.rmSync(DIR + "/init.json");
   Mcp.fail(Mcp.status().servers.find((s) => s.name === "github")!, "stopped");
@@ -298,17 +306,19 @@ test("Claude Code's servers its init tells are kept, but illi's own; one off lea
   expect(denied((await call("turn")).log.args)).toBe("AskUserQuestion");
 });
 
-test("an agent's tools list keeps of Claude Code's servers those it names (a server, its tools, or mcp: all); naming none, its call loads none; a call without tools loads none either way", async () => {
+test("an agent's tools list keeps of Claude Code's servers those it names (a server, its tools, or mcp: all); naming none, its call loads none; one it names that wasn't told loads if it's there, every one told but named left out; a call without tools loads none either way", async () => {
   fs.writeFileSync(DIR + "/init.json", JSON.stringify(INIT));
   await call("turn");
   const args = async (listed: string[]) => (await call("turn", true, undefined, { listed })).log.args;
   expect(denied(await args(["read", "mcp__claude_ai_Gmail"]))).toBe("AskUserQuestion,mcp__github__*,mcp__plugin_p_db__*,mcp__notes__*");
   expect(denied(await args(["mcp__notes__find"]))).toBe("AskUserQuestion,mcp__github__*,mcp__claude_ai_Gmail__*,mcp__plugin_p_db__*,mcp__notes__add,mcp__notes__drop");
   expect(denied(await args(["mcp"]))).toBe("AskUserQuestion");
-  for (const listed of [["read", "zoom"], [], ["mcp__linear"]]) {
+  for (const listed of [["read", "zoom"], []]) {
     const got = await args(listed);
     expect([listed, strict(got), denied(got)]).toEqual([listed, true, "AskUserQuestion"]);
   }
+  const linear = await args(["mcp__linear"]);
+  expect([strict(linear), denied(linear)]).toEqual([false, "AskUserQuestion,mcp__github__*,mcp__claude_ai_Gmail__*,mcp__plugin_p_db__*,mcp__notes__*"]);
   expect(ClaudeCode.servers()!.map((s) => s.tools?.length ?? null)).toEqual([2, 2, 0, 3]);
   config.config_set("off", "notes");
   expect(strict(await args(["mcp__notes"]))).toBe(true);
