@@ -313,6 +313,42 @@ test("variables as each command has them: a heredoc's body expands as its comman
   expect(parts("x=1; bash -c 'y=2; ls $y'").at(-1)).toBe("ls 2 @/w");
 });
 
+test("what may set a variable unseen leaves it known only as it runs, or is refused: an assigning ${...} anywhere (nested, indirect, in an arithmetic), IFS set (bash splits where illi wouldn't), a source; names read from their words' values (read \"d\", declare \"d=\", printf -vd); a heredoc's body that sets one, time before an assignment and a nameref refused", () => {
+  const last = (script: string) => (parts(script) as string[]).at(-1);
+  for (const unseen of [
+    "x=/a; (( ${x:=/} )); touch \"${x}home/x\"",
+    "x=/a; : $(( ${x:=/} )); touch \"${x}home/x\"",
+    "x=/a; : ${a:-${x:=/}}; touch \"${x}home/x\"",
+    "ref=x; x=/a; : ${!ref:=/}; touch \"${x}home/x\"",
+    "x=/a; source ./env.sh; touch \"${x}home/x\"",
+    "x=/a; . ./a.txt; touch \"${x}home/x\"",
+    "x=/a; read \"x\" <<<''; touch \"${x}home/x\"",
+    "x=/a; read -r $N <<<''; touch \"${x}home/x\"",
+    "x=/a; printf -vx ''; touch \"${x}home/x\"",
+    "x=/a; printf -v x ''; touch \"${x}home/x\"",
+    "x=/a; declare \"$N=/\"; touch \"${x}home/x\"",
+    "x=/a; unset $N; touch \"${x}home/x\"",
+  ]) {
+    expect([unseen, last(unseen)]).toEqual([unseen, "touch ~ @/w"]);
+  }
+  expect(last("x=/a; declare \"x=/b\"; touch \"${x}/y\"")).toBe("touch /b/y @/w");
+  expect(last("x=/a; export x=/c; touch \"${x}/y\"")).toBe("touch /c/y @/w");
+  expect(last("IFS=q; d='srcq/*'; touch $d")).toBe("touch ~ @/w");
+  expect(last("d='src/*'; touch \"$d\" $(pwd)")).toBe("touch src/* /w @/w");
+  expect(last("IFS=/; touch $(pwd)")).toBe("touch ~ @/w");
+  for (const [refused, why] of [
+    ["x=; : <<E\n${x:=/}\nE\ntouch \"${x}home/x\"", "a heredoc's body that sets a variable"],
+    ["x=; : <<E; touch \"${x}home/x\"\n${x:=/}\nE", "a heredoc's body that sets a variable"],
+    ["d=/tmp/a; time d=; touch \"$d\"/x", "time before an assignment"],
+    ["d=/tmp/a; time -p d=; touch \"$d\"/x", "time before an assignment"],
+    ["declare -n d=x; d=/tmp/a; x=/; touch \"$d\"/x", "declare -n"],
+    ["typeset -rn d=x", "typeset -n"],
+  ]) {
+    expect([refused, String(parts(refused)).startsWith(why)]).toEqual([refused, true]);
+  }
+  expect(parts("cat <<E\n$(echo ${x:=/})\n$((1 + 2))\nE")).toEqual(["cat <<E @/w", "echo ~ @/w"]);
+});
+
 test("redirections keep the descriptor written before them; fed text made as it runs is marked", () => {
   const redirs = (command: string) => (Shell.parse(command, "/w") as Part[]).flatMap((p) => p.redirs.map((r) => [r.num ?? "", r.op, r.made === true]));
   expect(redirs("bash 3< a 2>&1 < b")).toEqual([["3", "<", false], ["2", ">&", false], ["", "<", false]]);

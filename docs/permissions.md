@@ -167,19 +167,20 @@ command that:
 - holds what is known only as it runs (`$CMD` as a command, a path made
   by `$(...)`), or what illi can't follow (`case`, functions, arrays,
   aliases, `set -o posix`, a `trap` on anything but `EXIT`, whose
-  action may run before any later command): asked, never guessed. A
-  variable the command itself sets to plain words, `$(pwd)` or the
-  repository's top is known (not one bash keeps its own way, as
+  action may run before any later command, `declare -n`): asked, never
+  guessed. A variable the command itself sets to plain words, `$(pwd)`
+  or the repository's top is known (not one bash keeps its own way, as
   `FUNCNAME` or `RANDOM`; a `cd` that `CDPATH` may lead elsewhere
-  leaves the folder unknown). So
-  is one set alone to a plain `$(mktemp ...)` when a failed mktemp,
-  which leaves the variable empty, ends the script: after `set -e`, or
-  with `|| exit` after it (no word after `exit`, a number or `$?`),
-  the assignment and the `set -e` each at the top (not in an if, a
-  loop, a group, a pipeline or the background, not negated nor in
-  another `&&` or `||` list).
-  `set -e; d=$(mktemp -d); git clone ... "$d/repo"` writes
-  in `$TMPDIR` (else `/tmp`), so it runs; without the `set -e`, it's
+  leaves the folder unknown), until something may set it unseen (a
+  `source`, a `${x:=...}` illi can't place, a name made as it runs) or
+  `IFS` is set, which splits values where illi wouldn't. So is one set
+  alone to a plain `$(mktemp ...)` when a failed mktemp, which leaves
+  the variable empty, ends the script: after `set -e`, or with
+  `|| exit` after it (no word after `exit`, a number or `$?`), the
+  assignment and the `set -e` each at the top (not in an if, a loop, a
+  group, a pipeline or the background, not negated nor in another `&&`
+  or `||` list). `set -e; d=$(mktemp -d); git clone ... "$d/repo"`
+  writes in `$TMPDIR` (else `/tmp`), so it runs; without the `set -e`, it's
   asked (empty, `rm -rf "$d"/*` would be `rm -rf /*`). Claude Code's
   Bash runs a command in a wrapper of its own, where a `set -e` may not
   hold, so there only `|| exit` makes the folder known.
