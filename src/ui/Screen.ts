@@ -1007,14 +1007,14 @@ function ed_layout(ed: Ed): Laid {
 }
 
 // a line's rows, wrapped at w columns between words, and each place of
-// the cursor (before each character, and the end). The last line's end
-// past a full row takes the word it ends with down to the next row, so
-// the cursor typing it stays at its end (a word that starts its row, or
-// fills one, can't go: the end gets a row of its own; a space typed
-// after it, and the word is no longer the end: it goes back up to fill
-// its row, the space hung past it). A word that would cross
+// the cursor (before each character, and the end). No word ends in a
+// row's last column but one that starts its row: one that would goes
+// down to the next row whole, so the space after it, or the cursor at
+// the line's end, is beside it, and what is typed after it never takes
+// it back up. A word that would cross
 // the edge starts the next row whole, the space before it left at the
-// end of its row; a space that finds its row full hangs past the edge,
+// end of its row; a space that finds its row full (its word starting
+// the row, or the space after another) hangs past the edge,
 // unshown (the row then full: what follows starts the next, a second
 // space too, and the line's end, which gets a row of its own, so no
 // two places show at one spot); a chip (a paste's token, an image's) is
@@ -1050,6 +1050,10 @@ function ed_wrap(text: string, w: number, last: boolean, sized: Map<string, [str
     }
     const [x, cw] = shown;
     const space = /^[^\S\u00a0\u2007\u202f\ufeff]+$/.test(g) && !chips.some(([a, b]) => a < pos && pos < b);
+    const from  = word >= 0 && word < places.length ? places[word].col : 0;
+    if (space && !hung && !gap && col + cw > w && from > 0 && col - from + cw <= w) {
+      down(from);
+    }
     if (space && !hung && col + cw > w) {
       places.push({ pos, row: rows.length - 1, col });
       cuts.push(rows[rows.length - 1].length);
@@ -1058,9 +1062,9 @@ function ed_wrap(text: string, w: number, last: boolean, sized: Map<string, [str
     }
     word = !space && gap ? places.length : word;
     if (col + cw > w || hung) {
-      const from = word >= 0 && word < places.length ? places[word].col : col;
-      if (!space && word >= 0 && col - from + cw <= w) {
-        down(from);
+      const start = word >= 0 && word < places.length ? places[word].col : col;
+      if (!space && word >= 0 && col - start + cw <= w) {
+        down(start);
       } else {
         rows.push("");
         col = 0;
@@ -1075,7 +1079,7 @@ function ed_wrap(text: string, w: number, last: boolean, sized: Map<string, [str
     gap = space;
   }
   const from = word >= 0 && word < places.length ? places[word].col : 0;
-  if (last && !hung && !gap && col >= w && from > 0 && col - from < w) {
+  if (!hung && !gap && col >= w && from > 0 && col - from < w) {
     down(from);
   } else if ((last || hung) && col >= w) {
     rows.push("");
@@ -1313,7 +1317,8 @@ export function ed_key(ed: Ed, key: string): boolean {
   }
   switch (key) {
     case "Shift+Enter":
-    case "Ctrl+J": {
+    case "Ctrl+J":
+    case "Ctrl+Shift+J": {
       ed_type(ed, "\n");
       return true;
     }

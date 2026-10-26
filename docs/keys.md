@@ -151,10 +151,10 @@ Typing
   front moves nothing.
 - A message wraps between words: a word that would cross the input's
   edge starts the next line whole, and a space that finds its line full
-  stays at its end, unshown. The word you type up to the edge already
-  starts the next line, the cursor after it, so the next letter moves
-  nothing; a space typed after it takes it back to the end of the line
-  it fills, the cursor on the next. A pasted text's or an image's token
+  stays at its end, unshown. No word ends in the line's last column
+  unless it fills the line, so the cursor or the space after it fits
+  beside it: the word you type up to the edge goes to the next line at
+  once, and nothing you type after it moves it back. A pasted text's or an image's token
   counts as one word. A word wider than the input breaks at any
   character, as text with no spaces does.
 - Shift+Enter or Ctrl+J: a new line. Up and Down past the ends: the
