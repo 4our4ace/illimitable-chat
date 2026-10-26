@@ -82,7 +82,7 @@ git or Claude Code runs unasked:
 
 | | Runs | Asked about |
 | --- | --- | --- |
-| Changes | any in the project, deleting files and folders too (`rm -rf src`), and in `/tmp` | a file changed, deleted or moved outside the project (`rm -rf ../x`, `cd ~ && rm -rf code`, `echo x >> ~/.bashrc`, `mv src ../y`, `ln -s ~/.bashrc rc`), placed where the system finds it (`link/../x` from where the link leads, a glob's matches); one whose file is known only as it runs (`rm -rf "$X"`, `rm -rf $(...)`, `find . \| xargs rm`; a folder `d=$(mktemp -d)` made is known under `set -e` or `|| exit`: in `$TMPDIR` or `/tmp`, free); deleting the project itself, its `.git`, home or `/`; an archive extracted with its absolute names (`tar -xPf`, `unzip -:`); writing to a device |
+| Changes | any in the project, deleting files and folders too (`rm -rf src`), and in `/tmp` | a file changed, deleted or moved outside the project (`rm -rf ../x`, `cd ~ && rm -rf code`, `echo x >> ~/.bashrc`, `mv src ../y`, `ln -s ~/.bashrc rc`), placed where the system finds it (`link/../x` from where the link leads, a glob's matches); one whose file is known only as it runs (`rm -rf "$X"`, `rm -rf $(...)`, `find . \| xargs rm`; a folder `d=$(mktemp -d)` made is known when set alone at the top, under `set -e` or `|| exit`: in `$TMPDIR` or `/tmp`, free); deleting the project itself, its `.git`, home or `/`; an archive extracted with its absolute names (`tar -xPf`, `unzip -:`); writing to a device |
 | Reads | anywhere, by a program that only reads (`cat`, `grep -r`, `find`, `sed -n`, `git log`, the read tool) | a folder outside the project that holds a secret store, read as a whole (`grep -r x ~`, `ls ~/.claude`: home holds `~/.ssh`); a file outside the project read by a command that may change things (a script or program from there: `python3 ../lib/gen.py`; a build there: `cd ../lib && make`; a program illi doesn't know: `fmt-tool ../lib`), but in `/tmp`, the system's folders, the dependency caches and illi's skills |
 | Secrets | `.env.example`, `.env.sample`, `.env.template`; awk and sed scripts that only mention one (`awk '/\.env/'`, `sed 's/credentials/creds/'`) | a file that may hold secrets, through any tool (`cat .env`, `cp .env.example .env`, `git show HEAD:.env`, `sed 'r .env'`, the read tool): `.env` files, keys (`*.pem`, `id_ed25519`), logins and tokens by name (`auth.json`, `credentials.json`, `.npmrc`, `.netrc`), key and credential stores (`~/.ssh`, `~/.aws`, `~/.gnupg`, `~/.config/gh/hosts.yml`), other agents' logins (Claude Code's, Codex's, opencode's), browser profiles, illi's logins; `gh auth token`, `git credential fill`; inline code naming one (`python3 -c 'open(".env")'`, `sed 'e cat .env'`), an awk program opening one (`getline < ".env"`, `-v f=.env`, `F=.env` read by `ENVIRON`) |
 | System | builds, tests, installs, inline code (`python -c`), the project's scripts, git's own work (`reset --hard`, `clean -fdx`), the network (`curl \| sh`, `ssh`), `pkill`, `PATH=...` | root (`sudo`, `doas`, `sudoedit`); disks and their volumes (`mkfs`, `wipefs`, `dd of=/dev/sda`, `lvremove`, `zfs destroy`, `diskutil eraseDisk`); the system's services and settings (`systemctl`, `crontab`, `mount`); turning the computer off; `kill -1`; a container given the whole computer or a folder outside the project; a command illi can't follow (`case`) or named only as it runs (`$CMD x`) |
@@ -167,10 +167,13 @@ command that:
 - holds what is known only as it runs (`$CMD` as a command, a path made
   by `$(...)`), or what illi can't follow (`case`, functions, arrays):
   asked, never guessed. A variable the command itself sets to plain
-  words, `$(pwd)` or the repository's top is known. So is one set to a
-  plain `$(mktemp ...)` when a failed mktemp, which leaves the
-  variable empty, ends the script: after `set -e`, or with `|| exit`
-  after it. `set -e; d=$(mktemp -d); git clone ... "$d/repo"` writes
+  words, `$(pwd)` or the repository's top is known. So is one set
+  alone to a plain `$(mktemp ...)` when a failed mktemp, which leaves
+  the variable empty, ends the script: after `set -e`, or with
+  `|| exit` after it, the assignment and the `set -e` each at the top
+  (not in an if, a loop, a group, a pipeline or the background, not
+  negated nor in another `&&` or `||` list).
+  `set -e; d=$(mktemp -d); git clone ... "$d/repo"` writes
   in `$TMPDIR` (else `/tmp`), so it runs; without the `set -e`, it's
   asked (empty, `rm -rf "$d"/*` would be `rm -rf /*`).
 

@@ -102,8 +102,8 @@ type Cmd = { words: Word[]; env: Env[]; redirs: Redir[]; from: number; to: numbe
 type Ctx = { cwd: string | null; root: boolean; fed: boolean; piped: boolean; span: Span };
 
 // a word's values as it is read; made: as Word's (undefined: no mktemp
-// in it yet; null: something else in it known only as it runs, or too
-// many values)
+// in it yet; null: something else in it known only as it runs, a
+// command's output after it, or too many values)
 type Build = { alts: string[]; dynamic: boolean; glob: boolean; made?: string[] | null };
 
 // a heredoc waiting for its body (the lines after its command's):
@@ -1390,8 +1390,8 @@ function cmd_word(s: Scan, cmd: Cmd, word: Word): boolean {
 // the background runs in a subshell: its cd and variables don't last.
 // top: it runs whenever the command does (the command's own, not in a
 // subshell, a group, a loop, an if, a pipeline, the background, nor on
-// either side of && or ||, nor negated); trust: so, a failure in it ends
-// the script (set -e, or || exit after it)
+// either side of && or ||, nor negated); trust: so but for an || exit
+// after it, and a failure in it ends the script (set -e, or that exit)
 function cmd_end(s: Scan, cmd: Cmd, piped: boolean, forked: boolean, top = false, trust = false): void {
   if (cmd_empty(cmd)) {
     return;
@@ -1406,9 +1406,9 @@ function cmd_end(s: Scan, cmd: Cmd, piped: boolean, forked: boolean, top = false
 
 // a command's parts (an assignment alone: one without words, its
 // variables set), and what it changes of the shell after it (cmd_after).
-// One variable set alone to what a mktemp makes (Word made), its failure
-// ending the script (trust: so the variable never stays empty), stands
-// for where it makes it
+// One variable set alone (no redirection either) to what a mktemp makes
+// (Word made), its failure ending the script (trust: so the variable
+// never stays empty), stands for where it makes it
 function cmd_run(s: Scan, cmd: Cmd, full: string, piped: boolean, top: boolean, trust: boolean): void {
   const ctx = { cwd: s.cwd, root: s.root, fed: s.fed, piped: piped || s.inpipe, span: place(s, cmd.from, cmd.to) };
   if (cmd.words.length === 0) {
@@ -1433,8 +1433,8 @@ function cmd_run(s: Scan, cmd: Cmd, full: string, piped: boolean, top: boolean, 
 // A cd another program runs (sudo cd, env cd, exec cd) leaves the folder
 // unknown. errexit (set -e, as -euo pipefail; set -o errexit) turns on
 // only by a set the command runs whenever it runs (top: cmd_end); off by
-// any (+e, +o errexit), a set of words known only as it runs, or any
-// shopt -o (shopt -uo errexit)
+// any (+e, +o errexit), a set of words known only as it runs, any
+// shopt -o (shopt -uo errexit) or a shopt of words known only as it runs
 function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
   const name = Shell.program(argv[0]);
   const args = argv.slice(1);
