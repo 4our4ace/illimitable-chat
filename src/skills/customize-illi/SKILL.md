@@ -164,7 +164,8 @@ one:
   program are asked about, saying why), careful (reads and routine
   changes in the project; every risky call asked), ask (every change
   asked), read-only (changes refused), yolo (everything, but what the
-  user's rules refuse or ask and a write to illi's own config); /mode
+  user's rules refuse or ask and a write to illi's settings,
+  permissions, hooks, plugins or MCP servers); /mode
   switches it for a session, /permissions lists what was refused and
   the grants kept
 - permissions: the permission file, permissions.json in illi's folder

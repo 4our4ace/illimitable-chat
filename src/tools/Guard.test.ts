@@ -985,6 +985,28 @@ test("a write to illi's own config (its folder, a project's .illi) is asked in e
   expect(write(TOP + "/src/a.ts")).toEqual({ $: "allow" });
 });
 
+test("illi customizes itself as asked: its skills, commands, agents, rules and theme written run in auto (asked in careful); its settings, permissions, hooks, plugins and MCP servers stay asked in every mode, as does a secret in a skill's folder, the skills folder itself, and a path that only leads there by .. or a link", () => {
+  const dir = process.env.ILLI_DIR!;
+  const write = (p: string, mode: Where["mode"] = "auto") => Guard.check(where({ mode }), "write", { path: p, content: "x" });
+  for (const p of [dir + "/skills/notes/SKILL.md", dir + "/skills/notes/ref/table.md", dir + "/commands/ship.md", dir + "/agents/reviewer.md", dir + "/RULES.md", dir + "/theme.json", TOP + "/.illi/skills/x/SKILL.md", TOP + "/.illi/agents/a.md"]) {
+    expect([p, write(p).$, write(p, "yolo").$]).toEqual([p, "allow", "allow"]);
+  }
+  expect(write(dir + "/skills/notes/SKILL.md", "careful")).toMatchObject({ $: "ask", why: expect.stringContaining("changes how illi works or looks") });
+  for (const p of [dir + "/config.json", dir + "/permissions.json", dir + "/hooks.json", dir + "/mcp.json", dir + "/plugins/p/index.ts", dir + "/skills", dir + "/skills/../permissions.json", TOP + "/.illi/hooks.json", TOP + "/.illi/plugins/p/index.ts"]) {
+    expect([p, write(p, "yolo")]).toMatchObject([p, { $: "ask", why: expect.stringContaining("illi's own config") }]);
+  }
+  expect(write(dir + "/skills/notes/.env")).toMatchObject({ $: "ask", why: expect.stringContaining("may hold secrets") });
+  fs.mkdirSync(dir + "/skills/trick", { recursive: true });
+  fs.symlinkSync(dir + "/permissions.json", dir + "/skills/trick/SKILL.md");
+  expect(write(dir + "/skills/trick/SKILL.md", "yolo")).toMatchObject({ $: "ask", why: expect.stringContaining("illi's own config") });
+  expect(judge("mkdir -p " + dir + "/skills/notes && printf '%s' x > " + dir + "/skills/notes/SKILL.md", { mode: "auto" })).toBe("run");
+  expect(judge("echo x > " + dir + "/hooks.json", { mode: "auto" })).toStartWith("ask: ");
+  // a link whose target isn't there yet: a write through it makes that target
+  fs.symlinkSync(dir + "/hooks.json", TOP + "/notes-link");
+  expect([write(TOP + "/notes-link", "yolo").$, judge("echo x > notes-link", { mode: "yolo" }).startsWith("ask: ")]).toEqual(["ask", true]);
+  fs.rmSync(TOP + "/notes-link");
+});
+
 test("the user's rules come first; a root command's allow must name its sudo; deny and ask by a program's name wherever it lives; allow covers the command, not its redirections or assignments, and on a command illi can't follow, or one named by the whole command (reading a pipe, a file), only strictly", () => {
   expect(judge("/bin/rm -rf src", { rules: { shell: { "rm *": "deny" } } })).toBe("deny: your rules refuse /bin/rm -rf src");
   expect(Guard.check(where({ rules: { shell: { "git push *": "ask" } } }), "shell", { command: "/usr/bin/git push" })).toMatchObject({ $: "ask", always: [] });

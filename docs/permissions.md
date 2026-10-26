@@ -23,7 +23,7 @@ Modes
 | `careful` | reads, and routine changes in the project | every risky call, and files outside the project ([careful](#careful)) |
 | `ask` | reads | every change, and what `careful` asks |
 | `read-only` | reads | what `careful` asks; changes are refused |
-| `yolo` | everything | only your ask rules and a write to illi's own config |
+| `yolo` | everything | only your ask rules and a write to illi's own config (not its skills, commands, agents, rules or theme) |
 
 - `/mode` switches it for this session, or click it at the bottom
   line's right end (`read-only` in the warning color, `yolo` in the
@@ -31,9 +31,15 @@ Modes
 - The `mode` setting ([Config](config.md)) is the default; `yolo` set
   there is said at the start. `ILLI_MODE=yolo` runs a script unasked.
 - Your rules hold in every mode: deny refuses and ask asks, even in
-  `yolo`. So does one check of illi's own: a write to its config (any
-  file in `~/.illi`, or a project's `.illi`: what it runs and is told,
-  hooks and plugins among them) is asked, until you grant that file.
+  `yolo`. So does one check of illi's own: a write to its config (a
+  file in `~/.illi`, or a project's `.illi`: its settings, permissions,
+  hooks, plugins and MCP servers, what it runs and may do) is asked,
+  until you grant that file. Its skills, commands, agents, rules
+  (`RULES.md`) and theme only say what it is told or how it looks, so
+  it writes those as you ask in `auto` and `yolo` (`careful` and `ask`
+  ask): it customizes itself, and what they lead it to do is still
+  checked. A path that only leads there by `..` or a link, even one
+  whose target isn't there yet, counts as where it leads.
 - Every mode but `yolo` asks all `auto` asks: a secret, through any
   tool (and a folder outside the project holding a secret store), root
   and the system, a change outside the project, what deletes for good on
