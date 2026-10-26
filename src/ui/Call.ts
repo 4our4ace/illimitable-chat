@@ -388,8 +388,8 @@ function project_in(project: unknown): string {
 }
 
 // the span a date or search call asks, its from and to read as the tool
-// reads them (When.span; one sent as null or "" left out: When.given);
-// null: none asked, or not one
+// reads them (When.span; one sent as null or blank left out:
+// When.given); null: none asked, or not one
 function span_of(x: Input): Span | null {
   const span = !When.given(x.from) && !When.given(x.to) ? null : When.span(x.from, x.to);
   return typeof span === "string" ? null : span;

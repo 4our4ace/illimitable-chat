@@ -31,9 +31,9 @@
 // project's too, its project named for the zoom), what isn't a span
 // refused, a field sent as null or "" read as left out; a search kept to
 // a span (to alone: all up to it), one whose span won't read searching
-// every date, saying so; the projects' days in illi's zone. The time now in each call's
-// message, short on claude-code, after every cache mark a later call
-// reads.
+// every date, saying so; the projects' days in illi's zone. The time
+// now in each call's message, short on claude-code, after every cache
+// mark a later call reads.
 
 import { expect, setSystemTime, test } from "bun:test";
 import * as fs from "node:fs";

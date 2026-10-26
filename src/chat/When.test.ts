@@ -8,10 +8,10 @@
 // a span to the end of what from names when to is left out (or sent as
 // null or blank), through to's day (month, year) when it is a date, from
 // the first message on when only to is given; what isn't a date
-// refused, saying why. The
-// time now in one short line (on claude-code without the date its prompt
-// gives). A span's words: its head, the times its lines show (only what
-// the head doesn't), the screen's short form.
+// refused, saying why. The time now in one short line (on claude-code
+// without the date its prompt gives). A span's words: its head, the
+// times its lines show (only what the head doesn't), the screen's short
+// form.
 
 import { afterAll, expect, test } from "bun:test";
 

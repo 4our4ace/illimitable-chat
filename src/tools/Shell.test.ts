@@ -6,8 +6,9 @@
 // -exec, flock), wrappers taken off, cd followed (behind builtin, command
 // or time too; another program's leaving the folder unknown; a path
 // walked as the system walks it), variables, braces (before tildes) and
-// the folder's own outputs ($(pwd)) expanded as far as known (an
-// unquoted one split and globbed as bash would; a [ without its ] not),
+// the outputs known before it runs ($(pwd), the repository's top, where
+// mktemp makes its file) expanded as far as known (an unquoted one
+// split and globbed as bash would; a [ without its ] not),
 // redirections with their descriptors and whether the text they feed is
 // made as it runs; what bash would read in a way this can't follow is
 // refused with why, never guessed. A line ending in |, && or || goes on

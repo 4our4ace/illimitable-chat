@@ -337,9 +337,9 @@ const WHAT  = 400;
 const WHOLE = 32000;
 const KEPT  = 1000;
 
-// what "don't ask again" keeps when it keeps the very command asked
-// about, shown whole above it, past SHORT characters or lines: never the
-// command again, a script's lines run together on one
+// how "don't ask again" names the very command asked about, kept
+// exactly, past a line or SHORT characters (Tools.kept): the command
+// shows above it, so never again here, a script's lines run together
 const EXACT = "this exact command";
 const SHORT = 72;
 
