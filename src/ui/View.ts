@@ -224,6 +224,7 @@ export type Server =
   | ({ $: "state" } & Partial<State>) // the fields moved since the view was last told, all as it joins (Chat.tell)
   | { $: "agent"; name: string; found: boolean }
   | { $: "note"; text: string }
+  | { $: "settings" } // config.json read again by the chat's illi, as a terminal changed a setting: a view's illi reads it again too, redoing what its terminal keeps of the settings (Settings.ts setting_told); a view of an older illi passes it over
   | ({ $: "ack"; id: string } & Answer);
 
 // a message a person sends: its text, its images

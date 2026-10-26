@@ -77,10 +77,11 @@ deleted, all of it at once.
 A project's chat runs in one illi. Started in a second terminal in the
 same project, illi joins it as another screen: the same chat, either
 one typing, asking or answering. The tools work in the first one's
-folder; its agents and MCP servers serve both. A setting changed in the
-second applies to the chat as one changed in the first does: the first
-reads `config.json` again. Quit the first, and the second takes the
-chat over on its own.
+folder; its agents and MCP servers serve both. A setting changed in
+any terminal on the chat applies to it, and to every terminal's screen,
+as one changed in the first does: the first reads `config.json` again,
+then each other terminal's illi does too. Quit the first, and the
+second takes the chat over on its own.
 
 What else illi keeps in `~/.illi`:
 

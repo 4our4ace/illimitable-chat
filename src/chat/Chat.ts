@@ -1266,15 +1266,18 @@ export namespace Chat {
       // setting_follow: this one's, or a second terminal's view's): read
       // again, every key, so a setting changed in any terminal holds for
       // the chat as one changed in this one's does; a suggested reply let
-      // go while `suggest` is off; the views told. The act keeps the name it had when it told
-      // of `related` alone, so a view and a chat of protocol 3 still agree
-      // (an older chat reads every key on it too)
+      // go while `suggest` is off; the views told the state, and each to
+      // read the file again itself (settings), so every terminal's screen
+      // follows. The act keeps the name it had when it told of `related`
+      // alone, so a view and a chat of protocol 3 still agree (an older
+      // chat reads every key on it too)
       case "related": {
         config.config_reread();
         if (!config.SUGGEST) {
           Suggest.drop(chat);
         }
         Chat.change(chat);
+        Chat.all(chat, { $: "settings" });
         return {};
       }
       case "autocompact": {

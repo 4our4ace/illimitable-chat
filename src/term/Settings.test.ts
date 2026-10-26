@@ -13,8 +13,9 @@
 // into a config.json that won't read. A setting written at a view, in
 // any way, is told to the chat's illi once (it reads the file again:
 // Chat.test.ts), the terminal's own of it anew; one only read again is
-// told to no one. Each setting is in docs/config.md and the
-// customize-illi skill.
+// told to no one. Told the chat's illi read the file again, a view's
+// illi reads it too, the holder's terminal nothing. Each setting is in
+// docs/config.md and the customize-illi skill.
 
 import { afterAll, afterEach, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -32,7 +33,7 @@ delete process.env.ILLI_JOBS;
 
 const config = await import("../config/Config.ts");
 const { Custom } = await import("../config/Custom.ts");
-const { setting_follow } = await import("./Settings.ts");
+const { setting_follow, setting_told } = await import("./Settings.ts");
 const { status_new } = await import("./Status.ts");
 const { term_commands } = await import("./Commands.ts");
 const { term_grab, term_type } = await import("./Keys.ts");
@@ -222,6 +223,23 @@ test("a setting written at a view, by /settings, a sticky skill or a shortcut, i
     config.config_set(key, null);
   }
   fs.rmSync(DIR + "/skills/terse", { recursive: true, force: true });
+});
+
+test("told the chat's illi read the settings again, a view's illi reads them too, its terminal following, telling no one; the holder's own terminal reads nothing", () => {
+  const view = term();
+  const was = config.SIDE;
+  fs.writeFileSync(DIR + "/config.json", JSON.stringify({ ...file(), side: "left" }));
+  const holder = { ...term(), chat: {} };
+  setting_told(holder);
+  expect([config.SIDE, holder.side.place]).toEqual([was, "right"]);
+  setting_follow(view);
+  setting_told(view);
+  expect([config.SIDE, view.side.place, acts(view)]).toEqual(["left", "left", []]);
+  fs.writeFileSync(DIR + "/config.json", "{ nope");
+  setting_told(view);
+  expect(note(view)).toStartWith("config: " + DIR + "/config.json: ");
+  fs.writeFileSync(DIR + "/config.json", "{}");
+  config.config_reread();
 });
 
 test("a vendor or a model taken out that a pick runs on won't do", () => {
