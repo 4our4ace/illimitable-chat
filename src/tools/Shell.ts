@@ -174,13 +174,28 @@ const NEST = 64;
 const META = " \t\n;&|()<>";
 
 // an exit, as the command after a || (its own: not piped nor in the
-// background, which would run it in a subshell), with no word, a number
+// background, which would run it in a subshell; not a heredoc's body
+// read between, scan_list), with no word, a number
 // or $? (exit abc, exit 1x: bash says so and goes on). A return, at the
 // top of a script not sourced, fails and goes on
 const EXITS = /^\s*exit(?:[ \t]+(?:\d{1,3}|\$\?|"\$\?"))?(?:[ \t]*(?:[;\n]|$)|[ \t]+#)/;
 
 // the signal a trap's action runs at that comes only as the shell ends
 const END = /^(?:(?:SIG)?EXIT|0)$/i;
+
+// the variables bash keeps its own way: an assignment to them lost or
+// changed (FUNCNAME=/x leaves it empty), or their value changing by
+// itself (RANDOM, LINENO, REPLY after a read): never known
+const SPECIAL = /^(?:BASH\w*|FUNCNAME|_|DIRSTACK|GROUPS|RANDOM|SRANDOM|SECONDS|EPOCH\w+|LINENO|PIPESTATUS|PPID|UID|EUID|HISTCMD|OPTIND|OPTARG|REPLY|MAPFILE|SHELLOPTS|COMP_\w+|READLINE_\w+)$/;
+
+// set's one-letter options and its -o names: any other makes the whole
+// set fail, its -e with it
+const SET_FLAGS = /^[-+][abefhkmnptuvxBCEHPTo]+$/;
+const SET_NAMES = new Set(["allexport", "braceexpand", "emacs", "errexit", "errtrace", "functrace", "hashall", "histexpand", "history", "ignoreeof", "interactive-comments", "keyword", "monitor", "noclobber", "noexec", "noglob", "nolog", "notify", "nounset", "onecmd", "physical", "pipefail", "posix", "privileged", "verbose", "vi", "xtrace"]);
+
+// the special builtins: an assignment before one lasts in POSIX mode and
+// in sh (dash), so its variables are known only as it runs after
+const SPECIALS = new Set([":", ".", "source", "break", "continue", "eval", "exec", "exit", "export", "readonly", "return", "set", "shift", "times", "trap", "unset"]);
 
 // the reserved words that only group commands: read past
 const SKIP = new Set(["if", "then", "elif", "else", "fi", "do", "done", "while", "until", "!", "{", "}"]);
@@ -426,7 +441,7 @@ function scan_list(s: Scan, close: string): void {
     const at    = place(s, cmd.from, cmd.to);
     const now   = after?.was == null ? null : state_of(s);
     const list  = op === "&&" || op === "||";
-    const exits = op === "||" && EXITS.test(s.src.slice(s.at));
+    const exits = op === "||" && s.docs.length === 0 && EXITS.test(s.src.slice(s.at));
     const plain = s.depth === 0 && groups.length === 0 && !neg && !piped && !sub && !andor;
     closed = null;
     if (after?.was != null) {
@@ -818,11 +833,16 @@ function scan_dollar(s: Scan, b: Build, split = false): void {
 
 // a variable's values put in a word: as the command set it, else as the
 // environment has it (PWD: the folder followed); else known only as it
-// runs (as is any after a source: it may have set them). Split (bash
+// runs (as is any after a source: it may have set them; any bash keeps
+// its own way, SPECIAL). Split (bash
 // splits an unquoted value into words, and globs it): one holding a
 // space is known only as it runs (x="rm -rf src"; $x is three words, a
 // command), one holding *, ? or [ a glob
 function var_put(s: Scan, b: Build, name: string, split = false): void {
+  if (SPECIAL.test(name)) {
+    unknown(b);
+    return;
+  }
   const v = s.vars.get(name);
   const known = v !== undefined ? v.alts : name === "PWD" ? (s.cwd === null ? null : [s.cwd]) : s.wild || name === "OLDPWD" || process.env[name] === undefined ? null : [process.env[name]!];
   if (known === null || (split && known.some((x) => /[ \t\n]/.test(x)))) {
@@ -841,12 +861,13 @@ function var_put(s: Scan, b: Build, name: string, split = false): void {
 // --show-toplevel; else, or once a source or an assignment (PATH,
 // GIT_DIR, TMPDIR) may have changed what they'd say, or while the
 // environment's GIT_DIR or GIT_WORK_TREE points git elsewhere, known only
-// as it runs. The file or folder mktemp makes (temp) is known only if
+// as it runs (as is one of several lines, its status the last's). The
+// file or folder mktemp makes (temp) is known only if
 // it makes it (Word made: a failed one's output is empty; a command's
 // output after it, whose status the assignment's would be, drops it).
 // Split as var_put's
 function output(s: Scan, b: Build, inner: string, split = false): void {
-  const cmd = inner.trim().replace(/\s+/g, " ");
+  const cmd = inner.includes("\n") ? "" : inner.trim().replace(/\s+/g, " ");
   b.made = Array.isArray(b.made) ? null : b.made;
   const odd = s.cwd === null || s.wild || ["PATH", "GIT_DIR", "GIT_WORK_TREE", "TMPDIR"].some((n) => s.vars.has(n));
   const git = cmd === "git rev-parse --show-toplevel" && process.env.GIT_DIR === undefined && process.env.GIT_WORK_TREE === undefined;
@@ -1418,7 +1439,9 @@ function cmd_end(s: Scan, cmd: Cmd, piped: boolean, forked: boolean, top = false
 // variables set), and what it changes of the shell after it (cmd_after).
 // One variable set alone (no redirection either) to what a mktemp makes
 // (Word made), its failure ending the script (trust: so the variable
-// never stays empty), stands for where it makes it
+// never stays empty), stands for where it makes it. A command with a
+// redirection is no top for cmd_after (one failing, set never runs); a
+// special builtin's assignments may last (SPECIALS)
 function cmd_run(s: Scan, cmd: Cmd, full: string, piped: boolean, top: boolean, trust: boolean): void {
   const ctx = { cwd: s.cwd, root: s.root, fed: s.fed, piped: piped || s.inpipe, span: place(s, cmd.from, cmd.to) };
   if (cmd.words.length === 0) {
@@ -1430,25 +1453,31 @@ function cmd_run(s: Scan, cmd: Cmd, full: string, piped: boolean, top: boolean, 
   }
   const run = unwrap(s, cmd.words, cmd.env, cmd.redirs, full, ctx);
   if (run !== null) {
-    cmd_after(s, run.argv, run.own, top);
+    if (run.own && SPECIALS.has(Shell.program(run.argv[0]))) {
+      cmd.env.forEach((e) => s.vars.set(e.name, DYN));
+    }
+    cmd_after(s, run.argv, run.own, top && cmd.redirs.length === 0);
   }
 }
 
 // what a builtin changes of the shell for the commands after it (own: run
 // by this shell, a wrapper of its own before it at most): the folder (cd,
 // pushd: to its target, -P's as the system finds it; to home; popd, cd
-// -: unknown), the variables (set to plain words as written, else known
+// -, a name CDPATH may lead elsewhere: unknown), the variables (set to plain words as written, else known
 // only as it runs), all of them after a source; aliases on, a command
 // hashed to a path, a builtin loaded or one turned off can't be followed.
 // A cd another program runs (sudo cd, env cd, exec cd) leaves the folder
 // unknown. errexit (set -e, as -euo pipefail; set -o errexit) turns on
 // only by a set the command runs whenever it runs (top: cmd_end), where
 // it holds as written (Scan sete); off by
-// any (+e, +o errexit), a set of words known only as it runs, any
-// shopt -o (shopt -uo errexit) or a shopt of words known only as it runs
+// any (+e, +o errexit), a set of words known only as it runs or one that
+// fails (an option it doesn't know: SET_FLAGS, SET_NAMES), any shopt -o
+// (shopt -uo errexit) or a shopt of words known only as it runs; set -o
+// posix and an alias refused
 function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
   const name = Shell.program(argv[0]);
   const args = argv.slice(1);
+  const value = (a: Word) => (a.dynamic || a.alts.length !== 1 ? null : a.alts[0]);
   const names = args.filter((a) => /^[A-Za-z_]\w*$/.test(a.raw)).map((a) => a.raw);
   if (!own) {
     if (name === "cd" || name === "pushd" || name === "popd") {
@@ -1465,7 +1494,8 @@ function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
       const home = process.env.HOME ?? os.homedir();
       const physical = /P[^L]*$/.test(opts.map((a) => a.raw).join(""));
       const from = one === undefined || one === null || path.isAbsolute(one) ? "/" : s.cwd;
-      s.cwd = one === undefined ? (name === "cd" ? home : null) : one === null || one === "-" || /^[+-]\d+$/.test(one) || from === null ? null : physical ? Shell.walk(from, one) : path.resolve(from, one);
+      const searched = typeof one === "string" && !/^(?:\/|\.\.?(?:\/|$))/.test(one) && (s.wild || s.vars.has("CDPATH") || !!process.env.CDPATH);
+      s.cwd = one === undefined ? (name === "cd" ? home : null) : one === null || one === "-" || /^[+-]\d+$/.test(one) || from === null || searched ? null : physical ? Shell.walk(from, one) : path.resolve(from, one);
       return;
     }
     case "popd": {
@@ -1501,15 +1531,29 @@ function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
       return;
     }
     case "set": {
+      const opts: Array<[string, string, string | undefined]> = [];
       for (let k = 0; k < args.length; k++) {
-        const flag = args[k].dynamic || args[k].alts.length !== 1 ? null : /^([-+])([A-Za-z]+)$/.exec(args[k].alts[0]);
-        const opt  = flag?.[2].includes("o") ? args[++k] : undefined;
-        if (flag === null || opt?.dynamic || (opt !== undefined && opt.alts.length !== 1)) {
-          s.errexit &&= !args[k].dynamic && args[k].alts.length === 1;
+        const flag = value(args[k]);
+        if (flag === null) {
+          s.errexit = false;
+          return;
+        }
+        if (flag === "--" || flag === "-" || !/^[-+]/.test(flag)) {
           break;
         }
-        if (flag[2].includes("e") || opt?.alts[0] === "errexit") {
-          s.errexit = flag[1] === "-" ? s.errexit || (top && s.sete) : false;
+        const named = flag.includes("o") && k + 1 < args.length ? value(args[++k]) : undefined;
+        if (!SET_FLAGS.test(flag) || named === null || (named !== undefined && !SET_NAMES.has(named))) {
+          s.errexit = false;
+          return;
+        }
+        if (flag[0] === "-" && named === "posix") {
+          throw new Unread("set -o posix (bash then expands aliases and keeps a builtin's assignments)");
+        }
+        opts.push([flag[0], flag.slice(1), named]);
+      }
+      for (const [sign, letters, named] of opts) {
+        if (letters.includes("e") || named === "errexit") {
+          s.errexit = sign === "-" ? s.errexit || (top && s.sete) : false;
         }
       }
       return;
@@ -1521,6 +1565,12 @@ function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
     case "unset": {
       if (!args.some((a) => a.raw === "-f")) {
         names.forEach((n) => s.vars.set(n, Shell.lit("")));
+      }
+      return;
+    }
+    case "alias": {
+      if (args.some((a) => a.dynamic || a.raw.includes("="))) {
+        throw new Unread("alias (a name standing for other commands, which sh and POSIX mode expand)");
       }
       return;
     }
@@ -1621,8 +1671,11 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
         return null;
       }
     }
-    const trap = rest[0]?.raw === "--" ? rest.slice(1) : rest;
-    if (name === "eval" || name === "watch" || (name === "trap" && trap.length >= 2 && !/^-/.test(trap[0].raw) && trap[0].alts[0] !== "")) {
+    const known = (w: Word | undefined) => (w === undefined || w.dynamic || w.alts.length !== 1 ? null : w.alts[0]);
+    const trap = known(rest[0]) === "--" ? rest.slice(1) : rest;
+    const lists = /^-[lpP]+$/.test(known(rest[0]) ?? "");
+    const none = known(trap[0]) === "-" || known(trap[0]) === "";
+    if (name === "eval" || name === "watch" || (name === "trap" && !lists && trap.length >= 2 && !none)) {
       const words = name === "trap" ? trap.slice(0, 1) : name === "watch" ? watch_words(rest) : rest;
       if (words === null) {
         argv = Shell.opts(rest, { args: WATCH }).rest;

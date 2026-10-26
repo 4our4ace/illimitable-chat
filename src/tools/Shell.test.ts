@@ -254,6 +254,15 @@ test("a variable mktemp's output is set to stands for where it makes it only whe
     "d=$(mktemp -d /tmp/x.XXX) || exit 1x",
     "d=$(mktemp -d /tmp/x.XXX) || exit $E",
     "d=$(mktemp -d /tmp/x.XXX) || exit 99999999999999999999",
+    "d=$(mktemp -d -p /tmp\nX=a.XXX) || exit",
+    "set -e; d=$(mktemp -d /tmp/x.XXX\ntrue)",
+    "cat <<EOF; d=$(mktemp -d /tmp/x.XXX) ||\nexit\nEOF\necho hi",
+    "set -e 2>no/dir/x; d=$(mktemp -d /tmp/x.XXX)",
+    "set -e <missing; d=$(mktemp -d /tmp/x.XXX)",
+    "set -eZ; d=$(mktemp -d /tmp/x.XXX)",
+    "set -e -Z; d=$(mktemp -d /tmp/x.XXX)",
+    "set -o bogus -o errexit; d=$(mktemp -d /tmp/x.XXX)",
+    "set -e; d=/tmp/a; d= :",
     "bash -c 'set -e; d=$(mktemp -d /tmp/x.XXX); touch \"$d\"'",
   ]) {
     expect([odd, at(odd)]).toEqual([odd, unknown]);
@@ -273,7 +282,25 @@ test("a variable mktemp's output is set to stands for where it makes it only whe
   ]) {
     expect([trap, String(parts(trap)).startsWith("a trap on ")]).toEqual([trap, true]);
   }
+  for (const trap of ["X=$(printf 'cd /'); trap \"$X\" DEBUG; rm -rf home", "trap \"$UNSET\" DEBUG; rm -rf home", "trap $X EXIT"]) {
+    expect([trap, parts(trap)]).toEqual([trap, "trap runs a command made as it runs"]);
+  }
+  expect(String(parts("trap -- -:'||cd /' DEBUG; rm -rf home"))).toStartWith("a trap on DEBUG");
   expect(parts("trap 'echo bye' exit; trap 'echo bye' SIGEXIT 0")).toEqual(["echo bye @/w", "echo bye @/w"]);
+  expect(parts("trap - DEBUG; trap '' INT; trap -p; trap -l")).toEqual(["trap - DEBUG @/w", "trap  INT @/w", "trap -p @/w", "trap -l @/w"]);
+  // variables bash keeps its own way are never known, set or not
+  for (const own of ["FUNCNAME", "_", "BASH_SOURCE", "DIRSTACK", "RANDOM", "LINENO", "REPLY"]) {
+    expect([own, at(own + "=$(mktemp -d /tmp/x.XXX) || exit; d=$" + own)]).toEqual([own, unknown]);
+  }
+  // what turns aliases on, and aliases themselves, refused: an alias may stand for exit or set
+  expect([parts("set -o posix"), parts("alias exit=:"), parts("alias ll='ls -l'")]).toEqual([
+    "set -o posix (bash then expands aliases and keeps a builtin's assignments)",
+    "alias (a name standing for other commands, which sh and POSIX mode expand)",
+    "alias (a name standing for other commands, which sh and POSIX mode expand)",
+  ]);
+  expect(parts("alias; set -o; set +o posix")).toEqual(["alias @/w", "set -o @/w", "set +o posix @/w"]);
+  // a cd CDPATH may lead elsewhere leaves the folder unknown; one by a path, as written
+  expect(parts("CDPATH=/; cd home; ls; cd ./src; ls; cd /tmp; cd lib; ls")).toEqual(["CDPATH=/ @/w", "cd home @/w", "ls @null", "cd ./src @null", "ls @null", "cd /tmp @null", "cd lib @/tmp", "ls @null"]);
   // run where a set -e may not hold (Claude Code's Bash, in its own wrapper): only || exit trusted
   const wrapped = (script: string) => (Shell.parse(script + "; touch \"$d\"", "/w", 0, false) as Part[]).map(line).at(-1);
   expect([wrapped("set -e; d=$(mktemp -d /tmp/x.XXX)"), wrapped("d=$(mktemp -d /tmp/x.XXX) || exit 1")]).toEqual([unknown, known]);

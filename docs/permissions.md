@@ -166,9 +166,12 @@ command that:
   `.mcp.json`, shell rc files, `bunfig.toml`, ...)
 - holds what is known only as it runs (`$CMD` as a command, a path made
   by `$(...)`), or what illi can't follow (`case`, functions, arrays,
-  a `trap` on anything but `EXIT`, whose action may run before any
-  later command): asked, never guessed. A variable the command itself
-  sets to plain words, `$(pwd)` or the repository's top is known. So
+  aliases, `set -o posix`, a `trap` on anything but `EXIT`, whose
+  action may run before any later command): asked, never guessed. A
+  variable the command itself sets to plain words, `$(pwd)` or the
+  repository's top is known (not one bash keeps its own way, as
+  `FUNCNAME` or `RANDOM`; a `cd` that `CDPATH` may lead elsewhere
+  leaves the folder unknown). So
   is one set alone to a plain `$(mktemp ...)` when a failed mktemp,
   which leaves the variable empty, ends the script: after `set -e`, or
   with `|| exit` after it (no word after `exit`, a number or `$?`),
