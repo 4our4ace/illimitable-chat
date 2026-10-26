@@ -52,7 +52,7 @@ process.env.ILLI_MODE = "careful";
 
 const { Chat } = await import("../chat/Chat.ts");
 const config = await import("../config/Config.ts");
-const { MASTER, SUB, Tools } = await import("./Tools.ts");
+const { MASTER, SUB, SUB_FRESH, Tools } = await import("./Tools.ts");
 const { Projects } = await import("../chat/Projects.ts");
 const { Store } = await import("../chat/Store.ts");
 const { Memory } = await import("../chat/Memory.ts");
@@ -161,6 +161,8 @@ test("a caller in Claude Code gets only the tools it lacks, served at ?lean; its
   expect(hosted).not.toContain("Your shell, read, write and edit tools");
   expect(hosted).toContain("mcp__illi__");
   expect(Tools.hosted(SUB)).toStartWith("Here you work as a subagent of illi");
+  expect(Tools.hosted(SUB_FRESH)).toStartWith("Here you work as a subagent of illi");
+  expect(Tools.hosted(SUB_FRESH)).not.toContain("Your shell, read, write and edit tools");
   expect(Tools.hosted(SUB)).not.toContain("Your shell, read, write and edit tools");
   const project = temp_repo("illi-tools-project-");
   fs.writeFileSync(project + "/CLAUDE.md", "a rule of the project");

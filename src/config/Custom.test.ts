@@ -10,7 +10,8 @@
 // model, instructions and tools, Claude Code's too), noted before the
 // next message, each keeping its pick; spawn's agent runs a subagent as
 // it, with its Claude Code tools (none on a ChatGPT model whose window
-// isn't told: never guessed).
+// isn't told: never guessed); one started fresh (its agent's fresh:
+// true, or spawn's) gets none of the chat, told again after a restart too.
 // A skill: its folder's SKILL.md (a folded description), the
 // project's over theirs, listed by the skill tool and loaded by it; a
 // sticky one turned on and off by it, while on in every turn's prompt;
@@ -237,6 +238,46 @@ test("spawn's agent runs a subagent as it, and names the user's agents", async (
   chat.tools.agents.delete(name);
   expect(Tools.agent(chat.tools, name)!.role).toEqual({ $: "sub", effort: null, agent: "reviewer" });
   await until(() => !chat.busy);
+});
+
+test("an agent with fresh: true, or spawn's fresh, starts its subagent without the chat: no view, a prompt saying so, no tool reading the chat, and so again when told after a restart", async () => {
+  put(CWD + "/.illi/agents/tester.md", "---\ndescription: Tests\nmode: subagent\nfresh: true\n---\nYou test.\n");
+  const memory = ["zoom", "date", "projects", "search"];
+  const signal = new AbortController().signal;
+  try {
+    expect([Custom.agent(CWD, "tester")!.fresh, Custom.agent(CWD, "reviewer")!.fresh]).toEqual([true, false]);
+    asks.length = 0;
+    const out = await Tools.call(chat.tools, "main", "spawn", { tasks: ["test it"], agent: "tester" }, signal);
+    const name = /Started (\w+)/.exec(out.text)![1];
+    await until(() => asks.length > 0);
+    expect(asks[0].system).toContain("You start fresh: you see none of illi's chat with the user");
+    expect(asks[0].system).not.toContain("The view: the chat between illi and the user");
+    expect(asks[0].blocks.some((b: any) => b.text.includes("<chat>"))).toBe(false);
+    expect(Tools.list(chat.tools, name).map((t) => t.name).filter((n) => memory.includes(n))).toEqual([]);
+    expect(Logs.read(chat.mem, name)![0].text).toBe("subagent tester, without the chat");
+    chat.tools.agents.delete(name);
+    expect(Tools.agent(chat.tools, name)!.role).toEqual({ $: "sub", effort: null, agent: "tester", fresh: true });
+    await until(() => !chat.busy);
+    asks.length = 0;
+    expect((await Tools.call(chat.tools, "main", "tell", { name, message: "and the edge cases" }, signal)).fail).toBe(false);
+    await until(() => asks.length > 0);
+    expect(asks[0].blocks.some((b: any) => b.text.includes("<chat>"))).toBe(false);
+    await until(() => !chat.busy);
+    // a plain subagent, and one of an agent with the view, by spawn's fresh
+    asks.length = 0;
+    const plain = /Started (\w+)/.exec((await Tools.call(chat.tools, "main", "spawn", { tasks: ["look"], effort: "low", fresh: true }, signal)).text)![1];
+    await until(() => asks.length > 0);
+    expect(asks[0].system).toContain("You start fresh");
+    expect(Logs.read(chat.mem, plain)![0].text).toBe("subagent at effort low, without the chat");
+    chat.tools.agents.delete(plain);
+    expect(Tools.agent(chat.tools, plain)!.role).toEqual({ $: "sub", effort: "low", agent: null, fresh: true });
+    await until(() => !chat.busy);
+    const fresh = /Started (\w+)/.exec((await Tools.call(chat.tools, "main", "spawn", { tasks: ["review"], agent: "reviewer", fresh: true }, signal)).text)![1];
+    expect(Tools.list(chat.tools, fresh).map((t) => t.name)).toEqual(["read"]);
+    await until(() => !chat.busy);
+  } finally {
+    fs.rmSync(CWD + "/.illi/agents/tester.md", { force: true });
+  }
 });
 
 test("a main agent whose tools list holds spawn to some agents is offered those alone, and spawn refuses another or a plain subagent; held to none of the user's agents, it has no spawn", async () => {

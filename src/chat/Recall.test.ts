@@ -281,6 +281,25 @@ test("a line the caller's view holds at an episode's detail or finer is never gi
   tools.agents.delete("Cy");
 });
 
+test("an agent started fresh starts no search, so no line of the chat reaches it; one with the view does", async () => {
+  const view = [{ text: "<chat>\n", mark: false }, { text: "0+1024|user: a\n1024+512|illi: b\n1536+32|x\n1568+1|y\n1569+1|z\n</chat>\n", mark: true }];
+  const agent = { name: "Fy", run: 0, log: "Ada.t1", role: { $: "sub" as const, effort: null, agent: null, fresh: true as boolean }, call: null, live: [], calls: {}, stop: false, view: [] as typeof view, replies: [] };
+  tools.agents.set("Fy", agent);
+  try {
+    await stood(async () => null, async (asks) => {
+      expect(Recall.start(tools, "Fy", "shell", { command: "bun test src/chat/Seeker.ts" })).toBeNull();
+      expect(asks).toHaveLength(0);
+      [agent.role.fresh, agent.view] = [false, view];
+      const pending = Recall.start(tools, "Fy", "shell", { command: "bun test src/chat/Seeker.ts" });
+      expect(pending).not.toBeNull();
+      await pending!.found;
+      expect(asks).toHaveLength(1);
+    });
+  } finally {
+    tools.agents.delete("Fy");
+  }
+});
+
 // When
 // ----
 

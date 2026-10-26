@@ -26,7 +26,8 @@
 // it does (description), runs on (model: a label or
 // vendor:model:effort:speed; effort), may use (tools, by name, on
 // claude-code Claude Code's built-in tools too; left out: all its role
-// has; empty: none, as Claude Code reads an empty list)
+// has; empty: none, as Claude Code reads an empty list), whether a
+// subagent of it starts fresh (fresh: true: none of the chat, Tools.ts)
 // and the color of its mark (color: #rrggbb; none: one made for it); its
 // body is its instructions, added to the system prompt of its calls.
 //
@@ -80,7 +81,7 @@ export type Mode = "primary" | "subagent" | "all";
 // Claude Code built-in tools it may use on claude-code (null: it has no
 // tools list, so all; a list naming none of them: none), the subagents it
 // may spawn, by name (null: any; Claude Code's Agent(worker, researcher):
-// those alone)
+// those alone), whether it starts fresh as a subagent
 export type Profile = {
   name        : string;
   description : string;
@@ -95,6 +96,7 @@ export type Profile = {
   notes?      : string[];
   builtins?   : string[] | null;
   spawns?     : string[] | null;
+  fresh?      : boolean;
 };
 
 // a command: its name (as listed), what it does, its message, its file,
@@ -336,6 +338,7 @@ export namespace Custom {
       notes       : lost ? ["its tools name Claude Code's searches (Glob, Grep, LS), which illi does with shell; it names no Bash, Write or Edit, so it gets no shell"] : [],
       builtins    : list === undefined ? null : agent_builtins(list),
       spawns      : list === undefined ? null : agent_spawns(list),
+      fresh       : YES.test(head.fresh ?? ""),
     };
   }
 

@@ -96,6 +96,10 @@ You review code changes. ...
   edit as Bash, Read, Write and Edit; never its Agent, Task, TodoWrite or
   task tools, as illi's spawn and todo take their place; and Claude
   Code's own MCP servers to those its mcp__<server> names name
+- fresh: true: as a subagent it starts without the chat: no view, no
+  zoom, date, projects or search, no past moments handed to it; only its
+  task and the user's instructions (a blind test or review). Left out:
+  it sees the chat; spawn's fresh starts any subagent so
 - color: its mark's color; none: one is made for it
 - the body: its instructions, added to its system prompt
 
