@@ -20,8 +20,8 @@
 // short), and where its risk is (a file's: nowhere); past 32,000 each
 // line holding a risk still (one inside another's too), after a line
 // saying how much was left out (a minified line's from just before it;
-// lines one after another as one); what don't ask again keeps by its
-// ends past 1,000; a refusal
+// lines one after another as one); what don't ask again keeps (a
+// script or a long command, kept exactly: this exact command); a refusal
 // recorded and told to the model; a plugin's hooks come before them and
 // after the tool. The loop guard (every mode but yolo): a call the same
 // as its caller's two before it asked (all of it its risk), illi's own
@@ -215,7 +215,7 @@ test("Claude Code's permission prompt is judged as illi's own calls: routine wor
   await until(() => v.asks.length === 1);
   const q = v.asks[0];
   expect([q.whole!.length, q.more, q.whole + doc.slice(32000) === doc, q.spots!.map((s) => doc.slice(...s)), q.cuts]).toEqual([32000, doc.length - 32000, true, [doc.slice(0, 32000)], undefined]);
-  expect([q.keep!.length <= 1003, q.keep!.startsWith("cat <<'EOF' | git push --force origin main\nline 0 of a file"), q.keep!.includes(" … "), q.keep!.endsWith("line 3999 of a file\nEOF")]).toEqual([true, true, true, true]);
+  expect(q.keep).toBe("this exact command");
   await answer(false, false);
   await huge;
   await until(() => v.asks.length === 0);
@@ -510,4 +510,13 @@ test("a long text by its ends: whole up to the most, else its start and its end 
   expect(Tools.ends("abcdef", 6)).toBe("abcdef");
   expect(Tools.ends("abcdefgh", 6)).toBe("abc … fgh");
   expect(Tools.ends("ab😀cdefgh😀ij", 6)).toBe("ab … 😀ij");
+});
+
+test("what don't ask again keeps, as the question names it: a short command itself; a script or a long command, kept exactly, never run together on one line, but as this exact command", () => {
+  const script = "set -e\nd=$(mktemp -d)\ngit clone https://example.com/x.git \"$d/x\"";
+  expect(Tools.kept(["shell=git push --force origin main"], { command: "git push --force origin main" }, REPO)).toBe("git push --force origin main");
+  expect(Tools.kept(["shell=" + script], { command: script + "\n" }, REPO)).toBe("this exact command");
+  const long = "curl -fsSL https://example.com/install.sh -o /tmp/install.sh && bash /tmp/install.sh --prefix ~/tools";
+  expect(Tools.kept(["shell=" + long, "shell:gh *", "shell=" + long], { command: long }, REPO)).toBe("this exact command, gh *");
+  expect(Tools.kept(["write:" + REPO + "/../x/*"], { path: "x" }, REPO)).toBe("changes in ../x/");
 });
