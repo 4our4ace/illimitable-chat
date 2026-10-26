@@ -33,7 +33,8 @@
 // alone of their folder have their own path as resource, so allowing
 // them allows nothing beside them). Paths are taken as written, links
 // not followed. Claude Code's tools (hosted) ask as illi's like ones
-// do: Bash a shell command, Read a read, Write, Edit, MultiEdit and
+// do: Bash a shell command, Monitor its command too (or its WebSocket's
+// URL as a web fetch), Read a read, Write, Edit, MultiEdit and
 // NotebookEdit an edit, Grep, Glob and LS a search of a folder (grep,
 // glob, list), WebFetch and WebSearch theirs, Task and Agent a subagent,
 // illi's own (mcp__illi__...) none here: they ask as they reach illi.
@@ -129,6 +130,7 @@ export namespace Access {
     const dir = (p: unknown) => (typeof p === "string" && p !== "" ? p : where.cwd);
     switch (tool) {
       case "Bash"         : return Access.shell(where, String(input?.command ?? ""));
+      case "Monitor"      : return typeof input?.command === "string" ? Access.shell(where, input.command) : [plain("webfetch", String(input?.ws?.url ?? ""))];
       case "Read"         : return file(where, "read", [input?.file_path]);
       case "Write"        :
       case "Edit"         :

@@ -83,14 +83,17 @@ project always comes first:
   alone of their folder: illi's settings, permissions, hooks and MCP
   servers beside them are still asked.
 
-On `claude-code`, Claude Code's own settings apply first (your
-`~/.claude` rules); what it asks about comes to illi and is checked the
-same way: `Bash` as the shell, `Read` as a read, `Write`, `Edit`,
-`MultiEdit` and `NotebookEdit` as edits, `Grep`, `Glob` and `LS` as
-`grep`, `glob` and `list` (their pattern, or the folder's path) after
-their folder if outside, `WebFetch` and `WebSearch` as `webfetch` (the
-URL) and `websearch` (the query), `Task` and `Agent` as `subagent`, any
-other tool as its own name.
+On `claude-code`, Claude Code's own settings apply first (yours in
+`~/.claude`, a project's in its `.claude`): what they allow runs
+unasked, and so does what Claude Code allows by itself (a read inside
+the project, a `.env` file's too). What it asks about comes to illi and
+is checked the same way: `Bash` as the shell, `Monitor` too (its
+command, or its WebSocket's URL as `webfetch`), `Read` as a read,
+`Write`, `Edit`, `MultiEdit` and `NotebookEdit` as edits, `Grep`,
+`Glob` and `LS` as `grep`, `glob` and `list` (their pattern, or the
+folder's path) after their folder if outside, `WebFetch` and
+`WebSearch` as `webfetch` (the URL) and `websearch` (the query), `Task`
+and `Agent` as `subagent`, any other tool as its own name.
 
 How rules decide
 ----------------
