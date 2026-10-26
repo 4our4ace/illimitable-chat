@@ -163,8 +163,9 @@ export function setting_open(t: Term, key: config.Key): void {
 }
 
 // Enter on `off`: each skill, agent, command, MCP server (illi's own,
-// then Claude Code's as its last call told them: ClaudeCode.servers) and
-// plugin, what it is and where it's from (built in, global, the profile,
+// then Claude Code's as its last call told them: ClaudeCode.servers,
+// whatever the pick, as `off` holds for each later call on claude-code)
+// and plugin, what it is and where it's from (built in, global, the profile,
 // the project, a plugin: its part by the name it is listed by; Claude
 // Code), on or off (setting_on); Enter, Left or Right turns the lit one
 // on or off (setting_toggle), kept in `off` at once (illi's own server or

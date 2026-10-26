@@ -5,12 +5,13 @@
 // the profiles (two or more; those open in this window marked as they
 // are), a plan's use (ChatGPT's, Claude's), the chat's (the
 // context, the memory), the past topics related to the work (the radar:
-// Related.ts), the MCP servers (illi's own, Claude Code's), the requests
-// refused, the plugins' lines, a hint for the keys or illi's to-do list;
-// the side and side_width settings place it.
+// Related.ts), the MCP servers (illi's own; Claude Code's while the pick
+// is on claude-code), the requests refused, the plugins' lines, a hint
+// for the keys or illi's to-do list; the side and side_width settings
+// place it.
 
-import { ClaudeCode, type Theirs } from "../ai/ClaudeCode.ts";
-import { term_background, term_choose, term_mcp, term_mcp_state, term_stick } from "./Commands.ts";
+import type { Theirs } from "../ai/ClaudeCode.ts";
+import { term_background, term_choose, term_mcp, term_mcp_state, term_stick, term_theirs } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Custom, type Skill } from "../config/Custom.ts";
 import * as Draw from "../ui/Draw.ts";
@@ -259,14 +260,15 @@ function term_bar(f: number, w: number, c: string): Item {
 
 // the user's MCP servers, a line each, their names aligned: ● ready
 // (in the theme's success; its tools counted), ✗ failed (its error), ◌
-// starting; a file that won't read; then, under a dim line, Claude
-// Code's own as its last call told them (ClaudeCode.servers), but one
-// illi's own of its name stands in for: ● connected (its tools counted,
-// once told), ✗ failed, dim one `off` names, or as Claude Code says it
-// is (term_mcp_state); a click on any: /mcp, lit on it
+// starting; a file that won't read; then, under a dim line, while the
+// pick is on claude-code, Claude Code's own as its last call told them
+// (term_theirs), but one illi's own of its name stands in for: ●
+// connected (its tools counted, once told), ✗ failed, dim one `off`
+// names, or as Claude Code says it is (term_mcp_state); a click on any:
+// /mcp, lit on it
 function term_side_mcp(t: Term): Item[] {
   const { servers, troubles } = Mcp.status();
-  const theirs = (ClaudeCode.servers() ?? []).filter((s) => !s.over);
+  const theirs = term_theirs(t).filter((s) => !s.over);
   const wide = Math.max(0, ...[...servers, ...theirs].map((s) => Paint.text_width(s.name)));
   const tone = Draw.draw_tokens();
   const red  = { ...Paint.INK, c: tone.error };

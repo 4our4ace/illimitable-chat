@@ -437,7 +437,8 @@ Mouse and side panel
   run), your plan's use (ChatGPT's or Claude's, once it has told it),
   the context and the memory, past topics related to the work
   ([Related](#related)), the MCP servers, Claude Code's own under a line
-  of their own (a click opens `/mcp` on one), the
+  of their own while the pick is on `claude-code` (a click opens `/mcp`
+  on one), the
   latest requests refused (a click opens `/permissions` on one) and illi's
   to-do list, gone once every item is done or on `/clear`. The `side`
   and `side_width` settings place it.

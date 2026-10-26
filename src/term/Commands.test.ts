@@ -31,7 +31,8 @@
 // servers as its last call told them, each how it is and on or off, the
 // lit one's tools under them, Enter turning one off and on (illi's own
 // one off too, not started); the side shows them under a line of their
-// own, a click /mcp lit on one.
+// own, a click /mcp lit on one; both only while the pick is on
+// claude-code.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -60,6 +61,15 @@ const term = () => {
   const v = View.view_new();
   View.view_hear(v, { $: "state", ...v, vendors: ["claude-api", "openai-api"], pick: { vendor: "claude-api", model: "sonnet-5.5", effort: "medium", speed: "slow" } });
   return { v, scr: { tty: true, ed: Screen.ed_new() }, choose: null, question: null, wait: null, pane: null, sug: null, ver: 0, scroll: 0, notices: [], subs: new Map(), seen: { tall: 20 }, due: true } as any;
+};
+
+// a terminal whose chat is on claude-code, offered beside claude-api, its
+// side's agents and profiles known
+const coded = () => {
+  const t = term();
+  t.v.vendors = ["claude-api", "claude-code"];
+  t.v.pick = { vendor: "claude-code", model: "claude-opus-5-5", effort: "high", speed: "slow" };
+  return Object.assign(t, { agents: [], profs: ["default"], since: Date.now() });
 };
 
 // /model typed with no name
@@ -627,8 +637,7 @@ test("each command and key is in docs/keys.md", () => {
 
 test("/mcp lists Claude Code's own servers as its last call told them, each how it is, on or off, the lit one's tools under them; Enter turns one off in illi's calls, again on; the side shows them under a line of their own; illi's own one off, not started, is listed to turn on", () => {
   ClaudeCode.learn({ mcp_servers: [{ name: "illi", status: "connected" }, { name: "github", status: "connected" }, { name: "claude.ai Gmail", status: "needs-auth" }, { name: "docs", status: "failed" }], tools: ["mcp__illi__zoom", "mcp__github__get_issue", "mcp__github__list_prs"] }, { strict: false, deny: [] });
-  const t = term();
-  Object.assign(t, { agents: [], profs: ["default"], since: Date.now() });
+  const t = coded();
   const text = (l: any[]) => l.map((r) => r.x).join("").replace(/\s+/g, " ").trim();
   const side = () => term_side(t, 50, 60).map(([line]) => text(line));
   run(t, "/mcp");
@@ -650,5 +659,28 @@ test("/mcp lists Claude Code's own servers as its last call told them, each how 
   expect([t.choose.names[0], t.choose.about[0], t.choose.aside[0], t.choose.heads[0], foot(t)]).toEqual(["web", "not started · " + config.config_home(DIR + "/mcp.json"), "off", "illi's", "Enter on/off · at the next start"]);
   term_grab(t, "Enter");
   expect([config.OFF, t.choose.aside[0]]).toEqual([[], "on"]);
+  fs.rmSync(DIR + "/mcp.json");
+});
+
+test("Claude Code's own servers show at the side and in /mcp only while the pick is on claude-code: moved off, neither shows them, beside illi's own or alone, and /mcp's empty pane says when they show", () => {
+  ClaudeCode.learn({ mcp_servers: [{ name: "github", status: "connected" }], tools: ["mcp__github__get_issue"] }, { strict: false, deny: [] });
+  const t = coded();
+  const text = (l: any[]) => l.map((r) => r.x).join("").replace(/\s+/g, " ").trim();
+  const side = () => term_side(t, 50, 60).map(([line]) => text(line));
+  const pane = () => text(t.pane.make(200).flat());
+  expect(side()).toEqual(expect.arrayContaining(["MCP", "Claude Code's", "● github 1 tool"]));
+  t.v.pick = { vendor: "claude-api", model: "sonnet-5.5", effort: "medium", speed: "slow" };
+  expect(side().filter((l) => l === "MCP" || l === "Claude Code's" || l.includes("github"))).toEqual([]);
+  run(t, "/mcp");
+  expect([t.choose, pane()]).toEqual([null, expect.stringMatching(/^No MCP servers yet\. .* Claude Code's own servers show here while the pick is on claude-code, once a call has loaded them\.$/)]);
+  fs.writeFileSync(DIR + "/mcp.json", JSON.stringify({ mcpServers: { web: { type: "http", url: "https://example.com/mcp" } } }));
+  config.config_set("off", "web");
+  run(t, "/mcp");
+  expect([t.choose.names, new Set(t.choose.heads)]).toEqual([["web"], new Set(["illi's"])]);
+  t.choose = null;
+  t.v.pick = { vendor: "claude-code", model: "claude-opus-5-5", effort: "high", speed: "slow" };
+  run(t, "/mcp");
+  expect(t.choose.names).toEqual(["web", "github"]);
+  config.config_set("off", null);
   fs.rmSync(DIR + "/mcp.json");
 });

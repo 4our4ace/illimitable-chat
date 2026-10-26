@@ -24,7 +24,7 @@ import { Custom, type Command, type Profile, type Skill } from "../config/Custom
 import { term_redraw } from "./Frame.ts";
 import { term_away, term_clear, term_cycle, term_enter, term_esc, term_next, term_page, term_shots, term_take, term_verbose } from "./Keys.ts";
 import { Mcp } from "../tools/Mcp.ts";
-import { ClaudeCode } from "../ai/ClaudeCode.ts";
+import { ClaudeCode, type Theirs } from "../ai/ClaudeCode.ts";
 import { Export } from "../chat/Export.ts";
 import { Plugins, type Command as Plugged, type Found } from "../config/Plugins.ts";
 import { Hooks, type Entry } from "../config/Hooks.ts";
@@ -143,7 +143,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/settings",         "",                        "all the settings: type to search, Left, Right or Enter change one, Del puts its default back", (t) => term_settings(t)],
       ["/shortcuts",        "",                        "the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one", (t) => term_shortcuts(t)],
       ["/set <key> [value]", "",                       "change a setting (default: back to its default); no value: /settings at it. / finds each setting by its key or what it does", term_set],
-      ["/mcp",              "",                        "your MCP servers and Claude Code's: on or off, their tools, or why one failed", term_mcp],
+      ["/mcp",              "",                        "your MCP servers and, on claude-code, Claude Code's: on or off, their tools, or why one failed", term_mcp],
       ["/mode [mode]",      "",                        "what runs without asking, this session: auto, careful, ask, read-only or yolo; no mode: opens a list (or click it on the bottom line)", term_mode],
       ["/permissions",      "",                        "the requests refused (Enter allows one again, this session), the grants kept (Del removes one), your rules", (t) => term_permissions(t)],
     ]],
@@ -470,24 +470,25 @@ function term_skill(t: Term, skill: Skill, arg: string, word: string): void {
 }
 
 // the MCP servers, illi's own (where each is from: a plugin, a file;
-// one `off` names, not started, too), then Claude Code's as its last
-// call told them (ClaudeCode.servers), each how it is (term_mcp_state)
-// and on or off (setting_on); the lit one's tools under them, or why it
-// failed, or the login it needs; Enter, Left or Right turns it off or on
-// (setting_toggle: `off`; illi's own at the next start, Claude Code's
-// from the next call); the files that won't read after them. None of
-// either: where the user's go (none there yet: config.MCPS), and on
-// claude-code that Claude Code's own show once a call has loaded them.
-// `at`: the server lit, illi's or Claude Code's (cc: a click on one at
-// the side)
+// one `off` names, not started, too), then, while the pick is on
+// claude-code, Claude Code's as its last call told them (term_theirs),
+// each how it is (term_mcp_state) and on or off (setting_on); the lit
+// one's tools under them, or why it failed, or the login it needs;
+// Enter, Left or Right turns it off or on (setting_toggle: `off`; illi's
+// own at the next start, Claude Code's from the next call); the files
+// that won't read after them. None of either: where the user's go (none
+// there yet: config.MCPS), and, claude-code offered, that Claude Code's
+// own show while the pick is on it, once a call has loaded them. `at`:
+// the server lit, illi's or Claude Code's (cc: a click on one at the
+// side)
 export function term_mcp(t: Term, at = "", cc = false): void {
   const { servers, troubles, files } = Mcp.status();
   const idle   = Object.entries(Mcp.read(process.cwd(), true)).filter(([name]) => config.config_off(name) && !servers.some((s) => s.name === name));
-  const theirs = ClaudeCode.servers() ?? [];
+  const theirs = term_theirs(t);
   const where  = files.map((f, k) => config.config_home(f) + (files.length === 1 ? "" : k === 0 ? " (every profile)" : " (this profile's)")).join(" or ");
   const from   = (s: { plugin: string | null; file: string }) => (s.plugin !== null ? "plugin " + s.plugin : config.config_home(s.file));
   if (servers.length === 0 && idle.length === 0 && theirs.length === 0) {
-    const later = t.v.vendors.includes("claude-code") ? " Claude Code's own servers show here once a call on claude-code has loaded them." : "";
+    const later = t.v.vendors.includes("claude-code") ? " Claude Code's own servers show here while the pick is on claude-code, once a call has loaded them." : "";
     const text  = ["No MCP servers yet. Add them to " + where + ", as Claude Code's mcpServers (illi's docs/customize.md shows the shape); they run from illi's next start." + later, ...(troubles.length === 0 ? [] : ["", "Won't read:", ...troubles.map((x) => "- " + x)])];
     return term_pane_text(t, "MCP", text.join("\n"));
   }
@@ -530,6 +531,15 @@ export function term_mcp(t: Term, at = "", cc = false): void {
   if (lit >= 0 && t.choose !== null) {
     t.choose.at = Math.max(0, t.choose.shown.findIndex((m) => m.k === lit));
   }
+}
+
+// Claude Code's own MCP servers as /mcp and the side show them: as its
+// last call that loaded them told them (ClaudeCode.servers), only while
+// the chat's pick (the main agent's) is on claude-code, the one vendor
+// whose calls load them; on any other, none, as none of its calls has
+// them
+export function term_theirs(t: Term): Theirs[] {
+  return t.v.pick?.vendor === "claude-code" ? (ClaudeCode.servers() ?? []) : [];
 }
 
 // how an MCP server is, in words: connected, its tools counted (once
