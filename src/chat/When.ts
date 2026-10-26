@@ -12,9 +12,9 @@
 //
 // A span is [from, to): a date alone as `from` is its day's start; as
 // `to`, its day's end, so a span names its last day (a month's or a
-// year's alike); a time as `to` is
-// the instant the span stops before. A day is a calendar day, 23 or 25
-// hours where the clocks change, never 24 hours added.
+// year's alike); a time as `to` is the instant the span stops before;
+// `to` alone spans from the first message on. A day is a calendar day,
+// 23 or 25 hours where the clocks change, never 24 hours added.
 
 // Types
 // =====

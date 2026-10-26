@@ -29,7 +29,7 @@
 // why (every bypass the reviews found among them; inline code with no
 // "don't ask again"), and what only looks like one isn't ([ as a test, a
 // project's bin/, a sed s/// holding ;, git's revisions, a search's
-// pattern, a project's own linked interpreter);
+// pattern, a project's own linked interpreter, a folder mktemp makes);
 // read-only refuses changes, ask asks them, yolo runs all but what the
 // user's rules refuse or ask and a write to illi's own config; the user's rules come first (deny, ask,
 // allow; a root command's allow names its sudo; deny and ask by a
