@@ -281,6 +281,14 @@ test("no false alarms: [ as a test, a project's own bin/, *.egg-info, names insi
     ["set -e; trap 's\"e\"t +e' DEBUG; d=$(mktemp -d); rm -rf \"$d\"/*", "a trap on DEBUG"],
     ["d=/tmp/a; trap 'd=' DEBUG; rm -rf \"$d\"/*", "a trap on DEBUG"],
     ["trap 'cd /' DEBUG; rm -rf home", "a trap on DEBUG"],
+    ["FUNCNAME=$(mktemp -d) || exit; rm -rf \"$FUNCNAME\"/*", "is known only as it runs"],
+    ["X=$(printf 'cd /'); trap \"$X\" DEBUG; rm -rf home", "trap runs a command made as it runs"],
+    ["trap -- -:'||cd /' DEBUG; rm -rf home", "a trap on DEBUG"],
+    ["d=$(mktemp -d -p /tmp\nX=a.XXX) || exit; rm -rf \"$d\"/*", "is known only as it runs"],
+    ["cat <<EOF; d=$(mktemp -d) ||\nexit\nEOF\necho hi; rm -rf \"$d\"/*", "is known only as it runs"],
+    ["set -eZ; d=$(mktemp -d); rm -rf \"$d\"/*", "is known only as it runs"],
+    ["alias exit=:\nd=$(mktemp -d) || exit; rm -rf \"$d\"/*", "alias"],
+    ["CDPATH=/; cd home; rm -rf x", "is known only as it runs"],
   ];
   for (const [command, why] of asks) {
     const got = judge(command);
