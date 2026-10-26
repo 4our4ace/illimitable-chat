@@ -87,11 +87,12 @@ You review code changes. ...
   medium, high, xhigh or max
 - tools: the tools it may use, by name (zoom, date, shell, read, write,
   edit, spawn, tell, todo, skill; mcp__<server> for all of a server's;
-  Claude Code's names too, Agent or Task as spawn, TodoWrite as todo);
-  left out: every tool its role has; empty: none. On claude-code it
-  limits Claude Code's built-in tools too: those named (Grep, WebFetch),
-  and shell, read, write and edit as Bash, Read, Write and Edit; never
-  its Agent, Task or TodoWrite, as illi's spawn and todo take their place
+  Claude Code's names too, Agent or Task as spawn, TodoWrite or
+  TaskCreate, TaskUpdate, TaskList, TaskGet as todo); left out: every
+  tool its role has; empty: none. On claude-code it limits Claude Code's
+  built-in tools too: those named (Grep, WebFetch), and shell, read,
+  write and edit as Bash, Read, Write and Edit; never its Agent, Task,
+  TodoWrite or task tools, as illi's spawn and todo take their place
 - color: its mark's color; none: one is made for it
 - the body: its instructions, added to its system prompt
 

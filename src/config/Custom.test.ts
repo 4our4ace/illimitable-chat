@@ -101,9 +101,12 @@ test("an agent's tools list as YAML writes it: in [ ], each name quoted or not, 
   expect([block.tools, block.builtins, block.model]).toEqual([["read", "edit", "shell"], ["Read", "Edit", "Bash"], "sonnet"]);
 });
 
-test("Claude Code's Agent, Task and TodoWrite in a tools list are illi's spawn and todo, never Claude Code's own on claude-code", () => {
+test("Claude Code's Agent, Task, TodoWrite and task tools in a tools list are illi's spawn and todo, never Claude Code's own on claude-code", () => {
   put(DIR + "/lists/lead.md", "---\ntools: Read, Agent, Task, TodoWrite, Bash\n---\n");
   put(DIR + "/lists/boss.md", "---\ntools: Task, TodoWrite\n---\n");
+  put(DIR + "/lists/tasks.md", "---\ntools: TaskCreate, TaskUpdate, TaskList, TaskGet, Grep\n---\n");
+  const tasks = Custom.profile("tasks", DIR + "/lists/tasks.md");
+  expect([tasks.tools, tasks.builtins]).toEqual([["todo"], ["Grep"]]);
   const lead = Custom.profile("lead", DIR + "/lists/lead.md");
   expect([lead.tools, lead.builtins]).toEqual([["read", "spawn", "todo", "shell"], ["Read", "Bash"]]);
   const boss = Custom.profile("boss", DIR + "/lists/boss.md");

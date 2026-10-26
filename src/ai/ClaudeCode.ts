@@ -9,7 +9,8 @@
 // (Ask.server) adds illi's over MCP, those Claude Code lacks (Tools.list
 // `lean`), an agent's tools list keeping Claude Code's built-in ones to
 // those it names, but those illi gives itself (Ask.builtins: its Agent,
-// Task and TodoWrite never; its MCP servers and plugins stay),
+// Task, TodoWrite and task tools never; its MCP servers and plugins
+// stay),
 // allowed to run (as `-p` asks no one), its permission prompts
 // asked of the user at illi's screen (Tools.approve), and illi's prompt after
 // Claude Code's (from a file, so no argument limit); one without (a summary, a goal check), or
