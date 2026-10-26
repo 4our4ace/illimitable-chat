@@ -40,15 +40,17 @@
 // /mcp and the side show them, nothing before a call has told them).
 // Each call leaves out (ClaudeCode.cut), by a rule (--disallowedTools
 // mcp__<name>__*: Claude Code drops their tools from the model's
-// context, though it still starts them), each `off` names and each illi
-// runs its own server of, by its name as Claude Code spells it (illi's
-// wins: the model gets one copy); with an agent's tools list, each the
-// list doesn't name too (one it names by tools alone: its other tools),
-// and all where it names none of those told, or none is told yet
-// (--strict-mcp-config, illi's own server kept). Claude Code's settings
-// are never touched. Their names, case and all, are kept
-// (claude-code.json), so `off`'s rules are right before a start's first
-// call has told them.
+// context, though it still starts them), each illi runs its own server
+// of, by its name as Claude Code spells it (illi's wins: the model gets
+// one copy), and each of those told that `off` names (before any is
+// told, each `off` names); with an agent's tools list, each of those
+// told the list doesn't name too (one it names by tools alone: its
+// other tools), and all where it names none of those told, or none is
+// told yet (--strict-mcp-config, illi's own server kept). One added to
+// Claude Code since the last told loads in one more call, which tells
+// it. Claude Code's settings are never touched. Their names, case and
+// all, are kept (claude-code.json), so `off`'s rules are right before a
+// start's first call has told them.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -265,18 +267,19 @@ export namespace ClaudeCode {
 
   // what a call with tools leaves out of Claude Code's own MCP servers
   // (a call without loads none: args), so the model reads no tool it
-  // isn't to have.
-  // With an agent's tools list (Ask.listed): those of the servers last
-  // told that the list names (mcp: all; mcp__github: that one; tools
-  // alone, mcp__github__get_issue: those) stay, but one off or over;
-  // none such, or none told yet, and the call loads none (strict). Else,
-  // by rule: each server `off` names, and each illi runs its own of
-  // (over: illi's wins, so the model gets one copy), whole; each the
-  // list doesn't name, whole; each it names by tools alone, its other
-  // tools last told (none told: whole). Before any call has told the
-  // servers, the rules are by name: illi's own servers', and those `off`
-  // names (case and all as told before, else as written). A rule never
-  // reaches illi's own tools (mcp__illi__...)
+  // isn't to have. With an agent's tools list (Ask.listed): those of the
+  // servers last told that the list names (mcp: all; mcp__github: that
+  // one; tools alone, mcp__github__get_issue: those) stay, but one off or
+  // over; none such, or none told yet, and the call loads none (strict).
+  // Else, by rule: each server illi runs its own of, by name, whether
+  // told or not (over: illi's wins, so the model gets one copy), whole;
+  // of those told, each `off` names, whole, each the list doesn't name,
+  // whole, and each it names by tools alone, its other tools last told
+  // (none told: whole). One added to Claude Code since the last told
+  // loads in the call (whose init then tells it). Before any call has
+  // told the servers, those `off` names leave by name too (case and all
+  // as told before, else as written). A rule never reaches illi's own
+  // tools (mcp__illi__...)
   export function cut(ask: Ask): Cut {
     if (ask.server === "" || ask.once) {
       return { strict: true, deny: [] };
@@ -288,7 +291,8 @@ export namespace ClaudeCode {
     if (listed !== null && !(known ?? []).some((s) => !s.off && !s.over && named(s).length > 0)) {
       return { strict: true, deny: [] };
     }
-    const deny = known === null ? [...ClaudeCode.own(), ...config.OFF.map((name) => ClaudeCode.cased().get(name) ?? name)].map((name) => head(name) + "__*") : known.flatMap((s) => {
+    const over = ClaudeCode.own().map((name) => head(name) + "__*");
+    const told = known === null ? config.OFF.map((name) => head(ClaudeCode.cased().get(name) ?? name) + "__*") : known.flatMap((s) => {
       const these = named(s);
       if (s.off || s.over || these.length === 0) {
         return [head(s.name) + "__*"];
@@ -298,7 +302,7 @@ export namespace ClaudeCode {
       }
       return s.tools === null ? [head(s.name) + "__*"] : s.tools.filter((t) => !these.includes(t));
     });
-    return { strict: false, deny: [...new Set(deny)].filter((rule) => !rule.startsWith(OURS)) };
+    return { strict: false, deny: [...new Set([...over, ...told])].filter((rule) => !rule.startsWith(OURS)) };
   }
 
   // Claude Code's own MCP servers as its last call that loaded them told

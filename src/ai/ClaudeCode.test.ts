@@ -19,10 +19,11 @@
 // all; one `off` names leaves illi's calls by a rule; an agent's tools
 // list keeps those it names (a server, its tools, mcp: all), naming
 // none its call loads none (--strict-mcp-config); illi's own server of
-// a name wins while it runs (failed: Claude Code's stays). Before any
-// call told them, an agent's list loads none, and the rules are by
-// name: those `off` names (case and all as told before) and illi's own
-// servers'. A name is spelled as Claude Code spells it in its tools'.
+// a name wins while it runs, told or not (failed: Claude Code's stays).
+// Before any call told them, an agent's list loads none, and the rules
+// are by name: those `off` names (case and all as told before) and
+// illi's own servers'. A name is spelled as Claude Code spells it in
+// its tools'.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -316,11 +317,14 @@ test("an agent's tools list keeps of Claude Code's servers those it names (a ser
   expect([strict(none), none.includes("--mcp-config"), none.includes("--disallowedTools")]).toEqual([true, false, false]);
 });
 
-test("a server both illi's own and Claude Code's: illi's wins while it runs, so the model gets one copy; failed, Claude Code's stays", async () => {
+test("a server both illi's own and Claude Code's: illi's wins while it runs, so the model gets one copy, though Claude Code's wasn't told yet; failed, Claude Code's stays", async () => {
   fs.writeFileSync(DIR + "/init.json", JSON.stringify(INIT));
   await own("github");
+  await own("web");
   const { log } = await call("turn");
-  expect(denied(log.args)).toBe("AskUserQuestion,mcp__github__*");
+  expect(denied(log.args)).toBe("AskUserQuestion,mcp__github__*,mcp__web__*");
+  Mcp.fail(Mcp.status().servers.find((s) => s.name === "web")!, "stopped");
+  expect(denied((await call("turn")).log.args)).toBe("AskUserQuestion,mcp__github__*");
   expect(ClaudeCode.servers()!.find((s) => s.name === "github")).toMatchObject({ over: true, tools: ["mcp__github__get_issue", "mcp__github__list_prs"] });
   expect(strict((await call("turn", true, undefined, { listed: ["mcp__github"] })).log.args)).toBe(true);
   Mcp.fail(Mcp.status().servers.find((s) => s.name === "github")!, "stopped");
