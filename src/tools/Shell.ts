@@ -785,7 +785,8 @@ function scan_quoted(s: Scan, b: Build): void {
 // a $: an arithmetic, a command's output, a variable, or itself; split:
 // unquoted, outside an assignment, where bash splits a value into words
 // and globs it (var_put). A ${x=...} or ${x:=...} sets x: known only as
-// it runs after
+// it runs after; any other = in one (nested, ${!x:=...}, a pattern) may
+// set any: all forgotten
 function scan_dollar(s: Scan, b: Build, split = false): void {
   const rest = s.src.slice(s.at, s.at + 3);
   if (rest === "$((") {
@@ -813,8 +814,10 @@ function scan_dollar(s: Scan, b: Build, split = false): void {
     } else {
       unknown(b);
     }
-    if (set !== null) {
+    if (set !== null && !body.slice(set[0].length).includes("=")) {
       s.vars.set(set[1], DYN);
+    } else if (body.includes("=")) {
+      forget(s);
     }
     return;
   }
@@ -845,7 +848,7 @@ function var_put(s: Scan, b: Build, name: string, split = false): void {
   }
   const v = s.vars.get(name);
   const known = v !== undefined ? v.alts : name === "PWD" ? (s.cwd === null ? null : [s.cwd]) : s.wild || name === "OLDPWD" || process.env[name] === undefined ? null : [process.env[name]!];
-  if (known === null || (split && known.some((x) => /[ \t\n]/.test(x)))) {
+  if (known === null || (split && (ifs(s) || known.some((x) => /[ \t\n]/.test(x))))) {
     unknown(b);
     return;
   }
@@ -854,6 +857,13 @@ function var_put(s: Scan, b: Build, name: string, split = false): void {
   if (v?.dynamic === true) {
     unknown(b);
   }
+}
+
+// whether IFS may be set (by the command, or by a source), so bash may
+// split a value where illi wouldn't (IFS=/ splits /a into "" and a);
+// bash takes none from the environment
+function ifs(s: Scan): boolean {
+  return s.wild || s.vars.has("IFS");
 }
 
 // a command's output put in a word: the folder for pwd (-L, -P), the
@@ -874,12 +884,12 @@ function output(s: Scan, b: Build, inner: string, split = false): void {
   const known = odd ? null : /^pwd( -[LP])?$/.test(cmd) ? s.cwd : git ? git_top(s.cwd!) : null;
   const made = odd || known !== null ? null : temp(cmd, s.cwd!);
   const was = b.made === null ? null : (b.made ?? (b.dynamic ? null : b.alts));
-  if (made !== null && was !== null && !(split && /[ \t\n*?[]/.test(made))) {
+  if (made !== null && was !== null && !(split && (ifs(s) || /[ \t\n*?[]/.test(made)))) {
     b.made = was.length > MOST ? null : was.map((a) => a + made);
     b.dynamic = true;
     return;
   }
-  if (known === null || (split && /[ \t\n]/.test(known))) {
+  if (known === null || (split && (ifs(s) || /[ \t\n]/.test(known)))) {
     unknown(b);
     return;
   }
@@ -992,6 +1002,9 @@ function arith(s: Scan, from: number): number {
       }
       for (const m of body.matchAll(SETS)) {
         s.vars.set(m[1] ?? m[2] ?? m[3], DYN);
+      }
+      if (body.includes("${")) {
+        forget(s);
       }
       return i + 2;
     }
@@ -1162,7 +1175,9 @@ function scan_redir(s: Scan, cmd: Cmd, num?: string): void {
 // the heredocs' bodies, from the line after their command's, each where
 // it starts in the command parsed: an unquoted delimiter's body expands,
 // so the commands in it run, with the shell as its command had it (was:
-// not as the commands after it on its line leave it)
+// not as the commands after it on its line leave it). One that sets a
+// variable (${x:=...}) is refused: bash sets it as its command runs,
+// before the commands after it on its line, which illi read first
 function docs_read(s: Scan): void {
   const docs = s.docs;
   s.docs = [];
@@ -1187,7 +1202,11 @@ function docs_read(s: Scan): void {
     if (doc.expand) {
       const now = state_of(s);
       state_put(s, doc.was);
+      const seen = new Map(s.vars);
       scan_body(s, body, from, doc.inpipe);
+      if (s.wild !== doc.was.wild || s.vars.size !== seen.size || [...s.vars].some(([k, v]) => seen.get(k) !== v)) {
+        throw new Unread("a heredoc's body that sets a variable (bash sets it as its command runs, before the commands after it)");
+      }
       state_put(s, now);
     }
   }
@@ -1367,6 +1386,13 @@ function state_put(s: Scan, was: State): void {
   Object.assign(s, { cwd: was.cwd, vars: was.vars, wild: was.wild, errexit: was.errexit });
 }
 
+// every variable known only as it runs from here on: none kept, any read
+// unknown (wild), as after a source or a set illi can't name
+function forget(s: Scan): void {
+  s.vars = new Map();
+  s.wild = true;
+}
+
 // a nested reading, NEST deep at most
 function deeper(s: Scan, run: () => void): void {
   if (++s.depth > NEST) {
@@ -1463,8 +1489,11 @@ function cmd_run(s: Scan, cmd: Cmd, full: string, piped: boolean, top: boolean, 
 // what a builtin changes of the shell for the commands after it (own: run
 // by this shell, a wrapper of its own before it at most): the folder (cd,
 // pushd: to its target, -P's as the system finds it; to home; popd, cd
-// -, a name CDPATH may lead elsewhere: unknown), the variables (set to plain words as written, else known
-// only as it runs), all of them after a source; aliases on, a command
+// -, a name CDPATH may lead elsewhere: unknown), the variables (set to
+// plain words as written, else known only as it runs; named by their
+// words' values, as the builtin reads them: one named only as it runs,
+// or a source, forgets all: forget), a name for another variable
+// (declare -n) refused; aliases on, a command
 // hashed to a path, a builtin loaded or one turned off can't be followed.
 // A cd another program runs (sudo cd, env cd, exec cd) leaves the folder
 // unknown. errexit (set -e, as -euo pipefail; set -o errexit) turns on
@@ -1478,7 +1507,8 @@ function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
   const name = Shell.program(argv[0]);
   const args = argv.slice(1);
   const value = (a: Word) => (a.dynamic || a.alts.length !== 1 ? null : a.alts[0]);
-  const names = args.filter((a) => /^[A-Za-z_]\w*$/.test(a.raw)).map((a) => a.raw);
+  const odd = args.some((a) => value(a) === null);
+  const names = args.map(value).filter((x): x is string => x !== null && /^[A-Za-z_]\w*$/.test(x));
   if (!own) {
     if (name === "cd" || name === "pushd" || name === "popd") {
       s.cwd = null;
@@ -1504,7 +1534,8 @@ function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
     }
     case "source":
     case ".": {
-      s.wild = true;
+      forget(s);
+      s.errexit = false;
       return;
     }
     case "export":
@@ -1512,10 +1543,15 @@ function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
     case "typeset":
     case "local":
     case "readonly": {
+      if (name !== "export" && name !== "readonly" && args.some((a) => /^-\w*n/.test(value(a) ?? a.raw))) {
+        throw new Unread(name + " -n (a name for another variable)");
+      }
       for (const a of args) {
-        const set = /^([A-Za-z_]\w*)(\+?)=/.exec(a.raw);
+        const set = /^([A-Za-z_]\w*)(\+?)=/.exec(value(a) ?? a.raw);
         if (set !== null) {
           s.vars.set(set[1], set[2] === "+" ? DYN : Shell.cut(a, set[0].length));
+        } else if (value(a) === null) {
+          forget(s);
         }
       }
       return;
@@ -1525,9 +1561,14 @@ function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
     case "readarray":
     case "getopts":
     case "printf": {
-      if (name !== "printf" || args.some((a) => a.raw === "-v")) {
-        names.forEach((n) => s.vars.set(n, DYN));
+      const into = args.map(value).flatMap((x) => /^-v([A-Za-z_]\w*)$/.exec(x ?? "")?.[1] ?? []);
+      if (name === "printf" && !args.some((a) => /^-v/.test(value(a) ?? a.raw))) {
+        return;
       }
+      if (odd) {
+        forget(s);
+      }
+      [...names, ...into].forEach((n) => s.vars.set(n, DYN));
       return;
     }
     case "set": {
@@ -1563,7 +1604,9 @@ function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
       return;
     }
     case "unset": {
-      if (!args.some((a) => a.raw === "-f")) {
+      if (odd) {
+        forget(s);
+      } else if (!args.some((a) => value(a) === "-f")) {
         names.forEach((n) => s.vars.set(n, Shell.lit("")));
       }
       return;
@@ -1627,6 +1670,9 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
         throw new Unread(name + " " + odd + ": an option illi doesn't know");
       }
       let next = after.slice(wrap.then ?? 0);
+      if (name === "time" && /^[A-Za-z_]\w*\+?=/.test(next[0]?.raw ?? "")) {
+        throw new Unread("time before an assignment (bash sets it; a program of that name never runs)");
+      }
       if (name === "env") {
         if (got.has("-S") || got.has("--split-string")) {
           throw new Unread("env -S splits a string into a command");

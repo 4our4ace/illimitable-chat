@@ -289,6 +289,12 @@ test("no false alarms: [ as a test, a project's own bin/, *.egg-info, names insi
     ["set -eZ; d=$(mktemp -d); rm -rf \"$d\"/*", "is known only as it runs"],
     ["alias exit=:\nd=$(mktemp -d) || exit; rm -rf \"$d\"/*", "alias"],
     ["CDPATH=/; cd home; rm -rf x", "is known only as it runs"],
+    ["x=; (( ${x:=/} )); rm -rf \"${x}home\"", "is known only as it runs"],
+    ["IFS=q; d='srcq/*'; rm -rf $d", "is known only as it runs"],
+    ["d=/tmp/a; time d=; rm -rf \"$d\"/*", "time before an assignment"],
+    ["declare -n d=x; d=/tmp/a; x=/; rm -rf \"$d\"/*", "declare -n"],
+    ["d=/tmp/a; read \"d\" <<<\"\"; rm -rf \"$d\"/*", "is known only as it runs"],
+    ["d=/tmp/a; . ./a.txt; rm -rf \"$d\"/*", "is known only as it runs"],
   ];
   for (const [command, why] of asks) {
     const got = judge(command);
