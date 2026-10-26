@@ -227,12 +227,12 @@ with project in that project's chat, or in all ("all"), with from and
 to only in that span; zoom and date take a project too.`;
 
 // an agent's log starts with a note of what it is: SUB_NOTE, the user's
-// agent it runs as, its effort if not the configured one, and
-// SUB_WITHOUT if it started fresh
+// agent it runs as (a plugin's as plugin:name), its effort if not the
+// configured one, and SUB_WITHOUT if it started fresh
 const SUB_NOTE    = "subagent";
 const SUB_AT      = " at effort ";
 const SUB_WITHOUT = ", without the chat";
-const SUB_RE    = /^subagent(?: ([a-z0-9][a-z0-9_-]*))?(?: at effort ([^\s,]+))?(, without the chat)?$/i;
+const SUB_RE      = /^subagent(?: ([a-z0-9][a-z0-9_-]*(?::[a-z0-9][a-z0-9_-]*)?))?(?: at effort ([^\s,]+))?(, without the chat)?$/i;
 
 // where the tools run, in the system prompt (HERE_DOC); the working dir
 // and the time now, at the start of each call's message (Tools.here), so
