@@ -5,7 +5,9 @@
 # a time limit some times its usual length, so a hang fails in minutes
 # instead of running the runner's six hours. Bun 1.4.3 at least: 1.3's
 # spawnSync could spin forever over a child already gone (bun#34069),
-# which hung the tests here some runs in three.
+# which hung the tests here some runs in three. Every file built holds
+# Bun's runtime, whose licenses THIRD_PARTY_NOTICES.md gives for this
+# version: a new bun-version takes that section anew.
 name: release
 
 on:

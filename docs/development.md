@@ -77,8 +77,8 @@ print exactly `illi X.Y.Z` (main.ts), then renames it over itself. `bun
 run build`'s `./illi` is such a file and updates itself too
 (`ILLI_AUTOUPDATE=off` keeps it); a source run never does.
 
-The libraries illi is built with are three, each pinned to one version
-in `package.json` (`bun.lock` holds the exact commit or file hash) and
+The libraries illi uses are three, each pinned to one version in
+`package.json` (`bun.lock` holds the exact commit or file hash) and
 compiled into the binary, so a user installs none of them: Pele lays out
 Mermaid diagrams, pelext draws them on the terminal's cell grid, and
 Prism reads code. To take a new release of one, name its version, then
@@ -87,3 +87,9 @@ test and commit both files:
     bun add --exact pelext@github:4our4ace/pelext#v0.2.2
     bun add --exact pele@1.8.0
     bun run test
+
+Their licenses are in `THIRD_PARTY_NOTICES.md`, and so are those of
+Bun's runtime, which `bun build --compile` puts in every file it makes:
+as Bun lists them for the version the release is built on, with where
+the LGPL parts' sources are. A release on another Bun takes that
+section anew from that version's lists.
