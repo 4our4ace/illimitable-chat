@@ -3,7 +3,8 @@
 // The agents' logs of a chat (Memory.ts), in the project's file beside
 // it (Store.ts): one per agent, by its name and a tag (a name freed goes
 // on to a new agent, with a log of its own). A name's log is the one it
-// last took; a log is read whole, by its name or by its log.
+// last took; a log is read whole, by its name or by its log, and its
+// agent's calls get it from its last recap on (view).
 
 import type { Kind } from "../ai/AskAI.ts";
 import { Memory, type Root } from "./Memory.ts";
@@ -88,6 +89,38 @@ export namespace Logs {
 
   export function show(mem: Memory, name: string): string {
     return Logs.read(mem, name)?.map(Logs.line).join("\n\n") ?? "No agent " + name + ".";
+  }
+
+  // its log as its calls get it (none: empty): whole till its first
+  // recap (Tools.recap: it outgrew its model's window); past one, what it
+  // is (its first note) and illi's messages to it (its task, all it was
+  // told since: user) whole, then its last recap and all after it. What
+  // it leaves out is a zoom away (show)
+  export function view(mem: Memory, name: string): Root[] {
+    const log = Logs.read(mem, name) ?? [];
+    const at  = log.findLastIndex((e) => e.kind === "recap");
+    return at < 0 ? log : log.filter((e, k) => k === 0 || k >= at || e.kind === "user");
+  }
+
+  // a log's lines (line) in `most` characters or so: past it, each line
+  // longer than a common length (the longest first: tool results, as a
+  // rule) keeps its head and tail to it, saying how much it cut, so no
+  // result, however long, pushes a recap's request past its model's
+  // window (Tools.recap)
+  export function fit(log: Root[], most = Infinity): string {
+    const lines = log.map(Logs.line);
+    const sum = (cap: number) => lines.reduce((n, s) => n + Math.min(s.length, cap), 0);
+    if (sum(Infinity) <= most) {
+      return lines.join("\n\n");
+    }
+    let [lo, hi] = [0, lines.reduce((n, s) => Math.max(n, s.length), 0)];
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      [lo, hi] = sum(mid) <= most ? [mid, hi] : [lo, mid - 1];
+    }
+    const half = Math.floor(lo / 2);
+    const cut  = (s: string) => (s.length <= lo ? s : (s.slice(0, half) + "\n[... " + (s.length - 2 * half) + " characters cut ...]\n" + s.slice(s.length - half)).toWellFormed());
+    return lines.map(cut).join("\n\n");
   }
 
   export function line(root: Root): string {

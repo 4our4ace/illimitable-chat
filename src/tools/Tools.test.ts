@@ -32,7 +32,12 @@
 // refused, a field sent as null or "" read as left out; a search kept to
 // a span; the projects' days in illi's zone. The time now in each call's
 // message, short on claude-code, after every cache mark a later call
-// reads.
+// reads. A subagent outgrowing its model's window (its room a turn's)
+// recaps its own log and goes on from the recap, unasked: the recap's
+// request cut to fit, each long line to its head and tail, halved while
+// still too long; its task, and a message told meanwhile, kept whole, a
+// restart reading it so; three recaps in a row with no call grown end
+// its run, saying why, as a recap that fails does.
 
 import { expect, setSystemTime, test } from "bun:test";
 import * as fs from "node:fs";
@@ -59,6 +64,8 @@ const { Store } = await import("../chat/Store.ts");
 const { Memory } = await import("../chat/Memory.ts");
 const { AskAI } = await import("../ai/AskAI.ts");
 const { When } = await import("../chat/When.ts");
+const { Logs } = await import("../chat/Logs.ts");
+const { Pick } = await import("../ai/Pick.ts");
 const View = await import("../ui/View.ts");
 
 const chat = Chat.open(REPO);
@@ -75,6 +82,35 @@ async function until(ok: () => boolean): Promise<void> {
       throw new Error("never");
     }
     await Bun.sleep(5);
+  }
+}
+
+// a plain subagent given `task`, its model a window of `window` tokens
+// (asked by its label, as the catalog knows it):
+// the agent's calls answered in turn by `work` (k: the call's place
+// among them), its recaps by `recap` (k: the recap's), any other call
+// (the chat's turn as the report comes, a summary) at once; its calls,
+// its recaps' and the report the chat got
+async function sub(task: string, window: number, work: (k: number, feed: any, name: string) => void, recap: (k: number, feed: any, name: string) => void) {
+  const real = { ask: AskAI.ask, window: Pick.window };
+  const [calls, recaps]: [any[], any[]] = [[], []];
+  let name = "";
+  Pick.window = (p) => (Pick.model(p.vendor, p.model) === undefined ? undefined : window);
+  AskAI.ask = (a, on) => {
+    const [call, feed] = AskAI.tie(on, () => {}, () => {});
+    const list = !a.system.includes("You are a subagent of illi") ? null : a.once ? recaps : calls;
+    list?.push(a);
+    queueMicrotask(() => (list === null ? feed.end({ ok: true, text: "noted", left: [] }) : (list === calls ? work : recap)(list.length - 1, feed, name)));
+    return call;
+  };
+  try {
+    name = Tools.start(chat.tools, { $: "sub", effort: null, agent: null }, task, []);
+    const report = () => Array.from({ length: chat.mem.count }, (_, i) => Memory.message(chat.mem, i)!).find((m) => m.kind === "work" && m.text.startsWith("[" + name + "]"));
+    await until(() => report() !== undefined);
+    await until(() => !chat.busy);
+    return { name, calls, recaps, report: report()!.text };
+  } finally {
+    [AskAI.ask, Pick.window] = [real.ask, real.window];
   }
 }
 
@@ -504,4 +540,69 @@ test("a long text by its ends: whole up to the most, else its start and its end 
   expect(Tools.ends("abcdef", 6)).toBe("abcdef");
   expect(Tools.ends("abcdefgh", 6)).toBe("abc … fgh");
   expect(Tools.ends("ab😀cdefgh😀ij", 6)).toBe("ab … 😀ij");
+});
+
+test("an agent's log as its calls get it: whole till a recap; past one, what it is and illi's messages whole, then the last recap on; cut to fit, each line past a common length to its head and tail, a surrogate pair kept whole", () => {
+  const root = (i: number, kind: any, text: string) => Memory.root(i, { kind, text });
+  const log = [root(0, "note", "subagent"), root(1, "user", "list it"), root(2, "echo", "a".repeat(50)), root(3, "recap", "r1"), root(4, "user", "and count"), root(5, "echo", "b"), root(6, "recap", "r2"), root(7, "echo", "c")];
+  expect(Logs.fit(log.slice(0, 3))).toBe("0|note: subagent\n\n1|user: list it\n\n2|echo: " + "a".repeat(50));
+  const name = Logs.start(chat.mem, null, () => false);
+  log.forEach((e) => Logs.push(chat.mem, name, e.kind, e.text));
+  expect(Logs.view(chat.mem, name).map((e) => e.i)).toEqual([0, 1, 4, 6, 7]);
+  expect(Logs.view(chat.mem, "nobody")).toEqual([]);
+  const cut = Logs.fit([root(0, "user", "short"), root(1, "echo", "h".repeat(400) + "t".repeat(400))], 200);
+  expect(cut).toStartWith("0|user: short\n\n1|echo: hhh");
+  expect(cut).toEndWith("ttt");
+  expect(cut).toContain("characters cut ...]");
+  expect(cut.length).toBeLessThan(300);
+  expect(Logs.fit([root(0, "echo", "😀".repeat(400))], 101)).not.toMatch(/[\uD800-\uDFFF](?![\uDC00-\uDFFF])(?<![\uD800-\uDBFF][\uDC00-\uDFFF])/);
+});
+
+test("a subagent outgrowing its model's window recaps its own log and goes on from the recap, unasked: its room a turn's; the recap's request cut to fit, halved while still too long; its task, and a message told meanwhile, kept whole; after a restart its calls start at the recap", async () => {
+  const big = "EARLY " + "x".repeat(100000) + " LATE";
+  const got = await sub("list the folder", 10000, (k, feed) => {
+    if (k === 0) {
+      feed.on({ $: "Entry", kind: "tool", text: "shell: ls", of: "t1" });
+      feed.on({ $: "Entry", kind: "echo", text: big, of: "t1" });
+      feed.end({ ok: false, text: "", left: [], stop: "full", grew: true });
+    } else {
+      feed.end({ ok: true, text: "listed: 3 files", left: [] });
+    }
+  }, (k, feed, name) => {
+    if (k === 0) {
+      feed.end({ ok: false, text: "HTTP 400: prompt is too long", left: [], stop: "full" });
+    } else {
+      void Tools.tell(chat.tools, name, "also count the files");
+      feed.on({ $: "Delta", kind: "illi", text: "## Task" });
+      feed.end({ ok: true, text: "## Task\n- list the folder", left: [] });
+    }
+  });
+  expect([got.calls.length, got.recaps.length]).toEqual([2, 2]);
+  expect([got.calls[0].room, got.calls[0].once, got.recaps[0].room, got.recaps[0].once]).toEqual([9000, undefined, undefined, true]);
+  const [first, second] = got.recaps.map((a) => a.blocks.at(-2).text as string);
+  expect(got.recaps[0].blocks.at(-1).text).toStartWith("Recap: your context is full.");
+  expect([first.length < 7000 * 4 + 200, first.includes("1|user: list the folder"), first.includes("EARLY"), first.includes("LATE"), first.includes("characters cut")]).toEqual([true, true, true, true, true]);
+  expect(second.length).toBeLessThan(first.length / 2 + 200);
+  const view = got.calls[1].blocks.at(-1).text as string;
+  expect(view).not.toContain("EARLY");
+  for (const line of ["0|note: subagent", "1|user: list the folder", "4|user: also count the files", "5|recap: ## Task\n- list the folder", "6|note: Your context filled up", 'zoom("' + Logs.log(chat.mem, got.name) + '")']) {
+    expect(view).toContain(line);
+  }
+  expect(Logs.read(chat.mem, got.name)!.map((e) => e.kind)).toEqual(["note", "user", "tool", "echo", "user", "recap", "note"]);
+  expect(got.report).toStartWith("[" + got.name + "]\nlisted: 3 files\n");
+  chat.tools.agents.delete(got.name);
+  expect(Tools.ask(chat.tools, Tools.agent(chat.tools, got.name)!).blocks.at(-1)!.text).toBe(view);
+});
+
+test("a subagent's recaps that never let a call grow end its run after three in a row, saying why; a call that grew starts the count anew", async () => {
+  const full = (grew: boolean[]) => (k: number, feed: any) => feed.end({ ok: false, text: "HTTP 400: prompt is too long", left: [], stop: "full", grew: grew[k] ?? false });
+  const recap = (k: number, feed: any) => feed.end({ ok: true, text: "recap " + k, left: [] });
+  const stuck = await sub("look", 10000, full([]), recap);
+  expect([stuck.calls.length, stuck.recaps.length]).toEqual([4, 3]);
+  expect(stuck.report).toContain("failed: its work won't fit " + Tools.pick(chat.tools, { $: "sub", effort: null, agent: null }).model + "'s window even recapped");
+  const grown = await sub("look", 10000, full([false, true]), recap);
+  expect([grown.calls.length, grown.recaps.length]).toEqual([5, 4]);
+  const none = await sub("look", 10000, full([]), (_, feed) => feed.end({ ok: false, text: "the AI service is busy", left: [], stop: "down" }));
+  expect([none.calls.length, none.recaps.length]).toEqual([1, 1]);
+  expect(none.report).toContain("failed: no recap: the AI service is busy");
 });
