@@ -56,8 +56,9 @@ export type Block = { text: string; mark: boolean };
 
 // searches: the most web searches it runs (0: no web tools); keep: its
 // last request is kept whole (AskAI.last: a turn's); once: one step,
-// naming its tools but running none, unanswered if it calls one (a
-// recap's: Chat.compact, on the turn's cache; an agent's: Tools.recap);
+// naming its tools but running none, unanswered if it calls one, a
+// message sent meanwhile left (End.left) (a recap's: Chat.compact, on
+// the turn's cache; an agent's: Tools.recap);
 // from: the request it goes on from, its blocks after that one's items
 // and answer, once (a suggested reply's: Suggest.ask); max: the most
 // tokens it writes, its thinking's too (none: the model's cap); room:

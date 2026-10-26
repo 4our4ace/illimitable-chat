@@ -35,11 +35,12 @@
 // now in each call's message, short on claude-code, after every cache
 // mark a later call reads. A subagent outgrowing its model's window
 // (its room a turn's) recaps its own log and goes on from the recap,
-// unasked: the recap's request cut to fit, each long line to its head
-// and tail, halved while still too long; its task, and a message told
-// meanwhile, kept whole, a restart reading it so; three recaps in a row
-// with no call grown end its run, saying why, as a recap that fails
-// does. What don't ask again keeps, as the question names it.
+// unasked: the recap's request cut to fit in bytes, each long line to
+// its head and tail (a surrogate pair kept whole), halved while still
+// too long; its task, and a message told meanwhile, kept whole, a
+// restart reading it so, and only what its calls get naming the lines
+// it holds (recall); three recaps in a row with no call grown end its
+// run, saying why, as a recap that fails does.
 
 import { expect, setSystemTime, test } from "bun:test";
 import * as fs from "node:fs";
