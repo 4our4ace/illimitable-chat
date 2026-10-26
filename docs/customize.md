@@ -319,9 +319,9 @@ over. What differs:
   or as `plugin:name`), as Claude Code holds an agent run as the main
   one: illi's main agent is offered them alone, and spawn refuses any
   other, or a plain subagent (`Agent` alone allows any; naming none of
-  your agents, it gets no spawn). (Your own
-  agents are read so too, and the list may be YAML's:
-  `[Read, "Grep"]`, or `- Read` lines.) On claude-code, the list also
+  your agents, it gets no spawn). (Your own agents are read so too, and
+  the list may be YAML's: `[Read, "Grep"]`, or `- Read` lines, blank
+  lines between them too.) On claude-code, the list also
   limits Claude Code's built-in tools to those it names (illi's `read`,
   `write`, `edit` and `shell` as `Read`, `Write`, `Edit` and `Bash`;
   `MultiEdit` as `Edit`), but never to its `Agent`, `Task`, `TodoWrite`
