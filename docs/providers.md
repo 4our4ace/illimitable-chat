@@ -40,12 +40,14 @@ illi then runs Claude Code itself, as it ships, on your login:
   illi's added through MCP: zoom into the memory, the date, subagents,
   messages to them, the to-do list and skills. An agent's `tools:`
   limits both: `tools: zoom, Read, Grep` gives that agent illi's zoom
-  and, of Claude Code's built-in tools, Read and Grep alone. Claude
-  Code's own MCP servers it keeps only by name: `mcp__github` keeps
-  that one, `mcp__github__get_issue` that tool of it (once illi has
-  seen its tools; before, none of it), `mcp` all; naming none, it loads
-  none of them, and so too until illi has seen them (below). Claude
-  Code's plugins stay, their MCP servers counted among its own.
+  and, of Claude Code's built-in tools, Read and Grep alone. Of Claude
+  Code's own MCP servers illi has seen (below), it keeps only those it
+  names: `mcp__github` keeps that one, `mcp__github__get_issue` that
+  tool of it (once illi has seen its tools; before, none of it), `mcp`
+  all; naming none, it loads none of them, and so too until illi has
+  seen them. One added to Claude Code since illi last saw them loads in
+  one more call, which shows it to illi. Claude Code's plugins stay,
+  their MCP servers counted among its own.
 - **Your token stays with Claude Code.** illi never sees it, and its
   turns stay out of Claude Code's session history.
 - **Your Claude Code setup applies**: its permission rules, MCP servers
@@ -65,7 +67,8 @@ illi then runs Claude Code itself, as it ships, on your login:
   its own by the same name, illi's alone reaches the model (failed,
   Claude Code's stays), so the model gets one copy. illi keeps the
   names it has seen (`claude-code.json`), so `off` takes one out from
-  the first call after a start too.
+  the first call after a start too (one it hasn't seen may load in one
+  call, which shows it).
 - **Permission prompts come to illi.** When Claude Code wants to run
   something its settings don't allow, illi checks it as it checks its
   own calls ([Permissions](permissions.md)): routine work runs, a risky
