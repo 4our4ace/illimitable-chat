@@ -62,12 +62,17 @@ test("evaluate: the last matching rule wins, by action and resource; none asks",
   expect(Permissions.evaluate("shell", "rm -rf ~", [just]).effect).toBe("ask");
 });
 
-test("shadowed: a deny or ask a later rule of another effect matches whole never decides; one a later like rule repeats, or that a later one meets in part, does", () => {
-  const rules = [rule("shell", "git push --force*", "deny"), rule("shell", "git *", "allow"), rule("read", "*.pem", "ask"), rule("*", "*", "allow"), rule("shell", "rm *", "deny"), rule("shell", "rm -rf *", "ask"), rule("edit", "*.lock", "deny"), rule("edit", "*", "allow"), rule("edit", "*.lock", "deny")];
+test("shadowed: a deny or ask a later, looser rule covers whole never decides; one a later rule repeats or makes stricter, or meets in part, does", () => {
+  const rules = [rule("shell", "git push --force*", "deny"), rule("shell", "git *", "allow"), rule("read", "*.pem", "ask"), rule("*", "*", "allow"), rule("shell", "rm *", "deny"), rule("shell", "rm -rf *", "ask"), rule("edit", "*.lock", "deny"), rule("edit", "*", "allow"), rule("edit", "*.lock", "deny"), rule("webfetch", "*", "ask"), rule("webfetch", "*", "deny")];
   expect(Permissions.shadowed(rules)).toEqual([
     { rule: rules[0], by: rules[3] },
     { rule: rules[2], by: rules[3] },
   ]);
+  expect(Permissions.shadowed([rule("shell", "rm /tmp/*", "deny"), rule("shell", "rm /tmp/?", "allow"), rule("shell", "git push *", "ask"), rule("shell", "git push ?*", "allow")])).toEqual([]);
+  expect(Permissions.covers("git *", "git push *")).toBe(true);
+  expect(Permissions.covers("git push ?*", "git push *")).toBe(false);
+  expect(Permissions.covers("rm /tmp/?", "rm /tmp/*")).toBe(false);
+  expect(Permissions.covers("rm /tmp/*", "rm /tmp/?")).toBe(true);
 });
 
 test("decide: a configured deny refuses whatever is saved; a saved approval clears an ask; trust runs what is asked, never what is denied", () => {

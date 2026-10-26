@@ -11,18 +11,20 @@
 //                       ask again" saves * (every file)
 //   shell               each simple command, as written (shell): its
 //                       leading assignments left out, wrappers kept
-//                       (sudo rm -rf /), and its words unquoted, a system
-//                       program by name ('rm' -rf "/" and /bin/rm -rf /
-//                       as rm -rf /: bare); each command a wrapper or a
-//                       script runs (rm -rf /, bash -c's script's) and the
-//                       wrapper's or script's own; "don't ask again" saves
-//                       each one's head and * (git push *: arity). Folders
-//                       outside: those it cds into, and paths its words or
-//                       redirections name (absolute, ~, ~user, ..; a value
-//                       glued to an option, --file=/x or -o/x, or after a
-//                       name, of=/x; one made as it runs by its head), the
-//                       stream devices left out (/dev/null, /dev/tty). A
-//                       command Shell.ts can't read is split crudely into pieces,
+//                       (sudo rm -rf /), and its words as they'd expand
+//                       (unquoted, ~ and the variables known filled in), a
+//                       system program by name ('rm' -rf "/", /bin/rm -rf
+//                       / and rm -rf "$X" with X=/ as rm -rf /: bare);
+//                       each command a wrapper or a script runs (rm -rf /,
+//                       bash -c's script's) and the wrapper's or script's
+//                       own; "don't ask again" saves each one's head and *
+//                       (git push *: arity). Folders outside: those it cds
+//                       into, and paths its words or redirections name
+//                       (absolute, ~, ~user, ..; a value glued to an
+//                       option, --file=/x or -o/x, or after a name, of=/x;
+//                       one made as it runs by its head), the stream
+//                       devices left out (/dev/null, /dev/tty). A command
+//                       Shell.ts can't read is split crudely into pieces,
 //                       its paths found by their look, so a rule still
 //                       finds most of what is in it
 //   spawn, skill, ask   subagent (its agent's name), skill (its name),
@@ -80,6 +82,14 @@ type Piece = { text: string; span: Span };
 
 // the commands that only move the shell (their folders asked, not they)
 const CD = new Set(["cd", "chdir", "pushd", "popd"]);
+
+// the builtins that set variables: a name=value of theirs names no
+// folder (export PATH=~/bin:$PATH)
+const SETS = new Set(["export", "declare", "typeset", "local", "readonly"]);
+
+// how many expansions of a command's words a rule meets at most (bare):
+// past it, a word's values in a row
+const BARE = 16;
 
 // the words that open a shell's own syntax, not a command (left off a
 // piece's front, the piece dropped if a loop's head)
@@ -164,7 +174,10 @@ export namespace Access {
     const pieces: Piece[] = [];
     if (typeof parts === "string") {
       pieces.push(...outer(command), ...crude(command));
-      for (const m of command.matchAll(/(^|[\s=('"<>|;&`])((?:~|\.\.)?\/[^\s'"`;|&<>()$]*|\.\.(?=$|[\s'"`;|&<>)]))/g)) {
+      for (const m of command.matchAll(/(^|[\s=('"<>|;&`]|(?<=\s)-[A-Za-z])((?:~[\w.-]*|\.\.)?\/[^\s'"`;|&<>()$]*|\.\.(?=$|[\s'"`;|&<>)]))/g)) {
+        if (m[1].startsWith("-") && m[2] === "/") {
+          continue;
+        }
         const at = m.index! + m[1].length;
         const t = path_target(where, m[2], where.cwd, null);
         t !== null && found.push({ target: t, span: [at, at + m[2].length] });
@@ -177,7 +190,8 @@ export namespace Access {
         }
         const program = Shell.program(p.argv[0]);
         const cd = CD.has(program);
-        p.argv.slice(1).forEach((w) => paths(w, cd).forEach((v) => {
+        const sets = SETS.has(program);
+        p.argv.slice(1).forEach((w) => paths(w, cd, sets).forEach((v) => {
           const t = path_target(where, v, run, cd ? "directory" : null);
           t !== null && found.push({ target: t, span: p.span });
         }));
@@ -191,7 +205,7 @@ export namespace Access {
           });
         }
         if (!cd) {
-          pieces.push({ text: p.full, span: p.span }, { text: p.text, span: p.span }, { text: bare(p), span: p.span });
+          pieces.push({ text: p.full, span: p.span }, { text: p.text, span: p.span }, ...bare(p).map((text) => ({ text, span: p.span })));
         }
       }
       pieces.push(...outer(command));
@@ -431,23 +445,50 @@ function crude(cmd: string): Piece[] {
 }
 
 // a word's values that may name a path: each value (a dynamic word's,
-// its head); an option's glued value (--file=/x), never the option; a
-// glob's head before its first wild character
-function paths(w: Word, cd: boolean): string[] {
-  return w.alts.flatMap((v) => {
+// its head; one whose ~user the system's passwd lacks, as written) and
+// what follows its first = (dd of=/x; not a variable a builtin sets:
+// sets), each of a list's (a:b); an option's glued value (--file=/x, or
+// a short one's past its letter: -o/x, but a lone /, cut -d/), never
+// the option; a glob's head before its first wild character
+function paths(w: Word, cd: boolean, sets: boolean): string[] {
+  const user = w.dynamic ? /^~[\w.-]+(?:\/[^\s'"$`*?[{\\]*)?/.exec(w.raw) : null;
+  return [...(user === null ? [] : [user[0]]), ...w.alts.flatMap((v) => {
     const option = v.startsWith("-") && !cd;
-    const glued = v.includes("=") ? [v.slice(v.indexOf("=") + 1)] : [];
-    const values = option ? [...glued, ...(/^-[^-]/.test(v) ? [v.slice(2)] : [])] : [v, ...glued];
+    const glued = v.includes("=") && (option || !sets) ? v.slice(v.indexOf("=") + 1).split(":") : [];
+    const short = option && /^-[^-]/.test(v) && v.slice(2) !== "/" ? [v.slice(2)] : [];
+    const values = option ? [...glued, ...short] : [v, ...glued];
     return values.map((value) => (w.glob ? value.slice(0, value.search(/[*?[{]|$/)) : value)).filter((plain) => plain !== "");
-  });
+  })];
 }
 
-// a command's words unquoted, its program by name if a system one
-// (/bin/rm as rm): so a rule on rm -rf /* meets 'rm' -rf "/" too
-function bare(p: Part): string {
+// a command's words as they'd expand (unquoted, ~ and the variables
+// known filled in; one known only as it runs as written), its program by
+// name if a system one (/bin/rm as rm): so a rule on rm -rf /* meets
+// 'rm' -rf "/" too. A word of several values (a brace's, a loop's
+// variable's) gives a command for each (past BARE, its values in a row),
+// so a rule on rm -rf /var/* meets for d in /tmp /var; do rm -rf $d; done
+function bare(p: Part): string[] {
   const [head, ...rest] = p.argv;
-  const value = (w: Word) => (w.dynamic ? w.raw : w.alts.join(" "));
-  return [head === undefined ? "" : Shell.program(head) || value(head), ...rest.map(value)].join(" ").trim();
+  if (head === undefined) {
+    return [];
+  }
+  let out = [Shell.program(head) || (head.dynamic ? head.raw : head.alts.join(" "))];
+  for (const w of rest) {
+    const values = w.dynamic ? [w.raw] : w.alts;
+    out = out.length * values.length > BARE ? out.map((o) => o + " " + values.join(" ")) : out.flatMap((o) => values.map((v) => o + " " + v));
+  }
+  return out.map((o) => o.trim());
+}
+
+// a path's ~ as the home it names (Shell.home; a user the system's
+// passwd lacks, beside illi's user's home, as the system most likely
+// keeps it); anything else as it is
+function home_of(v: string): string {
+  const m = /^~([^/]*)(.*)$/s.exec(v);
+  if (m === null) {
+    return v;
+  }
+  return (m[1] === "" ? os.homedir() : Shell.home(m[1]) ?? path.join(path.dirname(os.homedir()), m[1])) + m[2];
 }
 
 
@@ -460,7 +501,7 @@ function path_target(where: Where, v: string, from: string, kind: "directory" | 
   if (!named) {
     return null;
   }
-  const absolute = path.resolve(from, v === "~" ? os.homedir() : v.startsWith("~/") ? path.join(os.homedir(), v.slice(2)) : v);
+  const absolute = path.resolve(from, home_of(v));
   if (DEVICES.test(absolute) || !top_exists(absolute)) {
     return null;
   }

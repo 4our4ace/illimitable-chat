@@ -80,6 +80,9 @@ type Seen = { file: string; stamp: string; data: Record<string, any> | null | st
 
 const EFFECTS: Effect[] = ["allow", "ask", "deny"];
 
+// how strict each effect is (Permissions.shadowed)
+const STRICT: Record<Effect, number> = { allow: 0, ask: 1, deny: 2 };
+
 // the patterns compiled, by pattern
 const COMPILED = new Map<string, RegExp>();
 
@@ -112,15 +115,25 @@ export namespace Permissions {
   }
 
   // the denies and asks that never decide, as the last match wins: each
-  // whose last later rule matching it whole (on its action or all, its
-  // pattern taken as a resource: git * after git push --force*) says
-  // otherwise. An older illi took deny over ask over allow, whatever the
-  // order, so its file may hold such a rule; said at the start
+  // whose last later rule covering it whole (covers: on its action or
+  // all, git * after git push --force*) is looser (an allow after a deny
+  // or an ask, an ask after a deny). An older illi took deny over ask
+  // over allow, whatever the order, so its file may hold such a rule;
+  // said at the start
   export function shadowed(rules: Rule[]): Array<{ rule: Rule; by: Rule }> {
     return rules.flatMap((rule, k) => {
-      const by = rule.effect === "allow" ? undefined : rules.slice(k + 1).findLast((o) => match(rule.action, o.action) && match(rule.resource, o.resource));
-      return by === undefined || by.effect === rule.effect ? [] : [{ rule, by }];
+      const by = rules.slice(k + 1).findLast((o) => covers(o.action, rule.action) && covers(o.resource, rule.resource));
+      return by === undefined || STRICT[by.effect] >= STRICT[rule.effect] ? [] : [{ rule, by }];
     });
+  }
+
+  // whether a pattern matches all a narrower one does: the narrower
+  // taken as text, each wildcard in it one only a * meets (its * two
+  // characters a ? can't take alone, its ? one), and, ending in " *",
+  // its bare command too (git push ?* doesn't cover git push *)
+  export function covers(wide: string, narrow: string): boolean {
+    const text = (p: string) => p.replace(/\*/g, "\u0001\u0002").replace(/\?/g, "\u0001");
+    return match(text(narrow), wide) && (!narrow.endsWith(" *") || match(text(narrow.slice(0, -2)), wide));
   }
 
   // a request's verdict: denied if any resource is, by the configured
