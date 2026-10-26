@@ -590,6 +590,13 @@ test("an agent's log as its calls get it: whole till a recap; past one, what it 
   }
   const cjk = Logs.fit([root(0, "echo", "漢".repeat(3000))], 3000);
   expect(Memory.bytes(cjk)).toBeLessThan(3000 + 60);
+  // cut by bytes, not by characters: wide ends round a narrow middle fit too, never longer than uncut
+  const ends = (n: number, mid: number) => [root(0, "echo", "中".repeat(n) + "a".repeat(mid) + "中".repeat(n))];
+  const near = Memory.bytes(Logs.fit(ends(2000, 30)));
+  expect(Memory.bytes(Logs.fit(ends(2000, 30), near - 1))).toBeLessThan(near);
+  for (const most of [20000, 12000, 6000]) {
+    expect([most, Memory.bytes(Logs.fit(ends(3000, 30000), most)) <= most]).toEqual([most, true]);
+  }
 });
 
 test("a subagent outgrowing its model's window recaps its own log and goes on from the recap, unasked: its room a turn's; the recap's request cut to fit, halved while still too long; its task, and a message told meanwhile, kept whole; after a restart its calls start at the recap", async () => {

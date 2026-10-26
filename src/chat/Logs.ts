@@ -112,7 +112,8 @@ export namespace Logs {
   // it; the gaps between lines and the marks of what it cut counted, CUT
   // bytes each): past it, each line longer than a common length (the
   // longest first: tool results, as a rule) keeps its head and tail to
-  // it, saying how many characters it cut (a surrogate pair kept whole),
+  // it, half its bytes each (reach), saying how many characters it cut
+  // (a surrogate pair kept whole),
   // and none is cut that its mark wouldn't make shorter, so no result,
   // however long, pushes a recap's request past its model's window
   // (Tools.recap). A log of more lines than even their marks fit in
@@ -134,9 +135,7 @@ export namespace Logs {
       if (b <= lo + CUT) {
         return s;
       }
-      const half = Math.floor((lo * s.length) / b / 2);
-      const head = half - (half > 0 && s.charCodeAt(half - 1) >> 10 === 0x36 ? 1 : 0);
-      const tail = s.length - half - (half > 0 && s.charCodeAt(s.length - half) >> 10 === 0x37 ? 1 : 0);
+      const [head, tail] = [reach(s, lo / 2, false), reach(s, lo / 2, true)];
       return s.slice(0, head) + "\n[... " + (tail - head) + " characters cut ...]\n" + s.slice(tail);
     };
     return lines.map((s, k) => cut(s, sizes[k])).join("\n\n");
@@ -145,4 +144,22 @@ export namespace Logs {
   export function line(root: Root): string {
     return root.i + "|" + Memory.plain(root);
   }
+}
+
+// how far a string's head of `most` UTF-8 bytes at most reaches (back:
+// where its tail of so many starts), a code point kept whole (a lone
+// surrogate counted as its replacement's 3 bytes, as Memory.bytes counts)
+function reach(s: string, most: number, back: boolean): number {
+  let [k, n] = [back ? s.length : 0, 0];
+  while (back ? k > 0 : k < s.length) {
+    const c    = s.charCodeAt(back ? k - 1 : k);
+    const pair = back ? k > 1 && c >> 10 === 0x37 && s.charCodeAt(k - 2) >> 10 === 0x36 : c >> 10 === 0x36 && s.charCodeAt(k + 1) >> 10 === 0x37;
+    const w    = pair ? 4 : c < 0x80 ? 1 : c < 0x800 ? 2 : 3;
+    if (n + w > most) {
+      break;
+    }
+    n += w;
+    k += (back ? -1 : 1) * (pair ? 2 : 1);
+  }
+  return k;
 }
