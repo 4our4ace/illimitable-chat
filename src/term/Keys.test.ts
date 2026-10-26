@@ -19,8 +19,8 @@
 // one); keys it doesn't use do nothing; Ctrl+D closes it, the input
 // kept; Ctrl+P closes the palette it opened; a question takes Down and
 // Enter over the commands suggested; a paste goes to its search as one
-// line (none: nowhere), never the input. The leader let go by the wheel
-// passes it on to what has it.
+// line (none: nowhere), never the input, and no key types a new line in
+// it. The leader let go by the wheel passes it on to what has it.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -250,6 +250,14 @@ test("a paste goes to a popup's search as one line; without one, nowhere; never 
   list(t, 3);
   term_paste(t, "anything");
   expect(t.scr.ed.text).toBe("my draft");
+});
+
+test("a popup's search takes no new line: Shift+Enter, Ctrl+J and Ctrl+Shift+J (kitty's keys, modifyOtherKeys) leave it one line, the input under it as it was", () => {
+  const t = term("");
+  Screen.ed_set(t.scr.ed, "my draft");
+  list(t, 3, true);
+  Screen.screen_feed(t.scr, "o\x1b[13;2u\n\x1b[106;6u\x1b[27;6;74~1");
+  expect([t.choose.find.text, t.scr.ed.text]).toEqual(["o1", "my draft"]);
 });
 
 test("the leader let go by the wheel passes it on to what has it: a pane scrolls, not the chat", () => {

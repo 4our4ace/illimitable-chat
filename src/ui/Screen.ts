@@ -278,6 +278,11 @@ const MODS: [number, string][] = [[4, "Ctrl+"], [2, "Alt+"], [1, "Shift+"]];
 // one: Shift and an arrow, the pick's moves (Commands.ts ARROWS)
 const SHIFT_OWN = new Set(["Shift+Left", "Shift+Right", "Shift+Up", "Shift+Down"]);
 
+// the keys that type a new line: Ctrl+Shift+J as Ctrl+J, as a legacy
+// terminal sends it (a picker's search, one line, leaves them all to its
+// rows: Keys.ts ROWS)
+export const NEW_LINE = ["Shift+Enter", "Ctrl+J", "Ctrl+Shift+J"];
+
 // a mouse report's button: the wheel's bit, its down bit, its sideways
 // bit (66, 67), a move's bit (with no button down: NONE), the right
 // button; the modifiers' bits (ignored); how soon a press again in the
@@ -1007,21 +1012,22 @@ function ed_layout(ed: Ed): Laid {
 }
 
 // a line's rows, wrapped at w columns between words, and each place of
-// the cursor (before each character, and the end). No word ends in a
-// row's last column but one that starts its row: one that would goes
-// down to the next row whole, so the space after it, or the cursor at
-// the line's end, is beside it, and what is typed after it never takes
-// it back up. A word that would cross
-// the edge starts the next row whole, the space before it left at the
-// end of its row; a space that finds its row full (its word starting
-// the row, or the space after another) hangs past the edge,
-// unshown (the row then full: what follows starts the next, a second
-// space too, and the line's end, which gets a row of its own, so no
-// two places show at one spot); a chip (a paste's token, an image's) is
-// one word, its spaces none to break at, as a no-break space is none; a
-// word wider than a row, at any character. Each character cleaned and
-// measured once (sized: those measured); cuts: where each character
-// starts in its row's text
+// the cursor (before each character, and the end). A word that would
+// cross the edge starts the next row whole, the space before it left at
+// the end of its row. No word ends in a row's last column but one that
+// starts its row: one that would goes down to the next row whole as it
+// ends (at a space after it, of any width, or the line's end), so the
+// cursor after it shows beside it, and what is typed after it never takes
+// it back up. A space that finds no room left in its row (filled by a
+// space before it, or by the word before it from the row's start; a tab's
+// two columns with one left) hangs past the edge, unshown (the row then
+// full: what follows starts the next, a second space too, and the line's
+// end, which gets a row of its own, so no two places show at one spot); a
+// chip (a paste's token, an image's) is one word, its spaces none to
+// break at, as a no-break space is none; a word wider than a row starts
+// one, broken at any character. Each character cleaned and measured once
+// (sized: those measured); cuts: where each character starts in its row's
+// text
 function ed_wrap(text: string, w: number, last: boolean, sized: Map<string, [string, number]>): Wrap {
   const rows = [""];
   const places: Place[] = [];
@@ -1051,7 +1057,7 @@ function ed_wrap(text: string, w: number, last: boolean, sized: Map<string, [str
     const [x, cw] = shown;
     const space = /^[^\S\u00a0\u2007\u202f\ufeff]+$/.test(g) && !chips.some(([a, b]) => a < pos && pos < b);
     const from  = word >= 0 && word < places.length ? places[word].col : 0;
-    if (space && !hung && !gap && col + cw > w && from > 0 && col - from + cw <= w) {
+    if (space && !hung && !gap && col >= w && from > 0 && col - from < w) {
       down(from);
     }
     if (space && !hung && col + cw > w) {
@@ -1066,6 +1072,10 @@ function ed_wrap(text: string, w: number, last: boolean, sized: Map<string, [str
       if (!space && word >= 0 && col - start + cw <= w) {
         down(start);
       } else {
+        // too wide for a row: still the start of one, then broken
+        if (start > 0 && start < col) {
+          down(start);
+        }
         rows.push("");
         col = 0;
       }
@@ -1285,7 +1295,8 @@ function ed_closest(have: string[], want: string[]): number[] | null {
 // whether key is one. Shift with one edits as the key alone, as legacy
 // terminals send it (kitty's keys and modifyOtherKeys tell Shift apart:
 // Shift+Backspace erases as Backspace does), but where Shift means
-// something of its own (SHIFT_OWN); Shift+Enter is a new line
+// something of its own (SHIFT_OWN); Shift+Enter, as Ctrl+J, is a new
+// line (NEW_LINE)
 export function ed_key(ed: Ed, key: string): boolean {
   const laid = ed_layout(ed);
   const back = ed_step(laid, ed.pos, -1);
@@ -1315,18 +1326,13 @@ export function ed_key(ed: Ed, key: string): boolean {
     ed.pos  = a;
     return true;
   }
-  switch (key) {
-    case "Shift+Enter":
-    case "Ctrl+J":
-    case "Ctrl+Shift+J": {
-      ed_type(ed, "\n");
-      return true;
-    }
-    case "Up":
-    case "Down": {
-      ed_vert(ed, laid, ed_place(laid, ed.pos), key === "Up" ? -1 : 1);
-      return true;
-    }
+  if (NEW_LINE.includes(key)) {
+    ed_type(ed, "\n");
+    return true;
+  }
+  if (key === "Up" || key === "Down") {
+    ed_vert(ed, laid, ed_place(laid, ed.pos), key === "Up" ? -1 : 1);
+    return true;
   }
   return false;
 }

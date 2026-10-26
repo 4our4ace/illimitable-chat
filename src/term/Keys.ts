@@ -30,7 +30,7 @@ import * as View from "../ui/View.ts";
 
 // the editing keys a picker's search leaves to its rows: a new line, a
 // line up or down
-const ROWS = ["Up", "Down", "Shift+Enter", "Ctrl+J"];
+const ROWS = ["Up", "Down", ...Screen.NEW_LINE];
 
 // the keys a popup or a question leaves to what is under it: the screen
 // drawn again, a suspend, the palette (in a list's place, over a
