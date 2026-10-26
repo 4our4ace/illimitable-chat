@@ -22,9 +22,10 @@ Development
                    (Recall.ts), a second terminal's view (Remote.ts), times as
                    people say them (When.ts), the disk
     src/ai/        model vendors, the agent loop, picks, token usage
-    src/tools/     shell and files, MCP servers, the prompts; the permission
-                   checks: bash read as bash reads it (Shell.ts), each call
-                   judged (Guard.ts), your rules and grants (Permissions.ts)
+    src/tools/     shell and files, MCP servers, the prompts; the permissions:
+                   what each call asks leave for (Access.ts; bash read as bash
+                   reads it, Shell.ts), the rules and what "don't ask again"
+                   saved (Permissions.ts)
     src/config/    settings, profiles, your agents, commands and skills (Custom.ts),
                    plugins (Plugins.ts; a plugin's folder read: Bundle.ts), hooks
                    (Hooks.ts) and the commands they and the status line run

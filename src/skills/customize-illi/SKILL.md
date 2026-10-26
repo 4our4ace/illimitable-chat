@@ -157,22 +157,18 @@ one:
   (one off globally is off in every profile)
 - sticky: the sticky skills on, by name, the same way; /<name> keeps it
   for the user
-- mode: what runs without asking: auto (the default: everything in the
-  project, reads outside it, the network, pushes and deploys; a change
-  outside the project, secrets, root and the system, what deletes for
-  good on another computer and what makes git or Claude Code run a
-  program are asked about, saying why), careful (reads and routine
-  changes in the project; every risky call asked), ask (every change
-  asked), read-only (changes refused), yolo (everything, but what the
-  user's rules refuse or ask and a write to illi's settings,
-  permissions, hooks, plugins or MCP servers); /mode
-  switches it for a session, /permissions lists what was refused and
-  the grants kept
+- mode: what runs without asking: default (everything inside the
+  project; a folder outside it, a .env read and what the user's rules
+  ask are asked about, saying why), trust (everything, but what the
+  user's rules deny); /mode switches it for a session, /permissions
+  lists what was refused and the approvals saved
 - permissions: the permission file, permissions.json in illi's folder
   unless set: the user's rules ({"rules": {"shell": {"git push *":
-  "ask"}}}: allow, ask or deny by pattern, for shell, read, write and
-  mcp) and the grants "don't ask again" keeps per project. Changing it
-  is always asked: offer the rule, and let the user say yes
+  "ask"}, "external_directory": {"/tmp/*": "allow"}}}: allow, ask or
+  deny by action and pattern) and what "don't ask
+  again" saved per project. It is outside the project, so writing it
+  is asked (but in trust mode): offer the rule, and let the user say
+  yes
 - side: right, left or off; side_width: "25%" or columns; jobs: summaries
   built at once
 - related: on, screen or off, past topics that may be related to the

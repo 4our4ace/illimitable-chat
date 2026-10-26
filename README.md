@@ -24,9 +24,9 @@ curl -fsSL https://raw.githubusercontent.com/4our4ace/illimitable-chat/main/inst
 ```
 
 Then type `illi` in any project. Linux and macOS (on Windows, WSL).
-Once you trust the folder, it gets to work on its own, and asks before
-it touches your secrets or the system, or changes a file outside the
-project ([Permissions](docs/permissions.md)). It keeps itself up to date.
+Once you trust the folder, it gets to work on its own in the project,
+and asks before it reaches outside it or reads a `.env` file
+([Permissions](docs/permissions.md)). It keeps itself up to date.
 
 It remembers
 ------------

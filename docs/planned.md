@@ -2,8 +2,8 @@ Planned
 =======
 
 Planned. Until then, the [permission checks](permissions.md) ask before
-risky calls, but what illi runs from your project runs as you: use it
-where you'd let it.
+a call reaches outside the project, but what illi runs in your project
+runs as you: use it where you'd let it.
 
 - **Sandbox.** Shell commands in a bubblewrap sandbox: only the project
   and `/tmp` writable, secrets hidden, network off. illi asks before
