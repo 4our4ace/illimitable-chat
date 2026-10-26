@@ -130,7 +130,7 @@ test("a question waiting in a profile open hidden here makes the title's mark ?"
   } finally {
     process.stdout.write = write;
   }
-  expect(out.join("")).toMatch(/^\x1b\]0;\? illi · /);
+  expect(out.join("")).toMatch(/^\x1b\]0;\? .+ · illi/);
 });
 
 test("a quit says which profiles open hidden here at work it ends too; those at rest go without a word", () => {

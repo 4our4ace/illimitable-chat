@@ -93,10 +93,10 @@ test("while work runs, a tick writes the ∞'s changed cells alone, the rule who
   expect(t.spin).toBeUndefined();
 });
 
-test("the terminal's title names illi and the project, written as it changes: a spinner in the ∞'s place while work runs, ? while a question waits, ∞ once done; again after a wipe", async () => {
+test("the terminal's title names the project, then illi, written as it changes: a spinner in the ∞'s place while work runs, ? while a question waits, ∞ once done; again after a wipe", async () => {
   const t = term();
   const top = Projects.place(process.cwd()).path;
-  const osc = (mark: string) => "\x1b]0;" + mark + " illi · " + (top === "" ? "home" : path.basename(top)) + "\x07";
+  const osc = (mark: string) => "\x1b]0;" + mark + " " + (top === "" ? "home" : path.basename(top)) + " · illi\x07";
   const titles: string[] = [];
   await written(async () => {
     term_paint(t);
@@ -114,7 +114,7 @@ test("the terminal's title names illi and the project, written as it changes: a 
   const spun = titles.slice(1, -3);
   expect([titles[0], ...titles.slice(-3)]).toEqual([osc("∞"), osc("?"), osc("∞"), osc("∞")]);
   expect(spun.length).toBeGreaterThanOrEqual(2);
-  expect(spun.every((s, k) => /^\x1b\]0;[⠀-⣿] illi · /.test(s) && s !== titles[k])).toBe(true);
+  expect(spun.every((s, k) => /^\x1b\]0;[⠀-⣿] .+ · illi\x07$/.test(s) && s !== titles[k])).toBe(true);
 });
 
 test("the title's mark while work runs: one braille cell, a trail of 3 dots a step on a figure of eight over its six dots (1 4 5 2, 3 6 5 2), all its 8 steps apart", () => {

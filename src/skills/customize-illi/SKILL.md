@@ -201,7 +201,7 @@ one:
   ({ "type": "command", "command": "...", "refreshInterval": 5 });
   docs/customize.md lists the fields. A script goes in illi's folder
   (statusline.sh, made executable); applies at once
-- title: on or off, the terminal's title (∞ illi · project, the profile
+- title: on or off, the terminal's title (∞ project · illi, the profile
   after it but for the default; a spinner while illi works)
 - theme, mcp: where those files are, if not in illi's folder (theme:
   else the global folder's; the global mcp.json is read too); login: the
