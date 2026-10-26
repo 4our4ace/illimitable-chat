@@ -112,7 +112,9 @@ The columns, by table:
 - **log**: `id`, `chat`, `log`, `name`. **work**: `log` (references
   `log`), `i`, `kind`, `text`, `date`. The agents' logs (`Logs.ts`): a
   name freed goes on to a new agent, with a log of its own (the name and
-  a tag).
+  a tag). An agent that outgrew its model's window logs its recap as a
+  `recap` entry; its calls then get its first note, its `user` entries
+  and the log from its last recap on (`Logs.view`), the rest kept.
 - **image**: `id`, `chat`, `name` (its hash, so an image pasted twice is
   kept once), `data` (bytes), `fit` (a smaller copy for models, or null:
   a JPEG's a JPEG, any other's a WebP). Images illi reads with its tools

@@ -70,6 +70,16 @@ before (`/agents` marks such an agent fresh). illi starts any subagent
 fresh when you ask for it ("a fresh tester"); it stays so when told
 more later, even after a restart.
 
+A subagent works as long as its task needs. When its own context fills
+up, it writes a recap of its work so far (its task, what it found, what
+is done and what's next) and goes on from it, unasked, on every
+provider; its task and illi's messages to it stay word for word. The
+recap shows in its log, and the log before it stays whole: any
+subagent but a fresh one can `zoom` it. If its work won't fit the
+model's window even recapped (three recaps in a row with no progress
+between), it stops and its report says so. `autocontinue` is the main
+chat's: a subagent always goes on.
+
 MCP servers
 -----------
 
