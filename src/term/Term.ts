@@ -68,6 +68,7 @@ import { status_hear, status_new, status_set, type Status } from "./Status.ts";
 import { Run } from "../config/Run.ts";
 import * as Reply from "../ui/Reply.ts";
 import * as Screen from "../ui/Screen.ts";
+import { setting_follow } from "./Settings.ts";
 import { CLOCK } from "./Side.ts";
 import { Store } from "../chat/Store.ts";
 import { Tools } from "../tools/Tools.ts";
@@ -430,9 +431,12 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
     acted   : null,
   };
   // the chat suggests replies to a screen that shows them, never a pipe
+  // (while `suggest` is on: Suggest.ask); a setting changed, here or in
+  // another terminal, is followed (setting_follow)
   if (chat !== null) {
-    chat.suggest.on = t.scr.tty && config.SUGGEST;
+    chat.suggest.on = t.scr.tty;
   }
+  setting_follow(t);
   term_primaries(t);
   Reply.reply_buttons(t.scr.tty);
   member_attach(t);

@@ -56,6 +56,9 @@ const RENAMED: Record<string, string> = { context: "autocompact", contexts: "aut
 const PATH = DIR + "/config.json";
 let FILE: Record<string, unknown> = config_files();
 
+// what follows a write or a read again of config.json (config_follow)
+let FOLLOW: (wrote: boolean) => void = () => {};
+
 // the picks set that aren't offered here, each given way to its default
 // (config_gone), and what the start tells of them
 const GONE = new Set<string>();
@@ -687,15 +690,26 @@ export function config_set(key: Key, value: unknown, root = false): void {
   FILE = config_files();
   GONE.delete(key);
   config_live();
+  FOLLOW(true);
 }
 
 // config.json read again, and what changes while illi runs with it
 // (config_live): a setting another illi changed in the file, as a second
-// terminal's /settings does (its config_set reaches its own process
-// alone: Chat.act's related)
+// terminal's does (its config_set reaches its own process alone: the
+// chat's illi reads the file again as its terminal tells it, Chat.act's
+// related)
 export function config_reread(): void {
   FILE = config_files();
   config_live();
+  FOLLOW(false);
+}
+
+// what follows each config_set and config_reread, whatever the key, told
+// whether this illi wrote the file (Settings.ts setting_follow: the
+// terminal's own of the settings anew, a write told to the chat's illi);
+// one at a time, the last given
+export function config_follow(then: (wrote: boolean) => void): void {
+  FOLLOW = then;
 }
 
 // why a key can't take a value (null: it can), the other keys as they
