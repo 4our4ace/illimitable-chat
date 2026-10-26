@@ -30,7 +30,8 @@
 // message's date (Wed 21 Oct 2026 14:05), a span's lines (another
 // project's too, its project named for the zoom), what isn't a span
 // refused, a field sent as null or "" read as left out; a search kept to
-// a span; the projects' days in illi's zone. The time now in each call's
+// a span (to alone: all up to it), one whose span won't read searching
+// every date, saying so; the projects' days in illi's zone. The time now in each call's
 // message, short on claude-code, after every cache mark a later call
 // reads.
 
@@ -422,7 +423,7 @@ async function zoned(at: number, run: () => Promise<void> | void): Promise<void>
   }
 }
 
-test("date both ways: a span's lines in another project's chat, its project named for the zoom; what isn't a span refused; a search kept to a span", () => zoned(Date.UTC(2026, 9, 25, 18, 5), async () => {
+test("date both ways: a span's lines in another project's chat, its project named for the zoom; what isn't a span refused; a search kept to a span (to alone: all up to it), one that won't read searching every date, saying so", () => zoned(Date.UTC(2026, 9, 25, 18, 5), async () => {
   const other = Store.open(DIR + "/chat", { key: "git:/work/shop", name: "shop-9x1a2b", path: "/work/shop" });
   const dates = ["2026-10-20T16:00:00.000Z", "2026-10-20T17:00:00.000Z", "2026-10-22T16:00:00.000Z"];
   const texts = ["user: the cache bug in checkout", "illi: fixed the cache bug", "user: cache warmup"];
@@ -434,7 +435,7 @@ test("date both ways: a span's lines in another project's chat, its project name
   ].join("\n"));
   expect((await call("date", { from: "2026-10-21", project: "shop-9x1a2b" })).text).toBe("Nothing on Wed 21 Oct 2026. Before and after it:\n0+2|Tue 20 12:00–13:00 user, illi: the cache bug, fixed\n2+1|Thu 22 12:00 user: cache warmup\nZoom a line to go deeper, with project shop-9x1a2b.");
   expect((await call("date", { id: 2, project: "shop-9x1a2b" })).text).toBe("Thu 22 Oct 2026 12:00");
-  expect(await call("date", { from: "last Tuesday" })).toEqual({ text: "from: a local date or date and time, as 2026-10-21 or 2026-10-21 14:00.", fail: true });
+  expect(await call("date", { from: "last Tuesday" })).toEqual({ text: "from: a local date or date and time, as 2026-10-21 or 2026-10-21 14:00 (or a month, 2026-10; a year, 2026; today, yesterday or now).", fail: true });
   expect(await call("date", { from: "2026-10-21", to: "2026-10-20 12:00" })).toEqual({ text: "to comes before from.", fail: true });
   expect(await call("date", {})).toEqual({ text: "Give id, or from (and to).", fail: true });
   expect(await call("date", { from: "2026-10-21", project: "nope" })).toEqual({ text: "No project nope: projects lists them.", fail: true });
@@ -442,7 +443,12 @@ test("date both ways: a span's lines in another project's chat, its project name
   expect(await found({})).toEqual(["shop-9x1a2b 0+1|user: the cache bug in checkout", "shop-9x1a2b 0+2|user, illi: the cache bug, fixed", "shop-9x1a2b 1+1|illi: fixed the cache bug", "shop-9x1a2b 2+1|user: cache warmup"]);
   expect(await found({ from: "2026-10-22" })).toEqual(["shop-9x1a2b 2+1|user: cache warmup"]);
   expect(await found({ from: "2026-10-20 12:30", to: "2026-10-22" })).toEqual(["shop-9x1a2b 1+1|illi: fixed the cache bug", "shop-9x1a2b 2+1|user: cache warmup"]);
-  expect(await call("search", { words: "cache", to: "2026-10-22" })).toEqual({ text: "from: a local date or date and time, as 2026-10-21 or 2026-10-21 14:00.", fail: true });
+  expect(await found({ to: "2026-10-20" })).toEqual(["shop-9x1a2b 0+1|user: the cache bug in checkout", "shop-9x1a2b 0+2|user, illi: the cache bug, fixed", "shop-9x1a2b 1+1|illi: fixed the cache bug"]);
+  expect(await found({ from: "2026-10" })).toEqual(await found({}));
+  const loose = await call("search", { words: "cache", project: "shop-9x1a2b", from: "last Tuesday" });
+  expect(loose.fail).toBe(false);
+  expect(loose.text.split("\n\n")[0]).toBe("Every date searched: the span won't read (from: a local date or date and time, as 2026-10-21 or 2026-10-21 14:00 (or a month, 2026-10; a year, 2026; today, yesterday or now)).");
+  expect(loose.text.split("\n\n")[1].split("\n").sort()).toEqual(await found({}));
   // a field the model leaves out may come as null or "": left out all the same
   for (const none of [null, ""]) {
     expect((await call("date", { id: 2, from: none, to: none, project: "shop-9x1a2b" })).text).toBe("Thu 22 Oct 2026 12:00");

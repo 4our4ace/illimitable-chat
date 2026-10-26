@@ -126,7 +126,11 @@ test("illi's own tools' labels: memory, agents, skills, the to-do list, question
   expect(label("date", { from: year + "-10-14", to: year + "-10-20", project: "site" })).toBe("Looked back at 14–20 Oct in site");
   expect(label("date", { from: year + "-10-21 14:00", to: year + "-10-21 18:00" })).toBe("Looked back at " + day(year, 10, 21) + " 21 Oct 14:00–18:00");
   expect(label("date", { from: "2025-12-29", to: "2026-01-04" })).toBe("Looked back at 29 Dec 2025–4 Jan 2026");
-  expect(label("date", { from: "2026-10-21T14:00:00Z" })).toBe("Looked back at a span");
+  expect(label("date", { from: "last Tuesday" })).toBe("Looked back at a span");
+  // an ISO time with its zone, read in illi's: the rest of that day
+  const zoned = new Date(Date.UTC(year, 9, 21, 14));
+  const iso = label("date", { from: year + "-10-21T14:00:00Z" });
+  expect([iso.startsWith("Looked back at " + day(year, zoned.getMonth() + 1, zoned.getDate())), iso.includes([zoned.getHours(), zoned.getMinutes()].map((n) => String(n).padStart(2, "0")).join(":") + "–")]).toEqual([true, true]);
   expect(label("search", { words: "cache bug", from: year + "-10-21" })).toBe('Searched memory for "cache bug" on ' + day(year, 10, 21) + " 21 Oct");
   expect(label("search", { words: "cache bug", project: "all", from: year + "-10-14", to: year + "-10-20" })).toBe('Searched memory for "cache bug" in every project over 14–20 Oct');
   expect(call("search", { words: "cache bug", project: "site", from: year + "-10-14", to: year + "-10-20" }).head).toBe('"cache bug" · site · 14–20 Oct');

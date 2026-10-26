@@ -2,10 +2,13 @@
 // =========
 // `bun test When.test.ts`. In one zone set for the test (New York, whose
 // clocks go back an hour on 1 Nov 2026), whatever the machine's: a
-// model's local date or date and time read as that zone's, a day being
-// its calendar day (25 hours as the clocks go back), a span to the end
-// of from's day when to is left out (or sent as null or ""), through
-// to's day when it is a date; what isn't a date refused, saying why. The
+// model's local date or date and time read as that zone's (a year, a
+// month, today and yesterday too; an ISO time with its zone as it
+// says), a day being its calendar day (25 hours as the clocks go back),
+// a span to the end of what from names when to is left out (or sent as
+// null or blank), through to's day (month, year) when it is a date, from
+// the first message on when only to is given; what isn't a date
+// refused, saying why. The
 // time now in one short line (on claude-code without the date its prompt
 // gives). A span's words: its head, the times its lines show (only what
 // the head doesn't), the screen's short form.
@@ -27,28 +30,45 @@ const { When } = await import("./When.ts");
 // a local time in the test's zone
 const at = (y: number, mo: number, d: number, h = 0, mi = 0) => new Date(y, mo - 1, d, h, mi).getTime();
 
-test("a local date or date and time, read in the zone illi runs in; what isn't one, refused", () => {
-  expect(When.parse("2026-10-21")).toEqual({ at: Date.UTC(2026, 9, 21, 4), day: true });
-  expect(When.parse("2026-10-21 14:05")).toEqual({ at: Date.UTC(2026, 9, 21, 18, 5), day: false });
-  expect(When.parse("2026-10-21T14:05:30")).toEqual({ at: Date.UTC(2026, 9, 21, 18, 5, 30), day: false });
-  expect(When.parse(" 2026-11-02 ")).toEqual({ at: Date.UTC(2026, 10, 2, 5), day: true });
-  for (const bad of ["2026-02-30", "2026-13-01", "2026-10-21 24:00", "2026-10-21 14:60", "21 Oct", "2026-10-21Z", "", 20261021, null]) {
+test("a local date or date and time, read in the zone illi runs in, a year or a month too; an ISO time with its zone, as it says; today, yesterday and now; what isn't one, refused", () => {
+  const now = at(2026, 10, 21, 14, 5);
+  expect(When.parse("2026-10-21")).toEqual({ at: Date.UTC(2026, 9, 21, 4), end: Date.UTC(2026, 9, 22, 4) });
+  expect(When.parse("2026-10-21 14:05")).toEqual({ at: Date.UTC(2026, 9, 21, 18, 5), end: null });
+  expect(When.parse("2026-10-21T14:05:30")).toEqual({ at: Date.UTC(2026, 9, 21, 18, 5, 30), end: null });
+  expect(When.parse(" 2026-11-02 ")).toEqual({ at: Date.UTC(2026, 10, 2, 5), end: Date.UTC(2026, 10, 3, 5) });
+  expect(When.parse("2026-10")).toEqual({ at: at(2026, 10, 1), end: at(2026, 11, 1) });
+  expect(When.parse("2026")).toEqual({ at: at(2026, 1, 1), end: at(2027, 1, 1) });
+  expect(When.parse("2026-10-21T14:05:00Z")).toEqual({ at: Date.UTC(2026, 9, 21, 14, 5), end: null });
+  expect(When.parse("2026-10-21T14:05:00.250z")).toEqual({ at: Date.UTC(2026, 9, 21, 14, 5, 0, 250), end: null });
+  expect(When.parse("2026-10-21 14:05+0200")).toEqual({ at: Date.UTC(2026, 9, 21, 12, 5), end: null });
+  expect(When.parse("2026-10-21T14:05-04:00")).toEqual({ at: Date.UTC(2026, 9, 21, 18, 5), end: null });
+  expect(When.parse("Today", now)).toEqual({ at: at(2026, 10, 21), end: at(2026, 10, 22) });
+  expect(When.parse("yesterday", at(2026, 11, 2, 0, 30))).toEqual({ at: at(2026, 11, 1), end: at(2026, 11, 2) });
+  expect(When.parse(" now ", now)).toEqual({ at: now, end: null });
+  for (const bad of ["2026-02-30", "2026-13-01", "2026-13", "2026-10-21 24:00", "2026-10-21 14:60", "21 Oct", "2026-10-21Z", "2026-10-32T10:00Z", "", "last week", 20261021, null]) {
     expect(When.parse(bad)).toBeNull();
   }
 });
 
-test("a span: to left out, the rest of from's day; a date as to, through its day; a time as to, the instant it stops before; one ending before it starts, refused", () => {
+test("a span: to left out, the rest of from's day (all of a month or a year); a date as to, through its day (a month, a year, through it); a time as to, the instant it stops before; to alone, from the first message on; one ending before it starts, refused", () => {
   expect(When.span("2026-10-21", undefined)).toEqual({ from: at(2026, 10, 21), to: at(2026, 10, 22) });
   expect(When.span("2026-10-21 14:00", "")).toEqual({ from: at(2026, 10, 21, 14), to: at(2026, 10, 22) });
   expect(When.span("2026-10-14", "2026-10-20")).toEqual({ from: at(2026, 10, 14), to: at(2026, 10, 21) });
   expect(When.span("2026-10-21 14:00", "2026-10-21 18:00")).toEqual({ from: at(2026, 10, 21, 14), to: at(2026, 10, 21, 18) });
-  expect(When.span("yesterday", undefined)).toBe("from: a local date or date and time, as 2026-10-21 or 2026-10-21 14:00.");
-  expect(When.span("2026-10-21", "soon")).toBe("to: a local date or date and time, as 2026-10-21 or 2026-10-21 14:00.");
+  const form = "a local date or date and time, as 2026-10-21 or 2026-10-21 14:00 (or a month, 2026-10; a year, 2026; today, yesterday or now).";
+  expect(When.span("last week", undefined)).toBe("from: " + form);
+  expect(When.span("2026-10-21", "soon")).toBe("to: " + form);
+  expect(When.span("2026-10", undefined)).toEqual({ from: at(2026, 10, 1), to: at(2026, 11, 1) });
+  expect(When.span("2026-09-15", "2026-10")).toEqual({ from: at(2026, 9, 15), to: at(2026, 11, 1) });
+  expect(When.span(undefined, "2026-10-20")).toEqual({ from: 0, to: at(2026, 10, 21) });
+  expect(When.span(" ", "2026-10-20 12:00")).toEqual({ from: 0, to: at(2026, 10, 20, 12) });
+  expect(When.span("yesterday", "now", at(2026, 10, 21, 14, 5))).toEqual({ from: at(2026, 10, 20), to: at(2026, 10, 21, 14, 5) });
+  expect(When.span("2026-10", "2026-09")).toBe("to comes before from.");
   expect(When.span("2026-10-21", "2026-10-20 23:00")).toBe("to comes before from.");
   expect(When.span("2026-10-22", "2026-10-21")).toBe("to comes before from.");
   expect(When.span("2026-10-22 14:00", "2026-10-22")).toEqual({ from: at(2026, 10, 22, 14), to: at(2026, 10, 23) });
   expect(When.span("2026-10-21", null)).toEqual({ from: at(2026, 10, 21), to: at(2026, 10, 22) });
-  expect([undefined, null, "", "2026-10-21", 0].map(When.given)).toEqual([false, false, false, true, true]);
+  expect([undefined, null, "", "  ", "2026-10-21", 0].map(When.given)).toEqual([false, false, false, false, true, true]);
 });
 
 test("a day is a calendar day: 25 hours as the clocks go back, 23 as they go on", () => {
@@ -102,5 +122,5 @@ test("a span's head says it whole; its lines' times only what the head doesn't; 
   ]);
   expect(When.short(day, at(2027, 1, 2))).toBe("Wed 21 Oct 2026");
   expect(When.short(over, at(2027, 1, 2))).toBe("29 Sep–5 Oct 2026");
-  expect(When.parse("2026-03-08 02:30")).toEqual({ at: at(2026, 3, 8, 3, 30), day: false });
+  expect(When.parse("2026-03-08 02:30")).toEqual({ at: at(2026, 3, 8, 3, 30), end: null });
 });
