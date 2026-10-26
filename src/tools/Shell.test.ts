@@ -180,7 +180,7 @@ test("words expand as far as known: variables, loops, tildes, braces; globs and 
   expect(parts("g='*.ts'; ls $g \"$g\"")).toEqual(["g=*.ts @/w", "ls **.ts *.ts @/w"]);
 });
 
-test("a [ without its ] is itself, not a glob; $(pwd) and $(git rev-parse --show-toplevel) are the folder while known (not while GIT_DIR or GIT_WORK_TREE, set before illi started, may point git elsewhere); flock runs its command", () => {
+test("a [ without its ] is itself, not a glob; $(pwd) and $(git rev-parse --show-toplevel) are the folder while known (not while GIT_DIR or GIT_WORK_TREE, set before illi started, may point git elsewhere); $(mktemp) where it makes its file or folder (not once TMPDIR is set, nor with a word it can't read); flock runs its command", () => {
   expect(parts("[ -f a ] && ls x[ab] [c")).toEqual(["[ -f a ] @/w", "ls *x[ab] [c @/w"]);
   expect(parts("echo $(pwd)/x `pwd -P`; cd $X; echo $(pwd)")).toEqual(["pwd @/w", "pwd -P @/w", "echo /w/x /w @/w", "cd ~ @/w", "pwd @null", "echo ~ @null"]);
   fs.mkdirSync(REPO + "/sub/deep", { recursive: true });
@@ -197,6 +197,13 @@ test("a [ without its ] is itself, not a glob; $(pwd) and $(git rev-parse --show
     }
   }
   expect(top("source env.sh; echo $(pwd)")).toEqual(["echo", "~"]);
+  // mktemp's file or folder: where it lands, its X's kept
+  const tmp = process.env.TMPDIR || "/tmp";
+  expect(top("d=$(mktemp -d /tmp/x.XXXXXX); git clone u \"$d/repo\"")).toEqual(["git", "clone", "u", "/tmp/x.XXXXXX/repo"]);
+  expect(top("touch \"$(mktemp)\" \"$(mktemp -d -t job)\" `mktemp -p /var/tmp --suffix=.log`")).toEqual(["touch", tmp + "/tmp.XXXXXXXXXX", tmp + "/job", "/var/tmp/tmp.XXXXXXXXXX.log"]);
+  expect(top("touch \"$(mktemp --tmpdir=/var/tmp a.XXX)\" \"$(mktemp -dq b.XXX)\" \"$(mktemp ../c.XXX)\"")).toEqual(["touch", "/var/tmp/a.XXX", REPO + "/sub/deep/b.XXX", REPO + "/sub/c.XXX"]);
+  expect(top("touch \"$(mktemp -p \"$HOME\")\" \"$(mktemp -t a/b)\" \"$(mktemp --weird)\"")).toEqual(["touch", "~", "~", "~"]);
+  expect(top("TMPDIR=/etc; touch \"$(mktemp)\"")).toEqual(["touch", "~"]);
   expect(parts("flock -n /tmp/l rm x; flock -w 5 /tmp/l -c 'cd /tmp && ls'")).toEqual(["rm x @/w", "cd /tmp @/w", "ls @/tmp"]);
   expect(parts("flock --bogus /tmp/l rm x")).toBe("flock --bogus: an option illi doesn't know");
 });

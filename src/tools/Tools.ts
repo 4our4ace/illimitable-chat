@@ -337,6 +337,12 @@ const WHAT  = 400;
 const WHOLE = 32000;
 const KEPT  = 1000;
 
+// what "don't ask again" keeps when it keeps the very command asked
+// about, shown whole above it, past SHORT characters or lines: never the
+// command again, a script's lines run together on one
+const EXACT = "this exact command";
+const SHORT = 72;
+
 // past WHOLE, the most characters the question shows of a line holding a
 // spot (what made the checks ask: Tools.whole), from REACH before the
 // spot on (a minified script is one long line)
@@ -887,7 +893,8 @@ export namespace Tools {
   // where in it that is (Verdict spots; a hook's ask, the loop guard,
   // rules that won't read: all of it; a file's, an MCP tool's reasons have
   // no place in it: none, so the question doesn't fold it either), and
-  // what "don't ask again" keeps by its ends past KEPT. One
+  // what "don't ask again" keeps by its ends past KEPT (the command
+  // itself, long: EXACT). One
   // asked runs on the user's yes, "don't ask again" keeping its grants for
   // the project (one that can't be saved: for this run). A rules file that
   // won't read leaves nothing run unasked
@@ -911,7 +918,7 @@ export namespace Tools {
     if (verdict.$ === "deny") {
       return Tools.refuse(tools, { ...asked, how: verdict.rule ? "rule" : "mode", said: "", exact: verdict.exact });
     }
-    const reply = await tools.hooks.ask({ ...asked, ...Tools.whole(input, verdict.spots), why: Tools.ends(verdict.why, WHOLE), keep: Tools.ends(verdict.always.map((g) => Guard.said(g, folder)).join(", "), KEPT) }, signal);
+    const reply = await tools.hooks.ask({ ...asked, ...Tools.whole(input, verdict.spots), why: Tools.ends(verdict.why, WHOLE), keep: Tools.ends(Tools.kept(verdict.always, input, folder), KEPT) }, signal);
     if (!reply.yes) {
       return Tools.refuse(tools, { ...asked, how: "no", said: reply.said, exact: verdict.exact }, !signal.aborted);
     }
@@ -922,6 +929,15 @@ export namespace Tools {
       console.error("illi: a grant kept for this run only: " + unsaved);
     }
     return null;
+  }
+
+  // what "don't ask again" keeps, as the question names it (Guard.said):
+  // the command asked about itself, past a line or SHORT characters, EXACT
+  export function kept(always: string[], input: unknown, folder: string): string {
+    const command = (input as { command?: unknown } | null)?.command;
+    const long = typeof command === "string" && (command.trim().includes("\n") || command.trim().length > SHORT);
+    const whole = long ? "shell=" + String(command).trim() : null;
+    return [...new Set(always.map((g) => (g === whole ? EXACT : Guard.said(g, folder))))].join(", ");
   }
 
   // whether a call is the same (tool and input) as its caller's LOOP
