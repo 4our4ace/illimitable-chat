@@ -56,7 +56,7 @@ OpenAI's). A vendor whose own program runs the loop (Claude Code) skips
 the wire: `Agent.ask` hands the call to its runner, which must give back
 a `Try` with the same `Event`s and `End`. A call `once` (a recap) runs
 no tool and takes no message sent meanwhile: the runner leaves it in
-`End.left`, as `Agent.loop` does (an agent's log holds it for its next
+`End.left`, as Agent.ts does (an agent's log holds it for its next
 call).
 
 Failures must land in the right `stop`, since each is handled apart:
