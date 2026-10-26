@@ -301,6 +301,11 @@ const REBUILT = new Set([
   ".dart_tool", ".expo", ".angular", ".output", ".vercel", "tmp", ".tmp",
 ]);
 
+// in illi's folders, what only says what it is told or how it looks: a
+// skill's files, a command, an agent, its rules, its theme (never the
+// skills folder itself, nor what sits beside it)
+const TOLD = /^(?:(?:skills|commands|agents)\/[^/]|(?:RULES\.md|theme\.json)$)/;
+
 // outside the project: where anything may be written (scratch), and read
 // besides (the system's folders); in /dev only these files
 const SCRATCH = [...new Set(["/tmp", "/var/tmp", Projects_real(os.tmpdir()), Projects_real(process.env.TMPDIR ?? "/tmp")])];
@@ -2465,7 +2470,10 @@ function path_rule(where: Where, file: string, write: boolean): Rule | null {
 }
 
 // why a file is asked about, each reason with the modes that ask it:
-// illi's own config written (in every mode); a secret, read or written
+// illi's own config written (in every mode: its settings, permissions,
+// hooks, plugins and MCP servers, what it runs and may do; but what it
+// is told or how it looks, told: careful's, so it customizes itself as
+// asked, each thing that leads it to do still checked); a secret, read or written
 // through any tool (in every mode but yolo), before the folders read
 // freely (illi's skills', a plugin's); a device written; git's hooks or
 // config, or Claude Code's settings (what it runs unasked), written
@@ -2487,12 +2495,16 @@ function path_why(where: Where, file: string, write: boolean, maybe = false, fol
   if (DEVS.test(file)) {
     return [];
   }
-  if (write && (under(file, Projects_real(config.ROOT)) || under(file, path.join(where.top, ".illi")))) {
+  const own = write && (under(file, Projects_real(config.ROOT)) || under(file, path.join(where.top, ".illi")));
+  if (own && !told(file, where.top)) {
     return [{ why: at + " is illi's own config (what it runs and is told)", wide: false, tier: "self" }];
   }
   const kept = where.plugins.some((d) => plugin_kept(file, d)) ? "kept" : secret(file, where.top);
   if (kept === "kept" || (kept === "name" && !folder)) {
     return [{ why: at + " may hold secrets", wide: false, tier: "all" }];
+  }
+  if (own) {
+    return [{ why: at + " changes how illi works or looks (a skill, command, agent, its rules or theme)", wide: false, tier: "careful" }];
   }
   if (!write && (where.reads.some((d) => under(file, d)) || where.plugins.some((d) => under(file, d)))) {
     return [];
@@ -2804,13 +2816,21 @@ function uniq<T>(xs: T[]): T[] {
 }
 
 // whether a path is a folder's or under it
+// a file of illi's customization that only says what it is told or how
+// it looks (TOLD: a skill, a command, an agent, its rules, its theme), in
+// its folder, its profile's or a project's .illi
+function told(file: string, top: string): boolean {
+  return [config.ROOT, config.DIR, path.join(top, ".illi")].some((dir) => TOLD.test(path.relative(Projects_real(dir), file)));
+}
+
 function under(file: string, dir: string): boolean {
   return file === dir || file.startsWith(dir.endsWith(path.sep) ? dir : dir + path.sep);
 }
 
 // a path's real place: links followed as far as it exists, the rest kept;
-// a file descriptor's (/dev/fd/3, /dev/stdin: the command's own, not
-// illi's) kept as it is
+// a link whose target isn't there (yet) followed too, as a write through
+// it makes that target; a file descriptor's (/dev/fd/3, /dev/stdin: the
+// command's own, not illi's) kept as it is
 function real(file: string): string {
   if (DEVS.test(file)) {
     return file;
@@ -2820,6 +2840,11 @@ function real(file: string): string {
     try {
       return path.join(fs.realpathSync(head), tail);
     } catch {
+      const link = link_of(head);
+      if (link !== null) {
+        head = path.resolve(real(path.dirname(head)), link);
+        continue;
+      }
       const up = path.dirname(head);
       if (up === head) {
         return file;
@@ -2829,6 +2854,15 @@ function real(file: string): string {
     }
   }
   return file;
+}
+
+// where a link leads, as written (null: not a link)
+function link_of(file: string): string | null {
+  try {
+    return fs.readlinkSync(file);
+  } catch {
+    return null;
+  }
 }
 
 // where a file is named: its folder's real place, itself as named (a
