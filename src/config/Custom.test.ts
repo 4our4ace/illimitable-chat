@@ -239,7 +239,7 @@ test("spawn's agent runs a subagent as it, and names the user's agents", async (
   await until(() => !chat.busy);
 });
 
-test("a main agent whose tools list holds spawn to some agents is offered those alone, and spawn refuses another or a plain subagent", async () => {
+test("a main agent whose tools list holds spawn to some agents is offered those alone, and spawn refuses another or a plain subagent; held to none of the user's agents, it has no spawn", async () => {
   put(CWD + "/.illi/agents/lead.md", "---\ndescription: Leads\nmode: primary\ntools: Agent(reviewer, Scout), zoom\n---\nYou lead.");
   try {
     expect(Chat.main(chat, "lead")).toEqual({});
@@ -249,6 +249,9 @@ test("a main agent whose tools list holds spawn to some agents is offered those 
     expect(other).toMatchObject({ fail: true, text: "coder isn't one this agent may spawn; name one of: reviewer, scout." });
     const plain = await Tools.call(chat.tools, "main", "spawn", { tasks: ["x"] }, new AbortController().signal);
     expect(plain).toMatchObject({ fail: true, text: "A plain subagent isn't one this agent may spawn; name one of: reviewer, scout." });
+    // naming none of the user's agents, it may spawn nothing: no spawn offered
+    put(CWD + "/.illi/agents/lead.md", "---\ndescription: Leads\nmode: primary\ntools: Agent(nobody), zoom, todo\n---\nYou lead.");
+    expect(Tools.list(chat.tools, "main").map((t) => t.name)).toEqual(["zoom", "todo"]);
   } finally {
     Chat.main(chat, null);
     fs.rmSync(CWD + "/.illi/agents/lead.md", { force: true });

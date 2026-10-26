@@ -380,13 +380,15 @@ function skill_files(dir: string): string[] {
 
 // the master's tools: spawn, with the user's subagents to run tasks as,
 // if any (only: those its agent may spawn, one of which it must name;
-// null: any, or none for a plain subagent); tell; todo
+// null: any, or none for a plain subagent; none of them there: no spawn,
+// as it could start nothing); tell; todo
 function boss(cwd: string, only: string[] | null = null): Spec[] {
   const subs = Custom.subagents(cwd).filter((a) => only === null || Custom.called(a).some((n) => only.includes(n)));
   const agents = subs.map((a) => a.name + (a.description === "" ? "" : " (" + a.description + ")"));
   const agent = { type: "string", description: "The user's agent to run each task as, by name, with its own instructions, model and tools: " + agents.join("; ") + (only === null ? ". None: a plain subagent." : ". Name one of them: no other is allowed.") };
   const fields = agents.length === 0 ? { tasks: { type: "array", items: STR }, effort: EFFORT } : { tasks: { type: "array", items: STR }, agent, effort: EFFORT };
-  return [spec("spawn", SPAWN, fields, only === null || agents.length === 0 ? ["tasks"] : ["tasks", "agent"]), TELL, TODO, ASK];
+  const spawn = only !== null && agents.length === 0 ? [] : [spec("spawn", SPAWN, fields, only === null ? ["tasks"] : ["tasks", "agent"])];
+  return [...spawn, TELL, TODO, ASK];
 }
 
 // Tools
