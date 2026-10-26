@@ -4,7 +4,8 @@
 // profile, a trusted project's), a command given twice kept once, what
 // won't do said, disableAllHooks turning all off; matchers read as
 // Claude Code's (names exactly, else a pattern found anywhere), one
-// naming only Claude Code's tools but Bash (Agent too) said. A
+// naming only Claude Code's tools but Bash (Agent, its task tools too)
+// said. A
 // command's answer is read as Claude Code's: exit 2 blocks, a JSON object
 // decides on any other exit, exit 0's text is context where it may be; a
 // failure is passed over but refuses a tool's call (onFailure sets it).
@@ -125,10 +126,10 @@ test("matchers as Claude Code reads them: none, \"\" or * all; plain names exact
   expect(takes("/any.sh", "anything")).toBe(true);
 });
 
-test("a tool hook whose matcher names only Claude Code's tools other than Bash (Agent, Task too) is said once at the start, as it runs only on claude-code's own calls", () => {
-  hooks(ROOT + "/hooks.json", { PreToolUse: [["Agent", "/agent.sh"], ["Task|Read", "/task.sh"], ["Agent|shell", "/both.sh"]] });
+test("a tool hook whose matcher names only Claude Code's tools other than Bash (Agent, Task, its task tools too) is said once at the start, as it runs only on claude-code's own calls", () => {
+  hooks(ROOT + "/hooks.json", { PreToolUse: [["Agent", "/agent.sh"], ["Task|Read", "/task.sh"], ["Agent|shell", "/both.sh"], ["TaskCreate|TaskUpdate", "/todo.sh"]] });
   Hooks.load(REPO, () => false);
-  expect(notes.filter((n) => n.includes("Claude Code's tools")).map((n) => /matches (\S+),/.exec(n)?.[1])).toEqual(["Agent", "Task|Read"]);
+  expect(notes.filter((n) => n.includes("Claude Code's tools")).map((n) => /matches (\S+),/.exec(n)?.[1])).toEqual(["Agent", "Task|Read", "TaskCreate|TaskUpdate"]);
 });
 
 test("an answer as Claude Code's: exit 2 blocks where its event can; exit 0's text is context where it may be; anything else failing is passed over, but refuses a tool's call", () => {

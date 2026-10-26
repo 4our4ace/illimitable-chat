@@ -79,8 +79,9 @@ const MATCHED: Partial<Record<Event, true>> = { PreToolUse: true, PostToolUse: t
 
 // Claude Code's tool names a matcher may name: Bash, whose input is
 // illi's shell's, taken for it; the others, whose inputs differ, said
-// (Agent, its subagents' tool, under its old name Task too)
-const CLAUDE_TOOLS = ["Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "LS", "WebFetch", "WebSearch", "NotebookEdit", "TodoWrite", "Agent", "Task"];
+// (Agent, its subagents' tool, under its old name Task too; its to-do
+// list's TodoWrite and the task tools it is off by default in favor of)
+const CLAUDE_TOOLS = ["Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "LS", "WebFetch", "WebSearch", "NotebookEdit", "TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "Agent", "Task"];
 
 // the events whose output, as text, is context for the model
 const CONTEXT: Partial<Record<Event, true>> = { UserPromptSubmit: true, SessionStart: true };
