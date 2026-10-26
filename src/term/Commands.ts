@@ -469,8 +469,9 @@ function term_skill(t: Term, skill: Skill, arg: string, word: string): void {
   }
 }
 
-// the MCP servers, illi's own (where each is from: a plugin, a file),
-// then Claude Code's as its last call told them (ClaudeCode.servers),
+// the MCP servers, illi's own (where each is from: a plugin, a file;
+// one `off` names, not started, too), then Claude Code's as its last
+// call told them (ClaudeCode.servers),
 // each how it is (term_mcp_state) and on or off (setting_on); the lit
 // one's tools under them, or why it failed; Enter, Left or Right turns
 // it off or on (setting_toggle: `off`; illi's own at the next start,
@@ -481,9 +482,11 @@ function term_skill(t: Term, skill: Skill, arg: string, word: string): void {
 // (cc: a click on one at the side)
 export function term_mcp(t: Term, at = "", cc = false): void {
   const { servers, troubles, files } = Mcp.status();
+  const idle   = Object.entries(Mcp.read(process.cwd(), true)).filter(([name]) => config.config_off(name) && !servers.some((s) => s.name === name));
   const theirs = ClaudeCode.servers() ?? [];
   const where  = files.map((f, k) => config.config_home(f) + (files.length === 1 ? "" : k === 0 ? " (every profile)" : " (this profile's)")).join(" or ");
-  if (servers.length === 0 && theirs.length === 0) {
+  const from   = (s: { plugin: string | null; file: string }) => (s.plugin !== null ? "plugin " + s.plugin : config.config_home(s.file));
+  if (servers.length === 0 && idle.length === 0 && theirs.length === 0) {
     const later = t.v.vendors.includes("claude-code") ? " Claude Code's own servers show here once a call on claude-code has loaded them." : "";
     const text  = ["No MCP servers yet. Add them to " + where + ", as Claude Code's mcpServers (illi's docs/customize.md shows the shape); they run from illi's next start." + later, ...(troubles.length === 0 ? [] : ["", "Won't read:", ...troubles.map((x) => "- " + x)])];
     return term_pane_text(t, "MCP", text.join("\n"));
@@ -492,11 +495,12 @@ export function term_mcp(t: Term, at = "", cc = false): void {
   const rows: Array<{ name: string; about: string; head: string; detail: string; foot: string }> = [
     ...servers.map((s) => ({
       name   : s.name,
-      about  : term_mcp_state(s.state === "ready" ? "connected" : s.state, s.own.size) + " · " + (s.plugin !== null ? "plugin " + s.plugin : config.config_home(s.file)),
+      about  : term_mcp_state(s.state === "ready" ? "connected" : s.state, s.own.size) + " · " + from(s),
       head   : "illi's",
       detail : s.state === "ready" ? tools([...s.own.values()]) : s.state === "failed" ? "failed: " + s.why : "",
       foot   : "Enter on/off · at the next start",
     })),
+    ...idle.map(([name, f]) => ({ name, about: "not started · " + from(f), head: "illi's", detail: "", foot: "Enter on/off · at the next start" })),
     ...theirs.map((s) => ({
       name   : s.name,
       about  : s.over ? "illi's own " + s.name + " in its place" : term_mcp_state(s.status, s.tools?.length ?? null),
@@ -506,7 +510,7 @@ export function term_mcp(t: Term, at = "", cc = false): void {
     })),
     ...troubles.map((x) => ({ name: x, about: "", head: "Won't read", detail: "", foot: "read again at the next start" })),
   ];
-  const named  = servers.length + theirs.length;
+  const named  = servers.length + idle.length + theirs.length;
   const aside  = () => rows.map((r, k) => (k < named ? setting_on(r.name) : ""));
   const detail = (k: number, w: number) => {
     const lines = rows[k].detail === "" ? [] : Paint.runs_wrap([Paint.Run(rows[k].detail, Paint.DIM)], Math.max(2, w), false);
@@ -522,7 +526,7 @@ export function term_mcp(t: Term, at = "", cc = false): void {
     return true;
   };
   term_chooser(t, "MCP servers", rows.map((r) => r.name), rows.map((r) => r.about), -1, () => {}, { find: true, keys, foot: (k) => rows[k].foot, detail, aside: aside(), heads: rows.map((r) => r.head) });
-  const lit = rows.findIndex((r, k) => r.name === at && (k >= servers.length) === cc && k < named);
+  const lit = rows.findIndex((r, k) => r.name === at && (k >= servers.length + idle.length) === cc && k < named);
   if (lit >= 0 && t.choose !== null) {
     t.choose.at = Math.max(0, t.choose.shown.findIndex((m) => m.k === lit));
   }

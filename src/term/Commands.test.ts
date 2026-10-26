@@ -29,8 +29,9 @@
 // used, its bar as full. A /word finds every setting too, by its key or
 // what it does, as `/set <key>`. /mcp lists Claude Code's own MCP
 // servers as its last call told them, each how it is and on or off, the
-// lit one's tools under them, Enter turning one off and on; the side
-// shows them under a line of their own, a click /mcp lit on one.
+// lit one's tools under them, Enter turning one off and on (illi's own
+// one off too, not started); the side shows them under a line of their
+// own, a click /mcp lit on one.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -624,7 +625,7 @@ test("each command and key is in docs/keys.md", () => {
   }
 });
 
-test("/mcp lists Claude Code's own servers as its last call told them, each how it is, on or off, the lit one's tools under them; Enter turns one off in illi's calls, again on; the side shows them under a line of their own", () => {
+test("/mcp lists Claude Code's own servers as its last call told them, each how it is, on or off, the lit one's tools under them; Enter turns one off in illi's calls, again on; the side shows them under a line of their own; illi's own one off, not started, is listed to turn on", () => {
   ClaudeCode.learn({ mcp_servers: [{ name: "illi", status: "connected" }, { name: "github", status: "connected" }, { name: "claude.ai Gmail", status: "needs-auth" }, { name: "docs", status: "failed" }], tools: ["mcp__illi__zoom", "mcp__github__get_issue", "mcp__github__list_prs"] }, { strict: false, deny: [] });
   const t = term();
   Object.assign(t, { agents: [], profs: ["default"], since: Date.now() });
@@ -643,4 +644,11 @@ test("/mcp lists Claude Code's own servers as its last call told them, each how 
   t.choose = null;
   term_side(t, 50, 60).find(([line]) => text(line).endsWith("docs failed"))![1]!();
   expect([t.choose.title, lit(t)]).toEqual(["MCP servers", "docs"]);
+  fs.writeFileSync(DIR + "/mcp.json", JSON.stringify({ mcpServers: { web: { type: "http", url: "https://example.com/mcp" } } }));
+  config.config_set("off", "web");
+  run(t, "/mcp");
+  expect([t.choose.names[0], t.choose.about[0], t.choose.aside[0], t.choose.heads[0], foot(t)]).toEqual(["web", "not started · " + config.config_home(DIR + "/mcp.json"), "off", "illi's", "Enter on/off · at the next start"]);
+  term_grab(t, "Enter");
+  expect([config.OFF, t.choose.aside[0]]).toEqual([[], "on"]);
+  fs.rmSync(DIR + "/mcp.json");
 });

@@ -15,14 +15,14 @@
 // are the Claude plan's use (each its share used and reset, kept till
 // told again; a model's own window left out). Claude Code's own MCP
 // servers, as a call's init tells them, are kept (illi's left out; one
-// a call cut, its tools as told before) and their names as spelled; one
-// `off` names leaves illi's calls by a rule; an agent's tools list keeps
-// those it names (a server, its tools, mcp: all), naming none its call
-// loads none (--strict-mcp-config); illi's own server of a name wins
-// while it runs (failed: Claude Code's stays). Before any call told
-// them, an agent's list loads none, and the rules are by name: those
-// `off` names (spelled as Claude Code last did) and illi's own servers'.
-// A name is spelled as Claude Code spells it in its tools'.
+// a call cut, its tools as told before), and their names, case and
+// all; one `off` names leaves illi's calls by a rule; an agent's tools
+// list keeps those it names (a server, its tools, mcp: all), naming
+// none its call loads none (--strict-mcp-config); illi's own server of
+// a name wins while it runs (failed: Claude Code's stays). Before any
+// call told them, an agent's list loads none, and the rules are by
+// name: those `off` names (case and all as told before) and illi's own
+// servers'. A name is spelled as Claude Code spells it in its tools'.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -158,7 +158,7 @@ const until = async (ok: () => boolean) => {
   }
 };
 
-test("before any call has told Claude Code's servers: an agent's tools list loads none; else, by name, those off (as Claude Code spelled them before) and those illi runs its own of leave the call", async () => {
+test("before any call has told Claude Code's servers: an agent's tools list loads none; else, by name, those off (case and all as told before) and those illi runs its own of leave the call", async () => {
   fs.writeFileSync(DIR + "/claude-code.json", JSON.stringify({ servers: ["claude.ai Gmail"] }));
   config.config_set("off", "claude.ai gmail, linear, illi");
   await own("github");

@@ -46,8 +46,8 @@
 // list doesn't name too (one it names by tools alone: its other tools),
 // and all where it names none of those told, or none is told yet
 // (--strict-mcp-config, illi's own server kept). Claude Code's settings
-// are never touched. The names as Claude Code spelled them are kept
-// (claude-code.json), so `off` is spelled right before a start's first
+// are never touched. Their names, case and all, are kept
+// (claude-code.json), so `off`'s rules are right before a start's first
 // call has told them.
 
 import * as fs from "node:fs";
@@ -141,12 +141,12 @@ let limits: Limit[] = [];
 // (Theirs, but off and over, read anew each time; null: none has yet)
 let theirs: Array<Omit<Theirs, "off" | "over">> | null = null;
 
-// the names Claude Code's servers were ever told by, as it spells them,
-// by their lower case (as `off` holds them; null: NAMES not read yet),
-// kept across starts in NAMES so `off` spells its rules right before a
-// start's first call has told the servers (Claude Code matches a rule's
-// server case and all)
-let spellings: Map<string, string> | null = null;
+// the names Claude Code's servers were ever told by, case and all, by
+// their lower case (as `off` holds them; null: NAMES not read yet), kept
+// across starts in NAMES so `off`'s rules are right before a start's
+// first call has told the servers (Claude Code matches a rule's server
+// case and all)
+let cases: Map<string, string> | null = null;
 const NAMES = config.ROOT + "/claude-code.json";
 
 const NO_CLAUDE = "Claude Code isn't installed here: install it (code.claude.com), log in with claude, then send a message";
@@ -271,7 +271,7 @@ export namespace ClaudeCode {
   // list doesn't name, whole; each it names by tools alone, its other
   // tools last told (none told: whole). Before any call has told the
   // servers, the rules are by name: illi's own servers', and those `off`
-  // names (as Claude Code spelled them, else as written). A rule never
+  // names (case and all as told before, else as written). A rule never
   // reaches illi's own tools (mcp__illi__...)
   export function cut(ask: Ask): Cut {
     if (ask.server === "" || ask.once) {
@@ -284,7 +284,7 @@ export namespace ClaudeCode {
     if (listed !== null && !(known ?? []).some((s) => !s.off && !s.over && named(s).length > 0)) {
       return { strict: true, deny: [] };
     }
-    const deny = known === null ? [...ClaudeCode.own(), ...config.OFF.map((name) => ClaudeCode.spelled().get(name) ?? name)].map((name) => head(name) + "__*") : known.flatMap((s) => {
+    const deny = known === null ? [...ClaudeCode.own(), ...config.OFF.map((name) => ClaudeCode.cased().get(name) ?? name)].map((name) => head(name) + "__*") : known.flatMap((s) => {
       const these = named(s);
       if (s.off || s.over || these.length === 0) {
         return [head(s.name) + "__*"];
@@ -322,7 +322,7 @@ export namespace ClaudeCode {
   // a call's init, where it loaded Claude Code's servers: each (but
   // illi's own), how it is, its tools as the init lists them (one the
   // call cut keeps those told before, if any: its tools may be left out
-  // of the list); their names kept as spelled (NAMES)
+  // of the list); their names kept, case and all (NAMES)
   export function learn(m: any, cut: Cut): void {
     const tools = (Array.isArray(m.tools) ? m.tools : []).map(String).filter((t: string) => t.startsWith("mcp__"));
     const told  = (Array.isArray(m.mcp_servers) ? m.mcp_servers : []).filter((s: any) => typeof s?.name === "string" && s.name !== "illi");
@@ -333,7 +333,7 @@ export namespace ClaudeCode {
       const left = cut.deny.some((rule) => rule.startsWith(head));
       return { name: s.name, status: String(s.status ?? ""), tools: !left ? got : (was ?? (got.length > 0 ? got : null)) };
     });
-    const names = ClaudeCode.spelled();
+    const names = ClaudeCode.cased();
     const news  = theirs!.filter((s) => names.get(s.name.toLowerCase()) !== s.name);
     if (news.length > 0) {
       news.forEach((s) => names.set(s.name.toLowerCase(), s.name));
@@ -341,11 +341,11 @@ export namespace ClaudeCode {
     }
   }
 
-  // the names Claude Code's servers were ever told by, by their lower
-  // case (NAMES read once)
-  export function spelled(): Map<string, string> {
-    spellings ??= new Map((json_object(NAMES)?.servers ?? []).filter((n: unknown) => typeof n === "string").map((n: string) => [n.toLowerCase(), n]));
-    return spellings;
+  // the names Claude Code's servers were ever told by, case and all, by
+  // their lower case (NAMES read once)
+  export function cased(): Map<string, string> {
+    cases ??= new Map((json_object(NAMES)?.servers ?? []).filter((n: unknown) => typeof n === "string").map((n: string) => [n.toLowerCase(), n]));
+    return cases;
   }
 
   // names kept in NAMES beside those there (another illi's too), every
