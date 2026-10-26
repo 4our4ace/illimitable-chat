@@ -79,7 +79,7 @@ Setup
 | `/settings` | all the settings: type to search, Left, Right or Enter change one, Del puts its default back |
 | `/shortcuts` | the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one |
 | `/set <key> [value]` | change a setting (default: back to its default); no value: opens `/settings` at it. A `/word` finds every setting too, by its key or what it does |
-| `/mcp` | your MCP servers: their tools, or why one failed |
+| `/mcp` | your MCP servers and, on `claude-code`, Claude Code's own: how each is, on or off, the lit one's tools or why it failed; Enter turns one off or on (`off`) |
 | `/mode [mode]` | what runs without asking, this session: `auto`, `careful`, `ask`, `read-only` or `yolo`; no mode: opens a list (or click it on the bottom line) |
 | `/permissions` | the requests refused (Enter allows one again, this session), the grants kept (Del removes one), your rules |
 
@@ -245,7 +245,7 @@ and what you were typing comes back once you answer.
   to its next value, Shift+Enter or Left back; Del puts its default back
   (in a profile: the global value).
 
-Panes (`/help`, `/agents`, `/mcp`) open in the chat's place,
+Panes (`/help`, `/agents`, `/mcp` with no servers) open in the chat's place,
 on a background of their own: Esc or Enter closes one, the arrows and
 the pages scroll it, and typing closes it and goes to the input. A list
 opens in a pane's place, closing it; a question takes the input's place
@@ -436,7 +436,8 @@ Mouse and side panel
   `?` while it asks you something, `● 2` while only its background jobs
   run), your plan's use (ChatGPT's or Claude's, once it has told it),
   the context and the memory, past topics related to the work
-  ([Related](#related)), the MCP servers (a click opens `/mcp`), the
+  ([Related](#related)), the MCP servers, Claude Code's own under a line
+  of their own (a click opens `/mcp` on one), the
   latest requests refused (a click opens `/permissions` on one) and illi's
   to-do list, gone once every item is done or on `/clear`. The `side`
   and `side_width` settings place it.

@@ -40,8 +40,12 @@ illi then runs Claude Code itself, as it ships, on your login:
   illi's added through MCP: zoom into the memory, the date, subagents,
   messages to them, the to-do list and skills. An agent's `tools:`
   limits both: `tools: zoom, Read, Grep` gives that agent illi's zoom
-  and, of Claude Code's built-in tools, Read and Grep alone (its MCP
-  servers and plugins stay).
+  and, of Claude Code's built-in tools, Read and Grep alone. Claude
+  Code's own MCP servers it keeps only by name: `mcp__github` keeps
+  that one, `mcp__github__get_issue` that tool of it (once illi has
+  seen its tools; before, none of it), `mcp` all; naming none, it loads
+  none of them, and so too until illi has seen them (below). Claude
+  Code's plugins stay, their MCP servers counted among its own.
 - **Your token stays with Claude Code.** illi never sees it, and its
   turns stay out of Claude Code's session history.
 - **Your Claude Code setup applies**: its permission rules, MCP servers
@@ -49,6 +53,19 @@ illi then runs Claude Code itself, as it ships, on your login:
   `~/.illi/hooks.json` is the one that runs
   ([Customize](customize.md#hooks)). A project's `CLAUDE.md` is Claude
   Code's to read, so illi doesn't add it again.
+- **Claude Code's MCP servers in illi**: those you added to Claude Code
+  (`claude mcp add`, its plugins', claude.ai connectors) load in illi's
+  calls beside illi's own. illi learns them from the first call that
+  loads them, and `/mcp` and the side show them from then on, each
+  marked as Claude Code's, how it is and its tools (none show before).
+  `off`, or Enter on one in `/mcp`, takes one out of illi's calls by its
+  name as `/mcp` lists it, from the next call: Claude Code still starts
+  it, but its tools leave the model's context, so they cost no tokens,
+  and Claude Code itself is never changed. While illi runs a server of
+  its own by the same name, illi's alone reaches the model (failed,
+  Claude Code's stays), so the model gets one copy. illi keeps the
+  names it has seen (`claude-code.json`), so `off` takes one out from
+  the first call after a start too.
 - **Permission prompts come to illi.** When Claude Code wants to run
   something its settings don't allow, illi checks it as it checks its
   own calls ([Permissions](permissions.md)): routine work runs, a risky

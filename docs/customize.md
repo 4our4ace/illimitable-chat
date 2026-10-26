@@ -77,8 +77,17 @@ starting (the `off` setting does too, by name). A trusted project's
 changed since illi last started there), and a plugin's come under
 yours: by name, a profile's take the place of the global ones, a
 project's of both, and any of yours of a plugin's. A change applies at
-illi's next start; `/mcp` lists the servers, where each is from, and
-their tools.
+illi's next start. `/mcp` lists the servers, where each is from, how
+each is, on or off, and the lit one's tools (or why it failed); Enter
+turns one off or on (the `off` setting), from the next start.
+
+On `claude-code`, the servers you added to Claude Code itself load in
+illi's calls too, and `/mcp` lists them under yours once a call has
+loaded them: Enter there (or `off`) takes one out of illi's calls
+alone, from the next call, its tools out of the model's context. A
+server of yours by the same name wins while it runs, so the model gets
+one copy; an agent's `tools:` keeps only those it names
+([Providers](providers.md#claude-plan)).
 
 Theme
 -----
@@ -315,7 +324,7 @@ over. What differs:
   `MultiEdit` as `Edit`), but never to its `Agent`, `Task`, `TodoWrite`
   or task tools: illi's spawn and todo take their place, so the agent's
   subagents show at the side and its to-do list is illi's. Its MCP
-  servers and plugins stay.
+  servers go but those it names (`mcp__github`); its plugins stay.
 - Hooks: a `Bash` matcher takes illi's `shell` ([Beside Claude
   Code's](#beside-claude-codes)); one naming only Claude Code's other
   tools runs only on `claude-code`'s own calls, said at the start.
