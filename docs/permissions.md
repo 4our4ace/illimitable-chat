@@ -165,17 +165,21 @@ command that:
   project (`.git`, `.illi`, `.claude`, `.vscode`, `.husky`,
   `.mcp.json`, shell rc files, `bunfig.toml`, ...)
 - holds what is known only as it runs (`$CMD` as a command, a path made
-  by `$(...)`), or what illi can't follow (`case`, functions, arrays):
-  asked, never guessed. A variable the command itself sets to plain
-  words, `$(pwd)` or the repository's top is known. So is one set
-  alone to a plain `$(mktemp ...)` when a failed mktemp, which leaves
-  the variable empty, ends the script: after `set -e`, or with
-  `|| exit` after it, the assignment and the `set -e` each at the top
-  (not in an if, a loop, a group, a pipeline or the background, not
-  negated nor in another `&&` or `||` list).
+  by `$(...)`), or what illi can't follow (`case`, functions, arrays,
+  a `trap` on anything but `EXIT`, whose action may run before any
+  later command): asked, never guessed. A variable the command itself
+  sets to plain words, `$(pwd)` or the repository's top is known. So
+  is one set alone to a plain `$(mktemp ...)` when a failed mktemp,
+  which leaves the variable empty, ends the script: after `set -e`, or
+  with `|| exit` after it (no word after `exit`, a number or `$?`),
+  the assignment and the `set -e` each at the top (not in an if, a
+  loop, a group, a pipeline or the background, not negated nor in
+  another `&&` or `||` list).
   `set -e; d=$(mktemp -d); git clone ... "$d/repo"` writes
   in `$TMPDIR` (else `/tmp`), so it runs; without the `set -e`, it's
-  asked (empty, `rm -rf "$d"/*` would be `rm -rf /*`).
+  asked (empty, `rm -rf "$d"/*` would be `rm -rf /*`). Claude Code's
+  Bash runs a command in a wrapper of its own, where a `set -e` may not
+  hold, so there only `|| exit` makes the folder known.
 
 The file tools (read, write, edit) are checked for the same files. An
 MCP tool its server marks as only reading runs; in `careful` and `ask`

@@ -493,7 +493,7 @@ export namespace Guard {
     const look: Look = { denied: [], flags: [], changes: [], whole: "", links: [] };
     try {
       if (tool === "shell") {
-        look_shell(where, look, String(input?.command ?? ""));
+        look_shell(where, look, String(input?.command ?? ""), input?.wrapped !== true);
       } else if (tool === "read" || tool === "write") {
         look_file(where, look, input?.path, tool === "write");
       } else if (tool === "edit") {
@@ -511,7 +511,8 @@ export namespace Guard {
   }
 
   // one of Claude Code's tools (its permission prompt: Tools.approve), as
-  // illi's would be judged: Bash a shell command; Read, LS, Grep and Glob
+  // illi's would be judged: Bash a shell command (run in Claude Code's own
+  // wrapper: a set -e in it not trusted, look_shell); Read, LS, Grep and Glob
   // reads (a search of its folder: a glob's fixed head, as /etc/** looks
   // in /etc); Write, Edit, MultiEdit and NotebookEdit changes; an MCP tool
   // by its name (illi's own, mcp__illi__..., judged as it reaches illi);
@@ -520,7 +521,7 @@ export namespace Guard {
   export function hosted(where: Where, tool: string, input: any): Verdict {
     const dir = (p: unknown) => (typeof p === "string" && p !== "" ? p : where.cwd);
     switch (tool) {
-      case "Bash"         : return Guard.check(where, "shell", { command: input?.command });
+      case "Bash"         : return Guard.check(where, "shell", { command: input?.command, wrapped: true });
       case "Read"         : return Guard.check(where, "read", { path: dir(input?.file_path) });
       case "LS"           :
       case "Grep"         : return Guard.check(where, "read", { path: dir(input?.path) });
@@ -662,9 +663,11 @@ function rule_path(p: string, top: string): string {
 
 // a shell command: the user's rules on it whole first (deny refuses it;
 // one illi can't read is asked, but an allow rule whose stars cover no
-// other command lets it run), then each of its parts
-function look_shell(where: Where, look: Look, command: string): void {
-  const parts = Shell.parse(command, where.cwd);
+// other command lets it run), then each of its parts. Not sete: run in a
+// wrapper illi doesn't make (Claude Code's Bash), where a set -e in it
+// may not hold (Shell.parse)
+function look_shell(where: Where, look: Look, command: string, sete = true): void {
+  const parts = Shell.parse(command, where.cwd, 0, sete);
   const text = command.trim();
   const rule = rule_of(where, "shell", [text], [text], true);
   const all: Span = [0, command.length];

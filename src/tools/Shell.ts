@@ -115,7 +115,10 @@ type Doc = { delim: string; strip: boolean; expand: boolean; redir: Redir; inpip
 
 // the reading: the text and where in it; the parts found; the folder
 // (null: unknown), the variables set so far, whether one may have been
-// set unseen (wild: a source), the heredocs waiting; what wrappers
+// set unseen (wild: a source), whether a failure ends the script
+// (errexit: set -e read), whether a set -e holds as written (sete: the
+// command runs at the top of a bash of its own, as illi's shell tool
+// runs it), the heredocs waiting; what wrappers
 // around a nested script (bash -c, eval) give its parts; whether its
 // commands read another's output (inpipe: after a |, inside a group, a
 // subshell or a loop a pipe goes into, inside >(...), a nested script or
@@ -134,6 +137,7 @@ type Scan = {
   vars  : Map<string, Word>;
   wild  : boolean;
   errexit: boolean;
+  sete  : boolean;
   docs  : Doc[];
   root  : boolean;
   fed   : boolean;
@@ -170,9 +174,13 @@ const NEST = 64;
 const META = " \t\n;&|()<>";
 
 // an exit, as the command after a || (its own: not piped nor in the
-// background, which would run it in a subshell). A return, at the top
-// of a script not sourced, fails and goes on
-const EXITS = /^\s*exit(?:[ \t]+[\w$?-]+)?(?:[ \t]*(?:[;\n]|$)|[ \t]+#)/;
+// background, which would run it in a subshell), with no word, a number
+// or $? (exit abc, exit 1x: bash says so and goes on). A return, at the
+// top of a script not sourced, fails and goes on
+const EXITS = /^\s*exit(?:[ \t]+(?:\d{1,3}|\$\?|"\$\?"))?(?:[ \t]*(?:[;\n]|$)|[ \t]+#)/;
+
+// the signal a trap's action runs at that comes only as the shell ends
+const END = /^(?:(?:SIG)?EXIT|0)$/i;
 
 // the reserved words that only group commands: read past
 const SKIP = new Set(["if", "then", "elif", "else", "fi", "do", "done", "while", "until", "!", "{", "}"]);
@@ -257,10 +265,12 @@ export namespace Shell {
   // here asks rather than lets a command through). Their spans count from
   // `at`, so a heredoc's body read again is placed in the command holding
   // it (Redir at); at a span instead, all of them are placed there (a body
-  // whose text isn't there as written)
-  export function parse(command: string, cwd: string, at: number | Span = 0): Part[] | string {
+  // whose text isn't there as written). Not sete: run where a set -e in
+  // it may not hold (a wrapper illi doesn't make, as Claude Code's Bash
+  // runs it in: an eval inside a && list ignores it), so none is trusted
+  export function parse(command: string, cwd: string, at: number | Span = 0, sete = true): Part[] | string {
     const [base, box]: [number | null, Span] = typeof at === "number" ? [at, [at, at + command.length]] : [null, at];
-    const s: Scan = { src: command, at: 0, base, box, parts: [], cwd, vars: new Map(), wild: false, errexit: false, docs: [], root: false, fed: false, inpipe: false, depth: 0, pipes: [] };
+    const s: Scan = { src: command, at: 0, base, box, parts: [], cwd, vars: new Map(), wild: false, errexit: false, sete, docs: [], root: false, fed: false, inpipe: false, depth: 0, pipes: [] };
     try {
       scan_list(s, "");
       pipe_feeds(s);
@@ -1432,7 +1442,8 @@ function cmd_run(s: Scan, cmd: Cmd, full: string, piped: boolean, top: boolean, 
 // hashed to a path, a builtin loaded or one turned off can't be followed.
 // A cd another program runs (sudo cd, env cd, exec cd) leaves the folder
 // unknown. errexit (set -e, as -euo pipefail; set -o errexit) turns on
-// only by a set the command runs whenever it runs (top: cmd_end); off by
+// only by a set the command runs whenever it runs (top: cmd_end), where
+// it holds as written (Scan sete); off by
 // any (+e, +o errexit), a set of words known only as it runs, any
 // shopt -o (shopt -uo errexit) or a shopt of words known only as it runs
 function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
@@ -1498,7 +1509,7 @@ function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
           break;
         }
         if (flag[2].includes("e") || opt?.alts[0] === "errexit") {
-          s.errexit = flag[1] === "-" ? s.errexit || top : false;
+          s.errexit = flag[1] === "-" ? s.errexit || (top && s.sete) : false;
         }
       }
       return;
@@ -1533,8 +1544,10 @@ function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
 // {} standing for what find searches (its start folders). The words then
 // run, and whether this shell runs them (own: no wrapper but its own,
 // OWN, before them; an eval another program runs is a shell of its own);
-// null: a nested script read instead. A trap's action that may run set
-// or shopt turns errexit off: it runs in this shell, whenever it fires
+// null: a nested script read instead. A trap's action is read only on
+// EXIT (END): on any other signal (DEBUG, ERR, INT) it may run before
+// any command after it, in this shell, so what illi read of those can't
+// hold: refused
 function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: string, ctx: Ctx): { argv: Word[]; own: boolean } | null {
   let argv = words;
   let own = true;
@@ -1619,7 +1632,10 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
       if (words.some((w) => w.dynamic || w.alts.length !== 1)) {
         throw new Unread(name + " runs a command made as it runs");
       }
-      s.errexit &&= name !== "trap" || !/\b(?:set|shopt)\b/.test(words[0].alts[0]);
+      const mid = name === "trap" ? trap.slice(1).find((w) => w.dynamic || w.alts.length !== 1 || !END.test(w.alts[0])) : undefined;
+      if (mid !== undefined) {
+        throw new Unread("a trap on " + mid.raw + " (its action may run before any command after it, changing what illi read)");
+      }
       nested(s, Shell.lit(words.map((w) => w.alts[0]).join(" ")), ctx, name !== "eval" || !own, words, name === "trap" ? [] : redirs, env);
       if (redirs.length > 0) {
         part_push(s, [], env, redirs, full, ctx);
@@ -1637,11 +1653,13 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
 
 // a nested script's commands, run by a wrapper (its root; its input:
 // fed, the pipe it reads, what its redirections give: its commands'
-// too, stdin_give): in a shell of its own (sub: bash -c, trap, watch:
-// its folder and variables its own, the variables only the
-// environment's; those this shell set or the command gives (env), which
-// it may export, known only as it runs; errexit off), else in this one
-// (eval; the variables the command gives known only as it runs). Its
+// too, stdin_give): in a shell of its own (sub: bash -c, watch: its
+// folder and variables its own, the variables only the environment's;
+// those this shell set or the command gives (env), which it may export,
+// known only as it runs; errexit off; a trap's EXIT action read so too:
+// it runs in this shell, but only as it ends, the variables as they are
+// then), else in this one (eval; the variables the command gives known
+// only as it runs). Its
 // parts are placed where its words are (one word whose one value is
 // there as written: each where it is in it; else at the words, at the
 // command when they are made up)
