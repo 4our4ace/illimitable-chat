@@ -3,7 +3,8 @@
 // `bun test Agent.test.ts`. A refusal saying the request is too long for
 // the model's window is told apart from any other; a call whose step
 // read past its room ends `full` once that step's tools ran, saying so
-// only if it was the first step (the request itself too long); what its
+// only if it was the first step (the request itself too long), else
+// grown, as one refused as too long past its first step is; what its
 // first request read is told, none when that one was refused. A call
 // once (a recap) runs no tool: one that calls one ends unanswered. A call
 // going on from another's keeps its vendor's cache marks in all: the
@@ -53,11 +54,11 @@ async function scripted(reads: number[], room?: number, once?: boolean) {
   }
 }
 
-test("a step read past the call's room ends it full once its tools ran; saying why only at the first step", async () => {
+test("a step read past the call's room ends it full once its tools ran; saying why only at the first step, grown past it", async () => {
   const first = await scripted([500, 10], 400);
-  expect([first.end.stop, first.end.text, first.ran, first.end.first]).toEqual(["full", "the turn starts past 400 tokens", ["t1"], 500]);
+  expect([first.end.stop, first.end.text, first.ran, first.end.first, first.end.grew]).toEqual(["full", "the turn starts past 400 tokens", ["t1"], 500, false]);
   const grown = await scripted([100, 200, 500, 10], 400);
-  expect([grown.end.stop, grown.end.text, grown.ran, grown.end.first]).toEqual(["full", "", ["t1", "t2", "t3"], 100]);
+  expect([grown.end.stop, grown.end.text, grown.ran, grown.end.first, grown.end.grew]).toEqual(["full", "", ["t1", "t2", "t3"], 100, true]);
   const fits = await scripted([100, 200, 300], 400);
   expect([fits.end.ok, fits.end.stop, fits.ran]).toEqual([true, undefined, ["t1", "t2"]]);
 });
@@ -69,9 +70,26 @@ test("a first request refused as too long (streamed, its usage nothing) tells no
     const ask = { vendor: "chatgpt", model: "m", effort: "low", speed: "slow", system: "", blocks: [{ text: "hi", mark: false }], searches: 0, server: "" } as any;
     const run = { ask, on: () => {}, sent: [], abort: new AbortController(), end: AskAI.end("") };
     await Agent.loop({ auth: { token: async () => "", spoil: () => {} }, marks: () => 0 } as any, run);
-    expect([run.end.stop, run.end.first]).toEqual(["full", undefined]);
+    expect([run.end.stop, run.end.first, run.end.grew]).toEqual(["full", undefined, false]);
   } finally {
     Agent.step = step;
+  }
+});
+
+test("a request refused as too long past the first step, its tools' results grown past the window, ends the call grown", async () => {
+  const step = Agent.step;
+  const use = Agent.use;
+  let k = 0;
+  Agent.step = async () => (k++ === 0 ? { out: [], uses: [{ id: "t1", name: "shell", input: {} }], entries: [{ kind: "tool", text: "shell" }], stop: "tools", why: "", note: "", read: 100 } : { out: [], uses: [], entries: [], stop: "full", why: "prompt is too long", note: "", read: 0 }) as any;
+  Agent.use = async () => ({ text: "a long log", fail: false });
+  try {
+    const ask = { vendor: "chatgpt", model: "m", effort: "low", speed: "slow", system: "", blocks: [{ text: "hi", mark: false }], searches: 0, server: "", room: 400 } as any;
+    const run = { ask, on: () => {}, sent: [], abort: new AbortController(), end: AskAI.end("") };
+    await Agent.loop({ auth: { token: async () => "", spoil: () => {} }, marks: () => 0 } as any, run);
+    expect([run.end.stop, run.end.text, run.end.first, run.end.grew]).toEqual(["full", "prompt is too long", 100, true]);
+  } finally {
+    Agent.step = step;
+    Agent.use = use;
   }
 });
 
