@@ -54,9 +54,10 @@ Its subagents know the story
 
 Send a reviewer and a tester off together. Each subagent gets a map of
 the chat, not just a one-line task, and opens what it needs, back to
-the exact words. What it reports stays in the chat for good. For a
-test that has to start blind, illi can start one fresh, without the
-chat.
+the exact words. When its own context fills up, it writes a recap of
+its work and carries on from it. What it reports stays in the chat for
+good. For a test that has to start blind, illi can start one fresh,
+without the chat.
 
 ![A reviewer and a tester in the side panel: the reviewer's report is in, the tester still at work](assets/screens/subagents.webp)
 
