@@ -60,11 +60,12 @@ illi then runs Claude Code itself, as it ships, on your login:
 - **Claude Code's MCP servers in illi**: those you added to Claude Code
   (`claude mcp add`, its plugins', claude.ai connectors) load in illi's
   calls beside illi's own. illi learns them from the first call that
-  loads them, and `/mcp` and the side show them from then on, each
-  marked as Claude Code's, how it is and its tools (none show before),
-  while the pick is on `claude-code`: on another vendor, whose calls
-  don't load them, they don't show (the `off` setting's list still
-  names them).
+  loads them, and `/mcp` and the side show them from then on, in the
+  terminal whose illi holds the chat, each marked as Claude Code's, how
+  it is and its tools (none show before; one that needs a login names
+  the `claude mcp login` command for it), while the pick is on
+  `claude-code`: on another vendor, whose calls don't load them, they
+  don't show (the `off` setting's list still names them).
   `off`, or Enter on one in `/mcp`, takes one out of illi's calls by its
   name as `/mcp` lists it, from the next call: Claude Code still starts
   it, but its tools leave the model's context, so they cost no tokens,

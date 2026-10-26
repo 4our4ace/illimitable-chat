@@ -417,15 +417,26 @@ With 100 projects, the list takes 39 ms.
 Messages by date
 ----------------
 
+Ask illi what you did yesterday afternoon or last Tuesday, and it works
+the dates out itself: each call's message names the time now after the
+working dir, as `Now: Sun 2026-10-25 14:05 UTC-4` (`Tools.here`,
+`When.now`; on `claude-code` without the date, which Claude Code's own
+prompt gives). The line is built once a call and sits after every cache
+mark a later call reads, so a new minute never costs a cached prefix.
+One `date` call then shows that stretch, or one `search` finds words
+in it.
+
 The model's `date` tool goes both ways: `date(id)` reads message id's
 `date` and says it in illi's zone (`Wed 21 Oct 2026 14:05`,
 `When.moment`); `date(from, to)` finds the messages of a span of time, and
 `search` takes the same `from` and `to`. The span is read in illi's
 local zone (`When.span`, `src/chat/When.ts`): a date alone as `from` is
 its day's start, as `to` its day's end, a time as `to` the instant the
-span stops before, and `to` left out the end of `from`'s day. Each
-message's `date` is an ISO instant, compared as one (`Date.parse`),
-never as text.
+span stops before, and `to` left out the end of `from`'s day (a field
+sent as null or `""`, as a model may send one it means to leave out,
+counts as left out: `When.given`). A date that isn't one, or a `to`
+before `from`, is refused, saying why. Each message's `date` is an ISO
+instant, compared as one (`Date.parse`), never as text.
 
 `Store.span(store, span)` gives the span's messages as `[a, b)`, the
 first and the one after the last, with no index and no scan:
