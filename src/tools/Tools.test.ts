@@ -167,6 +167,8 @@ test("a caller in Claude Code gets only the tools it lacks, served at ?lean; its
   expect(Tools.hosted(SUB_FRESH + "\n\n# Agent: tester")).toContain("mcp__illi__");
   expect(Tools.hosted(SUB_FRESH + "\n\n# Agent: tester")).not.toMatch(/\b(zoom|date|projects|search|todo)\b/);
   expect(Tools.hosted(SUB)).toContain("zoom");
+  expect(Tools.hosted(SUB + "\n\n# Agent: reviewer").split("\n\n").at(-1)).toBe("illi's own tools (zoom, date, projects, search, skill and the user's MCP\nservers in illi) come from illi, as its MCP server's (mcp__illi__).");
+  expect(Tools.hosted(MASTER)).toContain("illi's todo");
   expect(Tools.hosted(SUB)).not.toContain("Your shell, read, write and edit tools");
   const project = temp_repo("illi-tools-project-");
   fs.writeFileSync(project + "/CLAUDE.md", "a rule of the project");

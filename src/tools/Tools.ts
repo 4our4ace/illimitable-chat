@@ -267,8 +267,10 @@ const HOSTED_TOOLS = `illi's own tools (zoom, date, projects, search, todo, spaw
 and the user's MCP servers in illi) come from illi, as its MCP server's (mcp__illi__):
 keep your to-do list with illi's todo, which the user sees beside the
 chat.`;
-// illi's tools named to a subagent started fresh: none that reads the
-// chat (MEMORY)
+// illi's tools named to a subagent (no todo, spawn, tell or ask: the
+// master's); to one started fresh, none that reads the chat (MEMORY)
+const HOSTED_SUB   = `illi's own tools (zoom, date, projects, search, skill and the user's MCP
+servers in illi) come from illi, as its MCP server's (mcp__illi__).`;
 const HOSTED_ALONE = `illi's own tools (skill and the user's MCP servers in illi) come from
 illi, as its MCP server's (mcp__illi__).`;
 
@@ -449,10 +451,12 @@ export namespace Tools {
   }
 
   // a prompt as Claude Code gets it, after its own: who it is and its
-  // tools left to Claude Code (HOSTED), illi's tools named (a subagent
-  // started fresh, those it has: HOSTED_ALONE)
+  // tools left to Claude Code (HOSTED), illi's tools named (a
+  // subagent's, its own: HOSTED_SUB; one started fresh, none that reads
+  // the chat: HOSTED_ALONE)
   export function hosted(head: string): string {
-    return HOSTED.reduce((text, [from, to]) => text.replace(from, to), head) + "\n\n" + (head.startsWith(SUB_FRESH) ? HOSTED_ALONE : HOSTED_TOOLS);
+    const own = head.startsWith(SUB_FRESH) ? HOSTED_ALONE : head.startsWith(SUB) ? HOSTED_SUB : HOSTED_TOOLS;
+    return HOSTED.reduce((text, [from, to]) => text.replace(from, to), head) + "\n\n" + own;
   }
 
   // the working dir and the computer it is on, the project as kept, and
