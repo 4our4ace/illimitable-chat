@@ -4,11 +4,11 @@
 // clocks go back an hour on 1 Nov 2026), whatever the machine's: a
 // model's local date or date and time read as that zone's, a day being
 // its calendar day (25 hours as the clocks go back), a span to the end
-// of from's day when to is left out, through to's day when it is a date;
-// what isn't a date refused, saying why. The time now in one short line
-// (on claude-code without the date its prompt gives). A span's words: its
-// head, the times its lines show (only what the head doesn't), the
-// screen's short form.
+// of from's day when to is left out (or sent as null or ""), through
+// to's day when it is a date; what isn't a date refused, saying why. The
+// time now in one short line (on claude-code without the date its prompt
+// gives). A span's words: its head, the times its lines show (only what
+// the head doesn't), the screen's short form.
 
 import { afterAll, expect, test } from "bun:test";
 
@@ -47,6 +47,8 @@ test("a span: to left out, the rest of from's day; a date as to, through its day
   expect(When.span("2026-10-21", "2026-10-20 23:00")).toBe("to comes before from.");
   expect(When.span("2026-10-22", "2026-10-21")).toBe("to comes before from.");
   expect(When.span("2026-10-22 14:00", "2026-10-22")).toEqual({ from: at(2026, 10, 22, 14), to: at(2026, 10, 23) });
+  expect(When.span("2026-10-21", null)).toEqual({ from: at(2026, 10, 21), to: at(2026, 10, 22) });
+  expect([undefined, null, "", "2026-10-21", 0].map(When.given)).toEqual([false, false, false, true, true]);
 });
 
 test("a day is a calendar day: 25 hours as the clocks go back, 23 as they go on", () => {

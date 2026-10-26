@@ -70,7 +70,7 @@ const READS = new Map<string, (x: Input) => Shown>([
   ["write",      (x) => ({ head: String(x.path ?? ""), blocks: [] })],
   ["edit",       (x) => (Array.isArray(x.edits) ? { head: edits_files(x.edits), blocks: [] } : input_shown(x))],
   ["zoom",       (x) => ({ head: msg_show(x.id, x.n) + (x.at === undefined ? "" : " from char " + x.at), blocks: [] })],
-  ["date",       (x) => ({ head: x.from === undefined ? msg_show(x.id, 1) : heads([span_said(x) || "a span", x.project]), blocks: [] })],
+  ["date",       (x) => ({ head: !When.given(x.from) ? msg_show(x.id, 1) : heads([span_said(x) || "a span", x.project]), blocks: [] })],
   ["search",     (x) => ({ head: heads([x.words === undefined ? "" : '"' + String(x.words) + '"', x.project, span_said(x)]), blocks: [] })],
   ["spawn",      (x) => ({ head: tasks_show(x.tasks, x.agent, x.effort), blocks: (Array.isArray(x.tasks) ? x.tasks : []).flatMap(text_block) })],
   ["tell",       (x) => ({ head: String(x.name ?? ""), blocks: text_block(x.message) })],
@@ -96,7 +96,7 @@ const LABELS = new Map<string, (x: Input, result: string | null) => string>([
   ["web_search", (x) => web_label(x)],
   ["search",     (x) => about(x.words, (words) => 'Searched memory for "' + words + '"' + project_in(x.project) + span_in(x))],
   ["zoom",       (x) => about(typeof x.id === "string" && x.id !== "" ? x.id + "'s chat" : msg_show(x.id, x.n), (what) => "Looked back at " + what + project_in(x.project))],
-  ["date",       (x) => (x.from === undefined ? about(msg_show(x.id, 1), (what) => "Checked the date of " + what + project_in(x.project)) : "Looked back at " + (span_said(x) || "a span") + project_in(x.project))],
+  ["date",       (x) => (!When.given(x.from) ? about(msg_show(x.id, 1), (what) => "Checked the date of " + what + project_in(x.project)) : "Looked back at " + (span_said(x) || "a span") + project_in(x.project))],
   ["projects",   () => "Listed the projects"],
   ["spawn",      (x, result) => about(started(result) || agents_said(x.tasks, x.agent), (who) => "Started " + who)],
   ["tell",       (x) => about(x.name, (name) => "Messaged " + name)],
@@ -233,7 +233,7 @@ export function call_outcome(c: Call, ok: boolean | null, result: string): strin
     const m = SHOWN.exec(tail);
     return m === null ? "" : lines_said(Number(m[2]) - Number(m[1]) + 1);
   }
-  if (own === "date" && c.input.from !== undefined) {
+  if (own === "date" && When.given(c.input.from)) {
     return bare.startsWith("Nothing ") ? "nothing" : DATED.exec(bare.slice(0, TAIL))?.[1] ?? "";
   }
   return own === "write" || own === "edit" ? diff_said(bare) : "";
@@ -388,9 +388,10 @@ function project_in(project: unknown): string {
 }
 
 // the span a date or search call asks, its from and to read as the tool
-// reads them (When.span); null: none asked, or not one
+// reads them (When.span; one sent as null or "" left out: When.given);
+// null: none asked, or not one
 function span_of(x: Input): Span | null {
-  const span = x.from === undefined && x.to === undefined ? null : When.span(x.from, x.to);
+  const span = !When.given(x.from) && !When.given(x.to) ? null : When.span(x.from, x.to);
   return typeof span === "string" ? null : span;
 }
 

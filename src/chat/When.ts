@@ -55,12 +55,18 @@ export namespace When {
     return { at: new Date(y, mo - 1, d, h, mi, s).getTime(), day: m[4] === undefined };
   }
 
+  // whether a model gave a field: neither left out nor sent as null or
+  // "", as a model may send a field it means to leave out
+  export function given(x: unknown): boolean {
+    return x !== undefined && x !== null && x !== "";
+  }
+
   // the span a model asks: from `from` to `to` (left out: to the end of
   // from's day; a date alone: through its day); a string: why there is
   // none (not a date; `to` before `from`, or a day before from's)
   export function span(from: unknown, to: unknown): Span | string {
     const a = When.parse(from);
-    const none = to === undefined || to === null || to === "";
+    const none = !When.given(to);
     const b = none ? null : When.parse(to);
     if (a === null || (!none && b === null)) {
       return (a === null ? "from: " : "to: ") + FORM;

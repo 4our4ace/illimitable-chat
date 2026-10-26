@@ -627,8 +627,8 @@ export namespace Tools {
         });
       }
       case "date": {
-        const span = args.from === undefined ? null : When.span(args.from, args.to);
-        if (typeof span === "string" || (span === null && args.id === undefined)) {
+        const span = When.given(args.from) ? When.span(args.from, args.to) : null;
+        if (typeof span === "string" || (span === null && !When.given(args.id))) {
           return { text: span ?? "Give id, or from (and to).", fail: true };
         }
         const project = args.project === undefined || args.project === null ? "" : String(args.project);
@@ -638,11 +638,12 @@ export namespace Tools {
         return { text: Projects.table(mem.store), fail: false };
       }
       case "search": {
-        const span = args.from === undefined && args.to === undefined ? null : When.span(args.from, args.to);
+        const span = When.given(args.from) || When.given(args.to) ? When.span(args.from, args.to) : null;
         if (typeof span === "string") {
           return { text: span, fail: true };
         }
-        return { text: await Projects.seek(mem.store, String(args.words ?? ""), args.project === undefined ? "" : String(args.project), span), fail: false };
+        const project = args.project === undefined || args.project === null ? "" : String(args.project);
+        return { text: await Projects.seek(mem.store, String(args.words ?? ""), project, span), fail: false };
       }
       case "spawn": {
         const effort = args.effort === undefined ? null : String(args.effort);
