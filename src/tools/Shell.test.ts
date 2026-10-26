@@ -181,7 +181,7 @@ test("words expand as far as known: variables, loops, tildes, braces; globs and 
   expect(parts("g='*.ts'; ls $g \"$g\"")).toEqual(["g=*.ts @/w", "ls **.ts *.ts @/w"]);
 });
 
-test("a [ without its ] is itself, not a glob; $(pwd) and $(git rev-parse --show-toplevel) are the folder while known (not while GIT_DIR or GIT_WORK_TREE, set before illi started, may point git elsewhere); $(mktemp) where it makes its file or folder (not once TMPDIR is set, nor with a word it can't read); flock runs its command", () => {
+test("a [ without its ] is itself, not a glob; $(pwd) and $(git rev-parse --show-toplevel) are the folder while known (not while GIT_DIR or GIT_WORK_TREE, set before illi started, may point git elsewhere); $(mktemp) where it makes its file or folder (set alone to a variable, set -e on or || exit after it: a failed one leaves it empty; not once TMPDIR is set, nor with a word it can't read); flock runs its command", () => {
   expect(parts("[ -f a ] && ls x[ab] [c")).toEqual(["[ -f a ] @/w", "ls *x[ab] [c @/w"]);
   expect(parts("echo $(pwd)/x `pwd -P`; cd $X; echo $(pwd)")).toEqual(["pwd @/w", "pwd -P @/w", "echo /w/x /w @/w", "cd ~ @/w", "pwd @null", "echo ~ @null"]);
   fs.mkdirSync(REPO + "/sub/deep", { recursive: true });
@@ -200,13 +200,65 @@ test("a [ without its ] is itself, not a glob; $(pwd) and $(git rev-parse --show
   expect(top("source env.sh; echo $(pwd)")).toEqual(["echo", "~"]);
   // mktemp's file or folder: where it lands, its X's kept
   const tmp = process.env.TMPDIR || "/tmp";
-  expect(top("d=$(mktemp -d /tmp/x.XXXXXX); git clone u \"$d/repo\"")).toEqual(["git", "clone", "u", "/tmp/x.XXXXXX/repo"]);
-  expect(top("touch \"$(mktemp)\" \"$(mktemp -d -t job)\" `mktemp -p /var/tmp --suffix=.log`")).toEqual(["touch", tmp + "/tmp.XXXXXXXXXX", tmp + "/job", "/var/tmp/tmp.XXXXXXXXXX.log"]);
-  expect(top("touch \"$(mktemp --tmpdir=/var/tmp a.XXX)\" \"$(mktemp -dq b.XXX)\" \"$(mktemp ../c.XXX)\"")).toEqual(["touch", "/var/tmp/a.XXX", REPO + "/sub/deep/b.XXX", REPO + "/sub/c.XXX"]);
-  expect(top("touch \"$(mktemp -p \"$HOME\")\" \"$(mktemp -t a/b)\" \"$(mktemp --weird)\"")).toEqual(["touch", "~", "~", "~"]);
-  expect(top("TMPDIR=/etc; touch \"$(mktemp)\"")).toEqual(["touch", "~"]);
+  const made = (...ms: string[]) => ms.map((m) => top("set -e; d=" + m + "; touch \"$d\"")[1]);
+  expect(top("set -e\nd=$(mktemp -d /tmp/x.XXXXXX)\ngit clone u \"$d/repo\"")).toEqual(["git", "clone", "u", "/tmp/x.XXXXXX/repo"]);
+  expect(made("$(mktemp)", "$(mktemp -d -t job.XXX)", "`mktemp -p /var/tmp --suffix=.log`", "$(mktemp -d /tmp/x.XXX)/y")).toEqual([tmp + "/tmp.XXXXXXXXXX", tmp + "/job.XXX", "/var/tmp/tmp.XXXXXXXXXX.log", "/tmp/x.XXX/y"]);
+  expect(made("$(mktemp --tmpdir=/var/tmp a.XXX)", "$(mktemp -dq b.XXX)", "$(mktemp ../c.XXX)")).toEqual(["/var/tmp/a.XXX", REPO + "/sub/deep/b.XXX", REPO + "/sub/c.XXX"]);
+  expect(made("$(mktemp -p \"$HOME\")", "$(mktemp -t a/b)", "$(mktemp --weird)", "$(mktemp -d -t job)", "$(mktemp /nowhere-illi/x.XXX)", "$(mktemp -t x.XXX -p /tmp)")).toEqual(["~", "~", "~", "~", "~", "~"]);
+  expect(top("set -e; TMPDIR=/etc; d=$(mktemp); touch \"$d\"")).toEqual(["touch", "~"]);
   expect(parts("flock -n /tmp/l rm x; flock -w 5 /tmp/l -c 'cd /tmp && ls'")).toEqual(["rm x @/w", "cd /tmp @/w", "ls @/tmp"]);
   expect(parts("flock --bogus /tmp/l rm x")).toBe("flock --bogus: an option illi doesn't know");
+});
+
+test("a variable mktemp's output is set to stands for where it makes it only where its failure ends the script: set alone, by the command's own commands (not in a subshell, a group, an if, a pipeline, the background, nor negated or in && or ||), set -e on (or || exit after it); its output used in place, never", () => {
+  const d = (script: string) => parts(script + "; touch \"$d\"") as string[];
+  const at = (script: string) => d(script).at(-1);
+  const known = "touch /tmp/x.XXX @/w";
+  const unknown = "touch ~ @/w";
+  expect(at("d=$(mktemp -d /tmp/x.XXX)")).toBe(unknown);
+  expect(at("d=$(mktemp -d /tmp/x.XXX) || exit 1")).toBe(known);
+  expect(at("d=$(mktemp -d /tmp/x.XXX) ||\n  exit")).toBe(known);
+  for (const on of ["set -e", "set -euo pipefail", "set -o errexit", "set -xe", "set -o pipefail -e"]) {
+    expect([on, at(on + "; d=$(mktemp -d /tmp/x.XXX)")]).toEqual([on, known]);
+  }
+  for (const odd of [
+    "set -e; set +e; d=$(mktemp -d /tmp/x.XXX)",
+    "set -e; set +o errexit; d=$(mktemp -d /tmp/x.XXX)",
+    "set -e; set $X; d=$(mktemp -d /tmp/x.XXX)",
+    "set -e; eval 'set +e'; d=$(mktemp -d /tmp/x.XXX)",
+    "set -e | true; d=$(mktemp -d /tmp/x.XXX)",
+    "true && set -e; d=$(mktemp -d /tmp/x.XXX)",
+    "if true; then set -e; fi; d=$(mktemp -d /tmp/x.XXX)",
+    "(set -e; d=$(mktemp -d /tmp/x.XXX); touch \"$d\")",
+    "set -- -e; d=$(mktemp -d /tmp/x.XXX)",
+    "set -e; d=$(mktemp -d /tmp/x.XXX) && true",
+    "set -e; true && d=$(mktemp -d /tmp/x.XXX)",
+    "set -e; ! d=$(mktemp -d /tmp/x.XXX)",
+    "set -e; if true; then d=$(mktemp -d /tmp/x.XXX); fi",
+    "set -e; { d=$(mktemp -d /tmp/x.XXX); }",
+    "set -e; d=$(mktemp -d /tmp/x.XXX) &",
+    "set -e; d=$(mktemp -d /tmp/x.XXX) | true",
+    "set -e; d=$(mktemp -d /tmp/x.XXX)$(true)",
+    "set -e; d=$(mktemp -d /tmp/x.XXX) e=1",
+    "set -e; d=$(mktemp -d /tmp/x.XXX) 2>/dev/null",
+    "set -e; export d=$(mktemp -d /tmp/x.XXX)",
+    "d=$(mktemp -d /tmp/x.XXX) || return",
+    "d=$(mktemp -d /tmp/x.XXX) || exit | true",
+    "d=$(mktemp -d /tmp/x.XXX) || exit &",
+    "d=$(mktemp -d /tmp/x.XXX) || echo exit",
+    "bash -c 'set -e; d=$(mktemp -d /tmp/x.XXX); touch \"$d\"'",
+  ]) {
+    expect([odd, at(odd)]).toEqual([odd, unknown]);
+  }
+  expect(parts("set -e; touch \"$(mktemp -d /tmp/x.XXX)\" `mktemp`")).toEqual(["set -e @/w", "mktemp -d /tmp/x.XXX @/w", "mktemp @/w", "touch ~ ~ @/w"]);
+  expect(parts("enable -n exit; d=$(mktemp -d /tmp/x.XXX) || exit")).toBe("enable -n exit");
+});
+
+test("variables as each command has them: a heredoc's body expands as its command's shell, a ${x=...} sets x, a shell of its own has the variables set or given it known only as it runs", () => {
+  expect(parts("d=/a; cat <<EOF; d=/b\n$(ls $d)\nEOF")).toEqual(["d=/a @/w", "cat <<EOF @/w", "d=/b @/w", "ls /a @/w"]);
+  expect((parts("d=; : ${d:=/etc}; ls \"$d\"; d=/a; : ${d=/b}; ls $d") as string[]).filter((l) => l.startsWith("ls"))).toEqual(["ls ~ @/w", "ls ~ @/w"]);
+  expect((parts("HOME=/etc; bash -c 'ls $HOME'; d=/a bash -c 'ls $d'; d=/a eval 'ls $d'") as string[]).filter((l) => l.startsWith("ls"))).toEqual(["ls ~ @/w", "ls ~ @/w", "ls ~ @/w"]);
+  expect(parts("x=1; bash -c 'y=2; ls $y'").at(-1)).toBe("ls 2 @/w");
 });
 
 test("redirections keep the descriptor written before them; fed text made as it runs is marked", () => {
