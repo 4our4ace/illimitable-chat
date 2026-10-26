@@ -276,6 +276,11 @@ test("no false alarms: [ as a test, a project's own bin/, *.egg-info, names insi
     ["set -e; TMPDIR=/etc; d=$(mktemp -d); touch \"$d/x\"", "is known only as it runs"],
     ["d=$(mktemp -d); rm -rf \"$d\"/*", "is known only as it runs"],
     ["rm -rf \"$(mktemp -d)\"/*", "is known only as it runs"],
+    ["d=$(mktemp -d) || exit abc; rm -rf \"$d\"/*", "is known only as it runs"],
+    ["trap 'set +e' DEBUG; set -e; d=$(mktemp -d); rm -rf \"$d\"/*", "a trap on DEBUG"],
+    ["set -e; trap 's\"e\"t +e' DEBUG; d=$(mktemp -d); rm -rf \"$d\"/*", "a trap on DEBUG"],
+    ["d=/tmp/a; trap 'd=' DEBUG; rm -rf \"$d\"/*", "a trap on DEBUG"],
+    ["trap 'cd /' DEBUG; rm -rf home", "a trap on DEBUG"],
   ];
   for (const [command, why] of asks) {
     const got = judge(command);
@@ -376,6 +381,10 @@ test("auto: the read tool runs outside the project and asks secrets (.env files,
   expect(Guard.hosted(where({ mode: "auto" }), "Read", { file_path: ".env" })).toMatchObject({ $: "ask" });
   expect(Guard.hosted(where({ mode: "auto" }), "Bash", { command: "git push origin main" })).toEqual({ $: "allow" });
   expect(Guard.hosted(where({ mode: "auto" }), "Bash", { command: "git push --force" })).toMatchObject({ $: "ask", why: "git push --force rewrites the remote's history" });
+  // Claude Code runs its Bash in its own wrapper, where a set -e may not hold: a mktemp folder known only with || exit
+  const temp = "set -e\nd=$(mktemp -d)\nrm -rf \"$d\"/x";
+  expect([Guard.check(where({ mode: "auto" }), "shell", { command: temp }), Guard.hosted(where({ mode: "auto" }), "Bash", { command: temp })]).toMatchObject([{ $: "allow" }, { $: "ask" }]);
+  expect(Guard.hosted(where({ mode: "auto" }), "Bash", { command: "d=$(mktemp -d) || exit 1\nrm -rf \"$d\"/x" })).toEqual({ $: "allow" });
   expect(judge("rm -rf ../x", { mode: "auto", ...away })).toBe("ask: /work/illi-test/x is outside the project");
   expect(Guard.check(where({ mode: "auto", ...away }), "shell", { command: "rm -rf ../x" })).toMatchObject({ always: ["write:/work/illi-test/*"] });
   expect(Guard.check(where({ mode: "auto" }), "shell", { command: "sudo ls" })).toMatchObject({ always: ["shell=sudo ls"] });

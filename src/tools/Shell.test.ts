@@ -210,14 +210,16 @@ test("a [ without its ] is itself, not a glob; $(pwd) and $(git rev-parse --show
   expect(parts("flock --bogus /tmp/l rm x")).toBe("flock --bogus: an option illi doesn't know");
 });
 
-test("a variable mktemp's output is set to stands for where it makes it only where its failure ends the script: set alone, by the command's own commands (not in a subshell, a group, an if, a pipeline, the background, nor negated or in && or ||), set -e on (or || exit after it); its output used in place, never", () => {
+test("a variable mktemp's output is set to stands for where it makes it only where its failure ends the script: set alone, by the command's own commands (not in a subshell, a group, an if, a pipeline, the background, nor negated or in && or ||), set -e on where it holds (or || exit after it, with a number or $? at most); its output used in place, never; a trap on any signal but EXIT refused", () => {
   const d = (script: string) => parts(script + "; touch \"$d\"") as string[];
   const at = (script: string) => d(script).at(-1);
   const known = "touch /tmp/x.XXX @/w";
   const unknown = "touch ~ @/w";
   expect(at("d=$(mktemp -d /tmp/x.XXX)")).toBe(unknown);
   expect(at("d=$(mktemp -d /tmp/x.XXX) || exit 1")).toBe(known);
-  expect(at("d=$(mktemp -d /tmp/x.XXX) ||\n  exit")).toBe(known);
+  for (const exits of ["|| exit", "|| exit 1", "|| exit 255", "|| exit $?", "|| exit \"$?\"", "||\n  exit"]) {
+    expect([exits, at("d=$(mktemp -d /tmp/x.XXX) " + exits)]).toEqual([exits, known]);
+  }
   for (const on of ["set -e", "set -euo pipefail", "set -o errexit", "set -xe", "set -o pipefail -e"]) {
     expect([on, at(on + "; d=$(mktemp -d /tmp/x.XXX)")]).toEqual([on, known]);
   }
@@ -228,7 +230,6 @@ test("a variable mktemp's output is set to stands for where it makes it only whe
     "set -e; eval 'set +e'; d=$(mktemp -d /tmp/x.XXX)",
     "set -e; shopt -uo errexit; d=$(mktemp -d /tmp/x.XXX)",
     "set -e; shopt -u -o errexit; d=$(mktemp -d /tmp/x.XXX)",
-    "set -e; trap 'set +e' DEBUG; d=$(mktemp -d /tmp/x.XXX)",
     "set -e | true; d=$(mktemp -d /tmp/x.XXX)",
     "true && set -e; d=$(mktemp -d /tmp/x.XXX)",
     "if true; then set -e; fi; d=$(mktemp -d /tmp/x.XXX)",
@@ -249,12 +250,33 @@ test("a variable mktemp's output is set to stands for where it makes it only whe
     "d=$(mktemp -d /tmp/x.XXX) || exit | true",
     "d=$(mktemp -d /tmp/x.XXX) || exit &",
     "d=$(mktemp -d /tmp/x.XXX) || echo exit",
+    "d=$(mktemp -d /tmp/x.XXX) || exit abc",
+    "d=$(mktemp -d /tmp/x.XXX) || exit 1x",
+    "d=$(mktemp -d /tmp/x.XXX) || exit $E",
+    "d=$(mktemp -d /tmp/x.XXX) || exit 99999999999999999999",
     "bash -c 'set -e; d=$(mktemp -d /tmp/x.XXX); touch \"$d\"'",
   ]) {
     expect([odd, at(odd)]).toEqual([odd, unknown]);
   }
   expect(parts("set -e; touch \"$(mktemp -d /tmp/x.XXX)\" `mktemp`")).toEqual(["set -e @/w", "mktemp -d /tmp/x.XXX @/w", "mktemp @/w", "touch ~ ~ @/w"]);
   expect(parts("enable -n exit; d=$(mktemp -d /tmp/x.XXX) || exit")).toBe("enable -n exit");
+  // a trap's action on any signal but EXIT may run before any command after it, in this shell: refused
+  for (const trap of [
+    "set -e; trap 'set +e' DEBUG; d=$(mktemp -d /tmp/x.XXX)",
+    "trap 'set +e' DEBUG; set -e; d=$(mktemp -d /tmp/x.XXX)",
+    "set -e; trap 's\"e\"t +e' DEBUG; d=$(mktemp -d /tmp/x.XXX)",
+    "set -e; trap 'd=' DEBUG; d=$(mktemp -d /tmp/x.XXX)",
+    "trap 'cd /' DEBUG; rm -rf home",
+    "trap 'echo stopped' INT TERM",
+    "trap 'echo bye' EXIT USR1",
+    "trap 'echo x' $SIG",
+  ]) {
+    expect([trap, String(parts(trap)).startsWith("a trap on ")]).toEqual([trap, true]);
+  }
+  expect(parts("trap 'echo bye' exit; trap 'echo bye' SIGEXIT 0")).toEqual(["echo bye @/w", "echo bye @/w"]);
+  // run where a set -e may not hold (Claude Code's Bash, in its own wrapper): only || exit trusted
+  const wrapped = (script: string) => (Shell.parse(script + "; touch \"$d\"", "/w", 0, false) as Part[]).map(line).at(-1);
+  expect([wrapped("set -e; d=$(mktemp -d /tmp/x.XXX)"), wrapped("d=$(mktemp -d /tmp/x.XXX) || exit 1")]).toEqual([unknown, known]);
 });
 
 test("variables as each command has them: a heredoc's body expands as its command's shell, a ${x=...} sets x, a shell of its own has the variables set or given it known only as it runs", () => {
