@@ -86,10 +86,12 @@ You review code changes. ...
 - model: a model's name, or vendor:model:effort:speed; effort: low,
   medium, high, xhigh or max
 - tools: the tools it may use, by name (zoom, date, shell, read, write,
-  edit, spawn, tell, todo, skill; mcp__<server> for all of a server's);
+  edit, spawn, tell, todo, skill; mcp__<server> for all of a server's;
+  Claude Code's names too, Agent or Task as spawn, TodoWrite as todo);
   none: every tool its role has. On claude-code it limits Claude Code's
   built-in tools too: those named (Grep, WebFetch), and shell, read,
-  write and edit as Bash, Read, Write and Edit
+  write and edit as Bash, Read, Write and Edit; never its Agent, Task or
+  TodoWrite, as illi's spawn and todo take their place
 - color: its mark's color; none: one is made for it
 - the body: its instructions, added to its system prompt
 

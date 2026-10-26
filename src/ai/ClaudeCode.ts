@@ -8,7 +8,8 @@
 // leaving no session in Claude Code's history. One with tools
 // (Ask.server) adds illi's over MCP, those Claude Code lacks (Tools.list
 // `lean`), an agent's tools list keeping Claude Code's built-in ones to
-// those it names (Ask.builtins: its MCP servers and plugins stay),
+// those it names, but those illi gives itself (Ask.builtins: its Agent,
+// Task and TodoWrite never; its MCP servers and plugins stay),
 // allowed to run (as `-p` asks no one), its permission prompts
 // asked of the user at illi's screen (Tools.approve), and illi's prompt after
 // Claude Code's (from a file, so no argument limit); one without (a summary, a goal check), or
@@ -196,8 +197,8 @@ export namespace ClaudeCode {
   // would run its hooks in a folder never trusted: -p trusts any); with
   // tools, illi's (its MCP server, the lean list, allowed; illi's ask for
   // Claude Code's own, of its built-in ones only those an agent's tools
-  // list names, if it has one: --tools), else (or once) none, nor Claude
-  // Code's servers or commands
+  // list names, if it has one, but those illi gives itself: --tools),
+  // else (or once) none, nor Claude Code's servers or commands
   export function args(ask: Ask, file: string): string[] {
     const io = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--replay-user-messages", "--no-session-persistence"];
     const pick = ["--model", ask.model, "--effort", ask.effort, "--append-system-prompt-file", file, "--settings", JSON.stringify({ disableAllHooks: true })];

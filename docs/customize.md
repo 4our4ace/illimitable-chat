@@ -295,16 +295,19 @@ Skills, commands, agents, hooks, MCP servers and the variables carry
 over. What differs:
 
 - An agent's `tools:` take Claude Code's names, read as illi's: `Read`
-  read, `Write` write, `Edit` and `MultiEdit` edit, `Bash` shell, `Task`
-  spawn, `TodoWrite` todo; `Glob`, `Grep` and `LS` shell, if `Bash`,
-  `Write` or `Edit` is listed too (else it can't search, said in
-  `/agents`; on claude-code, Claude Code's own `Glob` and `Grep` do).
-  `model: inherit` is your pick; `sonnet`, `opus`, `haiku` or `fable`
-  alone the newest of it offered, else your pick. (Your own agents are
-  read so too, and the list may be YAML's: `[Read, "Grep"]`, or `- Read`
-  lines.) On claude-code, the list also limits Claude Code's built-in
-  tools to those it names (illi's `read`, `write`, `edit` and `shell` as
-  `Read`, `Write`, `Edit` and `Bash`; `MultiEdit` as `Edit`); its MCP
+  read, `Write` write, `Edit` and `MultiEdit` edit, `Bash` shell, `Agent`
+  (once `Task`, still read) spawn, `TodoWrite` todo; `Glob`, `Grep` and
+  `LS` shell, if `Bash`, `Write` or `Edit` is listed too (else it can't
+  search, said in `/agents`; on claude-code, Claude Code's own `Glob`
+  and `Grep` do). `model: inherit` is your pick; `sonnet`, `opus`,
+  `haiku` or `fable` alone the newest of it offered, else your pick.
+  (Your own agents are read so too, and the list may be YAML's:
+  `[Read, "Grep"]`, or `- Read` lines.) On claude-code, the list also
+  limits Claude Code's built-in tools to those it names (illi's `read`,
+  `write`, `edit` and `shell` as `Read`, `Write`, `Edit` and `Bash`;
+  `MultiEdit` as `Edit`), but never to its `Agent`, `Task` or
+  `TodoWrite`: illi's spawn and todo take their place, so the agent's
+  subagents show at the side and its to-do list is illi's. Its MCP
   servers and plugins stay.
 - Hooks: a `Bash` matcher takes illi's `shell` ([Beside Claude
   Code's](#beside-claude-codes)); one naming only Claude Code's other

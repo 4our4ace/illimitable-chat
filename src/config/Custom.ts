@@ -120,11 +120,12 @@ const MODES: Mode[] = ["primary", "subagent", "all"];
 // a front matter's yes (sticky: true)
 const YES = /^\s*(true|yes|on)\s*$/i;
 
-// Claude Code's tool names in an agent's tools list, as illi's; its
-// searches (Glob, Grep, LS) are illi's shell, given only where the list
-// gives that power already (Bash, Write, Edit); its model families,
-// each the newest of it offered (inherit: the pick's)
-const CLAUDE_TOOLS = new Map([["Read", "read"], ["Write", "write"], ["Edit", "edit"], ["MultiEdit", "edit"], ["Bash", "shell"], ["Task", "spawn"], ["TodoWrite", "todo"]]);
+// Claude Code's tool names in an agent's tools list, as illi's (its
+// subagents' tool, Agent, once Task, as spawn); its searches (Glob, Grep,
+// LS) are illi's shell, given only where the list gives that power
+// already (Bash, Write, Edit); its model families, each the newest of it
+// offered (inherit: the pick's)
+const CLAUDE_TOOLS = new Map([["Read", "read"], ["Write", "write"], ["Edit", "edit"], ["MultiEdit", "edit"], ["Bash", "shell"], ["Agent", "spawn"], ["Task", "spawn"], ["TodoWrite", "todo"]]);
 const CLAUDE_SEARCH = ["Glob", "Grep", "LS"];
 const CLAUDE_STRONG = ["Bash", "Write", "Edit", "MultiEdit", "shell", "write", "edit"];
 
@@ -432,14 +433,19 @@ function agent_tools(list: string[], plugin: string | null): string[] {
 // the Claude Code built-in tools an agent's tools list gives on
 // claude-code, as Claude Code's own subagent would have them: Claude
 // Code's names as they are (Glob, Grep: searches kept, though illi's own
-// loop has none without a shell; Task and TodoWrite too, beside illi's
-// spawn and todo), but one illi reads as its read, write, edit or shell,
-// and illi's own of those, as the Claude Code tool for it (CLAUDE_OWN:
-// MultiEdit, gone from Claude Code, as Edit); illi's other tools and MCP
-// servers none, as illi gives those itself. --tools reaches only Claude
-// Code's built-in tools: its own MCP servers and plugins stay
+// loop has none without a shell), but one illi reads as its read, write,
+// edit or shell, and illi's own of those, as the Claude Code tool for it
+// (CLAUDE_OWN: MultiEdit, gone from Claude Code, as Edit); one illi reads
+// as another of its own (Agent, Task: spawn; TodoWrite: todo) none, nor
+// illi's other tools and MCP servers, as illi gives those itself (so the
+// agent spawns one way, its subagents at illi's side, and keeps one to-do
+// list). --tools reaches only Claude Code's built-in tools: its own MCP
+// servers and plugins stay
 function agent_builtins(list: string[]): string[] {
-  const out = list.map((t) => CLAUDE_OWN.get(CLAUDE_TOOLS.get(t) ?? t) ?? (/^[A-Z][A-Za-z]*$/.test(t) ? t : null));
+  const out = list.map((t) => {
+    const own = CLAUDE_TOOLS.get(t) ?? t;
+    return CLAUDE_OWN.get(own) ?? (own === t && /^[A-Z][A-Za-z]*$/.test(t) ? t : null);
+  });
   return [...new Set(out.filter((t): t is string => t !== null))];
 }
 

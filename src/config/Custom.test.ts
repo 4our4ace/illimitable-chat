@@ -1,8 +1,9 @@
 // Custom test
 // ===========
 // `bun test Custom.test.ts`. The user's agents and commands: a file's
-// front matter and body (its tools list's Claude Code tools; the list as
-// YAML writes it too), the project's over the user's, its mode, a
+// front matter and body (its tools list's Claude Code tools, but those
+// illi gives itself, spawn and todo; the list as YAML writes it too),
+// the project's over the user's, its mode, a
 // command's arguments; an agent's model as a pick; /agent makes a primary
 // agent the main agent (its model, instructions and tools, Claude Code's
 // too), noted before the next message, each keeping its pick; spawn's
@@ -97,6 +98,15 @@ test("an agent's tools list as YAML writes it: in [ ], each name quoted or not, 
   expect([flow.tools, flow.builtins]).toEqual([["read", "zoom"], ["Read", "Grep"]]);
   const block = Custom.profile("block", DIR + "/lists/block.md");
   expect([block.tools, block.builtins, block.model]).toEqual([["read", "edit", "shell"], ["Read", "Edit", "Bash"], "sonnet"]);
+});
+
+test("Claude Code's Agent, Task and TodoWrite in a tools list are illi's spawn and todo, never Claude Code's own on claude-code", () => {
+  put(DIR + "/lists/lead.md", "---\ntools: Read, Agent, Task, TodoWrite, Bash\n---\n");
+  put(DIR + "/lists/boss.md", "---\ntools: Task, TodoWrite\n---\n");
+  const lead = Custom.profile("lead", DIR + "/lists/lead.md");
+  expect([lead.tools, lead.builtins]).toEqual([["read", "spawn", "todo", "shell"], ["Read", "Bash"]]);
+  const boss = Custom.profile("boss", DIR + "/lists/boss.md");
+  expect([boss.tools, boss.builtins]).toEqual([["spawn", "todo"], []]);
 });
 
 test("an agent's mode: primary, a subagent, or both", () => {
