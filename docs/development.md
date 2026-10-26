@@ -33,10 +33,9 @@ Development
     test/          tests across modules; each module's own sit beside it
     examples/      agents, a command, hooks, a plugin and a theme to copy
                    (customize.md)
-    assets/        the README's banner, screenshots and memory-tree
-                   drawing; logo.svg and logo-on-dark.svg are the
-                   logo's source files, kept for brand use though no
-                   page shows them
+    assets/        the README's banner and screenshots; logo.svg and
+                   logo-on-dark.svg are the logo's source files, kept
+                   for brand use though no page shows them
 
 Each file starts with a comment on its design; the chat's SQLite files
 are described end to end in [storage.md](storage.md), and what a new
