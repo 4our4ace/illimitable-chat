@@ -1010,7 +1010,9 @@ function ed_layout(ed: Ed): Laid {
 // the cursor (before each character, and the end). The last line's end
 // past a full row takes the word it ends with down to the next row, so
 // the cursor typing it stays at its end (a word that starts its row, or
-// fills one, can't go: the end gets a row of its own). A word that would cross
+// fills one, can't go: the end gets a row of its own; a space typed
+// after it, and the word is no longer the end: it goes back up to fill
+// its row, the space hung past it). A word that would cross
 // the edge starts the next row whole, the space before it left at the
 // end of its row; a space that finds its row full hangs past the edge,
 // unshown (the row then full: what follows starts the next, a second

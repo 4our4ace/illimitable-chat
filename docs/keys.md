@@ -153,8 +153,10 @@ Typing
   edge starts the next line whole, and a space that finds its line full
   stays at its end, unshown. The word you type up to the edge already
   starts the next line, the cursor after it, so the next letter moves
-  nothing. A pasted text's or an image's token counts as one word. A word wider than the input breaks at any character, as
-  text with no spaces does.
+  nothing; a space typed after it takes it back to the end of the line
+  it fills, the cursor on the next. A pasted text's or an image's token
+  counts as one word. A word wider than the input breaks at any
+  character, as text with no spaces does.
 - Shift+Enter or Ctrl+J: a new line. Up and Down past the ends: the
   messages sent before (not once you moved the cursor along what you
   typed, by a key or a click).
