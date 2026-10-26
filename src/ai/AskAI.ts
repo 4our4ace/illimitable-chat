@@ -34,7 +34,8 @@ import type { Pick } from "./Pick.ts";
 // model), a thought (shown, never logged), a reply, a tool call, its
 // result, a note of illi's own (a stop, a goal met, a new session, a
 // main agent switch, a restart), illi's recap of the chat before it (the
-// user's /compact: Chat.compact)
+// user's /compact: Chat.compact), or an agent's of its own log (it
+// outgrew its model's window: Tools.recap)
 export type Kind = "user" | "work" | "mind" | "illi" | "tool" | "echo" | "note" | "recap";
 
 export type Vendor = "claude-api" | "openai-api" | "chatgpt" | "claude-code";
@@ -56,14 +57,14 @@ export type Block = { text: string; mark: boolean };
 // searches: the most web searches it runs (0: no web tools); keep: its
 // last request is kept whole (AskAI.last: a turn's); once: one step,
 // naming its tools but running none, unanswered if it calls one (a
-// recap's: Chat.compact, on the turn's cache); from: the request it goes
-// on from, its blocks after that one's items and answer, once (a
-// suggested reply's: Suggest.ask); max: the most tokens it writes, its
-// thinking's too (none: the model's cap); room: the most tokens a step
-// may read before the call ends `full` once its tools ran (a turn's:
-// Chat.refit goes on from the chat as it then is; an agent's: Tools.refit
-// from its recap; none: no end); stuck:
-// a patient call's try failed, why, as it waits to ask again; builtins:
+// recap's: Chat.compact, on the turn's cache; an agent's: Tools.recap);
+// from: the request it goes on from, its blocks after that one's items
+// and answer, once (a suggested reply's: Suggest.ask); max: the most
+// tokens it writes, its thinking's too (none: the model's cap); room:
+// the most tokens a step may read before the call ends `full` once its
+// tools ran (a turn's: Chat.refit goes on from the chat as it then is;
+// an agent's: Tools.refit from its recap; none: no end); stuck: a
+// patient call's try failed, why, as it waits to ask again; builtins:
 // the Claude Code built-in tools it may use on claude-code, as its
 // agent's tools list gives them (Custom.profile; none: all); listed: its
 // agent's tools list as illi reads it (none: no list), whose MCP names
@@ -107,10 +108,11 @@ export type Event =
 // stop), the vendor (`down`), or none (our setup threw); again: down, but
 // a later try may answer (the vendor busy or out of reach); grew: full
 // once a step's tool results went in, that step having fit (the call's
-// own work outgrew the window, not what it was sent: Chat.ended); cut: a
-// reply had begun; first: the tokens its first request read, as its
-// vendor told (the chat learns from it what a request takes beside the
-// chat: Chat.cap; none: that request was refused, or read nothing told)
+// own work outgrew the window, not what it was sent: Chat.ended, an
+// agent's Tools.run); cut: a reply had begun; first: the tokens its
+// first request read, as its vendor told (the chat learns from it what
+// a request takes beside the chat: Chat.cap; none: that request was
+// refused, or read nothing told)
 export type End = {
   ok     : boolean;
   text   : string;

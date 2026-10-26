@@ -25,8 +25,9 @@
 // the recap under it once opened by a click or verbose, each of its
 // pages folded by a click to a line (a "Fold" row, keyed: row_fold);
 // what the screen showed before it stays above. An agent's page is its
-// log, kept live, whole, its work in runs as the chat's (each page its
-// own clicks: Shown).
+// log, kept live, whole, its work in runs as the chat's, its own recaps
+// (it outgrew its model's window: Tools.recap) such lines too (each
+// page its own clicks: Shown).
 
 import type { Kind, Vendor } from "../ai/AskAI.ts";
 import type { Mode } from "../tools/Guard.ts";
@@ -327,7 +328,8 @@ const WAIT = "compressing…";
 const SUMS = "compressing earlier messages…";
 const RECAPS = "writing the recap…";
 
-// the line across the chat at a recap (/compact)
+// the line across the chat at a recap (/compact), and across an agent's
+// page at one of its own
 const RULE = "Compaction";
 
 // the most items a run shows before a click on its More row shows them

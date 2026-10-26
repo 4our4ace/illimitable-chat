@@ -4,7 +4,8 @@
 // it (Store.ts): one per agent, by its name and a tag (a name freed goes
 // on to a new agent, with a log of its own). A name's log is the one it
 // last took; a log is read whole, by its name or by its log, and its
-// agent's calls get it from its last recap on (view).
+// agent's calls get it from its last recap on, its first note and
+// illi's messages to it kept whole (view).
 
 import type { Kind } from "../ai/AskAI.ts";
 import { Memory, type Root } from "./Memory.ts";
@@ -95,17 +96,20 @@ export namespace Logs {
   // recap (Tools.recap: it outgrew its model's window); past one, what it
   // is (its first note) and illi's messages to it (its task, all it was
   // told since: user) whole, then its last recap and all after it. What
-  // it leaves out is a zoom away (show)
+  // it leaves out is a zoom away (show), but for one started fresh,
+  // which has no zoom
   export function view(mem: Memory, name: string): Root[] {
     const log = Logs.read(mem, name) ?? [];
     const at  = log.findLastIndex((e) => e.kind === "recap");
     return at < 0 ? log : log.filter((e, k) => k === 0 || k >= at || e.kind === "user");
   }
 
-  // a log's lines (line) in `most` characters or so: past it, each line
-  // longer than a common length (the longest first: tool results, as a
-  // rule) keeps its head and tail to it, saying how much it cut, so no
-  // result, however long, pushes a recap's request past its model's
+  // a log's lines (line) in `most` characters or so (UTF-16 units; the
+  // marks of what it cut and the gaps between lines not counted): past
+  // it, each line longer than a common length (the longest first: tool
+  // results, as a rule) keeps its head and tail to it, saying how much
+  // it cut (a surrogate pair cut in two made U+FFFD: toWellFormed), so
+  // no result, however long, pushes a recap's request past its model's
   // window (Tools.recap)
   export function fit(log: Root[], most = Infinity): string {
     const lines = log.map(Logs.line);

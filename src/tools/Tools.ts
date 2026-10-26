@@ -15,12 +15,13 @@
 // work or of this run, as reviewer-2; else a random one; a name freed
 // is used again, each log its own); each call gets its context and its
 // log (whole till a call outgrows its model's window: then its own
-// recap stands for what came before, Tools.refit), so a told agent goes
-// on even after a restart; its replies reach the chat as one "[Name]"
-// message. It starts with a map of the
-// chat (Memory.map: a few dozen lines over it from the view's first
-// message, a /clear's or a recap's, the newest messages each its own),
-// and zooms or searches for what its task needs. One
+// recap stands for its work before it, its first note and illi's
+// messages to it kept whole: Logs.view, Tools.refit), so a told agent
+// goes on even after a restart; its replies reach the chat as one
+// "[Name]" message. It starts with a map of the chat (Memory.map: a few
+// dozen lines over it from the view's first message, a /clear's or a
+// recap's, the newest messages each its own), and zooms or searches for
+// what its task needs. One
 // started fresh (its agent's `fresh: true`, or spawn's) gets none of the
 // chat: no map, no tool reading it (MEMORY), no radar's line; its own
 // log alone. One spawned as a user's subagent (Custom.ts) runs on its
@@ -246,8 +247,9 @@ const SUB_RE      = /^subagent(?: ([a-z0-9][a-z0-9_-]*(?::[a-z0-9][a-z0-9_-]*)?)
 // fit (Logs.fit: at most MOST of the window, TOKEN characters a token);
 // the note it goes on from (#: how it reads what the recap left out,
 // RECAP_ZOOM, $ its name; none for one started fresh); the most recaps in
-// a row with no work between (a call grown starts the count anew), and
-// why it ends past them (#: the model)
+// a row with no work between (a call answered or grown starts the count
+// anew), the most tries of one, its log's cut halved each time, and why
+// it ends past either (#: the model)
 const RECAP_SUB  = `Recap: your context is full. Write your recap of your work so far: from
 now on, your log starts at it, and what came before it leaves your view,
 but for what you are and illi's messages to you, kept whole. Write it for
@@ -865,10 +867,10 @@ export namespace Tools {
   // before), or once one outgrew its model's window and its log was
   // recapped (Tools.refit; refits: those in a row with no work between,
   // a call answered or grown starting them anew); then its report,
-  // unanswered if stopped or the vendor was busy
-  // or out of reach (End.again). Its run is its turn: the loop guard starts
-  // it fresh (Tools.fresh), a name used again too. Detached: a throw ends
-  // it as a failed reply, still reported
+  // unanswered if stopped or the vendor was busy or out of reach
+  // (End.again), its recap's too. Its run is its turn: the loop guard
+  // starts it fresh (Tools.fresh), a name used again too. Detached: a
+  // throw ends it as a failed reply, still reported
   export async function run(tools: Tools, agent: Agent, call: Call | null = null): Promise<void> {
     Tools.fresh(tools, agent.name);
     let away = false;
@@ -899,9 +901,10 @@ export namespace Tools {
   // recapped (Tools.recap), and its run goes on from the recap and a note
   // (RECAPPED), as a turn goes on from the chat refitted (Chat.refit);
   // the refits-th in a row with no work between past REFITS, it ends
-  // instead (a call that grew starts the count anew, so an agent may
-  // work for hours). null: it goes on; else how its run ends (failed:
-  // why; again: the vendor busy, so its report stays unanswered)
+  // instead, no recap asked (a call answered or grown starts the count
+  // anew, so an agent may work for hours). null: it goes on; else how
+  // its run ends (failed: why; again: the vendor busy, so its report
+  // stays unanswered)
   export async function refit(tools: Tools, agent: Agent, refits: number): Promise<End | null> {
     if (refits > REFITS) {
       return AskAI.end(NO_FIT.replace("#", Tools.pick(tools, agent.role).model));
@@ -914,13 +917,15 @@ export namespace Tools {
   }
 
   // an agent's recap of its own work (RECAP_SUB), by its model, after its
-  // log as its calls get it, on their cache but for the log, cut to fit
-  // (Logs.fit: MOST of the window, halved while the request is still too
-  // long; a window not told: the log whole first); once (no tool runs),
-  // streamed to the views as its work is, then logged as the log's
-  // recap. Its call is the agent's while it runs, so a stop reaches it
-  // and a message told meanwhile is logged (kept whole past the recap:
-  // Logs.view). null: logged; else its failed end, saying why
+  // log as its calls get it, on their cache but for the log (not Claude
+  // Code's, run without tools), cut to fit (Logs.fit: at most MOST of
+  // the window, halved while the request is still too long, REFITS
+  // tries at most, then NO_FIT; a window not told: the log whole first);
+  // once (no tool runs), its pieces streamed to the views as its work's
+  // are (none of its entries), then logged as the log's recap. Its call
+  // is the agent's while it runs, so a stop reaches it and a message
+  // told meanwhile is logged (kept whole past the recap: Logs.view).
+  // null: logged; else its failed end, saying why
   export async function recap(tools: Tools, agent: Agent): Promise<End | null> {
     const ask = Tools.ask(tools, agent);
     const pick = Tools.pick(tools, agent.role);
@@ -956,11 +961,13 @@ export namespace Tools {
   }
 
   // a call of an agent, on its pick (Tools.pick): its map of the chat
-  // (Agent.view), where it works and its log (from its last recap on:
+  // (Agent.view), where it works and its log (past a recap, its first
+  // note and illi's messages to it, then the log from its last recap on:
   // Logs.view); one started fresh, no map, nor the map's docs
-  // (SUB_FRESH). Its room is a turn's (Chat.call), so one outgrowing its
-  // model's window ends `full` and its log is recapped (Tools.refit), on
-  // claude-code too (Claude Code's compaction off: ClaudeCode.env)
+  // (SUB_FRESH). Its room is a turn's (Chat.call; a window not told:
+  // none), so one outgrowing its model's window ends `full` and its log
+  // is recapped (Tools.refit), on claude-code too (Claude Code's
+  // compaction off: ClaudeCode.env)
   export function ask(tools: Tools, agent: Agent): Ask {
     const log = { text: Logs.fit(Logs.view(tools.mem, agent.name)), mark: true };
     const server = Tools.at(tools, agent.name);
