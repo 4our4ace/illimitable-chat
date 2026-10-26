@@ -13,7 +13,16 @@
 // too long and a crash end it in plain words; a stop cuts it; a missing
 // CLI says to install it. A rate limit event's 5-hour and weekly windows
 // are the Claude plan's use (each its share used and reset, kept till
-// told again; a model's own window left out).
+// told again; a model's own window left out). Claude Code's own MCP
+// servers, as a call's init tells them, are kept (illi's left out; one
+// a call cut, its tools as told before) and their names as spelled; one
+// `off` names leaves illi's calls by a rule; an agent's tools list keeps
+// those it names (a server, its tools, mcp: all), naming none its call
+// loads none (--strict-mcp-config); illi's own server of a name wins
+// while it runs (failed: Claude Code's stays). Before any call told
+// them, an agent's list loads none, and the rules are by name: those
+// `off` names (spelled as Claude Code last did) and illi's own servers'.
+// A name is spelled as Claude Code spells it in its tools'.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -25,8 +34,27 @@ process.env.FAKE_LOG = DIR + "/log.json";
 
 const { ClaudeCode } = await import("./ClaudeCode.ts");
 const { Pick } = await import("./Pick.ts");
+const { Mcp } = await import("../tools/Mcp.ts");
+const config = await import("../config/Config.ts");
 
-afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
+// a stand-in MCP server of illi's own: it starts, and lists one tool
+// (at /bad, it fails)
+const OWN = Bun.serve({
+  port: 0,
+  async fetch(req) {
+    if (new URL(req.url).pathname === "/bad") {
+      return new Response("down", { status: 500 });
+    }
+    const msg: any = await req.json();
+    const result = msg.method === "initialize" ? { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "own" } } : { tools: [{ name: "get_issue", inputSchema: { type: "object" } }] };
+    return msg.id === undefined ? new Response(null, { status: 202 }) : Response.json({ jsonrpc: "2.0", id: msg.id, result });
+  },
+});
+
+afterAll(() => {
+  OWN.stop(true);
+  fs.rmSync(DIR, { recursive: true, force: true });
+});
 
 // the stand-in: logs its arguments, illi's prompt and its input; echoes
 // each message as Claude Code does (--replay-user-messages); plays the
@@ -52,7 +80,13 @@ const next = async (ms) => {
 };
 const first = await next(5000);
 const scene = first.message.content.map((c) => c.text).join("");
-out({ type: "system", subtype: "init", mcp_servers: [{ name: "illi", status: "connected" }] });
+// init: illi's server, and, unless --strict-mcp-config, Claude Code's own
+// (init.json beside the log), their tools but those a rule denies
+const strict = args.includes("--strict-mcp-config");
+const deny = args.includes("--disallowedTools") ? args[args.indexOf("--disallowedTools") + 1].split(",") : [];
+const told = fs.existsSync(require("node:path").dirname(process.env.FAKE_LOG) + "/init.json") ? JSON.parse(fs.readFileSync(require("node:path").dirname(process.env.FAKE_LOG) + "/init.json", "utf8")) : { mcp_servers: [], tools: [] };
+const tools = ["mcp__illi__zoom", ...(strict ? [] : told.tools)].filter((t) => !deny.some((r) => (r.endsWith("__*") ? t.startsWith(r.slice(0, -1)) : t === r)));
+out({ type: "system", subtype: "init", mcp_servers: [{ name: "illi", status: "connected" }, ...(strict ? [] : told.mcp_servers)], tools });
 if (scene.includes("turn")) {
   ev({ type: "message_start", message: { usage: { input_tokens: 10, cache_read_input_tokens: 90 } } });
   ev({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
@@ -88,16 +122,32 @@ process.exit(0);
 fs.writeFileSync(DIR + "/claude", FAKE, { mode: 0o755 });
 ClaudeCode.bin = DIR + "/claude";
 
-// a call on opus with `text` as its message (tools: illi's, as a turn's),
-// run to its end: its events, end and log
-async function call(text: string, tools = true, during?: (c: any, events: any[]) => Promise<void>) {
+// a call on opus with `text` as its message (tools: illi's, as a turn's;
+// more: the ask's other fields, an agent's tools list), run to its end:
+// its events, end and log
+async function call(text: string, tools = true, during?: (c: any, events: any[]) => Promise<void>, more: object = {}) {
   const events: any[] = [];
-  const ask = { vendor: "claude-code", model: "claude-opus-5-5", effort: "high", speed: "slow", system: "illi's prompt", blocks: [{ text: "the view", mark: true }, { text: text, mark: true }], searches: 0, server: tools ? "http://127.0.0.1:1/key/main" : "" } as any;
+  const ask = { vendor: "claude-code", model: "claude-opus-5-5", effort: "high", speed: "slow", system: "illi's prompt", blocks: [{ text: "the view", mark: true }, { text: text, mark: true }], searches: 0, server: tools ? "http://127.0.0.1:1/key/main" : "", ...more } as any;
   const c = ClaudeCode.ask(ask, (ev) => events.push(ev));
   await during?.(c, events);
   const end = await c.done;
   return { events, end, log: JSON.parse(fs.readFileSync(DIR + "/log.json", "utf8")), c };
 }
+
+// Claude Code's own servers as its next calls' init tells them, but
+// those --strict-mcp-config or a rule leaves out (the fake's)
+const INIT = {
+  mcp_servers: [{ name: "github", status: "connected" }, { name: "claude.ai Gmail", status: "connected" }, { name: "plugin:p:db", status: "needs-auth" }, { name: "notes", status: "connected" }],
+  tools: ["mcp__github__get_issue", "mcp__github__list_prs", "mcp__claude_ai_Gmail__search", "mcp__claude_ai_Gmail__send", "mcp__notes__add", "mcp__notes__find", "mcp__notes__drop"],
+};
+
+// illi's own MCP server `name` started (the stand-in), or failing
+const own = (name: string, ok = true) => Mcp.open(name, { def: { type: "http", url: OWN.url.href + (ok ? "" : "bad") }, file: DIR + "/mcp.json", plugin: null, vars: {} }, DIR);
+
+// a call's rules (--disallowedTools), and whether it loads none of
+// Claude Code's servers (--strict-mcp-config)
+const denied = (args: string[]) => args[args.indexOf("--disallowedTools") + 1];
+const strict = (args: string[]) => args.includes("--strict-mcp-config");
 
 const until = async (ok: () => boolean) => {
   for (let k = 0; !ok(); k++) {
@@ -107,6 +157,32 @@ const until = async (ok: () => boolean) => {
     await Bun.sleep(5);
   }
 };
+
+test("before any call has told Claude Code's servers: an agent's tools list loads none; else, by name, those off (as Claude Code spelled them before) and those illi runs its own of leave the call", async () => {
+  fs.writeFileSync(DIR + "/claude-code.json", JSON.stringify({ servers: ["claude.ai Gmail"] }));
+  config.config_set("off", "claude.ai gmail, linear, illi");
+  await own("github");
+  await own("docs", false);
+  const listed = (await call("turn", true, undefined, { listed: ["read", "mcp__github"] })).log.args;
+  expect(strict(listed)).toBe(true);
+  expect(JSON.parse(listed[listed.indexOf("--mcp-config") + 1]).mcpServers.illi.url).toBe("http://127.0.0.1:1/key/main?lean");
+  expect(denied(listed)).toBe("AskUserQuestion");
+  expect(ClaudeCode.servers()).toBeNull();
+  fs.writeFileSync(DIR + "/init.json", JSON.stringify(INIT));
+  const first = (await call("turn")).log.args;
+  expect(strict(first)).toBe(false);
+  expect(denied(first)).toBe("AskUserQuestion,mcp__github__*,mcp__claude_ai_Gmail__*,mcp__linear__*");
+  expect(ClaudeCode.servers()).toEqual([
+    { name: "github", status: "connected", tools: null, off: false, over: true },
+    { name: "claude.ai Gmail", status: "connected", tools: null, off: true, over: false },
+    { name: "plugin:p:db", status: "needs-auth", tools: [], off: false, over: false },
+    { name: "notes", status: "connected", tools: ["mcp__notes__add", "mcp__notes__find", "mcp__notes__drop"], off: false, over: false },
+  ]);
+  expect(JSON.parse(fs.readFileSync(DIR + "/claude-code.json", "utf8"))).toEqual({ servers: ["claude.ai Gmail", "github", "notes", "plugin:p:db"] });
+  config.config_set("off", null);
+  fs.rmSync(DIR + "/init.json");
+  Mcp.fail(Mcp.status().servers.find((s) => s.name === "github")!, "stopped");
+});
 
 test("a turn runs Claude Code whole, illi's prompt after its own and illi's tools added; its stream shown and logged", async () => {
   const { events, end, log } = await call("turn");
@@ -205,4 +281,57 @@ test("a rate limit event's windows are the Claude plan's use at the side: each w
   expect(ClaudeCode.told()!.limits).toEqual([{ window: 300, used: 34, reset: at * 1000 }, { window: 10080, used: 7.1, reset: (at + 86400) * 1000 }]);
   ClaudeCode.windows({ status: "rejected", resetsAt: at });
   expect(ClaudeCode.told()!.limits.length).toBe(2);
+});
+
+test("Claude Code's servers its init tells are kept, but illi's own; one off leaves illi's calls by a rule, its tools as told before", async () => {
+  fs.writeFileSync(DIR + "/init.json", JSON.stringify(INIT));
+  await call("turn");
+  expect(ClaudeCode.servers()!.map((s) => [s.name, s.tools?.length ?? null])).toEqual([["github", 2], ["claude.ai Gmail", 2], ["plugin:p:db", 0], ["notes", 3]]);
+  expect(ClaudeCode.servers()!.some((s) => s.name === "illi")).toBe(false);
+  config.config_set("off", "claude.ai gmail, notes");
+  const { log } = await call("turn");
+  expect(strict(log.args)).toBe(false);
+  expect(denied(log.args)).toBe("AskUserQuestion,mcp__claude_ai_Gmail__*,mcp__notes__*");
+  expect(ClaudeCode.servers()!.map((s) => [s.name, s.off, s.tools?.length ?? null])).toEqual([["github", false, 2], ["claude.ai Gmail", true, 2], ["plugin:p:db", false, 0], ["notes", true, 3]]);
+  config.config_set("off", null);
+  expect(denied((await call("turn")).log.args)).toBe("AskUserQuestion");
+});
+
+test("an agent's tools list keeps of Claude Code's servers those it names (a server, its tools, or mcp: all); naming none, its call loads none; a call without tools loads none either way", async () => {
+  fs.writeFileSync(DIR + "/init.json", JSON.stringify(INIT));
+  await call("turn");
+  const args = async (listed: string[]) => (await call("turn", true, undefined, { listed })).log.args;
+  expect(denied(await args(["read", "mcp__claude_ai_Gmail"]))).toBe("AskUserQuestion,mcp__github__*,mcp__plugin_p_db__*,mcp__notes__*");
+  expect(denied(await args(["mcp__notes__find"]))).toBe("AskUserQuestion,mcp__github__*,mcp__claude_ai_Gmail__*,mcp__plugin_p_db__*,mcp__notes__add,mcp__notes__drop");
+  expect(denied(await args(["mcp"]))).toBe("AskUserQuestion");
+  for (const listed of [["read", "zoom"], [], ["mcp__linear"]]) {
+    const got = await args(listed);
+    expect([listed, strict(got), denied(got)]).toEqual([listed, true, "AskUserQuestion"]);
+  }
+  expect(ClaudeCode.servers()!.map((s) => s.tools?.length ?? null)).toEqual([2, 2, 0, 3]);
+  config.config_set("off", "notes");
+  expect(strict(await args(["mcp__notes"]))).toBe(true);
+  config.config_set("off", null);
+  const none = ClaudeCode.args({ vendor: "claude-code", model: "m", effort: "low", speed: "slow", system: "", blocks: [], searches: 0, server: "", listed: ["mcp"] } as any, "prompt.md");
+  expect([strict(none), none.includes("--mcp-config"), none.includes("--disallowedTools")]).toEqual([true, false, false]);
+});
+
+test("a server both illi's own and Claude Code's: illi's wins while it runs, so the model gets one copy; failed, Claude Code's stays", async () => {
+  fs.writeFileSync(DIR + "/init.json", JSON.stringify(INIT));
+  await own("github");
+  const { log } = await call("turn");
+  expect(denied(log.args)).toBe("AskUserQuestion,mcp__github__*");
+  expect(ClaudeCode.servers()!.find((s) => s.name === "github")).toMatchObject({ over: true, tools: ["mcp__github__get_issue", "mcp__github__list_prs"] });
+  expect(strict((await call("turn", true, undefined, { listed: ["mcp__github"] })).log.args)).toBe(true);
+  Mcp.fail(Mcp.status().servers.find((s) => s.name === "github")!, "stopped");
+  expect(denied((await call("turn")).log.args)).toBe("AskUserQuestion");
+  expect(ClaudeCode.servers()!.find((s) => s.name === "github")!.over).toBe(false);
+});
+
+test("a server's name as Claude Code spells it in its tools': a character it doesn't take as _, a claude.ai connector's runs of _ as one, none at its ends", () => {
+  expect(ClaudeCode.spell("my.server")).toBe("my_server");
+  expect(ClaudeCode.spell("plugin:my-plugin:database-tools")).toBe("plugin_my-plugin_database-tools");
+  expect(ClaudeCode.spell("claude.ai Claude Docs")).toBe("claude_ai_Claude_Docs");
+  expect(ClaudeCode.spell("claude.ai Box (Beta)")).toBe("claude_ai_Box_Beta");
+  expect(ClaudeCode.spell("odd  name.")).toBe("odd__name_");
 });

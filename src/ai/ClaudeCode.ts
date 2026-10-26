@@ -9,8 +9,8 @@
 // (Ask.server) adds illi's over MCP, those Claude Code lacks (Tools.list
 // `lean`), an agent's tools list keeping Claude Code's built-in ones to
 // those it names, but those illi gives itself (Ask.builtins: its Agent,
-// Task, TodoWrite and task tools never; its MCP servers and plugins
-// stay),
+// Task, TodoWrite and task tools never; its plugins stay, their MCP
+// servers as below),
 // allowed to run (as `-p` asks no one), its permission prompts
 // asked of the user at illi's screen (Tools.approve), and illi's prompt after
 // Claude Code's (from a file, so no argument limit); one without (a summary, a goal check), or
@@ -33,6 +33,22 @@
 // its canonical id) and kept for the next start; the plan's use, as each
 // rate limit event tells it (its 5-hour and weekly windows), shows at
 // the side (ClaudeCode.told).
+//
+// Claude Code's own MCP servers (claude mcp add, its plugins', the
+// claude.ai connectors) load in a call with tools beside illi's server.
+// The call's init tells them (ClaudeCode.learn: kept, illi's left out;
+// /mcp and the side show them, nothing before a call has told them).
+// Each call leaves out (ClaudeCode.cut), by a rule (--disallowedTools
+// mcp__<name>__*: Claude Code drops their tools from the model's
+// context, though it still starts them), each `off` names and each illi
+// runs its own server of, by its name as Claude Code spells it (illi's
+// wins: the model gets one copy); with an agent's tools list, each the
+// list doesn't name too (one it names by tools alone: its other tools),
+// and all where it names none of those told, or none is told yet
+// (--strict-mcp-config, illi's own server kept). Claude Code's settings
+// are never touched. The names as Claude Code spelled them are kept
+// (claude-code.json), so `off` is spelled right before a start's first
+// call has told them.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -43,6 +59,8 @@ import { Anthropic } from "./Anthropic.ts";
 import { Pick } from "./Pick.ts";
 import { FAILED, live_push, type Limit, type Plan } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
+import { json_object } from "../tools/Clip.ts";
+import { Mcp } from "../tools/Mcp.ts";
 
 // Types
 // =====
@@ -51,7 +69,9 @@ import * as config from "../config/Config.ts";
 // null between messages; what it showed), the messages sent mid-run
 // written but not echoed yet, whether the call's own was, whether a
 // reply came, the last result, when a plan's limit resets (ms; 0: none
-// told), whether the input ended
+// told), whether the input ended; what it left out of Claude Code's own
+// MCP servers (ClaudeCode.cut: none loaded, or the rules), its init
+// telling them all (ClaudeCode.learn) where some loaded
 type Run = {
   ask    : Ask;
   on     : (ev: Event) => void;
@@ -63,7 +83,22 @@ type Run = {
   result : any;
   reset  : number;
   shut   : boolean;
+  cut    : Cut;
 };
+
+// what a call with tools leaves out of Claude Code's own MCP servers:
+// all (strict: --strict-mcp-config, illi's own server kept), or each
+// rule's tools (--disallowedTools)
+type Cut = { strict: boolean; deny: string[] };
+
+// a Claude Code server as its last call that loaded them told it (its
+// init: illi's own left out): its name as Claude Code lists it (a
+// plugin's plugin:<plugin>:<server>, a connector's claude.ai <name>),
+// how it is (connected, failed, needs-auth, pending, disabled), its
+// tools as Claude Code names them (null: none told yet, each call
+// having cut it); as the views show it, whether `off` names it and
+// whether illi's own server of its name is used in its place (over)
+export type Theirs = { name: string; status: string; tools: string[] | null; off: boolean; over: boolean };
 
 // Constants
 // =========
@@ -102,6 +137,18 @@ const WINDOWS: Record<string, number> = { five_hour: 300, seven_day: 10080 };
 // as 0%). One Claude Code login a machine, so one record
 let limits: Limit[] = [];
 
+// Claude Code's own MCP servers as its last call that loaded them told
+// (Theirs, but off and over, read anew each time; null: none has yet)
+let theirs: Array<Omit<Theirs, "off" | "over">> | null = null;
+
+// the names Claude Code's servers were ever told by, as it spells them,
+// by their lower case (as `off` holds them; null: NAMES not read yet),
+// kept across starts in NAMES so `off` spells its rules right before a
+// start's first call has told the servers (Claude Code matches a rule's
+// server case and all)
+let spellings: Map<string, string> | null = null;
+const NAMES = config.ROOT + "/claude-code.json";
+
 const NO_CLAUDE = "Claude Code isn't installed here: install it (code.claude.com), log in with claude, then send a message";
 const NO_LOGIN  = "Claude Code isn't logged in: run claude in a terminal, log in there (/login), then send a message";
 
@@ -124,14 +171,15 @@ export namespace ClaudeCode {
       return none("Claude Code can't go on from another request", "fail");
     }
     const file = ClaudeCode.prompt(ask.system);
+    const cut = ClaudeCode.cut(ask);
     let proc: Subprocess<"pipe", "pipe", "pipe">;
     try {
-      proc = Bun.spawn([ClaudeCode.bin, ...ClaudeCode.args(ask, file)], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: ClaudeCode.env() });
+      proc = Bun.spawn([ClaudeCode.bin, ...ClaudeCode.args(ask, file, cut)], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: ClaudeCode.env() });
     } catch (err: any) {
       fs.rmSync(file, { force: true });
       return none(/ENOENT|not found/i.test(String(err?.message)) ? NO_CLAUDE : String(err?.message ?? err), "down");
     }
-    const run: Run = { ask, on, st: null, seen: [], sent: [], own: false, said: false, result: null, reset: 0, shut: false };
+    const run: Run = { ask, on, st: null, seen: [], sent: [], own: false, said: false, result: null, reset: 0, shut: false, cut };
     let stopped = false;
     // a line to Claude Code's input; false: it ended (it exited)
     const write = (msg: unknown) => {
@@ -200,7 +248,7 @@ export namespace ClaudeCode {
   // Claude Code's own, of its built-in ones only those an agent's tools
   // list names, if it has one, but those illi gives itself: --tools),
   // else (or once) none, nor Claude Code's servers or commands
-  export function args(ask: Ask, file: string): string[] {
+  export function args(ask: Ask, file: string, cut = ClaudeCode.cut(ask)): string[] {
     const io = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--replay-user-messages", "--no-session-persistence"];
     const pick = ["--model", ask.model, "--effort", ask.effort, "--append-system-prompt-file", file, "--settings", JSON.stringify({ disableAllHooks: true })];
     if (ask.server === "" || ask.once) {
@@ -208,7 +256,110 @@ export namespace ClaudeCode {
     }
     const mcp = { mcpServers: { illi: { type: "http", url: ask.server + "?lean", timeout: WAIT } } };
     const own = ask.builtins == null ? [] : ["--tools", ask.builtins.join(",")];
-    return [...io, ...pick, ...own, "--mcp-config", JSON.stringify(mcp), "--allowedTools", "mcp__illi", "--disallowedTools", "AskUserQuestion", "--permission-prompt-tool", "mcp__illi__approve"];
+    const strict = cut.strict ? ["--strict-mcp-config"] : [];
+    return [...io, ...pick, ...own, "--mcp-config", JSON.stringify(mcp), ...strict, "--allowedTools", "mcp__illi", "--disallowedTools", ["AskUserQuestion", ...cut.deny].join(","), "--permission-prompt-tool", "mcp__illi__approve"];
+  }
+
+  // what a call with tools leaves out of Claude Code's own MCP servers
+  // (none without: args), so the model reads no tool it isn't to have.
+  // With an agent's tools list (Ask.listed): those of the servers last
+  // told that the list names (mcp: all; mcp__github: that one; tools
+  // alone, mcp__github__get_issue: those) stay, but one off or over;
+  // none such, or none told yet, and the call loads none (strict). Else,
+  // by rule: each server `off` names, and each illi runs its own of
+  // (over: illi's wins, so the model gets one copy), whole; each the
+  // list doesn't name, whole; each it names by tools alone, its other
+  // tools last told (none told: whole). Before any call has told the
+  // servers, the rules are by name: illi's own servers', and those `off`
+  // names (as Claude Code spelled them, else as written). A rule never
+  // reaches illi's own tools (mcp__illi__...)
+  export function cut(ask: Ask): Cut {
+    if (ask.server === "" || ask.once) {
+      return { strict: true, deny: [] };
+    }
+    const listed = ask.listed?.filter((t) => t === "mcp" || t.startsWith("mcp__")) ?? null;
+    const known  = ClaudeCode.servers();
+    const head   = (name: string) => "mcp__" + ClaudeCode.spell(name);
+    const named  = (s: Theirs) => (listed ?? ["mcp"]).filter((t) => t === "mcp" || t === head(s.name) || t.startsWith(head(s.name) + "__"));
+    if (listed !== null && !(known ?? []).some((s) => !s.off && !s.over && named(s).length > 0)) {
+      return { strict: true, deny: [] };
+    }
+    const deny = known === null ? [...ClaudeCode.own(), ...config.OFF.map((name) => ClaudeCode.spelled().get(name) ?? name)].map((name) => head(name) + "__*") : known.flatMap((s) => {
+      const these = named(s);
+      if (s.off || s.over || these.length === 0) {
+        return [head(s.name) + "__*"];
+      }
+      if (these.some((t) => !t.startsWith(head(s.name) + "__"))) {
+        return [];
+      }
+      return s.tools === null ? [head(s.name) + "__*"] : s.tools.filter((t) => !these.includes(t));
+    });
+    return { strict: false, deny: [...new Set(deny)].filter((rule) => !rule.startsWith(OURS)) };
+  }
+
+  // Claude Code's own MCP servers as its last call that loaded them told
+  // (null: none has yet), each whether `off` names it and whether illi's
+  // own server of its name, running (not failed), is used in its place
+  export function servers(): Theirs[] | null {
+    const own = new Set(ClaudeCode.own().map(ClaudeCode.spell));
+    return theirs?.map((s) => ({ ...s, off: config.config_off(s.name), over: own.has(ClaudeCode.spell(s.name)) })) ?? null;
+  }
+
+  // the names of illi's own MCP servers running (starting or ready: one
+  // failed gives the model no copy, so Claude Code's of its name stays)
+  export function own(): string[] {
+    return Mcp.status().servers.filter((s) => s.state !== "failed").map((s) => s.name);
+  }
+
+  // a server's name as Claude Code spells it in its tools' names
+  // (mcp__<name>__<tool>): each character but a letter, digit, _ or - as
+  // _; a claude.ai connector's runs of _ then as one, none at its ends
+  export function spell(name: string): string {
+    const out = name.replace(/[^A-Za-z0-9_-]/g, "_");
+    return name.startsWith("claude.ai ") ? out.replace(/_+/g, "_").replace(/^_|_$/g, "") : out;
+  }
+
+  // a call's init, where it loaded Claude Code's servers: each (but
+  // illi's own), how it is, its tools as the init lists them (one the
+  // call cut keeps those told before, if any: its tools may be left out
+  // of the list); their names kept as spelled (NAMES)
+  export function learn(m: any, cut: Cut): void {
+    const tools = (Array.isArray(m.tools) ? m.tools : []).map(String).filter((t: string) => t.startsWith("mcp__"));
+    const told  = (Array.isArray(m.mcp_servers) ? m.mcp_servers : []).filter((s: any) => typeof s?.name === "string" && s.name !== "illi");
+    theirs = told.map((s: any) => {
+      const head = "mcp__" + ClaudeCode.spell(s.name) + "__";
+      const got  = tools.filter((t: string) => t.startsWith(head));
+      const was  = theirs?.find((w) => w.name === s.name)?.tools ?? null;
+      const left = cut.deny.some((rule) => rule.startsWith(head));
+      return { name: s.name, status: String(s.status ?? ""), tools: !left ? got : (was ?? (got.length > 0 ? got : null)) };
+    });
+    const names = ClaudeCode.spelled();
+    const news  = theirs!.filter((s) => names.get(s.name.toLowerCase()) !== s.name);
+    if (news.length > 0) {
+      news.forEach((s) => names.set(s.name.toLowerCase(), s.name));
+      ClaudeCode.keep([...names.values()]);
+    }
+  }
+
+  // the names Claude Code's servers were ever told by, by their lower
+  // case (NAMES read once)
+  export function spelled(): Map<string, string> {
+    spellings ??= new Map((json_object(NAMES)?.servers ?? []).filter((n: unknown) => typeof n === "string").map((n: string) => [n.toLowerCase(), n]));
+    return spellings;
+  }
+
+  // names kept in NAMES beside those there (another illi's too), every
+  // profile's, the file written in one piece
+  export function keep(names: string[]): void {
+    const tmp = NAMES + "." + process.pid + ".tmp";
+    const all = new Set([...(json_object(NAMES)?.servers ?? []).filter((n: unknown) => typeof n === "string"), ...names]);
+    try {
+      fs.mkdirSync(config.ROOT, { recursive: true });
+      fs.writeFileSync(tmp, JSON.stringify({ servers: [...all].sort() }, null, 2) + "\n");
+      fs.renameSync(tmp, NAMES);
+    } catch (err: any) {
+      console.error("claude-code: " + NAMES + " wasn't kept: " + err?.message);
+    }
   }
 
   // illi's prompt in a file of its own, readable by the user alone
@@ -332,7 +483,8 @@ export namespace ClaudeCode {
     }
   }
 
-  // a system line: a retry, a thought; illi's tools not connecting, logged
+  // a system line: a retry, a thought; illi's tools not connecting,
+  // logged; Claude Code's own servers, where the call loaded them, learned
   export function system(run: Run, m: any): void {
     if (m.subtype === "api_retry") {
       const secs = Math.ceil(Number(m.retry_delay_ms ?? 0) / 1000);
@@ -341,6 +493,9 @@ export namespace ClaudeCode {
     const ours = (m.mcp_servers ?? []).find((s: any) => s.name === "illi");
     if (m.subtype === "init" && ours !== undefined && ours.status !== "connected") {
       console.error("claude-code: illi's tools: " + ours.status);
+    }
+    if (m.subtype === "init" && !run.cut.strict) {
+      ClaudeCode.learn(m, run.cut);
     }
   }
 

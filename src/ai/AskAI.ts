@@ -64,7 +64,9 @@ export type Block = { text: string; mark: boolean };
 // Chat.refit goes on from the chat as it then is; none: no end); stuck:
 // a patient call's try failed, why, as it waits to ask again; builtins:
 // the Claude Code built-in tools it may use on claude-code, as its
-// agent's tools list gives them (Custom.profile; none: all)
+// agent's tools list gives them (Custom.profile; none: all); listed: its
+// agent's tools list as illi reads it (none: no list), whose MCP names
+// keep Claude Code's own servers on claude-code (ClaudeCode.cut)
 export type Ask = Pick & {
   system    : string;
   blocks    : Block[];
@@ -79,6 +81,7 @@ export type Ask = Pick & {
   room?     : number;
   stuck?    : (why: string) => void;
   builtins? : string[] | null;
+  listed?   : string[] | null;
 };
 
 // a request kept whole (Ask.keep): what it asked, the items it sent with
