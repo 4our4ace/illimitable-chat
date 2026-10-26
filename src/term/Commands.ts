@@ -24,6 +24,7 @@ import { Custom, type Command, type Profile, type Skill } from "../config/Custom
 import { term_redraw } from "./Frame.ts";
 import { term_away, term_clear, term_cycle, term_enter, term_esc, term_next, term_page, term_shots, term_take, term_verbose } from "./Keys.ts";
 import { Mcp } from "../tools/Mcp.ts";
+import * as Md from "../ui/Md.ts";
 import { ClaudeCode, type Theirs } from "../ai/ClaudeCode.ts";
 import { Export } from "../chat/Export.ts";
 import { Plugins, type Command as Plugged, type Found } from "../config/Plugins.ts";
@@ -1128,15 +1129,17 @@ function term_pick(t: Term, move: Move, arg: string): void {
   term_note(t, move[0].toUpperCase() + move.slice(1) + "s: " + list.join(", ") + ". Pick one with /" + move + " <" + move + ">.");
 }
 
-// illi's last reply on the tab shown, to the terminal's clipboard
+// illi's last reply on the tab shown, to the terminal's clipboard, as
+// the screen shows it (its citation marks off: Md.cites_hide)
 function term_copy(t: Term): void {
   const log  = t.v.page === null ? [...t.v.whole].sort((a, b) => a[0] - b[0]).map(([, e]) => e) : t.v.page.log ?? [];
   const last = log.filter((e) => e.kind === "illi").at(-1);
   if (last === undefined) {
     return term_note(t, "No reply to copy yet.");
   }
-  Screen.screen_copy(last.text);
-  term_note(t, "Copied the last reply (" + last.text.length + " characters).");
+  const text = Md.cites_hide(last.text);
+  Screen.screen_copy(text);
+  term_note(t, "Copied the last reply (" + text.length + " characters).");
 }
 
 // the memory, as JSON

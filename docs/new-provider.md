@@ -209,6 +209,10 @@ prompts routed to illi's checks. Web search is a server tool where the
 vendor has one (`Ask.searches`): each search logged as a call with its
 result, and the pages a reply cites but doesn't link ending the reply,
 in one `Sources:` line (`OpenAI.entries`), never a result no call made.
+The citation marks a ChatGPT model writes in its text (U+E200 `cite`
+... U+E201) stay in the chat as they came; the screen and `/copy`
+leave them out (`Md.cites_hide`), since only ChatGPT's own app knows
+the pages they name.
 
 8. Tests
 --------
