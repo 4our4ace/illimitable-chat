@@ -97,7 +97,7 @@ test("what it is told: Claude Code's fields from the chat's state; the shares nu
   const v = term().v;
   const cwd = DIR;
   const bare = status_input(v, cwd, "id1") as any;
-  expect(bare).toMatchObject({ hook_event_name: "Status", session_id: "id1", cwd, workspace: { current_dir: cwd, project_dir: cwd }, model: { id: "sonnet-5.5", display_name: "sonnet-5.5", vendor: "claude-api" }, effort: { level: "high" }, fast_mode: false, permission_mode: "auto", busy: false, agents: [] });
+  expect(bare).toMatchObject({ hook_event_name: "Status", session_id: "id1", cwd, workspace: { current_dir: cwd, project_dir: cwd }, model: { id: "sonnet-5.5", display_name: "sonnet-5.5", vendor: "claude-api" }, effort: { level: "high" }, fast_mode: false, permission_mode: "default", busy: false, agents: [] });
   expect([bare.context_window, "agent" in bare, "rate_limits" in bare, typeof bare.version]).toEqual([{ used_percentage: null, remaining_percentage: null }, false, false, "string"]);
   const [later, past] = [(Math.floor(Date.now() / 1000) + 3600) * 1000, (Math.floor(Date.now() / 1000) - 60) * 1000];
   const told = status_input({ ...v, agent: "coder", busy: true, use: { fill: { used: 32000, cap: 90000, window: 128000 }, plan: { brand: "ChatGPT", tier: "pro", limits: [{ window: 300, used: 23, reset: later }, { window: 60, used: 5, reset: 0 }] } } }, cwd, "id1") as any;

@@ -36,7 +36,7 @@ import { Plugins } from "../config/Plugins.ts";
 import { Projects } from "./Projects.ts";
 import { Recall } from "./Recall.ts";
 import { MASTER, SEARCHES, Tools, type Agent, type Live, type Reply } from "../tools/Tools.ts";
-import { MODES, type Mode } from "../tools/Guard.ts";
+import { MODES, type Mode } from "../tools/Permissions.ts";
 import { ANSWERED, COMPACTING, IMAGES, live_push, SUMMARIES, TURN, type Answer, type Link, type Part, type Pipe, type Question, type Server as Out, type State, type Wait } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
 
@@ -142,6 +142,7 @@ const GOAL_NO    = "The goal isn't satisfied yet: keep working.";
 // own skipped, or no one there to answer (answered: View ANSWERED, then
 // the answers)
 const SAID_NO    = "The user said no, asked at illi's screen.";
+const SAID_STOP  = "Stopped: you said no.";
 const SAID_WHY   = "The user said no, asked at illi's screen: ";
 const NO_ONE     = "No one is at illi's screen to ask, so it isn't allowed.";
 const STOPPED    = "The request was stopped.";
@@ -265,6 +266,7 @@ export namespace Chat {
       change : () => Chat.change(chat),
       pick   : () => chat.pick,
       halt   : () => chat.halt.signal,
+      stop   : (who) => (who === MAIN ? Chat.interrupt(chat, SAID_STOP) : Tools.stop(chat.tools, who)),
       main   : () => chat.mem.agent,
     }, cwd);
     const pick = Pick.load(mem.pick, config.OFFER, config.PICK);
@@ -474,16 +476,13 @@ export namespace Chat {
   // passed it over; one still being asked, stopped) and asks for the
   // next. The messages sent as a stopped one wound down start a new one.
   // A to-do list all done goes as it starts and ends (Tools.todo_finished);
-  // the loop guard starts the main agent's count fresh (Tools.fresh: a
-  // command polled once a turn is never a loop); recall's thread is
-  // started, if it isn't (Recall.wake). The plugins are told it starts
+  // recall's thread is started, if it isn't (Recall.wake). The plugins are told it starts
   // and ends (why it stopped, if it did)
   export async function turn(chat: Chat): Promise<void> {
     chat.busy = true;
     clearTimeout(chat.idle);
     void Plugins.emit("turn.start", { cwd: chat.tools.cwd });
     Tools.todo_finished(chat.tools);
-    Tools.fresh(chat.tools, MAIN);
     Recall.wake();
     try {
       let go = true;
@@ -1049,13 +1048,13 @@ export namespace Chat {
 
   // a question answered (none: one answered already); said: what the
   // user said, for the model (a no's reason, the answer to illi's own)
-  export function answered(chat: Chat, id: string, yes: boolean, always: boolean, said: string): void {
+  export function answered(chat: Chat, id: string, yes: boolean, always: boolean, said: string, stop = false): void {
     const k = chat.asks.findIndex((q) => q.id === id);
     if (k < 0) {
       return;
     }
     const [q] = chat.asks.splice(k, 1);
-    q.done({ yes, always, said: yes && q.queries === undefined ? "" : said });
+    q.done({ yes, always, said: yes && q.queries === undefined ? "" : said, ...(stop ? { stop } : {}) });
     Chat.change(chat);
   }
 
@@ -1239,7 +1238,7 @@ export namespace Chat {
         const said = typeof msg.said === "string" ? msg.said.trim() : "";
         const own  = chat.asks.find((q) => q.id === msg.ask)?.queries !== undefined;
         const yes  = msg.yes === true && (!own || said !== "");
-        Chat.answered(chat, String(msg.ask), yes, msg.always === true, own ? (yes ? ANSWERED + said : SKIPPED) : said === "" ? SAID_NO : SAID_WHY + said);
+        Chat.answered(chat, String(msg.ask), yes, msg.always === true, own ? (yes ? ANSWERED + said : SKIPPED) : said === "" ? SAID_NO : SAID_WHY + said, !yes && !own && said === "");
         return {};
       }
       case "compact": {
@@ -1264,7 +1263,7 @@ export namespace Chat {
         return Machine.stop(Number(msg.stop)) ? {} : { error: "That background job has ended already." };
       }
       case "revoke": {
-        const why = Tools.revoke(chat.tools, String(msg.grant));
+        const why = Tools.revoke(chat.tools, String(msg.action), String(msg.resource));
         return why === null ? {} : { error: why };
       }
       case "dismiss": {

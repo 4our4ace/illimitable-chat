@@ -1,6 +1,7 @@
 // Shell
 // =====
-// A shell tool's command read as bash reads it, so Guard.ts can judge it
+// A shell tool's command read as bash reads it, so Access.ts can find
+// what it asks leave for
 // before it runs: every simple command in it (a part), wherever it sits
 // (a pipeline, a list, a subshell, a command's substitution, a heredoc's
 // body, a loop, a bash -c's script, an eval's, a trap's, a find -exec's),

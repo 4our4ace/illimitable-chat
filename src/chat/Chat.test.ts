@@ -27,14 +27,16 @@
 // screen as it was; what is logged meanwhile comes after it; failed or
 // stopped, the chat is as it was, and a quit resumes nothing. /clear
 // empties the to-do list beside the chat, whatever was said. A view
-// switches this session's mode; a refused request allowed again is told
-// to illi in the user's name, its grants this session's; a grant goes.
+// switches this session's mode; a request refused with the user's words
+// is allowed again, told to illi in the user's name, its approvals this
+// session's; an approval goes; a plain no stops the turn, and every
+// other question its caller has waiting; "don't ask again" answers the
+// questions waiting that it now allows.
 // A radar's line a view dismissed reaches the chat, kept once; a setting
 // written at a view, whatever its key, is read again by the chat's illi
 // (`related`, `sticky`, `off`, `suggest`: a suggested reply let go while
 // off), each view told to read it again too.
-// The loop guard counts within a turn (an agent's run too). A
-// message passes the plugins' and hooks' checks (kept back, told more;
+// A message passes the plugins' and hooks' checks (kept back, told more;
 // slow ones waited on in the views' sight, a stop sending it back); their
 // turn.stop makes a turn go on before its goal is checked, 8 times in a
 // row at most; what they tell every call comes after where illi works.
@@ -51,6 +53,8 @@ process.env.ILLI_DIR = DIR;
 // the project the chat is opened in: a throwaway repository (no
 // remote), so its calls act there, never on this checkout
 const REPO = temp_repo("illi-chat-work-");
+// a folder outside it, its writes asked
+const OUT = temp_dir("illi-chat-out-");
 
 const { AskAI } = await import("../ai/AskAI.ts");
 const { ChatGPT } = await import("../ai/ChatGPT.ts");
@@ -67,6 +71,7 @@ const config = await import("../config/Config.ts");
 const View = await import("../ui/View.ts");
 const { Tools } = await import("../tools/Tools.ts");
 const { Machine } = await import("../tools/Machine.ts");
+const { Permissions } = await import("../tools/Permissions.ts");
 
 // the model: answers `reply` to a call that sees the user's message, after
 // `hold` resolves
@@ -106,31 +111,67 @@ test("a view over the pipe sends a message and hears the reply", async () => {
   v.ws!.close();
 });
 
-test("permissions over the pipe: the mode switched for this session (the setting's again with none); a refused request allowed again, illi told in the user's name; a grant let go", async () => {
+test("permissions over the pipe: the mode switched for this session (the setting's again with none); a request refused with words, allowed again, illi told in the user's name; an approval let go", async () => {
   const v = View.view_new();
   View.link_open(v, Chat.link(chat, (msg) => View.view_hear(v, msg).forEach((out) => View.link_send(v, out))));
   await until(() => v.up);
-  expect(v.perm).toMatchObject({ mode: "auto", set: "auto", refused: [], grants: [], file: config.PERMISSIONS, broken: "" });
-  View.link_send(v, { $: "mode", mode: "read-only" });
-  await until(() => v.perm.mode === "read-only");
-  const out = await Tools.call(chat.tools, "main", "write", { path: "x-illi-test.txt", content: "x" }, new AbortController().signal);
-  expect(out.text).toBe("Not run: illi is in read-only mode: changing x-illi-test.txt. The user can switch with /mode, or allow just this in /permissions.");
+  expect(v.perm).toMatchObject({ mode: "default", set: "default", refused: [], grants: [], file: config.PERMISSIONS, broken: "" });
+  View.link_send(v, { $: "mode", mode: "trust" });
+  await until(() => v.perm.mode === "trust");
+  View.link_send(v, { $: "mode", mode: null });
+  await until(() => v.perm.mode === "default");
+  const file = OUT + "/x-illi-test.txt";
+  const call = Tools.call(chat.tools, "main", "write", { path: file, content: "x" }, new AbortController().signal);
+  await until(() => v.asks.length === 1);
+  expect(v.asks[0]).toMatchObject({ who: "illi", tool: "write", why: "it reaches outside the project: " + OUT + "/", keep: "files in " + OUT + "/" });
+  View.link_send(v, { $: "answer", ask: v.asks[0].id, yes: false, always: false, said: "not there" });
+  expect((await call).text).toBe("The user said no, asked at illi's screen: not there. Asked because it reaches outside the project: " + OUT + "/. Don't run it again as is: ask the user, or do it another way. They can allow it in /permissions.");
   await until(() => v.perm.refused.length === 1);
   const refused = v.perm.refused[0];
-  expect(refused).toMatchObject({ who: "illi", tool: "write", what: "x-illi-test.txt", how: "mode" });
+  expect(refused).toMatchObject({ who: "illi", tool: "write", what: file, how: "no", exact: [{ action: "external_directory", resource: OUT + "/*" }] });
   View.link_send(v, { $: "allow", refused: refused.id });
   await until(() => v.perm.refused.length === 0 && v.perm.grants.length === 1);
-  expect(v.perm.grants).toEqual([{ grant: refused.exact[0], said: "changing x-illi-test.txt", saved: false }]);
-  const told = "I allowed `x-illi-test.txt` (/permissions): run it again if you still need it.";
+  expect(v.perm.grants).toEqual([{ action: "external_directory", resource: OUT + "/*", said: "files in " + OUT + "/", saved: false }]);
+  const told = "I allowed `" + file + "` (/permissions): run it again if you still need it.";
   await until(() => Array.from({ length: chat.mem.count }, (_, i) => Memory.message(chat.mem, i)!).some((m) => m.kind === "user" && m.text === told));
   await until(() => !chat.busy);
-  expect(await Tools.guard(chat.tools, "main", "write", { path: "x-illi-test.txt" }, new AbortController().signal)).toBeNull();
-  View.link_send(v, { $: "revoke", grant: refused.exact[0] });
+  expect(await Tools.guard(chat.tools, "main", "write", { path: file }, new AbortController().signal)).toBeNull();
+  View.link_send(v, { $: "revoke", action: "external_directory", resource: OUT + "/*" });
   await until(() => v.perm.grants.length === 0);
-  View.link_send(v, { $: "mode", mode: null });
-  await until(() => v.perm.mode === "auto");
-  expect(fs.existsSync(REPO + "/x-illi-test.txt")).toBe(false);
+  expect(fs.existsSync(file)).toBe(false);
   v.ws!.close();
+});
+
+test("a plain no stops the turn and refuses every other question its caller has waiting; \"don't ask again\" answers yes the questions waiting it now allows", async () => {
+  const v = View.view_new();
+  View.link_open(v, Chat.link(chat, (msg) => View.view_hear(v, msg).forEach((out) => View.link_send(v, out))));
+  await until(() => v.up);
+  const signal = new AbortController().signal;
+  const write = (who: string, name: string) => Tools.guard(chat.tools, who, "write", { path: OUT + "/" + name }, signal);
+  const [a, b, c] = [write("main", "a"), write("main", "b"), write("reviewer", "c")];
+  await until(() => v.asks.length === 3);
+  const stops: string[] = [];
+  const stop = chat.tools.hooks.stop;
+  chat.tools.hooks.stop = (who) => stops.push(who);
+  try {
+    View.link_send(v, { $: "answer", ask: v.asks[0].id, yes: false, always: false });
+    expect((await a)!.text).toBe("The user said no (asked because it reaches outside the project: " + OUT + "/) and stopped the turn: wait for them to say how to go on.");
+    expect((await b)!.text).toStartWith("The user said no (asked because");
+    await until(() => v.asks.length === 1);
+    expect(stops).toEqual(["main"]);
+    expect(v.asks[0].who).toBe("reviewer");
+    const d = write("main", "d");
+    await until(() => v.asks.length === 2);
+    View.link_send(v, { $: "answer", ask: v.asks[0].id, yes: true, always: true });
+    expect([await c, await d]).toEqual([null, null]);
+    expect(v.asks).toHaveLength(0);
+    expect(Permissions.read(config.PERMISSIONS, HERE.path)).toMatchObject({ saved: [{ action: "external_directory", resource: OUT + "/*" }] });
+  } finally {
+    chat.tools.hooks.stop = stop;
+    Permissions.revoke(config.PERMISSIONS, HERE.path, "external_directory", OUT + "/*");
+    chat.tools.perm.refused.length = 0;
+    v.ws!.close();
+  }
 });
 
 test("a radar's line dismissed at a view's side reaches the chat over the pipe, kept once till illi quits; what is no line refused", async () => {
@@ -918,30 +959,6 @@ test("background jobs over the pipe: a shell call's in every view's state, its c
   expect(Memory.message(chat.mem, chat.mem.count - 1)).toMatchObject({ kind: "note", text: "illi quit, stopping its background jobs: sleep 30 > /dev/null 2>&1 & (reviewer's)." });
   Machine.end();
   v.ws!.close();
-});
-
-test("the loop guard starts each turn fresh: a command polled once a turn is never a loop, three in a turn are; an agent's run, a name used again, starts fresh too", async () => {
-  const poll = (who = "main") => Tools.call(chat.tools, who, "shell", { command: "echo poll" }, new AbortController().signal);
-  const looped = "No one is at illi's screen to ask, so it isn't allowed. Asked because the same call a third time in a row";
-  await until(() => !chat.busy);
-  expect(Tools.mode(chat.tools)).toBe("auto");
-  for (let k = 0; k < 3; k++) {
-    expect((await poll()).text).toStartWith("poll\n");
-    expect((await poll()).text).toStartWith("poll\n");
-    Chat.take(chat, Chat.push(chat, null, "user", "check again"));
-    await until(() => !chat.busy);
-  }
-  expect((await poll()).text).toStartWith("poll\n");
-  expect((await poll()).text).toStartWith("poll\n");
-  expect((await poll()).text).toStartWith(looped);
-  expect((await poll("reviewer")).text).toStartWith("poll\n");
-  expect((await poll("reviewer")).text).toStartWith("poll\n");
-  expect(Tools.start(chat.tools, { $: "sub", effort: null, agent: "reviewer" }, "look again", [])).toBe("reviewer");
-  expect((await poll("reviewer")).text).toStartWith("poll\n");
-  const said = () => Array.from({ length: chat.mem.count }, (_, i) => Memory.message(chat.mem, i)!);
-  await until(() => said().some((m) => m.kind === "work" && m.text.includes("reviewer")));
-  await until(() => !chat.busy && said().at(-1)!.kind === "illi");
-  chat.tools.perm.refused.length = 0;
 });
 
 test("the suggested reply stays as the chat closes, so the next start shows it (a screen that asks for none, none); let go, saved so", async () => {

@@ -13,19 +13,17 @@
 // prompts that say it works inside illi (a subagent named only illi's
 // tools it has, one started fresh none that read the chat), the
 // project's CLAUDE.md left to Claude Code. Its
-// permission prompt, and illi's own shell, files and MCP tools, pass the
-// checks (Guard.ts; careful mode, in a throwaway repository): a
-// risk asked with why, the question given the command whole up to 32,000
-// characters, how many more left out (a note and the refused list, cut
-// short), and where its risk is (a file's: nowhere); past 32,000 each
-// line holding a risk still (one inside another's too), after a line
+// permission prompt, and illi's own tools, pass the permission checks
+// (Permissions.ts, Access.ts; in a throwaway repository): what stays in
+// the project runs, a folder outside asked with why, the question given
+// the command whole up to 32,000 characters, how many more left out (a
+// note and the refused list, cut short), and where what asked is (a
+// file's: nowhere); past 32,000 each line holding it still, after a line
 // saying how much was left out (a minified line's from just before it;
-// lines one after another as one); what don't ask again keeps (a
-// script or a long command, kept exactly: this exact command); a refusal
-// recorded and told to the model; a plugin's hooks come before them and
-// after the tool. The loop guard (every mode but yolo): a call the same
-// as its caller's two before it asked (all of it its risk), illi's own
-// tools too; a yes starts its count again. The projects: their table,
+// lines one after another as one); what don't ask again saves, saved
+// for the project; trust mode runs what is asked; a rule's deny refuses,
+// a file that won't read asks; a refusal recorded and told to the
+// model; a plugin's hooks come before them and after the tool. The projects: their table,
 // a search across them, a zoom into another's chat. date both ways: a
 // message's date (Wed 21 Oct 2026 14:05), a span's lines (another
 // project's too, its project named for the zoom), what isn't a span
@@ -50,14 +48,11 @@ const DIR = temp_dir("illi-tools-");
 process.env.ILLI_DIR = DIR;
 
 // the chat's project: a throwaway repository (no remote), so what its
-// calls run acts there, never on this checkout; a folder outside it, not
-// scratch (writing there is asked) and not this user's to write
+// calls run acts there, never on this checkout; folders outside it (its
+// files asked about): one not this user's to write, one that is there
 const REPO = temp_repo("illi-tools-repo-");
 const AWAY = "/illi-tools-away";
-
-// careful, whose questions (git reset --hard, a plain push) these tests
-// answer; the loop guard's test switches to auto
-process.env.ILLI_MODE = "careful";
+const OUT  = temp_dir("illi-tools-out-");
 
 const { Chat } = await import("../chat/Chat.ts");
 const config = await import("../config/Config.ts");
@@ -220,7 +215,7 @@ test("a caller in Claude Code gets only the tools it lacks, served at ?lean; its
   expect(Tools.system("head", project, "claude-code")).not.toContain("a rule of the project");
 }, 20000);
 
-test("Claude Code's permission prompt is judged as illi's own calls: routine work unasked, a risk asked with why, the command whole for the question; yes, no with a reason, don't ask again kept for the project; stopped or no one there, no", async () => {
+test("Claude Code's permission prompt is judged as illi's own calls: what stays in the project unasked, a folder outside asked with why, the command whole for the question; yes, no with a reason, don't ask again saved for the project; trust runs it; stopped or no one there, no", async () => {
   const v = View.view_new();
   View.link_open(v, Chat.link(chat, (msg) => void View.view_hear(v, msg)));
   await until(() => v.up);
@@ -230,151 +225,98 @@ test("Claude Code's permission prompt is judged as illi's own calls: routine wor
     View.link_send(v, { $: "answer", ask: v.asks[0].id, yes, always, said: why });
   };
   const AGAIN = " Don't run it again as is: ask the user, or do it another way. They can allow it in /permissions.";
-  expect(await approve("Bash", { command: "ls -la" })).toEqual({ behavior: "allow", updatedInput: { command: "ls -la" } });
+  const OUTSIDE = "it reaches outside the project: " + OUT + "/";
+  expect(await approve("Bash", { command: "rm -rf build && git push --force origin main" })).toEqual({ behavior: "allow", updatedInput: { command: "rm -rf build && git push --force origin main" } });
   expect(await approve("Task", { prompt: "look" })).toMatchObject({ behavior: "allow" });
-  const yes = approve("Bash", { command: "git push --force origin main" });
+  const yes = approve("Bash", { command: "cat " + OUT + "/notes.txt" });
   await until(() => v.asks.length === 1);
-  expect(v.asks[0]).toMatchObject({ who: "illi", tool: "Bash", what: "git push --force origin main", why: "git push --force origin main rewrites the remote's history", keep: "git push --force origin main" });
+  expect(v.asks[0]).toMatchObject({ who: "illi", tool: "Bash", what: "cat " + OUT + "/notes.txt", why: OUTSIDE, keep: "files in " + OUT + "/" });
   await answer(true, false);
-  expect(await yes).toEqual({ behavior: "allow", updatedInput: { command: "git push --force origin main" } });
+  expect(await yes).toEqual({ behavior: "allow", updatedInput: { command: "cat " + OUT + "/notes.txt" } });
   await until(() => v.asks.length === 0);
-  const no = approve("Bash", { command: "git reset --hard" });
-  await answer(false, false, "use the clean script");
-  const said = (await no).message;
-  expect(said).toStartWith("The user said no, asked at illi's screen: use the clean script. Asked because ");
-  expect(said).toEndWith(AGAIN);
+  const no = approve("Write", { file_path: OUT + "/a-illi-test.txt", content: "x" });
+  await answer(false, false, "keep it in the repo");
+  expect((await no).message).toBe("The user said no, asked at illi's screen: keep it in the repo. Asked because " + OUTSIDE + "." + AGAIN);
   await until(() => v.asks.length === 0);
-  expect(chat.tools.perm.refused.at(-1)).toMatchObject({ who: "illi", tool: "Bash", what: "git reset --hard", how: "no", said: "The user said no, asked at illi's screen: use the clean script", exact: ["shell=git reset --hard"] });
-  const long = "git reset --hard && echo " + "abcdefghij".repeat(200);
+  expect(chat.tools.perm.refused.at(-1)).toMatchObject({ who: "illi", tool: "Write", what: OUT + "/a-illi-test.txt", how: "no", said: "The user said no, asked at illi's screen: keep it in the repo", exact: [{ action: "external_directory", resource: OUT + "/*" }] });
+  const long = "cat " + OUT + "/x && echo " + "abcdefghij".repeat(200);
   const cut  = approve("Bash", { command: long });
   await until(() => v.asks.length === 1);
-  expect([v.asks[0].what.length, v.asks[0].whole, v.asks[0].spots!.map((s) => long.slice(...s))]).toEqual([400, long, ["git reset --hard"]]);
-  await answer(false, false);
+  expect([v.asks[0].what.length, v.asks[0].whole, v.asks[0].spots!.map((s) => long.slice(...s))]).toEqual([400, long, ["cat " + OUT + "/x"]]);
+  await answer(false, false, "no");
   await cut;
   await until(() => v.asks.length === 0);
   expect(chat.tools.perm.refused.at(-1)!.what).toHaveLength(400);
-  const doc  = "cat <<'EOF' | git push --force origin main\n" + Array.from({ length: 4000 }, (_, k) => "line " + k + " of a file").join("\n") + "\nEOF";
+  const doc  = "cat <<'EOF' > ok.txt\n" + Array.from({ length: 4000 }, (_, k) => "line " + k + " of a file").join("\n") + "\nEOF\ncp ok.txt " + OUT + "/";
   const huge = approve("Bash", { command: doc });
   await until(() => v.asks.length === 1);
   const q = v.asks[0];
-  expect([q.whole!.length, q.more, q.whole + doc.slice(32000) === doc, q.spots!.map((s) => doc.slice(...s)), q.cuts]).toEqual([32000, doc.length - 32000, true, [doc.slice(0, 32000)], undefined]);
-  expect(q.keep).toBe("this exact command");
-  await answer(false, false);
+  expect([q.whole!.startsWith(doc.slice(0, 32000)), q.whole!.endsWith("\ncp ok.txt " + OUT + "/"), q.cuts!.length, q.more, q.spots!.map((s) => q.whole!.slice(...s))]).toEqual([true, true, 1, 0, ["cp ok.txt " + OUT + "/"]]);
+  await answer(false, false, "no");
   await huge;
   await until(() => v.asks.length === 0);
+  fs.writeFileSync(config.PERMISSIONS, JSON.stringify({ rules: { shell: { "git push *": "ask" } } }));
   const always = approve("Bash", { command: "git push origin main" });
   await until(() => v.asks.length === 1);
-  expect(v.asks[0].keep).toBe("git push *");
+  expect(v.asks[0]).toMatchObject({ why: "your rule asks about git push *", keep: "git push *" });
   await answer(true, true);
   expect((await always).behavior).toBe("allow");
   await until(() => v.asks.length === 0);
   expect(await approve("Bash", { command: "git push origin dev" })).toMatchObject({ behavior: "allow" });
+  expect(JSON.parse(fs.readFileSync(config.PERMISSIONS, "utf8")).projects[chat.tools.cwd]).toEqual({ saved: [{ action: "shell", resource: "git push *" }] });
+  fs.rmSync(config.PERMISSIONS);
   expect(chat.asks).toEqual([]);
   const stop    = new AbortController();
   const count   = chat.tools.perm.refused.length;
   const stopped = approve("Write", { file_path: AWAY + "/a-illi-test.txt", content: "x" }, stop.signal);
   await until(() => v.asks.length === 1);
-  expect([v.asks[0].what, v.asks[0].spots]).toEqual([AWAY + "/a-illi-test.txt", []]);
+  expect([v.asks[0].what, v.asks[0].spots]).toEqual([AWAY + "/a-illi-test.txt", undefined]);
   stop.abort();
   expect((await stopped).message).toStartWith("The request was stopped. Asked because ");
   expect(chat.tools.perm.refused).toHaveLength(count);
   await until(() => v.asks.length === 0);
-  chat.tools.perm.mode = "read-only";
-  expect(await approve("Edit", { file_path: "src/x-illi-test.ts" })).toEqual({ behavior: "deny", message: "Not run: illi is in read-only mode: changing src/x-illi-test.ts. The user can switch with /mode, or allow just this in /permissions." });
-  expect(chat.tools.perm.refused.at(-1)).toMatchObject({ how: "mode", exact: ["write=" + REPO + "/src/x-illi-test.ts"] });
+  chat.tools.perm.mode = "trust";
+  expect(await approve("Edit", { file_path: AWAY + "/b-illi-test.txt" })).toMatchObject({ behavior: "allow" });
   chat.tools.perm.mode = null;
   v.ws!.close();
   await until(() => chat.socks.size === 0);
   expect((await approve("Edit", { file_path: AWAY + "/b-illi-test.txt" })).message).toStartWith("No one is at illi's screen to ask, so it isn't allowed. Asked because ");
   chat.tools.perm.refused.length = 0;
 });
-
-test("illi's own shell, files and MCP tools pass the same checks: the user's rules first, a file that won't read asks; what runs runs", async () => {
-  const call = (name: string, args: object) => Tools.call(chat.tools, "main", name, args, new AbortController().signal);
-  expect(await call("shell", { command: "echo hi" })).toMatchObject({ text: expect.stringMatching(/^hi\n/), fail: false });
-  expect((await call("shell", { command: "git push --force" })).text).toStartWith("No one is at illi's screen to ask");
-  fs.writeFileSync(config.PERMISSIONS, JSON.stringify({ rules: { shell: { "echo *": "deny" }, read: { "~/.bashrc": "allow" } } }));
-  expect(await call("shell", { command: "echo hi" })).toEqual({ text: "Not run: the user's permission rules refuse it (your rules refuse echo hi). Don't run it, nor anything that does the same: ask the user if you need it.", fail: true });
-  expect(chat.tools.perm.refused.at(-1)).toMatchObject({ how: "rule", exact: [] });
-  fs.writeFileSync(config.PERMISSIONS, "{ broken");
-  expect((await call("shell", { command: "ls" })).text).toContain("Asked because illi can't read your permission rules (" + config.PERMISSIONS + ": ");
-  fs.rmSync(config.PERMISSIONS);
+test("illi customizes itself unasked: a skill, a command, an agent, its rules written by its tools or its shell; its settings, hooks and permissions beside them asked", async () => {
+  const guard = (tool: string, input: object) => Tools.guard(chat.tools, "main", tool, input, new AbortController().signal);
+  const NO = "No one is at illi's screen to ask, so it isn't allowed. Asked because it reaches outside the project: ";
+  expect(await guard("write", { path: config.ROOT + "/skills/notes/SKILL.md", content: "x" })).toBeNull();
+  expect(await guard("edit", { edits: [{ path: config.ROOT + "/commands/ship.md" }, { path: config.ROOT + "/agents/scout.md" }] })).toBeNull();
+  expect(await guard("write", { path: config.ROOT + "/RULES.md", content: "x" })).toBeNull();
+  expect(await guard("shell", { command: "mkdir -p " + config.ROOT + "/skills/pdf && cat > " + config.ROOT + "/skills/pdf/SKILL.md <<'EOF'\nx\nEOF" })).toBeNull();
+  expect((await guard("write", { path: config.ROOT + "/hooks.json", content: "{}" }))!.text).toStartWith(NO);
+  expect((await guard("shell", { command: "echo '{}' > " + config.ROOT + "/permissions.json" }))!.text).toStartWith(NO);
+  expect((await guard("write", { path: config.ROOT + "/config.json", content: "{}" }))!.text).toStartWith(NO);
   chat.tools.perm.refused.length = 0;
 });
 
-test("the loop guard, in every mode but yolo: a call the same (tool and input; a command in other words too) as its caller's two before it is asked, saying so, illi's own tools too; another call between, another caller or yolo, not", async () => {
-  const call = (name: string, args: object, who = "main") => Tools.call(chat.tools, who, name, args, new AbortController().signal);
-  const looped = "No one is at illi's screen to ask, so it isn't allowed. Asked because the same call a third time in a row";
-  chat.tools.perm.calls.clear();
-  chat.tools.perm.mode = "auto";
-  try {
-    expect((await call("projects", {})).fail).toBe(false);
-    expect((await call("projects", {})).fail).toBe(false);
-    expect((await call("projects", {})).text).toStartWith(looped);
-    expect((await call("projects", {})).text).toStartWith(looped);
-    expect(chat.tools.perm.refused.at(-1)).toMatchObject({ how: "no", tool: "projects", why: "the same call a third time in a row", exact: [] });
-    expect((await call("search", { words: "loop" })).fail).toBe(false);
-    expect((await call("projects", {})).fail).toBe(false);
-    expect((await call("shell", { command: "echo loop" })).text).toStartWith("loop\n");
-    expect((await call("shell", { command: "echo loop" })).text).toStartWith("loop\n");
-    expect((await call("shell", { command: "echo loop", timeout: 5 })).text).toStartWith("loop\n");
-    expect((await call("shell", { command: "echo loop", description: "Print loop" })).text).toStartWith("loop\n");
-    expect((await call("shell", { command: "echo loop", description: "Say loop again" })).text).toStartWith("loop\n");
-    expect((await call("projects", {}, "Scout")).fail).toBe(false);
-    expect((await call("shell", { command: "echo loop" })).text).toStartWith(looped);
-    for (const mode of ["careful", "ask", "read-only"] as const) {
-      chat.tools.perm.mode = mode;
-      expect([mode, (await call("shell", { command: "echo loop" })).text.startsWith(looped)]).toEqual([mode, true]);
-    }
-    chat.tools.perm.mode = "yolo";
-    expect((await call("shell", { command: "echo loop" })).text).toStartWith("loop\n");
-  } finally {
-    chat.tools.perm.mode = null;
-    chat.tools.perm.calls.clear();
-    chat.tools.perm.refused.length = 0;
-  }
+test("illi's own tools pass the same checks: what stays in the project runs; the user's rules after illi's, a deny refusing; a file that won't read asks; what runs runs", async () => {
+  const call = (name: string, args: object) => Tools.call(chat.tools, "main", name, args, new AbortController().signal);
+  expect(await call("shell", { command: "echo hi" })).toMatchObject({ text: expect.stringMatching(/^hi\n/), fail: false });
+  expect((await call("shell", { command: "ls " + OUT })).text).toStartWith("No one is at illi's screen to ask");
+  expect((await call("read", { path: ".env" })).text).toBe("No one is at illi's screen to ask, so it isn't allowed. Asked because it reads a .env file, which may hold secrets. Don't run it again as is: ask the user, or do it another way. They can allow it in /permissions.");
+  fs.writeFileSync(config.PERMISSIONS, JSON.stringify({ rules: { shell: { "echo *": "deny" }, external_directory: { [OUT + "/*"]: "allow" } } }));
+  expect(await call("shell", { command: "echo hi" })).toEqual({ text: "Not run: your rule denies echo *. Don't run it, nor anything that does the same: ask the user if you need it.", fail: true });
+  expect(chat.tools.perm.refused.at(-1)).toMatchObject({ how: "rule", exact: [] });
+  expect((await call("shell", { command: "ls " + OUT })).fail).toBe(false);
+  fs.writeFileSync(config.PERMISSIONS, "{ broken");
+  expect((await call("shell", { command: "ls" })).text).toContain("Asked because illi can't read your permission rules (" + config.PERMISSIONS + ": ");
+  expect((await call("projects", {})).fail).toBe(false);
+  fs.rmSync(config.PERMISSIONS);
+  chat.tools.perm.refused.length = 0;
 });
-
-test("the loop guard: a yes starts that caller's count again from none, so a poll goes on two more times before it asks again; no ends it", async () => {
-  const v = View.view_new();
-  View.link_open(v, Chat.link(chat, (msg) => void View.view_hear(v, msg)));
-  await until(() => v.up);
-  const poll  = () => Tools.call(chat.tools, "main", "shell", { command: "echo poll" }, new AbortController().signal);
-  const reply = async (yes: boolean) => {
-    await until(() => v.asks.length === 1);
-    expect(v.asks[0]).toMatchObject({ tool: "shell", what: "echo poll", why: "the same call a third time in a row", keep: "", spots: [[0, 9]] });
-    View.link_send(v, { $: "answer", ask: v.asks[0].id, yes, always: false, said: "" });
-  };
-  chat.tools.perm.calls.clear();
-  chat.tools.perm.mode = "auto";
-  try {
-    expect((await poll()).text).toStartWith("poll\n");
-    expect((await poll()).text).toStartWith("poll\n");
-    const third = poll();
-    await reply(true);
-    expect((await third).text).toStartWith("poll\n");
-    await until(() => v.asks.length === 0);
-    expect((await poll()).text).toStartWith("poll\n");
-    expect((await poll()).text).toStartWith("poll\n");
-    const sixth = poll();
-    await reply(false);
-    expect((await sixth).text).toContain("Asked because the same call a third time in a row");
-    await until(() => v.asks.length === 0);
-  } finally {
-    chat.tools.perm.mode = null;
-    chat.tools.perm.calls.clear();
-    chat.tools.perm.refused.length = 0;
-    v.ws!.close();
-    await until(() => chat.socks.size === 0);
-  }
-});
-
-test("a plugin's hooks come first: its input is what the checks judge and Claude Code runs, its refusal final, its ask asked, its allow run, what it adds after the answer, what the model reads its last say; its tools run", async () => {
+test("a plugin's hooks come first: its input is what the checks judge and Claude Code runs, its refusal final, its ask asked, its allow run (a folder outside the project too), what it adds after the answer, what the model reads its last say; its tools run", async () => {
   const { Plugins } = await import("../config/Plugins.ts");
   fs.mkdirSync(DIR + "/plugins", { recursive: true });
   fs.writeFileSync(DIR + "/plugins/p.ts", `export default function (illi: any) {
-  illi.on("tool.before", (call: any) => call.input?.command === "echo swap" ? { input: { command: "git push --force" } } : call.input?.command === "echo old" ? { input: { command: "ls" } } : call.input?.command === "echo nope" ? { block: "The plugin says no." } : undefined);
-  illi.on("tool.before", (call: any) => call.input?.command === "echo told" ? { context: "told more" } : call.input?.command === "echo asked" ? { ask: "the plugin wants a look" } : /illi-hooked-secret/.test(call.input?.command ?? "") ? { allow: true } : undefined);
+  illi.on("tool.before", (call: any) => call.input?.command === "echo swap" ? { input: { command: "cat ~/.illi-tools-swap" } } : call.input?.command === "echo old" ? { input: { command: "ls" } } : call.input?.command === "echo nope" ? { block: "The plugin says no." } : undefined);
+  illi.on("tool.before", (call: any) => call.input?.command === "echo told" ? { context: "told more" } : call.input?.command === "echo asked" ? { ask: "the plugin wants a look" } : /illi-hooked-secret/.test(call.input?.command ?? call.input?.path ?? "") ? { allow: true } : undefined);
   illi.on("tool.after", (call: any) => call.input?.command === "echo seen" ? { text: call.output.text + "(seen)" } : undefined);
   illi.tool({ name: "twice", description: "doubles x", run: (input: any) => String(2 * input.x) });
 }
@@ -382,11 +324,12 @@ test("a plugin's hooks come first: its input is what the checks judge and Claude
   await Plugins.load(REPO, () => false);
   const call = (name: string, args: object) => Tools.call(chat.tools, "main", name, args, new AbortController().signal);
   try {
-    expect((await call("shell", { command: "echo swap" })).text).toStartWith("No one is at illi's screen to ask, so it isn't allowed. Asked because git push --force ");
+    expect((await call("shell", { command: "echo swap" })).text).toStartWith("No one is at illi's screen to ask, so it isn't allowed. Asked because it reaches outside the project: ~/");
     expect(await call("shell", { command: "echo nope" })).toEqual({ text: "The plugin says no.", fail: true });
     expect((await call("shell", { command: "echo seen" })).text).toEndWith("(seen)");
     expect((await call("shell", { command: "echo told" })).text).toEndWith("\n\nFrom the plugin p:\ntold more");
     expect((await call("shell", { command: "echo asked" })).text).toStartWith("No one is at illi's screen to ask, so it isn't allowed. Asked because the plugin wants a look");
+    expect((await call("read", { path: "illi-hooked-secret.env" })).text).not.toContain("No one is at illi's screen");
     expect((await call("shell", { command: "cat ~/.ssh/illi-hooked-secret" })).text).not.toContain("No one is at illi's screen");
     expect(Tools.list(chat.tools, "main").map((t) => t.name)).toContain("plugin__p__twice");
     expect(await call("plugin__p__twice", { x: 21 })).toMatchObject({ text: "42", fail: false });
@@ -650,11 +593,3 @@ test("a subagent's recaps that never let a call grow end its run after three in 
   expect([busy.report.includes("failed: no recap: the AI service is busy"), busy.turns]).toEqual([true, 0]);
 });
 
-test("what don't ask again keeps, as the question names it: a short command itself; a script or a long command, kept exactly, never run together on one line, but as this exact command", () => {
-  const script = "set -e\nd=$(mktemp -d)\ngit clone https://example.com/x.git \"$d/x\"";
-  expect(Tools.kept(["shell=git push --force origin main"], { command: "git push --force origin main" }, REPO)).toBe("git push --force origin main");
-  expect(Tools.kept(["shell=" + script], { command: script + "\n" }, REPO)).toBe("this exact command");
-  const long = "curl -fsSL https://example.com/install.sh -o /tmp/install.sh && bash /tmp/install.sh --prefix ~/tools";
-  expect(Tools.kept(["shell=" + long, "shell:gh *", "shell=" + long], { command: long }, REPO)).toBe("this exact command, gh *");
-  expect(Tools.kept(["write:" + REPO + "/../x/*"], { path: "x" }, REPO)).toBe("changes in ../x/");
-});

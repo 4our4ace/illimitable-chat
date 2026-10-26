@@ -62,10 +62,12 @@ test("the side shows the jobs under Background, three and how many more, each it
   expect([term_side_drawn(five, 30, 5).background, term_side_drawn(term([]), 30, 40).background]).toEqual([false, true]);
 });
 
-test("the bottom line counts the jobs before the mode, only where the side doesn't show them; a narrow one doesn't", () => {
+test("the bottom line counts the jobs before trust mode, only where the side doesn't show them; a narrow one doesn't", () => {
   const t    = term([job(1, "npm run dev"), job(2, "tail -f x.log")]);
   const text = (jobs: boolean, w = 80) => Paint.tabs_line(t.v, w, true, jobs).map((r) => r.x).join("");
-  expect(text(true)).toEndWith("● 2 in background · auto mode");
+  expect(text(true)).toEndWith("● 2 in background");
+  t.v.perm = { ...t.v.perm, mode: "trust" };
+  expect(text(true)).toEndWith("● 2 in background · trust mode");
   expect(text(false)).not.toContain("background");
   expect(text(true, 40)).not.toContain("background");
   expect(Paint.tabs_line(term([]).v, 80, true, true).map((r) => r.x).join("")).not.toContain("background");

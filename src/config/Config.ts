@@ -107,8 +107,8 @@ const TABLE = {
   after      : { def: "", values: "text", now: true, what: "a command after each turn" },
   off        : { def: "", values: "text", now: true, what: "skills, agents, commands, MCP servers, plugins (or a plugin's part, as plugin:name) and hooks.json turned off", none: "none" },
   sticky     : { def: "", values: "text", now: true, what: "sticky skills on, in every turn", none: "none" },
-  mode       : { def: "auto", values: ["auto", "careful", "ask", "read-only", "yolo"], now: true, what: "what runs without asking", shape: [/^(read-only|ask|careful|auto|yolo)$/, "read-only, ask, careful, auto or yolo"] },
-  permissions: { def: DIR + "/permissions.json", values: "text", now: false, what: "your permission rules and grants", path: true },
+  mode       : { def: "default", values: ["default", "trust"], now: true, what: "what runs without asking", shape: [/^(default|trust|auto|careful|ask|read-only|yolo)$/, "default or trust"] },
+  permissions: { def: DIR + "/permissions.json", values: "text", now: false, what: "your permission rules and what \"don't ask again\" saved", path: true },
   vendors    : { def: "chatgpt", values: "text", now: false, what: "where models come from" },
   models     : { def: "", values: "text", now: false, what: "the models offered", none: "all" },
   jobs       : { def: "8", values: ["2", "4", "8", "16", "32"], now: false, what: "summaries built at once", shape: [/^[1-9]\d*$/, "a number, 1 or more"] },
@@ -165,12 +165,16 @@ export const THEME    = config_place("theme");
 export const MCP      = config_place("mcp");
 export const MCPS     = DIR === ROOT ? [MCP] : [...new Set([ROOT + "/mcp.json", MCP])];
 
-// the user's permission rules and the grants kept (Permissions.ts); a
-// mode of yolo set is said at the start, as little is asked then (a
-// write to illi's own config, what the rules ask: Guard.ts)
+// the user's permission rules and the approvals saved (Permissions.ts);
+// a mode of trust set is said at the start, as nothing but what the
+// rules deny is refused then; an older illi's mode, as the one it is
+// taken for (Permissions.mode_of: yolo trust, the rest default)
 export const PERMISSIONS = config_place("permissions");
-if (config_value("mode") === "yolo") {
-  NOTES.push("mode is yolo: every call runs unasked, but a write to illi's own config and what your permission rules refuse or ask. /mode switches it for this session.");
+const MODE = config_value("mode");
+if (MODE === "trust" || MODE === "yolo") {
+  NOTES.push("mode is " + (MODE === "yolo" ? "yolo, now called trust" : "trust") + ": every call runs unasked, but what your permission rules deny. /mode switches it for this session.");
+} else if (MODE !== "default") {
+  NOTES.push("mode " + MODE + " is gone: illi has two modes now, default and trust, and runs " + MODE + " as default. /settings sets it.");
 }
 
 // the skills, agents, commands, MCP servers, plugins and hooks turned

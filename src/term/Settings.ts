@@ -20,7 +20,7 @@ import { term_chooser, term_model_pick } from "./Commands.ts";
 import { term_draw } from "./Frame.ts";
 import * as config from "../config/Config.ts";
 import { Custom } from "../config/Custom.ts";
-import type { Mode } from "../tools/Guard.ts";
+import { Permissions } from "../tools/Permissions.ts";
 import { Mcp } from "../tools/Mcp.ts";
 import { ClaudeCode } from "../ai/ClaudeCode.ts";
 import { Plugins } from "../config/Plugins.ts";
@@ -268,7 +268,7 @@ export function setting_set(t: Term, key: config.Key, value: unknown): boolean {
     term_act(t, { $: "Pick", to: config.PICK });
   }
   if (key === "mode") {
-    term_send(t, { $: "mode", mode: config.config_value("mode") as Mode });
+    term_send(t, { $: "mode", mode: Permissions.mode_of(config.config_value("mode")) });
   }
   return true;
 }

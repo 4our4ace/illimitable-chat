@@ -3,16 +3,17 @@
 // A question the chat asks (View Question: leave to run a call the
 // checks stopped, Tools.guard) at the input, as every question
 // (Question.ts), as it comes: Yes; Yes, and don't ask again for what it
-// keeps, in this project (offered only when it keeps something); No (Esc
-// too); No, and say why (a line typed, for the model). Why it was asked
-// and what it would do (a command whole, by its lines, up to the most
-// the question is given: Tools.whole, a dim line saying how much more;
-// past that, the lines holding what made the checks ask, after a dim
-// line saying how much was left out) show over the answers, once: no
-// note says them again (a pipe, with no answers to show, notes them, cut
-// short). A long command folds to its first line, those lines and its
-// last, a long line to its rows holding what made them ask (Question.ts:
-// Ctrl+O shows it whole), never hiding why it asks.
+// saves, in this project (offered only when it saves something); No
+// (Esc too: a plain no, which stops the caller's turn, Tools.question);
+// No, and say why (a line typed, for the model, which goes on). Why it
+// was asked and what it would do (a command whole, by its lines, up to
+// the most the question is given: Tools.whole, a dim line saying how
+// much more; past that, the lines holding what made the checks ask,
+// after a dim line saying how much was left out) show over the answers,
+// once: no note says them again (a pipe, with no answers to show, notes
+// them, cut short). A long command folds to its first line, those lines
+// and its last, a long line to its rows holding what made them ask
+// (Question.ts: Ctrl+O shows it whole), never hiding why it asks.
 // illi's own questions (ask) show at the input too (Question.ts), as a
 // form, a tab each: the question, its options (one to pick, or several),
 // and a row for words of the user's own, which they may type beside the
