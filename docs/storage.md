@@ -734,7 +734,7 @@ gets none. In one read transaction, on that worker's connection:
    - the chat's agent: the view's lines before its cut, those of 16
      messages or fewer left out (what the view says of them is as fine
      as any line found there), and its recent messages from the cut on;
-   - a subagent: the lines of the view it was given, those of 16
+   - a subagent: the lines of the map it was given, those of 16
      messages or fewer left out;
    - and, for both, what the user dismissed at the side (sent to the
      chat over the view's pipe: `Chat.dismiss`, kept till illi quits).

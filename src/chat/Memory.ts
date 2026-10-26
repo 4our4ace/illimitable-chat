@@ -156,6 +156,14 @@ const WAIT = "(not summarized yet: zoom it)";
 const SPAN_LINES = 12;
 const SPAN_BYTES = 4800;
 
+// a subagent's map of the chat (Memory.map): its newest MAP_RECENT
+// messages each a line of its own, lines split while they stay MAP_LINES
+// at most and MAP_BYTES (about 4,000 tokens): enough to see what the
+// chat holds and zoom where a task needs
+const MAP_RECENT = 8;
+const MAP_LINES  = 48;
+const MAP_BYTES  = 16000;
+
 // the most messages a line covers just before or after a span with none
 // (Memory.near)
 const NEAR = 8;
@@ -857,6 +865,40 @@ export namespace Memory {
     }
     const share = Math.floor(SPAN_BYTES / lines.length);
     return bytes(lines) <= SPAN_BYTES ? lines : lines.map((line) => ({ ...line, text: line.text === null ? null : Memory.cut(line.text, share) }));
+  }
+
+  // a subagent's map of the chat (Tools.view), in one block marked for
+  // the cache: the chat's view's messages (from its first: what came
+  // before is a search away), oldest first, the newest MAP_RECENT each
+  // its line, those before them tiled by the tree's largest nodes
+  // (Memory.roots), then split one at a time, the most due first (one
+  // not built, else the most messages for its distance from the chat's
+  // end: detail fades with age, as in a view), while MAP_LINES and
+  // MAP_BYTES hold. Read from the lines built, no model asked: one not
+  // built says so, and zoom opens it. Lines past MAP_BYTES as they
+  // start (the roots, many over a long chat) each cut to a share of it
+  export function map(mem: Memory): Block[] {
+    const from   = Math.min(mem.view.from, mem.count);
+    const recent = Math.max(from, mem.count - MAP_RECENT);
+    const read   = (part: Part) => ({ part, text: Memory.node(mem, part) });
+    const bytes  = (all: Array<{ text: string | null }>) => all.reduce((n, line) => n + Memory.bytes(line.text ?? WAIT), 0);
+    const due    = (line: { part: Part; text: string | null }) => (line.text === null ? Infinity : 2 ** line.part.l / (mem.count - Memory.span(line.part)[0]));
+    let lines = [...Memory.roots(recent, from), ...Array.from({ length: mem.count - recent }, (_, k) => ({ l: 0, i: recent + k }))].map(read);
+    for (;;) {
+      const open = lines.filter((line) => line.part.l > 0);
+      if (open.length === 0) {
+        break;
+      }
+      const most = open.reduce((a, b) => (due(b) > due(a) ? b : a));
+      const next = lines.flatMap((line) => (line === most ? Memory.halves(line.part).map(read) : [line]));
+      if (next.length > MAP_LINES || bytes(next) > MAP_BYTES) {
+        break;
+      }
+      lines = next;
+    }
+    const share = Math.floor(MAP_BYTES / Math.max(1, lines.length));
+    const text  = (line: { text: string | null }) => (line.text === null ? WAIT : bytes(lines) <= MAP_BYTES ? line.text : Memory.cut(line.text, share));
+    return [{ text: "<chat>\n" + lines.map((line) => Memory.line(line.part, text(line)) + "\n").join("") + "</chat>\n", mark: true }];
   }
 
   // the lines just before and after message a, where a span of time with

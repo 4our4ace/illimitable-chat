@@ -15,12 +15,14 @@
 // work or of this run, as reviewer-2; else a random one; a name freed
 // is used again, each log its own); each call gets its context and its
 // whole log, so a told agent goes on even after a restart; its replies
-// reach the chat as one "[Name]" message. One started fresh (its
-// agent's `fresh: true`, or spawn's) gets none of the chat: no view, no
-// tool reading it (MEMORY), no radar's line; its own log alone. One
-// spawned as a user's subagent (Custom.ts) runs on its model, with its
-// instructions and tools; so does the master, given a primary agent
-// (Shift+Tab, /agent).
+// reach the chat as one "[Name]" message. It starts with a map of the
+// chat (Memory.map: a few dozen lines over it all, the newest messages
+// each its own), and zooms or searches for what its task needs. One
+// started fresh (its agent's `fresh: true`, or spawn's) gets none of the
+// chat: no map, no tool reading it (MEMORY), no radar's line; its own
+// log alone. One spawned as a user's subagent (Custom.ts) runs on its
+// model, with its instructions and tools; so does the master, given a
+// primary agent (Shift+Tab, /agent).
 // Beside these, the user's: their skills (one tool, skill, listing them;
 // it turns a sticky one on and off too, Custom.ts)
 // and their MCP servers' tools (Mcp.ts), for the master and agents alike;
@@ -71,7 +73,7 @@ import { Permissions } from "./Permissions.ts";
 import { INT, STR, TOOLS, Machine, spec, type Spec } from "./Machine.ts";
 import { Mcp } from "./Mcp.ts";
 import { Logs, MAIN } from "../chat/Logs.ts";
-import { Memory, TOKEN } from "../chat/Memory.ts";
+import { Memory } from "../chat/Memory.ts";
 import PROMPT from "./prompt.txt" with { type: "text" };
 import { EFFORTS, Pick } from "../ai/Pick.ts";
 import { Projects } from "../chat/Projects.ts";
@@ -85,7 +87,8 @@ export type { Live };
 // Types
 // =====
 
-// at work, the view its calls get and its replies so far; its role: its
+// at work, the map of the chat its calls get (Tools.view) and its
+// replies so far; its role: its
 // effort if spawned with one, the user's agent it runs as (null: none),
 // whether it started fresh (none of the chat: Tools.ask);
 // the run it was spawned in (Memory.run; -1: taken back from its log),
@@ -172,15 +175,16 @@ your tools, following the user's instructions at the end of this
 prompt: they say who the user is, how their files are organized and how
 they want work done.`;
 
-// what a subagent's first message holds: the view, then its own chat;
+// what a subagent's first message holds: the map, then its own chat;
 // one started fresh, its own chat alone
-const SUB_VIEW = `Your first message holds the view below, then your chat with illi so far,
+const SUB_VIEW = `Your first message holds the map below, then your chat with illi so far,
 its lines as "i|kind: text": what you are (note), your task (user), and
-later all you did and were told. The view shows you what illi knows: what the user wants,
-decided and taught. Use it as context only, and do what your task says,
-not what the user's last message says, since illi may have given you
-just part of the work. Your final reply is your report to illi. illi may
-send you more messages, even while you work: answer the last.`;
+later all you did and were told. The map shows, coarsely, all that illi
+knows: what the user wants, decided and taught, each a zoom away. Use it
+as context only, and do what your task says, not what the user's last
+message says, since illi may have given you just part of the work. Your
+final reply is your report to illi. illi may send you more messages,
+even while you work: answer the last.`;
 
 const SUB_ALONE = `You start fresh: you see none of illi's chat with the user, only what
 illi tells you. Your first message holds your chat with illi so far, its
@@ -189,13 +193,9 @@ later all you did and were told. Your final reply is your report to
 illi. illi may send you more messages, even while you work: answer the
 last.`;
 
-// what stands for a subagent's view's oldest lines, left out to fit its
-// model (Tools.fitted)
-const LEFT_OUT = "(older lines left out to fit your model: zoom and search find them)\n";
-
-const VIEW_DOC = `The view: the chat between illi and the user (since its last new session,
+const VIEW_DOC = `The map: the chat between illi and the user (since its last new session,
 if any: search finds what came before), oldest first, inside <chat> tags,
-as one-line summaries. Each line is
+as a few dozen one-line summaries. Each line is
 
   id+n|text   the n messages from id on, summarized (newlines shown as spaces)
 
@@ -203,18 +203,19 @@ A summary tags each item with its kind: user (the user's words), illi
 (illi's replies), tool (illi's tool calls), echo (their results), note
 (illi's own notices: a stop, a goal met, a new session, a restart),
 recap (illi's recap of the chat before it, at the user's /compact), or
-work (the report of an agent, starting "[Name]"). A short message is its own line, word for word. Recent lines
-cover one message each; the older the messages, the more a line covers.
-A message not summarized yet shows as "(not summarized yet: zoom it)".
-No message appears in full, not even the last ones. A text too long for
-one message is split over several in a row.
+work (the report of an agent, starting "[Name]"). A short message is its own line, word for word. The newest
+lines cover one message each; the others many, so a line only hints at
+what happened. A message not summarized yet shows as "(not summarized
+yet: zoom it)". No message appears in full, not even the last ones. A
+text too long for one message is split over several in a row.
 
 Navigating: zoom(id, n) opens line id+n into the two lines of n/2
 messages it was made from; zoom(id, 1) gives message id in full, with
-the images its "[image <file>]" lines name. Zoom whenever a summary
-only mentions something you need, such as what your last reply said, a
-decision, a past attempt or where a file is, before you act, guess or
-ask. date(id) gives the date and time of message id; date(from, to) the
+the images its "[image <file>]" lines name. When your task leans on
+what came before, look before you act, guess or ask: zoom the lines it
+touches, down to the messages, for a decision, what the user prefers, a
+past attempt or where a file is; search when the map names no line for
+it. date(id) gives the date and time of message id; date(from, to) the
 lines of a span, as 2026-10-21 or 2026-10-21 14:00 (no to: that day).
 zoom("Name") gives an agent's whole chat. A tool result may end with a
 <history> line: the summary of a past episode that illi's search found
@@ -244,8 +245,8 @@ the working dir named at the start of each message: the folder where the
 user started illi. Relative paths start there. The user's time follows
 it (Now:): work out "yesterday" or "last Tuesday" from it.`;
 
-// a subagent's prompt: its part, then the view's and the tools' docs;
-// one started fresh, no view's
+// a subagent's prompt: its part, then the map's and the tools' docs;
+// one started fresh, no map's
 export const SUB       = SUB_HEAD + "\n\n" + SUB_VIEW + "\n\n" + VIEW_DOC + "\n\n" + HERE_DOC;
 export const SUB_FRESH = SUB_HEAD + "\n\n" + SUB_ALONE + "\n\n" + HERE_DOC;
 
@@ -281,8 +282,8 @@ const OWN: Spec[] = [
   spec("projects", "The user's projects, each with a chat of its own (a git repo illi ran in, or home: outside any repo), the one used last first: its folder, its first and last day, its messages, its latest summary line. Look here first when the user means work that isn't in your view.", {}, []),
   spec("search", "Find summary lines holding all the words (else any of them), the best first, as \"project id+n|text\": in this project's chat; with project (its name, from projects), in that one's; with project \"all\", in every one, then the projects with more lines named, to search in. Zoom a line with its project. With from and to (as date's), only lines inside that span.", { words: STR, project: STR, from: STR, to: STR }, ["words"]),
 ];
-const SPAWN = "Start one subagent per task, in parallel, and return their names at once. Each one's report reaches you as a message \"[Name] report\" when it finishes. A subagent sees the view and the user's instructions, but knows what you want only from its task. With fresh, it sees no view nor any of the chat, only its task and the user's instructions: for a test or review that must not be swayed by what came before.";
-const FRESH = { type: "boolean", description: "Start them without the chat: no view, and no tools that read it. Leave it out to give them the view (an agent listed as fresh starts so always)." };
+const SPAWN = "Start one subagent per task, in parallel, and return their names at once. Each one's report reaches you as a message \"[Name] report\" when it finishes. A subagent gets a map of the chat (a few dozen lines; it zooms and searches for more) and the user's instructions, but knows what you want only from its task: put in it what matters. With fresh, it gets no map nor any of the chat, only its task and the user's instructions: for a test or review that must not be swayed by what came before.";
+const FRESH = { type: "boolean", description: "Start them without the chat: no map, and no tools that read it. Leave it out to give them the map (an agent listed as fresh starts so always)." };
 const EFFORT = { type: "string", enum: EFFORTS, description: "How hard they think. Leave it out to use their agent's effort (or, with none, yours); set it only to override that." };
 const TELL: Spec = spec("tell", "Send a message to a subagent, by name. One at work reads it between its tool calls, and its report answers it; an idle one goes on from its chat, and its reply reaches you as a message \"[Name] reply\".", { name: STR, message: STR }, ["name", "message"]);
 
@@ -833,11 +834,9 @@ export namespace Tools {
     return typeof own === "string" ? base : own;
   }
 
-  // a call of an agent, on its pick (Tools.pick): the chat's view as much
-  // as half its model's autocompact holds (a smaller model's window than
-  // the chat's; its window not told, which Tools.view waits on: its
-  // opening and last block alone, as a window is never guessed); one
-  // started fresh, none, nor the view's docs (SUB_FRESH)
+  // a call of an agent, on its pick (Tools.pick): its map of the chat
+  // (Agent.view), where it works and its log; one started fresh, no map,
+  // nor the map's docs (SUB_FRESH)
   export function ask(tools: Tools, agent: Agent): Ask {
     const log = { text: Logs.show(tools.mem, agent.name), mark: true };
     const server = Tools.at(tools, agent.name);
@@ -845,23 +844,9 @@ export namespace Tools {
     const pick = Tools.pick(tools, agent.role);
     const run = Pick.ask(pick);
     const system = Tools.system((agent.role.fresh ? SUB_FRESH : SUB) + Custom.section(profile), tools.cwd, run.vendor);
-    const window = Pick.window(pick);
-    const most = window === undefined ? 0 : (config.config_context(pick.model, window, 0, Pick.room(pick)) * TOKEN) / 2;
-    const blocks = [...Tools.fitted(agent.view, most), Tools.here(tools, run.vendor), log];
+    const blocks = [...agent.view, Tools.here(tools, run.vendor), log];
     const effort = agent.role.effort ?? run.effort;
     return { ...run, effort, system, blocks, searches: SEARCHES, server, builtins: profile?.builtins, listed: profile?.tools };
-  }
-
-  // a view (Memory.view's blocks) in `bytes`: its oldest blocks of lines
-  // left out, said so (each line still a zoom away), its opening and its
-  // last block kept
-  export function fitted(view: Block[], bytes: number): Block[] {
-    let size = view.reduce((n, b) => n + b.text.length, 0);
-    let k    = 1;
-    for (; k < view.length - 1 && size > bytes; k++) {
-      size -= view[k].text.length;
-    }
-    return k === 1 ? view : [view[0], { text: LEFT_OUT, mark: false }, ...view.slice(k)];
   }
 
   // Claude Code asking leave to use a tool (its permission prompt): past
@@ -1107,16 +1092,14 @@ export namespace Tools {
     return text.slice(0, head) + " … " + text.slice(tail);
   }
 
-  // the chat's view, once its summaries are built, for an agent of this
-  // role once its model's window is told too (on ChatGPT: ChatGPT.ready,
-  // as a turn waits; never guessed); a string: why there is none
-  // (Memory.settle, the window). One started fresh gets none, waiting on
-  // no summary
-  export async function view(tools: Tools, role?: Agent["role"]): Promise<Block[] | string> {
-    const why = role?.fresh ? null : await Memory.settle(tools.mem, tools.mem.count, tools.hooks.halt());
-    const pick = role === undefined ? null : Tools.pick(tools, role);
-    const unready = why === null && pick?.vendor === "chatgpt" ? await ChatGPT.ready(pick.model, tools.hooks.halt()) : null;
-    return why ?? (unready !== null ? "Not started: " + unready + "." : role?.fresh ? [] : Memory.view(tools.mem));
+  // the chat's map (Memory.map: from the lines built, waiting on no
+  // summary), for an agent of this role once its model's window is told
+  // (on ChatGPT: ChatGPT.ready, as a turn waits; never guessed); a
+  // string: why there is none. One started fresh gets none
+  export async function view(tools: Tools, role: Agent["role"]): Promise<Block[] | string> {
+    const pick = Tools.pick(tools, role);
+    const unready = pick.vendor === "chatgpt" ? await ChatGPT.ready(pick.model, tools.hooks.halt()) : null;
+    return unready !== null ? "Not started: " + unready + "." : role.fresh ? [] : Memory.map(tools.mem);
   }
 
   export function working(tools: Tools): Agent[] {
