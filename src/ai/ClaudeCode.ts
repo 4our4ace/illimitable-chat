@@ -83,6 +83,7 @@ type Run = {
   own    : boolean;
   said   : boolean;
   result : any;
+  grew   : boolean;
   reset  : number;
   shut   : boolean;
   cut    : Cut;
@@ -183,7 +184,7 @@ export namespace ClaudeCode {
       fs.rmSync(file, { force: true });
       return none(/ENOENT|not found/i.test(String(err?.message)) ? NO_CLAUDE : String(err?.message ?? err), "down");
     }
-    const run: Run = { ask, on, st: null, seen: [], sent: [], own: false, said: false, result: null, reset: 0, shut: false, cut };
+    const run: Run = { ask, on, st: null, seen: [], sent: [], own: false, said: false, result: null, grew: false, reset: 0, shut: false, cut };
     let stopped = false;
     // a line to Claude Code's input; false: it ended (it exited)
     const write = (msg: unknown) => {
@@ -487,14 +488,16 @@ export namespace ClaudeCode {
     }
   }
 
-  // a user line: tool results, each its call's echo; else a message
-  // echoed, the call's own first, then those sent mid-run, in turn
+  // a user line: tool results, each its call's echo (the call grew:
+  // its first request fit, Claude Code having no room of illi's); else a
+  // message echoed, the call's own first, then those sent mid-run, in turn
   export function heard(run: Run, m: any): void {
     const content = m.message?.content;
     const results = Array.isArray(content) ? content.filter((c: any) => c.type === "tool_result") : [];
     for (const r of results) {
       run.on({ $: "Entry", kind: "echo", text: (r.is_error ? FAILED : "") + (AskAI.show(r.content) || "(no output)"), of: r.tool_use_id });
     }
+    run.grew ||= results.length > 0;
     if (results.length > 0 || m.isSynthetic === true || m.isMeta === true) {
       return;
     }
@@ -535,7 +538,8 @@ export namespace ClaudeCode {
   }
 
   // the call's end from its last result (none: Claude Code's own words,
-  // or its exit code)
+  // or its exit code); one too long for the window after a tool's result
+  // came back grew (End.grew)
   export function end(run: Run, err: string, code: number): End {
     const r = run.result;
     if (r !== null && r.subtype === "success" && !r.is_error) {
@@ -545,7 +549,8 @@ export namespace ClaudeCode {
     if (r !== null || err !== "") {
       console.error("claude-code: " + said.slice(0, 300));
     }
-    return { ...ClaudeCode.failed(said, r?.api_error_status ?? null, run.reset), left: [], cut: run.said };
+    const end = ClaudeCode.failed(said, r?.api_error_status ?? null, run.reset);
+    return { ...end, left: [], cut: run.said, grew: end.stop === "full" && run.grew };
   }
 
   // a failure in plain words: too long for the window; a plan's limit

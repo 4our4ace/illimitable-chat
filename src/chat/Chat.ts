@@ -70,7 +70,8 @@ type Check = { call: Call; goal: string };
 // what a turn's first request read beyond the chat it carried (the
 // prompt, the tools, illi's guess of tokens put right), by vendor:model,
 // as last told (Chat.cap leaves room for it); refits: the
-// refits since a call was last answered; compacting: a /compact's recap
+// refits in a row with no work between (no call answered, none grew past
+// its first request: End.grew); compacting: a /compact's recap
 // under way (Chat.compact), busy too; goings: the times hooks made the
 // turn go on in a row, with no tool call nor message of the user's
 // between (Chat.stopping), going: whether one did since the user's last
@@ -630,7 +631,8 @@ export namespace Chat {
       return Chat.refit(chat, false, CAPPED_NOTE.replace("$", chat.model).replace("#", Math.round(window / 1000) + "k"));
     }
     if (full) {
-      return Chat.refit(chat, end.text !== "");
+      chat.refits = end.grew ? 0 : chat.refits;
+      return Chat.refit(chat, !end.grew);
     }
     if (end.ok && !halt.signal.aborted && chat.wait.length === 0 && (await Chat.stopping(chat, end.text, halt))) {
       return !halt.signal.aborted;
@@ -718,16 +720,20 @@ export namespace Chat {
   }
 
   // the chat outgrew the model's window (a call ended `full`): the
-  // request itself too long (shrink: a vendor's refusal, or past its room
-  // at its first step: the chat's text is more tokens than its bytes
-  // told), a turn's share made FIT smaller; either way a note says so,
-  // and the turn goes on from it, the chat as it now is, more of it as
-  // summary lines (Chat.cut moves on); why: the note it goes on from.
-  // Past REFITS in a row, the turn ends, saying why; with autocontinue
-  // off, it ends at once, the note saying a message goes on, and the
-  // next turn sends the chat fitted as here (the count going on till a
-  // call is answered, so a chat that won't fit still ends saying so,
-  // not asking for one message after another). false: the turn ends
+  // request itself too long (shrink: its first request refused, or past
+  // its room: the chat's text is more tokens than its bytes told), a
+  // turn's share made FIT smaller; else the turn's own work grew past it
+  // (End.grew: its tools' results, however long the turn has worked).
+  // Either way a note says so, and the turn goes on from it, the chat as
+  // it now is, its work so far logged, more of it as summary lines
+  // (Chat.cut moves on); why: the note it goes on from. Past REFITS in a
+  // row with no work between (a call that grew starts the count anew,
+  // so a turn may work for hours), the turn ends, saying why; with
+  // autocontinue off, it ends at once, the note saying a message goes
+  // on, and the next turn sends the chat fitted as here (the count going
+  // on till a call is answered or grows, so a chat that won't fit still
+  // ends saying so, not asking for one message after another). false:
+  // the turn ends
   export function refit(chat: Chat, shrink: boolean, why = REFIT.replace("#", chat.model)): boolean {
     chat.refits += 1;
     if (chat.refits > REFITS) {

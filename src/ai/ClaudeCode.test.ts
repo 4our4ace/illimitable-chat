@@ -10,7 +10,8 @@
 // only the built-in ones it names (--tools); a message sent mid-run is
 // taken as it is echoed, one
 // sent after the end is left; a plan's limit, a missing login, a chat
-// too long and a crash end it in plain words; a stop cuts it; a missing
+// too long (grown, once a tool's result came back) and a crash end it in
+// plain words; a stop cuts it; a missing
 // CLI says to install it. A rate limit event's 5-hour and weekly windows
 // are the Claude plan's use (each its share used and reset, kept till
 // told again; a model's own window left out). Claude Code's own MCP
@@ -110,6 +111,10 @@ if (scene.includes("turn")) {
 } else if (scene.includes("login")) {
   result({ is_error: true, result: "Not logged in · Please run /login" });
 } else if (scene.includes("long")) {
+  result({ is_error: true, result: "Prompt is too long" });
+} else if (scene.includes("grown")) {
+  out({ type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "mcp__illi__zoom", input: { id: 3 } }] }, parent_tool_use_id: null });
+  out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: [{ type: "text", text: "line 3" }] }] }, parent_tool_use_id: null });
   result({ is_error: true, result: "Prompt is too long" });
 } else if (scene.includes("crash")) {
   process.stderr.write("boom\n");
@@ -251,12 +256,13 @@ test("a message sent mid-run is taken as Claude Code echoes it; one sent after t
   expect(end.left).toEqual([]);
 });
 
-test("a plan's limit, a missing login, a chat too long and a crash end the call in plain words", async () => {
+test("a plan's limit, a missing login, a chat too long (grown once a tool's result came back) and a crash end the call in plain words", async () => {
   const limit = (await call("limit")).end;
   expect(limit).toMatchObject({ ok: false, stop: "down", again: true });
   expect(limit.text).toMatch(/^your Claude plan's usage limit is reached: it resets at (\w{3} )?\d\d:\d\d; \/model picks another model meanwhile$/);
   expect((await call("login")).end).toMatchObject({ ok: false, stop: "down", text: "Claude Code isn't logged in: run claude in a terminal, log in there (/login), then send a message" });
-  expect((await call("long")).end).toMatchObject({ ok: false, stop: "full" });
+  expect((await call("long")).end).toMatchObject({ ok: false, stop: "full", grew: false });
+  expect((await call("grown", true)).end).toMatchObject({ ok: false, stop: "full", grew: true });
   expect((await call("crash")).end).toMatchObject({ ok: false, stop: "down", text: "boom" });
 });
 

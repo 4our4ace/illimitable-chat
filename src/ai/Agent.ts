@@ -225,6 +225,7 @@ export namespace Agent {
         end.text ||= step.why;
         end.stop  = step.stop;
         end.again = step.again;
+        end.grew  = step.stop === "full" && steps > 1;
         end.cut   = step.entries.some((e) => e.kind === "illi");
         return;
       }
@@ -255,6 +256,7 @@ export namespace Agent {
       if (backs.length > 0 && ask.room !== undefined && (step.read ?? 0) > ask.room) {
         end.text = steps === 1 ? "the turn starts past " + ask.room + " tokens" : "";
         end.stop = "full";
+        end.grew = steps > 1;
         return;
       }
       const says = run.sent.splice(0);

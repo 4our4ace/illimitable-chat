@@ -11,7 +11,8 @@
 // lowers the chat's budget; a view sets its model's autocompact; a model
 // whose window no one told moves no cut, its turn saying why (a stop
 // while it waits for the catalog ends it at once). A call too long for the model's window makes the
-// chat refit and the turn go on from a note, unasked; three in a row end
+// chat refit and the turn go on from a note, unasked (a call grown past
+// its first request starts the count anew, its share kept); three in a row end
 // it, saying why; with autocontinue off, the turn ends at the first,
 // saying a message goes on, the three counted over the user's messages
 // all the same. A view is told the state whole as it joins, then only
@@ -462,7 +463,7 @@ test("a turn's new text holds what was logged between its waiting messages, tagg
 // the model's turn calls ending as `ends` says, in turn (then answered;
 // a summary's call answered as ever): the last block of each turn call
 // asked, and its room
-async function refitted(ends: Array<{ text: string }>) {
+async function refitted(ends: Array<{ text: string; grew?: boolean }>) {
   await until(() => !chat.busy);
   const asked: Array<{ text: string; room?: number }> = [];
   const ask = AskAI.ask;
@@ -476,7 +477,7 @@ async function refitted(ends: Array<{ text: string }>) {
       return ask(a, on);
     }
     const [call, feed] = AskAI.tie(on, () => {}, () => {});
-    queueMicrotask(() => feed.end({ ok: false, text: end.text, left: [], stop: "full" }));
+    queueMicrotask(() => feed.end({ ok: false, text: end.text, left: [], stop: "full", grew: end.grew }));
     return call;
   };
   try {
@@ -531,14 +532,28 @@ test("a call too long for the model's window: a turn's share shrinks, and the tu
   expect(asked[0].room).toBe(window === undefined ? undefined : Math.round(window * 0.9));
 });
 
-test("a turn grown past its room goes on without shrinking; three refits in a row end the turn, saying why", async () => {
+test("a turn grown past its room goes on without shrinking; three refits in a row with no work between end the turn, saying why", async () => {
   const fit = chat.fit;
-  expect(await refitted([{ text: "" }])).toHaveLength(2);
+  expect(await refitted([{ text: "", grew: true }])).toHaveLength(2);
   expect(chat.fit).toBe(fit);
-  const asked = await refitted([{ text: "" }, { text: "" }, { text: "" }, { text: "" }]);
+  const start = { text: "the turn starts past 100 tokens" };
+  const asked = await refitted([start, start, start, start]);
   expect(asked).toHaveLength(4);
   const last = Memory.message(chat.mem, chat.mem.count - 1)!;
   expect([last.kind, last.text]).toEqual(["note", "No reply: the chat won't fit " + chat.model + "'s window even summarized. /clear starts a new topic (the chat before it is kept, not sent), or /model picks a model with a bigger window."]);
+  expect(chat.refits).toBe(0);
+});
+
+test("a turn working past its window again and again goes on, each call grown past its first request starting the count anew, its share kept, even one refused as too long", async () => {
+  const fit = chat.fit;
+  const grown = Array.from({ length: 6 }, (_, k) => ({ text: k % 2 === 0 ? "" : "HTTP 400: prompt is too long", grew: true }));
+  const from = chat.mem.count;
+  const asked = await refitted(grown);
+  expect(asked).toHaveLength(7);
+  expect(asked.slice(1).every((a) => a.text.includes("The chat outgrew " + chat.model + "'s window"))).toBe(true);
+  expect(chat.fit).toBe(fit);
+  const notes = Array.from({ length: chat.mem.count - from }, (_, k) => Memory.message(chat.mem, from + k)!).filter((m) => m.kind === "note");
+  expect(notes.some((m) => m.text.startsWith("No reply"))).toBe(false);
   expect(chat.refits).toBe(0);
 });
 
@@ -806,6 +821,9 @@ test("a turn ending of itself: a turn.stop hook, given the reply, makes it go on
   const seen: Array<[boolean, string]> = [];
   let goes = 1;
   AskAI.ask = (a, on) => {
+    if (a.blocks.at(-1)!.text.endsWith("</input>")) {
+      return ask(a, on);
+    }
     const goal = a.system.startsWith("You check a goal");
     calls.push(goal ? "goal" : "turn");
     const [call, feed] = AskAI.tie(on, () => {}, () => {});

@@ -104,7 +104,9 @@ export type Event =
 // reason; asked again, it fails alike), the request's length (`full`:
 // too long for the model's window, or past its room), we (`lost`: a
 // stop), the vendor (`down`), or none (our setup threw); again: down, but
-// a later try may answer (the vendor busy or out of reach); cut: a reply
+// a later try may answer (the vendor busy or out of reach); grew: full
+// past its first request, which fit (its tools' results outgrew the
+// window, not what it was sent: Chat.ended); cut: a reply
 // had begun; first: the tokens its first request read, as its vendor told
 // (the chat learns from it what a request takes beside the chat: Chat.cap;
 // none: that request was refused, or read nothing told)
@@ -115,6 +117,7 @@ export type End = {
   note?  : string;
   stop?  : "fail" | "lost" | "down" | "full";
   again? : boolean;
+  grew?  : boolean;
   cut?   : boolean;
   first? : number;
 };
