@@ -35,7 +35,7 @@ Marks
 | `[+]` | shut: a click opens it (`GLYPH.shut`) | a recap's line, a page folded in a recap, the side's to-do folded |
 | `[-]` | open: a click shuts it (`GLYPH.open`) | an open recap's line, the side's to-do shown whole |
 | `•` | a run of work (`GLYPH.run`) | the line over a run's calls ([Runs](#runs)) |
-| `>` | the lit row: Enter picks it (`GLYPH.lit`) | lists, questions, the trust question, the commands suggested |
+| `>` | the lit row: Enter picks it (`GLYPH.lit`) | lists, questions, the commands suggested |
 | `> ` | the message you type (`GLYPH.input`) | the input, your words in a question, a line a question asks for |
 | `>` | the to-do item at work (`GLYPH.active`) | the side's to-do, the todo tool |
 | `□` `■` | to do, done; an option among several | the to-do; a question that takes several |
@@ -57,6 +57,7 @@ Marks
 | `⌕` | search | a list's search line |
 | `↓` | the chat's end; tokens written | Jump to Bottom; the work line |
 | `[ ⧉ copy ]` | a button: a click copies (`⧉ md`, `⧉ art`, `⧉ source`, `⧉ copy reply`) | over or beside a reply's lists, tables, code, diagrams, quotes and alerts; a reply's end |
+| `[ Yes ]` | a button that answers: lit, filled in the accent (Enter takes it); a click takes any | the trust question |
 | `•` `◦` | a list's item, one nested deeper | replies |
 | `[✓]` `[ ]` | a task done, to do | replies' lists |
 

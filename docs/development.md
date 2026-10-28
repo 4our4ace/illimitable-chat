@@ -12,7 +12,7 @@ Development
     src/ui/        the chat's view, replies drawn from their markdown (its parser,
                    Markdown.ts; the palettes, Palettes.ts; code's languages,
                    Prism.ts), diagrams, the screen and the terminal's modes
-                   (Modes.ts)
+                   (Modes.ts), the logo in block glyphs (Logo.ts)
     src/chat/      the chat's turns (Chat.ts), its memory tree and views (Memory.ts),
                    the summaries written (Compactor.ts), its SQLite file (Store.ts),
                    its lock (Lock.ts), suggested replies (Suggest.ts), agents' logs
@@ -36,8 +36,9 @@ Development
     examples/      agents, a command, hooks, a plugin and a theme to copy
                    (customize.md)
     assets/        the README's banner and screenshots; logo.svg and
-                   logo-on-dark.svg are the logo's source files, kept
-                   for brand use though no page shows them
+                   logo-on-dark.svg are the logo's source files (the
+                   trust question draws it fitted in block glyphs:
+                   src/ui/Logo.ts)
 
 Each file starts with a comment on its design; the chat's SQLite files
 are described end to end in [storage.md](storage.md), and what a new

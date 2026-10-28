@@ -819,9 +819,11 @@ export function config_down(cwd: string): string[] {
   }
 }
 
-// a path as illi shows it: ~ for the home folder
+// a path as illi shows it: ~ for the home folder (not for a folder
+// whose name only starts as home's: /home/ann2 isn't ~2)
 export function config_home(file: string): string {
-  return file.startsWith(os.homedir()) ? "~" + file.slice(os.homedir().length) : file;
+  const home = os.homedir();
+  return file === home || file.startsWith(home + "/") ? "~" + file.slice(home.length) : file;
 }
 
 // the path a key names, from the folder of the config.json that sets it
