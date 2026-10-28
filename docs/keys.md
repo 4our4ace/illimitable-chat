@@ -428,7 +428,8 @@ Mouse and side panel
   its lead (or illi's questions' lines), where they are cut.
 - The click that only brings the terminal's window to the front does
   nothing, in the chat as in a list or a question (in tmux, with `set -g
-  focus-events on`).
+  focus-events on`). On a reply's copy button it copies all the same, so
+  after pasting elsewhere, the next copy takes one click.
 - From 100 columns on, a side panel shows the primary agents by name (a
   click makes one the main agent) and beside them your sticky skills,
   each on (●) or off (◯), a click turning it on or off (under the agents
