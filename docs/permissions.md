@@ -211,8 +211,10 @@ cat ~/notes/todo.md
   another covers left out: `git && git push` saves `git *`), every
   read or change, an MCP tool, a skill. It answers yes, too, every
   question waiting that it now allows. It isn't offered on a question a
-  hook asked for, nor while your rules won't read. A `.env` read's saves
-  every read: a later `.env` read isn't asked either.
+  hook asked for, nor while your rules won't read; a folder whose path
+  holds `*`, `?` or `[` saves nothing, as a pattern of it would allow
+  other folders too (`~/*/*` every folder in your home). A `.env`
+  read's saves every read: a later `.env` read isn't asked either.
 - No refuses the call and every other question of the one who asked
   (illi, or a subagent) waiting with it, and stops its turn (illi's, its
   subagents with it): illi waits for you to say how to go on. Esc is No.

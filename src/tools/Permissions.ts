@@ -108,13 +108,13 @@ export namespace Permissions {
     return re.test(text.replaceAll("\\", "/"));
   }
 
-  // patterns, those another of them covers left out (it matches them as
-  // text: ~/x/* covers ~/x/y/*, git * covers git push *), so a question
-  // says, and "don't ask again" saves, the widest alone; of patterns
-  // covering each other, the first
+  // patterns, those another of them covers left out (covers: ~/x/*
+  // covers ~/x/y/*, git * covers git push * and git ? *), so "don't ask
+  // again" offers and saves the widest alone; of patterns covering each
+  // other, the first
   export function fold(patterns: string[]): string[] {
     const all = [...new Set(patterns)];
-    return all.filter((p, k) => !all.some((o, j) => j !== k && Permissions.match(p, o) && (j < k || !Permissions.match(o, p))));
+    return all.filter((p, k) => !all.some((o, j) => j !== k && Permissions.covers(o, p) && (j < k || !Permissions.covers(p, o))));
   }
 
   // the rule a resource falls under: the last matching it and its action

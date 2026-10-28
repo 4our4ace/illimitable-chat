@@ -1082,9 +1082,9 @@ export namespace Tools {
   // the commands that asked, not of its every one; one another covers
   // left out, Permissions.fold: a folder's, not those in it; for this
   // run, if the file won't take them), every question waiting that they
-  // now allow answered yes. No: refused, and every other question of its caller
-  // waiting with it, the same answer; a plain no stops the caller's turn
-  // too (the master's: its subagents with it)
+  // now allow answered yes. No: refused, and every other question of its
+  // caller waiting with it, the same answer; a plain no stops the
+  // caller's turn too (the master's: its subagents with it)
   export async function question(tools: Tools, who: string, asked: { who: string; tool: string; what: string }, input: unknown, ask: Asking, signal: AbortSignal): Promise<Out | null> {
     const folder = Trusted.folder(tools.cwd);
     const entry: Pending = { who, ask, ctl: new AbortController() };
@@ -1153,13 +1153,13 @@ export namespace Tools {
   }
 
   // why a request is asked or refused: the folders outside, which (one
-  // inside another said as that one: Permissions.fold); a .env read; the
+  // inside another said as that one: Access.outermost); a .env read; the
   // user's rule that says so
   export function why(rules: { base: Rule[]; user: Rule[]; saved: Rule[] }, req: Want, v: { effect: Effect; by: number[] }, top: string): string {
     const folder = (r: string) => Access.said("external_directory", r, top).replace(/^files in /, "");
     const rule = Permissions.evaluate(req.action, req.resources[v.by[0]] ?? "*", v.effect === "deny" ? [...rules.base, ...rules.user] : [...rules.base, ...rules.user, ...rules.saved]);
     if (rules.base.includes(rule)) {
-      return req.action === "external_directory" ? "it reaches outside the project: " + Permissions.fold(v.by.map((k) => req.resources[k])).map(folder).join(", ") : req.action === "read" ? "it reads a .env file, which may hold secrets" : "illi's rules ask about " + req.action;
+      return req.action === "external_directory" ? "it reaches outside the project: " + Access.outermost(v.by.map((k) => req.resources[k])).map(folder).join(", ") : req.action === "read" ? "it reads a .env file, which may hold secrets" : "illi's rules ask about " + req.action;
     }
     return "your rule " + (v.effect === "deny" ? "denies " : "asks about ") + (rule.action === "shell" ? "" : rule.action + " ") + rule.resource;
   }
