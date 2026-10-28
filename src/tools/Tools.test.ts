@@ -234,6 +234,12 @@ test("Claude Code's permission prompt is judged as illi's own calls: what stays 
   await answer(true, false);
   expect(await yes).toEqual({ behavior: "allow", updatedInput: { command: "cat " + OUT + "/notes.txt" } });
   await until(() => v.asks.length === 0);
+  const nested = approve("Bash", { command: "ls " + OUT + "/a/b/x.txt " + OUT + "/a/y.txt " + OUT + "/z.txt" });
+  await until(() => v.asks.length === 1);
+  expect(v.asks[0]).toMatchObject({ why: OUTSIDE, keep: "files in " + OUT + "/" });
+  await answer(true, false);
+  await nested;
+  await until(() => v.asks.length === 0);
   const no = approve("Write", { file_path: OUT + "/a-illi-test.txt", content: "x" });
   await answer(false, false, "keep it in the repo");
   expect((await no).message).toBe("The user said no, asked at illi's screen: keep it in the repo. Asked because " + OUTSIDE + "." + AGAIN);

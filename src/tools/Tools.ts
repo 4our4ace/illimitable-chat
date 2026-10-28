@@ -1079,8 +1079,9 @@ export namespace Tools {
   // a request asked of the user, waiting (Perm pending) till answered or
   // settled by another answer; null: yes. Yes, and don't ask again: the
   // approvals of what asked saved (a shell request's, the families of
-  // the commands that asked, not of its every one; for this run, if the
-  // file won't take them), every question waiting that they now allow
+  // the commands that asked, not of its every one; one another covers
+  // left out, Permissions.fold: a folder's, not those in it; for this
+  // run, if the file won't take them), every question waiting that they now allow
   // answered yes. No: refused, and every other question of its caller
   // waiting with it, the same answer; a plain no stops the caller's turn
   // too (the master's: its subagents with it)
@@ -1089,7 +1090,7 @@ export namespace Tools {
     const entry: Pending = { who, ask, ctl: new AbortController() };
     const id = crypto.randomUUID();
     const spots = ask.all === true ? [[0, Tools.does(input).length] as Span] : ask.by.flatMap((k) => (ask.req.spots[k] === null ? [] : [ask.req.spots[k]!]));
-    const saves = ask.req.save.filter((s) => ask.by.some((k) => Permissions.match(ask.req.resources[k], s)));
+    const saves = Permissions.fold(ask.req.save.filter((s) => ask.by.some((k) => Permissions.match(ask.req.resources[k], s))));
     const keep = ask.keep ? [...new Set(saves.map((s) => Access.said(ask.req.action, s, folder)))].join(", ") : "";
     tools.perm.pending.set(id, entry);
     let reply: Reply;
@@ -1151,13 +1152,14 @@ export namespace Tools {
     return { base: Permissions.base(Access.places(tools.cwd)), user: ok ? read.rules : [], saved: [...(ok ? read.saved : []), ...tools.perm.allowed], broken: ok ? null : read };
   }
 
-  // why a request is asked or refused: a folder outside, which; a .env
-  // read; the user's rule that says so
+  // why a request is asked or refused: the folders outside, which (one
+  // inside another said as that one: Permissions.fold); a .env read; the
+  // user's rule that says so
   export function why(rules: { base: Rule[]; user: Rule[]; saved: Rule[] }, req: Want, v: { effect: Effect; by: number[] }, top: string): string {
     const folder = (r: string) => Access.said("external_directory", r, top).replace(/^files in /, "");
     const rule = Permissions.evaluate(req.action, req.resources[v.by[0]] ?? "*", v.effect === "deny" ? [...rules.base, ...rules.user] : [...rules.base, ...rules.user, ...rules.saved]);
     if (rules.base.includes(rule)) {
-      return req.action === "external_directory" ? "it reaches outside the project: " + v.by.map((k) => folder(req.resources[k])).join(", ") : req.action === "read" ? "it reads a .env file, which may hold secrets" : "illi's rules ask about " + req.action;
+      return req.action === "external_directory" ? "it reaches outside the project: " + Permissions.fold(v.by.map((k) => req.resources[k])).map(folder).join(", ") : req.action === "read" ? "it reads a .env file, which may hold secrets" : "illi's rules ask about " + req.action;
     }
     return "your rule " + (v.effect === "deny" ? "denies " : "asks about ") + (rule.action === "shell" ? "" : rule.action + " ") + rule.resource;
   }
