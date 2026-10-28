@@ -35,9 +35,9 @@ type Button = { row: number; col: number; to: number; at: number };
 // Constants
 // =========
 
-// the buttons, in order; the widest the card runs, the room kept round
-// it on a narrow screen, its text's indent inside its frame, the room
-// between the buttons side by side
+// the buttons, in order; the widest the card runs (the narrowest: the
+// screen's), the room kept round it on a narrow screen, its text's
+// indent inside its frame, the room between the buttons side by side
 const NO = 0, YES = 1;
 const BUTTONS = ["No, exit", "Yes, trust it"];
 const WIDE    = 64;
@@ -48,7 +48,7 @@ const GAP     = 3;
 const TITLE = "Trust this folder?";
 const TEXT  = "illi will read, edit and run files here, and follow its AGENTS.md or CLAUDE.md. Trust only code you know.";
 const HOME  = "Your home folder, or one above it: illi asks at every start here.";
-const KEYS  = "←→ choose · Enter confirm · Esc exit";
+const KEYS  = ["<- -> Enter", "Esc exit"];
 
 // Trust
 // =====
@@ -78,7 +78,7 @@ export namespace Trust {
   // the click that only focused the window). Its keys are grabbed, and its
   // text taken, before the input's editing sees them (Left and Right move
   // in the input otherwise), its mouse its own till it is answered. Drawn
-  // again as the terminal's size changes
+  // whole again as the terminal's size changes (every row moves)
   export function ask(scr: Screen.Screen, asked: Asked): Promise<boolean> {
     return new Promise((done) => {
       const on = scr.on;
@@ -88,8 +88,12 @@ export namespace Trust {
         laid = Trust.laid(asked, Screen.screen_size());
         Screen.screen_paint(scr, laid.rows, null);
       };
+      const resize = () => {
+        Screen.screen_wipe(scr);
+        draw();
+      };
       const end = (yes: boolean) => {
-        process.stdout.off("resize", draw);
+        process.stdout.off("resize", resize);
         [scr.grab, scr.type, scr.on] = [null, undefined, on];
         done(yes);
       };
@@ -126,7 +130,7 @@ export namespace Trust {
           }
         }
       };
-      process.stdout.on("resize", draw);
+      process.stdout.on("resize", resize);
       draw();
     });
   }
@@ -159,16 +163,19 @@ export namespace Trust {
   }
 
   // the screen laid out: the logo over a card in the middle (on a screen
-  // too short or narrow for both, the card alone), the card as wide as
-  // the screen lets it (WIDE at most), framed dim, the question on its
-  // top edge and the keys on its bottom one; in it the folder bold (~ for
-  // home), what trusting it means (home's: that it is asked each time,
-  // dim), then the buttons, the lit one filled in the accent, the other
-  // dim between its brackets. Each button's place kept as its runs land
-  // on the screen
+  // too narrow for the logo with room round it, or too short for both,
+  // the card alone), the card as wide as the screen lets it (WIDE at
+  // most), framed dim, the question on its top edge, then its keys as
+  // many as fit; in it the folder bold (~ for home), what trusting it
+  // means (home's: that it is asked each time, dim), then the buttons,
+  // the lit one filled in the accent, the other dim between its brackets.
+  // On a screen too short for the card, its blank lines go first, then
+  // its text from the end (an ellipsis where it's cut), so the folder
+  // and the buttons stay; shorter still, its top. Each button's place
+  // kept as its runs land on the screen
   export function laid(asked: Asked, { w, h }: { w: number; h: number }): Laid {
-    const cw     = Math.max(24, Math.min(WIDE, w - 2 * MARGIN));
-    const tw     = cw - 4 - 2 * PAD;
+    const cw     = Math.min(w, Math.max(24, Math.min(WIDE, w - 2 * MARGIN)));
+    const tw     = Math.max(1, cw - 4 - 2 * PAD);
     const bold   = { ...Paint.INK, b: true };
     const accent = Draw.draw_tokens().accent;
     const wrap   = (runs: Paint.Line) => Paint.runs_wrap(runs, tw, false);
@@ -181,19 +188,16 @@ export namespace Trust {
     };
     const [no, yes] = [button(NO), button(YES)];
     const both   = [...no, Paint.Run(" ".repeat(GAP)), ...yes];
-    const body   = [
-      [],
-      ...wrap([Paint.Run(Paint.text_clean(config_home(asked.folder)), bold)]),
-      [],
-      ...wrap([Paint.Run(TEXT)]),
-      ...(asked.kept ? [] : [[], ...wrap([Paint.Run(HOME, Paint.DIM)])]),
-      [],
-      ...(Paint.line_width(both) <= tw ? [mid(both, tw)] : [mid(no, tw), [], mid(yes, tw)]),
-      [],
-    ].map((l) => (l.length === 0 ? l : [Paint.Run(" ".repeat(PAD)), ...l]));
-    const card   = Paint.frame(body, cw, [Paint.Run(" " + TITLE + " ", bold)], [Paint.Run(" " + KEYS + " ", Paint.DIM)]);
-    const logo   = h >= LOGO_H + 1 + card.length && w >= LOGO_W ? [...logo_lines().map((l) => mid(l, cw)), []] : [];
-    const lines  = [...logo, ...card];
+    const side   = Paint.line_width(both) <= tw;
+    const folder = wrap([Paint.Run(Paint.text_clean(config_home(asked.folder)), bold)]);
+    const text   = [...wrap([Paint.Run(TEXT)]), ...(asked.kept ? [] : [[], ...wrap([Paint.Run(HOME, Paint.DIM)])])];
+    const said   = text.filter((l) => l.length > 0);
+    const card   = (body: Paint.Line[]) => Paint.frame(body.map((l) => (l.length === 0 ? l : [Paint.Run(" ".repeat(PAD)), ...l])), cw, Trust.edge(cw - 3));
+    const whole  = card([[], ...folder, [], ...text, [], ...(side ? [mid(both, tw)] : [mid(no, tw), [], mid(yes, tw)]), []]);
+    const room   = h - 2 - folder.length - (side ? 1 : 2);
+    const tight  = () => card([...folder, ...Trust.cut(said, room, tw), ...(side ? [mid(both, tw)] : [mid(no, tw), mid(yes, tw)])]);
+    const logo   = cw >= LOGO_W && h >= LOGO_H + 1 + whole.length ? [...logo_lines().map((l) => mid(l, cw)), []] : [];
+    const lines  = whole.length <= h ? [...logo, ...whole] : tight().slice(-Math.max(1, h));
     const lw     = Math.max(...lines.map(Paint.line_width));
     const col    = Math.max(0, Math.floor((w - lw) / 2));
     const top    = Math.max(0, Math.floor((h - lines.length) / 2));
@@ -217,5 +221,34 @@ export namespace Trust {
       return line === undefined ? [] : [{ col, w: Math.min(lw, w - col), line }];
     });
     return { rows, buttons };
+  }
+
+  // the card's top edge, in room columns: the question bold, then its
+  // keys dim, as many as fit from the first (a box's keys after its
+  // title); the question alone cut, an ellipsis at its end, where it
+  // doesn't fit whole
+  export function edge(room: number): Paint.Line {
+    const bold = { ...Paint.INK, b: true };
+    for (let n = KEYS.length; n > 0; n--) {
+      const line = [Paint.Run(" " + TITLE, bold), Paint.Run(" · " + KEYS.slice(0, n).join(" · ") + " ", Paint.DIM)];
+      if (Paint.line_width(line) <= room) {
+        return line;
+      }
+    }
+    const title = [Paint.Run(" " + TITLE + " ", bold)];
+    return Paint.line_width(title) <= room ? title : room < 1 ? [] : [...Paint.line_cut(title, 0, room - 1)[1], Paint.Run("…", bold)];
+  }
+
+  // lines, n of them at most, the last kept cut to end in an ellipsis (w
+  // columns at most) where any are left out
+  export function cut(lines: Paint.Line[], n: number, w: number): Paint.Line[] {
+    if (n >= lines.length) {
+      return lines;
+    }
+    if (n <= 0) {
+      return [];
+    }
+    const last = lines[n - 1];
+    return [...lines.slice(0, n - 1), [...Paint.line_cut(last, 0, Math.max(0, w - 1))[1], Paint.Run("…", last.at(-1)?.s)]];
   }
 }
