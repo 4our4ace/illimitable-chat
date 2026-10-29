@@ -542,7 +542,7 @@ function term_hear(t: Term, msg: View.Server): void {
   if (t.v.agent !== agent) {
     term_primaries(t);
   }
-  if (!t.scr.tty && msg.$ === "entry" && msg.agent === undefined && msg.id !== undefined) {
+  if (!t.scr.tty && msg.$ === "entry" && msg.agent === undefined && msg.id !== undefined && msg.head === undefined) {
     term_print(View.entry_rows(msg.id, msg.kind, msg.text, msg.images));
   }
   if (first) {

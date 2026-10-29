@@ -266,6 +266,19 @@ export namespace Memory {
     return root.kind + ": " + root.text + pics.join("");
   }
 
+  // the pages [a, b) of the message page `id` is one of (Memory.pages:
+  // each but its last says more)
+  export function paged(mem: Memory, id: number): [number, number] {
+    let [a, b] = [id, id + 1];
+    while (a > 0 && Memory.message(mem, a - 1)?.more) {
+      a -= 1;
+    }
+    while (b < mem.count && Memory.message(mem, b - 1)?.more) {
+      b += 1;
+    }
+    return [a, b];
+  }
+
   // message i, from the file; null: none
   export function message(mem: Memory, i: number): Root | null {
     return Number.isInteger(i) && i >= 0 && i < mem.count ? Store.msg(mem.store, i) : null;

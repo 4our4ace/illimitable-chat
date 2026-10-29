@@ -417,7 +417,7 @@ it follows the theme) or a list of those.
 | `turn.start` | `{ cwd }` | |
 | `turn.end` | `{ cwd, stopped }` (why it stopped; `null`: it ended) | |
 | `turn.stop` | `{ cwd, again, reply, signal }`: a turn ending of itself (`again`: a hook made it go on since your last message; `reply`: illi's last reply) | `{ continue: "why" }`: it goes on, the model reading why |
-| `message` | `{ id, kind, text, agent }`, each message logged (`agent`: `null` for the chat's) | |
+| `message` | `{ id, kind, text, agent }`, each message logged, once and whole however long (`agent`: `null` for the chat's) | |
 | `message.before` | `{ text, cwd, signal }`: a message of yours, before it is sent | `{ block: "why" }`: kept back, why said, the text back in your input; `{ context }`: a note after it, which the model reads |
 | `notify` | `{ cwd, type, text }`: illi waits on you (`permission_prompt`: a question for leave, unanswered 6 s; `question`: its question tool's; `idle_prompt`: a reply left 60 s) | |
 | `tool.before` | `{ tool, input, agent, cwd, signal }` | `{ block: "why" }` to refuse the call; `{ input }` to run it on other input; `{ allow: true }` to run it as `trust` mode would (a deny rule still refuses it); `{ ask: "why" }` to have it asked; `{ context }` to add to what the model reads after its answer |

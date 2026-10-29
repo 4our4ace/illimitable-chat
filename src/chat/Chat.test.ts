@@ -15,7 +15,9 @@
 // tools' results grew past it starts the count anew, its share kept);
 // three in a row end it, saying why; with autocontinue off, the turn
 // ends at the first, saying a message goes on, the three counted over
-// the user's messages all the same (a grown call starting them anew). A view is told the state whole as it joins, then only
+// the user's messages all the same (a grown call starting them anew).
+// A message too long for one page is told to a view once, whole, at its
+// first page, live and as a view joins. A view is told the state whole as it joins, then only
 // what moved since its last, so each view holds the chat's state. A
 // failed turn asks to try again only when a later try may answer, and
 // says a reply was cut off; summaries stuck are told once;
@@ -626,6 +628,33 @@ test("autocontinue off: a turn whose chat outgrew the window ends there, its not
 function last(): string {
   return Memory.message(chat.mem, chat.mem.count - 1)!.text;
 }
+
+test("a message too long for one page is told to a view once, whole, at its first page, its later pages showing nothing of their own: live, and as a view joins", async () => {
+  await until(() => !chat.busy);
+  const long = 'Write {"file_path":"page.html","content":"' + "<p>a line of the page</p>\\n".repeat(3000) + '"}';
+  const joined = async () => {
+    const v = View.view_new();
+    View.link_open(v, Chat.link(chat, (msg) => View.view_hear(v, msg).forEach((out) => View.link_send(v, out))));
+    await until(() => v.up);
+    return v;
+  };
+  const live = await joined();
+  try {
+    const { id, end } = Chat.push(chat, null, "tool", long);
+    Chat.push(chat, null, "echo", "File created");
+    expect(end - id).toBe(3);
+    for (const v of [live, await joined()]) {
+      await until(() => v.whole.has(id) && v.later.size >= 2);
+      expect([v.whole.get(id)!.text, v.whole.has(id + 1), v.later.get(id + 1), v.later.get(id + 2)]).toEqual([long, false, id, id]);
+      v.turn = id;
+      const rows = View.view_rows(v, [[id, 1], [id + 1, 1], [id + 2, 1]]);
+      expect(rows.map((r) => r.filter((row) => row.$ === "Msg").length)).toEqual([1, 0, 0]);
+      v.ws?.close();
+    }
+  } finally {
+    live.ws?.close();
+  }
+});
 
 test("a model whose window no one told (ChatGPT's before its catalog answers) moves no cut, takes no tokens and shows no fill; its turn says why instead of guessing one, a stop while it waits ending it at once", async () => {
   await until(() => !chat.busy);

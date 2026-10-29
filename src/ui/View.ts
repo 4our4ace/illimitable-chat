@@ -43,8 +43,10 @@ import { GLYPH, WHO } from "./Theme.ts";
 // the n messages from id on (n a power of two)
 export type Part = [number, number];
 
-// a message logged: its kind, its text, its date (ISO), its images
-export type Entry = { kind: Kind; text: string; date?: string; images?: string[] };
+// a message logged: its kind, its text, its date (ISO), its images; one
+// too long for a page (Memory.pages) told at its first, its pages joined,
+// each later page only naming that one (head: Chat.entry)
+export type Entry = { kind: Kind; text: string; date?: string; images?: string[]; head?: number };
 
 // a summary: its text, its last message's date
 export type Node = { text: string; to: string };
@@ -186,7 +188,8 @@ export type State = {
 // ("id+n") and messages known; open: the blocks opened (true) or shut by
 // hand; the Shown's: what clicks opened or shut in the chat; verbose:
 // every run's items and recap open (Ctrl+O); minds: the thoughts after
-// each message; pages: the agents' asked
+// each message; later: the later pages of messages too long for one, by
+// the first's id (shown there whole, nothing of their own); pages: the agents' asked
 // for; page: the one shown (null: illi's); made: the characters the
 // models streamed (replies, thoughts, calls) since work began; flow:
 // the last RATE ms of them (when, how many); the Link's: acts not
@@ -203,6 +206,7 @@ export type View = State & Shown & {
   flow  : Array<[number, number]>;
   live  : Live[];
   minds : Map<number, string[]>;
+  later : Map<number, number>;
   pages : Map<string, Page>;
   page  : Page | null;
   notes : string[];
@@ -440,6 +444,7 @@ export function view_new(): View {
     flow      : [],
     live      : [],
     minds     : new Map(),
+    later     : new Map(),
     pages     : new Map(),
     page      : null,
     notes     : [],
@@ -1102,13 +1107,22 @@ function view_learn(v: View, pack: Pack): void {
     v.nodes.set(key, node);
   }
   for (const [id, entry] of Object.entries(pack.whole ?? {})) {
-    v.whole.set(Number(id), entry);
+    view_known(v, Number(id), entry);
+  }
+}
+
+// a message known: its whole, or a later page of one (Entry.head)
+function view_known(v: View, id: number, entry: Entry): void {
+  if (entry.head !== undefined) {
+    v.later.set(id, entry.head);
+  } else {
+    v.whole.set(id, entry);
   }
 }
 
 // a message: on its agent's page (its log's first: a new agent so named,
 // the page starts anew), in illi's chat, or, a thought (not logged),
-// after the last message
+// after the last message (a later page's: after its message)
 function view_entry(v: View, msg: Server & { $: "entry" }): void {
   const { $, agent, id, ...entry } = msg;
   const last = v.parts[v.parts.length - 1];
@@ -1120,10 +1134,11 @@ function view_entry(v: View, msg: Server & { $: "entry" }): void {
       page.shown = id === 0 ? undefined : page.shown;
     }
   } else if (id !== undefined) {
-    v.whole.set(id, entry);
+    view_known(v, id, entry);
     v.parts.push([id, 1]);
   } else if (msg.kind === "mind" && last !== undefined) {
-    const at = last[0] + last[1] - 1;
+    const end = last[0] + last[1] - 1;
+    const at = v.later.get(end) ?? end;
     v.minds.set(at, [...(v.minds.get(at) ?? []), msg.text]);
   }
 }
@@ -1196,8 +1211,12 @@ export function block_name(id: number, n: number): string {
 
 // t: the turn; talk: whether talk opens by itself (not in Fold all). Open:
 // the person's choice (Open, Shut) if made, else a message of the user or
-// illi (tool calls, reports and the rest stay folded)
+// illi (tool calls, reports and the rest stay folded). A later page of
+// a message has none: its first shows it whole
 function part_rows(v: View, id: number, n: number, t: number, talk: boolean): Row[] {
+  if (n === 1 && v.later.has(id)) {
+    return [];
+  }
   const key   = id + "+" + n;
   const entry = v.whole.get(id);
   const half  = n / 2;

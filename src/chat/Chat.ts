@@ -37,7 +37,7 @@ import { Projects } from "./Projects.ts";
 import { Recall } from "./Recall.ts";
 import { MASTER, SEARCHES, Tools, type Agent, type Live, type Reply } from "../tools/Tools.ts";
 import { MODES, type Mode } from "../tools/Permissions.ts";
-import { ANSWERED, COMPACTING, IMAGES, live_push, SUMMARIES, TURN, type Answer, type Link, type Part, type Pipe, type Question, type Server as Out, type State, type Wait } from "../ui/View.ts";
+import { ANSWERED, COMPACTING, IMAGES, live_push, SUMMARIES, TURN, type Answer, type Entry, type Link, type Part, type Pipe, type Question, type Server as Out, type State, type Wait } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
 
 // Types
@@ -792,14 +792,43 @@ export namespace Chat {
   }
 
   // messages logged as they are (no switch noted first: a recap's, which
-  // the note follows), each told to every view and to the plugins
+  // the note follows), each told to every view and to the plugins once,
+  // whole (one too long for a page: Chat.joined, its later pages named
+  // as such to the views)
   export function logged(chat: Chat, msgs: Array<{ kind: Kind; text: string; images?: string[] }>): Root[] {
     const roots = Memory.push(chat.mem, msgs);
-    for (const { i, kind, text, date, images } of roots) {
-      Chat.all(chat, { $: "entry", id: i, kind, text, date, images });
-      void Plugins.emit("message", { id: i, kind, text, agent: null });
+    let a = 0;
+    while (a < roots.length) {
+      let b = a + 1;
+      while (b < roots.length && roots[b - 1].more) {
+        b += 1;
+      }
+      const head  = roots[a].i;
+      const entry = Chat.joined(roots.slice(a, b));
+      Chat.all(chat, { $: "entry", id: head, ...entry });
+      roots.slice(a + 1, b).forEach((r) => Chat.all(chat, { $: "entry", id: r.i, kind: r.kind, text: "", date: r.date, head }));
+      void Plugins.emit("message", { id: head, kind: entry.kind, text: entry.text, agent: null });
+      a = b;
     }
     return roots;
+  }
+
+  // a message as a view gets it, by a page's id: at its first page, its
+  // pages joined (Chat.joined); a later page only names the first (head),
+  // so a message too long for one page shows once, whole
+  export function entry(chat: Chat, id: number): Entry {
+    const [a, b] = Memory.paged(chat.mem, id);
+    const m = Memory.message(chat.mem, id)!;
+    if (a < id) {
+      return { kind: m.kind, text: "", date: m.date, head: a };
+    }
+    return Chat.joined([m, ...Array.from({ length: b - a - 1 }, (_, k) => Memory.message(chat.mem, a + 1 + k)!)]);
+  }
+
+  // a message's pages as one: their texts joined, their images gathered
+  export function joined(pages: Root[]): Entry {
+    const images = pages.flatMap((p) => p.images ?? []);
+    return { kind: pages[0].kind, text: pages.map((p) => p.text).join(""), date: pages[0].date, images: images.length > 0 ? images : undefined };
   }
 
   // a message the call took was logged as it came; a tool call with none
@@ -1544,14 +1573,13 @@ export namespace Chat {
   }
 
   // what a view lacks of parts, before the parts themselves: each
-  // message or summary a message of its own; a summary not built yet,
-  // once built (Chat.made)
+  // message (Chat.entry) or summary a message of its own; a summary not
+  // built yet, once built (Chat.made)
   export function teach(chat: Chat, sock: Sock, parts: Part[]): void {
     for (const [id, n] of parts.filter(([id, n]) => !sock.data.seen.has(id + "+" + n))) {
       sock.data.seen.add(id + "+" + n);
       if (n === 1) {
-        const m = Memory.message(chat.mem, id)!;
-        Chat.send(sock, { $: "know", whole: { [id]: { kind: m.kind, text: m.text, date: m.date, images: m.images } } });
+        Chat.send(sock, { $: "know", whole: { [id]: Chat.entry(chat, id) } });
       }
       Chat.know(chat, sock, id, n);
     }
