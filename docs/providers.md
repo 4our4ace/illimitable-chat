@@ -169,9 +169,11 @@ illi then runs Claude Code itself, as it ships, on the account's login:
   API allows; then the API refuses the request for illi's one more
   ("A maximum of 4 blocks with cache_control"). illi goes on where it
   was without its mark, its note saying only that the request was
-  refused over a technical limit (that step still reads the chat from
-  the cache: the API finds illi's earlier mark a few blocks back), and
-  the next turn marks again (`autocontinue` off: the note says your next message goes on).
+  refused over a technical limit, and the next turn marks again
+  (`autocontinue` off: the note says your next message goes on). That
+  one step may read the chat from the cache still, the API looking back
+  a few blocks for illi's earlier mark, but after a long run of calls
+  that mark lies too far back, and the chat is read anew, once.
 - **Summaries run with nothing extra**: `claude -p` calls with no tools,
   MCP servers, commands or hooks.
 - **Your plan's use at the side**: the Usage section shows how much of
