@@ -343,9 +343,9 @@ function tally_use(count: Record<string, number>, name: string): void {
 }
 
 // a key to the commands suggested (true: taken): Up and Down move round
-// them, Tab fills the one lit in, Enter takes it (one found only by what
-// it does, filled in, so a second Enter runs what shows); Esc closes them
-// till the word changes. None matching, they take Esc alone
+// them, Tab fills the one lit in, Enter takes it (found by its name or by
+// what it does alike); Esc closes them till the word changes. None
+// matching, they take Esc alone
 export function term_suggest_key(t: Term, sug: Sug, key: string): boolean {
   const n    = sug.found.length;
   const move = ({ Up: -1, Down: 1 } as Record<string, number>)[key];
@@ -356,7 +356,7 @@ export function term_suggest_key(t: Term, sug: Sug, key: string): boolean {
     sug.top = Math.max(Math.min(sug.top, sug.at), sug.at - sug.tall + 1);
   } else if (n > 0 && (key === "Tab" || key === "Enter")) {
     const lit = sug.found[sug.at];
-    term_suggested(t, sug.cmds[lit.k][0], key === "Enter" && lit.hay !== true);
+    term_suggested(t, sug.cmds[lit.k][0], key === "Enter");
   } else {
     return false;
   }

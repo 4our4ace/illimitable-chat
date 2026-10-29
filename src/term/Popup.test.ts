@@ -465,7 +465,7 @@ test("the click that only focuses the terminal picks nothing and closes nothing:
   });
 });
 
-test("the commands suggested: a click on one does what Enter does there (found by what it does: filled in; by name: run), a press on them chooses no text; a drag begun in the chat goes on over them", () => {
+test("the commands suggested: a click on one does what Enter does there (run, found by what it does or by name), a press on them chooses no text; a drag begun in the chat goes on over them", () => {
   sized(120, 30, () => {
     const t = term();
     Screen.ed_set(t.scr.ed, "/new");
@@ -473,7 +473,7 @@ test("the commands suggested: a click on one does what Enter does there (found b
     expect(t.box.of).toBe(t.sug);
     const first = t.box.row + t.box.rows.findIndex((aim: any) => aim?.$ === "command" && aim.k === 0);
     click(t, first, 10);
-    expect([t.scr.ed.text, t.v.out]).toEqual(["/clear ", []]);
+    expect([t.scr.ed.text, t.v.out.map((o: any) => o.msg.$)]).toEqual(["", ["clear"]]);
     Screen.ed_set(t.scr.ed, "/hel");
     paint(t);
     const help = t.box.row + 1;

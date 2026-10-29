@@ -631,8 +631,7 @@ function popup_light(t: Term, on: object, at: Target): boolean {
 // and on to the next), what Space does where any are (picked or not; both
 // held as the keys are, just shown); the words' row: lit (typing goes
 // there anyway). On the commands suggested, one (still found) lit, then
-// what Enter does there (run, or filled in: one found by what it does,
-// one that needs words). On a line of the question's folded command
+// what Enter does there (run, or filled in: one that needs words). On a line of the question's folded command
 // saying what it hides: the command shown whole (held by nothing: it
 // answers nothing). The box, nothing
 function popup_click(t: Term, on: object, at: Pointed): void {

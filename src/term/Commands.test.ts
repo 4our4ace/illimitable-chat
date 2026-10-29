@@ -21,8 +21,8 @@
 // variable sets, said so, unchanged); the leader is never a key illi
 // takes itself. A skill named mid-message is suggested as it's typed,
 // filled in there, and illi told to use it as the message goes. A /word
-// finds commands by what they do too, after those by name (Enter fills
-// such a one in first); mid-message, names only. A use
+// finds commands by what they do too, after those by name (Enter runs
+// such a one, as one found by name); mid-message, names only. A use
 // counted weighs half as much 100 uses on, a name faded under a tenth
 // forgotten; two illis counting at once each keep theirs over the
 // other's. The side shows any vendor's plan alike: each window's share
@@ -465,7 +465,7 @@ test("the commands suggested: those run most first among those a word matches al
   expect(JSON.parse(fs.readFileSync(DIR + "/used.json", "utf8"))).toEqual({ "/settings": 1 });
 });
 
-test("a /word finds commands by what they do too, after those by name, the word lit; Enter fills such a one in, a second runs it; mid-message, names only", () => {
+test("a /word finds commands by what they do too, after those by name, the word lit; Enter runs such a one, as one found by name; mid-message, names only", () => {
   const t = term();
   const found = (word: string) => {
     Screen.ed_set(t.scr.ed, word);
@@ -478,7 +478,7 @@ test("a /word finds commands by what they do too, after those by name, the word 
   expect(found("/ne")).not.toContain("/clear*");
   Screen.ed_set(t.scr.ed, "/new");
   term_grab(t, "Enter");
-  expect([t.scr.ed.text, t.v.out]).toEqual(["/clear ", []]);
+  expect([t.scr.ed.text, t.v.out.map((o: any) => o.msg.$)]).toEqual(["", ["clear"]]);
   Screen.ed_set(t.scr.ed, "see /new");
   expect(term_suggest(t)).toBeNull();
 });

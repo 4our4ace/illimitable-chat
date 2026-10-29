@@ -160,7 +160,7 @@ export type Windowed = { nonce: string; hidden: boolean; heard: (msg: object, sc
 // =========
 
 // the editing keys, as /help lists them
-export const EDITING = "Arrows, Home, End, Ctrl+A, E, U, K, W, Alt+B, F, D, as in a shell; a click puts the cursor where it lands; Shift+Enter or Ctrl+J, a new line; Up and Down past the ends, the messages sent. A / first lists the commands that match as you type (by name, then by a word of what they do), in a box over the input: Up and Down choose, Tab fills one in, Enter (or a click) runs it (or fills it in, if it needs an argument or was found by what it does), Esc closes the list.";
+export const EDITING = "Arrows, Home, End, Ctrl+A, E, U, K, W, Alt+B, F, D, as in a shell; a click puts the cursor where it lands; Shift+Enter or Ctrl+J, a new line; Up and Down past the ends, the messages sent. A / first lists the commands that match as you type (by name, then by a word of what they do), in a box over the input: Up and Down choose, Tab fills one in, Enter (or a click) runs it (or fills it in, if it needs an argument), Esc closes the list.";
 
 // the fewest characters a word finds options by what they do (ed_find):
 // a shorter one would find most
