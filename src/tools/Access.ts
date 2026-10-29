@@ -33,8 +33,9 @@
 //
 // A folder outside is the path's own if it is one, else its file's: its
 // request's resource the folder and * (/x/y/*), saving its project's
-// (the git repository holding it, but home or /) and *. Inside: the
-// working dir and the project's top (the git repository's; not /).
+// (the git repository holding it, but home or /) and * (nothing where
+// that project's path holds *, ? or [). Inside: the working dir and
+// the project's top (the git repository's; not /).
 // illi's customization places are outside, allowed by its own rules
 // (places, Permissions.base: its skills', commands' and agents' folders,
 // a plugin's too, found at the load, by its real path: not the rest of
