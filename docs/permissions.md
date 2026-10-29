@@ -207,7 +207,8 @@ cat ~/notes/todo.md
 - "Don't ask again" says what it saves, for this project (for this
   session, if the file won't take it): a folder outside (its
   repository's), a command's family (`git push *`; for a shell command,
-  each that asked: `ls && git push` saves `git push *` alone), every
+  each that asked: `ls && git push` saves `git push *` alone; one
+  another covers left out: `git && git push` saves `git *`), every
   read or change, an MCP tool, a skill. It answers yes, too, every
   question waiting that it now allows. It isn't offered on a question a
   hook asked for, nor while your rules won't read. A `.env` read's saves

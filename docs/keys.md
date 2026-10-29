@@ -290,9 +290,12 @@ half a second, so a key or a click meant for the chat doesn't answer it;
 Esc works at once.
 
 The first time illi starts in a folder, it asks full screen whether you
-trust it, with two buttons: Left and Right (or Up, Down and Tab) move
-between No and Yes, Enter takes the lit one, `y` and `n` pick one, a
-click on a button takes it, Esc (or Ctrl+C) exits.
+trust it, with two buttons, No lit first: Left and Right (or Up, Down
+and Tab) move between No and Yes, Enter takes the lit one, `y` and `n`
+pick one, Esc (or Ctrl+C, Ctrl+D) exits. The pointer over a button
+lights it (Enter then takes that one); a click takes a button pressed
+and let go on it, never one that slips off it, nor the click that only
+brings the window to the front.
 
 Background jobs
 ---------------
@@ -379,8 +382,10 @@ Mouse and side panel
 
 - A click on a block opens it; a click anywhere in an open block's frame
   closes it. A drag copies the text it covers, a double click a word,
-  three a line; a reply's code has a copy button. Copying uses OSC 52,
-  so the terminal (and tmux) must allow it.
+  three a line. A reply's code, lists, tables, diagrams, quotes and
+  alerts have copy buttons: a click copies, though the pointer slips on
+  the button before it's let go (a drag off it chooses text). Copying
+  uses OSC 52, so the terminal (and tmux) must allow it.
 - A click in your message puts the cursor there ([Typing](#typing)), on
   an agent's page too; a drag over it still copies. A click in a list's
   search, the line a question asks for or your words to illi's
@@ -428,8 +433,8 @@ Mouse and side panel
 - The wheel scrolls the chat, a pane, or the list open; over a question,
   its lead (or illi's questions' lines), where they are cut.
 - The click that only brings the terminal's window to the front does
-  nothing, in the chat as in a list or a question (in tmux, with `set -g
-  focus-events on`). On a reply's copy button it copies all the same, so
+  nothing, in the chat as in a list, a question or the trust question
+  (in tmux, with `set -g focus-events on`). On a reply's copy button it copies all the same, so
   after pasting elsewhere, the next copy takes one click.
 - From 100 columns on, a side panel shows the primary agents by name (a
   click makes one the main agent) and beside them your sticky skills,

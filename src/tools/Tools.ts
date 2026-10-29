@@ -1081,8 +1081,8 @@ export namespace Tools {
   // approvals of what asked saved (a shell request's, the families of
   // the commands that asked, not of its every one; one another covers
   // left out, Permissions.fold: a folder's, not those in it; for this
-  // run, if the file won't take them), every question waiting that they now allow
-  // answered yes. No: refused, and every other question of its caller
+  // run, if the file won't take them), every question waiting that they
+  // now allow answered yes. No: refused, and every other question of its caller
   // waiting with it, the same answer; a plain no stops the caller's turn
   // too (the master's: its subagents with it)
   export async function question(tools: Tools, who: string, asked: { who: string; tool: string; what: string }, input: unknown, ask: Asking, signal: AbortSignal): Promise<Out | null> {

@@ -2,19 +2,18 @@
 // ================
 // `bun test Permissions.test.ts`. The rules: a wildcard's * and ?, a
 // trailing " *" matching the bare command, patterns another covers
-// folded into it; the last matching rule wins, none asks; a deny by the configured rules refuses
-// whatever was saved, a saved approval clears an ask, trust runs what is
-// asked; illi's own rules (.env reads asked, a folder outside asked but
-// illi's places). The file: none is no rules and nothing saved; rules by
-// action read in order, a hand edit seen at the next read, a deny or ask
-// a later rule overrides whole found (shadowed); an exact approval
-// meeting only itself; one that
-// won't read, or an effect that isn't allow, ask or deny, said (never
-// taken as no rules); a save adds to what the file has, a revoke leaves
-// the rest; an older illi's rules and grants read as this one's (its
-// mcp * as MCP tools', a folder's reads as none), a save turning that
-// project's grants into approvals; a file that won't read
-// is never written over.
+// folded into it; the last matching rule wins, none asks; a deny by the
+// configured rules refuses whatever was saved, a saved approval clears an
+// ask, trust runs what is asked; illi's own rules (.env reads asked, a
+// folder outside asked but illi's places). The file: none is no rules
+// and nothing saved; rules by action read in order, a hand edit seen at
+// the next read, a deny or ask a later rule overrides whole found
+// (shadowed); an exact approval meeting only itself; one that won't
+// read, or an effect that isn't allow, ask or deny, said (never taken as
+// no rules); a save adds to what the file has, a revoke leaves the rest;
+// an older illi's rules and grants read as this one's (its mcp * as MCP
+// tools', a folder's reads as none), a save turning that project's
+// grants into approvals; a file that won't read is never written over.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
