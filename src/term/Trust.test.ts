@@ -8,9 +8,12 @@
 // buttons side by side (one over the other on a narrow screen), the lit
 // one filled; the folder shows home as ~, and home's says it asks each
 // time. A screen too short for the card keeps the folder, the buttons
-// and both edges, its text cut. The pointer over a button lights it; a click on one takes it, a
-// slip off it or the click that focused the window nothing. What is kept
-// is Trusted.test.ts's.
+// and both edges, its text cut; shorter still, its top goes first. From
+// 11 columns on no row is wider than the screen, nor a button's place
+// past its edge, the buttons short where the long ones won't fit. The
+// pointer over a button lights it; a click on one takes it, a slip off
+// it or the click that focused the window nothing. What is kept is
+// Trusted.test.ts's.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
