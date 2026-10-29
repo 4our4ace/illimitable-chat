@@ -165,17 +165,18 @@ illi then runs Claude Code itself, as it ships, on the account's login:
   nothing is squashed into Claude Code's summary. A subagent runs with
   it off too: when its context fills, it writes a recap of its own work
   and goes on from it ([Customize](customize.md)).
-- **Cached across turns**: illi marks the end of the chat it sends, so
-  the next turn reads it from the cache and writes only what is new.
-  Claude Code marks each request itself too, at times all four marks the
-  API allows; then the API refuses the request for illi's one more
-  ("A maximum of 4 blocks with cache_control"). illi goes on where it
-  was without its mark, its note saying only that the request was
-  refused over a technical limit, and the next turn marks again
-  (`autocontinue` off: the note says your next message goes on). That
-  one step may read the chat from the cache still, the API looking back
-  a few blocks for illi's earlier mark, but after a long run of calls
-  that mark lies too far back, and the chat is read anew, once.
+- **Kept for the next turn**: illi asks Anthropic to keep the chat it
+  sends at hand, so the next turn finds it there, quick and cheap, and
+  only what is new is read in full. Claude Code asks the same for parts
+  of each request, and now and then (after an advisor call, say) the
+  two together ask for more than Anthropic allows, so it refuses the
+  request (in its words, "A maximum of 4 blocks with cache_control").
+  illi then goes on where it was without its own ask, its note saying
+  only that the request was refused over a technical limit and nothing
+  is lost, and the next turn asks again (`autocontinue` off: the note
+  says your next message goes on). That one step may still find the
+  chat kept from before, but after a long run of work it reads the
+  whole chat anew, once.
 - **Summaries run with nothing extra**: `claude -p` calls with no tools,
   MCP servers, commands or hooks.
 - **Your plan's use at the side**: the Usage section shows how much of

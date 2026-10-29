@@ -4,7 +4,9 @@
 // the chat's messages, `view_act` the person's acts, and both answer what
 // to send (by the Link). The main chat shows what its agent sees (Chat.ts): the
 // view's parts as blocks ("nx"), from the turn on each message whole
-// (0x) and its thoughts, then what streams or what the turn waits on. The
+// (0x; one too long for a page whole at its first, its later pages
+// showing nothing: Entry.head) and its thoughts, then what streams or
+// what the turn waits on. The
 // work between the person's words and illi's (tool calls, their results,
 // thinking, the agents' reports: ACTIVITY) shows as one line per run
 // (an "Act" row: what was done, counted, keyed by its first message:

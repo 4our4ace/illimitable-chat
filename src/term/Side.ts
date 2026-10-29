@@ -2,13 +2,14 @@
 // ====
 // The side panel, on a wide screen: the primary agents and the sticky
 // skills beside them, the subagents of this run, the background jobs,
-// the profiles (two or more; those open in this window marked as they
-// are), a plan's use (ChatGPT's, Claude's), the chat's (the
+// the profiles (two or more; those open hidden in this window or in
+// another terminal marked as they are: Member.ts member_seen), a plan's
+// use (ChatGPT's, Claude's), the chat's (the
 // context, the memory), the past topics related to the work (the radar:
 // Related.ts), the MCP servers (illi's own; Claude Code's while the pick
-// is on claude-code), the requests refused, the plugins' lines, a hint
-// for the keys or illi's to-do list; the side and side_width settings
-// place it.
+// is on claude-code, those not connected counted in one line), the
+// requests refused, the plugins' lines, a hint for the keys or illi's
+// to-do list; the side and side_width settings place it.
 
 import type { Theirs } from "../ai/ClaudeCode.ts";
 import { term_background, term_choose, term_mcp, term_mcp_state, term_stick, term_theirs } from "./Commands.ts";

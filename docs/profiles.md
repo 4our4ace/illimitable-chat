@@ -34,9 +34,10 @@ profile not open yet starts as illi does. The side panel marks each
 profile open, in this terminal or another: a spinner while it works,
 `?` while a question waits on you, `● 2` while only its background jobs
 run. For one open in this terminal, a note also says when it asks you
-something or is done, and the title's mark turns `?` for its question. Ctrl+D (or a second Ctrl+C) quits
-every profile open in the terminal, first saying which at work it ends
-too; Ctrl+Z hands the terminal back while all of them go on.
+something or is done, and the title's mark turns `?` for its question.
+Ctrl+D (or a second Ctrl+C) quits every profile open in the terminal,
+first saying which at work it ends too; Ctrl+Z hands the terminal back
+while all of them go on.
 
 Behind it, `illi` on a terminal is a small window process that runs
 each profile's illi on a pseudo-terminal of its own
