@@ -290,8 +290,9 @@ half a second, so a key or a click meant for the chat doesn't answer it;
 Esc works at once.
 
 The first time illi starts in a folder, it asks full screen whether you
-trust it: Up, Down and Tab move between No and Yes, Enter takes the lit
-one, `y` and `n` pick one, Esc (or Ctrl+C) exits.
+trust it, with two buttons: Left and Right (or Up, Down and Tab) move
+between No and Yes, Enter takes the lit one, `y` and `n` pick one, a
+click on a button takes it, Esc (or Ctrl+C) exits.
 
 Background jobs
 ---------------
