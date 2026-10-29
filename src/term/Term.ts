@@ -291,7 +291,9 @@ export type Under = { $: "popup" } | { $: "hit"; hit: Hit } | { $: "copy"; copy:
 // nothing); ask: a line asked for instead of options (a profile's name,
 // a file), always a question: typed in `find`, its hint shown while it
 // is empty, given by Enter to `done`, whose answer null closes it (what
-// it opened stays) and a reason keeps it open, saying it;
+// it opened stays) and a reason keeps it open, saying it; back: what Esc
+// does besides closing it (the list a level up opened again, /login's;
+// a sign-in waiting on the line asked stopped);
 // hay: what a search looks in, an option's each (none: its name); used:
 // how often an option was picked (a search ranks the more used first);
 // aside: what shows at an option's right end, each (its keys, its value);
@@ -330,7 +332,8 @@ export type Chooser = {
   keys   : (k: number, key: string) => boolean;
   foot   : (k: number) => string;
   detail?: (k: number, w: number) => Paint.Line[];
-  ask    : { hint: string; done: (text: string) => string | null } | null;
+  ask    : { hint: string; done: (text: string) => string | null; secret?: boolean } | null;
+  back?  : () => void;
 };
 
 // a line of the side drawn and what a click on it does (null: nothing);
@@ -770,8 +773,9 @@ function term_update(t: Term): void {
 }
 
 // the start's notes, held (HOLD): a pick set that gave way (config.NOTES);
-// on a terminal, the ChatGPT login unreadable or missing, and what the
-// API keys need (config.config_tips)
+// on a terminal, the ChatGPT login unreadable or missing (no provider
+// connected at all, the vendors setting unset: /login connects one), and
+// what the API keys need (config.config_tips)
 function term_hints(t: Term): void {
   const signed = ChatGPT.signed();
   const chatgpt = config.OFFER.vendors.includes("chatgpt");
@@ -781,7 +785,8 @@ function term_hints(t: Term): void {
     return;
   }
   if (unread !== "" || (chatgpt && !signed)) {
-    hint = term_notify(t, unread !== "" ? unread : "No ChatGPT login yet: type /login to sign in with your ChatGPT plan.", false, HOLD);
+    const none = config.config_named() ? "No ChatGPT login yet: type /login to sign in with your ChatGPT plan." : "No provider connected yet: type /login to connect your ChatGPT or Claude plan, or an API key.";
+    hint = term_notify(t, unread !== "" ? unread : none, false, HOLD);
   }
   if (t.chat !== null) {
     config.config_tips(t.chat.pick, signed).forEach((text) => term_note(t, text, HOLD));
@@ -798,7 +803,8 @@ function term_reader(): () => Memory {
   }, true);
 }
 
-// the start's login note let go (signed in)
+// the start's login note let go (a provider connected, the chat's
+// ChatGPT signed in)
 export function term_unhint(t: Term): void {
   if (hint !== null) {
     term_unnotify(t, hint);

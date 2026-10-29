@@ -79,9 +79,11 @@ Export and import
 -----------------
 
 - An export carries the profile's own folder; imported, it goes over the
-  importing illi's global setup. It leaves out the login (and a login
-  file its config names inside the profile's folder), the lock and the
-  log; the default's, what every profile shares too: the other profiles,
+  importing illi's global setup. It leaves out the logins and keys
+  `/login` connected (`login.json` and a login file its config names
+  inside the profile's folder, `accounts.json`, the Claude Code folders
+  in `claude/`), the lock and the log; the default's, what every
+  profile shares too: the other profiles,
   the models the vendors told (naming your ChatGPT account), the folders
   you trust, the commands' counts.
 - It strips config.json and mcp.json of secrets: by key name, or shaped

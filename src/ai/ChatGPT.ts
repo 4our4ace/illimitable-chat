@@ -44,6 +44,7 @@ import { Agent, type Wire } from "./Agent.ts";
 import { OpenAI } from "./OpenAI.ts";
 import { Pick, SPEEDS, type Model } from "./Pick.ts";
 import type { Limit, Plan } from "../ui/View.ts";
+import { Accounts, type Logins, type Saved } from "../config/Accounts.ts";
 import * as config from "../config/Config.ts";
 
 // Types
@@ -306,27 +307,39 @@ export namespace ChatGPT {
   }
 
   // tokens got, kept in a login file (its other entries kept, an old
-  // login's refresh token if none came): written whole, then moved over
+  // login's refresh token if none came)
   export function keep(file: string, data: any, entry: any, got: any, was: Login | null): Login {
-    data.openai = {
-      ...entry,
+    data.openai = { ...entry, ...ChatGPT.fresh(got, was) };
+    ChatGPT.write(file, data);
+    return ChatGPT.login(data.openai);
+  }
+
+  // tokens got, as a login's entry (opencode's shape), an old login's
+  // refresh token if none came
+  export function fresh(got: any, was: Login | null): Record<string, unknown> {
+    return {
       type      : "oauth",
       access    : got.access_token,
       refresh   : got.refresh_token ?? was?.refresh,
       expires   : Date.now() + (got.expires_in ?? 3600) * 1000,
       accountId : ChatGPT.claims(got.id_token ?? "").chatgpt_account_id ?? was?.account,
     };
+  }
+
+  // a login file written whole: a file of its own, readable by its owner
+  // alone, then moved over
+  export function write(file: string, data: any): void {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = path.join(path.dirname(file), ".auth." + process.pid + ".json");
     fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
     fs.renameSync(tmp, file);
-    return ChatGPT.login(data.openai);
   }
 
   // the login file: the one config names, else illi's own if there, else
-  // opencode's if there, else illi's own (none yet)
+  // opencode's if there and /login didn't leave it to opencode, else
+  // illi's own (none yet: config.config_login_file)
   export function file(): string {
-    return config.LOGIN_SET ?? (fs.existsSync(config.OWN_LOGIN) || !fs.existsSync(config.OPENCODE_LOGIN) ? config.OWN_LOGIN : config.OPENCODE_LOGIN);
+    return config.config_login_file();
   }
 
   // the file /login keeps its login in: the one config names, else illi's own
@@ -339,6 +352,7 @@ export namespace ChatGPT {
     const file = ChatGPT.file();
     return fs.existsSync(file) && json_object(file) === null ? "The ChatGPT login file " + file + " is unreadable: /login replaces it." : "";
   }
+
 
   // whether a login is there to run on
   export function signed(): boolean {
@@ -408,10 +422,10 @@ export namespace ChatGPT {
       if (!tokens.ok) {
         throw new Error("ChatGPT's device login got no tokens (HTTP " + tokens.status + ")");
       }
-      const file = ChatGPT.own();
-      const kept = json_object(file) ?? {};
-      ChatGPT.keep(file, kept, {}, await tokens.json(), null);
-      ChatGPT.sync();
+      const why = await ChatGPT.swap(ChatGPT.fresh(await tokens.json(), null));
+      if (why !== null) {
+        throw new Error(why);
+      }
       return;
     }
     throw new Error("the code expired after 15 minutes: /login for another");
@@ -426,6 +440,84 @@ export namespace ChatGPT {
     fs.rmSync(config.OWN_LOGIN);
     ChatGPT.sync();
     return true;
+  }
+
+  // a login's account as /login shows it: its key (ChatGPT.key), the
+  // email and plan its token tells ("": none told)
+  export function ident(access: string): { key: string; email: string; plan: string } {
+    const all  = ChatGPT.claims(access);
+    const text = (x: unknown) => (typeof x === "string" ? x : "");
+    return { key: ChatGPT.key(access), email: text(all["https://api.openai.com/profile"]?.email), plan: text(all.chatgpt_plan_type) };
+  }
+
+  // the login in a file as an account (null: none there that reads)
+  export function kept(file: string): Saved | null {
+    try {
+      const { entry } = ChatGPT.entry(file);
+      const id = ChatGPT.ident(entry.access);
+      return id.key === "" ? null : { ...id, entry };
+    } catch {
+      return null;
+    }
+  }
+
+  // the accounts as last read (Accounts.ts): whether opencode's login is
+  // one, those kept apart
+  export function logins(): Logins {
+    return config.config_accounts_read()?.chatgpt ?? { opencode: true, saved: [] };
+  }
+
+  // the accounts changed by f (Accounts.ts: read just before, the rest of
+  // the file kept), then read again (config.config_accounts). null: done;
+  // else why not
+  export function edit(f: (logins: Logins) => Logins): string | null {
+    const why = Accounts.edit(config.ROOT, (store) => ({ ...store, chatgpt: f(store.chatgpt ?? { opencode: true, saved: [] }) }));
+    config.config_accounts(true);
+    return why;
+  }
+
+  // an account kept apart forgotten
+  export function forget(key: string): string | null {
+    return ChatGPT.edit((logins) => ({ ...logins, saved: logins.saved.filter((s) => s.key !== key) }));
+  }
+
+  // opencode's login one of the accounts (used while illi has none of its
+  // own), or left to opencode (never used, opencode still signed in)
+  export function allow(on: boolean): string | null {
+    const why = ChatGPT.edit((logins) => ({ ...logins, opencode: on }));
+    ChatGPT.sync();
+    return why;
+  }
+
+  // a login put in illi's own file (ChatGPT.own) in place of the one there
+  // (null: that one let go, so opencode's is used if it may be), under the
+  // lock its renewals take: the one it replaces kept apart (read under the
+  // lock, as each renewal spends its refresh token: a copy from before
+  // wouldn't renew), the one put there kept apart no longer. A file
+  // `login` names is never let go. null: done; else why not
+  export async function swap(entry: Record<string, unknown> | null): Promise<string | null> {
+    const file = ChatGPT.own();
+    if (entry === null && config.LOGIN_SET !== null) {
+      return "illi uses the login in " + config.config_home(file) + " (the login setting), which it leaves be";
+    }
+    const key = entry === null ? "" : ChatGPT.key(String(entry.access));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const why = await ChatGPT.locked(file, async () => {
+      const was = ChatGPT.kept(file);
+      const set = was === null || was.key === key ? null : ChatGPT.edit((logins) => ({ ...logins, saved: [...logins.saved.filter((s) => s.key !== was.key), was] }));
+      if (set !== null) {
+        return set;
+      }
+      if (entry === null) {
+        fs.rmSync(file, { force: true });
+      } else {
+        ChatGPT.write(file, { ...(json_object(file) ?? {}), openai: entry });
+      }
+      return null;
+    });
+    const done = why ?? (key === "" ? null : ChatGPT.forget(key));
+    ChatGPT.sync();
+    return done;
   }
 
   // the login file, and its entry for OpenAI; one unreadable says so

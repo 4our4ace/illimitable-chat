@@ -2,20 +2,66 @@ Providers
 =========
 
 illi runs on your ChatGPT plan, your Claude plan (through your own
-Claude Code), or Anthropic and OpenAI API keys. Each is a vendor; name
-the ones you use in `~/.illi/config.json`.
+Claude Code), or Anthropic and OpenAI API keys. Each is a vendor.
+
+Connecting: /login
+------------------
+
+Type `/login` in the chat (`/logout` opens the same screen). It lists
+the providers, **ChatGPT** and **Claude**, each saying what of it is
+connected, the one the chat runs on marked. Enter on one opens its two
+ways in: its plan (**ChatGPT plan**, **Claude plan**) and an API key
+(**OpenAI API key**, **Anthropic API key**), each saying what it's
+connected with. Esc goes back a level, from every list and question
+`/login` opens:
+
+- **Enter on a way in not connected** connects it: a sign-in for a
+  plan, a key for an API.
+- **Enter on one connected** opens its accounts, the one in use marked.
+  Enter on another switches to it, at once and in every illi you have
+  open; Del logs one out (asked first); `+ add another …` connects one
+  more, which is then the one in use; the last row logs out of the
+  provider (asked first).
+
+What you connect is offered at once (`/model` lists its models), and
+what you log out of is gone at once: a chat on it moves to another
+provider's default model, saying so (a turn running finishes first).
+Every profile shares the same accounts. illi keeps them in
+`~/.illi/accounts.json`, readable by you alone; a profile you export
+leaves it out, with the logins and Claude Code folders below
+([Profiles](profiles.md)). The `vendors` setting, if you set it, names
+the vendors offered instead ([Config](config.md)); `/login` then says
+when it leaves out one you connected.
+
+With nothing connected illi offers `chatgpt`, and the chat says
+`/login` connects a provider.
 
 ChatGPT plan
 ------------
 
-In the chat, type `/login` to sign in with ChatGPT Plus or Pro: illi
-opens OpenAI's page in your browser and shows a code to enter there (it
-is in your clipboard too), then keeps and renews the login itself. The
-browser is your system's: on WSL Windows' default, asked through
-`rundll32.exe url.dll,FileProtocolHandler` (which some security tools
-flag); `BROWSER` picks another, and `BROWSER=none` opens none. Over SSH,
-or with no display, the link is only shown. An existing [opencode](https://opencode.ai) login is picked up
-as it is. `chatgpt` is the default vendor.
+Pick **ChatGPT**, then **ChatGPT plan**, in `/login` to sign in with
+ChatGPT Plus or Pro:
+illi opens OpenAI's page in your browser and shows a code to enter
+there (it is in your clipboard too), then keeps and renews the login
+itself. The browser is your system's: on WSL Windows' default, asked
+through `rundll32.exe url.dll,FileProtocolHandler` (which some security
+tools flag); `BROWSER` picks another, and `BROWSER=none` opens none.
+Over SSH, or with no display, the link is only shown.
+
+Each account shows by its email and plan. **+ add another account**
+signs in to one more. The account in use is in illi's login file
+(`~/.illi/login.json`, or the file the `login` setting names); the
+others wait in `accounts.json`. A switch puts the account you pick in
+the login file and keeps the one that was there, its login as last
+renewed, so each renews in its turn. Logging out of the account in use
+moves to the next one.
+
+An existing [opencode](https://opencode.ai) login (`opencode auth
+login`) is one of the accounts and is used while illi has no login of
+its own. Del on it leaves it to opencode: illi stops using it, and
+opencode stays signed in. `/login` offers to connect it again. Logging
+out of ChatGPT forgets illi's own logins and leaves opencode's to
+opencode, and ChatGPT is no longer offered.
 
 The side's Usage shows the plan the login is on and how much of its
 limits is used, once ChatGPT has told it (nothing shows before), both
@@ -23,18 +69,39 @@ asked of ChatGPT together (as Codex's `/status` does) when illi
 starts, after `/login` and `/logout`, and when the login changes on
 disk (another terminal's `/login`, or `opencode auth login`; looked at
 every few seconds), then kept current by each reply. They are
-always the account's in use: a new login drops the old one's usage at
-once.
+always the account's in use: a new login, or a switch, drops the old
+one's usage at once.
 
 Claude plan
 -----------
 
-For Claude Pro or Max, install [Claude Code](https://code.claude.com)
-and log in there (`claude`, then `/login`); then name it as a vendor:
+For Claude Pro, Max, Team or Enterprise, install [Claude
+Code](https://code.claude.com), then pick **Claude**, then **Claude
+plan**, in `/login`.
+If Claude Code is logged in, illi offers its login; otherwise, or for
+another account, illi signs in through Claude Code itself: Claude Code
+opens Claude's page in your browser (illi shows the link too), and
+you paste the code the page shows into illi, where it shows as dots.
 
-    { "vendors": "chatgpt,claude-code" }
+Each account shows by its email and plan:
 
-illi then runs Claude Code itself, as it ships, on your login:
+- **Your own Claude Code's**: the login in your Claude Code folder
+  (`~/.claude`, or the one `CLAUDE_CONFIG_DIR` names). Del makes illi
+  stop using it; Claude Code stays logged in.
+- **Another account** (**+ add another account**) gets a Claude Code
+  folder of its own, `~/.illi/claude/<id>`, as Claude Code keeps one
+  login per folder (on macOS, one Keychain entry per folder). That
+  folder is a separate Claude Code: your main one's settings, MCP
+  servers, plugins and `CLAUDE.md` aren't in it. Del logs it out and
+  removes the folder.
+
+The account you pick is the one illi's calls run on. The side's Usage
+and Claude Code's MCP servers (below) are that account's: a switch
+drops the other account's until a call tells them. Logging out of the
+Claude plan logs illi's own folders out and removes them; your own
+Claude Code stays logged in.
+
+illi then runs Claude Code itself, as it ships, on the account's login:
 
 - **Claude Code's own prompt and tools** (its shell, files, search), with
   illi's added through MCP: zoom into the memory, the date, subagents,
@@ -84,6 +151,11 @@ illi then runs Claude Code itself, as it ships, on your login:
   own calls ([Permissions](permissions.md)): what stays in the project
   runs, a folder outside it is asked about at illi's screen, saying
   why, and your rules and saved approvals apply.
+- **The whole window**: as soon as the plan is connected, and at each
+  start, illi asks Claude Code each model's window, sending no message
+  (1M on a plan with long context). A turn gets all of it, as Claude
+  Code's own compaction, which would stop at its autocompact window
+  (500k of Opus's 1M), is off.
 - **illi's memory, not Claude Code's compaction**: a turn runs with
   Claude Code's own compaction off. When a long turn fills the window,
   illi folds more of the chat into its tree and goes on where it was,
@@ -110,11 +182,16 @@ illi then runs Claude Code itself, as it ships, on your login:
 API keys
 --------
 
-Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`, and name the vendor:
+In `/login`, pick **Claude**, then **Anthropic API key**, or
+**ChatGPT**, then **OpenAI API key**, and paste a key. It shows as dots, and illi checks it with the provider before
+taking it. illi keeps a pasted key in `accounts.json` and shows it only
+by its ends (`sk-ant-…WXYZ`): never in the chat, a note or the input's
+history. If `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` is set, `/login`
+offers that key; illi never copies it, so it only lasts while the
+variable is set.
 
-    { "vendors": "claude-api" }
-
-Both run in illi's own loop, with no SDKs.
+**+ add another key** adds a key; Enter on one switches to it, and Del
+forgets a pasted one. Both APIs run in illi's own loop, with no SDKs.
 
 Models
 ------
@@ -128,7 +205,9 @@ illi's pick and the summaries' default to the first vendor's models:
 | `claude-code` | opus-5.5     | haiku-5.5   |
 | `claude-api`  | sonnet-5.5   | haiku-5.5   |
 
-To choose them, or list more vendors (the first gives the defaults):
+The vendors offered are those you connected, ChatGPT first, then the
+others in the order you connected them. To choose the models, or to
+name the vendors yourself (the first gives the defaults):
 
     {
       "vendors": "claude-api,chatgpt",
@@ -137,8 +216,9 @@ To choose them, or list more vendors (the first gives the defaults):
     }
 
 `ILLI_VENDORS=claude-api illi` tries it without a file; `/set vendors
-claude-api` in the chat works from the next start. `/model` picks the
-model, its effort and speed per chat.
+claude-api` in the chat applies at once, and `/set vendors default`
+goes back to what `/login` connected. `/model` picks the model, its
+effort and speed per chat.
 
 Each vendor tells illi its models, kept in `~/.illi/models.json` for the
 next start:
@@ -146,8 +226,8 @@ next start:
 | Vendor        | What it tells                                                    | When                                   |
 | ------------- | ---------------------------------------------------------------- | -------------------------------------- |
 | `chatgpt`     | the models your account may use, each one's window, efforts and speeds | at start, after `/login` and `/logout`, when the account changes; every 5 minutes while it doesn't answer |
-| `claude-api`  | each model's window (Anthropic's Models API)                     | at start                               |
-| `claude-code` | the window of the model a reply ran on                           | after each reply                       |
+| `claude-api`  | each model's window (Anthropic's Models API)                     | at start, after `/login`               |
+| `claude-code` | each model's window, as Claude Code has it for a turn (asked, no message sent); the window of the model a turn's reply ran on | at start, after `/login`; after each turn's reply |
 | `openai-api`  | nothing: its windows are built in (1.05M)                        |                                        |
 
 On ChatGPT the list is your account's own: a model it adds is offered
@@ -167,7 +247,7 @@ weigh. If your account refuses a chat that long at a turn's start, illi
 keeps to the usual window for that model from then on. A pick whose
 effort or speed the model doesn't have runs at the nearest one it has.
 The other vendors' windows are built in until they tell (Claude Code's:
-200k).
+200k, which it tells right away: 1M on a plan with long context).
 
 How much of the window a turn sends is each model's auto compact
 ([Config](config.md)): `/autocompact` sets it for the chat's model, and

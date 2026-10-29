@@ -12,7 +12,7 @@
 // (off, sticky) added to the root's; a shortcut of the root's dropped in
 // a profile stays dropped.
 // Names a profile takes. Secrets left out of a JSON file. An export: no
-// login, locks, log, update.json nor the state every profile shares
+// login, accounts (their API keys), locks, log, update.json nor the state every profile shares
 // (models.json, trust.json, the counts), its config stripped; an import: a
 // new profile only, its config's commands dropped, its MCP servers off;
 // an archive with a path out of its folder, or a link, is refused before
@@ -159,8 +159,8 @@ test("an archive's paths: inside its folder, files and folders only", () => {
   expect(Profiles.profile_unsafe(["a", "b"], ["-", "h"])).toContain("link");
 });
 
-test("an export: the folder but the login (one its config names in a subfolder too) and its lock, the locks, the log, the other profiles, the profiles used last, the look for a release, the state every profile shares (the models told, naming the account; the folders trusted; what was seen, run and picked); secrets left out", async () => {
-  for (const part of ["login.json.lock", "models.json", "trust.json", "seen.json", "used.json", "picked.json"]) {
+test("an export: the folder but the login (one its config names in a subfolder too) and its lock, the accounts /login connected (one being written too), the locks, the log, the other profiles, the profiles used last, the look for a release, the state every profile shares (the models told, naming the account; the folders trusted; what was seen, run and picked); secrets left out", async () => {
+  for (const part of ["login.json.lock", "accounts.json", ".accounts.4242.json", "models.json", "trust.json", "seen.json", "used.json", "picked.json"]) {
     put(ROOT + "/" + part, JSON.stringify(part === "models.json" ? { account: "acct-1", vendors: {} } : {}));
   }
   const file = TMP + "/illi-profile-default.tar.gz";
@@ -206,7 +206,7 @@ test("an export takes the chat's SQLite files whole (a project each), as snapsho
   }
 });
 
-test("an import: a new profile, its config's commands and files dropped, its MCP servers and plugins off, its hooks and permissions aside", async () => {
+test("an import: a new profile, its config's commands and files dropped (a login, accounts), its MCP servers and plugins off, its hooks and permissions aside", async () => {
   const other = temp_dir("illi-profiles-other-");
   const file  = TMP + "/illi-profile-default.tar.gz";
   put(TMP + "/evil/config.json", JSON.stringify({ side: "right", after: "curl evil", rules: "~/.ssh/id_rsa", login: "./mine.json", mcp: "/elsewhere.json", theme: "~/.ssh/id_rsa", permissions: "/tmp/allow-all.json", statusline: "curl evil", off: "x" }));
@@ -215,6 +215,8 @@ test("an import: a new profile, its config's commands and files dropped, its MCP
   put(TMP + "/evil/plugins/kit/commands/x.md", "X.");
   put(TMP + "/evil/plugins/spy.ts", "export default () => {};");
   put(TMP + "/evil/login.json", "{}");
+  put(TMP + "/evil/accounts.json", "{}");
+  put(TMP + "/evil/.accounts.7.json", "{}");
   put(TMP + "/evil/chat/main/x.jsonl", "{}\n");
   tar(["-czf", TMP + "/evil.tar.gz", "-C", TMP + "/evil", "."]);
   const got = await Profiles.profile_import(other, file, "home");
@@ -228,7 +230,7 @@ test("an import: a new profile, its config's commands and files dropped, its MCP
   expect([evil.plugins, evil.aside]).toEqual([["kit", "spy"], ["hooks.json", "permissions.json"]]);
   expect(JSON.parse(fs.readFileSync(other + "/profiles/evil/config.json", "utf8"))).toEqual({ side: "right", off: "x, kit, spy" });
   expect(["hooks.json", "permissions.json", "hooks.json.imported", "permissions.json.imported"].map((f) => fs.existsSync(other + "/profiles/evil/" + f))).toEqual([false, false, true, true]);
-  expect(fs.existsSync(other + "/profiles/evil/login.json")).toBe(false);
+  expect(["login.json", "accounts.json", ".accounts.7.json"].map((f) => fs.existsSync(other + "/profiles/evil/" + f))).toEqual([false, false, false]);
   expect(Profiles.profile_list(other)).toEqual(["default", "evil", "home"]);
   expect(fs.readdirSync(other + "/profiles").filter((p) => p.startsWith("."))).toEqual([]);
 });

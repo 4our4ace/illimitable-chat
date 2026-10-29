@@ -48,8 +48,10 @@ const FAST  = "fast-mode-2026-02-01";
 const LIST  = "https://api.anthropic.com/v1/models?limit=1000";
 const PAGES = 10;
 
-// the key's models asked (once: keys are read at the start)
+// the key's models asked (once a key: /login may change the one in use),
+// and the key they were asked with
 let listed: Promise<boolean> | null = null;
+let listed_by = "";
 
 // Anthropic
 // =========
@@ -57,10 +59,13 @@ let listed: Promise<boolean> | null = null;
 export namespace Anthropic {
 
   // the windows of the models the key may use (Models API: list), each
-  // built-in model's learned and kept for the next start; asked once, a
-  // failure changing nothing (the built-in windows hold). true: a window
-  // changed
+  // built-in model's learned and kept for the next start; asked once a
+  // key, a failure changing nothing (the built-in windows hold). true: a
+  // window changed
   export function models(key: string): Promise<boolean> {
+    if (listed_by !== key) {
+      [listed, listed_by] = [null, key];
+    }
     listed ??= Anthropic.list(key).then((all) => {
       const news = all.filter((m) => Pick.told("claude-api", m.id, m.window)).length > 0;
       if (news) {
@@ -72,6 +77,17 @@ export namespace Anthropic {
       return false;
     });
     return listed;
+  }
+
+  // whether a key works, asked of the Models API ("": it does; else why
+  // not, in a few words), as /login takes it
+  export async function check(key: string): Promise<string> {
+    try {
+      const res = await fetch(LIST, { headers: { "x-api-key": key, "anthropic-version": "2023-06-01" }, signal: AbortSignal.timeout(15e3) });
+      return res.ok ? "" : res.status === 401 || res.status === 403 ? "Anthropic refused the key" : "Anthropic answered HTTP " + res.status;
+    } catch (err: any) {
+      return "illi couldn't reach Anthropic (" + err.message + ")";
+    }
   }
 
   // each model the key may use, by id, with its window (max_input_tokens),

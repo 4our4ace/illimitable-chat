@@ -969,6 +969,48 @@ being `{ label, id, speeds, window?, standard?, efforts?, tiers?, room? }`
    that won't read is none: the built-in windows hold (ChatGPT's models
    have none: their windows wait for the catalog).
 
+Accounts
+--------
+
+`~/.illi/accounts.json` keeps what `/login` connected, every profile's
+(`src/config/Accounts.ts`):
+`{ "claude-api"?: keyed, "openai-api"?: keyed, "claude-code"?: folders, chatgpt?: logins }`.
+
+- `keyed` is `{ use, keys: [{ id, key, added }] }`: the keys pasted and
+  the one in use, by its id or `"env"` (the environment's variable,
+  never written here).
+- `folders` is `{ use, accounts: [{ id, email, plan, org }] }`: each a
+  Claude Code folder, `"own"` for the user's own Claude Code's, else
+  `claude/<id>` in illi's root, run with `CLAUDE_CONFIG_DIR`.
+- `logins` is `{ opencode, saved: [{ key, email, plan, entry }] }`:
+  whether opencode's ChatGPT login is one of the accounts, and the
+  accounts not in use, each its login entry in opencode's shape. The
+  account in use is in the login file (`login.json`), where it renews.
+
+How it is kept:
+
+1. An API or a Claude plan in the file is connected, the file listing
+   them in the order they were (ChatGPT, while a login is there to run
+   on, comes first). Config.ts reads it at the start into the keys in
+   use, the ChatGPT login file, the Claude Code folder and, unless the
+   `vendors` setting names them, the vendors offered.
+2. Each change reads the file just before, changes it, writes the whole
+   to `.accounts.<pid>.json`, opened readable by its owner alone before
+   anything is in it, and renames it over the file. A file that won't
+   read is never written over, as its keys would be lost: `/login` says
+   so and changes nothing.
+3. Every illi with a chat looks at the file every 2 s, by its inode,
+   size and time (a stat), and reads it again only when it changed, so a
+   change in one terminal reaches the others: the vendors offered, the
+   keys and the account in use. `/login` reads it again as it opens.
+4. A ChatGPT switch (`ChatGPT.swap`) runs under the lock renewals take
+   on the login file: the login there is read then, as each renewal
+   spends its refresh token, kept in `saved`, and the picked one put in
+   its place. A login that renewed since it was saved is never
+   overwritten by an older copy.
+5. A profile's export leaves out `accounts.json`, its temporary files
+   and `claude/`; an import drops them.
+
 Known limits
 ------------
 

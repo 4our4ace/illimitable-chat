@@ -625,8 +625,8 @@ function popup_light(t: Term, on: object, at: Target): boolean {
 // in a picker (a list, the question), an option (still shown), lit, then
 // what Enter does there, its own keys first (a setting stepped, a toggle,
 // a question's answer; held as Enter is, just shown); outside a list, it
-// closes as Esc closes it (a question never takes a click outside: it
-// never answers for you). In illi's form, a tab: that tab; an option of
+// closes, all of it (Esc goes a level up: /login's lists; a question
+// never takes a click outside: it never answers for you). In illi's form, a tab: that tab; an option of
 // the tab shown: lit, then what Enter does where one is picked (picked,
 // and on to the next), what Space does where any are (picked or not; both
 // held as the keys are, just shown); the words' row: lit (typing goes
@@ -658,7 +658,7 @@ function popup_click(t: Term, on: object, at: Pointed): void {
       term_suggest_key(t, sug, "Enter");
     }
   } else if (at === "out" && on === t.choose) {
-    term_choose_key(t, t.choose, "Esc");
+    t.choose = null;
   } else if (typeof at === "object" && at.$ === "fold" && on === t.question) {
     question_toggle(t.question);
   } else if (typeof at === "object" && at.$ === "option") {

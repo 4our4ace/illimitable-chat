@@ -46,7 +46,9 @@
 // turn.stop makes a turn go on before its goal is checked, 8 times in a
 // row at most; what they tell every call comes after where illi works.
 // The time now is in where illi works, after every cache mark a later
-// call reads.
+// call reads. The vendors offered changing (/login, the vendors
+// setting), the chat's pick on one gone gives way to the default, told,
+// a turn running keeping it to its end.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -690,6 +692,7 @@ test("a model whose window no one told (ChatGPT's before its catalog answers) mo
   ChatGPT.listed = async () => {};
   ChatGPT.models = async () => null;
   chat.pick = { vendor: "chatgpt", model: "gpt-6-luna", effort: "medium", speed: "slow" };
+  config.OFFER.vendors.push("chatgpt");
   try {
     expect(Pick.window(chat.pick)).toBeUndefined();
     const cut = chat.mem.cut;
@@ -708,6 +711,7 @@ test("a model whose window no one told (ChatGPT's before its catalog answers) mo
     expect(last()).toBe("and now?");
   } finally {
     [chat.pick, ChatGPT.listed, ChatGPT.models] = [was, listed, models];
+    config.OFFER.vendors.splice(config.OFFER.vendors.indexOf("chatgpt"), 1);
   }
 });
 
@@ -995,6 +999,35 @@ test("the time now opens where illi works: unmarked, after every mark a later ca
   expect(asked.blocks.at(-1).mark).toBe(true);
   expect(AskAI.keys(asked).length).toBeGreaterThan(0);
   expect(AskAI.keys(asked).length).toBeLessThanOrEqual(at);
+});
+
+test("the vendors offered changing, the chat's pick on one gone gives way to the default, told, once no turn runs: a turn running keeps it to its end", async () => {
+  const was  = process.env.ILLI_VENDORS;
+  const pick = chat.pick;
+  const v = View.view_new();
+  View.link_open(v, Chat.link(chat, (msg) => View.view_hear(v, msg).forEach((out) => View.link_send(v, out))));
+  await until(() => v.up);
+  let go = () => {};
+  hold = new Promise<void>((done) => (go = done));
+  try {
+    View.view_act(v, { $: "Send", text: "go on" }).forEach((out) => View.link_send(v, out));
+    await until(() => chat.busy);
+    process.env.ILLI_VENDORS = "chatgpt";
+    config.config_reread();
+    Chat.offered(chat);
+    expect(chat.pick).toEqual(pick);
+    go();
+    await until(() => !chat.busy);
+    expect(chat.pick.vendor).toBe("chatgpt");
+    expect(Memory.message(chat.mem, chat.mem.count - 1)).toMatchObject({ kind: "note", text: "claude-api isn't offered now, so the chat runs on " + Pick.shown(chat.pick) + "." });
+    await until(() => v.pick?.vendor === "chatgpt");
+  } finally {
+    hold = Promise.resolve();
+    was === undefined ? delete process.env.ILLI_VENDORS : (process.env.ILLI_VENDORS = was);
+    config.config_reread();
+    chat.pick = chat.mem.pick = pick;
+    v.ws!.close();
+  }
 });
 
 test("background jobs over the pipe: a shell call's in every view's state, its caller named, and in what illi's calls start with; a view's stop ends it; as illi quits, those left are noted", async () => {

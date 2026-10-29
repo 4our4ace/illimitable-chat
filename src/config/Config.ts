@@ -31,6 +31,7 @@ import { LABELS, VENDORS, Pick, type Offer } from "../ai/Pick.ts";
 import { profile_pick } from "./Profiles.ts";
 import type { Mode } from "./Update.ts";
 import { json_object } from "../tools/Clip.ts";
+import { Accounts, ENV, OWN, type Api, type Store } from "./Accounts.ts";
 import { Permissions } from "../tools/Permissions.ts";
 
 // Constants
@@ -110,7 +111,7 @@ const TABLE = {
   sticky     : { def: "", values: "text", now: true, what: "sticky skills on, in every turn", none: "none" },
   mode       : { def: "default", values: ["default", "trust"], now: true, what: "what runs without asking", shape: [/^(default|trust|auto|careful|ask|read-only|yolo)$/, "default or trust"] },
   permissions: { def: DIR + "/permissions.json", values: "text", now: false, what: "your permission rules and what \"don't ask again\" saved", path: true },
-  vendors    : { def: "chatgpt", values: "text", now: false, what: "where models come from" },
+  vendors    : { def: "", values: "text", now: true, what: "where models come from", none: "those /login connected" },
   models     : { def: "", values: "text", now: false, what: "the models offered", none: "all" },
   jobs       : { def: "8", values: ["2", "4", "8", "16", "32"], now: false, what: "summaries built at once", shape: [/^[1-9]\d*$/, "a number, 1 or more"] },
   theme      : { def: config_own("theme.json"), values: "text", now: false, what: "the theme file", path: true },
@@ -134,8 +135,40 @@ export const RELATED_FILE = ROOT + "/related.json";
 export const MODELS_SET  = config_value("models") !== "";
 config_models();
 
+// the ChatGPT login chatgpt runs on (ChatGPT.ts): the file `login` names,
+// else illi's own (/login makes it; the root's, so every profile's) or,
+// while there is none, opencode's (`opencode auth login`)
+export const LOGIN_SET      = config_value("login") === "" ? null : config_place("login");
+export const OWN_LOGIN      = ROOT + "/login.json";
+export const OPENCODE_LOGIN = config_path((process.env.XDG_DATA_HOME ?? "~/.local/share") + "/opencode/auth.json");
+
+// the keys, by name, and the variable each is read from
+export const VARS: Record<string, string> = {
+  anthropic       : "ANTHROPIC_API_KEY",
+  openai          : "OPENAI_API_KEY",
+};
+
+// the vendor that runs on each key
+export const KEYED: Record<string, Api> = {
+  anthropic       : "claude-api",
+  openai          : "openai-api",
+};
+
+// the environment's keys, read as illi starts and taken out of it (no
+// program an agent runs inherits them); the keys in use, by name: the
+// one /login chose for its vendor (Accounts.ts), else the environment's,
+// changed in place as the accounts change (config_accounts)
+const ENV_KEYS: Record<string, string> = Object.fromEntries(Object.entries(VARS).map(([name, v]) => [name, config_key(v)]));
+export const KEYS: Record<string, string> = { ...ENV_KEYS };
+
+// the accounts as last read (null: their file won't read), and how the
+// file looked then (Accounts.stamp)
+let ACCOUNTS: Store | null = Accounts.read(ROOT);
+let STAMPED = Accounts.stamp(ROOT);
+config_keys();
+
 export const OFFER: Offer = {
-  vendors : config_vendors(config_value("vendors")),
+  vendors : config_offered(),
   models  : config_list(config_value("models") || LABELS.join()),
 };
 
@@ -298,29 +331,9 @@ export const JOBS       = Number(config_value("jobs"));
 // looks (off, false, 0)
 export const AUTOUPDATE: Mode = config_update(String(config_value("autoupdate")).trim().toLowerCase());
 
-// the ChatGPT login chatgpt runs on (ChatGPT.ts): the file `login` names,
-// else illi's own (/login makes it; the root's, so every profile's) or,
-// while there is none, opencode's (`opencode auth login`)
-export const LOGIN_SET      = config_value("login") === "" ? null : config_place("login");
-export const OWN_LOGIN      = ROOT + "/login.json";
-export const OPENCODE_LOGIN = config_path((process.env.XDG_DATA_HOME ?? "~/.local/share") + "/opencode/auth.json");
-
 // the folder of what illi shares with other agents (opencode's, Codex's):
 // its skills/ (~/.agents/skills), as a project's .agents/skills
 export const AGENTS_DIR = config_path(process.env.ILLI_AGENTS_DIR ?? "~/.agents");
-
-// the keys, by name, and the variable each is read from
-export const VARS: Record<string, string> = {
-  anthropic       : "ANTHROPIC_API_KEY",
-  openai          : "OPENAI_API_KEY",
-};
-
-// the vendor that runs on each key
-const KEYED: Record<string, Vendor> = {
-  anthropic       : "claude-api",
-  openai          : "openai-api",
-};
-export const KEYS: Record<string, string> = Object.fromEntries(Object.entries(VARS).map(([name, v]) => [name, config_key(v)]));
 
 // Config
 // ======
@@ -369,11 +382,13 @@ function config_own(name: string): string {
 
 // the picks set as vendor:model:effort:speed that aren't offered here (a
 // model or vendor gone since) given way to their defaults, each told
-// (NOTES) with where it's set; one not of that shape is left to
-// config_start, which stops illi. A role's pick of a vendor not offered
-// waits till it is, untold
-function config_gone(): void {
-  const told = (key: Key, raw: string, def: string) => NOTES.push(key + " " + raw + " isn't offered here, so illi runs on " + def + " instead: change it in " + config_where(key) + (config_env_set(key) === null ? " or with /settings." : "."));
+// (NOTES, at the start: `tell`) with where it's set; one not of that
+// shape is left to config_start, which stops illi. A role's pick of a
+// vendor not offered waits till it is, untold. Again as the vendors
+// offered change: the pick back once it is offered again
+function config_gone(tell = true): void {
+  GONE.delete("pick");
+  const told = (key: Key, raw: string, def: string) => tell && NOTES.push(key + " " + raw + " isn't offered here, so illi runs on " + def + " instead: change it in " + config_where(key) + (config_env_set(key) === null ? " or with /settings." : "."));
   const raw = config_raw("pick");
   if (typeof raw === "string" && raw.split(":").length === 4 && Pick.read(config_split(raw), OFFER) === null) {
     GONE.add("pick");
@@ -390,18 +405,21 @@ function config_gone(): void {
 }
 
 // what the start tells of the API keys (KEYS): one set whose vendor isn't
-// offered, and how to use it (the vendors listed: a key's first while
-// there is no ChatGPT login); the key missing that the pick runs on
+// offered, and how to use it (/login connects it; the vendors setting
+// naming them, the vendors to list there: a key's first while there is
+// no ChatGPT login; a variable's, from the next start); the key missing
+// that the pick runs on (/login adds one)
 export function config_tips(pick: Pick, signed: boolean): string[] {
   const tips: string[] = [];
   const env  = config_env_set("vendors");
+  const set  = config_named();
   for (const [name, vendor] of Object.entries(KEYED)) {
     if (KEYS[name] !== "" && !OFFER.vendors.includes(vendor)) {
       const list = (signed ? [...OFFER.vendors, vendor] : [vendor, ...OFFER.vendors]).join(",");
-      tips.push(VARS[name] + " is set, but illi doesn't offer " + vendor + ": " + (env === null ? "/set vendors " + list : env + "=" + list) + ", then start illi again.");
+      tips.push(VARS[name] + " is set, but illi doesn't offer " + vendor + ": " + (!set ? "/login connects it." : env === null ? "/set vendors " + list + "." : env + "=" + list + ", then start illi again."));
     }
     if (KEYS[name] === "" && pick.vendor === vendor) {
-      tips.push("The chat runs on " + vendor + ", but " + VARS[name] + " isn't set: set it and start illi again, or /model picks another.");
+      tips.push("The chat runs on " + vendor + ", but it has no key: /login adds one, or /model picks another.");
     }
   }
   return tips;
@@ -705,6 +723,7 @@ export function config_set(key: Key, value: unknown, root = false): void {
   fs.writeFileSync(at, JSON.stringify(file, null, 2) + "\n");
   FILE = config_files();
   GONE.delete(key);
+  config_offer();
   config_live();
   FOLLOW(true);
 }
@@ -716,6 +735,7 @@ export function config_set(key: Key, value: unknown, root = false): void {
 // related)
 export function config_reread(): void {
   FILE = config_files();
+  config_offer();
   config_live();
   FOLLOW(false);
 }
@@ -729,15 +749,15 @@ export function config_follow(then: (wrote: boolean) => void): void {
 }
 
 // why a key can't take a value (null: it can), the other keys as they
-// are: its shape (a number or a yes taken as its text); the picks
-// offered both by this illi (read anew at once) and at the next start (a
-// vendor or a model taken out may leave one that won't start; one added
-// is offered only then). A pick not set is its default on the vendors
-// then (config_def), so only one set must be offered now. A role's picks
-// (one per vendor) must each be offered if their vendor is, the key's
-// being set (`strict`; else, as at the start, one not offered waits); one
-// of a vendor not offered waits till it is. A file named needn't be
-// there: none is none
+// are: its shape (a number or a yes taken as its text); the picks set
+// offered on the vendors and models it leaves (the vendors offered at
+// once, /login's while the setting is unset; the models at the next
+// start: one taken out may leave a pick that won't start, one added is
+// offered only then). A pick not set is its default on them
+// (config_def). A role's picks (one per vendor) must each be offered if
+// their vendor is, the key's being set (`strict`; else, as at the start,
+// one not offered waits); one of a vendor not offered waits till it is.
+// A file named needn't be there: none is none
 export function config_check(key: string, value: unknown, strict = true): string | null {
   if (!(key in SETTINGS)) {
     return "No setting " + key + ". The settings: " + Object.keys(SETTINGS).join(", ") + ".";
@@ -769,7 +789,7 @@ export function config_check(key: string, value: unknown, strict = true): string
   }
   const later = { vendors: OFFER.vendors, models: OFFER.models };
   try {
-    later.vendors = config_vendors(get("vendors"));
+    later.vendors = key === "vendors" ? (text === "" ? config_connected() : config_vendors(text)) : OFFER.vendors;
     later.models  = key === "models" ? config_list(text || LABELS.join()) : OFFER.models;
     config_run("pick", set("pick") ? get("pick") : config_def("pick", later), later);
     for (const k of ROLED) {
@@ -777,12 +797,6 @@ export function config_check(key: string, value: unknown, strict = true): string
     }
   } catch (err: any) {
     return err.message.replace(/^config: /, "");
-  }
-  const now = (text: string) => Pick.read(config_split(text), OFFER) !== null;
-  const own = ROLED.includes(key as Role) && strict ? config_list(text).filter((one) => OFFER.vendors.includes(one.split(":")[0] as Vendor)) : [];
-  const off = [...(set("pick") && !now(get("pick")) ? ["pick " + get("pick")] : []), ...own.filter((one) => !now(one)).map((one) => key + " " + one)];
-  if (off.length > 0) {
-    return off[0] + " is offered from the next start (vendors and models change then): set it once illi starts again.";
   }
   return null;
 }
@@ -878,6 +892,108 @@ function config_split(text: string): { vendor: string; model: string; effort: st
   return { vendor, model, effort, speed };
 }
 
+// the keys in use (KEYS): each vendor's that /login chose (Accounts.ts),
+// else the environment's (its own chosen, or the vendor not connected)
+function config_keys(): void {
+  for (const [name, vendor] of Object.entries(KEYED)) {
+    const keyed = ACCOUNTS?.[vendor];
+    KEYS[name] = keyed === undefined || keyed.use === ENV ? ENV_KEYS[name] : keyed.keys.find((k) => k.id === keyed.use)?.key ?? ENV_KEYS[name];
+  }
+}
+
+// the vendors offered: those the vendors setting names, else those
+// connected (config_connected)
+function config_offered(): Vendor[] {
+  return config_named() ? config_vendors(config_value("vendors")) : config_connected();
+}
+
+// whether the vendors setting names the vendors offered (else /login's
+// connected are)
+export function config_named(): boolean {
+  return config_value("vendors").trim() !== "";
+}
+
+// the vendors offered made anew, in place (OFFER: all who hold it see
+// them), the picks set given way or back with them (config_gone; a pick
+// set on a vendor gone gives way to its default till it's back): after
+// the accounts or the vendors setting changed. Whether they moved
+function config_offer(): boolean {
+  const vendors = config_offered();
+  if (vendors.join() === OFFER.vendors.join()) {
+    return false;
+  }
+  OFFER.vendors.splice(0, OFFER.vendors.length, ...vendors);
+  config_gone(false);
+  return true;
+}
+
+// the vendors connected: ChatGPT first while a login is there to run on
+// (config_signed), then the APIs and the Claude plan /login connected
+// (Accounts.ts), each in the order it was: an API only while its key in
+// use is there (the environment's may not be, in this illi), the Claude
+// plan while it has an account. None: ChatGPT, so the chat says /login
+// signs in
+function config_connected(): Vendor[] {
+  const name   = (v: Vendor) => Object.keys(KEYED).find((n) => KEYED[n] === v);
+  const has    = (v: Vendor) => (v === "claude-code" ? (ACCOUNTS?.["claude-code"]?.accounts.length ?? 0) > 0 : name(v) !== undefined && KEYS[name(v)!] !== "");
+  const listed = (Object.keys(ACCOUNTS ?? {}) as Vendor[]).filter(has);
+  const all    = [...(config_signed() ? ["chatgpt" as Vendor] : []), ...listed];
+  return all.length === 0 ? ["chatgpt"] : all;
+}
+
+// the ChatGPT login file chatgpt runs on (ChatGPT.ts): the file `login`
+// names, else illi's own if it's there, else opencode's if it's there and
+// /login didn't leave it to opencode (Accounts.ts), else illi's own (none
+// yet)
+export function config_login_file(): string {
+  const opencode = ACCOUNTS?.chatgpt?.opencode !== false && fs.existsSync(OPENCODE_LOGIN);
+  return LOGIN_SET ?? (fs.existsSync(OWN_LOGIN) || !opencode ? OWN_LOGIN : OPENCODE_LOGIN);
+}
+
+// the Claude Code folder claude-code runs on (ClaudeCode.ts env): the
+// Claude plan's account in use (Accounts.ts), "" for the user's own
+// Claude Code's (as its environment names it) or none connected
+export function config_claude_dir(): string {
+  return Accounts.folder(ROOT, ACCOUNTS?.["claude-code"]?.use ?? OWN);
+}
+
+// whether a ChatGPT login is there to run on (config_login_file)
+export function config_signed(): boolean {
+  const entry = json_object(config_login_file())?.openai;
+  return entry?.type === "oauth" && Boolean(entry.access) && Boolean(entry.refresh);
+}
+
+// the accounts read again if their file changed (or always, `now`), the
+// ChatGPT login looked at: the keys in use and, unless the vendors
+// setting names them, the vendors offered (config_offer), the picks with
+// them (config_live). Whether the accounts' file, the vendors offered or
+// a key in use changed (a Claude plan's account switched changes the
+// file alone)
+export function config_accounts(now = false): boolean {
+  const stamp = Accounts.stamp(ROOT);
+  const file  = stamp !== STAMPED;
+  if (now || file) {
+    [ACCOUNTS, STAMPED] = [Accounts.read(ROOT), stamp];
+  }
+  const keys = JSON.stringify(KEYS);
+  config_keys();
+  const moved = config_offer();
+  if (moved) {
+    config_live();
+  }
+  return file || moved || keys !== JSON.stringify(KEYS);
+}
+
+// the accounts as last read (null: their file won't read)
+export function config_accounts_read(): Store | null {
+  return ACCOUNTS;
+}
+
+// the environment's key of a name ("": none)
+export function config_env_key(name: string): string {
+  return ENV_KEYS[name] ?? "";
+}
+
 function config_vendors(text: string): Vendor[] {
   const list = config_list(text) as Vendor[];
   const bad = list.find((v) => !VENDORS.includes(v));
@@ -937,6 +1053,6 @@ function config_file(path: string): Record<string, unknown> {
 // the environment as illi found it, the keys it took out put back: what
 // a profile's switch starts illi again with
 export function config_env(): Record<string, string> {
-  const keys = Object.entries(VARS).filter(([name]) => KEYS[name] !== "").map(([name, v]) => [v, KEYS[name]]);
+  const keys = Object.entries(VARS).filter(([name]) => ENV_KEYS[name] !== "").map(([name, v]) => [v, ENV_KEYS[name]]);
   return { ...(process.env as Record<string, string>), ...Object.fromEntries(keys) };
 }

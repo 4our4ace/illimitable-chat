@@ -28,7 +28,8 @@
 // there puts it where it lands (past them or on the rule under them, at
 // their end), a drag choosing text, a double click keeping it, none from
 // the click that only focuses the window nor on text changed since the
-// paint. The input as typed is kept under a question, typing going
+// paint. A secret asked for (an API key) shows a dot a character, never
+// its text, the cursor where it would be, a drag copying dots. The input as typed is kept under a question, typing going
 // nowhere meanwhile, and comes back once it is answered. The pointer
 // moving onto an answer lights it; a click does what Enter does, held
 // just after the question shows and never from the click that only
@@ -492,6 +493,31 @@ test("a press on a line asked puts its cursor where it lands, typing going in th
     term_type(t, "Y");
     click(t, row, 12);
     expect([find.text, find.pos, t.question.title]).toEqual(["hellYo Xworld", 5, "New profile"]);
+  });
+});
+
+test("a secret asked for (an API key) shows a dot a character, never its text, the cursor where it would be; a drag copies dots", () => {
+  sized(80, 24, () => {
+    const t = term();
+    let got = "";
+    term_ask(t, "Anthropic API key", "paste it here", "", "Enter connect", (text) => ((got = text), null), true);
+    const out = written(() => {
+      term_type(t, "sk-ant-secret42");
+      paint(t);
+    });
+    const row = t.box.row;
+    expect([asked(t, 80)[1], t.ruled.at]).toEqual(["> " + "•".repeat(15), { row, col: 19 }]);
+    expect(out.join("")).not.toContain("secret42");
+    click(t, row, 8);
+    expect(t.question.find.pos).toBe(4);
+    const copied = written(() => {
+      press(t, row, 4);
+      drag(t, row, 9);
+      let_go(t, row, 9);
+    });
+    expect(copied).toEqual(["\x1b]52;c;" + Buffer.from("•".repeat(6)).toString("base64") + "\x07"]);
+    term_grab(t, "Enter");
+    expect(got).toBe("sk-ant-secret42");
   });
 });
 

@@ -37,9 +37,13 @@
 // as its stream tells, go with its end (End.first), so the chat learns
 // what Claude Code's own prompt and tools take beside it (Chat.cap). A
 // stop interrupts it (SIGINT, then SIGKILL), what streamed of its
-// message logged as cut off. A model's window, as a result tells it, is
-// learned (Pick.told, by its canonical id) and kept for the next start;
-// the plan's use, as each rate limit event tells it (its 5-hour and
+// message logged as cut off. A model's window is learned (Pick.told, by
+// its canonical id) and kept for the next start: as Claude Code has it
+// for a turn, asked as soon as the plan's account is in use (at the
+// start, at a /login change: ClaudeCode.models, no model called), and
+// as a turn's result tells it; a call with Claude Code's compaction on
+// tells its autocompact window instead (500k of Opus's 1M), never
+// learned; the plan's use, as each rate limit event tells it (its 5-hour and
 // weekly windows), shows at the side (ClaudeCode.told).
 //
 // Claude Code's own MCP servers (claude mcp add, its plugins', the
@@ -59,6 +63,16 @@
 // hold from a start's first call. One never told (added to Claude Code
 // since, or new to illi) loads in one more call, which tells it. Claude
 // Code's settings are never touched.
+//
+// A Claude plan's accounts (/login: Accounts.ts) are each a Claude Code
+// folder, as each Claude Code login is a folder's: the user's own Claude
+// Code's (as their environment names it), or one of illi's in its root
+// (claude/<id>, CLAUDE_CONFIG_DIR). A call runs in the account in use's;
+// a switch drops what the other's calls told (its servers, its plan's
+// use). /login signs a folder in (`claude auth login`, through pipes:
+// Claude Code opens its page itself, the code the page shows given it),
+// asks whom it's logged in as (`claude auth status`) and logs one of
+// illi's out (`claude auth logout`).
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -152,12 +166,17 @@ const WINDOWS: Record<string, number> = { five_hour: 300, seven_day: 10080 };
 
 // the plan's windows as last told, each its share used (%) and when it
 // starts anew: the side shows them (ClaudeCode.told; one past its reset
-// as 0%). One Claude Code login a machine, so one record
+// as 0%); the account in use's, its folder's
 let limits: Limit[] = [];
 
 // Claude Code's own MCP servers as its last call that loaded them told
-// (Theirs, but off and over, read anew each time; null: none has yet)
+// (Theirs, but off and over, read anew each time; null: none has yet);
+// the account in use's, its folder's
 let theirs: Array<Omit<Theirs, "off" | "over">> | null = null;
+
+// the Claude Code folder of the account limits and theirs are of ("":
+// the user's own Claude Code's: config.config_claude_dir)
+let folder = config.config_claude_dir();
 
 // the names Claude Code's servers were ever told by, case and all, by
 // their lower case (as `off` holds them; null: NAMES not read yet), kept
@@ -167,8 +186,22 @@ let theirs: Array<Omit<Theirs, "off" | "over">> | null = null;
 let cases: Map<string, string> | null = null;
 const NAMES = config.ROOT + "/claude-code.json";
 
-const NO_CLAUDE = "Claude Code isn't installed here: install it (code.claude.com), log in with claude, then send a message";
-const NO_LOGIN  = "Claude Code isn't logged in: run claude in a terminal, log in there (/login), then send a message";
+const NO_CLAUDE = "Claude Code isn't installed here: install it (code.claude.com), then /login connects your Claude plan";
+const NO_LOGIN  = "Claude Code isn't logged in: /login signs in to your Claude plan, then send a message";
+
+// how long `claude auth status` and `logout` may take (ms), and a
+// model's window asked (ClaudeCode.size)
+const AUTH = 30e3;
+
+// Claude Code asked a model's window (ClaudeCode.size): on its control
+// channel, as a call without tools runs (none of its tools, MCP servers,
+// commands or hooks; no session kept)
+const SIZE = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--settings", JSON.stringify({ disableAllHooks: true })];
+
+// the Claude plan's windows asked (ClaudeCode.models: once an account a
+// start), and the account they were asked of (its folder and email)
+let sized: Promise<boolean> | null = null;
+let sized_by = "";
 
 // ClaudeCode
 // ==========
@@ -179,6 +212,7 @@ export namespace ClaudeCode {
   export let bin = process.env.ILLI_CLAUDE ?? "claude";
 
   export function ask(ask: Ask, on: (ev: Event) => void): Try {
+    ClaudeCode.account();
     const end = AskAI.end("");
     const left: Say[] = [];
     const none = (text: string, stop: End["stop"]): Try => {
@@ -342,6 +376,7 @@ export namespace ClaudeCode {
   // (null: none has yet), each whether `off` names it and whether illi's
   // own server of its name, running (not failed), is used in its place
   export function servers(): Theirs[] | null {
+    ClaudeCode.account();
     const own = new Set(ClaudeCode.own().map(ClaudeCode.spell));
     return theirs?.map((s) => ({ ...s, off: config.config_off(s.name), over: own.has(ClaudeCode.spell(s.name)) })) ?? null;
   }
@@ -418,12 +453,113 @@ export namespace ClaudeCode {
   // the agent's log (Tools.refit), never Claude Code's summary; one
   // without room (a summary, a goal check, a recap) keeps it
   export function env(ask: Ask): Record<string, string> {
-    const env = { ...process.env } as Record<string, string>;
-    delete env.CLAUDECODE;
+    const env = ClaudeCode.folder_env(config.config_claude_dir());
     if (ask.room !== undefined) {
       env.DISABLE_COMPACT = "1";
     }
     return env;
+  }
+
+  // the environment Claude Code runs in for a folder: illi's, but the
+  // mark of a Claude Code session around illi; one of illi's folders
+  // named (CLAUDE_CONFIG_DIR; "": the user's own Claude Code's, as illi's
+  // environment names it)
+  export function folder_env(dir: string): Record<string, string> {
+    const env = { ...process.env } as Record<string, string>;
+    delete env.CLAUDECODE;
+    if (dir !== "") {
+      env.CLAUDE_CONFIG_DIR = dir;
+    }
+    return env;
+  }
+
+  // a Claude Code auth command in a folder (folder_env): what it printed
+  // and its exit code, killed past AUTH; thrown: Claude Code isn't here
+  export async function auth(dir: string, args: string[]): Promise<{ out: string; code: number }> {
+    let proc: Subprocess<"ignore", "pipe", "pipe">;
+    try {
+      proc = Bun.spawn([ClaudeCode.bin, "auth", ...args], { stdin: "ignore", stdout: "pipe", stderr: "pipe", env: ClaudeCode.folder_env(dir) });
+    } catch (err: any) {
+      throw new Error(/ENOENT|not found/i.test(String(err?.message)) ? NO_CLAUDE : String(err?.message ?? err));
+    }
+    const late = setTimeout(() => proc.kill("SIGKILL"), AUTH);
+    const [out, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited, new Response(proc.stderr).text()]);
+    clearTimeout(late);
+    return { out, code };
+  }
+
+  // whom a folder's Claude Code is logged in as (`claude auth status`):
+  // its email, plan (an API key's login: how) and organization ("": none
+  // told); null: not logged in. Thrown: Claude Code isn't here, or didn't
+  // say
+  export async function status(dir: string): Promise<{ email: string; plan: string; org: string } | null> {
+    const { out } = await ClaudeCode.auth(dir, ["status", "--json"]);
+    let data: any;
+    try {
+      data = JSON.parse(out);
+    } catch {
+      throw new Error("Claude Code didn't say whom it's logged in as");
+    }
+    const text = (x: unknown) => (typeof x === "string" ? x : "");
+    return data?.loggedIn !== true ? null : { email: text(data.email), plan: text(data.subscriptionType) || (data.authMethod === "claude.ai" ? "" : text(data.authMethod)), org: text(data.orgName) };
+  }
+
+  // a folder's Claude Code logged out (`claude auth logout`; false: it
+  // said it couldn't)
+  export async function logout(dir: string): Promise<boolean> {
+    return (await ClaudeCode.auth(dir, ["logout"])).code === 0;
+  }
+
+  // a folder signed in to a Claude plan (`claude auth login --claudeai`,
+  // through pipes; one of illi's made first, readable by the user alone):
+  // Claude Code opens its page itself, and each time it asks for the code
+  // the page shows, `ask` is told the page's link ("": none told); `give`
+  // gives it one; done as it exits (signed in; else, thrown, why not in
+  // its last words). Stop kills it. Thrown at once: Claude Code isn't here
+  export function signin(dir: string, stop: AbortSignal, ask: (url: string) => void): { give: (code: string) => void; done: Promise<void> } {
+    if (dir !== "") {
+      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    }
+    let proc: Subprocess<"pipe", "pipe", "pipe">;
+    try {
+      proc = Bun.spawn([ClaudeCode.bin, "auth", "login", "--claudeai"], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: ClaudeCode.folder_env(dir) });
+    } catch (err: any) {
+      throw new Error(/ENOENT|not found/i.test(String(err?.message)) ? NO_CLAUDE : String(err?.message ?? err));
+    }
+    const kill = () => proc.kill("SIGKILL");
+    stop.addEventListener("abort", kill, { once: true });
+    let said = "";
+    let asked = 0;
+    const read = (async () => {
+      const text = new TextDecoder();
+      const from = proc.stdout.getReader();
+      for (let got = await from.read(); !got.done; got = await from.read()) {
+        said += text.decode(got.value, { stream: true });
+        for (const prompts = said.split(/paste (?:the )?code/i).length - 1; asked < prompts; asked++) {
+          ask(/https:\/\/\S+(?=\s)/.exec(said)?.[0] ?? "");
+        }
+      }
+    })().catch(() => {});
+    const errs = new Response(proc.stderr).text();
+    const give = (code: string) => {
+      try {
+        proc.stdin.write(code + "\n");
+        proc.stdin.flush();
+      } catch {}
+    };
+    const done = (async () => {
+      const code = await proc.exited;
+      await read;
+      stop.removeEventListener("abort", kill);
+      if (stop.aborted) {
+        throw new Error("the login was stopped");
+      }
+      if (code !== 0) {
+        const lines = (said + "\n" + (await errs)).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").split("\n").map((l) => l.trim());
+        throw new Error(lines.filter((l) => l !== "" && !/paste (?:the )?code/i.test(l)).at(-1) ?? "Claude Code's login ended (exit " + code + ")");
+      }
+    })();
+    return { give, done };
   }
 
   // a user message as Claude Code reads it: its blocks' texts (none
@@ -461,7 +597,7 @@ export namespace ClaudeCode {
       }
       case "result": {
         run.result = m;
-        const news = Object.entries<any>(m.modelUsage ?? {}).filter(([id, use]) => Pick.told("claude-code", String(use?.canonicalModel ?? id), Number(use?.contextWindow ?? 0)));
+        const news = run.ask.room === undefined ? [] : Object.entries<any>(m.modelUsage ?? {}).filter(([id, use]) => Pick.told("claude-code", String(use?.canonicalModel ?? id), Number(use?.contextWindow ?? 0)));
         if (news.length > 0) {
           config.config_models_keep("claude-code", Pick.list("claude-code"));
         }
@@ -495,7 +631,86 @@ export namespace ClaudeCode {
   // the Claude plan as the views show it, once a call told its usage
   // (null: none told yet); Claude Code names no plan, so none is named
   export function told(): Plan | null {
+    ClaudeCode.account();
     return limits.length === 0 ? null : { brand: "Claude", tier: "", limits };
+  }
+
+  // the account in use looked at: another (a /login switch, here or in
+  // another terminal) drops what the old one's calls told (its servers,
+  // its plan's use)
+  export function account(): void {
+    const now = config.config_claude_dir();
+    if (now !== folder) {
+      [folder, theirs, limits] = [now, null, []];
+    }
+  }
+
+  // the windows of the Claude plan's models, as a turn of the account in
+  // use has them (a plan's are its own: one without long context gets
+  // 200k), each learned and kept for the next start; asked once an
+  // account a start (its folder, and whom it's logged in as: one signed
+  // in since is asked anew), so a window is right before any message.
+  // true: a window changed
+  export function models(): Promise<boolean> {
+    const dir  = config.config_claude_dir();
+    const kept = config.config_accounts_read()?.["claude-code"];
+    const by   = dir + "\n" + (kept?.accounts.find((a) => a.id === kept.use)?.email ?? "");
+    if (sized_by !== by) {
+      [sized, sized_by] = [null, by];
+    }
+    sized ??= Promise.all(Pick.list("claude-code").map(async (m) => Pick.told("claude-code", m.id, await ClaudeCode.size(dir, m.id)))).then((told) => {
+      const news = told.some(Boolean);
+      if (news) {
+        config.config_models_keep("claude-code", Pick.list("claude-code"));
+      }
+      return news;
+    });
+    return sized;
+  }
+
+  // a model's window as Claude Code in a folder has it for a turn (its
+  // compaction off: ClaudeCode.env), asked on its control channel
+  // (get_context_usage, summed up: no model called, nothing counted), a
+  // Claude Code each (set_model leaves the window as it was), stopped
+  // once it said; 0: none told (Claude Code isn't here, or said nothing
+  // that reads by AUTH)
+  export async function size(dir: string, id: string): Promise<number> {
+    let proc: Subprocess<"pipe", "pipe", "ignore">;
+    try {
+      proc = Bun.spawn([ClaudeCode.bin, ...SIZE, "--model", id], { stdin: "pipe", stdout: "pipe", stderr: "ignore", env: { ...ClaudeCode.folder_env(dir), DISABLE_COMPACT: "1" } });
+    } catch {
+      return 0;
+    }
+    const late = setTimeout(() => proc.kill("SIGKILL"), AUTH);
+    try {
+      proc.stdin.write(JSON.stringify({ type: "control_request", request_id: "size", request: { subtype: "get_context_usage", detail: "summary" } }) + "\n");
+      proc.stdin.flush();
+      const text = new TextDecoder();
+      const from = proc.stdout.getReader();
+      let said = "";
+      for (let got = await from.read(); !got.done; got = await from.read()) {
+        const lines = (said + text.decode(got.value, { stream: true })).split("\n");
+        said = lines.pop()!;
+        for (const line of lines) {
+          let m: any;
+          try {
+            m = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          if (m?.type === "control_response" && m.response?.request_id === "size") {
+            const window = Number(m.response.response?.rawMaxTokens);
+            return Number.isInteger(window) && window > 0 ? window : 0;
+          }
+        }
+      }
+      return 0;
+    } catch {
+      return 0;
+    } finally {
+      clearTimeout(late);
+      proc.kill();
+    }
   }
 
   // an API event, shown live: a message starts its own stream read; the

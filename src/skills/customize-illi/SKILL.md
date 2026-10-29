@@ -132,8 +132,11 @@ Every profile reads {{root}}/config.json, then its own in illi's folder.
 All keys are optional, and an ILLI_<KEY> environment variable overrides
 one:
 
-- vendors: chatgpt (the default), claude-code (the user's Claude plan,
-  through their own Claude Code, logged in there), claude-api, openai-api
+- vendors: the vendors offered, named by hand: chatgpt, claude-code (the
+  user's Claude plan, through Claude Code), claude-api, openai-api.
+  Unset (the default), they are what the user connected in /login, so
+  leave it unset unless the user asks: to connect a provider, point them
+  to /login
 - pick: what illi runs on, as vendor:model:effort:speed (default: the
   first vendor's); compactor: what writes its memory's summaries; agents:
   what subagents run on. Those two take a pick per vendor,
@@ -214,8 +217,12 @@ most at once (/ and a word finds a setting by its key or what it does;
 applies at the next start: for a single setting, point the user to
 /settings instead.
 
-API keys come only from ANTHROPIC_API_KEY and OPENAI_API_KEY in the
-environment.
+Providers and their accounts are connected in /login, never in a file:
+a plan's sign-in, an API key pasted there (kept in {{root}}/accounts.json,
+readable by the user alone), or ANTHROPIC_API_KEY and OPENAI_API_KEY from
+the environment, which /login offers. /login also adds a second account
+and switches between them; point the user there, and never ask for a
+key in the chat.
 
 ## Rules: RULES.md, and a project's AGENTS.md
 
@@ -326,8 +333,9 @@ user's yes first.
 - Keep JSON valid: parse a file after editing it (python3 -m json.tool
   FILE).
 - Keep secrets out of these files.
-- Leave illi's own state alone: login.json, models.json, update.json,
-  profile, project-profiles.json, chat/, profiles/.
+- Leave illi's own state alone: login.json, accounts.json, claude/,
+  models.json, update.json, profile, project-profiles.json, chat/,
+  profiles/.
 - Say when it applies: agents, commands, skills (a plugin's too) and the
   rules file's text at the next message; config.json, theme.json,
   mcp.json, hooks.json, a plugin's code, hooks and MCP servers, and a new
