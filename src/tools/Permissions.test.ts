@@ -1,7 +1,8 @@
 // Permissions test
 // ================
-// `bun test Permissions.test.ts`. The rules: a wildcard's * and ?, a trailing " *" matching the bare command; the last
-// matching rule wins, none asks; a deny by the configured rules refuses
+// `bun test Permissions.test.ts`. The rules: a wildcard's * and ?, a
+// trailing " *" matching the bare command, patterns another covers
+// folded into it; the last matching rule wins, none asks; a deny by the configured rules refuses
 // whatever was saved, a saved approval clears an ask, trust runs what is
 // asked; illi's own rules (.env reads asked, a folder outside asked but
 // illi's places). The file: none is no rules and nothing saved; rules by
@@ -48,6 +49,14 @@ test("match: * anything, / too; ? one character; a trailing \" *\" matches the b
   expect(Permissions.match("echo 'ünï ✓ 😀' | tr -d \"[]{}^$\"", "echo 'ünï ✓ 😀' | tr -d \"[]{}^$\"")).toBe(true);
   expect(Permissions.match("echo 😀x", "echo ?x")).toBe(true);
   expect(Permissions.match("", " *")).toBe(true);
+});
+
+test("fold: a pattern another covers is left out, a folder's covering those in it, a family its narrower ones; of patterns covering each other, the first", () => {
+  expect(Permissions.fold(["/h/o/skills/*", "/h/o/skills/up/*", "/h/o/*", "/h/ox/*"])).toEqual(["/h/o/*", "/h/ox/*"]);
+  expect(Permissions.fold(["git push *", "git log *"])).toEqual(["git push *", "git log *"]);
+  expect(Permissions.fold(["git push *", "git *"])).toEqual(["git *"]);
+  expect(Permissions.fold(["a*", "a**", "a*"])).toEqual(["a*"]);
+  expect(Permissions.fold([])).toEqual([]);
 });
 
 test("evaluate: the last matching rule wins, by action and resource; none asks", () => {

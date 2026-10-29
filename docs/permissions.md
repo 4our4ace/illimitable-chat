@@ -64,6 +64,10 @@ project always comes first:
   path. Inside means the working folder or the project's top (its git
   repository's).
 - A file outside asks for its folder; a folder outside, for itself.
+  Folders inside one another ask as the outermost: a command reading
+  `~/notes/` and `~/notes/old/` asks about `~/notes/`, and "don't ask
+  again" saves `~/notes/*`, which covers both (of any patterns it
+  would save, one another covers is left out).
 - A shell command's resources are each simple command in it, whole (its
   wrappers and redirections kept: `sudo rm -rf build > log`) and as the
   command it runs (`rm -rf build`), and that command as its words expand
@@ -162,7 +166,7 @@ cat ~/notes/todo.md
 ● illi
 ```
 
-- Why it asks comes first: a folder outside (which), a `.env` read,
+- Why it asks comes first: the folders outside (which), a `.env` read,
   your rule (`your rule asks about git push *`), a hook's why, or that
   illi can't read your rules. Then what it would do:
   the whole command, by its lines (the side panel and `/permissions`
