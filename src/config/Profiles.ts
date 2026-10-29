@@ -61,8 +61,8 @@ const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
 // what a profile's folder holds that is never a profile's to give: the
 // login (the root's, shared) and its lock, the accounts /login connected
 // (their API keys, logins and Claude Code folders: Accounts.owned), the
-// locks, the log; the
-// default's folder also holds the others, which was used last
+// locks, the log; the default's folder also holds the others, which was
+// used last
 // (anywhere, and in each project: HERE), when illi last looked for a new
 // release of itself (Update.ts), and the state every profile shares: the
 // models the vendors told (models.json, naming the ChatGPT account), the

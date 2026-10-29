@@ -626,7 +626,8 @@ function popup_light(t: Term, on: object, at: Target): boolean {
 // what Enter does there, its own keys first (a setting stepped, a toggle,
 // a question's answer; held as Enter is, just shown); outside a list, it
 // closes, all of it (Esc goes a level up: /login's lists; a question
-// never takes a click outside: it never answers for you). In illi's form, a tab: that tab; an option of
+// never takes a click outside: it never answers for you). In illi's
+// form, a tab: that tab; an option of
 // the tab shown: lit, then what Enter does where one is picked (picked,
 // and on to the next), what Space does where any are (picked or not; both
 // held as the keys are, just shown); the words' row: lit (typing goes

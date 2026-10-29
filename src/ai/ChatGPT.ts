@@ -3,11 +3,15 @@
 // The wire of chatgpt (Agent.ts): OpenAI.ts's Responses API on the Codex
 // backend, paid by a ChatGPT plan. Its login (ChatGPT.file) is the file
 // `login` names, else illi's own (config.OWN_LOGIN), or else opencode's
-// (`opencode auth login`, ChatGPT Plus/Pro); /login makes one with
-// Codex's device login (a code the person enters at OpenAI's page;
-// `device`), kept in the file `login` names, else as illi's own
-// (ChatGPT.own). All are in opencode's shape.
-// The backend
+// (`opencode auth login`, ChatGPT Plus/Pro) unless /login left it to
+// opencode; /login makes one with Codex's device login (a code the
+// person enters at OpenAI's page; `device`), kept in the file `login`
+// names, else as illi's own (ChatGPT.own). All are in opencode's shape.
+// Several accounts: the one in use is the login file's, renewed there;
+// the others wait in the accounts' file (Accounts.ts), their logins as
+// they were when put apart. A switch (`swap`) puts one in the login file
+// under the lock renewals take, keeping apart the one there as read
+// under it. The backend
 // takes no cache breakpoints; a prefix is cached for the session a
 // request names (its header and prompt_cache_key): the hash of its model
 // and system prompt, which all a chat's calls share. The token is renewed
@@ -394,9 +398,9 @@ export namespace ChatGPT {
 
   // a device login's grant, asked for every `every` ms till the person
   // gives it (403 or 404: not yet; no connection or a server error: asked
-  // again), changed for tokens (its PKCE pair came with it), kept in
-  // ChatGPT.own (its other entries kept; one unreadable replaced) and used
-  // from the next request on
+  // again), changed for tokens (its PKCE pair came with it), put in
+  // ChatGPT.own (swap: its other entries kept, one unreadable replaced;
+  // another account there kept apart) and used from the next request on
   export async function granted(id: string, code: string, every: number, stop: AbortSignal): Promise<void> {
     const json = { "content-type": "application/json" };
     for (const until = Date.now() + DEVICE; Date.now() < until; ) {
@@ -431,8 +435,9 @@ export namespace ChatGPT {
     throw new Error("the code expired after 15 minutes: /login for another");
   }
 
-  // illi's own login removed (opencode's, if there, is used again); false:
-  // there was none, or `login` names the file in use (never removed here)
+  // illi's own login removed (opencode's, if there and /login didn't leave
+  // it to opencode, is used again); false: there was none, or `login`
+  // names the file in use (never removed here)
   export function logout(): boolean {
     if (config.LOGIN_SET !== null || !fs.existsSync(config.OWN_LOGIN)) {
       return false;

@@ -43,8 +43,8 @@
 // start, at a /login change: ClaudeCode.models, no model called), and
 // as a turn's result tells it; a call with Claude Code's compaction on
 // tells its autocompact window instead (500k of Opus's 1M), never
-// learned; the plan's use, as each rate limit event tells it (its 5-hour and
-// weekly windows), shows at the side (ClaudeCode.told).
+// learned; the plan's use, as each rate limit event tells it (its
+// 5-hour and weekly windows), shows at the side (ClaudeCode.told).
 //
 // Claude Code's own MCP servers (claude mcp add, its plugins', the
 // claude.ai connectors) load in a call with tools beside illi's server.
@@ -70,9 +70,10 @@
 // (claude/<id>, CLAUDE_CONFIG_DIR). A call runs in the account in use's;
 // a switch drops what the other's calls told (its servers, its plan's
 // use). /login signs a folder in (`claude auth login`, through pipes:
-// Claude Code opens its page itself, the code the page shows given it),
-// asks whom it's logged in as (`claude auth status`) and logs one of
-// illi's out (`claude auth logout`).
+// Claude Code opens its page itself, the code the page shows given it;
+// it waits on the person, so only a stop ends it early), asks whom it's
+// logged in as (`claude auth status`) and logs one of illi's out
+// (`claude auth logout`), each of those two killed past AUTH.
 
 import * as fs from "node:fs";
 import * as os from "node:os";

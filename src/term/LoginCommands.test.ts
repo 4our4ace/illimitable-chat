@@ -4,25 +4,34 @@
 // ChatGPT and Claude, each saying what of it is connected, the chat's
 // marked; each opens its ways in, its plan and its API key, each saying
 // what it's connected with, the chat's marked; Esc goes a level up from
-// each, and from the questions they ask, down to closed. An API whose variable is
-// set connects on it, or on a key pasted; a key pasted shows as dots, is
-// checked with its provider (the network stood in for) and, refused, is
-// kept nowhere; taken, it is kept readable by its owner alone, in use at
-// once, offered, and never in a note whole. A connected API's accounts:
-// the one in use marked; Enter uses another; Del logs a kept key out,
-// asked first (Keep it keeps it), the environment's never forgotten, as
-// illi keeps no copy. The accounts are read again as the picker opens
-// (another terminal's change). Logging out of a provider, asked first, forgets
-// its keys and stops its models being offered. The vendors setting
-// leaving out what /login connected, /login says so and how. ChatGPT's
-// accounts: each named by its email, told by its plan; a second signed
-// in keeps the first apart, and Enter switches, each kept apart in turn
-// with its login as renewed since; opencode's login one of them while
-// illi may use it, Del leaving it to opencode (the next account in its
-// place), the picker connecting it again; Del logs one out, asked first
-// (one kept apart forgotten, the one in use let go); logging out of
-// ChatGPT forgets all of illi's, opencode's left to it, ChatGPT no longer
-// offered.
+// each, and from the questions they ask, down to closed. An API whose
+// variable is set connects on it, or on a key pasted; a key pasted shows
+// as dots, is checked with its provider (the network stood in for) and,
+// refused, is kept nowhere; taken, it is kept readable by its owner
+// alone, in use at once, offered, and never in a note whole. A connected
+// API's accounts: the one in use marked; Enter uses another; Del logs a
+// kept key out, asked first (Keep it keeps it), the environment's never
+// forgotten, as illi keeps no copy. The accounts are read again as the
+// picker opens (another terminal's change). Logging out of a provider,
+// asked first, forgets its keys and stops its models being offered. The
+// vendors setting leaving out what /login connected, /login says so and
+// how. ChatGPT's accounts: each named by its email, told by its plan; a
+// second signed in keeps the first apart, and Enter switches, each kept
+// apart in turn with its login as renewed since; opencode's login one of
+// them while illi may use it, Del leaving it to opencode (the next
+// account in its place), the picker connecting it again; Del logs one
+// out, asked first (one kept apart forgotten, the one in use let go);
+// logging out of ChatGPT forgets all of illi's, opencode's left to it,
+// ChatGPT no longer offered. The Claude plan (Claude Code stood in for):
+// your Claude Code logged in, its login connects it (or a sign-in to
+// another), run on as its environment names it; another account signs
+// in in a folder of illi's, Claude Code's page's link told, the code
+// asked as dots and given it, a wrong one saying why and Esc stopping
+// it, each leaving no folder; signed in, kept and in use, its folder
+// readable by its owner alone. Enter switches; Del leaves your Claude
+// Code logged in, and logs one of illi's out, its folder gone; logging
+// out of the Claude plan logs all of illi's out, the plan no longer
+// offered, your Claude Code still logged in.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";

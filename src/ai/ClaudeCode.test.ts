@@ -12,7 +12,8 @@
 // are asked as soon as its account is in use, as a turn has them, on
 // Claude Code's control channel, no model called: each learned and
 // kept, asked once an account (another asked anew); one that won't
-// read, none told, or no Claude Code changes nothing; a call without tools has none of Claude Code's, an agent's tools list
+// read, none told, or no Claude Code changes nothing; a call without
+// tools has none of Claude Code's, an agent's tools list
 // only the built-in ones it names (--tools); a message sent mid-run is
 // taken as it is echoed, one sent after the end left, as is one sent to
 // a call once (a recap), never written; a plan's limit, a missing login, a chat

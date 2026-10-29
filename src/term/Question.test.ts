@@ -29,7 +29,8 @@
 // their end), a drag choosing text, a double click keeping it, none from
 // the click that only focuses the window nor on text changed since the
 // paint. A secret asked for (an API key) shows a dot a character, never
-// its text, the cursor where it would be, a drag copying dots. The input as typed is kept under a question, typing going
+// its text, the cursor where it would be, a drag copying dots. The
+// input as typed is kept under a question, typing going
 // nowhere meanwhile, and comes back once it is answered. The pointer
 // moving onto an answer lights it; a click does what Enter does, held
 // just after the question shows and never from the click that only

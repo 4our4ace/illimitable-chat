@@ -105,8 +105,9 @@ import * as View from "../ui/View.ts";
 // the subagents of this run, whether at work (false: done, till the
 // person's next message); side: where the side panel shows and how wide
 // (config.SIDE, SIDE_WIDTH); todo: whether illi's to-do list shows
-// whole there (else folded); login: the device login waiting for
-// the person (/login; null: none); areas: the parts of the screen as last
+// whole there (else folded); login: the sign-in waiting for the person
+// (/login's: ChatGPT's device login, or Claude Code's waiting for its
+// code; one at a time; null: none); areas: the parts of the screen as last
 // painted, fields: the lines typed in as last painted (a press puts the
 // cursor in one), sel: the text chosen in one (null: none), hover: the button
 // under the pointer as last painted, drift: a drag's scrolling past an

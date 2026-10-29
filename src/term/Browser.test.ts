@@ -11,8 +11,8 @@
 // out): its arguments as given, from its own folder, in a session of its
 // own, its output dropped; a failure, a kill, one not found said in plain words; one
 // still running taken as opened; the next tried after one that fails.
-// /login's ChatGPT sign-in notice: true whether the browser opens or not, and put right
-// in place when it didn't.
+// /login's ChatGPT sign-in notice: true whether the browser opens or
+// not, and put right in place when it didn't.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";

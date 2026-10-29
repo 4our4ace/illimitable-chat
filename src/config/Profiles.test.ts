@@ -12,9 +12,11 @@
 // (off, sticky) added to the root's; a shortcut of the root's dropped in
 // a profile stays dropped.
 // Names a profile takes. Secrets left out of a JSON file. An export: no
-// login, accounts (their API keys), locks, log, update.json nor the state every profile shares
-// (models.json, trust.json, the counts), its config stripped; an import: a
-// new profile only, its config's commands dropped, its MCP servers off;
+// login, accounts (their API keys; one being written too), locks, log,
+// update.json nor the state every profile shares (models.json,
+// trust.json, the counts), its config stripped; an import: a new
+// profile only, its config's commands dropped and a login or accounts
+// in it, its MCP servers off;
 // an archive with a path out of its folder, or a link, is refused before
 // anything is unpacked. An export's chat is a snapshot,
 // whole while an illi writes to it. The chat folder a file is in, any
