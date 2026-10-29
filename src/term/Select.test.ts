@@ -11,7 +11,10 @@
 // once, the side on either hand or none (typing goes there; nothing
 // sent, the text as it was; on the rule under it, the text's end); a
 // drag from there still chooses and copies, a double click a word, the
-// cursor where the press put it; a scrolled input stays put under it.
+// cursor where the press put it; a scrolled input stays put under it. A
+// click on a reply's button copies what it holds, the pointer slipping on
+// it before it's let go too, and the click that only focused the window;
+// a drag off it chooses text.
 // No press moves it that only focused the window, nor a right one, nor
 // one under a popup, on a question in the input's place or with a pane
 // open (the input as painted before them takes none, though they aren't
@@ -255,6 +258,50 @@ test("a drag from the input still chooses its text and copies it as it's let go,
     expect([t.sel.unit, term_selected(t), t.scr.ed.pos]).toEqual([2, "words", 13]);
     expect(written(() => let_go(t, r, 17))).toEqual(["\x1b]52;c;" + Buffer.from("words").toString("base64") + "\x07"]);
     expect([t.scr.ed.pos, t.scr.ed.text]).toEqual([13, "pick these words"]);
+  });
+});
+
+test("a click on a reply's button copies what it holds, the pointer slipping on it before it's let go too; a drag off it chooses text, the button left out", () => {
+  sized(100, 30, () => {
+    const t = terminal();
+    View.view_hear(t.v, { $: "know", nodes: { "0+4": { text: "what was said first", to: "" } }, whole: { 4: { kind: "illi", text: "```ts\nlet x = 1\n```" } } });
+    View.view_hear(t.v, { $: "view", parts: [[0, 4], [4, 1]], turn: 4 });
+    paint(t);
+    const r   = t.ruled.rows.findIndex((row: any[]) => text(row).includes("⧉ copy"));
+    const c   = text(t.ruled.rows[r]).indexOf("⧉ copy");
+    const osc = (s: string) => "\x1b]52;c;" + Buffer.from(s).toString("base64") + "\x07";
+    const out = written(() => {
+      press(t, r, c);
+      pull(t, r, c + 3);
+      let_go(t, r, c + 3);
+    });
+    expect([out, t.sel, t.notices.at(-1)?.text]).toEqual([[osc("let x = 1")], null, "Copied 9 characters"]);
+    paint(t);
+    const off = written(() => {
+      press(t, r, c + 3);
+      pull(t, r + 1, c + 3);
+      let_go(t, r + 1, c + 3);
+    });
+    expect([t.sel.moved, off]).toEqual([true, [osc("  let x = 1")]]);
+  });
+});
+
+test("the click that only focused the window copies on a reply's button all the same, the focus told before it or after", () => {
+  sized(100, 30, () => {
+    const t = terminal();
+    View.view_hear(t.v, { $: "know", nodes: { "0+4": { text: "what was said first", to: "" } }, whole: { 4: { kind: "illi", text: "```ts\nlet x = 1\n```" } } });
+    View.view_hear(t.v, { $: "view", parts: [[0, 4], [4, 1]], turn: 4 });
+    paint(t);
+    const r   = t.ruled.rows.findIndex((row: any[]) => text(row).includes("⧉ copy"));
+    const c   = text(t.ruled.rows[r]).indexOf("⧉ copy");
+    const osc = (s: string) => "\x1b]52;c;" + Buffer.from(s).toString("base64") + "\x07";
+    Screen.screen_feed(t.scr, "\x1b[O");
+    const away = written(() => click(t, r, c));
+    expect([t.scr.focusing, away, t.sel]).toEqual([true, [osc("let x = 1")], null]);
+    Screen.screen_feed(t.scr, "\x1b[I");
+    paint(t);
+    const back = written(() => click(t, r, c + 1));
+    expect([t.scr.focusing, back]).toEqual([true, [osc("let x = 1")]]);
   });
 });
 

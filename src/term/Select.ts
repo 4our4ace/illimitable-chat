@@ -14,7 +14,9 @@
 // choice lights to its end (or the area's width); what's copied drops
 // each line's end spaces.
 // A reply's button under the pointer lights, and a click copies what it
-// holds; buttons are no text, so what's copied or quoted leaves them out.
+// holds, the pointer slipping on it before it's let go too (a drag from
+// it chooses text once it leaves it); buttons are no text, so what's
+// copied or quoted leaves them out.
 // The right button dragged over the chat chooses the same way (not from a
 // button), and as it's let go the text is quoted in the input, to reply
 // to it (not on an agent's read-only page); a right click soon after
@@ -31,7 +33,9 @@
 // bar, a glyph, a summary's gutter and /open, an open block's bar:
 // term_wordy) it acts at once. A press again soon on the cell whose click
 // just acted, or one that only focused the window, clicks nothing and
-// chooses no word (term_dead). Under a popup the mouse is its alone
+// chooses no word (term_dead); but one that focused it on a reply's
+// button copies all the same, as a window's first click does on Windows
+// (back from pasting elsewhere, the next copy takes one click). Under a popup the mouse is its alone
 // (Popup.ts popup_mouse, before all of this): nothing is chosen there,
 // and nothing lights; a question at the input takes the presses on its
 // answers alone (and on a line of a folded command saying what it hides;
@@ -91,7 +95,8 @@ function term_button(line: Paint.Line, col: number): (() => string) | undefined 
 // first: term_put); dragged, the choice follows the pointer (a chat scrolls
 // while it's past an edge); let go, the text chosen is copied, else it
 // was a click (none from a press that acts on nothing; none on the chat's
-// marks from one that let text chosen go: term_showing). The right
+// marks from one that let text chosen go: term_showing), as it is let go
+// on the button it was pressed on, however it moved (term_held). The right
 // button: the same in the chat, a character at a time (never from a
 // reply's button), the text chosen quoted as it's let go (term_quote),
 // else it was a right click, which takes a quote just made out
@@ -135,7 +140,7 @@ export function term_mouse(t: Term, key: string): void {
     term_drift(t, 0);
     term_follow(t);
     const sel = t.sel;
-    if (sel?.held && sel.moved) {
+    if (sel?.held && sel.moved && !term_held(t)) {
       sel.held = false;
       term_copied(t, term_selected(t));
     } else if (sel === null || sel.held) {
@@ -145,6 +150,14 @@ export function term_mouse(t: Term, key: string): void {
       }
     }
   }
+}
+
+// whether the left button is let go on the button it was pressed on, as
+// last painted: a click on it, though the pointer slipped a cell or more
+// between (a choice in it would be no text: buttons are none)
+function term_held(t: Term): boolean {
+  const pressed = term_under(t, t.scr.click);
+  return pressed !== undefined && term_under(t, t.scr.point) === pressed;
 }
 
 // a press on a line typed in as last painted (Field: the input, a
@@ -187,16 +200,17 @@ function term_showing(t: Term): boolean {
 
 // whether the left press down acts on nothing as a click, nor chooses a
 // word or a line (a drag from it still chooses text): it only focused the
-// window (Screen.ts focusing), or it is swallowed, again on the cell
-// whose click just acted, within TWICE of it (t.acted; a press there
-// holds the cell TWICE more)
+// window (Screen.ts focusing; not on a reply's button, as last painted:
+// that copies, which moves nothing on the screen), or it is swallowed,
+// again on the cell whose click just acted, within TWICE of it (t.acted;
+// a press there holds the cell TWICE more)
 function term_dead(t: Term, press = false): boolean {
   const a     = t.acted;
   const again = a !== null && t.scr.click.row === a.at.row && t.scr.click.col === a.at.col && t.scr.pressed < a.until;
   if (again && press) {
     a!.until = t.scr.pressed + Screen.TWICE;
   }
-  return again || t.scr.focusing === true;
+  return again || (t.scr.focusing === true && term_under(t, t.scr.click) === undefined);
 }
 
 // a held choice grown to the pointer, inside its area: from the first it
