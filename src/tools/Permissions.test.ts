@@ -55,6 +55,9 @@ test("fold: a pattern another covers is left out, a folder's covering those in i
   expect(Permissions.fold(["git push *", "git log *"])).toEqual(["git push *", "git log *"]);
   expect(Permissions.fold(["git push *", "git *"])).toEqual(["git *"]);
   expect(Permissions.fold(["a*", "a**", "a*"])).toEqual(["a*"]);
+  expect(Permissions.fold(["git ? *", "git *"])).toEqual(["git *"]);
+  expect(Permissions.fold(["npm run ?", "npm run *"])).toEqual(["npm run *"]);
+  expect(Permissions.fold(["/h/ab/*", "/h/a?/*"])).toEqual(["/h/a?/*"]);
   expect(Permissions.fold([])).toEqual([]);
 });
 

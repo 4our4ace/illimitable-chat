@@ -71,7 +71,9 @@ export type Request = { action: string; resources: string[]; save: string[]; spo
 export type Where = { cwd: string; top: string; files: string[] };
 
 // a path's place: absolute; its resource (from the working dir inside,
-// else absolute); outside, its folder's request (resource, save)
+// else absolute); outside, its folder's request (resource, save: ""
+// where its project's path holds a wildcard character, which a pattern
+// can't name alone: ~/*/* would allow every folder in home)
 type Target = { absolute: string; resource: string; outside?: { resource: string; save: string } };
 
 // a command's piece as written, and where it is
@@ -117,6 +119,10 @@ const ARITY: Record<string, number> = {
 // the devices a command reads or writes as a stream, and the process's
 // own descriptors: no folder asked for (any other device, a disk's, is)
 const DEVICES = /^\/(?:dev\/(?:null|zero|u?random|tty|std(?:in|out|err)|fd(?:\/\d+)?)|proc\/self\/fd(?:\/\d+)?)$/;
+
+// a path's character a pattern takes as a wildcard (Permissions.match:
+// * and ?; [ too, kept clear of)
+const WILD = /[*?[]/;
 
 // the top folders known to exist, by name (a path whose top folder
 // doesn't is no path: a regex, a pattern, /start/,/end/p)
@@ -234,7 +240,16 @@ export namespace Access {
       }
     })();
     const folder = type === "directory" ? absolute : path.dirname(absolute);
-    return { absolute, resource: slash(absolute), outside: { resource: slash(path.join(folder, "*")), save: slash(path.join(project(folder), "*")) } };
+    const top    = project(folder);
+    return { absolute, resource: slash(absolute), outside: { resource: slash(path.join(folder, "*")), save: WILD.test(top) ? "" : slash(path.join(top, "*")) } };
+  }
+
+  // folders outside (each its resource: the folder and *), those inside
+  // another of them left out, by their paths: a * or ? in a folder's
+  // name is that character, so ~/*/ hides no ~/.ssh/
+  export function outermost(resources: string[]): string[] {
+    const all = [...new Set(resources)];
+    return all.filter((r) => !all.some((o) => o !== r && o.endsWith("/*") && r.startsWith(o.slice(0, -1))));
   }
 
   // illi's customization places, as the patterns its own rules allow
@@ -302,7 +317,8 @@ function search(where: Where, action: string, dir: string, pattern: string | nul
 }
 
 // the folders outside, as one request (each folder once, first seen
-// first); none outside: none
+// first; one that saves nothing left out of its saves); none outside:
+// none
 function external(found: Array<{ target: Target; span: Span | null }>): Request[] {
   const seen = new Map<string, { save: string; span: Span | null }>();
   for (const { target, span } of found) {
@@ -310,7 +326,7 @@ function external(found: Array<{ target: Target; span: Span | null }>): Request[
       seen.set(target.outside.resource, { save: target.outside.save, span });
     }
   }
-  return seen.size === 0 ? [] : [{ action: "external_directory", resources: [...seen.keys()], save: [...new Set([...seen.values()].map((v) => v.save))], spots: [...seen.values()].map((v) => v.span) }];
+  return seen.size === 0 ? [] : [{ action: "external_directory", resources: [...seen.keys()], save: [...new Set([...seen.values()].map((v) => v.save).filter((s) => s !== ""))], spots: [...seen.values()].map((v) => v.span) }];
 }
 
 // Shell

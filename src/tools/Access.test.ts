@@ -12,7 +12,9 @@
 // option or a name, a redirection made as it runs, a disk's device all
 // the same), a heredoc's body never a command; one Shell.ts can't read
 // split crudely, so a rule still finds what is in it; the families
-// "don't ask again" saves; Claude Code's tools as illi's like ones. And
+// "don't ask again" saves (none for a folder whose path holds a
+// wildcard), folders inside another said as the outermost by their
+// paths; Claude Code's tools as illi's like ones. And
 // the rules on them: sudo * denies sudo's commands, bash * a bash -c, rm
 // * an rm in a case, rm -rf /* a quoted 'rm' -rf "/" and /bin/rm.
 
@@ -107,6 +109,14 @@ test("shell's folders outside however written: a space or quote in the path, a ~
   expect(shell("cut -d/ -f2 a.txt; awk -F/ '{print $NF}' x; sort -t/ -k2 a")).toHaveLength(1);
   expect(shell("export PATH=\"$HOME/.local/bin:$PATH\"; declare X=" + LIB)).toHaveLength(1);
   expect(shell("case x in *) cat ~root/x; curl -o" + LIB + "/x u; cut -d/ y ;; esac").map((r) => r[1])[0]).toEqual([ROOT + "/*", LIB + "/*"]);
+});
+
+test("a folder outside whose path holds * or ? saves nothing, a pattern of it allowing more; outermost: folders inside another by their paths, a * in a name only that character", () => {
+  expect(shell("cat \"" + LIB + "/*/x\" " + LIB + "/repo/pkg/y")[0]).toEqual(["external_directory", [LIB + "/*/*", LIB + "/repo/pkg/*"], [LIB + "/repo/*"]]);
+  expect(shell("cat \"" + LIB + "/a?/x\"")[0]).toEqual(["external_directory", [LIB + "/a?/*"], []]);
+  expect(Access.outermost([LIB + "/*/*", LIB + "/repo/pkg/*", LIB + "/a?/*", LIB + "/ab/*"])).toEqual([LIB + "/*/*", LIB + "/repo/pkg/*", LIB + "/a?/*", LIB + "/ab/*"]);
+  expect(Access.outermost([LIB + "/a/b/*", LIB + "/ab/*", LIB + "/a/*", LIB + "/a/*"])).toEqual([LIB + "/ab/*", LIB + "/a/*"]);
+  expect(Access.outermost([DIR + "/illi/RULES.md", LIB + "/a/*", DIR + "/*"])).toEqual([DIR + "/*"]);
 });
 
 test("shell Shell.ts can't read: split crudely, its paths found by their look", () => {

@@ -237,8 +237,16 @@ test("Claude Code's permission prompt is judged as illi's own calls: what stays 
   const nested = approve("Bash", { command: "ls " + OUT + "/a/b/x.txt " + OUT + "/a/y.txt " + OUT + "/z.txt" });
   await until(() => v.asks.length === 1);
   expect(v.asks[0]).toMatchObject({ why: OUTSIDE, keep: "files in " + OUT + "/" });
-  await answer(true, false);
+  await answer(true, true);
   await nested;
+  await until(() => v.asks.length === 0);
+  expect(JSON.parse(fs.readFileSync(config.PERMISSIONS, "utf8")).projects[chat.tools.cwd]).toEqual({ saved: [{ action: "external_directory", resource: OUT + "/*" }] });
+  fs.rmSync(config.PERMISSIONS);
+  const wild = approve("Bash", { command: "cat \"" + OUT + "/*/x\" " + OUT + "/a/y.txt" });
+  await until(() => v.asks.length === 1);
+  expect(v.asks[0]).toMatchObject({ why: "it reaches outside the project: " + OUT + "/*/, " + OUT + "/a/", keep: "files in " + OUT + "/a/" });
+  await answer(true, false);
+  await wild;
   await until(() => v.asks.length === 0);
   const no = approve("Write", { file_path: OUT + "/a-illi-test.txt", content: "x" });
   await answer(false, false, "keep it in the repo");
