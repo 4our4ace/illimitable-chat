@@ -9,7 +9,9 @@
 // start), one still going kept. What the views are told
 // of the calls: the input the main agent's last request read. A caller in
 // Claude Code gets only the tools it lacks (?lean), its permission prompt
-// whatever tools its agent lists (no other caller ever gets it), and
+// whatever tools its agent lists (no other caller ever gets it; a yes
+// never echoes the input, a long one past what Claude Code takes from a
+// tool, only one a hook changed), and
 // prompts that say it works inside illi (a subagent named only illi's
 // tools it has, one started fresh none that read the chat), the
 // project's CLAUDE.md left to Claude Code. Its
@@ -215,7 +217,7 @@ test("a caller in Claude Code gets only the tools it lacks, served at ?lean; its
   expect(Tools.system("head", project, "claude-code")).not.toContain("a rule of the project");
 }, 20000);
 
-test("Claude Code's permission prompt is judged as illi's own calls: what stays in the project unasked, a folder outside asked with why, the command whole for the question; yes, no with a reason, don't ask again saved for the project; trust runs it; stopped or no one there, no", async () => {
+test("Claude Code's permission prompt is judged as illi's own calls, a yes never echoing the input (a long one would pass what Claude Code takes from a tool): what stays in the project unasked, a folder outside asked with why, the command whole for the question; yes, no with a reason, don't ask again saved for the project; trust runs it; stopped or no one there, no", async () => {
   const v = View.view_new();
   View.link_open(v, Chat.link(chat, (msg) => void View.view_hear(v, msg)));
   await until(() => v.up);
@@ -226,13 +228,14 @@ test("Claude Code's permission prompt is judged as illi's own calls: what stays 
   };
   const AGAIN = " Don't run it again as is: ask the user, or do it another way. They can allow it in /permissions.";
   const OUTSIDE = "it reaches outside the project: " + OUT + "/";
-  expect(await approve("Bash", { command: "rm -rf build && git push --force origin main" })).toEqual({ behavior: "allow", updatedInput: { command: "rm -rf build && git push --force origin main" } });
+  expect(await approve("Bash", { command: "rm -rf build && git push --force origin main" })).toEqual({ behavior: "allow" });
+  expect(await approve("Write", { file_path: "page.html", content: "<p>long</p>\n".repeat(20000) })).toEqual({ behavior: "allow" });
   expect(await approve("Task", { prompt: "look" })).toMatchObject({ behavior: "allow" });
   const yes = approve("Bash", { command: "cat " + OUT + "/notes.txt" });
   await until(() => v.asks.length === 1);
   expect(v.asks[0]).toMatchObject({ who: "illi", tool: "Bash", what: "cat " + OUT + "/notes.txt", why: OUTSIDE, keep: "files in " + OUT + "/" });
   await answer(true, false);
-  expect(await yes).toEqual({ behavior: "allow", updatedInput: { command: "cat " + OUT + "/notes.txt" } });
+  expect(await yes).toEqual({ behavior: "allow" });
   await until(() => v.asks.length === 0);
   const nested = approve("Bash", { command: "ls " + OUT + "/a/b/x.txt " + OUT + "/a/y.txt " + OUT + "/z.txt" });
   await until(() => v.asks.length === 1);

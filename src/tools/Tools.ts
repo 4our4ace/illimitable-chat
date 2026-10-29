@@ -1003,12 +1003,15 @@ export namespace Tools {
   // it answers stays Claude Code's), then judged as illi's own would be
   // (Access.hosted: what illi's like tool asks), so the same rules,
   // approvals and mode hold there. Its answer as Claude Code reads it:
-  // the input to run, or a no with what the model is told
+  // a yes (with the input to run if a hook changed it; never the input
+  // echoed back, as a long one, a file's whole content, passes the size
+  // Claude Code takes from a tool, and it refuses the answer), or a no
+  // with what the model is told
   export async function approve(tools: Tools, who: string, tool: string, input: unknown, signal: AbortSignal): Promise<Out> {
     const told = await Plugins.before_tool({ tool, input, agent: who === MAIN ? null : who, cwd: tools.cwd, signal });
     const used = "block" in told ? undefined : told.input;
     const stop = "block" in told ? { text: told.block, fail: true } : await Tools.guard(tools, who, tool, used, signal, (where) => Access.hosted(where, tool, used), told);
-    const answer = stop === null ? { behavior: "allow", updatedInput: used } : { behavior: "deny", message: stop.text };
+    const answer = stop !== null ? { behavior: "deny", message: stop.text } : used === input ? { behavior: "allow" } : { behavior: "allow", updatedInput: used };
     return { text: JSON.stringify(answer), fail: false };
   }
 
