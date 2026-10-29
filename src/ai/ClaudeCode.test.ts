@@ -13,6 +13,8 @@
 // a call once (a recap), never written; a plan's limit, a missing login, a chat
 // too long (grown, once a tool's result came back; the message its API
 // error stands in never a reply) and a crash end it in plain words, a
+// request holding more cache marks than the API takes ends it `marks`
+// (a reply begun cut), a
 // turn's call (its room set) with Claude Code's compaction off, so illi
 // folds the chat; a stop cuts it; a missing
 // CLI says to install it. A rate limit event's 5-hour and weekly windows
@@ -121,6 +123,11 @@ if (scene.includes("turn")) {
   out({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "t1", content: [{ type: "text", text: "line 3" }] }] }, parent_tool_use_id: null });
   out({ type: "assistant", message: { model: "<synthetic>", content: [{ type: "text", text: "Prompt is too long" }] }, error: "invalid_request", is_api_error_message: true, parent_tool_use_id: null });
   result({ is_error: true, result: "Prompt is too long" });
+} else if (scene.includes("marks")) {
+  const why = "API Error: 400 A maximum of 4 blocks with cache_control may be provided. Found 5.";
+  out({ type: "assistant", message: { content: [{ type: "text", text: "Looking." }] }, parent_tool_use_id: null });
+  out({ type: "assistant", message: { model: "<synthetic>", content: [{ type: "text", text: why }] }, error: "unknown", is_api_error_message: true, api_error_status: 400, parent_tool_use_id: null });
+  result({ is_error: true, api_error_status: 400, terminal_reason: "api_error", result: why });
 } else if (scene.includes("crash")) {
   process.stderr.write("boom\n");
   process.exit(3);
@@ -283,6 +290,12 @@ test("a plan's limit, a missing login, a chat too long (grown once a tool's resu
   expect(grown.log.compact).toBe("1");
   expect((await call("long", true)).log.compact).toBeNull();
   expect((await call("crash")).end).toMatchObject({ ok: false, stop: "down", text: "boom" });
+});
+
+test("a request holding more cache marks than the API takes (Claude Code's own four beside illi's) ends the call `marks`, a reply begun cut", async () => {
+  const { events, end } = await call("marks");
+  expect(end).toMatchObject({ ok: false, stop: "marks", cut: true, text: "API Error: 400 A maximum of 4 blocks with cache_control may be provided. Found 5." });
+  expect(events.filter((e) => e.$ === "Entry" && e.kind === "illi").map((e) => e.text)).toEqual(["Looking."]);
 });
 
 test("a stop cuts the call, what streamed logged as cut off; messages not taken are left", async () => {

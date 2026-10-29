@@ -40,7 +40,9 @@
 // too long; its task, and a message told meanwhile, kept whole, a
 // restart reading it so, and only what its calls get naming the lines
 // it holds (recall); three recaps in a row with no call grown end its
-// run, saying why, as a recap that fails does.
+// run, saying why, as a recap that fails does. A subagent's call refused
+// for its cache marks goes on from a note, its next call unmarked, once
+// (refused so again, its run ends, saying why).
 
 import { expect, setSystemTime, test } from "bun:test";
 import * as fs from "node:fs";
@@ -603,6 +605,18 @@ test("a subagent outgrowing its model's window recaps its own log and goes on fr
   expect(got.report).toStartWith("[" + got.name + "]\nlisted: 3 files\n");
   chat.tools.agents.delete(got.name);
   expect(Tools.ask(chat.tools, Tools.agent(chat.tools, got.name)!).blocks.at(-1)!.text).toBe(view);
+});
+
+test("a subagent's call refused for its cache marks goes on from a note, its next call unmarked, once: refused so again, its run ends saying why", async () => {
+  const why = "API Error: 400 A maximum of 4 blocks with cache_control may be provided. Found 5.";
+  const none = () => {};
+  const once = await sub("look", 10000, (k, feed) => feed.end(k === 0 ? { ok: false, text: why, left: [], stop: "marks" } : { ok: true, text: "looked", left: [] }), none);
+  expect(once.calls.map((a) => a.blocks.some((b: any) => b.mark))).toEqual([true, false]);
+  expect(once.calls[1].blocks.at(-1).text).toContain("note: Claude Code's request was refused over a technical limit, so your work goes on a simpler way.");
+  expect(once.report).toStartWith("[" + once.name + "]\nlooked\n");
+  const twice = await sub("look", 10000, (_, feed) => feed.end({ ok: false, text: why, left: [], stop: "marks" }), none);
+  expect(twice.calls.map((a) => a.blocks.some((b: any) => b.mark))).toEqual([true, false]);
+  expect(twice.report).toContain("failed: " + why);
 });
 
 test("a subagent's recaps that never let a call grow end its run after three in a row, saying why; a call that grew starts the count anew; a recap refused ends it answered, one the vendor was too busy for unanswered, as a call's", async () => {

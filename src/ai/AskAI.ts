@@ -105,7 +105,11 @@ export type Event =
 // stop: who ended a call that failed (Agent.ts): the model (`fail`: it
 // answered, so the failure is its input's doing, a refusal or a stop
 // reason; asked again, it fails alike), the request's length (`full`:
-// too long for the model's window, or past its room), we (`lost`: a
+// too long for the model's window, or past its room), its cache marks
+// (`marks`: more than the API takes, Claude Code's own beside illi's:
+// the turn, or an agent's run, goes on with none, Chat.unmark; a call
+// of one request, as a summary's, never ends so, Claude Code's second
+// message mark needing a request before it), we (`lost`: a
 // stop), the vendor (`down`), or none (our setup threw); again: down, but
 // a later try may answer (the vendor busy or out of reach); grew: full
 // once a step's tool results went in, that step having fit (the call's
@@ -119,7 +123,7 @@ export type End = {
   text   : string;
   left   : Say[];
   note?  : string;
-  stop?  : "fail" | "lost" | "down" | "full";
+  stop?  : "fail" | "lost" | "down" | "full" | "marks";
   again? : boolean;
   grew?  : boolean;
   cut?   : boolean;
@@ -238,6 +242,12 @@ export namespace AskAI {
   export function marks(blocks: Block[], most: number): Block[] {
     let left = most;
     return blocks.toReversed().map((b) => (b.mark && left-- > 0 ? b : { ...b, mark: false })).reverse();
+  }
+
+  // a call with none of its blocks marked (one refused for its marks
+  // goes on so: End `marks`)
+  export function unmarked(ask: Ask): Ask {
+    return { ...ask, blocks: ask.blocks.map((b) => ({ ...b, mark: false })) };
   }
 
   // whether a call's end is cached: its last block is marked; one that

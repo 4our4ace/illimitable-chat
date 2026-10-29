@@ -19,7 +19,9 @@
 // of Claude Code's either, nor its MCP servers, commands or hooks. The
 // blocks go as one user message, the last marked one before the last
 // cached for an hour (MARK: else a call re-writes the whole view to the
-// cache, though only its end changed), a message sent mid-run as another
+// cache, though only its end changed; a request Claude Code marks four
+// times itself is refused for it, the call ending `marks`, and the turn
+// goes on with none), a message sent mid-run as another
 // (taken as Claude Code echoes it; a `once` call's left, as Agent.ts
 // leaves it); the input ends at the first result, so Claude Code ends
 // once all it read is done, and a message sent after is left. Its
@@ -121,7 +123,9 @@ const OURS = "mcp__illi__";
 // a marked block's cache entry: an hour, as Claude Code's own are (one
 // of five minutes may not follow theirs); one of a call's blocks, its
 // last marked (Claude Code marks the last block itself, and its own
-// prompt: a request holds its four marks at most)
+// prompt twice: a request holds four marks at most. At times Claude Code
+// marks a second message too, where its last request ended, and the API
+// refuses the five: ClaudeCode.failed, `marks`)
 const MARK = { type: "ephemeral", ttl: "1h" };
 const MARKS = 1;
 
@@ -133,10 +137,12 @@ const WAIT = 24 * 60 * 60 * 1000;
 // how long a stop waits for Claude Code to end before killing it (ms)
 const KILL = 5e3;
 
-// what a failure says: a plan's limit, a login missing, a busy service
-const LIMIT = /usage limit|limit reached|rate.?limit|\b429\b/i;
-const LOGIN = /not logged in|please run \/login|invalid api key|authentication|oauth token|\b401\b/i;
-const BUSY  = /overloaded|\b529\b|\b5\d\d\b|unavailable|timed? ?out|ECONN|network/i;
+// what a failure says: a plan's limit, a login missing, a busy service,
+// a request holding more cache marks than the API takes
+const LIMIT  = /usage limit|limit reached|rate.?limit|\b429\b/i;
+const LOGIN  = /not logged in|please run \/login|invalid api key|authentication|oauth token|\b401\b/i;
+const BUSY   = /overloaded|\b529\b|\b5\d\d\b|unavailable|timed? ?out|ECONN|network/i;
+const MARKED = /maximum of \d+ blocks with cache_control/i;
 
 // the plan's windows a rate limit event tells the share used of
 // (unifiedWindows: its utilization a fraction, 1 the whole), by their
@@ -581,12 +587,16 @@ export namespace ClaudeCode {
     return { ...end, left: [], cut: run.said, grew: end.stop === "full" && run.grew, ...first };
   }
 
-  // a failure in plain words: too long for the window; a plan's limit
-  // (when it resets, if told); a login missing; a busy service (a later
-  // try may answer); else as Claude Code says it
+  // a failure in plain words: too long for the window; more cache marks
+  // than the API takes (`marks`: illi's one beside Claude Code's four);
+  // a plan's limit (when it resets, if told); a login missing; a busy
+  // service (a later try may answer); else as Claude Code says it
   export function failed(said: string, status: number | null, reset: number): End {
     if (Agent.full(said)) {
       return { ok: false, text: said, left: [], stop: "full" };
+    }
+    if (MARKED.test(said)) {
+      return { ok: false, text: said, left: [], stop: "marks" };
     }
     if (status === 429 || reset > 0 || LIMIT.test(said)) {
       const when = reset > Date.now() ? ": it resets at " + Agent.when(reset) : "";

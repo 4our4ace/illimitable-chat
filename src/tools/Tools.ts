@@ -310,6 +310,9 @@ const RECAP_ZOOM = ' (zoom("$") reads all of it)';
 const RECAPPING  = "Its context is full: writing a recap of its work to go on from.";
 const REFITS     = 3;
 const NO_FIT     = "its work won't fit #'s window even recapped";
+// an agent's call refused for its cache marks (Tools.run): the note it
+// goes on from
+const UNMARKED   = "Claude Code's request was refused over a technical limit, so your work goes on a simpler way. Go on where you were: your final reply is still your report to illi.";
 
 // where the tools run, in the system prompt (HERE_DOC); the working dir
 // and the time now, at the start of each call's message (Tools.here), so
@@ -879,19 +882,28 @@ export namespace Tools {
   // calls while a message waits in its log (told too late for the call
   // before), or once one outgrew its model's window and its log was
   // recapped (Tools.refit; refits: those in a row with no work between,
-  // a call answered or grown starting them anew); then its report,
+  // a call answered or grown starting them anew), or was refused for its
+  // cache marks (End `marks`, as a turn's call: Chat.unmark), going on
+  // from a note (UNMARKED), its next call with no block marked (once:
+  // refused so again, it ends); then its report,
   // unanswered if stopped or the vendor was busy or out of reach
   // (End.again), its recap's too. Detached: a throw ends it as a failed
   // reply, still reported
   export async function run(tools: Tools, agent: Agent, call: Call | null = null): Promise<void> {
     let away = false;
     let refits = 0;
+    let unmarked = false;
     try {
       for (let more = true; more; call = null) {
-        agent.call = call ?? AskAI.ask(Tools.ask(tools, agent), (ev) => tools.hooks.on(agent, ev));
+        agent.call = call ?? AskAI.ask(Tools.ask(tools, agent, unmarked), (ev) => tools.hooks.on(agent, ev));
         tools.hooks.change();
-        const end = await agent.call.done;
+        const end: End = await agent.call.done;
         agent.call = null;
+        unmarked = end.stop === "marks" && !agent.stop && !unmarked;
+        if (unmarked) {
+          tools.hooks.push(agent, "note", UNMARKED);
+          continue;
+        }
         refits = end.ok || end.grew ? 0 : refits;
         const last = end.stop === "full" && !agent.stop ? await Tools.refit(tools, agent, ++refits) : end;
         if (last === null) {
@@ -983,8 +995,9 @@ export namespace Tools {
   // (SUB_FRESH). Its room is a turn's (Chat.call; a window not told:
   // none), so one outgrowing its model's window ends `full` and its log
   // is recapped (Tools.refit), on claude-code too (Claude Code's
-  // compaction off: ClaudeCode.env)
-  export function ask(tools: Tools, agent: Agent): Ask {
+  // compaction off: ClaudeCode.env); unmarked: none of its blocks marked
+  // (the call before refused for its marks: Tools.run)
+  export function ask(tools: Tools, agent: Agent, unmarked = false): Ask {
     const log = { text: Logs.fit(Logs.view(tools.mem, agent.name)), mark: true };
     const server = Tools.at(tools, agent.name);
     const profile = Custom.agent(tools.cwd, agent.role.agent);
@@ -995,7 +1008,8 @@ export namespace Tools {
     const effort = agent.role.effort ?? run.effort;
     const window = Pick.window(pick);
     const room = window === undefined ? undefined : Math.round(window * (Pick.room(pick) ?? config.ROOM));
-    return { ...run, effort, system, blocks, searches: SEARCHES, server, builtins: profile?.builtins, listed: profile?.tools, room };
+    const ask = { ...run, effort, system, blocks, searches: SEARCHES, server, builtins: profile?.builtins, listed: profile?.tools, room };
+    return unmarked ? AskAI.unmarked(ask) : ask;
   }
 
   // Claude Code asking leave to use a tool (its permission prompt): past
