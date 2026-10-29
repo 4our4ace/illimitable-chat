@@ -6,8 +6,13 @@
 // (lean), the view's marked block cached for an hour, its stream shown
 // live and logged, illi's tools by their own
 // names, the tokens its first request read told (none if that was
-// refused), and the model's window learned (by its canonical id) and kept;
-// a call without tools has none of Claude Code's, an agent's tools list
+// refused), and the model's window learned (by its canonical id) and kept,
+// as a call with Claude Code's compaction off tells it (one with it on
+// tells its autocompact window: none learned). The Claude plan's windows
+// are asked as soon as its account is in use, as a turn has them, on
+// Claude Code's control channel, no model called: each learned and
+// kept, asked once an account (another asked anew); one that won't
+// read, none told, or no Claude Code changes nothing; a call without tools has none of Claude Code's, an agent's tools list
 // only the built-in ones it names (--tools); a message sent mid-run is
 // taken as it is echoed, one sent after the end left, as is one sent to
 // a call once (a recap), never written; a plan's limit, a missing login, a chat
@@ -32,7 +37,9 @@
 // one that could load loads it, and the call tells them, one named by
 // its tools alone whole, its tools then told; a list naming only
 // servers off or illi's own loads none. A name is spelled as Claude
-// Code spells it in its tools'.
+// Code spells it in its tools'. A Claude plan's account in use is the
+// Claude Code folder its calls run in (the user's own: as the
+// environment names it); a switch drops what the other's calls told.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -46,6 +53,7 @@ const { ClaudeCode } = await import("./ClaudeCode.ts");
 const { Pick } = await import("./Pick.ts");
 const { Mcp } = await import("../tools/Mcp.ts");
 const config = await import("../config/Config.ts");
+const { Accounts } = await import("../config/Accounts.ts");
 
 // a stand-in MCP server of illi's own: it starts, and lists one tool
 // (at /bad, it fails)
@@ -68,12 +76,14 @@ afterAll(() => {
 
 // the stand-in: logs its arguments, illi's prompt and its input; echoes
 // each message as Claude Code does (--replay-user-messages); plays the
-// scene its first message names
+// scene its first message names. Asked a model's window on its control
+// channel, it answers it as FAKE_SIZES has it (junk: a line that won't
+// read), each asking noted in asked.txt beside the log
 const FAKE = String.raw`#!/usr/bin/env bun
 const fs = require("node:fs");
 const args = process.argv.slice(2);
-const file = args[args.indexOf("--append-system-prompt-file") + 1];
-const log = { args, prompt: fs.readFileSync(file, "utf8"), input: [], compact: process.env.DISABLE_COMPACT ?? null };
+const file = args.includes("--append-system-prompt-file") ? args[args.indexOf("--append-system-prompt-file") + 1] : null;
+const log = { args, prompt: file === null ? null : fs.readFileSync(file, "utf8"), input: [], compact: process.env.DISABLE_COMPACT ?? null, folder: process.env.CLAUDE_CONFIG_DIR ?? null };
 const save = () => fs.writeFileSync(process.env.FAKE_LOG, JSON.stringify(log));
 const out = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 const ev = (event) => out({ type: "stream_event", event, parent_tool_use_id: null });
@@ -89,6 +99,13 @@ const next = async (ms) => {
   return m;
 };
 const first = await next(5000);
+if (first.type === "control_request") {
+  const model = args[args.indexOf("--model") + 1];
+  const size  = JSON.parse(process.env.FAKE_SIZES ?? "{}")[model];
+  fs.appendFileSync(require("node:path").dirname(process.env.FAKE_LOG) + "/asked.txt", JSON.stringify({ model, args, compact: log.compact, folder: log.folder, asked: first.request }) + "\n");
+  process.stdout.write(size === "junk" ? "junk\n" : JSON.stringify({ type: "control_response", response: { subtype: "success", request_id: first.request_id, response: { model, rawMaxTokens: size } } }) + "\n");
+  process.exit(0);
+}
 const scene = first.message.content.map((c) => c.text).join("");
 // init: illi's server, and, unless --strict-mcp-config, Claude Code's own
 // (init.json beside the log), their tools but those a rule denies
@@ -211,7 +228,7 @@ test("before any call of the run has told Claude Code's servers: by name, those 
 });
 
 test("a turn runs Claude Code whole, illi's prompt after its own and illi's tools added; its stream shown and logged, the tokens its first request read told", async () => {
-  const { events, end, log } = await call("turn");
+  const { events, end, log } = await call("turn", true, undefined, { room: 900 });
   expect(log.args).toContain("--mcp-config");
   expect(JSON.parse(log.args[log.args.indexOf("--mcp-config") + 1])).toEqual({ mcpServers: { illi: { type: "http", url: "http://127.0.0.1:1/key/main?lean", timeout: 86400000 } } });
   expect(log.args.slice(log.args.indexOf("--allowedTools"), log.args.indexOf("--allowedTools") + 2)).toEqual(["--allowedTools", "mcp__illi"]);
@@ -233,6 +250,46 @@ test("a turn runs Claude Code whole, illi's prompt after its own and illi's tool
   expect(Pick.window({ vendor: "claude-code", model: "opus-5.5", effort: "high", speed: "slow" })).toBe(1000000);
   expect(JSON.parse(fs.readFileSync(DIR + "/models.json", "utf8")).vendors["claude-code"].find((m: any) => m.label === "opus-5.5").window).toBe(1000000);
   expect(fs.existsSync(log.args[log.args.indexOf("--append-system-prompt-file") + 1])).toBe(false);
+});
+
+test("the Claude plan's windows are asked as soon as its account is in use, as a turn has them, no model called: each learned and kept, asked once an account; junk, none told or no Claude Code change nothing; a call with compaction on tells no window", async () => {
+  const opus   = { vendor: "claude-code", model: "opus-5.5", effort: "high", speed: "slow" } as const;
+  const sonnet = { ...opus, model: "sonnet-5.5" };
+  const haiku  = { ...opus, model: "haiku-5.5" };
+  const asked  = () => (fs.existsSync(DIR + "/asked.txt") ? fs.readFileSync(DIR + "/asked.txt", "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
+  process.env.FAKE_SIZES = JSON.stringify({ "claude-opus-5-5": 990000, "claude-sonnet-5-5": 500000, "claude-haiku-5-5": "junk" });
+  try {
+    expect(await ClaudeCode.models()).toBe(true);
+    expect([Pick.window(opus), Pick.window(sonnet), Pick.window(haiku), Pick.window({ ...opus, model: "fable-5.1" })]).toEqual([990000, 500000, 200000, 200000]);
+    expect(JSON.parse(fs.readFileSync(DIR + "/models.json", "utf8")).vendors["claude-code"].find((m: any) => m.label === "sonnet-5.5").window).toBe(500000);
+    const all = asked();
+    expect(all.map((a) => a.model).sort()).toEqual(["claude-fable-5-1", "claude-haiku-5-5", "claude-opus-5-5", "claude-sonnet-5-5"]);
+    expect(all.every((a) => a.compact === "1" && a.args.includes("--strict-mcp-config") && a.args.includes("--no-session-persistence") && a.args[a.args.indexOf("--tools") + 1] === "")).toBe(true);
+    expect(all[0].asked).toEqual({ subtype: "get_context_usage", detail: "summary" });
+    expect(await ClaudeCode.models()).toBe(true);
+    expect(asked().length).toBe(4);
+    await call("turn");
+    expect(Pick.window(opus)).toBe(990000);
+    await call("turn", true, undefined, { room: 900 });
+    expect(Pick.window(opus)).toBe(1000000);
+    const me = (id: string) => ({ id, email: id + "@example.com", plan: "max", org: "" });
+    Accounts.write(config.ROOT, { "claude-code": { use: "c1", accounts: [me("own"), me("c1")] } });
+    config.config_accounts(true);
+    process.env.FAKE_SIZES = "{}";
+    expect(await ClaudeCode.models()).toBe(false);
+    expect([asked().length, asked().at(-1).folder]).toEqual([8, config.ROOT + "/claude/c1"]);
+    const bin = ClaudeCode.bin;
+    ClaudeCode.bin = DIR + "/no-such-claude";
+    try {
+      expect(await ClaudeCode.size("", "claude-opus-5-5")).toBe(0);
+    } finally {
+      ClaudeCode.bin = bin;
+    }
+  } finally {
+    delete process.env.FAKE_SIZES;
+    Accounts.write(config.ROOT, {});
+    config.config_accounts(true);
+  }
 });
 
 test("a call without tools has none of Claude Code's, nor its MCP servers, commands or hooks", async () => {
@@ -281,7 +338,7 @@ test("a plan's limit, a missing login, a chat too long (grown once a tool's resu
   const limit = (await call("limit")).end;
   expect(limit).toMatchObject({ ok: false, stop: "down", again: true });
   expect(limit.text).toMatch(/^your Claude plan's usage limit is reached: it resets at (\w{3} )?\d\d:\d\d; \/model picks another model meanwhile$/);
-  expect((await call("login")).end).toMatchObject({ ok: false, stop: "down", text: "Claude Code isn't logged in: run claude in a terminal, log in there (/login), then send a message" });
+  expect((await call("login")).end).toMatchObject({ ok: false, stop: "down", text: "Claude Code isn't logged in: /login signs in to your Claude plan, then send a message" });
   const long = (await call("long")).end;
   expect([long, long.first]).toMatchObject([{ ok: false, stop: "full", grew: false }, undefined]);
   const grown = await call("grown", true, undefined, { room: 900 });
@@ -314,7 +371,7 @@ test("a missing CLI says to install it", async () => {
   ClaudeCode.bin = DIR + "/no-such-claude";
   try {
     const end = await ClaudeCode.ask({ vendor: "claude-code", model: "m", effort: "low", speed: "slow", system: "", blocks: [], searches: 0, server: "" } as any, () => {}).done;
-    expect(end).toMatchObject({ ok: false, stop: "down", text: "Claude Code isn't installed here: install it (code.claude.com), log in with claude, then send a message" });
+    expect(end).toMatchObject({ ok: false, stop: "down", text: "Claude Code isn't installed here: install it (code.claude.com), then /login connects your Claude plan" });
   } finally {
     ClaudeCode.bin = bin;
   }
@@ -386,4 +443,27 @@ test("a server's name as Claude Code spells it in its tools': a character it doe
   expect(ClaudeCode.spell("claude.ai Claude Docs")).toBe("claude_ai_Claude_Docs");
   expect(ClaudeCode.spell("claude.ai Box (Beta)")).toBe("claude_ai_Box_Beta");
   expect(ClaudeCode.spell("odd  name.")).toBe("odd__name_");
+});
+
+test("a Claude plan's account in use is a Claude Code folder its calls run in (the user's own: as the environment names it); a switch drops what the other's calls told, its servers and its plan's use", async () => {
+  fs.writeFileSync(DIR + "/init.json", JSON.stringify(INIT));
+  const was = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = DIR + "/mine";
+  try {
+    expect((await call("turn")).log.folder).toBe(DIR + "/mine");
+    ClaudeCode.windows({ unifiedWindows: { five_hour: { utilization: 0.5, resetsAt: Math.floor(Date.now() / 1000) + 3600 } } });
+    expect([ClaudeCode.servers()?.length, ClaudeCode.told() !== null]).toEqual([4, true]);
+    const me = (id: string) => ({ id, email: id + "@example.com", plan: "max", org: "" });
+    Accounts.write(config.ROOT, { "claude-code": { use: "c1", accounts: [me("own"), me("c1")] } });
+    config.config_accounts(true);
+    expect([config.config_claude_dir(), ClaudeCode.servers(), ClaudeCode.told()]).toEqual([config.ROOT + "/claude/c1", null, null]);
+    expect((await call("turn")).log.folder).toBe(config.ROOT + "/claude/c1");
+    Accounts.write(config.ROOT, { "claude-code": { use: "own", accounts: [me("own"), me("c1")] } });
+    config.config_accounts(true);
+    expect([ClaudeCode.servers(), (await call("turn")).log.folder]).toEqual([null, DIR + "/mine"]);
+  } finally {
+    was === undefined ? delete process.env.CLAUDE_CONFIG_DIR : (process.env.CLAUDE_CONFIG_DIR = was);
+    Accounts.write(config.ROOT, {});
+    config.config_accounts(true);
+  }
 });

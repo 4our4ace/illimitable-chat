@@ -10,7 +10,7 @@ Chat
 | Key or command | Does |
 | -------------- | ---- |
 | Enter | send |
-| Esc | close a list; else clear the notes, and twice: stop illi and its subagents at work (a `/compact` under way too; background jobs go on: `/background`) |
+| Esc | close a list (`/login`'s: back a level); else clear the notes, and twice: stop illi and its subagents at work (a `/compact` under way too; background jobs go on: `/background`) |
 | Ctrl+C | clear the input; on an empty one, stop illi and its subagents (again: quit); text chosen: copy it again |
 | Ctrl+D | clear the input; on an empty one, quit, every profile open in this terminal too (while background jobs run, subagents or another profile are at work, it says what a quit stops: again to quit) |
 | Tab | take the suggested reply (it stays after a message of your own, to send as well, till illi answers) |
@@ -74,8 +74,8 @@ Setup
 
 | Key or command | Does |
 | -------------- | ---- |
-| `/login` | sign in to ChatGPT (Plus or Pro) with a code, its page opened in your browser; illi keeps the login and renews it |
-| `/logout` | remove illi's own ChatGPT login (opencode's, if any, is used again) |
+| `/login` | the providers, ChatGPT and Claude, each opening its plan and its API key: connect one, switch between its accounts, add one, log out; Esc goes back a level ([Providers](providers.md#connecting-login)) |
+| `/logout` | the providers, as `/login`: Del logs out of an account, the last row of a plan or a key out of it |
 | `/settings` | all the settings: type to search, Left, Right or Enter change one, Del puts its default back |
 | `/shortcuts` | the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one |
 | `/set <key> [value]` | change a setting (default: back to its default); no value: opens `/settings` at it. A `/word` finds every setting too, by its key or what it does |
@@ -209,7 +209,7 @@ and what you were typing comes back once you answer.
 | Ctrl+O | a question's long command: show it all, or fold it again |
 | Ctrl+Home, Ctrl+End | the first, the last (Home and End too, where you can't type) |
 | Enter | pick |
-| Esc (or Ctrl+C, Ctrl+D) | close; a question: No |
+| Esc (or Ctrl+C, Ctrl+D) | close (`/login`'s: back a level); a question: No |
 | typing | search, where the list has one, by name (Ctrl+P's by the words of what each row does too, as `/` does), or the line a question asks; it edits as the input does, and a paste goes there as one line |
 
 - In a list the wheel scrolls it; the row under the pointer lights as it

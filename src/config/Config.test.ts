@@ -1,8 +1,8 @@
 // Config test
 // ===========
-// `bun test Config.test.ts`. A pick on a vendor added is refused till the
-// next start, as config_live reads it on the vendors running, and the
-// settings after it are still read anew; `autocompacts` from a variable
+// `bun test Config.test.ts`. The vendors apply at once: a pick on a
+// vendor added is taken, vendors leaving a pick set unoffered refused,
+// and the settings after them are still read anew; `autocompacts` from a variable
 // (its old name, ILLI_CONTEXTS, too); a
 // relative path from the folder of the config.json naming it; a number
 // in config.json taken as its text. Each key set is checked at the
@@ -27,6 +27,7 @@ for (const k of Object.keys(process.env).filter((k) => k.startsWith("ILLI_"))) {
   delete process.env[k];
 }
 process.env.ILLI_DIR      = DIR;
+process.env.XDG_DATA_HOME = DIR + "/data";
 process.env.ILLI_CONTEXTS = "{\"gpt-6.1-sol\": 100000}";
 process.env.ANTHROPIC_API_KEY = "test-key";
 process.env.OPENAI_API_KEY    = "";
@@ -53,10 +54,13 @@ function start(env: Record<string, string>, args: string[] = []): { code: number
   }
 }
 
-test("a pick on a vendor added is refused till the next start; the settings after it still apply at once", () => {
+test("the vendors apply at once: a pick on a vendor added is taken; vendors that leave a pick set unoffered refused; the settings after them still apply at once", () => {
   config.config_set("vendors", "chatgpt,claude-api");
-  expect(() => config.config_set("pick", "claude-api:sonnet-5.5:medium:slow")).toThrow("offered from the next start");
-  expect(JSON.parse(fs.readFileSync(DIR + "/config.json", "utf8")).pick).toBeUndefined();
+  expect(config.OFFER.vendors).toEqual(["chatgpt", "claude-api"]);
+  config.config_set("pick", "claude-api:sonnet-5.5:medium:slow");
+  expect(config.PICK.vendor).toBe("claude-api");
+  expect(config.config_check("vendors", "chatgpt")).toBe("pick is no vendor:model:effort:speed offered here: claude-api:sonnet-5.5:medium:slow");
+  config.config_set("pick", null);
   expect(config.PICK.vendor).toBe("chatgpt");
   config.config_set("side", "left");
   expect(config.SIDE).toBe("left");
@@ -124,11 +128,19 @@ test("the picks' defaults are the first vendor's that is offered; the vendors ch
   expect(config.config_check("vendors", "openai-api")).toBeNull();
 });
 
-test("the start tells of an API key set whose vendor isn't offered, and of the pick's key missing", () => {
-  expect(config.config_tips(config.PICK, false)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer claude-api: /set vendors claude-api,chatgpt, then start illi again."]);
-  expect(config.config_tips(config.PICK, true)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer claude-api: /set vendors chatgpt,claude-api, then start illi again."]);
+test("the start tells of an API key set whose vendor isn't offered (/login connects it; the vendors setting set, how to name it there), and of the pick's key missing (/login adds one)", () => {
+  config.config_set("vendors", null);
+  expect(config.config_tips(config.PICK, false)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer claude-api: /login connects it."]);
   const openai = { vendor: "openai-api", model: "gpt-6-luna", effort: "medium", speed: "slow" } as const;
-  expect(config.config_tips(openai, true)).toContain("The chat runs on openai-api, but OPENAI_API_KEY isn't set: set it and start illi again, or /model picks another.");
+  expect(config.config_tips(openai, true)).toContain("The chat runs on openai-api, but it has no key: /login adds one, or /model picks another.");
+  process.env.ILLI_VENDORS = "chatgpt";
+  expect(config.config_tips(config.PICK, false)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer claude-api: ILLI_VENDORS=claude-api,chatgpt, then start illi again."]);
+  expect(config.config_tips(config.PICK, true)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer claude-api: ILLI_VENDORS=chatgpt,claude-api, then start illi again."]);
+  expect(config.config_tips(openai, true)).toContain("The chat runs on openai-api, but it has no key: /login adds one, or /model picks another.");
+  delete process.env.ILLI_VENDORS;
+  config.config_set("vendors", "chatgpt");
+  expect(config.config_tips(config.PICK, false)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer claude-api: /set vendors claude-api,chatgpt."]);
+  config.config_set("vendors", null);
 });
 
 test("autoupdate: on by default, notify, or off (true and false too, as config.json's)", () => {

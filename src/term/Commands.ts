@@ -12,7 +12,6 @@
 import * as fs from "node:fs";
 import type { Vendor } from "../ai/AskAI.ts";
 import { term_clip, term_image } from "./Attach.ts";
-import { browser_open } from "./Browser.ts";
 import { Bundle } from "../config/Bundle.ts";
 import { Anthropic } from "../ai/Anthropic.ts";
 import { Chat } from "../chat/Chat.ts";
@@ -29,10 +28,11 @@ import { ClaudeCode, type Theirs } from "../ai/ClaudeCode.ts";
 import { Export } from "../chat/Export.ts";
 import { Plugins, type Command as Plugged, type Found } from "../config/Plugins.ts";
 import { Hooks, type Entry } from "../config/Hooks.ts";
-import { term_note, term_notify, term_toast, term_unnote, term_unnotify, type Notice } from "./Notices.ts";
+import { term_note, term_toast, term_unnote } from "./Notices.ts";
 import * as Paint from "../ui/Paint.ts";
 import { term_palette } from "./Palette.ts";
 import { type Model, type Move, Pick } from "../ai/Pick.ts";
+import { term_login } from "./LoginCommands.ts";
 import { term_mode, term_permissions } from "./PermCommands.ts";
 import { term_profile } from "./ProfileCommands.ts";
 import { term_projects } from "./ProjectCommands.ts";
@@ -41,13 +41,8 @@ import * as Screen from "../ui/Screen.ts";
 import { setting_on, setting_toggle, setting_value, term_set, term_settings } from "./Settings.ts";
 import { Trusted } from "../config/Trusted.ts";
 import { term_age, term_tokens } from "./Side.ts";
-import { term_act, term_idle, term_primaries, term_send, term_unhint, type Chooser, type Cmd, type Sug, type Term } from "./Term.ts";
+import { term_act, term_idle, term_primaries, term_send, type Chooser, type Cmd, type Sug, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
-
-// how long the login's code shows: as long as it is good (ms), or till
-// the login ends; how long its failure shows, till Esc or a message
-const LOGIN        = 15 * 60000;
-const LOGIN_FAILED = 60000;
 
 // the pick's moves by Shift and an arrow
 const ARROWS: Record<string, Move> = { "Shift+Left": "prev", "Shift+Right": "next", "Shift+Up": "up", "Shift+Down": "down" };
@@ -95,7 +90,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
   const groups: [group: string, cmds: Cmd[]][] = [
     ["Chat", [
       ["",                  "Enter",                   "send",                                           term_enter],
-      ["",                  "Esc",                     "close a list; else clear the notes, and twice: stop illi and its subagents (background jobs go on)", term_esc],
+      ["",                  "Esc",                     "close a list (/login's: back a level); else clear the notes, and twice: stop illi and its subagents (background jobs go on)", term_esc],
       ["",                  "Ctrl+C",                  "clear the input; on an empty one, stop illi and its subagents (again: quit)", term_clear],
       ["",                  "Ctrl+D",                  "clear the input; on an empty one, quit",         term_clear],
       ["",                  "Tab",                     "take the suggested reply",                       term_take],
@@ -139,8 +134,8 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/background",       "",                        "the background jobs: what a shell call left running (a dev server, a watcher); Enter or Del stops one", term_background],
     ]],
     ["Setup", [
-      ["/login",            "",                        "sign in to ChatGPT (Plus or Pro) with a code, its page opened in your browser; illi keeps the login and renews it", term_login],
-      ["/logout",           "",                        "remove illi's own ChatGPT login (opencode's, if any, is used again)", term_logout],
+      ["/login",            "",                        "the providers, ChatGPT and Claude: connect a plan or an API key, switch between its accounts, add one, log out", term_login],
+      ["/logout",           "",                        "the providers, as /login: Del logs out of an account, the last row of a plan or a key out of it", term_login],
       ["/settings",         "",                        "all the settings: type to search, Left, Right or Enter change one, Del puts its default back", (t) => term_settings(t)],
       ["/shortcuts",        "",                        "the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one", (t) => term_shortcuts(t)],
       ["/set <key> [value]", "",                       "change a setting (default: back to its default); no value: /settings at it. / finds each setting by its key or what it does", term_set],
@@ -658,10 +653,11 @@ function term_agent_set(t: Term, arg: string): void {
 // with `used`, the more used first among matches as good), what else the
 // lit option takes and what the foot says of it (the model picker's),
 // what shows at each option's right end, each option's group (the
-// palette's) and the key that opened it, to close it
-export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; detail?: Chooser["detail"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; heads?: string[]; key?: string } = {}): void {
+// palette's), the key that opened it, to close it, and what Esc does
+// besides closing it (the list a level up opened again: /login's)
+export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; detail?: Chooser["detail"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; heads?: string[]; key?: string; back?: Chooser["back"] } = {}): void {
   const shown = Screen.ed_rank("", names);
-  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, heads: more.heads, key: more.key, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), detail: more.detail, ask: null };
+  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, heads: more.heads, key: more.key, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), detail: more.detail, ask: null, back: more.back };
   t.pane   = null;
 }
 
@@ -671,10 +667,11 @@ export function term_chooser(t: Term, title: string, names: string[], about: str
 // lit: its title, its answers and what each is, what picking answer k
 // does; with `more`, what else a key does on answer k (the permission
 // question's Esc), what its rule says of the lit one, the lines leading
-// the answers (why it asks, what it would do) and how a long command in
-// them folds (Chooser fold)
-export function term_question(t: Term, title: string, names: string[], about: string[], pick: (k: number) => void, more: { keys?: Chooser["keys"]; foot?: Chooser["foot"]; lead?: Chooser["lead"]; fold?: Chooser["fold"] } = {}): void {
-  t.question = { title, names, about, lead: more.lead, fold: more.fold, answers: true, here: -1, pick, find: null, shown: Screen.ed_rank("", names), at: 0, top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null };
+// the answers (why it asks, what it would do), how a long command in
+// them folds (Chooser fold) and what Esc does besides closing it (the
+// list that asked it opened again)
+export function term_question(t: Term, title: string, names: string[], about: string[], pick: (k: number) => void, more: { keys?: Chooser["keys"]; foot?: Chooser["foot"]; lead?: Chooser["lead"]; fold?: Chooser["fold"]; back?: Chooser["back"] } = {}): void {
+  t.question = { title, names, about, lead: more.lead, fold: more.fold, answers: true, here: -1, pick, find: null, shown: Screen.ed_rank("", names), at: 0, top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null, back: more.back };
   t.choose   = null;
 }
 
@@ -795,11 +792,12 @@ export function term_shortcut(t: Term, run: string): void {
 // Question.ts), in place of the question there and of the list that
 // asked it (a pane stays): its title, the hint while it is empty, what it
 // starts as, what its rule says, what Enter does with it (a reason: it
-// stays, saying it)
-export function term_ask(t: Term, title: string, hint: string, start: string, foot: string, done: (text: string) => string | null): void {
+// stays, saying it); a secret's (an API key) shown a dot a character;
+// what Esc does besides closing it (back: a sign-in waiting on it stopped)
+export function term_ask(t: Term, title: string, hint: string, start: string, foot: string, done: (text: string) => string | null, secret = false, back?: () => void): void {
   const find = Screen.ed_new();
   Screen.ed_set(find, start);
-  t.question = { title, names: [], about: [], here: -1, pick: () => {}, find, shown: [], at: 0, top: 0, keys: () => false, foot: () => foot, ask: { hint, done } };
+  t.question = { title, names: [], about: [], here: -1, pick: () => {}, find, shown: [], at: 0, top: 0, keys: () => false, foot: () => foot, ask: { hint, done, secret }, back };
   t.choose   = null;
 }
 
@@ -828,49 +826,12 @@ export function term_main(t: Term, name: string | null): void {
   term_send(t, { $: "main", name });
 }
 
-// /login: ChatGPT's device login: its page and code said (the code
-// copied), the login kept once the person gives it (in the file `login`
-// names, else as illi's own); again, a new code (the last one let go)
-async function term_login(t: Term): Promise<void> {
-  t.login?.abort();
-  const stop = new AbortController();
-  t.login = stop;
-  let asked: Notice | null = null;
-  try {
-    const { url, code, done } = await ChatGPT.device(stop.signal);
-    Screen.screen_copy(code);
-    const until   = Date.now() + LOGIN;
-    const opening = t.scr.tty ? browser_open(url) : null;
-    const open    = (why: string) => "Sign in to ChatGPT: " + why + "open " + url + " and enter the code " + code + " (copied; it is good for 15 minutes). illi waits for it.";
-    asked = term_notify(t, opening === null ? open("") : "Sign in to ChatGPT at " + url + " (opening in your browser) with the code " + code + " (copied; it is good for 15 minutes). illi waits for it.", false, LOGIN);
-    void opening?.then((why) => {
-      if (why !== "" && t.login === stop && asked !== null) {
-        term_unnotify(t, asked);
-        asked = term_notify(t, open("your browser didn't open (" + why + "), so "), false, Math.max(0, until - Date.now()));
-      }
-    });
-    await done;
-    term_unhint(t);
-    term_note(t, "Signed in to ChatGPT. illi keeps the login in " + ChatGPT.own() + (config.LOGIN_SET === null ? "" : " (the file `login` names)") + " and renews it there.");
-    term_account(t);
-  } catch (err: any) {
-    if (!stop.signal.aborted) {
-      term_notify(t, "Login failed: " + err.message + ".", false, LOGIN_FAILED);
-    }
-  } finally {
-    t.login = t.login === stop ? null : t.login;
-    if (asked !== null) {
-      term_unnotify(t, asked);
-    }
-  }
-}
-
 // the accounts as they are now (run here, not in another terminal's
 // view): ChatGPT's (ChatGPT.ts; signed in) plan and usage asked together,
 // the login followed for a change of account, and its catalog learned
 // (the chatgpt list: each model's window, efforts and speeds); the
-// Anthropic key's models' windows (Anthropic.models); the chat tells its
-// views
+// Anthropic key's models' windows (Anthropic.models), and the Claude
+// plan's account's (ClaudeCode.models); the chat tells its views
 export function term_account(t: Term): void {
   if (t.chat === null) {
     return;
@@ -878,6 +839,9 @@ export function term_account(t: Term): void {
   const chat = t.chat;
   if (config.OFFER.vendors.includes("claude-api") && config.KEYS.anthropic) {
     void Anthropic.models(config.KEYS.anthropic).then((news) => news && Chat.change(chat));
+  }
+  if (config.OFFER.vendors.includes("claude-code")) {
+    void ClaudeCode.models().then((news) => news && Chat.change(chat));
   }
   if (!config.OFFER.vendors.includes("chatgpt")) {
     return;
@@ -888,18 +852,6 @@ export function term_account(t: Term): void {
     void ChatGPT.usage();
     void ChatGPT.models();
   }
-}
-
-// /logout: illi's own login removed; a file `login` names is left
-function term_logout(t: Term): void {
-  t.login?.abort();
-  if (config.LOGIN_SET !== null) {
-    return term_note(t, "illi uses the login in " + config.config_home(config.LOGIN_SET) + " (the login setting): /logout leaves it. /set login default switches back at the next start.");
-  }
-  const gone = ChatGPT.logout();
-  const left = ChatGPT.signed() ? " Now on opencode's login." : " /login signs in again.";
-  term_note(t, (gone ? "Signed out of ChatGPT." : "illi has no login of its own.") + left);
-  term_account(t);
 }
 
 // stops all that runs, or the agent named; nothing running, says so

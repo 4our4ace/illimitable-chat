@@ -37,10 +37,24 @@ const BREAKS = 4;
 const INPUT = /^(invalid_prompt|invalid_image)/;
 const FULL  = /^context_length_exceeded/;
 
+// the models a key may use, asked to tell a key works (/login)
+const LIST = "https://api.openai.com/v1/models";
+
 // OpenAI
 // ======
 
 export namespace OpenAI {
+
+  // whether a key works, asked of the models list ("": it does; else why
+  // not, in a few words), as /login takes it
+  export async function check(key: string): Promise<string> {
+    try {
+      const res = await fetch(LIST, { headers: { authorization: "Bearer " + key }, signal: AbortSignal.timeout(15e3) });
+      return res.ok ? "" : res.status === 401 || res.status === 403 ? "OpenAI refused the key" : "OpenAI answered HTTP " + res.status;
+    } catch (err: any) {
+      return "illi couldn't reach OpenAI (" + err.message + ")";
+    }
+  }
 
   export function body(ask: Ask, items: Item[], tools: Tool[], max: number): unknown {
     const tier = TIERS[ask.speed];

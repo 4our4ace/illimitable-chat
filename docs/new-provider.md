@@ -118,14 +118,21 @@ needed. A plan login needs what `ChatGPT.ts` has:
   account's plan with another's usage.
 - `follow()`: the file looked at every few seconds while illi runs: a
   login made in another terminal, or by another tool, is picked up.
-- `/login` and `/logout` (`src/term/Commands.ts`): chatgpt's alone (a
-  device code entered in the browser, kept in the file `login` names,
-  else illi's own); a second plan login extends them. `term_account`
-  then asks the plan, usage and models of the account now in use (a
-  new vendor's asks go before the return it takes when chatgpt isn't
-  offered, as claude-api's do).
-- `term_hints` (`src/term/Term.ts`): the start's note when there is no
-  login yet.
+- `/login` and `/logout` (`src/term/LoginCommands.ts`): each provider
+  is a `Provider` there, under its maker (`Maker`: ChatGPT, Claude; a
+  vendor goes under its own, or a new one): its row's text, its accounts (the one in use
+  marked, what Enter and Del do on each), what connects one more and
+  what logs out of it all. A plan's sign-in runs there (chatgpt's
+  device code, claude-code's `claude auth login` through pipes), its
+  accounts kept in `src/config/Accounts.ts`'s file
+  (`~/.illi/accounts.json`), which Config.ts reads into the vendors
+  offered (`config_connected`) and every illi follows. `login_after`
+  then reads it again, moves a chat off a vendor gone (`Chat.offered`)
+  and runs `term_account`, which asks the plan, usage and models of the
+  account now in use (a new vendor's asks go before the return it takes
+  when chatgpt isn't offered, as claude-api's do).
+- `term_hints` (`src/term/Term.ts`): the start's note when nothing is
+  connected yet.
 
 5. Models, windows, efforts and speeds
 --------------------------------------
@@ -155,8 +162,13 @@ learn them, from best:
 - A model list with windows (Anthropic's `GET /v1/models`, paged): learn
   the windows of the models built in, by id (`Pick.told`); the full list
   would flood the picker with every model the vendor ever had.
-- What a reply tells (Claude Code's `modelUsage[model].contextWindow`,
-  by its `canonicalModel`): `Pick.told` after each reply.
+- A runner asked before any message (Claude Code's control channel:
+  `get_context_usage`, its `rawMaxTokens`, one Claude Code a model, as
+  a turn runs it: `ClaudeCode.models`), and what a reply tells (its
+  `modelUsage[model].contextWindow`, by its `canonicalModel`):
+  `Pick.told` each. Ask it as the turn runs: Claude Code tells its
+  autocompact window (500k of Opus's 1M) while its compaction is on, so
+  a summary's reply, which runs with it on, tells none.
 - Nothing told (the OpenAI API): the windows built in, from the vendor's
   docs.
 

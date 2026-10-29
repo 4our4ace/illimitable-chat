@@ -306,7 +306,7 @@ async function term_profile_export(t: Term, name: string): Promise<void> {
       await Disk.synced();
     }
     const cut = await Profiles.profile_export(config.ROOT, name, file);
-    term_note(t, "Profile " + name + " is in " + config.config_home(file) + ", without the login" + (cut === 0 ? "" : " or " + cut + " secret" + (cut === 1 ? "" : "s")) + ". /profile imports it.");
+    term_note(t, "Profile " + name + " is in " + config.config_home(file) + ", without the logins" + (cut === 0 ? " or API keys" : ", API keys or " + cut + " secret" + (cut === 1 ? "" : "s")) + ". /profile imports it.");
   } catch (err: any) {
     term_note(t, "Not exported. " + err.message);
   }

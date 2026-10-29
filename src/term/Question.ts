@@ -128,6 +128,20 @@ export function question_held(t: Term): boolean {
   return question_illi(t) && (a!.shown == null || Date.now() - a!.shown < ARM);
 }
 
+// a question's line asked, w wide, rows at most: as typed, or a secret's
+// (an API key) a dot a character, never its text, the cursor and a
+// click's place as they'd be on it (a dot each)
+function question_line(t: Term, c: Chooser, w: number, rows: number): ReturnType<typeof Screen.screen_input> {
+  const ed = c.find!;
+  if (c.ask?.secret !== true) {
+    return Screen.screen_input({ ...t.scr, ed }, w, rows, c.ask!.hint, false);
+  }
+  const dots = { ...ed, text: "•".repeat(ed.text.length) };
+  const line = Screen.screen_input({ ...t.scr, ed: dots }, w, rows, c.ask!.hint, false);
+  [ed.w, ed.top] = [dots.w, dots.top];
+  return line;
+}
+
 // the most lines a question takes on a screen h rows tall, free of them
 // for it (Frame.ts: all but those the rest of the screen keeps), one at
 // least; and of them the most a line typed takes
@@ -181,7 +195,7 @@ function question_picker(t: Term, c: Chooser, w: number, h: number, free: number
   const cut   = each.map((lines, e) => question_cut(lines, typeof list[e] === "number" ? c.names[c.shown[list[e]].k] : "", cap, w));
   const view  = question_view(c, list, cut.map((lines) => lines.length), most);
   const opts  = view.flatMap((e) => cut[e]);
-  const line  = c.ask === null ? null : Screen.screen_input({ ...t.scr, ed: c.find! }, w, question_words(h), c.ask.hint, false);
+  const line  = c.ask === null ? null : question_line(t, c, w, question_words(h));
   const ends  = line === null ? opts.length : line.lines.length;
   const fit   = Math.max(0, most - ends);
   const ahead = lead.length <= fit ? lead.length : Math.max(0, fit - 1);

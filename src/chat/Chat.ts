@@ -253,6 +253,15 @@ const RECAP_STOP = "Compaction stopped; the chat is as it was.";
 const HELLO      = "Hi, I'm illi, short for illimitable: an AI, so I can make mistakes. One chat that never ends, kept in a memory tree, the newest messages in the most detail. I work in the folder you start me in; each git repo gets a chat of its own. Ask me anything, for days, weeks, years; /help lists the commands.";
 const HELLO_LINE = "illi: hello: illi (illimitable), one endless chat in a memory tree, one per git repo; works in the folder it starts in; /help for commands.";
 
+// how often the accounts are looked at (ms: config.config_accounts), a
+// provider /login connected or let go in another terminal offered or
+// gone here by then; the chats open, following them, and the vendors
+// offered as they last saw them (the vendors setting changes them too)
+const ACCOUNTS = 2000;
+const FOLLOWED = new Set<Chat>();
+let following: ReturnType<typeof setInterval> | null = null;
+let followed = "";
+
 // Chat
 // ====
 
@@ -296,6 +305,7 @@ export namespace Chat {
       }
       Chat.change(chat);
     });
+    Chat.follow(chat);
     // a saved pick not offered gave way: told once
     const saved = mem.pick as Pick | null;
     if (saved !== null && Pick.label(saved) !== Pick.label(pick)) {
@@ -347,12 +357,46 @@ export namespace Chat {
   // view: Remote.ts) opens it as left. Background jobs running are noted
   // first (Chat.leaving)
   export function close(chat: Chat, keep = false): void {
+    FOLLOWED.delete(chat);
     Chat.leaving(chat);
     Chat.stop(chat, null);
     chat.suggest.call?.stop();
     chat.suggest.call = null;
     Memory.stop(chat.mem);
     Lock.release(keep);
+  }
+
+  // the accounts followed while the chat is open (each ACCOUNTS): a
+  // provider connected or let go, here or in another terminal, or the
+  // vendors setting changed, offered or gone at once (Chat.offered)
+  export function follow(chat: Chat): void {
+    FOLLOWED.add(chat);
+    if (following !== null) {
+      return;
+    }
+    followed  = config.OFFER.vendors.join();
+    following = setInterval(() => {
+      const keyed = config.config_accounts();
+      if (keyed || config.OFFER.vendors.join() !== followed) {
+        followed = config.OFFER.vendors.join();
+        FOLLOWED.forEach(Chat.offered);
+      }
+    }, ACCOUNTS);
+    following.unref?.();
+  }
+
+  // the vendors offered or a key in use changed: the views told; the
+  // chat's pick on a vendor no longer offered gives way to the default,
+  // told, once no turn runs (a turn keeps its vendor to its end; one
+  // running when it went is looked at again as it ends: Chat.offered)
+  export function offered(chat: Chat): void {
+    if (!chat.busy && !config.OFFER.vendors.includes(chat.pick.vendor)) {
+      const was = chat.pick;
+      chat.pick = chat.mem.pick = Pick.load(null, config.OFFER, config.PICK);
+      Chat.save(chat);
+      Chat.note(chat, was.vendor + " isn't offered now, so the chat runs on " + Pick.shown(chat.pick) + (config.config_named() ? "." : " (/login connects it again)."));
+    }
+    Chat.change(chat);
   }
 
   // the background jobs running as illi quits, noted in the chat
@@ -515,6 +559,9 @@ export namespace Chat {
       if (answered) {
         chat.suggest.unused += chat.suggest.passed ? 1 : 0;
         Suggest.drop(chat);
+      }
+      if (!config.OFFER.vendors.includes(chat.pick.vendor)) {
+        Chat.offered(chat);
       }
       Chat.change(chat);
       if (chat.wait.length > 0) {

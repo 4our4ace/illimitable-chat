@@ -65,8 +65,9 @@ const OPENAI: Model[] = [
 const CHATGPT: Model[] = OPENAI.map(({ label, id }) => ({ label, id, speeds: ["slow"] }));
 
 // Claude's on a Claude plan, through Claude Code (ClaudeCode.ts), at its
-// standard speed; each one's window 200k till Claude Code tells it (it
-// may run the 1M one)
+// standard speed; each one's window 200k till Claude Code tells it, as
+// soon as the plan is connected (ClaudeCode.models: 1M where the plan
+// has long context)
 const FABLE : Model = { label: "fable-5.1", id: "claude-fable-5-1", speeds: ["slow"] };
 const CLAUDE: Model[] = [FABLE, OPUS, SONNET, HAIKU].map((m) => ({ ...m, speeds: ["slow"], window: 200000 }));
 

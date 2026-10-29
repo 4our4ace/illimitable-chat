@@ -11,7 +11,7 @@
 // out): its arguments as given, from its own folder, in a session of its
 // own, its output dropped; a failure, a kill, one not found said in plain words; one
 // still running taken as opened; the next tried after one that fails.
-// /login's notice: true whether the browser opens or not, and put right
+// /login's ChatGPT sign-in notice: true whether the browser opens or not, and put right
 // in place when it didn't.
 
 import { afterAll, expect, test } from "bun:test";
@@ -22,7 +22,7 @@ const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-browser-");
 process.env.ILLI_DIR = DIR + "/illi";
 
 const { browser_commands, browser_open, browser_run } = await import("./Browser.ts");
-const { term_commands } = await import("./Commands.ts");
+const { login_chatgpt } = await import("./LoginCommands.ts");
 const { ChatGPT } = await import("../ai/ChatGPT.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
@@ -102,11 +102,11 @@ test("/login's notice: the link and code either way, 'opening in your browser' w
   const device = ChatGPT.device;
   let grant = () => {};
   ChatGPT.device = async () => ({ url: URL, code: "ABCD-1234", done: new Promise<void>((done) => (grant = done)) });
-  const t: any = { v: View.view_new(), scr: { tty: true, ed: Screen.ed_new() }, choose: null, question: null, pane: null, notices: [], due: true, ver: 0, login: null };
+  const t: any = { v: View.view_new(), scr: { tty: true, ed: Screen.ed_new() }, choose: null, question: null, pane: null, notices: [], due: true, ver: 0, login: null, chat: null };
   const write = process.stdout.write;
   process.stdout.write = (() => true) as any;
   try {
-    const login = term_commands().find(([use]) => use === "/login")![3](t, "") as Promise<void>;
+    const login = login_chatgpt(t);
     await Bun.sleep(20);
     expect(t.notices.map((n: any) => n.text)).toEqual(["Sign in to ChatGPT at " + URL + " (opening in your browser) with the code ABCD-1234 (copied; it is good for 15 minutes). illi waits for it."]);
     for (let k = 0; k < 100 && !t.notices[0].text.includes("didn't"); k++) {

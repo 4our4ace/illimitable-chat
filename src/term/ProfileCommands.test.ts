@@ -53,7 +53,7 @@ test("Ctrl+E exports a profile to the folder illi works in, never over a file th
   expect(fs.readFileSync(TMP + "/illi-profile-default.tar.gz", "utf8")).toBe("mine\n");
   fs.rmSync(TMP + "/illi-profile-default.tar.gz");
   t.choose.keys(0, "Ctrl+E");
-  expect(await noted(t, "Profile default")).toMatch(/^Profile default is in .*illi-profile-default\.tar\.gz, without the login\. \/profile imports it\.$/);
+  expect(await noted(t, "Profile default")).toMatch(/^Profile default is in .*illi-profile-default\.tar\.gz, without the logins or API keys\. \/profile imports it\.$/);
 });
 
 test("the import row asks the archive's path, then a name its file can't give, and says what came along", async () => {
