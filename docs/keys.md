@@ -172,9 +172,8 @@ Typing
   three letters on) those whose description has a word it starts, that
   word lit (`/new` lists `/clear`, "start a new topic"), then names with
   its letters in turn. Up and Down choose, Tab fills one in, Enter runs
-  it (one found by its description is filled in first, so a second
-  Enter runs what shows), a click on one does what Enter does, Esc
-  closes the list. Among those matched alike, the ones you run most
+  it (one that needs an argument, like `/image <path>`, is filled in),
+  a click on one does what Enter does, Esc closes the list. Among those matched alike, the ones you run most
   come first. After the commands come the
   settings it matches, by key or by what they do, as `/set <key>`:
   Enter opens `/settings` at one, Tab fills it in to type a value
