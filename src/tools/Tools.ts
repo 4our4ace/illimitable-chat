@@ -1080,7 +1080,8 @@ export namespace Tools {
   // settled by another answer; null: yes. Yes, and don't ask again: the
   // approvals of what asked saved (a shell request's, the families of
   // the commands that asked, not of its every one; one another covers
-  // left out, Permissions.fold: a folder's, not those in it; for this
+  // left out, Permissions.fold: a folder's, not those in it, unless that
+  // would leave one that asked unmet; for this
   // run, if the file won't take them), every question waiting that they
   // now allow answered yes. No: refused, and every other question of its
   // caller waiting with it, the same answer; a plain no stops the
@@ -1090,7 +1091,9 @@ export namespace Tools {
     const entry: Pending = { who, ask, ctl: new AbortController() };
     const id = crypto.randomUUID();
     const spots = ask.all === true ? [[0, Tools.does(input).length] as Span] : ask.by.flatMap((k) => (ask.req.spots[k] === null ? [] : [ask.req.spots[k]!]));
-    const saves = Permissions.fold(ask.req.save.filter((s) => ask.by.some((k) => Permissions.match(ask.req.resources[k], s))));
+    const offer = ask.req.save.filter((s) => ask.by.some((k) => Permissions.match(ask.req.resources[k], s)));
+    const fold  = Permissions.fold(offer);
+    const saves = ask.by.every((k) => !offer.some((s) => Permissions.match(ask.req.resources[k], s)) || fold.some((s) => Permissions.match(ask.req.resources[k], s))) ? fold : offer;
     const keep = ask.keep ? [...new Set(saves.map((s) => Access.said(ask.req.action, s, folder)))].join(", ") : "";
     tools.perm.pending.set(id, entry);
     let reply: Reply;
@@ -1187,7 +1190,8 @@ export namespace Tools {
 
   // a refused request allowed for this run (/permissions): its very
   // resources approved (exact: a command's * and ? as they are; a
-  // folder's request, that folder and those in it), and every refusal
+  // folder's request, that folder and those in it, but one whose path
+  // holds a wildcard character that folder alone: Access.wild), and every refusal
   // they now clear taken off the list; null: none such, or one only the
   // user's rules can allow
   export function allow(tools: Tools, id: string): Refused | null {
@@ -1196,7 +1200,7 @@ export namespace Tools {
       return null;
     }
     const has = (e: { action: string; resource: string }) => tools.perm.allowed.some((a) => a.action === e.action && a.resource === e.resource);
-    refused.exact.filter((e) => !has(e)).forEach((e) => tools.perm.allowed.push({ ...e, effect: "allow", exact: e.action !== "external_directory" }));
+    refused.exact.filter((e) => !has(e)).forEach((e) => tools.perm.allowed.push({ ...e, effect: "allow", exact: e.action !== "external_directory" || Access.wild(e.resource) }));
     tools.perm.refused = tools.perm.refused.filter((r) => r.exact.length === 0 || !r.exact.every(has));
     tools.hooks.change();
     return refused;

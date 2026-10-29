@@ -297,6 +297,16 @@ test("Claude Code's permission prompt is judged as illi's own calls: what stays 
   expect((await approve("Edit", { file_path: AWAY + "/b-illi-test.txt" })).message).toStartWith("No one is at illi's screen to ask, so it isn't allowed. Asked because ");
   chat.tools.perm.refused.length = 0;
 });
+test("a folder refused, allowed for the run (/permissions), allows it and those in it; one whose path holds a wildcard character, that folder alone", () => {
+  const was = chat.tools.perm.allowed.length;
+  const refused = (id: string, resource: string) => ({ id, who: "illi", tool: "shell", what: "cat x", why: "", how: "no", said: "", at: 1, exact: [{ action: "external_directory", resource }] }) as any;
+  chat.tools.perm.refused.push(refused("w1", OUT + "/*/*"), refused("w2", OUT + "/b/*"));
+  Tools.allow(chat.tools, "w1");
+  Tools.allow(chat.tools, "w2");
+  expect(chat.tools.perm.allowed.slice(was).map((a: any) => [a.resource, a.exact])).toEqual([[OUT + "/*/*", true], [OUT + "/b/*", false]]);
+  chat.tools.perm.allowed.length = was;
+});
+
 test("illi customizes itself unasked: a skill, a command, an agent, its rules written by its tools or its shell; its settings, hooks and permissions beside them asked", async () => {
   const guard = (tool: string, input: object) => Tools.guard(chat.tools, "main", tool, input, new AbortController().signal);
   const NO = "No one is at illi's screen to ask, so it isn't allowed. Asked because it reaches outside the project: ";

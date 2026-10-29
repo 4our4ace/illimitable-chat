@@ -102,6 +102,20 @@ test("on a narrow screen the buttons stand one over the other, each its own plac
   expect(Trust.edge(10).map((r) => r.x).join("")).toBe(" Trust th…");
 });
 
+test("on any screen from 11 columns, no row is wider than it nor a button's place past its edge; both buttons show from 4 rows, short ones where the long won't fit", () => {
+  for (let w = 11; w <= 80; w++) {
+    for (let h = 4; h <= 30; h++) {
+      const laid = Trust.laid({ folder: "/a/long/folder/name/that/wraps/over/lines", kept: h % 2 === 0, at: w % 2 }, { w, h });
+      expect(text(laid.rows).every((l) => l.length <= w)).toBe(true);
+      expect(laid.buttons.every((b) => b.col < b.to && b.to <= w)).toBe(true);
+      expect(new Set(laid.buttons.map((b) => b.at)).size).toBe(2);
+    }
+  }
+  const narrow = text(Trust.laid({ folder: "/w", kept: true, at: 0 }, { w: 16, h: 20 }).rows).join("\n");
+  expect([narrow.includes("[ Yes ]"), narrow.includes("Yes, trust it")]).toEqual([true, false]);
+  expect(Trust.cut([[{ x: "ab日本語", s: {} } as any], [{ x: "x", s: {} } as any]], 1, 4).map((l) => l.map((r) => r.x).join(""))).toEqual(["ab…"]);
+});
+
 test("on a screen too short for the card, its blank lines go, then its text from the end, the folder, the buttons and both edges kept", () => {
   const laid  = Trust.laid({ folder: "/work/app", kept: true, at: 0 }, { w: 60, h: 6 });
   const lines = text(laid.rows).map((l) => l.trim());
