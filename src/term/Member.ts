@@ -21,7 +21,10 @@
 // the profile used last (anywhere, and in this project). Shown, it hears
 // of the others open (`roster`): what the side panel (a spinner moving
 // while one works), the title and a quit's warning say of them, and a
-// note as one asks something or is done. The person's
+// note as one asks something or is done. The side marks the profiles
+// open in other terminals too: the illi holding a chat tells its state
+// beside its lock (Lock.tell), and one shown on a terminal looks at the
+// others' every LOOK (member_watch; Lock.states). The person's
 // quit goes to the window first (`quit`), which ends the others; `end`
 // quits this one as a quit does, once (a quit under way goes on; a second
 // Ctrl+D still quits at once). Lines said after leaving the screen go to
@@ -29,6 +32,7 @@
 // the window gone: a hangup.
 
 import * as config from "../config/Config.ts";
+import { Lock } from "../chat/Lock.ts";
 import { term_note } from "./Notices.ts";
 import * as Profiles from "../config/Profiles.ts";
 import * as Screen from "../ui/Screen.ts";
@@ -44,9 +48,9 @@ import { VERSION, wire_env, wire_env_parse, wire_frame, type Down, type How, typ
 
 // this illi in its window: the wire's nonce; how it started; whether it
 // is shown; the others open, as last told; its terminal (once it's up);
-// its state as last said; whether the window asked it to quit; whether
-// it told the window of the person's quit
-type Win = { nonce: string; how: How; shown: boolean; open: Open[]; t: Term | null; said: string; ended: boolean; quit: boolean };
+// whether the window asked it to quit; whether it told the window of the
+// person's quit
+type Win = { nonce: string; how: How; shown: boolean; open: Open[]; t: Term | null; ended: boolean; quit: boolean };
 
 // Constants
 // =========
@@ -62,6 +66,15 @@ export const WIN: Win | null = member_open();
 const SPIN = 160;
 let spin: Timer | undefined;
 
+// how often the chats other illis hold are looked at (ms), for the side's
+// profiles: the states they told (Lock.states), as last looked at
+const LOOK = 2000;
+let seen: Open[] = [];
+let look: Timer | undefined;
+
+// this one's state as last said (to the window, beside its lock)
+let said = "";
+
 // Member
 // ======
 
@@ -69,7 +82,7 @@ let spin: Timer | undefined;
 function member_open(): Win | null {
   const env = wire_env_parse(process.env.ILLI_WINDOW);
   delete process.env.ILLI_WINDOW;
-  return env === null ? null : { nonce: env.nonce, how: env.how, shown: env.how !== "hidden", open: [], t: null, said: "", ended: false, quit: false };
+  return env === null ? null : { nonce: env.nonce, how: env.how, shown: env.how !== "hidden", open: [], t: null, ended: false, quit: false };
 }
 
 // a message to the window, in order after what was painted before it
@@ -110,18 +123,53 @@ export function member_screen(): Screen.Windowed | undefined {
 
 // the terminal up: the window's messages reach it from now on, and the
 // others open, as told while it started, are heard again by it (a
-// question waiting noted, the side's spinner moving)
+// question waiting noted, the side's spinner moving); on a terminal, the
+// chats other illis hold looked at from now on
 export function member_attach(t: Term): void {
   if (WIN !== null) {
     const open = WIN.open;
     [WIN.t, WIN.open] = [t, []];
     member_roster(open, "");
   }
+  if (t.scr.tty) {
+    look ??= setInterval(() => member_look(t), LOOK);
+    look.unref?.();
+    member_look(t);
+  }
 }
 
 // the other profiles open in the window, as last told (none outside one)
 export function member_others(): Open[] {
   return WIN?.open ?? [];
+}
+
+// the other profiles open anywhere, as the side marks them: those hidden
+// in the window (as last told) and those whose chats illis hold in other
+// terminals (as last looked at), each once: a question waiting or at
+// work in either, its background jobs counted once (a hidden one's,
+// which holds its chat, are told both ways)
+export function member_seen(): Open[] {
+  const all = [...member_others(), ...seen].filter((o) => o.profile !== config.PROFILE);
+  return [...new Set(all.map((o) => o.profile))].map((profile) => {
+    const of   = all.filter((o) => o.profile === profile);
+    const told = seen.filter((o) => o.profile === profile).reduce((n, o) => n + o.jobs, 0);
+    return { profile, asks: of.some((o) => o.asks), working: of.some((o) => o.working), jobs: Math.max(member_others().find((o) => o.profile === profile)?.jobs ?? 0, told), holds: of.some((o) => o.holds) };
+  });
+}
+
+// the chats other illis hold looked at (while this one is shown and
+// there are other profiles to mark): one changed, the side painted again
+// and its spinner on or off
+export function member_look(t: Term): void {
+  if ((WIN !== null && !WIN.shown) || t.profs.length < 2) {
+    return;
+  }
+  const now = Lock.states(t.profs.map((profile) => ({ profile, dir: Profiles.profile_dir(config.ROOT, profile) })));
+  if (JSON.stringify(now) !== JSON.stringify(seen)) {
+    seen = now;
+    member_spin(t);
+    term_draw(t);
+  }
 }
 
 // a message from the window
@@ -139,9 +187,10 @@ function member_heard(scr: Screen.Screen, msg: Down): void {
 }
 
 // shown again: the status line run again, the note said, every row
-// painted anew (up first: Screen.screen_show); shown by a switch, kept
-// as the profile used last. The others' questions waiting are noted by
-// the roster that follows
+// painted anew (up first: Screen.screen_show), the other terminals'
+// chats looked at once (hidden, it didn't); shown by a switch, kept as
+// the profile used last. The others' questions waiting are noted by the
+// roster that follows
 function member_show(scr: Screen.Screen, switched: boolean, note: string): void {
   const t = WIN!.t;
   [WIN!.shown, WIN!.open] = [true, []];
@@ -152,6 +201,9 @@ function member_show(scr: Screen.Screen, switched: boolean, note: string): void 
     }
   }
   Screen.screen_show(scr);
+  if (t !== null) {
+    member_look(t);
+  }
   if (switched) {
     member_keep(true);
   }
@@ -239,12 +291,12 @@ function member_roster(open: Open[], note: string): void {
   term_draw(t);
 }
 
-// while this one is shown and another open here works, the side's
-// spinner for it moves: the side's rows written again alone, each SPIN
-// (none while a paint is due, or text chosen, the leader or a picker
-// would need a whole one)
+// while this one is shown (alone: always) and another profile open
+// works, here or in another terminal, the side's spinner for it moves:
+// the side's rows written again alone, each SPIN (none while a paint is
+// due, or text chosen, the leader or a picker would need a whole one)
 function member_spin(t: Term): void {
-  const on = WIN!.shown && WIN!.open.some((o) => o.working && !o.asks);
+  const on = (WIN === null || WIN.shown) && member_seen().some((o) => o.working && !o.asks);
   if (on && spin === undefined) {
     spin = setInterval(() => !t.due && t.ruled !== null && t.ruled.side !== null && t.sel === null && !t.lead && t.choose === null && term_side_again(t), SPIN);
     spin.unref?.();
@@ -254,17 +306,19 @@ function member_spin(t: Term): void {
   }
 }
 
-// this one's state, to the window, if it changed
+// this one's state, if it changed: to the window, and, holding its chat,
+// beside its lock for the other terminals (Lock.tell)
 export function member_state(t: Term): void {
-  if (WIN === null) {
+  const state: State = { asks: t.v.asks.length > 0, working: View.view_running(t.v), jobs: t.chat === null ? 0 : t.v.background.length, holds: t.chat !== null };
+  const now = JSON.stringify(state);
+  if (now === said) {
     return;
   }
-  const state: State = { asks: t.v.asks.length > 0, working: View.view_running(t.v), jobs: t.chat === null ? 0 : t.v.background.length, holds: t.chat !== null };
-  const said = JSON.stringify(state);
-  if (said !== WIN.said) {
-    WIN.said = said;
-    member_send({ $: "state", ...state });
+  said = now;
+  if (t.chat !== null) {
+    Lock.tell(state);
   }
+  member_send({ $: "state", ...state });
 }
 
 // the person quit, here: the window told first (it ends the others), once

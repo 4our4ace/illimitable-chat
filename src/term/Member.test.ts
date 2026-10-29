@@ -49,7 +49,7 @@ const said = (run: () => void) => {
 // a terminal with a screen in the window, no paint due
 const term = () => {
   const scr: any = { tty: true, kitty: false, ed: Screen.ed_new(), rest: "", shown: [], click: { row: 0, col: 0 }, clicks: 0, pressed: 0, point: { row: 0, col: 0 }, typed: false, grab: null, on: () => {}, win: member_screen() };
-  const t: any = { v: View.view_new(), scr, chat: {}, status: status_new(), login: new AbortController(), sel: { key: "chat" }, lead: true, drift: undefined, pointed: true, wait: null, notices: [], due: true, quitting: false, asking: { id: "q", c: null, done: false, form: null, shown: 1 }, aim: { row: 0, in: true, press: { of: null, on: "box" }, first: null } };
+  const t: any = { v: View.view_new(), scr, chat: {}, status: status_new(), login: new AbortController(), sel: { key: "chat" }, lead: true, drift: undefined, pointed: true, wait: null, notices: [], due: true, quitting: false, profs: [], asking: { id: "q", c: null, done: false, form: null, shown: 1 }, aim: { row: 0, in: true, press: { of: null, on: "box" }, first: null } };
   member_attach(t);
   return t;
 };

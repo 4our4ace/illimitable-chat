@@ -355,6 +355,7 @@ lives in the profile's `locks/` (`~/.illi/locks/`, another profile's
 | ---- | -- |
 | `<code>.lock` | the lock. `<code>` is a 12-character hash of the project's folder, or `home` (`Projects.lock`) |
 | `<code>.sock` | the holder's socket (mode 0600), where a second terminal's view connects |
+| `<code>.state` | the chat's state as its holder last told it (mode 0600): `{"asks", "working", "jobs", "holds"}`, for the other terminals' side panel |
 
 Each profile's illi takes it as it starts (`Term.ts term_start`): on a
 terminal, the members under the window, shown or hidden; alone
@@ -381,6 +382,16 @@ a row at most (`REJOIN`).
 
 **If another illi holds it:** this one becomes a view of that chat
 (`Remote.ts`), connected over the socket.
+
+**The chat's state** (`Lock.tell`): the holder writes `<code>.state`
+each time its state changes (a question waits, it works, its background
+jobs), whole or not at all (a temporary file renamed), deletes any left
+over as it takes the lock, and deletes its own as it lets go. Every illi
+on a terminal reads the other profiles' every 2 seconds
+(`Lock.states`, `Member.ts member_look`) for the side's profile marks.
+It reads a state only while its lock is held, asking with no wait
+(`busy_timeout = 0`, under a millisecond, as a wait would stall the
+screen): one left by a crash, whose lock the OS let go, says nothing.
 
 **Forgetting another project** takes that project's lock (without a
 socket) while it deletes the file, so no illi starts that project
