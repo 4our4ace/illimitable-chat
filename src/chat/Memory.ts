@@ -2,7 +2,8 @@
 // ======
 // The chat, kept forever, and the views of it calls see (a subagent's,
 // a map of it). Sizes are bytes of UTF-8. A message is logged in pages
-// (Clip.ts CAP chars, PICS images).
+// (Clip.ts CAP chars, PICS images); the views and the plugins get it
+// once, whole, at its first (Chat.entry, Memory.paged).
 //
 // Over the messages grows a binary tree: node (0,i) is message i (or
 // the line it was logged with; a result without the <history> line

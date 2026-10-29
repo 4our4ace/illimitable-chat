@@ -18,7 +18,8 @@
 // restart between kept (it is saved with the chat's state). /compact
 // takes the turn's place while illi writes its recap (Chat.compact).
 // The user's plugins are told each turn's start and end and each message
-// logged (Plugins.emit), never waited for.
+// logged, once and whole however many pages it takes (Chat.logged;
+// Plugins.emit), never waited for.
 
 import * as fs from "node:fs";
 import { AskAI, type Call, type End, type Event, type Kind, type Vendor } from "../ai/AskAI.ts";

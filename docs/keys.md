@@ -173,8 +173,9 @@ Typing
   word lit (`/new` lists `/clear`, "start a new topic"), then names with
   its letters in turn. Up and Down choose, Tab fills one in, Enter runs
   it (one that needs an argument, like `/image <path>`, is filled in),
-  a click on one does what Enter does, Esc closes the list. Among those matched alike, the ones you run most
-  come first. After the commands come the
+  a click on one does what Enter does, Esc closes the list. Among those
+  matched alike, the ones you run most come first. After the commands
+  come the
   settings it matches, by key or by what they do, as `/set <key>`:
   Enter opens `/settings` at one, Tab fills it in to type a value
   (`/sid` finds `/set side`).
@@ -450,11 +451,12 @@ Mouse and side panel
   opens `/background`), the profiles once you have two (a click
   switches; one open, in this terminal or another, shows a spinner
   while it works, `?` while it asks you something, `● 2` while only its
-  background jobs run), your plan's use (ChatGPT's or Claude's, once it has told it),
-  the context and the memory, past topics related to the work
-  ([Related](#related)), the MCP servers, Claude Code's own under a line
-  of their own while the pick is on `claude-code` (a click opens `/mcp`
-  on one), the
+  background jobs run), your plan's use (ChatGPT's or Claude's, once it
+  has told it), the context and the memory, past topics related to the
+  work ([Related](#related)), the MCP servers, Claude Code's own under a
+  line of their own while the pick is on `claude-code` (those not
+  connected, needing a login or still pending, counted in one line,
+  `+ 17 more not connected`; a click opens `/mcp` on one), the
   latest requests refused (a click opens `/permissions` on one) and illi's
   to-do list, gone once every item is done or on `/clear`. The `side`
   and `side_width` settings place it.
