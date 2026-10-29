@@ -443,9 +443,9 @@ Mouse and side panel
   when a name won't fit whole beside them), the subagents of this run,
   at work or done (a click shows one's tab), the background jobs (a click
   opens `/background`), the profiles once you have two (a click
-  switches; one open in this terminal shows a spinner while it works,
-  `?` while it asks you something, `● 2` while only its background jobs
-  run), your plan's use (ChatGPT's or Claude's, once it has told it),
+  switches; one open, in this terminal or another, shows a spinner
+  while it works, `?` while it asks you something, `● 2` while only its
+  background jobs run), your plan's use (ChatGPT's or Claude's, once it has told it),
   the context and the memory, past topics related to the work
   ([Related](#related)), the MCP servers, Claude Code's own under a line
   of their own while the pick is on `claude-code` (a click opens `/mcp`

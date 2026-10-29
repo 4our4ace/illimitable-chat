@@ -99,7 +99,7 @@ What else illi keeps in `~/.illi`:
 | `plugin-data/`  | each plugin's own folder (`CLAUDE_PLUGIN_DATA`), kept across its updates; a profile's plugins' in the profile's folder ([Plugins](customize.md#plugins)) |
 | `trust.json`    | the folders you trust illi in (a repo's top covers the repo), every profile's: the question at the start asks only for others; edit or delete it to trust less |
 | `update.json`   | when illi last looked for a new release (`autoupdate`), and the one it last said it couldn't install |
-| `locks/`        | a lock per project, held while its chat is open (by the system: a crash never leaves one held), and the socket a second terminal joins it by |
+| `locks/`        | a lock per project, held while its chat is open (by the system: a crash never leaves one held), the socket a second terminal joins it by, and the chat's state for the other terminals' side panel |
 | `illi.log`      | what went wrong (each profile's own)                  |
 
 `/export` writes `./illi-memory.json`, `/tree` `./illi-tree.html`.

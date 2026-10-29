@@ -31,10 +31,10 @@ streams on, its subagents, background jobs and MCP servers keep going,
 and a question it asks waits for you. Switching back shows it as you
 left it (the chat where you scrolled, what you had typed), at once; a
 profile not open yet starts as illi does. The side panel marks each
-profile open in the terminal: a spinner while it works, `?` while a
-question waits on you, `● 2` while only its background jobs run; a note
-says when one asks you something or is done, and the title's mark turns
-`?` for a question in any of them. Ctrl+D (or a second Ctrl+C) quits
+profile open, in this terminal or another: a spinner while it works,
+`?` while a question waits on you, `● 2` while only its background jobs
+run. For one open in this terminal, a note also says when it asks you
+something or is done, and the title's mark turns `?` for its question. Ctrl+D (or a second Ctrl+C) quits
 every profile open in the terminal, first saying which at work it ends
 too; Ctrl+Z hands the terminal back while all of them go on.
 

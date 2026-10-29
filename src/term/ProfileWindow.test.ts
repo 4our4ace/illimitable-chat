@@ -6,8 +6,10 @@
 // once; a profile open hidden in the window can't be renamed or deleted;
 // a pipe still runs in one profile; one hidden that runs again in place
 // isn't kept as the profile used last. The side marks the profiles open
-// hidden here as they are, the title asks for one's question, and a
-// quit says which at work it ends.
+// hidden here as they are, and those open in another terminal as the
+// illi holding their chat tells (jobs told both ways counted once; one
+// gone, dim again); the title asks for one's question, and a quit says
+// which at work it ends.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -21,7 +23,7 @@ delete process.env.ILLI_PROFILE;
 fs.mkdirSync(DIR + "/profiles/work", { recursive: true });
 fs.mkdirSync(DIR + "/profiles/home", { recursive: true });
 
-const { member_attach, member_screen } = await import("./Member.ts");
+const { member_attach, member_look, member_screen } = await import("./Member.ts");
 const { term_profile, term_profile_go } = await import("./ProfileCommands.ts");
 const { term_clear, term_grab, term_type } = await import("./Keys.ts");
 const { term_side_drawn } = await import("./Side.ts");
@@ -116,6 +118,38 @@ test("the side marks the profiles open hidden here: ? while one asks, a spinner 
   expect(text("home")).toMatch(/^◯ home [\u2800-\u28ff]$/);
   expect([text("idle"), text("shut")]).toEqual(["◯ idle", "◯ shut"]);
   expect([row("idle")[0].s.d === true, row("shut")[0].s.d === true]).toEqual([false, true]);
+});
+
+// another terminal's illi in profile `profile`, holding the chat of a
+// project of its own and telling its state, till killed
+async function holder(profile: string, state: object) {
+  const cwd = fs.mkdtempSync(DIR + "/project-");
+  const code = "const { Lock } = await import(" + JSON.stringify(import.meta.dir + "/../chat/Lock.ts") + "); await Lock.take(" + JSON.stringify(cwd) + "); Lock.tell(" + JSON.stringify(state) + "); console.log('held'); setInterval(() => {}, 1000);";
+  const proc = Bun.spawn(["bun", "-e", code], { env: { ...process.env, ILLI_PROFILE: profile, ILLI_WINDOW: "off" }, stdout: "pipe", stderr: "inherit" });
+  const got = await proc.stdout.getReader().read();
+  expect(new TextDecoder().decode(got.value)).toBe("held\n");
+  return proc;
+}
+
+test("the side marks the profiles open in another terminal too, as the illi holding their chat tells: a spinner while one works, jobs told both ways counted once; one gone, dim again as soon as this one is shown", async () => {
+  fs.mkdirSync(DIR + "/profiles/far", { recursive: true });
+  fs.mkdirSync(DIR + "/profiles/both", { recursive: true });
+  const t = Object.assign(term(), { profs: ["default", "both", "far"], agents: [], subs: new Map(), since: Date.now(), todo: false });
+  Screen.screen_feed(t.scr, wire_frame({ $: "show" }, NONCE));
+  roster(t, [open("both", { jobs: 2 })]);
+  const text = (name: string) => term_side_drawn(t, 30, 60).items.map(([line]) => line).find((l) => l.map((r) => r.x).join("").trim().split(" ")[1] === name)!;
+  const said = (name: string) => text(name).map((r) => r.x).join("").trim();
+  const others = [await holder("far", { asks: false, working: true, jobs: 0, holds: true }), await holder("both", { asks: false, working: false, jobs: 2, holds: true })];
+  try {
+    member_look(t);
+    expect(said("far")).toMatch(/^◯ far [\u2800-\u28ff]$/);
+    expect(said("both")).toBe("◯ both ● 2");
+  } finally {
+    others.forEach((p) => p.kill("SIGKILL"));
+    await Promise.all(others.map((p) => p.exited));
+  }
+  Screen.screen_feed(t.scr, wire_frame({ $: "show" }, NONCE));
+  expect([said("far"), text("far")[0].s.d === true]).toEqual(["◯ far", true]);
 });
 
 test("a question waiting in a profile open hidden here makes the title's mark ?", () => {

@@ -16,7 +16,7 @@ import * as config from "../config/Config.ts";
 import { Custom, type Skill } from "../config/Custom.ts";
 import * as Draw from "../ui/Draw.ts";
 import { term_spinner } from "./Frame.ts";
-import { member_others } from "./Member.ts";
+import { member_seen } from "./Member.ts";
 import type { Shown } from "../chat/Radar.ts";
 import { related_age, related_cut, related_list, related_open, related_pin, related_shown, related_text } from "./Related.ts";
 import { Mcp, type Server } from "../tools/Mcp.ts";
@@ -400,14 +400,14 @@ function term_side_sticky(t: Term, w: number, whole: boolean): Item[] | null {
 }
 
 // the side's profiles, once there are two: a head (a click: /profile's
-// picker), each profile (the one running marked; one open hidden in this
-// window in the ink, its state after it: term_side_open), a gap; a click
-// on another switches to it
+// picker), each profile (the one running marked; one open elsewhere,
+// hidden in this window or in another terminal, in the ink, its state
+// after it: term_side_open), a gap; a click on another switches to it
 function term_side_profiles(t: Term): Item[] {
   if (t.profs.length < 2) {
     return [];
   }
-  const others = member_others();
+  const others = member_seen();
   const items = t.profs.map((name): Item => {
     const here = name === config.PROFILE;
     const open = here ? undefined : others.find((o) => o.profile === name);
@@ -416,11 +416,12 @@ function term_side_profiles(t: Term): Item[] {
   return [[[Paint.Run("Profiles", { ...Paint.INK, b: true })], () => term_profile_pick(t)], ...items, [[], null]];
 }
 
-// a profile open hidden in this window, as the side marks it: ? (bold,
-// in the accent) while a question waits on you; while its turn or
-// subagents run, a spinner as the subagents' (Member.ts moves it); while
-// only its background jobs run, ● and how many (in the theme's success);
-// at rest, or not open, nothing
+// a profile open elsewhere (hidden in this window, or in another
+// terminal), as the side marks it: ? (bold, in the accent) while a
+// question waits on you; while its turn or subagents run, a spinner as
+// the subagents' (Member.ts moves it); while only its background jobs
+// run, ● and how many (in the theme's success); at rest, or not open,
+// nothing
 function term_side_open(o: Open | undefined): Paint.Run[] {
   const tone = Draw.draw_tokens();
   return o === undefined ? []
