@@ -214,7 +214,7 @@ test("a project forgotten is gone, its file deleted, its WAL too, the others kep
   const again = Store.open(DIR + "/forget", APP);
   expect([Store.count(again), Store.msg(again, 0)!.text]).toEqual([1, "a new start"]);
   [again, home].forEach(Store.close);
-  expect(fs.readdirSync(DIR + "/forget/projects")).toEqual(["app-k3f9x2.sqlite", "home.sqlite"]);
+  expect(fs.readdirSync(DIR + "/forget/projects").sort()).toEqual(["app-k3f9x2.sqlite", "home.sqlite"]);
 });
 
 test("a chat file that won't open is said by its name", () => {
