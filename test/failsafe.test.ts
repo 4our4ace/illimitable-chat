@@ -10,8 +10,8 @@
 // vendor's words logged once, and so does its end past the tries. A login
 // that won't renew ends the call at once, saying why. No connection says
 // which host can't be reached; a retry-after past the longest wait ends
-// the call at once; a refused key names its variable; a reply cut short
-// is marked once. Timers run 1000 times fast.
+// the call at once; a refused key says /login replaces it, and none
+// that /login connects one; a reply cut short is marked once. Timers run 1000 times fast.
 
 import { expect, test } from "bun:test";
 import { temp_dir } from "./repo.ts";
@@ -211,9 +211,9 @@ test("a retry-after past the longest wait ends the call at once, saying till whe
   expect(end.text).toMatch(/^the AI service is busy: it asks to wait till (\w+ )?\d\d:\d\d$/);
 }));
 
-test("a refused key names its variable; an HTML page is never shown, its body logged", () => fast(async () => {
+test("a refused key says /login replaces it; an HTML page is never shown, its body logged", () => fast(async () => {
   globalThis.fetch = (async () => Response.json({ type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } }, { status: 401 })) as any;
-  expect((await turn()).text).toBe("Anthropic refused the API key (HTTP 401: invalid x-api-key): check ANTHROPIC_API_KEY and restart illi");
+  expect((await turn()).text).toBe("Anthropic refused the API key (HTTP 401: invalid x-api-key): /login replaces it");
   const page = "<!DOCTYPE html><html><body>" + "Bad gateway ".repeat(100) + "</body></html>";
   globalThis.fetch = (async () => new Response(page, { status: 400 })) as any;
   logged.length = 0;
@@ -221,11 +221,11 @@ test("a refused key names its variable; an HTML page is never shown, its body lo
   expect(logged.some((line) => line.includes(page))).toBe(true);
 }));
 
-test("no API key ends the call saying which to set, and to restart", () => fast(async () => {
+test("no API key ends the call saying /login connects one", () => fast(async () => {
   config.KEYS.anthropic = "";
   const end = await Agent.ask({ ...SHARE, blocks: [{ text: "hi", mark: true }] }, () => {}).done;
   config.KEYS.anthropic = "test";
-  expect(end).toMatchObject({ ok: false, stop: "down", text: "no API key: set ANTHROPIC_API_KEY and restart illi" });
+  expect(end).toMatchObject({ ok: false, stop: "down", text: "no Anthropic API key: /login connects one" });
   expect(end.again).toBeUndefined();
 }));
 

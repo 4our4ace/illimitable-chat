@@ -1214,9 +1214,11 @@ export function block_name(id: number, n: number): string {
 // t: the turn; talk: whether talk opens by itself (not in Fold all). Open:
 // the person's choice (Open, Shut) if made, else a message of the user or
 // illi (tool calls, reports and the rest stay folded). A later page of
-// a message has none: its first shows it whole
+// a message has none while its first shows it whole, from the turn on;
+// one whose first lies before the turn (folded into a block above it, the
+// turn's line moved into the message) shows folded, as its own
 function part_rows(v: View, id: number, n: number, t: number, talk: boolean): Row[] {
-  if (n === 1 && v.later.has(id)) {
+  if (n === 1 && (v.later.get(id) ?? -1) >= t) {
     return [];
   }
   const key   = id + "+" + n;

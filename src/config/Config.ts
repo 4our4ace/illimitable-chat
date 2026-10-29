@@ -161,10 +161,15 @@ export const KEYED: Record<string, Api> = {
 const ENV_KEYS: Record<string, string> = Object.fromEntries(Object.entries(VARS).map(([name, v]) => [name, config_key(v)]));
 export const KEYS: Record<string, string> = { ...ENV_KEYS };
 
-// the accounts as last read (null: their file won't read), and how the
-// file looked then (Accounts.stamp)
+// the accounts as last read (null: their file won't read, and never has
+// in this illi: one that stops reading keeps the last read, so a passing
+// fault drops no provider), and how the file looked then
+// (Accounts.stamp); whether the ChatGPT login file read last, by its
+// path (config_signed: one that won't read for a moment, as a program
+// writes it in place, keeps what the last read said)
 let ACCOUNTS: Store | null = Accounts.read(ROOT);
 let STAMPED = Accounts.stamp(ROOT);
+let SIGNED  = { file: "", on: false };
 config_keys();
 
 export const OFFER: Offer = {
@@ -957,34 +962,48 @@ export function config_claude_dir(): string {
   return Accounts.folder(ROOT, ACCOUNTS?.["claude-code"]?.use ?? OWN);
 }
 
-// whether a ChatGPT login is there to run on (config_login_file)
+// whether a ChatGPT login is there to run on (config_login_file): a file
+// there that won't read, as the last read of it said (SIGNED)
 export function config_signed(): boolean {
-  const entry = json_object(config_login_file())?.openai;
-  return entry?.type === "oauth" && Boolean(entry.access) && Boolean(entry.refresh);
+  const file = config_login_file();
+  const data = json_object(file);
+  if (data === null && SIGNED.file === file && fs.existsSync(file)) {
+    return SIGNED.on;
+  }
+  const entry = data?.openai;
+  SIGNED = { file, on: entry?.type === "oauth" && Boolean(entry.access) && Boolean(entry.refresh) };
+  return SIGNED.on;
 }
 
-// the accounts read again if their file changed (or always, `now`), the
-// ChatGPT login looked at: the keys in use and, unless the vendors
-// setting names them, the vendors offered (config_offer), the picks with
-// them (config_live). Whether the accounts' file, the vendors offered or
-// a key in use changed (a Claude plan's account switched changes the
-// file alone)
+// the accounts read again if their file changed (or always, `now`; one
+// that won't read keeps the last read), the ChatGPT login looked at: the
+// keys in use and, unless the vendors setting names them, the vendors
+// offered (config_offer), the picks with them (config_live: settings that
+// leave no pick on the vendors now offered, as a models setting naming
+// only a provider let go, keep the picks as they were, logged, never
+// ending illi). Whether the accounts' file, the vendors offered or a key
+// in use changed (a Claude plan's account switched changes the file
+// alone)
 export function config_accounts(now = false): boolean {
   const stamp = Accounts.stamp(ROOT);
   const file  = stamp !== STAMPED;
   if (now || file) {
-    [ACCOUNTS, STAMPED] = [Accounts.read(ROOT), stamp];
+    [ACCOUNTS, STAMPED] = [Accounts.read(ROOT) ?? ACCOUNTS, stamp];
   }
   const keys = JSON.stringify(KEYS);
   config_keys();
   const moved = config_offer();
   if (moved) {
-    config_live();
+    try {
+      config_live();
+    } catch (err: any) {
+      console.error("the vendors offered changed, but " + err.message + ": the picks stay as they were");
+    }
   }
   return file || moved || keys !== JSON.stringify(KEYS);
 }
 
-// the accounts as last read (null: their file won't read)
+// the accounts as last read (null: their file won't read, and never has)
 export function config_accounts_read(): Store | null {
   return ACCOUNTS;
 }

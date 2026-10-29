@@ -17,7 +17,8 @@
 // ends at the first, saying a message goes on, the three counted over
 // the user's messages all the same (a grown call starting them anew).
 // A message too long for one page is told to a view once, whole, at its
-// first page, live and as a view joins.
+// first page, live and as a view joins (a later page past the turn's
+// start, its first folded above it, folded as its own).
 // One refused for its cache marks goes on from a note, its next call
 // unmarked, once (refused so again, the turn ends saying why); with
 // autocontinue off, the turn ends at the note, the next call unmarked. A view is told the state whole as it joins, then only
@@ -635,7 +636,7 @@ function last(): string {
   return Memory.message(chat.mem, chat.mem.count - 1)!.text;
 }
 
-test("a message too long for one page is told to a view once, whole, at its first page, its later pages showing nothing of their own: live, and as a view joins", async () => {
+test("a message too long for one page is told to a view once, whole, at its first page, its later pages showing nothing of their own (folded, as their own, where the turn starts after the first): live, and as a view joins", async () => {
   await until(() => !chat.busy);
   const long = 'Write {"file_path":"page.html","content":"' + "<p>a line of the page</p>\\n".repeat(3000) + '"}';
   const joined = async () => {
@@ -655,6 +656,8 @@ test("a message too long for one page is told to a view once, whole, at its firs
       v.turn = id;
       const rows = View.view_rows(v, [[id, 1], [id + 1, 1], [id + 2, 1]]);
       expect(rows.map((r) => r.filter((row) => row.$ === "Msg").length)).toEqual([1, 0, 0]);
+      v.turn = id + 1;
+      expect(View.view_rows(v, [[id + 1, 1], [id + 2, 1]]).map((r) => r.length > 0)).toEqual([true, true]);
       v.ws?.close();
     }
   } finally {

@@ -30,7 +30,8 @@ do, so the new one can copy the closest. illi has four vendors:
   `accounts.json` keeps); and in `src/term/LoginCommands.ts`'s `APIS`
   (its name in `/login`, where a key is made, and how one is checked:
   a `check(key)` on its wire, as `Anthropic.check` and `OpenAI.check`,
-  asking a list that costs nothing).
+  asking a list that costs nothing; its reason never the fetch error's
+  own text, which may hold a header's whole value, the key).
 - `docs/providers.md`: the vendors at its top, a section saying how to
   sign in or set the key, and its rows in the Models tables (the
   defaults, what it tells); its name where the docs list every vendor

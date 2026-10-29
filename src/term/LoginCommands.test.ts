@@ -12,7 +12,10 @@
 // API's accounts: the one in use marked; Enter uses another; Del logs a
 // kept key out, asked first (Keep it keeps it), the environment's never
 // forgotten, as illi keeps no copy. The accounts are read again as the
-// picker opens (another terminal's change). Logging out of a provider,
+// picker opens (another terminal's change); a list left open while
+// another terminal changed them changes nothing gone, saying so; the
+// last pasted key in use, forgotten, logs out of the API, the variable's
+// never taken in its place unasked. Logging out of a provider,
 // asked first, forgets its keys and stops its models being offered. The
 // vendors setting leaving out what /login connected, /login says so and
 // how. ChatGPT's accounts: each named by its email, told by its plan; a
@@ -181,7 +184,8 @@ test("a key pasted shows as dots and is checked: refused, kept nowhere; taken, k
   pick(t, "+ add another key");
   expect([t.question.title, t.question.ask.hint, t.question.ask.secret]).toEqual(["Anthropic API key", "paste it here: a key from console.anthropic.com", true]);
   expect(t.question.ask.done("  ")).toBe("Paste the key first.");
-  expect(t.question.ask.done("sk-ant one")).toBe("A key has no spaces in it: paste it alone.");
+  expect(t.question.ask.done("sk-ant one")).toBe("A key has no spaces or special characters in it: paste it alone, as the provider shows it.");
+  expect(t.question.ask.done("sk-ant-\u200bone")).toBe("A key has no spaces or special characters in it: paste it alone, as the provider shows it.");
   expect(t.question.ask.done("sk-ant-wrong-key-9999")).toBeNull();
   expect(await noted(t, "The key wasn't")).toBe("The key wasn't connected: Anthropic refused the key.");
   expect(Accounts.read(config.ROOT)).toEqual({ "claude-api": { use: ENV, keys: [] } });
@@ -224,6 +228,27 @@ test("the accounts are read again as the picker opens: a key another terminal ad
   const t = term();
   open(t, "Anthropic API key");
   expect([t.choose.names[t.choose.here], config.KEYS.anthropic]).toEqual(["sk-ant-…7777", "sk-ant-other-term-7777"]);
+  Accounts.write(config.ROOT, was);
+  config.config_accounts(true);
+});
+
+test("a list left open while another terminal changed the accounts changes nothing gone, saying so; the last pasted key in use, forgotten, logs out of the API, the variable's never taken unasked", () => {
+  const was = Accounts.read(config.ROOT)!;
+  const k7 = { "claude-api": { use: "k7", keys: [{ id: "k7", key: "sk-ant-other-term-7777", added: "" }] } };
+  Accounts.write(config.ROOT, k7);
+  const t = term();
+  open(t, "Anthropic API key");
+  expect(t.choose.names.slice(0, 2)).toEqual(["sk-ant-…0001", "sk-ant-…7777"]);
+  Accounts.write(config.ROOT, {});
+  t.choose.pick(0);
+  expect(note(t)).toBe("That changed in another terminal meanwhile: /login shows the accounts as they are now.");
+  expect(Accounts.read(config.ROOT)).toEqual({});
+  Accounts.write(config.ROOT, k7);
+  open(t, "Anthropic API key");
+  t.choose.keys(1, "Delete");
+  expect([t.question.title, t.question.about[1]]).toEqual(["Log out of Anthropic API?", "illi forgets its keys and stops offering its models"]);
+  t.question.pick(1);
+  expect([note(t), Accounts.read(config.ROOT)]).toEqual(["Logged out of Anthropic API.", {}]);
   Accounts.write(config.ROOT, was);
   config.config_accounts(true);
 });

@@ -15,7 +15,8 @@
 // key missing. autoupdate's values (true and false too) as its mode;
 // related's (on, screen, off; true and false as the old on and off) as
 // the radar at the side and its lines given to the model. An unknown
-// argument is named.
+// argument is named. A provider let go that leaves no pick offered keeps
+// the picks as they were, never ending illi.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -174,4 +175,27 @@ test("an unknown argument is named; one meaning to sign in, told where", () => {
   expect(odd.code).toBe(1);
   expect(odd.err).toStartWith("illi: unknown argument frob.\n");
   expect(start({}, ["login"]).err).toStartWith("illi: unknown argument login. Sign in inside the chat: run illi, then type /login.\n");
+});
+
+test("a provider let go that leaves no pick offered (the models offered all another's) keeps the picks as they were, never ending illi", () => {
+  const vendors = config.config_value("vendors");
+  const models  = [...config.OFFER.models];
+  config.config_set("vendors", null);
+  fs.writeFileSync(config.OWN_LOGIN, JSON.stringify({ openai: { type: "oauth", access: "a", refresh: "r" } }));
+  fs.writeFileSync(DIR + "/accounts.json", JSON.stringify({ "claude-api": { use: "env", keys: [] } }));
+  config.OFFER.models.splice(0, Infinity, "gpt-6.1-sol");
+  try {
+    config.config_accounts(true);
+    const pick = config.PICK;
+    expect([config.OFFER.vendors, pick.vendor]).toEqual([["chatgpt", "claude-api"], "chatgpt"]);
+    fs.rmSync(config.OWN_LOGIN);
+    expect(() => config.config_accounts(true)).not.toThrow();
+    expect([config.OFFER.vendors, config.PICK]).toEqual([["claude-api"], pick]);
+  } finally {
+    config.OFFER.models.splice(0, Infinity, ...models);
+    fs.rmSync(config.OWN_LOGIN, { force: true });
+    fs.rmSync(DIR + "/accounts.json", { force: true });
+    config.config_set("vendors", vendors === "" ? null : vendors);
+    config.config_accounts(true);
+  }
 });

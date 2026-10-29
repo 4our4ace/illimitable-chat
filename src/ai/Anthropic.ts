@@ -73,20 +73,21 @@ export namespace Anthropic {
       }
       return news;
     }, (err) => {
-      console.error("claude-api: the models' windows weren't told: " + err?.message);
+      console.error("claude-api: the models' windows weren't told: " + (key === "" ? String(err?.message) : String(err?.message).split(key).join("<key>")));
       return false;
     });
     return listed;
   }
 
   // whether a key works, asked of the Models API ("": it does; else why
-  // not, in a few words), as /login takes it
+  // not, in a few words, never the error's own: a header's may hold the
+  // key), as /login takes it
   export async function check(key: string): Promise<string> {
     try {
       const res = await fetch(LIST, { headers: { "x-api-key": key, "anthropic-version": "2023-06-01" }, signal: AbortSignal.timeout(15e3) });
       return res.ok ? "" : res.status === 401 || res.status === 403 ? "Anthropic refused the key" : "Anthropic answered HTTP " + res.status;
     } catch (err: any) {
-      return "illi couldn't reach Anthropic (" + err.message + ")";
+      return "illi couldn't reach Anthropic (" + (err?.name === "TimeoutError" ? "no answer in 15 seconds" : "no connection") + ")";
     }
   }
 
