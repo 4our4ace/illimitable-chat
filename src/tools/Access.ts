@@ -244,6 +244,13 @@ export namespace Access {
     return { absolute, resource: slash(absolute), outside: { resource: slash(path.join(folder, "*")), save: WILD.test(top) ? "" : slash(path.join(top, "*")) } };
   }
 
+  // whether a folder's resource (the folder and *) holds a character a
+  // pattern takes as a wildcard: as a pattern it would meet other folders
+  // too (~/*/* every folder in home), so it's taken as it is
+  export function wild(resource: string): boolean {
+    return WILD.test(resource.endsWith("/*") ? resource.slice(0, -2) : resource);
+  }
+
   // folders outside (each its resource: the folder and *), those inside
   // another of them left out, by their paths: a * or ? in a folder's
   // name is that character, so ~/*/ hides no ~/.ssh/

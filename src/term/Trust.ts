@@ -35,11 +35,14 @@ type Button = { row: number; col: number; to: number; at: number };
 // Constants
 // =========
 
-// the buttons, in order; the widest the card runs (the narrowest: the
-// screen's), the room kept round it on a narrow screen, its text's
-// indent inside its frame, the room between the buttons side by side
+// the buttons, in order (on a screen too narrow for them, short); the
+// widest the card runs (the narrowest: the screen's), the room kept round
+// it on a narrow screen, its text's indent inside its frame (none where
+// even the short buttons wouldn't fit), the room between the buttons
+// side by side
 const NO = 0, YES = 1;
 const BUTTONS = ["No, exit", "Yes, trust it"];
+const SHORT   = ["No", "Yes"];
 const WIDE    = 64;
 const MARGIN  = 2;
 const PAD     = 2;
@@ -168,21 +171,26 @@ export namespace Trust {
   // most), framed dim, the question on its top edge, then its keys as
   // many as fit; in it the folder bold (~ for home), what trusting it
   // means (home's: that it is asked each time, dim), then the buttons,
-  // the lit one filled in the accent, the other dim between its brackets.
-  // On a screen too short for the card, its blank lines go first, then
-  // its text from the end (an ellipsis where it's cut), so the folder
-  // and the buttons stay; shorter still, its top. Each button's place
-  // kept as its runs land on the screen
+  // the lit one filled in the accent, the other dim between its brackets
+  // (short, No and Yes, on a screen too narrow for them, the text's
+  // indent gone too where even those wouldn't fit). On a screen too short
+  // for the card, its blank lines go first, then its text from the end
+  // (an ellipsis where it's cut), so the folder and the buttons stay;
+  // shorter still, its top. Each button's place kept as its runs land on
+  // the screen, cut at its edge
   export function laid(asked: Asked, { w, h }: { w: number; h: number }): Laid {
     const cw     = Math.min(w, Math.max(24, Math.min(WIDE, w - 2 * MARGIN)));
-    const tw     = Math.max(1, cw - 4 - 2 * PAD);
+    const wide   = (names: string[]) => Math.max(...names.map(Paint.text_width)) + 4;
+    const pad    = cw - 4 - 2 * PAD >= wide(SHORT) ? PAD : 0;
+    const tw     = Math.max(1, cw - 4 - 2 * pad);
+    const names  = wide(BUTTONS) <= tw ? BUTTONS : SHORT;
     const bold   = { ...Paint.INK, b: true };
     const accent = Draw.draw_tokens().accent;
     const wrap   = (runs: Paint.Line) => Paint.runs_wrap(runs, tw, false);
     const mid    = (l: Paint.Line, of: number) => [Paint.Run(" ".repeat(Math.max(0, Math.floor((of - Paint.line_width(l)) / 2)))), ...l];
     const of     = new Map<Paint.Run, number>();
     const button = (k: number): Paint.Line => {
-      const runs = k === asked.at ? [Paint.Run("  " + BUTTONS[k] + "  ", { ...bold, c: accent, v: true })] : [Paint.Run("[ ", Paint.DIM), Paint.Run(BUTTONS[k]), Paint.Run(" ]", Paint.DIM)];
+      const runs = k === asked.at ? [Paint.Run("  " + names[k] + "  ", { ...bold, c: accent, v: true })] : [Paint.Run("[ ", Paint.DIM), Paint.Run(names[k]), Paint.Run(" ]", Paint.DIM)];
       runs.forEach((r) => of.set(r, k));
       return runs;
     };
@@ -192,7 +200,7 @@ export namespace Trust {
     const folder = wrap([Paint.Run(Paint.text_clean(config_home(asked.folder)), bold)]);
     const text   = [...wrap([Paint.Run(TEXT)]), ...(asked.kept ? [] : [[], ...wrap([Paint.Run(HOME, Paint.DIM)])])];
     const said   = text.filter((l) => l.length > 0);
-    const card   = (body: Paint.Line[]) => Paint.frame(body.map((l) => (l.length === 0 ? l : [Paint.Run(" ".repeat(PAD)), ...l])), cw, Trust.edge(cw - 3));
+    const card   = (body: Paint.Line[]) => Paint.frame(body.map((l) => (l.length === 0 ? l : [Paint.Run(" ".repeat(pad)), ...l])), cw, Trust.edge(cw - 3));
     const whole  = card([[], ...folder, [], ...text, [], ...(side ? [mid(both, tw)] : [mid(no, tw), [], mid(yes, tw)]), []]);
     const room   = h - 2 - folder.length - (side ? 1 : 2);
     const tight  = () => card([...folder, ...Trust.cut(said, room, tw), ...(side ? [mid(both, tw)] : [mid(no, tw), mid(yes, tw)])]);
@@ -208,10 +216,10 @@ export namespace Trust {
         const at   = of.get(r);
         const last = buttons.at(-1);
         const to   = x + Paint.text_width(r.x);
-        if (at !== undefined && last?.row === top + k && last.at === at && last.to === x) {
-          last.to = to;
-        } else if (at !== undefined && top + k < h) {
-          buttons.push({ row: top + k, col: x, to, at });
+        if (at !== undefined && last?.row === top + k && last.at === at && last.to === x && x < w) {
+          last.to = Math.min(to, w);
+        } else if (at !== undefined && top + k < h && x < w) {
+          buttons.push({ row: top + k, col: x, to: Math.min(to, w), at });
         }
         x = to;
       }
@@ -249,6 +257,6 @@ export namespace Trust {
       return [];
     }
     const last = lines[n - 1];
-    return [...lines.slice(0, n - 1), [...Paint.line_cut(last, 0, Math.max(0, w - 1))[1], Paint.Run("…", last.at(-1)?.s)]];
+    return [...lines.slice(0, n - 1), [...Paint.line_fit(last, Math.max(0, w - 1), Paint.Run("")), Paint.Run("…", last.at(-1)?.s)]];
   }
 }

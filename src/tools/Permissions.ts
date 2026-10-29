@@ -138,11 +138,14 @@ export namespace Permissions {
 
   // whether a pattern matches all a narrower one does: the narrower
   // taken as text, each wildcard in it one only a * meets (its * two
-  // characters a ? can't take alone, its ? one), and, ending in " *",
-  // its bare command too (git push ?* doesn't cover git push *)
+  // characters a ? can't take alone, and none, which a ? must; its ?
+  // one), and, ending in " *", its bare command too (git push ?* doesn't
+  // cover git push *, nor a?? * a* *)
   export function covers(wide: string, narrow: string): boolean {
-    const text = (p: string) => p.replace(/\*/g, "\u0001\u0002").replace(/\?/g, "\u0001");
-    return match(text(narrow), wide) && (!narrow.endsWith(" *") || match(text(narrow.slice(0, -2)), wide));
+    const text  = (p: string) => p.replace(/\*/g, "\u0001\u0002").replace(/\?/g, "\u0001");
+    const short = (p: string) => p.replace(/\*/g, "").replace(/\?/g, "\u0001");
+    const both  = (p: string) => match(text(p), wide) && match(short(p), wide);
+    return both(narrow) && (!narrow.endsWith(" *") || both(narrow.slice(0, -2)));
   }
 
   // a request's verdict: denied if any resource is, by the configured
