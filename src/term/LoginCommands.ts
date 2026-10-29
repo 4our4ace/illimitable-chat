@@ -34,7 +34,7 @@
 // history, the chat or a note.
 
 import * as fs from "node:fs";
-import { Accounts, ENV, OWN, type Folder, type Keyed, type Saved } from "../config/Accounts.ts";
+import { Accounts, ENV, OWN, type Folder, type Keyed, type Saved, type Store } from "../config/Accounts.ts";
 import { Anthropic } from "../ai/Anthropic.ts";
 import type { Vendor } from "../ai/AskAI.ts";
 import { browser_open } from "./Browser.ts";
@@ -176,13 +176,20 @@ function login_after(t: Term, vendor: Vendor, said: string): void {
   term_note(t, said + (left ? " " + fix : ""));
 }
 
-// a change to the accounts' file, said if it fails (true: done)
-function login_edit(t: Term, f: Parameters<typeof Accounts.edit>[1]): boolean {
-  const why = Accounts.edit(config.ROOT, f);
+// a change to the accounts' file, said if it fails (true: done); f gives
+// null where what it changes is gone from the file as read just before
+// (another terminal's change while this one's list was open: nothing
+// written, the list to be opened again)
+function login_edit(t: Term, f: (store: Store) => Store | null): boolean {
+  let gone = false;
+  const why = Accounts.edit(config.ROOT, (store) => f(store) ?? ((gone = true), store));
   if (why !== null) {
     term_note(t, "Can't change the accounts: " + why + ".");
+  } else if (gone) {
+    config.config_accounts(true);
+    term_note(t, "That changed in another terminal meanwhile: /login shows the accounts as they are now.");
   }
-  return why === null;
+  return why === null && !gone;
 }
 
 // a question that asks before a log out (Enter on its second answer;
@@ -327,7 +334,7 @@ async function login_claude_sign(t: Term, id: string, back: () => void): Promise
 
 // an account used from now on
 function login_claude_use(t: Term, a: Folder): void {
-  if (login_edit(t, (store) => ({ ...store, "claude-code": { ...store["claude-code"]!, use: a.id } }))) {
+  if (login_edit(t, (store) => (store["claude-code"]?.accounts.some((o) => o.id === a.id) ? { ...store, "claude-code": { ...store["claude-code"]!, use: a.id } } : null))) {
     login_after(t, "claude-code", "Claude plan now runs on " + login_claude_name(a) + ".");
   }
 }
@@ -346,8 +353,12 @@ function login_claude_drop(t: Term, a: Folder, back: () => void): void {
         await login_claude_forget(a.id);
       }
       const done = login_edit(t, (store) => {
-        const rest = (store["claude-code"]?.accounts ?? []).filter((o) => o.id !== a.id);
-        const use  = store["claude-code"]?.use === a.id ? rest[0]?.id ?? "" : store["claude-code"]!.use;
+        const was = store["claude-code"];
+        if (was === undefined) {
+          return store;
+        }
+        const rest = was.accounts.filter((o) => o.id !== a.id);
+        const use  = was.use === a.id ? rest[0]?.id ?? "" : was.use;
         const { "claude-code": _, ...others } = store;
         return rest.length === 0 ? others : { ...store, "claude-code": { use, accounts: rest } };
       });
@@ -424,8 +435,8 @@ function login_api_ask(t: Term, api: Api, back: () => void): void {
     if (key === "") {
       return "Paste the key first.";
     }
-    if (/\s/.test(key)) {
-      return "A key has no spaces in it: paste it alone.";
+    if (!Accounts.plain(key)) {
+      return "A key has no spaces or special characters in it: paste it alone, as the provider shows it.";
     }
     void login_api_take(t, api, key, null);
     return null;
@@ -433,8 +444,12 @@ function login_api_ask(t: Term, api: Api, back: () => void): void {
 }
 
 // a key checked with its provider, then taken: the environment's (ENV) in
-// use, or a pasted one kept and in use; refused, said
+// use, or a pasted one kept and in use; refused, said (one that can't be
+// a key, Accounts.plain, never sent)
 async function login_api_take(t: Term, api: Api, key: string, id: string | null): Promise<void> {
+  if (!Accounts.plain(key)) {
+    return term_note(t, "The key wasn't connected: it has a space or a character no key has.");
+  }
   const checking = term_notify(t, "Checking the key with " + api.name.replace(/ API key$/, "") + "…", false, 30000);
   const why = await api.check(key);
   term_unnotify(t, checking);
@@ -456,15 +471,17 @@ async function login_api_take(t: Term, api: Api, key: string, id: string | null)
 
 // a key of a connected API used from now on (shown: as its row shows it)
 function login_api_use(t: Term, api: Api, id: string, shown: string): void {
-  if (login_edit(t, (store) => ({ ...store, [api.vendor]: { ...store[api.vendor]!, use: id } }))) {
+  const there = (was: Keyed | undefined) => was !== undefined && (id === ENV ? config.config_env_key(api.key) !== "" : was.keys.some((k) => k.id === id));
+  if (login_edit(t, (store) => (there(store[api.vendor]) ? { ...store, [api.vendor]: { ...store[api.vendor]!, use: id } } : null))) {
     login_after(t, api.vendor, api.name.replace(/ key$/, "") + " now runs on " + shown + ".");
   }
 }
 
 // a key logged out (asked first, Esc back to `back`): a pasted one
-// forgotten (the last one left, the provider let go); the environment's
-// can't be, as illi keeps no copy of it, unless it's the last, which
-// lets the provider go
+// forgotten (the last one left, or the last pasted one in use, the
+// provider let go: the environment's is never taken in its place
+// unasked); the environment's can't be, as illi keeps no copy of it,
+// unless it's the last, which lets the provider go
 function login_api_drop(t: Term, api: Api, id: string, back: () => void): void {
   const now = config.config_accounts_read()?.[api.vendor];
   if (now === undefined) {
@@ -474,7 +491,7 @@ function login_api_drop(t: Term, api: Api, id: string, back: () => void): void {
   if (id === ENV) {
     return rest.length > 0 ? term_note(t, config.VARS[api.key] + " is your environment's, so illi keeps no copy of it to forget: Enter on another key uses that one.") : login_api_out(t, api, back);
   }
-  if (rest.length === 0 && config.config_env_key(api.key) === "") {
+  if (rest.length === 0 && (now.use === id || config.config_env_key(api.key) === "")) {
     return login_api_out(t, api, back);
   }
   const key = now.keys.find((k) => k.id === id)?.key ?? "";
@@ -598,7 +615,7 @@ export async function login_chatgpt(t: Term): Promise<void> {
 // place of the one there (kept apart in turn), or opencode's (null: illi's
 // own let go for it, kept apart)
 async function login_chatgpt_use(t: Term, s: Saved | null): Promise<void> {
-  const why = await ChatGPT.swap(s === null ? null : s.entry);
+  const why = await ChatGPT.swap(s === null ? null : s.entry, true);
   if (why !== null) {
     return term_note(t, "Can't switch accounts: " + why + ".");
   }
@@ -641,7 +658,7 @@ function login_chatgpt_leave(t: Term, back: () => void): void {
 // (ChatGPT.file), else the first kept apart, put in the login file; said
 async function login_chatgpt_next(t: Term, said: string): Promise<void> {
   const next = ChatGPT.signed() ? null : ChatGPT.logins().saved[0] ?? null;
-  const why  = next === null ? null : await ChatGPT.swap(next.entry);
+  const why  = next === null ? null : await ChatGPT.swap(next.entry, true);
   const now  = ChatGPT.kept(ChatGPT.file());
   login_after(t, "chatgpt", said + (why !== null ? " Can't switch accounts: " + why + "." : now === null ? "" : " ChatGPT now runs on " + login_chatgpt_name(now) + "."));
 }

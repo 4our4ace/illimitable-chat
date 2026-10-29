@@ -138,15 +138,19 @@ export namespace Accounts {
     return { use, keys };
   }
 
-  // the file changed by f, as it is just before (null: changed; else why
-  // not: it won't read, or can't be written)
+  // the file changed by f, as it is just before (f giving it back as it
+  // was: nothing written). null: changed; else why not: it won't read, or
+  // can't be written
   export function edit(root: string, f: (store: Store) => Store): string | null {
     const now = Accounts.read(root);
     if (now === null) {
       return "the accounts file " + Accounts.file(root) + " won't read: illi leaves it as it is";
     }
     try {
-      Accounts.write(root, f(now));
+      const next = f(now);
+      if (next !== now) {
+        Accounts.write(root, next);
+      }
       return null;
     } catch (err: any) {
       return "the accounts file couldn't be written: " + err.message;
@@ -177,6 +181,13 @@ export namespace Accounts {
     } catch {
       return "";
     }
+  }
+
+  // whether a key could be one: printable ASCII, no space (one with a
+  // character pasted from elsewhere, an invisible one, would go into a
+  // request's header, which fails saying the header's whole value)
+  export function plain(key: string): boolean {
+    return /^[\x21-\x7e]+$/.test(key);
   }
 
   // a key as shown: its start and end around an ellipsis, never whole

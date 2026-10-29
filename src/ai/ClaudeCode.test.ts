@@ -20,7 +20,7 @@
 // too long (grown, once a tool's result came back; the message its API
 // error stands in never a reply) and a crash end it in plain words, a
 // request holding more cache marks than the API takes ends it `marks`
-// (a reply begun cut), a
+// in plain words (a reply begun cut), a
 // turn's call (its room set) with Claude Code's compaction off, so illi
 // folds the chat; a stop cuts it; a missing
 // CLI says to install it. A rate limit event's 5-hour and weekly windows
@@ -350,9 +350,9 @@ test("a plan's limit, a missing login, a chat too long (grown once a tool's resu
   expect((await call("crash")).end).toMatchObject({ ok: false, stop: "down", text: "boom" });
 });
 
-test("a request holding more cache marks than the API takes (Claude Code's own four beside illi's) ends the call `marks`, a reply begun cut", async () => {
+test("a request holding more cache marks than the API takes (Claude Code's own four beside illi's) ends the call `marks` in plain words, a reply begun cut", async () => {
   const { events, end } = await call("marks");
-  expect(end).toMatchObject({ ok: false, stop: "marks", cut: true, text: "API Error: 400 A maximum of 4 blocks with cache_control may be provided. Found 5." });
+  expect(end).toMatchObject({ ok: false, stop: "marks", cut: true, text: "Anthropic refused Claude Code's request over a technical limit" });
   expect(events.filter((e) => e.$ === "Entry" && e.kind === "illi").map((e) => e.text)).toEqual(["Looking."]);
 });
 

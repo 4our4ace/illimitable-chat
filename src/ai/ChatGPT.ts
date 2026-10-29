@@ -498,9 +498,13 @@ export namespace ChatGPT {
   // (null: that one let go, so opencode's is used if it may be), under the
   // lock its renewals take: the one it replaces kept apart (read under the
   // lock, as each renewal spends its refresh token: a copy from before
-  // wouldn't renew), the one put there kept apart no longer. A file
-  // `login` names is never let go. null: done; else why not
-  export async function swap(entry: Record<string, unknown> | null): Promise<string | null> {
+  // wouldn't renew), the one put there kept apart no longer. A switch
+  // (switching: an account /login listed) takes the one put there by its
+  // key from the accounts read under the lock, for the same reason, and
+  // writes nothing if the file holds it already (another terminal put it
+  // there, maybe renewed since). A file `login` names is never let go.
+  // null: done; else why not
+  export async function swap(entry: Record<string, unknown> | null, switching = false): Promise<string | null> {
     const file = ChatGPT.own();
     if (entry === null && config.LOGIN_SET !== null) {
       return "illi uses the login in " + config.config_home(file) + " (the login setting), which it leaves be";
@@ -509,14 +513,21 @@ export namespace ChatGPT {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const why = await ChatGPT.locked(file, async () => {
       const was = ChatGPT.kept(file);
+      if (switching && was !== null && was.key === key) {
+        return null;
+      }
+      const put = switching && entry !== null ? Accounts.read(config.ROOT)?.chatgpt?.saved.find((s) => s.key === key)?.entry : entry;
+      if (put === undefined) {
+        return "that account was logged out in another terminal meanwhile";
+      }
       const set = was === null || was.key === key ? null : ChatGPT.edit((logins) => ({ ...logins, saved: [...logins.saved.filter((s) => s.key !== was.key), was] }));
       if (set !== null) {
         return set;
       }
-      if (entry === null) {
+      if (put === null) {
         fs.rmSync(file, { force: true });
       } else {
-        ChatGPT.write(file, { ...(json_object(file) ?? {}), openai: entry });
+        ChatGPT.write(file, { ...(json_object(file) ?? {}), openai: put });
       }
       return null;
     });

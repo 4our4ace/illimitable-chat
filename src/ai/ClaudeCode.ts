@@ -190,6 +190,10 @@ const NAMES = config.ROOT + "/claude-code.json";
 const NO_CLAUDE = "Claude Code isn't installed here: install it (code.claude.com), then /login connects your Claude plan";
 const NO_LOGIN  = "Claude Code isn't logged in: /login signs in to your Claude plan, then send a message";
 
+// a request refused for its cache marks (MARKED), in plain words: the
+// API's own text names its cache_control blocks
+const NO_MARKS  = "Anthropic refused Claude Code's request over a technical limit";
+
 // how long `claude auth status` and `logout` may take (ms), and a
 // model's window asked (ClaudeCode.size)
 const AUTH = 30e3;
@@ -804,7 +808,8 @@ export namespace ClaudeCode {
   }
 
   // a failure in plain words: too long for the window; more cache marks
-  // than the API takes (`marks`: illi's one beside Claude Code's four);
+  // than the API takes (`marks`: illi's one beside Claude Code's four,
+  // NO_MARKS);
   // a plan's limit (when it resets, if told); a login missing; a busy
   // service (a later try may answer); else as Claude Code says it
   export function failed(said: string, status: number | null, reset: number): End {
@@ -812,7 +817,7 @@ export namespace ClaudeCode {
       return { ok: false, text: said, left: [], stop: "full" };
     }
     if (MARKED.test(said)) {
-      return { ok: false, text: said, left: [], stop: "marks" };
+      return { ok: false, text: NO_MARKS, left: [], stop: "marks" };
     }
     if (status === 429 || reset > 0 || LIMIT.test(said)) {
       const when = reset > Date.now() ? ": it resets at " + Agent.when(reset) : "";

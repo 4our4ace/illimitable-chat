@@ -198,9 +198,11 @@ it, so it only lasts while the variable is set.
 
 Once connected, the variable's key is listed with the keys you pasted.
 **+ add another key** adds a key; Enter on one switches to it, and Del
-forgets a pasted one. Forgetting the last pasted key while the variable
-is set leaves illi on the variable's key; **Log out of …** stops the
-API altogether. Both APIs run in illi's own loop, with no SDKs.
+forgets a pasted one. Forgetting the last pasted key while it's in use
+logs out of the API (asked first): illi never moves to the variable's
+key without asking, so Enter connects it again if you want it. **Log
+out of …** stops the API altogether. Both APIs run in illi's own loop,
+with no SDKs.
 
 Models
 ------

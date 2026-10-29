@@ -205,7 +205,7 @@ export namespace Agent {
     const signal = run.abort.signal;
     const key = wire.auth ? "" : config.KEYS[wire.key];
     if (!wire.auth && !key) {
-      end.text = "no API key: set " + wire.key.toUpperCase() + "_API_KEY and restart illi";
+      end.text = "no " + (VENDORS[wire.key] ?? wire.key) + " API key: /login connects one";
       end.stop = "down";
       return;
     }
@@ -424,7 +424,7 @@ export namespace Agent {
     } catch (err: any) {
       const away = res === null && !idle.signal.aborted && !run.abort.signal.aborted;
       if (away) {
-        console.error(run.ask.model + ": " + err.message);
+        console.error(run.ask.model + ": " + (token === "" ? err.message : String(err.message).split(token).join("<key>")));
       }
       step = Agent.fail(away ? Agent.unreached(wire.url) : err.message, [], "busy");
     }
@@ -466,8 +466,7 @@ export namespace Agent {
       return Agent.fail(why, [], "full");
     }
     if (down && (res.status === 401 || res.status === 403) && !wire.auth) {
-      const name = wire.key.toUpperCase() + "_API_KEY";
-      return Agent.fail((VENDORS[wire.key] ?? wire.key) + " refused the API key (" + why + "): check " + name + " and restart illi", [], "down");
+      return Agent.fail((VENDORS[wire.key] ?? wire.key) + " refused the API key (" + why + "): /login replaces it", [], "down");
     }
     return Agent.fail(why, [], down ? "down" : "busy");
   }
