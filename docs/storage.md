@@ -90,7 +90,9 @@ The columns, by table:
   (`Image.ts PICS`), is stored as several rows, its pages. Only the last
   page has `more` null. A partial index `msg_page` on `(chat) where more
   is not null` lists the continued pages, so a chat's count of whole
-  messages costs nothing.
+  messages costs nothing. Pages are the file's alone: the screen and the
+  plugins' `message` hook get a long message once, whole, at its first
+  page's index (`Chat.entry`).
 - **node**: `chat`, `first`, `n`, `text`. A line covers messages
   `first … first + n - 1`. The memory tree (`Memory.ts`) is binary: node
   (level `l`, index `i`) has `first = i · 2^l` and `n = 2^l`. The table

@@ -120,11 +120,15 @@ export function related_hear(t: Term, msg: View.Server): void {
 
 // whether a step's results are all in: as many results as calls since
 // the last message that is neither (a step's calls run one after
-// another, each result logged as its call ends)
+// another, each result logged as its call ends; a long one's later
+// pages not counted)
 export function related_settled(v: View.View): boolean {
   let [calls, results] = [0, 0];
   for (let k = v.parts.length - 1; k >= 0; k--) {
     const [id, n] = v.parts[k];
+    if (n === 1 && v.later.has(id)) {
+      continue;
+    }
     const kind = n === 1 ? v.whole.get(id)?.kind : undefined;
     if (kind !== "tool" && kind !== "echo") {
       break;
