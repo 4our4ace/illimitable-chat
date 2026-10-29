@@ -63,7 +63,9 @@ illi then runs Claude Code itself, as it ships, on your login:
   loads them, and `/mcp` and the side show them from then on, in the
   terminal whose illi holds the chat, each marked as Claude Code's, how
   it is and its tools (none show before; one that needs a login names
-  the `claude mcp login` command for it), while the pick is on
+  the `claude mcp login` command for it; the side counts those not
+  connected, a login needed or still pending, in one line, `+ 17 more
+  not connected`, which opens `/mcp`), while the pick is on
   `claude-code`: on another vendor, whose calls don't load them, they
   don't show (the `off` setting's list still names them).
   `off`, or Enter on one in `/mcp`, takes one out of illi's calls by its

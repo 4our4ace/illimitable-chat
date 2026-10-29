@@ -264,11 +264,14 @@ function term_bar(f: number, w: number, c: string): Item {
 // pick is on claude-code, Claude Code's own as its last call told them
 // (term_theirs), but one illi's own of its name stands in for: ●
 // connected (its tools counted, once told), ✗ failed, dim one `off`
-// names, or as Claude Code says it is (term_mcp_state); a click on any:
-// /mcp, lit on it
+// names; those not connected otherwise (needing a login, still pending:
+// the claude.ai connectors never set up) one dim line counting them; a
+// click on any: /mcp, lit on it (the count's: on the first it counts)
 function term_side_mcp(t: Term): Item[] {
   const { servers, troubles } = Mcp.status();
-  const theirs = term_theirs(t).filter((s) => !s.over);
+  const all    = term_theirs(t).filter((s) => !s.over);
+  const theirs = all.filter((s) => s.off || s.status === "connected" || s.status === "failed");
+  const rest   = all.filter((s) => !theirs.includes(s));
   const wide = Math.max(0, ...[...servers, ...theirs].map((s) => Paint.text_width(s.name)));
   const tone = Draw.draw_tokens();
   const red  = { ...Paint.INK, c: tone.error };
@@ -276,10 +279,11 @@ function term_side_mcp(t: Term): Item[] {
   const ok   = (name: string, n: number | null): Paint.Line => [Paint.Run("● ", { ...Paint.INK, c: tone.success }), Paint.Run(pad(name)), ...(n === null ? [] : [Paint.Run("  " + term_mcp_state("connected", n), Paint.DIM)])];
   const bad  = (name: string): Paint.Line => [Paint.Run(GLYPH.failed + " ", red), Paint.Run(pad(name), Paint.DIM), Paint.Run("  failed", { ...Paint.DIM, c: tone.error })];
   const line = (s: Server): Paint.Line => (s.state === "ready" ? ok(s.name, s.own.size) : s.state === "failed" ? bad(s.name) : [Paint.Run("◌ " + pad(s.name) + "  starting", Paint.DIM)]);
-  const their = (s: Theirs): Paint.Line => (s.off ? [Paint.Run("  " + pad(s.name) + "  off", Paint.DIM)] : s.status === "connected" ? ok(s.name, s.tools?.length ?? null) : s.status === "failed" ? bad(s.name) : [Paint.Run("  " + pad(s.name) + "  " + term_mcp_state(s.status, null), Paint.DIM)]);
+  const their = (s: Theirs): Paint.Line => (s.off ? [Paint.Run("  " + pad(s.name) + "  off", Paint.DIM)] : s.status === "connected" ? ok(s.name, s.tools?.length ?? null) : bad(s.name));
+  const more = rest.length === 0 ? [] : [[Paint.Run(theirs.length === 0 ? "  " + rest.length + " not connected" : "+ " + rest.length + " more not connected", Paint.DIM)] as Paint.Line];
   const file = troubles.length === 0 ? [] : [[Paint.Run(GLYPH.failed + " ", red), Paint.Run((troubles.length === 1 ? "an MCP file" : troubles.length + " MCP files") + " won't read", Paint.DIM)]];
-  const cc   = theirs.length === 0 ? [] : [[Paint.Run("Claude Code's", Paint.DIM)] as Paint.Line, ...theirs.map(their)];
-  const at   = [...servers.map((s) => s.name), ...file.map(() => ""), ...cc.map((_, k) => (k === 0 ? "" : theirs[k - 1].name))];
+  const cc   = all.length === 0 ? [] : [[Paint.Run("Claude Code's", Paint.DIM)] as Paint.Line, ...theirs.map(their), ...more];
+  const at   = [...servers.map((s) => s.name), ...file.map(() => ""), "", ...theirs.map((s) => s.name), ...rest.slice(0, 1).map((s) => s.name)];
   return [...servers.map(line), ...file, ...cc].map((l, k): Item => [l, () => term_mcp(t, at[k], k >= servers.length + file.length)]);
 }
 

@@ -31,7 +31,8 @@
 // servers as its last call told them, each how it is and on or off, the
 // lit one's tools under them, Enter turning one off and on (illi's own
 // one off too, not started); the side shows them under a line of their
-// own, a click /mcp lit on one; both only while the pick is on
+// own (those not connected, a login needed or pending, counted in one
+// line), a click /mcp lit on one; both only while the pick is on
 // claude-code.
 
 import { afterAll, expect, test } from "bun:test";
@@ -635,7 +636,7 @@ test("each command and key is in docs/keys.md", () => {
   }
 });
 
-test("/mcp lists Claude Code's own servers as its last call told them, each how it is, on or off, the lit one's tools under them; Enter turns one off in illi's calls, again on; the side shows them under a line of their own; illi's own one off, not started, is listed to turn on", () => {
+test("/mcp lists Claude Code's own servers as its last call told them, each how it is, on or off, the lit one's tools under them; Enter turns one off in illi's calls, again on; the side shows them under a line of their own, those not connected (a login needed, pending) counted in one line; illi's own one off, not started, is listed to turn on", () => {
   ClaudeCode.learn({ mcp_servers: [{ name: "illi", status: "connected" }, { name: "github", status: "connected" }, { name: "claude.ai Gmail", status: "needs-auth" }, { name: "docs", status: "failed" }], tools: ["mcp__illi__zoom", "mcp__github__get_issue", "mcp__github__list_prs"] }, { strict: false, deny: [] });
   const t = coded();
   const text = (l: any[]) => l.map((r) => r.x).join("").replace(/\s+/g, " ").trim();
@@ -644,7 +645,8 @@ test("/mcp lists Claude Code's own servers as its last call told them, each how 
   expect([t.choose.title, t.choose.names, t.choose.about, t.choose.aside]).toEqual(["MCP servers", ["github", "claude.ai Gmail", "docs"], ["2 tools", "needs a login", "failed"], ["on", "on", "on"]]);
   expect(new Set(t.choose.heads)).toEqual(new Set(["Claude Code's, as last told"]));
   expect([lit(t), foot(t), t.choose.detail(0, 60).map(text)]).toEqual(["github", "Enter on/off in illi's calls · from the next call", ["get_issue, list_prs"]]);
-  expect(side()).toEqual(expect.arrayContaining(["MCP", "Claude Code's", "● github 2 tools", "claude.ai Gmail needs a login", GLYPH.failed + " docs failed"]));
+  expect(side()).toEqual(expect.arrayContaining(["MCP", "Claude Code's", "● github 2 tools", GLYPH.failed + " docs failed", "+ 1 more not connected"]));
+  expect(side().join("\n")).not.toContain("Gmail");
   term_grab(t, "Enter");
   expect([config.OFF, t.choose.aside, ClaudeCode.servers()![0].off]).toEqual([["github"], ["off", "on", "on"], true]);
   expect(side()).toContain("github off");
@@ -653,6 +655,9 @@ test("/mcp lists Claude Code's own servers as its last call told them, each how 
   t.choose = null;
   term_side(t, 50, 60).find(([line]) => text(line).endsWith("docs failed"))![1]!();
   expect([t.choose.title, lit(t)]).toEqual(["MCP servers", "docs"]);
+  t.choose = null;
+  term_side(t, 50, 60).find(([line]) => text(line) === "+ 1 more not connected")![1]!();
+  expect([t.choose.title, lit(t)]).toEqual(["MCP servers", "claude.ai Gmail"]);
   fs.writeFileSync(DIR + "/mcp.json", JSON.stringify({ mcpServers: { web: { type: "http", url: "https://example.com/mcp" } } }));
   config.config_set("off", "web");
   run(t, "/mcp");
