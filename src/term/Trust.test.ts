@@ -3,10 +3,12 @@
 // `bun test Trust.test.ts`. The question takes its keys (No lit first,
 // Left and Right light the button that way, Enter takes the lit one, y
 // and n, Esc exits; grabbed before the input's editing) and stands in
-// the screen's middle, the logo over its card (none on a short screen),
-// its buttons side by side (one over the other on a narrow one), the lit
+// the screen's middle, the logo over its card (none on a short screen,
+// nor a narrow one), its keys on its top edge as many as fit, its
+// buttons side by side (one over the other on a narrow screen), the lit
 // one filled; the folder shows home as ~, and home's says it asks each
-// time. The pointer over a button lights it; a click on one takes it, a
+// time. A screen too short for the card keeps the folder, the buttons
+// and both edges, its text cut. The pointer over a button lights it; a click on one takes it, a
 // slip off it or the click that focused the window nothing. What is kept
 // is Trusted.test.ts's.
 
@@ -24,6 +26,19 @@ afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
 // the rows' text, each row's pieces laid over one another
 const text = (rows: any[]) => rows.map((r) => r.map((p: any) => " ".repeat(p.col) + p.line.map((x: any) => x.x).join("")).join("").trimEnd());
+
+// f run on a screen cols by rows, till it's done
+async function sized<T>(cols: number, rows: number, f: () => Promise<T>): Promise<T> {
+  const was = [Object.getOwnPropertyDescriptor(process.stdout, "columns"), Object.getOwnPropertyDescriptor(process.stdout, "rows")];
+  Object.defineProperty(process.stdout, "columns", { value: cols, configurable: true });
+  Object.defineProperty(process.stdout, "rows", { value: rows, configurable: true });
+  try {
+    return await f();
+  } finally {
+    Object.defineProperty(process.stdout, "columns", was[0] ?? { value: undefined, configurable: true });
+    Object.defineProperty(process.stdout, "rows", was[1] ?? { value: undefined, configurable: true });
+  }
+}
 
 test("the question's keys: No lit first; Left and Right light that way, Up, Down and Tab the other; Enter takes the lit one; y, n; Esc and Ctrl+C exit", () => {
   const asked = { folder: "/w", kept: true, at: 0 };
@@ -48,7 +63,7 @@ test("the question stands in the screen's middle, the logo over its card, the fo
   const logo = logo_lines().map((l) => l.map((r) => r.x).join("").trimEnd());
   expect(used.slice(0, LOGO_H).map(([l]) => l.trim())).toEqual(logo.map((l) => l.trim()));
   expect(lines[used[0][1] + LOGO_H]).toBe("");
-  expect(lines.some((l) => l.includes("╭─ Trust this folder? ─"))).toBe(true);
+  expect(lines.some((l) => l.includes("╭─ Trust this folder? · <- -> Enter · Esc exit ─"))).toBe(true);
   expect(lines.some((l) => l.includes("│   /work/app"))).toBe(true);
   const row = lines.findIndex((l) => l.includes("No, exit"));
   expect(lines[row]).toMatch(/ {2}No, exit {2} {3}\[ Yes, trust it \]/);
@@ -71,7 +86,7 @@ test("on a screen too short for the logo and the card, the card alone, still in 
   expect(lines.findIndex((l) => l !== "")).toBeGreaterThan(0);
 });
 
-test("on a narrow screen the buttons stand one over the other, each its own place", () => {
+test("on a narrow screen the buttons stand one over the other, each its own place, the card in the middle without the logo, its keys whole or left out", () => {
   const laid  = Trust.laid({ folder: "/w", kept: true, at: 1 }, { w: 40, h: 30 });
   const lines = text(laid.rows);
   const no    = lines.findIndex((l) => l.includes("No, exit"));
@@ -79,6 +94,26 @@ test("on a narrow screen the buttons stand one over the other, each its own plac
   expect(yes).toBe(no + 2);
   expect(laid.buttons.map((b) => [b.row, b.at])).toEqual([[no, 0], [yes, 1]]);
   expect(lines.every((l) => l.length <= 40)).toBe(true);
+  const used = lines.filter((l) => l !== "");
+  expect(used[0].trim()).toMatch(/^╭─ Trust this folder\? ─+╮$/);
+  expect(used.every((l) => l.length - l.trimStart().length === 2 && l.length === 38)).toBe(true);
+  const edge = text(Trust.laid({ folder: "/w", kept: true, at: 0 }, { w: 43, h: 30 }).rows).find((l) => l.includes("╭"))!;
+  expect(edge.trim()).toMatch(/^╭─ Trust this folder\? · <- -> Enter ─+╮$/);
+  expect(Trust.edge(10).map((r) => r.x).join("")).toBe(" Trust th…");
+});
+
+test("on a screen too short for the card, its blank lines go, then its text from the end, the folder, the buttons and both edges kept", () => {
+  const laid  = Trust.laid({ folder: "/work/app", kept: true, at: 0 }, { w: 60, h: 6 });
+  const lines = text(laid.rows).map((l) => l.trim());
+  expect(lines[0]).toStartWith("╭─ Trust this folder?");
+  expect(lines[1]).toBe("│   /work/app                                          │");
+  expect(lines[3]).toMatch(/… +│$/);
+  expect(lines[4]).toMatch(/No, exit {5}\[ Yes, trust it \]/);
+  expect(lines[5]).toStartWith("╰─");
+  expect(laid.buttons.map((b) => [b.row, b.at])).toEqual([[4, 0], [4, 1]]);
+  const least = Trust.laid({ folder: "/work/app", kept: true, at: 0 }, { w: 60, h: 2 });
+  expect(text(least.rows).map((l) => l.trim().slice(0, 2))).toEqual(["│ ", "╰─"]);
+  expect(least.buttons.map((b) => b.at)).toEqual([0, 1]);
 });
 
 test("the question grabs its keys before the input's editing, and lets go once answered, the mouse given back", async () => {
@@ -95,29 +130,30 @@ test("the pointer over a button lights it; a click on one takes it, a slip on it
   const scr: any = { left: true, grab: null, type: undefined, on: () => {}, point: { row: 0, col: 0 } };
   const asked = { folder: "/w", kept: true, at: 0 };
   let answer = null as boolean | null;
-  void Trust.ask(scr, asked).then((yes) => (answer = yes));
-  const laid = Trust.laid(asked, { w: process.stdout.columns || 80, h: process.stdout.rows || 24 });
-  const [no, yes] = laid.buttons;
-  const at = (b: any, dx = 0) => (scr.point = { row: b.row, col: b.col + dx });
-  at(yes, 1);
-  scr.on("Move");
-  expect(asked.at).toBe(1);
-  at(no, 1);
-  scr.focusing = true;
-  scr.on("Press");
-  scr.on("Release");
-  scr.focusing = false;
-  at(yes, 1);
-  scr.on("Press");
-  at(no, 1);
-  scr.on("Release");
-  await Promise.resolve();
-  expect(answer).toBeNull();
-  at(yes, 1);
-  scr.on("Press");
-  at(yes, 3);
-  scr.on("Drag");
-  scr.on("Release");
-  await Promise.resolve();
-  expect(answer).toBe(true);
+  await sized(100, 30, async () => {
+    void Trust.ask(scr, asked).then((yes) => (answer = yes));
+    const [no, yes] = Trust.laid(asked, { w: 100, h: 30 }).buttons;
+    const at = (b: any, dx = 0) => (scr.point = { row: b.row, col: b.col + dx });
+    at(yes, 1);
+    scr.on("Move");
+    expect(asked.at).toBe(1);
+    at(no, 1);
+    scr.focusing = true;
+    scr.on("Press");
+    scr.on("Release");
+    scr.focusing = false;
+    at(yes, 1);
+    scr.on("Press");
+    at(no, 1);
+    scr.on("Release");
+    await Promise.resolve();
+    expect(answer).toBeNull();
+    at(yes, 1);
+    scr.on("Press");
+    at(yes, 3);
+    scr.on("Drag");
+    scr.on("Release");
+    await Promise.resolve();
+    expect(answer).toBe(true);
+  });
 });

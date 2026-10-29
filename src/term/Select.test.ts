@@ -298,8 +298,8 @@ test("the click that only focused the window copies on a reply's button all the 
     Screen.screen_feed(t.scr, "\x1b[O");
     const away = written(() => click(t, r, c));
     expect([t.scr.focusing, away, t.sel]).toEqual([true, [osc("let x = 1")], null]);
-    Screen.screen_feed(t.scr, "\x1b[I");
     paint(t);
+    Screen.screen_feed(t.scr, "\x1b[I");
     const back = written(() => click(t, r, c + 1));
     expect([t.scr.focusing, back]).toEqual([true, [osc("let x = 1")]]);
   });
