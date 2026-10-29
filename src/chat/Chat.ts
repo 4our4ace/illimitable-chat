@@ -71,7 +71,8 @@ type Check = { call: Call; goal: string };
 // prompt, the tools, illi's guess of tokens put right), by vendor:model,
 // as last told (Chat.cap leaves room for it); refits: the
 // refits in a row with no work between (no call answered, none grew past
-// its first request: End.grew); compacting: a /compact's recap
+// its first request: End.grew); unmarked: the next call goes with no
+// block marked, the one before refused for its marks (Chat.unmark); compacting: a /compact's recap
 // under way (Chat.compact), busy too; goings: the times hooks made the
 // turn go on in a row, with no tool call nor message of the user's
 // between (Chat.stopping), going: whether one did since the user's last
@@ -109,6 +110,7 @@ export type Chat = {
   fit   : number;
   beside: Map<string, number>;
   refits: number;
+  unmarked: boolean;
   asks  : Asked[];
   compacting: boolean;
   goings: number;
@@ -168,6 +170,9 @@ const STAY       = "Send a message to go on (autocontinue is off).";
 const REFIT      = "The chat outgrew #'s window: more of it is summarized now, each summary a zoom away. " + GO_ON;
 const CAPPED_NOTE = "This ChatGPT account takes at most # of $'s window, kept from now on: more of the chat is summarized now, each summary a zoom away. " + GO_ON;
 const NO_FIT     = "No reply: the chat won't fit #'s window even summarized. /clear starts a new topic (the chat before it is kept, not sent), or /model picks a model with a bigger window.";
+// a call refused for its cache marks (Chat.unmark): the note the turn
+// goes on from
+const UNMARKED   = "Claude Code's request was refused over a technical limit, so illi went on a simpler way: nothing is lost. " + GO_ON;
 
 // the most turns hooks may make go on in a row, with no message of the
 // user's between (Chat.stopping), and the note once past it
@@ -275,7 +280,7 @@ export namespace Chat {
       mem, tools, pick, socks: new Set(), busy: false, call: null, model: "", asked: false, open: 0, sent: [], wait: [], next: [],
       halt: new AbortController(), live: [], calls: {}, eye: { parts: [], from: 0 }, after: Promise.resolve(),
       writes: Promise.resolve(), held: null, switched: false, was: null, picks: new Map(),
-      suggest: { on: false, due: false, text: mem.suggest, call: null, passed: false, unused: 0 }, fit: 1, beside: new Map(), refits: 0, asks: [], compacting: false,
+      suggest: { on: false, due: false, text: mem.suggest, call: null, passed: false, unused: 0 }, fit: 1, beside: new Map(), refits: 0, unmarked: false, asks: [], compacting: false,
       goings: 0, going: false, saying: Promise.resolve(), checking: null, context: Promise.resolve([]), idle: undefined,
       told: new WeakMap(),
     };
@@ -587,7 +592,7 @@ export namespace Chat {
     chat.model = chat.pick.model;
     chat.asked = true;
     chat.open = 0;
-    const call = (chat.call = AskAI.ask(ask, (ev) => Chat.on(chat, null, ev)));
+    const call = (chat.call = AskAI.ask(chat.unmarked ? AskAI.unmarked(ask) : ask, (ev) => Chat.on(chat, null, ev)));
     Chat.change(chat);
     return Chat.ended(chat, call, halt, carried);
   }
@@ -621,7 +626,9 @@ export namespace Chat {
     chat.suggest.due = end.ok && !halt.signal.aborted;
     chat.refits = end.ok ? 0 : chat.refits;
     const full = end.stop === "full" && !halt.signal.aborted;
-    if (!end.ok && !halt.signal.aborted && !full) {
+    const marks = end.stop === "marks" && !halt.signal.aborted && !chat.unmarked;
+    chat.unmarked = false;
+    if (!end.ok && !halt.signal.aborted && !full && !marks) {
       Chat.failed(chat, end.text, end);
     }
     if (end.note) {
@@ -634,6 +641,9 @@ export namespace Chat {
     if (full) {
       chat.refits = end.grew ? 0 : chat.refits;
       return Chat.refit(chat, !end.grew);
+    }
+    if (marks) {
+      return Chat.unmark(chat);
     }
     if (end.ok && !halt.signal.aborted && chat.wait.length === 0 && (await Chat.stopping(chat, end.text, halt))) {
       return !halt.signal.aborted;
@@ -749,6 +759,23 @@ export namespace Chat {
       return false;
     }
     Chat.hold(chat, () => Chat.take(chat, Chat.push(chat, null, "note", why)));
+    return true;
+  }
+
+  // a call refused for its cache marks (End `marks`: Claude Code marks a
+  // request four times itself at times, and illi's one is one too many):
+  // a note says so, and the turn goes on from it, its next call with no
+  // block marked (unmarked; one refused so again ends the turn, saying
+  // why); with autocontinue off, it ends at once, the note saying a
+  // message goes on, and the next turn's call goes unmarked. false: the
+  // turn ends
+  export function unmark(chat: Chat): boolean {
+    chat.unmarked = true;
+    if (!config.AUTOCONTINUE) {
+      Chat.note(chat, UNMARKED.replace(GO_ON, STAY));
+      return false;
+    }
+    Chat.hold(chat, () => Chat.take(chat, Chat.push(chat, null, "note", UNMARKED)));
     return true;
   }
 

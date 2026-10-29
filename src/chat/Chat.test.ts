@@ -17,7 +17,10 @@
 // ends at the first, saying a message goes on, the three counted over
 // the user's messages all the same (a grown call starting them anew).
 // A message too long for one page is told to a view once, whole, at its
-// first page, live and as a view joins. A view is told the state whole as it joins, then only
+// first page, live and as a view joins.
+// One refused for its cache marks goes on from a note, its next call
+// unmarked, once (refused so again, the turn ends saying why); with
+// autocontinue off, the turn ends at the note, the next call unmarked. A view is told the state whole as it joins, then only
 // what moved since its last, so each view holds the chat's state. A
 // failed turn asks to try again only when a later try may answer, and
 // says a reply was cut off; summaries stuck are told once;
@@ -503,24 +506,25 @@ test("a turn's new text holds what was logged between its waiting messages, tagg
   expect(asked).toEndWith("one\n\nnote: Stopped by the user: illi.\n\ntwo");
 });
 
-// the model's turn calls ending as `ends` says, in turn (then answered;
-// a summary's call answered as ever): the last block of each turn call
-// asked, and its room
-async function refitted(ends: Array<{ text: string; grew?: boolean }>) {
+// the model's turn calls ending as `ends` says, in turn (`full` unless
+// told; then answered; a summary's call answered as ever): the last
+// block of each turn call asked, its room, and whether any block was
+// marked
+async function refitted(ends: Array<{ text: string; grew?: boolean; stop?: "full" | "marks" }>) {
   await until(() => !chat.busy);
-  const asked: Array<{ text: string; room?: number }> = [];
+  const asked: Array<{ text: string; room?: number; marked: boolean }> = [];
   const ask = AskAI.ask;
   AskAI.ask = (a, on) => {
     if (a.blocks.at(-1)!.text.endsWith("</input>")) {
       return ask(a, on);
     }
     const end = ends[asked.length];
-    asked.push({ text: a.blocks.at(-1)!.text, room: a.room });
+    asked.push({ text: a.blocks.at(-1)!.text, room: a.room, marked: a.blocks.some((b) => b.mark) });
     if (end === undefined) {
       return ask(a, on);
     }
     const [call, feed] = AskAI.tie(on, () => {}, () => {});
-    queueMicrotask(() => feed.end({ ok: false, text: end.text, left: [], stop: "full", grew: end.grew }));
+    queueMicrotask(() => feed.end({ ok: false, text: end.text, left: [], stop: end.stop ?? "full", grew: end.grew }));
     return call;
   };
   try {
@@ -653,6 +657,30 @@ test("a message too long for one page is told to a view once, whole, at its firs
     }
   } finally {
     live.ws?.close();
+  }
+});
+
+test("a call refused for its cache marks goes on from a note, unasked, its next call unmarked, once: refused so again, the turn ends saying why; the next turn marks again; with autocontinue off, the turn ends at the note and the next call goes unmarked", async () => {
+  const marks = { text: "API Error: 400 A maximum of 4 blocks with cache_control may be provided. Found 5.", stop: "marks" as const };
+  const from = chat.mem.count;
+  const asked = await refitted([marks]);
+  expect(asked.map((a) => a.marked)).toEqual([true, false]);
+  expect(asked[1].text).toContain("Claude Code's request was refused over a technical limit, so illi went on a simpler way: nothing is lost. Go on where you were.");
+  const notes = Array.from({ length: chat.mem.count - from }, (_, k) => Memory.message(chat.mem, from + k)!).filter((m) => m.kind === "note");
+  expect(notes.some((m) => /^(No reply|Reply cut off)/.test(m.text))).toBe(false);
+  expect(chat.unmarked).toBe(false);
+  expect((await refitted([marks, marks])).map((a) => a.marked)).toEqual([true, false]);
+  expect(last()).toBe("No reply: " + marks.text.replace(/\.$/, "") + ". Send a message to try again.");
+  expect((await refitted([])).map((a) => a.marked)).toEqual([true]);
+  config.config_set("autocontinue", "off");
+  try {
+    expect(await refitted([marks])).toHaveLength(1);
+    expect(last()).toBe("Claude Code's request was refused over a technical limit, so illi went on a simpler way: nothing is lost. Send a message to go on (autocontinue is off).");
+    expect(chat.unmarked).toBe(true);
+    expect((await refitted([])).map((a) => a.marked)).toEqual([false]);
+    expect(chat.unmarked).toBe(false);
+  } finally {
+    config.config_set("autocontinue", null);
   }
 });
 
