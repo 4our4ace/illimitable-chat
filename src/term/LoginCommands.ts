@@ -11,8 +11,9 @@
 // its device login (its page opened, its code copied: login_chatgpt), or
 // opencode's login if /login left it to opencode; Claude by your Claude
 // Code's login, or a sign-in (Claude Code's own, its code pasted here as
-// dots: login_claude_sign; your own Claude Code's while it's logged in
-// to none, else in a folder of illi's); an API
+// dots: login_claude_sign; the first, with none connected and your
+// Claude Code logged in to none, your own Claude Code's; else in a
+// folder of illi's); an API
 // by a key pasted in a line shown as dots, or the environment's
 // (ANTHROPIC_API_KEY, OPENAI_API_KEY) if it's set, each checked with
 // the provider before it's taken (Accounts.ts keeps a pasted one, in

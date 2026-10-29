@@ -171,7 +171,7 @@ export async function term_restart(t: Term, name: string, step?: () => void | Pr
 
 // all this illi holds let go, as a quit does, but waited on (the
 // execve after fires no exit): the plugins told it quits (their quit
-// hooks, SessionEnd's commands), the device login let go, the chat
+// hooks, SessionEnd's commands), a /login sign-in waiting let go, the chat
 // stopped (what it cut goes on at its next start), the agents' processes,
 // the hooks' and status line's commands and the MCP servers ended, a new
 // release's download given up (its folder gone), every write flushed,

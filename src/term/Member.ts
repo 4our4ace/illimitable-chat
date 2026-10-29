@@ -224,15 +224,15 @@ export function member_keep(switched: boolean): void {
 }
 
 // hidden, to show profile `to` (a switch): nothing painted, the status
-// line's command stopped, a device login waiting let go, text chosen and
-// the leader let go
+// line's command stopped, a sign-in waiting let go (/login's: ChatGPT's
+// device login, Claude Code's), text chosen and the leader let go
 export function member_hide(t: Term, to: string): void {
   t.login?.abort();
   member_rest(t);
   member_send({ $: "hide", to });
 }
 
-// Ctrl+Z: hidden (a device login waiting kept), and the window told,
+// Ctrl+Z: hidden (a sign-in waiting kept), and the window told,
 // which puts the terminal back and stops itself (this illi's work goes
 // on); shown again as the window comes back
 function member_suspend(): void {
