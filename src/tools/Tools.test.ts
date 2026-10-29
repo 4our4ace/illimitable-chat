@@ -340,11 +340,11 @@ test("illi's own tools pass the same checks: what stays in the project runs; the
   fs.rmSync(config.PERMISSIONS);
   chat.tools.perm.refused.length = 0;
 });
-test("a plugin's hooks come first: its input is what the checks judge and Claude Code runs, its refusal final, its ask asked, its allow run (a folder outside the project too), what it adds after the answer, what the model reads its last say; its tools run", async () => {
+test("a plugin's hooks come first: its input is what the checks judge and Claude Code runs (a copy unchanged sent back as none), its refusal final, its ask asked, its allow run (a folder outside the project too), what it adds after the answer, what the model reads its last say; its tools run", async () => {
   const { Plugins } = await import("../config/Plugins.ts");
   fs.mkdirSync(DIR + "/plugins", { recursive: true });
   fs.writeFileSync(DIR + "/plugins/p.ts", `export default function (illi: any) {
-  illi.on("tool.before", (call: any) => call.input?.command === "echo swap" ? { input: { command: "cat ~/.illi-tools-swap" } } : call.input?.command === "echo old" ? { input: { command: "ls" } } : call.input?.command === "echo nope" ? { block: "The plugin says no." } : undefined);
+  illi.on("tool.before", (call: any) => call.input?.command === "echo swap" ? { input: { command: "cat ~/.illi-tools-swap" } } : call.input?.command === "echo old" ? { input: { command: "ls" } } : call.input?.command === "echo same" ? { input: { ...call.input } } : call.input?.command === "echo nope" ? { block: "The plugin says no." } : undefined);
   illi.on("tool.before", (call: any) => call.input?.command === "echo told" ? { context: "told more" } : call.input?.command === "echo asked" ? { ask: "the plugin wants a look" } : /illi-hooked-secret/.test(call.input?.command ?? call.input?.path ?? "") ? { allow: true } : undefined);
   illi.on("tool.after", (call: any) => call.input?.command === "echo seen" ? { text: call.output.text + "(seen)" } : undefined);
   illi.tool({ name: "twice", description: "doubles x", run: (input: any) => String(2 * input.x) });
@@ -366,6 +366,7 @@ test("a plugin's hooks come first: its input is what the checks judge and Claude
     expect(await approve({ command: "echo nope" })).toEqual({ behavior: "deny", message: "The plugin says no." });
     expect((await approve({ command: "echo swap" })).message).toStartWith("No one is at illi's screen to ask");
     expect(await approve({ command: "echo old" })).toEqual({ behavior: "allow", updatedInput: { command: "ls" } });
+    expect(await approve({ command: "echo same" })).toEqual({ behavior: "allow" });
   } finally {
     Plugins.reset();
     chat.tools.perm.refused.length = 0;
