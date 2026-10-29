@@ -74,7 +74,7 @@ Setup
 
 | Key or command | Does |
 | -------------- | ---- |
-| `/login` | the providers, ChatGPT and Claude, each opening its plan and its API key: connect one, switch between its accounts, add one, log out; Esc goes back a level ([Providers](providers.md#connecting-login)) |
+| `/login` | the providers, ChatGPT and Claude, each opening its plan and its API key: connect one; in its accounts, Enter switches to one, Del logs one out (asked first), a row adds one, the last logs out of it all; Esc goes back a level ([Providers](providers.md#connecting-login)) |
 | `/logout` | the providers, as `/login`: Del logs out of an account, the last row of a plan or a key out of it |
 | `/settings` | all the settings: type to search, Left, Right or Enter change one, Del puts its default back |
 | `/shortcuts` | the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one |
@@ -195,7 +195,8 @@ closes.
 Questions take the input's place instead: a permission question, illi's
 own questions, a confirmation (switch profiles and stop the background
 jobs? delete a profile? forget a project?) and a line asked for (a
-name, a path, why not). The rule over it says what it asks and its keys
+name, a path, why not; an API key or a sign-in code, which shows as a
+dot for each character). The rule over it says what it asks and its keys
 (`── Allow shell? · ↑↓ Enter · Esc no ──`), the rule under it stays, and
 it takes half the screen's rows at most (fewer on a short screen), the
 chat keeping the rest.
@@ -245,6 +246,11 @@ and what you were typing comes back once you answer.
 - `/settings` (and a setting in Ctrl+P): Enter or Right steps a setting
   to its next value, Shift+Enter or Left back; Del puts its default back
   (in a profile: the global value).
+- `/login` (and `/logout`): Enter opens a provider, then a way in (a
+  plan, an API key); on one connected, its accounts: Enter switches to
+  one, Del logs one out (asked first). Esc goes back a level, from a
+  question it asks too (a key to paste, a sign-in's code: Esc there
+  stops the sign-in); a click outside one of its lists closes it all.
 
 Panes (`/help`, `/agents`, `/mcp` with no servers) open in the chat's place,
 on a background of their own: Esc or Enter closes one, the arrows and

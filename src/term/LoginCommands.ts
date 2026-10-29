@@ -7,10 +7,12 @@
 // plan (Plus or Pro) or an OpenAI API key, Claude's plan (through Claude
 // Code) or an Anthropic API key, each saying what it's connected with;
 // Esc goes a level up, from these and from all they open (a question
-// asked too). Enter on a way in not connected connects it: ChatGPT by its device login (its page opened, its code
-// copied: login_chatgpt), or opencode's login if /login left it to
-// opencode; Claude by your Claude Code's login, or a sign-in (Claude
-// Code's own, its code pasted here as dots: login_claude_sign); an API
+// asked too). Enter on a way in not connected connects it: ChatGPT by
+// its device login (its page opened, its code copied: login_chatgpt), or
+// opencode's login if /login left it to opencode; Claude by your Claude
+// Code's login, or a sign-in (Claude Code's own, its code pasted here as
+// dots: login_claude_sign; your own Claude Code's while it's logged in
+// to none, else in a folder of illi's); an API
 // by a key pasted in a line shown as dots, or the environment's
 // (ANTHROPIC_API_KEY, OPENAI_API_KEY) if it's set, each checked with
 // the provider before it's taken (Accounts.ts keeps a pasted one, in

@@ -77,11 +77,13 @@ Claude plan
 
 For Claude Pro, Max, Team or Enterprise, install [Claude
 Code](https://code.claude.com), then pick **Claude**, then **Claude
-plan**, in `/login`.
-If Claude Code is logged in, illi offers its login; otherwise, or for
-another account, illi signs in through Claude Code itself: Claude Code
-opens Claude's page in your browser (illi shows the link too), and
-you paste the code the page shows into illi, where it shows as dots.
+plan**, in `/login` (without Claude Code installed, `/login` says so).
+If Claude Code is logged in, illi offers its login, or a sign-in to
+another account; if it isn't, the sign-in logs your own Claude Code
+in. illi signs in through Claude Code itself: Claude Code opens
+Claude's page in your browser (illi shows the link too), and you paste
+the code the page shows into illi, where it shows as dots. Esc there
+stops the sign-in.
 
 Each account shows by its email and plan:
 
@@ -185,15 +187,19 @@ API keys
 --------
 
 In `/login`, pick **Claude**, then **Anthropic API key**, or
-**ChatGPT**, then **OpenAI API key**, and paste a key. It shows as dots, and illi checks it with the provider before
-taking it. illi keeps a pasted key in `accounts.json` and shows it only
-by its ends (`sk-ant-…WXYZ`): never in the chat, a note or the input's
-history. If `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` is set, `/login`
-offers that key; illi never copies it, so it only lasts while the
-variable is set.
+**ChatGPT**, then **OpenAI API key**, and paste a key. It shows as
+dots, and illi checks it with the provider before taking it (a key the
+provider refuses isn't kept). illi keeps a pasted key in
+`accounts.json` and shows it only by its ends (`sk-ant-…WXYZ`): never
+in the chat, a note or the input's history. If `ANTHROPIC_API_KEY` or
+`OPENAI_API_KEY` is set, `/login` offers that key; illi never copies
+it, so it only lasts while the variable is set.
 
+Once connected, the variable's key is listed with the keys you pasted.
 **+ add another key** adds a key; Enter on one switches to it, and Del
-forgets a pasted one. Both APIs run in illi's own loop, with no SDKs.
+forgets a pasted one. Forgetting the last pasted key while the variable
+is set leaves illi on the variable's key; **Log out of …** stops the
+API altogether. Both APIs run in illi's own loop, with no SDKs.
 
 Models
 ------

@@ -6,8 +6,9 @@
 // won't read never written over; a vendor's keys of the wrong shape
 // dropped, the one in use naming no key the last added (none: the
 // environment's); ChatGPT's accounts of the wrong shape or twice dropped,
-// opencode's login one of them unless it says not; another vendor left out; a key shown by its
-// ends alone; a new key's id one not taken. As Config.ts follows it:
+// opencode's login one of them unless it says not; another vendor left
+// out; a key shown by its ends alone; a new key's id one not taken. As
+// Config.ts follows it:
 // nothing connected, ChatGPT offered (the chat says /login signs in) and
 // the environment's key read but its vendor not offered; an API
 // connected, offered at once, its key in use the one chosen (the

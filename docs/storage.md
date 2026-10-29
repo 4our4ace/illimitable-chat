@@ -998,7 +998,9 @@ How it is kept:
    to `.accounts.<pid>.json`, opened readable by its owner alone before
    anything is in it, and renames it over the file. A file that won't
    read is never written over, as its keys would be lost: `/login` says
-   so and changes nothing.
+   so and changes nothing. Read, the file keeps only the entries of the
+   shapes above: an entry of another shape, or a vendor illi doesn't
+   know, is dropped, and gone from the file at the next change.
 3. Every illi with a chat looks at the file every 2 s, by its inode,
    size and time (a stat), and reads it again only when it changed, so a
    change in one terminal reaches the others: the vendors offered, the
@@ -1006,8 +1008,8 @@ How it is kept:
 4. A ChatGPT switch (`ChatGPT.swap`) runs under the lock renewals take
    on the login file: the login there is read then, as each renewal
    spends its refresh token, kept in `saved`, and the picked one put in
-   its place. A login that renewed since it was saved is never
-   overwritten by an older copy.
+   its place. So the login put apart is always the one as last renewed;
+   the one picked is the copy in `saved` as `/login` read it.
 5. A profile's export leaves out `accounts.json`, its temporary files
    and `claude/`; an import drops them.
 
@@ -1028,3 +1030,6 @@ Known limits
 - **Two illis starting at the same moment on a very busy machine** can
   both miss the 50 ms lock window; both then become views, find no
   holder, and run again 600 ms later.
+- **Two `/login` changes at the same moment in two terminals** each read
+  `accounts.json`, change it and write it whole, with no lock between
+  them: the one written last wins, and the other's change is lost.

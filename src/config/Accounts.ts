@@ -16,13 +16,17 @@
 // of illi's, a folder of its own in illi's root, claude/<id>, as each
 // Claude Code login is a folder's), and which one is in use. Config.ts
 // takes from it the keys in use, the ChatGPT login file, the Claude Code
-// folder and, unless the vendors setting names them, the vendors offered; every illi looks at the file
-// now and then (Config.ts config_accounts), so a change in one terminal
-// reaches the others. Written whole to a file of its own (made
-// readable by its owner alone before it holds anything), then moved over
-// the old one, so a crash leaves the old; read again just before (edit),
-// so what another illi wrote meanwhile stays. A file that won't read is
-// never written over: its keys would be lost.
+// folder and, unless the vendors setting names them, the vendors
+// offered; every illi with a chat looks at the file every 2 s (Chat.ts
+// follow, Config.ts config_accounts), so a change in one terminal
+// reaches the others. Written whole to a file of its own (made readable
+// by its owner alone before it holds anything), then moved over the old
+// one, so a crash leaves the old; read again just before (edit), so
+// what another illi wrote meanwhile stays (no lock is taken: of two
+// changes at the same moment, the last written wins). A file that won't
+// read is never written over: its keys would be lost. As read, it keeps
+// only the entries of the shapes here: one of another shape, or a
+// vendor not here, is dropped, and gone from the file at the next edit.
 
 import * as fs from "node:fs";
 import * as path from "node:path";

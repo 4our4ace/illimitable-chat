@@ -2,8 +2,8 @@
 // ===========
 // `bun test Config.test.ts`. The vendors apply at once: a pick on a
 // vendor added is taken, vendors leaving a pick set unoffered refused,
-// and the settings after them are still read anew; `autocompacts` from a variable
-// (its old name, ILLI_CONTEXTS, too); a
+// and the settings after them are still read anew; `autocompacts` from
+// a variable (its old name, ILLI_CONTEXTS, too); a
 // relative path from the folder of the config.json naming it; a number
 // in config.json taken as its text. Each key set is checked at the
 // start: one that won't do stops illi with one line on why, no trace;

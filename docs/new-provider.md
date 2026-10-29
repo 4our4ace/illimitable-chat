@@ -11,7 +11,7 @@ do, so the new one can copy the closest. illi has four vendors:
 | `claude-api`  | an API key   | illi's own loop        | `src/ai/Anthropic.ts` |
 | `openai-api`  | an API key   | illi's own loop        | `src/ai/OpenAI.ts` |
 | `chatgpt`     | a plan login | illi's own loop        | `src/ai/ChatGPT.ts` (OpenAI's wire on the Codex backend) |
-| `claude-code` | a plan login | the user's Claude Code | `src/ai/ClaudeCode.ts` |
+| `claude-code` | a plan login | the user's Claude Code (another account's: in a Claude Code folder of illi's) | `src/ai/ClaudeCode.ts` |
 
 1. The vendor's name
 --------------------
@@ -25,7 +25,12 @@ do, so the new one can copy the closest. illi has four vendors:
   is missing) and its vendor in `KEYED`.
 - An API key also goes in Agent.ts's `VENDORS` (the name a refused key
   is said with) and in `update_run`'s list (`src/config/Update.ts`),
-  which keeps the keys from the `--version` it runs.
+  which keeps the keys from the `--version` it runs; in
+  `src/config/Accounts.ts`'s `Api` and `KEYED` (the vendors whose keys
+  `accounts.json` keeps); and in `src/term/LoginCommands.ts`'s `APIS`
+  (its name in `/login`, where a key is made, and how one is checked:
+  a `check(key)` on its wire, as `Anthropic.check` and `OpenAI.check`,
+  asking a list that costs nothing).
 - `docs/providers.md`: the vendors at its top, a section saying how to
   sign in or set the key, and its rows in the Models tables (the
   defaults, what it tells); its name where the docs list every vendor
@@ -106,8 +111,13 @@ Failures must land in the right `stop`, since each is handled apart:
 4. The login, and switching accounts
 -------------------------------------
 
-An API key is read once at the start (`config.KEYS`); nothing else is
-needed. A plan login needs what `ChatGPT.ts` has:
+An API key is the one `/login` chose for its vendor, else the
+environment's (`config.KEYS`, changed in place as `accounts.json`
+changes: `config_accounts`); the wire reads it at each call, so nothing
+else is needed, but what it asks once a key (the windows its models
+list tells, as `Anthropic.models` does) must ask again for a new one. A
+plan login needs what `ChatGPT.ts` has (a runner's, like Claude Code's,
+is its own: a folder an account, `ClaudeCode.ts`):
 
 - `token()`: the login on disk, renewed before it ends, under the lock
   other tools take on that file, and written back so they stay signed in.
