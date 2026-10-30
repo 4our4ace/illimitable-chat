@@ -48,7 +48,8 @@
 // fetch), Read a read, Write, Edit, MultiEdit and NotebookEdit an edit,
 // Grep, Glob and LS a search of a folder (grep, glob, list), WebFetch
 // and WebSearch theirs, Task and Agent a subagent, illi's own
-// (mcp__illi__...) none here: they ask as they reach illi.
+// (mcp__illi__...) none here: they ask as they reach illi. Monitor, Task
+// and Agent never ask now: illi's calls leave them out (ClaudeCode.OFF).
 
 import * as fs from "node:fs";
 import * as os from "node:os";

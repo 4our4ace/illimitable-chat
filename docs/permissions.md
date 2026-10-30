@@ -113,14 +113,16 @@ On `claude-code`, Claude Code's own settings apply first (yours in
 unasked, and so does what Claude Code allows by itself (a read inside
 the project, a `.env` file's too); illi never sees those calls, so your
 deny rules don't refuse them. What it asks about comes to illi and
-is checked the same way: `Bash` as the shell, `Monitor` too (its
-command, or its WebSocket's URL as `webfetch`), `Read` as a read,
+is checked the same way: `Bash` as the shell, `Read` as a read,
 `Write`, `Edit`, `MultiEdit` and `NotebookEdit` as edits, `Grep`,
 `Glob` and `LS` as `grep`, `glob` and `list` (their pattern, or the
 folder's path) after their folder if outside, `WebFetch` and
-`WebSearch` as `webfetch` (the URL) and `websearch` (the query), `Task`
-and `Agent` as `subagent`, any other tool as its own name. illi's own
-tools in it (`mcp__illi__…`) are checked as they reach illi.
+`WebSearch` as `webfetch` (the URL) and `websearch` (the query), any
+other tool as its own name. illi's own tools in it (`mcp__illi__…`)
+are checked as they reach illi. Claude Code's own subagents, to-do
+list, `Monitor` and its other tools for a long session of its own are
+off in illi's calls ([Providers](providers.md#claude-plan)), so they
+never ask: illi's `spawn` asks as `subagent`.
 
 How rules decide
 ----------------
