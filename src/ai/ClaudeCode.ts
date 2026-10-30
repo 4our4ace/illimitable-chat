@@ -28,8 +28,9 @@
 // once all it read is done, and a message sent after is left. Its
 // stream: the API's own events shown live (Anthropic.read), each
 // message's blocks as entries, a tool's result as its echo, illi's
-// tools by their own names; a subagent's own steps (inside its Task)
-// aren't shown. The last result ends the call: answered, or in plain
+// tools by their own names; a subagent's own steps aren't shown (its
+// Task is off, OFF, but a skill of Claude Code's may still run in one).
+// The last result ends the call: answered, or in plain
 // words (a plan's limit and when it resets, a login missing, a chat too
 // long for the window: `full`, a busy service); a turn's call, and an
 // illi agent's, runs with Claude Code's compaction off, so one

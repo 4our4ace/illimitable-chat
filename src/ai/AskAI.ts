@@ -67,7 +67,8 @@ export type Block = { text: string; mark: boolean };
 // an agent's: Tools.refit from its recap; none: no end); stuck: a
 // patient call's try failed, why, as it waits to ask again; builtins:
 // the Claude Code built-in tools it may use on claude-code, as its
-// agent's tools list gives them (Custom.profile; none: all); listed: its
+// agent's tools list gives them (Custom.profile; none: all; never those
+// ClaudeCode.OFF leaves out of every call); listed: its
 // agent's tools list as illi reads it (none: no list), whose MCP names
 // keep Claude Code's own servers on claude-code (ClaudeCode.cut)
 export type Ask = Pick & {

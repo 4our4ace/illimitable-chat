@@ -18,7 +18,9 @@
 // folder and data folder (CLAUDE_PLUGIN_ROOT, CLAUDE_PLUGIN_DATA, and
 // ILLI_ spellings), and its notes name it. A matcher naming Claude
 // Code's Bash takes illi's shell too (its input alike: { command }); one
-// naming only Claude Code's other tools is said, as illi's inputs differ.
+// naming only Claude Code's other tools is said, as illi's inputs differ,
+// and one naming only its subagent and to-do tools, as never running
+// (illi turns those off in Claude Code's calls: ClaudeCode.OFF).
 // They run as a plugin of illi's own, after the user's code plugins
 // (Plugins.own), so they share their order, failure rules and call
 // sites.
@@ -79,10 +81,11 @@ const MATCHED: Partial<Record<Event, true>> = { PreToolUse: true, PostToolUse: t
 
 // Claude Code's tool names a matcher may name: Bash, whose input is
 // illi's shell's, taken for it; the others, whose inputs differ, said:
-// those its calls in illi run, and those illi leaves out of them
-// (ClaudeCode.OFF), its spawn and todo in their place (Agent, its
-// subagents' tool, under its old name Task too; its to-do list's
-// TodoWrite and the task tools it is off by default in favor of)
+// those its calls in illi run, and those illi leaves out of them (some
+// of ClaudeCode.OFF, kept in step by hand), its spawn and todo in their
+// place (Agent, its subagents' tool, under its old name Task too; its
+// to-do list's TodoWrite and the task tools it is off by default in
+// favor of)
 const CLAUDE_TOOLS = ["Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "LS", "WebFetch", "WebSearch", "NotebookEdit"];
 const CLAUDE_OFF = ["TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "Agent", "Task"];
 

@@ -372,7 +372,9 @@ const KINDED   = /^(user|illi|tool|echo|mind|note|work|recap): /;
 const ANSWERS = "your answers";
 
 // what a run's tool calls did, by tool: one, many (the rest: "called");
-// Claude Code's own tools as illi's alike (ALIKE), or as their own
+// Claude Code's own tools as illi's alike (ALIKE: its Agent, Task and
+// TodoWrite, off in illi's calls now, only in a chat's older ones), or
+// as their own
 const DID: Record<string, [string, string]> = {
   shell      : ["ran a command", "ran # commands"],
   read       : ["read a file", "read # files"],

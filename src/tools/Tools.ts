@@ -38,7 +38,9 @@
 // A call on claude-code runs in Claude Code, with its own prompt and
 // tools: it gets the tools Claude Code lacks (a `lean` list: no shell or
 // files), and prompts that say it works inside illi (Tools.hosted), the
-// project's CLAUDE.md left to Claude Code, which reads it itself.
+// project's CLAUDE.md left to Claude Code, which reads it itself. Claude
+// Code's own subagents and to-do list are off there (ClaudeCode.OFF), so
+// spawn and todo are the only ones.
 // Every call goes first to the user's plugins and hooks
 // (Plugins.before_tool: they may refuse it, change its input, allow it,
 // have it asked or add to what the model reads after it), then, as

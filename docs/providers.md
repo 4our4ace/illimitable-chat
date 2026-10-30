@@ -199,11 +199,14 @@ illi then runs Claude Code itself, as it ships, on the account's login:
   request was refused (above).
 - **No Claude Code memory**: illi runs Claude Code with its own memory
   off (`CLAUDE_CODE_DISABLE_AUTO_MEMORY`), so the model neither reads
-  nor writes the notes Claude Code keeps for a project in
-  `~/.claude/projects/<project>/memory/`; Claude Code on its own still
-  keeps them. illi's memory is the chat itself, your rules (`RULES.md`)
-  and the project's `AGENTS.md` or `CLAUDE.md`, the same on every
-  provider: a note you want kept for good belongs in one of those.
+  nor writes the notes Claude Code keeps for a project in its folder
+  (`~/.claude/projects/<project>/memory/`); Claude Code on its own still
+  keeps them. Its `CLAUDE.md` files are instructions, not those notes,
+  and still load: the account's folder's (your own Claude Code's in
+  `~/.claude`), on the Claude plan alone, and the project's. illi's
+  memory is the chat itself, your rules (`RULES.md`) and the project's
+  `AGENTS.md` or `CLAUDE.md`, the same on every provider: a note you
+  want kept for good belongs in one of those.
 - **Summaries run with nothing extra**: `claude -p` calls with no tools,
   MCP servers, commands or hooks.
 - **Your plan's use at the side**: the Usage section shows how much of
