@@ -18,9 +18,10 @@
 // folder and data folder (CLAUDE_PLUGIN_ROOT, CLAUDE_PLUGIN_DATA, and
 // ILLI_ spellings), and its notes name it. A matcher naming Claude
 // Code's Bash takes illi's shell too (its input alike: { command }); one
-// naming only Claude Code's other tools is said, as illi's inputs differ,
-// and one naming only its subagent and to-do tools, as never running
-// (illi turns those off in Claude Code's calls: ClaudeCode.OFF).
+// naming only Claude Code's other tools is said, as illi's inputs differ:
+// running only on its own calls, a PreToolUse one; never, a PostToolUse
+// one, or one naming only those illi turns off in Claude Code's calls
+// (ClaudeCode.OFF).
 // They run as a plugin of illi's own, after the user's code plugins
 // (Plugins.own), so they share their order, failure rules and call
 // sites.
@@ -41,6 +42,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { ClaudeCode } from "../ai/ClaudeCode.ts";
 import { Bundle } from "./Bundle.ts";
 import * as config from "./Config.ts";
 import { Plugins, type Output, type ToolCall, type Wait } from "./Plugins.ts";
@@ -81,13 +83,12 @@ const MATCHED: Partial<Record<Event, true>> = { PreToolUse: true, PostToolUse: t
 
 // Claude Code's tool names a matcher may name: Bash, whose input is
 // illi's shell's, taken for it; the others, whose inputs differ, said:
-// those its calls in illi run, and those illi leaves out of them (some
-// of ClaudeCode.OFF, kept in step by hand), its spawn and todo in their
-// place (Agent, its subagents' tool, under its old name Task too; its
-// to-do list's TodoWrite and the task tools it is off by default in
-// favor of)
+// those its calls in illi run (a PreToolUse hook sees one as it asks
+// leave; Claude Code runs them itself, so a PostToolUse one never does),
+// and those illi leaves out of its calls (ClaudeCode.OFF: its subagents',
+// to-do list's and long-session tools, illi's spawn, todo and ask in
+// their place), which no hook ever sees
 const CLAUDE_TOOLS = ["Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "LS", "WebFetch", "WebSearch", "NotebookEdit"];
-const CLAUDE_OFF = ["TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "Agent", "Task"];
 
 // the events whose output, as text, is context for the model
 const CONTEXT: Partial<Record<Event, true>> = { UserPromptSubmit: true, SessionStart: true };
@@ -458,16 +459,23 @@ function hooks_seen(file: string): void {
 }
 
 // each tool hook whose matcher names only Claude Code's tools that illi
-// doesn't take for its own (all but Bash): said once, as it runs only on
-// claude-code's own calls, or, naming only those illi leaves out of them
-// (its subagents' and to-do list's), never
+// doesn't take for its own (all but Bash): said once, as a PreToolUse
+// one runs only on claude-code's own calls, and one never runs that
+// names only those illi turns off (ClaudeCode.OFF) or is a PostToolUse
+// one (Claude Code runs its tools itself)
 function hooks_claude(): void {
+  const off = (n: string) => ClaudeCode.OFF.includes(n);
   for (const e of ENTRIES.filter((e) => e.event === "PreToolUse" || e.event === "PostToolUse")) {
     const names = /^[A-Za-z0-9_\- ,|]+$/.test(e.match) ? e.match.split(/[|,]/).map((x) => x.trim()).filter(Boolean) : [];
+    if (names.length === 0 || !names.every((n) => CLAUDE_TOOLS.includes(n) || off(n))) {
+      continue;
+    }
     const head = hooks_whose(e, true) + " " + e.event + " hook " + clip(e.command) + " matches " + names.join("|");
-    if (names.length > 0 && names.every((n) => CLAUDE_OFF.includes(n))) {
-      Plugins.say(head + ", Claude Code's subagent and to-do tools, which illi turns off for its own spawn and todo (whose input differs), so it never runs.");
-    } else if (names.length > 0 && names.every((n) => CLAUDE_TOOLS.includes(n) || CLAUDE_OFF.includes(n))) {
+    if (names.every(off)) {
+      Plugins.say(head + ", Claude Code's tools that illi turns off (its own spawn, todo and ask take their place, with a different input), so it never runs.");
+    } else if (e.event === "PostToolUse") {
+      Plugins.say(head + ", Claude Code's tools: Claude Code runs them itself, so illi never sees one finish (illi's own are shell, read, write, edit..., with a different input), and it never runs.");
+    } else {
       Plugins.say(head + ", Claude Code's tools: illi's are shell, read, write, edit..., whose input differs, so it runs only on claude-code's own calls.");
     }
   }

@@ -4,9 +4,9 @@
 // profile, a trusted project's), a command given twice kept once, what
 // won't do said, disableAllHooks turning all off; matchers read as
 // Claude Code's (names exactly, else a pattern found anywhere), one
-// naming only Claude Code's tools but Bash said (run only on its own
-// calls; never, its subagent and to-do tools alone, as illi turns those
-// off). A
+// naming only Claude Code's tools but Bash said (a PreToolUse one run
+// only on its own calls; never, a PostToolUse one, or one naming only
+// those illi turns off in them). A
 // command's answer is read as Claude Code's: exit 2 blocks, a JSON object
 // decides on any other exit, exit 0's text is context where it may be; a
 // failure is passed over but refuses a tool's call (onFailure sets it).
@@ -127,11 +127,15 @@ test("matchers as Claude Code reads them: none, \"\" or * all; plain names exact
   expect(takes("/any.sh", "anything")).toBe(true);
 });
 
-test("a tool hook whose matcher names only Claude Code's tools other than Bash is said once at the start, as it runs only on claude-code's own calls; naming only its subagent and to-do tools (Agent, Task, its task tools), which illi turns off, as it never runs", () => {
-  hooks(ROOT + "/hooks.json", { PreToolUse: [["Agent", "/agent.sh"], ["Task|Read", "/task.sh"], ["Agent|shell", "/both.sh"], ["TaskCreate|TaskUpdate", "/todo.sh"]] });
+test("a tool hook whose matcher names only Claude Code's tools other than Bash is said once at the start: a PreToolUse one as running only on claude-code's own calls; as never running, a PostToolUse one, or one naming only those illi turns off (its subagent, to-do, ask and long-session tools)", () => {
+  hooks(ROOT + "/hooks.json", {
+    PreToolUse: [["Agent", "/agent.sh"], ["Task|Read", "/task.sh"], ["Agent|shell", "/both.sh"], ["TaskCreate|TaskUpdate", "/todo.sh"], ["AskUserQuestion", "/asks.sh"], ["Monitor|CronCreate", "/waits.sh"]],
+    PostToolUse: [["Write|Edit", "/format.sh"], ["Agent|Read", "/after.sh"], ["Edit|edit", "/mine.sh"]],
+  });
   Hooks.load(REPO, () => false);
-  expect(notes.filter((n) => n.includes("Claude Code's tools")).map((n) => /matches (\S+),/.exec(n)?.[1])).toEqual(["Task|Read"]);
-  expect(notes.filter((n) => n.includes("so it never runs")).map((n) => /matches (\S+),/.exec(n)?.[1])).toEqual(["Agent", "TaskCreate|TaskUpdate"]);
+  const said = (text: string) => notes.filter((n) => n.includes(text)).map((n) => /(\w+) hook \S+ matches (\S+),/.exec(n)!.slice(1).join(" "));
+  expect(said("runs only on claude-code's own calls")).toEqual(["PreToolUse Task|Read"]);
+  expect(said("never runs")).toEqual(["PreToolUse Agent", "PreToolUse TaskCreate|TaskUpdate", "PreToolUse AskUserQuestion", "PreToolUse Monitor|CronCreate", "PostToolUse Write|Edit", "PostToolUse Agent|Read"]);
 });
 
 test("an answer as Claude Code's: exit 2 blocks where its event can; exit 0's text is context where it may be; anything else failing is passed over, but refuses a tool's call", () => {

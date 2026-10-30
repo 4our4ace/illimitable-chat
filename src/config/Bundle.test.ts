@@ -167,9 +167,9 @@ test("a plugin's hooks run before the user's, its disableAllHooks ignored; given
   expect(ran.out.trim()).toBe(KIT + "|" + ROOT + "/plugin-data/kit|" + REPO);
 });
 
-test("a plugin's hook naming only Claude Code's other tools is said once at the start", () => {
+test("a plugin's hook naming only Claude Code's other tools is said once at the start: a PostToolUse one never runs, as Claude Code runs them itself", () => {
   Hooks.load(REPO, trusted);
-  expect(notes.filter((n) => n.includes("Claude Code's tools"))).toEqual(["The plugin kit's PostToolUse hook echo inline matches Write|Edit, Claude Code's tools: illi's are shell, read, write, edit..., whose input differs, so it runs only on claude-code's own calls."]);
+  expect(notes.filter((n) => n.includes("Claude Code's tools"))).toEqual(["The plugin kit's PostToolUse hook echo inline matches Write|Edit, Claude Code's tools: Claude Code runs them itself, so illi never sees one finish (illi's own are shell, read, write, edit..., with a different input), and it never runs."]);
 });
 
 test("a plugin's MCP servers go under the user's by name, its variables filled in; a trusted project's mcp.json is read", () => {

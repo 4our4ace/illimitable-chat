@@ -116,10 +116,13 @@ illi then runs Claude Code itself, as it ships, on the account's login:
   messages to them, the to-do list and skills. Claude Code's own
   subagents and to-do list are off, as are the tools it has for a long
   session of its own (scheduled tasks and wake-ups, monitors, workflows,
-  messages to its agents, notifications, worktrees…): illi's spawn,
-  todo and tell take their place, so subagents show at illi's side and
-  there is one to-do list, and illi's turn ends with its Claude Code
-  run, which those tools would outlive. Its skills stay. An agent's `tools:`
+  messages to its agents, notifications, worktrees…) and its background
+  tasks: illi's spawn, todo and tell take their place, so subagents
+  show at illi's side and there is one to-do list, and illi's turn ends
+  with its Claude Code run, which those would outlive. Its shell works
+  as illi's own: a command can still go to the background as in any
+  shell (`cmd > log 2>&1 &`), and a wait is a loop that checks
+  (`until <check>; do sleep 2; done`). Its skills stay. An agent's `tools:`
   limits both: `tools: zoom, Read, Grep` gives that agent illi's zoom
   and, of Claude Code's built-in tools, Read and Grep alone. Of Claude
   Code's own MCP servers (below), it keeps only those it names:

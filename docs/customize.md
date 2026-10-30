@@ -358,9 +358,9 @@ over. What differs:
 - Hooks: a `Bash` matcher takes illi's `shell` ([Beside Claude
   Code's](#beside-claude-codes)); a `PreToolUse` one naming only Claude
   Code's other tools runs only on `claude-code`'s own calls (a
-  `PostToolUse` one never sees them), and one naming only its `Agent`,
-  `Task`, `TodoWrite` or task tools never runs, as illi turns those
-  off, each said at the start.
+  `PostToolUse` one never sees them), and one naming only tools illi
+  turns off in its calls (`Agent`, `Task`, `TodoWrite`, its task tools,
+  `AskUserQuestion`, `Monitor`…) never runs, each said at the start.
 - Its own MCP servers' tools are `mcp__<server>__<tool>`: Claude Code's
   `mcp__plugin_<plugin>_<server>__` is read as that, in its agents and
   matchers.
@@ -601,9 +601,10 @@ its input:
   `tool_name: "Bash"`; one
   naming only Claude Code's other tools (`Write|Edit`: their inputs
   differ) is said at the start. On `claude-code`, its own tools come
-  under their names as they ask leave, but its `Agent`, `Task`,
-  `TodoWrite` and task tools, which illi turns off for its own spawn
-  and todo, never do (said at the start too); illi turns
+  under their names as they ask leave, but those illi turns off for its
+  own spawn, todo and ask (`Agent`, `Task`, `TodoWrite`, its task
+  tools, `AskUserQuestion`, `Monitor` and its other long-session tools)
+  never do (said at the start too); illi turns
   your `~/.claude` hooks off inside it, so `hooks.json` is the one file
   that runs, and only `PreToolUse`'s refusal, input and decision reach
   those tools (Claude Code runs them, so `PostToolUse` doesn't see them).
