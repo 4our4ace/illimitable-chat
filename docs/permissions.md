@@ -120,8 +120,8 @@ folder's path) after their folder if outside, `WebFetch` and
 `WebSearch` as `webfetch` (the URL) and `websearch` (the query), any
 other tool as its own name. illi's own tools in it (`mcp__illi__…`)
 are checked as they reach illi. Claude Code's own subagents, to-do
-list, `Monitor` and its other tools for a long session of its own are
-off in illi's calls ([Providers](providers.md#claude-plan)), so they
+list, background tasks, `Monitor` and its other tools for a long
+session of its own are off in illi's calls ([Providers](providers.md#claude-plan)), so they
 never ask: illi's `spawn` asks as `subagent`.
 
 How rules decide

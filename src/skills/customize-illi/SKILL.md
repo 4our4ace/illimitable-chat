@@ -316,8 +316,9 @@ Code's: shell {command, description}, read/write {path, ...}, edit
 "Bash"); Claude Code's
 other names (Write, Edit...) match only Claude Code's own calls on the
 claude-code vendor, and only in PreToolUse (Claude Code runs those
-tools, so PostToolUse never sees them); Agent, Task, TodoWrite and its
-task tools none (illi turns those off); each said at the start. A command gets the event as JSON on stdin;
+tools, so PostToolUse never sees them); those illi turns off (Agent,
+Task, TodoWrite, its task tools, AskUserQuestion, Monitor...) none; each
+said at the start. A command gets the event as JSON on stdin;
 docs/customize.md lists the fields and answers. Say what a hook will run
 before writing it: it runs as the user, on every matching event. illi
 asks the user before you write illi's own hooks.json or a plugin's

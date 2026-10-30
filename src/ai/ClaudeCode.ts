@@ -38,7 +38,8 @@
 // the agent's log (ClaudeCode.env); every call runs with Claude Code's
 // advisor off (ClaudeCode.env: its answer comes back locked, and once it
 // has answered Claude Code's own marks leave no room for illi's MARK),
-// and its own memory off (illi's is the chat, on every provider);
+// its own memory off (illi's is the chat, on every provider), and its
+// background tasks (a run ends with the turn, so none would be told);
 // the tokens its first request read,
 // as its stream tells, go with its end (End.first), so the chat learns
 // what Claude Code's own prompt and tools take beside it (Chat.cap). A
@@ -244,13 +245,14 @@ export namespace ClaudeCode {
   // which a call, its process ending with the turn, can't keep (cron,
   // wake-ups, monitors, workflows, messages to its agents) or which act
   // outside illi (notifications, remote triggers, worktrees, plugins,
-  // onboarding guides, designs, review findings). Its Skill stays, and
-  // TaskStop, which stops a shell run in the background. A tool a newer
-  // Claude Code adds isn't named, so it loads till it is added here
+  // onboarding guides, designs, review findings), and TaskStop, with
+  // nothing to stop as its background tasks are off (ClaudeCode.env). Its
+  // Skill stays. A tool a newer Claude Code adds isn't named, so it loads
+  // till it is added here
   export const OFF = [
     "AskUserQuestion",
     "Agent", "Task", "TodoWrite", "TaskCreate", "TaskGet", "TaskList", "TaskUpdate",
-    "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "Monitor", "Workflow", "SendMessage", "ListAgents",
+    "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "Monitor", "TaskStop", "Workflow", "SendMessage", "ListAgents",
     "PushNotification", "RemoteTrigger", "EnterWorktree", "ExitWorktree", "ShareOnboardingGuide", "PublishPlugin", "DesignSync", "ReportFindings",
   ];
 
@@ -498,7 +500,13 @@ export namespace ClaudeCode {
   // reads and writes in its folder, ~/.claude/projects/<project>/memory),
   // as illi's memory is the chat and the rules it reads, the same on
   // every provider, and notes Claude Code kept would reach the model on
-  // the Claude plan alone;
+  // the Claude plan alone; and its background tasks off
+  // (CLAUDE_CODE_DISABLE_BACKGROUND_TASKS): a command it ran in the
+  // background would tell the model when it ended, in a run ended with
+  // the turn, and while they are on Claude Code refuses a long `sleep`,
+  // waiting with Monitor instead (OFF); without them its shell is illi's,
+  // a job in the background the shell's own (cmd > log 2>&1 &), a wait a
+  // loop in the foreground;
   // a call illi refits (Ask.room: a turn's, an agent's) with Claude
   // Code's compaction off (DISABLE_COMPACT), so one outgrowing the window
   // ends "Prompt is too long" (`full`) and illi folds the chat into its
@@ -508,6 +516,7 @@ export namespace ClaudeCode {
     const env = ClaudeCode.folder_env(config.config_claude_dir());
     env.CLAUDE_CODE_DISABLE_ADVISOR_TOOL = "1";
     env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
+    env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = "1";
     if (ask.room !== undefined) {
       env.DISABLE_COMPACT = "1";
     }

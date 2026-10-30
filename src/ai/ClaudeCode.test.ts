@@ -4,8 +4,9 @@
 // that plays a scene, named by the call's message: a turn runs Claude
 // Code whole with illi's prompt after its own and illi's tools added
 // (lean), Claude Code's advisor off (it leaves no room for illi's cache
-// mark), its own memory off (illi's is the chat) and its subagents', to-do
-// list's and long-session tools (illi's spawn and todo in their place),
+// mark), its own memory and background tasks off (illi's memory is the
+// chat; a run ends with the turn) and its subagents', to-do list's and
+// long-session tools (illi's spawn and todo in their place),
 // the view's marked block cached for an hour, its stream shown
 // live and logged, illi's tools by their own
 // names, the tokens its first request read told (none if that was
@@ -90,7 +91,7 @@ const FAKE = String.raw`#!/usr/bin/env bun
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 const file = args.includes("--append-system-prompt-file") ? args[args.indexOf("--append-system-prompt-file") + 1] : null;
-const log = { args, prompt: file === null ? null : fs.readFileSync(file, "utf8"), input: [], compact: process.env.DISABLE_COMPACT ?? null, advisor: process.env.CLAUDE_CODE_DISABLE_ADVISOR_TOOL ?? null, memory: process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY ?? null, folder: process.env.CLAUDE_CONFIG_DIR ?? null };
+const log = { args, prompt: file === null ? null : fs.readFileSync(file, "utf8"), input: [], compact: process.env.DISABLE_COMPACT ?? null, advisor: process.env.CLAUDE_CODE_DISABLE_ADVISOR_TOOL ?? null, memory: process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY ?? null, background: process.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS ?? null, folder: process.env.CLAUDE_CONFIG_DIR ?? null };
 const save = () => fs.writeFileSync(process.env.FAKE_LOG, JSON.stringify(log));
 const out = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 const ev = (event) => out({ type: "stream_event", event, parent_tool_use_id: null });
@@ -234,12 +235,13 @@ test("before any call of the run has told Claude Code's servers: by name, those 
   Mcp.fail(Mcp.status().servers.find((s) => s.name === "github")!, "stopped");
 });
 
-test("a turn runs Claude Code whole, illi's prompt after its own, illi's tools added and Claude Code's advisor, memory, subagents, to-do list and long-session tools off; its stream shown and logged, the tokens its first request read told", async () => {
+test("a turn runs Claude Code whole, illi's prompt after its own, illi's tools added and Claude Code's advisor, memory, background tasks, subagents, to-do list and long-session tools off; its stream shown and logged, the tokens its first request read told", async () => {
   const { events, end, log } = await call("turn", true, undefined, { room: 900 });
   expect(log.advisor).toBe("1");
   expect(log.memory).toBe("1");
-  expect(["Agent", "Task", "TodoWrite", "TaskCreate", "CronCreate", "ScheduleWakeup", "Monitor", "Workflow", "PushNotification"].filter((t) => !ClaudeCode.OFF.includes(t))).toEqual([]);
-  expect(["Bash", "Read", "Edit", "Write", "WebFetch", "WebSearch", "ToolSearch", "Skill", "TaskStop"].filter((t) => ClaudeCode.OFF.includes(t))).toEqual([]);
+  expect(log.background).toBe("1");
+  expect(["Agent", "Task", "TodoWrite", "TaskCreate", "CronCreate", "ScheduleWakeup", "Monitor", "TaskStop", "Workflow", "PushNotification"].filter((t) => !ClaudeCode.OFF.includes(t))).toEqual([]);
+  expect(["Bash", "Read", "Edit", "Write", "WebFetch", "WebSearch", "ToolSearch", "Skill"].filter((t) => ClaudeCode.OFF.includes(t))).toEqual([]);
   expect(log.args).toContain("--mcp-config");
   expect(JSON.parse(log.args[log.args.indexOf("--mcp-config") + 1])).toEqual({ mcpServers: { illi: { type: "http", url: "http://127.0.0.1:1/key/main?lean", timeout: 86400000 } } });
   expect(log.args.slice(log.args.indexOf("--allowedTools"), log.args.indexOf("--allowedTools") + 2)).toEqual(["--allowedTools", "mcp__illi"]);
@@ -303,8 +305,9 @@ test("the Claude plan's windows are asked as soon as its account is in use, as a
   }
 });
 
-test("a call without tools has none of Claude Code's, nor its MCP servers, commands or hooks", async () => {
+test("a call without tools has none of Claude Code's, nor its MCP servers, commands or hooks; its advisor, memory and background tasks off too", async () => {
   const { log } = await call("turn", false);
+  expect([log.advisor, log.memory, log.background]).toEqual(["1", "1", "1"]);
   expect(log.args.slice(log.args.indexOf("--tools"), log.args.indexOf("--tools") + 2)).toEqual(["--tools", ""]);
   expect(log.args).toContain("--strict-mcp-config");
   expect(log.args).toContain("--disable-slash-commands");
