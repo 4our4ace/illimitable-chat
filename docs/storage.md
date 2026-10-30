@@ -994,13 +994,18 @@ How it is kept:
    on, comes first). Config.ts reads it at the start into the keys in
    use, the ChatGPT login file, the Claude Code folder and, unless the
    `vendors` setting names them, the vendors offered.
-2. Each change reads the file just before, changes it, writes the whole
-   to `.accounts.<pid>.json`, opened readable by its owner alone before
-   anything is in it, and renames it over the file. A file that won't
-   read is never written over, as its keys would be lost: `/login` says
-   so and changes nothing. Read, the file keeps only the entries of the
-   shapes above: an entry of another shape, or a vendor illi doesn't
-   know, is dropped, and gone from the file at the next change.
+2. Each change holds the file's lock, a flock on `.accounts.lock`
+   beside it (`src/config/Flock.ts`), so two illis changing it at once
+   take turns; one that waits 3 s says another illi is changing the
+   accounts. Under the lock it reads the file, changes it, writes the
+   whole to `.accounts.<pid>.json`, opened readable by its owner alone
+   before anything is in it and synced to the disk, and renames it over
+   the file (then syncs the folder): a crash leaves the old file or the
+   new, never half of one. A file that won't read is never written
+   over, as its keys would be lost: `/login` says so and changes
+   nothing. Read, the file keeps only the entries of the shapes above,
+   an entry of another shape dropped; a vendor illi doesn't know (a
+   newer illi's) is kept as it is, so an older illi never deletes it.
 3. Every illi with a chat looks at the file every 2 s, by its inode,
    size and time (a stat), and reads it again only when it changed, so a
    change in one terminal reaches the others: the vendors offered, the
@@ -1009,9 +1014,10 @@ How it is kept:
    on the login file: the login there is read then, as each renewal
    spends its refresh token, kept in `saved`, and the picked one put in
    its place. So the login put apart is always the one as last renewed;
-   the one picked is the copy in `saved` as `/login` read it.
-5. A profile's export leaves out `accounts.json`, its temporary files
-   and `claude/`; an import drops them.
+   the one picked is taken from `saved` as read then, and a switch to
+   the account already there writes nothing.
+5. A profile's export leaves out `accounts.json`, its lock, its
+   temporary files and `claude/`; an import drops them.
 
 Known limits
 ------------
@@ -1030,6 +1036,3 @@ Known limits
 - **Two illis starting at the same moment on a very busy machine** can
   both miss the 50 ms lock window; both then become views, find no
   holder, and run again 600 ms later.
-- **Two `/login` changes at the same moment in two terminals** each read
-  `accounts.json`, change it and write it whole, with no lock between
-  them: the one written last wins, and the other's change is lost.

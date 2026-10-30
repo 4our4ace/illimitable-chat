@@ -69,6 +69,10 @@ const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
 // folders trusted (Trusted.ts), the project files seen (Seen.ts), the
 // commands run and picked (Commands.ts USED, PICKED)
 const OWN    = ["login.json", "login.json.lock", "accounts.json", "locks", "illi.log"];
+
+// a login being written to move over the login file (ChatGPT.write),
+// which a crash may leave: never a profile's to give either
+const WRITING = /^\.auth\.\d+\.json$/;
 const ROOTED = ["profiles", "profile", "project-profiles.json", "update.json", "models.json", "trust.json", "seen.json", "used.json", "picked.json"];
 
 // the profile used last in each project, by its key (Projects.place),
@@ -314,7 +318,7 @@ export async function profile_export(root: string, name: string, file: string): 
       fs.writeFileSync(tmp + "/" + part, JSON.stringify(kept, null, 2) + "\n");
     }
     const snap  = profile_snapshot(dir + "/chat", tmp + "/chat");
-    const parts = fs.readdirSync(dir).filter((p) => !skip.includes(p) && !Accounts.owned(p) && !(snap && p === "chat")).map((p) => "./" + p);
+    const parts = fs.readdirSync(dir).filter((p) => !skip.includes(p) && !Accounts.owned(p) && !WRITING.test(p) && !(snap && p === "chat")).map((p) => "./" + p);
     const chat  = snap ? fs.readdirSync(dir + "/chat").filter((p) => p !== "projects").map((p) => "./chat/" + p) : [];
     const clean = fs.readdirSync(tmp).map((p) => "./" + p);
     await profile_tar(["-czhf", file, ...local, "-C", dir, ...parts, ...chat, "-C", tmp, ...clean]);
@@ -364,7 +368,7 @@ export async function profile_import(root: string, file: string, name: string): 
   try {
     await profile_tar(["-xzf", file, "--no-same-owner", "-C", tmp]);
     profile_walk(tmp, "");
-    for (const part of [...OWN, ...ROOTED, ...fs.readdirSync(tmp).filter(Accounts.owned)]) {
+    for (const part of [...OWN, ...ROOTED, ...fs.readdirSync(tmp).filter((p) => Accounts.owned(p) || WRITING.test(p))]) {
       fs.rmSync(tmp + "/" + part, { recursive: true, force: true });
     }
     const conf = json_object(tmp + "/config.json");

@@ -85,6 +85,14 @@ export const SPEEDS = ["slow", "fast", "ultrafast"];
 
 export const LABELS = [...new Set(Object.values(MODELS).flat().map((m) => m.label))];
 
+// each vendor as a note names it to the person (its id is the settings')
+const PROVIDERS: Record<Vendor, string> = {
+  "claude-api" : "the Anthropic API",
+  "openai-api" : "the OpenAI API",
+  "chatgpt"    : "your ChatGPT plan",
+  "claude-code": "your Claude plan",
+};
+
 // Pick
 // ====
 
@@ -207,6 +215,13 @@ export namespace Pick {
 
   // as a person reads it, as it runs (fit): model · effort, the speed
   // only if not the standard one (gpt-6.1-sol · medium · fast)
+  // a vendor as a note names it ("the Anthropic API"; up: starting a
+  // sentence)
+  export function provider(vendor: Vendor, up = false): string {
+    const name = PROVIDERS[vendor];
+    return up ? name[0].toUpperCase() + name.slice(1) : name;
+  }
+
   export function shown(pick: Pick): string {
     const p = Pick.fit(pick);
     return [p.model, p.effort, ...(p.speed === "slow" ? [] : [p.speed])].join(" · ");

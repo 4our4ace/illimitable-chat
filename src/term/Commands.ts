@@ -13,9 +13,7 @@ import * as fs from "node:fs";
 import type { Vendor } from "../ai/AskAI.ts";
 import { term_clip, term_image } from "./Attach.ts";
 import { Bundle } from "../config/Bundle.ts";
-import { Anthropic } from "../ai/Anthropic.ts";
 import { Chat } from "../chat/Chat.ts";
-import { ChatGPT } from "../ai/ChatGPT.ts";
 import { json_object } from "../tools/Clip.ts";
 import * as config from "../config/Config.ts";
 import * as Draw from "../ui/Draw.ts";
@@ -827,30 +825,16 @@ export function term_main(t: Term, name: string | null): void {
 }
 
 // the accounts as they are now (run here, not in another terminal's
-// view): ChatGPT's (ChatGPT.ts; signed in) plan and usage asked together,
-// the login followed for a change of account, and its catalog learned
-// (the chatgpt list: each model's window, efforts and speeds); the
-// Anthropic key's models' windows (Anthropic.models), and the Claude
-// plan's account's (ClaudeCode.models); the chat tells its views
+// view: Chat.account): ChatGPT's (ChatGPT.ts; signed in) plan and usage
+// asked together, the login followed for a change of account, and its
+// catalog learned (the chatgpt list: each model's window, efforts and
+// speeds); the Anthropic key's models' windows (Anthropic.models), and
+// the Claude plan's account's (ClaudeCode.models); the chat tells its
+// views. Another terminal's change of accounts asks them too
+// (Chat.follow)
 export function term_account(t: Term): void {
-  if (t.chat === null) {
-    return;
-  }
-  const chat = t.chat;
-  if (config.OFFER.vendors.includes("claude-api") && config.KEYS.anthropic) {
-    void Anthropic.models(config.KEYS.anthropic).then((news) => news && Chat.change(chat));
-  }
-  if (config.OFFER.vendors.includes("claude-code")) {
-    void ClaudeCode.models().then((news) => news && Chat.change(chat));
-  }
-  if (!config.OFFER.vendors.includes("chatgpt")) {
-    return;
-  }
-  ChatGPT.sync();
-  ChatGPT.follow();
-  if (ChatGPT.signed()) {
-    void ChatGPT.usage();
-    void ChatGPT.models();
+  if (t.chat !== null) {
+    Chat.account(t.chat);
   }
 }
 

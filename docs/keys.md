@@ -10,7 +10,7 @@ Chat
 | Key or command | Does |
 | -------------- | ---- |
 | Enter | send |
-| Esc | close a list (`/login`'s: back a level); else clear the notes, and twice: stop illi and its subagents at work (a `/compact` under way too; background jobs go on: `/background`) |
+| Esc | close a list (`/login`'s: back a level); else clear the notes (a sign-in waiting stops), and twice: stop illi and its subagents at work (a `/compact` under way too; background jobs go on: `/background`) |
 | Ctrl+C | clear the input; on an empty one, stop illi and its subagents (again: quit); text chosen: copy it again |
 | Ctrl+D | clear the input; on an empty one, quit, every profile open in this terminal too (while background jobs run, subagents or another profile are at work, it says what a quit stops: again to quit) |
 | Tab | take the suggested reply (it stays after a message of your own, to send as well, till illi answers) |

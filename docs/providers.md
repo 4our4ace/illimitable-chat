@@ -43,7 +43,8 @@ Pick **ChatGPT**, then **ChatGPT plan**, in `/login` to sign in with
 ChatGPT Plus or Pro:
 illi opens OpenAI's page in your browser and shows a code to enter
 there (it is in your clipboard too), then keeps and renews the login
-itself. The browser is your system's: on WSL Windows' default, asked
+itself. The code is good for 15 minutes, and illi waits for it till
+then; Esc stops waiting. The browser is your system's: on WSL Windows' default, asked
 through `rundll32.exe url.dll,FileProtocolHandler` (which some security
 tools flag); `BROWSER` picks another, and `BROWSER=none` opens none.
 Over SSH, or with no display, the link is only shown.
@@ -82,8 +83,12 @@ If Claude Code is logged in, illi offers its login, or a sign-in to
 another account; if it isn't, the sign-in logs your own Claude Code
 in. illi signs in through Claude Code itself: Claude Code opens
 Claude's page in your browser (illi shows the link too), and you paste
-the code the page shows into illi, where it shows as dots. Esc there
-stops the sign-in.
+the code the page shows into illi, where it shows as dots. Esc stops
+the sign-in, as soon as it starts; with no code after 10 minutes, illi
+stops it itself. When it fails, the note gives Claude Code's own words.
+A sign-in that doesn't end with the account kept (failed, stopped, or
+the accounts file couldn't be saved) logs its folder out again and
+removes it, so no login is left behind unlisted.
 
 Each account shows by its email and plan:
 
