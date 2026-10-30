@@ -93,8 +93,9 @@ You review code changes. ...
   none of the user's agents named: no spawn); left out: every tool its
   role has; empty: none. On claude-code it limits Claude Code's built-in
   tools too: those named (Grep, WebFetch), and shell, read, write and
-  edit as Bash, Read, Write and Edit; never its Agent, Task, TodoWrite or
-  task tools, as illi's spawn and todo take their place; and Claude
+  edit as Bash, Read, Write and Edit; never its Agent, Task, TodoWrite,
+  task or long-session tools (cron, Monitor...), off in every call, as
+  illi's spawn and todo take their place; and Claude
   Code's own MCP servers to those its mcp__<server> names name
 - fresh: true: as a subagent it starts without the chat: no map of it,
   no zoom, date, projects or search, no past moments handed to it; only
@@ -314,7 +315,8 @@ Code's: shell {command, description}, read/write {path, ...}, edit
 {edits: [{path, old, new}]}; `Bash` takes shell too (told tool_name
 "Bash"); Claude Code's
 other names (Write, Edit...) match only Claude Code's own calls on the
-claude-code vendor, said at the start. A command gets the event as JSON on stdin;
+claude-code vendor (Agent, Task, TodoWrite and its task tools none: illi
+turns those off), said at the start. A command gets the event as JSON on stdin;
 docs/customize.md lists the fields and answers. Say what a hook will run
 before writing it: it runs as the user, on every matching event. illi
 asks the user before you write illi's own hooks.json or a plugin's

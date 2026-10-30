@@ -4,7 +4,9 @@
 // that plays a scene, named by the call's message: a turn runs Claude
 // Code whole with illi's prompt after its own and illi's tools added
 // (lean), Claude Code's advisor off (it leaves no room for illi's cache
-// mark), the view's marked block cached for an hour, its stream shown
+// mark), its own memory off (illi's is the chat) and its subagents', to-do
+// list's and long-session tools (illi's spawn and todo in their place),
+// the view's marked block cached for an hour, its stream shown
 // live and logged, illi's tools by their own
 // names, the tokens its first request read told (none if that was
 // refused), and the model's window learned (by its canonical id) and kept,
@@ -57,6 +59,9 @@ const { Mcp } = await import("../tools/Mcp.ts");
 const config = await import("../config/Config.ts");
 const { Accounts } = await import("../config/Accounts.ts");
 
+// the tools of Claude Code's own every call with tools leaves out
+const OFF = ClaudeCode.OFF.join(",");
+
 // a stand-in MCP server of illi's own: it starts, and lists one tool
 // (at /bad, it fails)
 const OWN = Bun.serve({
@@ -85,7 +90,7 @@ const FAKE = String.raw`#!/usr/bin/env bun
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 const file = args.includes("--append-system-prompt-file") ? args[args.indexOf("--append-system-prompt-file") + 1] : null;
-const log = { args, prompt: file === null ? null : fs.readFileSync(file, "utf8"), input: [], compact: process.env.DISABLE_COMPACT ?? null, advisor: process.env.CLAUDE_CODE_DISABLE_ADVISOR_TOOL ?? null, folder: process.env.CLAUDE_CONFIG_DIR ?? null };
+const log = { args, prompt: file === null ? null : fs.readFileSync(file, "utf8"), input: [], compact: process.env.DISABLE_COMPACT ?? null, advisor: process.env.CLAUDE_CODE_DISABLE_ADVISOR_TOOL ?? null, memory: process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY ?? null, folder: process.env.CLAUDE_CONFIG_DIR ?? null };
 const save = () => fs.writeFileSync(process.env.FAKE_LOG, JSON.stringify(log));
 const out = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 const ev = (event) => out({ type: "stream_event", event, parent_tool_use_id: null });
@@ -206,7 +211,7 @@ test("before any call of the run has told Claude Code's servers: by name, those 
   const listed = (await call("turn", true, undefined, { listed: ["read", "mcp__github", "mcp__linear__find"] })).log.args;
   expect(strict(listed)).toBe(true);
   expect(JSON.parse(listed[listed.indexOf("--mcp-config") + 1]).mcpServers.illi.url).toBe("http://127.0.0.1:1/key/main?lean");
-  expect(denied(listed)).toBe("AskUserQuestion");
+  expect(denied(listed)).toBe(OFF);
   expect(ClaudeCode.servers()).toBeNull();
   const main = "http://127.0.0.1:1/key/main";
   expect(ClaudeCode.cut({ server: main } as any)).toEqual({ strict: false, deny: ["mcp__github__*", "mcp__claude_ai_Gmail__*", "mcp__linear__*"] });
@@ -215,7 +220,7 @@ test("before any call of the run has told Claude Code's servers: by name, those 
   fs.writeFileSync(DIR + "/init.json", JSON.stringify(INIT));
   const first = (await call("turn", true, undefined, { listed: ["read", "mcp__notes__find"] })).log.args;
   expect(strict(first)).toBe(false);
-  expect(denied(first)).toBe("AskUserQuestion,mcp__github__*,mcp__claude_ai_Gmail__*,mcp__slack__*,mcp__linear__*");
+  expect(denied(first)).toBe(OFF + ",mcp__github__*,mcp__claude_ai_Gmail__*,mcp__slack__*,mcp__linear__*");
   expect(ClaudeCode.servers()).toEqual([
     { name: "github", status: "connected", tools: null, off: false, over: true },
     { name: "claude.ai Gmail", status: "connected", tools: null, off: true, over: false },
@@ -223,19 +228,22 @@ test("before any call of the run has told Claude Code's servers: by name, those 
     { name: "notes", status: "connected", tools: ["mcp__notes__add", "mcp__notes__find", "mcp__notes__drop"], off: false, over: false },
   ]);
   expect(JSON.parse(fs.readFileSync(DIR + "/claude-code.json", "utf8"))).toEqual({ servers: ["claude.ai Gmail", "github", "notes", "plugin:p:db", "slack"] });
-  expect(denied((await call("turn", true, undefined, { listed: ["read", "mcp__notes__find"] })).log.args)).toBe("AskUserQuestion,mcp__github__*,mcp__claude_ai_Gmail__*,mcp__plugin_p_db__*,mcp__notes__add,mcp__notes__drop");
+  expect(denied((await call("turn", true, undefined, { listed: ["read", "mcp__notes__find"] })).log.args)).toBe(OFF + ",mcp__github__*,mcp__claude_ai_Gmail__*,mcp__plugin_p_db__*,mcp__notes__add,mcp__notes__drop");
   config.config_set("off", null);
   fs.rmSync(DIR + "/init.json");
   Mcp.fail(Mcp.status().servers.find((s) => s.name === "github")!, "stopped");
 });
 
-test("a turn runs Claude Code whole, illi's prompt after its own, illi's tools added and Claude Code's advisor off; its stream shown and logged, the tokens its first request read told", async () => {
+test("a turn runs Claude Code whole, illi's prompt after its own, illi's tools added and Claude Code's advisor, memory, subagents, to-do list and long-session tools off; its stream shown and logged, the tokens its first request read told", async () => {
   const { events, end, log } = await call("turn", true, undefined, { room: 900 });
   expect(log.advisor).toBe("1");
+  expect(log.memory).toBe("1");
+  expect(["Agent", "Task", "TodoWrite", "TaskCreate", "CronCreate", "ScheduleWakeup", "Monitor", "Workflow", "PushNotification"].filter((t) => !ClaudeCode.OFF.includes(t))).toEqual([]);
+  expect(["Bash", "Read", "Edit", "Write", "WebFetch", "WebSearch", "ToolSearch", "Skill", "TaskStop"].filter((t) => ClaudeCode.OFF.includes(t))).toEqual([]);
   expect(log.args).toContain("--mcp-config");
   expect(JSON.parse(log.args[log.args.indexOf("--mcp-config") + 1])).toEqual({ mcpServers: { illi: { type: "http", url: "http://127.0.0.1:1/key/main?lean", timeout: 86400000 } } });
   expect(log.args.slice(log.args.indexOf("--allowedTools"), log.args.indexOf("--allowedTools") + 2)).toEqual(["--allowedTools", "mcp__illi"]);
-  expect(log.args.slice(log.args.indexOf("--disallowedTools"), log.args.indexOf("--disallowedTools") + 2)).toEqual(["--disallowedTools", "AskUserQuestion"]);
+  expect(log.args.slice(log.args.indexOf("--disallowedTools"), log.args.indexOf("--disallowedTools") + 2)).toEqual(["--disallowedTools", OFF]);
   expect(log.args.slice(log.args.indexOf("--permission-prompt-tool"), log.args.indexOf("--permission-prompt-tool") + 2)).toEqual(["--permission-prompt-tool", "mcp__illi__approve"]);
   expect(log.args).not.toContain("--tools");
   expect(log.args).not.toContain("--system-prompt");
@@ -398,25 +406,25 @@ test("Claude Code's servers its init tells are kept, but illi's own; one off lea
   config.config_set("off", "claude.ai gmail, notes");
   const { log } = await call("turn");
   expect(strict(log.args)).toBe(false);
-  expect(denied(log.args)).toBe("AskUserQuestion,mcp__claude_ai_Gmail__*,mcp__notes__*");
+  expect(denied(log.args)).toBe(OFF + ",mcp__claude_ai_Gmail__*,mcp__notes__*");
   expect(ClaudeCode.servers()!.map((s) => [s.name, s.off, s.tools?.length ?? null])).toEqual([["github", false, 2], ["claude.ai Gmail", true, 2], ["plugin:p:db", false, 0], ["notes", true, 3]]);
   config.config_set("off", null);
-  expect(denied((await call("turn")).log.args)).toBe("AskUserQuestion");
+  expect(denied((await call("turn")).log.args)).toBe(OFF);
 });
 
 test("an agent's tools list keeps of Claude Code's servers those it names (a server, its tools, or mcp: all); naming none, its call loads none; one it names that wasn't told loads if it's there, every one told but named left out; a call without tools loads none either way", async () => {
   fs.writeFileSync(DIR + "/init.json", JSON.stringify(INIT));
   await call("turn");
   const args = async (listed: string[]) => (await call("turn", true, undefined, { listed })).log.args;
-  expect(denied(await args(["read", "mcp__claude_ai_Gmail"]))).toBe("AskUserQuestion,mcp__github__*,mcp__plugin_p_db__*,mcp__notes__*");
-  expect(denied(await args(["mcp__notes__find"]))).toBe("AskUserQuestion,mcp__github__*,mcp__claude_ai_Gmail__*,mcp__plugin_p_db__*,mcp__notes__add,mcp__notes__drop");
-  expect(denied(await args(["mcp"]))).toBe("AskUserQuestion");
+  expect(denied(await args(["read", "mcp__claude_ai_Gmail"]))).toBe(OFF + ",mcp__github__*,mcp__plugin_p_db__*,mcp__notes__*");
+  expect(denied(await args(["mcp__notes__find"]))).toBe(OFF + ",mcp__github__*,mcp__claude_ai_Gmail__*,mcp__plugin_p_db__*,mcp__notes__add,mcp__notes__drop");
+  expect(denied(await args(["mcp"]))).toBe(OFF);
   for (const listed of [["read", "zoom"], []]) {
     const got = await args(listed);
-    expect([listed, strict(got), denied(got)]).toEqual([listed, true, "AskUserQuestion"]);
+    expect([listed, strict(got), denied(got)]).toEqual([listed, true, OFF]);
   }
   const linear = await args(["mcp__linear"]);
-  expect([strict(linear), denied(linear)]).toEqual([false, "AskUserQuestion,mcp__github__*,mcp__claude_ai_Gmail__*,mcp__plugin_p_db__*,mcp__notes__*"]);
+  expect([strict(linear), denied(linear)]).toEqual([false, OFF + ",mcp__github__*,mcp__claude_ai_Gmail__*,mcp__plugin_p_db__*,mcp__notes__*"]);
   expect(ClaudeCode.servers()!.map((s) => s.tools?.length ?? null)).toEqual([2, 2, 0, 3]);
   config.config_set("off", "notes");
   expect(strict(await args(["mcp__notes"]))).toBe(true);
@@ -430,13 +438,13 @@ test("a server both illi's own and Claude Code's: illi's wins while it runs, so 
   await own("github");
   await own("web");
   const { log } = await call("turn");
-  expect(denied(log.args)).toBe("AskUserQuestion,mcp__github__*,mcp__web__*");
+  expect(denied(log.args)).toBe(OFF + ",mcp__github__*,mcp__web__*");
   Mcp.fail(Mcp.status().servers.find((s) => s.name === "web")!, "stopped");
-  expect(denied((await call("turn")).log.args)).toBe("AskUserQuestion,mcp__github__*");
+  expect(denied((await call("turn")).log.args)).toBe(OFF + ",mcp__github__*");
   expect(ClaudeCode.servers()!.find((s) => s.name === "github")).toMatchObject({ over: true, tools: ["mcp__github__get_issue", "mcp__github__list_prs"] });
   expect(strict((await call("turn", true, undefined, { listed: ["mcp__github"] })).log.args)).toBe(true);
   Mcp.fail(Mcp.status().servers.find((s) => s.name === "github")!, "stopped");
-  expect(denied((await call("turn")).log.args)).toBe("AskUserQuestion");
+  expect(denied((await call("turn")).log.args)).toBe(OFF);
   expect(ClaudeCode.servers()!.find((s) => s.name === "github")!.over).toBe(false);
 });
 
