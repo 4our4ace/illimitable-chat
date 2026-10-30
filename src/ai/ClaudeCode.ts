@@ -138,9 +138,11 @@ const OURS = "mcp__illi__";
 // a marked block's cache entry: an hour, as Claude Code's own are (one
 // of five minutes may not follow theirs); one of a call's blocks, its
 // last marked (Claude Code marks the last block itself, and its own
-// prompt twice: a request holds four marks at most. At times Claude Code
-// marks a second message too, where its last request ended, and the API
-// refuses the five: ClaudeCode.failed, `marks`)
+// prompt twice: a request holds four marks at most. Once its advisor has
+// answered, Claude Code's own marks fill all four, and the API refuses
+// illi's fifth: illi's calls run with the advisor off, ClaudeCode.env.
+// Four marked for any other reason end the call `marks`,
+// ClaudeCode.failed)
 const MARK = { type: "ephemeral", ttl: "1h" };
 const MARKS = 1;
 
@@ -451,14 +453,19 @@ export namespace ClaudeCode {
   }
 
   // the environment Claude Code runs in: illi's, but the mark of a Claude
-  // Code session around illi (as when illi runs inside one); a call illi
-  // refits (Ask.room: a turn's, an agent's) with Claude Code's compaction
-  // off (DISABLE_COMPACT), so one outgrowing the window ends "Prompt is
-  // too long" (`full`) and illi folds the chat into its tree, or recaps
-  // the agent's log (Tools.refit), never Claude Code's summary; one
-  // without room (a summary, a goal check, a recap) keeps it
+  // Code session around illi (as when illi runs inside one), with Claude
+  // Code's advisor off (CLAUDE_CODE_DISABLE_ADVISOR_TOOL, as its own
+  // changelog names it; the user's Claude Code keeps it): its answer comes
+  // back locked, illi can neither show nor keep it, and once it has
+  // answered Claude Code's requests leave no room for illi's mark (MARK);
+  // a call illi refits (Ask.room: a turn's, an agent's) with Claude
+  // Code's compaction off (DISABLE_COMPACT), so one outgrowing the window
+  // ends "Prompt is too long" (`full`) and illi folds the chat into its
+  // tree, or recaps the agent's log (Tools.refit), never Claude Code's
+  // summary; one without room (a summary, a goal check, a recap) keeps it
   export function env(ask: Ask): Record<string, string> {
     const env = ClaudeCode.folder_env(config.config_claude_dir());
+    env.CLAUDE_CODE_DISABLE_ADVISOR_TOOL = "1";
     if (ask.room !== undefined) {
       env.DISABLE_COMPACT = "1";
     }
