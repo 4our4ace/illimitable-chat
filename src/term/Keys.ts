@@ -467,14 +467,18 @@ export function term_take(t: Term): void {
   }
 }
 
-// Esc: the notes cleared, a sign-in waiting stopped (its note was one);
-// while work runs (illi's turn, its subagents), it says Esc again stops
-// it, and a second within AGAIN does, all of it, so a stray one never: a
-// stop leaves no agent to ask or report after it (background jobs go on:
-// /background)
+// Esc: the notes cleared, a sign-in waiting stopped (its note was one;
+// one stopped says so); while work runs (illi's turn, its subagents), it
+// says Esc again stops it, and a second within AGAIN does, all of it, so
+// a stray one never: a stop leaves no agent to ask or report after it
+// (background jobs go on: /background)
 export function term_esc(t: Term): void {
   term_unnote(t);
-  t.login?.abort();
+  if (t.login) {
+    t.login.abort();
+    t.login = null;
+    term_note(t, "The sign-in stopped: /login starts it again.");
+  }
   if (!View.view_running(t.v)) {
     return;
   }

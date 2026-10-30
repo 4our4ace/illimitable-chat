@@ -5,7 +5,8 @@
 // beside it, read back as written; none, nothing connected; one that
 // won't read never written over; a change waits on another illi's lock,
 // the entries illi doesn't read kept, one that can't be saved saying why
-// plainly and leaving nothing behind; a vendor's keys of the wrong shape
+// plainly and leaving nothing behind; a lock held past its wait given up,
+// one the file system refuses gone on without; a vendor's keys of the wrong shape
 // dropped, the one in use naming no key the last added (none: the
 // environment's); ChatGPT's accounts of the wrong shape or twice dropped,
 // opencode's login one of them unless it says not; another vendor left
@@ -37,6 +38,7 @@ process.env.ANTHROPIC_API_KEY = "sk-ant-from-env-0001";
 process.env.OPENAI_API_KEY    = "";
 
 const { Accounts, ENV } = await import("./Accounts.ts");
+const { Flock } = await import("./Flock.ts");
 const config = await import("./Config.ts");
 
 afterAll(() => {
@@ -93,6 +95,16 @@ test("a change waits while another illi holds the file's lock, then changes what
     expect(fs.readdirSync(STORE).sort()).toEqual([".accounts.lock", "accounts.json"]);
   }
   expect(Accounts.why({ code: "ENOSPC" }, STORE)).toBe(": the disk is full");
+});
+
+test("a lock another holds is waited on, then given up past its wait; one the file system refuses (no lock to take) lets the change go on without it", async () => {
+  const lock = STORE + "/.accounts.lock";
+  const holder = Bun.spawn(["python3", "-I", "-c", "import fcntl,sys,time;f=open(sys.argv[1],'w');fcntl.flock(f,fcntl.LOCK_EX);print('held',flush=True);time.sleep(0.6)", lock], { stdout: "pipe" });
+  expect(new TextDecoder().decode((await holder.stdout.getReader().read()).value)).toContain("held");
+  expect(Flock.sync(lock, 100, () => "ran")).toBeUndefined();
+  await holder.exited;
+  expect(Flock.sync(lock, 100, () => "ran")).toBe("ran");
+  expect(Flock.take(987654)).toBe("none");
 });
 
 test("a vendor's keys of the wrong shape dropped, the one in use naming no key the last added (none: the environment's); ChatGPT's accounts of the wrong shape or twice dropped, opencode's one of them unless it says not; a vendor of neither left out", () => {

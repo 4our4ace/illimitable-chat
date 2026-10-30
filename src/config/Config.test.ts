@@ -16,12 +16,13 @@
 // related's (on, screen, off; true and false as the old on and off) as
 // the radar at the side and its lines given to the model. An unknown
 // argument is named. A provider let go that leaves no pick offered keeps
-// the picks as they were, never ending illi.
+// the picks as they were, never ending illi. A pick of a provider illi
+// doesn't know (a newer illi's) reads without crashing.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
-import { LABELS, type Offer } from "../ai/Pick.ts";
+import { LABELS, Pick, type Offer } from "../ai/Pick.ts";
 
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-config-");
 for (const k of Object.keys(process.env).filter((k) => k.startsWith("ILLI_"))) {
@@ -198,4 +199,10 @@ test("a provider let go that leaves no pick offered (the models offered all anot
     config.config_set("vendors", vendors === "" ? null : vendors);
     config.config_accounts(true);
   }
+});
+
+test("a pick of a provider this illi doesn't know (a newer illi's, saved in a chat) reads without crashing, its provider named by its id", () => {
+  const newer = { vendor: "newer-api" as any, model: "m-1", effort: "high", speed: "slow" };
+  expect([Pick.shown(newer), Pick.provider(newer.vendor, true), Pick.window(newer), Pick.list(newer.vendor), Pick.models([newer.vendor], ["m-1"])]).toEqual(["m-1 · high", "Newer-api", undefined, [], []]);
+  expect([Pick.provider("claude-api", true), Pick.provider("claude-code")]).toEqual(["The Anthropic API", "your Claude plan"]);
 });

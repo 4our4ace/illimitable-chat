@@ -76,7 +76,8 @@
 // use). /login signs a folder in (`claude auth login`, through pipes:
 // Claude Code opens its page itself, the code the page shows given it;
 // it waits on the person, so only a stop, or SIGNIN passing, ends it
-// early), asks whom it's logged in as (`claude auth status`) and logs
+// early; it ends as Claude Code does, its last words waited for DRAIN at
+// most, as a child it left may hold its output), asks whom it's logged in as (`claude auth status`) and logs
 // one of illi's out (`claude auth logout`), each of those two given up
 // past AUTH (killed, its output let go).
 
@@ -208,6 +209,10 @@ const AUTH = 30e3;
 // how long a sign-in may wait for the person (ms): as long as Claude's
 // page is good for, about
 const SIGNIN = 10 * 60e3;
+
+// how long a sign-in's last words are waited for once Claude Code ended
+// (ms): a child it left (a browser's launcher) may hold its output open
+const DRAIN = 1e3;
 
 // Claude Code asked a model's window (ClaudeCode.size): on its control
 // channel, as a call without tools runs (none of its tools, MCP servers,
@@ -544,9 +549,10 @@ export namespace ClaudeCode {
   // Claude Code opens its page itself, and as it shows the page's link,
   // then each time it asks again for the code the page shows, `ask` is
   // told the link ("": none told); `give` gives it one; done as it exits
-  // (signed in; else, thrown, why not: its last words, said to be its).
-  // Stop kills it, as does SIGNIN passing. Thrown at once: Claude Code
-  // isn't here
+  // (signed in; else, thrown, why not: its last words, said to be its,
+  // waited for DRAIN at most, as a child it left may hold its output
+  // open). Stop kills it, as does SIGNIN passing, either ending it at
+  // once. Thrown at once: Claude Code isn't here
   export function signin(dir: string, stop: AbortSignal, ask: (url: string) => void): { give: (code: string) => void; done: Promise<void> } {
     if (dir !== "") {
       fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -563,9 +569,9 @@ export namespace ClaudeCode {
     const timer = setTimeout(() => ((late = true), kill()), SIGNIN);
     let said = "";
     let asked = 0;
+    const from = proc.stdout.getReader();
     const read = (async () => {
       const text = new TextDecoder();
-      const from = proc.stdout.getReader();
       for (let got = await from.read(); !got.done; got = await from.read()) {
         said += text.decode(got.value, { stream: true });
         const url = /https:\/\/\S+(?=\s)/.exec(said)?.[0] ?? "";
@@ -574,7 +580,18 @@ export namespace ClaudeCode {
         }
       }
     })().catch(() => {});
-    const errs = new Response(proc.stderr).text();
+    let errsaid = "";
+    const errfrom = proc.stderr.getReader();
+    const errs = (async () => {
+      const text = new TextDecoder();
+      for (let got = await errfrom.read(); !got.done; got = await errfrom.read()) {
+        errsaid += text.decode(got.value, { stream: true });
+      }
+    })().catch(() => {});
+    const let_go = () => {
+      void from.cancel().catch(() => {});
+      void errfrom.cancel().catch(() => {});
+    };
     const give = (code: string) => {
       try {
         proc.stdin.write(code + "\n");
@@ -583,17 +600,20 @@ export namespace ClaudeCode {
     };
     const done = (async () => {
       const code = await proc.exited;
-      await read;
       clearTimeout(timer);
       stop.removeEventListener("abort", kill);
       if (stop.aborted) {
+        let_go();
         throw new Error("the login was stopped");
       }
       if (late) {
+        let_go();
         throw new Error("no code came in " + SIGNIN / 60e3 + " minutes, so illi stopped waiting");
       }
+      await Promise.race([Promise.all([read, errs]), Bun.sleep(DRAIN)]);
+      let_go();
       if (code !== 0) {
-        const lines = (said + "\n" + (await errs)).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").split("\n").map((l) => l.trim());
+        const lines = (said + "\n" + errsaid).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").split("\n").map((l) => l.trim());
         const last = lines.filter((l) => l !== "" && !/paste (?:the )?code/i.test(l)).at(-1);
         throw new Error(last === undefined ? "Claude Code's sign-in ended (exit " + code + ")" : "Claude Code said “" + last + "”");
       }

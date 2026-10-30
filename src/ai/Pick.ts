@@ -98,8 +98,10 @@ const PROVIDERS: Record<Vendor, string> = {
 
 export namespace Pick {
 
+  // a vendor's model by its label (a vendor not known here, as a newer
+  // illi's saved in a chat: none)
   export function model(vendor: Vendor, label: string): Model | undefined {
-    return MODELS[vendor].find((m) => m.label === label);
+    return MODELS[vendor]?.find((m) => m.label === label);
   }
 
   // a vendor's models as it tells them: a known one takes what it's told
@@ -129,7 +131,7 @@ export namespace Pick {
 
   // a vendor's models as known now (each a copy), to keep
   export function list(vendor: Vendor): Model[] {
-    return MODELS[vendor].map((m) => ({ ...m }));
+    return (MODELS[vendor] ?? []).map((m) => ({ ...m }));
   }
 
   // the tokens a pick's model takes in (none: not known)
@@ -145,7 +147,7 @@ export namespace Pick {
 
   // a vendor's model by the id it runs as
   export function by_id(vendor: Vendor, id: string): Model | undefined {
-    return MODELS[vendor].find((m) => m.id === id);
+    return MODELS[vendor]?.find((m) => m.id === id);
   }
 
   // a vendor's model, by the id it runs as, takes `window` tokens in, as
@@ -167,7 +169,7 @@ export namespace Pick {
 
   // the models offered (by label) of these vendors, each with its vendor
   export function models(vendors: Vendor[], labels: string[]): Array<[Vendor, Model]> {
-    return vendors.flatMap((v) => MODELS[v].filter((m) => labels.includes(m.label)).map((m): [Vendor, Model] => [v, m]));
+    return vendors.flatMap((v) => (MODELS[v] ?? []).filter((m) => labels.includes(m.label)).map((m): [Vendor, Model] => [v, m]));
   }
 
   // each with the part the move steps
@@ -216,7 +218,7 @@ export namespace Pick {
   // a vendor as a note names it ("the Anthropic API"; up: starting a
   // sentence)
   export function provider(vendor: Vendor, up = false): string {
-    const name = PROVIDERS[vendor];
+    const name = PROVIDERS[vendor] ?? vendor;
     return up ? name[0].toUpperCase() + name.slice(1) : name;
   }
 

@@ -45,6 +45,7 @@ function tar(args: string[], cwd = TMP): string {
 put(ROOT + "/config.json", JSON.stringify({ side: "left", vendors: "chatgpt,claude-api", anthropic_api_key: "sk-ant-0123456789abcdefghij", login: "auth/other-login.json" }));
 put(ROOT + "/login.json", JSON.stringify({ openai: { access: "secret-access", refresh: "secret-refresh" } }));
 put(ROOT + "/auth/other-login.json", "{}");
+put(ROOT + "/auth/.auth.4242.json", JSON.stringify({ openai: { access: "half-written-access" } }));
 put(ROOT + "/locks/0123456789ab.lock", "");
 put(ROOT + "/illi.log", "log\n");
 put(ROOT + "/update.json", JSON.stringify({ checked: "2026-10-20T00:00:00.000Z" }));
