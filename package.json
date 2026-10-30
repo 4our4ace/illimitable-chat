@@ -1,6 +1,6 @@
 {
   "name": "illimitable-chat",
-  "version": "0.3.11",
+  "version": "0.3.12",
   "private": true,
   "bin": {
     "illi": "src/main.ts"
