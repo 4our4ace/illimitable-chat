@@ -200,6 +200,10 @@ const NO_MARKS  = "Anthropic refused Claude Code's request over a technical limi
 // model's window asked (ClaudeCode.size)
 const AUTH = 30e3;
 
+// how long a sign-in may wait for the person (ms): as long as Claude's
+// page is good for, about
+const SIGNIN = 10 * 60e3;
+
 // Claude Code asked a model's window (ClaudeCode.size): on its control
 // channel, as a call without tools runs (none of its tools, MCP servers,
 // commands or hooks; no session kept)
@@ -486,7 +490,9 @@ export namespace ClaudeCode {
   }
 
   // a Claude Code auth command in a folder (folder_env): what it printed
-  // and its exit code, killed past AUTH; thrown: Claude Code isn't here
+  // and its exit code; thrown: Claude Code isn't here, or didn't end in
+  // AUTH (killed, and its output let go: a child it left may hold the
+  // pipes open)
   export async function auth(dir: string, args: string[]): Promise<{ out: string; code: number }> {
     let proc: Subprocess<"ignore", "pipe", "pipe">;
     try {
@@ -494,10 +500,16 @@ export namespace ClaudeCode {
     } catch (err: any) {
       throw new Error(/ENOENT|not found/i.test(String(err?.message)) ? NO_CLAUDE : String(err?.message ?? err));
     }
-    const late = setTimeout(() => proc.kill("SIGKILL"), AUTH);
-    const [out, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited, new Response(proc.stderr).text()]);
+    let late: Timer | undefined;
+    const ran  = Promise.all([new Response(proc.stdout).text(), proc.exited, new Response(proc.stderr).text()]);
+    const over = new Promise<null>((done) => (late = setTimeout(() => done(null), AUTH)));
+    const got  = await Promise.race([ran, over]);
     clearTimeout(late);
-    return { out, code };
+    if (got === null) {
+      proc.kill("SIGKILL");
+      throw new Error("Claude Code didn't answer in " + AUTH / 1000 + " seconds");
+    }
+    return { out: got[0], code: got[1] };
   }
 
   // whom a folder's Claude Code is logged in as (`claude auth status`):
@@ -510,7 +522,7 @@ export namespace ClaudeCode {
     try {
       data = JSON.parse(out);
     } catch {
-      throw new Error("Claude Code didn't say whom it's logged in as");
+      throw new Error("Claude Code didn't say whom it's logged in as: `claude update` brings a Claude Code that does");
     }
     const text = (x: unknown) => (typeof x === "string" ? x : "");
     return data?.loggedIn !== true ? null : { email: text(data.email), plan: text(data.subscriptionType) || (data.authMethod === "claude.ai" ? "" : text(data.authMethod)), org: text(data.orgName) };
@@ -524,10 +536,12 @@ export namespace ClaudeCode {
 
   // a folder signed in to a Claude plan (`claude auth login --claudeai`,
   // through pipes; one of illi's made first, readable by the user alone):
-  // Claude Code opens its page itself, and each time it asks for the code
-  // the page shows, `ask` is told the page's link ("": none told); `give`
-  // gives it one; done as it exits (signed in; else, thrown, why not in
-  // its last words). Stop kills it. Thrown at once: Claude Code isn't here
+  // Claude Code opens its page itself, and as it shows the page's link,
+  // then each time it asks again for the code the page shows, `ask` is
+  // told the link ("": none told); `give` gives it one; done as it exits
+  // (signed in; else, thrown, why not: its last words, said to be its).
+  // Stop kills it,
+  // as does SIGNIN passing. Thrown at once: Claude Code isn't here
   export function signin(dir: string, stop: AbortSignal, ask: (url: string) => void): { give: (code: string) => void; done: Promise<void> } {
     if (dir !== "") {
       fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -540,6 +554,8 @@ export namespace ClaudeCode {
     }
     const kill = () => proc.kill("SIGKILL");
     stop.addEventListener("abort", kill, { once: true });
+    let late = false;
+    const timer = setTimeout(() => ((late = true), kill()), SIGNIN);
     let said = "";
     let asked = 0;
     const read = (async () => {
@@ -547,8 +563,9 @@ export namespace ClaudeCode {
       const from = proc.stdout.getReader();
       for (let got = await from.read(); !got.done; got = await from.read()) {
         said += text.decode(got.value, { stream: true });
-        for (const prompts = said.split(/paste (?:the )?code/i).length - 1; asked < prompts; asked++) {
-          ask(/https:\/\/\S+(?=\s)/.exec(said)?.[0] ?? "");
+        const url = /https:\/\/\S+(?=\s)/.exec(said)?.[0] ?? "";
+        for (const asks = Math.max(said.split(/paste (?:the )?code/i).length - 1, url === "" ? 0 : 1); asked < asks; asked++) {
+          ask(url);
         }
       }
     })().catch(() => {});
@@ -562,13 +579,18 @@ export namespace ClaudeCode {
     const done = (async () => {
       const code = await proc.exited;
       await read;
+      clearTimeout(timer);
       stop.removeEventListener("abort", kill);
       if (stop.aborted) {
         throw new Error("the login was stopped");
       }
+      if (late) {
+        throw new Error("no code came in " + SIGNIN / 60e3 + " minutes, so illi stopped waiting");
+      }
       if (code !== 0) {
         const lines = (said + "\n" + (await errs)).replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").split("\n").map((l) => l.trim());
-        throw new Error(lines.filter((l) => l !== "" && !/paste (?:the )?code/i.test(l)).at(-1) ?? "Claude Code's login ended (exit " + code + ")");
+        const last = lines.filter((l) => l !== "" && !/paste (?:the )?code/i.test(l)).at(-1);
+        throw new Error(last === undefined ? "Claude Code's sign-in ended (exit " + code + ")" : "Claude Code said “" + last + "”");
       }
     })();
     return { give, done };
@@ -661,7 +683,8 @@ export namespace ClaudeCode {
   // use has them (a plan's are its own: one without long context gets
   // 200k), each learned and kept for the next start; asked once an
   // account a start (its folder, and whom it's logged in as: one signed
-  // in since is asked anew), so a window is right before any message.
+  // in since is asked anew), so a window is right before any message;
+  // one model after another, so a start runs one Claude Code at a time.
   // true: a window changed
   export function models(): Promise<boolean> {
     const dir  = config.config_claude_dir();
@@ -670,13 +693,16 @@ export namespace ClaudeCode {
     if (sized_by !== by) {
       [sized, sized_by] = [null, by];
     }
-    sized ??= Promise.all(Pick.list("claude-code").map(async (m) => Pick.told("claude-code", m.id, await ClaudeCode.size(dir, m.id)))).then((told) => {
-      const news = told.some(Boolean);
+    sized ??= (async () => {
+      let news = false;
+      for (const m of Pick.list("claude-code")) {
+        news = Pick.told("claude-code", m.id, await ClaudeCode.size(dir, m.id)) || news;
+      }
       if (news) {
         config.config_models_keep("claude-code", Pick.list("claude-code"));
       }
       return news;
-    });
+    })();
     return sized;
   }
 
@@ -685,7 +711,8 @@ export namespace ClaudeCode {
   // (get_context_usage, summed up: no model called, nothing counted), a
   // Claude Code each (set_model leaves the window as it was), stopped
   // once it said; 0: none told (Claude Code isn't here, or said nothing
-  // that reads by AUTH)
+  // that reads by AUTH: killed then, its output let go, as a child it
+  // left may hold it open)
   export async function size(dir: string, id: string): Promise<number> {
     let proc: Subprocess<"pipe", "pipe", "ignore">;
     try {
@@ -693,12 +720,15 @@ export namespace ClaudeCode {
     } catch {
       return 0;
     }
-    const late = setTimeout(() => proc.kill("SIGKILL"), AUTH);
+    const from = proc.stdout.getReader();
+    const late = setTimeout(() => {
+      proc.kill("SIGKILL");
+      void from.cancel().catch(() => {});
+    }, AUTH);
     try {
       proc.stdin.write(JSON.stringify({ type: "control_request", request_id: "size", request: { subtype: "get_context_usage", detail: "summary" } }) + "\n");
       proc.stdin.flush();
       const text = new TextDecoder();
-      const from = proc.stdout.getReader();
       let said = "";
       for (let got = await from.read(); !got.done; got = await from.read()) {
         const lines = (said + text.decode(got.value, { stream: true })).split("\n");

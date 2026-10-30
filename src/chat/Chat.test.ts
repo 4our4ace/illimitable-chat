@@ -1022,7 +1022,7 @@ test("the vendors offered changing, the chat's pick on one gone gives way to the
     go();
     await until(() => !chat.busy);
     expect(chat.pick.vendor).toBe("chatgpt");
-    expect(Memory.message(chat.mem, chat.mem.count - 1)).toMatchObject({ kind: "note", text: "claude-api isn't offered now, so the chat runs on " + Pick.shown(chat.pick) + "." });
+    expect(Memory.message(chat.mem, chat.mem.count - 1)).toMatchObject({ kind: "note", text: "The Anthropic API isn't available now, so the chat runs on " + Pick.shown(chat.pick) + " on your ChatGPT plan." });
     await until(() => v.pick?.vendor === "chatgpt");
   } finally {
     hold = Promise.resolve();

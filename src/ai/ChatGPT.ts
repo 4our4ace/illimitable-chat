@@ -42,13 +42,13 @@
 import * as fs from "node:fs";
 import { json_object } from "../tools/Clip.ts";
 import * as path from "node:path";
-import { dlopen } from "bun:ffi";
 import type { Ask } from "./AskAI.ts";
 import { Agent, type Wire } from "./Agent.ts";
 import { OpenAI } from "./OpenAI.ts";
 import { Pick, SPEEDS, type Model } from "./Pick.ts";
 import type { Limit, Plan } from "../ui/View.ts";
 import { Accounts, type Logins, type Saved } from "../config/Accounts.ts";
+import { EX, Flock, NB, UN } from "../config/Flock.ts";
 import * as config from "../config/Config.ts";
 
 // Types
@@ -98,11 +98,6 @@ const EARLY = 300e3;
 const LOCKED = 30e3;
 
 const NO_LOGIN = "no ChatGPT login: type /login to sign in (or sign in with opencode: `opencode auth login`)";
-
-// flock(2)'s operations
-const EX = 2;
-const NB = 4;
-const UN = 8;
 
 // the plan's windows, as a response's headers name them (x-codex-<window>-
 // used-percent, -window-minutes, -reset-after-seconds, -reset-at): each a
@@ -331,12 +326,17 @@ export namespace ChatGPT {
   }
 
   // a login file written whole: a file of its own, readable by its owner
-  // alone, then moved over
+  // alone, then moved over (that file gone if either fails)
   export function write(file: string, data: any): void {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = path.join(path.dirname(file), ".auth." + process.pid + ".json");
-    fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
-    fs.renameSync(tmp, file);
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
+      fs.renameSync(tmp, file);
+    } catch (err) {
+      fs.rmSync(tmp, { force: true });
+      throw err;
+    }
   }
 
   // the login file: the one config names, else illi's own if there, else
@@ -498,12 +498,13 @@ export namespace ChatGPT {
   // (null: that one let go, so opencode's is used if it may be), under the
   // lock its renewals take: the one it replaces kept apart (read under the
   // lock, as each renewal spends its refresh token: a copy from before
-  // wouldn't renew), the one put there kept apart no longer. A switch
-  // (switching: an account /login listed) takes the one put there by its
-  // key from the accounts read under the lock, for the same reason, and
-  // writes nothing if the file holds it already (another terminal put it
-  // there, maybe renewed since). A file `login` names is never let go.
-  // null: done; else why not
+  // wouldn't renew), the one put there kept apart no longer (that failing,
+  // the switch is done all the same: logged; the list shows it once). A
+  // switch (switching: an account /login listed) takes the one put there
+  // by its key from the accounts read under the lock, for the same
+  // reason, and writes nothing if the file holds it already (another
+  // terminal put it there, maybe renewed since). A file `login` names is
+  // never let go. null: done; else why not
   export async function swap(entry: Record<string, unknown> | null, switching = false): Promise<string | null> {
     const file = ChatGPT.own();
     if (entry === null && config.LOGIN_SET !== null) {
@@ -531,9 +532,14 @@ export namespace ChatGPT {
       }
       return null;
     });
-    const done = why ?? (key === "" ? null : ChatGPT.forget(key));
+    if (why === null && key !== "") {
+      const kept = ChatGPT.forget(key);
+      if (kept !== null) {
+        console.error("chatgpt: the account put in use stays among those kept apart: " + kept);
+      }
+    }
     ChatGPT.sync();
-    return done;
+    return why;
   }
 
   // the login file, and its entry for OpenAI; one unreadable says so
@@ -570,7 +576,7 @@ export namespace ChatGPT {
   // fn, holding the lock opencode's other tools take on the login file
   // (flock on <file>.lock); with no flock here, without it
   export async function locked<T>(file: string, fn: () => Promise<T>): Promise<T> {
-    const flock = ChatGPT.flock();
+    const flock = Flock.fn();
     const lock = file + ".lock";
     const fd = fs.openSync(lock, "w");
     try {
@@ -585,16 +591,6 @@ export namespace ChatGPT {
     } finally {
       flock?.(fd, UN);
       fs.closeSync(fd);
-    }
-  }
-
-  export function flock(): ((fd: number, op: number) => number) | null {
-    try {
-      const libc = process.platform === "darwin" ? "libSystem.B.dylib" : "libc.so.6";
-      const lib = dlopen(libc, { flock: { args: ["i32", "i32"], returns: "i32" } });
-      return (fd, op) => lib.symbols.flock(fd, op) as number;
-    } catch {
-      return null;
     }
   }
 

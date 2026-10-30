@@ -161,8 +161,8 @@ test("an archive's paths: inside its folder, files and folders only", () => {
   expect(Profiles.profile_unsafe(["a", "b"], ["-", "h"])).toContain("link");
 });
 
-test("an export: the folder but the login (one its config names in a subfolder too) and its lock, the accounts /login connected (one being written too), the locks, the log, the other profiles, the profiles used last, the look for a release, the state every profile shares (the models told, naming the account; the folders trusted; what was seen, run and picked); secrets left out", async () => {
-  for (const part of ["login.json.lock", "accounts.json", ".accounts.4242.json", "models.json", "trust.json", "seen.json", "used.json", "picked.json"]) {
+test("an export: the folder but the login (one its config names in a subfolder too, one being written too) and its lock, the accounts /login connected (one being written too, its lock), the locks, the log, the other profiles, the profiles used last, the look for a release, the state every profile shares (the models told, naming the account; the folders trusted; what was seen, run and picked); secrets left out", async () => {
+  for (const part of ["login.json.lock", ".auth.4242.json", "accounts.json", ".accounts.4242.json", ".accounts.lock", "models.json", "trust.json", "seen.json", "used.json", "picked.json"]) {
     put(ROOT + "/" + part, JSON.stringify(part === "models.json" ? { account: "acct-1", vendors: {} } : {}));
   }
   const file = TMP + "/illi-profile-default.tar.gz";
@@ -219,6 +219,7 @@ test("an import: a new profile, its config's commands and files dropped (a login
   put(TMP + "/evil/login.json", "{}");
   put(TMP + "/evil/accounts.json", "{}");
   put(TMP + "/evil/.accounts.7.json", "{}");
+  put(TMP + "/evil/.auth.7.json", "{}");
   put(TMP + "/evil/chat/main/x.jsonl", "{}\n");
   tar(["-czf", TMP + "/evil.tar.gz", "-C", TMP + "/evil", "."]);
   const got = await Profiles.profile_import(other, file, "home");
@@ -232,7 +233,7 @@ test("an import: a new profile, its config's commands and files dropped (a login
   expect([evil.plugins, evil.aside]).toEqual([["kit", "spy"], ["hooks.json", "permissions.json"]]);
   expect(JSON.parse(fs.readFileSync(other + "/profiles/evil/config.json", "utf8"))).toEqual({ side: "right", off: "x, kit, spy" });
   expect(["hooks.json", "permissions.json", "hooks.json.imported", "permissions.json.imported"].map((f) => fs.existsSync(other + "/profiles/evil/" + f))).toEqual([false, false, true, true]);
-  expect(["login.json", "accounts.json", ".accounts.7.json"].map((f) => fs.existsSync(other + "/profiles/evil/" + f))).toEqual([false, false, false]);
+  expect(["login.json", "accounts.json", ".accounts.7.json", ".auth.7.json"].map((f) => fs.existsSync(other + "/profiles/evil/" + f))).toEqual([false, false, false, false]);
   expect(Profiles.profile_list(other)).toEqual(["default", "evil", "home"]);
   expect(fs.readdirSync(other + "/profiles").filter((p) => p.startsWith("."))).toEqual([]);
 });

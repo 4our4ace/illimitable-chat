@@ -3,7 +3,9 @@
 // `bun test Accounts.test.ts`. The accounts' file: written readable by
 // its owner alone (an older file's looser mode never kept), nothing left
 // beside it, read back as written; none, nothing connected; one that
-// won't read never written over; a vendor's keys of the wrong shape
+// won't read never written over; a change waits on another illi's lock,
+// the entries illi doesn't read kept, one that can't be saved saying why
+// plainly and leaving nothing behind; a vendor's keys of the wrong shape
 // dropped, the one in use naming no key the last added (none: the
 // environment's); ChatGPT's accounts of the wrong shape or twice dropped,
 // opencode's login one of them unless it says not; another vendor left
@@ -66,6 +68,31 @@ test("a file that won't read is never written over: its keys would be lost", () 
   fs.rmSync(FILE);
   expect(Accounts.edit(STORE, (store) => ({ ...store, "openai-api": { use: ENV, keys: [] } }))).toBeNull();
   expect(Accounts.read(STORE)).toEqual({ "openai-api": { use: ENV, keys: [] } });
+});
+
+test("a change waits while another illi holds the file's lock, then changes what it finds; the entries illi doesn't read are kept; one that can't be saved says why in plain words, leaving nothing behind", async () => {
+  fs.writeFileSync(FILE, JSON.stringify({ "claude-api": { use: ENV, keys: [] }, "newer-vendor": { keys: ["kept"] } }));
+  const holder = Bun.spawn(["python3", "-I", "-c", "import fcntl,sys,time;f=open(sys.argv[1],'w');fcntl.flock(f,fcntl.LOCK_EX);print('held',flush=True);time.sleep(0.4)", STORE + "/.accounts.lock"], { stdout: "pipe" });
+  const reader = holder.stdout.getReader();
+  expect(new TextDecoder().decode((await reader.read()).value)).toContain("held");
+  const start = Date.now();
+  expect(Accounts.edit(STORE, (store) => ({ ...store, "openai-api": { use: ENV, keys: [] } }))).toBeNull();
+  expect(Date.now() - start).toBeGreaterThan(200);
+  await holder.exited;
+  expect(JSON.parse(fs.readFileSync(FILE, "utf8"))).toEqual({ "newer-vendor": { keys: ["kept"] }, "claude-api": { use: ENV, keys: [] }, "openai-api": { use: ENV, keys: [] } });
+  expect(Accounts.edit(STORE, ({ "openai-api": _, ...rest }) => rest)).toBeNull();
+  expect(Object.keys(JSON.parse(fs.readFileSync(FILE, "utf8")))).toEqual(["newer-vendor", "claude-api"]);
+  expect([Accounts.owned(".accounts.lock"), Accounts.owned(".accounts.123.json")]).toEqual([true, true]);
+  if (process.getuid?.() !== 0) {
+    fs.chmodSync(STORE, 0o500);
+    try {
+      expect(Accounts.edit(STORE, () => ({}))).toBe("the accounts file couldn't be saved: illi isn't allowed to write in " + STORE);
+    } finally {
+      fs.chmodSync(STORE, 0o700);
+    }
+    expect(fs.readdirSync(STORE).sort()).toEqual([".accounts.lock", "accounts.json"]);
+  }
+  expect(Accounts.why({ code: "ENOSPC" }, STORE)).toBe(": the disk is full");
 });
 
 test("a vendor's keys of the wrong shape dropped, the one in use naming no key the last added (none: the environment's); ChatGPT's accounts of the wrong shape or twice dropped, opencode's one of them unless it says not; a vendor of neither left out", () => {

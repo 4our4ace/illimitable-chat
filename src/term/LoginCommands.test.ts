@@ -29,9 +29,10 @@
 // your Claude Code logged in, its login connects it (or a sign-in to
 // another), run on as its environment names it; another account signs
 // in in a folder of illi's, Claude Code's page's link told, the code
-// asked as dots and given it, a wrong one saying why and Esc stopping
-// it, each leaving no folder; signed in, kept and in use, its folder
-// readable by its owner alone. Enter switches; Del leaves your Claude
+// asked as dots and given it, a wrong one saying why (in Claude Code's
+// words, said to be its) and Esc stopping it, each leaving no folder,
+// as does one signed in that can't be kept (logged out); signed in,
+// kept and in use, its folder readable by its owner alone. Enter switches; Del leaves your Claude
 // Code logged in, and logs one of illi's out, its folder gone; logging
 // out of the Claude plan logs all of illi's out, the plan no longer
 // offered, your Claude Code still logged in.
@@ -73,6 +74,7 @@ esac
 `, { mode: 0o755 });
 
 const { term_login } = await import("./LoginCommands.ts");
+const { term_esc } = await import("./Keys.ts");
 const { ChatGPT } = await import("../ai/ChatGPT.ts");
 const { ClaudeCode } = await import("../ai/ClaudeCode.ts");
 const { Accounts, ENV } = await import("../config/Accounts.ts");
@@ -270,7 +272,7 @@ test("the vendors setting leaving out what /login connected, /login says so and 
   open(t, "OpenAI API key");
   expect(t.question.ask.hint).toBe("paste it here: a key from platform.openai.com");
   t.question.ask.done("sk-proj-openai-key-5678");
-  expect(await noted(t, "Connected")).toBe("Connected OpenAI API (sk-proj…5678): its models are in /model. Your vendors setting leaves openai-api out, though: /set vendors default lets /login decide.");
+  expect(await noted(t, "Connected")).toBe("Connected OpenAI API (sk-proj…5678): its models are in /model. Your vendors setting leaves the OpenAI API out, though: /set vendors default lets /login decide.");
   expect([config.OFFER.vendors, config.KEYS.openai]).toEqual([["chatgpt"], "sk-proj-openai-key-5678"]);
   config.config_set("vendors", null);
   expect(config.OFFER.vendors).toEqual(["openai-api"]);
@@ -393,12 +395,23 @@ test("another account signs in in a folder of illi's: Claude Code's page's link 
   expect([t.question.ask.hint, t.question.ask.secret, note(t)]).toEqual(["paste the code from Claude's page", true, "Sign in to Claude in your browser (if it didn't open: https://claude.com/cai/oauth/authorize?code=true&state=s1), then paste the code the page shows."]);
   expect(t.question.ask.done("")).toBe("Paste the code first.");
   t.question.ask.done("bad-code");
-  expect(await noted(t, "Login failed")).toBe("Login failed: OAuth error: Invalid code.");
-  expect([t.question, fs.existsSync(FOLDER("c1"))]).toEqual([null, false]);
+  expect(await noted(t, "Login failed")).toBe("Login failed: Claude Code said “OAuth error: Invalid code”.");
+  await until(() => !fs.existsSync(FOLDER("c1")));
+  expect(t.question).toBeNull();
   await add();
   t.question.back();
-  await until(() => t.login === null);
-  expect([t.question, t.choose.title, fs.existsSync(FOLDER("c1")), note(t)]).toEqual([null, "Claude plan", false, "Login failed: OAuth error: Invalid code."]);
+  await until(() => t.login === null && !fs.existsSync(FOLDER("c1")));
+  expect([t.question, t.choose.title, note(t)]).toEqual([null, "Claude plan", "Login failed: Claude Code said “OAuth error: Invalid code”."]);
+  await add();
+  term_esc(t);
+  await until(() => t.login === null && !fs.existsSync(FOLDER("c1")));
+  const kept = fs.readFileSync(Accounts.file(config.ROOT), "utf8");
+  fs.writeFileSync(Accounts.file(config.ROOT), "{ broken");
+  await add();
+  t.question.ask.done("good-code");
+  expect(await noted(t, "Can't change")).toStartWith("Can't change the accounts: the accounts file");
+  await until(() => !fs.existsSync(FOLDER("c1")));
+  fs.writeFileSync(Accounts.file(config.ROOT), kept);
   await add();
   t.question.ask.done("good-code");
   expect(await noted(t, "Signed in")).toBe("Signed in to your Claude plan as c1@example.com: illi runs on it now.");
@@ -409,7 +422,7 @@ test("another account signs in in a folder of illi's: Claude Code's page's link 
 test("Enter switches; Del leaves your Claude Code logged in, logs one of illi's out (its folder gone); logging out of the Claude plan logs all of illi's out, the plan no longer offered", async () => {
   const t = term();
   open(t, "Claude plan");
-  expect([t.choose.names, t.choose.about.slice(0, 2), t.choose.here]).toEqual([["me@example.com", "c1@example.com", "+ add another account", "Log out of Claude plan"], ["max · your Claude Code", "max · illi's own folder"], 1]);
+  expect([t.choose.names, t.choose.about.slice(0, 2), t.choose.here]).toEqual([["me@example.com", "c1@example.com", "+ add another account", "Log out of Claude plan"], ["max · your Claude Code", "max · added in illi"], 1]);
   t.choose.pick(0);
   expect([note(t), config.config_claude_dir()]).toEqual(["Claude plan now runs on me@example.com.", ""]);
   open(t, "Claude plan");

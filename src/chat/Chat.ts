@@ -22,8 +22,10 @@
 // Plugins.emit), never waited for.
 
 import * as fs from "node:fs";
+import { Anthropic } from "../ai/Anthropic.ts";
 import { AskAI, type Call, type End, type Event, type Kind, type Vendor } from "../ai/AskAI.ts";
 import { ChatGPT } from "../ai/ChatGPT.ts";
+import { ClaudeCode } from "../ai/ClaudeCode.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
 import { Compactor } from "./Compactor.ts";
@@ -312,7 +314,7 @@ export namespace Chat {
     if (saved !== null && Pick.label(saved) !== Pick.label(pick)) {
       mem.pick = pick;
       Chat.save(chat);
-      Chat.note(chat, Pick.shown(saved) + " (" + saved.vendor + ") isn't offered here, so the chat now runs on " + Pick.shown(pick) + ".");
+      Chat.note(chat, Pick.shown(saved) + " on " + Pick.provider(saved.vendor) + " isn't available here, so the chat now runs on " + Pick.shown(pick) + " on " + Pick.provider(pick.vendor) + ".");
     }
     if (mem.count === 0) {
       Memory.push(mem, [{ kind: "illi", text: HELLO, line: HELLO_LINE }]);
@@ -368,8 +370,9 @@ export namespace Chat {
   }
 
   // the accounts followed while the chat is open (each ACCOUNTS): a
-  // provider connected or let go, here or in another terminal, or the
-  // vendors setting changed, offered or gone at once (Chat.offered)
+  // provider connected or let go, an account or key switched, here or in
+  // another terminal, or the vendors setting changed, offered or gone at
+  // once (Chat.offered), and the account in use asked anew (Chat.account)
   export function follow(chat: Chat): void {
     FOLLOWED.add(chat);
     if (following !== null) {
@@ -380,10 +383,36 @@ export namespace Chat {
       const keyed = config.config_accounts();
       if (keyed || config.OFFER.vendors.join() !== followed) {
         followed = config.OFFER.vendors.join();
-        FOLLOWED.forEach(Chat.offered);
+        FOLLOWED.forEach((chat) => {
+          Chat.account(chat);
+          Chat.offered(chat);
+        });
       }
     }, ACCOUNTS);
     following.unref?.();
+  }
+
+  // what the accounts in use tell, asked (at the start, after /login, and
+  // as the accounts change in another terminal): an Anthropic key's
+  // models, the Claude plan's windows (ClaudeCode.models: once an
+  // account), ChatGPT's login looked at and followed, its plan, use and
+  // catalog; the views told what changed
+  export function account(chat: Chat): void {
+    if (config.OFFER.vendors.includes("claude-api") && config.KEYS.anthropic) {
+      void Anthropic.models(config.KEYS.anthropic).then((news) => news && Chat.change(chat));
+    }
+    if (config.OFFER.vendors.includes("claude-code")) {
+      void ClaudeCode.models().then((news) => news && Chat.change(chat));
+    }
+    if (!config.OFFER.vendors.includes("chatgpt")) {
+      return;
+    }
+    ChatGPT.sync();
+    ChatGPT.follow();
+    if (ChatGPT.signed()) {
+      void ChatGPT.usage();
+      void ChatGPT.models();
+    }
   }
 
   // the vendors offered or a key in use changed: the views told; the
@@ -395,7 +424,7 @@ export namespace Chat {
       const was = chat.pick;
       chat.pick = chat.mem.pick = Pick.load(null, config.OFFER, config.PICK);
       Chat.save(chat);
-      Chat.note(chat, was.vendor + " isn't offered now, so the chat runs on " + Pick.shown(chat.pick) + (config.config_named() ? "." : " (/login connects it again)."));
+      Chat.note(chat, Pick.provider(was.vendor, true) + " isn't available now, so the chat runs on " + Pick.shown(chat.pick) + " on " + Pick.provider(chat.pick.vendor) + (config.config_named() ? "." : " (/login connects it again)."));
     }
     Chat.change(chat);
   }

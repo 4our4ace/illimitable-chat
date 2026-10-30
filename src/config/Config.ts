@@ -421,10 +421,10 @@ export function config_tips(pick: Pick, signed: boolean): string[] {
   for (const [name, vendor] of Object.entries(KEYED)) {
     if (KEYS[name] !== "" && !OFFER.vendors.includes(vendor)) {
       const list = (signed ? [...OFFER.vendors, vendor] : [vendor, ...OFFER.vendors]).join(",");
-      tips.push(VARS[name] + " is set, but illi doesn't offer " + vendor + ": " + (!set ? "/login connects it." : env === null ? "/set vendors " + list + "." : env + "=" + list + ", then start illi again."));
+      tips.push(VARS[name] + " is set, but illi doesn't offer " + Pick.provider(vendor) + ": " + (!set ? "/login connects it." : env === null ? "/set vendors " + list + "." : env + "=" + list + ", then start illi again."));
     }
     if (KEYS[name] === "" && pick.vendor === vendor) {
-      tips.push("The chat runs on " + vendor + ", but it has no key: /login adds one, or /model picks another.");
+      tips.push("The chat runs on " + Pick.provider(vendor) + ", but it has no key: /login adds one, or /model picks another.");
     }
   }
   return tips;

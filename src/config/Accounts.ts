@@ -19,17 +19,20 @@
 // folder and, unless the vendors setting names them, the vendors
 // offered; every illi with a chat looks at the file every 2 s (Chat.ts
 // follow, Config.ts config_accounts), so a change in one terminal
-// reaches the others. Written whole to a file of its own (made readable
-// by its owner alone before it holds anything), then moved over the old
-// one, so a crash leaves the old; read again just before (edit), so
-// what another illi wrote meanwhile stays (no lock is taken: of two
-// changes at the same moment, the last written wins). A file that won't
-// read is never written over: its keys would be lost. As read, it keeps
-// only the entries of the shapes here: one of another shape, or a
-// vendor not here, is dropped, and gone from the file at the next edit.
+// reaches the others. A change (edit) holds the file's lock (a flock on
+// .accounts.lock beside it: Flock.ts), so two illis changing it at once
+// take turns, each reading it anew under the lock and changing what it
+// finds. Written whole to a file of its own (made readable by its owner
+// alone before it holds anything, synced to the disk), then moved over
+// the old one, so a crash leaves the old or the new, never half. A file
+// that won't read is never written over: its keys would be lost. As
+// read, it keeps only the entries of the shapes here, an entry of
+// another shape dropped; a vendor not here (a newer illi's) is kept as
+// it is, the file written with it.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { Flock } from "./Flock.ts";
 
 // Types
 // =====
@@ -74,6 +77,12 @@ export const ENV = "env";
 // the user's own Claude Code's folder, as a Claude plan's account's id
 export const OWN = "own";
 
+// the entries of the file illi reads (any other kept as it is: write)
+const KNOWN = [...KEYED, "chatgpt", "claude-code"];
+
+// how long a change waits while another illi changes the file (ms)
+const WAIT = 3e3;
+
 // Accounts
 // ========
 
@@ -86,15 +95,24 @@ export namespace Accounts {
 
   // the file as it is (none: nothing connected); null: it won't read
   export function read(root: string): Store | null {
+    const data = Accounts.raw(root);
+    return data === null ? null : Accounts.store(data);
+  }
+
+  // the file's JSON object (none: {}); null: it won't read, or holds
+  // something else
+  export function raw(root: string): Record<string, unknown> | null {
     let data: unknown;
     try {
       data = JSON.parse(fs.readFileSync(Accounts.file(root), "utf8"));
     } catch (err: any) {
       return err?.code === "ENOENT" ? {} : null;
     }
-    if (typeof data !== "object" || data === null || Array.isArray(data)) {
-      return null;
-    }
+    return typeof data === "object" && data !== null && !Array.isArray(data) ? (data as Record<string, unknown>) : null;
+  }
+
+  // the entries illi reads of the file's object, each as read
+  export function store(data: Record<string, unknown>): Store {
     const store: Store = {};
     for (const [vendor, value] of Object.entries(data)) {
       if (KEYED.includes(vendor as Api)) {
@@ -138,38 +156,69 @@ export namespace Accounts {
     return { use, keys };
   }
 
-  // the file changed by f, as it is just before (f giving it back as it
-  // was: nothing written). null: changed; else why not: it won't read, or
-  // can't be written
+  // the file changed by f, under its lock, as it is just then (f giving
+  // it back as it was: nothing written), the entries illi doesn't read
+  // kept. null: changed; else why not, in plain words: it won't read,
+  // another illi held it past WAIT, or it couldn't be saved
   export function edit(root: string, f: (store: Store) => Store): string | null {
-    const now = Accounts.read(root);
-    if (now === null) {
-      return "the accounts file " + Accounts.file(root) + " won't read: illi leaves it as it is";
-    }
     try {
-      const next = f(now);
-      if (next !== now) {
-        Accounts.write(root, next);
-      }
-      return null;
+      fs.mkdirSync(root, { recursive: true });
+      const why = Flock.sync(path.join(root, ".accounts.lock"), WAIT, () => {
+        const data = Accounts.raw(root);
+        if (data === null) {
+          return "the accounts file " + Accounts.file(root) + " won't read: illi leaves it as it is";
+        }
+        const now  = Accounts.store(data);
+        const next = f(now);
+        if (next !== now) {
+          Accounts.write(root, next, Object.fromEntries(Object.entries(data).filter(([k]) => !KNOWN.includes(k))));
+        }
+        return null;
+      });
+      return why === undefined ? "another illi is changing the accounts just now: try again in a moment" : why;
     } catch (err: any) {
-      return "the accounts file couldn't be written: " + err.message;
+      return "the accounts file couldn't be saved" + Accounts.why(err, root);
     }
   }
 
-  // the file written whole: a file of its own, readable by its owner
-  // alone before anything is in it, then moved over the old one
-  export function write(root: string, store: Store): void {
+  // why a file in `root` couldn't be saved, in plain words (": ..."; ""
+  // if the system said nothing it names)
+  export function why(err: any, root: string): string {
+    const words: Record<string, string> = { ENOSPC: "the disk is full", EDQUOT: "the disk quota is used up", EACCES: "illi isn't allowed to write in " + root, EPERM: "illi isn't allowed to write in " + root, EROFS: root + " is read-only" };
+    const code = typeof err?.code === "string" ? err.code : "";
+    return words[code] !== undefined ? ": " + words[code] : code !== "" ? " (" + code + ")" : "";
+  }
+
+  // the file written whole, with `rest` (entries illi doesn't read) kept:
+  // a file of its own, readable by its owner alone before anything is in
+  // it, synced to the disk, then moved over the old one (the folder then
+  // synced, so the move lasts too); the file of its own gone if any of
+  // it fails
+  export function write(root: string, store: Store, rest: Record<string, unknown> = {}): void {
     fs.mkdirSync(root, { recursive: true });
     const tmp = path.join(root, ".accounts." + process.pid + ".json");
-    const fd  = fs.openSync(tmp, "w", 0o600);
     try {
-      fs.fchmodSync(fd, 0o600);
-      fs.writeSync(fd, JSON.stringify(store, null, 2) + "\n");
-    } finally {
-      fs.closeSync(fd);
+      const fd = fs.openSync(tmp, "w", 0o600);
+      try {
+        fs.fchmodSync(fd, 0o600);
+        fs.writeFileSync(fd, JSON.stringify({ ...rest, ...store }, null, 2) + "\n");
+        fs.fsyncSync(fd);
+      } finally {
+        fs.closeSync(fd);
+      }
+      fs.renameSync(tmp, Accounts.file(root));
+    } catch (err) {
+      fs.rmSync(tmp, { force: true });
+      throw err;
     }
-    fs.renameSync(tmp, Accounts.file(root));
+    try {
+      const dir = fs.openSync(root, "r");
+      try {
+        fs.fsyncSync(dir);
+      } finally {
+        fs.closeSync(dir);
+      }
+    } catch {}
   }
 
   // the file as it looks (its inode, size and time; "": none), to tell a
@@ -195,11 +244,11 @@ export namespace Accounts {
     return key.length <= 12 ? "…" + key.slice(-2) : key.slice(0, 7) + "…" + key.slice(-4);
   }
 
-  // whether a file of illi's root is the accounts' (the file, or one
-  // being written to move over it; the Claude Code folders, claude/),
-  // never a profile's to give
+  // whether a file of illi's root is the accounts' (the file, its lock,
+  // or one being written to move over it; the Claude Code folders,
+  // claude/), never a profile's to give
   export function owned(name: string): boolean {
-    return name === "accounts.json" || name === "claude" || /^\.accounts\.\d+\.json$/.test(name);
+    return name === "accounts.json" || name === ".accounts.lock" || name === "claude" || /^\.accounts\.\d+\.json$/.test(name);
   }
 
   // a Claude plan's account's Claude Code folder ("": the user's own

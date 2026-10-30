@@ -108,11 +108,11 @@ test("/login's notice: the link and code either way, 'opening in your browser' w
   try {
     const login = login_chatgpt(t);
     await Bun.sleep(20);
-    expect(t.notices.map((n: any) => n.text)).toEqual(["Sign in to ChatGPT at " + URL + " (opening in your browser) with the code ABCD-1234 (copied; it is good for 15 minutes). illi waits for it."]);
+    expect(t.notices.map((n: any) => n.text)).toEqual(["Sign in to ChatGPT at " + URL + " (opening in your browser) with the code ABCD-1234 (copied; it is good for 15 minutes). illi waits for it: Esc stops."]);
     for (let k = 0; k < 100 && !t.notices[0].text.includes("didn't"); k++) {
       await Bun.sleep(20);
     }
-    expect(t.notices.map((n: any) => n.text)).toEqual(["Sign in to ChatGPT: your browser didn't open (broken exited 5), so open " + URL + " and enter the code ABCD-1234 (copied; it is good for 15 minutes). illi waits for it."]);
+    expect(t.notices.map((n: any) => n.text)).toEqual(["Sign in to ChatGPT: your browser didn't open (broken exited 5), so open " + URL + " and enter the code ABCD-1234 (copied; it is good for 15 minutes). illi waits for it: Esc stops."]);
     expect(t.notices[0].until).toBeGreaterThan(Date.now() + 14 * 60000);
     grant();
     await login;

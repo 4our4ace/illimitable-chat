@@ -131,16 +131,16 @@ test("the picks' defaults are the first vendor's that is offered; the vendors ch
 
 test("the start tells of an API key set whose vendor isn't offered (/login connects it; the vendors setting set, how to name it there), and of the pick's key missing (/login adds one)", () => {
   config.config_set("vendors", null);
-  expect(config.config_tips(config.PICK, false)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer claude-api: /login connects it."]);
+  expect(config.config_tips(config.PICK, false)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer the Anthropic API: /login connects it."]);
   const openai = { vendor: "openai-api", model: "gpt-6-luna", effort: "medium", speed: "slow" } as const;
-  expect(config.config_tips(openai, true)).toContain("The chat runs on openai-api, but it has no key: /login adds one, or /model picks another.");
+  expect(config.config_tips(openai, true)).toContain("The chat runs on the OpenAI API, but it has no key: /login adds one, or /model picks another.");
   process.env.ILLI_VENDORS = "chatgpt";
-  expect(config.config_tips(config.PICK, false)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer claude-api: ILLI_VENDORS=claude-api,chatgpt, then start illi again."]);
-  expect(config.config_tips(config.PICK, true)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer claude-api: ILLI_VENDORS=chatgpt,claude-api, then start illi again."]);
-  expect(config.config_tips(openai, true)).toContain("The chat runs on openai-api, but it has no key: /login adds one, or /model picks another.");
+  expect(config.config_tips(config.PICK, false)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer the Anthropic API: ILLI_VENDORS=claude-api,chatgpt, then start illi again."]);
+  expect(config.config_tips(config.PICK, true)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer the Anthropic API: ILLI_VENDORS=chatgpt,claude-api, then start illi again."]);
+  expect(config.config_tips(openai, true)).toContain("The chat runs on the OpenAI API, but it has no key: /login adds one, or /model picks another.");
   delete process.env.ILLI_VENDORS;
   config.config_set("vendors", "chatgpt");
-  expect(config.config_tips(config.PICK, false)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer claude-api: /set vendors claude-api,chatgpt."]);
+  expect(config.config_tips(config.PICK, false)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer the Anthropic API: /set vendors claude-api,chatgpt."]);
   config.config_set("vendors", null);
 });
 
