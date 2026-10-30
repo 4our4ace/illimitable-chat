@@ -1009,7 +1009,10 @@ How it is kept:
 3. Every illi with a chat looks at the file every 2 s, by its inode,
    size and time (a stat), and reads it again only when it changed, so a
    change in one terminal reaches the others: the vendors offered, the
-   keys and the account in use. `/login` reads it again as it opens.
+   keys and the account in use, whose models' windows (and ChatGPT's
+   plan and use) are then asked anew (`Chat.account`). `/login` reads
+   it again as it opens. Reading takes no lock: the file is only ever
+   replaced whole.
 4. A ChatGPT switch (`ChatGPT.swap`) runs under the lock renewals take
    on the login file: the login there is read then, as each renewal
    spends its refresh token, kept in `saved`, and the picked one put in
@@ -1017,7 +1020,9 @@ How it is kept:
    the one picked is taken from `saved` as read then, and a switch to
    the account already there writes nothing.
 5. A profile's export leaves out `accounts.json`, its lock, its
-   temporary files and `claude/`; an import drops them.
+   temporary files and `claude/`, and a ChatGPT login being written
+   (`.auth.<pid>.json`, which a crash may leave beside `login.json`);
+   an import drops them.
 
 Known limits
 ------------
@@ -1036,3 +1041,13 @@ Known limits
 - **Two illis starting at the same moment on a very busy machine** can
   both miss the 50 ms lock window; both then become views, find no
   holder, and run again 600 ms later.
+- **The accounts file's lock waits with the terminal held:** a change
+  waits up to 3 s for another illi's, the screen still meanwhile (a
+  change holds it a moment, so this is rare). Where the system's C
+  library won't load, no lock is taken and of two changes at the same
+  moment the last written wins; where the file system refuses a flock
+  (one without locks), every change waits its 3 s and says another illi
+  is changing the accounts.
+- **An older illi keeps a newer one's vendor whole, but not its new
+  fields:** an entry of a vendor it knows is written back with only the
+  fields it reads.

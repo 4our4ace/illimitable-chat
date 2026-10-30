@@ -213,8 +213,6 @@ export namespace Pick {
     return [pick.vendor, pick.model, pick.effort, pick.speed].join(":");
   }
 
-  // as a person reads it, as it runs (fit): model · effort, the speed
-  // only if not the standard one (gpt-6.1-sol · medium · fast)
   // a vendor as a note names it ("the Anthropic API"; up: starting a
   // sentence)
   export function provider(vendor: Vendor, up = false): string {
@@ -222,6 +220,8 @@ export namespace Pick {
     return up ? name[0].toUpperCase() + name.slice(1) : name;
   }
 
+  // as a person reads it, as it runs (fit): model · effort, the speed
+  // only if not the standard one (gpt-6.1-sol · medium · fast)
   export function shown(pick: Pick): string {
     const p = Pick.fit(pick);
     return [p.model, p.effort, ...(p.speed === "slow" ? [] : [p.speed])].join(" · ");

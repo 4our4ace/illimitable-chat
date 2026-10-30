@@ -89,7 +89,7 @@ What else illi keeps in `~/.illi`:
 | File            | Holds                                                 |
 | --------------- | ----------------------------------------------------- |
 | `login.json`    | the ChatGPT login in use, which `/login` makes (else opencode's, in `~/.local/share/opencode/auth.json`) |
-| `accounts.json` | what `/login` connected, readable by you alone: the API keys pasted and the one in use, ChatGPT's other accounts (and whether opencode's login is one), the Claude plan's accounts and the one in use ([Providers](providers.md#connecting-login)) |
+| `accounts.json` | what `/login` connected, readable by you alone: the API keys pasted and the one in use, ChatGPT's other accounts (and whether opencode's login is one), the Claude plan's accounts and the one in use ([Providers](providers.md#connecting-login)); changed under a lock, `.accounts.lock` beside it, so two illis take turns ([Storage](storage.md#accounts)) |
 | `claude/`       | a Claude Code folder for each Claude account `/login` added beside your own Claude Code's, its login in it |
 | `models.json`   | the models the vendors told last: each one's window, speeds and efforts (ChatGPT's for the account named in it: [Storage](storage.md#models)) |
 | `claude-code.json` | the name of each of Claude Code's own MCP servers illi has seen, case and all, so `off` and an agent's `tools:` leave one out of the first call after a start too ([Providers](providers.md#claude-plan)) |

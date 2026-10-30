@@ -13,11 +13,13 @@
 // (profile_move_chat); any but the default may be renamed or deleted. A
 // profile goes out as one archive (tar.gz, by the system's tar): its
 // folder but the login (a login file its config names too, wherever in
-// it), the locks, the log (and, the default's, the other profiles), its
-// config.json and mcp.json with their secrets left out; its chat's
-// SQLite files (a project each) as snapshots SQLite takes (VACUUM INTO),
-// whole though an illi writes to them; the rest (agents, commands,
-// skills, plugins, hooks, permissions, theme, rules) as it is.
+// it), the accounts /login connected (Accounts.owned: the file, its
+// lock, the Claude Code folders), a login or accounts file a crash left
+// half written, the locks, the log (and, the default's, the other
+// profiles), its config.json and mcp.json with their secrets left out;
+// its chat's SQLite files (a project each) as snapshots SQLite takes
+// (VACUUM INTO), whole though an illi writes to them; the rest (agents,
+// commands, skills, plugins, hooks, permissions, theme, rules) as it is.
 // One comes in only as a new profile, its archive taken as untrusted:
 // each entry a file or a folder, inside it, checked before a byte is
 // unpacked; once unpacked, nothing of it runs a command till the person
@@ -71,8 +73,11 @@ const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
 const OWN    = ["login.json", "login.json.lock", "accounts.json", "locks", "illi.log"];
 
 // a login being written to move over the login file (ChatGPT.write),
-// which a crash may leave: never a profile's to give either
+// which a crash may leave: never a profile's to give either (only one
+// in the folder itself: one beside a login file in a subfolder isn't)
 const WRITING = /^\.auth\.\d+\.json$/;
+// the default's folder's, besides OWN (above: the others, which was used
+// last, the release looked for, the state every profile shares)
 const ROOTED = ["profiles", "profile", "project-profiles.json", "update.json", "models.json", "trust.json", "seen.json", "used.json", "picked.json"];
 
 // the profile used last in each project, by its key (Projects.place),

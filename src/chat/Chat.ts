@@ -5,7 +5,10 @@
 // views (View.ts), each fed by a pipe (Chat.link): the chat's events one
 // way, the person's acts the other (Chat.apply), each answered once what
 // it logged is on disk. One process at a time holds a project's chat
-// (Lock.take).
+// (Lock.take). While it's open, the accounts /login connected are
+// followed (Chat.follow): a change in any terminal offers or drops a
+// vendor at once, and asks the accounts in use anew (Chat.account: their
+// models' windows, ChatGPT's plan and use).
 //
 // One turn at a time. A message is logged as it arrives; the running call
 // takes it between tool calls if it goes whole beside its view, else the

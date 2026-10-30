@@ -32,10 +32,11 @@
 // asked as dots and given it, a wrong one saying why (in Claude Code's
 // words, said to be its) and Esc stopping it, each leaving no folder,
 // as does one signed in that can't be kept (logged out); signed in,
-// kept and in use, its folder readable by its owner alone. Enter switches; Del leaves your Claude
-// Code logged in, and logs one of illi's out, its folder gone; logging
-// out of the Claude plan logs all of illi's out, the plan no longer
-// offered, your Claude Code still logged in.
+// kept and in use, its folder readable by its owner alone. Enter
+// switches; Del leaves your Claude Code logged in, and logs one of
+// illi's out, its folder gone; logging out of the Claude plan logs all
+// of illi's out, the plan no longer offered, your Claude Code still
+// logged in.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";

@@ -12,8 +12,11 @@
 // opencode's login if /login left it to opencode; Claude by your Claude
 // Code's login, or a sign-in (Claude Code's own, its code pasted here as
 // dots: login_claude_sign; the first, with none connected and your
-// Claude Code logged in to none, your own Claude Code's; else in a
-// folder of illi's); an API
+// Claude Code logged in to none, your own Claude Code's; else in a new
+// folder of illi's, made as it starts so two terminals never share one,
+// and logged out and removed if the sign-in ends without it kept; your
+// own Claude Code is never logged out). Esc stops a sign-in waiting,
+// ChatGPT's or Claude's (term_esc); an API
 // by a key pasted in a line shown as dots, or the environment's
 // (ANTHROPIC_API_KEY, OPENAI_API_KEY) if it's set, each checked with
 // the provider before it's taken (Accounts.ts keeps a pasted one, in
@@ -78,7 +81,8 @@ type Api = { vendor: "claude-api" | "openai-api"; name: string; key: string; whe
 // =========
 
 // how long ChatGPT's code shows: as long as it is good (ms), or till the
-// login ends; how long a failure shows, till Esc or a message
+// login ends (a Claude sign-in's notes too: it ends sooner, at
+// ClaudeCode.ts SIGNIN); how long a failure shows, till Esc or a message
 const LOGIN        = 15 * 60000;
 const LOGIN_FAILED = 60000;
 
