@@ -42,9 +42,14 @@ test("another illi's chat state is read by its profile, asked without waiting; t
   try {
     expect(await Lock.take(MINE)).toBe(true);
     Lock.tell({ asks: true, working: true, jobs: 1, holds: true });
+    // asked five times: waiting on the lock held (as a take does, 50 ms)
+    // would take 250 ms at least; asking without, a fraction of that, with
+    // room for a slow machine
     const t0 = performance.now();
-    expect(Lock.states(DIRS)).toEqual([{ profile: "home", asks: false, working: true, jobs: 2, holds: true }]);
-    expect(performance.now() - t0).toBeLessThan(40);
+    for (let k = 0; k < 5; k++) {
+      expect(Lock.states(DIRS)).toEqual([{ profile: "home", asks: false, working: true, jobs: 2, holds: true }]);
+    }
+    expect(performance.now() - t0).toBeLessThan(150);
   } finally {
     other.kill("SIGKILL");
     await other.exited;
