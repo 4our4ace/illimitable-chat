@@ -1,10 +1,14 @@
 // Flock
 // =====
 // flock(2) on a lock file beside the file it guards: illis changing the
-// accounts file (Accounts.edit), opencode's tools and illi renewing a
-// ChatGPT login (ChatGPT.locked). The system lets a flock go however its
-// holder ends, so no lock outlives a crash. Where libc won't load (no
-// flock here), none is taken.
+// accounts file (Accounts.edit: sync, the thread held while it waits, as
+// a change under it takes a moment), opencode's tools and illi renewing
+// a ChatGPT login (ChatGPT.locked: its wait async). flock(2) is loaded
+// from the system's C library through bun:ffi (libc.so.6 on Linux,
+// libSystem.B.dylib on macOS; its operations' numbers the same on both).
+// The system lets a flock go however its holder ends, so no lock
+// outlives a crash. Where libc won't load (no flock here), none is
+// taken. A flock refused for any reason reads as held: errno isn't read.
 
 import { dlopen } from "bun:ffi";
 import * as fs from "node:fs";
@@ -40,9 +44,10 @@ export namespace Flock {
     return FLOCK;
   }
 
-  // f run holding `lock`'s flock, its file made readable by its owner
-  // alone, waiting `wait` ms at most while another holds it (the thread
-  // held: a change under it takes a moment); held still: undefined
+  // f run holding `lock`'s flock, its file (made readable by its owner
+  // alone, if it isn't there) holding nothing, waiting `wait` ms at most
+  // while another holds it (the thread held: a change under it takes a
+  // moment); held still: undefined
   export function sync<T>(lock: string, wait: number, f: () => T): T | undefined {
     const flock = Flock.fn();
     const fd = fs.openSync(lock, "w", 0o600);

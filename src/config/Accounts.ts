@@ -20,14 +20,16 @@
 // offered; every illi with a chat looks at the file every 2 s (Chat.ts
 // follow, Config.ts config_accounts), so a change in one terminal
 // reaches the others. A change (edit) holds the file's lock (a flock on
-// .accounts.lock beside it: Flock.ts), so two illis changing it at once
-// take turns, each reading it anew under the lock and changing what it
-// finds. Written whole to a file of its own (made readable by its owner
-// alone before it holds anything, synced to the disk), then moved over
-// the old one, so a crash leaves the old or the new, never half. A file
-// that won't read is never written over: its keys would be lost. As
-// read, it keeps only the entries of the shapes here, an entry of
-// another shape dropped; a vendor not here (a newer illi's) is kept as
+// .accounts.lock beside it: Flock.ts, waiting WAIT at most), so two
+// illis changing it at once take turns, each reading it anew under the
+// lock and changing what it finds; a read takes no lock, as the file is
+// only ever replaced whole. Written whole to a file of its own (made
+// readable by its owner alone before it holds anything, synced to the
+// disk), then moved over the old one, so a crash leaves the old or the
+// new, never half. A file that won't read is never written over: its
+// keys would be lost. As read, it keeps only the entries of the shapes
+// here, an entry of another shape dropped (one of these shapes keeps
+// only the fields read); a vendor not here (a newer illi's) is kept as
 // it is, the file written with it.
 
 import * as fs from "node:fs";

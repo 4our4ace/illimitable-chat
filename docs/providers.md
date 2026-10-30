@@ -44,10 +44,11 @@ ChatGPT Plus or Pro:
 illi opens OpenAI's page in your browser and shows a code to enter
 there (it is in your clipboard too), then keeps and renews the login
 itself. The code is good for 15 minutes, and illi waits for it till
-then; Esc stops waiting. The browser is your system's: on WSL Windows' default, asked
-through `rundll32.exe url.dll,FileProtocolHandler` (which some security
-tools flag); `BROWSER` picks another, and `BROWSER=none` opens none.
-Over SSH, or with no display, the link is only shown.
+then; Esc stops waiting. The browser is your system's: on WSL Windows'
+default, asked through `rundll32.exe url.dll,FileProtocolHandler`
+(which some security tools flag); `BROWSER` picks another, and
+`BROWSER=none` opens none. Over SSH, or with no display, the link is
+only shown.
 
 Each account shows by its email and plan. **+ add another account**
 signs in to one more. The account in use is in illi's login file
@@ -95,12 +96,12 @@ Each account shows by its email and plan:
 - **Your own Claude Code's**: the login in your Claude Code folder
   (`~/.claude`, or the one `CLAUDE_CONFIG_DIR` names). Del makes illi
   stop using it; Claude Code stays logged in.
-- **Another account** (**+ add another account**) gets a Claude Code
-  folder of its own, `~/.illi/claude/<id>`, as Claude Code keeps one
-  login per folder (on macOS, one Keychain entry per folder). That
-  folder is a separate Claude Code: your main one's settings, MCP
-  servers, plugins and `CLAUDE.md` aren't in it. Del logs it out and
-  removes the folder.
+- **Another account** (**+ add another account**; its row says "added
+  in illi") gets a Claude Code folder of its own,
+  `~/.illi/claude/<id>`, as Claude Code keeps one login per folder (on
+  macOS, one Keychain entry per folder). That folder is a separate
+  Claude Code: your main one's settings, MCP servers, plugins and
+  `CLAUDE.md` aren't in it. Del logs it out and removes the folder.
 
 The account you pick is the one illi's calls run on. The side's Usage
 and Claude Code's MCP servers (below) are that account's: a switch
@@ -158,11 +159,12 @@ illi then runs Claude Code itself, as it ships, on the account's login:
   own calls ([Permissions](permissions.md)): what stays in the project
   runs, a folder outside it is asked about at illi's screen, saying
   why, and your rules and saved approvals apply.
-- **The whole window**: as soon as the plan is connected, and at each
-  start, illi asks Claude Code each model's window, sending no message
-  (1M on a plan with long context). A turn gets all of it, as Claude
-  Code's own compaction, which would stop at its autocompact window
-  (500k of Opus's 1M), is off.
+- **The whole window**: as soon as the plan is connected, at each
+  start, and when another terminal switches the account, illi asks
+  Claude Code each model's window, one model after another, sending no
+  message (1M on a plan with long context). A turn gets all of it, as
+  Claude Code's own compaction, which would stop at its autocompact
+  window (500k of Opus's 1M), is off.
 - **illi's memory, not Claude Code's compaction**: a turn runs with
   Claude Code's own compaction off. When a long turn fills the window,
   illi folds more of the chat into its tree and goes on where it was,
@@ -249,8 +251,8 @@ next start:
 | Vendor        | What it tells                                                    | When                                   |
 | ------------- | ---------------------------------------------------------------- | -------------------------------------- |
 | `chatgpt`     | the models your account may use, each one's window, efforts and speeds | at start, after `/login` and `/logout`, when the account changes; every 5 minutes while it doesn't answer |
-| `claude-api`  | each model's window (Anthropic's Models API)                     | at start, after `/login`               |
-| `claude-code` | each model's window, as Claude Code has it for a turn (asked, no message sent); the window of the model a turn's reply ran on | at start, after `/login`; after each turn's reply |
+| `claude-api`  | each model's window (Anthropic's Models API)                     | at start, after `/login` (here or in another terminal) |
+| `claude-code` | each model's window, as Claude Code has it for a turn (asked, no message sent); the window of the model a turn's reply ran on | at start, after `/login` (here or in another terminal); after each turn's reply |
 | `openai-api`  | nothing: its windows are built in (1.05M)                        |                                        |
 
 On ChatGPT the list is your account's own: a model it adds is offered

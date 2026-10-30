@@ -30,7 +30,8 @@ Development
                    plugins (Plugins.ts; a plugin's folder read: Bundle.ts), hooks
                    (Hooks.ts) and the commands they and the status line run
                    (Run.ts), a project's files as last seen (Seen.ts), updates,
-                   the folders you trust (Trusted.ts)
+                   the folders you trust (Trusted.ts), the accounts /login
+                   connected (Accounts.ts; a change's lock, Flock.ts)
     src/skills/    the skills built into illi (customize-illi)
     test/          tests across modules; each module's own sit beside it
     examples/      agents, a command, hooks, a plugin and a theme to copy

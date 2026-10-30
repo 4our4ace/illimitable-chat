@@ -18,7 +18,10 @@ do, so the new one can copy the closest. illi has four vendors:
 
 - `src/ai/AskAI.ts`: add it to `Vendor`, and its cache's lifetime to
   `TTL` (how long the vendor keeps a prefix it cached unused).
-- `src/ai/Pick.ts`: add it to `VENDORS` and its models to `MODELS`.
+- `src/ai/Pick.ts`: add it to `VENDORS`, its models to `MODELS`, and
+  how a note names it to the person to `PROVIDERS` ("the Anthropic
+  API", "your Claude plan": `Pick.provider`; the vendor's id is only
+  the settings').
 - `src/config/Config.ts`: its default pick and summaries' pick in
   `DEFS`; if it runs on an API key, the key's variable in `VARS` (named
   `<KEY>_API_KEY` for the wire's `key`: Agent.ts says that name when it

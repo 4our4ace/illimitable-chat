@@ -33,14 +33,18 @@
 // long for the window: `full`, a busy service); a turn's call, and an
 // illi agent's, runs with Claude Code's compaction off, so one
 // outgrowing the window ends `full` and illi folds the chat, or recaps
-// the agent's log (ClaudeCode.env); the tokens its first request read,
+// the agent's log (ClaudeCode.env); every call runs with Claude Code's
+// advisor off (ClaudeCode.env: its answer comes back locked, and once it
+// has answered Claude Code's own marks leave no room for illi's MARK);
+// the tokens its first request read,
 // as its stream tells, go with its end (End.first), so the chat learns
 // what Claude Code's own prompt and tools take beside it (Chat.cap). A
 // stop interrupts it (SIGINT, then SIGKILL), what streamed of its
 // message logged as cut off. A model's window is learned (Pick.told, by
 // its canonical id) and kept for the next start: as Claude Code has it
 // for a turn, asked as soon as the plan's account is in use (at the
-// start, at a /login change: ClaudeCode.models, no model called), and
+// start, at a /login change here or in another terminal: Chat.account,
+// ClaudeCode.models, one model after another, no model called), and
 // as a turn's result tells it; a call with Claude Code's compaction on
 // tells its autocompact window instead (500k of Opus's 1M), never
 // learned; the plan's use, as each rate limit event tells it (its
@@ -71,9 +75,10 @@
 // a switch drops what the other's calls told (its servers, its plan's
 // use). /login signs a folder in (`claude auth login`, through pipes:
 // Claude Code opens its page itself, the code the page shows given it;
-// it waits on the person, so only a stop ends it early), asks whom it's
-// logged in as (`claude auth status`) and logs one of illi's out
-// (`claude auth logout`), each of those two killed past AUTH.
+// it waits on the person, so only a stop, or SIGNIN passing, ends it
+// early), asks whom it's logged in as (`claude auth status`) and logs
+// one of illi's out (`claude auth logout`), each of those two given up
+// past AUTH (killed, its output let go).
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -540,8 +545,8 @@ export namespace ClaudeCode {
   // then each time it asks again for the code the page shows, `ask` is
   // told the link ("": none told); `give` gives it one; done as it exits
   // (signed in; else, thrown, why not: its last words, said to be its).
-  // Stop kills it,
-  // as does SIGNIN passing. Thrown at once: Claude Code isn't here
+  // Stop kills it, as does SIGNIN passing. Thrown at once: Claude Code
+  // isn't here
   export function signin(dir: string, stop: AbortSignal, ask: (url: string) => void): { give: (code: string) => void; done: Promise<void> } {
     if (dir !== "") {
       fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -683,9 +688,11 @@ export namespace ClaudeCode {
   // use has them (a plan's are its own: one without long context gets
   // 200k), each learned and kept for the next start; asked once an
   // account a start (its folder, and whom it's logged in as: one signed
-  // in since is asked anew), so a window is right before any message;
-  // one model after another, so a start runs one Claude Code at a time.
-  // true: a window changed
+  // in since is asked anew), so a window is right before a message as a
+  // rule (nothing waits on it: a turn before it told runs on the window
+  // kept from the last start, 200k at the very first); one model after
+  // another, so a start runs one Claude Code at a time. true: a window
+  // changed
   export function models(): Promise<boolean> {
     const dir  = config.config_claude_dir();
     const kept = config.config_accounts_read()?.["claude-code"];
