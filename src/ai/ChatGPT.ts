@@ -48,7 +48,7 @@ import { OpenAI } from "./OpenAI.ts";
 import { Pick, SPEEDS, type Model } from "./Pick.ts";
 import type { Limit, Plan } from "../ui/View.ts";
 import { Accounts, type Logins, type Saved } from "../config/Accounts.ts";
-import { EX, Flock, NB, UN } from "../config/Flock.ts";
+import { Flock } from "../config/Flock.ts";
 import * as config from "../config/Config.ts";
 
 // Types
@@ -574,24 +574,10 @@ export namespace ChatGPT {
   }
 
   // fn, holding the lock opencode's other tools take on the login file
-  // (flock on <file>.lock); with no flock here, without it
+  // (flock on <file>.lock: Flock.hold); with none to take, without it
   export async function locked<T>(file: string, fn: () => Promise<T>): Promise<T> {
-    const flock = Flock.fn();
     const lock = file + ".lock";
-    const fd = fs.openSync(lock, "w");
-    try {
-      const until = Date.now() + LOCKED;
-      while (flock !== null && flock(fd, EX | NB) !== 0) {
-        if (Date.now() > until) {
-          throw new Error("the ChatGPT login is locked by another program: " + lock);
-        }
-        await Bun.sleep(50);
-      }
-      return await fn();
-    } finally {
-      flock?.(fd, UN);
-      fs.closeSync(fd);
-    }
+    return Flock.hold(lock, LOCKED, "the ChatGPT login is locked by another program: " + lock, fn);
   }
 
   // the session a call's requests name, which all a chat's share

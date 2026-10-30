@@ -73,9 +73,12 @@ const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
 const OWN    = ["login.json", "login.json.lock", "accounts.json", "locks", "illi.log"];
 
 // a login being written to move over the login file (ChatGPT.write),
-// which a crash may leave: never a profile's to give either (only one
-// in the folder itself: one beside a login file in a subfolder isn't)
+// which a crash may leave: never a profile's to give either, in the
+// folder itself or beside a login file `login` names in a subfolder
+// (the export's tar leaves out every file of its name: EXCLUDE)
 const WRITING = /^\.auth\.\d+\.json$/;
+const EXCLUDE = "--exclude=.auth.[0-9]*.json";
+
 // the default's folder's, besides OWN (above: the others, which was used
 // last, the release looked for, the state every profile shares)
 const ROOTED = ["profiles", "profile", "project-profiles.json", "update.json", "models.json", "trust.json", "seen.json", "used.json", "picked.json"];
@@ -326,7 +329,7 @@ export async function profile_export(root: string, name: string, file: string): 
     const parts = fs.readdirSync(dir).filter((p) => !skip.includes(p) && !Accounts.owned(p) && !WRITING.test(p) && !(snap && p === "chat")).map((p) => "./" + p);
     const chat  = snap ? fs.readdirSync(dir + "/chat").filter((p) => p !== "projects").map((p) => "./chat/" + p) : [];
     const clean = fs.readdirSync(tmp).map((p) => "./" + p);
-    await profile_tar(["-czhf", file, ...local, "-C", dir, ...parts, ...chat, "-C", tmp, ...clean]);
+    await profile_tar(["-czhf", file, ...local, EXCLUDE, "-C", dir, ...parts, ...chat, "-C", tmp, ...clean]);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

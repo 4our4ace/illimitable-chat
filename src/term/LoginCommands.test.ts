@@ -65,6 +65,7 @@ case "$1 $2" in
   "auth login")
     echo "Opening browser to sign in…"
     echo "If the browser didn't open, visit: https://claude.com/cai/oauth/authorize?code=true&state=s1"
+    if [ -n "$HOLD" ]; then sleep 5 & fi
     printf "Paste code here if prompted > "
     read code
     if [ "$code" != "good-code" ]; then echo "OAuth error: Invalid code" >&2; exit 1; fi
@@ -405,6 +406,7 @@ test("another account signs in in a folder of illi's: Claude Code's page's link 
   expect([t.question, t.choose.title, note(t)]).toEqual([null, "Claude plan", "Login failed: Claude Code said “OAuth error: Invalid code”."]);
   await add();
   term_esc(t);
+  expect(note(t)).toBe("The sign-in stopped: /login starts it again.");
   await until(() => t.login === null && !fs.existsSync(FOLDER("c1")));
   const kept = fs.readFileSync(Accounts.file(config.ROOT), "utf8");
   fs.writeFileSync(Accounts.file(config.ROOT), "{ broken");
@@ -418,6 +420,28 @@ test("another account signs in in a folder of illi's: Claude Code's page's link 
   expect(await noted(t, "Signed in")).toBe("Signed in to your Claude plan as c1@example.com: illi runs on it now.");
   expect(claude()).toEqual({ use: "c1", accounts: [{ id: "own", email: "me@example.com", plan: "max", org: "Org" }, { id: "c1", email: "c1@example.com", plan: "max", org: "Org" }] });
   expect([config.config_claude_dir(), ClaudeCode.env({} as any).CLAUDE_CONFIG_DIR, fs.statSync(FOLDER("c1")).mode & 0o777]).toEqual([FOLDER("c1"), FOLDER("c1"), 0o700]);
+});
+
+test("a sign-in ends as Claude Code does, though a child it left holds its output open: a wrong code says why, a stop ends it at once", async () => {
+  process.env.HOLD = "1";
+  try {
+    const held = DIR + "/held";
+    const bad = ClaudeCode.signin(held, new AbortController().signal, () => {});
+    await Bun.sleep(150);
+    bad.give("bad-code");
+    let t0 = Date.now();
+    await expect(bad.done).rejects.toThrow("Claude Code said “OAuth error: Invalid code”");
+    expect(Date.now() - t0).toBeLessThan(2500);
+    const stop = new AbortController();
+    const run = ClaudeCode.signin(held, stop.signal, () => {});
+    await Bun.sleep(150);
+    t0 = Date.now();
+    stop.abort();
+    await expect(run.done).rejects.toThrow("the login was stopped");
+    expect(Date.now() - t0).toBeLessThan(1000);
+  } finally {
+    delete process.env.HOLD;
+  }
 });
 
 test("Enter switches; Del leaves your Claude Code logged in, logs one of illi's out (its folder gone); logging out of the Claude plan logs all of illi's out, the plan no longer offered", async () => {

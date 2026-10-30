@@ -1044,10 +1044,10 @@ Known limits
 - **The accounts file's lock waits with the terminal held:** a change
   waits up to 3 s for another illi's, the screen still meanwhile (a
   change holds it a moment, so this is rare). Where the system's C
-  library won't load, no lock is taken and of two changes at the same
-  moment the last written wins; where the file system refuses a flock
-  (one without locks), every change waits its 3 s and says another illi
-  is changing the accounts.
+  library won't load, or the file system refuses a flock (one without
+  locks, as NFS without lockd: errno tells it apart from a lock held),
+  no lock is taken, and of two changes at the same moment the last
+  written wins.
 - **An older illi keeps a newer one's vendor whole, but not its new
   fields:** an entry of a vendor it knows is written back with only the
   fields it reads.

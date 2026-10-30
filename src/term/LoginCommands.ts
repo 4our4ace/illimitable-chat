@@ -235,7 +235,8 @@ function login_claude_name(a: Folder, all: Folder[] = []): string {
 
 // an account more: none yet, the user's own Claude Code's (its login, if
 // it's logged in, or a sign-in to another, asked once Claude Code said,
-// a note saying illi asks it meanwhile: drawn then; not, it signs in);
+// a note saying illi asks it meanwhile, Esc stopping it as a sign-in's:
+// drawn then; not, it signs in);
 // else one signed in to in a new folder of illi's. Esc on what it asks
 // goes back to `back`
 async function login_claude_add(t: Term, back: () => void): Promise<void> {
@@ -243,13 +244,20 @@ async function login_claude_add(t: Term, back: () => void): Promise<void> {
     return login_claude_sign(t, null, back);
   }
   let who: Awaited<ReturnType<typeof ClaudeCode.status>>;
-  const asking = term_notify(t, "Asking your Claude Code whom it's logged in as…", false, 60e3);
+  t.login?.abort();
+  const stop = new AbortController();
+  t.login = stop;
+  const asking = term_notify(t, "Asking your Claude Code whom it's logged in as… (Esc stops)", false, 60e3);
   try {
     who = await ClaudeCode.status("");
   } catch (err: any) {
-    return term_note(t, err.message + ".");
+    return stop.signal.aborted ? undefined : term_note(t, err.message + ".");
   } finally {
+    t.login = t.login === stop ? null : t.login;
     term_unnotify(t, asking);
+  }
+  if (stop.signal.aborted) {
+    return;
   }
   if (who === null) {
     return login_claude_sign(t, OWN, back);
@@ -395,15 +403,20 @@ function login_claude_drop(t: Term, a: Folder, back: () => void): void {
 }
 
 // one of illi's folders logged out and gone (its Claude Code's login
-// with it; a logout that fails: the folder goes all the same); the user's
-// own Claude Code's never (OWN: nothing done)
+// with it; a logout that fails: the folder goes all the same; one that
+// won't go logged, never thrown); the user's own Claude Code's never
+// (OWN: nothing done)
 async function login_claude_forget(id: string): Promise<void> {
   const dir = Accounts.folder(config.ROOT, id);
   if (dir === "") {
     return;
   }
   await ClaudeCode.logout(dir).catch(() => false);
-  fs.rmSync(dir, { recursive: true, force: true });
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch (err: any) {
+    console.error("claude-code: the folder " + dir + " couldn't be removed (" + (err?.code ?? "error") + ")");
+  }
 }
 
 // the Claude plan logged out (asked first, Esc back to `back`): illi's
