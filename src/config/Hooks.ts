@@ -78,10 +78,13 @@ export const NAME = "hooks.json";
 const MATCHED: Partial<Record<Event, true>> = { PreToolUse: true, PostToolUse: true, SessionStart: true, Notification: true, SessionEnd: true };
 
 // Claude Code's tool names a matcher may name: Bash, whose input is
-// illi's shell's, taken for it; the others, whose inputs differ, said
-// (Agent, its subagents' tool, under its old name Task too; its to-do
-// list's TodoWrite and the task tools it is off by default in favor of)
-const CLAUDE_TOOLS = ["Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "LS", "WebFetch", "WebSearch", "NotebookEdit", "TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "Agent", "Task"];
+// illi's shell's, taken for it; the others, whose inputs differ, said:
+// those its calls in illi run, and those illi leaves out of them
+// (ClaudeCode.OFF), its spawn and todo in their place (Agent, its
+// subagents' tool, under its old name Task too; its to-do list's
+// TodoWrite and the task tools it is off by default in favor of)
+const CLAUDE_TOOLS = ["Read", "Write", "Edit", "MultiEdit", "Glob", "Grep", "LS", "WebFetch", "WebSearch", "NotebookEdit"];
+const CLAUDE_OFF = ["TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet", "Agent", "Task"];
 
 // the events whose output, as text, is context for the model
 const CONTEXT: Partial<Record<Event, true>> = { UserPromptSubmit: true, SessionStart: true };
@@ -453,12 +456,16 @@ function hooks_seen(file: string): void {
 
 // each tool hook whose matcher names only Claude Code's tools that illi
 // doesn't take for its own (all but Bash): said once, as it runs only on
-// claude-code's own calls
+// claude-code's own calls, or, naming only those illi leaves out of them
+// (its subagents' and to-do list's), never
 function hooks_claude(): void {
   for (const e of ENTRIES.filter((e) => e.event === "PreToolUse" || e.event === "PostToolUse")) {
     const names = /^[A-Za-z0-9_\- ,|]+$/.test(e.match) ? e.match.split(/[|,]/).map((x) => x.trim()).filter(Boolean) : [];
-    if (names.length > 0 && names.every((n) => CLAUDE_TOOLS.includes(n))) {
-      Plugins.say(hooks_whose(e, true) + " " + e.event + " hook " + clip(e.command) + " matches " + names.join("|") + ", Claude Code's tools: illi's are shell, read, write, edit..., whose input differs, so it runs only on claude-code's own calls.");
+    const head = hooks_whose(e, true) + " " + e.event + " hook " + clip(e.command) + " matches " + names.join("|");
+    if (names.length > 0 && names.every((n) => CLAUDE_OFF.includes(n))) {
+      Plugins.say(head + ", Claude Code's subagent and to-do tools, which illi turns off for its own spawn and todo (whose input differs), so it never runs.");
+    } else if (names.length > 0 && names.every((n) => CLAUDE_TOOLS.includes(n) || CLAUDE_OFF.includes(n))) {
+      Plugins.say(head + ", Claude Code's tools: illi's are shell, read, write, edit..., whose input differs, so it runs only on claude-code's own calls.");
     }
   }
 }

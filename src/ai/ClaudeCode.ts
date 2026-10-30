@@ -10,7 +10,8 @@
 // `lean`), an agent's tools list keeping Claude Code's built-in ones to
 // those it names, but those illi gives itself (Ask.builtins: its Agent,
 // Task, TodoWrite and task tools never; its plugins stay, their MCP
-// servers as below),
+// servers as below), and never those illi leaves out, list or none
+// (ClaudeCode.OFF: its subagents, to-do list and long-session tools),
 // allowed to run (as `-p` asks no one), its permission prompts
 // asked of the user at illi's screen (Tools.approve), and illi's prompt after
 // Claude Code's (from a file, so no argument limit); one without (a summary, a goal check), or
@@ -35,7 +36,8 @@
 // outgrowing the window ends `full` and illi folds the chat, or recaps
 // the agent's log (ClaudeCode.env); every call runs with Claude Code's
 // advisor off (ClaudeCode.env: its answer comes back locked, and once it
-// has answered Claude Code's own marks leave no room for illi's MARK);
+// has answered Claude Code's own marks leave no room for illi's MARK),
+// and its own memory off (illi's is the chat, on every provider);
 // the tokens its first request read,
 // as its stream tells, go with its end (End.first), so the chat learns
 // what Claude Code's own prompt and tools take beside it (Chat.cap). A
@@ -232,6 +234,25 @@ export namespace ClaudeCode {
   // the CLI run
   export let bin = process.env.ILLI_CLAUDE ?? "claude";
 
+  // Claude Code's own tools a call with tools leaves out (--disallowedTools,
+  // which wins over --tools and an agent's list): AskUserQuestion, as
+  // illi asks through its own ask; its subagents' tool (Agent, Task: its
+  // old name) and its to-do list's (TodoWrite, the task tools), as illi's
+  // spawn and todo take their place, so subagents show at illi's side and
+  // the to-do list is one; and those made for a long Claude Code session,
+  // which a call, its process ending with the turn, can't keep (cron,
+  // wake-ups, monitors, workflows, messages to its agents) or which act
+  // outside illi (notifications, remote triggers, worktrees, plugins,
+  // onboarding guides, designs, review findings). Its Skill stays, and
+  // TaskStop, which stops a shell run in the background. A tool a newer
+  // Claude Code adds isn't named, so it loads till it is added here
+  export const OFF = [
+    "AskUserQuestion",
+    "Agent", "Task", "TodoWrite", "TaskCreate", "TaskGet", "TaskList", "TaskUpdate",
+    "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "Monitor", "Workflow", "SendMessage", "ListAgents",
+    "PushNotification", "RemoteTrigger", "EnterWorktree", "ExitWorktree", "ShareOnboardingGuide", "PublishPlugin", "DesignSync", "ReportFindings",
+  ];
+
   export function ask(ask: Ask, on: (ev: Event) => void): Try {
     ClaudeCode.account();
     const end = AskAI.end("");
@@ -324,8 +345,8 @@ export namespace ClaudeCode {
   // list names, if it has one, but those illi gives itself: --tools), and
   // Claude Code's own MCP servers but what the call leaves out
   // (ClaudeCode.cut: all, --strict-mcp-config, or by rule,
-  // --disallowedTools beside AskUserQuestion), else (or once) none, nor
-  // Claude Code's servers or commands
+  // --disallowedTools beside its tools illi leaves out, OFF), else (or
+  // once) none, nor Claude Code's servers or commands
   export function args(ask: Ask, file: string): string[] {
     const io = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--replay-user-messages", "--no-session-persistence"];
     const pick = ["--model", ask.model, "--effort", ask.effort, "--append-system-prompt-file", file, "--settings", JSON.stringify({ disableAllHooks: true })];
@@ -336,7 +357,7 @@ export namespace ClaudeCode {
     const own = ask.builtins == null ? [] : ["--tools", ask.builtins.join(",")];
     const cut = ClaudeCode.cut(ask);
     const strict = cut.strict ? ["--strict-mcp-config"] : [];
-    return [...io, ...pick, ...own, "--mcp-config", JSON.stringify(mcp), ...strict, "--allowedTools", "mcp__illi", "--disallowedTools", ["AskUserQuestion", ...cut.deny].join(","), "--permission-prompt-tool", "mcp__illi__approve"];
+    return [...io, ...pick, ...own, "--mcp-config", JSON.stringify(mcp), ...strict, "--allowedTools", "mcp__illi", "--disallowedTools", [...ClaudeCode.OFF, ...cut.deny].join(","), "--permission-prompt-tool", "mcp__illi__approve"];
   }
 
   // what a call with tools leaves out of Claude Code's own MCP servers
@@ -472,6 +493,11 @@ export namespace ClaudeCode {
   // changelog names it; the user's Claude Code keeps it): its answer comes
   // back locked, illi can neither show nor keep it, and once it has
   // answered Claude Code's requests leave no room for illi's mark (MARK);
+  // and its own memory off (CLAUDE_CODE_DISABLE_AUTO_MEMORY: the notes it
+  // reads and writes in its folder, ~/.claude/projects/<project>/memory),
+  // as illi's memory is the chat and the rules it reads, the same on
+  // every provider, and notes Claude Code kept would reach the model on
+  // the Claude plan alone;
   // a call illi refits (Ask.room: a turn's, an agent's) with Claude
   // Code's compaction off (DISABLE_COMPACT), so one outgrowing the window
   // ends "Prompt is too long" (`full`) and illi folds the chat into its
@@ -480,6 +506,7 @@ export namespace ClaudeCode {
   export function env(ask: Ask): Record<string, string> {
     const env = ClaudeCode.folder_env(config.config_claude_dir());
     env.CLAUDE_CODE_DISABLE_ADVISOR_TOOL = "1";
+    env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
     if (ask.room !== undefined) {
       env.DISABLE_COMPACT = "1";
     }

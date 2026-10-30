@@ -113,7 +113,13 @@ illi then runs Claude Code itself, as it ships, on the account's login:
 
 - **Claude Code's own prompt and tools** (its shell, files, search), with
   illi's added through MCP: zoom into the memory, the date, subagents,
-  messages to them, the to-do list and skills. An agent's `tools:`
+  messages to them, the to-do list and skills. Claude Code's own
+  subagents and to-do list are off, as are the tools it has for a long
+  session of its own (scheduled tasks and wake-ups, monitors, workflows,
+  messages to its agents, notifications, worktrees…): illi's spawn,
+  todo and tell take their place, so subagents show at illi's side and
+  there is one to-do list, and illi's turn ends with its Claude Code
+  run, which those tools would outlive. Its skills stay. An agent's `tools:`
   limits both: `tools: zoom, Read, Grep` gives that agent illi's zoom
   and, of Claude Code's built-in tools, Read and Grep alone. Of Claude
   Code's own MCP servers (below), it keeps only those it names:
@@ -191,6 +197,13 @@ illi then runs Claude Code itself, as it ships, on the account's login:
   illi the advisor's answer comes back locked, so illi could neither
   show it nor keep it in its memory, and once it had answered, the next
   request was refused (above).
+- **No Claude Code memory**: illi runs Claude Code with its own memory
+  off (`CLAUDE_CODE_DISABLE_AUTO_MEMORY`), so the model neither reads
+  nor writes the notes Claude Code keeps for a project in
+  `~/.claude/projects/<project>/memory/`; Claude Code on its own still
+  keeps them. illi's memory is the chat itself, your rules (`RULES.md`)
+  and the project's `AGENTS.md` or `CLAUDE.md`, the same on every
+  provider: a note you want kept for good belongs in one of those.
 - **Summaries run with nothing extra**: `claude -p` calls with no tools,
   MCP servers, commands or hooks.
 - **Your plan's use at the side**: the Usage section shows how much of

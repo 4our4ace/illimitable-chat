@@ -349,13 +349,17 @@ over. What differs:
   limits Claude Code's built-in tools to those it names (illi's `read`,
   `write`, `edit` and `shell` as `Read`, `Write`, `Edit` and `Bash`;
   `MultiEdit` as `Edit`), but never to its `Agent`, `Task`, `TodoWrite`
-  or task tools: illi's spawn and todo take their place, so the agent's
-  subagents show at the side and its to-do list is illi's. Its MCP
+  or task tools, nor its long-session tools, which illi leaves out of
+  every call ([Providers](providers.md#claude-plan)): illi's spawn and
+  todo take their place, so the agent's subagents show at the side and
+  its to-do list is illi's. Its MCP
   servers go but those it names (`mcp__github`; one illi has never seen
   loads in one call, which shows it); its plugins stay.
 - Hooks: a `Bash` matcher takes illi's `shell` ([Beside Claude
   Code's](#beside-claude-codes)); one naming only Claude Code's other
-  tools runs only on `claude-code`'s own calls, said at the start.
+  tools runs only on `claude-code`'s own calls, and one naming only its
+  `Agent`, `Task`, `TodoWrite` or task tools never runs, as illi turns
+  those off, each said at the start.
 - Its own MCP servers' tools are `mcp__<server>__<tool>`: Claude Code's
   `mcp__plugin_<plugin>_<server>__` is read as that, in its agents and
   matchers.
