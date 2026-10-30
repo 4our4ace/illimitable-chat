@@ -168,15 +168,22 @@ illi then runs Claude Code itself, as it ships, on the account's login:
 - **Kept for the next turn**: illi asks Anthropic to keep the chat it
   sends at hand, so the next turn finds it there, quick and cheap, and
   only what is new is read in full. Claude Code asks the same for parts
-  of each request, and now and then (after an advisor call, say) the
+  of each request. After its advisor answers it asks for more, and the
   two together ask for more than Anthropic allows, so it refuses the
-  request (in its words, "A maximum of 4 blocks with cache_control").
-  illi then goes on where it was without its own ask, its note saying
-  only that the request was refused over a technical limit and nothing
-  is lost, and the next turn asks again (`autocontinue` off: the note
-  says your next message goes on). That one step may still find the
-  chat kept from before, but after a long run of work it reads the
-  whole chat anew, once.
+  request (in its words, "A maximum of 4 blocks with cache_control"):
+  the reason the advisor is off in illi (below). Should a request still
+  be refused so, illi goes on where it was without its own ask, its note
+  saying only that the request was refused over a technical limit and
+  nothing is lost, and the next turn asks again (`autocontinue` off: the
+  note says your next message goes on). That one step may still find the
+  chat kept from before, but after a long run of work it reads the whole
+  chat anew, once.
+- **No advisor**: illi runs Claude Code with its advisor off
+  (`CLAUDE_CODE_DISABLE_ADVISOR_TOOL`), even when your Claude Code
+  settings turn it on; Claude Code on its own still uses it. Inside
+  illi the advisor's answer comes back locked, so illi could neither
+  show it nor keep it in its memory, and once it had answered, the next
+  request was refused (above).
 - **Summaries run with nothing extra**: `claude -p` calls with no tools,
   MCP servers, commands or hooks.
 - **Your plan's use at the side**: the Usage section shows how much of

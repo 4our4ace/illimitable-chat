@@ -80,9 +80,12 @@ Failures must land in the right `stop`, since each is handled apart:
 - `marks`: the request held more cache marks than the API takes. Only
   Claude Code's runner says it: Claude Code marks a request itself, at
   times all four the API allows, and illi's one beside them is refused
-  (`MARKED`, ClaudeCode.ts). `Chat.unmark` goes on from a note, the next
-  call with no block marked (`AskAI.unmarked`), once; a subagent's run
-  does the same (`Tools.run`).
+  (`MARKED`, ClaudeCode.ts). Its advisor was the one known cause (once
+  it has answered, Claude Code's own marks fill all four), so illi's
+  calls run with it off (`ClaudeCode.env`); this stays for any other.
+  `Chat.unmark` goes on from a note, the next call with no block marked
+  (`AskAI.unmarked`), once; a subagent's run does the same
+  (`Tools.run`).
 - `down`: the vendor refused (a wrong key, credit or plan used up).
   `Agent.spent` says what to do in plain words: add the vendor's case
   there (and to `CREDIT` for an API key).
