@@ -7,8 +7,8 @@
 // "auto" as none); at most 70% of the window, and never so much that a
 // turn can't start under 90% of it beside what a request takes besides
 // the chat. A change of one model's is merged into the file as it is,
-// the old name dropped. The models kept last: chatgpt's list whole,
-// another vendor's windows on those built in only. ChatGPT's catalog is
+// the old name dropped. The models kept last: a catalog vendor's list whole (chatgpt's, claude-code's),
+// another's windows on those built in only. ChatGPT's catalog is
 // the chatgpt list: each
 // model's whole window, its usual one, efforts and speeds, kept naming the
 // account (another vendor's kept too); a pick its model can't run as asked
@@ -38,7 +38,7 @@ process.env.ILLI_VENDORS = "claude-api,chatgpt";
 delete process.env.ILLI_CONTEXT;
 delete process.env.ILLI_MODELS;
 fs.writeFileSync(DIR + "/config.json", JSON.stringify({ context: "60%", contexts: { "gpt-6.1-sol": 350000, big: 990000, auto: "auto", kilo: "400k" } }));
-fs.writeFileSync(DIR + "/models.json", JSON.stringify({ vendors: { chatgpt: [{ label: "gpt-7-kept", id: "gpt-7-kept", speeds: ["slow"], window: 400000, room: 0.95 }, { label: "gpt-7-bare", id: "gpt-7-bare", speeds: ["slow"] }, { label: "gpt-7-bad", id: "gpt-7-bad", speeds: ["slow"], window: "lots", standard: -1, room: 7 }], "claude-code": [{ label: "opus-5.5", id: "claude-opus-5-5", speeds: ["slow", "fast"], window: 1000000 }, { label: "opus-4.1", id: "claude-opus-4-1", speeds: ["slow"], window: 200000 }] } }));
+fs.writeFileSync(DIR + "/models.json", JSON.stringify({ vendors: { chatgpt: [{ label: "gpt-7-kept", id: "gpt-7-kept", speeds: ["slow"], window: 400000, room: 0.95 }, { label: "gpt-7-bare", id: "gpt-7-bare", speeds: ["slow"] }, { label: "gpt-7-bad", id: "gpt-7-bad", speeds: ["slow"], window: "lots", standard: -1, room: 7 }], "claude-code": [{ label: "opus-5.5", id: "claude-opus-5-5", speeds: ["slow"], window: 1000000 }, { label: "opus-4.1", id: "claude-opus-4-1", speeds: ["slow"], window: 200000 }], "openai-api": [{ label: "gpt-6-luna", id: "gpt-6-luna", speeds: ["slow"], window: 500000 }, { label: "gpt-9", id: "gpt-9", speeds: ["slow"], window: 2000000 }] } }));
 fs.mkdirSync(DATA + "/opencode");
 // a ChatGPT account's access token (its id the claim), and the login
 // opencode keeps, of one
@@ -108,12 +108,13 @@ test("a model's autocompact set goes into the file that sets autocompacts; a var
   config.config_autocompact("gpt-6-luna", null);
 });
 
-test("the models kept from the last start are offered, their windows known (none kept, or none that is one: none, never a guess); another vendor's only tell the windows of those built in", () => {
+test("the models kept from the last start are offered, their windows known (none kept, or none that is one: none, never a guess); a vendor's list not its account's own only tells the windows of those built in", () => {
   const at = (model: string) => ({ vendor: "chatgpt" as const, model, effort: "low", speed: "slow" });
   expect(config.OFFER.models).toContain("gpt-7-kept");
   expect([Pick.window(at("gpt-7-kept")), Pick.room(at("gpt-7-kept"))]).toEqual([400000, 0.95]);
   expect([Pick.window(at("gpt-7-bare")), Pick.window(at("gpt-7-bad")), Pick.model("chatgpt", "gpt-7-bad")!.standard, Pick.room(at("gpt-7-bad"))]).toEqual([undefined, undefined, undefined, undefined]);
-  expect([Pick.model("claude-code", "opus-5.5"), Pick.model("claude-code", "opus-4.1")]).toEqual([{ label: "opus-5.5", id: "claude-opus-5-5", speeds: ["slow"], window: 1000000 }, undefined]);
+  expect([Pick.model("claude-code", "opus-5.5"), Pick.model("claude-code", "opus-4.1")]).toEqual([{ label: "opus-5.5", id: "claude-opus-5-5", speeds: ["slow"], window: 1000000 }, { label: "opus-4.1", id: "claude-opus-4-1", speeds: ["slow"], window: 200000 }]);
+  expect([Pick.model("openai-api", "gpt-6-luna"), Pick.model("openai-api", "gpt-9")]).toEqual([{ label: "gpt-6-luna", id: "gpt-6-luna", speeds: ["slow", "fast"], window: 500000 }, undefined]);
 });
 
 test("ChatGPT's list: a new model shown is offered and kept, a hidden one not, a known one's window told", async () => {
@@ -153,7 +154,7 @@ test("ChatGPT's catalog is the chatgpt list: each model's whole window, its usua
   expect(config.config_most(872000, 300000, sol.room)).toBe(484800);
   expect(luna).toMatchObject({ speeds: ["slow"], window: 272000, standard: undefined, efforts: ["low", "medium"] });
   const file = JSON.parse(fs.readFileSync(config.MODELS_FILE, "utf8"));
-  expect([file.account, file.capped, Object.keys(file.vendors).sort()]).toEqual(["acct-1", [], ["chatgpt", "claude-code"]]);
+  expect([file.account, file.capped, Object.keys(file.vendors).sort()]).toEqual(["acct-1", [], ["chatgpt", "claude-code", "openai-api"]]);
   expect(config.config_context("gpt-6.1-sol", 872000)).toBe(523200);
 });
 

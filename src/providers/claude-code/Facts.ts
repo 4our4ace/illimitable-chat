@@ -7,9 +7,11 @@ import type { Model } from "../../ai/Pick.ts";
 import { CLAUDE, HAIKU, OPUS, SONNET } from "../claude-api/Facts.ts";
 import type { Facts } from "../Provider.ts";
 
-// Claude's models at their standard speed, each one's window 200k till
-// Claude Code tells it, as soon as the plan is connected
-// (ClaudeCode.models: 1M where the plan has long context)
+// Claude's models at their standard speed, till Claude Code lists the
+// plan's own (ClaudeCode.lineup: the newest of each family, as soon as
+// the plan is connected, kept for the next start: catalog), each one's
+// window 200k till Claude Code tells it (ClaudeCode.models: 1M where the
+// plan has long context)
 const FABLE : Model = { label: "fable-5.1", id: "claude-fable-5-1", speeds: ["slow"] };
 
 export const FACTS = {
@@ -22,5 +24,6 @@ export const FACTS = {
   ttl      : 300e3,
   accounts : "folders" as const,
   folders  : "claude",
+  catalog  : true,
   dated    : true,
 } satisfies Facts;

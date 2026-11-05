@@ -81,6 +81,14 @@ export namespace Anthropic {
     return listed;
   }
 
+  // a Claude model's label by its id (claude-opus-5-5: opus-5.5;
+  // claude-haiku-4-5-20251001: haiku-4.5; claude-sonnet-5: sonnet-5);
+  // null: an id not of that shape
+  export function label(id: string): string | null {
+    const got = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/.exec(id);
+    return got === null ? null : got[1] + "-" + got[2] + (got[3] === undefined ? "" : "." + got[3]);
+  }
+
   // whether a key works, asked of the Models API ("": it does; else why
   // not, in a few words, never the error's own: a header's may hold the
   // key), as /login takes it
