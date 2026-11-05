@@ -14,7 +14,11 @@
 // uses it (its mark's process ended), one in use or newer stays; a write
 // that fails (a full disk) is said, never a crash; an empty file stored as
 // it is unpacks; another terminal's download, still under way, is left
-// be.
+// be. With autoupdate on and an account connected, this illi's build
+// downloads by itself, once a run, one illi at a time on the machine (one
+// whose illi lives is left to it), a call meanwhile told it's
+// downloading; the same build put in place meanwhile by another illi is
+// kept as it is.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -73,10 +77,13 @@ function zip(files: Array<{ name: string; data: string; store?: boolean }>): Buf
 
 const sha = (b: Buffer) => new Bun.CryptoHasher("sha256").update(b).digest("hex");
 
-// archives served by name
+// archives served by name, one held back till its promise ends
 const SERVED: Record<string, Buffer> = {};
-const HOST = Bun.serve({ port: 0, fetch: (req) => {
-  const b = SERVED[new URL(req.url).pathname.slice(1)];
+const HELD: Record<string, Promise<void>> = {};
+const HOST = Bun.serve({ port: 0, fetch: async (req) => {
+  const name = new URL(req.url).pathname.slice(1);
+  await HELD[name];
+  const b = SERVED[name];
   return b === undefined ? new Response(null, { status: 404 }) : new Response(new Uint8Array(b));
 } });
 const URL_OF = (name: string) => "http://127.0.0.1:" + HOST.port + "/" + name;
@@ -184,4 +191,31 @@ test("a write that fails is said, never a crash; an empty file stored as it is u
   await Agy.download(Agy.pin, new AbortController().signal, () => {});
   expect([fs.readFileSync(Agy.home() + "/1.4.9/EMPTY", "utf8"), fs.existsSync(young), fs.existsSync(old)]).toEqual(["", true, false]);
   expect(Agy.versions()).toEqual(["1.4.9", "1.4.5"]);
+});
+
+test("with autoupdate on and an account connected, this illi's build downloads by itself, once, one illi at a time on the machine; a call meanwhile told it's downloading; the same build put in place by another illi meanwhile kept", async () => {
+  const lock = () => Agy.home() + "/.updating";
+  const other = Bun.spawn(["sleep", "30"]);
+  Agy.pin = BUILT("2.0.0", "lock.zip", zip([{ name: "agy_acp_server.par", data: "x" }]));
+  expect([Agy.auto("notify", true), Agy.auto("off", true), Agy.auto("on", false)]).toEqual([null, null, null]);
+  fs.writeFileSync(lock(), String(other.pid));
+  expect([await Agy.auto("on", true), Agy.progress(), Agy.why()]).toEqual([false, { share: null }, "Google's Antigravity agent 2.0.0 is downloading in another illi: try again once it's done"]);
+  expect(Agy.told(Agy.why())).toBe(true);
+  other.kill();
+  await other.exited;
+  expect(Agy.progress()).toBeNull();
+  const one = zip([{ name: "agy_acp_server.par", data: "#!/bin/sh\necho auto\n" }]);
+  let release = () => {};
+  HELD["auto.zip"] = new Promise<void>((done) => (release = done));
+  SERVED["auto.zip"] = one;
+  Agy.pin = BUILT("2.0.1", "auto.zip", one, ["--uid="]);
+  const done = Agy.auto("on", true)!;
+  expect([Agy.update() === done, fs.readFileSync(lock(), "utf8"), Agy.progress(), Agy.why()]).toEqual([true, String(process.pid), { share: 0 }, "Google's Antigravity agent 2.0.1 is downloading (0%): try again once it's done"]);
+  release();
+  expect(await done).toBe(true);
+  expect([Agy.ready(), fs.existsSync(lock()), Agy.progress(), await Agy.update()]).toEqual([true, false, null, false]);
+  const cmd = Agy.home() + "/2.0.1/agy_acp_server.par";
+  const ino = fs.statSync(cmd).ino;
+  await Agy.download(Agy.pin, new AbortController().signal, () => {});
+  expect([fs.statSync(cmd).ino, fs.readdirSync(Agy.home()).filter((n) => n.startsWith(".new-") && n !== ".new-other")]).toEqual([ino, []]);
 });

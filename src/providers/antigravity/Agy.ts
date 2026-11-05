@@ -22,7 +22,11 @@
 // illi's goes once no live illi uses it, as this illi first runs its own
 // or puts it in place. A newer version stays: it's a newer illi's, which
 // may run in another terminal. A download's folder left beside them
-// (.new-*) goes a day old.
+// (.new-*) goes a day old. With autoupdate on, illi downloads its own
+// build by itself once an account is connected and it isn't here (an
+// illi update moved the pin: Agy.update), in the background, one illi at
+// a time on the machine (.updating names the one doing it); a call
+// meanwhile says it's downloading.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -75,6 +79,15 @@ const TOLD = new Set<string>();
 
 // whether this illi has marked its own build in use and tidied (Agy.mark)
 let marked = false;
+
+// the file naming the illi that downloads its build by itself (its pid),
+// in the agent's folder: one at a time on the machine (Agy.update)
+const LOCK = ".updating";
+
+// this illi's download by itself (Agy.update): its build, how far it got
+// (bytes of `of`), its end; the version it was tried for this run
+let updating: { b: Build; bytes: number; of: number; done: Promise<boolean> } | null = null;
+let tried = "";
 
 // Agy
 // ===
@@ -178,7 +191,9 @@ export namespace Agy {
   export function why(): string {
     const b    = Agy.pin;
     const was  = Agy.other();
+    const now  = Agy.progress();
     const text = b === null ? AGENT + "has no build for this machine (" + Agy.machine() + ") that illi runs: ILLI_ANTIGRAVITY can name one of your own"
+      : now !== null ? AGENT + b.version + " is downloading" + (now.share === null ? " in another illi" : " (" + now.share + "%)") + ": try again once it's done"
       : was !== null ? AGENT + was + " is here, and this illi runs " + b.version + ": /login " + (Agy.newer(was, b.version) > 0 ? "updates" : "downloads") + " it"
       : AGENT + "isn't here: /login downloads it";
     TOLD.add(text);
@@ -298,9 +313,10 @@ export namespace Agy {
   }
 
   // a build downloaded and put in place (its archive checked as it comes,
-  // `got` told the bytes so far and of how many), marked in use by this
-  // illi, what's left beside it tidied (Agy.tidy); thrown, why not (a
-  // stop: the signal's), nothing left behind
+  // `got` told the bytes so far and of how many; the same build put there
+  // meanwhile by another illi kept as it is, as it may be running), marked
+  // in use by this illi, what's left beside it tidied (Agy.tidy); thrown,
+  // why not (a stop: the signal's), nothing left behind
   export async function download(b: Build, signal: AbortSignal, got: (bytes: number, of: number) => void): Promise<void> {
     fs.mkdirSync(Agy.home(), { recursive: true, mode: 0o700 });
     const tmp = fs.mkdtempSync(path.join(Agy.home(), ".new-"));
@@ -315,14 +331,85 @@ export namespace Agy {
         throw new Error("Google's archive has no " + b.cmd);
       }
       fs.writeFileSync(path.join(into, "agent.json"), JSON.stringify({ cmd: b.cmd, args: b.args, sha256: b.sha256 }, null, 2) + "\n");
-      const at = path.join(Agy.home(), b.version);
-      fs.rmSync(at, { recursive: true, force: true });
-      fs.renameSync(into, at);
+      if (!Agy.has(b)) {
+        const at = path.join(Agy.home(), b.version);
+        fs.rmSync(at, { recursive: true, force: true });
+        fs.renameSync(into, at);
+      }
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
     Agy.use(b.version);
     Agy.tidy();
+  }
+
+  // this illi's build downloaded by itself where autoupdate is on (mode)
+  // and a Google account is connected (account), it not being here: the
+  // download under way (Agy.update); null: none
+  export function auto(mode: string, account: boolean): Promise<boolean> | null {
+    return mode === "on" && account && !Agy.ready() ? Agy.update() : null;
+  }
+
+  // this illi's build downloaded by itself, in the background: once a run
+  // for a version (one asked again shares the first), one illi at a time
+  // on the machine
+  // (LOCK: another's, its process alive, is left to it; one whose illi
+  // ended goes). true: downloaded now; false: not (none to take, here
+  // already, another illi's under way, or it failed: logged, /login
+  // offers it as before)
+  export function update(): Promise<boolean> {
+    if (updating !== null) {
+      return updating.done;
+    }
+    const b = Agy.pin;
+    if (b === null || tried === b.version || Agy.ready()) {
+      return Promise.resolve(false);
+    }
+    tried = b.version;
+    const lock = path.join(Agy.home(), LOCK);
+    try {
+      fs.mkdirSync(Agy.home(), { recursive: true, mode: 0o700 });
+      if (Agy.lives(Number(fs.readFileSync(lock, "utf8")))) {
+        return Promise.resolve(false);
+      }
+    } catch {}
+    try {
+      fs.rmSync(lock, { force: true });
+      fs.writeFileSync(lock, String(process.pid), { flag: "wx" });
+    } catch {
+      return Promise.resolve(false);
+    }
+    const now = { b, bytes: 0, of: b.bytes, done: Promise.resolve(false) };
+    now.done = Agy.download(b, new AbortController().signal, (bytes, of) => {
+      [now.bytes, now.of] = [bytes, of || b.bytes];
+    }).then(() => true, (err: any) => {
+      console.error("antigravity: Google's agent " + b.version + " wasn't downloaded: " + String(err?.message ?? err));
+      return false;
+    }).finally(() => {
+      updating = null;
+      try {
+        if (fs.readFileSync(lock, "utf8") === String(process.pid)) {
+          fs.rmSync(lock, { force: true });
+        }
+      } catch {}
+    });
+    updating = now;
+    return now.done;
+  }
+
+  // the download of this illi's build under way by itself: in this illi,
+  // its share done (%); in another (LOCK, its process alive), share null;
+  // none: null
+  export function progress(): { share: number | null } | null {
+    if (updating !== null) {
+      return { share: Math.min(100, Math.floor((updating.bytes / (updating.of || 1)) * 100)) };
+    }
+    try {
+      const pid = Number(fs.readFileSync(path.join(Agy.home(), LOCK), "utf8"));
+      return pid !== process.pid && Agy.lives(pid) && !Agy.ready() ? { share: null } : null;
+    } catch {
+      return null;
+    }
   }
 
   // the archive to a file, its sha256 reckoned as it comes and checked;
