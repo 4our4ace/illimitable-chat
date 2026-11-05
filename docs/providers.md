@@ -20,9 +20,11 @@ plan**) and, for ChatGPT and Claude, an API key (**OpenAI API key**,
   plan, a key for an API.
 - **Enter on one connected** opens its accounts, the one in use marked.
   Enter on another switches to it, at once and in every illi you have
-  open; Del logs one out (asked first); `+ add another …` connects one
-  more, which is then the one in use; the last row logs out of the
-  provider (asked first).
+  open; Del logs one out (asked first); **Models** chooses which of its
+  models write the summaries and run its chats ([Models](#models)), as
+  connecting one asks; `+ add another …` connects one more, which is
+  then the one in use; the last row logs out of the provider (asked
+  first).
 
 What you connect is offered at once (`/model` lists its models), and
 what you log out of is gone at once: a chat on it moves to another
@@ -362,9 +364,23 @@ one comes (`*` stands for the version):
 | `antigravity` | `gemini-*-flash`, high | `gemini-*-flash`, low      | gemini-3.8-flash |
 | `claude-api`  | `sonnet-*`            | `haiku-*`                   | sonnet-5.5, haiku-5.5 |
 
-`chats` names your own chat model per provider (/login asks it as you
-connect one, with the summaries' model): new chats start on your first
-provider's, unless `pick` names one model for every provider.
+`chats` names your own chat model per provider, and `compactor` the
+model that writes its summaries. As you connect a provider, /login reads
+the models it offers you (a note says so while it waits, 15 seconds at
+most) and asks both: which model writes the summaries, then which its
+chats run on. Each list is lit on what runs now, the provider's own
+default, its price shown next to each model where the provider lists
+one; Left and Right set the effort. Enter on what's lit leaves the
+setting unset, so the default keeps moving on with the provider's
+models; another model is kept by its family while it's the newest of
+it (so it moves on too), else by itself (an older one you chose stays).
+Esc skips what's left. The provider's **Models** row in /login asks
+both again whenever you like. A second account or key, a switch
+between them, or a provider illi already offered (ChatGPT on opencode's
+login, say) asks nothing: its Models row does. If its list didn't come,
+or the screen was at something else when it did, a note points to that
+row instead. New chats start on your first provider's chat model,
+unless `pick` names one model for every provider.
 
 Your own `pick`, `chats`, `compactor` and `agents` take a family the same way
 (`claude-code:opus-*:high:slow`: always the newest Opus) or a model by

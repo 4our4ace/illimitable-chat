@@ -454,6 +454,16 @@ export function config_role(key: Role, pick: Pick): Pick {
   return Pick.read(want, OFFER) ?? stand ?? pick;
 }
 
+// what a vendor's chats start on as offered now: its `chats` pick, else
+// its own default (DEFS), its model gone from the vendor's list its
+// first model offered; null: it offers none
+export function config_chats(vendor: Vendor): Pick | null {
+  const want  = config_split(DEFS(vendor).pick);
+  const first = Pick.models([vendor], OFFER.models)[0]?.[1];
+  const stand = first === undefined ? null : Pick.read({ ...want, model: first.label, speed: first.speeds[0] ?? "slow" }, OFFER) ?? Pick.read({ vendor, model: first.label, effort: "medium", speed: first.speeds[0] ?? "slow" }, OFFER);
+  return Pick.read(want, OFFER) ?? stand;
+}
+
 // a role's setting with `pick` in its vendor's place, the other vendors'
 // kept
 export function config_role_set(key: Role, pick: Pick): string {

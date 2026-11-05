@@ -16,9 +16,11 @@
 // keeps a pasted one, in illi's root: every profile's; never the
 // environment's). Esc stops a sign-in waiting (term_esc: t.login). On one
 // connected: its accounts, the one in use marked: Enter uses one, Del
-// logs one out (asked first); under them the rows its page adds (Page.more:
-// a program it runs on, to update, say), a row that connects one more,
-// the last logs out of it (asked first). What's connected is offered at once, and what's
+// logs one out (asked first); under them its Models row (which of its
+// models write its summaries and run its chats: asked too as one is
+// connected anew), the rows its page adds (Page.more: a program it runs
+// on, to update, say), a row that connects one more, the last logs out
+// of it (asked first). What's connected is offered at once, and what's
 // let go is gone, here and in every illi open (config.config_accounts,
 // Chat.follow), unless the vendors setting names the providers, which
 // /login then says. /logout opens the same pickers. A key is never shown
@@ -28,7 +30,7 @@
 import { Accounts, ENV, type Keyed, type Store } from "../config/Accounts.ts";
 import type { Vendor } from "../ai/AskAI.ts";
 import { Chat } from "../chat/Chat.ts";
-import { term_account, term_ask, term_chooser, term_question } from "./Commands.ts";
+import { term_account, term_ask, term_chooser, term_model_pick, term_question } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Logins } from "../providers/Logins.ts";
 import { term_note, term_notify, term_unnotify } from "./Notices.ts";
@@ -36,6 +38,7 @@ import { Pick } from "../ai/Pick.ts";
 import type { Facts } from "../providers/Provider.ts";
 import { Providers } from "../providers/Providers.ts";
 import { FACTS, Vendors } from "../providers/Vendors.ts";
+import { setting_set } from "./Settings.ts";
 import { term_hint, term_unhint, type Term } from "./Term.ts";
 
 // Types
@@ -80,14 +83,26 @@ type Api = { facts: Facts & { key: NonNullable<Facts["key"]> }; check: (key: str
 export const LOGIN        = 15 * 60000;
 export const LOGIN_FAILED = 60000;
 
+// how long a provider connected anew is waited on for its models (its
+// account's list: Provider.ts account) before /login asks which to run
+// on (ms); past it, a note says where to choose them
+export const READING      = 15000;
+
 // Login
 // =====
+
+// the vendors offered as /login last opened, or since its last change of
+// accounts (null: neither yet): what a vendor offered after a change is
+// new to (login_after), whatever the change read on the way (a page that
+// read the accounts again itself: ChatGPT's allowing opencode's login)
+let seen: Vendor[] | null = null;
 
 // /login (and /logout): the providers' picker, the accounts read again
 // first (another terminal's change: a view's illi follows no chat that
 // would have)
 export function term_login(t: Term): void {
   config.config_accounts();
+  seen = [...config.OFFER.vendors];
   login_makers(t);
 }
 
@@ -135,13 +150,14 @@ function login_provider(t: Term, p: Page, back: () => void): void {
 }
 
 // a provider's accounts' picker, the one in use marked: Enter uses one,
-// Del logs one out; then the rows its page adds (Page.more), the row that
+// Del logs one out; then its Models row (while it offers any:
+// login_models_row), the rows its page adds (Page.more), the row that
 // connects one more (if it can) and the one that logs out of it all; Esc
 // goes back to `back`, and from what these ask, back here
 function login_accounts(t: Term, p: Page, back: () => void): void {
   const again    = () => login_accounts(t, p, back);
   const accounts = p.accounts();
-  const more  = p.more?.() ?? [];
+  const more  = [...login_models_row(t, p.vendor), ...(p.more?.() ?? [])];
   const adds  = p.adds === "" ? [] : [p.adds];
   const out   = "Log out of " + p.name;
   const names = [...accounts.map((a) => a.name), ...more.map((r) => r.name), ...adds, out];
@@ -164,22 +180,31 @@ function login_accounts(t: Term, p: Page, back: () => void): void {
 // vendor went), the start's login note let go once no login is missing
 // (term_hint), each account's catalog asked; said, with what the vendors
 // setting leaves out (a vendor connected: its login kept outside the
-// accounts' file there, else its entry in the file)
+// accounts' file there, else its entry in the file). A vendor offered
+// now that wasn't as /login opened (`seen`: connected anew, by any page:
+// a key, a plan's sign-in) is asked its models next (login_models_new);
+// a change of account, a second key, a log out ask nothing (its Models
+// row asks)
 export function login_after(t: Term, vendor: Vendor, said: string): void {
+  const was = (seen ?? config.OFFER.vendors).includes(vendor);
   config.config_accounts(true);
+  seen = [...config.OFFER.vendors];
   if (t.chat !== null) {
     Chat.offered(t.chat);
   }
   if (term_hint() === "") {
     term_unhint(t);
   }
-  term_account(t);
+  const asked = term_account(t);
   const outside = Vendors.of(vendor)?.outside;
   const there   = outside !== undefined ? outside() : Object.keys(config.config_accounts_read() ?? {}).includes(vendor);
   const left    = config.config_named() && there && !config.OFFER.vendors.includes(vendor);
   const env  = config.config_env_set("vendors");
   const fix  = env === null ? "Your vendors setting leaves " + Pick.provider(vendor) + " out, though: /set vendors default lets /login decide." : env + " leaves " + Pick.provider(vendor) + " out, though: start illi without it to let /login decide.";
   term_note(t, said + (left ? " " + fix : ""));
+  if (!was && config.OFFER.vendors.includes(vendor)) {
+    void login_models_new(t, vendor, asked[vendor]);
+  }
 }
 
 // a change to the accounts' file, said if it fails (true: done); f gives
@@ -202,6 +227,100 @@ export function login_edit(t: Term, f: (store: Store) => Store | null): boolean 
 // Esc goes back to `back`)
 export function login_sure(t: Term, title: string, about: string, done: () => void, back: () => void): void {
   term_question(t, title, ["Keep it", "Log out"], ["", about], (k) => (k === 1 ? done() : undefined), { back });
+}
+
+// Models
+// ======
+
+// a provider connected anew: its models read first (what its account
+// tells: Provider.ts account, waited on READING ms at most, a note saying
+// so; one that asks nothing, or a view's illi, as known), then asked
+// (login_models). Nothing asked if it offers fewer than two; its list not
+// come in time, or the screen at something else by then (a list, a
+// question, a sign-in, text typed), a note says where to choose them
+async function login_models_new(t: Term, vendor: Vendor, reading: Promise<boolean> | undefined): Promise<void> {
+  let came = true;
+  if (reading !== undefined) {
+    const note = term_notify(t, "Reading the models " + Pick.provider(vendor) + " offers…", false, READING);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<false>((done) => (timer = setTimeout(() => done(false), READING)));
+    came = await Promise.race([reading.then(() => true, () => false), late]);
+    clearTimeout(timer);
+    term_unnotify(t, note);
+  }
+  const rows = Pick.models([vendor], config.OFFER.models);
+  if (!config.OFFER.vendors.includes(vendor) || rows.length < 2) {
+    return;
+  }
+  const busy = t.choose !== null || t.question !== null || t.login !== null || t.scr.ed.text !== "";
+  if (!came || busy) {
+    return term_note(t, (came ? "" : "Its list of models didn't come. ") + "/login, " + (Vendors.of(vendor)?.row ?? vendor) + ", Models chooses which of them " + Pick.provider(vendor) + " runs on.");
+  }
+  login_models(t, vendor);
+}
+
+// a provider's Models row, while it offers any: what its chats and their
+// summaries run on now; Enter asks both again (login_models)
+function login_models_row(t: Term, vendor: Vendor): Row[] {
+  const chats = config.OFFER.vendors.includes(vendor) ? config.config_chats(vendor) : null;
+  if (chats === null) {
+    return [];
+  }
+  const sums = config.config_role("compactor", chats);
+  return [{ name: "Models", about: "chats: " + Pick.shown(chats) + ", summaries: " + Pick.shown(sums), enter: "choose them", pick: (back) => login_models(t, vendor, back) }];
+}
+
+// a provider's models, asked: the one that writes its chats' summaries
+// (compactor), then the one its chats run on (chats), each picker lit on
+// what runs now (the setting's choice, else the provider's own: its
+// facts' defaults). Enter on that as it is leaves the setting as it is
+// (a default follows the provider's list as it changes); another is kept
+// in the setting (login_models_keep). Esc on the first skips both, on the
+// second keeps the first; either goes to `back` if given. Said once done
+function login_models(t: Term, vendor: Vendor, back?: () => void): void {
+  const rows  = Pick.models([vendor], config.OFFER.models);
+  const chats = config.config_chats(vendor);
+  if (chats === null) {
+    return;
+  }
+  const sums  = config.config_role("compactor", chats);
+  const on    = Pick.provider(vendor);
+  term_model_pick(t, rows, "Summaries on " + on + ": which model writes them?", sums, (s) => {
+    if (!login_models_keep(t, "compactor", sums, s)) {
+      return back?.();
+    }
+    term_model_pick(t, rows, "Chats on " + on + ": which model do they run on?", chats, (c) => {
+      if (login_models_keep(t, "chats", chats, c)) {
+        login_models_said(t, vendor);
+      }
+      back?.();
+    }, false, back);
+  }, false, back);
+}
+
+// a model chosen for a role on its vendor (`now`: what ran), kept in the
+// role's setting unless it's what ran: by family (Pick.family) while it's
+// the newest of it offered, so the setting follows as newer ones come,
+// else by itself (an older one chosen stays); false: not kept (said)
+function login_models_keep(t: Term, role: "compactor" | "chats", now: Pick, chose: Pick): boolean {
+  if (Pick.label(chose) === Pick.label(now)) {
+    return true;
+  }
+  const family = Pick.family(chose.model);
+  const named  = family !== chose.model && Pick.newest(chose.vendor, family, config.OFFER.models) === chose.model ? { ...chose, model: family } : chose;
+  return setting_set(t, role, config.config_role_set(role, named));
+}
+
+// a provider's models as now chosen, said; where new chats start too,
+// while that's another provider (the first offered's, or `pick`)
+function login_models_said(t: Term, vendor: Vendor): void {
+  const chats = config.config_chats(vendor);
+  if (chats === null) {
+    return;
+  }
+  const sums  = config.config_role("compactor", chats);
+  const first = config.PICK.vendor === vendor ? "" : " New chats start on " + Pick.provider(config.PICK.vendor) + ": /model moves a chat to " + Pick.provider(vendor) + ".";
+  term_note(t, Pick.provider(vendor, true) + ": chats run on " + Pick.shown(chats) + ", summaries on " + Pick.shown(sums) + "." + first);
 }
 
 // APIs

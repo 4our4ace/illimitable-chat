@@ -155,10 +155,14 @@ export namespace Pick {
     return best?.label;
   }
 
-  // a model's family, its versions as * (deepseek-v4-pro: deepseek-v*-pro,
-  // opus-5.5: opus-*), as a pick may name it to follow the newest
+  // a model's family, its version as * (deepseek-v4-pro: deepseek-v*-pro,
+  // opus-5.5: opus-*, qwen3-coder-480b: qwen*-coder-480b), as a pick may
+  // name it to follow the newest: its first number that isn't a size
+  // (480b, 8x7b: a bigger one is another model, not a later one); none
+  // (gpt-oss-120b): the label itself
   export function family(label: string): string {
-    return label.replace(/\d+(?:\.\d+)*/g, "*");
+    const at = [...label.matchAll(/\d+(?:\.\d+)*/g)].find((m) => !/^(?:[bkmt](?![a-z])|x\d)/i.test(label.slice(m.index + m[0].length)));
+    return at === undefined ? label : label.slice(0, at.index) + "*" + label.slice(at.index + at[0].length);
   }
 
   // whether version a comes after b, part by part (5.10 after 5.9, 5.5

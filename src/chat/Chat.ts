@@ -400,14 +400,19 @@ export namespace Chat {
   // what the accounts in use tell, asked (at the start, after /login, and
   // as the accounts change in another terminal): each offered vendor's
   // (Provider.ts account: an API key's models, a plan's windows, plan, use
-  // and catalog); the views told what changed
-  export function account(chat: Chat): void {
+  // and catalog); the views told what changed. Each vendor's asking given
+  // back, as /login waits on a vendor's to show its models (one that asks
+  // nothing it waits on: none)
+  export function account(chat: Chat): Partial<Record<Vendor, Promise<boolean>>> {
+    const asked: Partial<Record<Vendor, Promise<boolean>>> = {};
     for (const vendor of config.OFFER.vendors) {
       const news = Providers.of(vendor)?.account?.();
       if (news !== undefined) {
+        asked[vendor] = news;
         void news.then((changed) => changed && Chat.change(chat));
       }
     }
+    return asked;
   }
 
   // the vendors offered or a key in use changed: the views told; the

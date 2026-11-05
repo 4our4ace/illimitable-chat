@@ -62,7 +62,7 @@ const { Agent } = await import("../ai/Agent.ts");
 const { Pick } = await import("../ai/Pick.ts");
 const { Chat } = await import("../chat/Chat.ts");
 const { Tools } = await import("../tools/Tools.ts");
-const { term_login } = await import("../term/LoginCommands.ts");
+const { login_after, term_login } = await import("../term/LoginCommands.ts");
 const { term_hint } = await import("../term/Term.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
@@ -92,8 +92,8 @@ test("its page in /login, under its maker; the rows it adds under its accounts",
   t.choose.pick(t.choose.names.indexOf("Fake"));
   expect([t.choose.names, t.choose.abouts ?? t.choose.about]).toEqual([["Fake plan"], ["connected: me@fake.test"]]);
   t.choose.pick(0);
-  expect([t.choose.names, t.choose.about, t.choose.foot(1)]).toEqual([["me@fake.test", "Update its program", "Log out of Fake plan"], ["pro", "1.0 → 1.1", ""], "Enter update it · Esc back"]);
-  t.choose.pick(1);
+  expect([t.choose.names, t.choose.about, t.choose.foot(1), t.choose.foot(2)]).toEqual([["me@fake.test", "Models", "Update its program", "Log out of Fake plan"], ["pro", "chats: fake-1 · medium, summaries: fake-mini-1 · low", "1.0 → 1.1", ""], "Enter choose them · Esc back", "Enter update it · Esc back"]);
+  t.choose.pick(2);
   expect(updated).toBe(1);
 });
 
@@ -102,4 +102,52 @@ test("its accounts kept by their shape, an entry no provider reads kept as it wa
   expect(Accounts.edit(config.ROOT, (store) => Accounts.put(store, "fake", two))).toBeNull();
   expect([Accounts.folders_in(Accounts.read(config.ROOT), "fake"), JSON.parse(fs.readFileSync(DIR + "/accounts.json", "utf8")).later]).toEqual([two, { kept: true }]);
   expect([config.config_accounts(true), config.config_folder("fake" as any)]).toEqual([true, DIR + "/fake/f2"]);
+});
+
+// Enter on a list's row k, as Keys.ts does it: the list shut, then its pick
+const enter = (t: any, k: number) => {
+  const c  = t.choose;
+  t.choose = null;
+  c.pick(k);
+};
+
+test("connected anew, asked which model writes its summaries, then which its chats run on: what runs lit, kept unwritten; another kept by family; asked again by its Models row, not by a change of account", () => {
+  const t    = { v: View.view_new(), scr: { tty: true, ed: Screen.ed_new() }, choose: null, question: null, wait: null, pane: null, notices: [], due: true, ver: 0, login: null, chat: null } as any;
+  const kept = fs.readFileSync(DIR + "/accounts.json", "utf8");
+  fs.writeFileSync(DIR + "/accounts.json", JSON.stringify({ later: { kept: true } }));
+  term_login(t);
+  t.choose = null;
+  expect(config.OFFER.vendors).not.toContain("fake");
+  fs.writeFileSync(DIR + "/accounts.json", kept);
+  login_after(t, "fake" as any, "Connected.");
+  expect([t.choose.title, t.choose.names, t.choose.about, t.choose.at]).toEqual(["Summaries on your Fake plan: which model writes them?", ["fake-1", "fake-mini-1"], ["100k context  $3.00/M in", "100k context  $1.00/M in"], 1]);
+  enter(t, 1);
+  expect([t.choose.title, t.choose.at, config.config_value("compactor")]).toEqual(["Chats on your Fake plan: which model do they run on?", 0, ""]);
+  enter(t, 1);
+  expect([t.choose, config.config_value("chats"), config.config_value("compactor"), config.PICK]).toEqual([null, "fake:fake-mini-*:medium:slow", "", { vendor: "fake" as any, model: "fake-mini-1", effort: "medium", speed: "slow" }]);
+  expect(t.notices.at(-1).text).toBe("Your Fake plan: chats run on fake-mini-1 · medium, summaries on fake-mini-1 · low.");
+  login_after(t, "fake" as any, "Fake plan now runs on two@fake.test.");
+  expect(t.choose).toBeNull();
+  term_login(t);
+  enter(t, t.choose.names.indexOf("Fake"));
+  enter(t, 0);
+  enter(t, t.choose.names.indexOf("Models"));
+  expect(t.choose.title).toBe("Summaries on your Fake plan: which model writes them?");
+  enter(t, 0);
+  enter(t, 0);
+  expect([config.config_value("compactor"), config.config_value("chats")]).toEqual(["fake:fake-*:low:slow", "fake:fake-*:medium:slow"]);
+  config.config_set("compactor", "");
+  config.config_set("chats", "");
+});
+
+test("connected anew while the screen is at something else: a note says where to choose its models instead", () => {
+  const t = { v: View.view_new(), scr: { tty: true, ed: Screen.ed_new() }, choose: null, question: null, wait: null, pane: null, notices: [], due: true, ver: 0, login: null, chat: null } as any;
+  const kept = fs.readFileSync(DIR + "/accounts.json", "utf8");
+  fs.writeFileSync(DIR + "/accounts.json", JSON.stringify({}));
+  term_login(t);
+  t.choose = null;
+  fs.writeFileSync(DIR + "/accounts.json", kept);
+  t.scr.ed.text = "a message being typed";
+  login_after(t, "fake" as any, "Connected.");
+  expect([t.choose, t.notices.at(-1).text]).toEqual([null, "/login, Fake plan, Models chooses which of them your Fake plan runs on."]);
 });
