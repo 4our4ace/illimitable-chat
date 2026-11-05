@@ -61,7 +61,7 @@ const { Trusted } = await import("./Trusted.ts");
 const { Logs } = await import("../chat/Logs.ts");
 const { Memory } = await import("../chat/Memory.ts");
 const { Tools } = await import("../tools/Tools.ts");
-const { ChatGPT } = await import("../ai/ChatGPT.ts");
+const { ChatGPT } = await import("../providers/chatgpt/ChatGPT.ts");
 const { Pick } = await import("../ai/Pick.ts");
 
 // the project's own agents, commands and skills load only once it is trusted

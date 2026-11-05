@@ -41,10 +41,10 @@
 // flight (AskAI.wait) as it is sent.
 
 import { AskAI, type Ask, type Block, type Flight, type Try, type End, type Event, type Img, type Kind, type Say, type Usage, type Vendor } from "./AskAI.ts";
-import { Anthropic } from "./Anthropic.ts";
-import { ChatGPT } from "./ChatGPT.ts";
-import { ClaudeCode } from "./ClaudeCode.ts";
-import { OpenAI } from "./OpenAI.ts";
+import { Anthropic } from "../providers/claude-api/Anthropic.ts";
+import { ChatGPT } from "../providers/chatgpt/ChatGPT.ts";
+import { ClaudeCode } from "../providers/claude-code/ClaudeCode.ts";
+import { OpenAI } from "../providers/openai-api/OpenAI.ts";
 import { FAILED, live_push } from "../ui/View.ts";
 import { stream_events } from "../tools/Clip.ts";
 import { Machine, type Spec } from "../tools/Machine.ts";

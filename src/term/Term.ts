@@ -44,7 +44,7 @@ import * as fs from "node:fs";
 import { term_paste } from "./Attach.ts";
 import { Chat } from "../chat/Chat.ts";
 import { Lock } from "../chat/Lock.ts";
-import { ChatGPT } from "../ai/ChatGPT.ts";
+import { ChatGPT } from "../providers/chatgpt/ChatGPT.ts";
 import { term_account } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Custom, type Profile } from "../config/Custom.ts";

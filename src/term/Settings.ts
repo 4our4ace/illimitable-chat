@@ -22,7 +22,7 @@ import * as config from "../config/Config.ts";
 import { Custom } from "../config/Custom.ts";
 import { Permissions } from "../tools/Permissions.ts";
 import { Mcp } from "../tools/Mcp.ts";
-import { ClaudeCode } from "../ai/ClaudeCode.ts";
+import { ClaudeCode } from "../providers/claude-code/ClaudeCode.ts";
 import { Plugins } from "../config/Plugins.ts";
 import { term_note } from "./Notices.ts";
 import { Pick } from "../ai/Pick.ts";

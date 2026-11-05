@@ -25,7 +25,7 @@ const config = await import("../src/config/Config.ts");
 config.KEYS.anthropic = "test";
 
 const { Agent } = await import("../src/ai/Agent.ts");
-const { Anthropic } = await import("../src/ai/Anthropic.ts");
+const { Anthropic } = await import("../src/providers/claude-api/Anthropic.ts");
 const { AskAI } = await import("../src/ai/AskAI.ts");
 const { Memory } = await import("../src/chat/Memory.ts");
 const { Compactor } = await import("../src/chat/Compactor.ts");

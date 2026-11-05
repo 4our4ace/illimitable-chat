@@ -97,14 +97,14 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import type { Subprocess } from "bun";
-import { AskAI, type Ask, type Block, type End, type Event, type Img, type Say, type Try } from "./AskAI.ts";
-import { Agent, type Emit, type Entry } from "./Agent.ts";
-import { Anthropic } from "./Anthropic.ts";
-import { Pick } from "./Pick.ts";
-import { FAILED, live_push, type Limit, type Plan } from "../ui/View.ts";
-import * as config from "../config/Config.ts";
-import { json_object } from "../tools/Clip.ts";
-import { Mcp } from "../tools/Mcp.ts";
+import { AskAI, type Ask, type Block, type End, type Event, type Img, type Say, type Try } from "../../ai/AskAI.ts";
+import { Agent, type Emit, type Entry } from "../../ai/Agent.ts";
+import { Anthropic } from "../claude-api/Anthropic.ts";
+import { Pick } from "../../ai/Pick.ts";
+import { FAILED, live_push, type Limit, type Plan } from "../../ui/View.ts";
+import * as config from "../../config/Config.ts";
+import { json_object } from "../../tools/Clip.ts";
+import { Mcp } from "../../tools/Mcp.ts";
 
 // Types
 // =====

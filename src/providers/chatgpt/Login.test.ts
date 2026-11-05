@@ -20,7 +20,7 @@ delete process.env.ILLI_LOGIN;
 fs.mkdirSync(DATA + "/opencode");
 fs.writeFileSync(DATA + "/opencode/auth.json", JSON.stringify({ openai: { type: "oauth", access: "opencode-access", refresh: "r", expires: Date.now() + 3600e3 } }));
 
-const config = await import("../config/Config.ts");
+const config = await import("../../config/Config.ts");
 const { ChatGPT } = await import("./ChatGPT.ts");
 
 // a JWT with these claims (unsigned: only read here)

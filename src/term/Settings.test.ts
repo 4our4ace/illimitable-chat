@@ -40,7 +40,7 @@ const { term_commands } = await import("./Commands.ts");
 const { term_grab, term_type } = await import("./Keys.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
-const { ClaudeCode } = await import("../ai/ClaudeCode.ts");
+const { ClaudeCode } = await import("../providers/claude-code/ClaudeCode.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 afterEach(() => config.config_follow(() => {}));

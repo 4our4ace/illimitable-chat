@@ -40,16 +40,16 @@
 // one for the account.
 
 import * as fs from "node:fs";
-import { json_object } from "../tools/Clip.ts";
+import { json_object } from "../../tools/Clip.ts";
 import * as path from "node:path";
-import type { Ask } from "./AskAI.ts";
-import { Agent, type Wire } from "./Agent.ts";
-import { OpenAI } from "./OpenAI.ts";
-import { Pick, SPEEDS, type Model } from "./Pick.ts";
-import type { Limit, Plan } from "../ui/View.ts";
-import { Accounts, type Logins, type Saved } from "../config/Accounts.ts";
-import { Flock } from "../config/Flock.ts";
-import * as config from "../config/Config.ts";
+import type { Ask } from "../../ai/AskAI.ts";
+import { Agent, type Wire } from "../../ai/Agent.ts";
+import { OpenAI } from "../openai-api/OpenAI.ts";
+import { Pick, SPEEDS, type Model } from "../../ai/Pick.ts";
+import type { Limit, Plan } from "../../ui/View.ts";
+import { Accounts, type Logins, type Saved } from "../../config/Accounts.ts";
+import { Flock } from "../../config/Flock.ts";
+import * as config from "../../config/Config.ts";
 
 // Types
 // =====

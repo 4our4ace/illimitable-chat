@@ -6,7 +6,7 @@
 
 import { expect, test } from "bun:test";
 import { Anthropic } from "./Anthropic.ts";
-import { FAILED } from "../ui/View.ts";
+import { FAILED } from "../../ui/View.ts";
 
 test("a server tool's result is failed when an error stands in its place or its command exits non-zero", () => {
   const result = (content: unknown) => Anthropic.entry({ type: "web_search_tool_result", tool_use_id: "s1", content });

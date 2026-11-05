@@ -51,7 +51,7 @@ const Paint = await import("../ui/Paint.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
 const { GLYPH } = await import("../ui/Theme.ts");
-const { ClaudeCode } = await import("../ai/ClaudeCode.ts");
+const { ClaudeCode } = await import("../providers/claude-code/ClaudeCode.ts");
 const config = await import("../config/Config.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));

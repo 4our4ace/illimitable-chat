@@ -65,7 +65,7 @@ const REPO = temp_repo("illi-chat-work-");
 const OUT = temp_dir("illi-chat-out-");
 
 const { AskAI } = await import("../ai/AskAI.ts");
-const { ChatGPT } = await import("../ai/ChatGPT.ts");
+const { ChatGPT } = await import("../providers/chatgpt/ChatGPT.ts");
 const { Chat } = await import("./Chat.ts");
 const { Lock } = await import("./Lock.ts");
 const { Suggest } = await import("./Suggest.ts");
