@@ -616,7 +616,7 @@ test("a subagent's call refused for its cache marks goes on from a note, its nex
   const none = () => {};
   const once = await sub("look", 10000, (k, feed) => feed.end(k === 0 ? { ok: false, text: why, left: [], stop: "marks" } : { ok: true, text: "looked", left: [] }), none);
   expect(once.calls.map((a) => a.blocks.some((b: any) => b.mark))).toEqual([true, false]);
-  expect(once.calls[1].blocks.at(-1).text).toContain("note: Claude Code's request was refused over a technical limit, so your work goes on a simpler way.");
+  expect(once.calls[1].blocks.at(-1).text).toContain("note: The request was refused over a technical limit, so your work goes on a simpler way.");
   expect(once.report).toStartWith("[" + once.name + "]\nlooked\n");
   const twice = await sub("look", 10000, (_, feed) => feed.end({ ok: false, text: why, left: [], stop: "marks" }), none);
   expect(twice.calls.map((a) => a.blocks.some((b: any) => b.mark))).toEqual([true, false]);

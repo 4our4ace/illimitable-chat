@@ -51,6 +51,8 @@ import { Accounts, type Logins, type Saved } from "../../config/Accounts.ts";
 import { Flock } from "../../config/Flock.ts";
 import * as config from "../../config/Config.ts";
 import { LoginFile } from "./Facts.ts";
+import { FACTS } from "./Facts.ts";
+import type { Provider } from "../Provider.ts";
 
 // Types
 // =====
@@ -837,3 +839,43 @@ export namespace ChatGPT {
   };
 
 }
+
+// a refusal saying the plan doesn't take Codex, in plain words
+const NO_CODEX = "your ChatGPT plan doesn't include Codex, which illi runs on: /login with a plan that does (Plus or Pro)";
+
+// the start's note while no login is there to run on (the vendors setting
+// naming chatgpt; with nothing connected, the start says how to connect
+// any provider instead)
+const NO_LOGIN_YET = "No ChatGPT login yet: type /login to sign in with your ChatGPT plan.";
+
+// chatgpt's code, as the rest of illi asks it (Provider.ts): a call on its
+// wire in illi's loop; a refusal for its plan's usage limit, or for a plan
+// without Codex, in plain words; a model's window told before a call (the
+// account's catalog asked), the windows known as its own once the catalog
+// answered this run; at the start (and after /login), its login looked at
+// and followed, its plan, use and catalog asked; the chat told as they
+// change; the plan at the side; a model the account refused past its
+// standard window learned; the start's note while its login won't read or
+// isn't there
+export const PROVIDER: Provider = {
+  facts   : FACTS,
+  wire    : ChatGPT.wire,
+  spent   : (said, err) => (/usage_not_included/i.test(said) ? NO_CODEX : /usage.?limit/i.test(said) ? ChatGPT.spent(typeof err === "object" ? err : {}) : ""),
+  ready   : ChatGPT.ready,
+  windows : ChatGPT.catalogued,
+  account : () => {
+    ChatGPT.sync();
+    ChatGPT.follow();
+    if (ChatGPT.signed()) {
+      void ChatGPT.usage();
+      void ChatGPT.models();
+    }
+  },
+  watch   : ChatGPT.watch,
+  plan    : ChatGPT.told,
+  refused : ChatGPT.refused,
+  hint    : () => {
+    const unread = ChatGPT.unread();
+    return unread !== "" ? { text: unread, trouble: true } : ChatGPT.signed() ? null : { text: NO_LOGIN_YET, trouble: false };
+  },
+};

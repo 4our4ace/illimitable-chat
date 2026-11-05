@@ -18,6 +18,8 @@ import { AskAI, type Ask, type Img, type Usage } from "../../ai/AskAI.ts";
 import { Agent, type Emit, type Entry, type Item, type Step, type Tool, type Use, type Wire } from "../../ai/Agent.ts";
 import { Pick } from "../../ai/Pick.ts";
 import * as config from "../../config/Config.ts";
+import { FACTS } from "./Facts.ts";
+import type { Provider } from "../Provider.ts";
 import { FAILED } from "../../ui/View.ts";
 
 // Types
@@ -380,3 +382,14 @@ export namespace Anthropic {
   };
 
 }
+
+// claude-api's code, as the rest of illi asks it (Provider.ts): a call on
+// the Anthropic API's wire in illi's loop, a key checked, and at the
+// start (and as the key changes) its models' windows asked of the key in
+// use
+export const PROVIDER: Provider = {
+  facts   : FACTS,
+  wire    : Anthropic.wire,
+  check   : Anthropic.check,
+  account : () => (config.KEYS[FACTS.key.name] ? Anthropic.models(config.KEYS[FACTS.key.name]) : undefined),
+};

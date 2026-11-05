@@ -41,14 +41,11 @@
 // flight (AskAI.wait) as it is sent.
 
 import { AskAI, type Ask, type Block, type Flight, type Try, type End, type Event, type Img, type Kind, type Say, type Usage, type Vendor } from "./AskAI.ts";
-import { Anthropic } from "../providers/claude-api/Anthropic.ts";
-import { ChatGPT } from "../providers/chatgpt/ChatGPT.ts";
-import { ClaudeCode } from "../providers/claude-code/ClaudeCode.ts";
-import { OpenAI } from "../providers/openai-api/OpenAI.ts";
 import { FAILED, live_push } from "../ui/View.ts";
 import { stream_events } from "../tools/Clip.ts";
 import { Machine, type Spec } from "../tools/Machine.ts";
 import * as config from "../config/Config.ts";
+import { Providers } from "../providers/Providers.ts";
 import { Vendors } from "../providers/Vendors.ts";
 import { PICS } from "./Image.ts";
 import { When } from "../chat/When.ts";
@@ -167,9 +164,12 @@ export namespace Agent {
     return Vendors.keyed().find((f) => f.key.name === key)?.key.maker ?? key;
   }
 
+  // a call on its vendor: run by the vendor's own program if it has one
+  // (a runner: Provider.ts ask), else in illi's loop on its wire
   export function ask(ask: Ask, on: (ev: Event) => void): Try {
-    if (ask.vendor === "claude-code") {
-      return ClaudeCode.ask(ask, on);
+    const provider = Providers.of(ask.vendor);
+    if (provider?.ask !== undefined) {
+      return provider.ask(ask, on);
     }
     const end = AskAI.end("");
     const run: Run = { ask, on, sent: [], abort: new AbortController(), end };
@@ -180,12 +180,11 @@ export namespace Agent {
     };
     const done = (async () => {
       try {
-        if (ask.vendor === "claude-api") {
-          await Agent.loop(Anthropic.wire, run);
-        } else if (ask.vendor === "chatgpt") {
-          await Agent.loop(ChatGPT.wire, run);
+        if (provider?.wire === undefined) {
+          end.text = "illi has no provider " + ask.vendor + " here";
+          end.stop = "fail";
         } else {
-          await Agent.loop(OpenAI.wire, run);
+          await Agent.loop(provider.wire, run);
         }
       } catch (err: any) {
         end.text ||= err.message;
@@ -489,19 +488,17 @@ export namespace Agent {
   }
 
   // a refusal that means the money behind it is used up ("": not one),
-  // what to do about it: a ChatGPT plan's usage limit (ChatGPT.spent), or
-  // without Codex; an API key's credit or quota. status: its response's
-  // (0: an error in its stream)
+  // what to do about it: its vendor's own reading first (a plan's usage
+  // limit: Provider.ts spent), else an API key's credit or quota. status:
+  // its response's (0: an error in its stream)
   export function spent(vendor: Vendor, status: number, err: any): string {
     const said = (typeof err === "string" ? [err] : [err?.type, err?.code, err?.message].filter((x) => typeof x === "string")).join(" ");
     if (said === "" || status >= 500) {
       return "";
     }
-    if (vendor === "chatgpt" && /usage_not_included/i.test(said)) {
-      return "your ChatGPT plan doesn't include Codex, which illi runs on: /login with a plan that does (Plus or Pro)";
-    }
-    if (vendor === "chatgpt" && /usage.?limit/i.test(said)) {
-      return ChatGPT.spent(typeof err === "object" ? err : {});
+    const own = Providers.of(vendor)?.spent?.(said, err) ?? "";
+    if (own !== "") {
+      return own;
     }
     if (/insufficient_quota|exceeded your current quota|credit balance|billing/i.test(said)) {
       return Vendors.of(vendor)?.key?.credit ?? "";

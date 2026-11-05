@@ -69,7 +69,7 @@ export type Pending = { who: string; step: number; found: Promise<Found | null> 
 
 // illi's own memory and meta tools, never given a line: zoom, search and
 // date read the memory themselves, and a line after projects, todo, ask,
-// skill, approve (Claude Code's permission prompt), spawn or tell would be
+// skill, approve (a provider's program's permission prompt), spawn or tell would be
 // noise on illi's own steps, or go round an agent's report
 export const SKIP = new Set(["zoom", "search", "date", "projects", "todo", "ask", "skill", "approve", "spawn", "tell"]);
 

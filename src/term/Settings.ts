@@ -22,7 +22,7 @@ import * as config from "../config/Config.ts";
 import { Custom } from "../config/Custom.ts";
 import { Permissions } from "../tools/Permissions.ts";
 import { Mcp } from "../tools/Mcp.ts";
-import { ClaudeCode } from "../providers/claude-code/ClaudeCode.ts";
+import { Providers } from "../providers/Providers.ts";
 import { Plugins } from "../config/Plugins.ts";
 import { term_note } from "./Notices.ts";
 import { Pick } from "../ai/Pick.ts";
@@ -32,9 +32,6 @@ import { term_act, term_send, type Term } from "./Term.ts";
 
 // the widest a value shows in the picker, so what it is fits beside it
 const WIDE = 24;
-
-// what `off`'s list says of a server of Claude Code's own
-const CLAUDE_CODE = "MCP server · Claude Code";
 
 // the settings, in their order
 const KEYS = Object.keys(config.SETTINGS) as config.Key[];
@@ -163,8 +160,9 @@ export function setting_open(t: Term, key: config.Key): void {
 }
 
 // Enter on `off`: each skill, agent, command, MCP server (illi's own,
-// then Claude Code's as its last call told them: ClaudeCode.servers,
-// whatever the pick, as `off` holds for each later call on claude-code)
+// then each vendor's own program's as its last call told them:
+// Provider.ts servers, Claude Code's, whatever the pick, as `off` holds
+// for each later call on that vendor)
 // and plugin, what it is and where it's from (built in, global, the profile,
 // the project, a plugin: its part by the name it is listed by; Claude
 // Code), on or off (setting_on); Enter, Left or Right turns the lit one
@@ -175,12 +173,15 @@ function setting_off(t: Term): void {
   const cwd   = process.cwd();
   const own   = config.DIR !== config.ROOT;
   const where = (file: string) => (file === "" ? "built in" : own && file.startsWith(config.DIR + "/") ? config.PROFILE : file.startsWith(config.ROOT + "/") ? "global" : "project");
+  // each vendor's own program's servers, said whose they are (one
+  // turned off leaves that program's calls from the next call)
+  const theirs = Providers.all().flatMap((p) => (p.servers?.list() ?? []).map((s) => ({ name: s.name, about: "MCP server · " + p.servers!.by })));
   const rows  = [
     ...Custom.skills(cwd, true).map((s) => [s.name, "skill · " + (s.plugin == null ? where(s.dir) : "plugin " + s.plugin)]),
     ...Custom.parts(cwd, "agents", true).map((p) => [p.name, "agent · " + (p.plugin === null ? where(p.file) : "plugin " + p.plugin.name)]),
     ...Custom.parts(cwd, "commands", true).map((p) => [p.name, "command · " + (p.plugin === null ? where(p.file) : "plugin " + p.plugin.name)]),
     ...Object.entries(Mcp.read(cwd, true)).map(([name, f]) => [name, "MCP server · " + (f.plugin !== null ? "plugin " + f.plugin : where(f.file))]),
-    ...(ClaudeCode.servers() ?? []).map((s) => [s.name, CLAUDE_CODE]),
+    ...theirs.map((s) => [s.name, s.about]),
     ...Plugins.found().map((p) => [p.name, "plugin · " + where(p.dir || p.file)]),
   ];
   const aside = () => rows.map(([name]) => setting_on(name));
@@ -193,7 +194,7 @@ function setting_off(t: Term): void {
     }
     return true;
   };
-  const foot = (k: number) => "Enter on/off · " + (rows[k][1] === CLAUDE_CODE ? "from the next call" : /^(MCP|plugin)/.test(rows[k][1]) ? "at the next start" : "applies now");
+  const foot = (k: number) => "Enter on/off · " + (theirs.some((s) => s.about === rows[k][1]) ? "from the next call" : /^(MCP|plugin)/.test(rows[k][1]) ? "at the next start" : "applies now");
   term_chooser(t, "Turned off" + (own ? " in " + config.PROFILE : ""), rows.map(([name]) => name), rows.map(([, about]) => about), -1, () => {}, { find: true, keys, foot, aside: aside() });
 }
 

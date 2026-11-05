@@ -11,8 +11,8 @@
 // requests refused, the plugins' lines, a hint for the keys or illi's
 // to-do list; the side and side_width settings place it.
 
-import type { Theirs } from "../providers/claude-code/ClaudeCode.ts";
-import { term_background, term_choose, term_mcp, term_mcp_state, term_stick, term_theirs } from "./Commands.ts";
+import type { Theirs } from "../providers/Provider.ts";
+import { term_background, term_choose, term_mcp, term_mcp_state, term_owner, term_stick, term_theirs } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Custom, type Skill } from "../config/Custom.ts";
 import * as Draw from "../ui/Draw.ts";
@@ -261,9 +261,10 @@ function term_bar(f: number, w: number, c: string): Item {
 
 // the user's MCP servers, a line each, their names aligned: ● ready
 // (in the theme's success; its tools counted), ✗ failed (its error), ◌
-// starting; a file that won't read; then, under a dim line, while the
-// pick is on claude-code, Claude Code's own as its last call told them
-// (term_theirs), but one illi's own of its name stands in for: ●
+// starting; a file that won't read; then, under a dim line naming whose
+// they are, while the pick is on a vendor whose program loads its own
+// (Claude Code's), those as its last call told them (term_theirs), but
+// one illi's own of its name stands in for: ●
 // connected (its tools counted, once told), ✗ failed, dim one `off`
 // names; those not connected otherwise (needing a login, still pending:
 // the claude.ai connectors never set up) one dim line counting them; a
@@ -283,7 +284,7 @@ function term_side_mcp(t: Term): Item[] {
   const their = (s: Theirs): Paint.Line => (s.off ? [Paint.Run("  " + pad(s.name) + "  off", Paint.DIM)] : s.status === "connected" ? ok(s.name, s.tools?.length ?? null) : bad(s.name));
   const more = rest.length === 0 ? [] : [[Paint.Run(theirs.length === 0 ? "  " + rest.length + " not connected" : "+ " + rest.length + " more not connected", Paint.DIM)] as Paint.Line];
   const file = troubles.length === 0 ? [] : [[Paint.Run(GLYPH.failed + " ", red), Paint.Run((troubles.length === 1 ? "an MCP file" : troubles.length + " MCP files") + " won't read", Paint.DIM)]];
-  const cc   = all.length === 0 ? [] : [[Paint.Run("Claude Code's", Paint.DIM)] as Paint.Line, ...theirs.map(their), ...more];
+  const cc   = all.length === 0 ? [] : [[Paint.Run((term_owner(t)?.by ?? "") + "'s", Paint.DIM)] as Paint.Line, ...theirs.map(their), ...more];
   const at   = [...servers.map((s) => s.name), ...file.map(() => ""), "", ...theirs.map((s) => s.name), ...rest.slice(0, 1).map((s) => s.name)];
   return [...servers.map(line), ...file, ...cc].map((l, k): Item => [l, () => term_mcp(t, at[k], k >= servers.length + file.length)]);
 }

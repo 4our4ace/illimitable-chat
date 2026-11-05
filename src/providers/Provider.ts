@@ -9,10 +9,17 @@
 //   offered, the default picks, the API keys' variables), so a facts file
 //   imports nothing of illi's that reads the config: Vendors.ts lists
 //   them all.
+// - its code (Provider below): how a call runs on it, and what illi asks
+//   of it as it runs (its account, plan and models). Providers.ts lists
+//   them all.
+// - its /login page, unless it runs on an API key (those share one).
 //
 // Types only: every file may import it.
 
+import type { Wire } from "../ai/Agent.ts";
+import type { Ask, Event, Try } from "../ai/AskAI.ts";
 import type { Model } from "../ai/Pick.ts";
+import type { Plan } from "../ui/View.ts";
 
 // Types
 // =====
@@ -82,4 +89,73 @@ export type Facts = {
   dated?    : boolean;
   setup?    : (ctx: Context) => void;
   outside?  : () => boolean;
+};
+
+// an MCP server a provider's own program loads in a call (Claude Code's,
+// as its init tells: illi's own left out): its name as the program lists
+// it, how it is (connected, failed, needs-auth, pending, disabled), its
+// tools as the program names them (null: none told yet, each call having
+// cut it); as the views show it, whether `off` names it and whether
+// illi's own server of its name is used in its place (over)
+export type Theirs = { name: string; status: string; tools: string[] | null; off: boolean; over: boolean };
+
+// the MCP servers a provider's own program loads in its calls (Claude
+// Code's), which /mcp, /settings and the side show while the chat's pick
+// is on it: whose they are ("Claude Code"), the servers as its last call
+// told them (null: none told yet), a server's tools by their own names,
+// and the command that logs in to one waiting on a login
+export type Servers = {
+  by    : string;
+  list  : () => Theirs[] | null;
+  short : (server: Theirs) => string[];
+  login : (name: string) => string;
+};
+
+// what the start says of a provider's login (Provider hint): its words,
+// and whether they tell of a fault (a login file that won't read), which
+// is said even while nothing is connected
+export type Hint = { text: string; trouble: boolean };
+
+// a provider's code:
+// - facts: its facts (Facts.ts);
+// - wire: a call runs in illi's loop on it (Agent.loop: illi sends each
+//   request and runs the tools), or
+// - ask: its own program runs the call (a runner: Claude Code), giving
+//   back the same Events and End as Agent.ask;
+// - spent: a refusal that means the plan behind it is used up (said: the
+//   error's words), what to do about it ("": not one);
+// - ready: before a call, its model's window told (on chatgpt, the
+//   account's catalog asked); null: ready, else why not;
+// - windows: whether the windows known are the account's own this run
+//   (none: always); while not, the chat's cut waits for them, as one
+//   fitted to smaller windows kept last would fold the chat for good;
+// - account: what the account in use tells, asked (at the start, after
+//   /login, as the accounts change in another terminal): true once
+//   something changed (its models' windows);
+// - watch: tells f each time its account, plan or catalog changed;
+// - plan: its plan's limits and use, as the side shows them (null: none
+//   told);
+// - refused: a model this account refused as too long past its standard
+//   window, learned (its window is the standard one from now on); true:
+//   learned;
+// - servers: the MCP servers its own program loads (Servers);
+// - hint: what the start says of its login (null: nothing);
+// - check: an API key checked with it, asking what costs nothing (""
+//   good, else why not, never the fetch error's own words);
+// - close: what it runs in the background stopped, as illi ends
+export type Provider = {
+  facts     : Facts;
+  wire?     : Wire<any>;
+  ask?      : (ask: Ask, on: (ev: Event) => void) => Try;
+  spent?    : (said: string, err: any) => string;
+  ready?    : (model: string, halt?: AbortSignal) => Promise<string | null>;
+  windows?  : () => boolean;
+  account?  : () => Promise<boolean> | void;
+  watch?    : (f: () => void) => void;
+  plan?     : () => Plan | null;
+  refused?  : (label: string) => boolean;
+  servers?  : Servers;
+  hint?     : () => Hint | null;
+  check?    : (key: string) => Promise<string>;
+  close?    : () => void;
 };

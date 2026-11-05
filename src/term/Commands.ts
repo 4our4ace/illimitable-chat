@@ -22,7 +22,9 @@ import { term_redraw } from "./Frame.ts";
 import { term_away, term_clear, term_cycle, term_enter, term_esc, term_next, term_page, term_shots, term_take, term_verbose } from "./Keys.ts";
 import { Mcp } from "../tools/Mcp.ts";
 import * as Md from "../ui/Md.ts";
-import { ClaudeCode, type Theirs } from "../providers/claude-code/ClaudeCode.ts";
+import type { Servers, Theirs } from "../providers/Provider.ts";
+import { Providers } from "../providers/Providers.ts";
+import { Vendors } from "../providers/Vendors.ts";
 import { Export } from "../chat/Export.ts";
 import { Plugins, type Command as Plugged, type Found } from "../config/Plugins.ts";
 import { Hooks, type Entry } from "../config/Hooks.ts";
@@ -132,12 +134,12 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["/background",       "",                        "the background jobs: what a shell call left running (a dev server, a watcher); Enter or Del stops one", term_background],
     ]],
     ["Setup", [
-      ["/login",            "",                        "the providers, ChatGPT and Claude: connect a plan or an API key, switch between its accounts, add one, log out", term_login],
+      ["/login",            "",                        "the providers, " + Vendors.list(Vendors.makers(), "and") + ": connect a plan or an API key, switch between its accounts, add one, log out", term_login],
       ["/logout",           "",                        "the providers, as /login: Del logs out of an account, the last row of a plan or a key out of it", term_login],
       ["/settings",         "",                        "all the settings: type to search, Left, Right or Enter change one, Del puts its default back", (t) => term_settings(t)],
       ["/shortcuts",        "",                        "the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one", (t) => term_shortcuts(t)],
       ["/set <key> [value]", "",                       "change a setting (default: back to its default); no value: /settings at it. / finds each setting by its key or what it does", term_set],
-      ["/mcp",              "",                        "your MCP servers and, on claude-code, Claude Code's: on or off, their tools, or why one failed", term_mcp],
+      ["/mcp",              "",                        "your MCP servers" + Providers.all().flatMap((p) => (p.servers === undefined ? [] : [" and, on " + p.facts.id + ", " + p.servers.by + "'s"])).join("") + ": on or off, their tools, or why one failed", term_mcp],
       ["/mode [mode]",      "",                        "what runs without asking, this session: default or trust; no mode: opens a list (in trust mode, click it on the bottom line too)", term_mode],
       ["/permissions",      "",                        "the requests refused (Enter allows one again, this session), the approvals saved (Del removes one), your rules", (t) => term_permissions(t)],
     ]],
@@ -464,34 +466,35 @@ function term_skill(t: Term, skill: Skill, arg: string, word: string): void {
 }
 
 // the MCP servers, illi's own (where each is from: a plugin, a file;
-// one `off` names, not started, too), then, while the pick is on
-// claude-code, Claude Code's as its last call told them (term_theirs),
-// each how it is (term_mcp_state) and on or off (setting_on); the lit
-// one's tools under them, or why it failed, or the login it needs;
-// Enter, Left or Right turns it off or on (setting_toggle: `off`; illi's
-// own at the next start, Claude Code's from the next call; by name, so
-// one of each so named together); the files
-// that won't read after them. None of either: where the user's go (none
-// there yet: config.MCPS), and, claude-code offered, that Claude Code's
-// own show while the pick is on it, once a call has loaded them. `at`:
-// the server lit, illi's or Claude Code's (cc: a click on one at the
-// side)
+// one `off` names, not started, too), then, while the pick is on a
+// vendor whose own program loads its own (claude-code: Claude Code's),
+// those as its last call told them (term_theirs), each how it is
+// (term_mcp_state) and on or off (setting_on); the lit one's tools under
+// them, or why it failed, or the login it needs; Enter, Left or Right
+// turns it off or on (setting_toggle: `off`; illi's own at the next
+// start, the program's from the next call; by name, so one of each so
+// named together); the files that won't read after them. None of either:
+// where the user's go (none there yet: config.MCPS), and, such a vendor
+// offered, that its program's own show while the pick is on it, once a
+// call has loaded them. `at`: the server lit, illi's or the program's
+// (cc: a click on one at the side)
 export function term_mcp(t: Term, at = "", cc = false): void {
   const { servers, troubles, files } = Mcp.status();
   const idle   = Object.entries(Mcp.read(process.cwd(), true)).filter(([name]) => config.config_off(name) && !servers.some((s) => s.name === name));
   const theirs = term_theirs(t);
+  const owner  = term_owner(t);
   const where  = files.map((f, k) => config.config_home(f) + (files.length === 1 ? "" : k === 0 ? " (every profile)" : " (this profile's)")).join(" or ");
   const from   = (s: { plugin: string | null; file: string }) => (s.plugin !== null ? "plugin " + s.plugin : config.config_home(s.file));
   if (servers.length === 0 && idle.length === 0 && theirs.length === 0) {
-    const later = t.v.vendors.includes("claude-code") ? " Claude Code's own servers show here while the pick is on claude-code, once a call has loaded them." : "";
+    const later = t.v.vendors.map((v) => Providers.of(v)).flatMap((p) => (p?.servers === undefined ? [] : [" " + p.servers.by + "'s own servers show here while the pick is on " + p.facts.id + ", once a call has loaded them."])).join("");
     const text  = ["No MCP servers yet. Add them to " + where + ", as Claude Code's mcpServers (illi's docs/customize.md shows the shape); they run from illi's next start." + later, ...(troubles.length === 0 ? [] : ["", "Won't read:", ...troubles.map((x) => "- " + x)])];
     return term_pane_text(t, "MCP", text.join("\n"));
   }
   const tools = (names: string[]) => (names.length === 0 ? "no tools" : names.join(", "));
-  // `off` holds names: one of illi's and one of Claude Code's so named
+  // `off` holds names: one of illi's and one of the program's so named
   // go off and on together, as each one's foot says
   const twin  = (name: string, cc: boolean) => (cc ? [...servers.map((s) => s.name), ...idle.map(([n]) => n)] : theirs.map((s) => s.name)).some((n) => n.toLowerCase() === name.toLowerCase());
-  const own   = (name: string) => "Enter on/off · at the next start" + (twin(name, false) ? ", Claude Code's of this name too" : "");
+  const own   = (name: string) => "Enter on/off · at the next start" + (twin(name, false) && owner !== null ? ", " + owner.by + "'s of this name too" : "");
   const rows: Array<{ name: string; about: string; head: string; detail: string; foot: string }> = [
     ...servers.map((s) => ({
       name   : s.name,
@@ -503,9 +506,9 @@ export function term_mcp(t: Term, at = "", cc = false): void {
     ...idle.map(([name, f]) => ({ name, about: "not started · " + from(f), head: "illi's", detail: "", foot: own(name) })),
     ...theirs.map((s) => ({
       name   : s.name,
-      about  : s.over ? "illi's own " + s.name + " in its place" : term_mcp_state(s.status, s.tools?.length ?? null),
-      head   : "Claude Code's, as last told",
-      detail : s.over ? "illi's calls use illi's own server of this name instead, so the model gets one copy" : s.status === "needs-auth" ? "Claude Code needs a login to it: claude mcp login \"" + s.name + "\"" : s.status !== "connected" || s.tools === null ? "" : tools(s.tools.map((x) => x.slice(("mcp__" + ClaudeCode.spell(s.name) + "__").length))),
+      about  : s.over ? "illi's own " + s.name + " in its place" : term_mcp_state(s.status, s.tools?.length ?? null, owner?.by),
+      head   : owner!.by + "'s, as last told",
+      detail : s.over ? "illi's calls use illi's own server of this name instead, so the model gets one copy" : s.status === "needs-auth" ? owner!.by + " needs a login to it: " + owner!.login(s.name) : s.status !== "connected" || s.tools === null ? "" : tools(owner!.short(s)),
       foot   : "Enter on/off in illi's calls · from the next call" + (twin(s.name, true) ? ", illi's own of this name too at the next start" : ""),
     })),
     ...troubles.map((x) => ({ name: x, about: "", head: "Won't read", detail: "", foot: "read again at the next start" })),
@@ -532,23 +535,30 @@ export function term_mcp(t: Term, at = "", cc = false): void {
   }
 }
 
-// Claude Code's own MCP servers as /mcp and the side show them: as its
-// last call that loaded them told them (ClaudeCode.servers), only while
-// the chat's pick (the main agent's) is on claude-code, the one vendor
-// whose calls load them; on any other, none, as none of its calls has
-// them
+// the MCP servers a vendor's own program loads (Provider.ts servers:
+// Claude Code's) as /mcp and the side show them: as its last call that
+// loaded them told them, only while the chat's pick (the main agent's) is
+// on that vendor, the one whose calls load them; on any other, none, as
+// none of its calls has them
 export function term_theirs(t: Term): Theirs[] {
-  return t.v.pick?.vendor === "claude-code" ? (ClaudeCode.servers() ?? []) : [];
+  return term_owner(t)?.list() ?? [];
+}
+
+// whose those are: the chat's vendor's servers (none: its calls load no
+// servers of their own)
+export function term_owner(t: Term): Servers | null {
+  return Providers.of(t.v.pick?.vendor)?.servers ?? null;
 }
 
 // how an MCP server is, in words: connected, its tools counted (once
-// told), else failed, starting, or as Claude Code says it (needs-auth: a
-// login it needs, disabled: turned off in Claude Code itself)
-export function term_mcp_state(state: string, tools: number | null): string {
+// told), else failed, starting, or as a provider's program says it of
+// its own (`by`: needs-auth, a login it needs; disabled, turned off in
+// that program itself)
+export function term_mcp_state(state: string, tools: number | null, by = "its program"): string {
   switch (state) {
     case "connected"  : return tools === null ? "connected" : tools + (tools === 1 ? " tool" : " tools");
     case "needs-auth" : return "needs a login";
-    case "disabled"   : return "off in Claude Code";
+    case "disabled"   : return "off in " + by;
     default           : return state;
   }
 }

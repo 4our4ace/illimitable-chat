@@ -53,7 +53,7 @@ import { term_note, term_notify, term_unnotify, type Notice } from "./Notices.ts
 import { OpenAI } from "../providers/openai-api/OpenAI.ts";
 import { Pick } from "../ai/Pick.ts";
 import * as Screen from "../ui/Screen.ts";
-import { term_unhint, type Term } from "./Term.ts";
+import { term_hint, term_unhint, type Term } from "./Term.ts";
 
 // Types
 // =====
@@ -165,15 +165,15 @@ function login_accounts(t: Term, p: Provider, back: () => void): void {
 
 // what follows a change of accounts: read again at once (the vendors
 // offered, the keys in use), the chat told (its pick given way if its
-// vendor went), the start's login note let go once ChatGPT is no longer
-// what the chat waits on, each account's catalog asked; said, with what
+// vendor went), the start's login note let go once no login is missing
+// (term_hint), each account's catalog asked; said, with what
 // the vendors setting leaves out
 function login_after(t: Term, vendor: Vendor, said: string): void {
   config.config_accounts(true);
   if (t.chat !== null) {
     Chat.offered(t.chat);
   }
-  if (!config.OFFER.vendors.includes("chatgpt") || ChatGPT.signed()) {
+  if (term_hint() === "") {
     term_unhint(t);
   }
   term_account(t);

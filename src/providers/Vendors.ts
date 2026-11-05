@@ -39,6 +39,24 @@ export namespace Vendors {
     return FACTS.find((f) => f.fallback) ?? FACTS[0];
   }
 
+  // the makers, in /login's order (Provider.ts Maker)
+  export function makers(): string[] {
+    return [...new Set([...FACTS].sort((a, b) => a.maker.order - b.maker.order).map((f) => f.maker.name))];
+  }
+
+  // what /login connects, in words: a plan of each maker that has one,
+  // or an API key ("your ChatGPT or Claude plan, or an API key")
+  export function ways(): string {
+    const plans = [...new Set([...FACTS].filter((f) => f.key === undefined).sort((a, b) => a.maker.order - b.maker.order).map((f) => f.maker.name))];
+    const keys  = FACTS.some((f) => f.key !== undefined) ? ", or an API key" : "";
+    return "your " + Vendors.list(plans, "or") + " plan" + keys;
+  }
+
+  // names in a sentence: "A", "A or B", "A, B or C"
+  export function list(names: string[], and: string): string {
+    return names.length <= 1 ? names.join("") : names.slice(0, -1).join(", ") + " " + and + " " + names.at(-1);
+  }
+
   // the providers that run on an API key
   export function keyed(): Array<Facts & { key: NonNullable<Facts["key"]> }> {
     return FACTS.filter((f): f is Facts & { key: NonNullable<Facts["key"]> } => f.key !== undefined);
