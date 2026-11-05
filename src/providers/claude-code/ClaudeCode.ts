@@ -105,6 +105,8 @@ import { FAILED, live_push, type Limit, type Plan } from "../../ui/View.ts";
 import * as config from "../../config/Config.ts";
 import { json_object } from "../../tools/Clip.ts";
 import { Mcp } from "../../tools/Mcp.ts";
+import { FACTS } from "./Facts.ts";
+import type { Provider, Theirs } from "../Provider.ts";
 
 // Types
 // =====
@@ -146,7 +148,7 @@ type Cut = { strict: boolean; deny: string[] };
 // tools as Claude Code names them (null: none told yet, each call
 // having cut it); as the views show it, whether `off` names it and
 // whether illi's own server of its name is used in its place (over)
-export type Theirs = { name: string; status: string; tools: string[] | null; off: boolean; over: boolean };
+export type { Theirs };
 
 // Constants
 // =========
@@ -977,3 +979,20 @@ export namespace ClaudeCode {
   }
 
 }
+
+// claude-code's code, as the rest of illi asks it (Provider.ts): a call
+// run by Claude Code itself (a runner), at the start (once an account)
+// the plan's windows asked, the plan at the side, and Claude Code's own
+// MCP servers as its last call told them
+export const PROVIDER: Provider = {
+  facts   : FACTS,
+  ask     : ClaudeCode.ask,
+  account : ClaudeCode.models,
+  plan    : ClaudeCode.told,
+  servers : {
+    by    : "Claude Code",
+    list  : ClaudeCode.servers,
+    short : (s) => (s.tools ?? []).map((x) => x.slice(("mcp__" + ClaudeCode.spell(s.name) + "__").length)),
+    login : (name) => "claude mcp login \"" + name + "\"",
+  },
+};

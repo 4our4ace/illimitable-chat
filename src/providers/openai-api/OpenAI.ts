@@ -14,6 +14,8 @@
 import { AskAI, type Ask, type Img, type Usage } from "../../ai/AskAI.ts";
 import { Agent, type Emit, type Entry, type Item, type Step, type Tool, type Use, type Wire } from "../../ai/Agent.ts";
 import { FAILED } from "../../ui/View.ts";
+import { FACTS } from "./Facts.ts";
+import type { Provider } from "../Provider.ts";
 
 // Types
 // =====
@@ -262,3 +264,11 @@ function untracked(text: string): string {
 function linked(text: string, url: string): boolean {
   return new RegExp(url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?=$|[\\s)\\]>\"'#]|[.,;:!?](?:\\s|$))").test(text);
 }
+
+// openai-api's code, as the rest of illi asks it (Provider.ts): a call on
+// OpenAI's wire in illi's loop, and a key checked
+export const PROVIDER: Provider = {
+  facts : FACTS,
+  wire  : OpenAI.wire,
+  check : OpenAI.check,
+};

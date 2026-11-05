@@ -929,7 +929,7 @@ function config_offer(): boolean {
 // connects one
 function config_connected(): Vendor[] {
   const outside = FACTS.filter((f) => f.outside?.() === true).map((f) => f.id as Vendor);
-  const listed  = (Object.keys(ACCOUNTS ?? {}) as Vendor[]).filter((v) => Vendors.of(v)?.outside === undefined && config_has(v));
+  const listed  = (Object.keys(ACCOUNTS ?? {}) as Vendor[]).filter((v) => Vendors.of(v) !== undefined && Vendors.of(v)?.outside === undefined && config_has(v));
   const all     = [...outside, ...listed];
   return all.length === 0 ? [Vendors.fallback().id as Vendor] : all;
 }
@@ -937,7 +937,7 @@ function config_connected(): Vendor[] {
 // whether a vendor is connected: its login kept outside the accounts'
 // file is there (outside), else its entry in the file has what it runs
 // on (an API's key in use, a plan's account)
-export function config_has(vendor: Vendor): boolean {
+export function config_has(vendor: string): boolean {
   const facts = Vendors.of(vendor);
   if (facts?.outside !== undefined) {
     return facts.outside();

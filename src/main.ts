@@ -13,6 +13,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { HERE, Update, VERSION } from "./config/Update.ts";
+import { Vendors } from "./providers/Vendors.ts";
 
 // the installer (install.sh), for an illi that is neither one file nor a
 // clone
@@ -31,9 +32,8 @@ const USAGE = `Usage: illi            the chat; its tools work in this folder
        illi upgrade    the latest release in this one's place, now
        illi version    this illi's version
        illi help       this
-First, run illi in a project folder and type /login to sign in with
-your ChatGPT plan (Plus or Pro); your Claude plan and API keys work too
-(docs/providers.md). The chat and its settings are in ~/.illi
+First, run illi in a project folder and type /login to connect
+${Vendors.ways()} (docs/providers.md). The chat and its settings are in ~/.illi
 (ILLI_DIR); docs/config.md lists them. Other profiles' are in
 ~/.illi/profiles: illi opens a project in the one used last there, a
 new one in the one used last anywhere (ILLI_PROFILE names one). A new

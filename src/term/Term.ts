@@ -44,9 +44,11 @@ import * as fs from "node:fs";
 import { term_paste } from "./Attach.ts";
 import { Chat } from "../chat/Chat.ts";
 import { Lock } from "../chat/Lock.ts";
-import { ChatGPT } from "../providers/chatgpt/ChatGPT.ts";
 import { term_account } from "./Commands.ts";
 import * as config from "../config/Config.ts";
+import type { Hint } from "../providers/Provider.ts";
+import { Providers } from "../providers/Providers.ts";
+import { FACTS, Vendors } from "../providers/Vendors.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import * as Draw from "../ui/Draw.ts";
 import { term_draw, term_paint, term_print, term_resize } from "./Frame.ts";
@@ -467,6 +469,7 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
     }
     Machine.end();
     Mcp.stop();
+    Providers.all().forEach((p) => p.close?.());
   });
   for (const sig of ["SIGHUP", "SIGTERM", "SIGINT"]) {
     process.on(sig, () => term_bye(t));
@@ -774,24 +777,40 @@ function term_update(t: Term): void {
 }
 
 // the start's notes, held (HOLD): a pick set that gave way (config.NOTES);
-// on a terminal, the ChatGPT login unreadable or missing (no provider
-// connected at all, the vendors setting unset: /login connects one), and
-// what the API keys need (config.config_tips)
+// on a terminal, what the logins need (term_hint), and what the API keys
+// need (config.config_tips: a key's vendor listed first unless the first
+// offered is connected)
 function term_hints(t: Term): void {
-  const signed = ChatGPT.signed();
-  const chatgpt = config.OFFER.vendors.includes("chatgpt");
-  const unread = chatgpt ? ChatGPT.unread() : "";
   config.NOTES.forEach((text) => term_note(t, text, HOLD));
   if (!t.scr.tty) {
     return;
   }
-  if (unread !== "" || (chatgpt && !signed)) {
-    const none = config.config_named() ? "No ChatGPT login yet: type /login to sign in with your ChatGPT plan." : "No provider connected yet: type /login to connect your ChatGPT or Claude plan, or an API key.";
-    hint = term_notify(t, unread !== "" ? unread : none, false, HOLD);
+  const said = term_hint();
+  if (said !== "") {
+    hint = term_notify(t, said, false, HOLD);
   }
   if (t.chat !== null) {
-    config.config_tips(t.chat.pick, signed).forEach((text) => term_note(t, text, HOLD));
+    const first = config.OFFER.vendors[0];
+    config.config_tips(t.chat.pick, first !== undefined && config.config_has(first)).forEach((text) => term_note(t, text, HOLD));
   }
+}
+
+// what the start says of the logins ("": nothing): a fault an offered
+// vendor tells of its login (Provider.ts hint: a login file that won't
+// read); else, with nothing connected and the vendors setting unset, how
+// /login connects a provider; else what an offered vendor says its login
+// lacks
+export function term_hint(): string {
+  const hints = config.OFFER.vendors.map((v) => Providers.of(v)?.hint?.() ?? null).filter((h): h is Hint => h !== null);
+  const none  = !config.config_named() && !FACTS.some((f) => config.config_has(f.id));
+  return hints.find((h) => h.trouble)?.text ?? (none ? term_none() : hints[0]?.text ?? "");
+}
+
+// the start's note while nothing is connected: what /login connects
+// (Vendors.ways: No provider connected yet: type /login to connect your
+// ChatGPT or Claude plan, or an API key.)
+function term_none(): string {
+  return "No provider connected yet: type /login to connect " + Vendors.ways() + ".";
 }
 
 // the project's chat to read, in a view of another terminal's: as saved,

@@ -60,10 +60,10 @@ import * as path from "node:path";
 import { AskAI, type Ask, type Block, type Call, type End, type Event, type Kind, type Vendor } from "../ai/AskAI.ts";
 import type { Out } from "../ai/Agent.ts";
 import { report_text } from "../ui/Call.ts";
-import { ChatGPT } from "../providers/chatgpt/ChatGPT.ts";
-import { ClaudeCode } from "../providers/claude-code/ClaudeCode.ts";
 import { clip_page } from "./Clip.ts";
 import * as config from "../config/Config.ts";
+import { Providers } from "../providers/Providers.ts";
+import { Vendors } from "../providers/Vendors.ts";
 import { Custom, type Skill } from "../config/Custom.ts";
 import { Plugins } from "../config/Plugins.ts";
 import { Trusted } from "../config/Trusted.ts";
@@ -80,7 +80,7 @@ import { Projects } from "../chat/Projects.ts";
 import { Recall } from "../chat/Recall.ts";
 import { Store } from "../chat/Store.ts";
 import { When } from "../chat/When.ts";
-import type { Background, Live, Perms, Plan, Query, Question, Refused, State, Todo } from "../ui/View.ts";
+import type { Background, Live, Perms, Query, Question, Refused, State, Todo } from "../ui/View.ts";
 
 export type { Live };
 
@@ -175,9 +175,6 @@ export const SEARCHES = 10;
 // the chats' tools, by their secret; the server, once one is
 const CHATS = new Map<string, Tools>();
 
-// the vendors that tell a plan (View.Plan: its limits shown at the side),
-// each by how: one added here shows as the others do
-const PLANS: Partial<Record<Vendor, () => Plan | null>> = { chatgpt: ChatGPT.told, "claude-code": ClaudeCode.told };
 let HTTP: ReturnType<typeof Bun.serve> | null = null;
 
 // the master's prompt (a turn's and a compaction's): prompt.txt
@@ -311,7 +308,7 @@ const REFITS     = 3;
 const NO_FIT     = "its work won't fit #'s window even recapped";
 // an agent's call refused for its cache marks (Tools.run): the note it
 // goes on from
-const UNMARKED   = "Claude Code's request was refused over a technical limit, so your work goes on a simpler way. Go on where you were: your final reply is still your report to illi.";
+const UNMARKED   = "The request was refused over a technical limit, so your work goes on a simpler way. Go on where you were: your final reply is still your report to illi.";
 
 // where the tools run, in the system prompt (HERE_DOC); the working dir
 // and the time now, at the start of each call's message (Tools.here), so
@@ -327,9 +324,10 @@ it (Now:): work out "yesterday" or "last Tuesday" from it.`;
 export const SUB       = SUB_HEAD + "\n\n" + SUB_VIEW + "\n\n" + VIEW_DOC + "\n\n" + HERE_DOC;
 export const SUB_FRESH = SUB_HEAD + "\n\n" + SUB_ALONE + "\n\n" + HERE_DOC;
 
-// Claude Code's permission prompt (--permission-prompt-tool: its web
-// fetch, its MCP servers' tools), answered by the user at illi's screen
-const APPROVE: Spec = spec("approve", "Claude Code's permission prompt, answered by the user at illi's screen. Not a tool to call yourself.", { tool_name: STR, input: { type: "object" }, tool_use_id: STR }, ["tool_name", "input"]);
+// the permission prompt of a provider's program that runs the call
+// (Claude Code's --permission-prompt-tool: its web fetch, its MCP
+// servers' tools), answered by the user at illi's screen
+const APPROVE: Spec = spec("approve", "The permission prompt of the program running this call, answered by the user at illi's screen. Not a tool to call yourself.", { tool_name: STR, input: { type: "object" }, tool_use_id: STR }, ["tool_name", "input"]);
 
 // the tools of everyone (OWN), the main agent's (boss), and those that run
 // on this computer (Machine.ts's TOOLS); those of OWN that read the chat
@@ -504,8 +502,8 @@ export namespace Tools {
   }
 
   // the working dir and the computer it is on, the project as kept, and
-  // the time now (When.now; on claude-code, short: Claude Code's own
-  // message on where it runs gives the day's date). Built once a call (Chat.call, Chat.recap, Tools.ask)
+  // the time now (When.now; short on a vendor whose calls tell the model
+  // the date themselves: Provider.ts dated). Built once a call (Chat.call, Chat.recap, Tools.ask)
   // and sent with every step of it; unmarked, after every mark a later
   // call reads (the view's and recent's), so a new minute changes only
   // what a call sends anew (as at_work's running minutes do), never a
@@ -513,7 +511,7 @@ export namespace Tools {
   export function here(tools: Tools, vendor?: Vendor): Block {
     const place = Store.named(tools.mem.store);
     const project = place.path === "" ? "home (outside any git repo)" : place.name;
-    return { text: "Working dir: " + tools.cwd + " on " + os.hostname() + " (" + process.platform + "), project " + project + "\nNow: " + When.now(vendor === "claude-code") + "\n\n", mark: false };
+    return { text: "Working dir: " + tools.cwd + " on " + os.hostname() + " (" + process.platform + "), project " + project + "\nNow: " + When.now(vendor !== undefined && Vendors.of(vendor)?.dated === true) + "\n\n", mark: false };
   }
 
   // what a tool reads of a chat (`read`): this one, or a project's by its
@@ -1311,11 +1309,11 @@ export namespace Tools {
 
   // the chat's map (Memory.map: from the lines built, waiting on no
   // summary), for an agent of this role once its model's window is told
-  // (on ChatGPT: ChatGPT.ready, as a turn waits; never guessed); a
-  // string: why there is none. One started fresh gets none
+  // (Provider.ts ready, as a turn waits; never guessed); a string: why
+  // there is none. One started fresh gets none
   export async function view(tools: Tools, role: Agent["role"]): Promise<Block[] | string> {
     const pick = Tools.pick(tools, role);
-    const unready = pick.vendor === "chatgpt" ? await ChatGPT.ready(pick.model, tools.hooks.halt()) : null;
+    const unready = (await Providers.of(pick.vendor)?.ready?.(pick.model, tools.hooks.halt())) ?? null;
     return unready !== null ? "Not started: " + unready + "." : role.fresh ? [] : Memory.map(tools.mem);
   }
 
@@ -1337,7 +1335,7 @@ export namespace Tools {
   // what the views show of the tools (Chat.state): the plan of the vendor
   // the master is on, its to-do list
   export function state(tools: Tools, vendor: Vendor): { use: State["use"]; todo: Todo[]; perm: Perms; background: Background[] } {
-    return { use: { plan: PLANS[vendor]?.() ?? null }, todo: Tools.todo(tools), perm: Tools.perms(tools), background: Machine.background() };
+    return { use: { plan: Providers.of(vendor)?.plan?.() ?? null }, todo: Tools.todo(tools), perm: Tools.perms(tools), background: Machine.background() };
   }
 
   // the master's to-do list: as last set, else as the chat's file keeps

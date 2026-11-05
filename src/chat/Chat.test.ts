@@ -670,7 +670,7 @@ test("a call refused for its cache marks goes on from a note, unasked, its next 
   const from = chat.mem.count;
   const asked = await refitted([marks]);
   expect(asked.map((a) => a.marked)).toEqual([true, false]);
-  expect(asked[1].text).toContain("Claude Code's request was refused over a technical limit, so illi went on a simpler way: nothing is lost. Go on where you were.");
+  expect(asked[1].text).toContain("The request was refused over a technical limit, so illi went on a simpler way: nothing is lost. Go on where you were.");
   const notes = Array.from({ length: chat.mem.count - from }, (_, k) => Memory.message(chat.mem, from + k)!).filter((m) => m.kind === "note");
   expect(notes.some((m) => /^(No reply|Reply cut off)/.test(m.text))).toBe(false);
   expect(chat.unmarked).toBe(false);
@@ -680,7 +680,7 @@ test("a call refused for its cache marks goes on from a note, unasked, its next 
   config.config_set("autocontinue", "off");
   try {
     expect(await refitted([marks])).toHaveLength(1);
-    expect(last()).toBe("Claude Code's request was refused over a technical limit, so illi went on a simpler way: nothing is lost. Send a message to go on (autocontinue is off).");
+    expect(last()).toBe("The request was refused over a technical limit, so illi went on a simpler way: nothing is lost. Send a message to go on (autocontinue is off).");
     expect(chat.unmarked).toBe(true);
     expect((await refitted([])).map((a) => a.marked)).toEqual([false]);
     expect(chat.unmarked).toBe(false);

@@ -25,10 +25,7 @@
 // Plugins.emit), never waited for.
 
 import * as fs from "node:fs";
-import { Anthropic } from "../providers/claude-api/Anthropic.ts";
 import { AskAI, type Call, type End, type Event, type Kind, type Vendor } from "../ai/AskAI.ts";
-import { ChatGPT } from "../providers/chatgpt/ChatGPT.ts";
-import { ClaudeCode } from "../providers/claude-code/ClaudeCode.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
 import { Compactor } from "./Compactor.ts";
@@ -45,6 +42,8 @@ import { MASTER, SEARCHES, Tools, type Agent, type Live, type Reply } from "../t
 import { MODES, type Mode } from "../tools/Permissions.ts";
 import { ANSWERED, COMPACTING, IMAGES, live_push, SUMMARIES, TURN, type Answer, type Entry, type Link, type Part, type Pipe, type Question, type Server as Out, type State, type Wait } from "../ui/View.ts";
 import * as config from "../config/Config.ts";
+import { Providers } from "../providers/Providers.ts";
+import { Vendors } from "../providers/Vendors.ts";
 
 // Types
 // =====
@@ -162,8 +161,8 @@ const NO_ANSWER  = "No one is at illi's screen to answer: decide yourself, or as
 // the context made this much smaller, when the request itself was too
 // long; the most refits in a row with no work between (a call grown
 // starts the count anew); the note the turn goes on from (#: the
-// model; an account found to take less of its window: CAPPED_NOTE, #
-// that window, $ the model), its last words (GO_ON) the user's instead
+// model; an account found to take less of its window: CAPPED_NOTE, @
+// its maker, # that window, $ the model), its last words (GO_ON) the user's instead
 // with autocontinue off (STAY), the turn ending there; the one it ends
 // with
 const FIT        = 0.8;
@@ -174,11 +173,11 @@ const CAPPED     = 0.75;
 const GO_ON      = "Go on where you were.";
 const STAY       = "Send a message to go on (autocontinue is off).";
 const REFIT      = "The chat outgrew #'s window: more of it is summarized now, each summary a zoom away. " + GO_ON;
-const CAPPED_NOTE = "This ChatGPT account takes at most # of $'s window, kept from now on: more of the chat is summarized now, each summary a zoom away. " + GO_ON;
+const CAPPED_NOTE = "This @ account takes at most # of $'s window, kept from now on: more of the chat is summarized now, each summary a zoom away. " + GO_ON;
 const NO_FIT     = "No reply: the chat won't fit #'s window even summarized. /clear starts a new topic (the chat before it is kept, not sent), or /model picks a model with a bigger window.";
 // a call refused for its cache marks (Chat.unmark): the note the turn
 // goes on from
-const UNMARKED   = "Claude Code's request was refused over a technical limit, so illi went on a simpler way: nothing is lost. " + GO_ON;
+const UNMARKED   = "The request was refused over a technical limit, so illi went on a simpler way: nothing is lost. " + GO_ON;
 
 // the most turns hooks may make go on in a row, with no message of the
 // user's between (Chat.stopping), and the note once past it
@@ -301,16 +300,19 @@ export namespace Chat {
     };
     chat.context = Plugins.context({ cwd });
     Machine.watch(() => Chat.change(chat));
-    // the account's catalog or plan told: on ChatGPT the cut fitted anew
-    // while no turn runs, once the account's catalog told its windows (the
-    // start's waits on it, as a plan or a login told first must: the
-    // windows kept last may be smaller, and a cut never moves back)
-    ChatGPT.watch(() => {
-      if (!chat.busy && chat.pick.vendor === "chatgpt" && ChatGPT.catalogued()) {
-        Chat.cut(chat);
-      }
-      Chat.change(chat);
-    });
+    // an account's catalog or plan told (Provider.ts watch): on the
+    // chat's vendor, the cut fitted anew while no turn runs, once the
+    // windows known are the account's own (windows: the start's waits on
+    // them, as a plan or a login told first must: the windows kept last
+    // may be smaller, and a cut never moves back)
+    for (const provider of Providers.all()) {
+      provider.watch?.(() => {
+        if (!chat.busy && chat.pick.vendor === provider.facts.id && provider.windows?.() !== false) {
+          Chat.cut(chat);
+        }
+        Chat.change(chat);
+      });
+    }
     Chat.follow(chat);
     // a saved pick not offered gave way: told once
     const saved = mem.pick as Pick | null;
@@ -322,7 +324,7 @@ export namespace Chat {
     if (mem.count === 0) {
       Memory.push(mem, [{ kind: "illi", text: HELLO, line: HELLO_LINE }]);
     }
-    if (chat.pick.vendor !== "chatgpt") {
+    if (Providers.of(chat.pick.vendor)?.windows?.() !== false) {
       Chat.cut(chat);
     }
     chat.eye = Chat.eye(mem, mem.show);
@@ -396,25 +398,15 @@ export namespace Chat {
   }
 
   // what the accounts in use tell, asked (at the start, after /login, and
-  // as the accounts change in another terminal): an Anthropic key's
-  // models, the Claude plan's windows (ClaudeCode.models: once an
-  // account), ChatGPT's login looked at and followed, its plan, use and
-  // catalog; the views told what changed
+  // as the accounts change in another terminal): each offered vendor's
+  // (Provider.ts account: an API key's models, a plan's windows, plan, use
+  // and catalog); the views told what changed
   export function account(chat: Chat): void {
-    if (config.OFFER.vendors.includes("claude-api") && config.KEYS.anthropic) {
-      void Anthropic.models(config.KEYS.anthropic).then((news) => news && Chat.change(chat));
-    }
-    if (config.OFFER.vendors.includes("claude-code")) {
-      void ClaudeCode.models().then((news) => news && Chat.change(chat));
-    }
-    if (!config.OFFER.vendors.includes("chatgpt")) {
-      return;
-    }
-    ChatGPT.sync();
-    ChatGPT.follow();
-    if (ChatGPT.signed()) {
-      void ChatGPT.usage();
-      void ChatGPT.models();
+    for (const vendor of config.OFFER.vendors) {
+      const news = Providers.of(vendor)?.account?.();
+      if (news !== undefined) {
+        void news.then((changed) => changed && Chat.change(chat));
+      }
     }
   }
 
@@ -637,7 +629,7 @@ export namespace Chat {
     const halt = (chat.halt = new AbortController());
     chat.suggest.due = false;
     Chat.change(chat);
-    const unready = chat.pick.vendor === "chatgpt" ? await ChatGPT.ready(chat.pick.model, halt.signal) : null;
+    const unready = (await Providers.of(chat.pick.vendor)?.ready?.(chat.pick.model, halt.signal)) ?? null;
     if (unready !== null) {
       if (!halt.signal.aborted) {
         Chat.failed(chat, unready);
@@ -715,8 +707,9 @@ export namespace Chat {
       Chat.all(chat, { $: "note", text: end.note });
     }
     if (full && carried !== undefined && Chat.capped(chat, end, carried)) {
-      const window = Pick.model("chatgpt", chat.model)?.window ?? 0;
-      return Chat.refit(chat, false, CAPPED_NOTE.replace("$", chat.model).replace("#", Math.round(window / 1000) + "k"));
+      const vendor = carried.model.slice(0, carried.model.indexOf(":")) as Vendor;
+      const window = Pick.model(vendor, chat.model)?.window ?? 0;
+      return Chat.refit(chat, false, CAPPED_NOTE.replace("@", Vendors.of(vendor)?.maker.name ?? vendor).replace("$", chat.model).replace("#", Math.round(window / 1000) + "k"));
     }
     if (full) {
       chat.refits = end.grew ? 0 : chat.refits;
@@ -795,19 +788,21 @@ export namespace Chat {
     return !halt.signal.aborted;
   }
 
-  // a call refused as too long on ChatGPT at its first request (it read
-  // nothing: end.first none; one past its room, or refused at a later
-  // step as its tools' output grew: End.grew, tells nothing of the
-  // account) while it carried (carried: the chat's tokens, and on what,
-  // with what a request takes beside it) past its model's standard
-  // window, yet well within its whole one (no misjudged size explains
-  // it): the account takes no more than the standard window, learned for
-  // it (ChatGPT.refused). true: learned, the turn goes on fitted to it
+  // a call refused as too long at its first request (it read nothing:
+  // end.first none; one past its room, or refused at a later step as its
+  // tools' output grew: End.grew, tells nothing of the account) while it
+  // carried (carried: the chat's tokens, and on what, with what a request
+  // takes beside it) past its model's standard window, yet well within its
+  // whole one (no misjudged size explains it), on a vendor that learns
+  // from that (chatgpt: Provider.ts refused): the account takes no more
+  // than the standard window, learned for it. true: learned, the turn
+  // goes on fitted to it
   export function capped(chat: Chat, end: End, carried: { model: string; tokens: number }): boolean {
     const at    = carried.model.indexOf(":");
     const model = Pick.model(carried.model.slice(0, at) as Vendor, carried.model.slice(at + 1));
     const sent  = carried.tokens + (chat.beside.get(carried.model) ?? 0);
-    return end.first === undefined && !end.grew && carried.model.startsWith("chatgpt:") && model?.standard !== undefined && model.window !== undefined && sent > model.standard && sent < model.window * CAPPED && ChatGPT.refused(model.label);
+    const refused = Providers.of(carried.model.slice(0, at))?.refused;
+    return end.first === undefined && !end.grew && refused !== undefined && model?.standard !== undefined && model.window !== undefined && sent > model.standard && sent < model.window * CAPPED && refused(model.label);
   }
 
   // the chat outgrew the model's window (a call ended `full`): the
