@@ -41,9 +41,10 @@
 // page alone: Clip.ts clip_pages). `related` on alone
 // (config.RECALL; screen: the side alone; off: nothing). Covered: illi's
 // own loop (chatgpt, claude-api, openai-api: shell, files, MCP and plugin
-// tools), the chat's agent and its subagents alike, and claude-code,
-// whose tools illi serves it, all but Claude Code's own (its web search
-// and fetch, its MCP servers'), which run inside it.
+// tools), the chat's agent and its subagents alike, and claude-code and
+// antigravity, whose tools illi serves them, all but their programs' own
+// (their web search and fetch, Claude Code's MCP servers'), which run
+// inside them.
 
 import type { Out } from "../ai/Agent.ts";
 import type { Block } from "../ai/AskAI.ts";

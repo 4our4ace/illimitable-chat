@@ -5,7 +5,8 @@
 // makers (ChatGPT, Claude...: each provider's facts name its maker),
 // each saying what of it is connected, the one the chat runs on marked;
 // Enter on one, its ways in: its plan first (ChatGPT's, Claude's through
-// Claude Code), then its API key, each saying what it's connected with;
+// Claude Code, Google's through Google's Antigravity agent), then its API
+// key, if it has one, each saying what it's connected with;
 // Esc goes a level up, from these and from all they open (a question
 // asked too). Enter on a way in not connected connects it: a plan by its
 // own page (Logins.ts: each provider's folder's Login.ts, its sign-in and
@@ -65,8 +66,9 @@ type Api = { facts: Facts & { key: NonNullable<Facts["key"]> }; check: (key: str
 // =========
 
 // how long a sign-in's code shows: as long as ChatGPT's is good (ms), or
-// till the login ends (a Claude sign-in's notes too: it ends sooner, at
-// ClaudeCode.ts SIGNIN); how long a failure shows, till Esc or a message
+// till the login ends (a Claude or Google sign-in's notes too: each ends
+// sooner, at ClaudeCode.ts or Antigravity.ts SIGNIN); how long a failure
+// shows, till Esc or a message
 export const LOGIN        = 15 * 60000;
 export const LOGIN_FAILED = 60000;
 

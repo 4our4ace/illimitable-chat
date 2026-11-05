@@ -315,9 +315,10 @@ Code's: shell {command, description}, read/write {path, ...}, edit
 "Bash"); Claude Code's
 other names (Write, Edit, Agent, TodoWrite...) match nothing, as illi
 runs its own tools on every provider, but WebFetch and WebSearch: Claude
-Code's own, on the claude-code vendor, matched only in PreToolUse
-(Claude Code runs them, so PostToolUse never sees them); each said at
-the start. A command gets the event as JSON on stdin;
+Code's own on the claude-code vendor, and Google's agent's web search
+and page reading on antigravity, matched only in PreToolUse (their
+program runs them, so PostToolUse never sees them); each said at the
+start. A command gets the event as JSON on stdin;
 docs/customize.md lists the fields and answers. Say what a hook will run
 before writing it: it runs as the user, on every matching event. illi
 asks the user before you write illi's own hooks.json or a plugin's
@@ -337,8 +338,8 @@ user's yes first.
   FILE).
 - Keep secrets out of these files.
 - Leave illi's own state alone: login.json, accounts.json, claude/,
-  models.json, update.json, profile, project-profiles.json, chat/,
-  profiles/.
+  antigravity/, claude-code.json, models.json, update.json, profile,
+  project-profiles.json, chat/, profiles/.
 - Say when it applies: agents, commands, skills (a plugin's too) and the
   rules file's text at the next message; config.json, theme.json,
   mcp.json, hooks.json, a plugin's code, hooks and MCP servers, and a new

@@ -304,9 +304,11 @@ switches accounts on its own.
   tools cut theirs sooner); when Google is busy or your plan's limit
   is reached, the agent may retry quietly for minutes before it says
   so (Esc stops the turn); each agent takes about 325 MB, and each turn
-  running in it about 160 MB more till it ends. illi starts one as a
-  turn needs it, keeps one more ready so the next turn needn't wait,
-  and ends them after 10 minutes with no turn, and as illi ends.
+  it ran about 160 MB more till the agent ends. illi starts one as a
+  turn needs it (turns running at once share one, four at most) and
+  ends it once its turns have; it keeps one more ready so the next turn
+  needn't wait, which ends after 10 minutes with no turn. None is left
+  once illi ends.
 
 API keys
 --------

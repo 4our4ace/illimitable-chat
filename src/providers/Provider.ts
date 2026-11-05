@@ -120,8 +120,8 @@ export type Hint = { text: string; trouble: boolean };
 // - facts: its facts (Facts.ts);
 // - wire: a call runs in illi's loop on it (Agent.loop: illi sends each
 //   request and runs the tools), or
-// - ask: its own program runs the call (a runner: Claude Code), giving
-//   back the same Events and End as Agent.ask;
+// - ask: its own program runs the call (a runner: Claude Code, Google's
+//   Antigravity agent), giving back the same Events and End as Agent.ask;
 // - spent: a refusal that means the plan behind it is used up (said: the
 //   error's words), what to do about it ("": not one);
 // - ready: before a call, its model's window told (on chatgpt, the

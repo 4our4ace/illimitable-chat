@@ -89,9 +89,10 @@ const LABEL = 200;
 // result: spawn's names); "": none of its own, or the field it is about
 // missing or blank (about), so it reads as any tool's (call_named).
 // illi's tools first, then Claude Code's (the claude-code vendor's
-// calls: its web search and fetch; the others, its files and shell, and
-// its subagents' Agent, once Task, and TodoWrite, come only in a chat's
-// older ones, from before illi served it its own tools)
+// calls: its web search and fetch, as the antigravity vendor's logs its
+// agent's own too, Antigravity.called; the others, its files and shell,
+// and its subagents' Agent, once Task, and TodoWrite, come only in a
+// chat's older ones, from before illi served it its own tools)
 const LABELS = new Map<string, (x: Input, result: string | null, at: number) => string>([
   ["shell",      (x) => text_first(x.description) || command_first(x.command)],
   ["read",       (x) => about(path_said(x.path), (path) => "Read " + path + read_lines(x.offset, x.limit))],

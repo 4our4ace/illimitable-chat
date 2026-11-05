@@ -946,9 +946,10 @@ export function config_has(vendor: string): boolean {
   return key !== undefined ? Accounts.keys_in(ACCOUNTS, vendor) !== undefined && KEYS[key] !== "" : (Accounts.folders_in(ACCOUNTS, vendor)?.accounts.length ?? 0) > 0;
 }
 
-// a plan's folder its program runs in (ClaudeCode.ts env): its account
-// in use (Accounts.ts), "" for the program's own (the user's own Claude
-// Code's, as its environment names it) or none connected
+// a plan's folder its program runs in (ClaudeCode.ts env, Antigravity.ts
+// env): its account in use (Accounts.ts), "" for the program's own (the
+// user's own Claude Code's, as its environment names it) or none
+// connected
 export function config_folder(vendor: Vendor): string {
   return Accounts.folder(ROOT, vendor, Accounts.folders_in(ACCOUNTS, vendor)?.use ?? OWN);
 }

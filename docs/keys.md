@@ -74,7 +74,7 @@ Setup
 
 | Key or command | Does |
 | -------------- | ---- |
-| `/login` | the providers, ChatGPT and Claude, each opening its plan and its API key: connect one; in its accounts, Enter switches to one, Del logs one out (asked first), a row adds one, the last logs out of it all; Esc goes back a level ([Providers](providers.md#connecting-login)) |
+| `/login` | the providers, ChatGPT, Claude and Gemini, each opening its plan and (ChatGPT's and Claude's) its API key: connect one; in its accounts, Enter switches to one, Del logs one out (asked first), a row adds one, the last logs out of it all; Esc goes back a level ([Providers](providers.md#connecting-login)) |
 | `/logout` | the providers, as `/login`: Del logs out of an account, the last row of a plan or a key out of it |
 | `/settings` | all the settings: type to search, Left, Right or Enter change one, Del puts its default back |
 | `/shortcuts` | the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one |
@@ -320,8 +320,8 @@ hidden with their profile ([Profiles](profiles.md)); a quit stops them,
 so Ctrl+D (or a second Ctrl+C) first says how many it stops; illi is
 told they were stopped, so it starts them again if it needs them. A
 process that left its group (`setsid`, a daemon) isn't listed but is
-stopped at the quit all the same. On the `claude-code` provider too:
-illi runs the shell there as everywhere.
+stopped at the quit all the same. On the `claude-code` and
+`antigravity` providers too: illi runs the shell there as everywhere.
 
 Related
 -------
@@ -377,9 +377,10 @@ have opened or pinned 20 lines that matched a path or an error, the bar
 moves to where the lowest quarter of those lines scored, never below a
 floor. The memory tools (zoom, search, date) and illi's own steps
 (todo, a subagent started or told) never get a line. On the
-`claude-code` provider illi runs the tools too, so they get lines as
-everywhere; Claude Code's own web search and fetch and its MCP
-servers' tools, which run inside it, don't.
+`claude-code` and `antigravity` providers illi runs the tools too, so
+they get lines as everywhere; Claude Code's own web search and fetch
+and its MCP servers' tools, and Google's agent's web search and page
+reading, which run inside them, don't.
 
 The `related` setting is `on` (the side, and the strong lines given to
 illi), `screen` (the side only) or `off`.
@@ -405,8 +406,8 @@ Mouse and side panel
   it answered; a web search by OpenAI's or ChatGPT's models from before
   illi 0.3.1). A report, or a thought or a result with no call, is a
   line of its own. A stop answers a call still running, as failed; on
-  `claude-code`, where Claude Code runs the steps, a call cut off gets
-  no answer. A click on a call's line opens that call alone, under it
+  `claude-code` and `antigravity`, where the provider's own program
+  runs the steps, a call cut off gets no answer. A click on a call's line opens that call alone, under it
   behind a bar: the thinking before it, its whole input, its whole
   result; its siblings stay shut.
   A click on its line again, anywhere down its bar, or anywhere in it

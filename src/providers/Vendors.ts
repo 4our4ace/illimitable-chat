@@ -3,9 +3,10 @@
 // Every provider's facts (Provider.ts Facts), in the order illi lists
 // their models: the one list of providers that Config.ts, Pick.ts,
 // Accounts.ts and AskAI.ts read, as illi starts. A provider is added
-// here, by its folder's Facts.ts, and in Providers.ts, by its code;
-// nothing else of illi names it. Its facts import nothing that reads the
-// config, so this list loads before Config.ts does.
+// here, by its folder's Facts.ts, in Providers.ts, by its code, and, a
+// plan, in Logins.ts, by its /login page; nothing else of illi names it.
+// Its facts import nothing that reads the config, so this list loads
+// before Config.ts does.
 
 import { FACTS as ANTIGRAVITY } from "./antigravity/Facts.ts";
 import { FACTS as CHATGPT } from "./chatgpt/Facts.ts";
@@ -45,10 +46,11 @@ export namespace Vendors {
     return [...new Set([...FACTS].sort((a, b) => a.maker.order - b.maker.order).map((f) => f.maker.name))];
   }
 
-  // what /login connects, in words: a plan of each maker that has one,
-  // or an API key ("your ChatGPT or Claude plan, or an API key")
+  // what /login connects, in words: each plan by its own row's name, in
+  // its maker's order, or an API key ("your ChatGPT, Claude or Google AI
+  // plan, or an API key")
   export function ways(): string {
-    const plans = [...new Set([...FACTS].filter((f) => f.key === undefined).sort((a, b) => a.maker.order - b.maker.order).map((f) => f.maker.name))];
+    const plans = [...new Set([...FACTS].filter((f) => f.key === undefined).sort((a, b) => a.maker.order - b.maker.order).map((f) => f.row.replace(/\s*plan$/i, "")))];
     const keys  = FACTS.some((f) => f.key !== undefined) ? ", or an API key" : "";
     return "your " + Vendors.list(plans, "or") + " plan" + keys;
   }

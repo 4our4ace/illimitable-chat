@@ -112,8 +112,26 @@ async function prompt(p) {
     say(sid, "Usage Limit Reached\n\nYou have reached your current quota for this period. Your limit will reset in 4 hours, 2 minutes.");
     return { stopReason: "refusal", usage: USAGE };
   }
+  if (scene.includes("capped")) {
+    think(sid, "pondering"); say(sid, "A long answer that ran"); used(sid, 1500); say(sid, " past the cap");
+    return { stopReason: "max_tokens", usage: USAGE };
+  }
+  if (scene.includes("declined")) {
+    say(sid, "I can't help with that.");
+    return { stopReason: "refusal", usage: USAGE };
+  }
   if (scene.includes("max")) {
     return { stopReason: "max_tokens", usage: USAGE };
+  }
+  if (scene.includes("deaf")) {
+    say(sid, "Working");
+    await new Promise(() => {});
+  }
+  if (scene.includes("sleepy")) {
+    say(sid, "Calling");
+    const asked = fetch(sessions.get(sid).mcp[0].url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "sleepy", arguments: {} } }) }).catch(() => {});
+    await new Promise((done) => cancels.set(sid, done));
+    return { stopReason: "cancelled", usage: USAGE };
   }
   if (scene.includes("slow")) {
     say(sid, "Working");
@@ -121,7 +139,7 @@ async function prompt(p) {
     return { stopReason: "cancelled", usage: USAGE };
   }
   if (scene.includes("hold")) {
-    await new Promise((done) => setTimeout(done, 400));
+    await new Promise((done) => setTimeout(done, scene.includes("more") ? 1500 : 400));
     say(sid, "held"); used(sid, 10);
     return { stopReason: "end_turn", usage: USAGE };
   }
@@ -132,6 +150,9 @@ async function handle(m) {
   switch (m.method) {
     case "initialize": return { protocolVersion: 1, agentCapabilities: {}, authMethods: [{ id: "oauth-personal", name: "Log in with Google" }] };
     case "authenticate": {
+      if (process.env.FAKE_AUTHFAIL) {
+        return null;
+      }
       if (process.env.FAKE_SIGNIN) {
         process.stderr.write("Open the following link to authenticate the ACP server: https://accounts.example/auth?x=1\n");
         await new Promise((done) => setTimeout(done, process.env.FAKE_SIGNIN === "gone" ? 600000 : 100));
@@ -173,6 +194,7 @@ fs.writeFileSync(DIR + "/agent.js", FAKE);
 // says; each request kept
 let APPROVE = "allow";
 const TOLD: any[] = [];
+const SLEPT: string[] = [];
 const TOOLS = Bun.serve({
   port: 0,
   async fetch(req) {
@@ -181,6 +203,11 @@ const TOOLS = Bun.serve({
     TOLD.push({ hosted: url.searchParams.has("hosted"), path: url.pathname, m });
     if (m.method === "tools/call" && m.params.name === "approve") {
       return Response.json({ jsonrpc: "2.0", id: m.id, result: { content: [{ type: "text", text: JSON.stringify(APPROVE === "allow" ? { behavior: "allow" } : { behavior: "deny", message: "no" }) }] } });
+    }
+    if (m.method === "tools/call" && m.params.name === "sleepy") {
+      const quit = await Promise.race([Bun.sleep(2000).then(() => false), new Promise<boolean>((done) => req.signal.addEventListener("abort", () => done(true)))]);
+      SLEPT.push(quit ? "stopped" : "slept");
+      return Response.json({ jsonrpc: "2.0", id: m.id, result: { content: [{ type: "text", text: "woke" }] } });
     }
     if (m.method === "tools/call") {
       return Response.json({ jsonrpc: "2.0", id: m.id, result: { content: [{ type: "text", text: "line 3" }], isError: false } });
@@ -211,6 +238,7 @@ beforeEach(() => {
   TOLD.length = 0;
   APPROVE = "allow";
   delete process.env.FAKE_SIGNIN;
+  delete process.env.FAKE_AUTHFAIL;
 });
 
 // what the stand-in logged
@@ -299,6 +327,14 @@ test("an error the agent says as a message is never a reply: busy, too long, the
   expect(max.end.stop).toBe("full");
 });
 
+test("a turn past the most the model may write, or declined, keeps what it said and ends in plain words, as illi's own loop ends one", async () => {
+  const capped = await call("capped");
+  expect([capped.end.ok, capped.end.stop, capped.end.text, capped.end.cut]).toEqual([false, "fail", "the reply reached the most the model may write at once", true]);
+  expect(entries(capped.events)).toEqual([["mind", "pondering"], ["illi", "A long answer that ran past the cap"]]);
+  const declined = await call("declined");
+  expect([declined.end.stop, declined.end.text, entries(declined.events)]).toEqual(["fail", "the model declined to answer", [["illi", "I can't help with that."]]]);
+});
+
 test("a model the account doesn't offer fails, saying what it does", async () => {
   const { end } = await call("turn", { model: "gemini-9" });
   expect([end.ok, end.stop]).toEqual([false, "fail"]);
@@ -346,6 +382,67 @@ test("the pool: calls at once share an agent, a spare stands ready, one ends onc
     }
   };
   expect([...pids, spare!].some(alive)).toBe(false);
+});
+
+test("an account's folder made anew (a logout, then a sign-in that got its id) never runs on the agents started before; a logout here ends them at once", async () => {
+  Antigravity.close();
+  await call("turn");
+  const before = new Set(logged().filter((l) => l.env !== undefined).map((l) => l.pid));
+  expect(Antigravity.running()).toBe(1);
+  fs.rmSync(FOLDER, { recursive: true, force: true });
+  fs.mkdirSync(FOLDER);
+  fs.rmSync(process.env.FAKE_LOG!, { force: true });
+  expect((await call("turn")).end.ok).toBe(true);
+  expect(before.has(logged().find((l) => l.method === "session/new").pid)).toBe(false);
+  Antigravity.forget(FOLDER);
+  expect(Antigravity.running()).toBe(0);
+});
+
+test("a stop the agent doesn't honour: an agent others share isn't killed (theirs go on), the call given up and the agent taking no more; alone, it's killed", async () => {
+  Antigravity.close();
+  const was = Antigravity.cancel;
+  Antigravity.cancel = 300;
+  try {
+    const events: any[] = [];
+    const deaf = Antigravity.ask({ vendor: "antigravity", model: "gemini-3.8-flash", effort: "medium", speed: "slow", system: "", blocks: [{ text: "deaf", mark: false }], searches: 0, server: SERVER } as any, (ev) => {
+      events.push(ev);
+      if (ev.$ === "Delta") {
+        deaf.stop();
+      }
+    });
+    const other = call("hold more");
+    const [end, held] = await Promise.all([deaf.done, other]);
+    expect([end.stop, held.end.ok, held.end.text]).toEqual(["lost", true, "held"]);
+    expect(new Set(logged().filter((l) => l.method === "session/new").map((l) => l.pid)).size).toBe(1);
+    const alone = Antigravity.ask({ vendor: "antigravity", model: "gemini-3.8-flash", effort: "medium", speed: "slow", system: "", blocks: [{ text: "deaf", mark: false }], searches: 0, server: SERVER } as any, (ev) => ev.$ === "Delta" && alone.stop());
+    expect((await alone.done).stop).toBe("lost");
+  } finally {
+    Antigravity.cancel = was;
+    Antigravity.close();
+  }
+});
+
+test("a stop reaches illi's tool running through the forwarder, though the agent goes on for another call", async () => {
+  Antigravity.close();
+  SLEPT.length = 0;
+  const other = call("hold more");
+  const sleepy = Antigravity.ask({ vendor: "antigravity", model: "gemini-3.8-flash", effort: "medium", speed: "slow", system: "", blocks: [{ text: "sleepy", mark: false }], searches: 0, server: SERVER } as any, (ev) => ev.$ === "Entry" && ev.kind === "tool" && setTimeout(() => sleepy.stop(), 100));
+  expect((await sleepy.done).stop).toBe("lost");
+  await other;
+  await Bun.sleep(200);
+  expect(SLEPT).toEqual(["stopped"]);
+  Antigravity.close();
+});
+
+test("an agent that fails to start ends, so no later call takes it", async () => {
+  Antigravity.close();
+  process.env.FAKE_AUTHFAIL = "1";
+  expect((await call("turn")).end.ok).toBe(false);
+  await Bun.sleep(300);
+  expect(Antigravity.running()).toBe(0);
+  delete process.env.FAKE_AUTHFAIL;
+  expect((await call("turn")).end.ok).toBe(true);
+  Antigravity.close();
 });
 
 test("a sign-in run out ends a call at once, never waiting on a browser", async () => {

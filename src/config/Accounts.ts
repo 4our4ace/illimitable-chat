@@ -8,10 +8,11 @@
 //   and which one is in use (its id, or "env": the environment's own,
 //   ANTHROPIC_API_KEY or OPENAI_API_KEY, read as illi starts and never
 //   written here); connected while it's in the file;
-// - folders (a plan's run by another program, as claude-code: Claude
-//   Code): its accounts, each a folder of that program's (the user's
-//   own, "own", or one of illi's, a folder of its own in illi's root,
-//   <folders>/<id>, as each Claude Code login is a folder's), and which
+// - folders (a plan's run by another program: claude-code, Claude Code;
+//   antigravity, Google's Antigravity agent): its accounts, each a folder
+//   of that program's (the user's own Claude Code's, "own", or one of
+//   illi's, a folder of its own in illi's root, <folders>/<id>, as
+//   claude/c1 or antigravity/g1, as each login is a folder's), and which
 //   one is in use; connected while it has an account;
 // - logins (chatgpt): connected while a login is there to run on, in a
 //   file of its own (ChatGPT.ts); the file keeps its accounts signed in
@@ -58,12 +59,14 @@ export type Saved = { key: string; email: string; plan: string; entry: Record<st
 // signed in and not in use
 export type Logins = { opencode: boolean; saved: Saved[] };
 
-// a Claude plan's account: its Claude Code folder's id ("own": the user's
-// own Claude Code's; else illi's claude/<id>), the email, plan and
-// organization Claude Code told as it signed in ("": none)
+// a plan's account run by another program (claude-code, antigravity):
+// its folder's id ("own": the program's own, the user's own Claude
+// Code's; else illi's <folders>/<id>, as claude/c1 or antigravity/g1),
+// the email, plan and organization the program told as it signed in
+// ("": none; Google's agent tells no email)
 export type Folder = { id: string; email: string; plan: string; org: string };
 
-// a Claude plan's accounts, and the one in use (its id)
+// such a plan's accounts, and the one in use (its id)
 export type Folders = { use: string; accounts: Folder[] };
 
 // each shape of entry (Provider.ts accounts)
@@ -151,9 +154,10 @@ export namespace Accounts {
     return (entry === undefined ? others : vendor in store ? { ...store, [vendor]: entry } : { ...others, [vendor]: entry }) as Store;
   }
 
-  // a Claude plan's accounts as read: those of the right shape (an id
-  // that names a folder: "own", else letters and digits), each once; the
-  // one in use naming none, the first
+  // a folders entry's accounts as read (a plan's run by another
+  // program): those of the right shape (an id that names a folder: "own",
+  // else letters and digits), each once; the one in use naming none, the
+  // first
   export function folders(value: any): Folders {
     const text = (x: unknown) => (typeof x === "string" ? x : "");
     const all  = (Array.isArray(value?.accounts) ? value.accounts : []).filter((a: any) => typeof a?.id === "string" && /^[a-z0-9]+$/.test(a.id));

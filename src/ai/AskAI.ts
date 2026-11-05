@@ -4,8 +4,10 @@
 // Deltas (live pieces) and an Entry per finished message out. send()
 // hands the agent a message at its next chance, stop() aborts, `left`
 // holds those never taken. Every vendor is an API run in our loop
-// (Agent.ts), but claude-code: the user's Claude Code, which runs the
-// steps in its own loop, with illi's prompt and tools (ClaudeCode.ts). A patient call (a summary's) asks again, AGAIN after each
+// (Agent.ts), but a runner's (Provider.ts ask), whose own program runs
+// the steps in its own loop, with illi's prompt and tools: claude-code,
+// the user's Claude Code (ClaudeCode.ts); antigravity, Google's
+// Antigravity agent (Antigravity.ts). A patient call (a summary's) asks again, AGAIN after each
 // try nothing answered (the vendor down or refusing it, as when the API
 // key's credit is gone; our setup failing), each time telling why (its
 // `stuck`), till one is answered or we stop it: an outage only delays it, and no summary is made of a failure

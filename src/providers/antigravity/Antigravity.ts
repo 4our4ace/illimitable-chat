@@ -37,11 +37,12 @@
 // a message (its usage tells nothing apart, coming as it does mid-stream):
 // a turn that used nothing ended on an error, as did one whose last piece
 // is one of the agent's own words for one (ERROR: the words streamed
-// before it logged as cut off), never a reply. Its end in plain words: too long for the window (`full`: illi folds the
-// chat), the plan's limit reached (when it resets), the sign-in run out
-// (/login), a busy service; a stop cancels the turn (session/cancel), the
-// agent killed if it doesn't end it in CANCEL. Each step's usage tells
-// the model's window, learned and kept for the next start.
+// before it logged as cut off), never a reply. Its end in plain words:
+// too long for the window (`full`: illi folds the chat), the plan's limit
+// reached (when it resets), the sign-in run out (/login), a busy service;
+// a stop cancels the turn (session/cancel), the agent killed if it
+// doesn't end it in CANCEL. Each step's usage tells the model's window,
+// learned and kept for the next start.
 //
 // The agents run in a pool, an account's at a time: one starts as a
 // call needs it (initialize and sign-in, about 2.5 s), takes up to MOST
@@ -70,13 +71,15 @@ import { Vendors } from "../Vendors.ts";
 // Types
 // =====
 
-// an agent running for an account (its folder): its connection, whether
-// it's ready (initialized and signed in), the sessions it started and
-// those running, its calls by their session, whether it asked for a
-// sign-in (its account's ran out)
+// an agent running for an account (its folder, and the folder's stamp as
+// it started: Antigravity.stamp), its connection, whether it's ready
+// (initialized and signed in), the sessions it started and those running,
+// its calls by their session, whether it asked for a sign-in (its
+// account's ran out)
 type Proc = {
   conn    : Conn;
   folder  : string;
+  stamp   : string;
   ready   : Promise<void>;
   started : number;
   live    : number;
@@ -90,7 +93,9 @@ type Proc = {
 // piece starts an entry; the last words logged, whether any were; the
 // tokens its first step read; whether a tool's answer came back; the agent's web
 // tools' calls waiting for their answers; the calls through the forwarder
-// so far; whether it was stopped (halt: what it waits on stops then)
+// so far; whether it was stopped (halt: what it waits on stops then); a
+// stop the agent didn't honour in CANCEL on an agent others share: the
+// call given up (gave, give), not waited for
 type Run = {
   ask     : Ask;
   on      : (ev: Event) => void;
@@ -109,6 +114,8 @@ type Run = {
   n       : number;
   stopped : boolean;
   halt    : AbortController;
+  gave    : Promise<null>;
+  give    : () => void;
 };
 
 // Constants
@@ -126,8 +133,13 @@ const IDLE = 10 * 60e3;
 const READY = 90e3;
 const SETUP = 60e3;
 
-// how long a stop waits for the agent to end the turn before killing it
+// how long a stop waits for the agent to end the turn: then, the agent
+// alone with the call is killed; one others share takes no new call (it
+// ends once theirs did) and the call is given up
 const CANCEL = 5e3;
+
+// the file in an account's folder its stamp is kept in (Antigravity.stamp)
+const STAMP = ".illi-stamp";
 
 // how long a sign-in may wait for the person (ms): past the agent's own
 // five minutes, so its own words say why it ended
@@ -181,6 +193,10 @@ const RUNS = new Map<string, Run>();
 
 export namespace Antigravity {
 
+  // how long a stop waits for the agent to end the turn (CANCEL; a test's
+  // shorter)
+  export let cancel = CANCEL;
+
   export function ask(ask: Ask, on: (ev: Event) => void): Try {
     const left: Say[] = [];
     const end = AskAI.end("");
@@ -195,7 +211,9 @@ export namespace Antigravity {
     if (Agy.command() === null) {
       return none(NO_AGENT, "down");
     }
-    const run: Run = { ask, on, proc: null, sid: "", token: crypto.randomUUID(), text: "", mind: "", last: "", fresh: false, reply: "", said: false, first: null, grew: false, calls: new Set(), n: 0, stopped: false, halt: new AbortController() };
+    let give = () => {};
+    const gave = new Promise<null>((done) => (give = () => done(null)));
+    const run: Run = { ask, on, proc: null, sid: "", token: crypto.randomUUID(), text: "", mind: "", last: "", fresh: false, reply: "", said: false, first: null, grew: false, calls: new Set(), n: 0, stopped: false, halt: new AbortController(), gave, give };
     const stop = () => {
       if (run.stopped) {
         return;
@@ -205,7 +223,7 @@ export namespace Antigravity {
       const proc = run.proc;
       if (proc !== null && run.sid !== "") {
         Acp.notify(proc.conn, "session/cancel", { sessionId: run.sid });
-        setTimeout(() => proc.runs.has(run.sid) && Acp.stop(proc.conn, "it didn't stop the turn"), CANCEL).unref();
+        setTimeout(() => Antigravity.deaf(proc, run), Antigravity.cancel).unref();
       }
     };
     const done = Antigravity.run(run, folder).then((e) => ({ ...e, left }));
@@ -238,8 +256,8 @@ export namespace Antigravity {
       if (run.stopped) {
         return Antigravity.lost(run);
       }
-      const result = await Acp.call(proc.conn, "session/prompt", { sessionId: run.sid, prompt: Antigravity.prompt(run.ask) });
-      return Antigravity.end(run, result);
+      const result = await Promise.race([Acp.call(proc.conn, "session/prompt", { sessionId: run.sid, prompt: Antigravity.prompt(run.ask) }), run.gave]);
+      return result === null ? Antigravity.lost(run) : Antigravity.end(run, result);
     } catch (err: any) {
       if (run.stopped) {
         return Antigravity.lost(run);
@@ -251,6 +269,21 @@ export namespace Antigravity {
       Antigravity.release(proc);
       Antigravity.clean(folder, run.sid);
     }
+  }
+
+  // a stop the agent didn't honour in CANCEL: an agent running this call
+  // alone killed; one others share takes no new call, so it ends once
+  // theirs did, and this call is given up, its session left to end with it
+  export function deaf(proc: Proc, run: Run): void {
+    if (!proc.runs.has(run.sid)) {
+      return;
+    }
+    if (proc.runs.size === 1) {
+      Acp.stop(proc.conn, "it didn't stop the turn");
+      return;
+    }
+    proc.started = MOST;
+    run.give();
   }
 
   // a session's settings: the account's empty folder; illi's tools
@@ -472,8 +505,9 @@ export namespace Antigravity {
   }
 
   // a request of the agent's to illi's tools, passed on to the call's
-  // tools URL as it came; a tool's call logged as it goes, with what it
-  // answered as that comes back
+  // tools URL as it came (stopped as the agent drops it, or the call
+  // stops); a tool's call logged as it goes, with what it answered as that
+  // comes back
   export async function relay(req: Request): Promise<Response> {
     const run = RUNS.get(new URL(req.url).pathname.slice(1));
     if (run === undefined) {
@@ -497,7 +531,7 @@ export namespace Antigravity {
     let res: Response;
     let text: string;
     try {
-      res  = await fetch(run.ask.server, { method: req.method, headers, body, signal: req.signal });
+      res  = await fetch(run.ask.server, { method: req.method, headers, body, signal: AbortSignal.any([req.signal, run.halt.signal]) });
       text = await res.text();
     } catch {
       return new Response(null, { status: 502 });
@@ -516,7 +550,10 @@ export namespace Antigravity {
   // the call's end from the turn's: answered, unless its words were an
   // error said as a message (the turn used nothing, or their last piece
   // is the agent's own words for one: those before it logged as cut off),
-  // or it stopped another way
+  // or it stopped another way: past the most tokens with nothing said, too
+  // long for the window (`full`); else what it said logged and the stop in
+  // plain words (Agent.stopped: the most the model may write at once, a
+  // refusal), as illi's own loop ends one
   export function end(run: Run, result: any): End {
     const stop  = String(result?.stopReason ?? "");
     const used  = result?.usage !== undefined && result?.usage !== null;
@@ -537,14 +574,12 @@ export namespace Antigravity {
       Antigravity.flush(run);
       return { ok: true, text: run.reply, left: [], ...first };
     }
-    if (stop === "max_tokens") {
-      return { ok: false, text: "the request was too long for the model's window", left: [], stop: "full", grew: run.grew, cut: run.said, ...first };
+    if (stop === "max_tokens" && !run.said && run.text.trim() === "") {
+      return { ok: false, text: "the request was too long for the model's window", left: [], stop: "full", grew: run.grew, ...first };
     }
-    if (stop === "max_turn_requests") {
-      Antigravity.flush(run);
-      return { ok: false, text: "Antigravity ended the turn: it took more steps than it allows in one", left: [], stop: "fail", cut: run.said, ...first };
-    }
-    return { ...Antigravity.failed(run, run.text.trim() || "Antigravity ended the turn (" + (stop || "no reason told") + ")"), ...first };
+    Antigravity.flush(run);
+    const why = stop === "max_turn_requests" ? "Antigravity ended the turn: it took more steps than it allows in one" : Agent.stopped(stop, "Antigravity ended the turn (" + (stop || "no reason told") + ")");
+    return { ok: false, text: why, left: [], stop: "fail", cut: run.said, ...first };
   }
 
   // a failure in plain words: too long for the window; the plan's limit
@@ -587,18 +622,24 @@ export namespace Antigravity {
 
   // an agent of the account's for a call: one running a session with room
   // for more, else the spare, else a new one; a spare started beside it
-  // at once.
+  // at once. Agents of another account, or of this one's folder before it
+  // was made anew (a logout, then a sign-in that got its id: its stamp
+  // changed, here or in another terminal), take no call: those idle end.
   // Thrown: it won't start or sign in (its account's sign-in ran out:
   // NO_SIGNIN)
   export async function take(folder: string): Promise<Proc> {
     Antigravity.wake();
-    for (const p of procs.filter((p) => p.folder !== folder && p.live === 0)) {
+    const stamp = Antigravity.stamp(folder);
+    for (const p of procs.filter((p) => (p.folder !== folder || p.stamp !== stamp) && p.live === 0)) {
       Antigravity.kill(p, "another account is in use");
+    }
+    for (const p of procs.filter((p) => p.folder === folder && p.stamp !== stamp)) {
+      p.started = MOST;
     }
     const p = procs.find((p) => p.folder === folder && p.live > 0 && p.started < MOST && !p.conn.ended) ?? procs.find((p) => p.folder === folder && p.started === 0 && !p.conn.ended) ?? Antigravity.spawn(folder);
     p.started++;
     p.live++;
-    if (!procs.some((o) => o.folder === folder && o.started === 0)) {
+    if (!procs.some((o) => o.folder === folder && o.stamp === stamp && o.started === 0)) {
       try {
         Antigravity.spawn(folder);
       } catch {}
@@ -613,14 +654,15 @@ export namespace Antigravity {
   }
 
   // an agent started for an account, initialized and signed in (ready);
-  // its ask for a browser sign-in ends it (its sign-in ran out). Thrown:
-  // the agent isn't here
+  // its ask for a browser sign-in ends it (its sign-in ran out), as does
+  // any failure to start (so no call takes it). Thrown: the agent isn't
+  // here
   export function spawn(folder: string): Proc {
     const cmd = Agy.command();
     if (cmd === null) {
       throw new Error(NO_AGENT);
     }
-    const p = { folder, started: 0, live: 0, runs: new Map(), signin: false } as unknown as Proc;
+    const p = { folder, stamp: Antigravity.stamp(folder), started: 0, live: 0, runs: new Map(), signin: false } as unknown as Proc;
     try {
       p.conn = Acp.start(cmd, Antigravity.work(folder), Antigravity.env(folder), (_, m) => Antigravity.heard(p, m), (conn, line) => {
         if (SIGNING.test(line)) {
@@ -635,7 +677,7 @@ export namespace Antigravity {
       await Acp.call(p.conn, "initialize", Antigravity.hello(), READY);
       await Acp.call(p.conn, "authenticate", Antigravity.auth(), READY);
     })();
-    p.ready.catch(() => {});
+    p.ready.catch(() => Antigravity.kill(p, "it didn't start"));
     void p.conn.exited.then(() => {
       procs = procs.filter((o) => o !== p);
     });
@@ -732,6 +774,30 @@ export namespace Antigravity {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     fs.mkdirSync(path.join(folder, "tmp"), { recursive: true, mode: 0o700 });
     return dir;
+  }
+
+  // an account's folder's stamp: a random one written as the folder is
+  // first used, so a folder removed and made anew under the same id (a
+  // logout, then a sign-in) is told apart from the one an agent started
+  // in ("": the folder isn't there)
+  export function stamp(folder: string): string {
+    const file = path.join(folder, STAMP);
+    try {
+      return fs.readFileSync(file, "utf8").trim();
+    } catch {}
+    try {
+      fs.writeFileSync(file, crypto.randomUUID() + "\n", { flag: "wx", mode: 0o600 });
+    } catch {}
+    try {
+      return fs.readFileSync(file, "utf8").trim();
+    } catch {
+      return "";
+    }
+  }
+
+  // an account's agents ended (it's logged out here)
+  export function forget(folder: string): void {
+    procs.filter((p) => p.folder === folder).forEach((p) => Antigravity.kill(p, "its account was logged out"));
   }
 
   // a session's files gone from the account's folder (its conversation

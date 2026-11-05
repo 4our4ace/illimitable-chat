@@ -14,12 +14,14 @@
 // registry's sha256 as it comes, unpacked by illi (each file by its own
 // name, none in a folder: nothing outside the version's folder), made
 // runnable, then moved into place in one rename, so a download stopped
-// halfway leaves nothing that looks installed. An older version goes once
-// a newer one is in place.
+// halfway leaves nothing that looks installed. Once one is in place,
+// every other version kept goes, and every download's folder left beside
+// them (.new-*).
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as zlib from "node:zlib";
+import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import * as config from "../../config/Config.ts";
 
@@ -49,6 +51,10 @@ export const UNPACKED = 960e6;
 
 // how long the registry may take to answer (ms)
 const ASK = 15e3;
+
+// how old a download's folder left beside the builds must be to go (ms):
+// one younger may be another terminal's, still downloading
+const LEFT = 24 * 60 * 60e3;
 
 // Agy
 // ===
@@ -163,8 +169,9 @@ export namespace Agy {
   }
 
   // a build downloaded and put in place (its archive checked as it comes,
-  // `got` told the bytes so far and of how many), the older ones gone;
-  // thrown, why not (a stop: the signal's), nothing left behind
+  // `got` told the bytes so far and of how many), what's left beside it
+  // tidied (Agy.tidy); thrown, why not (a stop: the signal's), nothing
+  // left behind
   export async function download(b: Build, signal: AbortSignal, got: (bytes: number, of: number) => void): Promise<void> {
     fs.mkdirSync(Agy.home(), { recursive: true, mode: 0o700 });
     const tmp = fs.mkdtempSync(path.join(Agy.home(), ".new-"));
@@ -185,14 +192,26 @@ export namespace Agy {
     } finally {
       fs.rmSync(tmp, { recursive: true, force: true });
     }
+    Agy.tidy(b.version);
+  }
+
+  // what's left beside a build put in place: the other versions, and the
+  // download folders a day old (a younger one may be another terminal's
+  // download); one that won't go is left, never failing the download
+  export function tidy(version: string): void {
     for (const n of fs.readdirSync(Agy.home())) {
-      if (n !== b.version && (/^\d+(\.\d+)*$/.test(n) || n.startsWith(".new-"))) {
-        fs.rmSync(path.join(Agy.home(), n), { recursive: true, force: true });
-      }
+      const at = path.join(Agy.home(), n);
+      try {
+        const old = n.startsWith(".new-") && Date.now() - fs.statSync(at).mtimeMs > LEFT;
+        if ((n !== version && /^\d+(\.\d+)*$/.test(n)) || old) {
+          fs.rmSync(at, { recursive: true, force: true });
+        }
+      } catch {}
     }
   }
 
-  // the archive to a file, its sha256 reckoned as it comes and checked
+  // the archive to a file, its sha256 reckoned as it comes and checked;
+  // thrown: the host's refusal, a write that failed (a full disk), a stop
   export async function get(b: Build, file: string, signal: AbortSignal, got: (bytes: number, of: number) => void): Promise<void> {
     let res: Response;
     try {
@@ -205,22 +224,16 @@ export namespace Agy {
     }
     const of   = Number(res.headers.get("content-length")) || 0;
     const hash = new Bun.CryptoHasher("sha256");
-    const out  = fs.createWriteStream(file, { mode: 0o600 });
     let bytes = 0;
-    const from = res.body.getReader();
-    try {
-      for (let read = await from.read(); !read.done; read = await from.read()) {
-        hash.update(read.value);
-        bytes += read.value.length;
-        if (!out.write(read.value)) {
-          await new Promise((done) => out.once("drain", done));
-        }
+    const count = new Transform({
+      transform(chunk: Buffer, _, done) {
+        hash.update(chunk);
+        bytes += chunk.length;
         got(bytes, of);
-      }
-    } finally {
-      void from.cancel().catch(() => {});
-      await new Promise((done) => out.end(done));
-    }
+        done(null, chunk);
+      },
+    });
+    await pipeline(Readable.fromWeb(res.body as any), count, fs.createWriteStream(file, { mode: 0o600 }), { signal });
     if (hash.digest("hex") !== b.sha256) {
       throw new Error("Google's archive didn't match the checksum the registry lists, so illi didn't keep it");
     }
@@ -239,6 +252,13 @@ export namespace Agy {
       }
       const start = Agy.data(zip, e);
       const out   = path.join(into, e.name);
+      if (e.packed === 0 && e.method === 0) {
+        fs.writeFileSync(out, "", { mode: 0o755 });
+        if (e.size !== 0) {
+          throw new Error("Google's archive unpacked " + e.name + " short");
+        }
+        continue;
+      }
       const from  = fs.createReadStream(zip, { start, end: start + e.packed - 1, signal });
       const to    = fs.createWriteStream(out, { mode: 0o755 });
       if (e.method === 8) {

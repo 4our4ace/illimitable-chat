@@ -127,14 +127,14 @@ test("matchers as Claude Code reads them: none, \"\" or * all; plain names exact
   expect(takes("/any.sh", "anything")).toBe(true);
 });
 
-test("a tool hook whose matcher names only Claude Code's tools other than Bash is said once at the start: as never running, illi running its own on every provider (its long-session tools too); a PreToolUse one naming its web search or fetch as running only as Claude Code asks leave for one, a PostToolUse one as never seeing one finish", () => {
+test("a tool hook whose matcher names only Claude Code's tools other than Bash is said once at the start: as never running, illi running its own on every provider (its long-session tools too); a PreToolUse one naming its web search or fetch as running only as a plan's program asks leave for one by those names, a PostToolUse one as never seeing one finish", () => {
   hooks(ROOT + "/hooks.json", {
     PreToolUse: [["Agent", "/agent.sh"], ["Task|Read", "/task.sh"], ["Agent|shell", "/both.sh"], ["TaskCreate|TaskUpdate", "/todo.sh"], ["AskUserQuestion", "/asks.sh"], ["WebFetch|Read", "/fetch.sh"], ["Monitor|CronCreate", "/waits.sh"], ["SendMessage|EnterWorktree", "/long.sh"]],
     PostToolUse: [["Write|Edit", "/format.sh"], ["WebFetch", "/fetched.sh"], ["Edit|edit", "/mine.sh"]],
   });
   Hooks.load(REPO, () => false);
   const said = (text: string) => notes.filter((n) => n.includes(text)).map((n) => /(\w+) hook \S+ matches (\S+),/.exec(n)!.slice(1).join(" "));
-  expect(said("as Claude Code asks leave")).toEqual(["PreToolUse WebFetch|Read"]);
+  expect(said("so it runs only then")).toEqual(["PreToolUse WebFetch|Read"]);
   expect(said("never runs")).toEqual(["PreToolUse Agent", "PreToolUse Task|Read", "PreToolUse TaskCreate|TaskUpdate", "PreToolUse AskUserQuestion", "PreToolUse Monitor|CronCreate", "PreToolUse SendMessage|EnterWorktree", "PostToolUse Write|Edit", "PostToolUse WebFetch"]);
   expect(said("illi never sees one finish")).toEqual(["PostToolUse WebFetch"]);
   expect(said("illi runs its own on every provider")).not.toContain("PostToolUse WebFetch");
