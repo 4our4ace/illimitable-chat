@@ -101,7 +101,9 @@ export type Emit = (kind: Kind, text: string, fresh?: boolean) => void;
 // for each request, and what spoils one it refused), what a response's
 // headers tell it (heard: chatgpt's plan limits), how many cache marks a
 // request takes (marks: the last ones are kept, AskAI.marks), and how its
-// stream reads into a step (S: what it read so far)
+// stream reads into a step (S: what it read so far); ended: whether a
+// stream that closed before its last event still ended its step (an API
+// that may leave its usage out: the step as read, never asked again)
 export type Wire<S> = {
   key     : string;
   idle    : number;
@@ -116,6 +118,7 @@ export type Wire<S> = {
   begun   : (ev: any) => boolean;
   step    : (st: S, ask: Ask) => Step;
   usage   : (st: S) => Usage;
+  ended?  : (st: S) => boolean;
 };
 
 // Constants
@@ -539,6 +542,11 @@ export namespace Agent {
           const step = wire.step(st, ask);
           return step.stop === "fail" || step.stop === "busy" ? Agent.fail(step.why, seen, step.stop) : step;
         }
+      }
+      if (wire.ended?.(st) === true) {
+        read.done = true;
+        const step = wire.step(st, ask);
+        return step.stop === "fail" || step.stop === "busy" ? Agent.fail(step.why, seen, step.stop) : step;
       }
       return Agent.fail("the stream ended early", seen, "busy");
     } catch (err: any) {

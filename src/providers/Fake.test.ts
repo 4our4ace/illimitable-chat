@@ -27,8 +27,8 @@ const FACTS = {
   name     : "your Fake plan",
   maker    : { name: "Fake", offers: "by Fake Inc: your Fake plan", order: 9 },
   row      : "Fake plan",
-  models   : [{ label: "fake-1", id: "fake-model-1", speeds: ["slow"], window: 100000 }],
-  defaults : { pick: "fake:fake-*:medium:slow", compactor: "fake:fake-*:low:slow" },
+  models   : [{ label: "fake-1", id: "fake-model-1", speeds: ["slow"], window: 100000, price: 3 }, { label: "fake-mini-1", id: "fake-mini-1", speeds: ["slow"], window: 100000, price: 1 }],
+  defaults : { pick: "fake:fake-*:medium:slow", compactor: (models: Array<{ label: string; price?: number }>) => "fake:" + [...models].sort((a, b) => (a.price ?? 0) - (b.price ?? 0))[0].label + ":low:slow" },
   ttl      : 300e3,
   accounts : "folders" as const,
   folders  : "fake",
@@ -73,6 +73,7 @@ test("connected by its accounts' entry: offered, the default pick its own, its m
   expect([config.OFFER.vendors, config.config_value("pick"), config.config_has("fake"), config.config_folder("fake" as any)]).toEqual([["fake" as any], "fake:fake-1:medium:slow", true, ""]);
   expect([Pick.provider("fake" as any), Pick.model("fake" as any, "fake-1")?.window, config.OFFER.models.includes("fake-1")]).toEqual(["your Fake plan", 100000, true]);
   expect(term_hint()).toBe("");
+  expect(config.config_role("compactor", { vendor: "fake" as any, model: "fake-1", effort: "high", speed: "slow" })).toEqual({ vendor: "fake" as any, model: "fake-mini-1", effort: "low", speed: "slow" });
 });
 
 test("a call handed to its program, as a runner's; its plan asked for the side; what its account tells asked at the start", async () => {

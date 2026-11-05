@@ -138,11 +138,14 @@ one:
   leave it unset unless the user asks: to connect a provider, point them
   to /login
 - pick: what illi runs on, as vendor:model:effort:speed (default: the
-  first vendor's); compactor: what writes its memory's summaries; agents:
-  what subagents run on. Those two take a pick per vendor,
+  first vendor's); chats: what new chats start on, by provider (/login
+  asks it as one is connected; the first vendor's is the default unless
+  pick is set); compactor: what writes its memory's summaries; agents:
+  what subagents run on. Those three take a pick per vendor,
   comma-separated, and a chat uses its own vendor's: vendors never mix.
-  Unset, the compactor is the vendor's small model, agents the chat's
-  pick
+  A model may be named by family, * for its version
+  (claude-code:opus-*:high:slow: always the newest Opus). Unset, the
+  compactor is the vendor's small model, agents the chat's pick
 - models: the models offered; autocompact: how much of the chat a turn
   sends before older messages fold (a share of the window like "60%",
   or tokens like "400k"; at most 70%); autocompacts: per model, as

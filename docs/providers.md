@@ -362,7 +362,11 @@ one comes (`*` stands for the version):
 | `antigravity` | `gemini-*-flash`, high | `gemini-*-flash`, low      | gemini-3.8-flash |
 | `claude-api`  | `sonnet-*`            | `haiku-*`                   | sonnet-5.5, haiku-5.5 |
 
-Your own `pick`, `compactor` and `agents` take a family the same way
+`chats` names your own chat model per provider (/login asks it as you
+connect one, with the summaries' model): new chats start on your first
+provider's, unless `pick` names one model for every provider.
+
+Your own `pick`, `chats`, `compactor` and `agents` take a family the same way
 (`claude-code:opus-*:high:slow`: always the newest Opus) or a model by
 its version (`claude-code:opus-5.5:high:slow`: that one, till it's
 gone). In a shell, quote one with `*` (`/set pick

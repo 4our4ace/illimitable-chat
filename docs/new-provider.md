@@ -42,7 +42,7 @@ illi lists their models in):
 | `name` | as a note names it: "the Anthropic API", "your ChatGPT plan" (`Pick.provider`) |
 | `maker`, `row` | under whom /login lists it (`Maker`: its name, what its row says while none of its providers is connected, its place; a maker's plan before its API key) and its row's name ("ChatGPT plan", "Anthropic API key") |
 | `models` | as built in (5: their windows, efforts and speeds) |
-| `defaults` | illi's own pick on it (the first offered vendor's is illi's default pick) and the summaries', while `compactor` names none for it. Each names its model by family, `*` for the version (`opus-*`, `gemini-*-flash`): the newest of it the vendor offers (`Pick.newest`), so it never needs a new illi when a model comes or goes. `Providers.test.ts` fails a default named by version, or one its built-in list has none of |
+| `defaults` | illi's own pick on it (the first offered vendor's is illi's default pick, while `chats` names none for it) and the summaries', while `compactor` names none for it. Each names its model by family, `*` for the version (`opus-*`, `gemini-*-flash`): the newest of it the vendor offers (`Pick.newest`), so it never needs a new illi when a model comes or goes; or it's a rule, a function given the models offered (each with its `price` where the vendor lists one) that returns the pick's text (the cheapest, say). `Providers.test.ts` fails a default named by version, or one its built-in list has none of |
 | `ttl` | how long it keeps a cached prefix unused, in ms (`AskAI.wait`) |
 | `accounts` | its entry's shape in `accounts.json` (`Accounts.ts`): `keys` (an API's), `folders` (a plan its own program runs, each account a folder: `folders` names theirs in illi's root, which a profile's export leaves out, `Accounts.owned`; the folder in use is `config_folder(vendor)`), `logins` (a plan whose login is a file of its own: `outside`) |
 | `key` | it runs on an API key: the key's name in `config.KEYS`, the variable the environment sets it in (named `<KEY>_API_KEY`), the maker a refused key is said with, where a key is made, what to do once its credit is used up |
@@ -86,6 +86,7 @@ ends the call; a vendor gives it a `Wire` (`PROVIDER.wire`):
 | `begun`   | the event that says the response has begun (a request waiting on the same prefix goes then) |
 | `usage`   | what the request read, wrote and was cached (the speed it ran at too, for `step`'s note) |
 | `heard`   | the response's headers, for a plan's limits (chatgpt's) |
+| `ended`   | whether a stream that closed before its last event still ended its step (an API that may leave its usage out); without it, such a stream is busy and asked again |
 | `idle`    | how long a silent stream lives before it is taken as dead |
 
 A vendor whose own program runs the loop (Claude Code, Google's

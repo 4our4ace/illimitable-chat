@@ -34,8 +34,10 @@ export type Move = "next" | "prev" | "model" | "up" | "down" | "effort" | "speed
 // vendor names them (none told: EFFORTS); the service tier each speed
 // sends (none: OpenAI.body's own names); room: the share of its window a
 // request may fill, as its vendor tells it (ChatGPT's
-// effective_context_window_percent, else Codex's 95%; none: config.ROOM)
-export type Model = { label: string; id: string; speeds: string[]; window?: number; standard?: number; efforts?: string[]; tiers?: Record<string, string>; room?: number };
+// effective_context_window_percent, else Codex's 95%; none: config.ROOM);
+// price: what a million tokens in cost on it, in dollars, as its vendor
+// lists it (none: not told), which a provider's default may go by
+export type Model = { label: string; id: string; speeds: string[]; window?: number; standard?: number; efforts?: string[]; tiers?: Record<string, string>; room?: number; price?: number };
 
 // what a server offers: vendors, and models by label
 export type Offer = { vendors: Vendor[]; models: string[] };
@@ -151,6 +153,12 @@ export namespace Pick {
       }
     }
     return best?.label;
+  }
+
+  // a model's family, its versions as * (deepseek-v4-pro: deepseek-v*-pro,
+  // opus-5.5: opus-*), as a pick may name it to follow the newest
+  export function family(label: string): string {
+    return label.replace(/\d+(?:\.\d+)*/g, "*");
   }
 
   // whether version a comes after b, part by part (5.10 after 5.9, 5.5

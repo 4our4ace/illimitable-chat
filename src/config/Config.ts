@@ -27,12 +27,13 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { Vendor } from "../ai/AskAI.ts";
-import { LABELS, VENDORS, Pick, type Offer } from "../ai/Pick.ts";
+import { LABELS, VENDORS, Pick, type Model, type Offer } from "../ai/Pick.ts";
 import { profile_pick } from "./Profiles.ts";
 import type { Mode } from "./Update.ts";
 import { json_object } from "../tools/Clip.ts";
 import { Accounts, ENV, OWN, type Store } from "./Accounts.ts";
 import { FACTS, Vendors } from "../providers/Vendors.ts";
+import type { Rule } from "../providers/Provider.ts";
 import { Permissions } from "../tools/Permissions.ts";
 
 // Constants
@@ -90,7 +91,8 @@ const ACCENTS = ["auto", "illi", "blue", "magenta", "cyan", "green", "yellow", "
 // (config_value) must be one, and one is all /settings, /set and
 // config_check need; docs/config.md and the customize-illi skill say each
 const TABLE = {
-  pick       : { def: Vendors.fallback().defaults.pick, values: "pick", now: true, what: "illi's own default model" },
+  pick       : { def: config_rule(Vendors.fallback().defaults.pick, Vendors.fallback().models), values: "pick", now: true, what: "illi's own default model, every provider's" },
+  chats      : { def: "", values: "pick", now: true, what: "what new chats start on, by provider (/login asks it)", none: "each provider's own" },
   agents     : { def: "", values: "pick", now: true, what: "what subagents run on, by provider", none: "the chat's pick" },
   compactor  : { def: "", values: "pick", now: true, what: "what writes the summaries, by provider", none: "each provider's small model" },
   suggest    : { def: "on", values: ["on", "off"], now: true, what: "suggested replies (Tab)", shape: ON_OFF },
@@ -168,16 +170,19 @@ export const OFFER: Offer = {
 };
 
 // illi's own pick on each vendor, by default: the first vendor
-// offered's (config_def); the compactor each vendor's own, while
-// `compactor` names none for it (each provider's facts: Provider.ts
-// defaults, each a family: the newest model of it offered, config_newest)
+// offered's (config_def), its `chats` pick while it reads (one gone: the
+// vendor's own); the compactor each vendor's own, while `compactor` names
+// none for it (each provider's facts: Provider.ts defaults, each a family
+// or a rule over the models it offers: the newest of it, config_newest)
 const DEFS = (vendor: Vendor, offer = OFFER) => {
-  const own = Vendors.of(vendor)?.defaults ?? Vendors.fallback().defaults;
-  return { pick: config_newest(own.pick, offer), compactor: config_newest(own.compactor, offer) };
+  const own    = Vendors.of(vendor)?.defaults ?? Vendors.fallback().defaults;
+  const models = Pick.models([vendor], offer.models).map(([, m]) => m);
+  const chose  = config_list(String(config_value("chats"))).find((text) => text.split(":")[0] === vendor && Pick.read(config_split(text, offer), offer) !== null);
+  return { pick: config_newest(chose ?? config_rule(own.pick, models), offer), compactor: config_newest(config_rule(own.compactor, models), offer) };
 };
 
 // the settings that name a pick per vendor (a role's)
-const ROLED = ["agents", "compactor"] as const;
+const ROLED = ["chats", "agents", "compactor"] as const;
 type Role = (typeof ROLED)[number];
 config_gone();
 
@@ -293,7 +298,7 @@ export const TAKEN = ["Ctrl+A", "Ctrl+C", "Ctrl+D", "Ctrl+E", "Ctrl+F", "Ctrl+H"
 // illi's own pick (a new chat's, and the chat's again after an agent);
 // the picks each role names, by vendor (config_role)
 export let PICK!     : Pick;
-let ROLES: Record<Role, Partial<Record<Vendor, Pick>>> = { agents: {}, compactor: {} };
+let ROLES: Record<Role, Partial<Record<Vendor, Pick>>> = { chats: {}, agents: {}, compactor: {} };
 
 // how much of the chat a turn sends before older messages fold into the
 // tree (its autocompact: Memory.cutoff), in tokens (4 bytes each), on a
@@ -393,7 +398,7 @@ function config_gone(tell = true): void {
     const own = typeof set === "string" ? config_list(set).filter((text) => text.split(":").length === 4) : [];
     for (const text of own.filter((text) => OFFER.vendors.includes(text.split(":")[0] as Vendor) && Pick.read(config_split(text), OFFER) === null)) {
       const vendor = text.split(":")[0] as Vendor;
-      told(key, text, key === "agents" ? "the chat's pick" : DEFS(vendor).compactor);
+      told(key, text, key === "agents" ? "the chat's pick" : key === "chats" ? DEFS(vendor).pick : DEFS(vendor).compactor);
     }
   }
 }
@@ -473,7 +478,7 @@ function config_start(): void {
 // were
 function config_live(): void {
   const pick   = config_run("pick", config_value("pick"));
-  const roles  = { agents: config_roles("agents", config_value("agents"), OFFER, false), compactor: config_roles("compactor", config_value("compactor"), OFFER, false) };
+  const roles  = { chats: config_roles("chats", config_value("chats"), OFFER, false), agents: config_roles("agents", config_value("agents"), OFFER, false), compactor: config_roles("compactor", config_value("compactor"), OFFER, false) };
   const own    = config_object(config_value("autocompacts"));
   const keys   = config_shortcuts(config_value("shortcuts"));
   const related = String(config_value("related")).trim().toLowerCase();
@@ -666,7 +671,7 @@ function config_models(): void {
   for (const vendor of Object.keys(kept).filter((v) => VENDORS.includes(v as Vendor) && Array.isArray(kept[v])) as Vendor[]) {
     const models = kept[vendor].filter((m: any) => typeof m?.label === "string" && typeof m.id === "string" && Array.isArray(m.speeds));
     if (Vendors.of(vendor)?.catalog) {
-      Pick.learn(vendor, models.map((m: any) => ({ ...m, window: count(m.window), standard: count(m.standard), room: count(m.room) !== undefined && m.room <= 1 ? m.room : undefined })), "replace");
+      Pick.learn(vendor, models.map((m: any) => ({ ...m, window: count(m.window), standard: count(m.standard), room: count(m.room) !== undefined && m.room <= 1 ? m.room : undefined, price: typeof m.price === "number" && m.price >= 0 && Number.isFinite(m.price) ? m.price : undefined })), "replace");
     } else {
       models.forEach((m: any) => Pick.told(vendor, m.id, Number(m.window)));
     }
@@ -882,6 +887,19 @@ function config_run(key: string, text: string, offer = OFFER): Pick {
     throw new Error("config: " + key + " is no vendor:model:effort:speed offered here: " + text);
   }
   return pick;
+}
+
+// a default's text (Provider.ts Rule): as it is, or as its rule gives it
+// from these models (one that throws, or gives none: "")
+function config_rule(rule: Rule, models: Model[]): string {
+  if (typeof rule === "string") {
+    return rule;
+  }
+  try {
+    return String(rule(models) ?? "");
+  } catch {
+    return "";
+  }
 }
 
 // a pick's text, in its parts, its model a family's newest offered
