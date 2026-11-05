@@ -320,8 +320,8 @@ hidden with their profile ([Profiles](profiles.md)); a quit stops them,
 so Ctrl+D (or a second Ctrl+C) first says how many it stops; illi is
 told they were stopped, so it starts them again if it needs them. A
 process that left its group (`setsid`, a daemon) isn't listed but is
-stopped at the quit all the same. On the `claude-code` provider, Claude Code runs the shell, so its
-background jobs don't show here.
+stopped at the quit all the same. On the `claude-code` provider too:
+illi runs the shell there as everywhere.
 
 Related
 -------
@@ -377,8 +377,9 @@ have opened or pinned 20 lines that matched a path or an error, the bar
 moves to where the lowest quarter of those lines scored, never below a
 floor. The memory tools (zoom, search, date) and illi's own steps
 (todo, a subagent started or told) never get a line. On the
-`claude-code` provider, Claude Code runs its own files and shell, so
-only the MCP and plugin tools illi serves it get one.
+`claude-code` provider illi runs the tools too, so they get lines as
+everywhere; Claude Code's own web search and fetch and its MCP
+servers' tools, which run inside it, don't.
 
 The `related` setting is `on` (the side, and the strong lines given to
 illi), `screen` (the side only) or `off`.
@@ -403,10 +404,11 @@ Mouse and side panel
   `✗` failed, blank when no result came with it (a call stopped before
   it answered; a web search by OpenAI's or ChatGPT's models from before
   illi 0.3.1). A report, or a thought or a result with no call, is a
-  line of its own. A stop answers a call illi's own tools are running,
-  as failed; one Claude Code is running gets no answer. A click on a
-  call's line opens that call alone, under it behind a bar: the thinking
-  before it, its whole input, its whole result; its siblings stay shut.
+  line of its own. A stop answers a call still running, as failed; on
+  `claude-code`, where Claude Code runs the steps, a call cut off gets
+  no answer. A click on a call's line opens that call alone, under it
+  behind a bar: the thinking before it, its whole input, its whole
+  result; its siblings stay shut.
   A click on its line again, anywhere down its bar, or anywhere in it
   shuts it. The run's own line takes no click. Past five calls, a
   `+3 more` line under them (while the run is at work, the newest five

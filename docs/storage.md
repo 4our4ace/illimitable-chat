@@ -435,8 +435,8 @@ Messages by date
 Ask illi what you did yesterday afternoon or last Tuesday, and it works
 the dates out itself: each call's message names the time now after the
 working dir, as `Now: Sun 2026-10-25 14:05 UTC-4` (`Tools.here`,
-`When.now`; on `claude-code` without the date, which Claude Code's own
-prompt gives). The line is built once a call and sits after every cache
+`When.now`; on `claude-code` without the date, which Claude Code adds
+in a note of its own). The line is built once a call and sits after every cache
 mark a later call reads, so a new minute never costs a cached prefix.
 One `date` call then shows that stretch, or one `search` finds words
 in it.

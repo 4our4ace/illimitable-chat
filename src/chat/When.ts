@@ -156,7 +156,8 @@ export namespace When {
 
   // the time now, as each call's message opens with it (Tools.here): Sun
   // 2026-10-25 14:05 UTC-4; short, its date left out (claude-code, whose
-  // own prompt gives the day's date alone): Sun 14:05 UTC-4
+  // own message on where it runs gives the day's date alone): Sun 14:05
+  // UTC-4
   export function now(short = false, ms = Date.now()): string {
     return When.week(ms) + (short ? "" : " " + When.ymd(ms)) + " " + When.hm(ms) + " " + When.zone(ms);
   }

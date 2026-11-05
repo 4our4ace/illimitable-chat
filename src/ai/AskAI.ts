@@ -4,8 +4,8 @@
 // Deltas (live pieces) and an Entry per finished message out. send()
 // hands the agent a message at its next chance, stop() aborts, `left`
 // holds those never taken. Every vendor is an API run in our loop
-// (Agent.ts), but claude-code: the user's Claude Code, run whole in its
-// own (ClaudeCode.ts). A patient call (a summary's) asks again, AGAIN after each
+// (Agent.ts), but claude-code: the user's Claude Code, which runs the
+// steps in its own loop, with illi's prompt and tools (ClaudeCode.ts). A patient call (a summary's) asks again, AGAIN after each
 // try nothing answered (the vendor down or refusing it, as when the API
 // key's credit is gone; our setup failing), each time telling why (its
 // `stuck`), till one is answered or we stop it: an outage only delays it, and no summary is made of a failure
@@ -65,10 +65,7 @@ export type Block = { text: string; mark: boolean };
 // the most tokens a step may read before the call ends `full` once its
 // tools ran (a turn's: Chat.refit goes on from the chat as it then is;
 // an agent's: Tools.refit from its recap; none: no end); stuck: a
-// patient call's try failed, why, as it waits to ask again; builtins:
-// the Claude Code built-in tools it may use on claude-code, as its
-// agent's tools list gives them (Custom.profile; none: all; never those
-// ClaudeCode.OFF leaves out of every call); listed: its
+// patient call's try failed, why, as it waits to ask again; listed: its
 // agent's tools list as illi reads it (none: no list), whose MCP names
 // keep Claude Code's own servers on claude-code (ClaudeCode.cut)
 export type Ask = Pick & {
@@ -84,7 +81,6 @@ export type Ask = Pick & {
   max?      : number;
   room?     : number;
   stuck?    : (why: string) => void;
-  builtins? : string[] | null;
   listed?   : string[] | null;
 };
 

@@ -346,14 +346,14 @@ export namespace Chat {
   // prompt. A summary gets no tools: one it called, ours or the API's
   // own (web search brings code execution), sent its whole input again
   export function share(chat: Chat): Share {
-    const system = Tools.system(MASTER, chat.tools.cwd, chat.pick.vendor);
+    const system = Tools.system(MASTER, chat.tools.cwd);
     return { ...Pick.ask(chat.pick), system, searches: 0, server: "" };
   }
 
   // a turn's system prompt: illi's, with its main agent's instructions
   // and the sticky skills on (a summary's has neither)
   export function system(chat: Chat): string {
-    return Tools.system(MASTER + Custom.section(Custom.agent(chat.tools.cwd, chat.mem.agent)) + Tools.stuck(chat.tools.cwd), chat.tools.cwd, chat.pick.vendor);
+    return Tools.system(MASTER + Custom.section(Custom.agent(chat.tools.cwd, chat.mem.agent)) + Tools.stuck(chat.tools.cwd), chat.tools.cwd);
   }
 
   // stops all at once, as a quit does: what ran stays saved (mem.work), so
@@ -667,7 +667,7 @@ export namespace Chat {
     const blocks = [...view, Tools.here(chat.tools, chat.pick.vendor), ...told, Tools.at_work(chat.tools), { text: HEAD + text, mark: true }];
     const window  = Pick.window(chat.pick);
     const agent   = Custom.agent(chat.tools.cwd, chat.mem.agent);
-    const ask     = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server, blocks, imgs, keep: true, builtins: agent?.builtins, listed: agent?.tools, room: window === undefined ? undefined : Math.round(window * (Pick.room(chat.pick) ?? config.ROOM)) };
+    const ask     = { ...Chat.share(chat), system: Chat.system(chat), searches: SEARCHES, server, blocks, imgs, keep: true, listed: agent?.tools, room: window === undefined ? undefined : Math.round(window * (Pick.room(chat.pick) ?? config.ROOM)) };
     const carried = { model: chat.pick.vendor + ":" + chat.pick.model, tokens: Math.round(Memory.fill(mem) / TOKEN) };
     chat.model = chat.pick.model;
     chat.asked = true;

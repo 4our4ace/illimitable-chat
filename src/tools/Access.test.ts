@@ -138,23 +138,11 @@ test("rules on shell: sudo * denies sudo's commands, bash * a bash -c's, rm * an
   expect(judge("cd " + LIB + " && ls", [rule("external_directory", LIB + "/*", "allow")])).toEqual(["allow", "allow"]);
 });
 
-test("Claude Code's tools, as illi's like ones: Bash a shell command, Monitor's too, Read, Write, Edit, Grep, Glob, LS, the web, a subagent; illi's own none", () => {
-  expect(Access.hosted(WHERE, "Bash", { command: "git push" })).toEqual(Access.shell(WHERE, "git push"));
-  expect(Access.hosted(WHERE, "Monitor", { command: "tail -f " + LIB + "/log" })).toEqual(Access.shell(WHERE, "tail -f " + LIB + "/log"));
-  expect(Access.hosted(WHERE, "Monitor", { ws: { url: "wss://x.dev/s" } })[0]).toMatchObject({ action: "webfetch", resources: ["wss://x.dev/s"] });
-  expect(Access.hosted(WHERE, "Read", { file_path: APP + "/src/a.ts" })[0].resources).toEqual(["a.ts"]);
-  expect(Access.hosted(WHERE, "Edit", { file_path: LIB + "/x" }).map((r) => r.action)).toEqual(["external_directory", "edit"]);
-  expect(Access.hosted(WHERE, "NotebookEdit", { notebook_path: "n.ipynb" })[0]).toMatchObject({ action: "edit", resources: ["n.ipynb"] });
-  expect(Access.hosted(WHERE, "Grep", { pattern: "TODO", path: LIB })).toEqual([
-    { action: "external_directory", resources: [LIB + "/*"], save: [LIB + "/*"], spots: [null] },
-    { action: "grep", resources: ["TODO"], save: ["*"], spots: [null] },
-  ]);
-  expect(Access.hosted(WHERE, "Glob", { pattern: LIB + "/repo/**/*.ts" })[0].resources).toEqual([LIB + "/repo/*"]);
-  expect(Access.hosted(WHERE, "LS", {})).toEqual([{ action: "list", resources: ["."], save: ["*"], spots: [null] }]);
-  expect(Access.hosted(WHERE, "WebFetch", { url: "https://x.dev" })[0]).toMatchObject({ action: "webfetch", resources: ["https://x.dev"] });
-  expect(Access.hosted(WHERE, "Task", { subagent_type: "Explore" })[0]).toMatchObject({ action: "subagent", resources: ["Explore"] });
-  expect(Access.hosted(WHERE, "mcp__illi__zoom", {})).toEqual([]);
-  expect(Access.hosted(WHERE, "TodoWrite", {})[0].action).toBe("TodoWrite");
+test("Claude Code's tools that ask in illi's calls, as illi's like ones: its web fetch and search theirs, one of its MCP servers' by its name; illi's own none", () => {
+  expect(Access.hosted("WebFetch", { url: "https://x.dev" })[0]).toMatchObject({ action: "webfetch", resources: ["https://x.dev"] });
+  expect(Access.hosted("WebSearch", { query: "bun ffi" })[0]).toMatchObject({ action: "websearch", resources: ["bun ffi"] });
+  expect(Access.hosted("mcp__illi__zoom", {})).toEqual([]);
+  expect(Access.hosted("mcp__github__get_issue", {})).toEqual([{ action: "mcp__github__get_issue", resources: ["*"], save: ["*"], spots: [null] }]);
 });
 
 test("arity: a family's head by its first words; any other, the first word", () => {

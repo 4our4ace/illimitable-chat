@@ -2,22 +2,28 @@
 // ==========
 // claude-code: the user's own Claude Code (the `claude` CLI; ILLI_CLAUDE
 // names another), on their Claude plan and logged in through its own
-// flow (`claude`, then /login), run whole as it ships: its system
-// prompt, tools, loop and login are its own, and illi never sees a
-// token. A call is one `claude -p`, streamed both ways (stream-json),
-// leaving no session in Claude Code's history. One with tools
-// (Ask.server) adds illi's over MCP, those Claude Code lacks (Tools.list
-// `lean`), an agent's tools list keeping Claude Code's built-in ones to
-// those it names, but those illi gives itself (Ask.builtins: its Agent,
-// Task, TodoWrite and task tools never; its plugins stay, their MCP
-// servers as below), and never those illi leaves out, list or none
-// (ClaudeCode.OFF: its subagents, to-do list and long-session tools),
-// allowed to run (as `-p` asks no one), its permission prompts
-// asked of the user at illi's screen (Tools.approve), and illi's prompt after
-// Claude Code's (from a file, so no argument limit); one without (a summary, a goal check), or
-// `once` (a recap: Claude Code can't name tools it won't run, so it reads
-// none of the turn's cache), runs with none
-// of Claude Code's either, nor its MCP servers, commands or hooks. The
+// flow (`claude`, then /login): illi never sees a token. Claude Code runs
+// a call's steps as it ships, but with illi's prompt in place of its own
+// (--system-prompt-file, from a file, so no argument limit: of its own
+// words only a line of who it is stays before it) and illi's tools in
+// place of its own: illi's whole list over MCP (Tools.list `hosted`), run
+// by illi, so permissions, hooks and background jobs are as on every
+// provider; of Claude Code's built-in tools only its web search and
+// fetch (WEB), where the call searches the web. Its settings are the
+// user's alone (--setting-sources user): a project's CLAUDE.md,
+// AGENTS.md, rules and .claude settings never load, as illi reads the
+// project's rules itself (Tools.rules) and a repository's settings would
+// apply untrusted (-p trusts any folder); the user's own instructions
+// (~/.claude/CLAUDE.md), MCP servers and plugins stay. A call is one
+// `claude -p`, streamed both ways (stream-json), leaving no session in
+// Claude Code's history, under illi's own name (ClaudeCode.folder_env).
+// One with tools (Ask.server) has illi's allowed to run (as `-p` asks no
+// one) and Claude Code's permission prompts (its web fetch, its MCP
+// servers' tools) asked of the user at illi's screen (Tools.approve);
+// one without (a summary, a goal check), or `once` (a recap: Claude Code
+// can't name tools it won't run, so it reads none of the turn's cache),
+// runs with no tools, nor Claude Code's MCP servers or commands. Claude
+// Code's hooks never run: illi's own hooks file is the one that runs. The
 // blocks go as one user message, the last marked one before the last
 // cached for an hour (MARK: else a call re-writes the whole view to the
 // cache, though only its end changed; a request Claude Code marks four
@@ -28,8 +34,7 @@
 // once all it read is done, and a message sent after is left. Its
 // stream: the API's own events shown live (Anthropic.read), each
 // message's blocks as entries, a tool's result as its echo, illi's
-// tools by their own names; a subagent's own steps aren't shown (its
-// Task is off, OFF, but a skill of Claude Code's may still run in one).
+// tools by their own names.
 // The last result ends the call: answered, or in plain
 // words (a plan's limit and when it resets, a login missing, a chat too
 // long for the window: `full`, a busy service); a turn's call, and an
@@ -40,9 +45,13 @@
 // has answered Claude Code's own marks leave no room for illi's MARK),
 // its own memory off (illi's is the chat, on every provider), and its
 // background tasks (a run ends with the turn, so none would be told);
+// its tool search off, so illi's tools load up front, as on every
+// provider (Claude Code's own servers' tools too, whole: `off`, an
+// agent's list and a login a server waits on are what leave them out,
+// ClaudeCode.cut);
 // the tokens its first request read,
 // as its stream tells, go with its end (End.first), so the chat learns
-// what Claude Code's own prompt and tools take beside it (Chat.cap). A
+// what the prompt and tools Claude Code sends take beside it (Chat.cap). A
 // stop interrupts it (SIGINT, then SIGKILL), what streamed of its
 // message logged as cut off. A model's window is learned (Pick.told, by
 // its canonical id) and kept for the next start: as Claude Code has it
@@ -145,6 +154,18 @@ export type Theirs = { name: string; status: string; tools: string[] | null; off
 // illi's tools as Claude Code names them, by their MCP server's name
 const OURS = "mcp__illi__";
 
+// said after illi's prompt in a call with tools
+// (ClaudeCode.instructions): the prompt names illi's tools as on every
+// provider (zoom, todo...), the model gets them by their MCP server's
+const NAMED = "Here illi's tools come through its MCP server, named " + OURS + " and their name: zoom is " + OURS + "zoom, shell " + OURS + "shell, and so on.";
+
+// the only built-in tools of Claude Code's a call with tools has, where
+// it searches the web (Ask.searches): its web search and fetch, as illi
+// has none of its own (another provider's search is its API's). Every
+// other (its shell, files, subagents, to-do list, skills, tools for a
+// long session of its own), and any a newer Claude Code adds, stays out
+const WEB = ["WebSearch", "WebFetch"];
+
 // a marked block's cache entry: an hour, as Claude Code's own are (one
 // of five minutes may not follow theirs); one of a call's blocks, its
 // last marked (Claude Code marks the last block itself, and its own
@@ -199,6 +220,14 @@ let folder = config.config_claude_dir();
 let cases: Map<string, string> | null = null;
 const NAMES = config.ROOT + "/claude-code.json";
 
+// the names of those of Claude Code's servers last told waiting on a
+// login (needs-auth; null: NAMES not read yet), kept beside the names, so
+// a start's first call leaves them out as the last call did
+// (ClaudeCode.cut): else it would load their login's tools and the next
+// call drop them, each change to the tools a request sends reading the
+// whole chat anew instead of from the cache
+let waits: Set<string> | null = null;
+
 const NO_CLAUDE = "Claude Code isn't installed here: install it (code.claude.com), then /login connects your Claude plan";
 const NO_LOGIN  = "Claude Code isn't logged in: /login signs in to your Claude plan, then send a message";
 
@@ -220,8 +249,8 @@ const DRAIN = 1e3;
 
 // Claude Code asked a model's window (ClaudeCode.size): on its control
 // channel, as a call without tools runs (none of its tools, MCP servers,
-// commands or hooks; no session kept)
-const SIZE = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--settings", JSON.stringify({ disableAllHooks: true })];
+// commands or hooks, nor a repository's settings; no session kept)
+const SIZE = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--settings", JSON.stringify({ disableAllHooks: true }), "--setting-sources", "user"];
 
 // the Claude plan's windows asked (ClaudeCode.models: once an account a
 // start), and the account they were asked of (its folder and email)
@@ -236,26 +265,6 @@ export namespace ClaudeCode {
   // the CLI run
   export let bin = process.env.ILLI_CLAUDE ?? "claude";
 
-  // Claude Code's own tools a call with tools leaves out (--disallowedTools,
-  // which wins over --tools and an agent's list): AskUserQuestion, as
-  // illi asks through its own ask; its subagents' tool (Agent, Task: its
-  // old name) and its to-do list's (TodoWrite, the task tools), as illi's
-  // spawn and todo take their place, so subagents show at illi's side and
-  // the to-do list is one; and those made for a long Claude Code session,
-  // which a call, its process ending with the turn, can't keep (cron,
-  // wake-ups, monitors, workflows, messages to its agents) or which act
-  // outside illi (notifications, remote triggers, worktrees, plugins,
-  // onboarding guides, designs, review findings), and TaskStop, with
-  // nothing to stop as its background tasks are off (ClaudeCode.env). Its
-  // Skill stays. A tool a newer Claude Code adds isn't named, so it loads
-  // till it is added here
-  export const OFF = [
-    "AskUserQuestion",
-    "Agent", "Task", "TodoWrite", "TaskCreate", "TaskGet", "TaskList", "TaskUpdate",
-    "CronCreate", "CronDelete", "CronList", "ScheduleWakeup", "Monitor", "TaskStop", "Workflow", "SendMessage", "ListAgents",
-    "PushNotification", "RemoteTrigger", "EnterWorktree", "ExitWorktree", "ShareOnboardingGuide", "PublishPlugin", "DesignSync", "ReportFindings",
-  ];
-
   export function ask(ask: Ask, on: (ev: Event) => void): Try {
     ClaudeCode.account();
     const end = AskAI.end("");
@@ -267,7 +276,7 @@ export namespace ClaudeCode {
     if (ask.from !== undefined) {
       return none("Claude Code can't go on from another request", "fail");
     }
-    const file = ClaudeCode.prompt(ask.system);
+    const file = ClaudeCode.prompt(ClaudeCode.instructions(ask));
     // what the call leaves out of Claude Code's servers, as its arguments
     // say it (args reads it too, at once, from the same state)
     const cut = ClaudeCode.cut(ask);
@@ -339,47 +348,51 @@ export namespace ClaudeCode {
     return { send, stop, done };
   }
 
-  // a call's arguments: streamed both ways, on its pick, illi's prompt
-  // after Claude Code's (its file), never Claude Code's hooks (illi's own
-  // hooks file is the one that runs, and a repository's .claude settings
-  // would run its hooks in a folder never trusted: -p trusts any); with
-  // tools, illi's (its MCP server, the lean list, allowed; illi's ask for
-  // Claude Code's own, of its built-in ones only those an agent's tools
-  // list names, if it has one, but those illi gives itself: --tools), and
-  // Claude Code's own MCP servers but what the call leaves out
-  // (ClaudeCode.cut: all, --strict-mcp-config, or by rule,
-  // --disallowedTools beside its tools illi leaves out, OFF), else (or
-  // once) none, nor Claude Code's servers or commands
+  // a call's arguments: streamed both ways, on its pick, illi's prompt in
+  // place of Claude Code's (its file), the user's settings alone (no
+  // repository's: -p trusts any folder), never Claude Code's hooks
+  // (illi's own hooks file is the one that runs) nor its commands; with
+  // tools, illi's (its MCP server, the whole list, allowed), of Claude
+  // Code's built-in ones its web search and fetch alone, where the call
+  // searches (WEB, else none: --tools), and Claude Code's own MCP servers
+  // but what the call leaves out (ClaudeCode.cut: all,
+  // --strict-mcp-config, or by rule, --disallowedTools), else (or once)
+  // none, nor Claude Code's servers
   export function args(ask: Ask, file: string): string[] {
     const io = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--replay-user-messages", "--no-session-persistence"];
-    const pick = ["--model", ask.model, "--effort", ask.effort, "--append-system-prompt-file", file, "--settings", JSON.stringify({ disableAllHooks: true })];
+    const pick = ["--model", ask.model, "--effort", ask.effort, "--system-prompt-file", file, "--settings", JSON.stringify({ disableAllHooks: true }), "--setting-sources", "user", "--disable-slash-commands"];
     if (ask.server === "" || ask.once) {
-      return [...io, ...pick, "--tools", "", "--strict-mcp-config", "--disable-slash-commands"];
+      return [...io, ...pick, "--tools", "", "--strict-mcp-config"];
     }
-    const mcp = { mcpServers: { illi: { type: "http", url: ask.server + "?lean", timeout: WAIT } } };
-    const own = ask.builtins == null ? [] : ["--tools", ask.builtins.join(",")];
+    const mcp = { mcpServers: { illi: { type: "http", url: ask.server + "?hosted", timeout: WAIT } } };
     const cut = ClaudeCode.cut(ask);
     const strict = cut.strict ? ["--strict-mcp-config"] : [];
-    return [...io, ...pick, ...own, "--mcp-config", JSON.stringify(mcp), ...strict, "--allowedTools", "mcp__illi", "--disallowedTools", [...ClaudeCode.OFF, ...cut.deny].join(","), "--permission-prompt-tool", "mcp__illi__approve"];
+    const deny = cut.deny.length > 0 ? ["--disallowedTools", cut.deny.join(",")] : [];
+    return [...io, ...pick, "--tools", ask.searches > 0 ? WEB.join(",") : "", "--mcp-config", JSON.stringify(mcp), ...strict, "--allowedTools", "mcp__illi", ...deny, "--permission-prompt-tool", "mcp__illi__approve"];
   }
 
   // what a call with tools leaves out of Claude Code's own MCP servers
   // (a call without loads none: args), so the model reads no tool it
   // isn't to have. The servers weighed: those last told, else, till a
   // call of this run tells them, those ever told, by the names kept
-  // (ClaudeCode.cased; their tools not known). By rule, whole: each
+  // (ClaudeCode.cased; their tools not known; waiting on a login as
+  // kept: ClaudeCode.waiting). By rule, whole: each
   // server illi runs its own of, by name, told or not (over: illi's wins,
   // so the model gets one copy); each weighed that `off` names (none told
   // yet: each name `off` holds, case and all as told before, else as
-  // written); with an agent's tools list (Ask.listed: mcp all,
+  // written); each last told waiting on a login (needs-auth: its only
+  // tools would be its login's, which a run ended with the turn can't
+  // finish; /mcp and the side name `claude mcp login` for it; Claude
+  // Code still starts it and tells each call how it is, so once a call
+  // finds it logged in, the next loads it); with an agent's tools list (Ask.listed: mcp all,
   // mcp__github that server, mcp__github__get_issue those tools), each
   // weighed it doesn't name, and of one it names by tools alone its other
   // tools once told (not yet: none, so the call tells them). A server
   // never told loads in the call, whose init then tells it (one added to
   // Claude Code since, or one a list names that this run hasn't seen), so
   // a list never waits on a call without one to learn them. A list whose
-  // names could load none (it names none, or only servers off or illi's
-  // own) loads none (strict). A rule never reaches illi's own tools
+  // names could load none (it names none, or only servers off, waiting
+  // on a login or illi's own) loads none (strict). A rule never reaches illi's own tools
   // (mcp__illi__...)
   export function cut(ask: Ask): Cut {
     if (ask.server === "" || ask.once) {
@@ -389,23 +402,24 @@ export namespace ClaudeCode {
     const known   = ClaudeCode.servers();
     const own     = ClaudeCode.own().map(ClaudeCode.spell);
     const offs    = config.OFF.map((name) => ClaudeCode.spell(ClaudeCode.cased().get(name) ?? name));
-    const weighed = known ?? [...ClaudeCode.cased().values()].map((name) => ({ name, tools: null, off: config.config_off(name), over: own.includes(ClaudeCode.spell(name)) }));
+    const weighed = known ?? [...ClaudeCode.cased().values()].map((name) => ({ name, status: ClaudeCode.waiting().has(name) ? "needs-auth" : "", tools: null, off: config.config_off(name), over: own.includes(ClaudeCode.spell(name)) }));
+    const gone    = (s: Theirs) => s.off || s.over || s.status === "needs-auth";
     const head    = (name: string) => "mcp__" + ClaudeCode.spell(name);
     const names   = (name: string, t: string) => t === head(name) || t.startsWith(head(name) + "__");
     const named   = (s: { name: string }) => (listed ?? ["mcp"]).filter((t) => t === "mcp" || names(s.name, t));
     // whether a name of a list could load a server: mcp, one weighed
-    // neither off nor over, or one never told, unless off or illi's own
+    // not left out whole, or one never told, unless off or illi's own
     const could = (t: string) => {
       const s = weighed.find((w) => names(w.name, t));
       const bare = t.slice("mcp__".length).split("__")[0];
-      return t === "mcp" || (s === undefined ? !own.includes(bare) && !offs.includes(bare) : !s.off && !s.over);
+      return t === "mcp" || (s === undefined ? !own.includes(bare) && !offs.includes(bare) : !gone(s));
     };
     if (listed !== null && !listed.some(could)) {
       return { strict: true, deny: [] };
     }
     const told = weighed.flatMap((s) => {
       const these = named(s);
-      if (s.off || s.over || these.length === 0) {
+      if (gone(s) || these.length === 0) {
         return [head(s.name) + "__*"];
       }
       if (s.tools === null || these.some((t) => !t.startsWith(head(s.name) + "__"))) {
@@ -443,7 +457,8 @@ export namespace ClaudeCode {
   // a call's init, where it loaded Claude Code's servers: each (but
   // illi's own), how it is, its tools as the init lists them (one the
   // call cut keeps those told before, if any: its tools may be left out
-  // of the list); their names kept, case and all (NAMES)
+  // of the list); their names kept, case and all, and those waiting on a
+  // login (NAMES)
   export function learn(m: any, cut: Cut): void {
     const tools = (Array.isArray(m.tools) ? m.tools : []).map(String).filter((t: string) => t.startsWith("mcp__"));
     const told  = (Array.isArray(m.mcp_servers) ? m.mcp_servers : []).filter((s: any) => typeof s?.name === "string" && s.name !== "illi");
@@ -456,9 +471,12 @@ export namespace ClaudeCode {
     });
     const names = ClaudeCode.cased();
     const news  = theirs!.filter((s) => names.get(s.name.toLowerCase()) !== s.name);
-    if (news.length > 0) {
+    const wait  = new Set(theirs!.filter((s) => s.status === "needs-auth").map((s) => s.name));
+    const was   = ClaudeCode.waiting();
+    if (news.length > 0 || wait.size !== was.size || [...wait].some((n) => !was.has(n))) {
       news.forEach((s) => names.set(s.name.toLowerCase(), s.name));
-      ClaudeCode.keep([...names.values()]);
+      waits = wait;
+      ClaudeCode.keep([...names.values()], [...wait]);
     }
   }
 
@@ -469,18 +487,33 @@ export namespace ClaudeCode {
     return cases;
   }
 
+  // the names of the servers last told waiting on a login (NAMES read
+  // once)
+  export function waiting(): Set<string> {
+    waits ??= new Set((json_object(NAMES)?.waiting ?? []).filter((n: unknown) => typeof n === "string"));
+    return waits;
+  }
+
   // names kept in NAMES beside those there (another illi's too), every
-  // profile's, the file written in one piece
-  export function keep(names: string[]): void {
+  // profile's, and those waiting on a login as the last call told them,
+  // the file written in one piece
+  export function keep(names: string[], waiting: string[]): void {
     const tmp = NAMES + "." + process.pid + ".tmp";
     const all = new Set([...(json_object(NAMES)?.servers ?? []).filter((n: unknown) => typeof n === "string"), ...names]);
     try {
       fs.mkdirSync(config.ROOT, { recursive: true });
-      fs.writeFileSync(tmp, JSON.stringify({ servers: [...all].sort() }, null, 2) + "\n");
+      fs.writeFileSync(tmp, JSON.stringify({ servers: [...all].sort(), waiting: [...waiting].sort() }, null, 2) + "\n");
       fs.renameSync(tmp, NAMES);
     } catch (err: any) {
       console.error("claude-code: " + NAMES + " wasn't kept: " + err?.message);
     }
+  }
+
+  // the system prompt a call sends: illi's, and in a call with tools a
+  // line on how its tools are named there (NAMED); a recap's (once) runs
+  // without tools, as one without a server
+  export function instructions(ask: Ask): string {
+    return ask.server === "" || ask.once ? ask.system : ask.system + "\n\n" + NAMED;
   }
 
   // illi's prompt in a file of its own, readable by the user alone
@@ -490,9 +523,8 @@ export namespace ClaudeCode {
     return file;
   }
 
-  // the environment Claude Code runs in: illi's, but the mark of a Claude
-  // Code session around illi (as when illi runs inside one), with Claude
-  // Code's advisor off (CLAUDE_CODE_DISABLE_ADVISOR_TOOL, as its own
+  // the environment Claude Code runs in: its folder's (folder_env), with
+  // Claude Code's advisor off (CLAUDE_CODE_DISABLE_ADVISOR_TOOL, as its own
   // changelog names it; the user's Claude Code keeps it): its answer comes
   // back locked, illi can neither show nor keep it, and once it has
   // answered Claude Code's requests leave no room for illi's mark (MARK);
@@ -500,13 +532,13 @@ export namespace ClaudeCode {
   // reads and writes in its folder, ~/.claude/projects/<project>/memory),
   // as illi's memory is the chat and the rules it reads, the same on
   // every provider, and notes Claude Code kept would reach the model on
-  // the Claude plan alone; and its background tasks off
-  // (CLAUDE_CODE_DISABLE_BACKGROUND_TASKS): a command it ran in the
-  // background would tell the model when it ended, in a run ended with
-  // the turn, and while they are on Claude Code refuses a long `sleep`,
-  // waiting with Monitor instead (OFF); without them its shell is illi's,
-  // a job in the background the shell's own (cmd > log 2>&1 &), a wait a
-  // loop in the foreground;
+  // the Claude plan alone; its background tasks off
+  // (CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: one would tell the model it
+  // ended in a run ended with the turn); its tool search off
+  // (ENABLE_TOOL_SEARCH), so illi's tools load up front, as on every
+  // provider, none waiting to be searched for (Claude Code's own
+  // servers' tools load whole so too: ClaudeCode.cut leaves out those a
+  // call isn't to have, and those waiting on a login);
   // a call illi refits (Ask.room: a turn's, an agent's) with Claude
   // Code's compaction off (DISABLE_COMPACT), so one outgrowing the window
   // ends "Prompt is too long" (`full`) and illi folds the chat into its
@@ -517,6 +549,7 @@ export namespace ClaudeCode {
     env.CLAUDE_CODE_DISABLE_ADVISOR_TOOL = "1";
     env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
     env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = "1";
+    env.ENABLE_TOOL_SEARCH = "false";
     if (ask.room !== undefined) {
       env.DISABLE_COMPACT = "1";
     }
@@ -524,12 +557,22 @@ export namespace ClaudeCode {
   }
 
   // the environment Claude Code runs in for a folder: illi's, but the
-  // mark of a Claude Code session around illi; one of illi's folders
-  // named (CLAUDE_CONFIG_DIR; "": the user's own Claude Code's, as illi's
-  // environment names it)
+  // mark of a Claude Code session around illi (as when illi runs inside
+  // one); one of illi's folders named (CLAUDE_CONFIG_DIR; "": the user's
+  // own Claude Code's, as illi's environment names it). It runs under
+  // illi's own name (CLAUDE_CODE_ENTRYPOINT, which each request carries,
+  // an inherited one overwritten: plans count `claude -p`'s own, sdk-cli,
+  // against their limits about twice as fast, anthropics/claude-code
+  // #97074), without what a name not Claude Code's own turns on: an
+  // artifact tool and a scratchpad line in each request
+  // (CLAUDE_CODE_DISABLE_ARTIFACT), and one more request each run, on the
+  // call's model, naming its session (CLAUDE_CODE_DISABLE_TERMINAL_TITLE)
   export function folder_env(dir: string): Record<string, string> {
     const env = { ...process.env } as Record<string, string>;
     delete env.CLAUDECODE;
+    env.CLAUDE_CODE_ENTRYPOINT = "illi";
+    env.CLAUDE_CODE_DISABLE_ARTIFACT = "1";
+    env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1";
     if (dir !== "") {
       env.CLAUDE_CONFIG_DIR = dir;
     }
