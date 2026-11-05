@@ -99,3 +99,28 @@ Bun's runtime, which `bun build --compile` puts in every file it makes:
 as Bun lists them for the version the release is built on, with where
 the LGPL parts' sources are. A release on another Bun takes that
 section anew from that version's lists.
+
+Google's agent, which the Google AI plan runs
+(`src/providers/antigravity`), is pinned too, though not built in:
+each illi runs the one version `Pinned.ts` names for its machine, the
+one tried with it, and /login downloads that one, checked against the
+checksum there.
+To take a new version: write the table anew from the [ACP
+registry](https://agentclientprotocol.com) (its version, each
+machine's archive, checksum and command) and Google's host (each
+archive's size, and its files' size unpacked, read from its last bytes
+alone); run the live trial on it, Google's real agent through illi's
+runner against a stand-in for Google's API, no model asked nor account
+signed in (the build downloaded once into the folder named, kept for
+the next trial; it checks the agent says it's the pinned version and
+tries a turn, tools, a picture, thoughts, a stop, a full window, two
+calls at once and the agent's web search); then test and commit:
+
+    bun src/providers/antigravity/pin.ts
+    ILLI_AGY_LIVE=~/.cache/illi-agy-live bun test --isolate src/providers/antigravity/Live.test.ts
+    bun run test
+
+The trial runs this machine's build alone; the others are checked
+against their checksums and sizes. Once a release carries the new
+version, each illi offers it in /login, and the older one goes once no
+illi still running uses it.

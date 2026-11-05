@@ -181,8 +181,10 @@ its program run there, `config_folder`):
 - `/login` and `/logout` (`src/term/LoginCommands.ts`): a plan's page
   is its folder's `Login.ts` (`PAGE`, a `Page`, listed in `Logins.ts`),
   under its maker: its row's text, its accounts (the one in use marked,
-  what Enter and Del do on each), what connects one more and what logs
-  out of it all. Its sign-in runs there (chatgpt's device code,
+  what Enter and Del do on each), the rows it adds under them as they
+  stand now (`more`, each a `Row`: its name, what it says, what Enter
+  does; antigravity's offers its agent's update while another version
+  is here), what connects one more and what logs out of it all. Its sign-in runs there (chatgpt's device code,
   claude-code's `claude auth login` through pipes, antigravity's agent
   asked to `authenticate`, illi opening the page whose link it
   prints), its accounts kept in

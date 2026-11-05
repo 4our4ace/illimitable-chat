@@ -986,7 +986,11 @@ Accounts
   `CLAUDE_CONFIG_DIR`; on `antigravity` each `antigravity/<id>` in
   illi's root (`g1`, `g2`…), the home of Google's agent run for it (its
   sign-in there; no email, which the agent doesn't tell), beside
-  `antigravity/agent/<version>/`, the agent `/login` downloaded.
+  `antigravity/agent/<version>/`, the agent `/login` downloaded (the
+  version an illi runs: `src/providers/antigravity/Pinned.ts`), its
+  `agent.json` (its command, arguments and checksum), and in `.users/`
+  a file named by the process id of each illi that runs it, so an
+  older version goes only once no illi still running uses it.
 - `logins` is `{ opencode, saved: [{ key, email, plan, entry }] }`:
   whether opencode's ChatGPT login is one of the accounts, and the
   accounts not in use, each its login entry in opencode's shape. The
