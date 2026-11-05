@@ -37,11 +37,15 @@
 // as a turn starts or ends (todo_finished).
 // A call on claude-code runs in Claude Code with illi's own prompt and
 // whole list of tools, over MCP (`hosted`: Claude Code's permission
-// prompt added), as on every provider.
+// prompt added), as on every provider; one on antigravity in Google's
+// agent, the whole list reaching it through illi's forwarder
+// (Antigravity.ts relay), its own web tools asked through the permission
+// prompt as Claude Code's are.
 // Every call goes first to the user's plugins and hooks
 // (Plugins.before_tool: they may refuse it, change its input, allow it,
 // have it asked or add to what the model reads after it), then, as
-// Claude Code asks leave for one of its own too (approve), it is judged
+// Claude Code and Google's agent ask leave for one of their own too
+// (approve), it is judged
 // on that input (Tools.guard: what it asks leave for, Access.ts, by
 // illi's rules, the user's and the approvals saved, Permissions.ts, in
 // the mode, /mode's or the setting's, default unless trust; one a hook
@@ -326,7 +330,9 @@ export const SUB_FRESH = SUB_HEAD + "\n\n" + SUB_ALONE + "\n\n" + HERE_DOC;
 
 // the permission prompt of a provider's program that runs the call
 // (Claude Code's --permission-prompt-tool: its web fetch, its MCP
-// servers' tools), answered by the user at illi's screen
+// servers' tools; Google's agent's web search and page reading, asked by
+// illi itself: Antigravity.approve), answered by the user at illi's
+// screen
 const APPROVE: Spec = spec("approve", "The permission prompt of the program running this call, answered by the user at illi's screen. Not a tool to call yourself.", { tool_name: STR, input: { type: "object" }, tool_use_id: STR }, ["tool_name", "input"]);
 
 // the tools of everyone (OWN), the main agent's (boss), and those that run
@@ -593,7 +599,8 @@ export namespace Tools {
   // ---
 
   // a notification gets no answer; a request dropped stops its job. A
-  // URL with ?hosted is a caller's in Claude Code (Tools.list)
+  // URL with ?hosted is a caller's in Claude Code, or Antigravity.ts
+  // asking leave for one of its agent's web tools (Tools.list)
   export async function fetch(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const [, key, who, ...rest] = url.pathname.split("/");
@@ -645,7 +652,8 @@ export namespace Tools {
 
   // a caller's tools, as its agent allows; `hosted`, a caller in Claude
   // Code, its permission prompt too, whatever the agent allows (Claude
-  // Code is told to ask through it, and won't start without it)
+  // Code is told to ask through it, and won't start without it;
+  // Antigravity.ts asks through it for its agent's web tools)
   export function list(tools: Tools, who: string, hosted = false): Spec[] {
     const user = [...skill_tools(tools.cwd), ...Mcp.tools(), ...Plugins.tools()];
     const asks = hosted ? [APPROVE] : [];
@@ -975,7 +983,10 @@ export namespace Tools {
     return unmarked ? AskAI.unmarked(ask) : ask;
   }
 
-  // Claude Code asking leave to use a tool (its permission prompt): past
+  // Claude Code asking leave to use a tool (its permission prompt), or
+  // Antigravity.ts for its agent's web search or page reading, by Claude
+  // Code's names and inputs (WebSearch, WebFetch; its answer a yes only
+  // with no input changed, which the agent can't take): past
   // the plugins' hooks first (they may refuse it or change its input; what
   // it answers stays Claude Code's), then judged as illi's own would be
   // (Access.hosted: its web fetch by the URL, its web search by the

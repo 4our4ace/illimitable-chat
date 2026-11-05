@@ -7,7 +7,10 @@
 // (served here) checked against its sha256 as it comes, unpacked (each
 // file by its own name, runnable), put in place in one rename, found as
 // the agent's command, an older one gone; one that doesn't match, or
-// holds a file in a folder, leaves nothing and keeps what was there.
+// holds a file in a folder, leaves nothing and keeps what was there; a
+// write that fails (a full disk) is said, never a crash; an empty file
+// stored as it is unpacks; another terminal's download, still under
+// way, is left be.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -20,20 +23,21 @@ process.env.ILLI_DIR = DIR;
 
 const { Agy } = await import("./Agy.ts");
 
-// a zip archive of these files (deflated), as Google's is made
-function zip(files: Array<{ name: string; data: string }>): Buffer {
+// a zip archive of these files (deflated, or stored), as Google's is made
+function zip(files: Array<{ name: string; data: string; store?: boolean }>): Buffer {
   const parts: Buffer[] = [];
   const dir: Buffer[] = [];
   let at = 0;
   for (const f of files) {
     const raw  = Buffer.from(f.data);
-    const body = zlib.deflateRawSync(raw);
+    const body = f.store ? raw : zlib.deflateRawSync(raw);
+    const how  = f.store ? 0 : 8;
     const name = Buffer.from(f.name);
     const crc  = Bun.hash.crc32(raw);
     const head = Buffer.alloc(30);
     head.writeUInt32LE(0x04034b50, 0);
     head.writeUInt16LE(20, 4);
-    head.writeUInt16LE(8, 8);
+    head.writeUInt16LE(how, 8);
     head.writeUInt32LE(crc, 14);
     head.writeUInt32LE(body.length, 18);
     head.writeUInt32LE(raw.length, 22);
@@ -42,7 +46,7 @@ function zip(files: Array<{ name: string; data: string }>): Buffer {
     central.writeUInt32LE(0x02014b50, 0);
     central.writeUInt16LE(20, 4);
     central.writeUInt16LE(20, 6);
-    central.writeUInt16LE(8, 10);
+    central.writeUInt16LE(how, 10);
     central.writeUInt32LE(crc, 16);
     central.writeUInt32LE(body.length, 20);
     central.writeUInt32LE(raw.length, 24);
@@ -123,4 +127,19 @@ test("a download checked as it comes, unpacked runnable, put in place and found;
   expect([fs.readdirSync(Agy.home()), fs.existsSync(DIR + "/escape"), Agy.kept()?.version]).toEqual([["1.4.5"], false, "1.4.5"]);
   await Agy.download({ version: "1.4.6", archive: URL_OF("two.zip"), sha256: sha(two), cmd: "agy_acp_server.par", args: [] }, new AbortController().signal, () => {});
   expect([fs.readdirSync(Agy.home()), Agy.command()]).toEqual([["1.4.6"], [Agy.home() + "/1.4.6/agy_acp_server.par"]]);
+});
+
+test("a write that fails is said, never a crash; an empty file stored as it is unpacks; another terminal's download under way is left be, a day-old one goes", async () => {
+  const one = zip([{ name: "agy_acp_server.par", data: "x" }]);
+  SERVED["w.zip"] = one;
+  await expect(Agy.get({ version: "1.4.8", archive: URL_OF("w.zip"), sha256: sha(one), cmd: "agy_acp_server.par", args: [] }, DIR + "/no/such/folder/agent.zip", new AbortController().signal, () => {})).rejects.toThrow("ENOENT");
+  const empty = zip([{ name: "agy_acp_server.par", data: "run" }, { name: "EMPTY", data: "", store: true }]);
+  SERVED["e.zip"] = empty;
+  const young = Agy.home() + "/.new-other";
+  const old   = Agy.home() + "/.new-stale";
+  fs.mkdirSync(young, { recursive: true });
+  fs.mkdirSync(old, { recursive: true });
+  fs.utimesSync(old, new Date(Date.now() - 2 * 86400e3), new Date(Date.now() - 2 * 86400e3));
+  await Agy.download({ version: "1.4.9", archive: URL_OF("e.zip"), sha256: sha(empty), cmd: "agy_acp_server.par", args: [] }, new AbortController().signal, () => {});
+  expect([fs.readFileSync(Agy.home() + "/1.4.9/EMPTY", "utf8"), fs.existsSync(young), fs.existsSync(old)]).toEqual(["", true, false]);
 });

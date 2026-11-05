@@ -19,7 +19,7 @@ The types of all three are in `src/providers/Provider.ts`.
 namespace or imports its folder; each provider's facts, code and page
 agree. `src/providers/Fake.test.ts` adds a provider no list names (as
 a test may: `Vendors.add`, `Providers.add`, `Logins.add`) and runs it
-end to end. illi has four vendors:
+end to end. illi has five vendors:
 
 | Vendor        | Paid by      | Runs in                | Its folder |
 | ------------- | ------------ | ---------------------- | ---------- |
@@ -27,6 +27,7 @@ end to end. illi has four vendors:
 | `openai-api`  | an API key   | illi's own loop        | `src/providers/openai-api` (`OpenAI.ts`) |
 | `chatgpt`     | a plan login | illi's own loop        | `src/providers/chatgpt` (`ChatGPT.ts`: OpenAI's wire on the Codex backend) |
 | `claude-code` | a plan login | the user's Claude Code (another account's: in a Claude Code folder of illi's) | `src/providers/claude-code` (`ClaudeCode.ts`) |
+| `antigravity` | a plan login | Google's own agent, `antigravity-acp`, run unmodified over the Agent Client Protocol (each account a folder of illi's) | `src/providers/antigravity` (`Antigravity.ts`: the runner and its pool of agents; `Acp.ts`: the connection; `Agy.ts`: the agent found, or downloaded by /login) |
 
 1. Its facts
 ------------
@@ -43,7 +44,7 @@ illi lists their models in):
 | `models` | as built in (5: their windows, efforts and speeds) |
 | `defaults` | illi's own pick on it (the first offered vendor's is illi's default pick) and the summaries', while `compactor` names none for it |
 | `ttl` | how long it keeps a cached prefix unused, in ms (`AskAI.wait`) |
-| `accounts` | its entry's shape in `accounts.json` (`Accounts.ts`): `keys` (an API's), `folders` (a plan its own program runs, each account a folder: `folders` names theirs in illi's root), `logins` (a plan whose login is a file of its own: `outside`) |
+| `accounts` | its entry's shape in `accounts.json` (`Accounts.ts`): `keys` (an API's), `folders` (a plan its own program runs, each account a folder: `folders` names theirs in illi's root, which a profile's export leaves out, `Accounts.owned`; the folder in use is `config_folder(vendor)`), `logins` (a plan whose login is a file of its own: `outside`) |
 | `key` | it runs on an API key: the key's name in `config.KEYS`, the variable the environment sets it in (named `<KEY>_API_KEY`), the maker a refused key is said with, where a key is made, what to do once its credit is used up |
 | `catalog` | `models.json` keeps its whole list (its account's catalog), not only the windows of the models built in |
 | `fallback` | offered while nothing is connected (one provider: chatgpt), so a chat has a pick and the start says /login connects one |
@@ -87,10 +88,10 @@ ends the call; a vendor gives it a `Wire` (`PROVIDER.wire`):
 | `heard`   | the response's headers, for a plan's limits (chatgpt's) |
 | `idle`    | how long a silent stream lives before it is taken as dead |
 
-A vendor whose own program runs the loop (Claude Code) has no wire but
-a runner (`PROVIDER.ask`): `Agent.ask` hands it the call, and it must
-give back a `Try` with the same `Event`s and `End`. A provider has one
-of the two. A call `once` (a recap) runs
+A vendor whose own program runs the loop (Claude Code, Google's
+Antigravity agent) has no wire but a runner (`PROVIDER.ask`):
+`Agent.ask` hands it the call, and it must give back a `Try` with the
+same `Event`s and `End`. A provider has one of the two. A call `once` (a recap) runs
 no tool and takes no message sent meanwhile: the runner leaves it in
 `End.left`, as Agent.ts does (an agent's log holds it for its next
 call).
@@ -105,8 +106,8 @@ Failures must land in the right `stop`, since each is handled apart:
   step's tool results went in is `grew` (the turn's own work outgrew the
   window: its share stays, and the count of refits starts anew, a
   subagent's too); `Agent.loop` sets it for a wire, a runner of its own
-  loop must set it itself (Claude Code's, once a tool's result came
-  back).
+  loop must set it itself (Claude Code's and Antigravity's, once a
+  tool's result came back).
 - `marks`: the request held more cache marks than the API takes. Only
   Claude Code's runner says it: Claude Code marks a request itself, at
   times all four the API allows, and illi's one beside them is refused
@@ -155,7 +156,8 @@ list tells, as `Anthropic.models` does) must ask again for a new one
 with `PROVIDER.check(key)`, asking a list that costs nothing; its reason
 never the fetch error's own text, which may hold a header's whole
 value, the key. A plan login needs what `ChatGPT.ts` has (a runner's,
-like Claude Code's, is its own: a folder an account, `ClaudeCode.ts`):
+like Claude Code's or Antigravity's, is its own: a folder an account,
+its program run there, `config_folder`):
 
 - `token()`: the login on disk, renewed before it ends, under the lock
   other tools take on that file, and written back so they stay signed in.
@@ -181,7 +183,9 @@ like Claude Code's, is its own: a folder an account, `ClaudeCode.ts`):
   under its maker: its row's text, its accounts (the one in use marked,
   what Enter and Del do on each), what connects one more and what logs
   out of it all. Its sign-in runs there (chatgpt's device code,
-  claude-code's `claude auth login` through pipes), its accounts kept in
+  claude-code's `claude auth login` through pipes, antigravity's agent
+  asked to `authenticate`, illi opening the page whose link it
+  prints), its accounts kept in
   `src/config/Accounts.ts`'s file (`~/.illi/accounts.json`: the shape
   its facts name, `Accounts.keys_in`, `folders_in`, `logins_in` and `put`
   for the entry), which Config.ts reads into the vendors offered and
@@ -206,7 +210,8 @@ model (`Pick.ts` `Model`) has:
 | `tiers`    | the id each speed is sent as |
 | `room`     | the share of the window a request may fill, as the vendor tells it (chatgpt's `effective_context_window_percent`, else Codex's 95%; a vendor that tells none: 90%) |
 
-Built-in models in `MODELS` hold until the vendor answers. Ways to
+Built-in models (its facts' `models`, each copied into Pick.ts's
+`MODELS`) hold until the vendor answers. Ways to
 learn them, from best:
 
 - A catalog of the account's models (chatgpt's `/codex/models`): it is
@@ -224,6 +229,8 @@ learn them, from best:
   `Pick.told` each. Ask it as the turn runs: Claude Code tells its
   autocompact window (500k of Opus's 1M) while its compaction is on, so
   a summary's reply, which runs with it on, tells none.
+- What a runner's stream tells as a turn runs (Antigravity's
+  `usage_update`, its `size`): `Pick.told`.
 - Nothing told (the OpenAI API): the windows built in, from the vendor's
   docs.
 
@@ -279,17 +286,25 @@ plan's name.
 --------------------
 
 A vendor in illi's loop gets illi's tools (`src/tools/`) as function
-definitions in its body. A vendor running its own loop (Claude Code)
-gets illi's prompt in place of its own and the same tools over MCP
-instead, illi running each (`Tools.list`'s `hosted` adds the `approve`
-tool, through which its permission prompts reach illi's checks). MCP
+definitions in its body. A vendor running its own loop gets illi's
+prompt (in place of its own on Claude Code; after Google's on
+Antigravity, whose agent puts its own first) and the same tools over
+MCP instead, illi running each (`Tools.list`'s `hosted` adds the
+`approve` tool, through which its permission prompts reach illi's
+checks). Antigravity's agent tells none of its MCP calls' results, so
+its calls reach illi's tools through a forwarder of the runner's own,
+which logs each with its answer; its permission asks for its own web
+tools the runner passes to `approve` itself. MCP
 servers of its program's own (Claude Code's) show in /mcp, /settings and
 the side while the chat's pick is on it: `PROVIDER.servers` (whose they
 are, the servers as its last call told them, a server's tools by their
 own names, the command that logs in to one). A vendor that tells the
 model the date itself (its facts' `dated`) gets illi's line of where it
 works with the time alone (`Tools.here`). Web
-search is a server tool where the vendor has one (`Ask.searches`):
+search is a server tool where the vendor has one (`Ask.searches`; a
+runner's program's own, Claude Code's web search and fetch,
+Antigravity's web search and page reading, each asked of the user
+through `approve` as `WebSearch` and `WebFetch`):
 each search logged as a call with its result, and the pages a reply
 cites but doesn't link ending the reply, in one `Sources:` line (`OpenAI.entries`), never a result no call made.
 The citation marks a ChatGPT model writes in its text (U+E200 `cite`
@@ -300,7 +315,9 @@ the pages they name.
 8. Tests
 --------
 
-A wire's tests stub `fetch` or the vendor's program: a turn streamed
+A wire's tests stub `fetch`, a runner's its program (a script that
+plays its part: `ClaudeCode.test.ts`'s Claude Code, `Antigravity.test.ts`'s
+ACP agent, never the real one): a turn streamed
 and its usage, each failure's `stop` and plain words (beside the wire,
 in its folder; claude-api's against a fake Anthropic in `test/`),
 the login renewed and a refused token spoilt (`ChatGPT.test.ts`,

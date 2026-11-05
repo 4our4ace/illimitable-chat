@@ -808,7 +808,7 @@ export function term_hint(): string {
 
 // the start's note while nothing is connected: what /login connects
 // (Vendors.ways: No provider connected yet: type /login to connect your
-// ChatGPT or Claude plan, or an API key.)
+// ChatGPT, Claude or Google AI plan, or an API key.)
 function term_none(): string {
   return "No provider connected yet: type /login to connect " + Vendors.ways() + ".";
 }

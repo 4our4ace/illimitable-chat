@@ -435,8 +435,8 @@ Messages by date
 Ask illi what you did yesterday afternoon or last Tuesday, and it works
 the dates out itself: each call's message names the time now after the
 working dir, as `Now: Sun 2026-10-25 14:05 UTC-4` (`Tools.here`,
-`When.now`; on `claude-code` without the date, which Claude Code adds
-in a note of its own). The line is built once a call and sits after every cache
+`When.now`; on `claude-code` and `antigravity` without the date, which
+their own programs add: a vendor's facts' `dated`). The line is built once a call and sits after every cache
 mark a later call reads, so a new minute never costs a cached prefix.
 One `date` call then shows that stretch, or one `search` finds words
 in it.
@@ -951,16 +951,17 @@ being `{ label, id, speeds, window?, standard?, efforts?, tiers?, room? }`
 1. `chatgpt`'s list is the account's catalog as it last answered
    (`ChatGPT.ts models`); `account` names whose it is, and `capped` the
    models that account refused past their usual window, which keep that
-   window as their whole one. `claude-api`'s and `claude-code`'s hold
-   the windows Anthropic's Models API and Claude Code told.
+   window as their whole one. `claude-api`'s, `claude-code`'s and
+   `antigravity`'s hold the windows Anthropic's Models API, Claude Code
+   and Google's agent told.
 2. Each write is one vendor's list: illi reads the file as it is now,
    puts that vendor's list in, leaves the others' as they are, writes
    the whole to `models.json.<pid>.tmp` and renames it over the file,
    so no reader sees half a file and one vendor's learning never drops
    another's. Two illis writing in the same instant can still lose one's
-   list: chatgpt's comes back at the catalog's next answer, claude-api's
-   and claude-code's at a later illi's start (each writes only windows
-   new to it).
+   list: chatgpt's comes back at the catalog's next answer, the others'
+   once a later illi is told their windows again (each writes only
+   windows new to it).
 3. At the start (`config_models`), the chatgpt list is taken whole,
    whatever its account (the login isn't read yet), until the catalog
    answers; a window or a share in it that isn't one (not a count above
@@ -993,11 +994,13 @@ Accounts
 
 How it is kept:
 
-1. An API or a Claude plan in the file is connected, the file listing
-   them in the order they were (ChatGPT, while a login is there to run
-   on, comes first). Config.ts reads it at the start into the keys in
-   use, the ChatGPT login file, the Claude Code folder and, unless the
-   `vendors` setting names them, the vendors offered.
+1. An API in the file is connected while its key in use is there, a
+   plan run by another program (`folders`: Claude's, Google AI's) while
+   it has an account, the file listing them in the order they were
+   (ChatGPT, while a login is there to run on, comes first). Config.ts
+   reads it at the start into the keys in use, the ChatGPT login file,
+   each plan's folder in use (`config_folder`) and, unless the `vendors`
+   setting names them, the vendors offered.
 2. Each change holds the file's lock, a flock on `.accounts.lock`
    beside it (`src/config/Flock.ts`), so two illis changing it at once
    take turns; one that waits 3 s says another illi is changing the
@@ -1024,7 +1027,8 @@ How it is kept:
    the one picked is taken from `saved` as read then, and a switch to
    the account already there writes nothing.
 5. A profile's export leaves out `accounts.json`, its lock, its
-   temporary files and `claude/`, and a ChatGPT login being written
+   temporary files, `claude/` and `antigravity/` (each plan's
+   `folders`: `Accounts.owned`), and a ChatGPT login being written
    (`.auth.<pid>.json`, which a crash may leave beside `login.json`);
    an import drops them.
 

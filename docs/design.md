@@ -78,7 +78,8 @@ in plain words, then how it ended:
 ```
 
 - **The line** says what was done, counted by tool (`Ran 3 commands`,
-  `Searched the web`; Claude Code's tools as illi's alike, or in words
+  `Searched the web`; Claude Code's tools (and Google's agent's web
+  search and page reading, named as its) as illi's alike, or in words
   of their own: `Opened 2 pages`; any other tool,
   `Called github: get_issue`; a call summed up before its message is
   known, `Used a tool`), then `thought`, then the agents that reported

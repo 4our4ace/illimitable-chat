@@ -3,7 +3,8 @@
 // Every provider's code (Provider.ts Provider), by its id: the one list
 // the rest of illi asks how a call runs and what an account tells
 // (Agent.ts, Chat.ts, Tools.ts, Term.ts...). A provider is added here, by
-// its folder's code, and in Vendors.ts, by its facts. The list is built
+// its folder's code, in Vendors.ts, by its facts, and, a plan, in
+// Logins.ts, by its /login page. The list is built
 // on first use, not as this file loads: a provider's code imports what
 // imports this file (Agent.ts), so its PROVIDER may not be made yet then.
 

@@ -214,14 +214,17 @@ function login_agy_drop(t: Term, a: Folder, back: () => void): void {
   }, back);
 }
 
-// an account's folder gone, its agent logged out first where it signed
-// in (a logout that fails: the folder goes all the same; one that won't
-// go logged, never thrown)
+// an account's folder gone, its agents here ended and it logged out
+// first where it signed in (a logout that fails: the folder goes all the
+// same; one that won't go logged, never thrown). Another terminal's
+// agents of it take no call once the folder is made anew (its stamp:
+// Antigravity.take)
 async function login_agy_forget(id: string, signed: boolean): Promise<void> {
   const dir = Accounts.folder(config.ROOT, "antigravity", id);
   if (dir === "") {
     return;
   }
+  Antigravity.forget(dir);
   if (signed) {
     await Antigravity.logout(dir);
   }
