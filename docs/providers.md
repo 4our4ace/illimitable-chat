@@ -386,7 +386,7 @@ next start:
 | Vendor        | What it tells                                                    | When                                   |
 | ------------- | ---------------------------------------------------------------- | -------------------------------------- |
 | `chatgpt`     | the models your account may use, each one's window, efforts and speeds | at start, after `/login` and `/logout`, when the account changes; every 5 minutes while it doesn't answer |
-| `claude-api`  | each model's window (Anthropic's Models API)                     | at start, after `/login` (here or in another terminal) |
+| `claude-api`  | the models your key may use, the newest active one of each family (opus, sonnet, haiku…), each one's window and efforts (Anthropic's Models API) | at start, after `/login` (here or in another terminal) |
 | `claude-code` | the models your plan offers, as Claude Code lists them: the newest of each family (Opus, Fable, Sonnet, Haiku), with their efforts; each model's window, as Claude Code has it for a turn (asked, no message sent); the window of the model a turn's reply ran on | at start, after `/login` (here or in another terminal); after each turn's reply |
 | `antigravity` | the models your account may use, each at its thinking levels; the window of the model a turn ran on | the models at sign-in and as each turn starts; the window during each turn |
 | `openai-api`  | nothing: its windows are built in (1.05M)                        |                                        |

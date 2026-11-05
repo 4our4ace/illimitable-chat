@@ -11,12 +11,13 @@
 // from pieces; tool_use and end_turn end a step, pause_turn asks again,
 // any other stop fails (in plain words: Agent.stopped), an error event is
 // busy. It pings while the model thinks, so 5 silent
-// minutes mean it is dead. The Models API tells each model's window
-// (models), learned at the start.
+// minutes mean it is dead. The Models API tells the key's models
+// (models), learned at the start: the newest of each line (opus, sonnet,
+// haiku...), with its window and efforts.
 
 import { AskAI, type Ask, type Img, type Usage } from "../../ai/AskAI.ts";
 import { Agent, type Emit, type Entry, type Item, type Step, type Tool, type Use, type Wire } from "../../ai/Agent.ts";
-import { Pick } from "../../ai/Pick.ts";
+import { EFFORTS, Pick, type Model } from "../../ai/Pick.ts";
 import * as config from "../../config/Config.ts";
 import { FACTS } from "./Facts.ts";
 import type { Provider } from "../Provider.ts";
@@ -24,6 +25,12 @@ import { FAILED } from "../../ui/View.ts";
 
 // Types
 // =====
+
+// a model the key may use, as the Models API lists it: its id, its
+// window (0: none told), its line (opus, sonnet, haiku...: "" none),
+// whether it's active (not deprecated), the efforts it takes (none
+// said: undefined)
+type Listed = { id: string; window: number; line: string; active: boolean; efforts?: string[] };
 
 // a stream read so far: the content blocks, the JSON of each tool input
 // that came in pieces, how it stopped and why, its usage, an error
@@ -60,22 +67,32 @@ let listed_by = "";
 
 export namespace Anthropic {
 
-  // the windows of the models the key may use (Models API: list), each
-  // built-in model's learned and kept for the next start; asked once a
-  // key, a failure changing nothing (the built-in windows hold). true: a
-  // window changed
+  // the models the key may use (Models API: list): the newest of each
+  // line (Anthropic.lineup) the list illi offers now (one new offered,
+  // unless `models` names those offered; one gone gone), else, a list
+  // naming no lines, the windows of the models built in; learned and kept
+  // for the next start; asked once a key, a failure changing nothing (the
+  // list and windows held). true: the list or a window changed
   export function models(key: string): Promise<boolean> {
     if (listed_by !== key) {
       [listed, listed_by] = [null, key];
     }
     listed ??= Anthropic.list(key).then((all) => {
-      const news = all.filter((m) => Pick.told("claude-api", m.id, m.window)).length > 0;
+      const lineup = Anthropic.lineup(all);
+      const shape  = (models: Model[]) => JSON.stringify(models.map((m) => [m.label, m.id, m.efforts ?? [], m.window]));
+      const news   = lineup.length > 0 ? shape(lineup) !== shape(Pick.list("claude-api")) : all.filter((m) => Pick.told("claude-api", m.id, m.window)).length > 0;
+      if (news && lineup.length > 0) {
+        const fresh = Pick.learn("claude-api", lineup, "replace");
+        if (!config.MODELS_SET) {
+          config.OFFER.models.push(...fresh.filter((label) => !config.OFFER.models.includes(label)));
+        }
+      }
       if (news) {
         config.config_models_keep("claude-api", Pick.list("claude-api"));
       }
       return news;
     }, (err) => {
-      console.error("claude-api: the models' windows weren't told: " + (key === "" ? String(err?.message) : String(err?.message).split(key).join("<key>")));
+      console.error("claude-api: the models weren't told: " + (key === "" ? String(err?.message) : String(err?.message).split(key).join("<key>")));
       return false;
     });
     return listed;
@@ -101,10 +118,31 @@ export namespace Anthropic {
     }
   }
 
+  // the newest model of each line the key may use (the list comes newest
+  // first), in that order: one still active (a deprecated one, or one of
+  // no line, left out), by its label (one known by its id keeps its own;
+  // else from the id: Anthropic.label), its window, its efforts (those
+  // its capabilities say it takes; none said: all), its speeds as known
+  // (a new one's the standard alone)
+  export function lineup(all: Listed[]): Model[] {
+    const lines = new Set<string>();
+    const out: Model[] = [];
+    for (const m of all) {
+      const label = Pick.by_id("claude-api", m.id)?.label ?? Anthropic.label(m.id);
+      if (m.line === "" || !m.active || label === null || lines.has(m.line) || out.some((o) => o.label === label)) {
+        continue;
+      }
+      lines.add(m.line);
+      const known = Pick.model("claude-api", label);
+      out.push({ label, id: m.id, speeds: known?.speeds ?? ["slow"], window: m.window > 0 ? m.window : known?.window, efforts: m.efforts });
+    }
+    return out;
+  }
+
   // each model the key may use, by id, with its window (max_input_tokens),
   // page after page
-  export async function list(key: string): Promise<Array<{ id: string; window: number }>> {
-    const out: Array<{ id: string; window: number }> = [];
+  export async function list(key: string): Promise<Listed[]> {
+    const out: Listed[] = [];
     let after = "";
     for (let page = 0; page < PAGES; page++) {
       const res = await fetch(LIST + (after === "" ? "" : "&after_id=" + encodeURIComponent(after)), { headers: { "x-api-key": key, "anthropic-version": "2023-06-01" }, signal: AbortSignal.timeout(15e3) });
@@ -113,8 +151,10 @@ export namespace Anthropic {
       }
       const body: any = await res.json();
       for (const m of Array.isArray(body?.data) ? body.data : []) {
-        if (typeof m?.id === "string" && Number(m.max_input_tokens) > 0) {
-          out.push({ id: m.id, window: Number(m.max_input_tokens) });
+        if (typeof m?.id === "string") {
+          const effort = m.capabilities?.effort;
+          const takes  = effort?.supported === true ? EFFORTS.filter((e) => effort[e]?.supported === true) : [];
+          out.push({ id: m.id, window: Number(m.max_input_tokens) || 0, line: typeof m.line === "string" ? m.line : "", active: (m.lifecycle ?? "active") === "active", efforts: takes.length > 0 ? takes : undefined });
         }
       }
       if (body?.has_more !== true || typeof body.last_id !== "string") {

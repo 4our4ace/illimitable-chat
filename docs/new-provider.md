@@ -224,9 +224,12 @@ learn them, from best:
   "replace")`, so a model it drops is gone; the labels it returns, new
   to illi, are offered once added to `config.OFFER.models` (unless
   `config.MODELS_SET`: the `models` setting names those offered).
-- A model list with windows (Anthropic's `GET /v1/models`, paged): learn
-  the windows of the models built in, by id (`Pick.told`); the full list
-  would flood the picker with every model the vendor ever had.
+- A model list with windows (Anthropic's `GET /v1/models`, paged): take
+  the newest active model of each line it names (its `line`, newest
+  first: `Anthropic.lineup`) as the vendor's list, since the full list
+  would flood the picker with every model the vendor ever had; one naming
+  no lines tells only the windows of the models built in, by id
+  (`Pick.told`).
 - A runner asked before any message (Claude Code's control channel:
   `get_context_usage`, its `rawMaxTokens`, one Claude Code a model, as
   a turn runs it: `ClaudeCode.models`), and what a reply tells (its
@@ -243,7 +246,7 @@ Keep what was learned for the next start with
 `config.config_models_keep(vendor, Pick.list(vendor))`: models.json
 holds each vendor's list on its own. At the start `config_models` takes
 a catalog vendor's list whole (its facts' `catalog`: chatgpt's,
-antigravity's, claude-code's) and only
+antigravity's, claude-code's, claude-api's) and only
 the windows of the others' built-in models, by id. Ask the
 vendor at the start (`term_account`), and again when the account
 changes (chatgpt's `follow`). models.json's `account` and `capped`
