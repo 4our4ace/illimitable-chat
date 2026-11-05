@@ -72,11 +72,14 @@ const USED  = "this model's share of your OpenCode Go plan is used up for now (e
 // what a request's images become for a model that takes none
 const NO_IMAGES = (n: number) => "[" + (n === 1 ? "an image" : n + " images") + " left out: this model takes none]";
 
-// the catalog asked (once a key: /login may change the one in use), and
-// the key it was asked with; what it told of each model, by id
+// the catalog asked (once a key: /login may change the one in use; again
+// AGAIN after it failed), the key it was asked with, when it last failed;
+// what it told of each model, by id
 let asked: Promise<boolean> | null = null;
 let asked_by = "";
+let failed = 0;
 const INFO = new Map<string, Info>();
+const AGAIN = 300e3;
 
 // OpenCode Go
 // ===========
@@ -86,11 +89,12 @@ export namespace OpenCodeGo {
   // the plan's models (OpenCodeGo.list), those illi offers (lineup) the
   // list it offers now (one new offered, unless `models` names those
   // offered; one gone gone), learned and kept for the next start; asked
-  // once a key, a failure changing nothing (the list held). true: the
-  // list changed
+  // once a key, a failure changing nothing (the list held) and asked
+  // again past AGAIN (what the wire knows of each model comes with it:
+  // Info). true: the list changed
   export function models(key: string): Promise<boolean> {
-    if (asked_by !== key) {
-      [asked, asked_by] = [null, key];
+    if (asked_by !== key || (failed > 0 && Date.now() - failed > AGAIN)) {
+      [asked, asked_by, failed] = [null, key, 0];
     }
     asked ??= OpenCodeGo.list(key).then((all) => {
       const lineup = OpenCodeGo.lineup(all);
@@ -105,6 +109,7 @@ export namespace OpenCodeGo {
       }
       return news;
     }, (err) => {
+      failed = Date.now();
       console.error("opencode-go: the models weren't told: " + (key === "" ? String(err?.message) : String(err?.message).split(key).join("<key>")));
       return false;
     });

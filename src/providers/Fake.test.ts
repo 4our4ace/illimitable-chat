@@ -38,6 +38,8 @@ Vendors.add(FACTS);
 
 const asked: any[] = [];
 let accounts = 0;
+// what its account tells next, asked (none: it asks nothing)
+let telling: Promise<boolean> | undefined;
 const { Providers } = await import("./Providers.ts");
 Providers.add({
   facts   : FACTS,
@@ -47,6 +49,7 @@ Providers.add({
   },
   account : () => {
     accounts++;
+    return telling;
   },
   plan    : () => ({ tier: "pro", limits: [] }) as any,
   hint    : () => null,
@@ -54,7 +57,9 @@ Providers.add({
 
 const { Logins } = await import("./Logins.ts");
 let updated = 0;
-Logins.add("fake", () => ({ name: "Fake plan", vendor: "fake" as any, about: () => "connected: me@fake.test", accounts: () => [{ name: "me@fake.test", about: "pro", use: true, take: () => {}, drop: () => {} }], more: () => [{ name: "Update its program", about: "1.0 → 1.1", enter: "update it", pick: () => void updated++ }], adds: "", add: () => {}, out: () => {} }));
+// connected while the accounts' file has its entry
+const connected = () => "fake" in JSON.parse(fs.readFileSync(DIR + "/accounts.json", "utf8"));
+Logins.add("fake", () => ({ name: "Fake plan", vendor: "fake" as any, about: () => "connected: me@fake.test", accounts: () => (connected() ? [{ name: "me@fake.test", about: "pro", use: true, take: () => {}, drop: () => {} }] : []), more: () => [{ name: "Update its program", about: "1.0 → 1.1", enter: "update it", pick: () => void updated++ }], adds: "", add: () => {}, out: () => {} }));
 
 const config = await import("../config/Config.ts");
 const { Accounts } = await import("../config/Accounts.ts");
@@ -111,7 +116,9 @@ const enter = (t: any, k: number) => {
   c.pick(k);
 };
 
-test("connected anew, asked which model writes its summaries, then which its chats run on: what runs lit, kept unwritten; another kept by family; asked again by its Models row, not by a change of account", () => {
+// a terminal with no screen; /login opened on it while the fake plan
+// wasn't connected, then connected (its entry put back), the picker shut
+const fresh = () => {
   const t    = { v: View.view_new(), scr: { tty: true, ed: Screen.ed_new() }, choose: null, question: null, wait: null, pane: null, notices: [], due: true, ver: 0, login: null, chat: null } as any;
   const kept = fs.readFileSync(DIR + "/accounts.json", "utf8");
   fs.writeFileSync(DIR + "/accounts.json", JSON.stringify({ later: { kept: true } }));
@@ -119,7 +126,20 @@ test("connected anew, asked which model writes its summaries, then which its cha
   t.choose = null;
   expect(config.OFFER.vendors).not.toContain("fake");
   fs.writeFileSync(DIR + "/accounts.json", kept);
+  return t;
+};
+
+// till ok, or a second has gone
+const until = async (ok: () => boolean) => {
+  for (let k = 0; k < 250 && !ok(); k++) {
+    await Bun.sleep(4);
+  }
+};
+
+test("connected anew, asked which model writes its summaries, then which its chats run on: what runs lit, kept unwritten; another kept by family; asked again by its Models row, not by a change of account", async () => {
+  const t = fresh();
   login_after(t, "fake" as any, "Connected.");
+  await until(() => t.choose !== null);
   expect([t.choose.title, t.choose.names, t.choose.about, t.choose.at]).toEqual(["Summaries on your Fake plan: which model writes them?", ["fake-1", "fake-mini-1"], ["100k context  $3.00/M in", "100k context  $1.00/M in"], 1]);
   enter(t, 1);
   expect([t.choose.title, t.choose.at, config.config_value("compactor")]).toEqual(["Chats on your Fake plan: which model do they run on?", 0, ""]);
@@ -127,6 +147,7 @@ test("connected anew, asked which model writes its summaries, then which its cha
   expect([t.choose, config.config_value("chats"), config.config_value("compactor"), config.PICK]).toEqual([null, "fake:fake-mini-*:medium:slow", "", { vendor: "fake" as any, model: "fake-mini-1", effort: "medium", speed: "slow" }]);
   expect(t.notices.at(-1).text).toBe("Your Fake plan: chats run on fake-mini-1 · medium, summaries on fake-mini-1 · low.");
   login_after(t, "fake" as any, "Fake plan now runs on two@fake.test.");
+  await Bun.sleep(5);
   expect(t.choose).toBeNull();
   term_login(t);
   enter(t, t.choose.names.indexOf("Fake"));
@@ -140,14 +161,40 @@ test("connected anew, asked which model writes its summaries, then which its cha
   config.config_set("chats", "");
 });
 
-test("connected anew while the screen is at something else: a note says where to choose its models instead", () => {
-  const t = { v: View.view_new(), scr: { tty: true, ed: Screen.ed_new() }, choose: null, question: null, wait: null, pane: null, notices: [], due: true, ver: 0, login: null, chat: null } as any;
-  const kept = fs.readFileSync(DIR + "/accounts.json", "utf8");
-  fs.writeFileSync(DIR + "/accounts.json", JSON.stringify({}));
-  term_login(t);
-  t.choose = null;
-  fs.writeFileSync(DIR + "/accounts.json", kept);
+test("a sign-in still ending as its account's connected (its wait let go after): asked once it has", async () => {
+  const t = fresh();
+  t.login = new AbortController();
+  try {
+    login_after(t, "fake" as any, "Signed in.");
+  } finally {
+    t.login = null;
+  }
+  await until(() => t.choose !== null);
+  expect([t.choose?.title, t.notices.at(-1).text]).toEqual(["Summaries on your Fake plan: which model writes them?", "Signed in."]);
+});
+
+test("its models read first, a note saying so while they come; a list that never comes says where to choose them", async () => {
+  let tell = (_: boolean) => {};
+  telling = new Promise<boolean>((done) => (tell = done));
+  const t = fresh();
+  login_after(t, "fake" as any, "Connected.");
+  await Bun.sleep(5);
+  expect([t.choose, t.notices.at(-1).text]).toEqual([null, "Reading the models your Fake plan offers…"]);
+  tell(true);
+  await until(() => t.choose !== null);
+  expect([t.choose?.title, t.notices.map((n: any) => n.text)]).toEqual(["Summaries on your Fake plan: which model writes them?", ["Connected."]]);
+  telling = Promise.reject(new Error("offline"));
+  const u = fresh();
+  login_after(u, "fake" as any, "Connected.");
+  await until(() => u.notices.at(-1).text !== "Reading the models your Fake plan offers…" && u.notices.at(-1).text !== "Connected.");
+  expect([u.choose, u.notices.at(-1).text]).toEqual([null, "Its list of models didn't come. /login, Fake plan, Models chooses which of them your Fake plan runs on."]);
+  telling = undefined;
+});
+
+test("connected anew while the screen is at something else: a note says where to choose its models instead", async () => {
+  const t = fresh();
   t.scr.ed.text = "a message being typed";
   login_after(t, "fake" as any, "Connected.");
+  await Bun.sleep(5);
   expect([t.choose, t.notices.at(-1).text]).toEqual([null, "/login, Fake plan, Models chooses which of them your Fake plan runs on."]);
 });
