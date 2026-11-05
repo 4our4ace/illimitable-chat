@@ -99,7 +99,8 @@ Your plan or your keys
 ----------------------
 
 Your ChatGPT plan, your Claude plan through your own [Claude
-Code](https://code.claude.com), or Anthropic and OpenAI API keys, each
+Code](https://code.claude.com), your Google AI plan through Google's
+Antigravity agent, or Anthropic and OpenAI API keys, each
 connected with `/login`, which also adds a second account and switches
 between them. The side shows how much of your plan is used
 ([Providers](docs/providers.md)).

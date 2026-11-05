@@ -130,11 +130,11 @@ const open = (t: any, name: string) => {
   pick(t, name);
 };
 
-test("the picker lists the providers, ChatGPT and Claude, each opening its plan and its API key, each saying what it's connected with", () => {
+test("the picker lists the providers, ChatGPT, Claude and Gemini, each opening its plan and its API key, each saying what it's connected with", () => {
   const t = term();
   term_login(t);
-  expect([t.choose.title, t.choose.names, t.choose.here, t.choose.foot(0)]).toEqual(["Providers", ["ChatGPT", "Claude"], -1, "Enter open"]);
-  expect(t.choose.about).toEqual(["by OpenAI: your ChatGPT plan or an API key", "by Anthropic: your Claude plan or an API key"]);
+  expect([t.choose.title, t.choose.names, t.choose.here, t.choose.foot(0)]).toEqual(["Providers", ["ChatGPT", "Claude", "Gemini"], -1, "Enter open"]);
+  expect(t.choose.about).toEqual(["by OpenAI: your ChatGPT plan or an API key", "by Anthropic: your Claude plan or an API key", "by Google: your Google AI plan, through Antigravity"]);
   pick(t, "ChatGPT");
   expect([t.choose.title, t.choose.names, t.choose.about]).toEqual(["ChatGPT", ["ChatGPT plan", "OpenAI API key"], ["your ChatGPT plan (Plus or Pro): Enter signs in", "a key from platform.openai.com"]]);
   term_login(t);
@@ -142,6 +142,9 @@ test("the picker lists the providers, ChatGPT and Claude, each opening its plan 
   expect([t.choose.title, t.choose.names, t.choose.here]).toEqual(["Claude", ["Claude plan", "Anthropic API key"], -1]);
   expect(t.choose.about).toEqual(["your Claude plan, through Claude Code", "ANTHROPIC_API_KEY is set: Enter connects it"]);
   expect(t.choose.foot(1)).toBe("Enter connect · Esc back");
+  term_login(t);
+  pick(t, "Gemini");
+  expect([t.choose.title, t.choose.names, t.choose.about]).toEqual(["Gemini", ["Google AI plan"], ["your Google AI plan, through Google's Antigravity agent"]]);
   expect(config.OFFER.vendors).toEqual(["chatgpt"]);
 });
 

@@ -2,17 +2,18 @@ Providers
 =========
 
 illi runs on your ChatGPT plan, your Claude plan (through your own
-Claude Code), or Anthropic and OpenAI API keys. Each is a vendor.
+Claude Code), your Google AI plan (through Google's Antigravity agent),
+or Anthropic and OpenAI API keys. Each is a vendor.
 
 Connecting: /login
 ------------------
 
 Type `/login` in the chat (`/logout` opens the same screen). It lists
-the providers, **ChatGPT** and **Claude**, each saying what of it is
-connected, the one the chat runs on marked. Enter on one opens its two
-ways in: its plan (**ChatGPT plan**, **Claude plan**) and an API key
-(**OpenAI API key**, **Anthropic API key**), each saying what it's
-connected with. Esc goes back a level, from every list and question
+the providers, **ChatGPT**, **Claude** and **Gemini**, each saying what
+of it is connected, the one the chat runs on marked. Enter on one opens
+its ways in: its plan (**ChatGPT plan**, **Claude plan**, **Google AI
+plan**) and, for ChatGPT and Claude, an API key (**OpenAI API key**,
+**Anthropic API key**), each saying what it's connected with. Esc goes back a level, from every list and question
 `/login` opens:
 
 - **Enter on a way in not connected** connects it: a sign-in for a
@@ -28,7 +29,8 @@ what you log out of is gone at once: a chat on it moves to another
 provider's default model, saying so (a turn running finishes first).
 Every profile shares the same accounts. illi keeps them in
 `~/.illi/accounts.json`, readable by you alone; a profile you export
-leaves it out, with the logins and Claude Code folders below
+leaves it out, with the logins and the Claude Code and Antigravity
+folders below
 ([Profiles](profiles.md)). The `vendors` setting, if you set it, names
 the vendors offered instead ([Config](config.md)); `/login` then says
 when it leaves out one you connected.
@@ -245,6 +247,67 @@ illi then runs Claude Code itself, as it ships, on the account's login:
   reply tells it (Claude Code names no plan, so none is named). When a
   limit is reached, illi says when it resets.
 
+Google AI plan
+--------------
+
+For Google AI Pro or Ultra, pick **Gemini**, then **Google AI plan**, in
+`/login`. illi runs Google's own agent for editors, `antigravity-acp`,
+as an editor such as Zed does: unmodified, over the Agent Client
+Protocol, under illi's own name, signed in with Google's own sign-in.
+Google's forum answers have said this use, an official unmodified
+agent in an ACP client with its native sign-in, for one person's
+interactive work, is allowed on a consumer plan, with the Gemini models
+in it; what Google allows is Google's to say, so check its terms
+([antigravity.google/terms](https://antigravity.google/terms)). illi
+never reads the agent's sign-in, never runs `agy -p`, and never
+switches accounts on its own.
+
+- **The agent**: with none here, adding an account first offers to
+  download it, saying its size (about 320 MB, about 960 MB once
+  unpacked). illi takes the build the [ACP
+  registry](https://agentclientprotocol.com) lists for your machine,
+  only from Google's own `dl.google.com`, checks it against the
+  registry's checksum as it comes, unpacks it into
+  `~/.illi/antigravity/agent/<version>/` and keeps it for every
+  profile; Esc stops the download, leaving nothing behind. To use one
+  you installed yourself, set `ILLI_ANTIGRAVITY` to its command line as
+  the registry lists it (on Linux `…/agy_acp_server.par --uid=`).
+- **Signing in**: illi opens Google's page in your browser (and shows
+  the link); once you sign in there, Google sends the browser back to
+  the agent on this computer, which keeps the sign-in. Esc stops it.
+  Each account gets a folder of its own, `~/.illi/antigravity/<id>/`,
+  readable by you alone: the agent's home, its sign-in kept in files
+  there, never in a keychain all accounts would share. Google's agent
+  tells no email, so an account shows as **Google account 1**, 2, …,
+  with the plan it names. Logging one out logs the agent out of it and
+  removes its folder.
+- **Your prompt, after Google's**: the agent puts Google's own
+  instructions first and illi's after them; illi's say which of
+  Google's (its workspace, artifacts and `file://` links) don't apply.
+- **illi's tools**: a turn runs in Google's agent with illi's tools
+  over MCP, run by illi, so your permissions, hooks and background
+  jobs work as on every provider. Of the agent's own tools only its web
+  search and page reading are on, where a turn searches the web, each
+  asked at illi's screen as Claude Code's are. It runs in an empty
+  folder, so no project's rules load twice (illi reads them itself), and
+  no Gemini or Google key of your environment reaches it.
+- **Each turn starts fresh**: a turn is a session of the agent's own,
+  with the chat illi sends, and its files are removed as it ends. The
+  agent keeps nothing at hand between turns, so each reads the chat in
+  full.
+- **The models**: the Gemini models your plan offers in Antigravity
+  (each at its thinking levels: the effort). One your plan doesn't
+  offer says what it does offer. Each turn tells the model's window,
+  which illi keeps.
+- **What's different**: a message you send mid-turn waits for the next
+  one; a tool's answer reaches the model cut at about 48 KB (illi's own
+  tools cut theirs sooner); when Google is busy or your plan's limit
+  is reached, the agent may retry quietly for minutes before it says
+  so (Esc stops the turn); each agent takes about 325 MB, and each turn
+  running in it about 160 MB more till it ends. illi starts one as a
+  turn needs it, keeps one more ready so the next turn needn't wait,
+  and ends them after 10 minutes with no turn, and as illi ends.
+
 API keys
 --------
 
@@ -275,6 +338,7 @@ illi's pick and the summaries' default to the first vendor's models:
 | `chatgpt`     | gpt-6.1-sol  | gpt-6-luna  |
 | `openai-api`  | gpt-6.1-sol  | gpt-6-luna  |
 | `claude-code` | opus-5.5     | haiku-5.5   |
+| `antigravity` | gemini-3.8-flash | gemini-3.5-flash |
 | `claude-api`  | sonnet-5.5   | haiku-5.5   |
 
 The vendors offered are those you connected, ChatGPT first, then the
@@ -300,6 +364,7 @@ next start:
 | `chatgpt`     | the models your account may use, each one's window, efforts and speeds | at start, after `/login` and `/logout`, when the account changes; every 5 minutes while it doesn't answer |
 | `claude-api`  | each model's window (Anthropic's Models API)                     | at start, after `/login` (here or in another terminal) |
 | `claude-code` | each model's window, as Claude Code has it for a turn (asked, no message sent); the window of the model a turn's reply ran on | at start, after `/login` (here or in another terminal); after each turn's reply |
+| `antigravity` | the window of the model a turn ran on                            | after each turn                        |
 | `openai-api`  | nothing: its windows are built in (1.05M)                        |                                        |
 
 On ChatGPT the list is your account's own: a model it adds is offered

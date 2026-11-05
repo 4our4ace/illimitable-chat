@@ -974,14 +974,18 @@ Accounts
 
 `~/.illi/accounts.json` keeps what `/login` connected, every profile's
 (`src/config/Accounts.ts`):
-`{ "claude-api"?: keyed, "openai-api"?: keyed, "claude-code"?: folders, chatgpt?: logins }`.
+`{ "claude-api"?: keyed, "openai-api"?: keyed, "claude-code"?: folders, antigravity?: folders, chatgpt?: logins }`.
 
 - `keyed` is `{ use, keys: [{ id, key, added }] }`: the keys pasted and
   the one in use, by its id or `"env"` (the environment's variable,
   never written here).
-- `folders` is `{ use, accounts: [{ id, email, plan, org }] }`: each a
-  Claude Code folder, `"own"` for the user's own Claude Code's, else
-  `claude/<id>` in illi's root, run with `CLAUDE_CONFIG_DIR`.
+- `folders` is `{ use, accounts: [{ id, email, plan, org }] }`: on
+  `claude-code` each a Claude Code folder, `"own"` for the user's own
+  Claude Code's, else `claude/<id>` in illi's root, run with
+  `CLAUDE_CONFIG_DIR`; on `antigravity` each `antigravity/<id>` in
+  illi's root (`g1`, `g2`…), the home of Google's agent run for it (its
+  sign-in there; no email, which the agent doesn't tell), beside
+  `antigravity/agent/<version>/`, the agent `/login` downloaded.
 - `logins` is `{ opencode, saved: [{ key, email, plan, entry }] }`:
   whether opencode's ChatGPT login is one of the accounts, and the
   accounts not in use, each its login entry in opencode's shape. The

@@ -18,7 +18,7 @@ profile's own `config.json` goes over it, key by key; its `off` and
 
 | Key          | Default                           | What                                             |
 | ------------ | --------------------------------- | ------------------------------------------------ |
-| `vendors`    | those `/login` connected          | the vendors offered, named yourself: `chatgpt`, `claude-code` (your Claude plan, through Claude Code), `claude-api`, `openai-api` (API keys); unset, what you connected in `/login` ([Providers](providers.md)) |
+| `vendors`    | those `/login` connected          | the vendors offered, named yourself: `chatgpt`, `claude-code` (your Claude plan, through Claude Code), `antigravity` (your Google AI plan, through Google's Antigravity agent), `claude-api`, `openai-api` (API keys); unset, what you connected in `/login` ([Providers](providers.md)) |
 | `pick`       | `chatgpt:gpt-6.1-sol:medium:slow` | vendor:model:effort:speed (`/model` per chat); default: the first vendor's. Efforts: `low`, `medium`, `high`, `xhigh`, `max`; speeds: `slow`, `fast`, `ultrafast`, as a model offers them |
 | `compactor`  | each vendor's small model         | writes the summaries: a pick per vendor, comma-separated |
 | `agents`     | the pick                          | what subagents run on: a pick per vendor         |
@@ -58,6 +58,8 @@ Other variables:
 | `ILLI_PROFILE` | the profile to start in                               |
 | `ILLI_WINDOW`  | `off`: illi runs alone on a terminal, not under a window, so a profile switch quits it and starts it again in the other, never while it works ([Profiles](profiles.md)) |
 | `ILLI_CLAUDE`  | the `claude` program the `claude-code` vendor runs    |
+| `ILLI_ANTIGRAVITY` | Google's agent the `antigravity` vendor runs, one you installed: its command line, split at spaces (on Linux `…/agy_acp_server.par --uid=`), in place of the one `/login` downloads |
+| `ILLI_ANTIGRAVITY_GATEWAY` | an AI API gateway of your own the `antigravity` vendor's agent uses in place of Google's services, signed in to it alone (tests use a stand-in) |
 | `BROWSER`      | what opens `/login`'s page: programs `:`-separated, tried in turn (`%s` is the link, else it goes last), before the system's; `none`: never open one |
 | `ILLI_INSTALL`, `ILLI_SOURCE` | where the installer puts illi; `1`: build from the source |
 

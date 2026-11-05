@@ -214,7 +214,7 @@ width its rows may take), `LINES`, `ILLI_PROJECT_DIR` and
 | `cwd`, `workspace.current_dir` | the folder illi works in |
 | `workspace.project_dir` | the project's top |
 | `model.id`, `model.display_name` | the model, as illi names it (`sonnet-5.5`) |
-| `model.vendor` | illi's: `chatgpt`, `claude-code`, `claude-api`, `openai-api` |
+| `model.vendor` | illi's: `chatgpt`, `claude-code`, `antigravity`, `claude-api`, `openai-api` |
 | `effort.level` | the effort |
 | `fast_mode` | the speed is fast (or faster) |
 | `version` | illi's |
