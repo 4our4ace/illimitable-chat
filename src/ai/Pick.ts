@@ -161,8 +161,19 @@ export namespace Pick {
   // (480b, 8x7b: a bigger one is another model, not a later one); none
   // (gpt-oss-120b): the label itself
   export function family(label: string): string {
-    const at = [...label.matchAll(/\d+(?:\.\d+)*/g)].find((m) => !/^(?:[bkmt](?![a-z])|x\d)/i.test(label.slice(m.index + m[0].length)));
-    return at === undefined ? label : label.slice(0, at.index) + "*" + label.slice(at.index + at[0].length);
+    const at = Pick.versioned(label);
+    return at === undefined ? label : label.slice(0, at.index) + "*" + label.slice(at.index! + at[0].length);
+  }
+
+  // a model's version, the number its family stands for (kimi-k3.1-pro:
+  // 3.1), its parts; none: []
+  export function version(label: string): number[] {
+    return Pick.versioned(label)?.[0].split(".").map(Number) ?? [];
+  }
+
+  // where a label's version is: its first number that isn't a size
+  export function versioned(label: string): RegExpMatchArray | undefined {
+    return [...label.matchAll(/\d+(?:\.\d+)*/g)].find((m) => !/^(?:[bkmt](?![a-z])|x\d)/i.test(label.slice(m.index! + m[0].length)));
   }
 
   // whether version a comes after b, part by part (5.10 after 5.9, 5.5

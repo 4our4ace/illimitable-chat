@@ -74,7 +74,7 @@ Setup
 
 | Key or command | Does |
 | -------------- | ---- |
-| `/login` | the providers, ChatGPT, Claude and Gemini, each opening its plan and (ChatGPT's and Claude's) its API key: connect one; in its accounts, Enter switches to one, Del logs one out (asked first), Models chooses what its chats and their summaries run on (asked as you connect one too), a row adds one, the last logs out of it all; Esc goes back a level ([Providers](providers.md#connecting-login)) |
+| `/login` | the providers, ChatGPT, Claude, Gemini and OpenCode, each opening its plan and (ChatGPT's and Claude's) its API key, OpenCode its Go plan's key: connect one; in its accounts, Enter switches to one, Del logs one out (asked first), Models chooses what its chats and their summaries run on (asked as you connect one too), a row adds one, the last logs out of it all; Esc goes back a level ([Providers](providers.md#connecting-login)) |
 | `/logout` | the providers, as `/login`: Del logs out of an account, the last row of a plan or a key out of it |
 | `/settings` | all the settings: type to search, Left, Right or Enter change one, Del puts its default back |
 | `/shortcuts` | the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one |

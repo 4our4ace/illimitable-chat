@@ -982,7 +982,7 @@ Accounts
 
 `~/.illi/accounts.json` keeps what `/login` connected, every profile's
 (`src/config/Accounts.ts`):
-`{ "claude-api"?: keyed, "openai-api"?: keyed, "claude-code"?: folders, antigravity?: folders, chatgpt?: logins }`.
+`{ "claude-api"?: keyed, "openai-api"?: keyed, "opencode-go"?: keyed, "claude-code"?: folders, antigravity?: folders, chatgpt?: logins }`.
 
 - `keyed` is `{ use, keys: [{ id, key, added }] }`: the keys pasted and
   the one in use, by its id or `"env"` (the environment's variable,
