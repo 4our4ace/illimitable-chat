@@ -17,7 +17,10 @@
 // account's, so no project's rules load (illi reads them itself), on the
 // pick's model and its thinking level (its effort), where the account
 // offers them (one it doesn't: the call fails, saying what it does
-// offer). Its tools are illi's whole list, over MCP, run by illi, so
+// offer). The models are the account's own, as its agent lists them: each
+// session made tells them (a sign-in's too, made for that alone), and
+// they replace the list illi offers, kept for the next start, the chat
+// told (watch). Its tools are illi's whole list, over MCP, run by illi, so
 // permissions, hooks and background jobs are as on every provider; of
 // Antigravity's own only its web search and page reading, where the call
 // searches the web (Ask.searches), each asked of the user at illi's
@@ -58,7 +61,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { AskAI, type Ask, type End, type Event, type Say, type Try } from "../../ai/AskAI.ts";
 import { Agent, type Entry } from "../../ai/Agent.ts";
-import { Pick } from "../../ai/Pick.ts";
+import { EFFORTS, Pick, type Model } from "../../ai/Pick.ts";
 import { FAILED } from "../../ui/View.ts";
 import * as config from "../../config/Config.ts";
 import { VERSION } from "../../config/Update.ts";
@@ -133,6 +136,10 @@ const IDLE = 10 * 60e3;
 const READY = 90e3;
 const SETUP = 60e3;
 
+// how long a sign-in waits on the agent listing the account's models (ms):
+// past it, the sign-in is done all the same, a call lists them
+const LISTING = 15e3;
+
 // how long a stop waits for the agent to end the turn: then, the agent
 // alone with the call is killed; one others share takes no new call (it
 // ends once theirs did) and the call is given up
@@ -182,6 +189,9 @@ const NO_SIGNIN  = "your Google sign-in for Antigravity has run out: /login sign
 // the agents running, and when they end with no call (IDLE)
 let procs: Proc[] = [];
 let idle: Timer | null = null;
+
+// what to call as the account's models change (one: the chat's)
+let watcher = () => {};
 
 // the forwarder of illi's tools, and the calls it serves, by their path
 let forwarder: ReturnType<typeof Bun.serve> | null = null;
@@ -248,6 +258,7 @@ export namespace Antigravity {
       const made = await Acp.call(proc.conn, "session/new", Antigravity.session(run, folder), SETUP);
       run.sid = String(made?.sessionId ?? "");
       proc.runs.set(run.sid, run);
+      Antigravity.learn(made);
       const why = run.stopped ? null : await Antigravity.choose(proc.conn, run, made?.configOptions);
       if (why !== null) {
         return { ok: false, text: why, left: [], stop: "fail" };
@@ -310,7 +321,7 @@ export namespace Antigravity {
   // the session set on the pick's model (Antigravity's model offered of
   // its family: the one at the effort's thinking level, else the family's
   // own) and its thinking level where offered; null: set, else why not
-  // (the account doesn't offer the model: what it offers)
+  // (the account doesn't offer the model: the Gemini models it offers)
   export async function choose(conn: Conn, run: Run, options: unknown): Promise<string | null> {
     const all    = Array.isArray(options) ? options : [];
     const model  = all.find((o: any) => o?.id === "model");
@@ -321,7 +332,8 @@ export namespace Antigravity {
     const { model: id, effort } = run.ask;
     const want = [id + "-" + effort, id].find((v) => values.includes(v)) ?? values.find((v) => v.startsWith(id + "-"));
     if (want === undefined) {
-      return "your Google AI plan doesn't offer " + id + " in Antigravity" + (values.length > 0 ? " (it offers " + Vendors.list(values, "and") + ")" : "") + ": /model picks another";
+      const gemini = values.filter((v) => v.startsWith("gemini-"));
+      return "your Google AI plan doesn't offer " + id + " in Antigravity" + (gemini.length > 0 ? " (it offers " + Vendors.list(gemini, "and") + ")" : "") + ": /model picks another";
     }
     let now = all;
     if (model.currentValue !== want) {
@@ -339,6 +351,70 @@ export namespace Antigravity {
   export function values(option: any): string[] {
     const list: any[] = Array.isArray(option?.options) ? option.options : [];
     return list.flatMap((o) => (Array.isArray(o?.options) ? o.options : [o])).map((o: any) => String(o?.value ?? "")).filter((v: string) => v !== "");
+  }
+
+  // Models
+  // ------
+
+  // the models a session made tells the account offers, in the agent's
+  // order: each a family (its model option's values, and the models it
+  // lists, each id a family at a thinking level: gemini-3.8-flash-high),
+  // its efforts the levels listed of it (else the session's thinking
+  // levels), Gemini's alone; each window as known (none: told as a call
+  // runs)
+  export function catalog(made: any): Model[] {
+    const all    = Array.isArray(made?.configOptions) ? made.configOptions : [];
+    const levels = Antigravity.values(all.find((o: any) => o?.id === "thinking_level")).filter((e) => EFFORTS.includes(e));
+    const listed = (Array.isArray(made?.models?.availableModels) ? made.models.availableModels : []).map((m: any) => String(m?.modelId ?? ""));
+    const tells  = new RegExp("^(.+)-(" + EFFORTS.join("|") + ")$");
+    const found  = new Map<string, Set<string>>();
+    for (const id of [...Antigravity.values(all.find((o: any) => o?.id === "model")), ...listed]) {
+      const [, family, effort] = tells.exec(id) ?? [id, id, ""];
+      if (!/^gemini-[a-z0-9.-]+$/.test(family)) {
+        continue;
+      }
+      const at = found.get(family) ?? new Set<string>();
+      found.set(family, effort === "" ? at : at.add(effort));
+    }
+    return [...found].map(([family, at]) => {
+      const own = EFFORTS.filter((e) => at.has(e));
+      const efforts = own.length > 0 ? own : levels.length > 0 ? levels : undefined;
+      return { label: family, id: family, speeds: ["slow"], window: Pick.model("antigravity", family)?.window, efforts };
+    });
+  }
+
+  // the account's models, as a session made tells them, learned: the
+  // list illi offers now (one gone from it gone; one new offered, unless
+  // `models` names those offered), kept for the next start, the chat
+  // told; the same list as known changes nothing
+  export function learn(made: any): void {
+    const list  = Antigravity.catalog(made);
+    const shape = (models: Model[]) => JSON.stringify(models.map((m) => [m.label, m.efforts ?? []]));
+    if (list.length === 0 || shape(list) === shape(Pick.list("antigravity"))) {
+      return;
+    }
+    const fresh = Pick.learn("antigravity", list, "replace");
+    if (!config.MODELS_SET) {
+      config.OFFER.models.push(...fresh.filter((label) => !config.OFFER.models.includes(label)));
+    }
+    config.config_models_keep("antigravity", Pick.list("antigravity"));
+    watcher();
+  }
+
+  // an agent signed in for an account asked the models it offers (a
+  // session made, nothing asked of a model, its files removed): learned.
+  // Never fails: a call learns them too
+  export async function listed(conn: Conn, folder: string): Promise<void> {
+    try {
+      const made = await Acp.call(conn, "session/new", { cwd: Antigravity.work(folder), mcpServers: [], _meta: { antigravity: { enabledTools: [] } } }, LISTING);
+      Antigravity.learn(made);
+      Antigravity.clean(folder, String(made?.sessionId ?? ""));
+    } catch {}
+  }
+
+  // what to call as the account's models change (one: the chat's)
+  export function watch(fn: () => void): void {
+    watcher = fn;
   }
 
   // Stream
@@ -816,8 +892,9 @@ export namespace Antigravity {
 
   // an account's folder signed in to a Google AI plan (the agent's own
   // sign-in: `ask` is told Google's page's link as the agent tells it, to
-  // open; the page sends the browser back to the agent, on this machine);
-  // what the agent tells of the plan ("Google AI Pro"; "": none told).
+  // open; the page sends the browser back to the agent, on this machine),
+  // the models it offers learned (listed); what the agent tells of the
+  // plan ("Google AI Pro"; "": none told).
   // Stop ends it at once; thrown: why it didn't sign in
   export async function signin(folder: string, stop: AbortSignal, ask: (url: string) => void): Promise<string> {
     const cmd = Agy.command();
@@ -841,6 +918,7 @@ export namespace Antigravity {
     try {
       await Acp.call(conn, "initialize", Antigravity.hello(), READY);
       const told = await Acp.call(conn, "authenticate", Antigravity.auth(), SIGNIN);
+      await Antigravity.listed(conn, folder);
       return String(told?._meta?.antigravity?.tier?.name ?? "");
     } finally {
       stop.removeEventListener("abort", end);
@@ -877,9 +955,11 @@ export namespace Antigravity {
 }
 
 // antigravity's code, as the rest of illi asks it (Provider.ts): a call
-// run by Google's agent itself (a runner); its agents ended as illi ends
+// run by Google's agent itself (a runner); the chat told as the account's
+// models change; its agents ended as illi ends
 export const PROVIDER: Provider = {
   facts : FACTS,
   ask   : Antigravity.ask,
+  watch : Antigravity.watch,
   close : Antigravity.close,
 };

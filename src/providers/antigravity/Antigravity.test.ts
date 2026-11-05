@@ -61,8 +61,10 @@ const think = (sid, text) => update(sid, { sessionUpdate: "agent_thought_chunk",
 const used = (sid, n) => update(sid, { sessionUpdate: "usage_update", used: n, size: 1000000 });
 const USAGE = { inputTokens: 1400, outputTokens: 100, totalTokens: 1500 };
 const OPTS = [{ optionId: "allow_always", name: "Allow Always (risky)", kind: "allow_always" }, { optionId: "allow", name: "Allow", kind: "allow_once" }, { optionId: "deny", name: "Deny", kind: "reject_once" }];
-const MODELS = ["gemini-3.8-flash-low", "gemini-3.8-flash-medium", "gemini-3.8-flash-high", "gemini-3.1-pro-low", "gemini-3.1-pro-high"];
-const options = (model) => [{ id: "model", currentValue: model, type: "select", options: MODELS.map((value) => ({ value, name: value })) }, { id: "thinking_level", currentValue: "high", type: "select", options: ["low", "medium", "high"].map((value) => ({ value, name: value })) }];
+const FAMILIES = ["gemini-4-argon", "gemini-3.8-flash", "claude-opus-test"];
+const LISTED = ["gemini-4-argon-medium", "gemini-4-argon-high", "gemini-4-argon-low", "gemini-3.8-flash-high", "gemini-3.8-flash-medium", "gemini-3.8-flash-low", "claude-opus-test-thinking", "gpt-oss-test-medium"];
+const options = (model) => [{ id: "model", currentValue: model, type: "select", category: "model", options: FAMILIES.map((value) => ({ value, name: value })) }, { id: "thinking_level", currentValue: "high", type: "select", category: "thought_level", options: ["low", "medium", "high"].map((value) => ({ value, name: value })) }, { id: "mode", currentValue: "default", type: "select", category: "mode", options: [{ value: "default", name: "Default" }] }];
+const models = () => ({ availableModels: LISTED.map((modelId) => ({ modelId, name: modelId, description: modelId })), currentModelId: "gemini-3.8-flash-high" });
 async function prompt(p) {
   const sid = p.sessionId;
   const scene = p.prompt.map((c) => c.text ?? "").join("");
@@ -167,9 +169,9 @@ async function handle(m) {
       fs.mkdirSync(home + "/brain/" + sid, { recursive: true });
       fs.writeFileSync(home + "/conversations/" + sid + ".db", "");
       fs.writeFileSync(home + "/conversations/" + sid + ".meta", "");
-      return { sessionId: sid, configOptions: options("gemini-3.8-flash-high") };
+      return { sessionId: sid, configOptions: options("gemini-3.8-flash"), models: models() };
     }
-    case "session/set_config_option": return { configOptions: options(m.params.configId === "model" ? m.params.value : "gemini-3.8-flash-high") };
+    case "session/set_config_option": return { configOptions: options(m.params.configId === "model" ? m.params.value : "gemini-3.8-flash") };
     case "session/prompt": return prompt(m.params);
     case "logout": return {};
   }
@@ -271,7 +273,7 @@ test("a turn: the agent run as illi in the account's folder, illi's prompt after
   expect(made.mcpServers[0].url).toStartWith("http://127.0.0.1:");
   const append: string = made._meta.antigravity.systemPrompt.append;
   expect([append.startsWith("ILLI PROMPT\n\n"), append.includes("mcp_illi_zoom"), append.includes("file:// links, don't apply here")]).toEqual([true, true, true]);
-  expect(log.filter((l) => l.method === "session/set_config_option").map((l) => [l.params.configId, l.params.value])).toEqual([["model", "gemini-3.8-flash-medium"], ["thinking_level", "medium"]]);
+  expect(log.filter((l) => l.method === "session/set_config_option").map((l) => [l.params.configId, l.params.value])).toEqual([["thinking_level", "medium"]]);
   expect(log.find((l) => l.method === "session/prompt").params.prompt).toEqual([{ type: "text", text: "turn" }]);
   expect([fs.readdirSync(FOLDER + "/.gemini/antigravity-acp/conversations"), fs.readdirSync(FOLDER + "/.gemini/antigravity-acp/brain")]).toEqual([[], []]);
   expect(Pick.model("antigravity", "gemini-3.8-flash")?.window).toBe(1000000);
@@ -338,7 +340,28 @@ test("a turn past the most the model may write, or declined, keeps what it said 
 test("a model the account doesn't offer fails, saying what it does", async () => {
   const { end } = await call("turn", { model: "gemini-9" });
   expect([end.ok, end.stop]).toEqual([false, "fail"]);
-  expect(end.text).toStartWith("your Google AI plan doesn't offer gemini-9 in Antigravity (it offers gemini-3.8-flash-low,");
+  expect(end.text).toBe("your Google AI plan doesn't offer gemini-9 in Antigravity (it offers gemini-4-argon and gemini-3.8-flash): /model picks another");
+});
+
+test("the account's models, as its agent lists them, are those offered: each family at its levels, Gemini's alone, windows kept; one new offered, one gone dropped, kept for the next start, the chat told; a call set on one", async () => {
+  const told: number[] = [];
+  Antigravity.watch(() => told.push(1));
+  await call("turn", { model: "gemini-4-argon", effort: "low" });
+  expect(logged().filter((l) => l.method === "session/set_config_option").map((l) => [l.params.configId, l.params.value])).toEqual([["model", "gemini-4-argon"], ["thinking_level", "low"]]);
+  const shown = () => Pick.list("antigravity").map((m: any) => [m.label, m.efforts, m.window]);
+  expect(shown()).toEqual([["gemini-4-argon", ["low", "medium", "high"], 1000000], ["gemini-3.8-flash", ["low", "medium", "high"], 1000000]]);
+  const real = { configOptions: [{ id: "model", currentValue: "gemini-3.8-flash", options: [{ value: "gemini-5-test", name: "Gemini 5 Test" }, { value: "gemini-3.8-flash", name: "Gemini 3.8 Flash" }] }, { id: "thinking_level", currentValue: "high", options: [{ value: "low" }, { value: "high" }] }], models: { availableModels: [{ modelId: "gemini-5-test-high" }, { modelId: "gemini-5-test-low" }, { modelId: "gemini-3.8-flash-high" }, { modelId: "gemini-3.8-flash-medium" }, { modelId: "gemini-3.8-flash-low" }] } };
+  Antigravity.learn(real);
+  expect(shown()).toEqual([["gemini-5-test", ["low", "high"], undefined], ["gemini-3.8-flash", ["low", "medium", "high"], 1000000]]);
+  expect([config.OFFER.models.includes("gemini-5-test"), told.length]).toEqual([true, 1]);
+  expect(JSON.parse(fs.readFileSync(DIR + "/models.json", "utf8")).vendors.antigravity.map((m: any) => m.label)).toEqual(["gemini-5-test", "gemini-3.8-flash"]);
+  Antigravity.learn(real);
+  expect(told.length).toBe(1);
+  expect(Antigravity.catalog({ configOptions: [{ id: "model", options: [{ value: "gemini-3.8-flash" }] }, { id: "thinking_level", options: [{ value: "low" }, { value: "high" }] }] }).map((m: any) => [m.label, m.efforts])).toEqual([["gemini-3.8-flash", ["low", "high"]]]);
+  expect(Antigravity.catalog({}).length).toBe(0);
+  await call("turn");
+  expect([shown().map((m) => m[0]), told.length]).toEqual([["gemini-4-argon", "gemini-3.8-flash"], 2]);
+  Antigravity.watch(() => {});
 });
 
 test("a stop cancels the turn, what streamed logged as cut off; a message sent mid-run is left", async () => {
@@ -460,6 +483,9 @@ test("/login's sign-in tells Google's page's link and the plan; its logout logs 
   const links: string[] = [];
   const plan = await Antigravity.signin(DIR + "/antigravity/g2", new AbortController().signal, (url) => links.push(url));
   expect([plan, links]).toEqual(["Google AI Pro", ["https://accounts.example/auth?x=1"]]);
+  const listed = logged().find((l) => l.method === "session/new").params;
+  expect([listed.mcpServers, listed._meta.antigravity.enabledTools, logged().some((l) => l.method === "session/prompt")]).toEqual([[], [], false]);
+  expect([fs.readdirSync(DIR + "/antigravity/g2/.gemini/antigravity-acp/conversations"), fs.readdirSync(DIR + "/antigravity/g2/.gemini/antigravity-acp/brain")]).toEqual([[], []]);
   delete process.env.FAKE_SIGNIN;
   expect(await Antigravity.logout(DIR + "/antigravity/g2")).toBe(true);
   expect(logged().filter((l) => l.method === "logout").length).toBe(1);

@@ -216,8 +216,9 @@ Built-in models (its facts' `models`, each copied into Pick.ts's
 `MODELS`) hold until the vendor answers. Ways to
 learn them, from best:
 
-- A catalog of the account's models (chatgpt's `/codex/models`): it is
-  the vendor's list. Learn it with `Pick.learn(vendor, models,
+- A catalog of the account's models (chatgpt's `/codex/models`;
+  antigravity's, as each session its agent makes lists them, and a
+  session made at sign-in for that alone): it is the vendor's list. Learn it with `Pick.learn(vendor, models,
   "replace")`, so a model it drops is gone; the labels it returns, new
   to illi, are offered once added to `config.OFFER.models` (unless
   `config.MODELS_SET`: the `models` setting names those offered).
@@ -239,7 +240,8 @@ learn them, from best:
 Keep what was learned for the next start with
 `config.config_models_keep(vendor, Pick.list(vendor))`: models.json
 holds each vendor's list on its own. At the start `config_models` takes
-a catalog vendor's list whole (its facts' `catalog`: chatgpt's) and only
+a catalog vendor's list whole (its facts' `catalog`: chatgpt's,
+antigravity's) and only
 the windows of the others' built-in models, by id. Ask the
 vendor at the start (`term_account`), and again when the account
 changes (chatgpt's `follow`). models.json's `account` and `capped`

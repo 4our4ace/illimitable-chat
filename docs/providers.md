@@ -301,8 +301,15 @@ switches accounts on its own.
   with the chat illi sends, and its files are removed as it ends. The
   agent keeps nothing at hand between turns, so each reads the chat in
   full.
-- **The models**: the Gemini models your plan offers in Antigravity
-  (each at its thinking levels: the effort). One your plan doesn't
+- **The models**: the Gemini models your account offers in Antigravity
+  (each at its thinking levels: the effort), as Google's agent lists
+  them when you sign in and as each turn starts: a model your plan adds
+  is offered at once (unless `models` names those offered), one it
+  drops is gone, and the list is kept for the next start. Other makers'
+  models the agent may list are left out. Before your first sign-in,
+  illi shows the list a Google AI Ultra account had (Gemini 4 Argon,
+  Gemini 3.8 Flash). With two accounts on different plans, the list is
+  the one whose agent told it last; a model the account in use doesn't
   offer says what it does offer. Each turn tells the model's window,
   which illi keeps.
 - **What's different**: a message you send mid-turn waits for the next
@@ -346,7 +353,7 @@ illi's pick and the summaries' default to the first vendor's models:
 | `chatgpt`     | gpt-6.1-sol  | gpt-6-luna  |
 | `openai-api`  | gpt-6.1-sol  | gpt-6-luna  |
 | `claude-code` | opus-5.5     | haiku-5.5   |
-| `antigravity` | gemini-3.8-flash | gemini-3.5-flash |
+| `antigravity` | gemini-3.8-flash | gemini-3.8-flash (low) |
 | `claude-api`  | sonnet-5.5   | haiku-5.5   |
 
 The vendors offered are those you connected, ChatGPT first, then the
@@ -372,7 +379,7 @@ next start:
 | `chatgpt`     | the models your account may use, each one's window, efforts and speeds | at start, after `/login` and `/logout`, when the account changes; every 5 minutes while it doesn't answer |
 | `claude-api`  | each model's window (Anthropic's Models API)                     | at start, after `/login` (here or in another terminal) |
 | `claude-code` | each model's window, as Claude Code has it for a turn (asked, no message sent); the window of the model a turn's reply ran on | at start, after `/login` (here or in another terminal); after each turn's reply |
-| `antigravity` | the window of the model a turn ran on                            | after each turn                        |
+| `antigravity` | the models your account may use, each at its thinking levels; the window of the model a turn ran on | the models at sign-in and as each turn starts; the window during each turn |
 | `openai-api`  | nothing: its windows are built in (1.05M)                        |                                        |
 
 On ChatGPT the list is your account's own: a model it adds is offered

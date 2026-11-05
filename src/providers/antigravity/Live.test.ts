@@ -11,8 +11,8 @@
 //
 //     ILLI_AGY_LIVE=~/.cache/illi-agy-live bun test --isolate src/providers/antigravity/Live.test.ts
 //
-// It tries: the agent says it's the pinned version; a turn; the next on
-// the agent kept (at once); illi's tool called and its answer echoed; a
+// It tries: the agent says it's the pinned version; a turn; the models
+// it lists learned; the next on the agent kept (at once); illi's tool called and its answer echoed; a
 // picture; thoughts and a reply in pieces; too long for the window
 // (full); a model the plan doesn't offer (said plainly); a stop during a
 // tool (lost); two calls at once on one agent; the window learned; the
@@ -31,10 +31,11 @@ const LIVE = KEEP !== "";
 const ACCOUNTS = JSON.stringify({ antigravity: { use: "live", accounts: [{ id: "live", email: "", plan: "", org: "" }] } });
 
 // what in a folder isn't the trial's own (Google's agent, its account,
-// the accounts' file it writes): an illi root's chats, logins, accounts...
+// the accounts' file it writes, the models it learns): an illi root's
+// chats, logins, accounts...
 function others(dir: string): string[] {
   const names = (at: string) => (fs.existsSync(at) ? fs.readdirSync(at) : []);
-  const top   = names(dir).filter((n) => n !== "antigravity" && !(n === "accounts.json" && fs.readFileSync(path.join(dir, n), "utf8") === ACCOUNTS));
+  const top   = names(dir).filter((n) => n !== "antigravity" && n !== "models.json" && !(n === "accounts.json" && fs.readFileSync(path.join(dir, n), "utf8") === ACCOUNTS));
   return [...top, ...names(path.join(dir, "antigravity")).filter((n) => n !== "agent" && n !== "live").map((n) => "antigravity/" + n)];
 }
 
@@ -206,6 +207,9 @@ test.skipIf(!LIVE)("Google's real agent, the pinned build, through illi's runner
   const one = await call("T1 hello");
   expect(one.end).toMatchObject({ ok: true });
   expect(one.end.text).toContain("mcp_illi_echo");
+
+  // the models the agent lists (the stand-in's) are those offered
+  expect(Pick.list("antigravity").map((m) => m.label)).toEqual(["gemini-3.5-flash", "gemini-3.1-pro"]);
   const two = await call("T1 hello again");
   expect([two.end.ok, two.ms < 1500]).toEqual([true, true]);
 
