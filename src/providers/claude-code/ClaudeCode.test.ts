@@ -500,7 +500,7 @@ test("a Claude plan's account in use is a Claude Code folder its calls run in (t
     const me = (id: string) => ({ id, email: id + "@example.com", plan: "max", org: "" });
     Accounts.write(config.ROOT, { "claude-code": { use: "c1", accounts: [me("own"), me("c1")] } });
     config.config_accounts(true);
-    expect([config.config_claude_dir(), ClaudeCode.servers(), ClaudeCode.told()]).toEqual([config.ROOT + "/claude/c1", null, null]);
+    expect([config.config_folder("claude-code"), ClaudeCode.servers(), ClaudeCode.told()]).toEqual([config.ROOT + "/claude/c1", null, null]);
     expect((await call("turn")).log.folder).toBe(config.ROOT + "/claude/c1");
     Accounts.write(config.ROOT, { "claude-code": { use: "own", accounts: [me("own"), me("c1")] } });
     config.config_accounts(true);

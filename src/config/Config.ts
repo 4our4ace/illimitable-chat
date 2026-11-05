@@ -31,7 +31,8 @@ import { LABELS, VENDORS, Pick, type Offer } from "../ai/Pick.ts";
 import { profile_pick } from "./Profiles.ts";
 import type { Mode } from "./Update.ts";
 import { json_object } from "../tools/Clip.ts";
-import { Accounts, ENV, OWN, type Api, type Store } from "./Accounts.ts";
+import { Accounts, ENV, OWN, type Store } from "./Accounts.ts";
+import { FACTS, Vendors } from "../providers/Vendors.ts";
 import { Permissions } from "../tools/Permissions.ts";
 
 // Constants
@@ -89,7 +90,7 @@ const ACCENTS = ["auto", "illi", "blue", "magenta", "cyan", "green", "yellow", "
 // (config_value) must be one, and one is all /settings, /set and
 // config_check need; docs/config.md and the customize-illi skill say each
 const TABLE = {
-  pick       : { def: "chatgpt:gpt-6.1-sol:medium:slow", values: "pick", now: true, what: "illi's own default model" },
+  pick       : { def: Vendors.fallback().defaults.pick, values: "pick", now: true, what: "illi's own default model" },
   agents     : { def: "", values: "pick", now: true, what: "what subagents run on, by provider", none: "the chat's pick" },
   compactor  : { def: "", values: "pick", now: true, what: "what writes the summaries, by provider", none: "each provider's small model" },
   suggest    : { def: "on", values: ["on", "off"], now: true, what: "suggested replies (Tab)", shape: ON_OFF },
@@ -135,24 +136,16 @@ export const RELATED_FILE = ROOT + "/related.json";
 export const MODELS_SET  = config_value("models") !== "";
 config_models();
 
-// the ChatGPT login chatgpt runs on (ChatGPT.ts): the file `login` names,
-// else illi's own (/login makes it; the root's, so every profile's) or,
-// while there is none, opencode's (`opencode auth login`)
-export const LOGIN_SET      = config_value("login") === "" ? null : config_place("login");
-export const OWN_LOGIN      = ROOT + "/login.json";
-export const OPENCODE_LOGIN = config_path((process.env.XDG_DATA_HOME ?? "~/.local/share") + "/opencode/auth.json");
+// each provider's facts set up (a login file's place: Provider.ts
+// setup), as illi starts, before the vendors offered are reckoned
+FACTS.forEach((f) => f.setup?.({ root: ROOT, store: () => ACCOUNTS, setting: (key) => config_value(key as Key), place: (key) => config_place(key as Key), path: config_path }));
 
-// the keys, by name, and the variable each is read from
-export const VARS: Record<string, string> = {
-  anthropic       : "ANTHROPIC_API_KEY",
-  openai          : "OPENAI_API_KEY",
-};
+// the keys, by name, and the variable each is read from (each provider's
+// that runs on one: Provider.ts key)
+export const VARS: Record<string, string> = Object.fromEntries(Vendors.keyed().map((f) => [f.key.name, f.key.env]));
 
 // the vendor that runs on each key
-export const KEYED: Record<string, Api> = {
-  anthropic       : "claude-api",
-  openai          : "openai-api",
-};
+export const KEYED: Record<string, Vendor> = Object.fromEntries(Vendors.keyed().map((f) => [f.key.name, f.id as Vendor]));
 
 // the environment's keys, read as illi starts and taken out of it (no
 // program an agent runs inherits them); the keys in use, by name: the
@@ -164,12 +157,9 @@ export const KEYS: Record<string, string> = { ...ENV_KEYS };
 // the accounts as last read (null: their file won't read, and never has
 // in this illi: one that stops reading keeps the last read, so a passing
 // fault drops no provider), and how the file looked then
-// (Accounts.stamp); whether the ChatGPT login file read last, by its
-// path (config_signed: one that won't read for a moment, as a program
-// writes it in place, keeps what the last read said)
+// (Accounts.stamp)
 let ACCOUNTS: Store | null = Accounts.read(ROOT);
 let STAMPED = Accounts.stamp(ROOT);
-let SIGNED  = { file: "", on: false };
 config_keys();
 
 export const OFFER: Offer = {
@@ -179,13 +169,9 @@ export const OFFER: Offer = {
 
 // illi's own pick on each vendor, by default: the first vendor
 // offered's (config_def); the compactor each vendor's own, while
-// `compactor` names none for it
-const DEFS: Record<Vendor, { pick: string; compactor: string }> = {
-  "claude-api" : { pick: "claude-api:sonnet-5.5:medium:slow",  compactor: "claude-api:haiku-5.5:medium:slow" },
-  "openai-api" : { pick: "openai-api:gpt-6.1-sol:medium:slow", compactor: "openai-api:gpt-6-luna:medium:slow" },
-  "chatgpt"    : { pick: TABLE.pick.def,                       compactor: "chatgpt:gpt-6-luna:medium:slow" },
-  "claude-code": { pick: "claude-code:opus-5.5:medium:slow",   compactor: "claude-code:haiku-5.5:medium:slow" },
-};
+// `compactor` names none for it (each provider's facts: Provider.ts
+// defaults)
+const DEFS = (vendor: Vendor) => Vendors.of(vendor)?.defaults ?? Vendors.fallback().defaults;
 
 // the settings that name a pick per vendor (a role's)
 const ROLED = ["agents", "compactor"] as const;
@@ -364,7 +350,7 @@ export function config_def(key: Key, offer?: Offer): string {
     return SETTINGS[key].def;
   }
   const on    = offer ?? OFFER;
-  const def   = on.vendors.map((v) => DEFS[v].pick).find((text) => Pick.read(config_split(text), on) !== null);
+  const def   = on.vendors.map((v) => DEFS(v).pick).find((text) => Pick.read(config_split(text), on) !== null);
   const first = Pick.models(on.vendors, on.models)[0];
   return def ?? (first === undefined ? SETTINGS[key].def : Pick.label({ vendor: first[0], model: first[1].label, effort: "medium", speed: first[1].speeds[0] }));
 }
@@ -404,23 +390,24 @@ function config_gone(tell = true): void {
     const own = typeof set === "string" ? config_list(set).filter((text) => text.split(":").length === 4) : [];
     for (const text of own.filter((text) => OFFER.vendors.includes(text.split(":")[0] as Vendor) && Pick.read(config_split(text), OFFER) === null)) {
       const vendor = text.split(":")[0] as Vendor;
-      told(key, text, key === "agents" ? "the chat's pick" : DEFS[vendor].compactor);
+      told(key, text, key === "agents" ? "the chat's pick" : DEFS(vendor).compactor);
     }
   }
 }
 
 // what the start tells of the API keys (KEYS): one set whose vendor isn't
 // offered, and how to use it (/login connects it; the vendors setting
-// naming them, the vendors to list there: a key's first while there is
-// no ChatGPT login; a variable's, from the next start); the key missing
-// that the pick runs on (/login adds one)
-export function config_tips(pick: Pick, signed: boolean): string[] {
+// naming them, the vendors to list there: a key's first unless the first
+// vendor offered is connected, `ready`: config_has; a variable's, from
+// the next start); the key missing that the pick runs on (/login adds
+// one)
+export function config_tips(pick: Pick, ready: boolean): string[] {
   const tips: string[] = [];
   const env  = config_env_set("vendors");
   const set  = config_named();
   for (const [name, vendor] of Object.entries(KEYED)) {
     if (KEYS[name] !== "" && !OFFER.vendors.includes(vendor)) {
-      const list = (signed ? [...OFFER.vendors, vendor] : [vendor, ...OFFER.vendors]).join(",");
+      const list = (ready ? [...OFFER.vendors, vendor] : [vendor, ...OFFER.vendors]).join(",");
       tips.push(VARS[name] + " is set, but illi doesn't offer " + Pick.provider(vendor) + ": " + (!set ? "/login connects it." : env === null ? "/set vendors " + list + "." : env + "=" + list + ", then start illi again."));
     }
     if (KEYS[name] === "" && pick.vendor === vendor) {
@@ -453,7 +440,7 @@ export function config_role(key: Role, pick: Pick): Pick {
   if (set !== undefined || key !== "compactor") {
     return set ?? pick;
   }
-  const want  = config_split(DEFS[pick.vendor].compactor);
+  const want  = config_split(DEFS(pick.vendor).compactor);
   const first = Pick.models([pick.vendor], OFFER.models)[0]?.[1];
   const stand = first === undefined ? null : Pick.read({ ...want, model: first.label, speed: first.speeds[0] ?? "slow" }, OFFER);
   return Pick.read(want, OFFER) ?? stand ?? pick;
@@ -662,9 +649,10 @@ export function config_autocompact(label: string, value: string | null): string 
   return null;
 }
 
-// the models listed last, learned (a file that won't read: none): the
-// chatgpt list as the catalog last gave it, whatever account it was of
-// (not known yet; the catalog's answer replaces it), a window or a share
+// the models listed last, learned (a file that won't read: none): a
+// catalog's list (a provider whose facts say `catalog`: chatgpt's) as it
+// last gave it, whatever account it was of (not known yet; the catalog's
+// answer replaces it), a window or a share
 // that isn't one (not a count above 0; a room past 0 to 1) none, so never
 // a wrong one; the others' windows on the models built in, and only those
 // (their speeds and list are illi's own: a model a later illi dropped, or
@@ -674,7 +662,7 @@ function config_models(): void {
   const count = (x: unknown) => (typeof x === "number" && x > 0 && Number.isFinite(x) ? x : undefined);
   for (const vendor of Object.keys(kept).filter((v) => VENDORS.includes(v as Vendor) && Array.isArray(kept[v])) as Vendor[]) {
     const models = kept[vendor].filter((m: any) => typeof m?.label === "string" && typeof m.id === "string" && Array.isArray(m.speeds));
-    if (vendor === "chatgpt") {
+    if (Vendors.of(vendor)?.catalog) {
       Pick.learn(vendor, models.map((m: any) => ({ ...m, window: count(m.window), standard: count(m.standard), room: count(m.room) !== undefined && m.room <= 1 ? m.room : undefined })), "replace");
     } else {
       models.forEach((m: any) => Pick.told(vendor, m.id, Number(m.window)));
@@ -901,7 +889,7 @@ function config_split(text: string): { vendor: string; model: string; effort: st
 // else the environment's (its own chosen, or the vendor not connected)
 function config_keys(): void {
   for (const [name, vendor] of Object.entries(KEYED)) {
-    const keyed = ACCOUNTS?.[vendor];
+    const keyed = Accounts.keys_in(ACCOUNTS, vendor);
     KEYS[name] = keyed === undefined || keyed.use === ENV ? ENV_KEYS[name] : keyed.keys.find((k) => k.id === keyed.use)?.key ?? ENV_KEYS[name];
   }
 }
@@ -932,47 +920,37 @@ function config_offer(): boolean {
   return true;
 }
 
-// the vendors connected: ChatGPT first while a login is there to run on
-// (config_signed), then the APIs and the Claude plan /login connected
-// (Accounts.ts), each in the order it was: an API only while its key in
-// use is there (the environment's may not be, in this illi), the Claude
-// plan while it has an account. None: ChatGPT, so the chat says /login
-// signs in
+// the vendors connected: first each one whose login is kept outside the
+// accounts' file while it's there to run on (chatgpt's: Provider.ts
+// outside), then those /login connected (Accounts.ts), each in the order
+// it was: an API only while its key in use is there (the environment's
+// may not be, in this illi), a plan run by another program while it has
+// an account. None: the fallback (chatgpt), so the chat says /login
+// connects one
 function config_connected(): Vendor[] {
-  const name   = (v: Vendor) => Object.keys(KEYED).find((n) => KEYED[n] === v);
-  const has    = (v: Vendor) => (v === "claude-code" ? (ACCOUNTS?.["claude-code"]?.accounts.length ?? 0) > 0 : name(v) !== undefined && KEYS[name(v)!] !== "");
-  const listed = (Object.keys(ACCOUNTS ?? {}) as Vendor[]).filter(has);
-  const all    = [...(config_signed() ? ["chatgpt" as Vendor] : []), ...listed];
-  return all.length === 0 ? ["chatgpt"] : all;
+  const outside = FACTS.filter((f) => f.outside?.() === true).map((f) => f.id as Vendor);
+  const listed  = (Object.keys(ACCOUNTS ?? {}) as Vendor[]).filter((v) => Vendors.of(v)?.outside === undefined && config_has(v));
+  const all     = [...outside, ...listed];
+  return all.length === 0 ? [Vendors.fallback().id as Vendor] : all;
 }
 
-// the ChatGPT login file chatgpt runs on (ChatGPT.ts): the file `login`
-// names, else illi's own if it's there, else opencode's if it's there and
-// /login didn't leave it to opencode (Accounts.ts), else illi's own (none
-// yet)
-export function config_login_file(): string {
-  const opencode = ACCOUNTS?.chatgpt?.opencode !== false && fs.existsSync(OPENCODE_LOGIN);
-  return LOGIN_SET ?? (fs.existsSync(OWN_LOGIN) || !opencode ? OWN_LOGIN : OPENCODE_LOGIN);
-}
-
-// the Claude Code folder claude-code runs on (ClaudeCode.ts env): the
-// Claude plan's account in use (Accounts.ts), "" for the user's own
-// Claude Code's (as its environment names it) or none connected
-export function config_claude_dir(): string {
-  return Accounts.folder(ROOT, ACCOUNTS?.["claude-code"]?.use ?? OWN);
-}
-
-// whether a ChatGPT login is there to run on (config_login_file): a file
-// there that won't read, as the last read of it said (SIGNED)
-export function config_signed(): boolean {
-  const file = config_login_file();
-  const data = json_object(file);
-  if (data === null && SIGNED.file === file && fs.existsSync(file)) {
-    return SIGNED.on;
+// whether a vendor is connected: its login kept outside the accounts'
+// file is there (outside), else its entry in the file has what it runs
+// on (an API's key in use, a plan's account)
+export function config_has(vendor: Vendor): boolean {
+  const facts = Vendors.of(vendor);
+  if (facts?.outside !== undefined) {
+    return facts.outside();
   }
-  const entry = data?.openai;
-  SIGNED = { file, on: entry?.type === "oauth" && Boolean(entry.access) && Boolean(entry.refresh) };
-  return SIGNED.on;
+  const key = facts?.key?.name;
+  return key !== undefined ? Accounts.keys_in(ACCOUNTS, vendor) !== undefined && KEYS[key] !== "" : (Accounts.folders_in(ACCOUNTS, vendor)?.accounts.length ?? 0) > 0;
+}
+
+// a plan's folder its program runs in (ClaudeCode.ts env): its account
+// in use (Accounts.ts), "" for the program's own (the user's own Claude
+// Code's, as its environment names it) or none connected
+export function config_folder(vendor: Vendor): string {
+  return Accounts.folder(ROOT, vendor, Accounts.folders_in(ACCOUNTS, vendor)?.use ?? OWN);
 }
 
 // the accounts read again if their file changed (or always, `now`; one

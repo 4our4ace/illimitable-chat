@@ -20,7 +20,8 @@ delete process.env.ILLI_LOGIN;
 fs.mkdirSync(DATA + "/opencode");
 fs.writeFileSync(DATA + "/opencode/auth.json", JSON.stringify({ openai: { type: "oauth", access: "opencode-access", refresh: "r", expires: Date.now() + 3600e3 } }));
 
-const config = await import("../../config/Config.ts");
+await import("../../config/Config.ts");
+const { LoginFile } = await import("./Facts.ts");
 const { ChatGPT } = await import("./ChatGPT.ts");
 
 // a JWT with these claims (unsigned: only read here)
@@ -55,13 +56,13 @@ afterAll(() => {
 });
 
 test("opencode's login is used while illi has none of its own", async () => {
-  expect(ChatGPT.file()).toBe(config.OPENCODE_LOGIN);
+  expect(ChatGPT.file()).toBe(LoginFile.opencode);
   expect(ChatGPT.signed()).toBe(true);
   expect(await ChatGPT.token()).toBe("opencode-access");
 });
 
 test("the device login: a code and page, polled till given, its tokens kept as illi's own", async () => {
-  fs.writeFileSync(config.OWN_LOGIN, "{ cut sho");
+  fs.writeFileSync(LoginFile.own, "{ cut sho");
   const { url, code, done } = await ChatGPT.device(new AbortController().signal);
   expect(url).toBe("https://auth.openai.com/codex/device");
   expect(code).toBe("ABCD-1234");
@@ -72,27 +73,27 @@ test("the device login: a code and page, polled till given, its tokens kept as i
   const exchange = new URLSearchParams(asked[asked.length - 1].body);
   expect(asked[asked.length - 1].url).toBe("https://auth.openai.com/oauth/token");
   expect(Object.fromEntries(exchange)).toEqual({ grant_type: "authorization_code", code: "code-1", redirect_uri: "https://auth.openai.com/deviceauth/callback", client_id: "app_EMoamEEZ73f0CkXaXp7hrann", code_verifier: "ver-1" });
-  const own = JSON.parse(fs.readFileSync(config.OWN_LOGIN, "utf8")).openai;
+  const own = JSON.parse(fs.readFileSync(LoginFile.own, "utf8")).openai;
   expect(own).toMatchObject({ type: "oauth", access: "own-access", refresh: "own-refresh", accountId: "acct-9" });
-  expect(fs.statSync(config.OWN_LOGIN).mode & 0o777).toBe(0o600);
-  expect(ChatGPT.file()).toBe(config.OWN_LOGIN);
+  expect(fs.statSync(LoginFile.own).mode & 0o777).toBe(0o600);
+  expect(ChatGPT.file()).toBe(LoginFile.own);
   expect(await ChatGPT.token()).toBe("own-access");
 }, 10000);
 
 test("logout lets illi's own login go: opencode's is used again", async () => {
   expect(ChatGPT.logout()).toBe(true);
-  expect(fs.existsSync(config.OWN_LOGIN)).toBe(false);
-  expect(ChatGPT.file()).toBe(config.OPENCODE_LOGIN);
+  expect(fs.existsSync(LoginFile.own)).toBe(false);
+  expect(ChatGPT.file()).toBe(LoginFile.opencode);
   expect(await ChatGPT.token()).toBe("opencode-access");
   expect(ChatGPT.logout()).toBe(false);
 });
 
 test("a renewal writes back to the file it read, though a /login made illi's own meanwhile", async () => {
-  fs.writeFileSync(config.OPENCODE_LOGIN, JSON.stringify({ openai: { type: "oauth", access: "old-access", refresh: "r", expires: 0 }, other: { kept: true } }));
+  fs.writeFileSync(LoginFile.opencode, JSON.stringify({ openai: { type: "oauth", access: "old-access", refresh: "r", expires: 0 }, other: { kept: true } }));
   const fresh = JSON.stringify({ openai: { type: "oauth", access: "fresh-access", refresh: "fresh-refresh", expires: Date.now() + 3600e3 } });
   const stand = globalThis.fetch;
   globalThis.fetch = (async (url: string, init: any) => {
-    fs.writeFileSync(config.OWN_LOGIN, fresh);
+    fs.writeFileSync(LoginFile.own, fresh);
     return stand(url, init);
   }) as typeof fetch;
   try {
@@ -100,7 +101,7 @@ test("a renewal writes back to the file it read, though a /login made illi's own
   } finally {
     globalThis.fetch = stand;
   }
-  expect(fs.readFileSync(config.OWN_LOGIN, "utf8")).toBe(fresh);
-  expect(JSON.parse(fs.readFileSync(config.OPENCODE_LOGIN, "utf8"))).toMatchObject({ openai: { access: "own-access" }, other: { kept: true } });
+  expect(fs.readFileSync(LoginFile.own, "utf8")).toBe(fresh);
+  expect(JSON.parse(fs.readFileSync(LoginFile.opencode, "utf8"))).toMatchObject({ openai: { access: "own-access" }, other: { kept: true } });
   ChatGPT.logout();
 });

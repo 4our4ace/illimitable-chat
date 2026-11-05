@@ -37,6 +37,7 @@ fs.writeFileSync(DIR + "/config.json", JSON.stringify({ jobs: 16, rules: "rules.
 fs.writeFileSync(DIR + "/rules.md", "be brief\n");
 
 const config = await import("./Config.ts");
+const { LoginFile } = await import("../providers/chatgpt/Facts.ts");
 
 afterAll(() => {
   fs.rmSync(DIR, { recursive: true, force: true });
@@ -182,19 +183,19 @@ test("a provider let go that leaves no pick offered (the models offered all anot
   const vendors = config.config_value("vendors");
   const models  = [...config.OFFER.models];
   config.config_set("vendors", null);
-  fs.writeFileSync(config.OWN_LOGIN, JSON.stringify({ openai: { type: "oauth", access: "a", refresh: "r" } }));
+  fs.writeFileSync(LoginFile.own, JSON.stringify({ openai: { type: "oauth", access: "a", refresh: "r" } }));
   fs.writeFileSync(DIR + "/accounts.json", JSON.stringify({ "claude-api": { use: "env", keys: [] } }));
   config.OFFER.models.splice(0, Infinity, "gpt-6.1-sol");
   try {
     config.config_accounts(true);
     const pick = config.PICK;
     expect([config.OFFER.vendors, pick.vendor]).toEqual([["chatgpt", "claude-api"], "chatgpt"]);
-    fs.rmSync(config.OWN_LOGIN);
+    fs.rmSync(LoginFile.own);
     expect(() => config.config_accounts(true)).not.toThrow();
     expect([config.OFFER.vendors, config.PICK]).toEqual([["claude-api"], pick]);
   } finally {
     config.OFFER.models.splice(0, Infinity, ...models);
-    fs.rmSync(config.OWN_LOGIN, { force: true });
+    fs.rmSync(LoginFile.own, { force: true });
     fs.rmSync(DIR + "/accounts.json", { force: true });
     config.config_set("vendors", vendors === "" ? null : vendors);
     config.config_accounts(true);

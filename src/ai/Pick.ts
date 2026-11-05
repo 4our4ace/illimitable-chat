@@ -1,9 +1,7 @@
 // Pick
 // ====
-// What a chat's calls run on, kept in its log: a vendor (claude-api,
-// openai-api, chatgpt: OpenAI's models on a ChatGPT plan, claude-code:
-// Claude's on a Claude plan, through Claude Code), a model of its, an
-// effort and a speed; label
+// What a chat's calls run on, kept in its log: a vendor (a provider, by
+// its id: Vendors.ts), a model of its, an effort and a speed; label
 // vendor:model:effort:speed, shown to a person as model · effort (a
 // speed past the standard one after them). A chat that saved none takes
 // the config's (`def`). A move steps one part along the picks that differ in it
@@ -13,7 +11,7 @@
 // value (`to`), to the pick whose part it is. A saved pick illi
 // doesn't offer gives way to def, never to a pick like it.
 
-import type { Vendor } from "./AskAI.ts";
+import { FACTS, VENDORS as IDS, Vendors, type Vendor } from "../providers/Vendors.ts";
 
 // Types
 // =====
@@ -45,53 +43,18 @@ export type Offer = { vendors: Vendor[]; models: string[] };
 // Constants
 // =========
 
-export const VENDORS: Vendor[] = ["claude-api", "openai-api", "chatgpt", "claude-code"];
+export const VENDORS: Vendor[] = IDS;
 
-// each vendor's models as built in, each window as its vendor states it
-// (ChatGPT's catalog tells them anew: learn; Anthropic's Models API and
-// Claude Code's results, each window: told)
-const OPUS  : Model = { label: "opus-5.5",   id: "claude-opus-5-5",   speeds: ["slow", "fast"], window: 1000000 };
-const SONNET: Model = { label: "sonnet-5.5", id: "claude-sonnet-5-5", speeds: ["slow"],         window: 1000000 };
-const HAIKU : Model = { label: "haiku-5.5",  id: "claude-haiku-5-5",  speeds: ["slow"],         window: 1000000 };
-const OPENAI: Model[] = [
-  { label: "gpt-6-luna",  id: "gpt-6-luna",  speeds: ["slow", "fast"],              window: 1050000 },
-  { label: "gpt-6.1-sol", id: "gpt-6.1-sol", speeds: ["slow", "fast"],              window: 1050000 },
-  { label: "gpt-6-astra", id: "gpt-6-astra", speeds: ["slow", "fast", "ultrafast"], window: 1050000 },
-];
-
-// the same on a ChatGPT plan (ChatGPT.ts), at one speed and no window
-// till the account's catalog tells each one's speeds and windows (its
-// max_context_window): a window is never guessed there
-const CHATGPT: Model[] = OPENAI.map(({ label, id }) => ({ label, id, speeds: ["slow"] }));
-
-// Claude's on a Claude plan, through Claude Code (ClaudeCode.ts), at its
-// standard speed; each one's window 200k till Claude Code tells it, as
-// soon as the plan is connected (ClaudeCode.models: 1M where the plan
-// has long context)
-const FABLE : Model = { label: "fable-5.1", id: "claude-fable-5-1", speeds: ["slow"] };
-const CLAUDE: Model[] = [FABLE, OPUS, SONNET, HAIKU].map((m) => ({ ...m, speeds: ["slow"], window: 200000 }));
-
-// each vendor's models, at the speeds it runs them
-const MODELS: Record<Vendor, Model[]> = {
-  "claude-api" : [OPUS, SONNET, HAIKU],
-  "openai-api" : OPENAI,
-  "chatgpt"    : CHATGPT,
-  "claude-code": CLAUDE,
-};
+// each vendor's models, at the speeds it runs them: as its facts build
+// them in (each a copy, which what the vendor tells changes: learn,
+// told), each window as its vendor states it
+const MODELS: Record<string, Model[]> = Object.fromEntries(FACTS.map((f) => [f.id, f.models.map((m) => ({ ...m }))]));
 
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 
 export const SPEEDS = ["slow", "fast", "ultrafast"];
 
 export const LABELS = [...new Set(Object.values(MODELS).flat().map((m) => m.label))];
-
-// each vendor as a note names it to the person (its id is the settings')
-const PROVIDERS: Record<Vendor, string> = {
-  "claude-api" : "the Anthropic API",
-  "openai-api" : "the OpenAI API",
-  "chatgpt"    : "your ChatGPT plan",
-  "claude-code": "your Claude plan",
-};
 
 // Pick
 // ====
@@ -218,7 +181,7 @@ export namespace Pick {
   // a vendor as a note names it ("the Anthropic API"; up: starting a
   // sentence)
   export function provider(vendor: Vendor, up = false): string {
-    const name = PROVIDERS[vendor] ?? vendor;
+    const name = Vendors.of(vendor)?.name ?? vendor;
     return up ? name[0].toUpperCase() + name.slice(1) : name;
   }
 

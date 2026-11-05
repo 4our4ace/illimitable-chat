@@ -35,6 +35,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import pkg from "../../package.json" with { type: "json" };
 import { json_object } from "../tools/Clip.ts";
+import { Vendors } from "../providers/Vendors.ts";
 
 // Types
 // =====
@@ -340,9 +341,11 @@ async function update_download(url: string, file: string): Promise<string> {
 }
 
 // what a file run with --version prints, trimmed, the API keys kept from
-// it; "": it failed, or took past RUN
+// it (each provider's that runs on one: Provider.ts key); "": it failed,
+// or took past RUN
 async function update_run(file: string): Promise<string> {
-  const { ANTHROPIC_API_KEY, OPENAI_API_KEY, ...env } = process.env;
+  const keys = Vendors.keyed().map((f) => f.key.env);
+  const env  = Object.fromEntries(Object.entries(process.env).filter(([name]) => !keys.includes(name)));
   try {
     const proc = Bun.spawn([file, "--version"], { env, stdin: "ignore", stdout: "pipe", stderr: "ignore", timeout: RUN });
     const [out, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);

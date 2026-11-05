@@ -260,10 +260,11 @@ test("Config.ts on a profile: its folder, its config over the root's, the root's
   process.env.ANTHROPIC_API_KEY = "test-key";
   put(ROOT + "/profiles/copy/config.json", JSON.stringify({ side: "off", off: "Adhd, github" }));
   const config = await import("./Config.ts");
+  const { LoginFile } = await import("../providers/chatgpt/Facts.ts");
   expect([config.ROOT, config.PROFILE, config.DIR]).toEqual([ROOT, "copy", ROOT + "/profiles/copy"]);
   expect(config.config_value("side")).toBe("off");
   expect(config.config_value("vendors")).toBe(process.env.ILLI_VENDORS ?? "chatgpt,claude-api");
-  expect(config.OWN_LOGIN).toBe(ROOT + "/login.json");
+  expect(LoginFile.own).toBe(ROOT + "/login.json");
   expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
   expect(config.config_env().ANTHROPIC_API_KEY).toBe("test-key");
 });

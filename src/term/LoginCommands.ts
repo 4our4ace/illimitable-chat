@@ -48,6 +48,7 @@ import { ClaudeCode } from "../providers/claude-code/ClaudeCode.ts";
 import { term_account, term_ask, term_chooser, term_question } from "./Commands.ts";
 import { term_draw } from "./Frame.ts";
 import * as config from "../config/Config.ts";
+import { LoginFile } from "../providers/chatgpt/Facts.ts";
 import { term_note, term_notify, term_unnotify, type Notice } from "./Notices.ts";
 import { OpenAI } from "../providers/openai-api/OpenAI.ts";
 import { Pick } from "../ai/Pick.ts";
@@ -280,7 +281,7 @@ function login_claude_id(): string {
       continue;
     }
     try {
-      fs.mkdirSync(Accounts.folder(config.ROOT, "c" + n), { mode: 0o700 });
+      fs.mkdirSync(Accounts.folder(config.ROOT, "claude-code", "c" + n), { mode: 0o700 });
       return "c" + n;
     } catch (err: any) {
       if (err?.code !== "EEXIST") {
@@ -338,7 +339,7 @@ async function login_claude_sign(t: Term, want: string | null, back: () => void)
   };
   try {
     id ??= login_claude_id();
-    const dir = Accounts.folder(config.ROOT, id);
+    const dir = Accounts.folder(config.ROOT, "claude-code", id);
     const run = ClaudeCode.signin(dir, stop.signal, ask);
     give = run.give;
     await run.done;
@@ -407,7 +408,7 @@ function login_claude_drop(t: Term, a: Folder, back: () => void): void {
 // won't go logged, never thrown); the user's own Claude Code's never
 // (OWN: nothing done)
 async function login_claude_forget(id: string): Promise<void> {
-  const dir = Accounts.folder(config.ROOT, id);
+  const dir = Accounts.folder(config.ROOT, "claude-code", id);
   if (dir === "") {
     return;
   }
@@ -571,9 +572,9 @@ function login_chatgpt_provider(t: Term): Provider {
   const accounts = (): Account[] => {
     const file  = ChatGPT.file();
     const using = ChatGPT.kept(file);
-    const ours  = file !== config.OPENCODE_LOGIN;
-    const other = config.LOGIN_SET === null && ours && ChatGPT.logins().opencode ? ChatGPT.kept(config.OPENCODE_LOGIN) : null;
-    const where = config.LOGIN_SET !== null ? "the file `login` names" : ours ? "illi's login" : "opencode's login";
+    const ours  = file !== LoginFile.opencode;
+    const other = LoginFile.set === null && ours && ChatGPT.logins().opencode ? ChatGPT.kept(LoginFile.opencode) : null;
+    const where = LoginFile.set !== null ? "the file `login` names" : ours ? "illi's login" : "opencode's login";
     const all = [
       ...(using === null ? [] : [{ s: using, where, use: true, take: () => {}, drop: (back: () => void) => (ours ? login_chatgpt_drop(t, using, true, back) : login_chatgpt_leave(t, back)) }]),
       ...(other === null || other.key === using?.key ? [] : [{ s: other, where: "opencode's login", use: false, take: () => void login_chatgpt_use(t, null), drop: (back: () => void) => login_chatgpt_leave(t, back) }]),
@@ -600,7 +601,7 @@ function login_chatgpt_name(s: Saved, all: Saved[] = []): string {
 // opencode's login, while /login left it to opencode (null: none there,
 // it is one of the accounts, or `login` names the file)
 function login_chatgpt_opencode(): Saved | null {
-  return config.LOGIN_SET === null && !ChatGPT.logins().opencode ? ChatGPT.kept(config.OPENCODE_LOGIN) : null;
+  return LoginFile.set === null && !ChatGPT.logins().opencode ? ChatGPT.kept(LoginFile.opencode) : null;
 }
 
 // ChatGPT not connected while opencode's login is there, left to opencode:
@@ -640,7 +641,7 @@ export async function login_chatgpt(t: Term): Promise<void> {
     });
     await done;
     const now = ChatGPT.kept(ChatGPT.own());
-    login_after(t, "chatgpt", "Signed in to ChatGPT" + (now === null ? "" : " as " + login_chatgpt_name(now)) + ". illi keeps the login in " + config.config_home(ChatGPT.own()) + (config.LOGIN_SET === null ? "" : " (the file `login` names)") + " and renews it there.");
+    login_after(t, "chatgpt", "Signed in to ChatGPT" + (now === null ? "" : " as " + login_chatgpt_name(now)) + ". illi keeps the login in " + config.config_home(ChatGPT.own()) + (LoginFile.set === null ? "" : " (the file `login` names)") + " and renews it there.");
   } catch (err: any) {
     if (!stop.signal.aborted) {
       term_notify(t, "Login failed: " + err.message + ".", false, LOGIN_FAILED);
@@ -669,7 +670,7 @@ async function login_chatgpt_use(t: Term, s: Saved | null): Promise<void> {
 // apart forgotten; the one in use (illi's own login, or the file `login`
 // names: never) let go, the next taking its place (login_chatgpt_next)
 function login_chatgpt_drop(t: Term, s: Saved, using: boolean, back: () => void): void {
-  if (using && config.LOGIN_SET !== null) {
+  if (using && LoginFile.set !== null) {
     return login_chatgpt_named(t);
   }
   const name = login_chatgpt_name(s);
@@ -709,10 +710,10 @@ async function login_chatgpt_next(t: Term, said: string): Promise<void> {
 // and the accounts kept apart forgotten, opencode's left to opencode,
 // ChatGPT no longer offered; a file `login` names is left
 function login_chatgpt_out(t: Term, back: () => void): void {
-  if (config.LOGIN_SET !== null) {
+  if (LoginFile.set !== null) {
     return login_chatgpt_named(t);
   }
-  const other = fs.existsSync(config.OPENCODE_LOGIN);
+  const other = fs.existsSync(LoginFile.opencode);
   login_sure(t, "Log out of ChatGPT?", "illi forgets its logins and stops offering ChatGPT" + (other ? "; opencode stays signed in" : ""), () => {
     t.login?.abort();
     ChatGPT.logout();
@@ -723,5 +724,5 @@ function login_chatgpt_out(t: Term, back: () => void): void {
 
 // the login in use is the file `login` names, which illi never lets go
 function login_chatgpt_named(t: Term): void {
-  term_note(t, "illi uses the login in " + config.config_home(config.LOGIN_SET!) + " (the login setting): logging out leaves it. /set login default switches back at the next start.");
+  term_note(t, "illi uses the login in " + config.config_home(LoginFile.set!) + " (the login setting): logging out leaves it. /set login default switches back at the next start.");
 }

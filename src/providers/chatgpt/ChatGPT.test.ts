@@ -1,6 +1,6 @@
 // ChatGPT test
 // ============
-// `bun test ChatGPT.test.ts`. The login on a file of our own (config.LOGIN_SET),
+// `bun test ChatGPT.test.ts`. The login on a file of our own (LoginFile.set),
 // renewed against a stand-in for OpenAI's token endpoint: a good token is
 // used as it is; one near its end, or refused, is renewed once however many
 // ask, and written back with the file's other entries kept. The plan's
