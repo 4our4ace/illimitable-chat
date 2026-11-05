@@ -12,7 +12,9 @@
 // going on from another's keeps its vendor's cache marks in all: the
 // other's count. A request carries at most PICS images, the oldest left
 // out by halves (so its prefix holds for steps), the newest results'
-// kept first, a line in each place; the items themselves untouched.
+// kept first, a line in each place; the items themselves untouched. A
+// stream closed before its last event ends its step where its wire says
+// it ended (an API that may leave its usage out), else it ended early.
 
 import { expect, test } from "bun:test";
 import { temp_dir } from "../../test/repo.ts";
@@ -118,6 +120,23 @@ test("a call full past its first step with no tool results gone in (a step asked
   } finally {
     Agent.step = step;
     Agent.use = use;
+  }
+});
+
+test("a stream that closes before its last event ends its step if its wire says it did (ended), as read, never busy to ask again; else it ended early", async () => {
+  const sse = (lines: string[]) => new Response(lines.map((l) => "data: " + l + "\n\n").join("")).body!;
+  const wire = { begun: () => true, read: (st: any, ev: any) => ((st.done ||= ev.finish === true), false), step: () => ({ out: [], uses: [], entries: [{ kind: "illi", text: "done" }], stop: "done", why: "", note: "" }), ended: (st: any) => st.done } as any;
+  const ask = { vendor: "chatgpt", model: "m", effort: "low", speed: "slow", system: "", blocks: [], searches: 0, server: "" } as any;
+  const run = { ask, on: () => {}, sent: [], abort: new AbortController(), end: AskAI.end("") } as any;
+  const timer = setTimeout(() => {}, 60000);
+  try {
+    const read = { done: false };
+    const ended = await Agent.stream(wire, run, sse(['{"a":1}', '{"finish":true}']), timer, [], { done: false }, () => {}, read);
+    expect([ended.stop, ended.entries, read.done]).toEqual(["done", [{ kind: "illi", text: "done" }], true]);
+    const early = await Agent.stream(wire, run, sse(['{"a":1}']), timer, [], { done: false }, () => {}, { done: false });
+    expect([early.stop, early.why]).toEqual(["busy", "the stream ended early"]);
+  } finally {
+    clearTimeout(timer);
   }
 });
 

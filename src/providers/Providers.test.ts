@@ -6,7 +6,8 @@
 // its code and facts by one id, a call run on a wire or by its own
 // program (one of the two), an API key's provider able to check a key,
 // a plan's page in /login, its default picks its own models, each named
-// by family (opus-*: the newest of it), never by a version.
+// by family (opus-*: the newest of it), never by a version, or a rule over
+// its models (the cheapest, say) that gives one of them.
 // `bun test Providers.test.ts`.
 
 import { expect, test } from "bun:test";
@@ -57,10 +58,12 @@ test("each provider's facts, code and page agree", () => {
     expect([f.id, p.facts === f, (p.wire === undefined) !== (p.ask === undefined)]).toEqual([f.id, true, true]);
     expect([f.id, f.key !== undefined ? p.check !== undefined : Logins.of(f.id) !== undefined]).toEqual([f.id, true]);
     expect([f.id, f.accounts === "folders" ? f.folders !== undefined : true, f.accounts === "keys" ? f.key !== undefined : true]).toEqual([f.id, true, true]);
-    for (const pick of [f.defaults.pick, f.defaults.compactor]) {
+    for (const rule of [f.defaults.pick, f.defaults.compactor]) {
+      const pick = typeof rule === "string" ? rule : rule(f.models);
       const [vendor, model] = pick.split(":");
-      const newest = Pick.newest(f.id as Vendor, model, f.models.map((m) => m.label));
-      expect([pick, vendor, model.includes("*") && !/\d/.test(model), f.models.some((m) => m.label === newest)]).toEqual([pick, f.id, true, true]);
+      const newest = model.includes("*") ? Pick.newest(f.id as Vendor, model, f.models.map((m) => m.label)) : model;
+      const named  = typeof rule !== "string" || (model.includes("*") && !/\d/.test(model));
+      expect([pick, vendor, named, f.models.some((m) => m.label === newest)]).toEqual([pick, f.id, true, true]);
     }
   }
   // a maker's providers say it the same way, and one of them falls back

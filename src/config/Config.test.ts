@@ -153,6 +153,25 @@ test("a pick named by family (* for its version) runs on the newest model of it 
   config.config_set("vendors", null);
 });
 
+test("a provider's chat pick (chats) is its default while it reads, one gone giving way to the provider's own; pick set goes over them all", () => {
+  const all = { vendors: ["claude-api", "chatgpt"], models: LABELS } as Offer;
+  config.config_set("vendors", "claude-api,chatgpt");
+  config.config_set("chats", "claude-api:opus-*:high:slow");
+  expect([config.config_def("pick", all), config.config_value("chats")]).toEqual(["claude-api:opus-5.5:high:slow", "claude-api:opus-*:high:slow"]);
+  expect(config.config_check("chats", "claude-api:nope-1:high:slow")).toBe("chats is no vendor:model:effort:speed offered here: claude-api:nope-1:high:slow");
+  config.config_set("chats", null);
+  process.env.ILLI_CHATS = "claude-api:nope-1:high:slow";
+  try {
+    expect(config.config_def("pick", all)).toBe("claude-api:sonnet-5.5:medium:slow");
+    config.config_set("pick", "chatgpt:gpt-6-luna:medium:slow");
+    expect(config.PICK).toEqual({ vendor: "chatgpt", model: "gpt-6-luna", effort: "medium", speed: "slow" });
+  } finally {
+    delete process.env.ILLI_CHATS;
+    config.config_set("pick", null);
+    config.config_set("vendors", null);
+  }
+});
+
 test("the start tells of an API key set whose vendor isn't offered (/login connects it; the vendors setting set, how to name it there), and of the pick's key missing (/login adds one)", () => {
   config.config_set("vendors", null);
   expect(config.config_tips(config.PICK, false)).toEqual(["ANTHROPIC_API_KEY is set, but illi doesn't offer the Anthropic API: /login connects it."]);

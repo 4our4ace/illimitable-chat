@@ -142,7 +142,7 @@ export function setting_open(t: Term, key: config.Key): void {
   }
   if (config.SETTINGS[key].values === "pick") {
     const rows = Pick.models(t.v.vendors, t.v.models);
-    const role = key === "agents" || key === "compactor" ? key : null;
+    const role = key === "chats" || key === "agents" || key === "compactor" ? key : null;
     const from = role !== null && t.v.pick !== null ? config.config_role(role, t.v.pick) : config.config_pick(key) ?? t.v.pick;
     if (env !== null || from === null || rows.length === 0) {
       return term_note(t, env !== null ? key + " is set by " + env + ": unset it to change it here." : "No models offered yet.");
