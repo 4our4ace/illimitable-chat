@@ -100,7 +100,7 @@ import type { Subprocess } from "bun";
 import { AskAI, type Ask, type Block, type End, type Event, type Img, type Say, type Try } from "../../ai/AskAI.ts";
 import { Agent, type Emit, type Entry } from "../../ai/Agent.ts";
 import { Anthropic } from "../claude-api/Anthropic.ts";
-import { Pick } from "../../ai/Pick.ts";
+import { EFFORTS, Pick, type Model } from "../../ai/Pick.ts";
 import { FAILED, live_push, type Limit, type Plan } from "../../ui/View.ts";
 import * as config from "../../config/Config.ts";
 import { json_object } from "../../tools/Clip.ts";
@@ -249,13 +249,19 @@ const SIGNIN = 10 * 60e3;
 // (ms): a child it left (a browser's launcher) may hold its output open
 const DRAIN = 1e3;
 
-// Claude Code asked a model's window (ClaudeCode.size): on its control
-// channel, as a call without tools runs (none of its tools, MCP servers,
-// commands or hooks, nor a repository's settings; no session kept)
+// how long Claude Code may take to list the Claude plan's models (ms;
+// ClaudeCode.lineup): past it, the list stays as it was
+const LINEUP = 15e3;
+
+// Claude Code asked a model's window or its models (ClaudeCode.control):
+// on its control channel, as a call without tools runs (none of its
+// tools, MCP servers, commands or hooks, nor a repository's settings; no
+// session kept)
 const SIZE = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--settings", JSON.stringify({ disableAllHooks: true }), "--setting-sources", "user"];
 
-// the Claude plan's windows asked (ClaudeCode.models: once an account a
-// start), and the account they were asked of (its folder and email)
+// the Claude plan's models and windows asked (ClaudeCode.models: once an
+// account a start), and the account they were asked of (its folder and
+// email)
 let sized: Promise<boolean> | null = null;
 let sized_by = "";
 
@@ -786,14 +792,15 @@ export namespace ClaudeCode {
     }
   }
 
-  // the windows of the Claude plan's models, as a turn of the account in
-  // use has them (a plan's are its own: one without long context gets
-  // 200k), each learned and kept for the next start; asked once an
-  // account a start (its folder, and whom it's logged in as: one signed
-  // in since is asked anew), so a window is right before a message as a
-  // rule (nothing waits on it: a turn before it told runs on the window
-  // kept from the last start, 200k at the very first); one model after
-  // another, so a start runs one Claude Code at a time. true: a window
+  // the Claude plan's models as Claude Code lists them for the account in
+  // use (ClaudeCode.lineup), then the window of each, as a turn of that
+  // account has them (a plan's are its own: one without long context gets
+  // 200k), learned and kept for the next start; asked once an account a
+  // start (its folder, and whom it's logged in as: one signed in since is
+  // asked anew), so the list and a window are right before a message as
+  // a rule (nothing waits on them: a turn before they told runs on those
+  // kept from the last start, the built-in list and 200k at the very
+  // first); one Claude Code after another. true: the list or a window
   // changed
   export function models(): Promise<boolean> {
     const dir  = config.config_folder("claude-code");
@@ -803,7 +810,7 @@ export namespace ClaudeCode {
       [sized, sized_by] = [null, by];
     }
     sized ??= (async () => {
-      let news = false;
+      let news = ClaudeCode.offer(await ClaudeCode.lineup(dir));
       for (const m of Pick.list("claude-code")) {
         news = Pick.told("claude-code", m.id, await ClaudeCode.size(dir, m.id)) || news;
       }
@@ -815,27 +822,75 @@ export namespace ClaudeCode {
     return sized;
   }
 
+  // the Claude plan's models as Claude Code in a folder lists them for
+  // its account (its initialize: no message sent, no model called): its
+  // lineup, the models it names by a family's alias (opus, fable,
+  // sonnet, haiku: the newest of each; its default, and the older models
+  // it names by their ids, left out), each by the model the alias runs,
+  // that model's label (one known by its id keeps its own; else from the
+  // id: Anthropic.label), its efforts, its window as known; []: none told
+  export async function lineup(dir: string): Promise<Model[]> {
+    const told = await ClaudeCode.control(dir, [], { subtype: "initialize" }, LINEUP);
+    const rows: any[] = Array.isArray(told?.models) ? told.models : [];
+    const out: Model[] = [];
+    for (const r of rows) {
+      const id    = String(r?.resolvedModel ?? "");
+      const alias = String(r?.value ?? "");
+      const label = Pick.by_id("claude-code", id)?.label ?? Anthropic.label(id);
+      if (alias === "" || alias === "default" || alias === id || label === null || out.some((m) => m.id === id || m.label === label)) {
+        continue;
+      }
+      const levels: unknown[] = Array.isArray(r.supportedEffortLevels) ? r.supportedEffortLevels : [];
+      const efforts = EFFORTS.filter((e) => levels.includes(e));
+      out.push({ label, id, speeds: ["slow"], window: Pick.model("claude-code", label)?.window, efforts: efforts.length > 0 ? efforts : undefined });
+    }
+    return out;
+  }
+
+  // the Claude plan's lineup learned: the list illi offers now (one new
+  // offered, unless `models` names those offered; one gone gone); none
+  // told, or the same, changes nothing. true: it changed
+  export function offer(list: Model[]): boolean {
+    const shape = (models: Model[]) => JSON.stringify(models.map((m) => [m.label, m.id, m.efforts ?? []]));
+    if (list.length === 0 || shape(list) === shape(Pick.list("claude-code"))) {
+      return false;
+    }
+    const fresh = Pick.learn("claude-code", list, "replace");
+    if (!config.MODELS_SET) {
+      config.OFFER.models.push(...fresh.filter((label) => !config.OFFER.models.includes(label)));
+    }
+    return true;
+  }
+
   // a model's window as Claude Code in a folder has it for a turn (its
   // compaction off: ClaudeCode.env), asked on its control channel
   // (get_context_usage, summed up: no model called, nothing counted), a
-  // Claude Code each (set_model leaves the window as it was), stopped
-  // once it said; 0: none told (Claude Code isn't here, or said nothing
-  // that reads by AUTH: killed then, its output let go, as a child it
-  // left may hold it open)
+  // Claude Code each (set_model leaves the window as it was); 0: none told
   export async function size(dir: string, id: string): Promise<number> {
+    const told   = await ClaudeCode.control(dir, ["--model", id], { subtype: "get_context_usage", detail: "summary" });
+    const window = Number(told?.rawMaxTokens);
+    return Number.isInteger(window) && window > 0 ? window : 0;
+  }
+
+  // what Claude Code in a folder answers one request on its control
+  // channel (started with SIZE and `args`, its compaction off: no message
+  // sent, no model called), stopped once it answered; null: no answer
+  // (Claude Code isn't here, or said nothing that reads in `ms`: killed
+  // then, its output let go, as a child it left may hold it open)
+  export async function control(dir: string, args: string[], request: { subtype: string } & Record<string, unknown>, ms = AUTH): Promise<any> {
     let proc: Subprocess<"pipe", "pipe", "ignore">;
     try {
-      proc = Bun.spawn([ClaudeCode.bin, ...SIZE, "--model", id], { stdin: "pipe", stdout: "pipe", stderr: "ignore", env: { ...ClaudeCode.folder_env(dir), DISABLE_COMPACT: "1" } });
+      proc = Bun.spawn([ClaudeCode.bin, ...SIZE, ...args], { stdin: "pipe", stdout: "pipe", stderr: "ignore", env: { ...ClaudeCode.folder_env(dir), DISABLE_COMPACT: "1" } });
     } catch {
-      return 0;
+      return null;
     }
     const from = proc.stdout.getReader();
     const late = setTimeout(() => {
       proc.kill("SIGKILL");
       void from.cancel().catch(() => {});
-    }, AUTH);
+    }, ms);
     try {
-      proc.stdin.write(JSON.stringify({ type: "control_request", request_id: "size", request: { subtype: "get_context_usage", detail: "summary" } }) + "\n");
+      proc.stdin.write(JSON.stringify({ type: "control_request", request_id: request.subtype, request }) + "\n");
       proc.stdin.flush();
       const text = new TextDecoder();
       let said = "";
@@ -849,15 +904,14 @@ export namespace ClaudeCode {
           } catch {
             continue;
           }
-          if (m?.type === "control_response" && m.response?.request_id === "size") {
-            const window = Number(m.response.response?.rawMaxTokens);
-            return Number.isInteger(window) && window > 0 ? window : 0;
+          if (m?.type === "control_response" && m.response?.request_id === request.subtype) {
+            return m.response.response ?? null;
           }
         }
       }
-      return 0;
+      return null;
     } catch {
-      return 0;
+      return null;
     } finally {
       clearTimeout(late);
       proc.kill();

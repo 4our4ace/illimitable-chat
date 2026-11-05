@@ -58,6 +58,7 @@ process.env.FAKE_LOG = DIR + "/log.json";
 const { ClaudeCode } = await import("./ClaudeCode.ts");
 const { Pick } = await import("../../ai/Pick.ts");
 const { Mcp } = await import("../../tools/Mcp.ts");
+const { Anthropic } = await import("../claude-api/Anthropic.ts");
 const config = await import("../../config/Config.ts");
 const { Accounts } = await import("../../config/Accounts.ts");
 
@@ -84,7 +85,8 @@ afterAll(() => {
 // each message as Claude Code does (--replay-user-messages); plays the
 // scene its first message names. Asked a model's window on its control
 // channel, it answers it as FAKE_SIZES has it (junk: a line that won't
-// read), each asking noted in asked.txt beside the log
+// read), each asking noted in asked.txt beside the log; asked its
+// initialize alone, it lists the models FAKE_LINEUP names (none: none)
 const FAKE = String.raw`#!/usr/bin/env bun
 const fs = require("node:fs");
 const args = process.argv.slice(2);
@@ -105,6 +107,11 @@ const next = async (ms) => {
   return m;
 };
 const first = await next(5000);
+if (first.type === "control_request" && first.request.subtype === "initialize") {
+  fs.appendFileSync(require("node:path").dirname(process.env.FAKE_LOG) + "/lineup.txt", JSON.stringify({ args, folder: log.folder }) + "\n");
+  out({ type: "control_response", response: { subtype: "success", request_id: first.request_id, response: { models: JSON.parse(process.env.FAKE_LINEUP ?? "null") ?? undefined } } });
+  process.exit(0);
+}
 if (first.type === "control_request") {
   const model = args[args.indexOf("--model") + 1];
   const size  = JSON.parse(process.env.FAKE_SIZES ?? "{}")[model];
@@ -299,6 +306,46 @@ test("the Claude plan's windows are asked as soon as its account is in use, as a
     }
   } finally {
     delete process.env.FAKE_SIZES;
+    Accounts.write(config.ROOT, {});
+    config.config_accounts(true);
+  }
+});
+
+test("the Claude plan's models are those Claude Code lists for the account, no model called: the newest of each family (its aliases), by the model each runs and its label, its efforts; its default and older models left out; a new one offered and its window asked, the defaults following; none told changes nothing", async () => {
+  const was = Pick.list("claude-code");
+  const all = ["low", "medium", "high", "xhigh", "max"];
+  const me  = (id: string) => ({ id, email: id + "@example.com", plan: "max", org: "" });
+  const lined = () => (fs.existsSync(DIR + "/lineup.txt") ? fs.readFileSync(DIR + "/lineup.txt", "utf8").trim().split("\n").length : 0);
+  process.env.FAKE_LINEUP = JSON.stringify([
+    { value: "default", resolvedModel: "claude-opus-6", displayName: "Default (recommended)", supportedEffortLevels: all },
+    { value: "opus", resolvedModel: "claude-opus-6", displayName: "Opus 6", supportedEffortLevels: all },
+    { value: "fable", resolvedModel: "claude-fable-5-1", displayName: "Fable 5.1", supportedEffortLevels: all },
+    { value: "sonnet", resolvedModel: "claude-sonnet-5-5", displayName: "Sonnet 5.5", supportedEffortLevels: ["low", "high", "medium"] },
+    { value: "sonnet[1m]", resolvedModel: "claude-sonnet-5-5[1m]", displayName: "Sonnet 5.5 (1M)" },
+    { value: "haiku", resolvedModel: "claude-haiku-5-5", displayName: "Haiku 5.5" },
+    { value: "claude-opus-5-5", resolvedModel: "claude-opus-5-5", displayName: "Opus 5.5", supportedEffortLevels: all },
+  ]);
+  process.env.FAKE_SIZES = JSON.stringify({ "claude-opus-6": 2000000 });
+  try {
+    Accounts.write(config.ROOT, { "claude-code": { use: "c2", accounts: [me("own"), me("c2")] } });
+    config.config_accounts(true);
+    const before = lined();
+    expect(await ClaudeCode.models()).toBe(true);
+    expect(lined()).toBe(before + 1);
+    expect(Pick.list("claude-code").map((m) => [m.label, m.id, m.efforts])).toEqual([["opus-6", "claude-opus-6", all], ["fable-5.1", "claude-fable-5-1", all], ["sonnet-5.5", "claude-sonnet-5-5", ["low", "medium", "high"]], ["haiku-5.5", "claude-haiku-5-5", undefined]]);
+    expect([Pick.model("claude-code", "opus-6")?.window, config.OFFER.models.includes("opus-6")]).toEqual([2000000, true]);
+    expect(JSON.parse(fs.readFileSync(DIR + "/models.json", "utf8")).vendors["claude-code"].map((m: any) => m.label)).toEqual(["opus-6", "fable-5.1", "sonnet-5.5", "haiku-5.5"]);
+    expect(config.config_newest("claude-code:opus-*:high:slow")).toBe("claude-code:opus-6:high:slow");
+    expect([Anthropic.label("claude-opus-5-5"), Anthropic.label("claude-haiku-4-5-20251001"), Anthropic.label("claude-sonnet-5"), Anthropic.label("claude-sonnet-5-5[1m]"), Anthropic.label("gpt-6")]).toEqual(["opus-5.5", "haiku-4.5", "sonnet-5", null, null]);
+    delete process.env.FAKE_LINEUP;
+    expect(await ClaudeCode.lineup("")).toEqual([]);
+    expect(ClaudeCode.offer([])).toBe(false);
+  } finally {
+    delete process.env.FAKE_LINEUP;
+    delete process.env.FAKE_SIZES;
+    Pick.learn("claude-code", was, "replace");
+    config.OFFER.models.splice(config.OFFER.models.indexOf("opus-6"), 1);
+    config.config_models_keep("claude-code", was);
     Accounts.write(config.ROOT, {});
     config.config_accounts(true);
   }
