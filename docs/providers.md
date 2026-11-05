@@ -346,15 +346,24 @@ with no SDKs.
 Models
 ------
 
-illi's pick and the summaries' default to the first vendor's models:
+illi's pick and the summaries' default to the first vendor's models.
+Each default names a family, not a version: it is the newest model of
+that family the vendor offers you, so it moves on by itself when a newer
+one comes (`*` stands for the version):
 
-| Vendor        | Pick         | Summaries   |
-| ------------- | ------------ | ----------- |
-| `chatgpt`     | gpt-6.1-sol  | gpt-6-luna  |
-| `openai-api`  | gpt-6.1-sol  | gpt-6-luna  |
-| `claude-code` | opus-5.5     | haiku-5.5   |
-| `antigravity` | gemini-3.8-flash | gemini-3.8-flash (low) |
-| `claude-api`  | sonnet-5.5   | haiku-5.5   |
+| Vendor        | Pick                  | Summaries                   | Today            |
+| ------------- | --------------------- | --------------------------- | ---------------- |
+| `chatgpt`     | `gpt-*-sol`           | `gpt-*-luna`                | gpt-6.1-sol, gpt-6-luna |
+| `openai-api`  | `gpt-*-sol`           | `gpt-*-luna`                | gpt-6.1-sol, gpt-6-luna |
+| `claude-code` | `opus-*`              | `haiku-*`                   | opus-5.5, haiku-5.5 |
+| `antigravity` | `gemini-*-flash`, high | `gemini-*-flash`, low      | gemini-3.8-flash |
+| `claude-api`  | `sonnet-*`            | `haiku-*`                   | sonnet-5.5, haiku-5.5 |
+
+Your own `pick`, `compactor` and `agents` take a family the same way
+(`claude-code:opus-*:high:slow`: always the newest Opus) or a model by
+its version (`claude-code:opus-5.5:high:slow`: that one, till it's
+gone). In a shell, quote one with `*` (`/set pick
+'claude-code:opus-*:high:slow'`), as fish and others would expand it.
 
 The vendors offered are those you connected, ChatGPT first, then the
 others in the order you connected them. To choose the models, or to
@@ -362,8 +371,8 @@ name the vendors yourself (the first gives the defaults):
 
     {
       "vendors": "claude-api,chatgpt",
-      "pick": "claude-api:opus-5.5:high:slow",
-      "compactor": "claude-api:haiku-5.5:medium:slow"
+      "pick": "claude-api:opus-*:high:slow",
+      "compactor": "claude-api:haiku-*:medium:slow"
     }
 
 `ILLI_VENDORS=claude-api illi` tries it without a file; `/set vendors

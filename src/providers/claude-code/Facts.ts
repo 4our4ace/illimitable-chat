@@ -18,7 +18,7 @@ export const FACTS = {
   maker    : CLAUDE,
   row      : "Claude plan",
   models   : [FABLE, OPUS, SONNET, HAIKU].map((m) => ({ ...m, speeds: ["slow"], window: 200000 })),
-  defaults : { pick: "claude-code:opus-5.5:medium:slow", compactor: "claude-code:haiku-5.5:medium:slow" },
+  defaults : { pick: "claude-code:opus-*:medium:slow", compactor: "claude-code:haiku-*:medium:slow" },
   ttl      : 300e3,
   accounts : "folders" as const,
   folders  : "claude",

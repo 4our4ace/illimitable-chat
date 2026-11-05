@@ -19,7 +19,7 @@ export const FACTS = {
   maker    : CLAUDE,
   row      : "Anthropic API key",
   models   : [OPUS, SONNET, HAIKU],
-  defaults : { pick: "claude-api:sonnet-5.5:medium:slow", compactor: "claude-api:haiku-5.5:medium:slow" },
+  defaults : { pick: "claude-api:sonnet-*:medium:slow", compactor: "claude-api:haiku-*:medium:slow" },
   ttl      : 300e3,
   accounts : "keys" as const,
   key      : { name: "anthropic", env: "ANTHROPIC_API_KEY", maker: "Anthropic", where: "console.anthropic.com", credit: "your Anthropic API credit is used up: add credit at console.anthropic.com, then send a message" },

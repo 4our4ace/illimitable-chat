@@ -5,16 +5,19 @@
 // Vendors.ts, Logins.ts). Each provider's facts, code and page agree:
 // its code and facts by one id, a call run on a wire or by its own
 // program (one of the two), an API key's provider able to check a key,
-// a plan's page in /login, its default picks its own models.
+// a plan's page in /login, its default picks its own models, each named
+// by family (opus-*: the newest of it), never by a version.
 // `bun test Providers.test.ts`.
 
 import { expect, test } from "bun:test";
+import type { Vendor } from "./Vendors.ts";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
 const { FACTS, Vendors } = await import("./Vendors.ts");
 const { Providers } = await import("./Providers.ts");
 const { Logins } = await import("./Logins.ts");
+const { Pick } = await import("../ai/Pick.ts");
 
 const SRC = path.join(import.meta.dir, "..");
 
@@ -56,7 +59,8 @@ test("each provider's facts, code and page agree", () => {
     expect([f.id, f.accounts === "folders" ? f.folders !== undefined : true, f.accounts === "keys" ? f.key !== undefined : true]).toEqual([f.id, true, true]);
     for (const pick of [f.defaults.pick, f.defaults.compactor]) {
       const [vendor, model] = pick.split(":");
-      expect([pick, vendor, f.models.some((m) => m.label === model)]).toEqual([pick, f.id, true]);
+      const newest = Pick.newest(f.id as Vendor, model, f.models.map((m) => m.label));
+      expect([pick, vendor, model.includes("*") && !/\d/.test(model), f.models.some((m) => m.label === newest)]).toEqual([pick, f.id, true, true]);
     }
   }
   // a maker's providers say it the same way, and one of them falls back

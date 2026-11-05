@@ -56,7 +56,10 @@ export type Context = {
 // - models: as built in (each window as the vendor states it; none: not
 //   known till it tells);
 // - defaults: illi's own pick on it (the first offered vendor's is
-//   illi's default) and the compactor's, while `compactor` names none;
+//   illi's default) and the compactor's, while `compactor` names none:
+//   each names its model by family, * for its version (opus-*: the
+//   newest of it offered, Pick.newest), never by a version, so it holds
+//   as the vendor's models change;
 // - ttl: how long it keeps a cached prefix unused (ms);
 // - accounts: the shape of its entry in accounts.json (Accounts.ts):
 //   keys (an API's), folders (a plan's, each account a folder: `folders`
