@@ -17,7 +17,9 @@
 // the radar at the side and its lines given to the model. An unknown
 // argument is named. A provider let go that leaves no pick offered keeps
 // the picks as they were, never ending illi. A pick of a provider illi
-// doesn't know (a newer illi's) reads without crashing.
+// doesn't know (a newer illi's) reads without crashing. A pick named by
+// family (opus-*) runs on the newest of it offered, and follows the
+// vendor's list as it changes.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -129,6 +131,26 @@ test("the picks' defaults are the first vendor's that is offered; the vendors ch
   expect(config.config_def("jobs")).toBe("8");
   expect(config.config_check("vendors", "claude-api")).toBeNull();
   expect(config.config_check("vendors", "openai-api")).toBeNull();
+});
+
+test("a pick named by family (* for its version) runs on the newest model of it offered, set or a provider's default, and follows a vendor's list as it changes", () => {
+  expect([Pick.newest("chatgpt", "gpt-*-sol", LABELS), Pick.newest("chatgpt", "gpt-*-luna", LABELS), Pick.newest("chatgpt", "gpt-*-sol", ["gpt-6-luna"])]).toEqual(["gpt-6.1-sol", "gpt-6-luna", undefined]);
+  expect([Pick.later([5, 10], [5, 9]), Pick.later([5, 5], [5]), Pick.later([5], [5, 0]), Pick.later([5], [5])]).toEqual([true, true, false, false]);
+  expect([config.config_newest("claude-api:opus-*:high:slow"), config.config_newest("claude-api:nope-*:high:slow"), config.config_newest("claude-api:opus-5.5:high:slow")]).toEqual(["claude-api:opus-5.5:high:slow", "claude-api:nope-*:high:slow", "claude-api:opus-5.5:high:slow"]);
+  config.config_set("vendors", "claude-api,chatgpt");
+  expect(config.config_check("compactor", "claude-api:gpt-*:low:slow")).toBe("compactor is no vendor:model:effort:speed offered here: claude-api:gpt-*:low:slow");
+  config.config_set("pick", "claude-api:opus-*:high:slow");
+  expect(config.PICK).toEqual({ vendor: "claude-api", model: "opus-5.5", effort: "high", speed: "slow" });
+  expect(config.config_role("compactor", config.PICK)).toEqual({ vendor: "claude-api", model: "haiku-5.5", effort: "medium", speed: "slow" });
+  const was = Pick.list("claude-api");
+  Pick.learn("claude-api", [...was, { label: "opus-6", id: "claude-opus-6", speeds: ["slow"] }, { label: "haiku-6", id: "claude-haiku-6", speeds: ["slow"] }], "replace");
+  config.OFFER.models.push("opus-6", "haiku-6");
+  config.config_models_keep("claude-api", Pick.list("claude-api"));
+  expect([config.PICK.model, config.config_role("compactor", config.PICK).model]).toEqual(["opus-6", "haiku-6"]);
+  Pick.learn("claude-api", was, "replace");
+  config.OFFER.models.splice(config.OFFER.models.indexOf("opus-6"), 2);
+  config.config_set("pick", null);
+  config.config_set("vendors", null);
 });
 
 test("the start tells of an API key set whose vendor isn't offered (/login connects it; the vendors setting set, how to name it there), and of the pick's key missing (/login adds one)", () => {

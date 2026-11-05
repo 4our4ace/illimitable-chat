@@ -56,6 +56,10 @@ export const SPEEDS = ["slow", "fast", "ultrafast"];
 
 export const LABELS = [...new Set(Object.values(MODELS).flat().map((m) => m.label))];
 
+// what a family's * stands for: a version, a number or numbers with dots
+// (opus-* is opus-5.5, gemini-*-flash gemini-3.8-flash)
+const VERSION = "(\\d+(?:\\.\\d+)*)";
+
 // Pick
 // ====
 
@@ -128,6 +132,36 @@ export namespace Pick {
     const below = SPEEDS.slice(0, SPEEDS.indexOf(pick.speed) + 1);
     const speed = below.filter((s) => model.speeds.includes(s)).pop() ?? "slow";
     return { ...pick, vendor, model: model.label, speed };
+  }
+
+  // a vendor's newest model offered of a family (a label with * for its
+  // version: opus-*), by its label: the one of the highest version, its
+  // parts compared as numbers (5.10 after 5.9); none: undefined
+  export function newest(vendor: Vendor, family: string, offered: string[]): string | undefined {
+    const like = new RegExp("^" + family.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(VERSION) + "$");
+    let best: { label: string; version: number[] } | undefined;
+    for (const m of MODELS[vendor] ?? []) {
+      const got = like.exec(m.label);
+      if (got === null || !offered.includes(m.label)) {
+        continue;
+      }
+      const version = got.slice(1).join(".").split(".").map(Number);
+      if (best === undefined || Pick.later(version, best.version)) {
+        best = { label: m.label, version };
+      }
+    }
+    return best?.label;
+  }
+
+  // whether version a comes after b, part by part (5.10 after 5.9, 5.5
+  // after 5)
+  export function later(a: number[], b: number[]): boolean {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      if ((a[i] ?? -1) !== (b[i] ?? -1)) {
+        return (a[i] ?? -1) > (b[i] ?? -1);
+      }
+    }
+    return false;
   }
 
   // the models offered (by label) of these vendors, each with its vendor

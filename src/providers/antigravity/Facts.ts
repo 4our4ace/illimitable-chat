@@ -30,7 +30,7 @@ export const FACTS = {
   maker    : GEMINI,
   row      : "Google AI plan",
   models   : MODELS,
-  defaults : { pick: "antigravity:gemini-3.8-flash:high:slow", compactor: "antigravity:gemini-3.8-flash:low:slow" },
+  defaults : { pick: "antigravity:gemini-*-flash:high:slow", compactor: "antigravity:gemini-*-flash:low:slow" },
   ttl      : 300e3,
   accounts : "folders" as const,
   folders  : "antigravity",

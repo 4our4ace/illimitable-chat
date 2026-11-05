@@ -170,8 +170,11 @@ export const OFFER: Offer = {
 // illi's own pick on each vendor, by default: the first vendor
 // offered's (config_def); the compactor each vendor's own, while
 // `compactor` names none for it (each provider's facts: Provider.ts
-// defaults)
-const DEFS = (vendor: Vendor) => Vendors.of(vendor)?.defaults ?? Vendors.fallback().defaults;
+// defaults, each a family: the newest model of it offered, config_newest)
+const DEFS = (vendor: Vendor, offer = OFFER) => {
+  const own = Vendors.of(vendor)?.defaults ?? Vendors.fallback().defaults;
+  return { pick: config_newest(own.pick, offer), compactor: config_newest(own.compactor, offer) };
+};
 
 // the settings that name a pick per vendor (a role's)
 const ROLED = ["agents", "compactor"] as const;
@@ -350,7 +353,7 @@ export function config_def(key: Key, offer?: Offer): string {
     return SETTINGS[key].def;
   }
   const on    = offer ?? OFFER;
-  const def   = on.vendors.map((v) => DEFS(v).pick).find((text) => Pick.read(config_split(text), on) !== null);
+  const def   = on.vendors.map((v) => DEFS(v, on).pick).find((text) => Pick.read(config_split(text, on), on) !== null);
   const first = Pick.models(on.vendors, on.models)[0];
   return def ?? (first === undefined ? SETTINGS[key].def : Pick.label({ vendor: first[0], model: first[1].label, effort: "medium", speed: first[1].speeds[0] }));
 }
@@ -679,7 +682,8 @@ export function config_models_file(): { at?: string; vendors?: Record<string, un
 // vendors' as the file is now (one vendor's learning never drops
 // another's); chatgpt's names the account its catalog is of, and the
 // models that account refused past their standard window (capped):
-// written whole, then moved over
+// written whole, then moved over. The picks named by family follow the
+// models known now (config_repick)
 export function config_models_keep(vendor: Vendor, models: unknown[], chatgpt?: { account: string; capped: string[] }): void {
   const file = config_models_file();
   const out  = { ...file, at: new Date().toISOString(), vendors: { ...(file.vendors ?? {}), [vendor]: models }, ...chatgpt };
@@ -691,6 +695,7 @@ export function config_models_keep(vendor: Vendor, models: unknown[], chatgpt?: 
   } catch (err: any) {
     console.error("models: " + MODELS_FILE + " wasn't kept: " + err?.message);
   }
+  config_repick();
 }
 
 // a key set in config.json (null: taken out, so its default holds), the
@@ -860,7 +865,7 @@ function config_roles(key: Role, text: string, offer = OFFER, strict = true): Pa
       throw new Error("config: " + key + " takes one pick per provider: two for " + vendor);
     }
     seen.add(vendor);
-    const pick = offer.vendors.includes(vendor) ? Pick.read(config_split(one), offer) : null;
+    const pick = offer.vendors.includes(vendor) ? Pick.read(config_split(one, offer), offer) : null;
     if (pick === null && strict && offer.vendors.includes(vendor)) {
       config_run(key, one, offer);
     }
@@ -872,17 +877,44 @@ function config_roles(key: Role, text: string, offer = OFFER, strict = true): Pa
 }
 
 function config_run(key: string, text: string, offer = OFFER): Pick {
-  const pick = Pick.read(config_split(text), offer);
+  const pick = Pick.read(config_split(text, offer), offer);
   if (pick === null) {
     throw new Error("config: " + key + " is no vendor:model:effort:speed offered here: " + text);
   }
   return pick;
 }
 
-// a pick's text, in its parts
-function config_split(text: string): { vendor: string; model: string; effort: string; speed: string } {
-  const [vendor, model, effort, speed] = text.split(":");
+// a pick's text, in its parts, its model a family's newest offered
+// (config_newest)
+function config_split(text: string, offer = OFFER): { vendor: string; model: string; effort: string; speed: string } {
+  const [vendor, model, effort, speed] = config_newest(text, offer).split(":");
   return { vendor, model, effort, speed };
+}
+
+// a pick's text with its model named by family (a label with * for its
+// version: claude-code:opus-*:high:slow) as the newest model of it offered
+// now (claude-code:opus-5.5:high:slow), so a default or a setting holds as
+// the vendor's models change; one no model offered is of, or naming a
+// model itself, as it is
+export function config_newest(text: string, offer = OFFER): string {
+  const parts = text.split(":");
+  const label = parts.length === 4 && parts[1].includes("*") ? Pick.newest(parts[0] as Vendor, parts[1], offer.models) : undefined;
+  return label === undefined ? text : [parts[0], label, parts[2], parts[3]].join(":");
+}
+
+// the picks illi's own and the roles' settings (or defaults) name, read
+// again as the models known change (a vendor's list learned), so one
+// named by family runs on its newest; one that no longer reads stays as
+// it was
+function config_repick(): void {
+  try {
+    PICK = config_run("pick", config_value("pick"));
+  } catch {}
+  for (const key of ROLED) {
+    try {
+      ROLES[key] = config_roles(key, config_value(key), OFFER, false);
+    } catch {}
+  }
 }
 
 // the keys in use (KEYS): each vendor's that /login chose (Accounts.ts),

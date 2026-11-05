@@ -20,7 +20,7 @@ export const FACTS = {
   maker    : CHATGPT,
   row      : "OpenAI API key",
   models   : OPENAI,
-  defaults : { pick: "openai-api:gpt-6.1-sol:medium:slow", compactor: "openai-api:gpt-6-luna:medium:slow" },
+  defaults : { pick: "openai-api:gpt-*-sol:medium:slow", compactor: "openai-api:gpt-*-luna:medium:slow" },
   ttl      : 1800e3,
   accounts : "keys" as const,
   key      : { name: "openai", env: "OPENAI_API_KEY", maker: "OpenAI", where: "platform.openai.com", credit: "your OpenAI API quota is used up: add credit at platform.openai.com, then send a message" },

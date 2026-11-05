@@ -72,7 +72,7 @@ export const FACTS = {
   maker    : CHATGPT,
   row      : "ChatGPT plan",
   models   : MODELS,
-  defaults : { pick: "chatgpt:gpt-6.1-sol:medium:slow", compactor: "chatgpt:gpt-6-luna:medium:slow" },
+  defaults : { pick: "chatgpt:gpt-*-sol:medium:slow", compactor: "chatgpt:gpt-*-luna:medium:slow" },
   ttl      : 300e3,
   accounts : "logins" as const,
   catalog  : true,

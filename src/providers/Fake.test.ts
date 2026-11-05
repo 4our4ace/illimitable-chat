@@ -28,7 +28,7 @@ const FACTS = {
   maker    : { name: "Fake", offers: "by Fake Inc: your Fake plan", order: 9 },
   row      : "Fake plan",
   models   : [{ label: "fake-1", id: "fake-model-1", speeds: ["slow"], window: 100000 }],
-  defaults : { pick: "fake:fake-1:medium:slow", compactor: "fake:fake-1:low:slow" },
+  defaults : { pick: "fake:fake-*:medium:slow", compactor: "fake:fake-*:low:slow" },
   ttl      : 300e3,
   accounts : "folders" as const,
   folders  : "fake",
