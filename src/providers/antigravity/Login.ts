@@ -40,7 +40,7 @@ function login_agy_provider(t: Term): Page {
   const about = () => {
     const now = kept();
     const a   = now?.accounts.find((a) => a.id === now.use);
-    const lack = Agy.ready() ? "" : " · Google's agent " + (Agy.other() === null ? "isn't here" : "needs an update");
+    const lack = Agy.ready() ? "" : " · Google's agent " + (Agy.progress() !== null ? "is downloading" : Agy.other() === null ? "isn't here" : "needs an update");
     return a === undefined ? "your Google AI plan, through Google's Antigravity agent" : "connected: " + login_agy_name(a) + lack;
   };
   const more = (): Row[] => {
@@ -50,6 +50,10 @@ function login_agy_provider(t: Term): Page {
     }
     const was = Agy.other();
     const up  = login_agy_older(was);
+    const now = Agy.progress();
+    if (now !== null) {
+      return [{ name: (up ? "Updating" : "Downloading") + " Google's Antigravity agent", about: (up ? was + " → " : "") + b.version + ", " + (now.share === null ? "in another illi" : now.share + "% of " + login_agy_mb(b.bytes)), enter: "see how far", pick: (back) => back() }];
+    }
     return [{ name: (up ? "Update" : "Download") + " Google's Antigravity agent", about: (up ? was + " → " : "") + b.version + ", " + login_agy_mb(b.bytes), enter: up ? "update it" : "download it", pick: (back) => login_agy_offer(t, back, false) }];
   };
   return { name: "Google AI plan", vendor: "antigravity", about, accounts, more, adds: "+ add another account", add: (back) => login_agy_add(t, back), out: (back) => login_agy_out(t, back) };
@@ -71,10 +75,15 @@ function login_agy_name(a: Folder): string {
 }
 
 // an account more: this illi's build of Google's agent downloaded first
-// if it isn't here (asked, saying its size), then a sign-in
+// if it isn't here (asked, saying its size; one downloading by itself
+// said, to wait for), then a sign-in
 function login_agy_add(t: Term, back: () => void): void {
   if (Agy.ready()) {
     void login_agy_sign(t);
+    return;
+  }
+  if (Agy.progress() !== null) {
+    term_notify(t, Agy.why() + ".", false, LOGIN_FAILED);
     return;
   }
   login_agy_offer(t, back, true);

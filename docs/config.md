@@ -45,7 +45,7 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `theme`      | `theme.json`: the profile's, else `~/.illi`'s | the theme's file                   |
 | `mcp`        | `mcp.json` in the profile's folder | the MCP servers' file; `~/.illi/mcp.json` is read too, and a trusted project's `.illi/mcp.json` |
 | `login`      | `~/.illi/login.json`, opencode's  | the ChatGPT login file, which `/login` writes    |
-| `autoupdate` | `on`                              | a new release installs itself: looked for once a day (as illi starts, or within the hour while it runs), downloaded and checked in the background, it runs from the next start (a note says so); `notify` only tells; `off` never looks. The installer's one file only: a source clone never updates itself |
+| `autoupdate` | `on`                              | a new release installs itself: looked for once a day (as illi starts, or within the hour while it runs), downloaded and checked in the background, it runs from the next start (a note says so); `notify` only tells; `off` never looks. The installer's one file only: a source clone never updates itself. On, it also downloads the version of Google's Antigravity agent an updated illi runs, once a Google account is connected; `notify` and `off` leave that to `/login` |
 
 API keys come from `/login`, which also offers `ANTHROPIC_API_KEY` and
 `OPENAI_API_KEY` if they're set ([Providers](providers.md#api-keys)).

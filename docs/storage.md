@@ -997,7 +997,10 @@ Accounts
   version an illi runs: `src/providers/antigravity/Pinned.ts`), its
   `agent.json` (its command, arguments and checksum), and in `.users/`
   a file named by the process id of each illi that runs it, so an
-  older version goes only once no illi still running uses it.
+  older version goes only once no illi still running uses it. While an
+  illi downloads its version by itself (`autoupdate`), `agent/.updating`
+  holds its process id, so another illi starting meanwhile leaves the
+  download to it.
 - `logins` is `{ opencode, saved: [{ key, email, plan, entry }] }`:
   whether opencode's ChatGPT login is one of the accounts, and the
   accounts not in use, each its login entry in opencode's shape. The

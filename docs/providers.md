@@ -272,10 +272,13 @@ switches accounts on its own.
   [ACP registry](https://agentclientprotocol.com) listed it), unpacks
   it into `~/.illi/antigravity/agent/<version>/` and keeps it for every
   profile; Esc stops the download, leaving nothing behind. When an illi
-  update moves to a newer version, the plan says so as a turn starts,
-  and /login offers it under your accounts (**Update Google's
-  Antigravity agent**); the older one goes once no illi still running
-  uses it. To use one you installed yourself, set `ILLI_ANTIGRAVITY` to
+  update moves to a newer version, illi downloads it by itself in the
+  background as it starts (with `autoupdate` on, the default, and a
+  Google account connected; one illi at a time on the machine), and a
+  turn meanwhile says it's downloading; with `autoupdate` set to
+  `notify` or `off`, a turn says an update is needed and /login offers
+  it under your accounts (**Update Google's Antigravity agent**). The
+  older one goes once no illi still running uses it. To use one you installed yourself, set `ILLI_ANTIGRAVITY` to
   its command line (on Linux `…/agy_acp_server.par --uid=`): illi runs
   it whatever its version, so keeping it current is yours.
 - **Signing in**: illi opens Google's page in your browser (and shows
