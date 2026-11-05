@@ -7,13 +7,14 @@
 // nothing else of illi names it. Its facts import nothing that reads the
 // config, so this list loads before Config.ts does.
 
+import { FACTS as ANTIGRAVITY } from "./antigravity/Facts.ts";
 import { FACTS as CHATGPT } from "./chatgpt/Facts.ts";
 import { FACTS as CLAUDE_API } from "./claude-api/Facts.ts";
 import { FACTS as CLAUDE_CODE } from "./claude-code/Facts.ts";
 import { FACTS as OPENAI_API } from "./openai-api/Facts.ts";
 import type { Facts } from "./Provider.ts";
 
-const ALL = [CLAUDE_API, OPENAI_API, CHATGPT, CLAUDE_CODE] as const;
+const ALL = [CLAUDE_API, OPENAI_API, CHATGPT, CLAUDE_CODE, ANTIGRAVITY] as const;
 
 // a provider's id, as saved
 export type Vendor = (typeof ALL)[number]["id"];

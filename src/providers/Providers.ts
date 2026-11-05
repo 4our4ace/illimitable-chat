@@ -7,6 +7,7 @@
 // on first use, not as this file loads: a provider's code imports what
 // imports this file (Agent.ts), so its PROVIDER may not be made yet then.
 
+import { PROVIDER as ANTIGRAVITY } from "./antigravity/Antigravity.ts";
 import { PROVIDER as CHATGPT } from "./chatgpt/ChatGPT.ts";
 import { PROVIDER as CLAUDE_API } from "./claude-api/Anthropic.ts";
 import { PROVIDER as CLAUDE_CODE } from "./claude-code/ClaudeCode.ts";
@@ -24,7 +25,7 @@ export namespace Providers {
   // every provider, in the order of their facts (Vendors.ts)
   export function all(): Provider[] {
     if (ALL === null) {
-      const made = [CLAUDE_API, OPENAI_API, CHATGPT, CLAUDE_CODE, ...ADDED];
+      const made = [CLAUDE_API, OPENAI_API, CHATGPT, CLAUDE_CODE, ANTIGRAVITY, ...ADDED];
       ALL = FACTS.map((f) => made.find((p) => p.facts.id === f.id)).filter((p): p is Provider => p !== undefined);
     }
     return ALL;

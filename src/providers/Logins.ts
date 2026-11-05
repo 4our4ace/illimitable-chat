@@ -8,6 +8,7 @@
 
 import type { Page } from "../term/LoginCommands.ts";
 import type { Term } from "../term/Term.ts";
+import { PAGE as ANTIGRAVITY } from "./antigravity/Login.ts";
 import { PAGE as CHATGPT } from "./chatgpt/Login.ts";
 import { PAGE as CLAUDE_CODE } from "./claude-code/Login.ts";
 
@@ -18,7 +19,7 @@ export namespace Logins {
 
   // a plan's page, made for this terminal (none: the provider has none)
   export function of(vendor: string): ((t: Term) => Page) | undefined {
-    const pages: Record<string, (t: Term) => Page> = { chatgpt: CHATGPT, "claude-code": CLAUDE_CODE, ...ADDED };
+    const pages: Record<string, (t: Term) => Page> = { chatgpt: CHATGPT, "claude-code": CLAUDE_CODE, antigravity: ANTIGRAVITY, ...ADDED };
     return pages[vendor];
   }
 
