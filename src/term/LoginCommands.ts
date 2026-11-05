@@ -16,8 +16,9 @@
 // keeps a pasted one, in illi's root: every profile's; never the
 // environment's). Esc stops a sign-in waiting (term_esc: t.login). On one
 // connected: its accounts, the one in use marked: Enter uses one, Del
-// logs one out (asked first), a row connects one more, the last logs out
-// of it (asked first). What's connected is offered at once, and what's
+// logs one out (asked first); under them the rows its page adds (Page.more:
+// a program it runs on, to update, say), a row that connects one more,
+// the last logs out of it (asked first). What's connected is offered at once, and what's
 // let go is gone, here and in every illi open (config.config_accounts,
 // Chat.follow), unless the vendors setting names the providers, which
 // /login then says. /logout opens the same pickers. A key is never shown
@@ -45,12 +46,19 @@ import { term_hint, term_unhint, type Term } from "./Term.ts";
 // there going back to `back`)
 export type Account = { name: string; about: string; use: boolean; take: () => void; drop: (back: () => void) => void };
 
+// a row a provider's page adds to its accounts' picker, under its
+// accounts (Page.more): its name, what it says, what Enter does (in the
+// picker's foot: "update it"), and what it does, given where Esc on what
+// it asks goes back to
+export type Row = { name: string; about: string; enter: string; pick: (back: () => void) => void };
+
 // a provider's page (a way in: a plan, an API key): its name, its vendor,
-// what its row says; its accounts (none: not connected); what connects
-// one more (its row's name, "": none yet), and what logs out of it all,
-// each given where Esc on what it asks goes back to. A plan's is its
-// folder's Login.ts (Logins.ts lists them); an API key's, login_api
-export type Page = { name: string; vendor: Vendor; about: () => string; accounts: () => Account[]; adds: string; add: (back: () => void) => void; out: (back: () => void) => void };
+// what its row says; its accounts (none: not connected); the rows it adds
+// under them as they stand now (none: no `more`), what connects one more
+// (its row's name, "": none yet), and what logs out of it all, each given
+// where Esc on what it asks goes back to. A plan's is its folder's
+// Login.ts (Logins.ts lists them); an API key's, login_api
+export type Page = { name: string; vendor: Vendor; about: () => string; accounts: () => Account[]; more?: () => Row[]; adds: string; add: (back: () => void) => void; out: (back: () => void) => void };
 
 // a maker's providers, as /login's first picker shows them: its name,
 // what its row says while none is connected, its providers' pages (its
@@ -127,16 +135,18 @@ function login_provider(t: Term, p: Page, back: () => void): void {
 }
 
 // a provider's accounts' picker, the one in use marked: Enter uses one,
-// Del logs one out; then the row that connects one more (if it can) and
-// the one that logs out of it all; Esc goes back to `back`, and from
-// what these ask, back here
+// Del logs one out; then the rows its page adds (Page.more), the row that
+// connects one more (if it can) and the one that logs out of it all; Esc
+// goes back to `back`, and from what these ask, back here
 function login_accounts(t: Term, p: Page, back: () => void): void {
   const again    = () => login_accounts(t, p, back);
   const accounts = p.accounts();
+  const more  = p.more?.() ?? [];
   const adds  = p.adds === "" ? [] : [p.adds];
   const out   = "Log out of " + p.name;
-  const names = [...accounts.map((a) => a.name), ...adds, out];
-  const about = [...accounts.map((a) => a.about), ...adds.map(() => ""), accounts.length === 1 ? "" : "all " + accounts.length + " of them"];
+  const names = [...accounts.map((a) => a.name), ...more.map((r) => r.name), ...adds, out];
+  const about = [...accounts.map((a) => a.about), ...more.map((r) => r.about), ...adds.map(() => ""), accounts.length === 1 ? "" : "all " + accounts.length + " of them"];
+  const row   = (k: number) => more[k - accounts.length];
   const keys  = (k: number, key: string) => {
     if (key !== "Delete" || k >= accounts.length) {
       return false;
@@ -144,8 +154,8 @@ function login_accounts(t: Term, p: Page, back: () => void): void {
     accounts[k].drop(again);
     return true;
   };
-  const foot  = (k: number) => (k < accounts.length ? (accounts[k].use ? "in use" : "Enter use it") + " · Del log it out" : names[k] === out ? "Enter log out" : "Enter connect") + " · Esc back";
-  const pick  = (k: number) => (k < accounts.length ? accounts[k].take() : names[k] === out ? p.out(again) : p.add(again));
+  const foot  = (k: number) => (k < accounts.length ? (accounts[k].use ? "in use" : "Enter use it") + " · Del log it out" : row(k) !== undefined ? "Enter " + row(k).enter : names[k] === out ? "Enter log out" : "Enter connect") + " · Esc back";
+  const pick  = (k: number) => (k < accounts.length ? accounts[k].take() : row(k) !== undefined ? row(k).pick(again) : names[k] === out ? p.out(again) : p.add(again));
   term_chooser(t, p.name, names, about, accounts.findIndex((a) => a.use), pick, { keys, foot, back });
 }
 

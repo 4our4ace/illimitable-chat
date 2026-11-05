@@ -262,16 +262,22 @@ in it; what Google allows is Google's to say, so check its terms
 never reads the agent's sign-in, never runs `agy -p`, and never
 switches accounts on its own.
 
-- **The agent**: with none here, adding an account first offers to
-  download it, saying its size (about 320 MB, about 960 MB once
-  unpacked). illi takes the build the [ACP
-  registry](https://agentclientprotocol.com) lists for your machine,
-  only from Google's own `dl.google.com`, checks it against the
-  registry's checksum as it comes, unpacks it into
-  `~/.illi/antigravity/agent/<version>/` and keeps it for every
-  profile; Esc stops the download, leaving nothing behind. To use one
-  you installed yourself, set `ILLI_ANTIGRAVITY` to its command line as
-  the registry lists it (on Linux `…/agy_acp_server.par --uid=`).
+- **The agent**: each illi runs one version of Google's agent, the one
+  it was tried with (`src/providers/antigravity/Pinned.ts` names it), as
+  T3 Code does. With none here,
+  adding an account first offers to download it, saying its size
+  (about 320 MB on Linux, 960 MB once unpacked; about 100 MB on a Mac
+  or Windows). illi takes it only from Google's own `dl.google.com`,
+  checks it as it comes against the checksum this illi carries (as the
+  [ACP registry](https://agentclientprotocol.com) listed it), unpacks
+  it into `~/.illi/antigravity/agent/<version>/` and keeps it for every
+  profile; Esc stops the download, leaving nothing behind. When an illi
+  update moves to a newer version, the plan says so as a turn starts,
+  and /login offers it under your accounts (**Update Google's
+  Antigravity agent**); the older one goes once no illi still running
+  uses it. To use one you installed yourself, set `ILLI_ANTIGRAVITY` to
+  its command line (on Linux `…/agy_acp_server.par --uid=`): illi runs
+  it whatever its version, so keeping it current is yours.
 - **Signing in**: illi opens Google's page in your browser (and shows
   the link); once you sign in there, Google sends the browser back to
   the agent on this computer, which keeps the sign-in. Esc stops it.

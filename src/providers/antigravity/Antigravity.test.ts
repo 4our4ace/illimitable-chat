@@ -469,14 +469,33 @@ test("/login's sign-in tells Google's page's link and the plan; its logout logs 
   await expect(asked).rejects.toThrow("the sign-in was stopped");
 });
 
-test("no account, or no agent, says what to do", async () => {
+test("no account, no agent, or only another version of it, says what to do, never logged as the agent's failure", async () => {
   fs.writeFileSync(DIR + "/accounts.json", "{}");
   config.config_accounts(true);
   expect((await call("turn")).end.text).toBe("no Google account is in use for Antigravity: /login signs in to one");
   fs.writeFileSync(DIR + "/accounts.json", JSON.stringify({ antigravity: { use: "g1", accounts: [{ id: "g1", email: "", plan: "", org: "" }] } }));
   config.config_accounts(true);
   const bin = Agy.bin;
+  const pin = Agy.pin;
   Agy.bin = null;
+  Agy.pin = { version: "1.4.5", archive: "https://dl.google.com/agy.zip", sha256: "a".repeat(64), bytes: 1, unpacked: 1, cmd: "agy_acp_server.par", args: [] };
   expect((await call("turn")).end.text).toBe("Google's Antigravity agent isn't here: /login downloads it");
+  const old = Agy.home() + "/1.4.4";
+  fs.mkdirSync(old, { recursive: true });
+  fs.writeFileSync(old + "/agent.json", JSON.stringify({ cmd: "agy_acp_server.par", args: [], sha256: "b".repeat(64) }));
+  fs.writeFileSync(old + "/agy_acp_server.par", "");
+  const said = "Google's Antigravity agent 1.4.4 is here, and this illi runs 1.4.5: /login updates it";
+  expect((await call("turn")).end).toMatchObject({ ok: false, text: said, stop: "down" });
+  const logged: string[] = [];
+  const error = console.error;
+  console.error = (...a: any[]) => void logged.push(a.join(" "));
+  try {
+    expect(Antigravity.failed({ said: false, grew: false } as any, Agy.why())).toMatchObject({ ok: false, text: said, stop: "down" });
+  } finally {
+    console.error = error;
+  }
+  expect(logged).toEqual([]);
+  fs.rmSync(Agy.home(), { recursive: true, force: true });
   Agy.bin = bin;
+  Agy.pin = pin;
 });

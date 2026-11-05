@@ -176,7 +176,6 @@ const BUSY  = /overloaded|unavailable|try again later|connection (was )?lost|dea
 // apart from the model's by these alone
 const ERROR = /^\s*(Usage Limit Reached|Agent execution error:|Agent connection was lost|The input token count \(\d+\) exceeds|The model is overloaded|Resource has been exhausted)/;
 
-const NO_AGENT   = "Google's Antigravity agent isn't here: /login downloads it";
 const NO_ACCOUNT = "no Google account is in use for Antigravity: /login signs in to one";
 const NO_SIGNIN  = "your Google sign-in for Antigravity has run out: /login signs in again";
 
@@ -209,7 +208,7 @@ export namespace Antigravity {
       return none(NO_ACCOUNT, "down");
     }
     if (Agy.command() === null) {
-      return none(NO_AGENT, "down");
+      return none(Agy.why(), "down");
     }
     let give = () => {};
     const gave = new Promise<null>((done) => (give = () => done(null)));
@@ -587,7 +586,7 @@ export namespace Antigravity {
   // service (a later try may answer); else as the agent says it
   export function failed(run: Run, said: string): End {
     const cut = { left: [], cut: run.said };
-    if (said !== NO_AGENT && said !== NO_SIGNIN) {
+    if (!Agy.told(said) && said !== NO_SIGNIN) {
       console.error("antigravity: " + said.replace(/\s+/g, " ").slice(0, 300));
     }
     if (Agent.full(said) || FULL.test(said)) {
@@ -600,8 +599,8 @@ export namespace Antigravity {
     if (said === NO_SIGNIN || LOGIN.test(said)) {
       return { ok: false, text: NO_SIGNIN, stop: "down", ...cut };
     }
-    if (said === NO_AGENT) {
-      return { ok: false, text: NO_AGENT, stop: "down", ...cut };
+    if (Agy.told(said)) {
+      return { ok: false, text: said, stop: "down", ...cut };
     }
     if (BUSY.test(said) || /^it ended/.test(said)) {
       return { ok: false, text: Agent.gone(""), stop: "down", again: true, ...cut };
@@ -660,7 +659,7 @@ export namespace Antigravity {
   export function spawn(folder: string): Proc {
     const cmd = Agy.command();
     if (cmd === null) {
-      throw new Error(NO_AGENT);
+      throw new Error(Agy.why());
     }
     const p = { folder, stamp: Antigravity.stamp(folder), started: 0, live: 0, runs: new Map(), signin: false } as unknown as Proc;
     try {
@@ -671,7 +670,7 @@ export namespace Antigravity {
         }
       });
     } catch (err: any) {
-      throw new Error(/ENOENT|not found|EACCES/i.test(String(err?.message)) ? NO_AGENT : String(err?.message ?? err));
+      throw new Error(/ENOENT|not found|EACCES/i.test(String(err?.message)) ? Agy.why() : String(err?.message ?? err));
     }
     p.ready = (async () => {
       await Acp.call(p.conn, "initialize", Antigravity.hello(), READY);
@@ -823,7 +822,7 @@ export namespace Antigravity {
   export async function signin(folder: string, stop: AbortSignal, ask: (url: string) => void): Promise<string> {
     const cmd = Agy.command();
     if (cmd === null) {
-      throw new Error(NO_AGENT);
+      throw new Error(Agy.why());
     }
     fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
     let conn: Conn;
@@ -835,7 +834,7 @@ export namespace Antigravity {
         }
       });
     } catch {
-      throw new Error(NO_AGENT);
+      throw new Error(Agy.why());
     }
     const end = () => Acp.stop(conn, "the sign-in was stopped");
     stop.addEventListener("abort", end, { once: true });
@@ -850,9 +849,11 @@ export namespace Antigravity {
   }
 
   // an account's folder logged out (the agent's own logout: its tokens
-  // gone); false: it couldn't
+  // gone), by this illi's build of the agent or, none here, by another
+  // version downloaded (a logout asks no model: Agy.any); false: it
+  // couldn't
   export async function logout(folder: string): Promise<boolean> {
-    const cmd = Agy.command();
+    const cmd = Agy.any();
     if (cmd === null || !fs.existsSync(folder)) {
       return false;
     }

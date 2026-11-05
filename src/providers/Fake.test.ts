@@ -2,8 +2,9 @@
 // Providers.add, Logins.add), runs as the others do with no change to
 // the rest of illi: connected by its accounts' entry, offered, the
 // default pick its own, its models and name known, a call handed to its
-// program, its plan at the side, its page in /login under its maker, its
-// accounts kept by their shape, what an account tells asked at the start.
+// program, its plan at the side, its page in /login under its maker (the
+// rows it adds under its accounts with it), its accounts kept by their
+// shape, what an account tells asked at the start.
 // `bun test Fake.test.ts`.
 
 import { afterAll, expect, test } from "bun:test";
@@ -52,7 +53,8 @@ Providers.add({
 });
 
 const { Logins } = await import("./Logins.ts");
-Logins.add("fake", () => ({ name: "Fake plan", vendor: "fake" as any, about: () => "connected: me@fake.test", accounts: () => [{ name: "me@fake.test", about: "pro", use: true, take: () => {}, drop: () => {} }], adds: "", add: () => {}, out: () => {} }));
+let updated = 0;
+Logins.add("fake", () => ({ name: "Fake plan", vendor: "fake" as any, about: () => "connected: me@fake.test", accounts: () => [{ name: "me@fake.test", about: "pro", use: true, take: () => {}, drop: () => {} }], more: () => [{ name: "Update its program", about: "1.0 → 1.1", enter: "update it", pick: () => void updated++ }], adds: "", add: () => {}, out: () => {} }));
 
 const config = await import("../config/Config.ts");
 const { Accounts } = await import("../config/Accounts.ts");
@@ -82,12 +84,16 @@ test("a call handed to its program, as a runner's; its plan asked for the side; 
   expect(accounts).toBe(1);
 });
 
-test("its page in /login, under its maker", () => {
+test("its page in /login, under its maker; the rows it adds under its accounts", () => {
   const t = { v: View.view_new(), scr: { tty: true, ed: Screen.ed_new() }, choose: null, question: null, wait: null, pane: null, notices: [], due: true, ver: 0, login: null, chat: null } as any;
   term_login(t);
   expect(t.choose.names).toContain("Fake");
   t.choose.pick(t.choose.names.indexOf("Fake"));
   expect([t.choose.names, t.choose.abouts ?? t.choose.about]).toEqual([["Fake plan"], ["connected: me@fake.test"]]);
+  t.choose.pick(0);
+  expect([t.choose.names, t.choose.about, t.choose.foot(1)]).toEqual([["me@fake.test", "Update its program", "Log out of Fake plan"], ["pro", "1.0 → 1.1", ""], "Enter update it · Esc back"]);
+  t.choose.pick(1);
+  expect(updated).toBe(1);
 });
 
 test("its accounts kept by their shape, an entry no provider reads kept as it was", () => {

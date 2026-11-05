@@ -6,9 +6,11 @@
 // sign-in waiting, term_esc), the page sends the browser back to the
 // agent, which keeps the sign-in in the account's folder, made as the
 // sign-in starts so two terminals never share one, and gone again if the
-// sign-in ends without it kept. The agent is Google's own (Agy.ts): with
-// none here, adding an account first offers to download it, saying how
-// big it is (Esc stops the download too). Google's agent tells no email,
+// sign-in ends without it kept. The agent is Google's own, the build
+// this illi is pinned to (Agy.ts): with none here, adding an account
+// first offers to download it, saying how big it is (Esc stops the
+// download too); with another version here (an older illi's), the page
+// says it needs an update, and a row under the accounts offers it. Google's agent tells no email,
 // so an account is named by its number and its plan. Logging one out
 // logs its folder's agent out and removes the folder. Accounts are never
 // switched but here: illi doesn't rotate them.
@@ -20,14 +22,15 @@ import * as config from "../../config/Config.ts";
 import { browser_open } from "../../term/Browser.ts";
 import { term_question } from "../../term/Commands.ts";
 import { term_draw } from "../../term/Frame.ts";
-import { LOGIN, LOGIN_FAILED, login_after, login_edit, login_sure, type Account, type Page } from "../../term/LoginCommands.ts";
+import { LOGIN, LOGIN_FAILED, login_after, login_edit, login_sure, type Account, type Page, type Row } from "../../term/LoginCommands.ts";
 import { term_notify, term_unnotify, type Notice } from "../../term/Notices.ts";
 import type { Term } from "../../term/Term.ts";
 import { Antigravity } from "./Antigravity.ts";
-import { Agy, UNPACKED, type Build } from "./Agy.ts";
+import { Agy, type Build } from "./Agy.ts";
 
 // the Google AI plan as a provider: its accounts, each a folder of
-// illi's, named by its number, told by the plan the agent named
+// illi's, named by its number, told by the plan the agent named; this
+// illi's build of Google's agent offered under them while it isn't here
 function login_agy_provider(t: Term): Page {
   const kept = () => config.config_accounts_read()?.antigravity;
   const accounts = (): Account[] => {
@@ -37,9 +40,29 @@ function login_agy_provider(t: Term): Page {
   const about = () => {
     const now = kept();
     const a   = now?.accounts.find((a) => a.id === now.use);
-    return a === undefined ? "your Google AI plan, through Google's Antigravity agent" : "connected: " + login_agy_name(a);
+    const lack = Agy.ready() ? "" : " · Google's agent " + (Agy.other() === null ? "isn't here" : "needs an update");
+    return a === undefined ? "your Google AI plan, through Google's Antigravity agent" : "connected: " + login_agy_name(a) + lack;
   };
-  return { name: "Google AI plan", vendor: "antigravity", about, accounts, adds: "+ add another account", add: (back) => void login_agy_add(t, back), out: (back) => login_agy_out(t, back) };
+  const more = (): Row[] => {
+    const b = Agy.pin;
+    if (b === null || Agy.ready()) {
+      return [];
+    }
+    const was = Agy.other();
+    const up  = login_agy_older(was);
+    return [{ name: (up ? "Update" : "Download") + " Google's Antigravity agent", about: (up ? was + " → " : "") + b.version + ", " + login_agy_mb(b.bytes), enter: up ? "update it" : "download it", pick: (back) => login_agy_offer(t, back, false) }];
+  };
+  return { name: "Google AI plan", vendor: "antigravity", about, accounts, more, adds: "+ add another account", add: (back) => login_agy_add(t, back), out: (back) => login_agy_out(t, back) };
+}
+
+// whether a version here is older than this illi's build (one to update)
+function login_agy_older(was: string | null): was is string {
+  return was !== null && Agy.pin !== null && Agy.newer(was, Agy.pin.version) > 0;
+}
+
+// a size said in MB
+function login_agy_mb(bytes: number): string {
+  return Math.round(bytes / 1e6) + " MB";
 }
 
 // an account's name: its number (Google's agent tells no email)
@@ -47,54 +70,53 @@ function login_agy_name(a: Folder): string {
   return "Google account " + a.id.replace(/^g/, "");
 }
 
-// an account more: Google's agent downloaded first if none is here
-// (asked, saying its size), then a sign-in
-async function login_agy_add(t: Term, back: () => void): Promise<void> {
-  if (Agy.command() !== null) {
-    return login_agy_sign(t);
-  }
-  t.login?.abort();
-  const stop = new AbortController();
-  t.login = stop;
-  const asking = term_notify(t, "Looking up Google's Antigravity agent… (Esc stops)", false, 60e3);
-  let build: Build;
-  let size: number;
-  try {
-    build = await Agy.latest(stop.signal);
-    size  = await Agy.size(build, stop.signal);
-  } catch (err: any) {
-    if (!stop.signal.aborted) {
-      term_notify(t, "Can't download Google's agent: " + err.message + ".", false, LOGIN_FAILED);
-    }
+// an account more: this illi's build of Google's agent downloaded first
+// if it isn't here (asked, saying its size), then a sign-in
+function login_agy_add(t: Term, back: () => void): void {
+  if (Agy.ready()) {
+    void login_agy_sign(t);
     return;
-  } finally {
-    t.login = t.login === stop ? null : t.login;
-    term_unnotify(t, asking);
   }
-  const mb = (bytes: number) => Math.round(bytes / 1e6) + " MB";
-  term_question(t, "Download Google's Antigravity agent?", ["Download it", "Not now"], ["antigravity-acp " + build.version + " from dl.google.com: " + (size > 0 ? mb(size) : "a few hundred MB") + ", about " + mb(UNPACKED) + " once unpacked", "the Google AI plan runs on it"], (k) => {
+  login_agy_offer(t, back, true);
+}
+
+// this illi's build of Google's agent offered (Esc back to `back`), what it
+// takes said, in place of an older version here; downloaded, a sign-in
+// follows if an account is being added. None for this machine: said
+function login_agy_offer(t: Term, back: () => void, adding: boolean): void {
+  const b = Agy.pin;
+  if (b === null) {
+    term_notify(t, Agy.why() + ".", false, LOGIN_FAILED);
+    return;
+  }
+  const was  = Agy.other();
+  const up   = login_agy_older(was);
+  const what = "antigravity-acp " + (up ? was + " → " : "") + b.version + " from dl.google.com: " + login_agy_mb(b.bytes) + ", " + login_agy_mb(b.unpacked) + " once unpacked";
+  const why  = up ? "this illi runs " + b.version + "; " + was + " goes once no illi runs it" : was !== null ? "this illi runs " + b.version + "; " + was + ", a newer illi's, stays" : "the Google AI plan runs on it";
+  term_question(t, (up ? "Update" : "Download") + " Google's Antigravity agent?", [up ? "Update it" : "Download it", "Not now"], [what, why], (k) => {
     if (k === 0) {
-      void login_agy_fetch(t, build, size);
+      void login_agy_fetch(t, b, up, adding);
     }
   }, { back });
   term_draw(t);
 }
 
 // Google's agent downloaded (Esc stops it, nothing left behind), its
-// progress said; then the sign-in
-async function login_agy_fetch(t: Term, build: Build, size: number): Promise<void> {
+// progress said; then, an account being added, the sign-in
+async function login_agy_fetch(t: Term, b: Build, up: boolean, adding: boolean): Promise<void> {
   t.login?.abort();
   const stop = new AbortController();
   t.login = stop;
-  let note: Notice = term_notify(t, "Downloading Google's Antigravity agent… (Esc stops)", false, LOGIN);
+  const doing = up ? "Updating" : "Downloading";
+  let note: Notice = term_notify(t, doing + " Google's Antigravity agent… (Esc stops)", false, LOGIN);
   let shown = -1;
   try {
-    await Agy.download(build, stop.signal, (bytes, of) => {
-      const share = Math.floor((bytes / (of || size || 1)) * 100);
+    await Agy.download(b, stop.signal, (bytes, of) => {
+      const share = Math.floor((bytes / (of || b.bytes)) * 100);
       if (share !== shown && share % 5 === 0) {
         shown = share;
         term_unnotify(t, note);
-        note = term_notify(t, "Downloading Google's Antigravity agent: " + Math.min(share, 100) + "% of " + Math.round((of || size) / 1e6) + " MB… (Esc stops)", false, LOGIN);
+        note = term_notify(t, doing + " Google's Antigravity agent: " + Math.min(share, 100) + "% of " + login_agy_mb(of || b.bytes) + "… (Esc stops)", false, LOGIN);
       }
     });
   } catch (err: any) {
@@ -106,8 +128,11 @@ async function login_agy_fetch(t: Term, build: Build, size: number): Promise<voi
     t.login = t.login === stop ? null : t.login;
     term_unnotify(t, note);
   }
-  term_notify(t, "Downloaded Google's Antigravity agent " + build.version + ".", false);
-  return login_agy_sign(t);
+  term_notify(t, (up ? "Updated Google's Antigravity agent to " : "Downloaded Google's Antigravity agent ") + b.version + ".", false);
+  if (adding) {
+    return login_agy_sign(t);
+  }
+  term_draw(t);
 }
 
 // a new folder of illi's, made now (readable by the user alone), so
