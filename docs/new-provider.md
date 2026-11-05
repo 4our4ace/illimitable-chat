@@ -19,7 +19,7 @@ The types of all three are in `src/providers/Provider.ts`.
 namespace or imports its folder; each provider's facts, code and page
 agree. `src/providers/Fake.test.ts` adds a provider no list names (as
 a test may: `Vendors.add`, `Providers.add`, `Logins.add`) and runs it
-end to end. illi has five vendors:
+end to end. illi has six vendors:
 
 | Vendor        | Paid by      | Runs in                | Its folder |
 | ------------- | ------------ | ---------------------- | ---------- |
@@ -27,6 +27,7 @@ end to end. illi has five vendors:
 | `openai-api`  | an API key   | illi's own loop        | `src/providers/openai-api` (`OpenAI.ts`) |
 | `chatgpt`     | a plan login | illi's own loop        | `src/providers/chatgpt` (`ChatGPT.ts`: OpenAI's wire on the Codex backend) |
 | `claude-code` | a plan login | the user's Claude Code (another account's: in a Claude Code folder of illi's) | `src/providers/claude-code` (`ClaudeCode.ts`) |
+| `opencode-go` | a plan's API key | illi's own loop     | `src/providers/opencode-go` (`OpenCodeGo.ts`: Chat Completions; the plan's catalog, its defaults rules by price) |
 | `antigravity` | a plan login | Google's own agent, `antigravity-acp`, run unmodified over the Agent Client Protocol (each account a folder of illi's) | `src/providers/antigravity` (`Antigravity.ts`: the runner and its pool of agents; `Acp.ts`: the connection; `Agy.ts`: the agent found, or downloaded by /login) |
 
 1. Its facts

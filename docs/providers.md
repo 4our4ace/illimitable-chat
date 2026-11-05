@@ -3,17 +3,20 @@ Providers
 
 illi runs on your ChatGPT plan, your Claude plan (through your own
 Claude Code), your Google AI plan (through Google's Antigravity agent),
-or Anthropic and OpenAI API keys. Each is a vendor.
+your OpenCode Go plan (by its API key), or Anthropic and OpenAI API
+keys. Each is a vendor.
 
 Connecting: /login
 ------------------
 
 Type `/login` in the chat (`/logout` opens the same screen). It lists
-the providers, **ChatGPT**, **Claude** and **Gemini**, each saying what
-of it is connected, the one the chat runs on marked. Enter on one opens
-its ways in: its plan (**ChatGPT plan**, **Claude plan**, **Google AI
-plan**) and, for ChatGPT and Claude, an API key (**OpenAI API key**,
-**Anthropic API key**), each saying what it's connected with. Esc goes back a level, from every list and question
+the providers, **ChatGPT**, **Claude**, **Gemini** and **OpenCode**,
+each saying what of it is connected, the one the chat runs on marked.
+Enter on one opens its ways in: its plan (**ChatGPT plan**, **Claude
+plan**, **Google AI plan**) and, for ChatGPT and Claude, an API key
+(**OpenAI API key**, **Anthropic API key**); OpenCode's Go plan is
+reached by its key (**OpenCode Go API key**). Each says what it's
+connected with. Esc goes back a level, from every list and question
 `/login` opens:
 
 - **Enter on a way in not connected** connects it: a sign-in for a
@@ -328,24 +331,66 @@ switches accounts on its own.
   needn't wait, which ends after 10 minutes with no turn. None is left
   once illi ends.
 
+OpenCode Go plan
+----------------
+
+OpenCode Go is OpenCode's monthly plan of open models (Kimi, GLM,
+DeepSeek, MiniMax, MiMo and others). illi runs it in its own loop on
+OpenCode's Chat Completions API, paid by the plan behind your key. In
+`/login`, pick **OpenCode**, then **OpenCode Go API key**, and paste a
+key from opencode.ai (Account, API keys) of a workspace that has Go;
+`OPENCODE_API_KEY` is offered if it's set ([API keys](#api-keys)).
+OpenCode checks only that it knows the key: one whose workspace has no
+Go plan is told by its first message.
+
+OpenCode says Go "works with OpenCode and other coding agents that send
+typical coding-agent traffic, identify themselves with their own user
+agent and send a session ID". illi names itself (`illi/<version>`) and
+sends one session ID for all of a chat's requests, which OpenCode also
+caches the chat's start by.
+
+Its models are the plan's own, from OpenCode's public catalog, at the
+start and as you connect: as you connect, /login asks which writes the
+summaries and which the chats run on ([Models](#models)), the price of
+each beside it. illi offers each one OpenCode serves on Chat Completions
+itself, with tools, the newest of each family; it leaves out:
+
+- the models OpenCode serves on another API (today GPT, Claude Haiku,
+  Gemini, Grok, Qwen and MiniMax M3): OpenCode says it translates them,
+  which illi hasn't tried, so they wait till it has;
+- the free ones (OpenCode answers its own app alone with those) and the
+  contributor ones (they train on what you send);
+- the older version of a family (glm-5.2 beside glm-5.3).
+
+A model's efforts are its own (some have one, some none: then its
+effort does nothing); its thoughts show as they stream; a picture goes
+to a model that takes them, and to one that doesn't, a note says it was
+left out. Each model has its own share of the plan (a dollar amount a
+month, a fifth of it per 5 hours, half per week): once one is used up,
+illi says so, and `/model` picks another while it resets (or, with Extra
+Usage on at opencode.ai, OpenCode bills your credit instead). The side
+shows no use for the plan yet (OpenCode's usage page isn't part of its
+public API), and there's no web search.
+
 API keys
 --------
 
-In `/login`, pick **Claude**, then **Anthropic API key**, or
-**ChatGPT**, then **OpenAI API key**, and paste a key. It shows as
+In `/login`, pick **Claude**, then **Anthropic API key**,
+**ChatGPT**, then **OpenAI API key**, or **OpenCode**, then **OpenCode
+Go API key** ([OpenCode Go plan](#opencode-go-plan)), and paste a key. It shows as
 dots, and illi checks it with the provider before taking it (a key the
 provider refuses isn't kept). illi keeps a pasted key in
 `accounts.json` and shows it only by its ends (`sk-ant-…WXYZ`): never
-in the chat, a note or the input's history. If `ANTHROPIC_API_KEY` or
-`OPENAI_API_KEY` is set, `/login` offers that key; illi never copies
-it, so it only lasts while the variable is set.
+in the chat, a note or the input's history. If `ANTHROPIC_API_KEY`,
+`OPENAI_API_KEY` or `OPENCODE_API_KEY` is set, `/login` offers that
+key; illi never copies it, so it only lasts while the variable is set.
 
 Once connected, the variable's key is listed with the keys you pasted.
 **+ add another key** adds a key; Enter on one switches to it, and Del
 forgets a pasted one. Forgetting the last pasted key while it's in use
 logs out of the API (asked first): illi never moves to the variable's
 key without asking, so Enter connects it again if you want it. **Log
-out of …** stops the API altogether. Both APIs run in illi's own loop,
+out of …** stops the API altogether. The APIs run in illi's own loop,
 with no SDKs.
 
 Models
@@ -354,7 +399,9 @@ Models
 illi's pick and the summaries' default to the first vendor's models.
 Each default names a family, not a version: it is the newest model of
 that family the vendor offers you, so it moves on by itself when a newer
-one comes (`*` stands for the version):
+one comes (`*` stands for the version). OpenCode Go's models come and
+go too often for a family, so its defaults are rules over the models it
+offers, by price:
 
 | Vendor        | Pick                  | Summaries                   | Today            |
 | ------------- | --------------------- | --------------------------- | ---------------- |
@@ -363,6 +410,7 @@ one comes (`*` stands for the version):
 | `claude-code` | `opus-*`              | `haiku-*`                   | opus-5.5, haiku-5.5 |
 | `antigravity` | `gemini-*-flash`, high | `gemini-*-flash`, low      | gemini-3.8-flash |
 | `claude-api`  | `sonnet-*`            | `haiku-*`                   | sonnet-5.5, haiku-5.5 |
+| `opencode-go` | the middle one by price, medium | the cheapest, low | deepseek-v4-pro, mimo-v2.6-flash |
 
 `chats` names your own chat model per provider, and `compactor` the
 model that writes its summaries. As you connect a provider, /login reads
@@ -413,6 +461,7 @@ next start:
 | `claude-code` | the models your plan offers, as Claude Code lists them: the newest of each family (Opus, Fable, Sonnet, Haiku), with their efforts; each model's window, as Claude Code has it for a turn (asked, no message sent); the window of the model a turn's reply ran on | at start, after `/login` (here or in another terminal); after each turn's reply |
 | `antigravity` | the models your account may use, each at its thinking levels; the window of the model a turn ran on | the models at sign-in and as each turn starts; the window during each turn |
 | `openai-api`  | nothing: its windows are built in (1.05M)                        |                                        |
+| `opencode-go` | the models your plan offers that illi runs ([OpenCode Go plan](#opencode-go-plan)), each one's window, efforts and price (OpenCode's catalog) | at start, after `/login` (here or in another terminal), before a turn till it answers |
 
 On ChatGPT the list is your account's own: a model it adds is offered
 at once (unless `models` names those offered), one it drops is gone. A

@@ -13,6 +13,7 @@ import { PROVIDER as CHATGPT } from "./chatgpt/ChatGPT.ts";
 import { PROVIDER as CLAUDE_API } from "./claude-api/Anthropic.ts";
 import { PROVIDER as CLAUDE_CODE } from "./claude-code/ClaudeCode.ts";
 import { PROVIDER as OPENAI_API } from "./openai-api/OpenAI.ts";
+import { PROVIDER as OPENCODE_GO } from "./opencode-go/OpenCodeGo.ts";
 import type { Provider } from "./Provider.ts";
 import { FACTS } from "./Vendors.ts";
 
@@ -26,7 +27,7 @@ export namespace Providers {
   // every provider, in the order of their facts (Vendors.ts)
   export function all(): Provider[] {
     if (ALL === null) {
-      const made = [CLAUDE_API, OPENAI_API, CHATGPT, CLAUDE_CODE, ANTIGRAVITY, ...ADDED];
+      const made = [CLAUDE_API, OPENAI_API, CHATGPT, CLAUDE_CODE, ANTIGRAVITY, OPENCODE_GO, ...ADDED];
       ALL = FACTS.map((f) => made.find((p) => p.facts.id === f.id)).filter((p): p is Provider => p !== undefined);
     }
     return ALL;

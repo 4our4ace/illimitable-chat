@@ -18,7 +18,7 @@ profile's own `config.json` goes over it, key by key; its `off` and
 
 | Key          | Default                           | What                                             |
 | ------------ | --------------------------------- | ------------------------------------------------ |
-| `vendors`    | those `/login` connected          | the vendors offered, named yourself: `chatgpt`, `claude-code` (your Claude plan, through Claude Code), `antigravity` (your Google AI plan, through Google's Antigravity agent), `claude-api`, `openai-api` (API keys); unset, what you connected in `/login` ([Providers](providers.md)) |
+| `vendors`    | those `/login` connected          | the vendors offered, named yourself: `chatgpt`, `claude-code` (your Claude plan, through Claude Code), `antigravity` (your Google AI plan, through Google's Antigravity agent), `claude-api`, `openai-api`, `opencode-go` (API keys; the last your OpenCode Go plan's); unset, what you connected in `/login` ([Providers](providers.md)) |
 | `pick`       | `chatgpt:gpt-*-sol:medium:slow` | vendor:model:effort:speed (`/model` per chat); default: the first vendor's. The model by version (`opus-5.5`) or by family, `*` for the version (`opus-*`: the newest offered, as the vendor's models change; quote it in a shell). Efforts: `low`, `medium`, `high`, `xhigh`, `max`; speeds: `slow`, `fast`, `ultrafast`, as a model offers them |
 | `chats`      | each provider's own               | what new chats start on, by provider: a pick per provider, comma-separated, a family too (`claude-code:opus-*:high:slow`). /login asks it as you connect one, and its Models row any time; your first provider's is the default, unless `pick` is set |
 | `compactor`  | each vendor's small model         | writes the summaries: a pick per vendor, comma-separated (a family too: `claude-code:haiku-*:low:slow`). /login asks it as you connect one, and its Models row any time |
@@ -48,8 +48,9 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `login`      | `~/.illi/login.json`, opencode's  | the ChatGPT login file, which `/login` writes    |
 | `autoupdate` | `on`                              | a new release installs itself: looked for once a day (as illi starts, or within the hour while it runs), downloaded and checked in the background, it runs from the next start (a note says so); `notify` only tells; `off` never looks. The installer's one file only: a source clone never updates itself. On, it also downloads the version of Google's Antigravity agent an updated illi runs, once a Google account is connected; `notify` and `off` leave that to `/login` |
 
-API keys come from `/login`, which also offers `ANTHROPIC_API_KEY` and
-`OPENAI_API_KEY` if they're set ([Providers](providers.md#api-keys)).
+API keys come from `/login`, which also offers `ANTHROPIC_API_KEY`,
+`OPENAI_API_KEY` and `OPENCODE_API_KEY` if they're set
+([Providers](providers.md#api-keys)).
 Other variables:
 
 | Variable       | Does                                                  |

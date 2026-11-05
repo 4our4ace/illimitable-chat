@@ -133,7 +133,7 @@ one:
 - vendors: the vendors offered, named by hand: chatgpt, claude-code (the
   user's Claude plan, through Claude Code), antigravity (the user's
   Google AI plan, through Google's Antigravity agent), claude-api,
-  openai-api.
+  openai-api, opencode-go (the user's OpenCode Go plan, by its key).
   Unset (the default), they are what the user connected in /login, so
   leave it unset unless the user asks: to connect a provider, point them
   to /login
