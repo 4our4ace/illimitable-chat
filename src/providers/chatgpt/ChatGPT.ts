@@ -344,7 +344,7 @@ export namespace ChatGPT {
 
   // the login file: the one config names, else illi's own if there, else
   // opencode's if there and /login didn't leave it to opencode, else
-  // illi's own (none yet: config.config_login_file)
+  // illi's own (none yet: LoginFile.file)
   export function file(): string {
     return LoginFile.file();
   }

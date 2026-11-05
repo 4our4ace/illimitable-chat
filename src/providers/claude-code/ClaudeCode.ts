@@ -211,7 +211,7 @@ let limits: Limit[] = [];
 let theirs: Array<Omit<Theirs, "off" | "over">> | null = null;
 
 // the Claude Code folder of the account limits and theirs are of ("":
-// the user's own Claude Code's: config.config_claude_dir)
+// the user's own Claude Code's: config.config_folder)
 let folder = config.config_folder("claude-code");
 
 // the names Claude Code's servers were ever told by, case and all, by

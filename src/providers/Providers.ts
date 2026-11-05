@@ -16,15 +16,25 @@ import { FACTS } from "./Vendors.ts";
 
 let ALL: Provider[] | null = null;
 
+// those added as illi starts (Providers.add)
+const ADDED: Provider[] = [];
+
 export namespace Providers {
 
   // every provider, in the order of their facts (Vendors.ts)
   export function all(): Provider[] {
     if (ALL === null) {
-      const made = [CLAUDE_API, OPENAI_API, CHATGPT, CLAUDE_CODE];
+      const made = [CLAUDE_API, OPENAI_API, CHATGPT, CLAUDE_CODE, ...ADDED];
       ALL = FACTS.map((f) => made.find((p) => p.facts.id === f.id)).filter((p): p is Provider => p !== undefined);
     }
     return ALL;
+  }
+
+  // a provider's code added as illi starts, its facts added to Vendors.ts
+  // (Vendors.add: a test's own provider)
+  export function add(provider: Provider): void {
+    ADDED.push(provider);
+    ALL = null;
   }
 
   // a provider by its id (none: not known here, as a newer illi's saved
