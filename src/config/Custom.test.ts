@@ -1,17 +1,17 @@
 // Custom test
 // ===========
 // `bun test Custom.test.ts`. The user's agents and commands: a file's
-// front matter and body (its tools list's Claude Code tools, but those
-// illi gives itself, spawn and todo; the list as YAML writes it too;
+// front matter and body (its tools list's Claude Code names read as
+// illi's, spawn and todo among them; the list as YAML writes it too;
 // one empty gives none, one left out all; Agent(worker, researcher)
 // whole, spawn held to those agents; a - list over blank lines), the
 // project's over the user's, its mode, a command's arguments; an agent's
 // model as a pick; /agent makes a primary agent the main agent (its
-// model, instructions and tools, Claude Code's too), noted before the
-// next message, each keeping its pick; spawn's agent runs a subagent as
-// it, with the chat's map (whole, needing no window) and its Claude Code
-// tools (none on a ChatGPT model whose window isn't told: never
-// guessed); one started fresh (its agent's fresh:
+// model, instructions and tools), noted before the next message, each
+// keeping its pick; spawn's agent runs a subagent as it, with the
+// chat's map (whole, needing no window) and its tools (none on a
+// ChatGPT model whose window isn't told: never guessed); one started
+// fresh (its agent's fresh:
 // true, listed so to spawn, or spawn's) gets none of the chat, told
 // again after a restart too, its role read back from any first note.
 // A skill: its folder's SKILL.md (a folded description), the
@@ -88,21 +88,21 @@ async function until(ok: () => boolean): Promise<void> {
 
 test("an agent file's front matter and body (its tools list's Claude Code tools as well); the project's wins", () => {
   const r = Custom.agent(CWD, "reviewer")!;
-  expect(r).toMatchObject({ name: "reviewer", description: "Reviews", mode: "all", model: "gpt-6-luna", effort: "high", tools: ["zoom", "read"], builtins: ["Read"], body: "You review." });
+  expect(r).toMatchObject({ name: "reviewer", description: "Reviews", mode: "all", model: "gpt-6-luna", effort: "high", tools: ["zoom", "read"], body: "You review." });
   expect(Custom.agent(CWD, "coder")!.description).toBe("Codes");
-  expect(Custom.agent(CWD, "coder")!.builtins).toBeNull();
+  expect(Custom.agent(CWD, "coder")!.tools).toBeNull();
   expect(Custom.agent(CWD, "Coder")!.name).toBe("coder");
   expect(Custom.agent(CWD, "nobody")).toBeNull();
   expect(Custom.agents(CWD).map((a) => a.name)).toEqual(["bad", "coder", "planner", "reviewer", "scout"]);
 });
 
-test("an agent's tools list as YAML writes it: in [ ], each name quoted or not, or as - lines; illi's own as Claude Code's, MultiEdit as Edit", () => {
+test("an agent's tools list as YAML writes it: in [ ], each name quoted or not, or as - lines; Claude Code's names as illi's, MultiEdit as edit, Grep as shell where the list gives a shell", () => {
   put(DIR + "/lists/flow.md", "---\ntools: [\"Read\", 'Grep', zoom]\n---\n");
   put(DIR + "/lists/block.md", "---\ntools:\n  - Read\n  - \"MultiEdit\"\n  - shell\nmodel: sonnet\n---\n");
   const flow = Custom.profile("flow", DIR + "/lists/flow.md");
-  expect([flow.tools, flow.builtins]).toEqual([["read", "zoom"], ["Read", "Grep"]]);
+  expect(flow.tools).toEqual(["read", "zoom"]);
   const block = Custom.profile("block", DIR + "/lists/block.md");
-  expect([block.tools, block.builtins, block.model]).toEqual([["read", "edit", "shell"], ["Read", "Edit", "Bash"], "sonnet"]);
+  expect([block.tools, block.model]).toEqual([["read", "edit", "shell"], "sonnet"]);
 });
 
 test("a - list goes on over blank lines, as YAML reads it, and ends at the next key", () => {
@@ -114,28 +114,28 @@ test("a - list goes on over blank lines, as YAML reads it, and ends at the next 
   }
 });
 
-test("Claude Code's Agent, Task, TodoWrite and task tools in a tools list are illi's spawn and todo, never Claude Code's own on claude-code", () => {
+test("Claude Code's Agent, Task, TodoWrite and task tools in a tools list are illi's spawn and todo", () => {
   put(DIR + "/lists/lead.md", "---\ntools: Read, Agent, Task, TodoWrite, Bash\n---\n");
   put(DIR + "/lists/boss.md", "---\ntools: Task, TodoWrite\n---\n");
   put(DIR + "/lists/tasks.md", "---\ntools: TaskCreate, TaskUpdate, TaskList, TaskGet, Grep\n---\n");
   const tasks = Custom.profile("tasks", DIR + "/lists/tasks.md");
-  expect([tasks.tools, tasks.builtins]).toEqual([["todo"], ["Grep"]]);
+  expect(tasks.tools).toEqual(["todo"]);
   const lead = Custom.profile("lead", DIR + "/lists/lead.md");
-  expect([lead.tools, lead.builtins]).toEqual([["read", "spawn", "todo", "shell"], ["Read", "Bash"]]);
+  expect(lead.tools).toEqual(["read", "spawn", "todo", "shell"]);
   const boss = Custom.profile("boss", DIR + "/lists/boss.md");
-  expect([boss.tools, boss.builtins]).toEqual([["spawn", "todo"], []]);
+  expect(boss.tools).toEqual(["spawn", "todo"]);
 });
 
-test("an empty tools list gives an agent none of illi's tools nor Claude Code's built-in ones, as Claude Code reads it; only one left out gives all", () => {
+test("an empty tools list gives an agent none of illi's tools, as Claude Code reads it; only one left out gives all", () => {
   put(DIR + "/lists/all.md", "---\ndescription: All\n---\n");
   put(DIR + "/lists/bare.md", "---\ntools:\ndescription: Bare\n---\n");
   put(DIR + "/lists/quoted.md", "---\ntools: \"\"\n---\n");
   put(DIR + "/lists/brackets.md", "---\ntools: []\n---\n");
   const all = Custom.profile("all", DIR + "/lists/all.md");
-  expect([all.tools, all.builtins]).toEqual([null, null]);
+  expect(all.tools).toBeNull();
   for (const name of ["bare", "quoted", "brackets"]) {
     const none = Custom.profile(name, DIR + "/lists/" + name + ".md");
-    expect([name, none.tools, none.builtins]).toEqual([name, [], []]);
+    expect([name, none.tools]).toEqual([name, []]);
   }
   expect(Custom.allow(Custom.profile("bare", DIR + "/lists/bare.md"), [{ name: "zoom" }, { name: "shell" }])).toEqual([]);
 });
@@ -146,11 +146,11 @@ test("Agent(worker, researcher) keeps its comma, as Claude Code writes it, in a 
   put(DIR + "/lists/quoted.md", "---\ntools: [\"Agent(worker, researcher)\", Read]\n---\n");
   for (const name of ["plain", "dashes", "quoted"]) {
     const p = Custom.profile(name, DIR + "/lists/" + name + ".md");
-    expect([name, p.tools, p.builtins, p.spawns]).toEqual([name, ["spawn", "read"], ["Read"], ["worker", "researcher"]]);
+    expect([name, p.tools, p.spawns]).toEqual([name, ["spawn", "read"], ["worker", "researcher"]]);
   }
   put(DIR + "/lists/any.md", "---\ntools: Agent(worker), Agent, Bash(git *)\n---\n");
   const any = Custom.profile("any", DIR + "/lists/any.md");
-  expect([any.tools, any.builtins, any.spawns]).toEqual([["spawn", "Bash(git *)"], [], null]);
+  expect([any.tools, any.spawns]).toEqual([["spawn", "Bash(git *)"], null]);
 });
 
 test("an agent's mode: primary, a subagent, or both", () => {
@@ -193,7 +193,7 @@ test("/agent makes a primary agent the main agent: its model, instructions and t
   await until(() => asks.length > 0 && !chat.busy);
   expect(asks.at(-1).system).toContain("You review.");
   expect(asks.at(-1).model).toBe("gpt-6-luna");
-  expect(asks.at(-1).builtins).toEqual(["Read"]);
+  expect(asks.at(-1).listed).toEqual(["zoom", "read"]);
   const log = Array.from({ length: chat.mem.count }, (_, i) => Memory.message(chat.mem, i)!.text);
   expect(log.indexOf("hi") - log.indexOf("Main agent: reviewer, on gpt-6-luna · high.")).toBe(1);
   expect(Chat.main(chat, null)).toEqual({});
@@ -339,7 +339,7 @@ test("a subagent on a ChatGPT model whose window isn't told starts on no guess: 
     expect(out.text).toBe("Not started: ChatGPT hasn't told gpt-6-luna's context window (its model list didn't answer), and illi never guesses one.");
     const ask = Tools.ask(chat.tools, { name: "x", run: 0, log: "x", role: { $: "sub", effort: null, agent: "reviewer" }, call: null, live: [], calls: {}, stop: false, view: [{ text: "first\n", mark: false }, { text: "middle\n", mark: false }, { text: "last\n", mark: false }], replies: [] } as any);
     expect(ask.blocks.map((b: any) => b.text).join("")).toStartWith("first\nmiddle\nlast\n");
-    expect(ask.builtins).toEqual(["Read"]);
+    expect(ask.listed).toEqual(["zoom", "read"]);
     await Bun.sleep(20);
     expect(asks).toEqual([]);
   } finally {

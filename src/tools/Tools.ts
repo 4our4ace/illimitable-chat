@@ -35,12 +35,9 @@
 // project's, in the chat's file (Store.todo), which the views show with
 // what its calls use (Tools.state); one with every item done is let go
 // as a turn starts or ends (todo_finished).
-// A call on claude-code runs in Claude Code, with its own prompt and
-// tools: it gets the tools Claude Code lacks (a `lean` list: no shell or
-// files), and prompts that say it works inside illi (Tools.hosted), the
-// project's CLAUDE.md left to Claude Code, which reads it itself. Claude
-// Code's own subagents and to-do list are off there (ClaudeCode.OFF), so
-// spawn and todo are the only ones.
+// A call on claude-code runs in Claude Code with illi's own prompt and
+// whole list of tools, over MCP (`hosted`: Claude Code's permission
+// prompt added), as on every provider.
 // Every call goes first to the user's plugins and hooks
 // (Plugins.before_tool: they may refuse it, change its input, allow it,
 // have it asked or add to what the model reads after it), then, as
@@ -330,29 +327,9 @@ it (Now:): work out "yesterday" or "last Tuesday" from it.`;
 export const SUB       = SUB_HEAD + "\n\n" + SUB_VIEW + "\n\n" + VIEW_DOC + "\n\n" + HERE_DOC;
 export const SUB_FRESH = SUB_HEAD + "\n\n" + SUB_ALONE + "\n\n" + HERE_DOC;
 
-// a prompt's words for a call in Claude Code (Tools.hosted): who it is
-// is Claude Code's to say, its tools its own; illi's come from illi
-const HOSTED: Array<[string | RegExp, string]> = [
-  [/^You are illi \(short for illimitable\), an AI agent that works for one user in a\nsingle chat that never ends\./, "Here you work inside illi (short for illimitable), for one user in a single\nchat that never ends: your replies show in it as illi's."],
-  [/^You are a subagent of illi, an AI agent that works for one user in a\nsingle chat that never ends\./, "Here you work as a subagent of illi (short for illimitable), an app that\nworks for one user in a single chat that never ends."],
-  [/Your shell, read, write and edit tools run/, "Your tools run"],
-];
-// Claude Code's permission prompt (--permission-prompt-tool), answered
-// by the user at illi's screen; illi's own tools that Claude Code loads
-// up front (the user's MCP servers' wait for its tool search)
+// Claude Code's permission prompt (--permission-prompt-tool: its web
+// fetch, its MCP servers' tools), answered by the user at illi's screen
 const APPROVE: Spec = spec("approve", "Claude Code's permission prompt, answered by the user at illi's screen. Not a tool to call yourself.", { tool_name: STR, input: { type: "object" }, tool_use_id: STR }, ["tool_name", "input"]);
-const UPFRONT = new Set(["zoom", "date", "projects", "search", "spawn", "tell", "todo", "ask"]);
-
-const HOSTED_TOOLS = `illi's own tools (zoom, date, projects, search, todo, spawn, tell, ask, skill
-and the user's MCP servers in illi) come from illi, as its MCP server's (mcp__illi__):
-keep your to-do list with illi's todo, which the user sees beside the
-chat.`;
-// illi's tools named to a subagent (no todo, spawn, tell or ask: the
-// master's); to one started fresh, none that reads the chat (MEMORY)
-const HOSTED_SUB   = `illi's own tools (zoom, date, projects, search, skill and the user's MCP
-servers in illi) come from illi, as its MCP server's (mcp__illi__).`;
-const HOSTED_ALONE = `illi's own tools (skill and the user's MCP servers in illi) come from
-illi, as its MCP server's (mcp__illi__).`;
 
 // the tools of everyone (OWN), the main agent's (boss), and those that run
 // on this computer (Machine.ts's TOOLS); those of OWN that read the chat
@@ -521,25 +498,14 @@ export namespace Tools {
   }
 
   // a call's system prompt: its instructions, then the user's rules
-  // (Tools.rules) for a call working in cwd; one on claude-code, its
-  // instructions as they read in Claude Code (Tools.hosted)
-  export function system(head: string, cwd: string, vendor?: Vendor): string {
-    const hosted = vendor === "claude-code";
-    return (hosted ? Tools.hosted(head) : head) + "\n\n" + Tools.rules(cwd, hosted);
-  }
-
-  // a prompt as Claude Code gets it, after its own: who it is and its
-  // tools left to Claude Code (HOSTED), illi's tools named (a
-  // subagent's, its own: HOSTED_SUB; one started fresh, none that reads
-  // the chat: HOSTED_ALONE)
-  export function hosted(head: string): string {
-    const own = head.startsWith(SUB_FRESH) ? HOSTED_ALONE : head.startsWith(SUB) ? HOSTED_SUB : HOSTED_TOOLS;
-    return HOSTED.reduce((text, [from, to]) => text.replace(from, to), head) + "\n\n" + own;
+  // (Tools.rules) for a call working in cwd; the same on every provider
+  export function system(head: string, cwd: string): string {
+    return head + "\n\n" + Tools.rules(cwd);
   }
 
   // the working dir and the computer it is on, the project as kept, and
-  // the time now (When.now; on claude-code, short: its own prompt gives
-  // the day's date). Built once a call (Chat.call, Chat.recap, Tools.ask)
+  // the time now (When.now; on claude-code, short: Claude Code's own
+  // message on where it runs gives the day's date). Built once a call (Chat.call, Chat.recap, Tools.ask)
   // and sent with every step of it; unmarked, after every mark a later
   // call reads (the view's and recent's), so a new minute changes only
   // what a call sends anew (as at_work's running minutes do), never a
@@ -609,10 +575,10 @@ export namespace Tools {
   // the user's rules: theirs for every project (config.RULES, RULES.md in
   // illi's folder; named even while there is none, so illi knows where it
   // goes), then the project's (Tools.project), each whole up to RULES_MOST
-  export function rules(cwd: string, hosted = false): string {
+  export function rules(cwd: string): string {
     const own  = rules_read(config.RULES);
     const top  = config.config_top(cwd);
-    const each = Tools.project(cwd).filter((file) => !hosted || path.basename(file) !== "CLAUDE.md").flatMap((file) => {
+    const each = Tools.project(cwd).flatMap((file) => {
       const text = rules_read(file);
       return text === null ? [] : ["This project's, in " + path.relative(top, file) + ":\n\n" + text];
     });
@@ -629,11 +595,11 @@ export namespace Tools {
   // ---
 
   // a notification gets no answer; a request dropped stops its job. A
-  // URL with ?lean is a caller's in Claude Code (Tools.list)
+  // URL with ?hosted is a caller's in Claude Code (Tools.list)
   export async function fetch(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const [, key, who, ...rest] = url.pathname.split("/");
-    const lean = url.searchParams.has("lean");
+    const hosted = url.searchParams.has("hosted");
     const tools = CHATS.get(key);
     const caller = who === MAIN || tools?.agents.has(who);
     const msg = await req.json().catch(() => ({}));
@@ -647,7 +613,7 @@ export namespace Tools {
       return new Response(null, { status: 202 });
     }
     const no = { error: { code: -32601, message: "no method " + msg.method } };
-    const out = await Tools.answer(tools, who, msg.method, msg.params ?? {}, req.signal, lean).then(
+    const out = await Tools.answer(tools, who, msg.method, msg.params ?? {}, req.signal, hosted).then(
       (result) => (result === null ? no : { result }),
       (err) => ({ error: { code: -32603, message: String(err?.message ?? err) } }),
     );
@@ -655,7 +621,7 @@ export namespace Tools {
   }
 
   // null: no such method
-  export async function answer(tools: Tools, who: string, method: string, params: any, signal: AbortSignal, lean = false): Promise<object | null> {
+  export async function answer(tools: Tools, who: string, method: string, params: any, signal: AbortSignal, hosted = false): Promise<object | null> {
     switch (method) {
       case "initialize": {
         const protocolVersion = params.protocolVersion ?? "2025-06-18";
@@ -663,12 +629,11 @@ export namespace Tools {
       }
       case "tools/list": {
         await Mcp.settle();
-        const upfront = (name: string) => (lean && UPFRONT.has(name) ? { _meta: { "anthropic/alwaysLoad": true } } : {});
-        return { tools: Tools.list(tools, who, lean).map((t) => ({ name: t.name, description: t.info, inputSchema: t.schema, ...upfront(t.name) })) };
+        return { tools: Tools.list(tools, who, hosted).map((t) => ({ name: t.name, description: t.info, inputSchema: t.schema })) };
       }
       case "tools/call": {
         const name = String(params.name);
-        const has = Tools.list(tools, who, lean).some((t) => t.name === name);
+        const has = Tools.list(tools, who, hosted).some((t) => t.name === name);
         const out = has ? await Tools.call(tools, who, name, params.arguments ?? {}, signal) : { text: "No tool " + name + ".", fail: true };
         const imgs = (out.imgs ?? []).map((img) => ({ type: "image", data: img.data, mimeType: img.type }));
         return { content: [{ type: "text", text: out.text }, ...imgs], isError: out.fail };
@@ -680,21 +645,19 @@ export namespace Tools {
     return null;
   }
 
-  // a caller's tools, as its agent allows; `lean`, a caller in Claude
-  // Code, none it has (shell, files: TOOLS), and its permission prompt
-  // whatever the agent allows (Claude Code is told to ask through it,
-  // and won't start without it)
-  export function list(tools: Tools, who: string, lean = false): Spec[] {
+  // a caller's tools, as its agent allows; `hosted`, a caller in Claude
+  // Code, its permission prompt too, whatever the agent allows (Claude
+  // Code is told to ask through it, and won't start without it)
+  export function list(tools: Tools, who: string, hosted = false): Spec[] {
     const user = [...skill_tools(tools.cwd), ...Mcp.tools(), ...Plugins.tools()];
-    const here = lean ? [] : TOOLS;
-    const asks = lean ? [APPROVE] : [];
+    const asks = hosted ? [APPROVE] : [];
     if (who === MAIN) {
       const lead = Custom.agent(tools.cwd, tools.hooks.main());
-      return [...Custom.allow(lead, [...OWN, ...boss(tools.cwd, lead?.spawns ?? null), ...here, ...user]), ...asks];
+      return [...Custom.allow(lead, [...OWN, ...boss(tools.cwd, lead?.spawns ?? null), ...TOOLS, ...user]), ...asks];
     }
     const role = tools.agents.get(who)?.role;
     const own  = role?.fresh ? OWN.filter((t) => !MEMORY.has(t.name)) : OWN;
-    return [...Custom.allow(Custom.agent(tools.cwd, role?.agent ?? null), [...own, ...here, ...user]), ...asks];
+    return [...Custom.allow(Custom.agent(tools.cwd, role?.agent ?? null), [...own, ...TOOLS, ...user]), ...asks];
   }
 
   // a call, past the plugins' hooks, then judged (Tools.guard: illi's own
@@ -1005,30 +968,31 @@ export namespace Tools {
     const profile = Custom.agent(tools.cwd, agent.role.agent);
     const pick = Tools.pick(tools, agent.role);
     const run = Pick.ask(pick);
-    const system = Tools.system((agent.role.fresh ? SUB_FRESH : SUB) + Custom.section(profile), tools.cwd, run.vendor);
+    const system = Tools.system((agent.role.fresh ? SUB_FRESH : SUB) + Custom.section(profile), tools.cwd);
     const blocks = [...agent.view, Tools.here(tools, run.vendor), log];
     const effort = agent.role.effort ?? run.effort;
     const window = Pick.window(pick);
     const room = window === undefined ? undefined : Math.round(window * (Pick.room(pick) ?? config.ROOM));
-    const ask = { ...run, effort, system, blocks, searches: SEARCHES, server, builtins: profile?.builtins, listed: profile?.tools, room };
+    const ask = { ...run, effort, system, blocks, searches: SEARCHES, server, listed: profile?.tools, room };
     return unmarked ? AskAI.unmarked(ask) : ask;
   }
 
   // Claude Code asking leave to use a tool (its permission prompt): past
   // the plugins' hooks first (they may refuse it or change its input; what
   // it answers stays Claude Code's), then judged as illi's own would be
-  // (Access.hosted: what illi's like tool asks), so the same rules,
-  // approvals and mode hold there. Its answer as Claude Code reads it:
+  // (Access.hosted: its web fetch by the URL, its web search by the
+  // query, any other by its name), so the same rules, approvals and mode
+  // hold there. Its answer as Claude Code reads it:
   // a yes (with the input to run if a hook changed it: by value, against
   // a copy taken first, so a copy unchanged is no change and one changed
-  // in place is; never the input echoed back, as a long one, a file's
-  // whole content, passes the size Claude Code takes from a tool, and it
+  // in place is; never the input echoed back, as a long one, a web
+  // fetch's long prompt, passes the size Claude Code takes from a tool, and it
   // refuses the answer), or a no with what the model is told
   export async function approve(tools: Tools, who: string, tool: string, input: unknown, signal: AbortSignal): Promise<Out> {
     const asked = structuredClone(input);
     const told = await Plugins.before_tool({ tool, input, agent: who === MAIN ? null : who, cwd: tools.cwd, signal });
     const used = "block" in told ? undefined : told.input;
-    const stop = "block" in told ? { text: told.block, fail: true } : await Tools.guard(tools, who, tool, used, signal, (where) => Access.hosted(where, tool, used), told);
+    const stop = "block" in told ? { text: told.block, fail: true } : await Tools.guard(tools, who, tool, used, signal, () => Access.hosted(tool, used), told);
     const answer = stop !== null ? { behavior: "deny", message: stop.text } : Bun.deepEquals(used, asked) ? { behavior: "allow" } : { behavior: "allow", updatedInput: used };
     return { text: JSON.stringify(answer), fail: false };
   }

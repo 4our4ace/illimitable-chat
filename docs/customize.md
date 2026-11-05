@@ -335,8 +335,7 @@ over. What differs:
   off by default in favor of (`TaskCreate`, `TaskUpdate`, `TaskList`,
   `TaskGet`) todo;
   `Glob`, `Grep` and `LS` shell, if `Bash`, `Write` or `Edit` is listed
-  too (else it can't search, said in `/agents`; on claude-code, Claude
-  Code's own `Glob` and `Grep` do). `model: inherit` is your pick;
+  too (else it can't search, said in `/agents`). `model: inherit` is your pick;
   `sonnet`, `opus`, `haiku` or `fable` alone the newest of it offered,
   else your pick. `Agent(worker, researcher)` (or `Task(…)`) keeps its
   comma and reads as spawn held to those agents (a plugin's by its name
@@ -345,22 +344,17 @@ over. What differs:
   other, or a plain subagent (`Agent` alone allows any; naming none of
   your agents, it gets no spawn). (Your own agents are read so too, and
   the list may be YAML's: `[Read, "Grep"]`, or `- Read` lines, blank
-  lines between them too.) On claude-code, the list also
-  limits Claude Code's built-in tools to those it names (illi's `read`,
-  `write`, `edit` and `shell` as `Read`, `Write`, `Edit` and `Bash`;
-  `MultiEdit` as `Edit`), but never to its `Agent`, `Task`, `TodoWrite`
-  or task tools, nor its long-session tools, which illi leaves out of
-  every call ([Providers](providers.md#claude-plan)): illi's spawn and
-  todo take their place, so the agent's subagents show at the side and
-  its to-do list is illi's. Its MCP
-  servers go but those it names (`mcp__github`; one illi has never seen
-  loads in one call, which shows it); its plugins stay.
+  lines between them too.) On claude-code, the agent gets illi's
+  tools as on every provider, and Claude Code's web search and fetch
+  ([Providers](providers.md#claude-plan)); of Claude Code's own MCP
+  servers, those its list names (`mcp__github`; one illi has never seen
+  loads in one call, which shows it).
 - Hooks: a `Bash` matcher takes illi's `shell` ([Beside Claude
-  Code's](#beside-claude-codes)); a `PreToolUse` one naming only Claude
-  Code's other tools runs only on `claude-code`'s own calls (a
-  `PostToolUse` one never sees them), and one naming only tools illi
-  turns off in its calls (`Agent`, `Task`, `TodoWrite`, its task tools,
-  `AskUserQuestion`, `Monitor`…) never runs, each said at the start.
+  Code's](#beside-claude-codes)); one naming only Claude Code's other
+  tools (`Write|Edit`, `Agent`, `TodoWrite`…) never runs, as illi runs
+  its own on every provider, but a `PreToolUse` one naming its
+  `WebFetch` or `WebSearch`, which runs on `claude-code` as Claude Code
+  asks leave for one; each is said at the start.
 - Its own MCP servers' tools are `mcp__<server>__<tool>`: Claude Code's
   `mcp__plugin_<plugin>_<server>__` is read as that, in its agents and
   matchers.
@@ -372,7 +366,8 @@ over. What differs:
 - A root `index.js` beside other parts is often its MCP server, so illi
   never imports it: illi's code goes in `illi.ts`.
 - On `claude-code`, Claude Code still loads its own enabled plugins
-  inside its calls.
+  inside its calls (their MCP servers; their skills, commands, agents
+  and hooks don't run there).
 
 ### Code
 
@@ -428,9 +423,10 @@ it follows the theme) or a list of those.
 | `tool.before` | `{ tool, input, agent, cwd, signal }` | `{ block: "why" }` to refuse the call; `{ input }` to run it on other input; `{ allow: true }` to run it as `trust` mode would (a deny rule still refuses it); `{ ask: "why" }` to have it asked; `{ context }` to add to what the model reads after its answer |
 | `tool.after` | the same, and `output: { text, fail }` | `{ text, fail }`: what the model reads |
 
-`tool.before` sees every tool call, Claude Code's own tools too (as
-they ask leave); `tool.after` every call illi runs (Claude Code runs its
-own, so it doesn't see theirs).
+`tool.before` sees every tool call, Claude Code's own on `claude-code`
+too (its web fetch and search, its MCP servers' tools, as they ask
+leave); `tool.after` every call illi runs (Claude Code runs its own, so
+it doesn't see theirs).
 
 - Hooks run one after another: the plugins in the order they load
   (global, profile, project; by name), each one's in the order it gave
@@ -600,14 +596,13 @@ its input:
   `{ command, description }`), and the command is told
   `tool_name: "Bash"`; one
   naming only Claude Code's other tools (`Write|Edit`: their inputs
-  differ) is said at the start. On `claude-code`, its own tools come
-  under their names as they ask leave, but those illi turns off for its
-  own spawn, todo and ask (`Agent`, `Task`, `TodoWrite`, its task
-  tools, `AskUserQuestion`, `Monitor` and its other long-session tools)
-  never do (said at the start too); illi turns
-  your `~/.claude` hooks off inside it, so `hooks.json` is the one file
-  that runs, and only `PreToolUse`'s refusal, input and decision reach
-  those tools (Claude Code runs them, so `PostToolUse` doesn't see them).
+  differ) is said at the start, as it never runs: illi runs its own
+  tools on every provider. On `claude-code`, Claude Code's web fetch and
+  search and its MCP servers' tools come under their names as they ask
+  leave; illi turns your `~/.claude` hooks off inside it, so
+  `hooks.json` is the one file that runs, and only `PreToolUse`'s
+  refusal, input and decision reach those tools (Claude Code runs them,
+  so `PostToolUse` doesn't see them).
 - No `session_id` or `transcript_path`: one chat per project, which `cwd`
   names. `permission_mode` holds illi's modes.
 - Only `command` hooks, and the seven events above.

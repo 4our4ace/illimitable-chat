@@ -111,21 +111,25 @@ Claude Code stays logged in.
 
 illi then runs Claude Code itself, as it ships, on the account's login:
 
-- **Claude Code's own prompt and tools** (its shell, files, search), with
-  illi's added through MCP: zoom into the memory, the date, subagents,
-  messages to them, the to-do list and skills. Claude Code's own
-  subagents and to-do list are off, as are the tools it has for a long
-  session of its own (scheduled tasks and wake-ups, monitors, workflows,
-  messages to its agents, notifications, worktrees…) and its background
-  tasks: illi's spawn, todo and tell take their place, so subagents
-  show at illi's side and there is one to-do list, and illi's turn ends
-  with its Claude Code run, which those would outlive. Its shell works
-  as illi's own: a command can still go to the background as in any
-  shell (`cmd > log 2>&1 &`), and a wait is a loop that checks
-  (`until <check>; do sleep 2; done`). Its skills stay. An agent's `tools:`
-  limits both: `tools: zoom, Read, Grep` gives that agent illi's zoom
-  and, of Claude Code's built-in tools, Read and Grep alone. Of Claude
-  Code's own MCP servers (below), it keeps only those it names:
+- **illi's prompt and tools, Claude Code's loop**: Claude Code runs a
+  turn's steps, but the model gets illi's prompt in place of Claude
+  Code's (of Claude Code's own words only a line saying it is a Claude
+  agent stays) and illi's own tools, the ones it has on every provider
+  (shell, read, write, edit, zoom into the memory, the date, subagents
+  and messages to them, the to-do list, skills), which illi serves
+  Claude Code over MCP and runs itself. So illi is the same agent on
+  every provider: its permissions, hooks, background jobs and Related
+  lines work here as everywhere else, and subagents show at illi's
+  side. Of Claude Code's own tools only its web search and fetch stay,
+  as illi has none of its own. Its shell, files, skills, subagents,
+  to-do list, background tasks and the tools it has for a long session
+  of its own (scheduled tasks, monitors, workflows…) are left out, and
+  so is its tool search, so illi's tools are there from the first step.
+  Skills kept in Claude Code's own folder (`~/.claude/skills`) don't
+  load: one copied to `~/.agents/skills` or `~/.illi/skills` works on
+  every provider ([Customize](customize.md)). An agent's `tools:` limits
+  illi's tools as on every provider. Of Claude Code's own MCP servers
+  (below), it keeps only those it names:
   `mcp__github` keeps that one, `mcp__github__get_issue` that tool of
   it, `mcp` all; naming none of them, or only ones turned off or run by
   illi itself, it loads none. illi leaves the others out by name: those
@@ -136,14 +140,37 @@ illi then runs Claude Code itself, as it ships, on the account's login:
   Code's plugins stay, their MCP servers counted among its own.
 - **Your token stays with Claude Code.** illi never sees it, and its
   turns stay out of Claude Code's session history.
-- **Your Claude Code setup applies**: its permission rules, MCP servers
-  and plugins. Its hooks are turned off inside illi's calls: your
+- **Under illi's own name**: each request names the program that sent
+  it, and illi's name `illi`, not `sdk-cli`, which every `claude -p`
+  names by default. Users report a plan's limits filling about twice
+  as fast under `sdk-cli`
+  ([anthropics/claude-code#97074](https://github.com/anthropics/claude-code/issues/97074)).
+  Under another name Claude Code would
+  also add an artifact tool and send one more request each run, to
+  title its session: illi turns both off.
+- **Your own Claude Code settings apply, a project's don't**: illi's
+  calls read your user settings alone: your permission rules (for its
+  web fetch and its MCP servers' tools; illi's own tools follow illi's
+  rules), MCP servers, plugins and your own `~/.claude/CLAUDE.md`. A
+  project's `.claude` settings and rules, `CLAUDE.md`,
+  `CLAUDE.local.md`, `AGENTS.md` and `.mcp.json` don't load in Claude
+  Code: illi reads the project's `AGENTS.md` or `CLAUDE.md` itself, as
+  on every provider, so it reaches the model once, and a repository's
+  settings would otherwise apply in a folder you never told Claude Code
+  to trust. A project's MCP servers go in its `.illi/mcp.json`, which
+  illi loads on every provider once you trust the folder
+  ([Customize](customize.md#mcp-servers)). Its hooks are turned off inside illi's calls: your
   `~/.illi/hooks.json` is the one that runs
-  ([Customize](customize.md#hooks)). A project's `CLAUDE.md` is Claude
-  Code's to read, so illi doesn't add it again.
+  ([Customize](customize.md#hooks)).
 - **Claude Code's MCP servers in illi**: those you added to Claude Code
   (`claude mcp add`, its plugins', claude.ai connectors) load in illi's
-  calls beside illi's own. illi learns them from the first call that
+  calls beside illi's own. Their tools go whole with every request, as
+  illi's do (Claude Code's tool search is off), so each one connected
+  takes room in every call: `off` or an agent's `tools:` (above) leaves
+  out those you don't need. One waiting on a login is left out by
+  itself, as its only tools would be the login's, which can't finish
+  inside illi's call; once you log in (`claude mcp login`), the call
+  after the next loads it. illi learns them from the first call that
   loads them, and `/mcp` and the side show them from then on, in the
   terminal whose illi holds the chat, each marked as Claude Code's, how
   it is and its tools (none show before; one that needs a login names
@@ -159,15 +186,16 @@ illi then runs Claude Code itself, as it ships, on the account's login:
   server of illi's own by that name too, from illi's next start (`/mcp`
   says so on both). While illi runs a server of its own by the same
   name, illi's alone reaches the model (failed, Claude Code's stays), so
-  the model gets one copy. illi keeps the names it has seen
-  (`claude-code.json`), so `off` and an agent's `tools:` take one out
-  from the first call after a start too (one it has never seen loads in
-  one call, which shows it).
-- **Permission prompts come to illi.** When Claude Code wants to run
-  something its settings don't allow, illi checks it as it checks its
-  own calls ([Permissions](permissions.md)): what stays in the project
-  runs, a folder outside it is asked about at illi's screen, saying
-  why, and your rules and saved approvals apply.
+  the model gets one copy. illi keeps the names it has seen, and which
+  wait on a login (`claude-code.json`), so `off`, an agent's `tools:`
+  and a login missing take one out from the first call after a start
+  too (one it has never seen loads in one call, which shows it).
+- **Permission prompts come to illi.** illi's own tools are checked by
+  illi, as on every provider ([Permissions](permissions.md)). When
+  Claude Code wants to run one of its own (a web fetch, a tool of one
+  of its MCP servers) that your Claude Code settings don't allow, illi
+  checks it the same way: your rules and saved approvals apply, and
+  what they leave open is asked at illi's screen, saying why.
 - **The whole window**: as soon as the plan is connected, at each
   start, and when another terminal switches the account, illi asks
   Claude Code each model's window, one model after another, sending no
@@ -204,12 +232,12 @@ illi then runs Claude Code itself, as it ships, on the account's login:
   off (`CLAUDE_CODE_DISABLE_AUTO_MEMORY`), so the model neither reads
   nor writes the notes Claude Code keeps for a project in its folder
   (`~/.claude/projects/<project>/memory/`); Claude Code on its own still
-  keeps them. Its `CLAUDE.md` files are instructions, not those notes,
-  and still load: the account's folder's (your own Claude Code's in
-  `~/.claude`), on the Claude plan alone, and the project's. illi's
-  memory is the chat itself, your rules (`RULES.md`) and the project's
-  `AGENTS.md` or `CLAUDE.md`, the same on every provider: a note you
-  want kept for good belongs in one of those.
+  keeps them. Its `CLAUDE.md` files are instructions, not those notes:
+  the account's folder's (your own Claude Code's in `~/.claude`) still
+  loads, on the Claude plan alone; the project's is illi's to read
+  (above). illi's memory is the chat itself, your rules (`RULES.md`) and
+  the project's `AGENTS.md` or `CLAUDE.md`, the same on every provider:
+  a note you want kept for good belongs in one of those.
 - **Summaries run with nothing extra**: `claude -p` calls with no tools,
   MCP servers, commands or hooks.
 - **Your plan's use at the side**: the Usage section shows how much of

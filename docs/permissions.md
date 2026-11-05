@@ -108,21 +108,16 @@ project always comes first:
   beside them are still asked, and so are a plugin's code, hooks and
   MCP servers.
 
-On `claude-code`, Claude Code's own settings apply first (yours in
-`~/.claude`, a project's in its `.claude`): what they allow runs
-unasked, and so does what Claude Code allows by itself (a read inside
-the project, a `.env` file's too); illi never sees those calls, so your
-deny rules don't refuse them. What it asks about comes to illi and
-is checked the same way: `Bash` as the shell, `Read` as a read,
-`Write`, `Edit`, `MultiEdit` and `NotebookEdit` as edits, `Grep`,
-`Glob` and `LS` as `grep`, `glob` and `list` (their pattern, or the
-folder's path) after their folder if outside, `WebFetch` and
-`WebSearch` as `webfetch` (the URL) and `websearch` (the query), any
-other tool as its own name. illi's own tools in it (`mcp__illi__…`)
-are checked as they reach illi. Claude Code's own subagents, to-do
-list, background tasks, `Monitor` and its other tools for a long
-session of its own are off in illi's calls ([Providers](providers.md#claude-plan)), so they
-never ask: illi's `spawn` asks as `subagent`.
+On `claude-code`, illi runs its own tools there too (shell, read,
+write, edit…), so they are checked as on every provider. Of Claude
+Code's own tools only its web search and fetch run in illi's calls,
+beside its MCP servers' tools ([Providers](providers.md#claude-plan)).
+For those your own Claude Code settings apply first (`~/.claude`; a
+project's `.claude` settings don't load in illi's calls): what they
+allow runs unasked, and illi never sees it, so your deny rules don't
+refuse it. What Claude Code asks about comes to illi and is checked the
+same way: `WebFetch` as `webfetch` (the URL), `WebSearch` as
+`websearch` (the query), any other tool as its own name.
 
 How rules decide
 ----------------
@@ -324,8 +319,8 @@ Limits
   known only as it runs stays as written (`rm -rf "$(cat dir)"` isn't
   `rm -rf /*`), `rm -fr /` isn't `rm -rf /*`, `git -C app push` isn't
   `git push *`.
-- A file rule (`read`, `edit`) is for the file tools, illi's and Claude
-  Code's: a shell command that reads or writes a file meets your
+- A file rule (`read`, `edit`) is for the file tools (`read`, `write`,
+  `edit`): a shell command that reads or writes a file meets your
   `shell` rules alone (and, outside the project, the folder's
   `external_directory` ones): an `edit` rule denying `*.lock` doesn't
   stop `echo x > bun.lock`.

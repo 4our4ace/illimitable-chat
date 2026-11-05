@@ -24,9 +24,9 @@
 // in the view), a subagent (subagent: only an agent spawns it, as
 // spawn's `agent`), or both (all, the default). Its front matter also says what
 // it does (description), runs on (model: a label or
-// vendor:model:effort:speed; effort), may use (tools, by name, on
-// claude-code Claude Code's built-in tools too; left out: all its role
-// has; empty: none, as Claude Code reads an empty list), whether a
+// vendor:model:effort:speed; effort), may use (tools, by name, Claude
+// Code's names read as illi's; left out: all its role has; empty: none,
+// as Claude Code reads an empty list), whether a
 // subagent of it starts fresh (fresh: true: none of the chat, Tools.ts)
 // and the color of its mark (color: #rrggbb; none: one made for it); its
 // body is its instructions, added to the system prompt of its calls.
@@ -78,9 +78,7 @@ export type Mode = "primary" | "subagent" | "all";
 // as its role has; Claude Code's tool names read as illi's), its mark's
 // color (#rrggbb; null: one made for it), its instructions, its file, its
 // plugin (null: the user's own), what to know of it (a tool it lost), the
-// Claude Code built-in tools it may use on claude-code (null: it has no
-// tools list, so all; a list naming none of them: none), the subagents it
-// may spawn, by name (null: any; Claude Code's Agent(worker, researcher):
+// subagents it may spawn, by name (null: any; Claude Code's Agent(worker, researcher):
 // those alone), whether it starts fresh as a subagent
 export type Profile = {
   name        : string;
@@ -94,7 +92,6 @@ export type Profile = {
   file        : string;
   plugin?     : string | null;
   notes?      : string[];
-  builtins?   : string[] | null;
   spawns?     : string[] | null;
   fresh?      : boolean;
 };
@@ -139,10 +136,6 @@ const CLAUDE_SEARCH = ["Glob", "Grep", "LS"];
 // name: Agent(worker, researcher), or Task(...), its old name
 const SPAWNS = /^(Agent|Task)\((.*)\)$/s;
 const CLAUDE_STRONG = ["Bash", "Write", "Edit", "MultiEdit", "shell", "write", "edit"];
-
-// illi's tools in an agent's tools list as Claude Code's built-in ones,
-// which an agent on claude-code uses in their place (Tools.list `lean`)
-const CLAUDE_OWN = new Map([["read", "Read"], ["write", "Write"], ["edit", "Edit"], ["shell", "Bash"]]);
 const FAMILIES = ["sonnet", "opus", "haiku", "fable"];
 
 // the skills illi comes with: SKILL.md files, named in their front
@@ -310,14 +303,13 @@ export namespace Custom {
 
   // an agent's file read: its tools list's Claude Code names as illi's
   // (a plugin's own MCP servers, as mcp__plugin_<plugin>_<server>, as
-  // illi names them), and the Claude Code built-in tools it gives
-  // (agent_builtins); a search it can't do said. The list as YAML writes
+  // illi names them); a search it can't do said. The list as YAML writes
   // it too: in [ ], each name quoted or not (a `- name` list: parse);
   // a comma inside ( ) is the entry's own, as in Agent(worker,
   // researcher), which reads as spawn held to those agents (spawns).
-  // One empty (tools: with no value, "" or []) gives none of illi's tools
-  // nor of Claude Code's built-in ones, as Claude Code reads an empty
-  // list; only one left out gives all
+  // One empty (tools: with no value, "" or []) gives none of illi's
+  // tools, as Claude Code reads an empty list; only one left out gives
+  // all
   export function profile(name: string, file: string, plugin: Bundle | null = null): Profile {
     const { head, body } = safe_read(file);
     const list = head.tools === undefined ? undefined : tools_split(head.tools.replace(/^\[|\]$/g, "")).map(unquote).filter(Boolean);
@@ -336,7 +328,6 @@ export namespace Custom {
       file,
       plugin      : plugin?.name ?? null,
       notes       : lost ? ["its tools name Claude Code's searches (Glob, Grep, LS), which illi does with shell; it names no Bash, Write or Edit, so it gets no shell"] : [],
-      builtins    : list === undefined ? null : agent_builtins(list),
       spawns      : list === undefined ? null : agent_spawns(list),
       fresh       : YES.test(head.fresh ?? ""),
     };
@@ -491,28 +482,6 @@ function tools_split(text: string): string[] {
 // Task(...) as Agent and Task; any other as written
 function claude_name(entry: string): string {
   return SPAWNS.exec(entry)?.[1] ?? entry;
-}
-
-// the Claude Code built-in tools an agent's tools list gives on
-// claude-code, as Claude Code's own subagent would have them: Claude
-// Code's names as they are (Glob, Grep: searches kept, though illi's own
-// loop has none without a shell), but one illi reads as its read, write,
-// edit or shell, and illi's own of those, as the Claude Code tool for it
-// (CLAUDE_OWN: MultiEdit, gone from Claude Code, as Edit); one illi reads
-// as another of its own (Agent, Task: spawn; TodoWrite, TaskCreate,
-// TaskUpdate, TaskList, TaskGet: todo) none, nor
-// illi's other tools and MCP servers, as illi gives those itself (so the
-// agent spawns one way, its subagents at illi's side, and keeps one to-do
-// list). --tools reaches only Claude Code's built-in tools: its own MCP
-// servers are cut by name (ClaudeCode.cut), its plugins stay. One
-// ClaudeCode.OFF names (Monitor, CronCreate...) is given as written, but
-// never loads: OFF goes out as --disallowedTools, which wins
-function agent_builtins(list: string[]): string[] {
-  const out = list.map(claude_name).map((t) => {
-    const own = CLAUDE_TOOLS.get(t) ?? t;
-    return CLAUDE_OWN.get(own) ?? (own === t && /^[A-Z][A-Za-z]*$/.test(t) ? t : null);
-  });
-  return [...new Set(out.filter((t): t is string => t !== null))];
 }
 
 // the line of a `- item` at or after line k, past blank lines, as a

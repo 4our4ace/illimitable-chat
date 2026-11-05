@@ -8,13 +8,11 @@
 // back; one all done is let go (as a turn starts and ends, and at the
 // start), one still going kept. What the views are told
 // of the calls: the input the main agent's last request read. A caller in
-// Claude Code gets only the tools it lacks (?lean), its permission prompt
+// Claude Code gets illi's whole list (?hosted) and its permission prompt
 // whatever tools its agent lists (no other caller ever gets it; a yes
 // never echoes the input, a long one past what Claude Code takes from a
-// tool, only one a hook changed), and
-// prompts that say it works inside illi (a subagent named only illi's
-// tools it has, one started fresh none that read the chat), the
-// project's CLAUDE.md left to Claude Code. Its
+// tool, only one a hook changed), and illi's own prompt, as on every
+// provider, the project's rules in it. Its
 // permission prompt, and illi's own tools, pass the permission checks
 // (Permissions.ts, Access.ts; in a throwaway repository): what stays in
 // the project runs, a folder outside asked with why, the question given
@@ -186,60 +184,58 @@ test("a user's subagent that lists its tools, in Claude Code, still gets the per
   }
 });
 
-test("a caller in Claude Code gets only the tools it lacks, served at ?lean; its prompts say it works inside illi, CLAUDE.md left to Claude Code", async () => {
-  const names = (lean: boolean) => Tools.list(chat.tools, "main", lean).map((t) => t.name);
-  expect(names(false)).toEqual(expect.arrayContaining(["shell", "read", "write", "edit"]));
-  expect(names(true)).not.toEqual(expect.arrayContaining(["shell"]));
-  expect(names(true).filter((n) => ["shell", "read", "write", "edit"].includes(n))).toEqual([]);
-  expect(names(true)).toEqual(expect.arrayContaining(["zoom", "date", "spawn", "tell", "todo"]));
-  const res = await fetch(Tools.at(chat.tools, "main") + "?lean", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
+test("a caller in Claude Code gets illi's whole list, served at ?hosted, with Claude Code's permission prompt; its prompt is illi's own, as on every provider, a project's rules in it", async () => {
+  const names = (hosted: boolean) => Tools.list(chat.tools, "main", hosted).map((t) => t.name);
+  expect(names(true)).toEqual(expect.arrayContaining(["shell", "read", "write", "edit", "zoom", "date", "spawn", "tell", "todo"]));
+  expect(names(true)).toEqual([...names(false), "approve"]);
+  const res = await fetch(Tools.at(chat.tools, "main") + "?hosted", { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
   const listed = (await res.json()).result.tools;
   expect(listed.map((t: any) => t.name)).toEqual(names(true));
-  expect(names(true)).toContain("approve");
-  expect(names(false)).not.toContain("approve");
-  const upfront = listed.filter((t: any) => t._meta?.["anthropic/alwaysLoad"] === true).map((t: any) => t.name);
-  expect(upfront.sort()).toEqual(["ask", "date", "projects", "search", "spawn", "tell", "todo", "zoom"]);
-  const hosted = Tools.hosted(MASTER);
-  expect(hosted).toStartWith("Here you work inside illi (short for illimitable)");
-  expect(hosted).not.toContain("You are illi");
-  expect(hosted).not.toContain("Your shell, read, write and edit tools");
-  expect(hosted).toContain("mcp__illi__");
-  expect(Tools.hosted(SUB)).toStartWith("Here you work as a subagent of illi");
-  expect(Tools.hosted(SUB_FRESH)).toStartWith("Here you work as a subagent of illi");
-  expect(Tools.hosted(SUB_FRESH)).not.toContain("Your shell, read, write and edit tools");
-  expect(Tools.hosted(SUB_FRESH + "\n\n# Agent: tester")).toContain("mcp__illi__");
-  expect(Tools.hosted(SUB_FRESH + "\n\n# Agent: tester")).not.toMatch(/\b(zoom|date|projects|search|todo)\b/);
-  expect(Tools.hosted(SUB)).toContain("zoom");
-  expect(Tools.hosted(SUB + "\n\n# Agent: reviewer").split("\n\n").at(-1)).toBe("illi's own tools (zoom, date, projects, search, skill and the user's MCP\nservers in illi) come from illi, as its MCP server's (mcp__illi__).");
-  expect(Tools.hosted(MASTER)).toContain("illi's todo");
-  expect(Tools.hosted(SUB)).not.toContain("Your shell, read, write and edit tools");
+  expect(listed.some((t: any) => t._meta !== undefined)).toBe(false);
+  const plain = await fetch(Tools.at(chat.tools, "main"), { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }) });
+  expect((await plain.json()).result.tools.map((t: any) => t.name)).toEqual(names(false));
   const project = temp_repo("illi-tools-project-");
   fs.writeFileSync(project + "/CLAUDE.md", "a rule of the project");
-  expect(Tools.system("head", project)).toContain("a rule of the project");
-  expect(Tools.system("head", project, "claude-code")).not.toContain("a rule of the project");
+  expect(Tools.system(MASTER, project)).toStartWith(MASTER + "\n\n# The user's rules");
+  expect(Tools.system(MASTER, project)).toContain("a rule of the project");
+  fs.writeFileSync(project + "/AGENTS.md", "the agents' rule");
+  expect(Tools.system(SUB_FRESH, project)).toContain("the agents' rule");
+  expect(Tools.system(SUB, project)).not.toContain("a rule of the project");
 }, 20000);
 
-test("Claude Code's permission prompt is judged as illi's own calls, a yes never echoing the input (a long one would pass what Claude Code takes from a tool): what stays in the project unasked, a folder outside asked with why, the command whole for the question; yes, no with a reason, don't ask again saved for the project; trust runs it; stopped or no one there, no", async () => {
+test("illi's own tools, as Claude Code's calls reach them too, and Claude Code's permission prompt (its web fetch, its MCP servers' tools) are judged alike, a yes to the prompt never echoing the input (a long one would pass what Claude Code takes from a tool): what stays in the project unasked, a folder outside asked with why, the command whole for the question; yes, no with a reason, don't ask again saved for the project; trust runs it; stopped or no one there, no", async () => {
   const v = View.view_new();
   View.link_open(v, Chat.link(chat, (msg) => void View.view_hear(v, msg)));
   await until(() => v.up);
   const approve = async (tool: string, input: unknown, signal = new AbortController().signal) => JSON.parse((await Tools.call(chat.tools, "main", "approve", { tool_name: tool, input }, signal)).text);
+  const guard = async (tool: string, input: unknown, signal = new AbortController().signal) => {
+    const out = await Tools.guard(chat.tools, "main", tool, input, signal);
+    return out === null ? { behavior: "allow" } : { behavior: "deny", message: out.text };
+  };
   const answer  = async (yes: boolean, always: boolean, why = "") => {
     await until(() => v.asks.length === 1);
     View.link_send(v, { $: "answer", ask: v.asks[0].id, yes, always, said: why });
   };
   const AGAIN = " Don't run it again as is: ask the user, or do it another way. They can allow it in /permissions.";
   const OUTSIDE = "it reaches outside the project: " + OUT + "/";
-  expect(await approve("Bash", { command: "rm -rf build && git push --force origin main" })).toEqual({ behavior: "allow" });
-  expect(await approve("Write", { file_path: "page.html", content: "<p>long</p>\n".repeat(20000) })).toEqual({ behavior: "allow" });
-  expect(await approve("Task", { prompt: "look" })).toMatchObject({ behavior: "allow" });
-  const yes = approve("Bash", { command: "cat " + OUT + "/notes.txt" });
+  expect(await guard("shell", { command: "rm -rf build && git push --force origin main" })).toEqual({ behavior: "allow" });
+  expect(await approve("WebFetch", { url: "https://x.dev", prompt: "<p>long</p>\n".repeat(20000) })).toEqual({ behavior: "allow" });
+  expect(await approve("mcp__github__get_issue", { number: 7 })).toEqual({ behavior: "allow" });
+  fs.writeFileSync(config.PERMISSIONS, JSON.stringify({ rules: { webfetch: { "https://ask.dev/*": "ask" } } }));
+  const fetched = approve("WebFetch", { url: "https://ask.dev/page", prompt: "<p>long</p>\n".repeat(20000) });
   await until(() => v.asks.length === 1);
-  expect(v.asks[0]).toMatchObject({ who: "illi", tool: "Bash", what: "cat " + OUT + "/notes.txt", why: OUTSIDE, keep: "files in " + OUT + "/" });
+  expect(v.asks[0]).toMatchObject({ who: "illi", tool: "WebFetch", what: "https://ask.dev/page", why: "your rule asks about webfetch https://ask.dev/*" });
+  await answer(true, false);
+  expect(await fetched).toEqual({ behavior: "allow" });
+  await until(() => v.asks.length === 0);
+  fs.rmSync(config.PERMISSIONS);
+  const yes = guard("shell", { command: "cat " + OUT + "/notes.txt" });
+  await until(() => v.asks.length === 1);
+  expect(v.asks[0]).toMatchObject({ who: "illi", tool: "shell", what: "cat " + OUT + "/notes.txt", why: OUTSIDE, keep: "files in " + OUT + "/" });
   await answer(true, false);
   expect(await yes).toEqual({ behavior: "allow" });
   await until(() => v.asks.length === 0);
-  const nested = approve("Bash", { command: "ls " + OUT + "/a/b/x.txt " + OUT + "/a/y.txt " + OUT + "/z.txt" });
+  const nested = guard("shell", { command: "ls " + OUT + "/a/b/x.txt " + OUT + "/a/y.txt " + OUT + "/z.txt" });
   await until(() => v.asks.length === 1);
   expect(v.asks[0]).toMatchObject({ why: OUTSIDE, keep: "files in " + OUT + "/" });
   await answer(true, true);
@@ -247,19 +243,19 @@ test("Claude Code's permission prompt is judged as illi's own calls, a yes never
   await until(() => v.asks.length === 0);
   expect(JSON.parse(fs.readFileSync(config.PERMISSIONS, "utf8")).projects[chat.tools.cwd]).toEqual({ saved: [{ action: "external_directory", resource: OUT + "/*" }] });
   fs.rmSync(config.PERMISSIONS);
-  const wild = approve("Bash", { command: "cat \"" + OUT + "/*/x\" " + OUT + "/a/y.txt" });
+  const wild = guard("shell", { command: "cat \"" + OUT + "/*/x\" " + OUT + "/a/y.txt" });
   await until(() => v.asks.length === 1);
   expect(v.asks[0]).toMatchObject({ why: "it reaches outside the project: " + OUT + "/*/, " + OUT + "/a/", keep: "files in " + OUT + "/a/" });
   await answer(true, false);
   await wild;
   await until(() => v.asks.length === 0);
-  const no = approve("Write", { file_path: OUT + "/a-illi-test.txt", content: "x" });
+  const no = guard("write", { path: OUT + "/a-illi-test.txt", content: "x" });
   await answer(false, false, "keep it in the repo");
   expect((await no).message).toBe("The user said no, asked at illi's screen: keep it in the repo. Asked because " + OUTSIDE + "." + AGAIN);
   await until(() => v.asks.length === 0);
-  expect(chat.tools.perm.refused.at(-1)).toMatchObject({ who: "illi", tool: "Write", what: OUT + "/a-illi-test.txt", how: "no", said: "The user said no, asked at illi's screen: keep it in the repo", exact: [{ action: "external_directory", resource: OUT + "/*" }] });
+  expect(chat.tools.perm.refused.at(-1)).toMatchObject({ who: "illi", tool: "write", what: OUT + "/a-illi-test.txt", how: "no", said: "The user said no, asked at illi's screen: keep it in the repo", exact: [{ action: "external_directory", resource: OUT + "/*" }] });
   const long = "cat " + OUT + "/x && echo " + "abcdefghij".repeat(200);
-  const cut  = approve("Bash", { command: long });
+  const cut  = guard("shell", { command: long });
   await until(() => v.asks.length === 1);
   expect([v.asks[0].what.length, v.asks[0].whole, v.asks[0].spots!.map((s) => long.slice(...s))]).toEqual([400, long, ["cat " + OUT + "/x"]]);
   await answer(false, false, "no");
@@ -267,7 +263,7 @@ test("Claude Code's permission prompt is judged as illi's own calls, a yes never
   await until(() => v.asks.length === 0);
   expect(chat.tools.perm.refused.at(-1)!.what).toHaveLength(400);
   const doc  = "cat <<'EOF' > ok.txt\n" + Array.from({ length: 4000 }, (_, k) => "line " + k + " of a file").join("\n") + "\nEOF\ncp ok.txt " + OUT + "/";
-  const huge = approve("Bash", { command: doc });
+  const huge = guard("shell", { command: doc });
   await until(() => v.asks.length === 1);
   const q = v.asks[0];
   expect([q.whole!.startsWith(doc.slice(0, 32000)), q.whole!.endsWith("\ncp ok.txt " + OUT + "/"), q.cuts!.length, q.more, q.spots!.map((s) => q.whole!.slice(...s))]).toEqual([true, true, 1, 0, ["cp ok.txt " + OUT + "/"]]);
@@ -275,19 +271,19 @@ test("Claude Code's permission prompt is judged as illi's own calls, a yes never
   await huge;
   await until(() => v.asks.length === 0);
   fs.writeFileSync(config.PERMISSIONS, JSON.stringify({ rules: { shell: { "git push *": "ask" } } }));
-  const always = approve("Bash", { command: "ls && git push origin main" });
+  const always = guard("shell", { command: "ls && git push origin main" });
   await until(() => v.asks.length === 1);
   expect(v.asks[0]).toMatchObject({ why: "your rule asks about git push *", keep: "git push *" });
   await answer(true, true);
   expect((await always).behavior).toBe("allow");
   await until(() => v.asks.length === 0);
-  expect(await approve("Bash", { command: "git push origin dev" })).toMatchObject({ behavior: "allow" });
+  expect(await guard("shell", { command: "git push origin dev" })).toMatchObject({ behavior: "allow" });
   expect(JSON.parse(fs.readFileSync(config.PERMISSIONS, "utf8")).projects[chat.tools.cwd]).toEqual({ saved: [{ action: "shell", resource: "git push *" }] });
   fs.rmSync(config.PERMISSIONS);
   expect(chat.asks).toEqual([]);
   const stop    = new AbortController();
   const count   = chat.tools.perm.refused.length;
-  const stopped = approve("Write", { file_path: AWAY + "/a-illi-test.txt", content: "x" }, stop.signal);
+  const stopped = guard("write", { path: AWAY + "/a-illi-test.txt", content: "x" }, stop.signal);
   await until(() => v.asks.length === 1);
   expect([v.asks[0].what, v.asks[0].spots]).toEqual([AWAY + "/a-illi-test.txt", undefined]);
   stop.abort();
@@ -295,11 +291,14 @@ test("Claude Code's permission prompt is judged as illi's own calls, a yes never
   expect(chat.tools.perm.refused).toHaveLength(count);
   await until(() => v.asks.length === 0);
   chat.tools.perm.mode = "trust";
-  expect(await approve("Edit", { file_path: AWAY + "/b-illi-test.txt" })).toMatchObject({ behavior: "allow" });
+  expect(await guard("write", { path: AWAY + "/b-illi-test.txt", content: "x" })).toMatchObject({ behavior: "allow" });
   chat.tools.perm.mode = null;
   v.ws!.close();
   await until(() => chat.socks.size === 0);
-  expect((await approve("Edit", { file_path: AWAY + "/b-illi-test.txt" })).message).toStartWith("No one is at illi's screen to ask, so it isn't allowed. Asked because ");
+  expect((await guard("write", { path: AWAY + "/b-illi-test.txt", content: "x" })).message).toStartWith("No one is at illi's screen to ask, so it isn't allowed. Asked because ");
+  fs.writeFileSync(config.PERMISSIONS, JSON.stringify({ rules: { webfetch: { "https://ask.dev/*": "ask" } } }));
+  expect((await approve("WebFetch", { url: "https://ask.dev/page" })).message).toStartWith("No one is at illi's screen to ask, so it isn't allowed. Asked because your rule asks about webfetch https://ask.dev/*");
+  fs.rmSync(config.PERMISSIONS);
   chat.tools.perm.refused.length = 0;
 });
 test("a folder refused, allowed for the run (/permissions), allows it and those in it; one whose path holds a wildcard character, that folder alone", () => {
@@ -346,6 +345,7 @@ test("a plugin's hooks come first: its input is what the checks judge and Claude
   fs.writeFileSync(DIR + "/plugins/p.ts", `export default function (illi: any) {
   illi.on("tool.before", (call: any) => call.input?.command === "echo swap" ? { input: { command: "cat ~/.illi-tools-swap" } } : call.input?.command === "echo old" ? { input: { command: "ls" } } : call.input?.command === "echo same" ? { input: { ...call.input } } : call.input?.command === "echo inplace" ? ((call.input.command = "ls"), { input: call.input }) : call.input?.command === "echo nope" ? { block: "The plugin says no." } : undefined);
   illi.on("tool.before", (call: any) => call.input?.command === "echo told" ? { context: "told more" } : call.input?.command === "echo asked" ? { ask: "the plugin wants a look" } : /illi-hooked-secret/.test(call.input?.command ?? call.input?.path ?? "") ? { allow: true } : undefined);
+  illi.on("tool.before", (call: any) => call.input?.url === "https://nope.dev/" ? { block: "The plugin says no." } : call.input?.url === "https://swap.dev/" ? { input: { url: "https://ask.dev/swapped" } } : call.input?.url === "https://old.dev/" ? { input: { url: "https://new.dev/" } } : call.input?.url === "https://same.dev/" ? { input: { ...call.input } } : call.input?.url === "https://inplace.dev/" ? ((call.input.url = "https://new.dev/"), { input: call.input }) : undefined);
   illi.on("tool.after", (call: any) => call.input?.command === "echo seen" ? { text: call.output.text + "(seen)" } : undefined);
   illi.tool({ name: "twice", description: "doubles x", run: (input: any) => String(2 * input.x) });
 }
@@ -362,12 +362,14 @@ test("a plugin's hooks come first: its input is what the checks judge and Claude
     expect((await call("shell", { command: "cat ~/.ssh/illi-hooked-secret" })).text).not.toContain("No one is at illi's screen");
     expect(Tools.list(chat.tools, "main").map((t) => t.name)).toContain("plugin__p__twice");
     expect(await call("plugin__p__twice", { x: 21 })).toMatchObject({ text: "42", fail: false });
-    const approve = async (input: object) => JSON.parse((await call("approve", { tool_name: "Bash", input })).text);
-    expect(await approve({ command: "echo nope" })).toEqual({ behavior: "deny", message: "The plugin says no." });
-    expect((await approve({ command: "echo swap" })).message).toStartWith("No one is at illi's screen to ask");
-    expect(await approve({ command: "echo old" })).toEqual({ behavior: "allow", updatedInput: { command: "ls" } });
-    expect(await approve({ command: "echo same" })).toEqual({ behavior: "allow" });
-    expect(await approve({ command: "echo inplace" })).toEqual({ behavior: "allow", updatedInput: { command: "ls" } });
+    const approve = async (input: object) => JSON.parse((await call("approve", { tool_name: "WebFetch", input })).text);
+    expect(await approve({ url: "https://nope.dev/" })).toEqual({ behavior: "deny", message: "The plugin says no." });
+    fs.writeFileSync(config.PERMISSIONS, JSON.stringify({ rules: { webfetch: { "https://ask.dev/*": "ask" } } }));
+    expect((await approve({ url: "https://swap.dev/" })).message).toStartWith("No one is at illi's screen to ask, so it isn't allowed. Asked because your rule asks about webfetch https://ask.dev/*");
+    fs.rmSync(config.PERMISSIONS);
+    expect(await approve({ url: "https://old.dev/" })).toEqual({ behavior: "allow", updatedInput: { url: "https://new.dev/" } });
+    expect(await approve({ url: "https://same.dev/" })).toEqual({ behavior: "allow" });
+    expect(await approve({ url: "https://inplace.dev/" })).toEqual({ behavior: "allow", updatedInput: { url: "https://new.dev/" } });
   } finally {
     Plugins.reset();
     chat.tools.perm.refused.length = 0;

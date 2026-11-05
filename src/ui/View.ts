@@ -372,9 +372,10 @@ const KINDED   = /^(user|illi|tool|echo|mind|note|work|recap): /;
 const ANSWERS = "your answers";
 
 // what a run's tool calls did, by tool: one, many (the rest: "called");
-// Claude Code's own tools as illi's alike (ALIKE: its Agent, Task and
-// TodoWrite, off in illi's calls now, only in a chat's older ones), or
-// as their own
+// Claude Code's own tools as illi's alike (ALIKE), or as their own: of
+// them only its web search and fetch run in illi's calls now, the
+// others (its shell, files, Agent, Task, TodoWrite) only in a chat's
+// older ones
 const DID: Record<string, [string, string]> = {
   shell      : ["ran a command", "ran # commands"],
   read       : ["read a file", "read # files"],
@@ -963,8 +964,9 @@ function act_text(v: View, rows: Row[]): string {
 // message whole even summed up (known by then: Chat.teach), the answers
 // to illi's question (ANSWERED, shown as the user's). None follows a call
 // logged alone: one stopped before it answered (Chat.unanswered: not run
-// yet, or Claude Code's, cut off; illi's own tools answer a stop, as
-// failed; an OpenAI web search left unfinished too), or an OpenAI web
+// yet, or one on claude-code, cut off, as its stream is let go at a
+// stop; illi's own loop answers a stop, as failed; an OpenAI web search
+// left unfinished too), or an OpenAI web
 // search logged before 0.3.1, which logged none (OpenAI.entries)
 function row_echo(v: View, row: Row | undefined): string | null {
   return row?.$ === "Msg" ? (row.kind === "echo" ? row.text : row.kind === "user" && row.who === ANSWERS ? ANSWERED + row.text : null)

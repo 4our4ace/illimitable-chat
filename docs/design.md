@@ -79,7 +79,7 @@ in plain words, then how it ended:
 
 - **The line** says what was done, counted by tool (`Ran 3 commands`,
   `Searched the web`; Claude Code's tools as illi's alike, or in words
-  of their own: `Searched the code 3 times`; any other tool,
+  of their own: `Opened 2 pages`; any other tool,
   `Called github: get_issue`; a call summed up before its message is
   known, `Used a tool`), then `thought`, then the agents that reported
   (a run of results alone, `Got 2 results`). It takes no click: each

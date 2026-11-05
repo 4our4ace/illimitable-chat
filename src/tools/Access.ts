@@ -43,13 +43,11 @@
 // theme.json, which alone of their folder have their own
 // path as resource, so allowing them allows nothing beside them). Paths
 // are taken as written (. and .. worked out), links not followed.
-// Claude Code's tools (hosted) ask as illi's like ones do: Bash a shell
-// command, Monitor its command too (or its WebSocket's URL as a web
-// fetch), Read a read, Write, Edit, MultiEdit and NotebookEdit an edit,
-// Grep, Glob and LS a search of a folder (grep, glob, list), WebFetch
-// and WebSearch theirs, Task and Agent a subagent, illi's own
-// (mcp__illi__...) none here: they ask as they reach illi. Monitor, Task
-// and Agent never ask now: illi's calls leave them out (ClaudeCode.OFF).
+// Claude Code's own tools (hosted), as it asks leave for one: of its
+// built-in ones only its web fetch and search run in illi's calls
+// (ClaudeCode.args), as webfetch (the URL) and websearch (the query);
+// one of its MCP servers' as its own name, on *; illi's own
+// (mcp__illi__...) none here: they ask as they reach illi.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -150,25 +148,13 @@ export namespace Access {
   }
 
   // the requests one of Claude Code's tools makes (its permission
-  // prompt: Tools.approve), as illi's like ones do; illi's own
-  // (mcp__illi__) none: they ask as they reach illi
-  export function hosted(where: Where, tool: string, input: any): Request[] {
-    const dir = (p: unknown) => (typeof p === "string" && p !== "" ? p : where.cwd);
+  // prompt: Tools.approve): its web fetch the URL, its web search the
+  // query, any other its name; illi's own (mcp__illi__) none: they ask
+  // as they reach illi
+  export function hosted(tool: string, input: any): Request[] {
     switch (tool) {
-      case "Bash"         : return Access.shell(where, String(input?.command ?? ""));
-      case "Monitor"      : return typeof input?.command === "string" ? Access.shell(where, input.command) : [plain("webfetch", String(input?.ws?.url ?? ""))];
-      case "Read"         : return file(where, "read", [input?.file_path]);
-      case "Write"        :
-      case "Edit"         :
-      case "MultiEdit"    : return file(where, "edit", [input?.file_path]);
-      case "NotebookEdit" : return file(where, "edit", [input?.notebook_path]);
-      case "Grep"         : return search(where, "grep", dir(input?.path), String(input?.pattern ?? ""));
-      case "Glob"         : return search(where, "glob", glob_root(path.resolve(where.cwd, dir(input?.path)), String(input?.pattern ?? "")), String(input?.pattern ?? ""));
-      case "LS"           : return search(where, "list", dir(input?.path), null);
-      case "WebFetch"     : return [plain("webfetch", String(input?.url ?? ""))];
-      case "WebSearch"    : return [plain("websearch", String(input?.query ?? ""))];
-      case "Task"         :
-      case "Agent"        : return [plain("subagent", String(input?.subagent_type || "general"))];
+      case "WebFetch"  : return [plain("webfetch", String(input?.url ?? ""))];
+      case "WebSearch" : return [plain("websearch", String(input?.query ?? ""))];
     }
     return tool.startsWith("mcp__illi__") ? [] : [plain(tool, "*")];
   }
@@ -316,13 +302,6 @@ function file(where: Where, action: string, paths: unknown[]): Request[] {
   const targets = paths.filter((p): p is string => typeof p === "string" && p !== "").map((p) => Access.target(where, p, "file"));
   const resources = [...new Set(targets.map((t) => t.resource))];
   return [...external(targets.map((target) => ({ target, span: null }))), ...(resources.length === 0 ? [] : [{ action, resources, save: ["*"], spots: resources.map(() => null) }])];
-}
-
-// a search of a folder: the folder if outside, then the action on its
-// pattern (none: the folder's resource)
-function search(where: Where, action: string, dir: string, pattern: string | null): Request[] {
-  const target = Access.target(where, dir, "directory");
-  return [...external([{ target, span: null }]), plain(action, pattern ?? target.resource)];
 }
 
 // the folders outside, as one request (each folder once, first seen
@@ -560,14 +539,6 @@ function project(folder: string): string {
     }
   }
   return folder;
-}
-
-// a glob's folder: its head before the first part holding a wild
-// character
-function glob_root(dir: string, pattern: string): string {
-  const parts = pattern.split("/");
-  const k = parts.findIndex((p) => /[*?[\]{}]/.test(p));
-  return path.resolve(dir, (k < 0 ? parts.slice(0, -1) : parts.slice(0, k)).join("/") || ".");
 }
 
 function under(file: string, dir: string): boolean {

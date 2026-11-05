@@ -237,13 +237,13 @@ plan's name.
 --------------------
 
 A vendor in illi's loop gets illi's tools (`src/tools/`) as function
-definitions in its body. A vendor running its own agent (Claude Code)
-gets illi's tools over MCP instead, its system prompt adapted
-(`Tools.system`'s `hosted`, which names claude-code), and its permission
-prompts routed to illi's checks. Web search is a server tool where the
-vendor has one (`Ask.searches`): each search logged as a call with its
-result, and the pages a reply cites but doesn't link ending the reply,
-in one `Sources:` line (`OpenAI.entries`), never a result no call made.
+definitions in its body. A vendor running its own loop (Claude Code)
+gets illi's prompt in place of its own and the same tools over MCP
+instead, illi running each (`Tools.list`'s `hosted` adds the `approve`
+tool, through which its permission prompts reach illi's checks). Web
+search is a server tool where the vendor has one (`Ask.searches`):
+each search logged as a call with its result, and the pages a reply
+cites but doesn't link ending the reply, in one `Sources:` line (`OpenAI.entries`), never a result no call made.
 The citation marks a ChatGPT model writes in its text (U+E200 `cite`
 ... U+E201) stay in the chat as they came; the screen and `/copy`
 leave them out (`Md.cites_hide`), since only ChatGPT's own app knows
