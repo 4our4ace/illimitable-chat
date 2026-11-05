@@ -868,7 +868,7 @@ export const PROVIDER: Provider = {
     ChatGPT.follow();
     if (ChatGPT.signed()) {
       void ChatGPT.usage();
-      void ChatGPT.models();
+      return ChatGPT.models().then(() => false);
     }
   },
   watch   : ChatGPT.watch,

@@ -74,7 +74,7 @@ Setup
 
 | Key or command | Does |
 | -------------- | ---- |
-| `/login` | the providers, ChatGPT, Claude and Gemini, each opening its plan and (ChatGPT's and Claude's) its API key: connect one; in its accounts, Enter switches to one, Del logs one out (asked first), a row adds one, the last logs out of it all; Esc goes back a level ([Providers](providers.md#connecting-login)) |
+| `/login` | the providers, ChatGPT, Claude and Gemini, each opening its plan and (ChatGPT's and Claude's) its API key: connect one; in its accounts, Enter switches to one, Del logs one out (asked first), Models chooses what its chats and their summaries run on (asked as you connect one too), a row adds one, the last logs out of it all; Esc goes back a level ([Providers](providers.md#connecting-login)) |
 | `/logout` | the providers, as `/login`: Del logs out of an account, the last row of a plan or a key out of it |
 | `/settings` | all the settings: type to search, Left, Right or Enter change one, Del puts its default back |
 | `/shortcuts` | the leader and its shortcuts: Enter changes one, Del puts illi's back (or drops it), the last row adds one |
@@ -249,7 +249,9 @@ and what you were typing comes back once you answer.
   (in a profile: the global value).
 - `/login` (and `/logout`): Enter opens a provider, then a way in (a
   plan, an API key); on one connected, its accounts: Enter switches to
-  one, Del logs one out (asked first). Esc goes back a level, from a
+  one, Del logs one out (asked first); its Models row asks which model
+  writes its summaries, then which its chats run on (a model list: Left
+  and Right set the effort, Enter on what's lit keeps it unset). Esc goes back a level, from a
   question it asks too (a key to paste, a sign-in's code: Esc there
   stops the sign-in); a click outside one of its lists closes it all.
 

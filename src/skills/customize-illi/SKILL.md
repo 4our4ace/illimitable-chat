@@ -139,8 +139,9 @@ one:
   to /login
 - pick: what illi runs on, as vendor:model:effort:speed (default: the
   first vendor's); chats: what new chats start on, by provider (/login
-  asks it as one is connected; the first vendor's is the default unless
-  pick is set); compactor: what writes its memory's summaries; agents:
+  asks it as one is connected, and its Models row any time; the first
+  vendor's is the default unless pick is set); compactor: what writes
+  its memory's summaries (asked with chats); agents:
   what subagents run on. Those three take a pick per vendor,
   comma-separated, and a chat uses its own vendor's: vendors never mix.
   A model may be named by family, * for its version

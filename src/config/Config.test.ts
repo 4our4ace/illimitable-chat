@@ -136,6 +136,8 @@ test("the picks' defaults are the first vendor's that is offered; the vendors ch
 test("a pick named by family (* for its version) runs on the newest model of it offered, set or a provider's default, and follows a vendor's list as it changes", () => {
   expect([Pick.newest("chatgpt", "gpt-*-sol", LABELS), Pick.newest("chatgpt", "gpt-*-luna", LABELS), Pick.newest("chatgpt", "gpt-*-sol", ["gpt-6-luna"])]).toEqual(["gpt-6.1-sol", "gpt-6-luna", undefined]);
   expect([Pick.later([5, 10], [5, 9]), Pick.later([5, 5], [5]), Pick.later([5], [5, 0]), Pick.later([5], [5])]).toEqual([true, true, false, false]);
+  const names = ["opus-5.5", "gemini-3.8-flash", "kimi-k2.5", "deepseek-v4-pro", "qwen3-coder-480b-a35b", "llama-3.3-70b", "gpt-oss-120b", "mixtral-8x7b", "o3-mini"];
+  expect(names.map(Pick.family)).toEqual(["opus-*", "gemini-*-flash", "kimi-k*", "deepseek-v*-pro", "qwen*-coder-480b-a35b", "llama-*-70b", "gpt-oss-120b", "mixtral-8x7b", "o*-mini"]);
   expect([config.config_newest("claude-api:opus-*:high:slow"), config.config_newest("claude-api:nope-*:high:slow"), config.config_newest("claude-api:opus-5.5:high:slow")]).toEqual(["claude-api:opus-5.5:high:slow", "claude-api:nope-*:high:slow", "claude-api:opus-5.5:high:slow"]);
   config.config_set("vendors", "claude-api,chatgpt");
   expect(config.config_check("compactor", "claude-api:gpt-*:low:slow")).toBe("compactor is no vendor:model:effort:speed offered here: claude-api:gpt-*:low:slow");

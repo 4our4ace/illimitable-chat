@@ -841,11 +841,10 @@ export function term_main(t: Term, name: string | null): void {
 // speeds); the Anthropic key's models' windows (Anthropic.models), and
 // the Claude plan's account's (ClaudeCode.models); the chat tells its
 // views. Another terminal's change of accounts asks them too
-// (Chat.follow)
-export function term_account(t: Term): void {
-  if (t.chat !== null) {
-    Chat.account(t.chat);
-  }
+// (Chat.follow). Each vendor's asking given back (Chat.account; a view's
+// illi asks none)
+export function term_account(t: Term): Partial<Record<Vendor, Promise<boolean>>> {
+  return t.chat === null ? {} : Chat.account(t.chat);
 }
 
 // stops all that runs, or the agent named; nothing running, says so
@@ -947,12 +946,16 @@ function term_model(t: Term, arg: string): void {
 // model's autocompact under the list (term_gauge), stepped by Shift+Left
 // and Shift+Right and kept per model while the picker is open: Enter
 // sends each one changed with the pick, Esc drops them. From another pick
-// than the chat's, the choice goes to `done` (a setting's: Settings.ts)
-export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "Model", from = View.view_asked(t.v)!, done = (p: Pick): unknown => term_act(t, { $: "Pick", to: p }), gauge = false): void {
+// than the chat's, the choice goes to `done` (a setting's: Settings.ts;
+// /login's models: LoginCommands.ts), Esc to `back` if given. Each row
+// says its vendor while the rows are of more than one, its window and
+// its price (dollars a million tokens in) where known
+export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "Model", from = View.view_asked(t.v)!, done = (p: Pick): unknown => term_act(t, { $: "Pick", to: p }), gauge = false, back?: () => void): void {
   let want    = from;
-  const many  = t.v.vendors.length > 1;
+  const many  = new Set(rows.map(([vendor]) => vendor)).size > 1;
   const vw    = Math.max(...rows.map(([vendor]) => vendor.length));
-  const about = rows.map(([vendor, m]) => [many ? vendor.padEnd(vw) : "", m.window === undefined ? "" : term_tokens(m.window) + " context"].filter((x) => x !== "").join("  "));
+  const price = (m: Model) => (m.price === undefined ? "" : "$" + m.price.toFixed(2) + "/M in");
+  const about = rows.map(([vendor, m]) => [many ? vendor.padEnd(vw) : "", m.window === undefined ? "" : term_tokens(m.window) + " context", price(m)].filter((x) => x !== "").join("  "));
   const here  = rows.findIndex(([vendor, m]) => vendor === want.vendor && m.label === want.model);
   const pick  = (k: number) => Pick.on(want, rows[k][0], rows[k][1]);
   const moved = new Map<string, number>();
@@ -991,7 +994,7 @@ export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "
     done(pick(k));
     moved.forEach((share, label) => term_send(t, { $: "autocompact", label, value: share + "%" }));
   };
-  term_chooser(t, title, rows.map(([, m]) => m.label), about, here, chosen, { find: true, keys, foot, detail: gauge ? detail : undefined });
+  term_chooser(t, title, rows.map(([, m]) => m.label), about, here, chosen, { find: true, keys, foot, detail: gauge ? detail : undefined, back });
 }
 
 // a model's auto compact as the picker shows it: its share stepped while
