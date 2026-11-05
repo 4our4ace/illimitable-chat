@@ -4,7 +4,8 @@
 // answered here: no request leaves). The catalog: the models Chat
 // Completions serves itself, with tools, priced, none a contributor's,
 // the newest of each family, learned, offered and kept; the defaults
-// the middle one by price for chats, the cheapest for summaries. A
+// the middle one by price for chats, the cheapest for summaries, none
+// of DeepSeek's (a workspace runs those once its owner allows them). A
 // request names illi and the chat (one session for a chat's every
 // call), sends an effort fitted to the model's own only to one that
 // lists efforts, caps the reply at the model's most. A stream's
@@ -90,7 +91,7 @@ afterAll(() => {
 const ask = (model: string, more: any = {}) => Agent.ask({ vendor: "opencode-go" as any, model, effort: "medium", speed: "slow", system: "the chat's system prompt", blocks: [{ text: "hi", mark: false }], searches: 0, server: "", ...more }, () => {});
 const chat = () => SENT.filter((s) => s.url.endsWith("/chat/completions"));
 
-test("the catalog: what Chat Completions serves itself, with tools, priced, no contributor's, the newest of each family; learned, offered, kept; asked once a key; chats on the middle by price, summaries on the cheapest", async () => {
+test("the catalog: what Chat Completions serves itself, with tools, priced, no contributor's, the newest of each family; learned, offered, kept; asked once a key; chats on the middle by price, summaries on the cheapest, neither DeepSeek's (its region is the workspace owner's to allow)", async () => {
   expect(config.OFFER.vendors).toEqual(["opencode-go" as any]);
   expect(await PROVIDER.account!()).toBe(true);
   const labels = ["kimi-k3", "glm-5.3", "deepseek-v4-pro", "deepseek-v4.1-flash", "hy3"];
@@ -99,7 +100,7 @@ test("the catalog: what Chat Completions serves itself, with tools, priced, no c
   expect(Pick.model("opencode-go" as any, "kimi-k3")).toEqual({ label: "kimi-k3", id: "kimi-k3", speeds: ["slow"], window: 1048576, efforts: ["max"], price: 3 });
   expect(Pick.model("opencode-go" as any, "hy3")?.efforts).toBeUndefined();
   expect(JSON.parse(fs.readFileSync(DIR + "/models.json", "utf8")).vendors["opencode-go"].map((m: any) => m.label)).toEqual(labels);
-  expect([Pick.label(config.config_chats("opencode-go" as any)!), Pick.label(config.config_role("compactor", config.config_chats("opencode-go" as any)!))]).toEqual(["opencode-go:deepseek-v4-pro:medium:slow", "opencode-go:hy3:low:slow"]);
+  expect([Pick.label(config.config_chats("opencode-go" as any)!), Pick.label(config.config_role("compactor", config.config_chats("opencode-go" as any)!))]).toEqual(["opencode-go:glm-5.3:medium:slow", "opencode-go:hy3:low:slow"]);
   await PROVIDER.account!();
   await PROVIDER.ready!("kimi-k3");
   expect(SENT.filter((s) => s.url.endsWith("/v1/models")).map((s) => [s.url, s.headers.authorization, s.headers["user-agent"].startsWith("illi/")])).toEqual([["https://opencode.ai/inference/go/v1/models", "Bearer oc_sk_test_0001", true]]);

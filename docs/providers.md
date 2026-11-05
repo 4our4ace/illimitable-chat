@@ -362,6 +362,12 @@ itself, with tools, the newest of each family; it leaves out:
   contributor ones (they train on what you send);
 - the older version of a family (glm-5.2 beside glm-5.3).
 
+DeepSeek's models run only once your workspace allows their region: an
+owner or admin chooses **Global** under Regions at opencode.ai
+(Settings, Privacy). Till then OpenCode refuses them, so illi never
+suggests one: the chats' default is the middle of the others
+by price, the summaries' the cheapest of them.
+
 A model's efforts are its own (some have one, some none: then its
 effort does nothing); its thoughts show as they stream; a picture goes
 to a model that takes them, and to one that doesn't, a note says it was
@@ -410,7 +416,7 @@ offers, by price:
 | `claude-code` | `opus-*`              | `haiku-*`                   | opus-5.5, haiku-5.5 |
 | `antigravity` | `gemini-*-flash`, high | `gemini-*-flash`, low      | gemini-3.8-flash |
 | `claude-api`  | `sonnet-*`            | `haiku-*`                   | sonnet-5.5, haiku-5.5 |
-| `opencode-go` | the middle one by price, medium | the cheapest, low | deepseek-v4-pro, mimo-v2.6-flash |
+| `opencode-go` | the middle one by price, medium | the cheapest, low | hy4, mimo-v2.6-flash |
 
 `chats` names your own chat model per provider, and `compactor` the
 model that writes its summaries. As you connect a provider, /login reads
@@ -423,9 +429,8 @@ setting unset, so the default keeps moving on with the provider's
 models; another model is kept by its family while it's the newest of
 it (so it moves on too), else by itself (an older one you chose stays).
 Esc skips what's left. The provider's **Models** row in /login asks
-both again whenever you like. A second account or key, a switch
-between them, or a provider illi already offered (ChatGPT on opencode's
-login, say) asks nothing: its Models row does. If its list didn't come,
+both again whenever you like. A second account or key, or a switch
+between them, asks nothing: its Models row does. If its list didn't come,
 or the screen was at something else when it did, a note points to that
 row instead. New chats start on your first provider's chat model,
 unless `pick` names one model for every provider.

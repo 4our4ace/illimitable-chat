@@ -376,6 +376,7 @@ test("Del logs an account out, asked first: one kept apart forgotten, the one in
   pick(t, "ChatGPT plan");
   expect([t.question.title, t.question.names, t.question.about]).toEqual(["Connect ChatGPT plan", ["Use opencode's login", "Sign in to another account"], ["home@example.com", "with a code at OpenAI's page"]]);
   answer(t, 0);
+  await until(() => t.choose !== null);
   expect([note(t), ChatGPT.key(), config.OFFER.vendors, t.choose.title]).toEqual(["ChatGPT runs on opencode's login (home@example.com).", "acct-3", ["chatgpt", "openai-api"], "Summaries on your ChatGPT plan: which model writes them?"]);
   open(t, "ChatGPT plan");
   pick(t, "Log out of ChatGPT plan");
@@ -398,6 +399,7 @@ test("the Claude plan, your Claude Code logged in: its login connects it (or a s
   await until(() => t.question?.title === "Connect Claude plan");
   expect([t.question.title, t.question.names, t.question.about]).toEqual(["Connect Claude plan", ["Use your Claude Code's login", "Sign in to another account"], ["me@example.com", "with a code at Claude's page"]]);
   answer(t, 0);
+  await until(() => t.choose !== null);
   expect([note(t), t.choose.title]).toEqual(["Connected your Claude plan (me@example.com): its models are in /model.", "Summaries on your Claude plan: which model writes them?"]);
   expect([claude(), config.OFFER.vendors, config.config_folder("claude-code"), ClaudeCode.env({} as any).CLAUDE_CONFIG_DIR]).toEqual([{ use: "own", accounts: [{ id: "own", email: "me@example.com", plan: "max", org: "Org" }] }, ["openai-api", "claude-code"], "", OWN_CLAUDE]);
 });

@@ -38,6 +38,7 @@ import { Pick } from "../ai/Pick.ts";
 import type { Facts } from "../providers/Provider.ts";
 import { Providers } from "../providers/Providers.ts";
 import { FACTS, Vendors } from "../providers/Vendors.ts";
+import { term_draw } from "./Frame.ts";
 import { setting_set } from "./Settings.ts";
 import { term_hint, term_unhint, type Term } from "./Term.ts";
 
@@ -91,10 +92,12 @@ export const READING      = 15000;
 // Login
 // =====
 
-// the vendors offered as /login last opened, or since its last change of
-// accounts (null: neither yet): what a vendor offered after a change is
-// new to (login_after), whatever the change read on the way (a page that
-// read the accounts again itself: ChatGPT's allowing opencode's login)
+// the vendors connected as /login last opened, or since its last change
+// of accounts (null: neither yet): what a vendor connected after a change
+// is new to (login_after), whatever the change read on the way (a page
+// that read the accounts again itself: ChatGPT's allowing opencode's
+// login). Connected, not offered: with nothing connected, illi offers
+// ChatGPT all the same (Vendors.fallback)
 let seen: Vendor[] | null = null;
 
 // /login (and /logout): the providers' picker, the accounts read again
@@ -102,8 +105,14 @@ let seen: Vendor[] | null = null;
 // would have)
 export function term_login(t: Term): void {
   config.config_accounts();
-  seen = [...config.OFFER.vendors];
+  seen = login_connected(t);
   login_makers(t);
+}
+
+// the vendors connected, as /login's pickers show them (a page with an
+// account)
+function login_connected(t: Term): Vendor[] {
+  return login_all(t).flatMap((m) => m.providers).filter((p) => p.accounts().length > 0).map((p) => p.vendor);
 }
 
 // the makers' picker, each saying what of its is connected, the one the
@@ -180,15 +189,15 @@ function login_accounts(t: Term, p: Page, back: () => void): void {
 // vendor went), the start's login note let go once no login is missing
 // (term_hint), each account's catalog asked; said, with what the vendors
 // setting leaves out (a vendor connected: its login kept outside the
-// accounts' file there, else its entry in the file). A vendor offered
+// accounts' file there, else its entry in the file). A vendor connected
 // now that wasn't as /login opened (`seen`: connected anew, by any page:
-// a key, a plan's sign-in) is asked its models next (login_models_new);
-// a change of account, a second key, a log out ask nothing (its Models
-// row asks)
+// a key, a plan's sign-in) and offered is asked its models next
+// (login_models_new: what its account tells waited on; a view's illi
+// asks it itself, its chat's illi asking its own); a change of account,
+// a second key, a log out ask nothing (its Models row asks)
 export function login_after(t: Term, vendor: Vendor, said: string): void {
-  const was = (seen ?? config.OFFER.vendors).includes(vendor);
+  const was = seen === null || seen.includes(vendor);
   config.config_accounts(true);
-  seen = [...config.OFFER.vendors];
   if (t.chat !== null) {
     Chat.offered(t.chat);
   }
@@ -202,8 +211,9 @@ export function login_after(t: Term, vendor: Vendor, said: string): void {
   const env  = config.config_env_set("vendors");
   const fix  = env === null ? "Your vendors setting leaves " + Pick.provider(vendor) + " out, though: /set vendors default lets /login decide." : env + " leaves " + Pick.provider(vendor) + " out, though: start illi without it to let /login decide.";
   term_note(t, said + (left ? " " + fix : ""));
-  if (!was && config.OFFER.vendors.includes(vendor)) {
-    void login_models_new(t, vendor, asked[vendor]);
+  seen = login_connected(t);
+  if (!was && seen.includes(vendor) && config.OFFER.vendors.includes(vendor)) {
+    void login_models_new(t, vendor, asked[vendor] ?? (t.chat === null ? Providers.of(vendor)?.account?.() ?? undefined : undefined));
   }
 }
 
@@ -234,13 +244,16 @@ export function login_sure(t: Term, title: string, about: string, done: () => vo
 
 // a provider connected anew: its models read first (what its account
 // tells: Provider.ts account, waited on READING ms at most, a note saying
-// so; one that asks nothing, or a view's illi, as known), then asked
-// (login_models). Nothing asked if it offers fewer than two; its list not
-// come in time, or the screen at something else by then (a list, a
-// question, a sign-in, text typed), a note says where to choose them
+// so; one that asks nothing, as known), then asked (login_models), the
+// page that connected it done first (a sign-in's own end: t.login let
+// go). Nothing asked if it offers fewer than two; its list not come in
+// time, or the screen at something else by then (a list, a question, a
+// sign-in, text typed), a note says where to choose them
 async function login_models_new(t: Term, vendor: Vendor, reading: Promise<boolean> | undefined): Promise<void> {
   let came = true;
-  if (reading !== undefined) {
+  if (reading === undefined) {
+    await Promise.resolve();
+  } else {
     const note = term_notify(t, "Reading the models " + Pick.provider(vendor) + " offers…", false, READING);
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = new Promise<false>((done) => (timer = setTimeout(() => done(false), READING)));
@@ -257,6 +270,7 @@ async function login_models_new(t: Term, vendor: Vendor, reading: Promise<boolea
     return term_note(t, (came ? "" : "Its list of models didn't come. ") + "/login, " + (Vendors.of(vendor)?.row ?? vendor) + ", Models chooses which of them " + Pick.provider(vendor) + " runs on.");
   }
   login_models(t, vendor);
+  term_draw(t);
 }
 
 // a provider's Models row, while it offers any: what its chats and their
