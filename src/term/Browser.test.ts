@@ -22,7 +22,7 @@ const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-browser-");
 process.env.ILLI_DIR = DIR + "/illi";
 
 const { browser_commands, browser_open, browser_run } = await import("./Browser.ts");
-const { login_chatgpt } = await import("./LoginCommands.ts");
+const { login_chatgpt } = await import("../providers/chatgpt/Login.ts");
 const { ChatGPT } = await import("../providers/chatgpt/ChatGPT.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");

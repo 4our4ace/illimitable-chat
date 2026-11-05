@@ -21,7 +21,9 @@ Development
                    past topics (Radar.ts) and its strong lines given to the model
                    (Recall.ts), a second terminal's view (Remote.ts), times as
                    people say them (When.ts), the disk
-    src/ai/        model vendors, the agent loop, picks, token usage
+    src/ai/        the agent loop, picks, token usage
+    src/providers/ the providers, a folder each (its facts, its code, its
+                   /login page) and their lists (new-provider.md)
     src/tools/     shell and files, MCP servers, the prompts; the permissions:
                    what each call asks leave for (Access.ts; bash read as bash
                    reads it, Shell.ts), the rules and what "don't ask again"

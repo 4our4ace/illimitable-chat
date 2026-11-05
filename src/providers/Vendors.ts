@@ -21,10 +21,10 @@ export type Vendor = (typeof ALL)[number]["id"];
 // each provider's shape of entry in accounts.json, by its id
 export type Shapes = { [F in (typeof ALL)[number] as F["id"]]: F["accounts"] };
 
-export const FACTS: readonly Facts[] = ALL;
+export const FACTS: Facts[] = [...ALL];
 
 // the providers' ids, in order
-export const VENDORS = ALL.map((f) => f.id) as Vendor[];
+export const VENDORS = FACTS.map((f) => f.id) as Vendor[];
 
 export namespace Vendors {
 
@@ -55,6 +55,14 @@ export namespace Vendors {
   // names in a sentence: "A", "A or B", "A, B or C"
   export function list(names: string[], and: string): string {
     return names.length <= 1 ? names.join("") : names.slice(0, -1).join(", ") + " " + and + " " + names.at(-1);
+  }
+
+  // a provider added to the list as illi starts, before Config.ts and
+  // Pick.ts load (a test's own, which no list here names: its code to
+  // Providers.add, its page to Logins.add)
+  export function add(facts: Facts): void {
+    FACTS.push(facts);
+    VENDORS.push(facts.id as Vendor);
   }
 
   // the providers that run on an API key

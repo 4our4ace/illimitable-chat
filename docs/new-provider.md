@@ -3,50 +3,77 @@ Adding a provider
 
 What a new vendor needs, end to end: the request, the login, the plan
 and its usage, the models with their efforts, speeds and windows, and
-the screen. Each step names the file and what the vendors there already
-do, so the new one can copy the closest. illi has four vendors:
+the screen. A provider is a folder of its own in `src/providers`, named
+by its id; the rest of illi never names one, but asks three lists in
+that folder. Adding one changes nothing else:
 
-| Vendor        | Paid by      | Runs in                | Wire or runner |
-| ------------- | ------------ | ---------------------- | -------------- |
-| `claude-api`  | an API key   | illi's own loop        | `src/ai/Anthropic.ts` |
-| `openai-api`  | an API key   | illi's own loop        | `src/ai/OpenAI.ts` |
-| `chatgpt`     | a plan login | illi's own loop        | `src/ai/ChatGPT.ts` (OpenAI's wire on the Codex backend) |
-| `claude-code` | a plan login | the user's Claude Code (another account's: in a Claude Code folder of illi's) | `src/ai/ClaudeCode.ts` |
+| Part | Where | What it holds |
+| ---- | ----- | ------------- |
+| its facts | `src/providers/<id>/Facts.ts`, listed in `Vendors.ts` | what illi knows before any of its code runs (Config.ts reads them as illi starts): its name, maker, models, default picks, API key |
+| its code | its module (`src/providers/<id>/<Name>.ts`), its `PROVIDER` listed in `Providers.ts` | how a call runs on it, and what illi asks of it as it runs: its account, plan, models' windows, a refusal in plain words |
+| its /login page | `src/providers/<id>/Login.ts`, listed in `Logins.ts` | a plan's sign-in and accounts; a provider on an API key has none, as /login's own page asks for its key |
 
-1. The vendor's name
---------------------
+The types of all three are in `src/providers/Provider.ts`.
+`src/providers/Providers.test.ts` keeps it so: no file outside
+`src/providers` holds a provider's id as a string, uses its code by its
+namespace or imports its folder; each provider's facts, code and page
+agree. `src/providers/Fake.test.ts` adds a provider no list names (as
+a test may: `Vendors.add`, `Providers.add`, `Logins.add`) and runs it
+end to end. illi has four vendors:
 
-- `src/ai/AskAI.ts`: add it to `Vendor`, and its cache's lifetime to
-  `TTL` (how long the vendor keeps a prefix it cached unused).
-- `src/ai/Pick.ts`: add it to `VENDORS`, its models to `MODELS`, and
-  how a note names it to the person to `PROVIDERS` ("the Anthropic
-  API", "your Claude plan": `Pick.provider`; the vendor's id is only
-  the settings').
-- `src/config/Config.ts`: its default pick and summaries' pick in
-  `DEFS`; if it runs on an API key, the key's variable in `VARS` (named
-  `<KEY>_API_KEY` for the wire's `key`: Agent.ts says that name when it
-  is missing) and its vendor in `KEYED`.
-- An API key also goes in Agent.ts's `VENDORS` (the name a refused key
-  is said with) and in `update_run`'s list (`src/config/Update.ts`),
-  which keeps the keys from the `--version` it runs; in
-  `src/config/Accounts.ts`'s `Api` and `KEYED` (the vendors whose keys
-  `accounts.json` keeps); and in `src/term/LoginCommands.ts`'s `APIS`
-  (its name in `/login`, where a key is made, and how one is checked:
-  a `check(key)` on its wire, as `Anthropic.check` and `OpenAI.check`,
-  asking a list that costs nothing; its reason never the fetch error's
-  own text, which may hold a header's whole value, the key).
-- `docs/providers.md`: the vendors at its top, a section saying how to
-  sign in or set the key, and its rows in the Models tables (the
-  defaults, what it tells); its name where the docs list every vendor
-  (`docs/config.md`'s `vendors` and keys, the status line's
-  `model.vendor` in `docs/customize.md`, the customize-illi skill,
-  `README.md`).
+| Vendor        | Paid by      | Runs in                | Its folder |
+| ------------- | ------------ | ---------------------- | ---------- |
+| `claude-api`  | an API key   | illi's own loop        | `src/providers/claude-api` (`Anthropic.ts`) |
+| `openai-api`  | an API key   | illi's own loop        | `src/providers/openai-api` (`OpenAI.ts`) |
+| `chatgpt`     | a plan login | illi's own loop        | `src/providers/chatgpt` (`ChatGPT.ts`: OpenAI's wire on the Codex backend) |
+| `claude-code` | a plan login | the user's Claude Code (another account's: in a Claude Code folder of illi's) | `src/providers/claude-code` (`ClaudeCode.ts`) |
+
+1. Its facts
+------------
+
+`Facts.ts` exports `FACTS` (`Provider.ts` `Facts`), its id typed as
+written (`"id" as const`), added to `ALL` in `Vendors.ts` (the order
+illi lists their models in):
+
+| Field | What it is |
+| ----- | ---------- |
+| `id` | as saved: in a pick (`vendor:model:effort:speed`), `models.json`, `accounts.json`; never changed once out |
+| `name` | as a note names it: "the Anthropic API", "your ChatGPT plan" (`Pick.provider`) |
+| `maker`, `row` | under whom /login lists it (`Maker`: its name, what its row says while none of its providers is connected, its place; a maker's plan before its API key) and its row's name ("ChatGPT plan", "Anthropic API key") |
+| `models` | as built in (5: their windows, efforts and speeds) |
+| `defaults` | illi's own pick on it (the first offered vendor's is illi's default pick) and the summaries', while `compactor` names none for it |
+| `ttl` | how long it keeps a cached prefix unused, in ms (`AskAI.wait`) |
+| `accounts` | its entry's shape in `accounts.json` (`Accounts.ts`): `keys` (an API's), `folders` (a plan its own program runs, each account a folder: `folders` names theirs in illi's root), `logins` (a plan whose login is a file of its own: `outside`) |
+| `key` | it runs on an API key: the key's name in `config.KEYS`, the variable the environment sets it in (named `<KEY>_API_KEY`), the maker a refused key is said with, where a key is made, what to do once its credit is used up |
+| `catalog` | `models.json` keeps its whole list (its account's catalog), not only the windows of the models built in |
+| `fallback` | offered while nothing is connected (one provider: chatgpt), so a chat has a pick and the start says /login connects one |
+| `dated` | its calls tell the model today's date themselves, so illi's own line of where it works gives the time alone |
+| `setup`, `outside` | `setup(ctx)` runs once as illi starts, given the settings and accounts it may read (`Context`), before the vendors offered are reckoned; `outside()`: connected by a login kept outside `accounts.json` (chatgpt's login file: `LoginFile`), listed first among those connected |
+
+A facts file imports nothing that reads the config (types, `node:`
+modules, `src/tools/Clip.ts`, another provider's facts), so the list
+loads before Config.ts does. From the facts, illi reckons the vendors
+connected (`config_has`, `config_connected`), the keys and their
+variables (`config.VARS`, `KEYS`: an API key is taken out of the
+environment as illi starts, so no program an agent runs inherits it),
+the default picks, the start's notes and what /login and `illi help`
+say it connects (`Vendors.ways`).
+
+Then `docs/providers.md`: the vendors at its top, a section saying how
+to sign in or set the key, and its rows in the Models tables (the
+defaults, what it tells); its name where the docs list every vendor
+(`docs/config.md`'s `vendors` and keys, the status line's
+`model.vendor` in `docs/customize.md`, the customize-illi skill,
+`README.md`).
 
 2. The request
 --------------
 
-illi's loop (`src/ai/Agent.ts`) sends every request, retries it, runs
-the tools and ends the call; a vendor gives it a `Wire`:
+Its code exports `PROVIDER` (`Provider.ts` `Provider`), added to
+`made` in `Providers.ts`; the list is built on first use, as the
+provider's code imports what imports that list. illi's loop
+(`src/ai/Agent.ts`) sends every request, retries it, runs the tools and
+ends the call; a vendor gives it a `Wire` (`PROVIDER.wire`):
 
 | Field     | What it does |
 | --------- | ------------ |
@@ -60,10 +87,10 @@ the tools and ends the call; a vendor gives it a `Wire`:
 | `heard`   | the response's headers, for a plan's limits (chatgpt's) |
 | `idle`    | how long a silent stream lives before it is taken as dead |
 
-Then name the wire in `Agent.ask` (a vendor not named there runs on
-OpenAI's). A vendor whose own program runs the loop (Claude Code) skips
-the wire: `Agent.ask` hands the call to its runner, which must give back
-a `Try` with the same `Event`s and `End`. A call `once` (a recap) runs
+A vendor whose own program runs the loop (Claude Code) has no wire but
+a runner (`PROVIDER.ask`): `Agent.ask` hands it the call, and it must
+give back a `Try` with the same `Event`s and `End`. A provider has one
+of the two. A call `once` (a recap) runs
 no tool and takes no message sent meanwhile: the runner leaves it in
 `End.left`, as Agent.ts does (an agent's log holds it for its next
 call).
@@ -90,8 +117,9 @@ Failures must land in the right `stop`, since each is handled apart:
   (`AskAI.unmarked`), once; a subagent's run does the same
   (`Tools.run`).
 - `down`: the vendor refused (a wrong key, credit or plan used up).
-  `Agent.spent` says what to do in plain words: add the vendor's case
-  there (and to `CREDIT` for an API key).
+  `Agent.spent` says what to do in plain words: a plan's own refusals
+  (its usage limit) are read by `PROVIDER.spent(said, err)`; an API
+  key's credit used up, by its facts' `key.credit`.
 - `busy`: a passing failure (no connection, 429, 5xx); asked again,
   `TRIES` times at most, then the call ends `down` (`again`: a later
   try may answer).
@@ -122,34 +150,44 @@ An API key is the one `/login` chose for its vendor, else the
 environment's (`config.KEYS`, changed in place as `accounts.json`
 changes: `config_accounts`); the wire reads it at each call, so nothing
 else is needed, but what it asks once a key (the windows its models
-list tells, as `Anthropic.models` does) must ask again for a new one. A
-plan login needs what `ChatGPT.ts` has (a runner's, like Claude Code's,
-is its own: a folder an account, `ClaudeCode.ts`):
+list tells, as `Anthropic.models` does) must ask again for a new one
+(`PROVIDER.account`). /login's own page asks for the key and checks it
+with `PROVIDER.check(key)`, asking a list that costs nothing; its reason
+never the fetch error's own text, which may hold a header's whole
+value, the key. A plan login needs what `ChatGPT.ts` has (a runner's,
+like Claude Code's, is its own: a folder an account, `ClaudeCode.ts`):
 
 - `token()`: the login on disk, renewed before it ends, under the lock
   other tools take on that file, and written back so they stay signed in.
 - `sync()`: the login file looked at (a stat, read only when it
   changed). A change of account drops everything known of the old one at
-  once (its plan, its usage) and tells the chat (`watch`, which
-  `Chat.ts` registers for chatgpt alone), so no screen shows one
-  account's plan with another's usage.
+  once (its plan, its usage) and tells the chat (`PROVIDER.watch`), so
+  no screen shows one account's plan with another's usage.
 - `follow()`: the file looked at every few seconds while illi runs: a
   login made in another terminal, or by another tool, is picked up.
-- `/login` and `/logout` (`src/term/LoginCommands.ts`): each provider
-  is a `Provider` there, under its maker (`Maker`: ChatGPT, Claude; a
-  vendor goes under its own, or a new one): its row's text, its accounts (the one in use
-  marked, what Enter and Del do on each), what connects one more and
-  what logs out of it all. A plan's sign-in runs there (chatgpt's
-  device code, claude-code's `claude auth login` through pipes), its
-  accounts kept in `src/config/Accounts.ts`'s file
-  (`~/.illi/accounts.json`), which Config.ts reads into the vendors
-  offered (`config_connected`) and every illi follows. `login_after`
-  then reads it again, moves a chat off a vendor gone (`Chat.offered`)
-  and runs `term_account`, which asks the plan, usage and models of the
-  account now in use (a new vendor's asks go before the return it takes
-  when chatgpt isn't offered, as claude-api's do).
-- `term_hints` (`src/term/Term.ts`): the start's note when nothing is
-  connected yet.
+- `PROVIDER.account()`: what the account in use tells, asked at the
+  start, after `/login` and as the accounts change in another terminal
+  (`Chat.account`: each vendor offered); a promise of whether something
+  changed (its models' windows), the chat redrawn then.
+- `PROVIDER.hint()`: what the start says of its login (a fault, such as
+  a login file that won't read, said even with nothing connected; else
+  what its login lacks, with the vendors setting naming it); with
+  nothing connected, the start says how /login connects any provider
+  (`term_hint`).
+- `PROVIDER.close()`: what it runs in the background stopped, as illi
+  ends.
+- `/login` and `/logout` (`src/term/LoginCommands.ts`): a plan's page
+  is its folder's `Login.ts` (`PAGE`, a `Page`, listed in `Logins.ts`),
+  under its maker: its row's text, its accounts (the one in use marked,
+  what Enter and Del do on each), what connects one more and what logs
+  out of it all. Its sign-in runs there (chatgpt's device code,
+  claude-code's `claude auth login` through pipes), its accounts kept in
+  `src/config/Accounts.ts`'s file (`~/.illi/accounts.json`: the shape
+  its facts name, `Accounts.keys_in`, `folders_in`, `logins_in` and `put`
+  for the entry), which Config.ts reads into the vendors offered and
+  every illi follows. `login_after` then reads it again, moves a chat
+  off a vendor gone (`Chat.offered`) and runs `term_account`, which
+  asks each account in use what it tells (`PROVIDER.account`).
 
 5. Models, windows, efforts and speeds
 --------------------------------------
@@ -192,8 +230,8 @@ learn them, from best:
 Keep what was learned for the next start with
 `config.config_models_keep(vendor, Pick.list(vendor))`: models.json
 holds each vendor's list on its own. At the start `config_models` takes
-chatgpt's list whole and only the windows of the others' built-in
-models, by id: a catalog vendor joins chatgpt's branch there. Ask the
+a catalog vendor's list whole (its facts' `catalog`: chatgpt's) and only
+the windows of the others' built-in models, by id. Ask the
 vendor at the start (`term_account`), and again when the account
 changes (chatgpt's `follow`). models.json's `account` and `capped`
 (the models that account refused past their usual window) are
@@ -206,8 +244,11 @@ takes beside the chat: `config_context`). A wrong window costs either
 memory (too small) or failed turns (too big). A vendor whose windows
 differ by account (chatgpt) gets none built in: until it answers,
 nothing is folded, and a turn or a subagent waits for it, then fails
-saying why (`ChatGPT.ready`, called for chatgpt in `Chat.call` and
-`Tools.view`; the start's cut waits in `Chat.ts` too). No window is ever
+saying why (`PROVIDER.ready`, asked in `Chat.call` and `Tools.view`;
+the start's cut waits in `Chat.ts` too, while `PROVIDER.windows()` says
+the windows known aren't the account's own yet). An account found to
+take less than a model's whole window (chatgpt's refusal past its
+standard one) is learned by `PROVIDER.refused(label)`. No window is ever
 guessed (`config_context` takes one, always). The others that tell
 theirs (Anthropic's API, Claude Code) get built-in ones till they tell;
 one that tells none (the OpenAI API), the ones its docs state.
@@ -221,8 +262,9 @@ told: a vendor that tells none shows no Usage at all, not even the
 plan's name.
 
 - `told()`: the account's plan now (`brand`, `tier`, its `limits`: each
-  window's minutes, share used and reset time), or null. Register it in
-  `PLANS` (`src/tools/Tools.ts`).
+  window's minutes, share used and reset time), or null: its
+  `PROVIDER.plan`, which the side asks for the chat's vendor
+  (`Tools.state`).
 - Ask the plan and usage together (chatgpt's `usage()`), at the start,
   after `/login` and `/logout`, and when the account changes; keep each
   answer for the account it was asked for, and drop one that comes back
@@ -240,7 +282,13 @@ A vendor in illi's loop gets illi's tools (`src/tools/`) as function
 definitions in its body. A vendor running its own loop (Claude Code)
 gets illi's prompt in place of its own and the same tools over MCP
 instead, illi running each (`Tools.list`'s `hosted` adds the `approve`
-tool, through which its permission prompts reach illi's checks). Web
+tool, through which its permission prompts reach illi's checks). MCP
+servers of its program's own (Claude Code's) show in /mcp, /settings and
+the side while the chat's pick is on it: `PROVIDER.servers` (whose they
+are, the servers as its last call told them, a server's tools by their
+own names, the command that logs in to one). A vendor that tells the
+model the date itself (its facts' `dated`) gets illi's line of where it
+works with the time alone (`Tools.here`). Web
 search is a server tool where the vendor has one (`Ask.searches`):
 each search logged as a call with its result, and the pages a reply
 cites but doesn't link ending the reply, in one `Sources:` line (`OpenAI.entries`), never a result no call made.
@@ -254,7 +302,7 @@ the pages they name.
 
 A wire's tests stub `fetch` or the vendor's program: a turn streamed
 and its usage, each failure's `stop` and plain words (beside the wire,
-`src/ai/*.test.ts`; claude-api's against a fake Anthropic in `test/`),
+in its folder; claude-api's against a fake Anthropic in `test/`),
 the login renewed and a refused token spoilt (`ChatGPT.test.ts`,
 `Login.test.ts`), the models learned and kept (a catalog stubbed:
 `src/config/Context.test.ts`). `src/ai/Agent.test.ts` matches each
@@ -262,4 +310,7 @@ vendor's too-long words (`FULL`); `src/config/Config.test.ts` starts
 each vendor alone and checks the start's tips on keys. Tests never call
 a real vendor. `test/cache.test.ts` replays a chat against a fake vendor
 that caches by Anthropic's rules: a new vendor whose cache works
-otherwise needs its own.
+otherwise needs its own. `src/providers/Providers.test.ts` checks the
+new provider's facts, code and page agree, and that nothing outside
+`src/providers` names it; `src/providers/Fake.test.ts` is the shape of
+one run end to end with no list naming it.
