@@ -1,7 +1,8 @@
 // claude-api: Claude's models on the Anthropic API, paid by an API key
 // (Anthropic.ts). Its models as built in, each window as Anthropic states
-// it (its Models API tells them anew: Anthropic.models); Claude Code's
-// (claude-code) are these too.
+// it, till its Models API tells the key's own (Anthropic.models: the
+// newest of each line, kept for the next start: catalog); Claude Code's
+// (claude-code) are these too till it lists its own.
 
 import type { Model } from "../../ai/Pick.ts";
 import type { Facts, Maker } from "../Provider.ts";
@@ -22,5 +23,6 @@ export const FACTS = {
   defaults : { pick: "claude-api:sonnet-*:medium:slow", compactor: "claude-api:haiku-*:medium:slow" },
   ttl      : 300e3,
   accounts : "keys" as const,
+  catalog  : true,
   key      : { name: "anthropic", env: "ANTHROPIC_API_KEY", maker: "Anthropic", where: "console.anthropic.com", credit: "your Anthropic API credit is used up: add credit at console.anthropic.com, then send a message" },
 } satisfies Facts;

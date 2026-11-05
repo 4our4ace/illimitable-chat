@@ -956,8 +956,9 @@ being `{ label, id, speeds, window?, standard?, efforts?, tiers?, room? }`
    starts: `Antigravity.ts learn`), with the windows its turns told.
    `claude-code`'s is the plan's models as Claude Code last listed them
    (its newest of each family: `ClaudeCode.ts lineup`), with the windows
-   it told. `claude-api`'s holds the windows Anthropic's Models API
-   told.
+   it told. `claude-api`'s is the key's models as Anthropic's Models
+   API last listed them (the newest active one of each line:
+   `Anthropic.ts lineup`), with their windows.
 2. Each write is one vendor's list: illi reads the file as it is now,
    puts that vendor's list in, leaves the others' as they are, writes
    the whole to `models.json.<pid>.tmp` and renames it over the file,
@@ -966,8 +967,8 @@ being `{ label, id, speeds, window?, standard?, efforts?, tiers?, room? }`
    list: chatgpt's comes back at the catalog's next answer, the others'
    once a later illi is told their windows again (each writes only
    windows new to it).
-3. At the start (`config_models`), the chatgpt, antigravity and
-   claude-code lists are taken whole, whatever their account (the login
+3. At the start (`config_models`), the chatgpt, antigravity,
+   claude-code and claude-api lists are taken whole, whatever their account (the login
    isn't read yet), until the catalog answers (antigravity's: its next
    sign-in or turn; claude-code's: as the start asks Claude Code); a
    window or a share in it that isn't one (not a count above

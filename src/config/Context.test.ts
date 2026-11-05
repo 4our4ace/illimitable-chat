@@ -207,6 +207,29 @@ test("Anthropic's model list, page after page, tells the built-in models' window
   expect(fetching(() => new Response("no", { status: 401 }), () => Anthropic.list("key"))).rejects.toThrow("HTTP 401");
 });
 
+test("Anthropic's model list naming lines is the key's list: the newest active model of each, its label from its id, window and efforts as it says, speeds as known; a new one offered, the defaults following; one deprecated or of no line left out", async () => {
+  const was = Pick.list("claude-api");
+  const effort = (...on: string[]) => ({ supported: true, ...Object.fromEntries(["low", "medium", "high", "xhigh", "max"].map((e) => [e, on.includes(e) ? { supported: true } : null])) });
+  const data = [
+    { id: "claude-mythos-1", line: "mythos", lifecycle: "deprecated", max_input_tokens: 500000 },
+    { id: "claude-opus-6", line: "opus", lifecycle: "active", max_input_tokens: 2000000, capabilities: { effort: effort("low", "medium", "high", "max") } },
+    { id: "claude-instant-9", line: null, lifecycle: "active", max_input_tokens: 100000 },
+    { id: "claude-opus-5-5", line: "opus", lifecycle: "active", max_input_tokens: 1000000 },
+    { id: "claude-sonnet-5-5", line: "sonnet", max_input_tokens: 1000000, capabilities: { effort: { supported: false } } },
+    { id: "claude-haiku-5-5", line: "haiku", lifecycle: "active", max_input_tokens: 400000 },
+  ];
+  try {
+    expect(await fetching(() => ({ data, has_more: false }), () => Anthropic.models("key-lines"))).toBe(true);
+    expect(Pick.list("claude-api").map((m) => [m.label, m.id, m.window, m.efforts, m.speeds])).toEqual([["opus-6", "claude-opus-6", 2000000, ["low", "medium", "high", "max"], ["slow"]], ["sonnet-5.5", "claude-sonnet-5-5", 1000000, undefined, ["slow"]], ["haiku-5.5", "claude-haiku-5-5", 400000, undefined, ["slow"]]]);
+    expect([config.OFFER.models.includes("opus-6"), config.config_newest("claude-api:opus-*:high:slow")]).toEqual([true, "claude-api:opus-6:high:slow"]);
+    expect(JSON.parse(fs.readFileSync(config.MODELS_FILE, "utf8")).vendors["claude-api"].map((m: any) => m.label)).toEqual(["opus-6", "sonnet-5.5", "haiku-5.5"]);
+  } finally {
+    Pick.learn("claude-api", was, "replace");
+    config.OFFER.models.splice(config.OFFER.models.indexOf("opus-6"), 1);
+    config.config_models_keep("claude-api", was);
+  }
+});
+
 test("a chat on ChatGPT folds nothing on the windows kept last as a login or a plan is told, only once the account's catalog tells its own", async () => {
   // no model asked meanwhile (the compactor's summaries): none past here
   AskAI.ask = (_, on) => AskAI.tie(on, () => {}, () => {})[0];
