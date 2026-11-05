@@ -14,7 +14,7 @@ process.env.ILLI_LOGIN = DIR + "/auth/chatgpt.json";
 fs.mkdirSync(DIR + "/auth");
 fs.writeFileSync(DIR + "/auth/chatgpt.json", JSON.stringify({ other: { kept: true } }));
 
-const config = await import("../config/Config.ts");
+const config = await import("../../config/Config.ts");
 const { ChatGPT } = await import("./ChatGPT.ts");
 
 const real = globalThis.fetch;

@@ -11,7 +11,7 @@
 // failed as its status says; one unfinished, alone.
 
 import { expect, test } from "bun:test";
-import { temp_dir } from "../../test/repo.ts";
+import { temp_dir } from "../../../test/repo.ts";
 
 process.env.ILLI_DIR = temp_dir("illi-openai-");
 
@@ -41,9 +41,9 @@ test("an error event is read alike", () => {
 });
 
 test("a request keeps the latest cache marks its vendor writes", async () => {
-  const { AskAI } = await import("./AskAI.ts");
-  const { Anthropic } = await import("./Anthropic.ts");
-  const { ChatGPT } = await import("./ChatGPT.ts");
+  const { AskAI } = await import("../../ai/AskAI.ts");
+  const { Anthropic } = await import("../claude-api/Anthropic.ts");
+  const { ChatGPT } = await import("../chatgpt/ChatGPT.ts");
   const blocks = ["a", "b", "c", "d", "e"].map((text) => ({ text, mark: true }));
   const ask = (end: boolean) => ({ blocks: [...blocks, { text: "z", mark: end }] }) as any;
   const kept = (wire: any, end: boolean) => AskAI.marks(ask(end).blocks, wire.marks(ask(end))).filter((b: any) => b.mark).map((b: any) => b.text).join("");

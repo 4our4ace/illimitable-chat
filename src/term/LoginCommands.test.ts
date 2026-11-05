@@ -77,8 +77,8 @@ esac
 
 const { term_login } = await import("./LoginCommands.ts");
 const { term_esc } = await import("./Keys.ts");
-const { ChatGPT } = await import("../ai/ChatGPT.ts");
-const { ClaudeCode } = await import("../ai/ClaudeCode.ts");
+const { ChatGPT } = await import("../providers/chatgpt/ChatGPT.ts");
+const { ClaudeCode } = await import("../providers/claude-code/ClaudeCode.ts");
 const { Accounts, ENV } = await import("../config/Accounts.ts");
 const config = await import("../config/Config.ts");
 const Screen = await import("../ui/Screen.ts");

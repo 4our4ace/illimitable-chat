@@ -56,10 +56,10 @@ process.env.ILLI_DIR = DIR;
 process.env.FAKE_LOG = DIR + "/log.json";
 
 const { ClaudeCode } = await import("./ClaudeCode.ts");
-const { Pick } = await import("./Pick.ts");
-const { Mcp } = await import("../tools/Mcp.ts");
-const config = await import("../config/Config.ts");
-const { Accounts } = await import("../config/Accounts.ts");
+const { Pick } = await import("../../ai/Pick.ts");
+const { Mcp } = await import("../../tools/Mcp.ts");
+const config = await import("../../config/Config.ts");
+const { Accounts } = await import("../../config/Accounts.ts");
 
 // a stand-in MCP server of illi's own: it starts, and lists one tool
 // (at /bad, it fails)

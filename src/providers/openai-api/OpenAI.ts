@@ -11,9 +11,9 @@
 // is busy. Silent while it reasons, it is dead
 // after 20 min.
 
-import { AskAI, type Ask, type Img, type Usage } from "./AskAI.ts";
-import { Agent, type Emit, type Entry, type Item, type Step, type Tool, type Use, type Wire } from "./Agent.ts";
-import { FAILED } from "../ui/View.ts";
+import { AskAI, type Ask, type Img, type Usage } from "../../ai/AskAI.ts";
+import { Agent, type Emit, type Entry, type Item, type Step, type Tool, type Use, type Wire } from "../../ai/Agent.ts";
+import { FAILED } from "../../ui/View.ts";
 
 // Types
 // =====

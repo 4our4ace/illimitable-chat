@@ -14,11 +14,11 @@
 // minutes mean it is dead. The Models API tells each model's window
 // (models), learned at the start.
 
-import { AskAI, type Ask, type Img, type Usage } from "./AskAI.ts";
-import { Agent, type Emit, type Entry, type Item, type Step, type Tool, type Use, type Wire } from "./Agent.ts";
-import { Pick } from "./Pick.ts";
-import * as config from "../config/Config.ts";
-import { FAILED } from "../ui/View.ts";
+import { AskAI, type Ask, type Img, type Usage } from "../../ai/AskAI.ts";
+import { Agent, type Emit, type Entry, type Item, type Step, type Tool, type Use, type Wire } from "../../ai/Agent.ts";
+import { Pick } from "../../ai/Pick.ts";
+import * as config from "../../config/Config.ts";
+import { FAILED } from "../../ui/View.ts";
 
 // Types
 // =====

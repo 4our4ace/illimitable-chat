@@ -25,10 +25,10 @@
 // Plugins.emit), never waited for.
 
 import * as fs from "node:fs";
-import { Anthropic } from "../ai/Anthropic.ts";
+import { Anthropic } from "../providers/claude-api/Anthropic.ts";
 import { AskAI, type Call, type End, type Event, type Kind, type Vendor } from "../ai/AskAI.ts";
-import { ChatGPT } from "../ai/ChatGPT.ts";
-import { ClaudeCode } from "../ai/ClaudeCode.ts";
+import { ChatGPT } from "../providers/chatgpt/ChatGPT.ts";
+import { ClaudeCode } from "../providers/claude-code/ClaudeCode.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
 import { Compactor } from "./Compactor.ts";

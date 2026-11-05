@@ -21,7 +21,7 @@ process.env.ILLI_LOGIN = FILE;
 process.env.ILLI_DIR = DIR;
 
 const { ChatGPT } = await import("./ChatGPT.ts");
-const { Agent } = await import("./Agent.ts");
+const { Agent } = await import("../../ai/Agent.ts");
 
 // a JWT with these claims (unsigned: only read here)
 function jwt(claims: object): string {

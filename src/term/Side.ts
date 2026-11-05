@@ -11,7 +11,7 @@
 // requests refused, the plugins' lines, a hint for the keys or illi's
 // to-do list; the side and side_width settings place it.
 
-import type { Theirs } from "../ai/ClaudeCode.ts";
+import type { Theirs } from "../providers/claude-code/ClaudeCode.ts";
 import { term_background, term_choose, term_mcp, term_mcp_state, term_stick, term_theirs } from "./Commands.ts";
 import * as config from "../config/Config.ts";
 import { Custom, type Skill } from "../config/Custom.ts";

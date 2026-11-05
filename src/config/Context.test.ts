@@ -48,8 +48,8 @@ login(token("acct-1"));
 
 const config = await import("./Config.ts");
 const { Pick } = await import("../ai/Pick.ts");
-const { ChatGPT } = await import("../ai/ChatGPT.ts");
-const { Anthropic } = await import("../ai/Anthropic.ts");
+const { ChatGPT } = await import("../providers/chatgpt/ChatGPT.ts");
+const { Anthropic } = await import("../providers/claude-api/Anthropic.ts");
 const { AskAI } = await import("../ai/AskAI.ts");
 const { Chat } = await import("../chat/Chat.ts");
 const { Memory } = await import("../chat/Memory.ts");

@@ -22,7 +22,7 @@ import { term_redraw } from "./Frame.ts";
 import { term_away, term_clear, term_cycle, term_enter, term_esc, term_next, term_page, term_shots, term_take, term_verbose } from "./Keys.ts";
 import { Mcp } from "../tools/Mcp.ts";
 import * as Md from "../ui/Md.ts";
-import { ClaudeCode, type Theirs } from "../ai/ClaudeCode.ts";
+import { ClaudeCode, type Theirs } from "../providers/claude-code/ClaudeCode.ts";
 import { Export } from "../chat/Export.ts";
 import { Plugins, type Command as Plugged, type Found } from "../config/Plugins.ts";
 import { Hooks, type Entry } from "../config/Hooks.ts";
