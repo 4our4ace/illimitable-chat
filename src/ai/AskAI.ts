@@ -26,6 +26,7 @@ import { Agent, type Item, type Tool } from "./Agent.ts";
 import { stream_lines } from "../tools/Clip.ts";
 import { Machine } from "../tools/Machine.ts";
 import type { Pick } from "./Pick.ts";
+import { Vendors, type Vendor } from "../providers/Vendors.ts";
 
 // Types
 // =====
@@ -38,7 +39,8 @@ import type { Pick } from "./Pick.ts";
 // outgrew its model's window: Tools.recap)
 export type Kind = "user" | "work" | "mind" | "illi" | "tool" | "echo" | "note" | "recap";
 
-export type Vendor = "claude-api" | "openai-api" | "chatgpt" | "claude-code";
+// a provider, by its id (Vendors.ts)
+export type { Vendor };
 
 // what a request used, as its vendor tells it: tokens read (input, cache
 // writes and reads), the speed it ran at; Agent.ts keeps the input each
@@ -148,13 +150,6 @@ export type Call = Try;
 // vendor meanwhile (a chat's JOBS each asking once a minute)
 const AGAIN = 60e3;
 
-// how long a vendor keeps a cache entry unused, in ms
-export const TTL: Record<Vendor, number> = {
-  "claude-api" : 300e3,
-  "openai-api" : 1800e3,
-  "chatgpt"    : 300e3,
-  "claude-code": 300e3,
-};
 
 // the prefixes cached, by key (AskAI.keys)
 const CACHE = new Map<string, Cached>();
@@ -271,7 +266,7 @@ export namespace AskAI {
   // the call's prefix; then leads, unless its whole prefix is cached
   export async function wait(ask: Ask): Promise<Flight> {
     const keys = AskAI.keys(ask);
-    const ttl = TTL[ask.vendor];
+    const ttl = Vendors.of(ask.vendor)?.ttl ?? 300e3;
     for (;;) {
       const now = Date.now();
       const live = (key: string) => CACHE.get(key)?.ready || (CACHE.get(key)?.until ?? 0) > now;

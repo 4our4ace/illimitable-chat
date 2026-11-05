@@ -210,7 +210,7 @@ let theirs: Array<Omit<Theirs, "off" | "over">> | null = null;
 
 // the Claude Code folder of the account limits and theirs are of ("":
 // the user's own Claude Code's: config.config_claude_dir)
-let folder = config.config_claude_dir();
+let folder = config.config_folder("claude-code");
 
 // the names Claude Code's servers were ever told by, case and all, by
 // their lower case (as `off` holds them; null: NAMES not read yet), kept
@@ -545,7 +545,7 @@ export namespace ClaudeCode {
   // tree, or recaps the agent's log (Tools.refit), never Claude Code's
   // summary; one without room (a summary, a goal check, a recap) keeps it
   export function env(ask: Ask): Record<string, string> {
-    const env = ClaudeCode.folder_env(config.config_claude_dir());
+    const env = ClaudeCode.folder_env(config.config_folder("claude-code"));
     env.CLAUDE_CODE_DISABLE_ADVISOR_TOOL = "1";
     env.CLAUDE_CODE_DISABLE_AUTO_MEMORY = "1";
     env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = "1";
@@ -778,7 +778,7 @@ export namespace ClaudeCode {
   // another terminal) drops what the old one's calls told (its servers,
   // its plan's use)
   export function account(): void {
-    const now = config.config_claude_dir();
+    const now = config.config_folder("claude-code");
     if (now !== folder) {
       [folder, theirs, limits] = [now, null, []];
     }
@@ -794,7 +794,7 @@ export namespace ClaudeCode {
   // another, so a start runs one Claude Code at a time. true: a window
   // changed
   export function models(): Promise<boolean> {
-    const dir  = config.config_claude_dir();
+    const dir  = config.config_folder("claude-code");
     const kept = config.config_accounts_read()?.["claude-code"];
     const by   = dir + "\n" + (kept?.accounts.find((a) => a.id === kept.use)?.email ?? "");
     if (sized_by !== by) {

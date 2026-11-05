@@ -40,6 +40,7 @@ process.env.OPENAI_API_KEY    = "";
 const { Accounts, ENV } = await import("./Accounts.ts");
 const { Flock } = await import("./Flock.ts");
 const config = await import("./Config.ts");
+const { LoginFile } = await import("../providers/chatgpt/Facts.ts");
 
 afterAll(() => {
   fs.rmSync(DIR, { recursive: true, force: true });
@@ -150,7 +151,7 @@ test("an API connected is offered at once, on the key chosen: the environment's,
 });
 
 test("a ChatGPT login is offered first; a pick set on a vendor let go gives way to its default, untold, and is back with it", () => {
-  fs.writeFileSync(config.OWN_LOGIN, JSON.stringify({ openai: { type: "oauth", access: "a", refresh: "r", expires: Date.now() + 3600e3 } }));
+  fs.writeFileSync(LoginFile.own, JSON.stringify({ openai: { type: "oauth", access: "a", refresh: "r", expires: Date.now() + 3600e3 } }));
   expect(config.config_accounts()).toBe(true);
   expect(config.OFFER.vendors).toEqual(["chatgpt", "claude-api"]);
   config.config_set("pick", "claude-api:sonnet-5.5:high:slow");
@@ -180,15 +181,15 @@ test("a Claude plan's accounts of the wrong shape (an id naming no folder of ill
   const all = [{ id: "own", email: "me@example.com" }, { id: "own" }, { id: "../x" }, { id: "c2", email: 3, plan: "max" }];
   expect(Accounts.folders({ use: "c9", accounts: all })).toEqual({ use: "own", accounts: [{ id: "own", email: "me@example.com", plan: "", org: "" }, { id: "c2", email: "", plan: "max", org: "" }] });
   expect(Accounts.folders(null)).toEqual({ use: "", accounts: [] });
-  expect([Accounts.folder("/r", "own"), Accounts.folder("/r", "c2"), Accounts.owned("claude"), Accounts.owned("claude-code.json")]).toEqual(["", "/r/claude/c2", true, false]);
+  expect([Accounts.folder("/r", "claude-code", "own"), Accounts.folder("/r", "claude-code", "c2"), Accounts.owned("claude"), Accounts.owned("claude-code.json")]).toEqual(["", "/r/claude/c2", true, false]);
 });
 
 test("a Claude plan connected is offered, the folder claude-code runs in its account in use's; a switch, which moves no vendor or key, is told all the same", () => {
   const me = (id: string) => ({ id, email: id + "@example.com", plan: "max", org: "" });
   Accounts.write(config.ROOT, { "claude-code": { use: "own", accounts: [me("own"), me("c1")] } });
   expect(config.config_accounts()).toBe(true);
-  expect([config.OFFER.vendors.includes("claude-code"), config.config_claude_dir()]).toEqual([true, ""]);
+  expect([config.OFFER.vendors.includes("claude-code"), config.config_folder("claude-code")]).toEqual([true, ""]);
   Accounts.write(config.ROOT, { "claude-code": { use: "c1", accounts: [me("own"), me("c1")] } });
-  expect([config.config_accounts(), config.config_claude_dir()]).toEqual([true, config.ROOT + "/claude/c1"]);
+  expect([config.config_accounts(), config.config_folder("claude-code")]).toEqual([true, config.ROOT + "/claude/c1"]);
   expect(config.config_accounts()).toBe(false);
 });

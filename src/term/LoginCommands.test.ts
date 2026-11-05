@@ -81,6 +81,7 @@ const { ChatGPT } = await import("../providers/chatgpt/ChatGPT.ts");
 const { ClaudeCode } = await import("../providers/claude-code/ClaudeCode.ts");
 const { Accounts, ENV } = await import("../config/Accounts.ts");
 const config = await import("../config/Config.ts");
+const { LoginFile } = await import("../providers/chatgpt/Facts.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
 
@@ -290,7 +291,7 @@ const saved = () => (Accounts.read(config.ROOT)?.chatgpt?.saved ?? []).map((s) =
 const OPENCODE = DIR + "/data/opencode/auth.json";
 
 test("ChatGPT's account is named by its email, told by its plan; a second signed in keeps the first apart; Enter switches, each kept apart in turn with its login as renewed since", async () => {
-  fs.writeFileSync(config.OWN_LOGIN, JSON.stringify({ openai: login("acct-1", "person@example.com", "plus") }));
+  fs.writeFileSync(LoginFile.own, JSON.stringify({ openai: login("acct-1", "person@example.com", "plus") }));
   const t = term();
   term_login(t);
   expect(t.choose.about[0]).toBe("connected: ChatGPT plan and OpenAI API key");
@@ -312,7 +313,7 @@ test("ChatGPT's account is named by its email, told by its plan; a second signed
     [ChatGPT.device, process.stdout.write] = [device, write];
   }
   expect([ChatGPT.key(), saved()]).toEqual(["acct-2", [["acct-1", "r-acct-1"]]]);
-  fs.writeFileSync(config.OWN_LOGIN, JSON.stringify({ openai: login("acct-2", "work@example.com", "team", "renewed") }));
+  fs.writeFileSync(LoginFile.own, JSON.stringify({ openai: login("acct-2", "work@example.com", "team", "renewed") }));
   open(t, "ChatGPT plan");
   expect([t.choose.names, t.choose.about.slice(0, 2), t.choose.here]).toEqual([["work@example.com", "person@example.com", "+ add another account", "Log out of ChatGPT plan"], ["team · illi's login", "plus"], 0]);
   t.choose.pick(1);
@@ -329,7 +330,7 @@ test("opencode's login is one of the accounts while illi may use it: switched to
   expect([t.choose.names.slice(0, 3), t.choose.about[1]]).toEqual([["person@example.com", "home@example.com", "work@example.com"], "pro · opencode's login"]);
   t.choose.pick(1);
   expect(await noted(t, "ChatGPT now")).toBe("ChatGPT now runs on home@example.com.");
-  expect([ChatGPT.file(), fs.existsSync(config.OWN_LOGIN), saved()]).toEqual([config.OPENCODE_LOGIN, false, [["acct-2", "renewed"], ["acct-1", "r-acct-1"]]]);
+  expect([ChatGPT.file(), fs.existsSync(LoginFile.own), saved()]).toEqual([LoginFile.opencode, false, [["acct-2", "renewed"], ["acct-1", "r-acct-1"]]]);
   open(t, "ChatGPT plan");
   t.choose.keys(0, "Delete");
   expect([t.question.title, t.question.about[1]]).toEqual(["Stop using opencode's login?", "opencode stays signed in; illi leaves it be"]);
@@ -351,7 +352,7 @@ test("Del logs an account out, asked first: one kept apart forgotten, the one in
   t.choose.keys(0, "Delete");
   t.question.pick(1);
   expect(await noted(t, "Logged out of work")).toBe("Logged out of work@example.com.");
-  expect([ChatGPT.signed(), fs.existsSync(config.OWN_LOGIN), config.OFFER.vendors]).toEqual([false, false, ["openai-api"]]);
+  expect([ChatGPT.signed(), fs.existsSync(LoginFile.own), config.OFFER.vendors]).toEqual([false, false, ["openai-api"]]);
   term_login(t);
   pick(t, "ChatGPT");
   expect(t.choose.about[0]).toBe("opencode's login is there: Enter connects it");
@@ -381,7 +382,7 @@ test("the Claude plan, your Claude Code logged in: its login connects it (or a s
   expect([t.question.title, t.question.names, t.question.about]).toEqual(["Connect Claude plan", ["Use your Claude Code's login", "Sign in to another account"], ["me@example.com", "with a code at Claude's page"]]);
   t.question.pick(0);
   expect(note(t)).toBe("Connected your Claude plan (me@example.com): its models are in /model.");
-  expect([claude(), config.OFFER.vendors, config.config_claude_dir(), ClaudeCode.env({} as any).CLAUDE_CONFIG_DIR]).toEqual([{ use: "own", accounts: [{ id: "own", email: "me@example.com", plan: "max", org: "Org" }] }, ["openai-api", "claude-code"], "", OWN_CLAUDE]);
+  expect([claude(), config.OFFER.vendors, config.config_folder("claude-code"), ClaudeCode.env({} as any).CLAUDE_CONFIG_DIR]).toEqual([{ use: "own", accounts: [{ id: "own", email: "me@example.com", plan: "max", org: "Org" }] }, ["openai-api", "claude-code"], "", OWN_CLAUDE]);
 });
 
 test("another account signs in in a folder of illi's: Claude Code's page's link told, the code asked as dots and given it; a wrong one says why, Esc stops it, each leaving no folder; signed in, kept and in use", async () => {
@@ -419,7 +420,7 @@ test("another account signs in in a folder of illi's: Claude Code's page's link 
   t.question.ask.done("good-code");
   expect(await noted(t, "Signed in")).toBe("Signed in to your Claude plan as c1@example.com: illi runs on it now.");
   expect(claude()).toEqual({ use: "c1", accounts: [{ id: "own", email: "me@example.com", plan: "max", org: "Org" }, { id: "c1", email: "c1@example.com", plan: "max", org: "Org" }] });
-  expect([config.config_claude_dir(), ClaudeCode.env({} as any).CLAUDE_CONFIG_DIR, fs.statSync(FOLDER("c1")).mode & 0o777]).toEqual([FOLDER("c1"), FOLDER("c1"), 0o700]);
+  expect([config.config_folder("claude-code"), ClaudeCode.env({} as any).CLAUDE_CONFIG_DIR, fs.statSync(FOLDER("c1")).mode & 0o777]).toEqual([FOLDER("c1"), FOLDER("c1"), 0o700]);
 });
 
 test("a sign-in ends as Claude Code does, though a child it left holds its output open: a wrong code says why, a stop ends it at once", async () => {
@@ -449,7 +450,7 @@ test("Enter switches; Del leaves your Claude Code logged in, logs one of illi's 
   open(t, "Claude plan");
   expect([t.choose.names, t.choose.about.slice(0, 2), t.choose.here]).toEqual([["me@example.com", "c1@example.com", "+ add another account", "Log out of Claude plan"], ["max · your Claude Code", "max · added in illi"], 1]);
   t.choose.pick(0);
-  expect([note(t), config.config_claude_dir()]).toEqual(["Claude plan now runs on me@example.com.", ""]);
+  expect([note(t), config.config_folder("claude-code")]).toEqual(["Claude plan now runs on me@example.com.", ""]);
   open(t, "Claude plan");
   t.choose.keys(0, "Delete");
   expect([t.question.title, t.question.about[1]]).toEqual(["Stop using your Claude Code's login?", "Claude Code stays logged in; illi leaves it be"]);

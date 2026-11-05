@@ -2,7 +2,7 @@
 // =======
 // The wire of chatgpt (Agent.ts): OpenAI.ts's Responses API on the Codex
 // backend, paid by a ChatGPT plan. Its login (ChatGPT.file) is the file
-// `login` names, else illi's own (config.OWN_LOGIN), or else opencode's
+// `login` names, else illi's own (LoginFile.own), or else opencode's
 // (`opencode auth login`, ChatGPT Plus/Pro) unless /login left it to
 // opencode; /login makes one with Codex's device login (a code the
 // person enters at OpenAI's page; `device`), kept in the file `login`
@@ -50,6 +50,7 @@ import type { Limit, Plan } from "../../ui/View.ts";
 import { Accounts, type Logins, type Saved } from "../../config/Accounts.ts";
 import { Flock } from "../../config/Flock.ts";
 import * as config from "../../config/Config.ts";
+import { LoginFile } from "./Facts.ts";
 
 // Types
 // =====
@@ -343,12 +344,12 @@ export namespace ChatGPT {
   // opencode's if there and /login didn't leave it to opencode, else
   // illi's own (none yet: config.config_login_file)
   export function file(): string {
-    return config.config_login_file();
+    return LoginFile.file();
   }
 
   // the file /login keeps its login in: the one config names, else illi's own
   export function own(): string {
-    return config.LOGIN_SET ?? config.OWN_LOGIN;
+    return LoginFile.set ?? LoginFile.own;
   }
 
   // why the login file is unreadable ("": it reads, or there is none)
@@ -439,10 +440,10 @@ export namespace ChatGPT {
   // it to opencode, is used again); false: there was none, or `login`
   // names the file in use (never removed here)
   export function logout(): boolean {
-    if (config.LOGIN_SET !== null || !fs.existsSync(config.OWN_LOGIN)) {
+    if (LoginFile.set !== null || !fs.existsSync(LoginFile.own)) {
       return false;
     }
-    fs.rmSync(config.OWN_LOGIN);
+    fs.rmSync(LoginFile.own);
     ChatGPT.sync();
     return true;
   }
@@ -507,7 +508,7 @@ export namespace ChatGPT {
   // never let go. null: done; else why not
   export async function swap(entry: Record<string, unknown> | null, switching = false): Promise<string | null> {
     const file = ChatGPT.own();
-    if (entry === null && config.LOGIN_SET !== null) {
+    if (entry === null && LoginFile.set !== null) {
       return "illi uses the login in " + config.config_home(file) + " (the login setting), which it leaves be";
     }
     const key = entry === null ? "" : ChatGPT.key(String(entry.access));

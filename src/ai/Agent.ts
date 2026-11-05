@@ -49,6 +49,7 @@ import { FAILED, live_push } from "../ui/View.ts";
 import { stream_events } from "../tools/Clip.ts";
 import { Machine, type Spec } from "../tools/Machine.ts";
 import * as config from "../config/Config.ts";
+import { Vendors } from "../providers/Vendors.ts";
 import { PICS } from "./Image.ts";
 import { When } from "../chat/When.ts";
 
@@ -141,15 +142,6 @@ const AWAY  = "can't reach ";
 // to the log)
 const SAID  = 200;
 
-// the API keys' vendors, by their names in config.KEYS
-const VENDORS: Record<string, string> = { anthropic: "Anthropic", openai: "OpenAI" };
-
-// what to do when an API key's money is used up
-const CREDIT: Record<string, string> = {
-  "claude-api" : "your Anthropic API credit is used up: add credit at console.anthropic.com, then send a message",
-  "openai-api" : "your OpenAI API quota is used up: add credit at platform.openai.com, then send a message",
-};
-
 // stop reasons, in plain words
 const STOPS: Record<string, string> = {
   max_tokens        : "the reply reached the most the model may write at once",
@@ -169,6 +161,11 @@ const ASKING = new Map<string, number>();
 // =====
 
 export namespace Agent {
+
+  // an API key's maker, by the key's name in config.KEYS ("Anthropic")
+  export function maker(key: string): string {
+    return Vendors.keyed().find((f) => f.key.name === key)?.key.maker ?? key;
+  }
 
   export function ask(ask: Ask, on: (ev: Event) => void): Try {
     if (ask.vendor === "claude-code") {
@@ -205,7 +202,7 @@ export namespace Agent {
     const signal = run.abort.signal;
     const key = wire.auth ? "" : config.KEYS[wire.key];
     if (!wire.auth && !key) {
-      end.text = "no " + (VENDORS[wire.key] ?? wire.key) + " API key: /login connects one";
+      end.text = "no " + Agent.maker(wire.key) + " API key: /login connects one";
       end.stop = "down";
       return;
     }
@@ -466,7 +463,7 @@ export namespace Agent {
       return Agent.fail(why, [], "full");
     }
     if (down && (res.status === 401 || res.status === 403) && !wire.auth) {
-      return Agent.fail((VENDORS[wire.key] ?? wire.key) + " refused the API key (" + why + "): /login replaces it", [], "down");
+      return Agent.fail(Agent.maker(wire.key) + " refused the API key (" + why + "): /login replaces it", [], "down");
     }
     return Agent.fail(why, [], down ? "down" : "busy");
   }
@@ -507,7 +504,7 @@ export namespace Agent {
       return ChatGPT.spent(typeof err === "object" ? err : {});
     }
     if (/insufficient_quota|exceeded your current quota|credit balance|billing/i.test(said)) {
-      return CREDIT[vendor] ?? "";
+      return Vendors.of(vendor)?.key?.credit ?? "";
     }
     return "";
   }

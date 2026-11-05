@@ -14,7 +14,8 @@ process.env.ILLI_LOGIN = DIR + "/auth/chatgpt.json";
 fs.mkdirSync(DIR + "/auth");
 fs.writeFileSync(DIR + "/auth/chatgpt.json", JSON.stringify({ other: { kept: true } }));
 
-const config = await import("../../config/Config.ts");
+await import("../../config/Config.ts");
+const { LoginFile } = await import("./Facts.ts");
 const { ChatGPT } = await import("./ChatGPT.ts");
 
 const real = globalThis.fetch;
@@ -34,12 +35,12 @@ afterAll(() => {
 });
 
 test("/login keeps its tokens in the file `login` names, which is the one used; /logout leaves it", async () => {
-  expect(ChatGPT.own()).toBe(config.LOGIN_SET!);
+  expect(ChatGPT.own()).toBe(LoginFile.set!);
   await (await ChatGPT.device(new AbortController().signal)).done;
-  expect(JSON.parse(fs.readFileSync(config.LOGIN_SET!, "utf8"))).toMatchObject({ openai: { access: "set-access" }, other: { kept: true } });
-  expect(fs.existsSync(config.OWN_LOGIN)).toBe(false);
-  expect(ChatGPT.file()).toBe(config.LOGIN_SET!);
+  expect(JSON.parse(fs.readFileSync(LoginFile.set!, "utf8"))).toMatchObject({ openai: { access: "set-access" }, other: { kept: true } });
+  expect(fs.existsSync(LoginFile.own)).toBe(false);
+  expect(ChatGPT.file()).toBe(LoginFile.set!);
   expect(await ChatGPT.token()).toBe("set-access");
   expect(ChatGPT.logout()).toBe(false);
-  expect(fs.existsSync(config.LOGIN_SET!)).toBe(true);
+  expect(fs.existsSync(LoginFile.set!)).toBe(true);
 });
