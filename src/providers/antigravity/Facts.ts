@@ -13,13 +13,15 @@ export const GEMINI: Maker = { name: "Gemini", offers: "by Google: your Google A
 
 // the Gemini models a Google AI plan runs in Antigravity, each a family
 // (Antigravity offers a model at each of its thinking levels: an effort
-// here), their windows as Antigravity states them (each call tells it
-// again: Antigravity.read)
+// here), as a Google AI Ultra account's agent listed them: an account's
+// own list replaces these as its agent tells it (Antigravity.learn: at
+// the sign-in, each call), kept for the next start (catalog). Each
+// window as Antigravity states it (each call tells it again:
+// Antigravity.read; none: not told yet)
 const WINDOW = 1048576;
 const MODELS: Model[] = [
+  { label: "gemini-4-argon",   id: "gemini-4-argon",   speeds: ["slow"], efforts: ["low", "medium", "high"] },
   { label: "gemini-3.8-flash", id: "gemini-3.8-flash", speeds: ["slow"], window: WINDOW, efforts: ["low", "medium", "high"] },
-  { label: "gemini-3.1-pro",   id: "gemini-3.1-pro",   speeds: ["slow"], window: WINDOW, efforts: ["low", "high"] },
-  { label: "gemini-3.5-flash", id: "gemini-3.5-flash", speeds: ["slow"], window: WINDOW, efforts: ["low", "medium", "high"] },
 ];
 
 export const FACTS = {
@@ -28,9 +30,10 @@ export const FACTS = {
   maker    : GEMINI,
   row      : "Google AI plan",
   models   : MODELS,
-  defaults : { pick: "antigravity:gemini-3.8-flash:high:slow", compactor: "antigravity:gemini-3.5-flash:low:slow" },
+  defaults : { pick: "antigravity:gemini-3.8-flash:high:slow", compactor: "antigravity:gemini-3.8-flash:low:slow" },
   ttl      : 300e3,
   accounts : "folders" as const,
   folders  : "antigravity",
+  catalog  : true,
   dated    : true,
 } satisfies Facts;
