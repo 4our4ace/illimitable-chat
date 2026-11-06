@@ -441,17 +441,19 @@ export function popup_wheel(t: Term, c: Chooser, d: number): void {
 
 // PgUp, PgDn in the picker: a question's lead half a page (Keys.ts
 // term_step), while it is cut, some of it showing (as last painted); else
-// the lit option a page (those shown, less one), stopping at the ends.
-// Ctrl+Home, Ctrl+End (and Home, End where nothing is typed): the first
-// option, the last
+// the lit option a page (the options in view as last painted, less one:
+// a group's head and the blank before it are no option), stopping at the
+// ends. Ctrl+Home, Ctrl+End (and Home, End where nothing is typed): the
+// first option, the last
 export function popup_page(t: Term, c: Chooser, key: string): void {
-  const box = t.box?.of === c ? t.box : null;
-  const n   = c.shown.length;
-  const d   = key === "PgUp" ? -1 : key === "PgDn" ? 1 : 0;
+  const box  = t.box?.of === c ? t.box : null;
+  const n    = c.shown.length;
+  const d    = key === "PgUp" ? -1 : key === "PgDn" ? 1 : 0;
+  const page = box === null ? n : new Set(box.rows.flatMap((r) => (r !== null && !Array.isArray(r) && r.$ === "option" ? [r.k] : []))).size;
   if (d !== 0 && box !== null && box.ahead > 0 && box.ahead < box.lead) {
     c.past = Math.max(0, Math.min(box.lead - box.ahead, (c.past ?? 0) + d * term_step(box.ahead)));
   } else if (d !== 0) {
-    c.at = Math.max(0, Math.min(n - 1, c.at + d * Math.max(1, (box?.tall ?? n) - 1)));
+    c.at = Math.max(0, Math.min(n - 1, c.at + d * Math.max(1, page - 1)));
   } else {
     c.at = key === "Ctrl+Home" || key === "Home" ? 0 : Math.max(0, n - 1);
   }
