@@ -96,7 +96,7 @@ export function term_groups(custom = false): [group: string, cmds: Cmd[]][] {
       ["",                  "Tab",                     "take the suggested reply",                       term_take],
       ["",                  "Ctrl+P",                  "all commands and settings in one list, typed to search", term_palette],
       ["",                  config.LEADER,             "the leader: the screen greys, and the next key runs its shortcut (/shortcuts lists them)", term_lead],
-      ["/goal <message>",   "",                        "send a goal: illi goes on until it is met",      (t, a) => term_say(t, "/goal " + a)],
+      ["/goal <message>",   "",                        "send a goal: illi goes on until it is met; alone, drops it, as /halt", (t, a) => term_say(t, "/goal " + a)],
       ["/halt",             "",                        "drop the goal; the turn running ends as it would", (t) => term_say(t, "/halt")],
       ["/clear",            "",                        "start a new topic: the chat before is kept and looked up when needed, not sent", (t) => term_say(t, "/clear")],
       ["/compact [focus]",  "",                        "illi writes a recap of the chat and goes on from it alone (the chat before is kept and looked up when needed, not sent); focus: what the recap should keep", (t, a) => term_say(t, ("/compact " + a).trim())],

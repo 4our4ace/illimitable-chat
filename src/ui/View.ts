@@ -549,9 +549,9 @@ export function view_act(v: View, act: Act): Client[] {
       const text   = act.text.trim();
       const images = act.images ?? [];
       // a `/word` reaching here is no command (the terminal ran its
-      // own), but /goal (a message, sent as typed, set as the goal),
-      // /halt, /clear and /compact: it errs, never goes to the AI as a
-      // message
+      // own), but /goal (a message, sent as typed, set as the goal; with
+      // none, the goal dropped, as /halt), /halt, /clear and /compact: it
+      // errs, never goes to the AI as a message
       const word   = /^\/[a-z]+(?=\s|$)/i.exec(text)?.[0];
       const goal   = word === "/goal" ? text.slice(word.length).trim() : null;
       if (text === "" && images.length === 0) {
@@ -560,7 +560,7 @@ export function view_act(v: View, act: Act): Client[] {
       if (!view_typing(v)) {
         return [];
       }
-      if (word === "/halt") {
+      if (word === "/halt" || goal === "") {
         return [{ $: "goal", text: null }];
       }
       if (word === "/clear") {
@@ -569,10 +569,6 @@ export function view_act(v: View, act: Act): Client[] {
       if (word === "/compact") {
         const focus = text.slice(word.length).trim();
         return [focus === "" ? { $: "compact" } : { $: "compact", focus }];
-      }
-      if (goal === "") {
-        v.notes.push("/goal needs one: /goal <message>.");
-        return [];
       }
       if (word !== undefined && goal === null) {
         v.notes.push(word + " is no command; nothing was sent. /help lists the commands.");
