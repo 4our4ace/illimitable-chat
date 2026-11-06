@@ -205,7 +205,7 @@ test("under a picker, PgUp and PgDn move its lit row a page, Ctrl+Home and Ctrl+
   const t = term("");
   t.seen = { tall: 20 };
   list(t, 30);
-  t.box = { of: t.choose, tall: 10, ahead: 0, lead: 0 };
+  t.box = { of: t.choose, tall: 10, ahead: 0, lead: 0, rows: Array.from({ length: 10 }, (_, k) => ({ $: "option", k })) };
   const at = (keys: string) => (Screen.screen_feed(t.scr, keys), t.choose.at);
   expect([at("\x1b[6~"), at("\x1b[6~"), at("\x1b[5~"), at("\x1b[1;5F"), at("\x1b[1;5H"), at("\x1b[F"), at("\x1b[H")]).toEqual([9, 18, 9, 29, 0, 29, 0]);
   expect(t.scroll).toBe(0);

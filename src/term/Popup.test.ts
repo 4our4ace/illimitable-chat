@@ -47,7 +47,7 @@ const { term_paint } = await import("./Frame.ts");
 const { term_grab, term_press, term_type } = await import("./Keys.ts");
 const { term_palette } = await import("./Palette.ts");
 const { term_mode, term_permissions } = await import("./PermCommands.ts");
-const { popup_size } = await import("./Popup.ts");
+const { popup_entries, popup_size } = await import("./Popup.ts");
 const { term_under } = await import("./Select.ts");
 const Paint = await import("../ui/Paint.ts");
 const Screen = await import("../ui/Screen.ts");
@@ -509,6 +509,28 @@ test("the wheel over a group's head scrolls on: the lit option gone from view, t
       paint(t);
     }
     expect([t.choose.top, lit(t)]).toEqual([6, "o5"]);
+  });
+});
+
+test("PgDn and PgUp move the lit option a page of the options in view, the groups' heads and blanks not counted; searched, a grouped list keeps its heads", () => {
+  sized(100, 24, () => {
+    const t = term();
+    const names = Array.from({ length: 40 }, (_, k) => "o" + k);
+    term_chooser(t, "List", names, names.map(() => ""), -1, () => {}, { find: true, heads: names.map((_, k) => "Group " + Math.floor(k / 5)), grouped: true });
+    paint(t);
+    const options = () => new Set(t.box.rows.flatMap((r: any) => (r?.$ === "option" ? [r.k] : []))).size;
+    const page = options();
+    expect(page).toBeLessThan(t.box.tall);
+    term_grab(t, "PgDn");
+    expect(lit(t)).toBe("o" + (page - 1));
+    paint(t);
+    term_grab(t, "PgUp");
+    expect(lit(t)).toBe("o0");
+    term_type(t, "o1");
+    paint(t);
+    // o1 first (its group first), o10-o19, then o21 and o31 (their
+    // characters in turn): each group once, its matches under it
+    expect([popup_entries(t.choose).filter((e: string | number) => typeof e === "string" && e !== ""), lit(t)]).toEqual([["Group 0", "Group 2", "Group 3", "Group 4", "Group 6"], "o1"]);
   });
 });
 
