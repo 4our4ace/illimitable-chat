@@ -7,8 +7,9 @@
 // it logged is on disk. One process at a time holds a project's chat
 // (Lock.take). While it's open, the accounts /login connected are
 // followed (Chat.follow): a change in any terminal offers or drops a
-// vendor at once, and asks the accounts in use anew (Chat.account: their
-// models' windows, ChatGPT's plan and use).
+// vendor at once, and asks the account in use anew (Chat.account: the
+// chat's vendor's alone, its models' windows, ChatGPT's plan and use; a
+// vendor the chat moves to is asked as it moves, Chat.use).
 //
 // One turn at a time. A message is logged as it arrives; the running call
 // takes it between tool calls if it goes whole beside its view, else the
@@ -125,6 +126,7 @@ export type Chat = {
   context: Promise<string[]>;
   idle  : ReturnType<typeof setTimeout> | undefined;
   told  : WeakMap<Sock, Record<string, string>>;
+  asking: boolean;
 };
 
 // a question asked of the user (Chat.question), and what its answer does
@@ -296,7 +298,7 @@ export namespace Chat {
       writes: Promise.resolve(), held: null, switched: false, was: null, picks: new Map(),
       suggest: { on: false, due: false, text: mem.suggest, call: null, passed: false, unused: 0 }, fit: 1, beside: new Map(), refits: 0, unmarked: false, asks: [], compacting: false,
       goings: 0, going: false, saying: Promise.resolve(), checking: null, context: Promise.resolve([]), idle: undefined,
-      told: new WeakMap(),
+      told: new WeakMap(), asking: false,
     };
     chat.context = Plugins.context({ cwd });
     Machine.watch(() => Chat.change(chat));
@@ -397,22 +399,40 @@ export namespace Chat {
     following.unref?.();
   }
 
-  // what the accounts in use tell, asked (at the start, after /login, and
-  // as the accounts change in another terminal): each offered vendor's
-  // (Provider.ts account: an API key's models, a plan's windows, plan, use
-  // and catalog); the views told what changed. Each vendor's asking given
-  // back, as /login waits on a vendor's to show its models (one that asks
-  // nothing it waits on: none)
-  export function account(chat: Chat): Partial<Record<Vendor, Promise<boolean>>> {
+  // what the account in use tells, asked (at the start, after /login, as
+  // the accounts change in another terminal, as the chat moves to another
+  // vendor: Chat.use): the chat's vendor's alone (Provider.ts account: an
+  // API key's models, a plan's windows, plan, use and catalog), so a
+  // vendor the chat isn't on runs and fetches nothing as illi opens (no
+  // Claude Code started for a chat on another plan); `also` too, offered
+  // (a vendor /login connected anew, its models shown next). The views
+  // told what changed. Each vendor's asking given back, as /login waits on
+  // a vendor's to show its models (one that asks nothing it waits on: none).
+  // Asked once (its terminal's start: term_account), the chat asks the
+  // vendor it moves to as well (`asking`, Chat.use); one never asked (no
+  // terminal: a test's) asks none
+  export function account(chat: Chat, also?: Vendor): Partial<Record<Vendor, Promise<boolean>>> {
+    chat.asking = true;
     const asked: Partial<Record<Vendor, Promise<boolean>>> = {};
-    for (const vendor of config.OFFER.vendors) {
-      const news = Providers.of(vendor)?.account?.();
+    for (const vendor of new Set([chat.pick.vendor, ...(also === undefined ? [] : [also])])) {
+      const news = config.OFFER.vendors.includes(vendor) ? Providers.of(vendor)?.account?.() : undefined;
       if (news !== undefined) {
         asked[vendor] = news;
         void news.then((changed) => changed && Chat.change(chat));
       }
     }
     return asked;
+  }
+
+  // the chat's pick set to pick (saved by the caller): on another vendor,
+  // that vendor's account asked (Chat.account), as only the one in use is,
+  // where the chat asks its accounts (`asking`)
+  export function use(chat: Chat, pick: Pick): void {
+    const was = chat.pick.vendor;
+    chat.pick = chat.mem.pick = pick;
+    if (chat.asking && pick.vendor !== was) {
+      Chat.account(chat);
+    }
   }
 
   // the vendors offered or a key in use changed: the views told; the
@@ -422,7 +442,7 @@ export namespace Chat {
   export function offered(chat: Chat): void {
     if (!chat.busy && !config.OFFER.vendors.includes(chat.pick.vendor)) {
       const was = chat.pick;
-      chat.pick = chat.mem.pick = Pick.load(null, config.OFFER, config.PICK);
+      Chat.use(chat, Pick.load(null, config.OFFER, config.PICK));
       Chat.save(chat);
       Chat.note(chat, Pick.provider(was.vendor, true) + " isn't available now, so the chat runs on " + Pick.shown(chat.pick) + " on " + Pick.provider(chat.pick.vendor) + (config.config_named() ? "." : " (/login connects it again)."));
     }
@@ -1443,7 +1463,7 @@ export namespace Chat {
         if (pick === null) {
           return { error: "No pick " + JSON.stringify(msg.to) + "." };
         }
-        chat.pick = chat.mem.pick = pick;
+        Chat.use(chat, pick);
         Memory.save(chat.mem);
         Chat.change(chat);
         return {};
@@ -1630,7 +1650,7 @@ export namespace Chat {
     }
     const was = chat.was ?? { agent: left, pick: Pick.label(chat.pick) };
     chat.mem.agent = name;
-    chat.pick = chat.mem.pick = pick;
+    Chat.use(chat, pick);
     Memory.save(chat.mem);
     chat.switched = was.agent !== name || was.pick !== Pick.label(pick);
     chat.was = chat.switched ? was : null;

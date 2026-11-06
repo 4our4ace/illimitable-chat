@@ -139,12 +139,14 @@ export type Hint = { text: string; trouble: boolean };
 // - windows: whether the windows known are the account's own this run
 //   (none: always); while not, the chat's cut waits for them, as one
 //   fitted to smaller windows kept last would fold the chat for good;
-// - account: what the account in use tells, asked (at the start, after
-//   /login, as the accounts change in another terminal): true once
-//   something changed (its models: a catalog's list, their windows).
-//   /login waits on it (LoginCommands.ts READING: 15 s at most) to ask
-//   a vendor connected anew which of its models to run on, so it should
-//   settle once the list is known;
+// - account: what the account in use tells, asked while the chat is on
+//   this vendor (at the start, as the chat moves to it, after /login, as
+//   the accounts change in another terminal: Chat.account), and as
+//   /login connects it anew; a vendor the chat isn't on is never asked:
+//   true once something changed (its models: a catalog's list, their
+//   windows). /login waits on it (LoginCommands.ts READING: 15 s at
+//   most) to ask a vendor connected anew which of its models to run on,
+//   so it should settle once the list is known;
 // - watch: tells f each time its account, plan or catalog changed;
 // - plan: its plan's limits and use, as the side shows them (null: none
 //   told);

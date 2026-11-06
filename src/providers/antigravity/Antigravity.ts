@@ -955,9 +955,10 @@ export namespace Antigravity {
 }
 
 // antigravity's code, as the rest of illi asks it (Provider.ts): a call
-// run by Google's agent itself (a runner); at the start (and after
-// /login), this illi's build of the agent downloaded by itself where
-// autoupdate is on and an account is connected (Agy.auto); the chat told
+// run by Google's agent itself (a runner); while the chat is on it (at
+// the start, as the chat moves to it, after /login: Chat.account), this
+// illi's build of the agent downloaded by itself where autoupdate is on
+// and an account is connected (Agy.auto); the chat told
 // as the account's models change; its agents ended as illi ends
 export const PROVIDER: Provider = {
   facts   : FACTS,

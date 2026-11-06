@@ -192,9 +192,10 @@ function login_accounts(t: Term, p: Page, back: () => void): void {
 // accounts' file there, else its entry in the file). A vendor connected
 // now that wasn't as /login opened (`seen`: connected anew, by any page:
 // a key, a plan's sign-in) and offered is asked its models next
-// (login_models_new: what its account tells waited on; a view's illi
-// asks it itself, its chat's illi asking its own); a change of account,
-// a second key, a log out ask nothing (its Models row asks)
+// (login_models_new: what its account tells waited on, asked beside the
+// chat's own, term_account; a view's illi asks it itself, its chat's illi
+// asking its own); a change of account, a second key, a log out ask
+// nothing more (its Models row asks)
 export function login_after(t: Term, vendor: Vendor, said: string): void {
   const was = seen === null || seen.includes(vendor);
   config.config_accounts(true);
@@ -204,7 +205,6 @@ export function login_after(t: Term, vendor: Vendor, said: string): void {
   if (term_hint() === "") {
     term_unhint(t);
   }
-  const asked = term_account(t);
   const outside = Vendors.of(vendor)?.outside;
   const there   = outside !== undefined ? outside() : Object.keys(config.config_accounts_read() ?? {}).includes(vendor);
   const left    = config.config_named() && there && !config.OFFER.vendors.includes(vendor);
@@ -212,8 +212,10 @@ export function login_after(t: Term, vendor: Vendor, said: string): void {
   const fix  = env === null ? "Your vendors setting leaves " + Pick.provider(vendor) + " out, though: /set vendors default lets /login decide." : env + " leaves " + Pick.provider(vendor) + " out, though: start illi without it to let /login decide.";
   term_note(t, said + (left ? " " + fix : ""));
   seen = login_connected(t);
-  if (!was && seen.includes(vendor) && config.OFFER.vendors.includes(vendor)) {
-    void login_models_new(t, vendor, asked[vendor] ?? (t.chat === null ? Providers.of(vendor)?.account?.() ?? undefined : undefined));
+  const fresh = !was && seen.includes(vendor) && config.OFFER.vendors.includes(vendor);
+  const asked = term_account(t, fresh ? vendor : undefined);
+  if (fresh) {
+    void login_models_new(t, vendor, asked[vendor]);
   }
 }
 

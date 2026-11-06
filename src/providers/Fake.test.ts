@@ -86,8 +86,25 @@ test("a call handed to its program, as a runner's; its plan asked for the side; 
   expect([(await run.done).text, asked.length, asked[0].model]).toEqual(["fake answer", 1, "fake-model-1"]);
   const tools = { todo: [], mem: {}, cwd: DIR, perm: { allowed: [], refused: [] }, mode: null } as any;
   expect(Tools.state(tools, "fake" as any).use.plan).toEqual({ tier: "pro", limits: [] } as any);
-  Chat.account({} as any);
+  Chat.account({ pick: { vendor: "fake" } } as any);
   expect(accounts).toBe(1);
+});
+
+test("only the account the chat is on asked: an offered vendor it isn't on asks nothing; a move to it or /login's new connection asks it; a chat never asked (no terminal) asks none", () => {
+  const before = accounts;
+  const quiet  = { pick: { vendor: "claude-api" }, mem: {}, asking: false } as any;
+  Chat.use(quiet, { vendor: "fake", model: "fake-1", effort: "medium", speed: "slow" } as any);
+  expect([accounts, quiet.pick.vendor]).toEqual([before, "fake"]);
+  const chat   = { pick: { vendor: "claude-api" }, mem: {}, asking: false } as any;
+  Chat.account(chat);
+  expect(accounts).toBe(before);
+  Chat.account(chat, "fake" as any);
+  expect(accounts).toBe(before + 1);
+  Chat.use(chat, { vendor: "fake", model: "fake-1", effort: "medium", speed: "slow" } as any);
+  expect([accounts, chat.pick.vendor, chat.mem.pick.vendor]).toEqual([before + 2, "fake", "fake"]);
+  Chat.use(chat, { vendor: "fake", model: "fake-mini-1", effort: "low", speed: "slow" } as any);
+  Chat.account(chat, "fake" as any);
+  expect([accounts, chat.pick.model]).toEqual([before + 3, "fake-mini-1"]);
 });
 
 test("its page in /login, under its maker; the rows it adds under its accounts", () => {

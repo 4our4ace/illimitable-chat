@@ -203,12 +203,13 @@ illi then runs Claude Code itself, as it ships, on the account's login:
   of its MCP servers) that your Claude Code settings don't allow, illi
   checks it the same way: your rules and saved approvals apply, and
   what they leave open is asked at illi's screen, saying why.
-- **The whole window**: as soon as the plan is connected, and when
-  another terminal switches the account, illi asks Claude Code the
-  plan's models and each one's window, one model after another, sending
-  no message (1M on a plan with long context); at a start it goes on
-  what Claude Code told within the last day, asking again past it
-  ([Models](#models)). A turn gets all of it, as
+- **The whole window**: as soon as the plan is connected, as a chat
+  moves to it, and when another terminal switches the account, illi
+  asks Claude Code the plan's models and each one's window, one model
+  after another, sending no message (1M on a plan with long context);
+  at a start on the plan it goes on what Claude Code told within the
+  last day, asking again past it ([Models](#models)). A chat on another
+  provider starts no Claude Code. A turn gets all of it, as
   Claude Code's own compaction, which would stop at its autocompact
   window (500k of Opus's 1M), is off.
 - **illi's memory, not Claude Code's compaction**: a turn runs with
@@ -280,8 +281,9 @@ switches accounts on its own.
   it into `~/.illi/antigravity/agent/<version>/` and keeps it for every
   profile; Esc stops the download, leaving nothing behind. When an illi
   update moves to a newer version, illi downloads it by itself in the
-  background as it starts (with `autoupdate` on, the default, and a
-  Google account connected; one illi at a time on the machine), and a
+  background as it starts on Google's plan or a chat moves to it (with
+  `autoupdate` on, the default, and a Google account connected; one illi
+  at a time on the machine), and a
   turn meanwhile says it's downloading; with `autoupdate` set to
   `notify` or `off`, a turn says an update is needed and /login offers
   it under your accounts (**Update Google's Antigravity agent**). The
@@ -459,7 +461,11 @@ goes back to what `/login` connected. `/model` picks the model, its
 effort and speed per chat.
 
 Each vendor tells illi its models, kept in `~/.illi/models.json` for the
-next start:
+next start. Only the vendor your chat is on is asked: at start, as the
+chat moves to it, after `/login`; and a vendor `/login` connects anew,
+whose models it shows you next. Another vendor's list is the one it told
+last, so a start on OpenCode runs no Claude Code and fetches no ChatGPT
+usage:
 
 | Vendor        | What it tells                                                    | When                                   |
 | ------------- | ---------------------------------------------------------------- | -------------------------------------- |

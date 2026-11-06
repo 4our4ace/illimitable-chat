@@ -855,19 +855,25 @@ export function term_main(t: Term, name: string | null): void {
   term_send(t, { $: "main", name });
 }
 
-// the accounts as they are now (run here, not in another terminal's
-// view: Chat.account): ChatGPT's (ChatGPT.ts; signed in) plan and usage
-// asked together, the login followed for a change of account, and its
-// catalog learned (the chatgpt list: each model's window, efforts and
-// speeds); the Anthropic key's models (Anthropic.models), the Claude
-// plan's account's (ClaudeCode.models: once a day), the OpenCode Go
-// plan's catalog (OpenCodeGo.models), and Google's agent downloaded by
-// itself where it isn't here (Agy.auto); the chat tells its
-// views. Another terminal's change of accounts asks them too
-// (Chat.follow). Each vendor's asking given back (Chat.account; a view's
-// illi asks none)
-export function term_account(t: Term): Partial<Record<Vendor, Promise<boolean>>> {
-  return t.chat === null ? {} : Chat.account(t.chat);
+// the account in use as it is now (run here, not in another terminal's
+// view: Chat.account, the chat's vendor's alone): on ChatGPT
+// (ChatGPT.ts; signed in) its plan and usage asked together, the login
+// followed for a change of account, and its catalog learned (the chatgpt
+// list: each model's window, efforts and speeds); on an API key its
+// models (Anthropic.models), on the Claude plan its account's
+// (ClaudeCode.models: once a day), on the OpenCode Go plan its catalog
+// (OpenCodeGo.models), on Google's plan its agent downloaded by itself
+// where it isn't here (Agy.auto); the chat tells its views. Another
+// terminal's change of accounts asks it too (Chat.follow). `also`: a
+// vendor /login connected anew, asked beside it (a view's illi asks that
+// one alone, its chat's illi asking its own). Each vendor's asking given
+// back
+export function term_account(t: Term, also?: Vendor): Partial<Record<Vendor, Promise<boolean>>> {
+  if (t.chat !== null) {
+    return Chat.account(t.chat, also);
+  }
+  const news = also === undefined ? undefined : Providers.of(also)?.account?.();
+  return news === undefined ? {} : { [also!]: news };
 }
 
 // stops all that runs, or the agent named; nothing running, says so

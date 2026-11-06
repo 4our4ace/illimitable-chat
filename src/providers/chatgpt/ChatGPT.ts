@@ -22,13 +22,14 @@
 // the plan's, never billed. What the account's plan is and how much of
 // its rate limits (its 5-hour and weekly windows) is used are one record,
 // kept for the account they are of (`told`, for the view): asked of the
-// usage endpoint together (`usage`: at start, after /login and /logout,
-// when the login changes on disk, as another terminal or opencode may
-// change it: `sync`, `follow`), and kept current by each response's
-// headers. A change of account drops the old record at once, so no view
-// shows one account's plan with another's usage. The account's catalog
-// (`models`: at start, after /login and /logout, on a change of account,
-// by a turn that finds it not asked: `listed`) is the chatgpt list: each
+// usage endpoint together (`usage`: while the chat is on chatgpt, at
+// start, as the chat moves to it, after /login and /logout, when the
+// login changes on disk, as another terminal or opencode may change it:
+// `sync`, `follow`), and kept current by each response's headers. A
+// change of account drops the old record at once, so no view shows one
+// account's plan with another's usage. The account's catalog (`models`:
+// as `usage` is, on a change of account, by a turn that finds it not
+// asked: `listed`) is the chatgpt list: each
 // model shown offered, a new one too, one it drops gone; its window the
 // most the account may set, its usual one (standard: what Codex uses
 // unless set higher), its efforts and its speeds (each a service tier:

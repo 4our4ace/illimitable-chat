@@ -55,10 +55,12 @@
 // stop interrupts it (SIGINT, then SIGKILL), what streamed of its
 // message logged as cut off. A model's window is learned (Pick.told, by
 // its canonical id) and kept for the next start: as Claude Code has it
-// for a turn, asked as soon as the plan's account is in use (at the
-// start, at a /login change here or in another terminal: Chat.account,
+// for a turn, asked as soon as the plan's account is in use (while the
+// chat is on the plan: at the start, as the chat moves to it, at a /login
+// change here or in another terminal; as /login connects it: Chat.account,
 // ClaudeCode.models, one model after another, no model called; once a
-// day for an account, so most starts run no Claude Code), and
+// day for an account, so most starts run no Claude Code, and a chat on
+// another vendor never starts one), and
 // as a turn's result tells it; a call with Claude Code's compaction on
 // tells its autocompact window instead (500k of Opus's 1M), never
 // learned; the plan's use, as each rate limit event tells it (its
