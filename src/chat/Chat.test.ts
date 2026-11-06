@@ -238,6 +238,19 @@ test("a setting written at a view reaches the chat's illi at once, whatever its 
   expect([config.RECALL, config.STICKY, config.OFF, config.SUGGEST, config.AUTOCONTINUE]).toEqual([true, [], [], true, true]);
 });
 
+test("a goal dropped with none set says so to its sender alone, nothing logged; one set is halted, noted", async () => {
+  const count = chat.mem.count;
+  expect(await Chat.act(chat, { $: "goal", text: null })).toEqual({ said: "No goal to halt." });
+  expect(chat.mem.count).toBe(count);
+  expect(await Chat.act(chat, { $: "goal", text: "ship it" })).toEqual({});
+  expect(await Chat.act(chat, { $: "goal", text: null })).toEqual({});
+  await until(() => chat.mem.count > count);
+  expect([chat.mem.goal, Memory.message(chat.mem, chat.mem.count - 1)?.text]).toEqual([null, "Goal halted by the user."]);
+  const v = View.view_new();
+  View.link_note(v, { said: "No goal to halt." });
+  expect(v.notes).toEqual(["No goal to halt."]);
+});
+
 test("a turn's wait names the model it runs on, not one picked since", async () => {
   let go = () => {};
   hold = new Promise((ok) => (go = ok));

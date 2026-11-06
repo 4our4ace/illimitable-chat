@@ -144,6 +144,10 @@ const HEAD       = "Turn: the user's new message:\n\n";
 // messages whole) of its goal; unmet, the user's nudge
 const GOAL       = "You check a goal. Below is a chat between a user and illi, an AI agent: its older messages as summary lines (id+n|text), then its latest messages whole, then the goal the user set with /goal. Answer yes if the chat shows the goal fully satisfied now, else no. Write that one word, nothing else.";
 const GOAL_ASK   = "\nThe goal:\n\n";
+
+// a goal dropped (/halt, /goal alone) with none set: told its sender
+// alone, kept nowhere
+const NO_GOAL    = "No goal to halt.";
 const GOAL_NO    = "The goal isn't satisfied yet: keep working.";
 
 // a no to a question (Chat.question): the user's, without a reason (a
@@ -1381,7 +1385,7 @@ export namespace Chat {
       case "goal": {
         const goal = msg.text === null ? null : String(msg.text);
         if (goal === chat.mem.goal) {
-          return {};
+          return goal === null ? { said: NO_GOAL } : {};
         }
         chat.mem.goal = goal;
         Memory.save(chat.mem);

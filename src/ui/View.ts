@@ -238,8 +238,10 @@ export type Server =
 // a message a person sends: its text, its images
 export type Sent = { text: string; images?: Blob[] };
 
-// an act's answer: why refused; a body, made anew for each post
-export type Answer = { error?: string };
+// an act's answer: why refused; said: what the chat tells its sender
+// alone, the act taken (no goal to halt), shown, never kept; a body,
+// made anew for each post
+export type Answer = { error?: string; said?: string };
 export type Body   = () => any;
 
 // the acts a view sends: changes, then reads; a message's body is its
@@ -1196,8 +1198,9 @@ export function link_send(v: View, msg: Client, done = (a: Answer) => link_note(
 }
 
 export function link_note(v: View, a: Answer): void {
-  if (a.error !== undefined) {
-    v.notes.push(a.error);
+  const note = a.error ?? a.said;
+  if (note !== undefined) {
+    v.notes.push(note);
   }
 }
 

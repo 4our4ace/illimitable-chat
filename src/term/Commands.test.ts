@@ -417,6 +417,20 @@ test("/autocompact says the chat's model's; a change is said once the chat takes
   expect(t.v.out).toHaveLength(2);
 });
 
+test("what the chat says back to /halt or /goal alone is noted, the input left empty; a refusal puts the command back in it", () => {
+  for (const name of ["/halt", "/goal"]) {
+    const t = term();
+    run(t, name);
+    expect(t.v.out.map((p: any) => ({ ...p.msg, id: undefined }))).toEqual([{ id: undefined, $: "goal", text: null }]);
+    t.v.out.at(-1).done({ said: "No goal to halt." });
+    expect([name, note(t), t.scr.ed.text]).toEqual([name, "No goal to halt.", ""]);
+  }
+  const t = term();
+  run(t, "/halt");
+  t.v.out.at(-1).done({ error: "The chat can't be reached." });
+  expect([note(t), t.scr.ed.text]).toEqual(["The chat can't be reached.", "/halt"]);
+});
+
 test("/tab finds the chat's tab by the main agent's name, or illi's; none lists the tabs", () => {
   const t = term();
   t.v.agent = "build";
