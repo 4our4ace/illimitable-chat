@@ -403,10 +403,13 @@ test("a turn past the most the model may write, or declined, keeps what it said 
   expect([declined.end.stop, declined.end.text, entries(declined.events)]).toEqual(["fail", "the model declined to answer", [["illi", "I can't help with that."]]]);
 });
 
-test("a model the account doesn't offer fails, saying what it does", async () => {
+test("a model the account doesn't offer fails, saying what it does; one not Gemini's is never set, though the CLI offers it", async () => {
   const { end } = await call("turn", { model: "gemini-9" });
   expect([end.ok, end.stop]).toEqual([false, "fail"]);
   expect(end.text).toBe("your Google AI plan doesn't offer gemini-9 in Antigravity (it offers gemini-4-argon and gemini-3.8-flash): /model picks another");
+  const other = await call("turn", { model: "claude-opus-test" });
+  expect([other.end.ok, other.end.stop, other.end.text]).toEqual([false, "fail", "illi runs only Gemini models on your Google AI plan, and claude-opus-test isn't one: /model picks one"]);
+  expect(logged().some((l) => l.method === "session/set_config_option" && l.params.value === "claude-opus-test")).toBe(false);
 });
 
 test("the account's models, as its CLI lists them, are those offered: each family at its levels, Gemini's alone, windows kept; one new offered, one gone dropped, kept for the next start, the chat told; a call set on one", async () => {

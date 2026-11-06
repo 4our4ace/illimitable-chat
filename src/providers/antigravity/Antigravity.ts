@@ -8,11 +8,12 @@
 // --login`: /login opens Google's page, the person pastes the code it
 // shows: Login.ts; illi never reads the tokens). Each account is a folder
 // of illi's (the HOME, the CLI's own folder (--gemini-dir) and TMPDIR of
-// the CLIs run for it, the sign-in kept in a file there, never a keyring
-// all accounts would share), so accounts never meet; an environment's
-// Gemini, Google or Antigravity keys and settings never reach the CLI,
-// which would take them in place of the sign-in, nor its own updates
-// (illi runs the build it found), nor its telemetry.
+// the CLIs run for it, the sign-in kept in a file there on Linux, never
+// a keyring all accounts would share, so accounts never meet; on a Mac
+// the CLI finds the keychain by itself, which illi can't move); an
+// environment's Gemini, Google or Antigravity keys and settings never
+// reach the CLI, which would take them in place of the sign-in, nor its
+// own updates (illi runs the build it found), nor its telemetry.
 //
 // A call is a session of its own (session/new), as a `claude -p` is on
 // claude-code: illi's prompt after Google's own (its systemPrompt append:
@@ -178,6 +179,9 @@ const OUTPUT = 1_000_000;
 
 // the agent's web tools, where a call searches the web
 const WEB = ["search_web", "read_url_content"];
+
+// a Gemini model's id, the only ones illi runs on a Google AI plan
+const GEMINI = /^gemini-[a-z0-9.-]+$/;
 
 // the link the CLI's sign-in tells, to Google's page
 const GOOGLE = /https:\/\/accounts\.google\.com\/\S+/;
@@ -366,18 +370,23 @@ export namespace Antigravity {
   // the session set on the pick's model (Antigravity's model offered of
   // its family: the one at the effort's thinking level, else the family's
   // own) and its thinking level where offered; null: set, else why not
-  // (the account doesn't offer the model: the Gemini models it offers)
+  // (a model not Gemini's, which illi never runs on a Google AI plan,
+  // though the CLI offers every model of the account; the account
+  // doesn't offer the model: the Gemini models it offers)
   export async function choose(conn: Conn, run: Run, options: unknown): Promise<string | null> {
     const all    = Array.isArray(options) ? options : [];
     const model  = all.find((o: any) => o?.id === "model");
     const values = Antigravity.values(model);
+    const { model: id, effort } = run.ask;
+    if (!GEMINI.test(id)) {
+      return "illi runs only Gemini models on your Google AI plan, and " + id + " isn't one: /model picks one";
+    }
     if (model === undefined) {
       return null;
     }
-    const { model: id, effort } = run.ask;
     const want = [id + "-" + effort, id].find((v) => values.includes(v)) ?? values.find((v) => v.startsWith(id + "-"));
     if (want === undefined) {
-      const gemini = values.filter((v) => v.startsWith("gemini-"));
+      const gemini = values.filter((v) => GEMINI.test(v));
       return "your Google AI plan doesn't offer " + id + " in Antigravity" + (gemini.length > 0 ? " (it offers " + Vendors.list(gemini, "and") + ")" : "") + ": /model picks another";
     }
     let now = all;
@@ -415,7 +424,7 @@ export namespace Antigravity {
     const found  = new Map<string, Set<string>>();
     for (const id of [...Antigravity.values(all.find((o: any) => o?.id === "model")), ...listed]) {
       const [, family, effort] = tells.exec(id) ?? [id, id, ""];
-      if (!/^gemini-[a-z0-9.-]+$/.test(family)) {
+      if (!GEMINI.test(family)) {
         continue;
       }
       const at = found.get(family) ?? new Set<string>();
@@ -869,9 +878,10 @@ export namespace Antigravity {
   // the environment a CLI runs in: illi's, but any Gemini, Google or
   // Antigravity key or setting (the CLI would take one in place of the
   // sign-in, or another endpoint), and the user's own folders for its
-  // settings and data (XDG's) and session bus (its keyring: the sign-in
-  // goes to a file in the folder, never a keyring all accounts would
-  // share); HOME and TMPDIR the account's folder's; no browser of its own
+  // settings and data (XDG's) and session bus (its keyring: on Linux the
+  // sign-in goes to a file in the folder, never a keyring all accounts
+  // would share; a Mac's keychain the CLI finds by itself, which illi
+  // can't move); HOME and TMPDIR the account's folder's; no browser of its own
   // (BROWSER=false: illi opens Google's page itself at /login, as it does
   // ChatGPT's), nor its own updates. With ILLI_ANTIGRAVITY_GATEWAY, an AI
   // API gateway of the user's own in place of Google's services (a test's

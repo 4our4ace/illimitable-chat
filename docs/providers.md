@@ -299,9 +299,11 @@ accounts on its own.
   the link); sign in there, then paste the code the page shows into
   illi (shown as dots), which gives it to the CLI. Esc stops it. Each
   account gets a folder of its own, `~/.illi/antigravity/<id>/`,
-  readable by you alone: the CLI's home, its sign-in kept in a file
-  there, never in a keyring all accounts would share (on a Mac, the CLI
-  may keep it in your login keychain). Google's CLI tells no email, so
+  readable by you alone: the CLI's home. On Linux illi keeps the CLI
+  off your desktop's keyring, so it keeps the sign-in in a file in that
+  folder, each account its own. On a Mac the CLI keeps it in your
+  keychain, which illi can't move: there, accounts may share one
+  sign-in, with your own `agy` too. Google's CLI tells no email, so
   an account shows as **Google account 1**, 2, …, with the plan it
   names. Logging one out logs the CLI out of it and removes its folder.
   A turn never signs in: when an account's sign-in has run out, the
