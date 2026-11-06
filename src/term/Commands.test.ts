@@ -429,6 +429,14 @@ test("what the chat says back to /halt or /goal alone is noted, the input left e
   run(t, "/halt");
   t.v.out.at(-1).done({ error: "The chat can't be reached." });
   expect([note(t), t.scr.ed.text]).toEqual(["The chat can't be reached.", "/halt"]);
+  // from a pipe, what the chat says back fails no script: no exit code,
+  // no quit (a refusal sets 1 and quits: term_back)
+  const pipe = term();
+  pipe.scr.tty = false;
+  const code = process.exitCode;
+  run(pipe, "/halt");
+  pipe.v.out.at(-1).done({ said: "No goal to halt." });
+  expect([note(pipe), process.exitCode, pipe.quitting]).toEqual(["No goal to halt.", code, undefined]);
 });
 
 test("/tab finds the chat's tab by the main agent's name, or illi's; none lists the tabs", () => {
