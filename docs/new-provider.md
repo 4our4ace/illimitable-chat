@@ -40,7 +40,7 @@ illi lists their models in):
 | Field | What it is |
 | ----- | ---------- |
 | `id` | as saved: in a pick (`vendor:model:effort:speed`), `models.json`, `accounts.json`; never changed once out |
-| `name` | as a note names it: "the Anthropic API", "your ChatGPT plan" (`Pick.provider`) |
+| `name` | as a note names it, "the" or "your" first: "the Anthropic API", "your ChatGPT plan" (`Pick.provider`); without that word, its title ("Anthropic API", `Pick.title`), the head over its models in `/model` and what a search there finds them by. `Providers.test.ts` fails a name that starts with neither |
 | `maker`, `row` | under whom /login lists it (`Maker`: its name, what its row says while none of its providers is connected, its place; a maker's plan before its API key) and its row's name ("ChatGPT plan", "Anthropic API key") |
 | `models` | as built in (5: their windows, efforts and speeds) |
 | `defaults` | illi's own pick on it (the first offered vendor's is illi's default pick, while `chats` names none for it) and the summaries', while `compactor` names none for it. Each names its model by family, `*` for the version (`opus-*`, `gemini-*-flash`): the newest of it the vendor offers (`Pick.newest`), so it never needs a new illi when a model comes or goes; or it's a rule, a function given the models offered (each with its `price` where the vendor lists one) that returns the pick's text (the cheapest, say). `Providers.test.ts` fails a default named by version, or one its built-in list has none of |

@@ -296,8 +296,9 @@ function popup_heights(c: Chooser, list: Array<string | number>, iw: number): nu
 // the widest name on one line: popup_rows), the one now marked (none: no
 // marks; one that makes something new, "+ ...", has its "+" in the mark's
 // place), the one lit bold, the characters the search matched bold in the
-// accent; with groups, while nothing is searched, each group's head over
-// its first (a blank line before each but the first). The list keeps KEEP
+// accent; with groups, while nothing is searched (grouped: as it is
+// searched too), each group's head over its first (a blank line before
+// each but the first). The list keeps KEEP
 // lines before the lit one's detail shows under all, after a blank one
 // (none where it won't fit), then the list the rest: as many whole as fit
 // from the first in view (moved to keep the lit one in it), blank past

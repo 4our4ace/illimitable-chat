@@ -212,7 +212,13 @@ and what you were typing comes back once you answer.
 | Ctrl+Home, Ctrl+End | the first, the last (Home and End too, where you can't type) |
 | Enter | pick |
 | Esc (or Ctrl+C, Ctrl+D) | close (`/login`'s: back a level); a question: No |
-| typing | search, where the list has one, by name (Ctrl+P's by the words of what each row does too, as `/` does), or the line a question asks; it edits as the input does, and a paste goes there as one line |
+| typing | search, where the list has one, by name (Ctrl+P's by the words of what each row does too, as `/` does; `/model`'s by the provider's name too), or the line a question asks; it edits as the input does, and a paste goes there as one line |
+
+Some lists come in groups, a head over each (Ctrl+P's commands by what
+they do, `/model`'s models by provider, `/mcp`'s servers, `/permissions`'
+grants). A search lists its matches best first, the heads gone, but
+`/model` keeps its: each provider's matches under its name, the provider
+of the best match first, that match lit.
 
 - In a list the wheel scrolls it; the row under the pointer lights as it
   moves; a click does what Enter does; a click in its search puts the
