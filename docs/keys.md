@@ -17,7 +17,7 @@ Chat
 | Ctrl+P | all commands and settings in one list, typed to search |
 | Ctrl+X | the leader: the screen greys, and the next key runs its shortcut ([below](#shortcuts)) |
 | `/goal <message>` | send a goal: illi goes on until it is met; `/goal` alone drops it, as `/halt` |
-| `/halt` | drop the goal; the turn running ends as it would |
+| `/halt` | drop the goal; the turn running ends as it would (with no goal set, it says "No goal to halt.") |
 | `/clear` | start a new topic: the chat before is kept and looked up when needed, not sent |
 | `/compact [focus]` | illi writes a recap of the chat and goes on from it alone (the chat before is kept and looked up when needed, not sent); focus: what the recap should keep |
 | `/image <path>` | attach an image to the next message (or paste or drop the file) |
