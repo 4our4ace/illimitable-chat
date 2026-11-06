@@ -859,8 +859,10 @@ export function term_main(t: Term, name: string | null): void {
 // view: Chat.account): ChatGPT's (ChatGPT.ts; signed in) plan and usage
 // asked together, the login followed for a change of account, and its
 // catalog learned (the chatgpt list: each model's window, efforts and
-// speeds); the Anthropic key's models' windows (Anthropic.models), and
-// the Claude plan's account's (ClaudeCode.models); the chat tells its
+// speeds); the Anthropic key's models (Anthropic.models), the Claude
+// plan's account's (ClaudeCode.models: once a day), the OpenCode Go
+// plan's catalog (OpenCodeGo.models), and Google's agent downloaded by
+// itself where it isn't here (Agy.auto); the chat tells its
 // views. Another terminal's change of accounts asks them too
 // (Chat.follow). Each vendor's asking given back (Chat.account; a view's
 // illi asks none)

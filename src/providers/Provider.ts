@@ -141,7 +141,10 @@ export type Hint = { text: string; trouble: boolean };
 //   fitted to smaller windows kept last would fold the chat for good;
 // - account: what the account in use tells, asked (at the start, after
 //   /login, as the accounts change in another terminal): true once
-//   something changed (its models' windows);
+//   something changed (its models: a catalog's list, their windows).
+//   /login waits on it (LoginCommands.ts READING: 15 s at most) to ask
+//   a vendor connected anew which of its models to run on, so it should
+//   settle once the list is known;
 // - watch: tells f each time its account, plan or catalog changed;
 // - plan: its plan's limits and use, as the side shows them (null: none
 //   told);
