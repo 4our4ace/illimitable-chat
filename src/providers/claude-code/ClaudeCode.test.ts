@@ -83,10 +83,11 @@ afterAll(() => {
 
 // the stand-in: logs its arguments, illi's prompt and its input; echoes
 // each message as Claude Code does (--replay-user-messages); plays the
-// scene its first message names. Asked a model's window on its control
-// channel, it answers it as FAKE_SIZES has it (junk: a line that won't
-// read), each asking noted in asked.txt beside the log; asked its
-// initialize alone, it lists the models FAKE_LINEUP names (none: none)
+// scene its first message names. Asked on its control channel, it
+// answers each request in turn: a model's window as FAKE_SIZES has it
+// (junk: a line that won't read), each asking noted in asked.txt beside
+// the log; its initialize, the models FAKE_LINEUP names (none: none),
+// noted in lineup.txt
 const FAKE = String.raw`#!/usr/bin/env bun
 const fs = require("node:fs");
 const args = process.argv.slice(2);
@@ -107,16 +108,18 @@ const next = async (ms) => {
   return m;
 };
 const first = await next(5000);
-if (first.type === "control_request" && first.request.subtype === "initialize") {
-  fs.appendFileSync(require("node:path").dirname(process.env.FAKE_LOG) + "/lineup.txt", JSON.stringify({ args, folder: log.folder }) + "\n");
-  out({ type: "control_response", response: { subtype: "success", request_id: first.request_id, response: { models: JSON.parse(process.env.FAKE_LINEUP ?? "null") ?? undefined } } });
-  process.exit(0);
-}
 if (first.type === "control_request") {
-  const model = args[args.indexOf("--model") + 1];
-  const size  = JSON.parse(process.env.FAKE_SIZES ?? "{}")[model];
-  fs.appendFileSync(require("node:path").dirname(process.env.FAKE_LOG) + "/asked.txt", JSON.stringify({ model, args, compact: log.compact, folder: log.folder, asked: first.request }) + "\n");
-  process.stdout.write(size === "junk" ? "junk\n" : JSON.stringify({ type: "control_response", response: { subtype: "success", request_id: first.request_id, response: { model, rawMaxTokens: size } } }) + "\n");
+  for (let m = first; m !== null && m.type === "control_request"; m = await next(1000)) {
+    if (m.request.subtype === "initialize") {
+      fs.appendFileSync(require("node:path").dirname(process.env.FAKE_LOG) + "/lineup.txt", JSON.stringify({ args, folder: log.folder }) + "\n");
+      out({ type: "control_response", response: { subtype: "success", request_id: m.request_id, response: { models: JSON.parse(process.env.FAKE_LINEUP ?? "null") ?? undefined } } });
+      continue;
+    }
+    const model = args[args.indexOf("--model") + 1];
+    const size  = JSON.parse(process.env.FAKE_SIZES ?? "{}")[model];
+    fs.appendFileSync(require("node:path").dirname(process.env.FAKE_LOG) + "/asked.txt", JSON.stringify({ model, args, compact: log.compact, folder: log.folder, asked: m.request }) + "\n");
+    process.stdout.write(size === "junk" ? "junk\n" : JSON.stringify({ type: "control_response", response: { subtype: "success", request_id: m.request_id, response: { model, rawMaxTokens: size } } }) + "\n");
+  }
   process.exit(0);
 }
 const scene = first.message.content.map((c) => c.text).join("");
@@ -311,6 +314,38 @@ test("the Claude plan's windows are asked as soon as its account is in use, as a
   }
 });
 
+test("the Claude plan's list comes from the Claude Code that asks the first window, each other window from one of its own; all told, kept as told for the account, so a start within a day asks Claude Code nothing, one past it asks again", async () => {
+  const me    = (id: string) => ({ id, email: id + "@example.com", plan: "max", org: "" });
+  const lines = (file: string) => (fs.existsSync(DIR + "/" + file) ? fs.readFileSync(DIR + "/" + file, "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
+  const use   = (id: string) => {
+    Accounts.write(config.ROOT, { "claude-code": { use: id, accounts: [me("own"), me(id)] } });
+    config.config_accounts(true);
+    return config.ROOT + "/claude/" + id + "\n" + id + "@example.com";
+  };
+  process.env.FAKE_SIZES = JSON.stringify(Object.fromEntries(Pick.list("claude-code").map((m) => [m.id, 1000000])));
+  try {
+    const by = use("c3");
+    const [lined, asked] = [lines("lineup.txt").length, lines("asked.txt").length];
+    await ClaudeCode.models();
+    const line = lines("lineup.txt").at(-1);
+    expect([lines("lineup.txt").length - lined, lines("asked.txt").length - asked, line.args.slice(line.args.indexOf("--model"), line.args.indexOf("--model") + 2)]).toEqual([1, Pick.list("claude-code").length, ["--model", Pick.list("claude-code")[0].id]]);
+    expect(Date.now() - config.config_models_told("claude-code", by)).toBeLessThan(60e3);
+    config.config_models_tell("claude-code", use("c4"));
+    const now = lines("lineup.txt").length;
+    expect([await ClaudeCode.models(), lines("lineup.txt").length]).toEqual([false, now]);
+    const old = use("c5");
+    const file = JSON.parse(fs.readFileSync(DIR + "/models.json", "utf8"));
+    file.told["claude-code"] = { of: Bun.hash(old).toString(16), at: new Date(Date.now() - 2 * 86400e3).toISOString() };
+    fs.writeFileSync(DIR + "/models.json", JSON.stringify(file));
+    await ClaudeCode.models();
+    expect(lines("lineup.txt").length).toBe(now + 1);
+  } finally {
+    delete process.env.FAKE_SIZES;
+    Accounts.write(config.ROOT, {});
+    config.config_accounts(true);
+  }
+});
+
 test("the Claude plan's models are those Claude Code lists for the account, no model called: the newest of each family (its aliases), by the model each runs and its label, its efforts; its default and older models left out; a new one offered and its window asked, the defaults following; none told changes nothing", async () => {
   const was = Pick.list("claude-code");
   const all = ["low", "medium", "high", "xhigh", "max"];
@@ -338,7 +373,7 @@ test("the Claude plan's models are those Claude Code lists for the account, no m
     expect(config.config_newest("claude-code:opus-*:high:slow")).toBe("claude-code:opus-6:high:slow");
     expect([Anthropic.label("claude-opus-5-5"), Anthropic.label("claude-haiku-4-5-20251001"), Anthropic.label("claude-sonnet-5"), Anthropic.label("claude-sonnet-5-5[1m]"), Anthropic.label("gpt-6")]).toEqual(["opus-5.5", "haiku-4.5", "sonnet-5", null, null]);
     delete process.env.FAKE_LINEUP;
-    expect(await ClaudeCode.lineup("")).toEqual([]);
+    expect(ClaudeCode.lineup(null)).toEqual([]);
     expect(ClaudeCode.offer([])).toBe(false);
   } finally {
     delete process.env.FAKE_LINEUP;

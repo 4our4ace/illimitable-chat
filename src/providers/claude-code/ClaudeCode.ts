@@ -57,7 +57,8 @@
 // its canonical id) and kept for the next start: as Claude Code has it
 // for a turn, asked as soon as the plan's account is in use (at the
 // start, at a /login change here or in another terminal: Chat.account,
-// ClaudeCode.models, one model after another, no model called), and
+// ClaudeCode.models, one model after another, no model called; once a
+// day for an account, so most starts run no Claude Code), and
 // as a turn's result tells it; a call with Claude Code's compaction on
 // tells its autocompact window instead (500k of Opus's 1M), never
 // learned; the plan's use, as each rate limit event tells it (its
@@ -250,8 +251,17 @@ const SIGNIN = 10 * 60e3;
 const DRAIN = 1e3;
 
 // how long Claude Code may take to list the Claude plan's models (ms;
-// ClaudeCode.lineup): past it, the list stays as it was
+// ClaudeCode.models): past it, the list stays as it was
 const LINEUP = 15e3;
+
+// how long the Claude plan's models and windows told hold for its
+// account (ms; ClaudeCode.models): a start within it asks Claude Code
+// nothing, going on those kept (a turn's reply still tells the window it
+// ran on); the first start after, or another account, asks again
+const TOLD_FOR = 24 * 3600e3;
+
+// a model's window asked on Claude Code's control channel
+const WINDOW = { subtype: "get_context_usage", detail: "summary" };
 
 // Claude Code asked a model's window or its models (ClaudeCode.control):
 // on its control channel, as a call without tools runs (none of its
@@ -795,12 +805,16 @@ export namespace ClaudeCode {
   // the Claude plan's models as Claude Code lists them for the account in
   // use (ClaudeCode.lineup), then the window of each, as a turn of that
   // account has them (a plan's are its own: one without long context gets
-  // 200k), learned and kept for the next start; asked once an account a
-  // start (its folder, and whom it's logged in as: one signed in since is
-  // asked anew), so the list and a window are right before a message as
-  // a rule (nothing waits on them: a turn before they told runs on those
-  // kept from the last start, the built-in list and 200k at the very
-  // first); one Claude Code after another. true: the list or a window
+  // 200k), learned and kept for the next start; asked once an account (its
+  // folder, and whom it's logged in as: one signed in since is asked anew),
+  // and only once a day (TOLD_FOR: a start within it asks nothing, so no
+  // Claude Code runs as illi opens), so the list and a window are right
+  // before a message as a rule (nothing waits on them: a turn before they
+  // told runs on those kept, the built-in list and 200k at the very
+  // first). The list comes from the Claude Code asked the first model's
+  // window (the first kept), then each other model's window from one of
+  // its own (one Claude Code after another); all told, it's kept as told
+  // for that account (config_models_tell). true: the list or a window
   // changed
   export function models(): Promise<boolean> {
     const dir  = config.config_folder("claude-code");
@@ -808,14 +822,26 @@ export namespace ClaudeCode {
     const by   = dir + "\n" + (kept?.accounts.find((a) => a.id === kept.use)?.email ?? "");
     if (sized_by !== by) {
       [sized, sized_by] = [null, by];
+      if (Date.now() - config.config_models_told("claude-code", by) < TOLD_FOR) {
+        sized = Promise.resolve(false);
+      }
     }
     sized ??= (async () => {
-      let news = ClaudeCode.offer(await ClaudeCode.lineup(dir));
+      const first = Pick.list("claude-code")[0];
+      const [init, usage] = await ClaudeCode.control(dir, first === undefined ? [] : ["--model", first.id], [{ subtype: "initialize" }, ...(first === undefined ? [] : [WINDOW])], LINEUP);
+      const known = new Map(first === undefined ? [] : [[first.id, ClaudeCode.window(usage)]]);
+      let news = ClaudeCode.offer(ClaudeCode.lineup(init));
+      let all  = init !== null;
       for (const m of Pick.list("claude-code")) {
-        news = Pick.told("claude-code", m.id, await ClaudeCode.size(dir, m.id)) || news;
+        const window = known.get(m.id) ?? (await ClaudeCode.size(dir, m.id));
+        news = Pick.told("claude-code", m.id, window) || news;
+        all  = all && window > 0;
       }
       if (news) {
         config.config_models_keep("claude-code", Pick.list("claude-code"));
+      }
+      if (all) {
+        config.config_models_tell("claude-code", by);
       }
       return news;
     })();
@@ -828,9 +854,9 @@ export namespace ClaudeCode {
   // sonnet, haiku: the newest of each; its default, and the older models
   // it names by their ids, left out), each by the model the alias runs,
   // that model's label (one known by its id keeps its own; else from the
-  // id: Anthropic.label), its efforts, its window as known; []: none told
-  export async function lineup(dir: string): Promise<Model[]> {
-    const told = await ClaudeCode.control(dir, [], { subtype: "initialize" }, LINEUP);
+  // id: Anthropic.label), its efforts, its window as known; []: none told.
+  // Read from its answer to initialize (told: null, none came)
+  export function lineup(told: any): Model[] {
     const rows: any[] = Array.isArray(told?.models) ? told.models : [];
     const out: Model[] = [];
     for (const r of rows) {
@@ -867,31 +893,43 @@ export namespace ClaudeCode {
   // (get_context_usage, summed up: no model called, nothing counted), a
   // Claude Code each (set_model leaves the window as it was); 0: none told
   export async function size(dir: string, id: string): Promise<number> {
-    const told   = await ClaudeCode.control(dir, ["--model", id], { subtype: "get_context_usage", detail: "summary" });
+    const [told] = await ClaudeCode.control(dir, ["--model", id], [WINDOW]);
+    return ClaudeCode.window(told);
+  }
+
+  // a window as get_context_usage tells it; 0: none
+  export function window(told: any): number {
     const window = Number(told?.rawMaxTokens);
     return Number.isInteger(window) && window > 0 ? window : 0;
   }
 
-  // what Claude Code in a folder answers one request on its control
-  // channel (started with SIZE and `args`, its compaction off: no message
-  // sent, no model called), stopped once it answered; null: no answer
-  // (Claude Code isn't here, or said nothing that reads in `ms`: killed
-  // then, its output let go, as a child it left may hold it open)
-  export async function control(dir: string, args: string[], request: { subtype: string } & Record<string, unknown>, ms = AUTH): Promise<any> {
+  // what Claude Code in a folder answers requests on its control channel,
+  // one after another in the one Claude Code (started with SIZE and
+  // `args`, its compaction off: no message sent, no model called), each
+  // sent once the one before answered, stopped once the last did; null
+  // for each with no answer (Claude Code isn't here, or said nothing that
+  // reads in `ms` all told: killed then, its output let go, as a child it
+  // left may hold it open)
+  export async function control(dir: string, args: string[], requests: Array<{ subtype: string } & Record<string, unknown>>, ms = AUTH): Promise<any[]> {
+    const out: any[] = requests.map(() => null);
     let proc: Subprocess<"pipe", "pipe", "ignore">;
     try {
       proc = Bun.spawn([ClaudeCode.bin, ...SIZE, ...args], { stdin: "pipe", stdout: "pipe", stderr: "ignore", env: { ...ClaudeCode.folder_env(dir), DISABLE_COMPACT: "1" } });
     } catch {
-      return null;
+      return out;
     }
     const from = proc.stdout.getReader();
     const late = setTimeout(() => {
       proc.kill("SIGKILL");
       void from.cancel().catch(() => {});
     }, ms);
-    try {
-      proc.stdin.write(JSON.stringify({ type: "control_request", request_id: request.subtype, request }) + "\n");
+    const send = (k: number) => {
+      proc.stdin.write(JSON.stringify({ type: "control_request", request_id: requests[k].subtype + "-" + k, request: requests[k] }) + "\n");
       proc.stdin.flush();
+    };
+    try {
+      let k = 0;
+      send(k);
       const text = new TextDecoder();
       let said = "";
       for (let got = await from.read(); !got.done; got = await from.read()) {
@@ -904,14 +942,18 @@ export namespace ClaudeCode {
           } catch {
             continue;
           }
-          if (m?.type === "control_response" && m.response?.request_id === request.subtype) {
-            return m.response.response ?? null;
+          if (m?.type === "control_response" && m.response?.request_id === requests[k].subtype + "-" + k) {
+            out[k] = m.response.response ?? null;
+            if (++k === requests.length) {
+              return out;
+            }
+            send(k);
           }
         }
       }
-      return null;
+      return out;
     } catch {
-      return null;
+      return out;
     } finally {
       clearTimeout(late);
       proc.kill();
