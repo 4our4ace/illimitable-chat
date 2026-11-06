@@ -1,29 +1,34 @@
 // Agy
 // ===
-// Google's agent itself (antigravity-acp), as illi runs it unmodified:
-// where it is, and its download. ILLI_ANTIGRAVITY names one of the
-// user's own: its command line, the program's path and its arguments
-// (Google's Linux builds take `--uid=`, else they look for a group
-// "nobody" and end), split at spaces, run whatever its version (keeping
-// it current is the user's). Else illi runs the one build this illi is
-// pinned to (Pinned.ts: the version tried with this illi, as pin.ts takes
-// it from the ACP registry), as /login downloads it into
-// antigravity/agent/<version>/ of illi's root beside the accounts'
-// folders, with what illi took it as (agent.json: its command, arguments
-// and sha256). Another version there (an older illi's, or a newer one's)
-// is never run: /login offers this illi's in its place (Agy.why says so
-// to a call). A download is taken only from Google's own host
-// (dl.google.com), its archive checked against the pinned sha256 as it
-// comes, unpacked by illi (each file by its own name, none in a folder:
-// nothing outside the version's folder), made runnable, then moved into
-// place in one rename, so a download stopped halfway leaves nothing that
-// looks installed. An illi that runs a version, or downloads it, marks
-// it in use while it lives (.users/<its pid>); an older version than this
-// illi's goes once no live illi uses it, as this illi first runs its own
-// or puts it in place. A newer version stays: it's a newer illi's, which
-// may run in another terminal. A download's folder left beside them
-// (.new-*) goes a day old. With autoupdate on, illi downloads its own
-// build by itself once an account is connected and it isn't here (an
+// Google's Antigravity CLI itself (agy), whose `agy acp` is the agent
+// illi runs, unmodified: where it is, and its download. ILLI_ANTIGRAVITY
+// names a command line of the user's own that starts its ACP server
+// (`agy acp`, say), split at spaces, run whatever its version (keeping it
+// current is the user's). Else the user's own `agy` on PATH, once it is
+// MINIMUM or later (Agy.look: its version asked once in the background,
+// as `agy --version` takes a second or more, and kept by its path, size
+// and time in agy.json beside the builds, so a start never waits on it;
+// its own updates keep it current, as the user installed it). Else illi
+// runs the one build this illi is pinned to (Pinned.ts: the version tried
+// with this illi, as pin.ts takes it from Google's releases), as /login
+// downloads it into antigravity/agent/<version>/ of illi's root beside the
+// accounts' folders, with what illi took it as (agent.json: its command,
+// arguments and sha256). Another version there is never run: /login
+// offers this illi's in its place (Agy.why says so to a call). A download
+// is taken only from the CLI's releases on GitHub (RELEASES), its archive
+// checked against the pinned sha256 as it comes, unpacked by illi (each
+// file by its own name, none in a folder, none but plain files: nothing
+// outside the version's folder), made runnable, then moved into place in
+// one rename, so a download stopped halfway leaves nothing that looks
+// installed. An illi that runs a version, or downloads it, marks it in
+// use while it lives (.users/<its pid>). Each version but this illi's own
+// build goes once no live illi uses it (none kept while the user's own CLI
+// or ILLI_ANTIGRAVITY's runs in its place: illi's download is then dead
+// weight), as this illi first runs an agent, downloads one, and ends (the
+// providers' close), so a version an illi update left (Google's old
+// agy-acp-server, 1.4.5) never lingers. A download's folder left beside
+// them (.new-*) goes a day old. With autoupdate on, illi downloads its own
+// build by itself once an account is connected and no agent is here (an
 // illi update moved the pin: Agy.update), in the background, one illi at
 // a time on the machine (.updating names the one doing it); a call
 // meanwhile says it's downloading.
@@ -31,7 +36,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as zlib from "node:zlib";
-import { Readable, Transform } from "node:stream";
+import { Readable, Transform, Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import * as config from "../../config/Config.ts";
 import { PINNED } from "./Pinned.ts";
@@ -39,23 +44,29 @@ import { PINNED } from "./Pinned.ts";
 // Types
 // =====
 
-// a build of the agent for one machine: its version, its archive's URL,
+// a build of the CLI for one machine: its version, its archive's URL,
 // sha256 and size, its files' size unpacked (bytes), the command in it and
-// its arguments
+// its arguments (the ACP server's: acp)
 export type Build = { version: string; archive: string; sha256: string; bytes: number; unpacked: number; cmd: string; args: string[] };
 
-// a file in a zip archive, as its central directory lists it
-type Entry = { name: string; method: number; packed: number; size: number; at: number };
+// the user's own CLI as found: where, its version
+export type Theirs = { at: string; version: string };
 
-// a zip archive's end (its end of central directory record): how many
-// files it lists, its central directory's size and where it starts
-type End = { count: number; bytes: number; at: number };
+// a file in a tar archive: its name, size, its type (0: a plain file)
+export type Tarred = { name: string; size: number; type: string };
 
 // Constants
 // =========
 
-// the only host an archive is taken from: Google's own
-const HOST = "dl.google.com";
+// where every archive is taken from: the CLI's releases on GitHub (each
+// a version's folder of them)
+export const RELEASES = "https://github.com/google-antigravity/antigravity-cli/releases/download/";
+
+// the oldest version illi runs: the one `agy acp` was first tried with
+// (1.5.0 put Google's ACP server in the CLI; 1.5.1 lists every model an
+// account offers to every client; 1.5.2 shows a session its own agent's
+// commands). A later pin may be newer; one older is never taken
+export const MINIMUM = "1.5.2";
 
 // a version's name: numbers between dots
 const VERSION = /^\d+(\.\d+)*$/;
@@ -67,21 +78,24 @@ const USERS = ".users";
 // one younger may be another terminal's, still downloading
 const LEFT = 24 * 60 * 60e3;
 
-// how many of an archive's last bytes hold its end: the end record and
-// the longest note it may carry
-export const TAIL = 65557;
+// how long the user's own CLI may take to tell its version (ms)
+const ASKING = 30e3;
+
+// a tar archive's blocks
+const BLOCK = 512;
 
 // how each sentence Agy.why says starts
-const AGENT = "Google's Antigravity agent ";
+const CLI = "Google's Antigravity CLI ";
 
 // the sentences Agy.why said (Agy.told)
 const TOLD = new Set<string>();
 
-// whether this illi has marked its own build in use and tidied (Agy.mark)
-let marked = false;
+// whether this illi has marked the build it runs in use and tidied
+// (Agy.settle)
+let settled = false;
 
 // the file naming the illi that downloads its build by itself (its pid),
-// in the agent's folder: one at a time on the machine (Agy.update)
+// in the CLI's folder: one at a time on the machine (Agy.update)
 const LOCK = ".updating";
 
 // this illi's download by itself (Agy.update): its build, how far it got
@@ -89,16 +103,31 @@ const LOCK = ".updating";
 let updating: { b: Build; bytes: number; of: number; done: Promise<boolean> } | null = null;
 let tried = "";
 
+// the user's own CLI looked for this run (Agy.look): what it found (null:
+// none, or too old to run), and the look itself
+let found: Theirs | null | undefined;
+let looking: Promise<Theirs | null> | null = null;
+
 // Agy
 // ===
 
 export namespace Agy {
 
-  // the agent named by ILLI_ANTIGRAVITY (a test's own, too), else none
+  // the command line named by ILLI_ANTIGRAVITY (a test's own, too), else
+  // none
   export let bin: string[] | null = process.env.ILLI_ANTIGRAVITY?.trim() ? process.env.ILLI_ANTIGRAVITY.trim().split(/\s+/) : null;
 
-  // this machine as the ACP registry names it (linux-x86_64,
-  // darwin-aarch64, windows-x86_64...)
+  // the program that is the user's own CLI (`agy`), where PATH finds it
+  // first, looked for without holding illi up: each folder at once (a
+  // PATH of many slow folders, WSL's Windows ones, takes a second looked
+  // through one by one, as Bun.which does); null: none (a test's own)
+  export let which = async (): Promise<string | null> => {
+    const dirs = (process.env.PATH ?? "").split(path.delimiter).filter((d) => d !== "");
+    const runs = (at: string) => fs.promises.access(at, fs.constants.X_OK).then(() => fs.promises.stat(at)).then((st) => (st.isFile() ? at : null), () => null);
+    return (await Promise.all(dirs.map((d) => runs(path.join(d, "agy"))))).find((at) => at !== null) ?? null;
+  };
+
+  // this machine as Pinned.ts names it (linux-x86_64, darwin-aarch64...)
   export function machine(): string {
     const os   = process.platform === "win32" ? "windows" : process.platform;
     const arch = process.arch === "x64" ? "x86_64" : process.arch === "arm64" ? "aarch64" : process.arch;
@@ -114,25 +143,117 @@ export namespace Agy {
     return path.join(config.ROOT, "antigravity", "agent");
   }
 
-  // the agent's command: ILLI_ANTIGRAVITY's, else this illi's build if it
-  // is downloaded (marked in use: Agy.mark); null: none to run (Agy.why
+  // whether a version is one illi runs: MINIMUM or later
+  export function least(version: string): boolean {
+    return VERSION.test(version) && Agy.newer(version, MINIMUM) <= 0;
+  }
+
+  // the user's own CLI, MINIMUM or later, as this run's look found it, else
+  // as agy.json kept it, while it's the same program (PATH isn't looked
+  // through: that's Agy.look's, in the background); null: none, too old,
+  // or not known yet
+  export function installed(): Theirs | null {
+    if (found !== undefined) {
+      return found;
+    }
+    const kept = Agy.remembered();
+    return kept !== null && Agy.least(kept.version) ? kept : null;
+  }
+
+  // the user's own CLI looked for, once a run: `agy` on PATH, its version
+  // as agy.json kept it for this program, else asked of it (`agy
+  // --version`, its own update not started by it) and kept; MINIMUM or
+  // later, it's run in place of illi's build. null: none, too old, or it
+  // told no version
+  export function look(): Promise<Theirs | null> {
+    looking ??= (async () => {
+      const at = await Agy.which();
+      let version = at === null ? null : Agy.recalled(at);
+      if (at !== null && version === null) {
+        version = await Agy.asked(at);
+        if (version !== null) {
+          Agy.recall(at, version);
+        }
+      }
+      found = at !== null && version !== null && Agy.least(version) ? { at, version } : null;
+      return found;
+    })();
+    return looking;
+  }
+
+  // the look let go, the next asking again (a test's fresh look)
+  export function unlook(): void {
+    [found, looking] = [undefined, null];
+  }
+
+  // the program agy.json keeps, and its version, while it's the same
+  // file (its size and time as then); null: none kept, or it changed
+  export function remembered(): Theirs | null {
+    try {
+      const kept = JSON.parse(fs.readFileSync(path.join(Agy.home(), "..", "agy.json"), "utf8"));
+      const now  = fs.statSync(String(kept?.at ?? ""));
+      return kept.size === now.size && kept.time === now.mtimeMs && typeof kept.version === "string" && VERSION.test(kept.version) ? { at: kept.at, version: kept.version } : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // the version agy.json keeps for a program, while it's the same file;
+  // null: none kept for it, or it changed
+  export function recalled(at: string): string | null {
+    const kept = Agy.remembered();
+    return kept?.at === at ? kept.version : null;
+  }
+
+  // a program's version kept in agy.json, by its path, size and time (one
+  // that can't be kept: asked again next run, never failing)
+  export function recall(at: string, version: string): void {
+    try {
+      const now = fs.statSync(at);
+      fs.mkdirSync(path.join(Agy.home(), ".."), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(path.join(Agy.home(), "..", "agy.json"), JSON.stringify({ at, size: now.size, time: now.mtimeMs, version }) + "\n");
+    } catch {}
+  }
+
+  // a program's version as `--version` tells it, its first line alone
+  // (numbers between dots); null: none told in ASKING
+  export async function asked(at: string): Promise<string | null> {
+    try {
+      const run = Bun.spawn([at, "--version"], { stdin: "ignore", stdout: "pipe", stderr: "ignore", env: { ...process.env, AGY_CLI_DISABLE_AUTO_UPDATE: "1" }, timeout: ASKING });
+      const said = (await new Response(run.stdout).text()).trim().split("\n")[0]?.trim() ?? "";
+      return (await run.exited) === 0 && VERSION.test(said) ? said : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // the command that starts the CLI's ACP server: ILLI_ANTIGRAVITY's, else
+  // the user's own CLI (MINIMUM or later), else this illi's build if it is
+  // downloaded (marked in use: Agy.settle); null: none to run (Agy.why
   // tells why)
   export function command(): string[] | null {
     if (Agy.bin !== null) {
+      Agy.settle(null);
       return Agy.bin;
+    }
+    const theirs = Agy.installed();
+    if (theirs !== null) {
+      Agy.settle(null);
+      return [theirs.at, "acp"];
     }
     const b = Agy.pin;
     if (b === null || !Agy.has(b)) {
       return null;
     }
-    Agy.mark();
+    Agy.settle(b.version);
     return [path.join(Agy.home(), b.version, b.cmd), ...b.args];
   }
 
-  // whether there's an agent to run (ILLI_ANTIGRAVITY's, or this illi's
-  // build downloaded), as Agy.command finds it, marking nothing
+  // whether there's an agent to run (ILLI_ANTIGRAVITY's, the user's own
+  // CLI as known, or this illi's build downloaded), as Agy.command finds
+  // it, marking nothing
   export function ready(): boolean {
-    return Agy.bin !== null || (Agy.pin !== null && Agy.has(Agy.pin));
+    return Agy.bin !== null || Agy.installed() !== null || (Agy.pin !== null && Agy.has(Agy.pin));
   }
 
   // whether a build is downloaded: its folder's agent.json names its
@@ -162,19 +283,22 @@ export namespace Agy {
     }
   }
 
-  // the newest version downloaded that isn't this illi's; null: none
+  // the newest version downloaded that isn't this illi's, MINIMUM or
+  // later (an older one is no ACP server illi runs, never offered as one);
+  // null: none
   export function other(): string | null {
-    return Agy.versions().find((v) => v !== Agy.pin?.version) ?? null;
+    return Agy.versions().find((v) => v !== Agy.pin?.version && Agy.least(v)) ?? null;
   }
 
   // a command to log an account out with: the agent's, else any version
-  // downloaded (marked in use), as a logout asks no model; null: none
+  // downloaded MINIMUM or later (marked in use), as a logout asks no
+  // model; null: none
   export function any(): string[] | null {
     const cmd = Agy.command();
     if (cmd !== null) {
       return cmd;
     }
-    for (const v of Agy.versions()) {
+    for (const v of Agy.versions().filter(Agy.least)) {
       const k = Agy.kept(v);
       if (k !== null) {
         Agy.use(v);
@@ -185,19 +309,36 @@ export namespace Agy {
   }
 
   // why there's no agent to run (Agy.command null), as a call or /login
-  // says it: no build for this machine, another version here (an older
-  // one: /login updates it; a newer illi's: /login downloads this one), or
-  // none (/login downloads it)
+  // says it: no build for this machine, this illi's downloading, another
+  // version here (an older one: /login updates it; a newer illi's:
+  // /login downloads this one), or none (/login downloads it; the user's
+  // own CLI too old said)
   export function why(): string {
     const b    = Agy.pin;
     const was  = Agy.other();
     const now  = Agy.progress();
-    const text = b === null ? AGENT + "has no build for this machine (" + Agy.machine() + ") that illi runs: ILLI_ANTIGRAVITY can name one of your own"
-      : now !== null ? AGENT + b.version + " is downloading" + (now.share === null ? " in another illi" : " (" + now.share + "%)") + ": try again once it's done"
-      : was !== null ? AGENT + was + " is here, and this illi runs " + b.version + ": /login " + (Agy.newer(was, b.version) > 0 ? "updates" : "downloads") + " it"
-      : AGENT + "isn't here: /login downloads it";
+    const old  = Agy.stale();
+    const text = b === null ? CLI + "has no build for this machine (" + Agy.machine() + ") that illi runs: install agy " + MINIMUM + " or later, or let ILLI_ANTIGRAVITY name one of your own"
+      : now !== null ? CLI + b.version + " is downloading" + (now.share === null ? " in another illi" : " (" + now.share + "%)") + ": try again once it's done"
+      : was !== null ? CLI + was + " is here, and this illi runs " + b.version + ": /login " + (Agy.newer(was, b.version) > 0 ? "updates" : "downloads") + " it"
+      : CLI + "isn't here: /login downloads it" + (old === null ? "" : " (your own agy is " + old + ", older than the " + MINIMUM + " illi runs: `agy update` brings it current)");
     TOLD.add(text);
     return text;
+  }
+
+  // why a CLI that says it's this version isn't run (older than MINIMUM:
+  // ILLI_ANTIGRAVITY's may be), said as Agy.why's are (Agy.told)
+  export function older(version: string): string {
+    const text = CLI + version + " is older than the " + MINIMUM + " illi runs: `agy update` brings it current";
+    TOLD.add(text);
+    return text;
+  }
+
+  // the version of the user's own CLI that is too old to run, as agy.json
+  // kept it (null: none, or one MINIMUM or later)
+  export function stale(): string | null {
+    const v = Agy.remembered()?.version ?? null;
+    return v !== null && !Agy.least(v) ? v : null;
   }
 
   // whether a call's failure is one Agy.why said
@@ -217,12 +358,11 @@ export namespace Agy {
     return 0;
   }
 
-  // whether illi takes a build: a version, an archive from Google's host
-  // over https, a sha256, its sizes, a command in it by its own name (no
-  // folder)
+  // whether illi takes a build: a version MINIMUM or later, an archive of
+  // that version's release on GitHub (a .tar.gz), a sha256, its sizes, a
+  // command in it by its own name (no folder)
   export function takes(b: Build): boolean {
-    const url = URL.canParse(b.archive) ? new URL(b.archive) : null;
-    return VERSION.test(b.version) && url?.protocol === "https:" && url.hostname === HOST && /^[0-9a-f]{64}$/.test(b.sha256) && b.bytes > 0 && b.unpacked > 0 && Agy.plain(b.cmd) && b.args.every((a) => typeof a === "string");
+    return Agy.least(b.version) && b.archive.startsWith(RELEASES + b.version + "/") && !b.archive.slice(RELEASES.length + b.version.length + 1).includes("/") && b.archive.endsWith(".tar.gz") && /^[0-9a-f]{64}$/.test(b.sha256) && b.bytes > 0 && b.unpacked > 0 && Agy.plain(b.cmd) && b.args.every((a) => typeof a === "string");
   }
 
   // a file's name with no folder in it
@@ -230,12 +370,15 @@ export namespace Agy {
     return name !== "" && name !== "." && name !== ".." && !/[\\/]/.test(name);
   }
 
-  // this illi's build marked in use, then what's left beside it tidied
-  // (Agy.tidy), once a run
-  export function mark(): void {
-    if (!marked && Agy.pin !== null) {
-      marked = true;
-      Agy.use(Agy.pin.version);
+  // the build this illi runs (a version: its own; null: another program)
+  // marked in use, then what's left beside it tidied (Agy.tidy), once a
+  // run
+  export function settle(version: string | null): void {
+    if (!settled) {
+      settled = true;
+      if (version !== null) {
+        Agy.use(version);
+      }
       Agy.tidy();
     }
   }
@@ -285,13 +428,13 @@ export namespace Agy {
     }
   }
 
-  // what's left beside this illi's build: each version older than it
-  // that no live illi uses, and each download's folder a day old (a
-  // younger one may be another terminal's download); a newer version
-  // stays (a newer illi's), its marks of ended illis go. One that won't go
-  // is left, never failing
+  // what's left beside the build this illi runs: each version no live
+  // illi uses but this illi's own build (none kept while
+  // ILLI_ANTIGRAVITY's or the user's own CLI runs in its place), and each
+  // download's folder a day old (a younger one may be another terminal's
+  // download). One that won't go is left, never failing
   export function tidy(): void {
-    const b = Agy.pin;
+    const keep = Agy.bin !== null || Agy.installed() !== null ? null : Agy.pin?.version ?? null;
     let names: string[];
     try {
       names = fs.readdirSync(Agy.home());
@@ -305,7 +448,7 @@ export namespace Agy {
           if (Date.now() - fs.statSync(at).mtimeMs > LEFT) {
             fs.rmSync(at, { recursive: true, force: true });
           }
-        } else if (VERSION.test(n) && !Agy.used(n) && b !== null && Agy.newer(n, b.version) > 0) {
+        } else if (VERSION.test(n) && n !== keep && !Agy.used(n)) {
           fs.rmSync(at, { recursive: true, force: true });
         }
       } catch {}
@@ -321,12 +464,12 @@ export namespace Agy {
     fs.mkdirSync(Agy.home(), { recursive: true, mode: 0o700 });
     const tmp = fs.mkdtempSync(path.join(Agy.home(), ".new-"));
     try {
-      const zip = path.join(tmp, "agent.zip");
-      await Agy.get(b, zip, signal, got);
-      const into = path.join(tmp, "agent");
+      const tgz = path.join(tmp, "cli.tar.gz");
+      await Agy.get(b, tgz, signal, got);
+      const into = path.join(tmp, "cli");
       fs.mkdirSync(into);
-      await Agy.unzip(zip, into, signal);
-      fs.rmSync(zip, { force: true });
+      await Agy.untar(fs.createReadStream(tgz, { signal }), into);
+      fs.rmSync(tgz, { force: true });
       if (!fs.existsSync(path.join(into, b.cmd))) {
         throw new Error("Google's archive has no " + b.cmd);
       }
@@ -344,10 +487,11 @@ export namespace Agy {
   }
 
   // this illi's build downloaded by itself where autoupdate is on (mode)
-  // and a Google account is connected (account), it not being here: the
-  // download under way (Agy.update); null: none
+  // and a Google account is connected (account), no agent being here (the
+  // user's own CLI looked for first): the download under way (Agy.update);
+  // null: none
   export function auto(mode: string, account: boolean): Promise<boolean> | null {
-    return mode === "on" && account && !Agy.ready() ? Agy.update() : null;
+    return mode === "on" && account && !Agy.ready() ? Agy.look().then((theirs) => (theirs === null && !Agy.ready() ? Agy.update() : false)) : null;
   }
 
   // this illi's build downloaded by itself, in the background: once a run
@@ -383,7 +527,7 @@ export namespace Agy {
     now.done = Agy.download(b, new AbortController().signal, (bytes, of) => {
       [now.bytes, now.of] = [bytes, of || b.bytes];
     }).then(() => true, (err: any) => {
-      console.error("antigravity: Google's agent " + b.version + " wasn't downloaded: " + String(err?.message ?? err));
+      console.error("antigravity: Google's Antigravity CLI " + b.version + " wasn't downloaded: " + String(err?.message ?? err));
       return false;
     }).finally(() => {
       updating = null;
@@ -419,10 +563,10 @@ export namespace Agy {
     try {
       res = await globalThis.fetch(b.archive, { headers: { "user-agent": "illi", "accept-encoding": "identity" }, signal });
     } catch (err) {
-      throw signal.aborted ? err : new Error(HOST + " can't be reached: check your connection");
+      throw signal.aborted ? err : new Error("GitHub can't be reached: check your connection");
     }
     if (!res.ok || res.body === null) {
-      throw new Error(HOST + " answered " + res.status + " for Google's agent");
+      throw new Error("GitHub answered " + res.status + " for Google's Antigravity CLI");
     }
     const of   = Number(res.headers.get("content-length")) || 0;
     const hash = new Bun.CryptoHasher("sha256");
@@ -441,108 +585,105 @@ export namespace Agy {
     }
   }
 
-  // a zip archive's files unpacked into a folder: each by its own name
-  // (one in a folder, or named to climb out, refused), runnable; thrown:
-  // an archive illi can't read (zip64, an unknown compression)
-  export async function unzip(zip: string, into: string, signal?: AbortSignal): Promise<void> {
-    for (const e of Agy.entries(zip)) {
-      if (e.name.endsWith("/")) {
-        continue;
-      }
-      if (!Agy.plain(e.name)) {
-        throw new Error("Google's archive holds a file in a folder (" + e.name + "), which illi doesn't unpack");
-      }
-      const start = Agy.data(zip, e);
-      const out   = path.join(into, e.name);
-      if (e.packed === 0 && e.method === 0) {
-        fs.writeFileSync(out, "", { mode: 0o755 });
-        if (e.size !== 0) {
-          throw new Error("Google's archive unpacked " + e.name + " short");
+  // a gzipped tar archive's files, unpacked into a folder (null: only
+  // listed): each a plain file by its own name, runnable (one in a folder,
+  // named to climb out, or no plain file: a link, a folder, refused); a
+  // pax header's fields passed over. Thrown: an archive illi can't read
+  export async function untar(from: Readable, into: string | null): Promise<Tarred[]> {
+    const files: Tarred[] = [];
+    let buf: Buffer = Buffer.alloc(0);
+    let file: { fd: number | null; left: number; size: number } | null = null;
+    let skip = 0;
+    let done = false;
+    const pad = (n: number) => (BLOCK - (n % BLOCK)) % BLOCK;
+    const take = (chunk: Buffer) => {
+      buf = buf.length === 0 ? chunk : Buffer.concat([buf, chunk]);
+      while (!done) {
+        if (file !== null) {
+          const n = Math.min(file.left, buf.length);
+          if (n > 0 && file.fd !== null) {
+            fs.writeSync(file.fd, buf, 0, n);
+          }
+          file.left -= n;
+          buf = buf.subarray(n);
+          if (file.left > 0) {
+            return;
+          }
+          if (file.fd !== null) {
+            fs.closeSync(file.fd);
+          }
+          skip = pad(file.size);
+          file = null;
         }
-        continue;
+        const n = Math.min(skip, buf.length);
+        skip -= n;
+        buf = buf.subarray(n);
+        if (skip > 0 || buf.length < BLOCK) {
+          return;
+        }
+        const block = buf.subarray(0, BLOCK);
+        buf = buf.subarray(BLOCK);
+        if (block.every((x) => x === 0)) {
+          done = true;
+          return;
+        }
+        const h = Agy.header(block);
+        if (h.type === "x" || h.type === "g") {
+          skip = h.size + pad(h.size);
+          continue;
+        }
+        if (h.type !== "0" && h.type !== "\0") {
+          throw new Error("Google's archive holds " + h.name + ", which isn't a plain file, so illi doesn't unpack it");
+        }
+        if (!Agy.plain(h.name)) {
+          throw new Error("Google's archive holds a file in a folder (" + h.name + "), which illi doesn't unpack");
+        }
+        files.push(h);
+        file = { fd: into === null ? null : fs.openSync(path.join(into, h.name), "wx", 0o755), left: h.size, size: h.size };
       }
-      const from  = fs.createReadStream(zip, { start, end: start + e.packed - 1, signal });
-      const to    = fs.createWriteStream(out, { mode: 0o755 });
-      if (e.method === 8) {
-        await pipeline(from, zlib.createInflateRaw(), to);
-      } else if (e.method === 0) {
-        await pipeline(from, to);
-      } else {
-        throw new Error("Google's archive packs " + e.name + " in a way illi can't unpack");
-      }
-      if (fs.statSync(out).size !== e.size) {
-        throw new Error("Google's archive unpacked " + e.name + " short");
-      }
-      fs.chmodSync(out, 0o755);
-    }
-  }
-
-  // a zip archive's files, as its central directory lists them
-  export function entries(zip: string): Entry[] {
-    const fd = fs.openSync(zip, "r");
+    };
+    const sink = new Writable({
+      write(chunk: Buffer, _, next) {
+        try {
+          take(chunk);
+          next();
+        } catch (err: any) {
+          next(err);
+        }
+      },
+      final(next) {
+        next(file !== null || !done ? new Error("Google's archive ended short") : null);
+      },
+    });
     try {
-      const size = fs.fstatSync(fd).size;
-      const tail = Buffer.alloc(Math.min(size, TAIL));
-      fs.readSync(fd, tail, 0, tail.length, size - tail.length);
-      const end = Agy.end(tail);
-      const dir = Buffer.alloc(end.bytes);
-      fs.readSync(fd, dir, 0, end.bytes, end.at);
-      return Agy.list(dir, end.count);
+      await pipeline(from, zlib.createGunzip(), sink);
     } finally {
-      fs.closeSync(fd);
+      const open = file as { fd: number | null } | null;
+      if (open?.fd != null) {
+        fs.closeSync(open.fd);
+      }
     }
+    if (into !== null) {
+      files.forEach((f) => fs.chmodSync(path.join(into, f.name), 0o755));
+    }
+    return files;
   }
 
-  // a zip archive's end, found in its last bytes (TAIL of them, or all);
-  // thrown: none there, or a zip64's
-  export function end(tail: Buffer): End {
-    const end = tail.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
-    if (end < 0) {
-      throw new Error("Google's archive isn't a zip illi can read");
+  // a tar header block read: its file's name (a ustar prefix before it),
+  // size and type; thrown: its checksum doesn't match, or its size won't
+  // read
+  export function header(block: Buffer): Tarred {
+    const text = (from: number, len: number) => block.toString("utf8", from, from + len).replace(/\0[\s\S]*$/, "");
+    const sum  = block.reduce((n, x, k) => n + (k >= 148 && k < 156 ? 32 : x), 0);
+    if (parseInt(text(148, 8).trim(), 8) !== sum) {
+      throw new Error("Google's archive won't read (a file's header doesn't add up)");
     }
-    const count = tail.readUInt16LE(end + 10);
-    const bytes = tail.readUInt32LE(end + 12);
-    const at    = tail.readUInt32LE(end + 16);
-    if (count === 0xffff || at === 0xffffffff) {
-      throw new Error("Google's archive is a zip64, which illi can't read");
+    const prefix = block.toString("latin1", 257, 262) === "ustar" ? text(345, 155) : "";
+    const size   = parseInt(text(124, 12).trim() || "0", 8);
+    if (!Number.isSafeInteger(size) || size < 0) {
+      throw new Error("Google's archive won't read (a file's size)");
     }
-    return { count, bytes, at };
-  }
-
-  // a central directory's files (`count` of them); thrown: one that won't
-  // read, or a zip64's
-  export function list(dir: Buffer, count: number): Entry[] {
-    const out: Entry[] = [];
-    for (let k = 0, p = 0; k < count; k++) {
-      if (p + 46 > dir.length || dir.readUInt32LE(p) !== 0x02014b50) {
-        throw new Error("Google's archive's list of files won't read");
-      }
-      const names = dir.readUInt16LE(p + 28);
-      const extra = dir.readUInt16LE(p + 30);
-      const note  = dir.readUInt16LE(p + 32);
-      const e = { name: dir.toString("utf8", p + 46, p + 46 + names), method: dir.readUInt16LE(p + 10), packed: dir.readUInt32LE(p + 20), size: dir.readUInt32LE(p + 24), at: dir.readUInt32LE(p + 42) };
-      if (e.packed === 0xffffffff || e.size === 0xffffffff || e.at === 0xffffffff) {
-        throw new Error("Google's archive is a zip64, which illi can't read");
-      }
-      out.push(e);
-      p += 46 + names + extra + note;
-    }
-    return out;
-  }
-
-  // where a file's packed bytes start: past its local header
-  export function data(zip: string, e: Entry): number {
-    const fd = fs.openSync(zip, "r");
-    try {
-      const head = Buffer.alloc(30);
-      fs.readSync(fd, head, 0, 30, e.at);
-      if (head.readUInt32LE(0) !== 0x04034b50) {
-        throw new Error("Google's archive's " + e.name + " won't read");
-      }
-      return e.at + 30 + head.readUInt16LE(26) + head.readUInt16LE(28);
-    } finally {
-      fs.closeSync(fd);
-    }
+    return { name: (prefix === "" ? "" : prefix + "/") + text(0, 100), size, type: String.fromCharCode(block[156]) };
   }
 
 }

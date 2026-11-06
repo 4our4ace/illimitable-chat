@@ -957,7 +957,7 @@ config_models_told`), so most starts run no Claude Code.
    (`ChatGPT.ts models`); `account` names whose it is, and `capped` the
    models that account refused past their usual window, which keep that
    window as their whole one. `antigravity`'s list is the account's
-   models as Google's agent last listed them (at a sign-in, as a turn
+   models as Google's CLI last listed them (at a sign-in, as a turn
    starts: `Antigravity.ts learn`), with the windows its turns told.
    `claude-code`'s is the plan's models as Claude Code last listed them
    (its newest of each family: `ClaudeCode.ts lineup`), with the windows
@@ -998,13 +998,19 @@ Accounts
   `claude-code` each a Claude Code folder, `"own"` for the user's own
   Claude Code's, else `claude/<id>` in illi's root, run with
   `CLAUDE_CONFIG_DIR`; on `antigravity` each `antigravity/<id>` in
-  illi's root (`g1`, `g2`…), the home of Google's agent run for it (its
-  sign-in there; no email, which the agent doesn't tell), beside
-  `antigravity/agent/<version>/`, the agent `/login` downloaded (the
+  illi's root (`g1`, `g2`…), the home of Google's Antigravity CLI run
+  for it (its sign-in there, in `.gemini/`, the CLI's own folder; no
+  email, which the CLI doesn't tell; `.illi-signed` once the CLI signed
+  it in, `.illi-stamp` telling it apart from a folder made anew), beside
+  `antigravity/agent/<version>/`, the CLI `/login` downloaded (the
   version an illi runs: `src/providers/antigravity/Pinned.ts`), its
   `agent.json` (its command, arguments and checksum), and in `.users/`
-  a file named by the process id of each illi that runs it, so an
-  older version goes only once no illi still running uses it. While an
+  a file named by the process id of each illi that runs it, so a
+  version goes only once no illi still running uses it (every one but
+  the illi's own, and that too while the user's own `agy` runs in its
+  place). `antigravity/agy.json` keeps the version of the user's own
+  `agy` as illi last asked it, with its path, size and time, so it's
+  asked again only once it changes. While an
   illi downloads its version by itself (`autoupdate`), `agent/.updating`
   holds its process id, so another illi starting meanwhile leaves the
   download to it.

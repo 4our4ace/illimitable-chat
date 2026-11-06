@@ -100,27 +100,33 @@ as Bun lists them for the version the release is built on, with where
 the LGPL parts' sources are. A release on another Bun takes that
 section anew from that version's lists.
 
-Google's agent, which the Google AI plan runs
+Google's Antigravity CLI, which the Google AI plan runs
 (`src/providers/antigravity`), is pinned too, though not built in:
-each illi runs the one version `Pinned.ts` names for its machine, the
-one tried with it, and /login downloads that one, checked against the
-checksum there.
-To take a new version: write the table anew from the [ACP
-registry](https://agentclientprotocol.com) (its version, each
-machine's archive, checksum and command) and Google's host (each
-archive's size, and its files' size unpacked, read from its last bytes
-alone); run the live trial on it, Google's real agent through illi's
-runner against a stand-in for Google's API, no model asked nor account
-signed in (the build downloaded once into the folder named, kept for
-the next trial; it checks the agent says it's the pinned version and
-tries a turn, tools, a picture, thoughts, a stop, a full window, two
-calls at once and the agent's web search); then test and commit:
+each illi runs the user's own `agy` when it is 1.5.2 or later
+(`MINIMUM` in `Agy.ts`, the oldest version tried with illi), else the
+one version `Pinned.ts` names for its machine, the one tried with it,
+and /login downloads that one, checked against the checksum there.
+To take a new version: write the table anew from the CLI's releases on
+GitHub (`pin.ts`, the latest release or the version named: each
+machine's archive, with the checksum and size GitHub tells, downloaded
+whole to check it and list its files, as illi unpacks them); run the
+live trial on it, Google's real CLI through illi's runner against a
+stand-in for Google's services, no model asked nor account signed in,
+nothing sent to Google (the build downloaded once into the folder
+named, kept for the next trial; it checks the CLI says it's the pinned
+version and tries a turn, tools, a picture, thoughts, a stop, a full
+window, two calls at once and the CLI's web search, and that it leaves
+nothing behind); then test and commit:
 
-    bun src/providers/antigravity/pin.ts
+    bun src/providers/antigravity/pin.ts [version]
     ILLI_AGY_LIVE=~/.cache/illi-agy-live bun test --isolate src/providers/antigravity/Live.test.ts
     bun run test
 
 The trial runs this machine's build alone; the others are checked
 against their checksums and sizes. Once a release carries the new
 version, each illi offers it in /login, and the older one goes once no
-illi still running uses it.
+illi still running uses it. A new CLI may change what illi reads of it
+(how it names illi's tools, the words it fails in, the files it leaves
+in an account's folder): the trial is what tells. Raising `MINIMUM`
+is for a version illi needs; a user's own CLI older than it is said,
+not run.

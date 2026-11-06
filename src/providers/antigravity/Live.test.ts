@@ -1,24 +1,30 @@
 // Live test
 // =========
-// Google's real agent, the build this illi is pinned to (Pinned.ts), run
-// through illi's runner against a stand-in for Google's AI API (a gateway
-// served here, answering by a marker in the prompt: T0..T8), so no model
-// is asked and no account signs in. Skipped unless ILLI_AGY_LIVE names a
-// folder of its own, kept between runs, where the build is downloaded
-// once from Google's host (its checksum the pinned one), as /login
-// would; one holding anything else (illi's own folder, say) is refused. A maintainer runs it before a release takes a new version
-// (docs/development.md):
+// Google's real Antigravity CLI, the build this illi is pinned to
+// (Pinned.ts; never the user's own `agy`), run through illi's runner as
+// illi runs it (`acp`, its folder the account's) against a stand-in for
+// Google's services (a gateway served here, the CLI's Cloud Code service
+// too, answering by a marker in the prompt: T0..T8), so no model is asked,
+// no account signs in, and nothing reaches Google. Skipped unless
+// ILLI_AGY_LIVE names a folder of its own, kept between runs, where the
+// build is downloaded once from the CLI's releases on GitHub (its
+// checksum the pinned one), as /login would; one holding anything else
+// (illi's own folder, say) is refused. A maintainer runs it before a
+// release takes a new version (docs/development.md):
 //
 //     ILLI_AGY_LIVE=~/.cache/illi-agy-live bun test --isolate src/providers/antigravity/Live.test.ts
 //
-// It tries: the agent says it's the pinned version; a turn; the models
-// it lists learned; the next on the agent kept (at once); illi's tool called and its answer echoed; a
+// It tries: the CLI says it's the pinned version; a turn (the tokens it
+// read told: one step's, as the CLI tells a turn's whole); the models it
+// lists learned; the next on the CLI kept (at once); illi's tool called
+// and its answer echoed (a turn of two steps: no tokens told); a
 // picture; thoughts and a reply in pieces; too long for the window
 // (full); a model the plan doesn't offer (said plainly); a stop during a
-// tool (lost); two calls at once on one agent; the window learned; the
-// agent's own web search asking illi first (refused here); nothing left
-// behind (no session's files, no agent running). Google's agent retries
-// a busy service (503) for minutes, so that isn't tried.
+// tool (lost); two calls at once on one CLI; the CLI's own web search
+// asking illi first (refused here); nothing left behind (no session's
+// files, no log, no CLI running), nothing asked that the stand-in
+// doesn't answer. The CLI retries a busy service (503) for minutes, so
+// that isn't tried; it tells no model's window against the stand-in.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -27,10 +33,14 @@ import * as path from "node:path";
 const KEEP = process.env.ILLI_AGY_LIVE?.trim() ?? "";
 const LIVE = KEEP !== "";
 
+// the requests the stand-in for Google's services was asked that it has
+// no answer for (a test's look, as the CLI changes)
+const UNKNOWN: string[] = [];
+
 // the accounts' file the trial writes in its folder: its one account
 const ACCOUNTS = JSON.stringify({ antigravity: { use: "live", accounts: [{ id: "live", email: "", plan: "", org: "" }] } });
 
-// what in a folder isn't the trial's own (Google's agent, its account,
+// what in a folder isn't the trial's own (Google's CLI, its account,
 // the accounts' file it writes, the models it learns): an illi root's
 // chats, logins, accounts...
 function others(dir: string): string[] {
@@ -86,6 +96,15 @@ function script(body: any): { call: string; args: any } | { text: string } {
   }
 }
 
+// what a tool's declaration requires that a call must give, as a model
+// gives it (the CLI asks a summary of each call: toolSummary...), each a
+// word
+function needs(body: any, name: string): Record<string, string> {
+  const fn = (body?.tools ?? []).flatMap((t: any) => t.functionDeclarations ?? []).find((f: any) => f.name === name);
+  const required: string[] = fn?.parameters?.required ?? fn?.parametersJsonSchema?.required ?? [];
+  return Object.fromEntries(required.map((k) => [k, "live"]));
+}
+
 // a stand-in for Google's AI API: its models, its answers streamed
 const GATEWAY = Bun.serve({ port: 0, hostname: "127.0.0.1", idleTimeout: 120, async fetch(req) {
   const url  = new URL(req.url);
@@ -109,9 +128,10 @@ const GATEWAY = Bun.serve({ port: 0, hostname: "127.0.0.1", idleTimeout: 120, as
       return sse(chunk({ text: "Let me think about it.", thought: true }, false), chunk({ text: "First " }, false), chunk({ text: "second " }, false), chunk({ text: "third." }, true));
     }
     const step = script(body);
-    const part = "call" in step ? { functionCall: { name: step.call, args: step.args } } : { text: step.text };
+    const part = "call" in step ? { functionCall: { name: step.call, args: { ...needs(body, step.call), ...step.args } } } : { text: step.text };
     return /:stream/.test(url.pathname) ? sse(chunk(part, true)) : Response.json({ candidates: [{ content: { role: "model", parts: [part] }, finishReason: "STOP", index: 0 }], usageMetadata: { promptTokenCount: 1234, candidatesTokenCount: 12, totalTokenCount: 1246 } });
   }
+  UNKNOWN.push(req.method + " " + url.pathname);
   return err(404, "NOT_FOUND", "not here");
 } });
 
@@ -162,6 +182,9 @@ const { Acp } = await import("./Acp.ts");
 const { Pick } = await import("../../ai/Pick.ts");
 
 const FOLDER = path.join(KEEP, "antigravity", "live");
+
+// the pinned build, never the user's own CLI
+Agy.which = async () => null;
 const SERVER = "http://127.0.0.1:" + TOOLS.port + "/mcp";
 
 afterAll(() => {
@@ -187,7 +210,7 @@ async function call(text: string, more: any = {}, during?: (run: any, ev: any) =
   return { end, shown: events.filter((e) => e.$ === "Entry").map((e) => e.kind + ": " + e.text), ms: performance.now() - t0 };
 }
 
-test.skipIf(!LIVE)("Google's real agent, the pinned build, through illi's runner against a stand-in API", async () => {
+test.skipIf(!LIVE)("Google's real CLI, the pinned build, through illi's runner against a stand-in API", async () => {
   if (Agy.pin === null) {
     throw new Error(Agy.why());
   }
@@ -197,15 +220,17 @@ test.skipIf(!LIVE)("Google's real agent, the pinned build, through illi's runner
   const cmd = Agy.command()!;
   expect(cmd[0]).toBe(path.join(Agy.home(), Agy.pin.version, Agy.pin.cmd));
 
-  // the agent says it's the pinned version
-  const conn  = Acp.start(cmd, Antigravity.work(FOLDER), Antigravity.env(FOLDER), () => {}, () => {});
+  // the CLI says it's the pinned version
+  const conn  = Acp.start([...cmd, ...Antigravity.flags(FOLDER)], Antigravity.work(FOLDER), Antigravity.env(FOLDER), () => {}, () => {});
   const hello = await Acp.call(conn, "initialize", Antigravity.hello(), 90e3);
   Acp.stop(conn, "its version read");
-  expect(hello?.agentInfo).toMatchObject({ name: "antigravity-acp", version: Agy.pin.version });
+  await conn.exited;
+  Antigravity.unlog(FOLDER, conn.proc.pid);
+  expect(hello?.agentInfo).toMatchObject({ name: "Antigravity ACP Server", version: Agy.pin.version });
 
   // a turn, then the next on the agent kept, at once
   const one = await call("T1 hello");
-  expect(one.end).toMatchObject({ ok: true });
+  expect(one.end).toMatchObject({ ok: true, first: 1234 });
   expect(one.end.text).toContain("mcp_illi_echo");
 
   // the models the agent lists (the stand-in's) are those offered
@@ -215,7 +240,7 @@ test.skipIf(!LIVE)("Google's real agent, the pinned build, through illi's runner
 
   // illi's tool called, its answer echoed; a picture
   const echo = await call("T2 echo");
-  expect([echo.end.ok, echo.shown.slice(0, 2)]).toEqual([true, ['tool: echo {"x":"ping"}', "echo: ECHO:ping"]]);
+  expect([echo.end.ok, echo.shown.slice(0, 2), echo.end.first]).toEqual([true, ['tool: echo {"x":"ping"}', "echo: ECHO:ping"], undefined]);
   const pic = await call("T3 picture");
   expect(pic.end.ok).toBe(true);
   expect(pic.shown).toContain("echo: [image]\na red dot");
@@ -238,20 +263,20 @@ test.skipIf(!LIVE)("Google's real agent, the pinned build, through illi's runner
   });
   expect(stopped.end).toMatchObject({ ok: false, stop: "lost" });
 
-  // two calls at once, on one agent; the window learned
+  // two calls at once, on one CLI
   const both = await Promise.all([call("T1 at once A"), call("T1 at once B")]);
-  expect([both[0].end.ok, both[1].end.ok, Antigravity.running(), Pick.model("antigravity", "gemini-3.5-flash")?.window]).toEqual([true, true, 1, 1048576]);
+  expect([both[0].end.ok, both[1].end.ok, Antigravity.running()]).toEqual([true, true, 1]);
 
-  // the agent's own web search asks illi first (refused here)
+  // the CLI's own web search asks illi first (refused here)
   const web = await call("T5 web search", { searches: 1 });
   expect(web.end.ok).toBe(true);
   expect(web.end.text).toContain("search_web");
 
   // nothing left behind
   Antigravity.close();
-  const home = path.join(FOLDER, ".gemini", "antigravity-acp");
-  expect([fs.readdirSync(path.join(home, "conversations")), fs.readdirSync(path.join(home, "brain"))]).toEqual([[], []]);
   await Bun.sleep(1500);
+  const left = (sub: string) => (fs.existsSync(Antigravity.home(FOLDER, sub)) ? fs.readdirSync(Antigravity.home(FOLDER, sub)) : []);
+  expect([left("conversations"), left("brain"), left("log"), [...new Set(UNKNOWN)]]).toEqual([[], [], [], []]);
   const ps = Bun.spawnSync(["ps", "-eo", "args"]).stdout.toString().split("\n");
   expect(ps.filter((line) => line.startsWith(Agy.home()))).toEqual([]);
 }, 1_200_000);

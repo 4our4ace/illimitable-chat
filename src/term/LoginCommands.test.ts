@@ -153,7 +153,7 @@ test("the picker lists the providers, ChatGPT, Claude, Gemini and OpenCode, each
   expect(t.choose.foot(1)).toBe("Enter connect · Esc back");
   term_login(t);
   pick(t, "Gemini");
-  expect([t.choose.title, t.choose.names, t.choose.about]).toEqual(["Gemini", ["Google AI plan"], ["your Google AI plan, through Google's Antigravity agent"]]);
+  expect([t.choose.title, t.choose.names, t.choose.about]).toEqual(["Gemini", ["Google AI plan"], ["your Google AI plan, through Google's Antigravity CLI"]]);
   term_login(t);
   pick(t, "OpenCode");
   expect([t.choose.title, t.choose.names, t.choose.about]).toEqual(["OpenCode", ["OpenCode Go API key"], ["a key from opencode.ai"]]);

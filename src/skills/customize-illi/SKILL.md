@@ -132,7 +132,7 @@ one:
 
 - vendors: the vendors offered, named by hand: chatgpt, claude-code (the
   user's Claude plan, through Claude Code), antigravity (the user's
-  Google AI plan, through Google's Antigravity agent), claude-api,
+  Google AI plan, through Google's Antigravity CLI), claude-api,
   openai-api, opencode-go (the user's OpenCode Go plan, by its key).
   Unset (the default), they are what the user connected in /login, so
   leave it unset unless the user asks: to connect a provider, point them
@@ -319,7 +319,7 @@ Code's: shell {command, description}, read/write {path, ...}, edit
 "Bash"); Claude Code's
 other names (Write, Edit, Agent, TodoWrite...) match nothing, as illi
 runs its own tools on every provider, but WebFetch and WebSearch: Claude
-Code's own on the claude-code vendor, and Google's agent's web search
+Code's own on the claude-code vendor, and Google's CLI's web search
 and page reading on antigravity, matched only in PreToolUse (their
 program runs them, so PostToolUse never sees them); each said at the
 start. A command gets the event as JSON on stdin;

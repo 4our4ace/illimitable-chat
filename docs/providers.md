@@ -2,7 +2,7 @@ Providers
 =========
 
 illi runs on your ChatGPT plan, your Claude plan (through your own
-Claude Code), your Google AI plan (through Google's Antigravity agent),
+Claude Code), your Google AI plan (through Google's Antigravity CLI),
 your OpenCode Go plan (by its API key), or Anthropic and OpenAI API
 keys. Each is a vendor.
 
@@ -259,78 +259,88 @@ Google AI plan
 --------------
 
 For Google AI Pro or Ultra, pick **Gemini**, then **Google AI plan**, in
-`/login`. illi runs Google's own agent for editors, `antigravity-acp`,
-as an editor such as Zed does: unmodified, over the Agent Client
-Protocol, under illi's own name, signed in with Google's own sign-in.
-Google's forum answers have said this use, an official unmodified
-agent in an ACP client with its native sign-in, for one person's
-interactive work, is allowed on a consumer plan, with the Gemini models
-in it; what Google allows is Google's to say, so check its terms
+`/login`. illi runs Google's own Antigravity CLI the way an editor such
+as Zed does (`agy acp`, its Agent Client Protocol server): unmodified,
+under illi's own name, signed in with Google's own sign-in. Google's
+forum answers have said this use, an official unmodified agent in an
+ACP client with its native sign-in, for one person's interactive work,
+is allowed on a consumer plan, with the Gemini models in it; what
+Google allows is Google's to say, so check its terms
 ([antigravity.google/terms](https://antigravity.google/terms)). illi
-never reads the agent's sign-in, never runs `agy -p`, and never
-switches accounts on its own.
+never reads the CLI's sign-in, never runs `agy -p`, and never switches
+accounts on its own.
 
-- **The agent**: each illi runs one version of Google's agent, the one
-  it was tried with (`src/providers/antigravity/Pinned.ts` names it), as
-  T3 Code does. With none here,
-  adding an account first offers to download it, saying its size
-  (about 320 MB on Linux, 960 MB once unpacked; about 100 MB on a Mac
-  or Windows). illi takes it only from Google's own `dl.google.com`,
-  checks it as it comes against the checksum this illi carries (as the
-  [ACP registry](https://agentclientprotocol.com) listed it), unpacks
+- **The CLI**: if you installed Google's Antigravity CLI yourself
+  (`agy` on your `PATH`), version 1.5.2 or later, illi runs yours, and
+  keeping it current is yours (`agy update`); illi asks its version
+  once, in the background, and again only once the program changes.
+  Otherwise each illi runs one version of it, the one it was tried
+  with (`src/providers/antigravity/Pinned.ts` names it), as T3 Code
+  does. With none here, adding an account first offers to download it,
+  saying its size (about 70 MB, about 240 MB once unpacked). illi takes
+  it only from the CLI's releases on GitHub
+  ([google-antigravity/antigravity-cli](https://github.com/google-antigravity/antigravity-cli/releases)),
+  checks it as it comes against the checksum this illi carries, unpacks
   it into `~/.illi/antigravity/agent/<version>/` and keeps it for every
   profile; Esc stops the download, leaving nothing behind. When an illi
   update moves to a newer version, illi downloads it by itself in the
   background as it starts on Google's plan or a chat moves to it (with
-  `autoupdate` on, the default, and a Google account connected; one illi
-  at a time on the machine), and a
-  turn meanwhile says it's downloading; with `autoupdate` set to
-  `notify` or `off`, a turn says an update is needed and /login offers
-  it under your accounts (**Update Google's Antigravity agent**). The
-  older one goes once no illi still running uses it. To use one you installed yourself, set `ILLI_ANTIGRAVITY` to
-  its command line (on Linux `…/agy_acp_server.par --uid=`): illi runs
-  it whatever its version, so keeping it current is yours.
+  `autoupdate` on, the default, and a Google account connected; one
+  illi at a time on the machine), and a turn meanwhile says it's
+  downloading; with `autoupdate` set to `notify` or `off`, a turn says
+  an update is needed and /login offers it under your accounts
+  (**Update Google's Antigravity CLI**). Every other version there goes
+  once no illi still running uses it, and illi's own goes too while
+  yours runs in its place, so nothing lingers (Google's older
+  `antigravity-acp` agent, which illi ran before 0.3.14, included). To
+  run another command line, set `ILLI_ANTIGRAVITY` to it (`agy acp`, or
+  a path and `acp`): illi runs it if it's 1.5.2 or later.
 - **Signing in**: illi opens Google's page in your browser (and shows
-  the link); once you sign in there, Google sends the browser back to
-  the agent on this computer, which keeps the sign-in. Esc stops it.
-  Each account gets a folder of its own, `~/.illi/antigravity/<id>/`,
-  readable by you alone: the agent's home, its sign-in kept in files
-  there, never in a keychain all accounts would share. Google's agent
-  tells no email, so an account shows as **Google account 1**, 2, …,
-  with the plan it names. Logging one out logs the agent out of it and
-  removes its folder.
-- **Your prompt, after Google's**: the agent puts Google's own
+  the link); sign in there, then paste the code the page shows into
+  illi (shown as dots), which gives it to the CLI. Esc stops it. Each
+  account gets a folder of its own, `~/.illi/antigravity/<id>/`,
+  readable by you alone: the CLI's home, its sign-in kept in a file
+  there, never in a keyring all accounts would share (on a Mac, the CLI
+  may keep it in your login keychain). Google's CLI tells no email, so
+  an account shows as **Google account 1**, 2, …, with the plan it
+  names. Logging one out logs the CLI out of it and removes its folder.
+  A turn never signs in: when an account's sign-in has run out, the
+  turn says so at once, and /login shows **Sign in again** under your
+  accounts, which signs the same account in again. An account Google's
+  older agent signed in (before illi 0.3.14) signs in again this way
+  once.
+- **Your prompt, after Google's**: the CLI puts Google's own
   instructions first and illi's after them; illi's say which of
   Google's (its workspace, artifacts and `file://` links) don't apply.
-- **illi's tools**: a turn runs in Google's agent with illi's tools
-  over MCP, run by illi, so your permissions, hooks and background
-  jobs work as on every provider. Of the agent's own tools only its web
-  search and page reading are on, where a turn searches the web, each
-  asked at illi's screen as Claude Code's are. It runs in an empty
-  folder, so no project's rules load twice (illi reads them itself), and
-  no Gemini or Google key of your environment reaches it.
-- **Each turn starts fresh**: a turn is a session of the agent's own,
-  with the chat illi sends, and its files are removed as it ends. The
-  agent keeps nothing at hand between turns, so each reads the chat in
-  full.
+- **illi's tools**: a turn runs in Google's CLI with illi's tools over
+  MCP, run by illi, so your permissions, hooks and background jobs work
+  as on every provider. Of the CLI's own tools only its web search and
+  page reading are on, where a turn searches the web, each asked at
+  illi's screen as Claude Code's are. It runs in an empty folder, so no
+  project's rules load twice (illi reads them itself); no Gemini,
+  Google or Antigravity key or setting of your environment reaches it,
+  nor its own updates or telemetry.
+- **Each turn starts fresh**: a turn is a session of the CLI's own,
+  with the chat illi sends, and its files are removed as it ends; the
+  CLI's logs go as it ends, and what else it leaves in the account's
+  folder once a day old. The CLI keeps nothing at hand between turns,
+  so each reads the chat in full.
 - **The models**: the Gemini models your account offers in Antigravity
-  (each at its thinking levels: the effort), as Google's agent lists
-  them when you sign in and as each turn starts: a model your plan adds
-  is offered at once (unless `models` names those offered), one it
-  drops is gone, and the list is kept for the next start. Other makers'
-  models the agent may list are left out. Before your first sign-in,
-  illi shows the list a Google AI Ultra account had (Gemini 4 Argon,
-  Gemini 3.8 Flash). With two accounts on different plans, the list is
-  the one whose agent told it last; a model the account in use doesn't
-  offer says what it does offer. Each turn tells the model's window,
-  which illi keeps.
+  (each at its thinking levels: the effort), as Google's CLI lists them
+  when you sign in and as each turn starts: a model your plan adds is
+  offered at once (unless `models` names those offered), one it drops
+  is gone, and the list is kept for the next start. Other makers'
+  models the CLI lists are left out. Before your first sign-in, illi
+  shows the list a Google AI Ultra account had (Gemini 4 Argon, Gemini
+  3.8 Flash). With two accounts on different plans, the list is the one
+  whose CLI told it last; a model the account in use doesn't offer says
+  what it does offer.
 - **What's different**: a message you send mid-turn waits for the next
   one; a tool's answer reaches the model cut at about 48 KB (illi's own
   tools cut theirs sooner); when Google is busy or your plan's limit
-  is reached, the agent may retry quietly for minutes before it says
-  so (Esc stops the turn); each agent takes about 325 MB, and each turn
-  it ran about 160 MB more till the agent ends. illi starts one as a
-  turn needs it (turns running at once share one, four at most) and
+  is reached, the CLI may retry quietly for minutes before it says so
+  (Esc stops the turn); each CLI takes about 200 MB. illi starts one as
+  a turn needs it (turns running at once share one, four at most) and
   ends it once its turns have; it keeps one more ready so the next turn
   needn't wait, which ends after 10 minutes with no turn. None is left
   once illi ends.

@@ -46,7 +46,7 @@
 // Claude Code's own tools (hosted), as it asks leave for one: of its
 // built-in ones only its web fetch and search run in illi's calls
 // (ClaudeCode.args), as webfetch (the URL) and websearch (the query);
-// Google's agent's web search and page reading, on antigravity, alike,
+// Google's CLI's web search and page reading, on antigravity, alike,
 // asked by those names (Antigravity.approve); one of Claude Code's MCP
 // servers' as its own name, on *; illi's own (mcp__illi__...) none here:
 // they ask as they reach illi.
@@ -150,7 +150,7 @@ export namespace Access {
   }
 
   // the requests one of Claude Code's tools makes (its permission
-  // prompt: Tools.approve; Google's agent's web tools by the same names):
+  // prompt: Tools.approve; Google's CLI's web tools by the same names):
   // its web fetch the URL, its web search the query, any other its name;
   // illi's own (mcp__illi__) none: they ask as they reach illi
   export function hosted(tool: string, input: any): Request[] {

@@ -120,7 +120,7 @@ same way: `WebFetch` as `webfetch` (the URL), `WebSearch` as
 `websearch` (the query), any other tool as its own name.
 
 On `antigravity` too, illi runs its own tools, checked as on every
-provider ([Providers](providers.md#google-ai-plan)). Of Google's agent's
+provider ([Providers](providers.md#google-ai-plan)). Of Google's CLI's
 own tools only its web search and page reading run, and each is asked
 of illi as Claude Code's are: the search as `websearch` (the query), a
 page as `webfetch` (its URL). Anything else the agent asks leave for is

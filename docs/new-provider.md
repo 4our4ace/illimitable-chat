@@ -28,7 +28,7 @@ end to end. illi has six vendors:
 | `chatgpt`     | a plan login | illi's own loop        | `src/providers/chatgpt` (`ChatGPT.ts`: OpenAI's wire on the Codex backend) |
 | `claude-code` | a plan login | the user's Claude Code (another account's: in a Claude Code folder of illi's) | `src/providers/claude-code` (`ClaudeCode.ts`) |
 | `opencode-go` | a plan's API key | illi's own loop     | `src/providers/opencode-go` (`OpenCodeGo.ts`: Chat Completions; the plan's catalog, its defaults rules by price) |
-| `antigravity` | a plan login | Google's own agent, `antigravity-acp`, run unmodified over the Agent Client Protocol (each account a folder of illi's) | `src/providers/antigravity` (`Antigravity.ts`: the runner and its pool of agents; `Acp.ts`: the connection; `Agy.ts`: the agent found, or downloaded by /login) |
+| `antigravity` | a plan login | Google's own Antigravity CLI (`agy acp`), run unmodified over the Agent Client Protocol (each account a folder of illi's) | `src/providers/antigravity` (`Antigravity.ts`: the runner and its pool of CLIs; `Acp.ts`: the connection; `Agy.ts`: the CLI found, yours or downloaded by /login; `Login.ts`: its /login page) |
 
 1. Its facts
 ------------
@@ -91,7 +91,7 @@ ends the call; a vendor gives it a `Wire` (`PROVIDER.wire`):
 | `idle`    | how long a silent stream lives before it is taken as dead |
 
 A vendor whose own program runs the loop (Claude Code, Google's
-Antigravity agent) has no wire but a runner (`PROVIDER.ask`):
+Antigravity CLI) has no wire but a runner (`PROVIDER.ask`):
 `Agent.ask` hands it the call, and it must give back a `Try` with the
 same `Event`s and `End`. A provider has one of the two. A call `once` (a recap) runs
 no tool and takes no message sent meanwhile: the runner leaves it in

@@ -1,9 +1,10 @@
 // antigravity: Gemini's models on a Google AI plan, through Google's own
-// agent for editors (antigravity-acp, run unmodified: Antigravity.ts),
-// signed in with its own Google sign-in. Its accounts are folders of
-// illi's own, in antigravity/ of illi's root, each the agent's home (its
-// sign-in, its sessions' files), as each sign-in is a folder's; the agent
-// itself, as /login downloads it, is kept beside them (Agy.ts).
+// Antigravity CLI as editors run it (`agy acp`, run unmodified:
+// Antigravity.ts), signed in with its own Google sign-in. Its accounts
+// are folders of illi's own, in antigravity/ of illi's root, each the
+// CLI's home (its sign-in, its sessions' files), as each sign-in is a
+// folder's; the CLI itself, the user's own or as /login downloads it, is
+// kept beside them (Agy.ts).
 
 import type { Model } from "../../ai/Pick.ts";
 import type { Facts, Maker } from "../Provider.ts";
@@ -14,10 +15,10 @@ export const GEMINI: Maker = { name: "Gemini", offers: "by Google: your Google A
 // the Gemini models a Google AI plan runs in Antigravity, each a family
 // (Antigravity offers a model at each of its thinking levels: an effort
 // here), as a Google AI Ultra account's agent listed them: an account's
-// own list replaces these as its agent tells it (Antigravity.learn: at
-// the sign-in, each call), kept for the next start (catalog). Each
-// window as Antigravity states it (each call tells it again:
-// Antigravity.read; none: not told yet)
+// own list replaces these as its CLI tells it (Antigravity.learn: at the
+// sign-in, each call), kept for the next start (catalog). Each window as
+// Antigravity states it (a step's usage tells it again, where the CLI
+// sends one: Antigravity.read; none: not told yet)
 const WINDOW = 1048576;
 const MODELS: Model[] = [
   { label: "gemini-4-argon",   id: "gemini-4-argon",   speeds: ["slow"], efforts: ["low", "medium", "high"] },

@@ -9,7 +9,7 @@
 //   ANTHROPIC_API_KEY or OPENAI_API_KEY, read as illi starts and never
 //   written here); connected while it's in the file;
 // - folders (a plan's run by another program: claude-code, Claude Code;
-//   antigravity, Google's Antigravity agent): its accounts, each a folder
+//   antigravity, Google's Antigravity CLI): its accounts, each a folder
 //   of that program's (the user's own Claude Code's, "own", or one of
 //   illi's, a folder of its own in illi's root, <folders>/<id>, as
 //   claude/c1 or antigravity/g1, as each login is a folder's), and which
@@ -63,7 +63,7 @@ export type Logins = { opencode: boolean; saved: Saved[] };
 // its folder's id ("own": the program's own, the user's own Claude
 // Code's; else illi's <folders>/<id>, as claude/c1 or antigravity/g1),
 // the email, plan and organization the program told as it signed in
-// ("": none; Google's agent tells no email)
+// ("": none; Google's CLI tells no email)
 export type Folder = { id: string; email: string; plan: string; org: string };
 
 // such a plan's accounts, and the one in use (its id)
