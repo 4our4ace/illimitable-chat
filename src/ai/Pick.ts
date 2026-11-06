@@ -9,7 +9,11 @@
 // model every vendor's models, effort, speed (a model lacking one takes
 // its fastest below), up and down the efforts, never the speed; given a
 // value (`to`), to the pick whose part it is. A saved pick illi
-// doesn't offer gives way to def, never to a pick like it.
+// doesn't offer gives way to def, never to a pick like it. A model has
+// a family, its label with * for its version (opus-5.5: opus-*, by its
+// first number that isn't a size: Pick.family), so a default or a
+// setting may name the newest of a family offered (Pick.newest) and
+// hold as the vendor's models come and go.
 
 import { FACTS, VENDORS as IDS, Vendors, type Vendor } from "../providers/Vendors.ts";
 

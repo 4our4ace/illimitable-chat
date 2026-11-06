@@ -203,10 +203,12 @@ illi then runs Claude Code itself, as it ships, on the account's login:
   of its MCP servers) that your Claude Code settings don't allow, illi
   checks it the same way: your rules and saved approvals apply, and
   what they leave open is asked at illi's screen, saying why.
-- **The whole window**: as soon as the plan is connected, at each
-  start, and when another terminal switches the account, illi asks
-  Claude Code each model's window, one model after another, sending no
-  message (1M on a plan with long context). A turn gets all of it, as
+- **The whole window**: as soon as the plan is connected, and when
+  another terminal switches the account, illi asks Claude Code the
+  plan's models and each one's window, one model after another, sending
+  no message (1M on a plan with long context); at a start it goes on
+  what Claude Code told within the last day, asking again past it
+  ([Models](#models)). A turn gets all of it, as
   Claude Code's own compaction, which would stop at its autocompact
   window (500k of Opus's 1M), is off.
 - **illi's memory, not Claude Code's compaction**: a turn runs with

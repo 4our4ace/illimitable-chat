@@ -964,14 +964,15 @@ config_models_told`), so most starts run no Claude Code.
    it told. `claude-api`'s is the key's models as Anthropic's Models
    API last listed them (the newest active one of each line:
    `Anthropic.ts lineup`), with their windows.
-2. Each write is one vendor's list: illi reads the file as it is now,
-   puts that vendor's list in, leaves the others' as they are, writes
-   the whole to `models.json.<pid>.tmp` and renames it over the file,
-   so no reader sees half a file and one vendor's learning never drops
-   another's. Two illis writing in the same instant can still lose one's
-   list: chatgpt's comes back at the catalog's next answer, the others'
-   once a later illi is told their windows again (each writes only
-   windows new to it).
+2. Each write is one vendor's list (or one vendor's `told`): illi reads
+   the file as it is now, puts that vendor's list in, leaves the
+   others' as they are, writes the whole to `models.json.<pid>.tmp` and
+   renames it over the file, so no reader sees half a file and one
+   vendor's learning never drops another's. Two illis writing in the
+   same instant can still lose one's list: chatgpt's comes back at the
+   catalog's next answer, the others' once a later illi is told their
+   windows again (each writes only windows new to it); a `told` lost
+   only has the next start ask once more.
 3. At the start (`config_models`), the chatgpt, antigravity,
    claude-code and claude-api lists are taken whole, whatever their account (the login
    isn't read yet), until the catalog answers (antigravity's: its next

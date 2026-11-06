@@ -195,7 +195,18 @@ its program run there, `config_folder`):
   for the entry), which Config.ts reads into the vendors offered and
   every illi follows. `login_after` then reads it again, moves a chat
   off a vendor gone (`Chat.offered`) and runs `term_account`, which
-  asks each account in use what it tells (`PROVIDER.account`).
+  asks each account in use what it tells (`PROVIDER.account`); a vendor
+  connected anew (not connected as /login opened: `seen`) is then asked
+  which of its models write its summaries and run its chats
+  (`login_models_new`, after waiting on its `account()` 15 seconds at
+  most, `READING`, so that hook should settle once the list is known),
+  kept in `compactor` and `chats` by family while the choice is the
+  newest of it (`login_models_keep`). What a page asks on the way
+  (`term_question`, `term_ask`) passes `popup: true`, so the step shows
+  in /login's popup, never at the input: a key or a sign-in's code is a
+  secret (`secret: true`), drawn as dots. The page's sign-in should end
+  (its `t.login` let go) as it calls `login_after`, since the models'
+  step waits a tick and opens only while nothing else is on screen.
 
 5. Models, windows, efforts and speeds
 --------------------------------------

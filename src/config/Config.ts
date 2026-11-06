@@ -13,10 +13,17 @@
 // (config_check), so one that won't do stops illi with a word on why;
 // a pick set that isn't offered here (a model or vendor gone) gives way
 // to its default instead, told (NOTES). illi's own pick defaults to the
-// first vendor offered's (config_def). The providers stay apart: a
-// chat's summaries and subagents run on its pick's vendor, each
-// vendor's own (`compactor`, `agents`: a pick per vendor), never
-// another's.
+// first vendor offered's (config_def): its `chats` pick, else the
+// vendor's own default (DEFS). A pick, set or default, may name its
+// model by family, * for its version (opus-*): it is the newest of that
+// family offered now (config_newest), read again as a vendor's models
+// are learned (config_repick). The providers stay apart: a chat's
+// summaries and subagents run on its pick's vendor, each vendor's own
+// (`chats`, `compactor`, `agents`: a pick per vendor), never another's.
+// What the vendors told of their models is kept in models.json
+// (config_models_keep: each vendor's list, a catalog's whole; told: when
+// a vendor last told its list whole, for which account, as the Claude
+// plan asks Claude Code at most once a day).
 // /settings changes them (config_set), some at once, the rest at the
 // next start. The API
 // keys are read from the environment and removed from it, so no program
