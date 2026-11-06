@@ -195,8 +195,9 @@ function login_agy_id(): string {
 // signed in again), else a new one (login_agy_id). A note says it starts
 // (Esc stops it); Google's page opened as the CLI tells its link (and
 // said, if the browser didn't open), the code the page shows asked for
-// here, shown as dots (Esc stops it all, back to `back`), given the CLI;
-// signed in, the account kept and in use. A new folder not kept in the
+// here, shown as dots (Esc stops it all, back to `back`), given the CLI,
+// a note saying it signs in meanwhile; signed in, the account kept and
+// in use. A new folder not kept in the
 // end (the sign-in failed or was stopped) is gone; an account's own stays
 // as it was
 async function login_agy_sign(t: Term, want: string | null, back: () => void): Promise<void> {
@@ -224,6 +225,10 @@ async function login_agy_sign(t: Term, want: string | null, back: () => void): P
       if (code.trim() === "") {
         return "Paste the code first.";
       }
+      if (asked !== null) {
+        term_unnotify(t, asked);
+      }
+      asked = term_notify(t, "Signing in with Google… (Esc stops)", false, LOGIN);
       give(code);
       return null;
     }, { secret: true, popup: true, back: () => {

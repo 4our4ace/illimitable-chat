@@ -116,7 +116,7 @@ test("each machine's pinned build is one illi takes, one for every machine illi 
 });
 
 test("a download checked as it comes, unpacked runnable, put in place, run; one that doesn't match, holds a folder or a link, leaves nothing", async () => {
-  const one = tar([{ name: "pax", data: "30 path=antigravity-renamed\n", type: "x" }, { name: "antigravity", data: "#!/bin/sh\necho one\n" }, { name: "NOTICE", data: "notice" }]);
+  const one = tar([{ name: "pax", data: "20 path=antigravity\n", type: "x" }, { name: "antigravity-cut-short", data: "#!/bin/sh\necho one\n" }, { name: "pax", data: "13 mtime=1.5\n", type: "x" }, { name: "NOTICE", data: "notice" }]);
   SERVED["one.tgz"] = one;
   Agy.pin = BUILT("1.5.2", "one.tgz", one);
   expect([Agy.command(), Agy.ready(), Agy.why()]).toEqual([null, false, "Google's Antigravity CLI isn't here: /login downloads it"]);
@@ -184,6 +184,9 @@ test("only this illi's build runs of those downloaded: another version here is s
   expect(Agy.told("Google's Antigravity CLI isn't here")).toBe(false);
   Agy.bin = ["/opt/agy/agy", "acp"];
   expect([Agy.command(), Agy.ready()]).toEqual([["/opt/agy/agy", "acp"], true]);
+  Agy.pin = here;
+  Agy.tidy();
+  expect(Agy.versions()).toEqual(["1.5.2"]);
   Agy.bin = null;
   Agy.pin = here;
 });
@@ -222,6 +225,23 @@ test("every other version goes once no live illi uses it, this illi's own too wh
   Agy.which = async () => null;
   Agy.unlook();
   expect([Agy.installed(), Agy.remembered()]).toEqual([null, null]);
+});
+
+test("a tar header's ustar prefix is POSIX's alone: GNU's keeps other fields there; a pax record's fields read", () => {
+  const block = (magic: string) => {
+    const h = Buffer.alloc(512);
+    h.write("antigravity", 0);
+    h.write("00000000001\0", 124);
+    h.write("0", 156);
+    h.write(magic, 257, "latin1");
+    h.write("\x01\x02", 345, "latin1");
+    h.write("        ", 148);
+    h.write(h.reduce((n, x) => n + x, 0).toString(8).padStart(6, "0") + "\0 ", 148);
+    return h;
+  };
+  expect(Agy.header(block("ustar  \0")).name).toBe("antigravity");
+  expect(Agy.header(block("ustar\x0000")).name).toBe("\x01\x02/antigravity");
+  expect(Agy.paxed(Buffer.from("20 path=antigravity\n13 mtime=1.5\nbad"))).toEqual({ path: "antigravity", mtime: "1.5" });
 });
 
 test("a write that fails is said, never a crash; an empty file unpacks; another terminal's download under way is left be, a day-old one goes", async () => {
