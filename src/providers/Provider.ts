@@ -50,7 +50,8 @@ export type Context = {
 // a provider's facts:
 // - id: as saved (a pick's vendor:model:effort:speed, models.json,
 //   accounts.json), never changed once out;
-// - name: as a note names it ("the Anthropic API", "your ChatGPT plan");
+// - name: as a note names it, "the" or "your" first ("the Anthropic
+//   API", "your ChatGPT plan"; without it, its title: Pick.title);
 // - maker, row: under whom /login lists it, and its row's name there
 //   ("ChatGPT plan", "Anthropic API key");
 // - models: as built in (each window as the vendor states it; none: not

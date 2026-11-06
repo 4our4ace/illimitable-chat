@@ -663,9 +663,9 @@ function term_agent_set(t: Term, arg: string): void {
 // what shows at each option's right end, each option's group (the
 // palette's), the key that opened it, to close it, and what Esc does
 // besides closing it (the list a level up opened again: /login's)
-export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; detail?: Chooser["detail"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; heads?: string[]; key?: string; back?: Chooser["back"] } = {}): void {
+export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; detail?: Chooser["detail"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; heads?: string[]; grouped?: boolean; key?: string; back?: Chooser["back"] } = {}): void {
   const shown = Screen.ed_rank("", names);
-  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, heads: more.heads, key: more.key, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), detail: more.detail, ask: null, back: more.back };
+  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, heads: more.heads, grouped: more.grouped, key: more.key, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), detail: more.detail, ask: null, back: more.back };
   t.pane   = null;
 }
 
@@ -832,13 +832,19 @@ export function term_ask(t: Term, title: string, hint: string, start: string, fo
 
 // the picker's search changed: the options it matches, the best lit
 // (with hay, by name and by what each does: Screen.ed_find; each the more
-// used first); emptied, all in their order, the one lit before still lit
-// (none: the one marked as now)
+// used first; grouped, by group: each where its best match ranks, its
+// own best first); emptied, all in their order, the one lit before still
+// lit (none: the one marked as now)
 export function term_chooser_find(c: Chooser): void {
   const was  = c.shown[c.at]?.k ?? c.here;
   const find = c.find?.text ?? "";
   const used = find === "" ? undefined : c.used;
   c.shown = c.hay === undefined ? Screen.ed_rank(find, c.names, used) : Screen.ed_find(find, c.names, c.hay, used);
+  if (c.grouped && c.heads !== undefined) {
+    const heads = c.heads;
+    const order = [...new Set(c.shown.map((m) => heads[m.k]))];
+    c.shown = order.flatMap((head) => c.shown.filter((m) => heads[m.k] === head));
+  }
   c.at    = find === "" ? Math.max(0, c.shown.findIndex((m) => m.k === was)) : 0;
   c.top   = 0;
 }
@@ -965,8 +971,10 @@ function term_model(t: Term, arg: string): void {
   term_model_pick(t, rows, undefined, undefined, undefined, true);
 }
 
-// the model picker: each model offered (its vendor too, if more than one
-// is; its window, if known), the pick's marked and lit; the one lit takes
+// the model picker: each model offered (its window, if known), the
+// pick's marked and lit; with more than one vendor, each vendor's under
+// its head (Pick.title: Claude plan), searched too (the matches by
+// vendor; a vendor's title finds its models); the one lit takes
 // its effort by Left and Right (Shift+Down and Shift+Up too; stopping at
 // the ends), its speed by Tab (round its speeds: one alone stays), the
 // foot saying both; Enter, or a click, sets the three as one pick. The
@@ -977,14 +985,14 @@ function term_model(t: Term, arg: string): void {
 // sends each one changed with the pick, Esc drops them. From another pick
 // than the chat's, the choice goes to `done` (a setting's: Settings.ts;
 // /login's models: LoginCommands.ts), Esc to `back` if given. Each row
-// says its vendor while the rows are of more than one, its window and
-// its price (dollars a million tokens in) where known
+// says its window and its price (dollars a million tokens in) where
+// known
 export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "Model", from = View.view_asked(t.v)!, done = (p: Pick): unknown => term_act(t, { $: "Pick", to: p }), gauge = false, back?: () => void): void {
   let want    = from;
   const many  = new Set(rows.map(([vendor]) => vendor)).size > 1;
-  const vw    = Math.max(...rows.map(([vendor]) => vendor.length));
+  const heads = many ? rows.map(([vendor]) => Pick.title(vendor)) : undefined;
   const price = (m: Model) => (m.price === undefined ? "" : "$" + m.price.toFixed(2) + "/M in");
-  const about = rows.map(([vendor, m]) => [many ? vendor.padEnd(vw) : "", m.window === undefined ? "" : term_tokens(m.window) + " context", price(m)].filter((x) => x !== "").join("  "));
+  const about = rows.map(([, m]) => [m.window === undefined ? "" : term_tokens(m.window) + " context", price(m)].filter((x) => x !== "").join("  "));
   const here  = rows.findIndex(([vendor, m]) => vendor === want.vendor && m.label === want.model);
   const pick  = (k: number) => Pick.on(want, rows[k][0], rows[k][1]);
   const moved = new Map<string, number>();
@@ -1023,7 +1031,7 @@ export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "
     done(pick(k));
     moved.forEach((share, label) => term_send(t, { $: "autocompact", label, value: share + "%" }));
   };
-  term_chooser(t, title, rows.map(([, m]) => m.label), about, here, chosen, { find: true, keys, foot, detail: gauge ? detail : undefined, back });
+  term_chooser(t, title, rows.map(([, m]) => m.label), about, here, chosen, { find: true, keys, foot, detail: gauge ? detail : undefined, back, heads, grouped: many, hay: heads?.map((head, k) => rows[k][1].label + "  " + head) });
 }
 
 // a model's auto compact as the picker shows it: its share stepped while

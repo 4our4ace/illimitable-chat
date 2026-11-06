@@ -246,6 +246,12 @@ export namespace Pick {
     return up ? name[0].toUpperCase() + name.slice(1) : name;
   }
 
+  // a vendor as a head over its models names it: its name without the
+  // "the" or "your" it starts with (Anthropic API, Claude plan)
+  export function title(vendor: Vendor): string {
+    return Pick.provider(vendor).replace(/^(?:the|your) /, "");
+  }
+
   // as a person reads it, as it runs (fit): model · effort, the speed
   // only if not the standard one (gpt-6.1-sol · medium · fast)
   export function shown(pick: Pick): string {
