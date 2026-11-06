@@ -16,7 +16,7 @@ Chat
 | Tab | take the suggested reply (it stays after a message of your own, to send as well, till illi answers) |
 | Ctrl+P | all commands and settings in one list, typed to search |
 | Ctrl+X | the leader: the screen greys, and the next key runs its shortcut ([below](#shortcuts)) |
-| `/goal <message>` | send a goal: illi goes on until it is met |
+| `/goal <message>` | send a goal: illi goes on until it is met; `/goal` alone drops it, as `/halt` |
 | `/halt` | drop the goal; the turn running ends as it would |
 | `/clear` | start a new topic: the chat before is kept and looked up when needed, not sent |
 | `/compact [focus]` | illi writes a recap of the chat and goes on from it alone (the chat before is kept and looked up when needed, not sent); focus: what the recap should keep |

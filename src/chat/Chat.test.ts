@@ -433,6 +433,16 @@ test("/clear empties the to-do list beside the chat, so after a restart too, eve
   expect(Tools.todo(chat.tools)).toEqual([]);
 });
 
+test("/goal sets the goal and sends it; /goal alone drops it, as /halt does, sending nothing", async () => {
+  const v = View.view_new();
+  const goal = View.view_act(v, { $: "Send", text: "/goal ship it" });
+  expect([goal[0], goal[1]?.$]).toEqual([{ $: "goal", text: "ship it" }, "say"]);
+  for (const text of ["/goal", "/goal   ", "/halt"]) {
+    expect([text, View.view_act(v, { $: "Send", text })]).toEqual([text, [{ $: "goal", text: null }]]);
+  }
+  expect(v.notes).toEqual([]);
+});
+
 test("a goal check and a message sent mid-run hold no more than the chat's model takes", () => {
   const mem = chat.mem;
   const cap = Chat.cap;
