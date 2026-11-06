@@ -249,7 +249,7 @@ export type Body   = () => any;
 export type Client =
   | { $: "say"; sizes: number[]; body: Body }
   | { $: "stop"; name?: string } // all work, or the agent named, or TURN
-  | { $: "goal"; text: string | null } // the goal set (/goal), or none (/halt)
+  | { $: "goal"; text: string | null } // the goal set (/goal), or none (/halt, /goal alone; with none set, answered what to say: Chat.ts NO_GOAL)
   | { $: "clear" } // a fresh session: the chat so far leaves the view, kept for search and zoom (/clear)
   | { $: "compact"; focus?: string } // illi writes its recap, the turn's view starting at it, the screen kept (/compact); focus: what it should keep
   | { $: "pick"; to: Pick }
@@ -1191,12 +1191,15 @@ export function link_open(v: View, link: Link): void {
   };
 }
 
-// an act, kept until answered; by default a refusal is a note
+// an act, kept until answered; by default its answer is noted
+// (link_note)
 export function link_send(v: View, msg: Client, done = (a: Answer) => link_note(v, a)): void {
   v.out.push({ msg: { id: crypto.randomUUID(), ...msg }, sent: false, done });
   v.flush();
 }
 
+// an act's answer as a note: a refusal's why, else what the chat said
+// back; one with neither (the act taken, nothing to say) is silent
 export function link_note(v: View, a: Answer): void {
   const note = a.error ?? a.said;
   if (note !== undefined) {
