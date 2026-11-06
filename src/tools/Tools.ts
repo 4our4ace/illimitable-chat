@@ -44,7 +44,7 @@
 // Every call goes first to the user's plugins and hooks
 // (Plugins.before_tool: they may refuse it, change its input, allow it,
 // have it asked or add to what the model reads after it), then, as
-// Claude Code and Google's agent ask leave for one of their own too
+// Claude Code and Google's CLI ask leave for one of their own too
 // (approve), it is judged
 // on that input (Tools.guard: what it asks leave for, Access.ts, by
 // illi's rules, the user's and the approvals saved, Permissions.ts, in
@@ -330,7 +330,7 @@ export const SUB_FRESH = SUB_HEAD + "\n\n" + SUB_ALONE + "\n\n" + HERE_DOC;
 
 // the permission prompt of a provider's program that runs the call
 // (Claude Code's --permission-prompt-tool: its web fetch, its MCP
-// servers' tools; Google's agent's web search and page reading, asked by
+// servers' tools; Google's CLI's web search and page reading, asked by
 // illi itself: Antigravity.approve), answered by the user at illi's
 // screen
 const APPROVE: Spec = spec("approve", "The permission prompt of the program running this call, answered by the user at illi's screen. Not a tool to call yourself.", { tool_name: STR, input: { type: "object" }, tool_use_id: STR }, ["tool_name", "input"]);

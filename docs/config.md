@@ -18,7 +18,7 @@ profile's own `config.json` goes over it, key by key; its `off` and
 
 | Key          | Default                           | What                                             |
 | ------------ | --------------------------------- | ------------------------------------------------ |
-| `vendors`    | those `/login` connected          | the vendors offered, named yourself: `chatgpt`, `claude-code` (your Claude plan, through Claude Code), `antigravity` (your Google AI plan, through Google's Antigravity agent), `claude-api`, `openai-api`, `opencode-go` (API keys; the last your OpenCode Go plan's); unset, what you connected in `/login` ([Providers](providers.md)) |
+| `vendors`    | those `/login` connected          | the vendors offered, named yourself: `chatgpt`, `claude-code` (your Claude plan, through Claude Code), `antigravity` (your Google AI plan, through Google's Antigravity CLI), `claude-api`, `openai-api`, `opencode-go` (API keys; the last your OpenCode Go plan's); unset, what you connected in `/login` ([Providers](providers.md)) |
 | `pick`       | `chatgpt:gpt-*-sol:medium:slow` | vendor:model:effort:speed (`/model` per chat); default: the first vendor's. The model by version (`opus-5.5`) or by family, `*` for the version (`opus-*`: the newest offered, as the vendor's models change; quote it in a shell). Efforts: `low`, `medium`, `high`, `xhigh`, `max`; speeds: `slow`, `fast`, `ultrafast`, as a model offers them |
 | `chats`      | each provider's own               | what new chats start on, by provider: a pick per provider, comma-separated, a family too (`claude-code:opus-*:high:slow`). /login asks it as you connect one, and its Models row any time; your first provider's is the default, unless `pick` is set |
 | `compactor`  | each vendor's small model         | writes the summaries: a pick per vendor, comma-separated (a family too: `claude-code:haiku-*:low:slow`). /login asks it as you connect one, and its Models row any time |
@@ -46,7 +46,7 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `theme`      | `theme.json`: the profile's, else `~/.illi`'s | the theme's file                   |
 | `mcp`        | `mcp.json` in the profile's folder | the MCP servers' file; `~/.illi/mcp.json` is read too, and a trusted project's `.illi/mcp.json` |
 | `login`      | `~/.illi/login.json`, opencode's  | the ChatGPT login file, which `/login` writes    |
-| `autoupdate` | `on`                              | a new release installs itself: looked for once a day (as illi starts, or within the hour while it runs), downloaded and checked in the background, it runs from the next start (a note says so); `notify` only tells; `off` never looks. The installer's one file only: a source clone never updates itself. On, it also downloads the version of Google's Antigravity agent an updated illi runs, once a Google account is connected; `notify` and `off` leave that to `/login` |
+| `autoupdate` | `on`                              | a new release installs itself: looked for once a day (as illi starts, or within the hour while it runs), downloaded and checked in the background, it runs from the next start (a note says so); `notify` only tells; `off` never looks. The installer's one file only: a source clone never updates itself. On, it also downloads the version of Google's Antigravity CLI an updated illi runs, once a Google account is connected; `notify` and `off` leave that to `/login` |
 
 API keys come from `/login`, which also offers `ANTHROPIC_API_KEY`,
 `OPENAI_API_KEY` and `OPENCODE_API_KEY` if they're set
@@ -60,8 +60,8 @@ Other variables:
 | `ILLI_PROFILE` | the profile to start in                               |
 | `ILLI_WINDOW`  | `off`: illi runs alone on a terminal, not under a window, so a profile switch quits it and starts it again in the other, never while it works ([Profiles](profiles.md)) |
 | `ILLI_CLAUDE`  | the `claude` program the `claude-code` vendor runs    |
-| `ILLI_ANTIGRAVITY` | Google's agent the `antigravity` vendor runs, one you installed: its command line, split at spaces (on Linux `…/agy_acp_server.par --uid=`), in place of the one `/login` downloads; run whatever its version, so keeping it current is yours |
-| `ILLI_ANTIGRAVITY_GATEWAY` | an AI API gateway of your own the `antigravity` vendor's agent uses in place of Google's services, signed in to it alone (tests use a stand-in) |
+| `ILLI_ANTIGRAVITY` | the command line that starts Google's Antigravity CLI's ACP server for the `antigravity` vendor, split at spaces (`agy acp`, or a path and `acp`), in place of your own `agy` on `PATH` or the one `/login` downloads; run if it's 1.5.2 or later, so keeping it current is yours |
+| `ILLI_ANTIGRAVITY_GATEWAY` | an AI API gateway of your own the `antigravity` vendor's CLI uses in place of Google's services, signed in to it alone (tests use a stand-in) |
 | `BROWSER`      | what opens `/login`'s page: programs `:`-separated, tried in turn (`%s` is the link, else it goes last), before the system's; `none`: never open one |
 | `ILLI_INSTALL`, `ILLI_SOURCE` | where the installer puts illi; `1`: build from the source |
 
@@ -95,7 +95,7 @@ What else illi keeps in `~/.illi`:
 | `login.json`    | the ChatGPT login in use, which `/login` makes (else opencode's, in `~/.local/share/opencode/auth.json`) |
 | `accounts.json` | what `/login` connected, readable by you alone: the API keys pasted and the one in use, ChatGPT's other accounts (and whether opencode's login is one), the Claude plan's and the Google AI plan's accounts and the one in use of each ([Providers](providers.md#connecting-login)); changed under a lock, `.accounts.lock` beside it, so two illis take turns ([Storage](storage.md#accounts)) |
 | `claude/`       | a Claude Code folder for each Claude account `/login` added beside your own Claude Code's, its login in it |
-| `antigravity/`  | a folder for each Google AI plan account `/login` signed in (`g1`, `g2`…: the home of Google's agent run for it, its sign-in in it), and in `agent/<version>/` the agent `/login` downloaded, the version this illi runs ([Providers](providers.md#google-ai-plan)) |
+| `antigravity/`  | a folder for each Google AI plan account `/login` signed in (`g1`, `g2`…: the home of Google's Antigravity CLI run for it, its sign-in in it), in `agent/<version>/` the CLI `/login` downloaded, the version this illi runs, and in `agy.json` the version of your own `agy` as illi last asked it ([Providers](providers.md#google-ai-plan)) |
 | `models.json`   | the models the vendors told last: a catalog vendor's whole list (ChatGPT's for the account named in it, the Claude plan's, the Google AI plan's, the Anthropic key's, OpenCode Go's), each one's window, speeds, efforts and price, and when the Claude plan last told its list, so a start within a day asks Claude Code nothing ([Storage](storage.md#models)) |
 | `claude-code.json` | the name of each of Claude Code's own MCP servers illi has seen, case and all, and those last seen waiting on a login, so `off`, an agent's `tools:` and a login missing leave one out of the first call after a start too ([Providers](providers.md#claude-plan)) |
 | `used.json`     | how often you ran each command: among those a `/word` matches alike, the most used come first; a use counts half as much 100 uses later, and a command you stopped using drops out (two illis at once each add theirs: [Storage](storage.md#usage-counts)) |

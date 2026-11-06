@@ -389,7 +389,7 @@ floor. The memory tools (zoom, search, date) and illi's own steps
 (todo, a subagent started or told) never get a line. On the
 `claude-code` and `antigravity` providers illi runs the tools too, so
 they get lines as everywhere; Claude Code's own web search and fetch
-and its MCP servers' tools, and Google's agent's web search and page
+and its MCP servers' tools, and Google's CLI's web search and page
 reading, which run inside them, don't.
 
 The `related` setting is `on` (the side, and the strong lines given to

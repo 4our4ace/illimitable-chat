@@ -83,7 +83,7 @@ Export and import
   importing illi's global setup. It leaves out the logins and keys
   `/login` connected (`login.json` and a login file its config names
   inside the profile's folder, `accounts.json`, the Claude Code folders
-  in `claude/`, the Antigravity ones and Google's agent in
+  in `claude/`, the Antigravity ones and Google's CLI in
   `antigravity/`, and a login or accounts file a crash left half written
   beside `login.json` or `accounts.json`), their locks and the log;
   the default's, what every profile shares too: the other profiles, the

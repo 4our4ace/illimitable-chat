@@ -354,7 +354,7 @@ over. What differs:
   tools (`Write|Edit`, `Agent`, `TodoWrite`…) never runs, as illi runs
   its own on every provider, but a `PreToolUse` one naming its
   `WebFetch` or `WebSearch`, which runs on `claude-code` as Claude Code
-  asks leave for one (and on `antigravity`, as Google's agent asks for
+  asks leave for one (and on `antigravity`, as Google's CLI asks for
   its web search or page reading, named so); each is said at the
   start.
 - Its own MCP servers' tools are `mcp__<server>__<tool>`: Claude Code's
@@ -427,9 +427,9 @@ it follows the theme) or a list of those.
 
 `tool.before` sees every tool call, Claude Code's own on `claude-code`
 too (its web fetch and search, its MCP servers' tools, as they ask
-leave), and Google's agent's web search and page reading on
+leave), and Google's CLI's web search and page reading on
 `antigravity` (as `WebSearch` and `WebFetch`, as they ask leave);
-`tool.after` every call illi runs (Claude Code and Google's agent run
+`tool.after` every call illi runs (Claude Code and Google's CLI run
 their own, so it doesn't see theirs).
 
 - Hooks run one after another: the plugins in the order they load
@@ -606,7 +606,7 @@ its input:
   leave; illi turns your `~/.claude` hooks off inside it, so
   `hooks.json` is the one file that runs, and only `PreToolUse`'s
   refusal, input and decision reach those tools (Claude Code runs them,
-  so `PostToolUse` doesn't see them). On `antigravity`, Google's agent's
+  so `PostToolUse` doesn't see them). On `antigravity`, Google's CLI's
   web search and page reading come as `WebSearch` and `WebFetch` as
   they ask leave, `PreToolUse` alone seeing them too; one given other
   input is refused, as the agent can't take it.

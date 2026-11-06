@@ -7,7 +7,7 @@
 // (Agent.ts), but a runner's (Provider.ts ask), whose own program runs
 // the steps in its own loop, with illi's prompt and tools: claude-code,
 // the user's Claude Code (ClaudeCode.ts); antigravity, Google's
-// Antigravity agent (Antigravity.ts). A patient call (a summary's) asks again, AGAIN after each
+// Antigravity CLI (Antigravity.ts). A patient call (a summary's) asks again, AGAIN after each
 // try nothing answered (the vendor down or refusing it, as when the API
 // key's credit is gone; our setup failing), each time telling why (its
 // `stuck`), till one is answered or we stop it: an outage only delays it, and no summary is made of a failure

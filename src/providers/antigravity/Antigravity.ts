@@ -1,14 +1,18 @@
 // Antigravity
 // ===========
 // antigravity: a Google AI plan's Gemini models, run by Google's own
-// agent for editors (antigravity-acp: Agy.ts finds or downloads it, run
-// unmodified, never its `agy -p`), as an editor runs it: illi is its
-// client over the Agent Client Protocol (Acp.ts), named illi, signed in by
-// the agent's own Google sign-in (/login: Login.ts; illi never reads its
-// tokens). Each account is a folder of illi's (HOME, GEMINI_HOME and
-// TMPDIR of the agents run for it, their tokens in files there), so
-// accounts never meet; an environment's Gemini or Google keys never reach
-// the agent, which would take them in place of the sign-in.
+// Antigravity CLI as an editor runs it (`agy acp`, its ACP server: Agy.ts
+// finds the user's own or illi's download, run unmodified, never its
+// `agy -p`): illi is its client over the Agent Client Protocol (Acp.ts),
+// named illi, signed in by the CLI's own Google sign-in (`agy acp
+// --login`: /login opens Google's page, the person pastes the code it
+// shows: Login.ts; illi never reads the tokens). Each account is a folder
+// of illi's (the HOME, the CLI's own folder (--gemini-dir) and TMPDIR of
+// the CLIs run for it, the sign-in kept in a file there, never a keyring
+// all accounts would share), so accounts never meet; an environment's
+// Gemini, Google or Antigravity keys and settings never reach the CLI,
+// which would take them in place of the sign-in, nor its own updates
+// (illi runs the build it found), nor its telemetry.
 //
 // A call is a session of its own (session/new), as a `claude -p` is on
 // claude-code: illi's prompt after Google's own (its systemPrompt append:
@@ -17,48 +21,51 @@
 // account's, so no project's rules load (illi reads them itself), on the
 // pick's model and its thinking level (its effort), where the account
 // offers them (one it doesn't: the call fails, saying what it does
-// offer). The models are the account's own, as its agent lists them: each
-// session made tells them (a sign-in's too, made for that alone), and
-// they replace the list illi offers, kept for the next start, the chat
-// told (watch). Its tools are illi's whole list, over MCP, run by illi, so
-// permissions, hooks and background jobs are as on every provider; of
-// Antigravity's own only its web search and page reading, where the call
-// searches the web (Ask.searches), each asked of the user at illi's
-// screen as Claude Code's are (Tools.approve, through the call's tools
-// URL); none else. A call without tools (a summary, a goal check, a
-// recap: `once`) has none. The blocks go as one message, the images
-// after; a message sent mid-run is left for the next turn (End.left), as
-// the agent takes one message a turn. Its session's files are removed as
-// it ends. The agent tells illi none of its MCP calls' results, so illi's
-// tools are given it through a forwarder of illi's own (a local URL for
-// each call), which logs each call with what it answered, as the chat's
-// memory keeps every tool's answer.
+// offer). The models are the account's own, as the CLI lists them (Gemini
+// alone: it lists every model the account has): each session made tells
+// them (a sign-in's too, made for that alone), and they replace the list
+// illi offers, kept for the next start, the chat told (watch). Its tools
+// are illi's whole list, over MCP, run by illi, so permissions, hooks and
+// background jobs are as on every provider; of Antigravity's own only its
+// web search and page reading, where the call searches the web
+// (Ask.searches), each asked of the user at illi's screen as Claude
+// Code's are (Tools.approve, through the call's tools URL); none else. A
+// call without tools (a summary, a goal check, a recap: `once`) has none.
+// The blocks go as one message, the images after; a message sent mid-run
+// is left for the next turn (End.left), as the CLI takes one message a
+// turn. Its session's files are removed as it ends, and what the CLI
+// leaves in the account's folder (its logs) once a day old. The CLI tells
+// illi none of its MCP calls' results, so illi's tools are given it
+// through a forwarder of illi's own (a local URL for each call), which
+// logs each call with what it answered, as the chat's memory keeps every
+// tool's answer.
 //
 // Its stream: the model's thoughts and words shown live, logged as a
-// tool call follows them or the turn ends; the agent's web tools logged
-// with what they answered. The agent says a failed request in words, as
+// tool call follows them or the turn ends; the CLI's web tools logged
+// with what they answered. The CLI says a failed request in words, as
 // a message (its usage tells nothing apart, coming as it does mid-stream):
 // a turn that used nothing ended on an error, as did one whose last piece
-// is one of the agent's own words for one (ERROR: the words streamed
+// is one of the CLI's own words for one (ERROR: the words streamed
 // before it logged as cut off), never a reply. Its end in plain words:
 // too long for the window (`full`: illi folds the chat), the plan's limit
-// reached (when it resets), the sign-in run out (/login), a busy service;
-// a stop cancels the turn (session/cancel), the agent killed if it
-// doesn't end it in CANCEL. Each step's usage tells the model's window,
-// learned and kept for the next start.
+// reached (when it resets), the sign-in run out (/login signs in again),
+// a busy service; a stop cancels the turn (session/cancel), the CLI
+// killed if it doesn't end it in CANCEL. Each step's usage tells the
+// model's window, learned and kept for the next start.
 //
-// The agents run in a pool, an account's at a time: one starts as a
-// call needs it (initialize and sign-in, about 2.5 s), takes up to MOST
-// sessions at once, and ends once none of its sessions runs (each keeps
-// a helper of Google's, about 160 MB, till its agent ends); one more is
-// started ready beside them (the spare), so the next call needs no start.
-// None runs while no call has for IDLE, nor after illi ends (close; an
-// agent ends too as its input closes, however illi ends). A sign-in run
-// out never opens a browser in a call: the agent's ask for one ends the
-// call at once, saying /login signs in again.
+// The CLIs run in a pool, an account's at a time: one starts as a call
+// needs it (about a second), takes up to MOST sessions at once, and ends
+// once none of its sessions runs; one more is started ready beside them
+// (the spare), so the next call needs no start. None runs while no call
+// has for IDLE, nor after illi ends (close; a CLI ends too as its input
+// closes, however illi ends). A call never signs in: the CLI uses the
+// sign-in its folder keeps, and with none (or one run out) the call fails
+// at once, saying /login signs in again (Google's own sign-in would open
+// a browser).
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import type { Subprocess } from "bun";
 import { AskAI, type Ask, type End, type Event, type Say, type Try } from "../../ai/AskAI.ts";
 import { Agent, type Entry } from "../../ai/Agent.ts";
 import { EFFORTS, Pick, type Model } from "../../ai/Pick.ts";
@@ -74,11 +81,10 @@ import { Vendors } from "../Vendors.ts";
 // Types
 // =====
 
-// an agent running for an account (its folder, and the folder's stamp as
-// it started: Antigravity.stamp), its connection, whether it's ready
-// (initialized and signed in), the sessions it started and those running,
-// its calls by their session, whether it asked for a sign-in (its
-// account's ran out)
+// a CLI running for an account (its folder, and the folder's stamp as it
+// started: Antigravity.stamp), its connection, whether it's ready
+// (initialized, and signed in to a gateway named), the sessions it
+// started and those running, its calls by their session
 type Proc = {
   conn    : Conn;
   folder  : string;
@@ -87,18 +93,18 @@ type Proc = {
   started : number;
   live    : number;
   runs    : Map<string, Run>;
-  signin  : boolean;
 };
 
-// a call as it runs: what it asks and where its events go, its agent and
+// a call as it runs: what it asks and where its events go, its CLI and
 // session, its tools' path at the forwarder; the words and thoughts
 // streaming, not logged yet (last: their last piece), whether the next
 // piece starts an entry; the last words logged, whether any were; the
-// tokens its first step read; whether a tool's answer came back; the agent's web
-// tools' calls waiting for their answers; the calls through the forwarder
-// so far; whether it was stopped (halt: what it waits on stops then); a
-// stop the agent didn't honour in CANCEL on an agent others share: the
-// call given up (gave, give), not waited for
+// tokens its first step read (as a step's usage tells it); whether a
+// tool's answer came back; whether the turn called a tool (it took more
+// than one step); the CLI's web tools' calls waiting for their answers;
+// the calls through the forwarder so far; whether it was stopped (halt:
+// what it waits on stops then); a stop the CLI didn't honour in CANCEL on
+// a CLI others share: the call given up (gave, give), not waited for
 type Run = {
   ask     : Ask;
   on      : (ev: Event) => void;
@@ -113,6 +119,7 @@ type Run = {
   said    : boolean;
   first   : number | null;
   grew    : boolean;
+  steps   : boolean;
   calls   : Set<string>;
   n       : number;
   stopped : boolean;
@@ -148,9 +155,22 @@ const CANCEL = 5e3;
 // the file in an account's folder its stamp is kept in (Antigravity.stamp)
 const STAMP = ".illi-stamp";
 
-// how long a sign-in may wait for the person (ms): past the agent's own
-// five minutes, so its own words say why it ended
-const SIGNIN = 6 * 60e3;
+// the file in an account's folder that says the CLI signed it in (its
+// version), written as /login's sign-in ends: a folder without it (the
+// one Google's old agent signed in, before illi ran the CLI) signs in
+// again (Antigravity.lapsed)
+const SIGNED = ".illi-signed";
+
+// how long a sign-in may wait for the person to paste Google's code (ms)
+const SIGNIN = 10 * 60e3;
+
+// how old what the CLI leaves in an account's folder (its logs, its
+// crash reports, its notes of each start) must be to go (ms)
+const LEFT = 24 * 60 * 60e3;
+
+// the CLI's own folders in an account's (Antigravity.home), whose files
+// go a day old: its logs, crash reports, notes of each start
+const LEAVES = ["log", "crashes", "implicit"];
 
 // the most bytes of a tool's answer the agent passes on (it cuts at about
 // 48 KB whatever this says; illi's own cut its tools' answers sooner)
@@ -159,8 +179,14 @@ const OUTPUT = 1_000_000;
 // the agent's web tools, where a call searches the web
 const WEB = ["search_web", "read_url_content"];
 
-// what the agent writes when it would open a browser to sign in
-const SIGNING = /Open the following link to authenticate the ACP server:\s*(\S+)/;
+// the link the CLI's sign-in tells, to Google's page
+const GOOGLE = /https:\/\/accounts\.google\.com\/\S+/;
+
+// the environment's variables a CLI never gets (Antigravity.env): Gemini,
+// Google, Antigravity (its old names too) and Cloud SDK keys and
+// settings; the user's own folders for settings and data, and session
+// bus
+const OWN = /^(GEMINI_|GOOGLE_|AGY_|ANTIGRAVITY_|JETSKI_|CLOUDSDK_|CLOUD_CODE_)|^(XDG_(CONFIG|DATA|CACHE|STATE)_HOME|XDG_RUNTIME_DIR|DBUS_SESSION_BUS_ADDRESS)$/;
 
 // said after illi's prompt in a call with tools: the prompt names illi's
 // tools as on every provider (zoom, todo...), the model gets them by their
@@ -175,16 +201,24 @@ const PLACE = "Antigravity's own instructions above, of a workspace folder, an a
 // run out, a busy service (the API's own words, as the agent passes them)
 const FULL  = /exceeds the maximum number of tokens|input token count|too many tokens|context (window|length)/i;
 const LIMIT = /usage limit reached|reached your current quota|resource.?exhausted|quota.?exhausted|\b429\b/i;
-const LOGIN = /sign in again|authentication required|auth_required|not (signed|logged) in|credentials|unauthenticated|\b401\b/i;
+const LOGIN = /sign in again|log back in|authentication (required|expired)|auth_required|not (signed|logged) in|not logged into|credentials|unauthenticated|\b401\b/i;
 const BUSY  = /overloaded|unavailable|try again later|connection (was )?lost|deadline|timed? ?out|\b5\d\d\b|ECONN/i;
 
-// how the agent's own words for a failed request start (its quota's, its
-// errors', a lost connection's; the API's, as it passes them on), told
-// apart from the model's by these alone
-const ERROR = /^\s*(Usage Limit Reached|Agent execution error:|Agent connection was lost|The input token count \(\d+\) exceeds|The model is overloaded|Resource has been exhausted)/;
+// how the CLI's own words for a failed request start (its quota's, its
+// errors', a lost connection's; the API's, as it passes them on; a
+// warning sign before them, as the CLI marks them), told apart from the
+// model's by these alone
+const ERROR = /^\s*(?:⚠\uFE0F?\s*)?(Usage Limit Reached|Agent execution error:|Agent connection was lost|The input token count \(\d+\) exceeds|The model (API )?is (currently )?overloaded|Servers are overloaded|Resource has been exhausted)/i;
 
 const NO_ACCOUNT = "no Google account is in use for Antigravity: /login signs in to one";
 const NO_SIGNIN  = "your Google sign-in for Antigravity has run out: /login signs in again";
+
+// the accounts' folders whose sign-in ran out in a call this run (those
+// /login offers to sign in again: Antigravity.lapsed)
+const LAPSED = new Set<string>();
+
+// the accounts' folders tidied this run (Antigravity.tidy)
+const TIDIED = new Set<string>();
 
 // the agents running, and when they end with no call (IDLE)
 let procs: Proc[] = [];
@@ -217,12 +251,9 @@ export namespace Antigravity {
     if (folder === "") {
       return none(NO_ACCOUNT, "down");
     }
-    if (Agy.command() === null) {
-      return none(Agy.why(), "down");
-    }
     let give = () => {};
     const gave = new Promise<null>((done) => (give = () => done(null)));
-    const run: Run = { ask, on, proc: null, sid: "", token: crypto.randomUUID(), text: "", mind: "", last: "", fresh: false, reply: "", said: false, first: null, grew: false, calls: new Set(), n: 0, stopped: false, halt: new AbortController(), gave, give };
+    const run: Run = { ask, on, proc: null, sid: "", token: crypto.randomUUID(), text: "", mind: "", last: "", fresh: false, reply: "", said: false, first: null, grew: false, steps: false, calls: new Set(), n: 0, stopped: false, halt: new AbortController(), gave, give };
     const stop = () => {
       if (run.stopped) {
         return;
@@ -239,10 +270,24 @@ export namespace Antigravity {
     return { send: (say) => left.push(say), stop, done };
   }
 
-  // a call run: an agent of the account taken, a session made on the
-  // pick's model, the message sent, its end read; its session's files
-  // removed, its agent let go
+  // a call run: the user's own CLI looked for (Agy.look: once a run), a
+  // CLI of the account taken, a session made on the pick's model, the
+  // message sent, its end read; its session's files removed, its CLI let
+  // go. A sign-in run out: the account's folder offered a sign-in again
+  // (lapsed)
   export async function run(run: Run, folder: string): Promise<End> {
+    const end = await Antigravity.turn(run, folder);
+    if (end.text === NO_SIGNIN) {
+      LAPSED.add(folder);
+    }
+    return end;
+  }
+
+  export async function turn(run: Run, folder: string): Promise<End> {
+    await Agy.look();
+    if (Agy.command() === null) {
+      return { ok: false, text: Agy.why(), left: [], stop: "down" };
+    }
     let proc: Proc;
     try {
       proc = await Antigravity.take(folder);
@@ -272,7 +317,7 @@ export namespace Antigravity {
       if (run.stopped) {
         return Antigravity.lost(run);
       }
-      return Antigravity.failed(run, proc.signin ? NO_SIGNIN : String(err?.message ?? err));
+      return Antigravity.failed(run, String(err?.message ?? err));
     } finally {
       RUNS.delete(run.token);
       proc.runs.delete(run.sid);
@@ -452,7 +497,8 @@ export namespace Antigravity {
         return Antigravity.piece(run, "mind", String(u.content?.text ?? ""));
       }
       case "tool_call": {
-        if (u._meta?.mcp?.server === "illi") {
+        run.steps = true;
+        if (Antigravity.ours(u)) {
           return;
         }
         Antigravity.flush(run);
@@ -484,6 +530,14 @@ export namespace Antigravity {
         return;
       }
     }
+  }
+
+  // whether a tool's call is one of illi's own, through its MCP server
+  // (the forwarder logs those, illi judges each as it comes): the CLI
+  // names each mcp_illi_ and its name, its title "Run" and that (its
+  // _meta naming the server, in its other builds)
+  export function ours(u: any): boolean {
+    return u?._meta?.mcp?.server === "illi" || /^mcp_illi_/.test(String(u?.name ?? "")) || /^Run mcp_illi_/.test(String(u?.title ?? ""));
   }
 
   // one of the agent's web tools' calls, as illi shows Claude Code's (its
@@ -545,7 +599,7 @@ export namespace Antigravity {
     if (run === undefined || run.stopped) {
       return answer(pick("reject_once"));
     }
-    if (call._meta?.mcp?.server === "illi") {
+    if (Antigravity.ours(call)) {
       return answer(pick("allow_once"));
     }
     const input = call.rawInput ?? {};
@@ -633,7 +687,8 @@ export namespace Antigravity {
     const stop  = String(result?.stopReason ?? "");
     const used  = result?.usage !== undefined && result?.usage !== null;
     const error = run.text.trim() !== "" && (!used || ERROR.test(run.last));
-    const first = run.first !== null ? { first: run.first } : {};
+    const read  = Number(result?.usage?.inputTokens);
+    const first = run.first !== null ? { first: run.first } : !run.steps && read > 0 ? { first: read } : {};
     if (run.stopped || stop === "cancelled") {
       return Antigravity.lost(run);
     }
@@ -660,8 +715,9 @@ export namespace Antigravity {
   // a failure in plain words: too long for the window; the plan's limit
   // (when it resets, as the agent tells it); a sign-in run out; a busy
   // service (a later try may answer); else as the agent says it
-  export function failed(run: Run, said: string): End {
-    const cut = { left: [], cut: run.said };
+  export function failed(run: Run, words: string): End {
+    const said = words.replace(/^\s*⚠\uFE0F?\s*/, "");
+    const cut  = { left: [], cut: run.said };
     if (!Agy.told(said) && said !== NO_SIGNIN) {
       console.error("antigravity: " + said.replace(/\s+/g, " ").slice(0, 300));
     }
@@ -692,16 +748,15 @@ export namespace Antigravity {
     return { ok: false, text: "stopped", left: [], stop: "lost", cut: run.said };
   }
 
-  // Agents
-  // ------
+  // CLIs
+  // ----
 
-  // an agent of the account's for a call: one running a session with room
+  // a CLI of the account's for a call: one running a session with room
   // for more, else the spare, else a new one; a spare started beside it
-  // at once. Agents of another account, or of this one's folder before it
-  // was made anew (a logout, then a sign-in that got its id: its stamp
-  // changed, here or in another terminal), take no call: those idle end.
-  // Thrown: it won't start or sign in (its account's sign-in ran out:
-  // NO_SIGNIN)
+  // at once. CLIs of another account, or of this one's folder before it
+  // was made anew or signed in again (its stamp changed, here or in
+  // another terminal), take no call: those idle end. Thrown: it won't
+  // start
   export async function take(folder: string): Promise<Proc> {
     Antigravity.wake();
     const stamp = Antigravity.stamp(folder);
@@ -723,45 +778,55 @@ export namespace Antigravity {
       await p.ready;
     } catch (err: any) {
       Antigravity.release(p);
-      throw new Error(p.signin ? NO_SIGNIN : String(err?.message ?? err));
+      throw new Error(String(err?.message ?? err));
     }
     return p;
   }
 
-  // an agent started for an account, initialized and signed in (ready);
-  // its ask for a browser sign-in ends it (its sign-in ran out), as does
-  // any failure to start (so no call takes it). Thrown: the agent isn't
-  // here
+  // a CLI started for an account (its folder tidied first, once a run),
+  // initialized (one older than MINIMUM refused: Antigravity.known), and
+  // signed in to the gateway named, if one is (ready); never to Google:
+  // the CLI uses the sign-in the folder keeps, a call failing at once
+  // without one. Any failure to start ends it (so no call takes it), its
+  // log going with it. Thrown: the CLI isn't here
   export function spawn(folder: string): Proc {
     const cmd = Agy.command();
     if (cmd === null) {
       throw new Error(Agy.why());
     }
-    const p = { folder, stamp: Antigravity.stamp(folder), started: 0, live: 0, runs: new Map(), signin: false } as unknown as Proc;
+    Antigravity.tidy(folder);
+    const p = { folder, stamp: Antigravity.stamp(folder), started: 0, live: 0, runs: new Map() } as unknown as Proc;
     try {
-      p.conn = Acp.start(cmd, Antigravity.work(folder), Antigravity.env(folder), (_, m) => Antigravity.heard(p, m), (conn, line) => {
-        if (SIGNING.test(line)) {
-          p.signin = true;
-          Acp.stop(conn, NO_SIGNIN);
-        }
-      });
+      p.conn = Acp.start([...cmd, ...Antigravity.flags(folder)], Antigravity.work(folder), Antigravity.env(folder), (_, m) => Antigravity.heard(p, m), () => {});
     } catch (err: any) {
       throw new Error(/ENOENT|not found|EACCES/i.test(String(err?.message)) ? Agy.why() : String(err?.message ?? err));
     }
     p.ready = (async () => {
-      await Acp.call(p.conn, "initialize", Antigravity.hello(), READY);
-      await Acp.call(p.conn, "authenticate", Antigravity.auth(), READY);
+      Antigravity.known(await Acp.call(p.conn, "initialize", Antigravity.hello(), READY));
+      if (Antigravity.gateway() !== "") {
+        await Acp.call(p.conn, "authenticate", Antigravity.auth(), READY);
+      }
     })();
     p.ready.catch(() => Antigravity.kill(p, "it didn't start"));
+    const pid = p.conn.proc.pid;
     void p.conn.exited.then(() => {
       procs = procs.filter((o) => o !== p);
+      Antigravity.unlog(folder, pid);
     });
     procs.push(p);
     return p;
   }
 
-  // a call's agent let go: one with no session running, that ran one,
-  // ends (its sessions' helpers with it)
+  // the CLI's answer to initialize taken: thrown, one older than illi
+  // runs (MINIMUM: ILLI_ANTIGRAVITY's may be), as it says its version
+  export function known(told: any): void {
+    const version = String(told?.agentInfo?.version ?? "");
+    if (/^\d+(\.\d+)*$/.test(version) && !Agy.least(version)) {
+      throw new Error(Agy.older(version));
+    }
+  }
+
+  // a call's CLI let go: one with no session running, that ran one, ends
   export function release(p: Proc): void {
     p.live = Math.max(0, p.live - 1);
     if (p.live === 0 && p.started > 0) {
@@ -775,7 +840,7 @@ export namespace Antigravity {
     Acp.stop(p.conn, why);
   }
 
-  // the agents end once no call has run for IDLE (the spare too)
+  // the CLIs end once no call has run for IDLE (the spare too)
   export function wake(): void {
     if (idle !== null) {
       clearTimeout(idle);
@@ -784,14 +849,16 @@ export namespace Antigravity {
     idle.unref();
   }
 
-  // every agent ended, and the forwarder (illi ends)
+  // every CLI ended, and the forwarder; the downloads no illi runs any
+  // more gone (illi ends: Agy.tidy)
   export function close(): void {
     [...procs].forEach((p) => Antigravity.kill(p, "illi ended"));
     forwarder?.stop(true);
     forwarder = null;
+    Agy.tidy();
   }
 
-  // the agents running (a test's look)
+  // the CLIs running (a test's look)
   export function running(): number {
     return procs.length;
   }
@@ -799,28 +866,38 @@ export namespace Antigravity {
   // Account
   // -------
 
-  // the environment an agent runs in: illi's, but any Gemini or Google
-  // key or setting (the agent would take one in place of the sign-in)
-  // and the agent's own switches; HOME, GEMINI_HOME and TMPDIR the
-  // account's folder's, the sign-in's tokens kept in files there (never a
-  // keychain all accounts would share); no browser of its own
+  // the environment a CLI runs in: illi's, but any Gemini, Google or
+  // Antigravity key or setting (the CLI would take one in place of the
+  // sign-in, or another endpoint), and the user's own folders for its
+  // settings and data (XDG's) and session bus (its keyring: the sign-in
+  // goes to a file in the folder, never a keyring all accounts would
+  // share); HOME and TMPDIR the account's folder's; no browser of its own
   // (BROWSER=false: illi opens Google's page itself at /login, as it does
-  // ChatGPT's; in a call a sign-in run out is said, never opened). With
-  // ILLI_ANTIGRAVITY_GATEWAY, an AI API gateway of the user's own in place
-  // of Google's services (a test's stub)
+  // ChatGPT's), nor its own updates. With ILLI_ANTIGRAVITY_GATEWAY, an AI
+  // API gateway of the user's own in place of Google's services (a test's
+  // stub)
   export function env(folder: string): Record<string, string> {
     const env: Record<string, string> = {};
     for (const [k, v] of Object.entries(process.env)) {
-      if (v !== undefined && !/^(GEMINI_|GOOGLE_|AGY_|CLOUDSDK_)/.test(k)) {
+      if (v !== undefined && !OWN.test(k)) {
         env[k] = v;
       }
     }
-    Object.assign(env, { HOME: folder, GEMINI_HOME: path.join(folder, ".gemini"), TMPDIR: path.join(folder, "tmp"), AGY_ACP_FORCE_FILE_STORAGE: "1", BROWSER: "false" });
+    Object.assign(env, { HOME: folder, TMPDIR: path.join(folder, "tmp"), BROWSER: "false", AGY_CLI_DISABLE_AUTO_UPDATE: "1" });
     const gateway = Antigravity.gateway();
     if (gateway !== "") {
-      Object.assign(env, { AGY_ACP_ENABLE_GATEWAY_AUTH: "1", AGY_LLM_GATEWAY_URL: gateway, AGY_ACP_CCPA_BASE_URL: gateway + "/ccpa", AGY_ACP_BAIC_BASE_URL: gateway + "/baic" });
+      Object.assign(env, { AGY_ACP_ENABLE_GATEWAY_AUTH: "1", AGY_LLM_GATEWAY_URL: gateway });
     }
     return env;
+  }
+
+  // the CLI's arguments after its command: its own folder the account's
+  // (its settings, sign-in, sessions and logs), no telemetry; with a
+  // gateway, Google's Cloud Code service the gateway too, so nothing goes
+  // to Google
+  export function flags(folder: string): string[] {
+    const gateway = Antigravity.gateway();
+    return ["--gemini-dir", Antigravity.home(folder, ""), "--disable-telemetry", ...(gateway !== "" ? ["--cloud_code_endpoint", gateway] : [])];
   }
 
   // the AI API gateway named ("": Google's own services)
@@ -828,22 +905,22 @@ export namespace Antigravity {
     return process.env.ILLI_ANTIGRAVITY_GATEWAY ?? "";
   }
 
-  // illi as the agent's client: its name and version, none of the
-  // client's files or terminals offered (illi's tools are its own)
+  // illi as the CLI's client: its name and version, none of the client's
+  // files or terminals offered (illi's tools are its own)
   export function hello(): unknown {
     const auth = Antigravity.gateway() !== "" ? { auth: { _meta: { gateway: true } } } : {};
     return { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false, ...auth }, clientInfo: { name: "illi", title: "illi", version: VERSION } };
   }
 
-  // the sign-in an agent uses: Google's (its tokens, else its browser
-  // sign-in), or the gateway named
+  // the sign-in a CLI uses: the gateway named, else Google's (the one its
+  // folder keeps: asked only as /login's sign-in ends, never in a call)
   export function auth(): unknown {
     const gateway = Antigravity.gateway();
     return gateway !== "" ? { methodId: "gateway", _meta: { gateway: { baseUrl: gateway } } } : { methodId: "oauth-personal" };
   }
 
-  // the account's empty folder the agent works in (no project's rules
-  // load from it), and its temporary one, made
+  // the account's empty folder the CLI works in (no project's rules load
+  // from it), and its temporary one, made
   export function work(folder: string): string {
     const dir = path.join(folder, "work");
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -851,10 +928,16 @@ export namespace Antigravity {
     return dir;
   }
 
+  // the CLI's own folder in an account's (--gemini-dir), or one of the
+  // folders in its data there ("": the folder itself)
+  export function home(folder: string, sub: string): string {
+    return sub === "" ? path.join(folder, ".gemini") : path.join(folder, ".gemini", "antigravity-cli", sub);
+  }
+
   // an account's folder's stamp: a random one written as the folder is
   // first used, so a folder removed and made anew under the same id (a
-  // logout, then a sign-in) is told apart from the one an agent started
-  // in ("": the folder isn't there)
+  // logout, then a sign-in), or signed in again (renew), is told apart
+  // from the one a CLI started in ("": the folder isn't there)
   export function stamp(folder: string): string {
     const file = path.join(folder, STAMP);
     try {
@@ -870,74 +953,180 @@ export namespace Antigravity {
     }
   }
 
-  // an account's agents ended (it's logged out here)
+  // an account's folder's stamp made anew: the CLIs started before (here
+  // and in other terminals) take no call, those idle end (take)
+  export function renew(folder: string): void {
+    fs.rmSync(path.join(folder, STAMP), { force: true });
+    Antigravity.stamp(folder);
+  }
+
+  // whether an account's folder needs signing in again: the CLI never
+  // signed it in (SIGNED: Google's old agent did), or its sign-in ran out
+  // in a call this run
+  export function lapsed(folder: string): boolean {
+    return LAPSED.has(folder) || !fs.existsSync(path.join(folder, SIGNED));
+  }
+
+  // an account's CLIs ended (it's logged out here)
   export function forget(folder: string): void {
     procs.filter((p) => p.folder === folder).forEach((p) => Antigravity.kill(p, "its account was logged out"));
   }
 
   // a session's files gone from the account's folder (its conversation
-  // and the agent's notes of it)
+  // and the CLI's notes of it)
   export function clean(folder: string, sid: string): void {
     if (!/^[A-Za-z0-9-]+$/.test(sid)) {
       return;
     }
-    const home = path.join(folder, ".gemini", "antigravity-acp");
     try {
-      for (const f of fs.readdirSync(path.join(home, "conversations")).filter((f) => f.startsWith(sid + "."))) {
-        fs.rmSync(path.join(home, "conversations", f), { force: true });
+      for (const f of fs.readdirSync(Antigravity.home(folder, "conversations")).filter((f) => f.startsWith(sid + "."))) {
+        fs.rmSync(path.join(Antigravity.home(folder, "conversations"), f), { force: true });
       }
     } catch {}
-    fs.rmSync(path.join(home, "brain", sid), { recursive: true, force: true });
+    fs.rmSync(path.join(Antigravity.home(folder, "brain"), sid), { recursive: true, force: true });
   }
 
-  // an account's folder signed in to a Google AI plan (the agent's own
-  // sign-in: `ask` is told Google's page's link as the agent tells it, to
-  // open; the page sends the browser back to the agent, on this machine),
-  // the models it offers learned (listed); what the agent tells of the
-  // plan ("Google AI Pro"; "": none told).
-  // Stop ends it at once; thrown: why it didn't sign in
-  export async function signin(folder: string, stop: AbortSignal, ask: (url: string) => void): Promise<string> {
+  // a CLI's log gone as it ends (its file names its process)
+  export function unlog(folder: string, pid: number | undefined): void {
+    try {
+      for (const f of fs.readdirSync(Antigravity.home(folder, "log")).filter((f) => f.endsWith("-" + pid + ".log"))) {
+        fs.rmSync(path.join(Antigravity.home(folder, "log"), f), { force: true });
+      }
+    } catch {}
+  }
+
+  // an account's folder tidied, once a run: Google's old agent's folder
+  // gone (its sign-in, which the CLI doesn't take; illi doesn't read it),
+  // and what the CLI leaves there a day old (LEAVES: its logs, crash
+  // reports, notes of each start; a younger one may be another terminal's
+  // CLI's, still running). One that won't go is left, never failing
+  export function tidy(folder: string): void {
+    if (TIDIED.has(folder)) {
+      return;
+    }
+    TIDIED.add(folder);
+    fs.rmSync(path.join(Antigravity.home(folder, ""), "antigravity-acp"), { recursive: true, force: true });
+    for (const sub of LEAVES) {
+      try {
+        for (const f of fs.readdirSync(Antigravity.home(folder, sub))) {
+          const at = path.join(Antigravity.home(folder, sub), f);
+          if (Date.now() - fs.statSync(at).mtimeMs > LEFT) {
+            fs.rmSync(at, { recursive: true, force: true });
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // an account's folder signed in to a Google AI plan by the CLI's own
+  // sign-in (`acp --login`, through pipes; the folder made first, readable
+  // by the user alone): as it tells Google's page's link, and each time it
+  // asks again, `ask` is told the link to open; `give` gives the CLI what
+  // the person pasted (the code the page shows, or its address). Signed
+  // in: the folder marked so (SIGNED) and its stamp made anew (renew),
+  // then the CLI asked what it tells of the plan ("Google AI Pro"; "":
+  // none told) and the models it offers (listed); done, the plan. Stop
+  // kills it, as does SIGNIN passing; thrown (done): why it didn't sign
+  // in; at once: the CLI isn't here
+  export function signin(folder: string, stop: AbortSignal, ask: (url: string) => void): { give: (code: string) => void; done: Promise<string> } {
     const cmd = Agy.command();
     if (cmd === null) {
       throw new Error(Agy.why());
     }
     fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
-    let conn: Conn;
+    Antigravity.tidy(folder);
+    let proc: Subprocess<"pipe", "pipe", "pipe">;
     try {
-      conn = Acp.start(cmd, Antigravity.work(folder), Antigravity.env(folder), (c, m) => m.id !== undefined && Acp.refuse(c, m.id, "not while signing in"), (_, line) => {
-        const url = SIGNING.exec(line)?.[1];
-        if (url !== undefined) {
-          ask(url);
-        }
-      });
+      proc = Bun.spawn([...cmd, "--login", ...Antigravity.flags(folder)], { cwd: Antigravity.work(folder), env: Antigravity.env(folder), stdin: "pipe", stdout: "pipe", stderr: "pipe" });
     } catch {
       throw new Error(Agy.why());
     }
-    const end = () => Acp.stop(conn, "the sign-in was stopped");
-    stop.addEventListener("abort", end, { once: true });
+    const kill = () => proc.kill("SIGKILL");
+    stop.addEventListener("abort", kill, { once: true });
+    let late = false;
+    const timer = setTimeout(() => ((late = true), kill()), SIGNIN);
+    let said = "";
+    let asked = 0;
+    const from = proc.stdout.getReader();
+    const read = (async () => {
+      const text = new TextDecoder();
+      for (let got = await from.read(); !got.done; got = await from.read()) {
+        said += text.decode(got.value, { stream: true });
+        const url = GOOGLE.exec(said)?.[0];
+        for (const asks = url === undefined ? 0 : Math.max(1, said.split(/paste the authorization code/i).length - 1); asked < asks; asked++) {
+          ask(url!);
+        }
+      }
+    })().catch(() => {});
+    const errs = new Response(proc.stderr).text().catch(() => "");
+    const give = (code: string) => {
+      try {
+        proc.stdin.write(code.trim() + "\n");
+        proc.stdin.flush();
+      } catch {}
+    };
+    const done = (async () => {
+      const code = await proc.exited;
+      clearTimeout(timer);
+      stop.removeEventListener("abort", kill);
+      Antigravity.unlog(folder, proc.pid);
+      if (stop.aborted) {
+        throw new Error("the sign-in was stopped");
+      }
+      if (late) {
+        throw new Error("no code came in " + SIGNIN / 60e3 + " minutes, so illi stopped waiting");
+      }
+      await Promise.race([read, Bun.sleep(500)]);
+      void from.cancel().catch(() => {});
+      if (code !== 0) {
+        const lines = (said + "\n" + (await Promise.race([errs, Bun.sleep(500).then(() => "")]))).split("\n").map((l) => l.trim().replace(/^Error:\s*/, ""));
+        const last  = lines.filter((l) => l !== "" && !GOOGLE.test(l) && !/^(Open this link|Then paste)/.test(l)).at(-1);
+        throw new Error(last === undefined ? "Google's sign-in ended (exit " + code + ")" : "Google's sign-in said “" + last + "”");
+      }
+      fs.writeFileSync(path.join(folder, SIGNED), (Agy.installed()?.version ?? Agy.pin?.version ?? "") + "\n", { mode: 0o600 });
+      LAPSED.delete(folder);
+      Antigravity.renew(folder);
+      return Antigravity.plan(folder, cmd);
+    })();
+    return { give, done };
+  }
+
+  // what a CLI just signed in tells of the plan ("Google AI Pro"; "":
+  // none told, as it tells it to Google's sign-in, its folder's kept),
+  // the models it offers learned (listed). Never fails: a call learns
+  // them too
+  export async function plan(folder: string, cmd: string[]): Promise<string> {
+    let conn: Conn;
     try {
-      await Acp.call(conn, "initialize", Antigravity.hello(), READY);
-      const told = await Acp.call(conn, "authenticate", Antigravity.auth(), SIGNIN);
+      conn = Acp.start([...cmd, ...Antigravity.flags(folder)], Antigravity.work(folder), Antigravity.env(folder), (c, m) => m.id !== undefined && Acp.refuse(c, m.id, "not while signing in"), () => {});
+    } catch {
+      return "";
+    }
+    try {
+      Antigravity.known(await Acp.call(conn, "initialize", Antigravity.hello(), READY));
+      const told = await Acp.call(conn, "authenticate", Antigravity.auth(), LISTING).catch(() => null);
       await Antigravity.listed(conn, folder);
       return String(told?._meta?.antigravity?.tier?.name ?? "");
+    } catch {
+      return "";
     } finally {
-      stop.removeEventListener("abort", end);
       Acp.stop(conn, "signed in");
+      void conn.exited.then(() => Antigravity.unlog(folder, conn.proc.pid));
     }
   }
 
-  // an account's folder logged out (the agent's own logout: its tokens
-  // gone), by this illi's build of the agent or, none here, by another
-  // version downloaded (a logout asks no model: Agy.any); false: it
-  // couldn't
+  // an account's folder logged out (the CLI's own logout: its sign-in
+  // gone), by the CLI or, none here, by another version downloaded (a
+  // logout asks no model: Agy.any); false: it couldn't
   export async function logout(folder: string): Promise<boolean> {
+    await Agy.look();
     const cmd = Agy.any();
     if (cmd === null || !fs.existsSync(folder)) {
       return false;
     }
     let conn: Conn;
     try {
-      conn = Acp.start(cmd, Antigravity.work(folder), Antigravity.env(folder), (c, m) => m.id !== undefined && Acp.refuse(c, m.id, "not while logging out"), () => {});
+      conn = Acp.start([...cmd, ...Antigravity.flags(folder)], Antigravity.work(folder), Antigravity.env(folder), (c, m) => m.id !== undefined && Acp.refuse(c, m.id, "not while logging out"), () => {});
     } catch {
       return false;
     }
@@ -955,11 +1144,12 @@ export namespace Antigravity {
 }
 
 // antigravity's code, as the rest of illi asks it (Provider.ts): a call
-// run by Google's agent itself (a runner); while the chat is on it (at
-// the start, as the chat moves to it, after /login: Chat.account), this
-// illi's build of the agent downloaded by itself where autoupdate is on
-// and an account is connected (Agy.auto); the chat told
-// as the account's models change; its agents ended as illi ends
+// run by Google's CLI itself (a runner); while the chat is on it (at the
+// start, as the chat moves to it, after /login: Chat.account), this
+// illi's build of the CLI downloaded by itself where autoupdate is on, an
+// account is connected and no CLI is here (Agy.auto); the chat told as
+// the account's models change; its CLIs ended as illi ends, and the
+// downloads no illi runs any more gone
 export const PROVIDER: Provider = {
   facts   : FACTS,
   ask     : Antigravity.ask,

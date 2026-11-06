@@ -5,7 +5,7 @@
 // makers (ChatGPT, Claude...: each provider's facts name its maker),
 // each saying what of it is connected, the one the chat runs on marked;
 // Enter on one, its ways in: its plan first (ChatGPT's, Claude's through
-// Claude Code, Google's through Google's Antigravity agent), then its API
+// Claude Code, Google's through Google's Antigravity CLI), then its API
 // key, if it has one, each saying what it's connected with;
 // Esc goes a level up, from these and from all they open (a question
 // asked too). Enter on a way in not connected connects it: a plan by its

@@ -21,7 +21,7 @@
 // naming only Claude Code's other tools is said: illi runs its own on
 // every provider, so it never runs, but a PreToolUse one naming its web
 // search or fetch, which run on the Claude plan as Claude Code asks
-// leave for one (and on the Google AI plan, as Google's agent's web
+// leave for one (and on the Google AI plan, as Google's CLI's web
 // tools ask leave by those names: Antigravity.approve).
 // They run as a plugin of illi's own, after the user's code plugins
 // (Plugins.own), so they share their order, failure rules and call
@@ -86,7 +86,7 @@ const MATCHED: Partial<Record<Event, true>> = { PreToolUse: true, PostToolUse: t
 // Of them only its web search and fetch run in illi, on the Claude plan
 // (CLAUDE_WEB: a PreToolUse hook sees one as Claude Code asks leave for
 // it; Claude Code runs it itself, so a PostToolUse one never does; on the
-// Google AI plan, Google's agent's web search and page reading ask
+// Google AI plan, Google's CLI's web search and page reading ask
 // leave by those names too, Antigravity.approve, and run alike); the
 // rest never run, as illi runs its own tools on every provider (Agent,
 // its subagents' tool, under its old name Task too; its to-do list's
@@ -472,7 +472,7 @@ function hooks_seen(file: string): void {
 // each tool hook whose matcher names only Claude Code's tools that illi
 // doesn't take for its own (all but Bash): said once, as a PreToolUse
 // one naming its web search or fetch runs only as Claude Code asks leave
-// for one, on the Claude plan (or Google's agent for its own web tools,
+// for one, on the Claude plan (or Google's CLI for its own web tools,
 // by those names, on the Google AI plan); a PostToolUse one naming them
 // never runs, as the program runs them itself; any other never runs, as
 // illi runs its own tools
