@@ -280,7 +280,8 @@ export namespace Antigravity {
   // CLI of the account taken, a session made on the pick's model, the
   // message sent, its end read; its session's files removed, its CLI let
   // go. A sign-in run out: the account's folder offered a sign-in again
-  // (lapsed)
+  // (lapsed), till a session is made on it (signed in again, here or in
+  // another terminal)
   export async function run(run: Run, folder: string): Promise<End> {
     const end = await Antigravity.turn(run, folder);
     if (end.text === NO_SIGNIN) {
@@ -307,6 +308,7 @@ export namespace Antigravity {
         return Antigravity.lost(run);
       }
       const made = await Acp.call(proc.conn, "session/new", Antigravity.session(run, folder), SETUP);
+      LAPSED.delete(folder);
       run.sid = String(made?.sessionId ?? "");
       proc.runs.set(run.sid, run);
       Antigravity.learn(made);

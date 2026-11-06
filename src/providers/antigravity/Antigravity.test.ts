@@ -539,7 +539,7 @@ test("a CLI that fails to start (one older than 1.5.2) ends, so no later call ta
   Antigravity.close();
 });
 
-test("no sign-in, or one run out, ends a call at once, never signing in nor waiting on a browser; /login offers a sign-in again", async () => {
+test("no sign-in, or one run out, ends a call at once, never signing in nor waiting on a browser; /login offers a sign-in again till a session is made (signed in again elsewhere)", async () => {
   Antigravity.close();
   fs.writeFileSync(FOLDER + "/.illi-signed", "1.5.2\n");
   expect(Antigravity.lapsed(FOLDER)).toBe(false);
@@ -549,6 +549,9 @@ test("no sign-in, or one run out, ends a call at once, never signing in nor wait
   expect([end.ok, end.stop, end.text]).toEqual([false, "down", "your Google sign-in for Antigravity has run out: /login signs in again"]);
   expect(Date.now() - t0).toBeLessThan(10e3);
   expect([logged().some((l) => l.method === "authenticate"), Antigravity.lapsed(FOLDER), Antigravity.lapsed(DIR + "/antigravity/never")]).toEqual([false, true, true]);
+  delete process.env.FAKE_SIGNEDOUT;
+  Antigravity.close();
+  expect([(await call("turn")).end.ok, Antigravity.lapsed(FOLDER)]).toEqual([true, false]);
   Antigravity.close();
 });
 

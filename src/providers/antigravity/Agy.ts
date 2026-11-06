@@ -23,12 +23,13 @@
 // installed. An illi that runs a version, or downloads it, marks it in
 // use while it lives (.users/<its pid>). Each version but this illi's own
 // build goes once no live illi uses it (none kept while the user's own CLI
-// or ILLI_ANTIGRAVITY's runs in its place: illi's download is then dead
-// weight), as this illi first runs an agent, downloads one, and ends (the
-// providers' close), so a version an illi update left (Google's old
-// agy-acp-server, 1.4.5) never lingers. A download's folder left beside
-// them (.new-*) goes a day old. With autoupdate on, illi downloads its own
-// build by itself once an account is connected and no agent is here (an
+// runs in its place, which lasts: illi's download is then dead weight;
+// ILLI_ANTIGRAVITY's keeps it, being mostly for a while), as this illi
+// first runs a CLI, downloads one, and ends (the providers' close), so a
+// version an illi update left (Google's old agy-acp-server, 1.4.5) never
+// lingers. A download's folder left beside them (.new-*) goes a day old.
+// With autoupdate on, illi downloads its own build by itself once an
+// account is connected and no CLI is here (an
 // illi update moved the pin: Agy.update), in the background, one illi at
 // a time on the machine (.updating names the one doing it); a call
 // meanwhile says it's downloading.
@@ -216,12 +217,16 @@ export namespace Agy {
   }
 
   // a program's version as `--version` tells it, its first line alone
-  // (numbers between dots); null: none told in ASKING
+  // (numbers between dots); null: none told in ASKING (its output never
+  // waited on past it, though a child of its own holds it open)
   export async function asked(at: string): Promise<string | null> {
     try {
-      const run = Bun.spawn([at, "--version"], { stdin: "ignore", stdout: "pipe", stderr: "ignore", env: { ...process.env, AGY_CLI_DISABLE_AUTO_UPDATE: "1" }, timeout: ASKING });
-      const said = (await new Response(run.stdout).text()).trim().split("\n")[0]?.trim() ?? "";
-      return (await run.exited) === 0 && VERSION.test(said) ? said : null;
+      const run  = Bun.spawn([at, "--version"], { stdin: "ignore", stdout: "pipe", stderr: "ignore", env: { ...process.env, AGY_CLI_DISABLE_AUTO_UPDATE: "1" }, timeout: ASKING });
+      const late = Bun.sleep(ASKING + 1e3).then(() => null);
+      const text = await Promise.race([new Response(run.stdout).text(), late]);
+      const code = await Promise.race([run.exited, late]);
+      const said = text?.trim().split("\n")[0]?.trim() ?? "";
+      return code === 0 && VERSION.test(said) ? said : null;
     } catch {
       return null;
     }
@@ -429,12 +434,13 @@ export namespace Agy {
   }
 
   // what's left beside the build this illi runs: each version no live
-  // illi uses but this illi's own build (none kept while
-  // ILLI_ANTIGRAVITY's or the user's own CLI runs in its place), and each
-  // download's folder a day old (a younger one may be another terminal's
-  // download). One that won't go is left, never failing
+  // illi uses but this illi's own build (none kept while the user's own
+  // CLI runs in its place, as it lasts; kept while ILLI_ANTIGRAVITY's
+  // does, as that's mostly for a while), and each download's folder a
+  // day old (a younger one may be another terminal's download). One that
+  // won't go is left, never failing
   export function tidy(): void {
-    const keep = Agy.bin !== null || Agy.installed() !== null ? null : Agy.pin?.version ?? null;
+    const keep = Agy.installed() !== null ? null : Agy.pin?.version ?? null;
     let names: string[];
     try {
       names = fs.readdirSync(Agy.home());
@@ -458,8 +464,9 @@ export namespace Agy {
   // a build downloaded and put in place (its archive checked as it comes,
   // `got` told the bytes so far and of how many; the same build put there
   // meanwhile by another illi kept as it is, as it may be running), marked
-  // in use by this illi, what's left beside it tidied (Agy.tidy); thrown,
-  // why not (a stop: the signal's), nothing left behind
+  // in use by this illi (before it's in place, so another illi's tidy
+  // never finds it unmarked), what's left beside it tidied (Agy.tidy);
+  // thrown, why not (a stop: the signal's), nothing left behind
   export async function download(b: Build, signal: AbortSignal, got: (bytes: number, of: number) => void): Promise<void> {
     fs.mkdirSync(Agy.home(), { recursive: true, mode: 0o700 });
     const tmp = fs.mkdtempSync(path.join(Agy.home(), ".new-"));
@@ -474,6 +481,8 @@ export namespace Agy {
         throw new Error("Google's archive has no " + b.cmd);
       }
       fs.writeFileSync(path.join(into, "agent.json"), JSON.stringify({ cmd: b.cmd, args: b.args, sha256: b.sha256 }, null, 2) + "\n");
+      fs.mkdirSync(path.join(into, USERS), { mode: 0o700 });
+      fs.writeFileSync(path.join(into, USERS, String(process.pid)), "");
       if (!Agy.has(b)) {
         const at = path.join(Agy.home(), b.version);
         fs.rmSync(at, { recursive: true, force: true });
@@ -588,13 +597,17 @@ export namespace Agy {
   // a gzipped tar archive's files, unpacked into a folder (null: only
   // listed): each a plain file by its own name, runnable (one in a folder,
   // named to climb out, or no plain file: a link, a folder, refused); a
-  // pax header's fields passed over. Thrown: an archive illi can't read
+  // pax header's path taken as the next file's name (a long one), its
+  // other fields passed over, as are a global header's. Thrown: an
+  // archive illi can't read
   export async function untar(from: Readable, into: string | null): Promise<Tarred[]> {
     const files: Tarred[] = [];
     let buf: Buffer = Buffer.alloc(0);
     let file: { fd: number | null; left: number; size: number } | null = null;
     let skip = 0;
     let done = false;
+    let pax: { left: number; size: number; data: Buffer[] } | null = null;
+    let named: string | null = null;
     const pad = (n: number) => (BLOCK - (n % BLOCK)) % BLOCK;
     const take = (chunk: Buffer) => {
       buf = buf.length === 0 ? chunk : Buffer.concat([buf, chunk]);
@@ -615,6 +628,18 @@ export namespace Agy {
           skip = pad(file.size);
           file = null;
         }
+        if (pax !== null) {
+          const n = Math.min(pax.left, buf.length);
+          pax.data.push(Buffer.from(buf.subarray(0, n)));
+          pax.left -= n;
+          buf = buf.subarray(n);
+          if (pax.left > 0) {
+            return;
+          }
+          named = Agy.paxed(Buffer.concat(pax.data)).path ?? null;
+          skip = pad(pax.size);
+          pax = null;
+        }
         const n = Math.min(skip, buf.length);
         skip -= n;
         buf = buf.subarray(n);
@@ -628,9 +653,16 @@ export namespace Agy {
           return;
         }
         const h = Agy.header(block);
-        if (h.type === "x" || h.type === "g") {
+        if (h.type === "x") {
+          pax = { left: h.size, size: h.size, data: [] };
+          continue;
+        }
+        if (h.type === "g") {
           skip = h.size + pad(h.size);
           continue;
+        }
+        if (named !== null) {
+          [h.name, named] = [named, null];
         }
         if (h.type !== "0" && h.type !== "\0") {
           throw new Error("Google's archive holds " + h.name + ", which isn't a plain file, so illi doesn't unpack it");
@@ -669,16 +701,35 @@ export namespace Agy {
     return files;
   }
 
-  // a tar header block read: its file's name (a ustar prefix before it),
-  // size and type; thrown: its checksum doesn't match, or its size won't
-  // read
+  // a pax header's fields (its records: "<length> <key>=<value>\n")
+  export function paxed(data: Buffer): Record<string, string> {
+    const fields: Record<string, string> = {};
+    for (let at = 0; at < data.length; ) {
+      const space = data.indexOf(0x20, at);
+      const len   = Number(data.toString("ascii", at, space));
+      if (space < 0 || !Number.isSafeInteger(len) || len <= space - at) {
+        break;
+      }
+      const record = data.toString("utf8", space + 1, at + len - 1);
+      const eq = record.indexOf("=");
+      if (eq > 0) {
+        fields[record.slice(0, eq)] = record.slice(eq + 1);
+      }
+      at += len;
+    }
+    return fields;
+  }
+
+  // a tar header block read: its file's name (a POSIX ustar prefix before
+  // it: GNU's header keeps other fields there), size and type; thrown: its
+  // checksum doesn't match, or its size won't read
   export function header(block: Buffer): Tarred {
     const text = (from: number, len: number) => block.toString("utf8", from, from + len).replace(/\0[\s\S]*$/, "");
     const sum  = block.reduce((n, x, k) => n + (k >= 148 && k < 156 ? 32 : x), 0);
     if (parseInt(text(148, 8).trim(), 8) !== sum) {
       throw new Error("Google's archive won't read (a file's header doesn't add up)");
     }
-    const prefix = block.toString("latin1", 257, 262) === "ustar" ? text(345, 155) : "";
+    const prefix = block.toString("latin1", 257, 263) === "ustar\0" ? text(345, 155) : "";
     const size   = parseInt(text(124, 12).trim() || "0", 8);
     if (!Number.isSafeInteger(size) || size < 0) {
       throw new Error("Google's archive won't read (a file's size)");
