@@ -5,7 +5,10 @@
 // rest), in the screen's middle whatever the side panel does, over the
 // rest of the screen dimmed in one ink (the backdrop: a pane, the input
 // as typed, a question at the input), the box on a background of its
-// own. Questions take the input's place instead (Question.ts). One rule
+// own. Questions take the input's place instead (Question.ts), but for a
+// list's own steps (/login's Connect?, its key, its Log out?: Commands.ts
+// term_place), shown in its popup: a question's answers as options, a
+// line asked in the search's place (popup_list). One rule
 // places and sizes a popup, from the screen and what it shows alone
 // (popup_size): as wide as its options' names ask, POP_MIN at least,
 // what they say widening it to POP_CAP, the room allowing; as tall as
@@ -95,6 +98,10 @@ type Laid = { place: Place; lines: Paint.Line[]; rows: Box["rows"]; at?: Screen.
 // inner width (tall)
 type Measure = { names: number; wants: number; least: number; tall: (iw: number) => number };
 
+// the line asked's lead in a popup (a list's search has GLYPH.find), as
+// the input's own
+const ASKED = "> ";
+
 // whether a popup is open: a list's picker
 export function term_popup(t: Term): boolean {
   return t.choose !== null;
@@ -173,7 +180,7 @@ function popup_measure(c: Chooser): Measure {
   });
   const title = Paint.text_width(popup_title(c, Infinity)) + 3;
   const foot  = popup_foot(c);
-  const hint  = c.find === null ? 0 : Paint.text_width(GLYPH.find) + Paint.text_width("type to search");
+  const hint  = c.find === null ? 0 : c.ask !== null ? Paint.text_width(ASKED + c.ask.hint) : Paint.text_width(GLYPH.find) + Paint.text_width("type to search");
   const more  = c.detail === undefined ? [] : c.names.flatMap((_, k) => c.detail!(k, POP_CAP - 4).map(Paint.line_width));
   const wants = Math.max(title, foot === "" ? 0 : Paint.text_width(foot) + 5, ...[...whole, hint, ...more].map((x) => x + 4));
   const heads = c.heads === undefined ? 0 : 2 * new Set(c.heads).size - 1;
@@ -185,11 +192,12 @@ function popup_measure(c: Chooser): Measure {
   return { names: 4 + lw + mark + wide + 2, wants, least: POP_MIN, tall };
 }
 
-// a list's title, its keys after it, as fits in w columns: its keys go
-// first, then the title is cut, an ellipsis at its end
+// a list's title, its keys after it (a line asked's: no arrows), as fits
+// in w columns: its keys go first, then the title is cut, an ellipsis at
+// its end
 function popup_title(c: Chooser, w: number): string {
   const title = Paint.text_clean(c.title);
-  const all   = " " + title + " · ↑↓ Enter · Esc ";
+  const all   = " " + title + (c.ask !== null ? " · Enter · Esc " : " · ↑↓ Enter · Esc ");
   return Paint.text_width(all) <= w ? all : popup_cut(" " + title + " ", w);
 }
 
@@ -294,14 +302,19 @@ function popup_heights(c: Chooser, list: Array<string | number>, iw: number): nu
 // (none where it won't fit), then the list the rest: as many whole as fit
 // from the first in view (moved to keep the lit one in it), blank past
 // those shown (none: a note says so). Its foot says what the lit one
-// takes besides. A search too long shows its end
+// takes besides. A search too long shows its end. A line asked (a step
+// of a list's own: /login's key, Commands.ts term_ask) in a search's
+// place, after ASKED, its hint while empty, a secret's a dot a character
+// (never its text), with no options and no note; its foot what it takes
 function popup_list(c: Chooser, w: number, h: number): Omit<Laid, "place"> {
   const iw    = w - 4;
   const room  = h - 2;
-  const fits  = iw - 1 - Paint.text_width(GLYPH.find);
-  const text  = c.find?.text ?? "";
+  const lead  = c.ask !== null ? ASKED : GLYPH.find;
+  const fits  = iw - 1 - Paint.text_width(lead);
+  const raw   = c.find?.text ?? "";
+  const text  = c.ask?.secret === true ? "•".repeat(raw.length) : raw;
   const typed = Paint.text_width(text) <= fits ? text : "…" + popup_tail(text, fits - Paint.text_width("…"));
-  const find  = c.find === null ? [] : [[Paint.Run(GLYPH.find, Paint.DIM), typed === "" ? Paint.Run("type to search", Paint.DIM) : Paint.Run(typed)]];
+  const find  = c.find === null ? [] : [[Paint.Run(lead, Paint.DIM), typed === "" ? Paint.Run(c.ask !== null ? c.ask.hint : "type to search", Paint.DIM) : Paint.Run(typed)]];
   const all   = (c.heads === undefined ? 0 : 2 * new Set(c.heads).size - 1) + c.names.reduce((n, name) => n + popup_name_tall(c, name, iw), 0);
   const more  = c.detail === undefined || c.shown.length === 0 ? [] : c.detail(c.shown[c.at].k, iw);
   const keep  = Math.min(all, KEEP, Math.max(0, room - find.length));
@@ -310,7 +323,7 @@ function popup_list(c: Chooser, w: number, h: number): Omit<Laid, "place"> {
   const list  = popup_entries(c);
   const tall  = popup_heights(c, list, iw);
   const view  = c.shown.length === 0 ? [] : popup_view(c, list, tall, rows);
-  const shown = c.shown.length === 0 ? [[[Paint.Run("  Nothing matches " + Paint.text_clean(text), Paint.DIM)], null] as [Paint.Line, null]] : popup_rows(c, list, view, iw).flat();
+  const shown = c.ask !== null ? [] : c.shown.length === 0 ? [[[Paint.Run("  Nothing matches " + Paint.text_clean(text), Paint.DIM)], null] as [Paint.Line, null]] : popup_rows(c, list, view, iw).flat();
   const blank = (n: number) => Array.from({ length: Math.max(0, n) }, (): [Paint.Line, null] => [[], null]);
   const items = [...find.map((l): [Paint.Line, null] => [l, null]), ...shown, ...blank(rows - shown.length), ...under.map((l): [Paint.Line, null] => [l, null])];
   const said  = popup_foot(c);
@@ -318,9 +331,9 @@ function popup_list(c: Chooser, w: number, h: number): Omit<Laid, "place"> {
   const title = [Paint.Run(popup_title(c, iw + 1), { ...Paint.DIM, b: true })];
   const fill  = [...items, ...blank(room - items.length)];
   const after = Paint.text_width(text.slice(c.find?.pos ?? 0));
-  const at    = c.find === null ? undefined : { row: 1, col: Math.min(w - 3, 2 + Paint.text_width(GLYPH.find) + Math.max(0, Paint.text_width(typed) - after)) };
+  const at    = c.find === null ? undefined : { row: 1, col: Math.min(w - 3, 2 + Paint.text_width(lead) + Math.max(0, Paint.text_width(typed) - after)) };
   const from  = typed === text ? 0 : text.length - (typed.length - "…".length);
-  const field = c.find === null ? undefined : { ed: c.find, row: 1, col: 2, w: iw, tall: 1, at: (_: number, col: number) => popup_find_at(text, typed !== text, from, col - Paint.text_width(GLYPH.find)) };
+  const field = c.find === null ? undefined : { ed: c.find, row: 1, col: 2, w: iw, tall: 1, at: (_: number, col: number) => popup_find_at(text, typed !== text, from, col - Paint.text_width(lead)) };
   return { lines: Paint.frame(fill.map(([l]) => l), w, title, foot), rows: [null, ...fill.map(([, aim]) => aim), null], at, shape: { list: 1 + find.length, lines: rows, tall: view.length, ahead: 0, lead: 0, folds: false }, field };
 }
 

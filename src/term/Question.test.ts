@@ -501,7 +501,7 @@ test("a secret asked for (an API key) shows a dot a character, never its text, t
   sized(80, 24, () => {
     const t = term();
     let got = "";
-    term_ask(t, "Anthropic API key", "paste it here", "", "Enter connect", (text) => ((got = text), null), true);
+    term_ask(t, "Anthropic API key", "paste it here", "", "Enter connect", (text) => ((got = text), null), { secret: true });
     const out = written(() => {
       term_type(t, "sk-ant-secret42");
       paint(t);

@@ -218,7 +218,8 @@ function term_shut(t: Term, c: Chooser): void {
 // Ctrl+Home and Ctrl+End to the first and the last (Home and End too,
 // with nothing to type in), the wheel scrolls (Popup.ts), Enter picks the
 // lit one (none matching the search: nothing; a line asked for: given,
-// kept with a reason if it won't do), Esc closes (its back run too: the
+// kept with a reason if it won't do, where it was: the popup or the
+// input's place), Esc closes (its back run too: the
 // list a level up, a sign-in stopped), and the search (the
 // line asked) takes the input's editing keys (but its rows'); any other
 // key does nothing
@@ -242,11 +243,12 @@ export function term_choose_key(t: Term, c: Chooser, press: string): boolean {
     return true;
   }
   if (key === "Enter" && c.ask !== null) {
+    const popup = t.choose === c;
     term_shut(t, c);
     const why = c.ask.done((c.find?.text ?? "").trim());
     if (why !== null) {
-      t.question = c;
-      c.foot     = () => why;
+      [t.choose, t.question] = popup ? [c, t.question] : [t.choose, c];
+      c.foot = () => why;
     }
     return true;
   }

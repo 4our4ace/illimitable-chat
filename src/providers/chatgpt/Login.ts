@@ -70,7 +70,7 @@ function login_chatgpt_connect(t: Term, back: () => void): void {
     }
     const why = ChatGPT.allow(true);
     return why !== null ? term_note(t, "Can't change the accounts: " + why + ".") : login_after(t, "chatgpt", "ChatGPT runs on opencode's login (" + login_chatgpt_name(other) + ").");
-  }, { back });
+  }, { back, popup: true });
 }
 
 // ChatGPT's device login: its page and code said (the code copied), the

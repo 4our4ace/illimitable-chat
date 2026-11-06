@@ -236,7 +236,7 @@ export function login_edit(t: Term, f: (store: Store) => Store | null): boolean 
 // a question that asks before a log out (Enter on its second answer;
 // Esc goes back to `back`)
 export function login_sure(t: Term, title: string, about: string, done: () => void, back: () => void): void {
-  term_question(t, title, ["Keep it", "Log out"], ["", about], (k) => (k === 1 ? done() : undefined), { back });
+  term_question(t, title, ["Keep it", "Log out"], ["", about], (k) => (k === 1 ? done() : undefined), { back, popup: true });
 }
 
 // Models
@@ -369,7 +369,7 @@ function login_api(t: Term, api: Api): Page {
 function login_api_env(t: Term, api: Api, back: () => void): void {
   const named = config.VARS[api.facts.key.name];
   const key   = config.config_env_key(api.facts.key.name);
-  term_question(t, "Connect " + api.facts.row, ["Use " + named, "Paste another key"], [Accounts.mask(key), "kept in illi's accounts"], (k) => (k === 0 ? void login_api_take(t, api, key, ENV) : login_api_ask(t, api, back)), { back });
+  term_question(t, "Connect " + api.facts.row, ["Use " + named, "Paste another key"], [Accounts.mask(key), "kept in illi's accounts"], (k) => (k === 0 ? void login_api_take(t, api, key, ENV) : login_api_ask(t, api, back)), { back, popup: true });
 }
 
 // a key asked for, shown as dots, then checked and kept (Esc back to
@@ -385,7 +385,7 @@ function login_api_ask(t: Term, api: Api, back: () => void): void {
     }
     void login_api_take(t, api, key, null);
     return null;
-  }, true, back);
+  }, { secret: true, back, popup: true });
 }
 
 // a key checked with its provider, then taken: the environment's (ENV) in
