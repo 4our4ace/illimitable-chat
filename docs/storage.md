@@ -944,9 +944,14 @@ Models
 
 `~/.illi/models.json` keeps what the vendors told of their models, for
 the next start (`Config.ts config_models_keep`):
-`{ at, vendors: { <vendor>: [model…] }, account?, capped? }`, a model
-being `{ label, id, speeds, window?, standard?, efforts?, tiers?, room? }`
-(chatgpt's `window` only where its catalog told one).
+`{ at, vendors: { <vendor>: [model…] }, account?, capped?, told? }`, a
+model being `{ label, id, speeds, window?, standard?, efforts?, tiers?,
+room?, price? }` (chatgpt's `window` only where its catalog told one).
+`told` is `{ <vendor>: { of, at } }`: when a vendor last told its list
+and every window whole, and for which account (`of`, a hash of its
+folder and email, never them). The Claude plan asks Claude Code at most
+once a day for an account (`ClaudeCode.ts models`, `Config.ts
+config_models_told`), so most starts run no Claude Code.
 
 1. `chatgpt`'s list is the account's catalog as it last answered
    (`ChatGPT.ts models`); `account` names whose it is, and `capped` the
@@ -970,7 +975,8 @@ being `{ label, id, speeds, window?, standard?, efforts?, tiers?, room? }`
 3. At the start (`config_models`), the chatgpt, antigravity,
    claude-code and claude-api lists are taken whole, whatever their account (the login
    isn't read yet), until the catalog answers (antigravity's: its next
-   sign-in or turn; claude-code's: as the start asks Claude Code); a
+   sign-in or turn; claude-code's: as the start asks Claude Code, once a
+day); a
    window or a share in it that isn't one (not a count above
    0, a `room` past 1) is none, never a wrong one. The other vendors'
    entries only set the windows of the models illi has built in. A file

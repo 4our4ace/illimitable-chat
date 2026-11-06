@@ -689,28 +689,46 @@ function config_models(): void {
 }
 
 // models.json as read now ({}: none, or it won't read)
-export function config_models_file(): { at?: string; vendors?: Record<string, unknown>; account?: string; capped?: string[] } {
+export function config_models_file(): { at?: string; vendors?: Record<string, unknown>; account?: string; capped?: string[]; told?: Record<string, { of: string; at: string }> } {
   return json_object(MODELS_FILE) ?? {};
 }
 
 // a vendor's models kept in models.json for the next start, the other
 // vendors' as the file is now (one vendor's learning never drops
 // another's); chatgpt's names the account its catalog is of, and the
-// models that account refused past their standard window (capped):
-// written whole, then moved over. The picks named by family follow the
-// models known now (config_repick)
+// models that account refused past their standard window (capped). The
+// picks named by family follow the models known now (config_repick)
 export function config_models_keep(vendor: Vendor, models: unknown[], chatgpt?: { account: string; capped: string[] }): void {
-  const file = config_models_file();
-  const out  = { ...file, at: new Date().toISOString(), vendors: { ...(file.vendors ?? {}), [vendor]: models }, ...chatgpt };
-  const tmp  = MODELS_FILE + "." + process.pid + ".tmp";
+  config_models_write((file) => ({ ...file, at: new Date().toISOString(), vendors: { ...(file.vendors ?? {}), [vendor]: models }, ...chatgpt }));
+  config_repick();
+}
+
+// when a vendor last told its models whole for an account (of: what
+// names the account, kept as its hash, never itself), as models.json
+// keeps it (ms; 0: never, or for another account), so a start may go on
+// what it told then (Provider.ts account: the Claude plan's, asked at
+// most once a day)
+export function config_models_told(vendor: Vendor, of: string): number {
+  const told = config_models_file().told?.[vendor];
+  return told?.of === Bun.hash(of).toString(16) ? Date.parse(told.at) || 0 : 0;
+}
+
+// a vendor's models told whole for an account now, kept (config_models_told)
+export function config_models_tell(vendor: Vendor, of: string): void {
+  config_models_write((file) => ({ ...file, told: { ...(file.told ?? {}), [vendor]: { of: Bun.hash(of).toString(16), at: new Date().toISOString() } } }));
+}
+
+// models.json changed: read, changed, written whole, then moved over (a
+// failure logged, the file as it was)
+function config_models_write(change: (file: ReturnType<typeof config_models_file>) => object): void {
+  const tmp = MODELS_FILE + "." + process.pid + ".tmp";
   try {
     fs.mkdirSync(ROOT, { recursive: true });
-    fs.writeFileSync(tmp, JSON.stringify(out, null, 2) + "\n");
+    fs.writeFileSync(tmp, JSON.stringify(change(config_models_file()), null, 2) + "\n");
     fs.renameSync(tmp, MODELS_FILE);
   } catch (err: any) {
     console.error("models: " + MODELS_FILE + " wasn't kept: " + err?.message);
   }
-  config_repick();
 }
 
 // a key set in config.json (null: taken out, so its default holds), the
