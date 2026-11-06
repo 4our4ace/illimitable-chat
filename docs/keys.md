@@ -52,7 +52,7 @@ Pick
 | -------------- | ---- |
 | Shift+Left, Shift+Right | the model before, the next |
 | Shift+Up, Shift+Down | more effort, less |
-| `/model [name]` | model, effort, speed and auto compact in one list (Left and Right: effort, Tab: speed, Shift+Left and Shift+Right: auto compact, shown as Shift + <-/->); a name: that model |
+| `/model [name]` | model, effort, speed and auto compact in one list, each provider's models under its name, a search too (typing a provider's name lists its models); Left and Right: effort, Tab: speed, Shift+Left and Shift+Right: auto compact, shown as Shift + <-/->; a name: that model |
 | `/effort [level]` | set the effort; no level: lists them |
 | `/autocompact [value]` | how much of the chat a turn sends before older messages fold, for the chat's model: a share of its window (50%), a size (300k) or default; no value: says it |
 

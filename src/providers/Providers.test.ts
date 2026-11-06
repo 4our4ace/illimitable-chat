@@ -58,6 +58,8 @@ test("each provider's facts, code and page agree", () => {
     expect([f.id, p.facts === f, (p.wire === undefined) !== (p.ask === undefined)]).toEqual([f.id, true, true]);
     expect([f.id, f.key !== undefined ? p.check !== undefined : Logins.of(f.id) !== undefined]).toEqual([f.id, true]);
     expect([f.id, f.accounts === "folders" ? f.folders !== undefined : true, f.accounts === "keys" ? f.key !== undefined : true]).toEqual([f.id, true, true]);
+    // named as a note names it, its title (a head over its models) the rest
+    expect([f.id, /^(?:the|your) \S/.test(f.name), Pick.title(f.id as Vendor)]).toEqual([f.id, true, f.name.replace(/^(?:the|your) /, "")]);
     for (const rule of [f.defaults.pick, f.defaults.compactor]) {
       const pick = typeof rule === "string" ? rule : rule(f.models);
       const [vendor, model] = pick.split(":");

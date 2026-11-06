@@ -272,10 +272,10 @@ function popup_name_lines(c: Chooser, name: string, iw: number, ink = Paint.INK,
 }
 
 // the picker's entries as shown now: each option by its index among
-// those shown, and while nothing is searched, each group's head over its
-// first (a blank before each but the first)
+// those shown, and while nothing is searched (grouped: always), each
+// group's head over its first (a blank before each but the first)
 export function popup_entries(c: Chooser): Array<string | number> {
-  const group = c.heads !== undefined && (c.find?.text ?? "") === "";
+  const group = c.heads !== undefined && (c.grouped === true || (c.find?.text ?? "") === "");
   return c.shown.flatMap((m, i): Array<string | number> => {
     const head = c.heads?.[m.k] ?? "";
     return !group || (i > 0 && head === c.heads![c.shown[i - 1].k]) ? [i] : i === 0 ? [head, i] : ["", head, i];

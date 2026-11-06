@@ -50,6 +50,7 @@ const Draw = await import("../ui/Draw.ts");
 const Paint = await import("../ui/Paint.ts");
 const Screen = await import("../ui/Screen.ts");
 const View = await import("../ui/View.ts");
+const { popup_entries } = await import("./Popup.ts");
 const { GLYPH } = await import("../ui/Theme.ts");
 const { ClaudeCode } = await import("../providers/claude-code/ClaudeCode.ts");
 const config = await import("../config/Config.ts");
@@ -85,12 +86,16 @@ const shown = (t: any) => t.choose.shown.map((m: Match) => t.choose.names[m.k]);
 const lit   = (t: any) => t.choose.names[t.choose.shown[t.choose.at].k];
 const foot  = (t: any) => t.choose.foot(t.choose.shown[t.choose.at].k);
 
-test("the model picker lists each vendor's models, at the pick's", () => {
+// the picker's entries as drawn: each group's head, an option by its name
+const entries = (t: any) => popup_entries(t.choose).map((e: string | number) => (typeof e === "string" ? "# " + e : t.choose.names[t.choose.shown[e].k]));
+
+test("the model picker lists each vendor's models under its head, at the pick's", () => {
   const t = term();
   model(t);
   expect(t.choose.names).toEqual(["opus-5.5", "sonnet-5.5", "haiku-5.5", "gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra"]);
-  expect(t.choose.about[0]).toBe("claude-api  1M context");
-  expect(t.choose.about[4]).toBe("openai-api  1.05M context");
+  expect(entries(t)).toEqual(["# Anthropic API", "opus-5.5", "sonnet-5.5", "haiku-5.5", "", "# OpenAI API", "gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra"].map((e) => (e === "" ? "# " : e)));
+  expect(t.choose.about[0]).toBe("1M context");
+  expect(t.choose.about[4]).toBe("1.05M context");
   expect([t.choose.here, lit(t)]).toEqual([1, "sonnet-5.5"]);
   expect(foot(t)).toBe("effort: <- medium -> · no fast mode");
 });
@@ -104,17 +109,29 @@ test("typing searches the models, Backspace takes a character off; emptied, the 
   expect(term_grab(t, "Backspace")).toBe(true);
   expect(shown(t)).toEqual(["sonnet-5.5", "gpt-6.1-sol"]);
   term_grab(t, "Backspace");
-  expect(shown(t)).toEqual(["sonnet-5.5", "gpt-6.1-sol", "opus-5.5", "gpt-6-astra"]);
+  expect(shown(t)).toEqual(["sonnet-5.5", "opus-5.5", "gpt-6.1-sol", "gpt-6-astra"]);
+  expect(entries(t)).toEqual(["# Anthropic API", "sonnet-5.5", "opus-5.5", "# ", "# OpenAI API", "gpt-6.1-sol", "gpt-6-astra"]);
   term_grab(t, "Down");
   term_grab(t, "Backspace");
   expect(shown(t)).toHaveLength(6);
-  expect(lit(t)).toBe("gpt-6.1-sol");
+  expect(lit(t)).toBe("opus-5.5");
   expect(t.scr.ed.text).toBe("");
   term_type(t, "xyz");
   expect(shown(t)).toEqual([]);
   term_grab(t, "Enter");
   expect(t.choose).not.toBeNull();
   expect(t.v.out).toEqual([]);
+});
+
+test("a vendor's title finds its models, under its head; its best match's group first", () => {
+  const t = term();
+  model(t);
+  term_type(t, "openai");
+  expect(entries(t)).toEqual(["# OpenAI API", "gpt-6-luna", "gpt-6.1-sol", "gpt-6-astra"]);
+  term_grab(t, "Escape");
+  model(t);
+  term_type(t, "sol");
+  expect([entries(t), lit(t)]).toEqual([["# OpenAI API", "gpt-6.1-sol"], "gpt-6.1-sol"]);
 });
 
 test("Left and Right set the lit model's effort, Tab its speed; Enter sends all three as one pick, one note", () => {

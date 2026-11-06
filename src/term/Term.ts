@@ -301,7 +301,10 @@ export type Under = { $: "popup" } | { $: "hit"; hit: Hit } | { $: "copy"; copy:
 // how often an option was picked (a search ranks the more used first);
 // aside: what shows at an option's right end, each (its keys, its value);
 // heads: each option's group, a head over its first while nothing is
-// searched; key: the key that opened it, which closes it (Ctrl+P's);
+// searched (grouped: as it's searched too, the matches by group, each
+// group where its best match ranks, its own best first: the model
+// picker's providers); key: the key that opened it, which closes it
+// (Ctrl+P's);
 // past: the lines leading it scrolled past; lead: lines over a
 // question's answers (why it asks, what it would do), wrapped and
 // cleaned as laid out (Question.ts); fold: how a long command in them
@@ -321,6 +324,7 @@ export type Chooser = {
   used?  : (k: number) => number;
   aside? : string[];
   heads? : string[];
+  grouped?: boolean;
   key?   : string;
   past?  : number;
   lead?  : Paint.Line[];
