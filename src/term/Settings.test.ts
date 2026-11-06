@@ -132,6 +132,16 @@ test("Enter on a pick opens the model picker at the chat's pick; its choice is t
   expect(config.config_role("agents", t.v.pick)).toEqual(t.v.pick);
 });
 
+test("Enter on chats lights what a chat on the chat's vendor starts on (as /login's Models row does), not the chat's own pick", () => {
+  const t = term();
+  t.v.pick = { vendor: "claude-api", model: "opus-5.5", effort: "high", speed: "slow" };
+  run(t, "/settings");
+  term_type(t, "chats");
+  term_grab(t, "Enter");
+  expect([t.choose.title, lit(t), config.config_chats("claude-api")!.model]).toEqual(["Settings: chats", "sonnet-5.5", "sonnet-5.5"]);
+  term_grab(t, "Escape");
+});
+
 test("Enter on one typed in puts /set in the input; /set checks the value, then keeps it", () => {
   const t = term();
   run(t, "/settings");

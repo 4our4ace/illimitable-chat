@@ -285,11 +285,12 @@ test("the Claude plan's windows are asked as soon as its account is in use, as a
     expect([Pick.window(opus), Pick.window(sonnet), Pick.window(haiku), Pick.window({ ...opus, model: "fable-5.1" })]).toEqual([990000, 500000, 200000, 200000]);
     expect(JSON.parse(fs.readFileSync(DIR + "/models.json", "utf8")).vendors["claude-code"].find((m: any) => m.label === "sonnet-5.5").window).toBe(500000);
     const all = asked();
-    expect(all.map((a) => a.model).sort()).toEqual(["claude-fable-5-1", "claude-haiku-5-5", "claude-opus-5-5", "claude-sonnet-5-5"]);
+    // the first (fable) told none by the Claude Code that listed: asked again
+    expect([all[0].model, all.map((a) => a.model).sort()]).toEqual(["claude-fable-5-1", ["claude-fable-5-1", "claude-fable-5-1", "claude-haiku-5-5", "claude-opus-5-5", "claude-sonnet-5-5"]]);
     expect(all.every((a) => a.compact === "1" && a.args.includes("--strict-mcp-config") && a.args.includes("--no-session-persistence") && a.args[a.args.indexOf("--tools") + 1] === "")).toBe(true);
     expect(all[0].asked).toEqual({ subtype: "get_context_usage", detail: "summary" });
     expect(await ClaudeCode.models()).toBe(true);
-    expect(asked().length).toBe(4);
+    expect(asked().length).toBe(5);
     await call("turn");
     expect(Pick.window(opus)).toBe(990000);
     await call("turn", true, undefined, { room: 900 });
@@ -299,7 +300,7 @@ test("the Claude plan's windows are asked as soon as its account is in use, as a
     config.config_accounts(true);
     process.env.FAKE_SIZES = "{}";
     expect(await ClaudeCode.models()).toBe(false);
-    expect([asked().length, asked().at(-1).folder]).toEqual([8, config.ROOT + "/claude/c1"]);
+    expect([asked().length, asked().at(-1).folder]).toEqual([10, config.ROOT + "/claude/c1"]);
     const bin = ClaudeCode.bin;
     ClaudeCode.bin = DIR + "/no-such-claude";
     try {
@@ -340,6 +341,37 @@ test("the Claude plan's list comes from the Claude Code that asks the first wind
     await ClaudeCode.models();
     expect(lines("lineup.txt").length).toBe(now + 1);
   } finally {
+    delete process.env.FAKE_SIZES;
+    Accounts.write(config.ROOT, {});
+    config.config_accounts(true);
+  }
+});
+
+test("the account's asking settles once the Claude plan's list is known (as /login waits on it), each other window asked after and told once changed; a first window not told is asked again", async () => {
+  const me    = (id: string) => ({ id, email: id + "@example.com", plan: "max", org: "" });
+  const lines = (file: string) => (fs.existsSync(DIR + "/" + file) ? fs.readFileSync(DIR + "/" + file, "utf8").trim().split("\n").map((l) => JSON.parse(l)) : []);
+  const use   = (id: string) => {
+    Accounts.write(config.ROOT, { "claude-code": { use: id, accounts: [me("own"), me(id)] } });
+    config.config_accounts(true);
+  };
+  const ids = Pick.list("claude-code").map((m) => m.id);
+  let told = 0;
+  ClaudeCode.watch(() => told++);
+  try {
+    use("c6");
+    process.env.FAKE_SIZES = JSON.stringify(Object.fromEntries(ids.map((id) => [id, 700000])));
+    let asked = lines("asked.txt").length;
+    await ClaudeCode.list();
+    expect([lines("asked.txt").length - asked, told]).toEqual([1, 0]);
+    await ClaudeCode.models();
+    expect([lines("asked.txt").length - asked, told, Pick.by_id("claude-code", ids[1])?.window]).toEqual([ids.length, 1, 700000]);
+    use("c7");
+    process.env.FAKE_SIZES = JSON.stringify({ ...Object.fromEntries(ids.map((id) => [id, 700000])), [ids[0]]: "junk" });
+    asked = lines("asked.txt").length;
+    await ClaudeCode.models();
+    expect([lines("asked.txt").slice(asked).filter((l) => l.model === ids[0]).length, lines("asked.txt").length - asked, told]).toEqual([2, ids.length + 1, 1]);
+  } finally {
+    ClaudeCode.watch(() => {});
     delete process.env.FAKE_SIZES;
     Accounts.write(config.ROOT, {});
     config.config_accounts(true);

@@ -240,8 +240,9 @@ const NO_LOGIN  = "Claude Code isn't logged in: /login signs in to your Claude p
 // API's own text names its cache_control blocks
 const NO_MARKS  = "Anthropic refused Claude Code's request over a technical limit";
 
-// how long `claude auth status` and `logout` may take (ms), and a
-// model's window asked (ClaudeCode.size)
+// how long `claude auth status` and `logout` may take (ms), and a Claude
+// Code asked on its control channel (ClaudeCode.control: the plan's
+// lineup and its first model's window, or one model's window)
 const AUTH = 30e3;
 
 // how long a sign-in may wait for the person (ms): as long as Claude's
@@ -251,10 +252,6 @@ const SIGNIN = 10 * 60e3;
 // how long a sign-in's last words are waited for once Claude Code ended
 // (ms): a child it left (a browser's launcher) may hold its output open
 const DRAIN = 1e3;
-
-// how long Claude Code may take to list the Claude plan's models (ms;
-// ClaudeCode.models): past it, the list stays as it was
-const LINEUP = 15e3;
 
 // how long the Claude plan's models and windows told hold for its
 // account (ms; ClaudeCode.models): a start within it asks Claude Code
@@ -272,10 +269,16 @@ const WINDOW = { subtype: "get_context_usage", detail: "summary" };
 const SIZE = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--tools", "", "--strict-mcp-config", "--disable-slash-commands", "--settings", JSON.stringify({ disableAllHooks: true }), "--setting-sources", "user"];
 
 // the Claude plan's models and windows asked (ClaudeCode.models: once an
-// account a start), and the account they were asked of (its folder and
+// account a start), its list's part (settled once the list is known:
+// ClaudeCode.list), and the account they were asked of (its folder and
 // email)
 let sized: Promise<boolean> | null = null;
+let listed: Promise<boolean> | null = null;
 let sized_by = "";
+
+// told each time the windows asked after the list changed (Provider.ts
+// watch)
+let watcher = () => {};
 
 // ClaudeCode
 // ==========
@@ -815,39 +818,73 @@ export namespace ClaudeCode {
   // told runs on those kept, the built-in list and 200k at the very
   // first). The list comes from the Claude Code asked the first model's
   // window (the first kept), then each other model's window from one of
-  // its own (one Claude Code after another); all told, it's kept as told
-  // for that account (config_models_tell). true: the list or a window
-  // changed
+  // its own (one Claude Code after another; one the first didn't tell
+  // asked again so); all told, it's kept as told for that account
+  // (config_models_tell). The list is kept and settles its part
+  // (ClaudeCode.list) as soon as it's known; the windows changed after
+  // are kept and told (watch) once all are asked; an account switched
+  // meanwhile stops the asking. true: the list or a window changed
   export function models(): Promise<boolean> {
     const dir  = config.config_folder("claude-code");
     const kept = config.config_accounts_read()?.["claude-code"];
     const by   = dir + "\n" + (kept?.accounts.find((a) => a.id === kept.use)?.email ?? "");
     if (sized_by !== by) {
-      [sized, sized_by] = [null, by];
+      [sized, listed, sized_by] = [null, null, by];
       if (Date.now() - config.config_models_told("claude-code", by) < TOLD_FOR) {
-        sized = Promise.resolve(false);
+        sized = listed = Promise.resolve(false);
       }
     }
-    sized ??= (async () => {
-      const first = Pick.list("claude-code")[0];
-      const [init, usage] = await ClaudeCode.control(dir, first === undefined ? [] : ["--model", first.id], [{ subtype: "initialize" }, ...(first === undefined ? [] : [WINDOW])], LINEUP);
-      const known = new Map(first === undefined ? [] : [[first.id, ClaudeCode.window(usage)]]);
-      let news = ClaudeCode.offer(ClaudeCode.lineup(init));
-      let all  = init !== null;
-      for (const m of Pick.list("claude-code")) {
-        const window = known.get(m.id) ?? (await ClaudeCode.size(dir, m.id));
-        news = Pick.told("claude-code", m.id, window) || news;
-        all  = all && window > 0;
-      }
-      if (news) {
-        config.config_models_keep("claude-code", Pick.list("claude-code"));
-      }
-      if (all) {
-        config.config_models_tell("claude-code", by);
-      }
-      return news;
-    })();
+    if (sized === null) {
+      let list = (_: boolean) => {};
+      listed = new Promise((done) => (list = done));
+      sized = (async () => {
+        try {
+          const first = Pick.list("claude-code")[0];
+          const [init, usage] = await ClaudeCode.control(dir, first === undefined ? [] : ["--model", first.id], [{ subtype: "initialize" }, ...(first === undefined ? [] : [WINDOW])]);
+          const known = new Map(first === undefined || ClaudeCode.window(usage) === 0 ? [] : [[first.id, ClaudeCode.window(usage)]]);
+          const news  = ClaudeCode.offer(ClaudeCode.lineup(init));
+          if (news) {
+            config.config_models_keep("claude-code", Pick.list("claude-code"));
+          }
+          list(news);
+          let sizes = false;
+          let all   = init !== null;
+          for (const m of Pick.list("claude-code")) {
+            const window = known.get(m.id) ?? (await ClaudeCode.size(dir, m.id));
+            if (sized_by !== by) {
+              return news;
+            }
+            sizes = Pick.told("claude-code", m.id, window) || sizes;
+            all   = all && window > 0;
+          }
+          if (sizes) {
+            config.config_models_keep("claude-code", Pick.list("claude-code"));
+            watcher();
+          }
+          if (all) {
+            config.config_models_tell("claude-code", by);
+          }
+          return news || sizes;
+        } finally {
+          list(false);
+        }
+      })();
+    }
     return sized;
+  }
+
+  // the Claude plan's models asked (ClaudeCode.models), as the account in
+  // use has them (Provider.ts account): settled once the list is known
+  // (true: it changed), as /login waits on it to ask which to run on; the
+  // windows then asked on, told as they change (watch)
+  export function list(): Promise<boolean> {
+    const all = ClaudeCode.models();
+    return listed ?? all;
+  }
+
+  // f told each time the windows asked after the list changed
+  export function watch(f: () => void): void {
+    watcher = f;
   }
 
   // the Claude plan's models as Claude Code in a folder lists them for
@@ -1079,13 +1116,15 @@ export namespace ClaudeCode {
 }
 
 // claude-code's code, as the rest of illi asks it (Provider.ts): a call
-// run by Claude Code itself (a runner), at the start (once an account)
-// the plan's windows asked, the plan at the side, and Claude Code's own
-// MCP servers as its last call told them
+// run by Claude Code itself (a runner), while the chat is on it (once a
+// day an account) the plan's list and windows asked (the list waited on,
+// the windows told as they change), the plan at the side, and Claude
+// Code's own MCP servers as its last call told them
 export const PROVIDER: Provider = {
   facts   : FACTS,
   ask     : ClaudeCode.ask,
-  account : ClaudeCode.models,
+  account : ClaudeCode.list,
+  watch   : ClaudeCode.watch,
   plan    : ClaudeCode.told,
   servers : {
     by    : "Claude Code",
