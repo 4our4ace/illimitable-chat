@@ -34,8 +34,10 @@
 // call without tools (a summary, a goal check, a recap: `once`) has none.
 // The blocks go as one message, the images after; a message sent mid-run
 // is left for the next turn (End.left), as the CLI takes one message a
-// turn. Its session's files are removed as it ends, and what the CLI
-// leaves in the account's folder (its logs) once a day old. The CLI tells
+// turn. Its session's files are removed as it ends, each CLI's log as the
+// CLI ends, and what else the CLI leaves in the account's folder (other
+// terminals' logs, crash reports, notes of each start) once a day old.
+// The CLI tells
 // illi none of its MCP calls' results, so illi's tools are given it
 // through a forwarder of illi's own (a local URL for each call), which
 // logs each call with what it answered, as the chat's memory keeps every
@@ -691,7 +693,10 @@ export namespace Antigravity {
   // or it stopped another way: past the most tokens with nothing said, too
   // long for the window (`full`); else what it said logged and the stop in
   // plain words (Agent.stopped: the most the model may write at once, a
-  // refusal), as illi's own loop ends one
+  // refusal), as illi's own loop ends one. The tokens its first step read
+  // (first): as a step's usage told them, else a one-step turn's whole as
+  // the result's usage tells it (that counts every step, so a turn that
+  // called a tool tells none)
   export function end(run: Run, result: any): End {
     const stop  = String(result?.stopReason ?? "");
     const used  = result?.usage !== undefined && result?.usage !== null;

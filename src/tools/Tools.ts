@@ -38,7 +38,7 @@
 // A call on claude-code runs in Claude Code with illi's own prompt and
 // whole list of tools, over MCP (`hosted`: Claude Code's permission
 // prompt added), as on every provider; one on antigravity in Google's
-// agent, the whole list reaching it through illi's forwarder
+// Antigravity CLI, the whole list reaching it through illi's forwarder
 // (Antigravity.ts relay), its own web tools asked through the permission
 // prompt as Claude Code's are.
 // Every call goes first to the user's plugins and hooks
@@ -600,7 +600,7 @@ export namespace Tools {
 
   // a notification gets no answer; a request dropped stops its job. A
   // URL with ?hosted is a caller's in Claude Code, or Antigravity.ts
-  // asking leave for one of its agent's web tools (Tools.list)
+  // asking leave for one of Google's CLI's web tools (Tools.list)
   export async function fetch(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const [, key, who, ...rest] = url.pathname.split("/");
@@ -653,7 +653,7 @@ export namespace Tools {
   // a caller's tools, as its agent allows; `hosted`, a caller in Claude
   // Code, its permission prompt too, whatever the agent allows (Claude
   // Code is told to ask through it, and won't start without it;
-  // Antigravity.ts asks through it for its agent's web tools)
+  // Antigravity.ts asks through it for Google's CLI's web tools)
   export function list(tools: Tools, who: string, hosted = false): Spec[] {
     const user = [...skill_tools(tools.cwd), ...Mcp.tools(), ...Plugins.tools()];
     const asks = hosted ? [APPROVE] : [];
@@ -984,7 +984,7 @@ export namespace Tools {
   }
 
   // Claude Code asking leave to use a tool (its permission prompt), or
-  // Antigravity.ts for its agent's web search or page reading, by Claude
+  // Antigravity.ts for Google's CLI's web search or page reading, by Claude
   // Code's names and inputs (WebSearch, WebFetch; its answer a yes only
   // with no input changed, which the agent can't take): past
   // the plugins' hooks first (they may refuse it or change its input; what

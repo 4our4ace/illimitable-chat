@@ -868,8 +868,8 @@ export function term_main(t: Term, name: string | null): void {
 // list: each model's window, efforts and speeds); on an API key its
 // models (Anthropic.models), on the Claude plan its account's
 // (ClaudeCode.models: once a day), on the OpenCode Go plan its catalog
-// (OpenCodeGo.models), on Google's plan its agent downloaded by itself
-// where it isn't here (Agy.auto); the chat tells its views. Another
+// (OpenCodeGo.models), on Google's plan its CLI downloaded by itself
+// where none is here (Agy.auto); the chat tells its views. Another
 // terminal's change of accounts asks it too (Chat.follow). `also`: a
 // vendor /login connected anew, asked beside it (a view's illi asks that
 // one alone, its chat's illi asking its own). Each vendor's asking given

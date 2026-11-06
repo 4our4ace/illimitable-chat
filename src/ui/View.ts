@@ -376,7 +376,7 @@ const ANSWERS = "your answers";
 // what a run's tool calls did, by tool: one, many (the rest: "called");
 // Claude Code's own tools as illi's alike (ALIKE), or as their own: of
 // them only its web search and fetch run in illi's calls now (Google's
-// agent's on antigravity logged by those names too), the others (its
+// CLI's on antigravity logged by those names too), the others (its
 // shell, files, Agent, Task, TodoWrite) only in a chat's older ones
 const DID: Record<string, [string, string]> = {
   shell      : ["ran a command", "ran # commands"],
