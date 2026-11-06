@@ -130,8 +130,10 @@ export function term_set(t: Term, arg: string): void {
 }
 
 // Enter on a setting with no values to step through: a pick, the model
-// picker (from the pick set, or the chat's), its choice set and the
-// settings back at it; one typed in, `/set <key> <value>` in the input
+// picker (from the pick set, or the chat's; for `chats` what a chat on
+// the chat's vendor starts on, as /login's Models row lights it:
+// config_chats), its choice set and the settings back at it; one typed
+// in, `/set <key> <value>` in the input
 export function setting_open(t: Term, key: config.Key): void {
   const env = config.config_env_set(key);
   if (key === "off") {
@@ -143,7 +145,7 @@ export function setting_open(t: Term, key: config.Key): void {
   if (config.SETTINGS[key].values === "pick") {
     const rows = Pick.models(t.v.vendors, t.v.models);
     const role = key === "chats" || key === "agents" || key === "compactor" ? key : null;
-    const from = role !== null && t.v.pick !== null ? config.config_role(role, t.v.pick) : config.config_pick(key) ?? t.v.pick;
+    const from = role === "chats" && t.v.pick !== null ? config.config_chats(t.v.pick.vendor) ?? t.v.pick : role !== null && t.v.pick !== null ? config.config_role(role, t.v.pick) : config.config_pick(key) ?? t.v.pick;
     if (env !== null || from === null || rows.length === 0) {
       return term_note(t, env !== null ? key + " is set by " + env + ": unset it to change it here." : "No models offered yet.");
     }
