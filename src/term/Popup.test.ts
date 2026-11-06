@@ -31,7 +31,9 @@
 // list with one in use dots its rows (the palette and /permissions
 // none), what /mode's say whole on 100 columns.
 // (Questions, illi's form too, take the input's place instead, their
-// answers dotted: Question.test.ts.)
+// answers dotted: Question.test.ts; but a list's own steps, /login's,
+// stay in its popup: a question's answers as its options, a line asked
+// in its search's place, a secret a dot a character, never its text.)
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -568,4 +570,36 @@ test("only a list with one in use dots its rows: the palette and /permissions no
       expect(rows.map((r: string) => r.replace(/^.{4}\S+ +/, "").replace(/ +the setting's$/, "").trimEnd())).toEqual(mode.choose.about);
     });
   }
+});
+
+test("a list's own step stays in its popup: a line asked (an API key) a dot a character, never its text, a paste going to it, one that won't do kept there saying why; a question's answers as its options", async () => {
+  const { term_ask, term_question } = await import("./Commands.ts");
+  const { term_paste } = await import("./Attach.ts");
+  sized(100, 30, () => {
+    const t = term();
+    let got = "";
+    const out: string[] = [];
+    const write = process.stdout.write;
+    process.stdout.write = ((x: string) => out.push(x) > 0) as any;
+    try {
+      term_ask(t, "Anthropic API key", "paste it here", "", "Enter connect · Esc back", (key) => (key === "short" ? "too short" : ((got = key), null)), { secret: true, popup: true });
+      expect([t.choose?.title, t.question]).toEqual(["Anthropic API key", null]);
+      paint(t);
+      expect([inside(t, 100)[0].trimEnd(), text(t.ruled.rows[t.box.row], 100)]).toEqual(["> paste it here", expect.stringContaining(" Anthropic API key · Enter · Esc ")]);
+      term_paste(t, "short");
+      term_grab(t, "Enter");
+      expect([t.choose?.title, t.choose?.foot(-1), t.question]).toEqual(["Anthropic API key", "too short", null]);
+      Screen.ed_set(t.choose.find, "");
+      term_type(t, "sk-ant-secret42");
+      paint(t);
+      expect(inside(t, 100)[0].trimEnd()).toBe("> " + "•".repeat(15));
+      expect(t.ruled.at).toEqual({ row: t.box.row + 1, col: t.box.col + 2 + 2 + 15 });
+      term_grab(t, "Enter");
+    } finally {
+      process.stdout.write = write;
+    }
+    expect([got, t.choose, out.join("").includes("secret42"), JSON.stringify(t.ruled.rows).includes("secret42")]).toEqual(["sk-ant-secret42", null, false, false]);
+    term_question(t, "Log out of Anthropic API?", ["Keep it", "Log out"], ["", "illi forgets its keys"], () => {}, { popup: true });
+    expect([t.choose?.names, t.choose?.at, t.question]).toEqual([["Keep it", "Log out"], 0, null]);
+  });
 });

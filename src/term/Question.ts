@@ -6,7 +6,8 @@
 // (Asks.ts), a confirmation (Switch to X?, Delete profile X?, Forget X?,
 // what a new profile starts with), a line asked for (Commands.ts
 // term_ask: a name, a path, why not); else illi's own questions, their
-// form (Asks.ts). The lists a person opens are popups (Popup.ts); one
+// form (Asks.ts); a list's own steps (/login's) show in its popup
+// instead (Commands.ts term_place). The lists a person opens are popups (Popup.ts); one
 // opened over a question (Ctrl+P) shows over it, the question back as
 // it closes. A question has the rows between the
 // rules round the input, its full width (under the side panel too): the

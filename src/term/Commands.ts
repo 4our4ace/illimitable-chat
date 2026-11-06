@@ -676,11 +676,29 @@ export function term_chooser(t: Term, title: string, names: string[], about: str
 // does; with `more`, what else a key does on answer k (the permission
 // question's Esc), what its rule says of the lit one, the lines leading
 // the answers (why it asks, what it would do), how a long command in
-// them folds (Chooser fold) and what Esc does besides closing it (the
-// list that asked it opened again)
-export function term_question(t: Term, title: string, names: string[], about: string[], pick: (k: number) => void, more: { keys?: Chooser["keys"]; foot?: Chooser["foot"]; lead?: Chooser["lead"]; fold?: Chooser["fold"]; back?: Chooser["back"] } = {}): void {
-  t.question = { title, names, about, lead: more.lead, fold: more.fold, answers: true, here: -1, pick, find: null, shown: Screen.ed_rank("", names), at: 0, top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null, back: more.back };
-  t.choose   = null;
+// them folds (Chooser fold), what Esc does besides closing it (the
+// list that asked it opened again), and whether it's a step of a list's
+// own (popup: /login's), shown in the list's popup instead (term_place;
+// no lead there)
+export function term_question(t: Term, title: string, names: string[], about: string[], pick: (k: number) => void, more: { keys?: Chooser["keys"]; foot?: Chooser["foot"]; lead?: Chooser["lead"]; fold?: Chooser["fold"]; back?: Chooser["back"]; popup?: boolean } = {}): Chooser {
+  const c: Chooser = { title, names, about, lead: more.lead, fold: more.fold, answers: true, here: -1, pick, find: null, shown: Screen.ed_rank("", names), at: 0, top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null, back: more.back };
+  term_place(t, c, more.popup === true);
+  return c;
+}
+
+// a question's picker placed: in the input's place, in place of the
+// question there and of the list that asked it (a pane stays); or, a
+// step of a list's own (/login's: Connect?, a key, Log out?), in the
+// list's popup (Popup.ts), over the question at the input (back as it
+// closes), a pane closed, as a list opens
+function term_place(t: Term, c: Chooser, popup: boolean): void {
+  if (popup) {
+    t.choose = c;
+    t.pane   = null;
+  } else {
+    t.question = c;
+    t.choose   = null;
+  }
 }
 
 // the leader pressed (config.LEADER): the screen greys till the next key,
@@ -800,13 +818,16 @@ export function term_shortcut(t: Term, run: string): void {
 // Question.ts), in place of the question there and of the list that
 // asked it (a pane stays): its title, the hint while it is empty, what it
 // starts as, what its rule says, what Enter does with it (a reason: it
-// stays, saying it); a secret's (an API key) shown a dot a character;
-// what Esc does besides closing it (back: a sign-in waiting on it stopped)
-export function term_ask(t: Term, title: string, hint: string, start: string, foot: string, done: (text: string) => string | null, secret = false, back?: () => void): void {
+// stays, saying it); with `more`, a secret's (an API key) shown a dot a
+// character, what Esc does besides closing it (back: a sign-in waiting on
+// it stopped), and whether it's a step of a list's own (popup: /login's
+// key, a sign-in's code), shown in the list's popup instead (term_place)
+export function term_ask(t: Term, title: string, hint: string, start: string, foot: string, done: (text: string) => string | null, more: { secret?: boolean; back?: () => void; popup?: boolean } = {}): Chooser {
   const find = Screen.ed_new();
   Screen.ed_set(find, start);
-  t.question = { title, names: [], about: [], here: -1, pick: () => {}, find, shown: [], at: 0, top: 0, keys: () => false, foot: () => foot, ask: { hint, done, secret }, back };
-  t.choose   = null;
+  const c: Chooser = { title, names: [], about: [], here: -1, pick: () => {}, find, shown: [], at: 0, top: 0, keys: () => false, foot: () => foot, ask: { hint, done, secret: more.secret }, back: more.back };
+  term_place(t, c, more.popup === true);
+  return c;
 }
 
 // the picker's search changed: the options it matches, the best lit

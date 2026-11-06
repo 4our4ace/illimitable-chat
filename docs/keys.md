@@ -251,9 +251,11 @@ and what you were typing comes back once you answer.
   plan, an API key); on one connected, its accounts: Enter switches to
   one, Del logs one out (asked first); its Models row asks which model
   writes its summaries, then which its chats run on (a model list: Left
-  and Right set the effort, Enter on what's lit keeps it unset). Esc goes back a level, from a
-  question it asks too (a key to paste, a sign-in's code: Esc there
-  stops the sign-in); a click outside one of its lists closes it all.
+  and Right set the effort, Enter on what's lit keeps it unset). What it
+  asks on the way stays in its popup: Connect?, Log out?, and a key to
+  paste or a sign-in's code, a line shown as dots, never in the message
+  field. Esc goes back a level, from those too (a sign-in's code: Esc
+  there stops the sign-in); a click outside it closes it all.
 
 Panes (`/help`, `/agents`, `/mcp` with no servers) open in the chat's place,
 on a background of their own: Esc or Enter closes one, the arrows and

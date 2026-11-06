@@ -106,7 +106,7 @@ function login_agy_offer(t: Term, back: () => void, adding: boolean): void {
     if (k === 0) {
       void login_agy_fetch(t, b, up, adding);
     }
-  }, { back });
+  }, { back, popup: true });
   term_draw(t);
 }
 

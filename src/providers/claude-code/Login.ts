@@ -81,7 +81,7 @@ async function login_claude_add(t: Term, back: () => void): Promise<void> {
   const mine = { id: OWN, ...who };
   term_question(t, "Connect Claude plan", ["Use your Claude Code's login", "Sign in to another account"], [login_claude_name(mine), "with a code at Claude's page"], (k) => {
     return k === 1 ? void login_claude_sign(t, null, back) : void login_claude_keep(t, mine, "Connected your Claude plan (" + login_claude_name(mine) + "): its models are in /model.");
-  }, { back });
+  }, { back, popup: true });
   term_draw(t);
 }
 
@@ -133,24 +133,23 @@ async function login_claude_sign(t: Term, want: string | null, back: () => void)
   t.login = stop;
   let id = want;
   let asked: Notice | null = term_notify(t, "Starting the sign-in: Claude Code opens Claude's page in your browser. Esc stops it.", false, LOGIN);
-  let line: Term["question"] = null;
+  let line: Term["choose"] = null;
   let give = (_code: string) => {};
   const ask = (url: string) => {
     if (asked !== null) {
       term_unnotify(t, asked);
     }
     asked = term_notify(t, "Sign in to Claude in your browser" + (url === "" ? "" : " (if it didn't open: " + url + ")") + ", then paste the code the page shows.", false, LOGIN);
-    term_ask(t, "Claude plan", "paste the code from Claude's page", "", "Enter sign in · Esc stop", (code) => {
+    line = term_ask(t, "Claude plan", "paste the code from Claude's page", "", "Enter sign in · Esc stop", (code) => {
       if (code === "") {
         return "Paste the code first.";
       }
       give(code);
       return null;
-    }, true, () => {
+    }, { secret: true, popup: true, back: () => {
       stop.abort();
       back();
-    });
-    line = t.question;
+    } });
   };
   try {
     id ??= login_claude_id();
@@ -170,7 +169,7 @@ async function login_claude_sign(t: Term, want: string | null, back: () => void)
     }
   } finally {
     t.login = t.login === stop ? null : t.login;
-    t.question = t.question === line ? null : t.question;
+    t.choose = t.choose === line ? null : t.choose;
     if (asked !== null) {
       term_unnotify(t, asked);
     }
