@@ -11,7 +11,8 @@
 // empty (profile_new), the root's setup its own (Config.ts, Custom.ts,
 // Mcp.ts: the global layer), and may take the running one's chat along
 // (profile_move_chat); any but the default may be renamed or deleted. A
-// profile goes out as one archive (tar.gz, by the system's tar): its
+// profile goes out as one archive (tar.gz, by the system's tar, found in
+// PATH's absolute folders alone: Run.own_path): its
 // folder but the login (a login file its config names too, wherever in
 // it), the accounts /login connected (Accounts.owned: the file, its
 // lock, the Claude Code folders), a login or accounts file a crash left

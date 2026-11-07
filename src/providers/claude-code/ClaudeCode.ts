@@ -603,7 +603,10 @@ export namespace ClaudeCode {
   // #97074), without what a name not Claude Code's own turns on: an
   // artifact tool and a scratchpad line in each request
   // (CLAUDE_CODE_DISABLE_ARTIFACT), and one more request each run, on the
-  // call's model, naming its session (CLAUDE_CODE_DISABLE_TERMINAL_TITLE)
+  // call's model, naming its session (CLAUDE_CODE_DISABLE_TERMINAL_TITLE).
+  // Its PATH is illi's absolute folders alone (Run.own_path): `claude`
+  // itself is found there, never a project's own, and so are the
+  // programs Claude Code starts (its own MCP servers)
   export function folder_env(dir: string): Record<string, string> {
     const env = { ...process.env } as Record<string, string>;
     delete env.CLAUDECODE;

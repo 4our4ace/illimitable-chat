@@ -275,7 +275,8 @@ never reads the CLI's sign-in, never runs `agy -p`, and never switches
 accounts on its own.
 
 - **The CLI**: if you installed Google's Antigravity CLI yourself
-  (`agy` on your `PATH`), version 1.5.2 or later, illi runs yours, and
+  (`agy` on your `PATH`, in one of its absolute folders), version 1.5.2
+  or later, illi runs yours, and
   keeping it current is yours (`agy update`); illi asks its version
   once, in the background, and again only once the program changes.
   Otherwise each illi runs one version of it, the one it was tried

@@ -1,7 +1,9 @@
 // Attach
 // ======
 // Images attached to a message: a path typed (/image), pasted or dropped
-// (a Windows one under WSL too), or the clipboard's image (Alt+V), each a
+// (a Windows one under WSL too), or the clipboard's image (Alt+V; the
+// system's clipboard program, found in PATH's absolute folders alone:
+// Run.own_path), each a
 // token in the input, sent with the message that names it.
 
 import * as fs from "node:fs";

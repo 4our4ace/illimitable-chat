@@ -53,7 +53,8 @@ start (autoupdate). In the chat, /help lists every command and key.`;
 // `illi upgrade`: one file, the latest release installed in its place
 // (Update.upgrade: checked, then the file replaced as a whole, so the one
 // running goes on; a failed download changes nothing), each step said;
-// from a git clone, a pull; the exit code
+// from a git clone, a pull (git from PATH's absolute folders alone:
+// Run.own_path); the exit code
 async function main_upgrade(): Promise<number> {
   console.log("illi " + VERSION + ": upgrading");
   if (HERE !== null) {

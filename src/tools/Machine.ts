@@ -7,7 +7,9 @@
 // background job: listed (Machine.background, State), stopped one by one
 // (Machine.stop), each change told (Machine.watch). As illi quits, end()
 // kills every shell's group (SHELLS), and any process marked ILLI_RUN
-// that left it.
+// that left it. The shell itself (bash) and the ps that lists them are
+// found in PATH's absolute folders alone (Run.own_path), never a
+// project's own; the command run in the shell keeps PATH whole.
 // A file changed (write over one, edit) answers as a unified diff (Diff),
 // which the view draws as one (Md.ts). Config.ts took the API keys out of
 // the environment the shells inherit. No read, write or edit reaches into

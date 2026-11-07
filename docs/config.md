@@ -62,7 +62,7 @@ Other variables:
 | `ILLI_AGENTS_DIR` | the folder shared with other agents, whose `skills/` illi loads, instead of `~/.agents` |
 | `ILLI_PROFILE` | the profile to start in                               |
 | `ILLI_WINDOW`  | `off`: illi runs alone on a terminal, not under a window, so a profile switch quits it and starts it again in the other, never while it works ([Profiles](profiles.md)) |
-| `ILLI_CLAUDE`  | the `claude` program the `claude-code` vendor runs    |
+| `ILLI_CLAUDE`  | the `claude` program the `claude-code` vendor runs (by name, it's found in `PATH`'s absolute folders alone, as every program of illi's own is: `bash`, `ps`, `tar`, `git`, the clipboard's and the browser's; a relative folder there, `.` or `node_modules/.bin`, is the project's. A command of yours, in the shell tool, a hook or an MCP server, keeps `PATH` whole) |
 | `ILLI_ANTIGRAVITY` | the command line that starts Google's Antigravity CLI's ACP server for the `antigravity` vendor, split at spaces (`agy acp`, or a path and `acp`), in place of your own `agy` on `PATH` or the one `/login` downloads; run if it's 1.5.2 or later, so keeping it current is yours |
 | `ILLI_ANTIGRAVITY_GATEWAY` | an AI API gateway of your own the `antigravity` vendor's CLI uses in place of Google's services, signed in to it alone (tests use a stand-in) |
 | `BROWSER`      | what opens `/login`'s page: programs `:`-separated, tried in turn (`%s` is the link, else it goes last), before the system's; `none`: never open one |

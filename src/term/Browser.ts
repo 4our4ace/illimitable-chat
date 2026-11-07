@@ -7,7 +7,9 @@
 // takes the terminal), macOS' open, elsewhere xdg-open on a display.
 // Over SSH only $BROWSER's (the system's would open on the far
 // machine); never a console browser (it can't run beside the screen).
-// Each runs with the link as an argument, from its own folder, in a
+// Each is found in PATH's absolute folders alone (Run.own_path: never a
+// project's own program of the name), and runs with the link as an
+// argument, from its own folder, in a
 // session of its own (Ctrl+Z, a closed terminal and illi's quit never
 // reach it; not marked ILLI_RUN, which Machine.end kills), its input and
 // output none, waited on WAIT at most.

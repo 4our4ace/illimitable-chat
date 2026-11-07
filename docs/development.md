@@ -79,6 +79,9 @@ path), not as `bun src/main.ts`: its first line starts Bun with
 variables would be settings) are never read. Every build of the one
 file leaves them out too (`--no-compile-autoload-bunfig
 --no-compile-autoload-dotenv`); `test/folder.test.ts` checks both.
+The same test checks that a program of illi's own run by name (`bash`,
+`ps`, `claude`…) is found in `PATH`'s absolute folders alone
+(`Run.own_path`), never in a project's `node_modules/.bin` or `.`.
 
 A release is a tag `vX.Y.Z` naming `package.json`'s version: the
 workflow (`.github/workflows/release.yml`) type-checks and tests it,
