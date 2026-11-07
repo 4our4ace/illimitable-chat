@@ -17,8 +17,9 @@
 // it was.
 // As the chat starts on a terminal and each AGAIN while it runs (check,
 // Term.ts), in the background, looking at most once a day (STATE in the
-// root keeps when it last did: one file, every profile's; a look that
-// fails is tried again at the next), by `autoupdate`: "on" installs,
+// root keeps when it last did, and the release it found, which the trust
+// question shows where it is newer: one file, every profile's; a look
+// that fails is tried again at the next), by `autoupdate`: "on" installs,
 // "notify" only tells, "off" never looks. An illi whose file was replaced
 // since it started (by it, another, a new install) looks no more: the
 // next start runs the new one and looks from there. What it did is one
@@ -126,8 +127,9 @@ export namespace Update {
       const version = await Update.latest(place.base);
       // the look kept once it succeeds, before any install: an AGAIN
       // later, the download still running, looks no more (so never two
-      // at once from one illi); one that failed is kept not at all
-      update_keep(file, { ...(json_object(file) ?? {}), checked: new Date(now).toISOString() });
+      // at once from one illi); one that failed is kept not at all. The
+      // release it found kept with it, for the trust question (known)
+      update_keep(file, { ...(json_object(file) ?? {}), checked: new Date(now).toISOString(), latest: version });
       if (!Update.newer(version, place.version)) {
         return "";
       }
@@ -150,6 +152,14 @@ export namespace Update {
       console.error("update: " + (err?.message ?? err));
       return "";
     }
+  }
+
+  // the latest release the last look found (check), where it is newer
+  // than this illi: read, never looked for (no look yet, or none newer:
+  // null)
+  export function known(root: string): string | null {
+    const latest = String(json_object(path.join(root, STATE))?.latest ?? "");
+    return Update.newer(latest, VERSION) ? latest : null;
   }
 
   // `illi upgrade` of the compiled file: the latest release installed now

@@ -7,13 +7,16 @@
 // screen has no room for both): the folder, what trusting it lets illi
 // do, and two buttons side by side (No, exit; Yes, trust it: No lit
 // first; one over the other where they don't fit), before anything of the
-// folder's loads or runs. A yes is kept for the project
+// folder's loads or runs; on the last row, illi's version, and a newer
+// release the last daily look found (Update.known: nothing looked for
+// here, so the question waits on no network). A yes is kept for the project
 // (Trusted.ts); home's own folder, and any above it, is asked at each
 // start, never kept. A pipe is never asked: a script's run is its own
 // say, though a folder's own agents, commands, skills, plugins, hooks and
 // MCP servers load in it only once a terminal trusted the folder.
 
-import { config_home } from "../config/Config.ts";
+import { ROOT, config_home } from "../config/Config.ts";
+import { Update, VERSION } from "../config/Update.ts";
 import * as Draw from "../ui/Draw.ts";
 import { LOGO_H, LOGO_W, logo_lines } from "../ui/Logo.ts";
 import * as Paint from "../ui/Paint.ts";
@@ -24,8 +27,9 @@ import { Trusted } from "../config/Trusted.ts";
 // =====
 
 // the question as shown: the folder, whether it is kept once trusted
-// (home's own, or one above it, is not), the button lit (NO, YES)
-export type Asked = { folder: string; kept: boolean; at: number };
+// (home's own, or one above it, is not), the button lit (NO, YES), a
+// newer release of illi known (Update.known)
+export type Asked = { folder: string; kept: boolean; at: number; newer?: string | null };
 
 // the screen as laid out: its rows, and where each button stands on them
 // (its row, its columns from col to to, the answer it gives: NO, YES)
@@ -68,7 +72,7 @@ export namespace Trust {
     if (!scr.tty || (kept && Trusted.has(folder))) {
       return true;
     }
-    const yes = await Trust.ask(scr, { folder, kept, at: NO });
+    const yes = await Trust.ask(scr, { folder, kept, at: NO, newer: Update.known(ROOT) });
     if (yes) {
       Trusted.trust(folder);
     }
@@ -177,7 +181,9 @@ export namespace Trust {
   // for the card, its blank lines go first, then its text from the end
   // (an ellipsis where it's cut), so the folder and the buttons stay;
   // shorter still, its top. Each button's place kept as its runs land on
-  // the screen, cut at its edge
+  // the screen, cut at its edge. On the last row, centred, illi's version
+  // and a newer release known (foot), where a row is left between it and
+  // the card and it fits
   export function laid(asked: Asked, { w, h }: { w: number; h: number }): Laid {
     const cw     = Math.min(w, Math.max(24, Math.min(WIDE, w - 2 * MARGIN)));
     const wide   = (names: string[]) => Math.max(...names.map(Paint.text_width)) + 4;
@@ -224,11 +230,22 @@ export namespace Trust {
         x = to;
       }
     });
+    const foot = Trust.foot(asked.newer);
+    const fw   = Paint.line_width(foot);
     const rows = Array.from({ length: h }, (_, r) => {
       const line = lines[r - top];
       return line === undefined ? [] : [{ col, w: Math.min(lw, w - col), line }];
     });
+    if (top + lines.length <= h - 2 && fw <= w) {
+      rows[h - 1] = [{ col: Math.floor((w - fw) / 2), w: fw, line: foot }];
+    }
     return { rows, buttons };
+  }
+
+  // the foot: this illi's version dim, then a newer release known, as an
+  // update available
+  export function foot(newer: string | null | undefined): Paint.Line {
+    return [Paint.Run("illi " + VERSION, Paint.DIM), ...(newer ? [Paint.Run(" · ", Paint.DIM), Paint.Run("update available (" + newer + ")")] : [])];
   }
 
   // the card's top edge, in room columns: the question bold, then its

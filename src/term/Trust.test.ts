@@ -12,7 +12,9 @@
 // 11 columns on no row is wider than the screen, nor a button's place
 // past its edge, the buttons short where the long ones won't fit. The
 // pointer over a button lights it; a click on one takes it, a slip off
-// it or the click that focused the window nothing. What is kept is
+// it or the click that focused the window nothing. On the last row,
+// centred, illi's version, and a newer release the last look found
+// (Update.known), where the card leaves a row between. What is kept is
 // Trusted.test.ts's.
 
 import { afterAll, expect, test } from "bun:test";
@@ -24,6 +26,7 @@ process.env.ILLI_DIR = DIR + "/illi";
 
 const { Trust } = await import("./Trust.ts");
 const { LOGO_H, logo_lines } = await import("../ui/Logo.ts");
+const { STATE, Update, VERSION } = await import("../config/Update.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
@@ -61,7 +64,7 @@ test("the question's keys: No lit first; Left and Right light that way, Up, Down
 test("the question stands in the screen's middle, the logo over its card, the folder in it and both buttons side by side, the lit one filled; home's says it asks each time", () => {
   const laid  = Trust.laid({ folder: "/work/app", kept: true, at: 0 }, { w: 100, h: 30 });
   const lines = text(laid.rows);
-  const used  = lines.map((l, k) => [l, k] as const).filter(([l]) => l !== "");
+  const used  = lines.slice(0, -1).map((l, k) => [l, k] as const).filter(([l]) => l !== "");
   expect(laid.rows.length).toBe(30);
   const logo = logo_lines().map((l) => l.map((r) => r.x).join("").trimEnd());
   expect(used.slice(0, LOGO_H).map(([l]) => l.trim())).toEqual(logo.map((l) => l.trim()));
@@ -76,10 +79,25 @@ test("the question stands in the screen's middle, the logo over its card, the fo
   expect(lit?.s.v).toBe(true);
   const top = used[0][1];
   const bottom = 29 - used.at(-1)![1];
+  expect(lines[29]).toBe(" ".repeat(Math.floor((100 - ("illi " + VERSION).length) / 2)) + "illi " + VERSION);
   expect(Math.abs(top - bottom)).toBeLessThanOrEqual(1);
   expect(laid.rows[top][0].col).toBeGreaterThan(0);
   const home = text(Trust.laid({ folder: os.homedir() + "/code/app", kept: false, at: 1 }, { w: 100, h: 30 }).rows).join("\n");
   expect([home.includes("~/code/app"), home.includes("Your home folder")]).toEqual([true, true]);
+});
+
+test("the last row, centred: illi's version, and a newer release the last look found; none where the card leaves no row between, or it doesn't fit", () => {
+  const foot = (newer: string | null, w = 100, h = 30) => text(Trust.laid({ folder: "/w", kept: true, at: 0, newer }, { w, h }).rows)[h - 1].trim();
+  expect(foot(null)).toBe("illi " + VERSION);
+  expect(foot("99.0.0")).toBe("illi " + VERSION + " · update available (99.0.0)");
+  expect(foot(null, 100, 12)).not.toStartWith("illi ");
+  expect(foot("99.0.0", 14)).not.toContain("update");
+  fs.mkdirSync(DIR + "/illi", { recursive: true });
+  expect(Update.known(DIR + "/illi")).toBeNull();
+  fs.writeFileSync(DIR + "/illi/" + STATE, JSON.stringify({ checked: new Date().toISOString(), latest: "99.0.0" }));
+  expect(Update.known(DIR + "/illi")).toBe("99.0.0");
+  fs.writeFileSync(DIR + "/illi/" + STATE, JSON.stringify({ checked: new Date().toISOString(), latest: VERSION }));
+  expect(Update.known(DIR + "/illi")).toBeNull();
 });
 
 test("on a screen too short for the logo and the card, the card alone, still in the middle", () => {
@@ -91,7 +109,7 @@ test("on a screen too short for the logo and the card, the card alone, still in 
 
 test("on a narrow screen the buttons stand one over the other, each its own place, the card in the middle without the logo, its keys whole or left out", () => {
   const laid  = Trust.laid({ folder: "/w", kept: true, at: 1 }, { w: 40, h: 30 });
-  const lines = text(laid.rows);
+  const lines = text(laid.rows.slice(0, -1));
   const no    = lines.findIndex((l) => l.includes("No, exit"));
   const yes   = lines.findIndex((l) => l.includes("Yes, trust it"));
   expect(yes).toBe(no + 2);

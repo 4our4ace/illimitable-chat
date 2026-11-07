@@ -123,6 +123,7 @@ test("a newer release installs over the running file, runnable, nothing else lef
   expect(fs.readdirSync(bin)).toEqual(["illi"]);
   expect(downloads()).toEqual(["/releases/download/v0.2.0/SHA256SUMS", "/releases/download/v0.2.0/" + Update.asset()]);
   expect(Date.parse(JSON.parse(fs.readFileSync(root + "/" + STATE, "utf8")).checked)).toBeGreaterThan(Date.now() - 60e3);
+  expect(JSON.parse(fs.readFileSync(root + "/" + STATE, "utf8")).latest).toBe("0.2.0");
   expect(logged).toEqual(["update: installed illi 0.2.0 in " + place.exec]);
 });
 
