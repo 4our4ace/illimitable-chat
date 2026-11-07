@@ -106,7 +106,12 @@ project always comes first:
   `RULES.md` and `theme.json` are allowed alone of their folder: in
   `default` mode, illi's settings, permissions, hooks and MCP servers
   beside them are still asked, and so are a plugin's code, hooks and
-  MCP servers.
+  MCP servers. The other side of it: what a project's text talks the
+  model into writing there (a planted instruction in a file it read)
+  reaches every later session, in every project, as your own rules,
+  skills or agents do. Add an `edit` rule asking about them if you'd
+  rather approve each change:
+  `{ "rules": { "edit": { "~/.illi/*": "ask" } } }`.
 
 On `claude-code`, illi runs its own tools there too (shell, read,
 write, edit…), so they are checked as on every provider. Of Claude
