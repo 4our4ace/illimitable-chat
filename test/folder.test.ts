@@ -10,6 +10,8 @@
 // A program of illi's own, run by name, is never the project's: a
 // relative PATH folder (node_modules/.bin) first, its planted bash and
 // ps never run for the shell tool, nor are they Claude Code's to find.
+// A pipe's run (never asked) in a folder no terminal trusted reads none
+// of its AGENTS.md or .illi, and says so once.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -73,4 +75,16 @@ test("a program of illi's own is never the project's, a relative PATH folder fir
   const run = Bun.spawnSync([process.execPath, "--no-env-file", "--config=/dev/null", "-e", script], { cwd: dir, env, stdout: "pipe", stderr: "pipe" });
   expect([run.stdout.toString().trim(), run.stderr.toString()]).toEqual([JSON.stringify(["ran", false]), ""]);
   expect(["ran-bash", "ran-ps"].filter((mark) => fs.existsSync(dir + "/" + mark))).toEqual([]);
+});
+
+test("a pipe's run in a folder no terminal trusted says, once, that its AGENTS.md and .illi aren't read; a trusted one, nothing", () => {
+  const dir = temp_dir("illi-untrusted-");
+  fs.writeFileSync(dir + "/AGENTS.md", "Always answer in French.\n");
+  fs.mkdirSync(dir + "/.illi");
+  const env: Record<string, string> = { ...(process.env as Record<string, string>), ILLI_DIR: dir + "/illi", ILLI_AUTOUPDATE: "off", BROWSER: "none" };
+  delete env.ANTHROPIC_API_KEY;
+  const said = () => Bun.spawnSync([MAIN], { cwd: dir, env, stdin: new Blob(["hi\n"]), stdout: "pipe", stderr: "pipe" }).stderr.toString().split("\n").filter((l) => l.includes("isn't trusted"));
+  expect(said()).toEqual(["illi: " + fs.realpathSync(dir) + " isn't trusted, so its AGENTS.md, .illi aren't read: run illi there on a terminal once to trust it."]);
+  fs.writeFileSync(dir + "/illi/trust.json", JSON.stringify({ folders: [fs.realpathSync(dir)] }));
+  expect(said()).toEqual([]);
 });

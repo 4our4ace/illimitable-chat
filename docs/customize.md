@@ -46,7 +46,7 @@ skill, `customize-illi`, and writes these files itself.
   you first, as it does before changing your skills, commands and
   agents ([Permissions](permissions.md)). A
   project's own `AGENTS.md` (else `CLAUDE.md`) is read too, from the
-  repo's top down to the folder you start in.
+  repo's top down to the folder you start in, once you trust its folder.
 
 Agents
 ------

@@ -15,9 +15,13 @@ first start there, kept for the whole repo in `trust.json`, and for a
 folder that is no repo, for the folders in it, but a git repo in one,
 which is asked about on its own; your home folder, and any folder above
 it, is asked at every start). A run from a
-pipe is never asked: it runs, but a project's own `.illi` agents,
-commands, skills, plugins, hooks and MCP servers load only if a
-terminal trusted the folder before ([Customize](customize.md)).
+pipe is never asked: it runs, but a project's own `AGENTS.md` (else
+`CLAUDE.md`) is read, and its `.illi` agents, commands, skills, plugins,
+hooks and MCP servers load, only if a terminal trusted the folder before
+([Customize](customize.md)); till then a pipe's run says once, on
+stderr, what it left out. A script or CI job in a fresh checkout follows
+no `AGENTS.md` till the folder is trusted (its `trust.json` in
+`ILLI_DIR`).
 
 Modes
 -----

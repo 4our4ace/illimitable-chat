@@ -580,11 +580,14 @@ export namespace Tools {
 
   // the user's rules: theirs for every project (config.RULES, RULES.md in
   // illi's folder; named even while there is none, so illi knows where it
-  // goes), then the project's (Tools.project), each whole up to RULES_MOST
+  // goes), then the project's (Tools.project) in a trusted folder alone
+  // (a terminal's start asks; a pipe's never does, so a folder no
+  // terminal trusted instructs no run: Tools.untrusted), each whole up
+  // to RULES_MOST
   export function rules(cwd: string): string {
     const own  = rules_read(config.RULES);
     const top  = config.config_top(cwd);
-    const each = Tools.project(cwd).flatMap((file) => {
+    const each = (Trusted.has(Trusted.folder(cwd)) ? Tools.project(cwd) : []).flatMap((file) => {
       const text = rules_read(file);
       return text === null ? [] : ["This project's, in " + path.relative(top, file) + ":\n\n" + text];
     });
@@ -595,6 +598,18 @@ export namespace Tools {
   // each folder the first of PROJECT there
   export function project(cwd: string): string[] {
     return config.config_down(cwd).flatMap((dir) => PROJECT.map((name) => path.join(dir, name)).filter((file) => fs.existsSync(file)).slice(0, 1));
+  }
+
+  // what of its own a folder no one trusted has that illi leaves out
+  // (its rules files, its .illi and .agents/skills folders), from its top;
+  // trusted: none
+  export function untrusted(cwd: string): string[] {
+    if (Trusted.has(Trusted.folder(cwd))) {
+      return [];
+    }
+    const top  = config.config_top(cwd);
+    const dirs = config.config_down(cwd).flatMap((dir) => [path.join(dir, ".illi"), path.join(dir, ".agents", "skills")]).filter((d) => fs.existsSync(d));
+    return [...Tools.project(cwd), ...dirs].map((f) => path.relative(top, f));
   }
 
   // MCP

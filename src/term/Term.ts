@@ -740,6 +740,13 @@ export async function term_start(): Promise<void> {
     const said = console.error;
     console.warn = console.error = (...args: unknown[]) => said(args.map(String).join(" ").replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, ""));
   }
+  // from a pipe (never asked), a folder no terminal trusted: what of its
+  // own illi leaves out (its AGENTS.md, its .illi), said once
+  const left = tty ? [] : Tools.untrusted(process.cwd());
+  if (left.length > 0) {
+    const said = "illi: " + Trusted.folder(process.cwd()) + " isn't trusted, so its " + left.join(", ") + " " + (left.length === 1 ? "isn't" : "aren't") + " read: run illi there on a terminal once to trust it.";
+    process.stderr.write(said.replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, "") + "\n");
+  }
   // the profile a person works in here, kept for the project's next start
   // (a script's run through a pipe changes nothing; one hidden in a
   // window, once shown); started by a window's switch, the one used last

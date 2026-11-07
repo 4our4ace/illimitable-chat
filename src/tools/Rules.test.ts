@@ -5,7 +5,9 @@
 // a missing one is no rules, never an error; a long one cut, saying so),
 // then the project's: from the repo's top (the folder holding .git, else
 // the working folder alone) down to the working folder, in each folder
-// its AGENTS.md, else its CLAUDE.md.
+// its AGENTS.md, else its CLAUDE.md, in a folder the user trusts alone
+// (a pipe's run never asks: one no terminal trusted is told what it
+// leaves out).
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -16,6 +18,7 @@ process.env.ILLI_DIR = DIR + "/illi";
 delete process.env.ILLI_RULES;
 
 const { Tools } = await import("./Tools.ts");
+const { Trusted } = await import("../config/Trusted.ts");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
@@ -41,7 +44,7 @@ test("RULES.md goes in whole; one too long is cut, saying so", () => {
   fs.rmSync(OWN);
 });
 
-test("a repo's AGENTS.md (else CLAUDE.md) in each folder from its top down to the working folder", () => {
+test("a repo's AGENTS.md (else CLAUDE.md) in each folder from its top down to the working folder, once its folder is trusted (till then, said as left out)", () => {
   const top = DIR + "/repo";
   fs.mkdirSync(top + "/.git", { recursive: true });
   write(top + "/AGENTS.md", "root rules");
@@ -50,7 +53,12 @@ test("a repo's AGENTS.md (else CLAUDE.md) in each folder from its top down to th
   write(top + "/other/AGENTS.md", "not on the way");
   const cwd = top + "/pkg/sub";
   fs.mkdirSync(cwd, { recursive: true });
+  fs.mkdirSync(top + "/.illi");
   expect(Tools.project(cwd)).toEqual([top + "/AGENTS.md", top + "/pkg/CLAUDE.md"]);
+  expect(Tools.rules(cwd)).not.toContain("root rules");
+  expect(Tools.untrusted(cwd)).toEqual(["AGENTS.md", "pkg/CLAUDE.md", ".illi"]);
+  Trusted.trust(Trusted.folder(cwd));
+  expect(Tools.untrusted(cwd)).toEqual([]);
   const rules = Tools.rules(cwd);
   expect(rules).toContain("This project's, in AGENTS.md:\n\nroot rules\n\nThis project's, in pkg/CLAUDE.md:\n\npkg rules");
   expect(rules).not.toContain("not read");

@@ -197,6 +197,7 @@ test("a caller in Claude Code gets illi's whole list, served at ?hosted, with Cl
   expect((await plain.json()).result.tools.map((t: any) => t.name)).toEqual(names(false));
   const project = temp_repo("illi-tools-project-");
   fs.writeFileSync(project + "/CLAUDE.md", "a rule of the project");
+  (await import("../config/Trusted.ts")).Trusted.trust(project);
   expect(Tools.system(MASTER, project)).toStartWith(MASTER + "\n\n# The user's rules");
   expect(Tools.system(MASTER, project)).toContain("a rule of the project");
   fs.writeFileSync(project + "/AGENTS.md", "the agents' rule");
