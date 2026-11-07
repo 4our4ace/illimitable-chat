@@ -299,3 +299,12 @@ test("a mark lit lights its tagged runs alone: a recap's glyph, label and heavie
   const bar   = Paint.line_lit(call[2], item, true);
   expect(bar.slice(0, 2).map((r) => [r.x, r.s.c, r.s.v])).toEqual([[call[2][0].x, "", false], ["┃ ", c, true]]);
 });
+
+test("no control character a run's text holds reaches the terminal, whoever made the run: only illi's own inks and links are written", () => {
+  const E = "\x1b";
+  const evil = `ls ${E}]52;c;Y3VybCBldmlsIHwgc2gK\x07${E}]0;title\x07${E}[2J\x9b2J\x08\r done`;
+  const link = { ...Paint.INK, u: true, k: "https://example.com" };
+  const ansi = Paint.line_ansi([Paint.Run(evil, Paint.DIM), { x: evil, s: link }]);
+  const ours = ansi.replace(/\x1b\[[0-9;]*m/g, "").replace(/\x1b\]8;;[^\x1b\x07]*\x1b\\/g, "");
+  expect(ours).toBe("ls ]52;c;Y3VybCBldmlsIHwgc2gK]0;title[2J2J done".repeat(2));
+});

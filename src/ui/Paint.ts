@@ -103,6 +103,9 @@ const MODE_ROOM = 50;
 
 const GRAPHEMES = new Intl.Segmenter("en", { granularity: "grapheme" });
 
+// a control character: C0, DEL, C1 (text_clean takes them out)
+const CONTROL = /[\x00-\x1f\x7f-\x9f]/;
+
 // each row's lines, at the width and look they were laid out at
 // (row_cached; the look: Draw.draw_stamp, counted up as the colors
 // change); the terminal's background, as told (null: not yet)
@@ -270,12 +273,15 @@ export function line_mark(l: Line, from: number, to: number, f: (s: Ink) => Ink)
 
 // a line as ANSI: an ink's codes only where the ink changes (a link open
 // over all its runs), back to the plain ink at its end; its end's spaces
-// dropped unless filled or reversed
+// dropped unless filled or reversed. Each run's text is written cleaned
+// (text_clean), whoever made the run: the codes written are illi's own
+// (its inks'), never one a model, a tool's output or an MCP server put in
+// a text (the clipboard's, the title's, a screen cleared)
 export function line_ansi(l: Line): string {
   let out = "";
   let was: Ink | null = null;
   for (const r of l) {
-    out += ink_ansi(was, r.s) + r.x;
+    out += ink_ansi(was, r.s) + (CONTROL.test(r.x) ? text_clean(r.x) : r.x);
     was = r.s;
   }
   return (was?.g || was?.v ? out : out.trimEnd()) + ink_ansi(was, INK);

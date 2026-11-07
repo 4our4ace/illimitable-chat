@@ -601,9 +601,9 @@ function screen_off(scr: Screen): string {
   return off;
 }
 
-// a pipe's lines, as text
+// a pipe's lines, as text, cleaned as a screen's are (Paint.line_ansi)
 export function screen_print(lines: Paint.Line[]): void {
-  process.stdout.write(lines.map((l) => l.map((r) => r.x).join("").trimEnd() + "\n").join(""));
+  process.stdout.write(lines.map((l) => Paint.text_clean(l.map((r) => r.x).join("")).trimEnd() + "\n").join(""));
 }
 
 // a text to the terminal's clipboard (OSC 52)
