@@ -398,6 +398,12 @@ const WHAT  = 400;
 const WHOLE = 32000;
 const KEPT  = 1000;
 
+// the tools whose question shows one field of their input, which is what
+// they'd do (a command, a file, a URL, a query: Tools.does): illi's own
+// and the web tools hosted calls ask for; any other's (an MCP server's,
+// a plugin's) its whole input, so no part of it is out of sight
+const FIELDED = new Set(["shell", "read", "write", "edit", "WebFetch", "WebSearch"]);
+
 // past WHOLE, the most characters the question shows of a line holding a
 // spot (what made the checks ask: Tools.whole), from REACH before the
 // spot on (a minified script is one long line)
@@ -1055,12 +1061,12 @@ export namespace Tools {
     const where: Where = { cwd: path.resolve(tools.cwd), top: folder, files: Access.own(), guarded: Access.guarded() };
     const mode = hooked.allow === true ? "trust" : Tools.mode(tools);
     const rules = Tools.ruleset(tools);
-    const asked = { who: who === MAIN ? "illi" : who, tool, what: Tools.what(input) };
+    const asked = { who: who === MAIN ? "illi" : who, tool, what: Tools.what(tool, input) };
     const all: Want[] = (() => {
       try {
         return requests(where);
       } catch (err: any) {
-        return [{ action: tool, resources: [Tools.does(input)], save: [], spots: [null], failed: String(err?.message ?? err) }];
+        return [{ action: tool, resources: [Tools.does(tool, input)], save: [], spots: [null], failed: String(err?.message ?? err) }];
       }
     })();
     const asks: Asking[] = [];
@@ -1104,7 +1110,7 @@ export namespace Tools {
     const folder = Trusted.folder(tools.cwd);
     const entry: Pending = { who, ask, ctl: new AbortController() };
     const id = crypto.randomUUID();
-    const spots = ask.all === true ? [[0, Tools.does(input).length] as Span] : ask.by.flatMap((k) => (ask.req.spots[k] === null ? [] : [ask.req.spots[k]!]));
+    const spots = ask.all === true ? [[0, Tools.does(asked.tool, input).length] as Span] : ask.by.flatMap((k) => (ask.req.spots[k] === null ? [] : [ask.req.spots[k]!]));
     const offer = ask.req.save.filter((s) => ask.by.some((k) => Permissions.match(ask.req.resources[k], s)));
     const fold  = Permissions.fold(offer);
     const saves = ask.by.every((k) => !offer.some((s) => Permissions.match(ask.req.resources[k], s)) || fold.some((s) => Permissions.match(ask.req.resources[k], s))) ? fold : offer;
@@ -1112,7 +1118,7 @@ export namespace Tools {
     tools.perm.pending.set(id, entry);
     let reply: Reply;
     try {
-      reply = await tools.hooks.ask({ ...asked, ...Tools.whole(input, spots.length === 0 ? undefined : spots), why: Tools.ends(ask.why, WHOLE), keep: Tools.ends(keep, KEPT) }, AbortSignal.any([signal, entry.ctl.signal]));
+      reply = await tools.hooks.ask({ ...asked, ...Tools.whole(asked.tool, input, spots.length === 0 ? undefined : spots), why: Tools.ends(ask.why, WHOLE), keep: Tools.ends(keep, KEPT) }, AbortSignal.any([signal, entry.ctl.signal]));
     } finally {
       tools.perm.pending.delete(id);
     }
@@ -1257,9 +1263,13 @@ export namespace Tools {
     return bad ? "Ask 1 to " + QUERIES + " questions, each with its text and 2 to " + OPTIONS + " options, each with a label." : each;
   }
 
-  // what a tool would do: a command, a file (an edit's files), a URL or a
-  // query, else its input
-  export function does(input: any): string {
+  // what a tool would do: of one FIELDED, a command, a file (an edit's
+  // files), a URL or a query, else its whole input; any other's, its
+  // whole input
+  export function does(tool: string, input: any): string {
+    if (!FIELDED.has(tool)) {
+      return JSON.stringify(input ?? {});
+    }
     const edits = Array.isArray(input?.edits) && input?.file_path === undefined ? [...new Set(input.edits.map((e: any) => String(e?.path ?? "")))].join(", ") : undefined;
     const one = input?.command ?? input?.file_path ?? input?.notebook_path ?? input?.path ?? edits ?? input?.url ?? input?.query ?? input?.pattern;
     return typeof one === "string" ? one : JSON.stringify(input ?? {});
@@ -1277,8 +1287,8 @@ export namespace Tools {
   // question says so); the spots, moved to where they are in what it
   // shows (none given: none). So a risk deep in a heredoc carrying a
   // whole file still shows
-  export function whole(input: any, spots?: Span[]): { whole: string; more: number; spots?: Span[]; cuts?: Span[] } {
-    const text   = Tools.does(input);
+  export function whole(tool: string, input: any, spots?: Span[]): { whole: string; more: number; spots?: Span[]; cuts?: Span[] } {
+    const text   = Tools.does(tool, input);
     const ends   = (e: number) => (e < text.length && text.charCodeAt(e - 1) >> 10 === 0x36 ? e - 1 : e);
     const starts = (a: number) => (a > 0 && text.charCodeAt(a) >> 10 === 0x37 ? a - 1 : a);
     const head   = text.length <= WHOLE ? text.length : ends(WHOLE);
@@ -1320,8 +1330,8 @@ export namespace Tools {
   // what a tool would do (Tools.does), WHAT characters at most, where
   // the room is small and nothing scrolls: a note, the side's refused
   // list, /permissions
-  export function what(input: any): string {
-    const text = Tools.does(input);
+  export function what(tool: string, input: any): string {
+    const text = Tools.does(tool, input);
     return text.length > WHAT ? text.slice(0, WHAT - 1) + "…" : text;
   }
 

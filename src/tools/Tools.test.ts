@@ -505,31 +505,33 @@ test("the time now, after where illi works, in about ten tokens (on claude-code 
   expect(SUB).toContain("(Now:)");
 }));
 
-test("what a tool would do: a command, a file, a URL or a query, else the input; whole for the question, cut short elsewhere", () => {
-  expect(Tools.what({ command: "git status", description: "x" })).toBe("git status");
-  expect(Tools.what({ file_path: "src/a.ts", old_string: "a" })).toBe("src/a.ts");
-  expect(Tools.what({ url: "https://example.com", prompt: "p" })).toBe("https://example.com");
-  expect(Tools.what({ pattern: "TODO" })).toBe("TODO");
-  expect(Tools.what({ n: 1 })).toBe('{"n":1}');
-  expect(Tools.what({ command: "x".repeat(1000) })).toHaveLength(400);
-  expect(Tools.whole({ command: "x".repeat(1000) })).toEqual({ whole: "x".repeat(1000), more: 0 });
-  expect(Tools.whole({ command: "x".repeat(40000) })).toEqual({ whole: "x".repeat(32000), more: 8000 });
-  expect(Tools.whole({ command: "x".repeat(31999) + "😀" + "x".repeat(10) })).toEqual({ whole: "x".repeat(31999), more: 12 });
+test("what a tool would do: of illi's own and the hosted web tools, a command, a file, a URL or a query, else the input; any other tool's (an MCP server's, a plugin's) its whole input; whole for the question, cut short elsewhere", () => {
+  expect(Tools.what("shell", { command: "git status", description: "x" })).toBe("git status");
+  expect(Tools.what("edit", { file_path: "src/a.ts", old_string: "a" })).toBe("src/a.ts");
+  expect(Tools.what("WebFetch", { url: "https://example.com", prompt: "p" })).toBe("https://example.com");
+  expect(Tools.what("WebSearch", { query: "illi" })).toBe("illi");
+  expect(Tools.what("read", { n: 1 })).toBe('{"n":1}');
+  expect(Tools.what("mcp__db__run", { query: "select 1", then: "drop table users" })).toBe('{"query":"select 1","then":"drop table users"}');
+  expect(Tools.what("deploy", { path: "site", target: "production" })).toBe('{"path":"site","target":"production"}');
+  expect(Tools.what("shell", { command: "x".repeat(1000) })).toHaveLength(400);
+  expect(Tools.whole("shell", { command: "x".repeat(1000) })).toEqual({ whole: "x".repeat(1000), more: 0 });
+  expect(Tools.whole("shell", { command: "x".repeat(40000) })).toEqual({ whole: "x".repeat(32000), more: 8000 });
+  expect(Tools.whole("shell", { command: "x".repeat(31999) + "😀" + "x".repeat(10) })).toEqual({ whole: "x".repeat(31999), more: 12 });
 });
 
 test("past 32,000 characters the question still gets each line holding a spot (what made the checks ask), after a line saying how many characters were left out there (where it is told: cuts), the spots moved with them; a minified line's from just before its spot; one in the first 32,000 needs nothing more", () => {
   const doc  = "cat <<'EOF' > notes.txt\n" + Array.from({ length: 3000 }, (_, k) => "echo line " + k + " of a file").join("\n") + "\nEOF\nrm -rf ~/old-site\necho done";
   const at   = doc.indexOf("rm -rf ~/old-site");
-  const got  = Tools.whole({ command: doc }, [[0, 23], [at, at + 17]]);
+  const got  = Tools.whole("shell", { command: doc }, [[0, 23], [at, at + 17]]);
   expect([got.whole.slice(0, 32000) === doc.slice(0, 32000), got.whole.slice(32000), got.more]).toEqual([true, "\n… " + (at - 32000).toLocaleString("en-US") + " characters left out\nrm -rf ~/old-site", "\necho done".length]);
   expect([got.spots!.map((s) => got.whole.slice(...s)), got.cuts!.map((s) => got.whole.slice(...s))]).toEqual([["cat <<'EOF' > notes.txt", "rm -rf ~/old-site"], ["… " + (at - 32000).toLocaleString("en-US") + " characters left out"]]);
   const line = "x=1;".repeat(10000) + "rm -rf ~/old-site;" + "y=2;".repeat(2000);
-  const one  = Tools.whole({ command: line }, [[40000, 40017]]);
+  const one  = Tools.whole("shell", { command: line }, [[40000, 40017]]);
   expect([one.whole.slice(32000), one.spots!.map((s) => one.whole.slice(...s)), one.more]).toEqual(["\n… 7,800 characters left out\n" + line.slice(39800, 41800), ["rm -rf ~/old-site"], line.length - 41800]);
-  expect(Tools.whole({ command: "ls && rm -rf x" }, [[6, 14]])).toEqual({ whole: "ls && rm -rf x", more: 0, spots: [[6, 14]] });
+  expect(Tools.whole("shell", { command: "ls && rm -rf x" }, [[6, 14]])).toEqual({ whole: "ls && rm -rf x", more: 0, spots: [[6, 14]] });
   const lines = "x".repeat(33000) + "\nrm -rf ~/a\nrm -rf ~/b\necho done";
   const [a, b] = [lines.indexOf("rm -rf ~/a"), lines.indexOf("rm -rf ~/b")];
-  const next  = Tools.whole({ command: lines }, [[0, lines.length], [a, a + 10], [b, b + 10]]);
+  const next  = Tools.whole("shell", { command: lines }, [[0, lines.length], [a, a + 10], [b, b + 10]]);
   expect([next.whole.slice(32000), next.more, next.spots!.slice(-2).map((s) => next.whole.slice(...s))]).toEqual(["\n… 1,001 characters left out\nrm -rf ~/a\nrm -rf ~/b", "\necho done".length, ["rm -rf ~/a", "rm -rf ~/b"]]);
 });
 

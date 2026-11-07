@@ -194,7 +194,9 @@ cat ~/notes/todo.md
   your rule (`your rule asks about git push *`), a hook's why, or that
   illi can't read your rules. Then what it would do:
   the whole command, by its lines (the side panel and `/permissions`
-  show it cut short). One too long for half the screen is cut to fit, a
+  show it cut short); a file tool's files, a web fetch's URL, a web
+  search's query; any other tool's (an MCP server's, a plugin's) whole
+  input, every field of it. One too long for half the screen is cut to fit, a
   dim line saying how much more; the wheel over it, or PgUp and PgDn,
   scroll it to its end. Past 32,000 characters (a heredoc carrying a
   whole file), the lines holding what made illi ask still show, each
