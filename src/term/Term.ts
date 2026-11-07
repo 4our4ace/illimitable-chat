@@ -106,7 +106,10 @@ import * as View from "../ui/View.ts";
 // nothing); subs:
 // the subagents of this run, whether at work (false: done, till the
 // person's next message); side: where the side panel shows and how wide
-// (config.SIDE, SIDE_WIDTH); todo: whether illi's to-do list shows
+// (config.SIDE, SIDE_WIDTH); update: what the side's foot says of a
+// newer release (Update.said, read at the start, as the start's look
+// ends and at each CLOCK, so another illi's install shows too; "":
+// none); todo: whether illi's to-do list shows
 // whole there (else folded); login: the sign-in waiting for the person
 // (/login's: ChatGPT's device login, or Claude Code's waiting for its
 // code; one at a time; null: none); areas: the parts of the screen as last
@@ -163,6 +166,7 @@ export type Term = {
   doing   : View.Doing | null;
   subs    : Map<string, boolean>;
   side    : { place: string; width: string };
+  update  : string;
   status  : Status;
   todo    : boolean;
   login   : AbortController | null;
@@ -419,6 +423,7 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
     doing   : null,
     subs    : new Map(),
     side    : { place: config.SIDE, width: config.SIDE_WIDTH },
+    update  : Update.said(config.ROOT),
     status  : status_new(),
     todo    : false,
     login   : null,
@@ -478,7 +483,10 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
   for (const sig of ["SIGHUP", "SIGTERM", "SIGINT"]) {
     process.on(sig, () => term_bye(t));
   }
-  setInterval(() => term_draw(t), CLOCK).unref();
+  setInterval(() => {
+    t.update = Update.said(config.ROOT);
+    term_draw(t);
+  }, CLOCK).unref();
   return t;
 }
 
@@ -790,7 +798,10 @@ function term_update(t: Term): void {
   if (!t.scr.tty || HERE === null || config.AUTOUPDATE === "off") {
     return;
   }
-  void Update.check(config.ROOT, config.AUTOUPDATE).then((note) => note !== "" && term_note(t, note, HOLD));
+  void Update.check(config.ROOT, config.AUTOUPDATE).then((note) => {
+    t.update = Update.said(config.ROOT);
+    note !== "" ? term_note(t, note, HOLD) : term_draw(t);
+  });
 }
 
 // the start's notes, held (HOLD): a pick set that gave way (config.NOTES);

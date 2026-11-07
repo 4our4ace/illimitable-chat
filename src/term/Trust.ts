@@ -8,8 +8,8 @@
 // do, and two buttons side by side (No, exit; Yes, trust it: No lit
 // first; one over the other where they don't fit), before anything of the
 // folder's loads or runs; on the last row, illi's version, and a newer
-// release the last daily look found (Update.known: nothing looked for
-// here, so the question waits on no network). A yes is kept for the project
+// release the last look found (Update.said: nothing looked for here, so
+// the question waits on no network). A yes is kept for the project
 // (Trusted.ts); home's own folder, and any above it, is asked at each
 // start, never kept. A pipe is never asked: a script's run is its own
 // say, though a folder's own agents, commands, skills, plugins, hooks and
@@ -27,9 +27,9 @@ import { Trusted } from "../config/Trusted.ts";
 // =====
 
 // the question as shown: the folder, whether it is kept once trusted
-// (home's own, or one above it, is not), the button lit (NO, YES), a
-// newer release of illi known (Update.known)
-export type Asked = { folder: string; kept: boolean; at: number; newer?: string | null };
+// (home's own, or one above it, is not), the button lit (NO, YES), what
+// is said of a newer release of illi (Update.said; "": none)
+export type Asked = { folder: string; kept: boolean; at: number; update?: string };
 
 // the screen as laid out: its rows, and where each button stands on them
 // (its row, its columns from col to to, the answer it gives: NO, YES)
@@ -72,7 +72,7 @@ export namespace Trust {
     if (!scr.tty || (kept && Trusted.has(folder))) {
       return true;
     }
-    const yes = await Trust.ask(scr, { folder, kept, at: NO, newer: Update.known(ROOT) });
+    const yes = await Trust.ask(scr, { folder, kept, at: NO, update: Update.said(ROOT) });
     if (yes) {
       Trusted.trust(folder);
     }
@@ -230,7 +230,7 @@ export namespace Trust {
         x = to;
       }
     });
-    const foot = Trust.foot(asked.newer);
+    const foot = Trust.foot(asked.update);
     const fw   = Paint.line_width(foot);
     const rows = Array.from({ length: h }, (_, r) => {
       const line = lines[r - top];
@@ -242,10 +242,10 @@ export namespace Trust {
     return { rows, buttons };
   }
 
-  // the foot: this illi's version dim, then a newer release known, as an
-  // update available
-  export function foot(newer: string | null | undefined): Paint.Line {
-    return [Paint.Run("illi " + VERSION, Paint.DIM), ...(newer ? [Paint.Run(" · ", Paint.DIM), Paint.Run("update available (" + newer + ")")] : [])];
+  // the foot: this illi's version dim, then what is said of a newer
+  // release (Update.said), as the side's foot says it (Side.ts)
+  export function foot(update = ""): Paint.Line {
+    return [Paint.Run("illi " + VERSION, Paint.DIM), ...(update === "" ? [] : [Paint.Run(" · ", Paint.DIM), Paint.Run(update)])];
   }
 
   // the card's top edge, in room columns: the question bold, then its

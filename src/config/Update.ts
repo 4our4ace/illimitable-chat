@@ -160,6 +160,19 @@ export namespace Update {
     return Update.newer(latest, VERSION) ? latest : null;
   }
 
+  // what the chat says of a newer release (the trust question's foot, the
+  // side's): one known (known) that is the file in this illi's place
+  // already (replaced since it started, by it or another illi): restart
+  // to apply it; one known, not there yet: available; none: ""
+  export function said(root: string, place = HERE): string {
+    const newer = Update.known(root);
+    if (newer === null) {
+      return "";
+    }
+    const now = place === null ? "" : Update.stamp(place.exec);
+    return now !== "" && now !== place!.stamp ? "restart to apply update (" + newer + ")" : "update available (" + newer + ")";
+  }
+
   // `illi upgrade` of the compiled file: the latest release installed now
   // (install), each step said (out); a failure said (err), nothing
   // changed, Ctrl+C too (an exit: the download's folder goes). The exit

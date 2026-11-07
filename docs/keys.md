@@ -471,7 +471,10 @@ Mouse and side panel
   connected, needing a login or still pending, counted in one line,
   `+ 17 more not connected`; a click opens `/mcp` on one), the
   latest requests refused (a click opens `/permissions` on one) and illi's
-  to-do list, gone once every item is done or on `/clear`. The `side`
+  to-do list, gone once every item is done or on `/clear`. Without one,
+  its foot says illi's version, and, once a look found a newer release,
+  `update available (0.4.1)`, or `restart to apply update (0.4.1)` once
+  it is installed ([Config](config.md), `autoupdate`). The `side`
   and `side_width` settings place it.
 - The bottom line ends with `trust mode` in the error color while
   that mode is on (a click opens `/mode`). Before it, the background

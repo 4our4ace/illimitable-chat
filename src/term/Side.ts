@@ -14,6 +14,7 @@
 import type { Theirs } from "../providers/Provider.ts";
 import { term_background, term_choose, term_mcp, term_mcp_state, term_owner, term_stick, term_theirs } from "./Commands.ts";
 import * as config from "../config/Config.ts";
+import { VERSION } from "../config/Update.ts";
 import { Custom, type Skill } from "../config/Custom.ts";
 import * as Draw from "../ui/Draw.ts";
 import { term_spinner } from "./Frame.ts";
@@ -37,8 +38,6 @@ const SIDE  = 20;
 const ROOM  = 60;
 const WIDE  = 100;
 
-// the side's hint at its foot, faint
-const HINT = "/help for all keys";
 
 // the side's: the width of its labels (Context, 5h, Week, Memory); its
 // bars' widest, every one alike; the to-do items a folded list shows; the
@@ -73,8 +72,9 @@ const SUMMARY = 20;
 // refused (a click: /permissions on it), each plugin's lines
 // (Plugins.side); at its
 // foot illi's to-do list, which, longer than the room, pushes the rest up
-// (its head stays); with none, a faint hint for the keys (HINT), if it
-// fits
+// (its head stays); with none, illi's version, faint, and what is said
+// of a newer release (t.update: available, or restart to apply it), as
+// the trust question's foot says it, if it fits
 export function term_side(t: Term, w: number, tall: number): Item[] {
   return term_side_drawn(t, w, tall).items;
 }
@@ -93,7 +93,7 @@ export function term_side_drawn(t: Term, w: number, tall: number): { items: Item
   const nos   = term_side_refused(t);
   const rel   = term_side_related(t, w);
   const todo  = term_side_todo(t, w);
-  const keys  = [[[Paint.Run(HINT, Paint.DIM)], null] as Item];
+  const keys  = term_side_version(t, w).map((l): Item => [l, null]);
   const gap   = [[], null] as Item;
   const fill  = (n: number) => Array.from({ length: n }, (): Item => [[], null]);
   const plan  = term_side_plan(t, w);
@@ -363,6 +363,19 @@ export function term_side_width(t: Term, w: number): number {
   const share = /^(\d+(?:\.\d+)?)%$/.exec(t.side.width);
   const want  = share !== null ? Math.floor((w * Number(share[1])) / 100) : Number(t.side.width) || Math.floor(w / 4);
   return Math.max(SIDE, Math.min(want, w - ROOM));
+}
+
+// the side's foot with no to-do list: illi's version, faint, and what is
+// said of a newer release (t.update) after it, on a line of its own where
+// both won't fit on one (wrapped where it won't fit either)
+function term_side_version(t: Term, w: number): Paint.Line[] {
+  const version = [Paint.Run("illi " + VERSION, Paint.DIM)];
+  const update  = [Paint.Run(t.update)];
+  if (t.update === "") {
+    return [version];
+  }
+  const one = [...version, Paint.Run(" · ", Paint.DIM), ...update];
+  return Paint.line_width(one) <= w ? [one] : [version, ...Paint.runs_wrap(update, w, false)];
 }
 
 // the side's subagents: the way back to the chat while an agent's tab

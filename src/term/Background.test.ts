@@ -6,7 +6,8 @@
 // lists them, Enter or Del stops one (none: says what they are). A quit
 // asked for while they run or subagents work says what it stops first
 // (Ctrl+C no subagent: it stopped them); a profile switch asks, and
-// staying makes no profile.
+// staying makes no profile. With no to-do list, the side's foot says
+// illi's version and what is said of a newer release.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -122,4 +123,17 @@ test("a profile switch while jobs run asks first, naming them; staying switches 
   expect([t.choose, t.question?.title]).toEqual([null, "Switch to fresh?"]);
   term_grab(t, "Enter");
   expect([t.question, fs.existsSync(DIR + "/profiles/fresh")]).toEqual([null, false]);
+});
+
+test("the side's foot, with no to-do list: illi's version, faint, and what is said of a newer release, after it, else on its own line", async () => {
+  const { VERSION } = await import("../config/Update.ts");
+  const foot = (update: string) => {
+    const t = { ...term([]), update };
+    const lines = term_side_drawn(t, 30, 40).items.map(([line]) => line);
+    return lines.slice(lines.findLastIndex((l) => l.map((r) => r.x).join("").trim() === "") + 1);
+  };
+  expect(foot("").map((l) => l.map((r) => r.x).join(""))).toEqual(["illi " + VERSION]);
+  expect(foot("")[0][0].s).toBe(Paint.DIM);
+  expect(foot("update (1.0)").map((l) => l.map((r) => r.x).join(""))).toEqual(["illi " + VERSION + " · update (1.0)"]);
+  expect(foot("restart to apply update (99.0.0)").map((l) => l.map((r) => r.x).join("").trim())).toEqual(["illi " + VERSION, "restart to apply update", "(99.0.0)"]);
 });

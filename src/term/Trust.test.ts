@@ -13,8 +13,9 @@
 // past its edge, the buttons short where the long ones won't fit. The
 // pointer over a button lights it; a click on one takes it, a slip off
 // it or the click that focused the window nothing. On the last row,
-// centred, illi's version, and a newer release the last look found
-// (Update.known), where the card leaves a row between. What is kept is
+// centred, illi's version, and a newer release the last look found:
+// available, or, the file in its place already that one, restart to
+// apply it (Update.said), where the card leaves a row between. What is kept is
 // Trusted.test.ts's.
 
 import { afterAll, expect, test } from "bun:test";
@@ -86,18 +87,27 @@ test("the question stands in the screen's middle, the logo over its card, the fo
   expect([home.includes("~/code/app"), home.includes("Your home folder")]).toEqual([true, true]);
 });
 
-test("the last row, centred: illi's version, and a newer release the last look found; none where the card leaves no row between, or it doesn't fit", () => {
-  const foot = (newer: string | null, w = 100, h = 30) => text(Trust.laid({ folder: "/w", kept: true, at: 0, newer }, { w, h }).rows)[h - 1].trim();
+test("the last row, centred: illi's version, and what is said of a newer release (Update.said: available, or, the file in its place already that one, restart to apply it); none where the card leaves no row between, or it doesn't fit", () => {
+  const foot = (newer: string | null, w = 100, h = 30) => text(Trust.laid({ folder: "/w", kept: true, at: 0, update: newer === null ? "" : "update available (" + newer + ")" }, { w, h }).rows)[h - 1].trim();
   expect(foot(null)).toBe("illi " + VERSION);
   expect(foot("99.0.0")).toBe("illi " + VERSION + " · update available (99.0.0)");
   expect(foot(null, 100, 12)).not.toStartWith("illi ");
   expect(foot("99.0.0", 14)).not.toContain("update");
-  fs.mkdirSync(DIR + "/illi", { recursive: true });
-  expect(Update.known(DIR + "/illi")).toBeNull();
-  fs.writeFileSync(DIR + "/illi/" + STATE, JSON.stringify({ checked: new Date().toISOString(), latest: "99.0.0" }));
-  expect(Update.known(DIR + "/illi")).toBe("99.0.0");
-  fs.writeFileSync(DIR + "/illi/" + STATE, JSON.stringify({ checked: new Date().toISOString(), latest: VERSION }));
-  expect(Update.known(DIR + "/illi")).toBeNull();
+  const root = DIR + "/illi";
+  fs.mkdirSync(root, { recursive: true });
+  expect([Update.known(root), Update.said(root)]).toEqual([null, ""]);
+  fs.writeFileSync(root + "/" + STATE, JSON.stringify({ checked: new Date().toISOString(), latest: "99.0.0" }));
+  const exec = DIR + "/illi-file";
+  fs.writeFileSync(exec, "old");
+  const place = { base: "", version: VERSION, exec, stamp: Update.stamp(exec) };
+  expect([Update.known(root), Update.said(root, place), Update.said(root, null)]).toEqual(["99.0.0", "update available (99.0.0)", "update available (99.0.0)"]);
+  fs.writeFileSync(exec + ".new", "new");
+  fs.renameSync(exec + ".new", exec);
+  expect(Update.said(root, place)).toBe("restart to apply update (99.0.0)");
+  fs.rmSync(exec);
+  expect(Update.said(root, place)).toBe("update available (99.0.0)");
+  fs.writeFileSync(root + "/" + STATE, JSON.stringify({ checked: new Date().toISOString(), latest: VERSION }));
+  expect([Update.known(root), Update.said(root, place)]).toEqual([null, ""]);
 });
 
 test("on a screen too short for the logo and the card, the card alone, still in the middle", () => {
