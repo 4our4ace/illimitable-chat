@@ -121,9 +121,11 @@ export namespace Agy {
   // the program that is the user's own CLI (`agy`), where PATH finds it
   // first, looked for without holding illi up: each folder at once (a
   // PATH of many slow folders, WSL's Windows ones, takes a second looked
-  // through one by one, as Bun.which does); null: none (a test's own)
+  // through one by one, as Bun.which does), an absolute one alone (a
+  // relative one, . or node_modules/.bin, is the project's: its own agy
+  // would run); null: none (a test's own)
   export let which = async (): Promise<string | null> => {
-    const dirs = (process.env.PATH ?? "").split(path.delimiter).filter((d) => d !== "");
+    const dirs = (process.env.PATH ?? "").split(path.delimiter).filter((d) => path.isAbsolute(d));
     const runs = (at: string) => fs.promises.access(at, fs.constants.X_OK).then(() => fs.promises.stat(at)).then((st) => (st.isFile() ? at : null), () => null);
     return (await Promise.all(dirs.map((d) => runs(path.join(d, "agy"))))).find((at) => at !== null) ?? null;
   };

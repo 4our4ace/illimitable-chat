@@ -36,7 +36,9 @@ process.env.ILLI_DIR = DIR;
 const { Agy, MINIMUM, RELEASES } = await import("./Agy.ts");
 const { PINNED } = await import("./Pinned.ts");
 
-// none of the user's own CLI, till a test gives one
+// none of the user's own CLI, till a test gives one (the lookup itself
+// kept: which)
+const which = Agy.which;
 Agy.which = async () => null;
 
 // a gzipped tar archive of these files (each a plain file, else of the
@@ -96,6 +98,26 @@ const ASKED = () => (fs.existsSync(DIR + "/bin/asked") ? fs.readFileSync(DIR + "
 afterAll(() => {
   HOST.stop(true);
   fs.rmSync(DIR, { recursive: true, force: true });
+});
+
+test("the user's own agy is found on PATH's absolute folders alone, never a relative one's (a project's node_modules/.bin)", async () => {
+  const bin = DIR + "/which";
+  fs.mkdirSync(bin + "/node_modules/.bin", { recursive: true });
+  fs.mkdirSync(bin + "/abs");
+  for (const at of [bin + "/node_modules/.bin/agy", bin + "/abs/agy"]) {
+    fs.writeFileSync(at, "#!/bin/sh\n", { mode: 0o755 });
+  }
+  const [path, cwd] = [process.env.PATH, process.cwd()];
+  try {
+    process.chdir(bin);
+    process.env.PATH = ["node_modules/.bin", bin + "/abs"].join(":");
+    expect(await which()).toBe(bin + "/abs/agy");
+    process.env.PATH = "node_modules/.bin";
+    expect(await which()).toBeNull();
+  } finally {
+    process.env.PATH = path;
+    process.chdir(cwd);
+  }
 });
 
 test("each machine's pinned build is one illi takes, one for every machine illi is released for, all one version, 1.5.2 or later", () => {
