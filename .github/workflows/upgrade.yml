@@ -64,8 +64,9 @@ jobs:
           chmod 755 "$dir/bin/illi"
           project="$(cd "$dir/project" && pwd -P)"
           printf '{"folders":["%s"]}\n' "$project" > "$dir/root/trust.json"
-          cd "$project"
-          got="$(ILLI_DIR="$dir/root" ILLI_AUTOUPDATE=on python3 - "$dir/bin/illi" "$latest" <<'EOF'
+          # (a file of its own: macOS's bash 3.2 can't read a heredoc
+          # inside $(...))
+          cat > "$dir/terminal.py" <<'EOF'
           # the chat on a pty of its own, no key pressed, till its file says
           # the version wanted or three minutes pass (a slow runner's
           # download); then killed
@@ -88,7 +89,8 @@ jobs:
           os.kill(pid, 9)
           print(got)
           EOF
-          )"
+          cd "$project"
+          got="$(ILLI_DIR="$dir/root" ILLI_AUTOUPDATE=on python3 "$dir/terminal.py" "$dir/bin/illi" "$latest")"
           echo "$got"
           cat "$dir/root/illi.log" 2>/dev/null | grep "update:" || true
           test "$got" = "illi $latest"
