@@ -11,8 +11,10 @@ read. No model judges a call.
 
 Trust in a folder comes first: on a terminal, illi starts in a folder
 only once you've said you trust it (the full-screen question at its
-first start there, kept for the whole repo in `trust.json`; your home
-folder, and any folder above it, is asked at every start). A run from a
+first start there, kept for the whole repo in `trust.json`, and for a
+folder that is no repo, for the folders in it, but a git repo in one,
+which is asked about on its own; your home folder, and any folder above
+it, is asked at every start). A run from a
 pipe is never asked: it runs, but a project's own `.illi` agents,
 commands, skills, plugins, hooks and MCP servers load only if a
 terminal trusted the folder before ([Customize](customize.md)).

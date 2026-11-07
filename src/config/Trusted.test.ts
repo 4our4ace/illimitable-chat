@@ -1,7 +1,8 @@
 // Trusted test
 // ============
 // `bun test Trusted.test.ts`. A folder is trusted for its git repo's top,
-// else for itself, its subfolders too, once kept; home's own folder, and
+// else for itself, its subfolders too, once kept, but a git repo in it
+// (a clone, a worktree, a submodule) only by its own; home's own folder, and
 // each above it, is trusted for the run only, never kept; a project's own
 // agents, commands and skills load only in a trusted folder.
 
@@ -30,6 +31,21 @@ test("a folder is trusted for its repo's top, else itself, its subfolders too, o
   Trusted.trust(repo);
   expect([Trusted.has(repo), Trusted.has(repo + "/src"), Trusted.has(repo + "-other")]).toEqual([true, true, false]);
   expect(JSON.parse(fs.readFileSync(DIR + "/illi/trust.json", "utf8")).folders).toEqual([repo]);
+});
+
+test("a git repo in a trusted folder (a clone, a worktree or submodule's .git file, one in a trusted repo) is trusted only by its own; a plain folder in it, with it", () => {
+  const work = Projects.real(DIR) + "/work";
+  fs.mkdirSync(work + "/clone/.git", { recursive: true });
+  fs.mkdirSync(work + "/notes", { recursive: true });
+  fs.mkdirSync(work + "/tree", { recursive: true });
+  fs.writeFileSync(work + "/tree/.git", "gitdir: " + work + "/clone/.git/worktrees/tree\n");
+  const repo = Projects.real(DIR) + "/repo";
+  fs.mkdirSync(repo + "/vendor/lib/.git", { recursive: true });
+  Trusted.trust(work);
+  expect([Trusted.folder(work + "/clone"), Trusted.folder(work + "/notes")]).toEqual([work + "/clone", work + "/notes"]);
+  expect([Trusted.has(work), Trusted.has(work + "/notes"), Trusted.has(work + "/clone"), Trusted.has(work + "/tree"), Trusted.has(repo + "/vendor/lib")]).toEqual([true, true, false, false, false]);
+  Trusted.trust(work + "/clone");
+  expect(Trusted.has(work + "/clone")).toBe(true);
 });
 
 test("home's own folder, and each above it, is trusted for the run, never kept", () => {

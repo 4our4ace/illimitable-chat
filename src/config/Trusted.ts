@@ -2,8 +2,9 @@
 // =======
 // The folders the user trusts illi in (Trust.ts asks, at the start on a
 // terminal): each kept by its project's folder (its git repo's top, else
-// the folder itself; either one's subfolders trusted with it) in
-// trust.json in illi's own folder, every profile's; home's own folder,
+// the folder itself; either one's subfolders trusted with it, but a git
+// repo in it, which is trusted by its own) in trust.json in illi's own
+// folder, every profile's; home's own folder,
 // and each above it (/home, /), is trusted only for the run it was
 // answered in, never kept, as keeping it would trust every folder under
 // it. What a project brings that runs or instructs (its .illi agents,
@@ -45,9 +46,13 @@ export namespace Trusted {
     return home === folder || home.startsWith(folder.endsWith(path.sep) ? folder : folder + path.sep);
   }
 
-  // whether a folder, or one it is in, is trusted
+  // whether a folder is trusted: kept, or in one kept, but a git repo's
+  // top (.git a folder, or a worktree's or submodule's file) only by its
+  // own, as one cloned into a trusted folder is someone else's code; or
+  // for this run
   export function has(folder: string): boolean {
-    const under = (f: string) => folder === f || folder.startsWith(f.endsWith(path.sep) ? f : f + path.sep);
+    const repo  = fs.existsSync(path.join(folder, ".git"));
+    const under = (f: string) => folder === f || (!repo && folder.startsWith(f.endsWith(path.sep) ? f : f + path.sep));
     return RUN.has(folder) || Trusted.kept().some(under);
   }
 
