@@ -15,9 +15,11 @@
 // (Commands.ts, /help), a key's too (Keys.ts), and so is each of the
 // user's commands (Custom.ts) and skills; images attach by a path, a
 // drop or the clipboard (Attach.ts). The user's MCP servers start with
-// it (Mcp.ts); on a terminal, so does the daily look for a new release
-// of illi, installed in the background or only told of (Update.ts,
-// `autoupdate`), its outcome a note. The agent's tools work in the
+// it (Mcp.ts); on a terminal, so does the look for a new release of
+// illi (at most once in ten minutes, every illi's), installed in the
+// background or only told of (Update.ts, `autoupdate`), its outcome a
+// note, and what is known of one the side's foot says (Update.said).
+// The agent's tools work in the
 // folder illi starts in; all they left running dies as illi quits.
 // Started in a project whose chat runs in another terminal, illi is one
 // more view of it (Remote.ts): no chat, agents or MCP servers of its

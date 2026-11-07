@@ -8,8 +8,9 @@
 // context, the memory), the past topics related to the work (the radar:
 // Related.ts), the MCP servers (illi's own; Claude Code's while the pick
 // is on claude-code, those not connected counted in one line), the
-// requests refused, the plugins' lines, a hint for the keys or illi's
-// to-do list; the side and side_width settings place it.
+// requests refused, the plugins' lines, and illi's to-do list or, with
+// none, illi's version and what is known of a newer release
+// (Update.said); the side and side_width settings place it.
 
 import type { Theirs } from "../providers/Provider.ts";
 import { term_background, term_choose, term_mcp, term_mcp_state, term_owner, term_stick, term_theirs } from "./Commands.ts";

@@ -13,7 +13,9 @@
 // approvals can't undo a deny), else asked if any is asked once the
 // saved approvals count too, else run. illi's own rules come first (base:
 // all runs; a .env read asks, a .env.example's doesn't; a folder outside
-// the project asks, illi's customization places don't), the user's after
+// the project asks, illi's customization places don't; an edit of those
+// every chat follows, its skills, commands, agents and RULES.md, asks:
+// Access.guarded), the user's after
 // them, so theirs win. Two modes: default, the rules as they are; trust,
 // what they ask runs too (a deny still refuses).
 //

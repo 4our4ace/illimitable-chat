@@ -311,7 +311,10 @@ and Tab) move between No and Yes, Enter takes the lit one, `y` and `n`
 pick one, Esc (or Ctrl+C, Ctrl+D) exits. The pointer over a button
 lights it (Enter then takes that one); a click takes a button pressed
 and let go on it, never one that slips off it, nor the click that only
-brings the window to the front.
+brings the window to the front. Its last row says illi's version and,
+once a look found a newer release, `update available (0.4.1)` or
+`restart to apply update (0.4.1)`, as the side panel's foot does
+(nothing is looked for there: the question waits on no network).
 
 Background jobs
 ---------------
