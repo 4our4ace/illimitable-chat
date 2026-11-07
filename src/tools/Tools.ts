@@ -600,20 +600,23 @@ export namespace Tools {
 
   // a notification gets no answer; a request dropped stops its job. A
   // URL with ?hosted is a caller's in Claude Code, or Antigravity.ts
-  // asking leave for one of Google's CLI's web tools (Tools.list)
+  // asking leave for one of Google's CLI's web tools (Tools.list). The
+  // key, its path's first part, is the server's only lock (so never
+  // written where another user reads it: ClaudeCode.files): a request
+  // without it is refused before its body is read
   export async function fetch(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const [, key, who, ...rest] = url.pathname.split("/");
     const hosted = url.searchParams.has("hosted");
     const tools = CHATS.get(key);
     const caller = who === MAIN || tools?.agents.has(who);
-    const msg = await req.json().catch(() => ({}));
     if (tools === undefined || rest.length > 0 || !caller) {
       return new Response(null, { status: 404 });
     }
     if (req.method !== "POST") {
       return new Response(null, { status: 405 });
     }
+    const msg = await req.json().catch(() => ({}));
     if (msg.id === undefined) {
       return new Response(null, { status: 202 });
     }

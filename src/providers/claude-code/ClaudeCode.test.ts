@@ -50,6 +50,7 @@
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
+import * as path from "node:path";
 
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-claude-code-");
 process.env.ILLI_DIR = DIR;
@@ -81,7 +82,8 @@ afterAll(() => {
   fs.rmSync(DIR, { recursive: true, force: true });
 });
 
-// the stand-in: logs its arguments, illi's prompt and its input; echoes
+// the stand-in: logs its arguments, illi's prompt, its MCP servers' file
+// and its input; echoes
 // each message as Claude Code does (--replay-user-messages); plays the
 // scene its first message names. Asked on its control channel, it
 // answers each request in turn: a model's window as FAKE_SIZES has it
@@ -92,7 +94,8 @@ const FAKE = String.raw`#!/usr/bin/env bun
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 const file = args.includes("--system-prompt-file") ? args[args.indexOf("--system-prompt-file") + 1] : null;
-const log = { args, prompt: file === null ? null : fs.readFileSync(file, "utf8"), input: [], compact: process.env.DISABLE_COMPACT ?? null, advisor: process.env.CLAUDE_CODE_DISABLE_ADVISOR_TOOL ?? null, memory: process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY ?? null, background: process.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS ?? null, search: process.env.ENABLE_TOOL_SEARCH ?? null, entry: process.env.CLAUDE_CODE_ENTRYPOINT ?? null, artifact: process.env.CLAUDE_CODE_DISABLE_ARTIFACT ?? null, title: process.env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE ?? null, folder: process.env.CLAUDE_CONFIG_DIR ?? null };
+const mcp = args.includes("--mcp-config") ? args[args.indexOf("--mcp-config") + 1] : null;
+const log = { args, prompt: file === null ? null : fs.readFileSync(file, "utf8"), mcp: mcp === null ? null : JSON.parse(fs.readFileSync(mcp, "utf8")), input: [], compact: process.env.DISABLE_COMPACT ?? null, advisor: process.env.CLAUDE_CODE_DISABLE_ADVISOR_TOOL ?? null, memory: process.env.CLAUDE_CODE_DISABLE_AUTO_MEMORY ?? null, background: process.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS ?? null, search: process.env.ENABLE_TOOL_SEARCH ?? null, entry: process.env.CLAUDE_CODE_ENTRYPOINT ?? null, artifact: process.env.CLAUDE_CODE_DISABLE_ARTIFACT ?? null, title: process.env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE ?? null, folder: process.env.CLAUDE_CONFIG_DIR ?? null };
 const save = () => fs.writeFileSync(process.env.FAKE_LOG, JSON.stringify(log));
 const out = (m) => process.stdout.write(JSON.stringify(m) + "\n");
 const ev = (event) => out({ type: "stream_event", event, parent_tool_use_id: null });
@@ -217,9 +220,10 @@ test("before any call of the run has told Claude Code's servers: by name, those 
   config.config_set("off", "claude.ai gmail, linear, illi");
   await own("github");
   await own("docs", false);
-  const listed = (await call("turn", true, undefined, { listed: ["read", "mcp__github", "mcp__linear__find"] })).log.args;
+  const got = (await call("turn", true, undefined, { listed: ["read", "mcp__github", "mcp__linear__find"] })).log;
+  const listed = got.args;
   expect(strict(listed)).toBe(true);
-  expect(JSON.parse(listed[listed.indexOf("--mcp-config") + 1]).mcpServers.illi.url).toBe("http://127.0.0.1:1/key/main?hosted");
+  expect(got.mcp.mcpServers.illi.url).toBe("http://127.0.0.1:1/key/main?hosted");
   expect(denied(listed)).toBe("");
   expect(ClaudeCode.servers()).toBeNull();
   const main = "http://127.0.0.1:1/key/main";
@@ -252,7 +256,8 @@ test("a turn runs Claude Code with illi's prompt in place of its own and illi's 
   expect(log.args.slice(log.args.indexOf("--setting-sources"), log.args.indexOf("--setting-sources") + 2)).toEqual(["--setting-sources", "user"]);
   expect(log.args).toContain("--disable-slash-commands");
   expect(log.args).toContain("--mcp-config");
-  expect(JSON.parse(log.args[log.args.indexOf("--mcp-config") + 1])).toEqual({ mcpServers: { illi: { type: "http", url: "http://127.0.0.1:1/key/main?hosted", timeout: 86400000 } } });
+  expect(log.mcp).toEqual({ mcpServers: { illi: { type: "http", url: "http://127.0.0.1:1/key/main?hosted", timeout: 86400000 } } });
+  expect(log.args.filter((a: string) => a.includes("127.0.0.1") || a.includes("/key/"))).toEqual([]);
   expect(log.args.slice(log.args.indexOf("--allowedTools"), log.args.indexOf("--allowedTools") + 2)).toEqual(["--allowedTools", "mcp__illi"]);
   expect(log.args).not.toContain("--disallowedTools");
   expect(log.args.slice(log.args.indexOf("--permission-prompt-tool"), log.args.indexOf("--permission-prompt-tool") + 2)).toEqual(["--permission-prompt-tool", "mcp__illi__approve"]);
@@ -271,7 +276,7 @@ test("a turn runs Claude Code with illi's prompt in place of its own and illi's 
   expect(end).toMatchObject({ ok: true, text: "Hello", left: [], first: 100 });
   expect(Pick.window({ vendor: "claude-code", model: "opus-5.5", effort: "high", speed: "slow" })).toBe(1000000);
   expect(JSON.parse(fs.readFileSync(DIR + "/models.json", "utf8")).vendors["claude-code"].find((m: any) => m.label === "opus-5.5").window).toBe(1000000);
-  expect(fs.existsSync(log.args[log.args.indexOf("--system-prompt-file") + 1])).toBe(false);
+  expect(fs.existsSync(path.dirname(log.args[log.args.indexOf("--system-prompt-file") + 1]))).toBe(false);
 });
 
 test("the Claude plan's windows are asked as soon as its account is in use, as a turn has them, no model called: each learned and kept, asked once an account; junk, none told or no Claude Code change nothing; a call with compaction on tells no window", async () => {
@@ -448,9 +453,9 @@ test("a Claude Code name inherited (illi started inside Claude Code) is overwrit
 test("of Claude Code's built-in tools a call with tools has its web search and fetch alone, where it searches the web, whatever an agent's tools list names; illi's whole list, Claude Code's permission prompt asked through illi", () => {
   const ask = { vendor: "claude-code", model: "claude-opus-5-5", effort: "high", speed: "slow", system: "", blocks: [], searches: 5, server: "http://127.0.0.1:1/key/sub" } as any;
   const tools = (more: object) => {
-    const args = ClaudeCode.args({ ...ask, ...more }, "prompt.md");
+    const args = ClaudeCode.args({ ...ask, ...more }, "call");
     expect(args.slice(args.indexOf("--permission-prompt-tool"), args.indexOf("--permission-prompt-tool") + 2)).toEqual(["--permission-prompt-tool", "mcp__illi__approve"]);
-    expect(JSON.parse(args[args.indexOf("--mcp-config") + 1]).mcpServers.illi.url).toBe("http://127.0.0.1:1/key/sub?hosted");
+    expect([args[args.indexOf("--mcp-config") + 1], (ClaudeCode.mcp({ ...ask, ...more }) as any).mcpServers.illi.url]).toEqual(["call/mcp.json", "http://127.0.0.1:1/key/sub?hosted"]);
     return args[args.indexOf("--tools") + 1];
   };
   expect(tools({})).toBe("WebSearch,WebFetch");
@@ -576,7 +581,7 @@ test("an agent's tools list keeps of Claude Code's servers those it names (a ser
   config.config_set("off", "notes");
   expect(strict(await args(["mcp__notes"]))).toBe(true);
   config.config_set("off", null);
-  const none = ClaudeCode.args({ vendor: "claude-code", model: "m", effort: "low", speed: "slow", system: "", blocks: [], searches: 0, server: "", listed: ["mcp"] } as any, "prompt.md");
+  const none = ClaudeCode.args({ vendor: "claude-code", model: "m", effort: "low", speed: "slow", system: "", blocks: [], searches: 0, server: "", listed: ["mcp"] } as any, "call");
   expect([strict(none), none.includes("--mcp-config"), none.includes("--disallowedTools")]).toEqual([true, false, false]);
 });
 

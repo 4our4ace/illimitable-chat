@@ -299,15 +299,15 @@ export namespace ClaudeCode {
     if (ask.from !== undefined) {
       return none("Claude Code can't go on from another request", "fail");
     }
-    const file = ClaudeCode.prompt(ClaudeCode.instructions(ask));
+    const dir = ClaudeCode.files(ask);
     // what the call leaves out of Claude Code's servers, as its arguments
     // say it (args reads it too, at once, from the same state)
     const cut = ClaudeCode.cut(ask);
     let proc: Subprocess<"pipe", "pipe", "pipe">;
     try {
-      proc = Bun.spawn([ClaudeCode.bin, ...ClaudeCode.args(ask, file)], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: ClaudeCode.env(ask) });
+      proc = Bun.spawn([ClaudeCode.bin, ...ClaudeCode.args(ask, dir)], { stdin: "pipe", stdout: "pipe", stderr: "pipe", env: ClaudeCode.env(ask) });
     } catch (err: any) {
-      fs.rmSync(file, { force: true });
+      fs.rmSync(dir, { recursive: true, force: true });
       return none(/ENOENT|not found/i.test(String(err?.message)) ? NO_CLAUDE : String(err?.message ?? err), "down");
     }
     const run: Run = { ask, on, st: null, seen: [], sent: [], own: false, said: false, result: null, grew: false, reset: 0, shut: false, cut, first: null };
@@ -361,7 +361,7 @@ export namespace ClaudeCode {
       } catch {}
       shut();
       const code = await proc.exited;
-      fs.rmSync(file, { force: true });
+      fs.rmSync(dir, { recursive: true, force: true });
       if (stopped) {
         Agent.fail("stopped", run.st === null ? [] : run.seen).entries.forEach((e) => on({ $: "Entry", ...e }));
         return { ...end, text: "stopped", stop: "lost", left: [...run.sent, ...left] } as End;
@@ -372,26 +372,26 @@ export namespace ClaudeCode {
   }
 
   // a call's arguments: streamed both ways, on its pick, illi's prompt in
-  // place of Claude Code's (its file), the user's settings alone (no
+  // place of Claude Code's (its file, in the call's folder: files), the user's settings alone (no
   // repository's: -p trusts any folder), never Claude Code's hooks
   // (illi's own hooks file is the one that runs) nor its commands; with
-  // tools, illi's (its MCP server, the whole list, allowed), of Claude
+  // tools, illi's (its MCP server, by the call's folder's file: never its
+  // URL, files says why; the whole list, allowed), of Claude
   // Code's built-in ones its web search and fetch alone, where the call
   // searches (WEB, else none: --tools), and Claude Code's own MCP servers
   // but what the call leaves out (ClaudeCode.cut: all,
   // --strict-mcp-config, or by rule, --disallowedTools), else (or once)
   // none, nor Claude Code's servers
-  export function args(ask: Ask, file: string): string[] {
+  export function args(ask: Ask, dir: string): string[] {
     const io = ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--replay-user-messages", "--no-session-persistence"];
-    const pick = ["--model", ask.model, "--effort", ask.effort, "--system-prompt-file", file, "--settings", JSON.stringify({ disableAllHooks: true }), "--setting-sources", "user", "--disable-slash-commands"];
+    const pick = ["--model", ask.model, "--effort", ask.effort, "--system-prompt-file", dir + "/prompt.md", "--settings", JSON.stringify({ disableAllHooks: true }), "--setting-sources", "user", "--disable-slash-commands"];
     if (ask.server === "" || ask.once) {
       return [...io, ...pick, "--tools", "", "--strict-mcp-config"];
     }
-    const mcp = { mcpServers: { illi: { type: "http", url: ask.server + "?hosted", timeout: WAIT } } };
     const cut = ClaudeCode.cut(ask);
     const strict = cut.strict ? ["--strict-mcp-config"] : [];
     const deny = cut.deny.length > 0 ? ["--disallowedTools", cut.deny.join(",")] : [];
-    return [...io, ...pick, "--tools", ask.searches > 0 ? WEB.join(",") : "", "--mcp-config", JSON.stringify(mcp), ...strict, "--allowedTools", "mcp__illi", ...deny, "--permission-prompt-tool", "mcp__illi__approve"];
+    return [...io, ...pick, "--tools", ask.searches > 0 ? WEB.join(",") : "", "--mcp-config", dir + "/mcp.json", ...strict, "--allowedTools", "mcp__illi", ...deny, "--permission-prompt-tool", "mcp__illi__approve"];
   }
 
   // what a call with tools leaves out of Claude Code's own MCP servers
@@ -539,11 +539,22 @@ export namespace ClaudeCode {
     return ask.server === "" || ask.once ? ask.system : ask.system + "\n\n" + NAMED;
   }
 
-  // illi's prompt in a file of its own, readable by the user alone
-  export function prompt(system: string): string {
-    const file = os.tmpdir() + "/illi-claude-" + crypto.randomUUID() + ".md";
-    fs.writeFileSync(file, system, { mode: 0o600 });
-    return file;
+  // a call's folder, the user's alone (made 0700, each file 0600), removed
+  // as the call ends: illi's prompt (prompt.md) and its MCP server
+  // (mcp.json). The server's URL holds the key to illi's tools (Tools.ts
+  // fetch), so it is never an argument: any user on the machine lists a
+  // process's arguments (ps)
+  export function files(ask: Ask): string {
+    const dir = fs.mkdtempSync(os.tmpdir() + "/illi-claude-");
+    fs.writeFileSync(dir + "/prompt.md", ClaudeCode.instructions(ask), { mode: 0o600 });
+    fs.writeFileSync(dir + "/mcp.json", JSON.stringify(ClaudeCode.mcp(ask)), { mode: 0o600 });
+    return dir;
+  }
+
+  // illi's MCP server, as Claude Code reads it (none where the call has
+  // no server: its URL "")
+  export function mcp(ask: Ask): object {
+    return { mcpServers: ask.server === "" ? {} : { illi: { type: "http", url: ask.server + "?hosted", timeout: WAIT } } };
   }
 
   // the environment Claude Code runs in: its folder's (folder_env), with
