@@ -67,7 +67,7 @@ if [ -z "$build" ]; then
       [ -n "$want" ] || die "the release's SHA256SUMS lists no $asset"
       [ "$(sha "$tmp/$asset")" = "$want" ] || die "$asset doesn't match the release's SHA256SUMS: not installed"
       ;;
-    404) say "The release has no SHA256SUMS: $asset is unchecked." ;;
+    404) die "the release has no SHA256SUMS, so $asset can't be checked: not installed" ;;
     *)   die "GitHub won't give SHA256SUMS now (HTTP $code): try again later" ;;
   esac
   mv "$tmp/$asset" "$tmp/illi"

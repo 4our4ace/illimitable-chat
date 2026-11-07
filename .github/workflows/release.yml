@@ -9,7 +9,11 @@
 # Bun's runtime, whose licenses THIRD_PARTY_NOTICES.md gives for this
 # version: a new bun-version takes that section anew. Each file is built
 # without Bun's own reading of a bunfig.toml and .env from the folder it
-# runs in, a project's (src/main.ts says why).
+# runs in, a project's (src/main.ts says why). Every action is pinned to
+# its commit (its tag beside it: a tag can be moved, a commit can't), and
+# the release is made by GitHub's own CLI on the runner, so no one else's
+# action holds the token that writes; a new version of one is pinned
+# anew, by `git ls-remote --tags` on its repository.
 name: release
 
 on:
@@ -24,8 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.3
       - name: the tag names package.json's version
@@ -51,8 +55,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile --production
@@ -60,7 +64,7 @@ jobs:
       # macOS runs only signed binaries: signed ad hoc
       - if: runner.os == 'macOS'
         run: codesign --force --sign - illi-${{ matrix.target }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: illi-${{ matrix.target }}
           path: illi-${{ matrix.target }}
@@ -72,13 +76,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           merge-multiple: true
       - run: sha256sum illi-* > SHA256SUMS
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            illi-*
-            SHA256SUMS
-          generate_release_notes: true
+      - name: the release, its files and notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" illi-* SHA256SUMS --repo "$GITHUB_REPOSITORY" --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
