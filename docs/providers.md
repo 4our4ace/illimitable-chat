@@ -146,7 +146,11 @@ illi then runs Claude Code itself, as it ships, on the account's login:
   its tools: that call may carry more than the list names. Claude
   Code's plugins stay, their MCP servers counted among its own.
 - **Your token stays with Claude Code.** illi never sees it, and its
-  turns stay out of Claude Code's session history.
+  turns stay out of Claude Code's session history. The other way too:
+  illi's prompt and the address of its tools server (which holds the
+  chat's secret) reach Claude Code as files in a folder made for the
+  call, yours alone and removed as it ends, never as the process's
+  arguments, which any user on the computer can list.
 - **Under illi's own name**: each request names the program that sent
   it, and illi's name `illi`, not `sdk-cli`, which every `claude -p`
   names by default. Users report a plan's limits filling about twice

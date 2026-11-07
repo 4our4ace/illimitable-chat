@@ -51,11 +51,14 @@ profile's own `config.json` goes over it, key by key; its `off` and
 API keys come from `/login`, which also offers `ANTHROPIC_API_KEY`,
 `OPENAI_API_KEY` and `OPENCODE_API_KEY` if they're set
 ([Providers](providers.md#api-keys)).
+Every variable comes from your environment alone: a project's `.env`
+never sets one, as illi runs with Bun's own reading of a folder's
+`.env` and `bunfig.toml` off ([Development](development.md)).
 Other variables:
 
 | Variable       | Does                                                  |
 | -------------- | ----------------------------------------------------- |
-| `ILLI_DIR`     | illi's folder, instead of `~/.illi`                   |
+| `ILLI_DIR`     | illi's folder, instead of `~/.illi` (made yours alone, 0700, as illi starts: its chats, keys and logs are in it) |
 | `ILLI_AGENTS_DIR` | the folder shared with other agents, whose `skills/` illi loads, instead of `~/.agents` |
 | `ILLI_PROFILE` | the profile to start in                               |
 | `ILLI_WINDOW`  | `off`: illi runs alone on a terminal, not under a window, so a profile switch quits it and starts it again in the other, never while it works ([Profiles](profiles.md)) |

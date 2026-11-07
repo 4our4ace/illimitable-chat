@@ -340,7 +340,9 @@ Limits
 - Paths are matched as written, but a path inside the project whose
   real place is outside (a link on its way, even one to a file not there
   yet) is asked about as that outside folder too, as if you'd named it:
-  a repository's `notes.md -> ~/.bashrc` can't be edited unasked. A
-  shell command's plain relative words (`cat notes.md`) aren't paths to
-  the checks, so in `default` mode they run, as anything inside does.
+  a repository's `notes.md -> ~/.bashrc` can't be edited unasked by the
+  file tools, nor by a shell redirection (`echo x > notes.md`). A shell
+  command's plain relative words (`cat notes.md`, `tee notes.md`, `cp x
+  notes.md`) aren't paths to the checks, so in `default` mode they run,
+  as anything inside does, even through such a link.
 - No sandbox yet: [Planned](planned.md).

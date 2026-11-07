@@ -4,7 +4,8 @@
 // illi runs, unmodified: where it is, and its download. ILLI_ANTIGRAVITY
 // names a command line of the user's own that starts its ACP server
 // (`agy acp`, say), split at spaces, run whatever its version (keeping it
-// current is the user's). Else the user's own `agy` on PATH, once it is
+// current is the user's). Else the user's own `agy` on PATH (its absolute
+// folders alone: a relative one is the project's, Agy.which), once it is
 // MINIMUM or later (Agy.look: its version asked once in the background,
 // as `agy --version` takes a second or more, and kept by its path, size
 // and time in agy.json beside the builds, so a start never waits on it;

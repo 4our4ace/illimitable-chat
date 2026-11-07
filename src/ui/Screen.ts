@@ -6,7 +6,8 @@
 // or scrolls, moved by the terminal), in one synchronized write; the
 // terminal's own scrollback stays as it was, and is back as illi quits,
 // or hands the terminal on (screen_leave). A pipe gets lines
-// as text. Input is read raw (macOS cuts a
+// as text, cleaned as a screen's are (screen_print: no control character
+// from a text reaches the terminal). Input is read raw (macOS cuts a
 // cooked line at 1024 bytes) as one stream, into one buffer (Bun's own
 // reader takes half a megabyte a read); a paste comes bracketed and
 // is typed whole. Kitty's keys at flag 1 only, so dead keys still

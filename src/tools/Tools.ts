@@ -2,7 +2,9 @@
 // =====
 // illi's prompts, tools and agents. Calls get the tools as MCP over one
 // local port, at a URL with the chat's secret and the caller ("main", an
-// agent; a compaction has none).
+// agent; a compaction has none); the secret is the server's only lock,
+// so the URL is never a process's argument (ClaudeCode.files) and a
+// request without it is refused unread (Tools.fetch).
 // shell, read, write and edit run here, on the user's computer, in the
 // working dir: where illi was started (each call's message names it, its
 // project and the time now). A request dropped (its call stopped) stops

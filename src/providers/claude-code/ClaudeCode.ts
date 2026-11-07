@@ -6,7 +6,9 @@
 // a call's steps as it ships, but with illi's prompt in place of its own
 // (--system-prompt-file, from a file, so no argument limit: of its own
 // words only a line of who it is stays before it) and illi's tools in
-// place of its own: illi's whole list over MCP (Tools.list `hosted`), run
+// place of its own: illi's whole list over MCP (Tools.list `hosted`; its
+// server named by a file too, in a folder of the call's own, the user's
+// alone and gone as it ends, as its URL holds the key: ClaudeCode.files), run
 // by illi, so permissions, hooks and background jobs are as on every
 // provider; of Claude Code's built-in tools only its web search and
 // fetch (WEB), where the call searches the web. Its settings are the

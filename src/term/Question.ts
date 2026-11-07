@@ -41,7 +41,9 @@
 // one; the form, as tall as its tallest tab (tabbing never moves the
 // chat), its lines between its tabs and its keys scrolling, the lit row
 // kept in view. Each row is one line, drawn once, no control character
-// in it (its lead and names cleaned where laid out: question_lead,
+// in it (its lead and names cleaned where laid out, an invisible
+// character shown, and laid out at the widest a terminal may draw them,
+// so a command's end never runs past the edge unseen: question_lead,
 // Popup.ts popup_name_lines), its lead laid out once a width (a command
 // whole may run long: Tools.whole). Nothing is dimmed, and the input as
 // typed is kept under it, back once it is answered. It has every key but
