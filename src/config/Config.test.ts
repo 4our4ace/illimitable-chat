@@ -71,6 +71,12 @@ test("the vendors apply at once: a pick on a vendor added is taken; vendors that
   expect(config.SIDE).toBe("left");
 });
 
+test("illi's folder is the user's alone as a session starts: made so, or made so from open to all", () => {
+  fs.chmodSync(config.ROOT, 0o755);
+  config.config_private();
+  expect(fs.statSync(config.ROOT).mode & 0o777).toBe(0o700);
+});
+
 test("autocompacts from a variable under its old name, as JSON", () => {
   expect(config.config_context("gpt-6.1-sol", 500000)).toBe(100000);
 });

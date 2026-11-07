@@ -717,6 +717,7 @@ export async function term_start(): Promise<void> {
   process.on("uncaughtException", term_crash);
   process.on("unhandledRejection", term_crash);
   member_hello();
+  config.config_private();
   const tty = process.stdin.isTTY === true && process.stdout.isTTY === true;
   const scr = tty ? Screen.screen_new(() => {}, member_screen()) : null;
   if (scr !== null && !(await Trust.check(scr, process.cwd()))) {

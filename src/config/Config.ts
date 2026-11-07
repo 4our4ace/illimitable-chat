@@ -871,6 +871,20 @@ export function config_down(cwd: string): string[] {
   }
 }
 
+// illi's folder (ROOT: every profile's, its chats, keys and logs) the
+// user's alone, as a session starts: made so, or made so if another user
+// may read it (a Mac's home is open to all, and so are the chats' files
+// in it, made as a process makes them). One the user doesn't own is left
+// as it is
+export function config_private(): void {
+  try {
+    fs.mkdirSync(ROOT, { recursive: true, mode: 0o700 });
+    if ((fs.statSync(ROOT).mode & 0o077) !== 0) {
+      fs.chmodSync(ROOT, 0o700);
+    }
+  } catch {}
+}
+
 // a path as illi shows it: ~ for the home folder (not for a folder
 // whose name only starts as home's: /home/me2 isn't ~2)
 export function config_home(file: string): string {
