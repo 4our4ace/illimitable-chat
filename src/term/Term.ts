@@ -729,10 +729,16 @@ export async function term_start(): Promise<void> {
     term_after("illi: " + err.message);
     process.exit(1);
   });
-  // on a terminal, what the agent logs goes to LOG, never over the screen
+  // on a terminal, what the agent logs goes to LOG, never over the screen;
+  // from a pipe, its errors to a terminal still (stderr), without control
+  // characters: they may carry what illi didn't write (an MCP server's
+  // line, an HTTP error's body)
   if (process.stdout.isTTY) {
     const log = (...args: unknown[]) => fs.appendFileSync(LOG, new Date().toISOString() + " " + args.map(String).join(" ") + "\n");
     console.log = console.warn = console.error = log;
+  } else if (process.stderr.isTTY) {
+    const said = console.error;
+    console.warn = console.error = (...args: unknown[]) => said(args.map(String).join(" ").replace(/[\x00-\x08\x0b-\x1f\x7f-\x9f]/g, ""));
   }
   // the profile a person works in here, kept for the project's next start
   // (a script's run through a pipe changes nothing; one hidden in a

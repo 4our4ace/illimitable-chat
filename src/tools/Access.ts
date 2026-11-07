@@ -221,7 +221,7 @@ export namespace Access {
     const absolute = path.resolve(where.cwd, p === "~" ? os.homedir() : p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p);
     if (inside(where, absolute)) {
       const place = real(absolute);
-      const back  = place === absolute || inside(where, place) || under(place, real(where.cwd));
+      const back  = place === absolute || inside(where, place) || under(place, real(where.cwd)) || (where.top !== path.parse(where.top).root && under(place, real(where.top)));
       return { absolute, resource: slash(path.relative(where.cwd, absolute) || "."), ...(back ? {} : { outside: Access.target(where, place, kind).outside }) };
     }
     if (where.files.includes(absolute)) {

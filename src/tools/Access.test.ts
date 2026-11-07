@@ -5,7 +5,8 @@
 // folder's request (a file's folder, a folder's own; saving its git
 // repository's); one inside by a link whose real place is outside (a
 // folder's, a file's, a file not there yet) asking for that folder too,
-// as if named, its resource still as written; illi's own RULES.md alone
+// as if named, its resource still as written (a working dir or project
+// top reached by a link: none); illi's own RULES.md alone
 // of its folder; a shell
 // command's simple commands as written (assignments off, wrappers kept,
 // a wrapper's script and what it runs both) and unquoted (a system
@@ -78,6 +79,7 @@ test("a link inside that leads outside asks for its real folder too, as if named
   expect(shell("echo x > notes.md")[0]).toEqual(["external_directory", [LIB + "/*"], [LIB + "/*"]]);
   expect(Access.requests(WHERE, "read", { path: "readme.md" })).toEqual([{ action: "read", resources: ["readme.md"], save: ["*"], spots: [null] }]);
   expect(Access.requests({ ...WHERE, cwd: DIR + "/app-link/src" }, "edit", { edits: [{ path: "a.ts" }, { path: "lib/b.ts" }] })).toEqual([{ action: "edit", resources: ["a.ts", "lib/b.ts"], save: ["*"], spots: [null, null] }]);
+  expect(Access.requests({ ...WHERE, cwd: DIR + "/app-link/src", top: DIR + "/app-link" }, "edit", { edits: [{ path: "../README.md" }] })).toEqual([{ action: "edit", resources: ["../README.md"], save: ["*"], spots: [null] }]);
 });
 
 test("illi's other tools, MCP tools: their own action", () => {
