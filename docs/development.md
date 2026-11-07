@@ -70,7 +70,15 @@ From source, without installing:
 
     git clone https://github.com/4our4ace/illimitable-chat
     cd illimitable-chat && bun install
-    bun src/main.ts
+    ./src/main.ts
+
+Run it as a program (`./src/main.ts`, or a launcher that `exec`s that
+path), not as `bun src/main.ts`: its first line starts Bun with
+`--no-env-file --config=/dev/null`, so a project's own `bunfig.toml`
+(whose `preload` would run before illi) and `.env` (whose `ILLI_*`
+variables would be settings) are never read. Every build of the one
+file leaves them out too (`--no-compile-autoload-bunfig
+--no-compile-autoload-dotenv`); `test/folder.test.ts` checks both.
 
 A release is a tag `vX.Y.Z` naming `package.json`'s version: the
 workflow (`.github/workflows/release.yml`) type-checks and tests it,

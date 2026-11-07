@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S bun --no-env-file --config=/dev/null
 // Main
 // ====
 // `illi`: the chat in this folder (term/Term.ts; on a terminal, under a
@@ -9,6 +9,15 @@
 // clone, a pull), `illi version`, `illi help` (USAGE). The chat is
 // imported only to run it, so an upgrade works whatever its settings
 // say; a setting that won't do stops it with one line on why.
+//
+// Bun reads a bunfig.toml (its preload: code run before this) and a .env
+// (variables, an ILLI_* one a setting) from the folder it starts in,
+// which is the project's: a repository's own files would run as the
+// user, before any trust is asked. So illi runs with neither: from the
+// source by the line above (run as a program: `bun src/main.ts` passes
+// no flags), the one file built without them (package.json's build,
+// release.yml, install.sh); illi's own restarts keep them
+// (process.execArgv: Window.ts, ProfileCommands.ts).
 
 import * as fs from "node:fs";
 import * as path from "node:path";

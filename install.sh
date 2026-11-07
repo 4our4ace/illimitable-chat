@@ -85,7 +85,8 @@ else
   later "$have" 1.4.3 || die "building illi needs Bun 1.4.3 or later, and this is $have: run bun upgrade, then this again"
   git clone --quiet --depth 1 "https://github.com/$REPO" "$tmp/repo"
   (cd "$tmp/repo" && bun install --frozen-lockfile --production >/dev/null)
-  bun build --compile --minify "$tmp/repo/src/main.ts" "$tmp/repo/src/chat/Seeker.ts" --outfile "$tmp/illi" >/dev/null
+  # never reading a project's bunfig.toml or .env as it runs (src/main.ts)
+  bun build --compile --no-compile-autoload-bunfig --no-compile-autoload-dotenv --minify "$tmp/repo/src/main.ts" "$tmp/repo/src/chat/Seeker.ts" --outfile "$tmp/illi" >/dev/null
 fi
 
 chmod 755 "$tmp/illi"

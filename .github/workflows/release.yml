@@ -7,7 +7,9 @@
 # spawnSync could spin forever over a child already gone (bun#34069),
 # which hung the tests here some runs in three. Every file built holds
 # Bun's runtime, whose licenses THIRD_PARTY_NOTICES.md gives for this
-# version: a new bun-version takes that section anew.
+# version: a new bun-version takes that section anew. Each file is built
+# without Bun's own reading of a bunfig.toml and .env from the folder it
+# runs in, a project's (src/main.ts says why).
 name: release
 
 on:
@@ -54,7 +56,7 @@ jobs:
         with:
           bun-version: 1.4.3
       - run: bun install --frozen-lockfile --production
-      - run: bun build --compile --minify --target=bun-${{ matrix.target }} src/main.ts src/chat/Seeker.ts --outfile illi-${{ matrix.target }}
+      - run: bun build --compile --no-compile-autoload-bunfig --no-compile-autoload-dotenv --minify --target=bun-${{ matrix.target }} src/main.ts src/chat/Seeker.ts --outfile illi-${{ matrix.target }}
       # macOS runs only signed binaries: signed ad hoc
       - if: runner.os == 'macOS'
         run: codesign --force --sign - illi-${{ matrix.target }}
