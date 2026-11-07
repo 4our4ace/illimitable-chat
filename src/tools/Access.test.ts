@@ -3,7 +3,10 @@
 // `bun test Access.test.ts`. What a call asks leave for: a file inside by
 // its path from the working dir, outside by its absolute path after its
 // folder's request (a file's folder, a folder's own; saving its git
-// repository's); illi's own RULES.md alone of its folder; a shell
+// repository's); one inside by a link whose real place is outside (a
+// folder's, a file's, a file not there yet) asking for that folder too,
+// as if named, its resource still as written; illi's own RULES.md alone
+// of its folder; a shell
 // command's simple commands as written (assignments off, wrappers kept,
 // a wrapper's script and what it runs both) and unquoted (a system
 // program by name), a cd only for its folder, the folders its words and
@@ -36,6 +39,11 @@ fs.mkdirSync(APP + "/.git");
 fs.mkdirSync(LIB + "/repo/.git", { recursive: true });
 fs.mkdirSync(LIB + "/repo/pkg");
 fs.mkdirSync(DIR + "/illi");
+fs.symlinkSync(LIB + "/repo/pkg", APP + "/src/out");
+fs.symlinkSync(LIB + "/n.txt", APP + "/src/notes.md");
+fs.symlinkSync(LIB + "/missing.txt", APP + "/src/dangle.md");
+fs.symlinkSync(APP + "/README.md", APP + "/src/readme.md");
+fs.symlinkSync(APP, DIR + "/app-link");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
@@ -60,6 +68,16 @@ test("files: inside by their path from the working dir; outside absolute, after 
   ]);
   expect(Access.requests(WHERE, "write", { path: DIR + "/illi/RULES.md" })[0]).toEqual({ action: "external_directory", resources: [DIR + "/illi/RULES.md"], save: [DIR + "/illi/RULES.md"], spots: [null] });
   expect(Access.requests(WHERE, "write", { path: DIR + "/illi/config.json" })[0].resources).toEqual([DIR + "/illi/*"]);
+});
+
+test("a link inside that leads outside asks for its real folder too, as if named (a folder's, a file's, a file not there yet a write would make), the path's own resource as written; one that stays inside, or a working dir reached by a link, none", () => {
+  const outside = (folder: string) => ({ action: "external_directory", resources: [folder + "/*"], save: [LIB + (folder === LIB ? "" : "/repo") + "/*"], spots: [null] });
+  expect(Access.requests(WHERE, "read", { path: "out/x.ts" })).toEqual([outside(LIB + "/repo/pkg"), { action: "read", resources: ["out/x.ts"], save: ["*"], spots: [null] }]);
+  expect(Access.requests(WHERE, "write", { path: "notes.md", content: "" })).toEqual([outside(LIB), { action: "edit", resources: ["notes.md"], save: ["*"], spots: [null] }]);
+  expect(Access.requests(WHERE, "write", { path: "dangle.md", content: "" })[0]).toEqual(outside(LIB));
+  expect(shell("echo x > notes.md")[0]).toEqual(["external_directory", [LIB + "/*"], [LIB + "/*"]]);
+  expect(Access.requests(WHERE, "read", { path: "readme.md" })).toEqual([{ action: "read", resources: ["readme.md"], save: ["*"], spots: [null] }]);
+  expect(Access.requests({ ...WHERE, cwd: DIR + "/app-link/src" }, "edit", { edits: [{ path: "a.ts" }, { path: "lib/b.ts" }] })).toEqual([{ action: "edit", resources: ["a.ts", "lib/b.ts"], save: ["*"], spots: [null, null] }]);
 });
 
 test("illi's other tools, MCP tools: their own action", () => {

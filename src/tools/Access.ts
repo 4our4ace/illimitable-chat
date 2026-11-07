@@ -42,7 +42,10 @@
 // a plugin, its code, hooks and MCP servers; its RULES.md and
 // theme.json, which alone of their folder have their own
 // path as resource, so allowing them allows nothing beside them). Paths
-// are taken as written (. and .. worked out), links not followed.
+// are taken as written (. and .. worked out); one inside whose real place
+// is outside (a link on its way, followed: one to a file not there yet
+// too, which a write would make) asks for that place's folder as well,
+// as if named, so a repository's link never reaches outside unasked.
 // Claude Code's own tools (hosted), as it asks leave for one: of its
 // built-in ones only its web fetch and search run in illi's calls
 // (ClaudeCode.args), as webfetch (the URL) and websearch (the query);
@@ -217,7 +220,9 @@ export namespace Access {
   export function target(where: Where, p: string, kind?: "file" | "directory"): Target {
     const absolute = path.resolve(where.cwd, p === "~" ? os.homedir() : p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p);
     if (inside(where, absolute)) {
-      return { absolute, resource: slash(path.relative(where.cwd, absolute) || ".") };
+      const place = real(absolute);
+      const back  = place === absolute || inside(where, place) || under(place, real(where.cwd));
+      return { absolute, resource: slash(path.relative(where.cwd, absolute) || "."), ...(back ? {} : { outside: Access.target(where, place, kind).outside }) };
     }
     if (where.files.includes(absolute)) {
       return { absolute, resource: slash(absolute), outside: { resource: slash(absolute), save: slash(absolute) } };
@@ -524,6 +529,27 @@ function top_exists(absolute: string): boolean {
 
 // Paths
 // =====
+
+// a path's real place: each link on its way followed, one whose target
+// isn't there too (a write through it makes that file), as far as links
+// go (a loop: where it stops); what isn't there yet, as written below
+// the real folder holding it
+function real(p: string, hops = 0): string {
+  try {
+    return fs.realpathSync(p);
+  } catch {}
+  const up = path.dirname(p);
+  if (up === p) {
+    return p;
+  }
+  const at = path.join(real(up, hops), path.basename(p));
+  try {
+    if (hops < 40 && fs.lstatSync(at).isSymbolicLink()) {
+      return real(path.resolve(path.dirname(at), fs.readlinkSync(at)), hops + 1);
+    }
+  } catch {}
+  return at;
+}
 
 // whether a path is inside: the working dir, or the project's top (not
 // /)

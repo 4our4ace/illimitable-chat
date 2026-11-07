@@ -332,6 +332,10 @@ Limits
   `shell` rules alone (and, outside the project, the folder's
   `external_directory` ones): an `edit` rule denying `*.lock` doesn't
   stop `echo x > bun.lock`.
-- Paths are matched as written: a link inside the project that leads
-  outside isn't asked.
+- Paths are matched as written, but a path inside the project whose
+  real place is outside (a link on its way, even one to a file not there
+  yet) is asked about as that outside folder too, as if you'd named it:
+  a repository's `notes.md -> ~/.bashrc` can't be edited unasked. A
+  shell command's plain relative words (`cat notes.md`) aren't paths to
+  the checks, so in `default` mode they run, as anything inside does.
 - No sandbox yet: [Planned](planned.md).
