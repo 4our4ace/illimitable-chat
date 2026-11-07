@@ -94,6 +94,13 @@ print exactly `illi X.Y.Z` (main.ts), then renames it over itself. `bun
 run build`'s `./illi` is such a file and updates itself too
 (`ILLI_AUTOUPDATE=off` keeps it); a source run never does.
 
+Once the release is out, `.github/workflows/upgrade.yml` tries that on
+each of the four systems, on GitHub's own machines, from the release
+before it: `illi upgrade` must leave the new one, the chat started on a
+terminal (a pty, no key pressed) must install it by itself, and a fresh
+`install.sh` must too. It also runs by hand (Actions, upgrade, Run
+workflow), trying the latest release against the one before.
+
 The libraries illi uses are three, each pinned to one version in
 `package.json` (`bun.lock` holds the exact commit or file hash) and
 compiled into the binary, so a user installs none of them: Pele lays out

@@ -1,0 +1,99 @@
+# An installed illi updating itself, tried on each system a release is
+# built for, on GitHub's own machines (Linux x64 and arm64, an Intel Mac
+# and an Apple one), after each release and when run by hand: the
+# release before the latest installed, `illi upgrade` must leave the
+# latest; installed again, the chat itself, started on a terminal of its
+# own (a pty, no key pressed), must install it by its start's look; and
+# install.sh, fresh, must install it, its checksum checked. Nothing is
+# built here: the files are the releases' own, as people download them.
+# No action is used, only the runner's curl, gh and python3, and the
+# token only reads.
+name: upgrade
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  upgrade:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest,    asset: illi-linux-x64 }
+          - { runner: ubuntu-24.04-arm, asset: illi-linux-arm64 }
+          - { runner: macos-15-intel,   asset: illi-darwin-x64 }
+          - { runner: macos-latest,     asset: illi-darwin-arm64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ILLI_VENDORS: claude-api
+    steps:
+      - name: the latest release and the one before it
+        run: |
+          tags="$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 2 --json tagName --jq '.[].tagName')"
+          latest="$(echo "$tags" | sed -n 1p)"
+          before="$(echo "$tags" | sed -n 2p)"
+          echo "latest=${latest#v}" >> "$GITHUB_ENV"
+          echo "before=$before" >> "$GITHUB_ENV"
+          echo "from $before to $latest"
+
+      - name: illi upgrade, from the release before
+        run: |
+          dir="$RUNNER_TEMP/upgrade"
+          mkdir -p "$dir/bin"
+          curl -fsSL -o "$dir/bin/illi" "https://github.com/$GITHUB_REPOSITORY/releases/download/$before/${{ matrix.asset }}"
+          chmod 755 "$dir/bin/illi"
+          "$dir/bin/illi" version
+          ILLI_DIR="$dir/root" "$dir/bin/illi" upgrade
+          test "$("$dir/bin/illi" version)" = "illi $latest"
+          test "$(ls -A "$dir/bin")" = "illi"
+
+      - name: the chat, started on a terminal, installs it by itself
+        run: |
+          dir="$RUNNER_TEMP/chat"
+          mkdir -p "$dir/bin" "$dir/root" "$dir/project"
+          curl -fsSL -o "$dir/bin/illi" "https://github.com/$GITHUB_REPOSITORY/releases/download/$before/${{ matrix.asset }}"
+          chmod 755 "$dir/bin/illi"
+          project="$(cd "$dir/project" && pwd -P)"
+          printf '{"folders":["%s"]}\n' "$project" > "$dir/root/trust.json"
+          cd "$project"
+          got="$(ILLI_DIR="$dir/root" ILLI_AUTOUPDATE=on python3 - "$dir/bin/illi" "$latest" <<'EOF'
+          # the chat on a pty of its own, no key pressed, till its file says
+          # the version wanted or a minute passes; then killed
+          import fcntl, os, pty, select, struct, subprocess, sys, termios, time
+          exe, want = sys.argv[1], sys.argv[2]
+          pid, fd = pty.fork()
+          if pid == 0:
+              fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 100, 0, 0))
+              os.execv(exe, [exe])
+          got, end = "", time.time() + 60
+          while time.time() < end:
+              if select.select([fd], [], [], 1)[0]:
+                  try:
+                      os.read(fd, 65536)
+                  except OSError:
+                      break
+              got = subprocess.run([exe, "version"], capture_output=True, text=True).stdout.strip()
+              if got == "illi " + want:
+                  break
+          os.kill(pid, 9)
+          print(got)
+          EOF
+          )"
+          echo "$got"
+          cat "$dir/root/illi.log" 2>/dev/null | grep "update:" || true
+          test "$got" = "illi $latest"
+
+      - name: install.sh, fresh
+        run: |
+          dir="$RUNNER_TEMP/fresh"
+          curl -fsSL "https://raw.githubusercontent.com/$GITHUB_REPOSITORY/main/install.sh" | ILLI_INSTALL="$dir" bash
+          test "$("$dir/illi" version)" = "illi $latest"
