@@ -143,6 +143,28 @@ export function text_clean(s: string): string {
   return s.replace(/\t/g, "  ").replace(/\n/g, " ").replace(/[\x00-\x1f\x7f-\x9f]/g, "");
 }
 
+// the most columns a terminal may draw a text in: a character past ASCII
+// two. Bun's widths (text_width) and a terminal's differ for hundreds of
+// characters (☰ is one to Bun, two in Unicode 16's table; a soft hyphen
+// none to Bun, one to most terminals), and a line laid out by Bun's that
+// a terminal draws wider runs past the screen's edge, its end never
+// seen: what a person decides by (a question's lead and answers,
+// Question.ts) is laid out by this, so it never does
+export function text_widest(s: string): number {
+  let n = 0;
+  for (const ch of s) {
+    n += ch.charCodeAt(0) < 0x80 ? 1 : 2;
+  }
+  return n;
+}
+
+// text as a person decides by it: cleaned (text_clean), each invisible
+// character (a format one: bidi controls, zero widths, a soft hyphen)
+// shown as �, one a code unit, so places in it stay where they were
+export function text_seen(s: string): string {
+  return text_clean(s).replace(/\p{Cf}/gu, (c) => "\uFFFD".repeat(c.length));
+}
+
 // text on one line, cleaned (text_clean), each run of spaces one, none
 // at its ends: a command as a list shows it
 export function text_line(s: string): string {
@@ -162,21 +184,21 @@ export function text_graphemes(s: string): string[] {
 // character (a link's pieces keep its url, so each opens it whole; a
 // run's pieces keep its button and its tag). A run that fits in the rest
 // of its line goes whole, unless it would start a line that a break
-// began.
-export function runs_wrap(runs: Line, w: number, hard: boolean): Line[] {
+// began. Widths by Bun's (text_width), or as given (text_widest)
+export function runs_wrap(runs: Line, w: number, hard: boolean, width = text_width): Line[] {
   const out: Line[] = [[]];
   let col = 0;
   for (const r of runs) {
-    const whole  = col + text_width(r.x) <= w && (col > 0 || out.length === 1);
+    const whole  = col + width(r.x) <= w && (col > 0 || out.length === 1);
     const words  = whole ? [r.x] : hard ? [] : r.x.split(/(\s+)/).filter((p) => p !== "");
-    const broken = hard && !whole ? text_graphemes(r.x) : words.flatMap((p) => (text_width(p) <= w ? [] : text_graphemes(p)));
-    const pieces = hard && !whole ? broken : words.flatMap((p) => (text_width(p) <= w ? [p] : text_graphemes(p)));
+    const broken = hard && !whole ? text_graphemes(r.x) : words.flatMap((p) => (width(p) <= w ? [] : text_graphemes(p)));
+    const pieces = hard && !whole ? broken : words.flatMap((p) => (width(p) <= w ? [p] : text_graphemes(p)));
     for (const p of pieces) {
-      const pw = text_width(p);
+      const pw = width(p);
       if (col > 0 && col + pw > w) {
-        const word = hard || broken.length > 0 || !/^\S/.test(p) ? [] : line_word(out[out.length - 1], w - pw);
+        const word = hard || broken.length > 0 || !/^\S/.test(p) ? [] : line_word(out[out.length - 1], w - pw, width);
         out.push(word);
-        col = line_width(word);
+        col = line_cols(word, width);
       }
       if (!(!hard && /^\s+$/.test(p) && col === 0 && out.length > 1)) {
         out[out.length - 1].push({ ...r, x: p });
@@ -190,12 +212,12 @@ export function runs_wrap(runs: Line, w: number, hard: boolean): Line[] {
 // the word a line ends in, taken off it to start the next line with
 // (back to its last space), if it is no wider than room; none (the line
 // ends in a space, or is all one word, or it's too wide): nothing taken
-function line_word(l: Line, room: number): Line {
+function line_word(l: Line, room: number, width: (s: string) => number): Line {
   for (let k = l.length - 1; k >= 0; k--) {
     const tail = /\S*$/.exec(l[k].x)![0];
     if (tail.length < l[k].x.length) {
       const word = [...(tail === "" ? [] : [{ ...l[k], x: tail }]), ...l.slice(k + 1)];
-      if (line_width(word) > room) {
+      if (line_cols(word, width) > room) {
         return [];
       }
       l.splice(k, l.length - k, { ...l[k], x: l[k].x.slice(0, l[k].x.length - tail.length) });
@@ -206,7 +228,12 @@ function line_word(l: Line, room: number): Line {
 }
 
 export function line_width(l: Line): number {
-  return l.reduce((n, r) => n + text_width(r.x), 0);
+  return line_cols(l, text_width);
+}
+
+// a line's columns, by a width
+function line_cols(l: Line, width: (s: string) => number): number {
+  return l.reduce((n, r) => n + width(r.x), 0);
 }
 
 // a line cut at columns from and to: its runs before, between, after (a

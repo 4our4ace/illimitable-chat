@@ -235,17 +235,28 @@ function popup_dot_width(c: Chooser, name: string): number {
   return popup_dotted(c) && !popup_act(c, name) ? 2 : 0;
 }
 
+// how an option's name is cleaned and measured: a question's answers
+// (answers: a permission's "don't ask again" names what it keeps) as a
+// person decides by them, at the widest a terminal may draw them
+// (Paint.text_seen, text_widest), so no answer's end runs past the edge
+// unseen; a list's as Bun counts
+function popup_text(c: Chooser): { clean: (s: string) => string; width: (s: string) => number } {
+  return c.answers === true ? { clean: Paint.text_seen, width: Paint.text_widest } : { clean: Paint.text_clean, width: Paint.text_width };
+}
+
 // the columns an option's name takes after the marks (one that makes
 // something new: its "+" in the mark's place)
 function popup_name_width(c: Chooser, name: string): number {
-  return Paint.text_width(Paint.text_clean(name)) - (popup_act(c, name) ? 2 : 0);
+  const { clean, width } = popup_text(c);
+  return width(clean(name)) - (popup_act(c, name) ? 2 : 0);
 }
 
 // the lines an option's name takes within iw columns after its marks
 // (popup_name_lines): one where it fits, unwrapped
 function popup_name_tall(c: Chooser, name: string, iw: number): number {
+  const { clean, width } = popup_text(c);
   const room = iw - Paint.text_width(Paint.lit_lead(true)) - popup_dot_width(c, name);
-  return Paint.text_width(Paint.text_clean(name)) <= room ? 1 : popup_name_lines(c, name, iw).length;
+  return width(clean(name)) <= room ? 1 : popup_name_lines(c, name, iw).length;
 }
 
 // an option's name as its rows show it, in ink (the characters at `at`
@@ -253,14 +264,15 @@ function popup_name_tall(c: Chooser, name: string, iw: number): number {
 // too wide, wrapped at its words (a word too long at its characters),
 // whole. No control character reaches the screen (a new line written
 // there would draw the rest of the row over the rows under it): each
-// cleaned as text is (Paint.text_clean), where the search counts it (none
+// cleaned as text is (popup_text), where the search counts it (none
 // lit: the name cleaned in one piece, a long one as fast as a short)
 function popup_name_lines(c: Chooser, name: string, iw: number, ink = Paint.INK, lit = Paint.INK, at: number[] = []): Paint.Line[] {
+  const { clean, width } = popup_text(c);
   const room = iw - Paint.text_width(Paint.lit_lead(true)) - popup_dot_width(c, name);
   const runs: Paint.Line = [];
   (at.length === 0 ? [name] : [...name]).forEach((ch, j) => {
     const s    = at.includes(j) ? lit : ink;
-    const x    = Paint.text_clean(ch);
+    const x    = clean(ch);
     const last = runs.at(-1);
     if (last !== undefined && last.s === s) {
       last.x += x;
@@ -268,7 +280,7 @@ function popup_name_lines(c: Chooser, name: string, iw: number, ink = Paint.INK,
       runs.push(Paint.Run(x, s));
     }
   });
-  return Paint.line_width(runs) <= room ? [runs] : Paint.runs_wrap(runs, Math.max(1, room), false);
+  return runs.reduce((n, r) => n + width(r.x), 0) <= room ? [runs] : Paint.runs_wrap(runs, Math.max(1, room), false, width);
 }
 
 // the picker's entries as shown now: each option by its index among

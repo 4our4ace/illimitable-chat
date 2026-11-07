@@ -214,6 +214,30 @@ for (const [what, said] of [[LONG, "a 2,000-character command on one line"], [TA
   }
 }
 
+test("the permission question never hides a command's end past the screen's edge, whatever a terminal's widths: each character past ASCII laid out two columns wide (☰ is one to Bun, two to a terminal on Unicode 16), an invisible one shown as �; nor the end of what don't ask again keeps", () => {
+  sized(80, 30, () => {
+    const pad = "☰".repeat(36);
+    for (const [what, keep, seen] of [
+      ["echo " + pad + " build ok && rm -rf src", pad + " *, rm *", ["build ok && rm -rf src", "rm * in this project"]],
+      ["ls \u202Ecrs fr- mr\u202C x\u00AD\u200By", "ls *", ["ls \uFFFDcrs fr- mr\uFFFD x\uFFFD\uFFFDy"]],
+    ]) {
+      const t = term();
+      ask(t, what as string, keep as string);
+      // each row at the widest a terminal may draw it (an answer's marks,
+      // illi's own, as Bun counts them) fits
+      for (const row of t.ruled.rows.slice(t.box.row, t.box.row + t.box.h)) {
+        for (const p of row) {
+          expect(Paint.text_widest(p.line.map((r: any) => r.x).join("").replace(/[●○]/g, "o"))).toBeLessThanOrEqual(p.w);
+        }
+      }
+      const shown = asked(t, 80).slice(1, -1).map((l: string) => l.trim()).join(" ");
+      for (const x of seen as string[]) {
+        expect(shown).toContain(x);
+      }
+    }
+  });
+});
+
 test("the permission question shows the command whole, not cut short as a note shows it: a 2,000-character one, folded to the rows holding its risk and its last, read to its end, page by page, once Ctrl+O shows it all", () => {
   sized(80, 24, () => {
     const t = term();

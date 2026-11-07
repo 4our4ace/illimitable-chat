@@ -219,8 +219,11 @@ function question_picker(t: Term, c: Chooser, w: number, h: number, free: number
 }
 
 // the lines leading a question's answers (Chooser lead) wrapped w wide,
-// each run cleaned as text is (Paint.text_clean: no control character
-// reaches the screen, whoever made them), all of them and folded
+// each run cleaned as a person decides by it (Paint.text_seen: no control
+// character reaches the screen, whoever made them; an invisible one
+// shows), laid out at the widest a terminal may draw them
+// (Paint.text_widest: the end of a command never runs past the edge
+// unseen, whatever a terminal's widths), all of them and folded
 // (question_folded); made once a lead, fold and width, as a paint lays
 // the question out again and again and a command whole may run to many
 // lines (a new width wraps and folds it anew)
@@ -230,8 +233,8 @@ function question_lead(c: Chooser, w: number): { all: Paint.Line[]; folded: Fold
   if (known?.w === w && known.fold === c.fold) {
     return known;
   }
-  const clean = lead.map((l) => l.map((r) => ({ ...r, x: Paint.text_clean(r.x) })));
-  const each  = clean.map((l) => Paint.runs_wrap(l, Math.max(1, w), false));
+  const clean = lead.map((l) => l.map((r) => ({ ...r, x: Paint.text_seen(r.x) })));
+  const each  = clean.map((l) => Paint.runs_wrap(l, Math.max(1, w), false, Paint.text_widest));
   const laid  = { fold: c.fold, w, all: each.flat(), folded: c.fold === undefined ? null : question_folded(clean.map((l) => l.map((r) => r.x).join("")), each, c.fold) };
   LEADS.set(lead, laid);
   return laid;
