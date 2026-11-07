@@ -103,6 +103,8 @@ project always comes first:
   of what is in it: a script quoted whole with none of those in it stays
   one piece (in a `case`, `bash -c 'rm x'` matches a rule on `bash *`,
   not one on `rm *`).
+- illi's own folder (`~/.illi`, `ILLI_DIR`) is outside every project,
+  the home chat's too, where it sits in the folder you work in.
 - illi's own customization places are allowed outside the project: its
   skills, commands and agents folders (its own, a profile's, those
   shared in `~/.agents/skills`, and each plugin's found as illi started,
@@ -113,7 +115,7 @@ project always comes first:
   permissions, hooks and MCP servers beside them are still asked, and
   so are a plugin's code, hooks and MCP servers.
 - A change by the file tools to what every chat follows is asked, from
-  any project (the home chat too, where `~/.illi` is inside): the
+  any project (the home chat too): the
   skills, commands and agents folders above (not a project's own, which
   stay in its sight) and the `RULES.md` files. What a project's text
   talks the model into writing there (a planted instruction in a file

@@ -27,6 +27,7 @@ import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as config from "../config/Config.ts";
 import { Access, type Where } from "./Access.ts";
 import { Permissions, type Rule } from "./Permissions.ts";
 
@@ -109,6 +110,15 @@ test("a change to illi's own instructions asks, by the file tools, wherever the 
   expect(judge(HOME, "write", { path: "illi/config.json", content: "" })).toEqual([["edit", "allow", ["*"]]]);
   expect(Access.said("edit", DIR + "/illi/skills/*", APP)).toBe("changes to " + DIR + "/illi/skills/");
   expect(Permissions.decide("edit", [DIR + "/illi/RULES.md"], [...base, rule("edit", DIR + "/illi/*", "allow")], []).effect).toBe("allow");
+});
+
+test("illi's own folder is outside every project, the home chat's too: its settings, hooks and permissions asked about from there as from anywhere", () => {
+  const home: Where = { ...WHERE, cwd: path.dirname(config.ROOT), top: path.dirname(config.ROOT) };
+  const base = Permissions.base(Access.places(home.cwd), Access.guarded());
+  const judge = (file: string) => Access.requests(home, "write", { path: file, content: "" }).map((r) => [r.action, Permissions.decide(r.action, r.resources, base, []).effect]);
+  expect(judge(config.ROOT + "/hooks.json")).toEqual([["external_directory", "ask"], ["edit", "allow"]]);
+  expect(judge(config.ROOT + "/permissions.json")).toEqual([["external_directory", "ask"], ["edit", "allow"]]);
+  expect(judge(path.dirname(config.ROOT) + "/notes.md")).toEqual([["edit", "allow"]]);
 });
 
 test("illi's other tools, MCP tools: their own action", () => {

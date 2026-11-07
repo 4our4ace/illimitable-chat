@@ -36,7 +36,9 @@
 // request's resource the folder and * (/x/y/*), saving its project's
 // (the git repository holding it, but home or /) and * (nothing where
 // that project's path holds *, ? or [). Inside: the working dir and
-// the project's top (the git repository's; not /).
+// the project's top (the git repository's; not /), but never illi's own
+// folder (its root's, its profile's), outside every project, the home
+// chat's too.
 // illi's customization places are outside, allowed by its own rules
 // (places, Permissions.base: its skills', commands' and agents' folders,
 // a plugin's too, found at the load, by its real path: not the rest of
@@ -45,8 +47,9 @@
 // path as resource, so allowing them allows nothing beside them). A
 // change by the file tools to those every chat follows (guarded: the
 // skills', commands' and agents' folders but a project's, the RULES.md
-// files) asks, by its absolute path, so from home too, where ~/.illi
-// is inside; "don't ask again" saves that place, never every change.
+// files) asks, by its absolute path, so wherever those are (~/.agents
+// in the home chat, a plugin's in its project); "don't ask again" saves
+// that place, never every change.
 // A shell command's write there is the shell's alone. Paths
 // are taken as written (. and .. worked out); one inside whose real place
 // is outside (a link on its way, followed: one to a file not there yet
@@ -235,7 +238,7 @@ export namespace Access {
     const place = real(absolute);
     if (inside(where, absolute)) {
       const resource = slash(path.relative(where.cwd, absolute) || ".");
-      const back     = inside(where, place) || under(place, real(where.cwd)) || (where.top !== path.parse(where.top).root && under(place, real(where.top)));
+      const back     = inside(where, place) || (!mine(place) && (under(place, real(where.cwd)) || (where.top !== path.parse(where.top).root && under(place, real(where.top)))));
       const seen     = back ? slash(path.relative(real(where.cwd), place) || ".") : slash(place);
       return { absolute, place, resource, ...(seen === resource ? {} : { real: seen }), ...(back ? {} : { outside: Access.target(where, place, kind).outside }) };
     }
@@ -588,9 +591,17 @@ function real(p: string, hops = 0): string {
 }
 
 // whether a path is inside: the working dir, or the project's top (not
-// /)
+// /), but never illi's own folder (mine)
 function inside(where: Where, absolute: string): boolean {
-  return under(absolute, where.cwd) || (where.top !== path.parse(where.top).root && under(absolute, where.top));
+  return !mine(absolute) && (under(absolute, where.cwd) || (where.top !== path.parse(where.top).root && under(absolute, where.top)));
+}
+
+// whether a path is in illi's own folder (its root, its profile's, as
+// named and as they really are): outside every project, the home chat's
+// too, where it is in the working dir, so its settings, hooks and
+// permissions are asked about as from anywhere else
+function mine(absolute: string): boolean {
+  return [config.ROOT, config.DIR].some((d) => under(absolute, d) || under(absolute, real(d)));
 }
 
 // the project a folder is in: the git repository holding it (but home
