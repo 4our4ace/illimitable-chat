@@ -14,7 +14,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-rules-");
-process.env.ILLI_DIR = DIR + "/illi";
+process.env.ILLI_DIR = DIR + "/.illi";
 delete process.env.ILLI_RULES;
 
 const { Tools } = await import("./Tools.ts");
@@ -28,7 +28,7 @@ function write(file: string, text: string): void {
   fs.writeFileSync(file, text);
 }
 
-const OWN = DIR + "/illi/RULES.md";
+const OWN = DIR + "/.illi/RULES.md";
 
 test("no RULES.md and no project files: the rules name where RULES.md goes, and say none yet", () => {
   fs.mkdirSync(DIR + "/bare", { recursive: true });
@@ -63,6 +63,11 @@ test("a repo's AGENTS.md (else CLAUDE.md) in each folder from its top down to th
   expect(rules).toContain("This project's, in AGENTS.md:\n\nroot rules\n\nThis project's, in pkg/CLAUDE.md:\n\npkg rules");
   expect(rules).not.toContain("not read");
   expect(rules).not.toContain("not on the way");
+});
+
+test("illi's own folder, in the working folder (as from home), is never said to be left out", () => {
+  fs.mkdirSync(DIR + "/.illi", { recursive: true });
+  expect(Tools.untrusted(DIR)).toEqual([]);
 });
 
 test("out of a repo, only the working folder's own file", () => {

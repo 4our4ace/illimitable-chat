@@ -104,7 +104,9 @@ project always comes first:
   one piece (in a `case`, `bash -c 'rm x'` matches a rule on `bash *`,
   not one on `rm *`).
 - illi's own folder (`~/.illi`, `ILLI_DIR`) is outside every project,
-  the home chat's too, where it sits in the folder you work in.
+  the home chat's too, where it sits in the folder you work in, and one
+  started in it: its settings, hooks and permissions are asked about
+  from anywhere.
 - illi's own customization places are allowed outside the project: its
   skills, commands and agents folders (its own, a profile's, those
   shared in `~/.agents/skills`, and each plugin's found as illi started,
@@ -121,8 +123,9 @@ project always comes first:
   talks the model into writing there (a planted instruction in a file
   it read) would reach every later session, in every project, as your
   own rules, skills or agents do. "Don't ask again" saves that place
-  alone (`changes to ~/.illi/skills/`), never every change. To have
-  them all run unasked again, allow them:
+  alone (`changes to ~/.illi/skills/`), never every change, and an
+  approval of every change saved before (`any file change`) doesn't
+  cover them. To have them all run unasked again, allow them:
   `{ "rules": { "edit": { "~/.illi/*": "allow" } } }`. A shell command
   writing there (`echo x >> ~/.illi/RULES.md`) isn't a file tool's
   change, so it isn't asked (below); the customize-illi skill has the

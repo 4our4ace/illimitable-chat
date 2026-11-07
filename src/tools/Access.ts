@@ -601,7 +601,18 @@ function inside(where: Where, absolute: string): boolean {
 // too, where it is in the working dir, so its settings, hooks and
 // permissions are asked about as from anywhere else
 function mine(absolute: string): boolean {
-  return [config.ROOT, config.DIR].some((d) => under(absolute, d) || under(absolute, real(d)));
+  return [config.ROOT, config.DIR].some((d) => under(absolute, d) || under(absolute, really(d)));
+}
+
+// a folder's real path, worked out once (illi's own, asked at each path
+// a call names)
+const REAL = new Map<string, string>();
+function really(dir: string): string {
+  let got = REAL.get(dir);
+  if (got === undefined) {
+    REAL.set(dir, (got = real(dir)));
+  }
+  return got;
 }
 
 // the project a folder is in: the git repository holding it (but home

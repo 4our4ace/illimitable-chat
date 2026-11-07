@@ -67,14 +67,15 @@ jobs:
           cd "$project"
           got="$(ILLI_DIR="$dir/root" ILLI_AUTOUPDATE=on python3 - "$dir/bin/illi" "$latest" <<'EOF'
           # the chat on a pty of its own, no key pressed, till its file says
-          # the version wanted or a minute passes; then killed
+          # the version wanted or three minutes pass (a slow runner's
+          # download); then killed
           import fcntl, os, pty, select, struct, subprocess, sys, termios, time
           exe, want = sys.argv[1], sys.argv[2]
           pid, fd = pty.fork()
           if pid == 0:
               fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", 30, 100, 0, 0))
               os.execv(exe, [exe])
-          got, end = "", time.time() + 60
+          got, end = "", time.time() + 180
           while time.time() < end:
               if select.select([fd], [], [], 1)[0]:
                   try:

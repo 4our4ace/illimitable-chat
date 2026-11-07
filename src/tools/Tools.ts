@@ -75,7 +75,7 @@ import { Plugins } from "../config/Plugins.ts";
 import { Trusted } from "../config/Trusted.ts";
 import { Access, type Request as Want, type Where } from "./Access.ts";
 import type { Span } from "./Shell.ts";
-import { Permissions, type Effect, type Mode, type Rule } from "./Permissions.ts";
+import { Permissions, type Effect, type Mode, type Rule, type Verdict } from "./Permissions.ts";
 import { INT, STR, TOOLS, Machine, spec, type Spec } from "./Machine.ts";
 import { Mcp } from "./Mcp.ts";
 import { Logs, MAIN } from "../chat/Logs.ts";
@@ -607,14 +607,17 @@ export namespace Tools {
   }
 
   // what of its own a folder no one trusted has that illi leaves out
-  // (its rules files, its .illi and .agents/skills folders), from its top;
-  // trusted: none
+  // (its rules files, its .illi and .agents/skills folders, but illi's
+  // own folder and the skills shared with other agents, read wherever
+  // illi runs, as from home), from its top; trusted: none
   export function untrusted(cwd: string): string[] {
     if (Trusted.has(Trusted.folder(cwd))) {
       return [];
     }
+    const real = (p: string) => (fs.existsSync(p) ? fs.realpathSync(p) : "");
+    const own  = new Set([config.ROOT, config.DIR, path.join(config.AGENTS_DIR, "skills")].map(real));
     const top  = config.config_top(cwd);
-    const dirs = config.config_down(cwd).flatMap((dir) => [path.join(dir, ".illi"), path.join(dir, ".agents", "skills")]).filter((d) => fs.existsSync(d));
+    const dirs = config.config_down(cwd).flatMap((dir) => [path.join(dir, ".illi"), path.join(dir, ".agents", "skills")]).filter((d) => fs.existsSync(d) && !own.has(real(d)));
     return [...Tools.project(cwd), ...dirs].map((f) => path.relative(top, f));
   }
 
@@ -1071,7 +1074,7 @@ export namespace Tools {
     })();
     const asks: Asking[] = [];
     for (const req of all) {
-      const v = Permissions.decide(req.action, req.resources, [...rules.base, ...rules.user], rules.saved, mode);
+      const v = Tools.judge(rules, req, mode);
       if (v.effect === "deny") {
         return Tools.refuse(tools, { ...asked, why: Tools.why(rules, req, v, folder), how: "rule", said: "", exact: [] });
       }
@@ -1162,7 +1165,24 @@ export namespace Tools {
   // since may allow it)
   export function decided(tools: Tools, ask: Asking): Effect {
     const rules = Tools.ruleset(tools);
-    return Permissions.decide(ask.req.action, ask.req.resources, [...rules.base, ...rules.user], rules.saved, ask.mode).effect;
+    return Tools.judge(rules, ask.req, ask.mode).effect;
+  }
+
+  // a request judged by illi's rules, the user's and the approvals saved
+  // that count for it (counted)
+  export function judge(rules: { base: Rule[]; user: Rule[]; saved: Rule[] }, req: Want, mode: Mode): Verdict {
+    return Permissions.decide(req.action, req.resources, [...rules.base, ...rules.user], Tools.counted(rules.saved, req), mode);
+  }
+
+  // the approvals saved that count for a request: all, but for an edit of
+  // one of illi's places every chat follows (Access.guarded) those alone
+  // that name a place: one of every change (edit *, "don't ask again" on
+  // another edit) never allows it, as a place's own or the user's rule
+  // does
+  export function counted(saved: Rule[], req: Want): Rule[] {
+    const guarded = Access.guarded();
+    const own = req.action === "edit" && req.resources.some((r) => guarded.some((g) => Permissions.match(r, g)));
+    return own ? saved.filter((s) => s.resource !== "*") : saved;
   }
 
   // the rules a call is judged by: illi's own (Permissions.base, with its
@@ -1180,7 +1200,7 @@ export namespace Tools {
   // user's rule that says so
   export function why(rules: { base: Rule[]; user: Rule[]; saved: Rule[] }, req: Want, v: { effect: Effect; by: number[] }, top: string): string {
     const folder = (r: string) => Access.said("external_directory", r, top).replace(/^files in /, "");
-    const rule = Permissions.evaluate(req.action, req.resources[v.by[0]] ?? "*", v.effect === "deny" ? [...rules.base, ...rules.user] : [...rules.base, ...rules.user, ...rules.saved]);
+    const rule = Permissions.evaluate(req.action, req.resources[v.by[0]] ?? "*", v.effect === "deny" ? [...rules.base, ...rules.user] : [...rules.base, ...rules.user, ...Tools.counted(rules.saved, req)]);
     if (rules.base.includes(rule)) {
       return req.action === "external_directory" ? "it reaches outside the project: " + Access.outermost(v.by.map((k) => req.resources[k])).map(folder).join(", ") : req.action === "read" ? "it reads a .env file, which may hold secrets" : req.action === "edit" ? "it changes illi's own instructions, which every chat follows" : "illi's rules ask about " + req.action;
     }
