@@ -5,8 +5,9 @@
 // folder's request (a file's folder, a folder's own; saving its git
 // repository's); one inside by a link whose real place is outside (a
 // folder's, a file's, a file not there yet) asking for that folder too,
-// as if named, its resource still as written (a working dir or project
-// top reached by a link: none); illi's own RULES.md alone
+// as if named, its resource as written and its real place's (a working
+// dir or project top reached by a link: none), so a rule on a .env
+// finds one through a link; illi's own RULES.md alone
 // of its folder; a shell
 // command's simple commands as written (assignments off, wrappers kept,
 // a wrapper's script and what it runs both) and unquoted (a system
@@ -45,6 +46,10 @@ fs.symlinkSync(LIB + "/n.txt", APP + "/src/notes.md");
 fs.symlinkSync(LIB + "/missing.txt", APP + "/src/dangle.md");
 fs.symlinkSync(APP + "/README.md", APP + "/src/readme.md");
 fs.symlinkSync(APP, DIR + "/app-link");
+fs.writeFileSync(APP + "/.env", "KEY=1\n");
+fs.writeFileSync(LIB + "/.env", "KEY=1\n");
+fs.symlinkSync(APP + "/.env", APP + "/src/settings.txt");
+fs.symlinkSync(LIB + "/.env", APP + "/src/lib-settings");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
@@ -71,15 +76,24 @@ test("files: inside by their path from the working dir; outside absolute, after 
   expect(Access.requests(WHERE, "write", { path: DIR + "/illi/config.json" })[0].resources).toEqual([DIR + "/illi/*"]);
 });
 
-test("a link inside that leads outside asks for its real folder too, as if named (a folder's, a file's, a file not there yet a write would make), the path's own resource as written; one that stays inside, or a working dir reached by a link, none", () => {
+test("a link inside that leads outside asks for its real folder too, as if named (a folder's, a file's, a file not there yet a write would make), the path's resource as written and its real place's; one that stays inside, by its path from there; a working dir reached by a link, none", () => {
   const outside = (folder: string) => ({ action: "external_directory", resources: [folder + "/*"], save: [LIB + (folder === LIB ? "" : "/repo") + "/*"], spots: [null] });
-  expect(Access.requests(WHERE, "read", { path: "out/x.ts" })).toEqual([outside(LIB + "/repo/pkg"), { action: "read", resources: ["out/x.ts"], save: ["*"], spots: [null] }]);
-  expect(Access.requests(WHERE, "write", { path: "notes.md", content: "" })).toEqual([outside(LIB), { action: "edit", resources: ["notes.md"], save: ["*"], spots: [null] }]);
+  expect(Access.requests(WHERE, "read", { path: "out/x.ts" })).toEqual([outside(LIB + "/repo/pkg"), { action: "read", resources: ["out/x.ts", LIB + "/repo/pkg/x.ts"], save: ["*"], spots: [null, null] }]);
+  expect(Access.requests(WHERE, "write", { path: "notes.md", content: "" })).toEqual([outside(LIB), { action: "edit", resources: ["notes.md", LIB + "/n.txt"], save: ["*"], spots: [null, null] }]);
   expect(Access.requests(WHERE, "write", { path: "dangle.md", content: "" })[0]).toEqual(outside(LIB));
   expect(shell("echo x > notes.md")[0]).toEqual(["external_directory", [LIB + "/*"], [LIB + "/*"]]);
-  expect(Access.requests(WHERE, "read", { path: "readme.md" })).toEqual([{ action: "read", resources: ["readme.md"], save: ["*"], spots: [null] }]);
+  expect(Access.requests(WHERE, "read", { path: "readme.md" })).toEqual([{ action: "read", resources: ["readme.md", "../README.md"], save: ["*"], spots: [null, null] }]);
+  expect(Access.requests(WHERE, "read", { path: "a.ts" })[0].resources).toEqual(["a.ts"]);
   expect(Access.requests({ ...WHERE, cwd: DIR + "/app-link/src" }, "edit", { edits: [{ path: "a.ts" }, { path: "lib/b.ts" }] })).toEqual([{ action: "edit", resources: ["a.ts", "lib/b.ts"], save: ["*"], spots: [null, null] }]);
   expect(Access.requests({ ...WHERE, cwd: DIR + "/app-link/src", top: DIR + "/app-link" }, "edit", { edits: [{ path: "../README.md" }] })).toEqual([{ action: "edit", resources: ["../README.md"], save: ["*"], spots: [null] }]);
+});
+
+test("a .env read through a link asks as the .env itself does, inside or out; a rule on the real file's path finds it", () => {
+  const read = (p: string, rules: Rule[] = []) => Access.requests(WHERE, "read", { path: p }).map((r) => Permissions.decide(r.action, r.resources, [...Permissions.base([]), ...rules], []).effect);
+  expect(read("../.env")).toEqual(["ask"]);
+  expect(read("settings.txt")).toEqual(["ask"]);
+  expect(read("lib-settings", [rule("external_directory", LIB + "/*", "allow")])).toEqual(["allow", "ask"]);
+  expect(read("notes.md", [rule("external_directory", LIB + "/*", "allow"), rule("read", LIB + "/n.txt", "deny")])).toEqual(["allow", "deny"]);
 });
 
 test("illi's other tools, MCP tools: their own action", () => {

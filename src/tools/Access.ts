@@ -45,7 +45,11 @@
 // are taken as written (. and .. worked out); one inside whose real place
 // is outside (a link on its way, followed: one to a file not there yet
 // too, which a write would make) asks for that place's folder as well,
-// as if named, so a repository's link never reaches outside unasked.
+// as if named, so a repository's link never reaches outside unasked. A
+// file a link makes another (inside or out) is its real place's
+// resource as well (from the working dir's real place inside, else
+// absolute), so a rule on a .env, or on one of illi's own files, finds
+// it through a link.
 // Claude Code's own tools (hosted), as it asks leave for one: of its
 // built-in ones only its web fetch and search run in illi's calls
 // (ClaudeCode.args), as webfetch (the URL) and websearch (the query);
@@ -76,10 +80,12 @@ export type Request = { action: string; resources: string[]; save: string[]; spo
 export type Where = { cwd: string; top: string; files: string[] };
 
 // a path's place: absolute; its resource (from the working dir inside,
-// else absolute); outside, its folder's request (resource, save: ""
-// where its project's path holds a wildcard character, which a pattern
-// can't name alone: ~/*/* would allow every folder in home)
-type Target = { absolute: string; resource: string; outside?: { resource: string; save: string } };
+// else absolute); its real place's, where a link on its way makes that
+// another (from the working dir's real place inside, else absolute);
+// outside, its folder's request (resource, save: "" where its project's
+// path holds a wildcard character, which a pattern can't name alone:
+// ~/*/* would allow every folder in home)
+type Target = { absolute: string; resource: string; real?: string; outside?: { resource: string; save: string } };
 
 // a command's piece as written, and where it is
 type Piece = { text: string; span: Span };
@@ -219,13 +225,16 @@ export namespace Access {
   // the file itself
   export function target(where: Where, p: string, kind?: "file" | "directory"): Target {
     const absolute = path.resolve(where.cwd, p === "~" ? os.homedir() : p.startsWith("~/") ? path.join(os.homedir(), p.slice(2)) : p);
+    const place = real(absolute);
     if (inside(where, absolute)) {
-      const place = real(absolute);
-      const back  = place === absolute || inside(where, place) || under(place, real(where.cwd)) || (where.top !== path.parse(where.top).root && under(place, real(where.top)));
-      return { absolute, resource: slash(path.relative(where.cwd, absolute) || "."), ...(back ? {} : { outside: Access.target(where, place, kind).outside }) };
+      const resource = slash(path.relative(where.cwd, absolute) || ".");
+      const back     = inside(where, place) || under(place, real(where.cwd)) || (where.top !== path.parse(where.top).root && under(place, real(where.top)));
+      const seen     = back ? slash(path.relative(real(where.cwd), place) || ".") : slash(place);
+      return { absolute, resource, ...(seen === resource ? {} : { real: seen }), ...(back ? {} : { outside: Access.target(where, place, kind).outside }) };
     }
+    const seen = place === absolute ? {} : { real: slash(place) };
     if (where.files.includes(absolute)) {
-      return { absolute, resource: slash(absolute), outside: { resource: slash(absolute), save: slash(absolute) } };
+      return { absolute, resource: slash(absolute), ...seen, outside: { resource: slash(absolute), save: slash(absolute) } };
     }
     const type = kind ?? (() => {
       try {
@@ -236,7 +245,7 @@ export namespace Access {
     })();
     const folder = type === "directory" ? absolute : path.dirname(absolute);
     const top    = project(folder);
-    return { absolute, resource: slash(absolute), outside: { resource: slash(path.join(folder, "*")), save: WILD.test(top) ? "" : slash(path.join(top, "*")) } };
+    return { absolute, resource: slash(absolute), ...seen, outside: { resource: slash(path.join(folder, "*")), save: WILD.test(top) ? "" : slash(path.join(top, "*")) } };
   }
 
   // whether a folder's resource (the folder and *) holds a character a
@@ -307,7 +316,7 @@ function plain(action: string, resource: string): Request {
 // a file tool's: the folders outside, then the action on the paths
 function file(where: Where, action: string, paths: unknown[]): Request[] {
   const targets = paths.filter((p): p is string => typeof p === "string" && p !== "").map((p) => Access.target(where, p, "file"));
-  const resources = [...new Set(targets.map((t) => t.resource))];
+  const resources = [...new Set(targets.flatMap((t) => (t.real === undefined ? [t.resource] : [t.resource, t.real])))];
   return [...external(targets.map((target) => ({ target, span: null }))), ...(resources.length === 0 ? [] : [{ action, resources, save: ["*"], spots: resources.map(() => null) }])];
 }
 
