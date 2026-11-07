@@ -3,7 +3,10 @@ name: customize-illi
 description: Customize illi itself - add or change its agents, slash commands, skills, MCP servers, plugins, hooks, theme and accent color, settings, or the rules added to its prompt. Use when the user asks illi to change how it works or looks, remember a workflow as a skill or a command, add an agent, connect a tool server, write a plugin or a hook, run a command whenever illi does something, or change a setting.
 ---
 
-illi is customized with plain files, which you write with your tools:
+illi is customized with plain files, which you write with your file
+tools (write, edit), never the shell: a change to illi's own skills,
+commands, agents or RULES.md is asked of the user first, as they shape
+every later chat, and the user approves it there.
 
 - The global folder, every profile's: {{root}}
 - illi's folder, this profile's own: {{illi}} (the same, in the default

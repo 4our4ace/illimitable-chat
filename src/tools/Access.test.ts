@@ -33,7 +33,7 @@ import { Permissions, type Rule } from "./Permissions.ts";
 const DIR   = fs.realpathSync(fs.mkdtempSync(os.tmpdir() + "/illi-access-"));
 const APP   = DIR + "/app";
 const LIB   = DIR + "/lib";
-const WHERE: Where = { cwd: APP + "/src", top: APP, files: [DIR + "/illi/RULES.md"] };
+const WHERE: Where = { cwd: APP + "/src", top: APP, files: [DIR + "/illi/RULES.md"], guarded: [DIR + "/illi/RULES.md", DIR + "/illi/skills/*"] };
 const ROOT  = fs.readFileSync("/etc/passwd", "utf8").split("\n").find((l) => l.startsWith("root:"))!.split(":")[5];
 
 fs.mkdirSync(APP + "/src", { recursive: true });
@@ -50,6 +50,8 @@ fs.writeFileSync(APP + "/.env", "KEY=1\n");
 fs.writeFileSync(LIB + "/.env", "KEY=1\n");
 fs.symlinkSync(APP + "/.env", APP + "/src/settings.txt");
 fs.symlinkSync(LIB + "/.env", APP + "/src/lib-settings");
+fs.writeFileSync(DIR + "/illi/RULES.md", "");
+fs.symlinkSync(DIR + "/illi/RULES.md", APP + "/src/rules.md");
 
 afterAll(() => fs.rmSync(DIR, { recursive: true, force: true }));
 
@@ -94,6 +96,19 @@ test("a .env read through a link asks as the .env itself does, inside or out; a 
   expect(read("settings.txt")).toEqual(["ask"]);
   expect(read("lib-settings", [rule("external_directory", LIB + "/*", "allow")])).toEqual(["allow", "ask"]);
   expect(read("notes.md", [rule("external_directory", LIB + "/*", "allow"), rule("read", LIB + "/n.txt", "deny")])).toEqual(["allow", "deny"]);
+});
+
+test("a change to illi's own instructions asks, by the file tools, wherever the chat runs (illi's folder inside it, as from home, or reached by a link): \"don't ask again\" saves that place alone; reading them, or a change beside them, doesn't ask", () => {
+  const base = Permissions.base([DIR + "/illi/*"], WHERE.guarded);
+  const judge = (where: Where, tool: string, input: object) => Access.requests(where, tool, input).map((r) => [r.action, Permissions.decide(r.action, r.resources, base, []).effect, r.save]);
+  const HOME: Where = { ...WHERE, cwd: DIR, top: DIR };
+  expect(judge(WHERE, "write", { path: DIR + "/illi/skills/x/SKILL.md", content: "" })).toEqual([["external_directory", "allow", [DIR + "/illi/skills/x/*"]], ["edit", "ask", [DIR + "/illi/skills/*"]]]);
+  expect(judge(HOME, "edit", { edits: [{ path: "illi/RULES.md" }, { path: "app/a.ts" }] })).toEqual([["edit", "ask", [DIR + "/illi/RULES.md"]]]);
+  expect(judge(WHERE, "write", { path: "rules.md", content: "" })).toEqual([["external_directory", "allow", [DIR + "/illi/RULES.md"]], ["edit", "ask", [DIR + "/illi/RULES.md"]]]);
+  expect(judge(HOME, "read", { path: "illi/RULES.md" })).toEqual([["read", "allow", ["*"]]]);
+  expect(judge(HOME, "write", { path: "illi/config.json", content: "" })).toEqual([["edit", "allow", ["*"]]]);
+  expect(Access.said("edit", DIR + "/illi/skills/*", APP)).toBe("changes to " + DIR + "/illi/skills/");
+  expect(Permissions.decide("edit", [DIR + "/illi/RULES.md"], [...base, rule("edit", DIR + "/illi/*", "allow")], []).effect).toBe("allow");
 });
 
 test("illi's other tools, MCP tools: their own action", () => {

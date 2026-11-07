@@ -8,7 +8,8 @@
 //   read, write, edit   a file: read, or edit (write too), its path
 //                       from the working dir (outside the project, its
 //                       absolute path, after its folder's request); "don't
-//                       ask again" saves * (every file)
+//                       ask again" saves * (every file), an edit of
+//                       illi's guarded places those places
 //   shell               each simple command, as written (shell): its
 //                       leading assignments left out, wrappers kept
 //                       (sudo rm -rf /), and its words as they'd expand
@@ -41,7 +42,12 @@
 // a plugin's too, found at the load, by its real path: not the rest of
 // a plugin, its code, hooks and MCP servers; its RULES.md and
 // theme.json, which alone of their folder have their own
-// path as resource, so allowing them allows nothing beside them). Paths
+// path as resource, so allowing them allows nothing beside them). A
+// change by the file tools to those every chat follows (guarded: the
+// skills', commands' and agents' folders but a project's, the RULES.md
+// files) asks, by its absolute path, so from home too, where ~/.illi
+// is inside; "don't ask again" saves that place, never every change.
+// A shell command's write there is the shell's alone. Paths
 // are taken as written (. and .. worked out); one inside whose real place
 // is outside (a link on its way, followed: one to a file not there yet
 // too, which a write would make) asks for that place's folder as well,
@@ -64,6 +70,7 @@ import * as path from "node:path";
 import * as config from "../config/Config.ts";
 import { Custom } from "../config/Custom.ts";
 import { Plugins } from "../config/Plugins.ts";
+import { Permissions } from "./Permissions.ts";
 import { Shell, type Part, type Span, type Word } from "./Shell.ts";
 
 // Types
@@ -77,7 +84,7 @@ export type Request = { action: string; resources: string[]; save: string[]; spo
 
 // where a call is judged: the working dir, the project's top, illi's own
 // files allowed alone of their folders (RULES.md, theme.json)
-export type Where = { cwd: string; top: string; files: string[] };
+export type Where = { cwd: string; top: string; files: string[]; guarded: string[] };
 
 // a path's place: absolute; its resource (from the working dir inside,
 // else absolute); its real place's, where a link on its way makes that
@@ -85,7 +92,7 @@ export type Where = { cwd: string; top: string; files: string[] };
 // outside, its folder's request (resource, save: "" where its project's
 // path holds a wildcard character, which a pattern can't name alone:
 // ~/*/* would allow every folder in home)
-type Target = { absolute: string; resource: string; real?: string; outside?: { resource: string; save: string } };
+type Target = { absolute: string; place: string; resource: string; real?: string; outside?: { resource: string; save: string } };
 
 // a command's piece as written, and where it is
 type Piece = { text: string; span: Span };
@@ -230,11 +237,11 @@ export namespace Access {
       const resource = slash(path.relative(where.cwd, absolute) || ".");
       const back     = inside(where, place) || under(place, real(where.cwd)) || (where.top !== path.parse(where.top).root && under(place, real(where.top)));
       const seen     = back ? slash(path.relative(real(where.cwd), place) || ".") : slash(place);
-      return { absolute, resource, ...(seen === resource ? {} : { real: seen }), ...(back ? {} : { outside: Access.target(where, place, kind).outside }) };
+      return { absolute, place, resource, ...(seen === resource ? {} : { real: seen }), ...(back ? {} : { outside: Access.target(where, place, kind).outside }) };
     }
     const seen = place === absolute ? {} : { real: slash(place) };
     if (where.files.includes(absolute)) {
-      return { absolute, resource: slash(absolute), ...seen, outside: { resource: slash(absolute), save: slash(absolute) } };
+      return { absolute, place, resource: slash(absolute), ...seen, outside: { resource: slash(absolute), save: slash(absolute) } };
     }
     const type = kind ?? (() => {
       try {
@@ -245,7 +252,7 @@ export namespace Access {
     })();
     const folder = type === "directory" ? absolute : path.dirname(absolute);
     const top    = project(folder);
-    return { absolute, resource: slash(absolute), ...seen, outside: { resource: slash(path.join(folder, "*")), save: WILD.test(top) ? "" : slash(path.join(top, "*")) } };
+    return { absolute, place, resource: slash(absolute), ...seen, outside: { resource: slash(path.join(folder, "*")), save: WILD.test(top) ? "" : slash(path.join(top, "*")) } };
   }
 
   // whether a folder's resource (the folder and *) holds a character a
@@ -270,6 +277,18 @@ export namespace Access {
   export function places(cwd: string): string[] {
     const dirs = (["skills", "commands", "agents"] as const).flatMap((k) => [...[config.ROOT, config.DIR, ...Plugins.roots()].map((d) => path.join(d, k)), ...Custom.dirs(cwd, k)]);
     return [...new Set(dirs.map((d) => slash(path.join(d, "*")))), ...Access.own().map(slash)];
+  }
+
+  // of illi's places, those every chat follows, an edit there asked
+  // (Permissions.base), wherever the chat runs: the skills', commands'
+  // and agents' folders of its root, its profile and each plugin, and
+  // the skills shared with other agents (not a project's own, which it
+  // keeps in sight); its RULES.md files (its root's, its profile's, the
+  // `rules` setting's; not theme.json, which only paints)
+  export function guarded(): string[] {
+    const dirs  = (["skills", "commands", "agents"] as const).flatMap((k) => [config.ROOT, config.DIR, ...Plugins.roots()].map((d) => path.join(d, k, "*")));
+    const rules = [...[config.ROOT, config.DIR].map((d) => path.join(d, "RULES.md")), ...(config.RULES === "" ? [] : [config.RULES])];
+    return [...new Set([...dirs, path.join(config.AGENTS_DIR, "skills", "*"), ...rules].map(slash))];
   }
 
   // illi's own files allowed alone of their folders: its RULES.md and
@@ -297,6 +316,9 @@ export namespace Access {
     if (resource === "*") {
       return action === "read" ? "any file read" : action === "edit" ? "any file change" : action === "subagent" ? "any subagent" : action;
     }
+    if (action === "edit") {
+      return "changes to " + shown(resource.endsWith("/*") ? resource.slice(0, -2) : resource, top) + (resource.endsWith("/*") ? "/" : "");
+    }
     if (action === "external_directory") {
       return "files in " + shown(resource.endsWith("/*") ? resource.slice(0, -2) : resource, top) + (resource.endsWith("/*") ? "/" : "");
     }
@@ -313,11 +335,16 @@ function plain(action: string, resource: string): Request {
   return { action, resources: [resource], save: ["*"], spots: [null] };
 }
 
-// a file tool's: the folders outside, then the action on the paths
+// a file tool's: the folders outside, then the action on the paths; an
+// edit in one of illi's guarded places by its absolute path too (inside,
+// as from home, its resource is relative), "don't ask again" saving
+// those places alone, never every change
 function file(where: Where, action: string, paths: unknown[]): Request[] {
-  const targets = paths.filter((p): p is string => typeof p === "string" && p !== "").map((p) => Access.target(where, p, "file"));
-  const resources = [...new Set(targets.flatMap((t) => (t.real === undefined ? [t.resource] : [t.resource, t.real])))];
-  return [...external(targets.map((target) => ({ target, span: null }))), ...(resources.length === 0 ? [] : [{ action, resources, save: ["*"], spots: resources.map(() => null) }])];
+  const targets   = paths.filter((p): p is string => typeof p === "string" && p !== "").map((p) => Access.target(where, p, "file"));
+  const own       = action !== "edit" ? [] : targets.flatMap((t) => [t.absolute, t.place]).map(slash).filter((p) => where.guarded.some((g) => Permissions.match(p, g)));
+  const resources = [...new Set([...targets.flatMap((t) => (t.real === undefined ? [t.resource] : [t.resource, t.real])), ...own])];
+  const save      = own.length === 0 ? ["*"] : [...new Set(where.guarded.filter((g) => own.some((p) => Permissions.match(p, g))))];
+  return [...external(targets.map((target) => ({ target, span: null }))), ...(resources.length === 0 ? [] : [{ action, resources, save, spots: resources.map(() => null) }])];
 }
 
 // the folders outside, as one request (each folder once, first seen

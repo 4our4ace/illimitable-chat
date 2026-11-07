@@ -42,7 +42,9 @@ skill, `customize-illi`, and writes these files itself.
   screen's foot, as Claude Code's status line ([Status line](#status-line),
   below).
 - `RULES.md`: your rules for every project, in every prompt. illi writes
-  it when you ask ("add that to my rules"), never on its own. A
+  it when you ask ("add that to my rules"), never on its own, and asks
+  you first, as it does before changing your skills, commands and
+  agents ([Permissions](permissions.md)). A
   project's own `AGENTS.md` (else `CLAUDE.md`) is read too, from the
   repo's top down to the folder you start in.
 

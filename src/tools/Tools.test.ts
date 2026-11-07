@@ -59,6 +59,7 @@ const OUT  = temp_dir("illi-tools-out-");
 const { Chat } = await import("../chat/Chat.ts");
 const config = await import("../config/Config.ts");
 const { MASTER, SUB, SUB_FRESH, Tools } = await import("./Tools.ts");
+const { Access } = await import("./Access.ts");
 const { Projects } = await import("../chat/Projects.ts");
 const { Store } = await import("../chat/Store.ts");
 const { Memory } = await import("../chat/Memory.ts");
@@ -311,12 +312,18 @@ test("a folder refused, allowed for the run (/permissions), allows it and those 
   chat.tools.perm.allowed.length = was;
 });
 
-test("illi customizes itself unasked: a skill, a command, an agent, its rules written by its tools or its shell; its settings, hooks and permissions beside them asked", async () => {
+test("illi reads its skills, commands, agents and rules unasked, and its file tools change them asked (\"don't ask again\" saving that place alone), its shell unasked; its settings, hooks and permissions beside them asked", async () => {
   const guard = (tool: string, input: object) => Tools.guard(chat.tools, "main", tool, input, new AbortController().signal);
-  const NO = "No one is at illi's screen to ask, so it isn't allowed. Asked because it reaches outside the project: ";
-  expect(await guard("write", { path: config.ROOT + "/skills/notes/SKILL.md", content: "x" })).toBeNull();
-  expect(await guard("edit", { edits: [{ path: config.ROOT + "/commands/ship.md" }, { path: config.ROOT + "/agents/scout.md" }] })).toBeNull();
-  expect(await guard("write", { path: config.ROOT + "/RULES.md", content: "x" })).toBeNull();
+  const NO   = "No one is at illi's screen to ask, so it isn't allowed. Asked because it reaches outside the project: ";
+  const OWN  = "No one is at illi's screen to ask, so it isn't allowed. Asked because it changes illi's own instructions, which every chat follows.";
+  fs.mkdirSync(config.ROOT + "/skills/notes", { recursive: true });
+  fs.writeFileSync(config.ROOT + "/skills/notes/SKILL.md", "x");
+  expect(await guard("read", { path: config.ROOT + "/skills/notes/SKILL.md" })).toBeNull();
+  expect((await guard("write", { path: config.ROOT + "/skills/notes/SKILL.md", content: "x" }))!.text).toStartWith(OWN);
+  expect((await guard("edit", { edits: [{ path: config.ROOT + "/commands/ship.md" }, { path: config.ROOT + "/agents/scout.md" }] }))!.text).toStartWith(OWN);
+  expect((await guard("write", { path: config.ROOT + "/RULES.md", content: "x" }))!.text).toStartWith(OWN);
+  const asked = Access.requests({ cwd: chat.tools.cwd, top: chat.tools.cwd, files: Access.own(), guarded: Access.guarded() }, "edit", { edits: [{ path: config.ROOT + "/skills/notes/SKILL.md" }, { path: "a.ts" }] }).at(-1)!;
+  expect([asked.save, Access.said("edit", asked.save[0], chat.tools.cwd)]).toEqual([[config.ROOT + "/skills/*"], "changes to " + config.ROOT + "/skills/"]);
   expect(await guard("shell", { command: "mkdir -p " + config.ROOT + "/skills/pdf && cat > " + config.ROOT + "/skills/pdf/SKILL.md <<'EOF'\nx\nEOF" })).toBeNull();
   expect((await guard("write", { path: config.ROOT + "/hooks.json", content: "{}" }))!.text).toStartWith(NO);
   expect((await guard("shell", { command: "echo '{}' > " + config.ROOT + "/permissions.json" }))!.text).toStartWith(NO);

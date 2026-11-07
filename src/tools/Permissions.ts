@@ -164,8 +164,9 @@ export namespace Permissions {
 
   // illi's own rules, before the user's: all runs; a .env file's read
   // asks, a .env.example's doesn't; a folder outside the project asks,
-  // but illi's customization places (patterns: Access.places)
-  export function base(places: string[]): Rule[] {
+  // but illi's customization places (patterns: Access.places); a change
+  // to one every chat follows asks (Access.guarded)
+  export function base(places: string[], guarded: string[] = []): Rule[] {
     return [
       { action: "*", resource: "*", effect: "allow" },
       { action: "read", resource: "*.env", effect: "ask" },
@@ -173,6 +174,7 @@ export namespace Permissions {
       { action: "read", resource: "*.env.example", effect: "allow" },
       { action: "external_directory", resource: "*", effect: "ask" },
       ...places.map((resource): Rule => ({ action: "external_directory", resource, effect: "allow" })),
+      ...guarded.map((resource): Rule => ({ action: "edit", resource, effect: "ask" })),
     ];
   }
 

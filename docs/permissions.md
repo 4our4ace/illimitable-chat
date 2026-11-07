@@ -102,16 +102,23 @@ project always comes first:
   shared in `~/.agents/skills`, and each plugin's found as illi started,
   by its real path, not one turned off), and its `RULES.md` and
   `theme.json` (where the `rules` and `theme` settings put them too).
-  So illi writes a skill or a rule for itself as you ask, unasked.
-  `RULES.md` and `theme.json` are allowed alone of their folder: in
-  `default` mode, illi's settings, permissions, hooks and MCP servers
-  beside them are still asked, and so are a plugin's code, hooks and
-  MCP servers. The other side of it: what a project's text talks the
-  model into writing there (a planted instruction in a file it read)
-  reaches every later session, in every project, as your own rules,
-  skills or agents do. Add an `edit` rule asking about them if you'd
-  rather approve each change:
-  `{ "rules": { "edit": { "~/.illi/*": "ask" } } }`.
+  So illi reads them unasked. `RULES.md` and `theme.json` are allowed
+  alone of their folder: in `default` mode, illi's settings,
+  permissions, hooks and MCP servers beside them are still asked, and
+  so are a plugin's code, hooks and MCP servers.
+- A change by the file tools to what every chat follows is asked, from
+  any project (the home chat too, where `~/.illi` is inside): the
+  skills, commands and agents folders above (not a project's own, which
+  stay in its sight) and the `RULES.md` files. What a project's text
+  talks the model into writing there (a planted instruction in a file
+  it read) would reach every later session, in every project, as your
+  own rules, skills or agents do. "Don't ask again" saves that place
+  alone (`changes to ~/.illi/skills/`), never every change. To have
+  them all run unasked again, allow them:
+  `{ "rules": { "edit": { "~/.illi/*": "allow" } } }`. A shell command
+  writing there (`echo x >> ~/.illi/RULES.md`) isn't a file tool's
+  change, so it isn't asked (below); the customize-illi skill has the
+  model use the file tools.
 
 On `claude-code`, illi runs its own tools there too (shell, read,
 write, edit…), so they are checked as on every provider. Of Claude
@@ -142,7 +149,8 @@ How rules decide
 - A resource takes the effect of the last rule that matches its action
   and itself; none matches: ask. illi's own rules: everything `allow`;
   `read` of `*.env` and `*.env.*` `ask`, of `*.env.example` `allow`;
-  `external_directory` `ask`, but illi's customization places `allow`.
+  `external_directory` `ask`, but illi's customization places `allow`;
+  `edit` of the places every chat follows `ask`.
 - A request is refused if any of its resources is denied by illi's
   rules and yours (a saved approval never undoes a deny), else asked if
   any is asked, else run. In `trust` mode what is asked runs.
