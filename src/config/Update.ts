@@ -15,8 +15,8 @@
 // again in place, too: Update.drop; one left by an illi killed mid-way
 // is cleared at the next install, once unwritten for STALE), the file as
 // it was.
-// As the chat starts on a terminal and each AGAIN while it runs (check,
-// Term.ts), in the background, looking at most once a day (STATE in the
+// As the chat starts on a terminal (check, Term.ts), in the background,
+// looking at most once in SPACE, every illi's (STATE in the
 // root keeps when it last did, and the release it found, which the trust
 // question shows where it is newer: one file, every profile's; a look
 // that fails is tried again at the next), by `autoupdate`: "on" installs,
@@ -62,19 +62,17 @@ const RELEASES = "https://github.com/4our4ace/illimitable-chat/releases";
 
 // how long a look for the latest, the sums and the file's run may take
 // (ms), and the file's download without a byte coming (a slow one goes
-// on, a stalled one gives up); the least time between looks; how long a
-// folder left beside the file must go unwritten to be taken as an
-// illi's that died mid-way (one downloading writes at least each IDLE)
+// on, a stalled one gives up); the least time between looks, every
+// illi's (starts close together, a window's profiles, several
+// terminals, look once); how long a folder left beside the file must go
+// unwritten to be taken as an illi's that died mid-way (one downloading
+// writes at least each IDLE)
 const LOOK  = 10e3;
 const SUMS  = 30e3;
 const RUN   = 30e3;
 const IDLE  = 60e3;
-const DAY   = 24 * 3600e3;
+const SPACE = 600e3;
 const STALE = 3600e3;
-
-// how often a running illi asks for a look (check: one a day at most), so
-// a chat kept open for weeks gets a new release ready for its next start
-export const AGAIN = 3600e3;
 
 // the signals that end `illi upgrade`, turned into an exit, so its
 // download's folder goes as it does
@@ -105,10 +103,10 @@ let dropped = false;
 
 export namespace Update {
 
-  // as illi starts on a terminal, and each AGAIN while it runs: a release
-  // newer than this illi's looked for (none to look for: "off", a source
-  // run, or a file replaced, or gone, since this illi started), at most
-  // once a day (a look that fails, again next time), and installed ("on")
+  // as illi starts on a terminal: a release newer than this illi's looked
+  // for (none to look for: "off", a source run, or a file replaced, or
+  // gone, since this illi started), at most once in SPACE, every illi's
+  // (a look that fails, again next time), and installed ("on")
   // or only told of ("notify"). The note to show ("": none). It never
   // throws: a failure is logged, but for a folder it can't write, told
   // once a release
@@ -119,15 +117,15 @@ export namespace Update {
     const file = path.join(root, STATE);
     try {
       const was = json_object(file) ?? {};
-      // a look stamped past a day from now, ahead too (the clock set
+      // a look stamped past SPACE from now, ahead too (the clock set
       // back), or not at all, looks again
-      if (Math.abs(now - Date.parse(String(was.checked))) < DAY) {
+      if (Math.abs(now - Date.parse(String(was.checked))) < SPACE) {
         return "";
       }
       const version = await Update.latest(place.base);
-      // the look kept once it succeeds, before any install: an AGAIN
-      // later, the download still running, looks no more (so never two
-      // at once from one illi); one that failed is kept not at all. The
+      // the look kept once it succeeds, before any install: another
+      // start meanwhile, the download still running, looks no more (so
+      // never two at once); one that failed is kept not at all. The
       // release it found kept with it, for the trust question (known)
       update_keep(file, { ...(json_object(file) ?? {}), checked: new Date(now).toISOString(), latest: version });
       if (!Update.newer(version, place.version)) {

@@ -77,7 +77,7 @@ import { Tools } from "../tools/Tools.ts";
 import { THEME_TROUBLE } from "../ui/Theme.ts";
 import { Trust } from "./Trust.ts";
 import { Trusted } from "../config/Trusted.ts";
-import { AGAIN, HERE, Update } from "../config/Update.ts";
+import { HERE, Update } from "../config/Update.ts";
 import * as View from "../ui/View.ts";
 
 // the terminal: the chat, run here (null: another terminal's, this one a
@@ -781,19 +781,16 @@ export async function term_start(): Promise<void> {
   term_update(t);
 }
 
-// on a terminal, a new release of illi looked for in the background, at
-// the start and each Update.AGAIN after (Update.check: the compiled
-// file's, at most once a day, by `autoupdate`; the timer never keeps
-// illi running), what it did or found a note held as the start's are;
-// never from a pipe, whose output is a script's, nor where it never
-// looks (a source run, `autoupdate` off)
+// on a terminal, a new release of illi looked for in the background as
+// it starts (Update.check: the compiled file's, at most once in ten
+// minutes, every illi's, by `autoupdate`), what it did or found a note
+// held as the start's are; never from a pipe, whose output is a
+// script's, nor where it never looks (a source run, `autoupdate` off)
 function term_update(t: Term): void {
   if (!t.scr.tty || HERE === null || config.AUTOUPDATE === "off") {
     return;
   }
-  const look = () => void Update.check(config.ROOT, config.AUTOUPDATE).then((note) => note !== "" && term_note(t, note, HOLD));
-  look();
-  setInterval(look, AGAIN).unref();
+  void Update.check(config.ROOT, config.AUTOUPDATE).then((note) => note !== "" && term_note(t, note, HOLD));
 }
 
 // the start's notes, held (HOLD): a pick set that gave way (config.NOTES);

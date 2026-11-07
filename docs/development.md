@@ -87,7 +87,7 @@ A release is a tag `vX.Y.Z` naming `package.json`'s version: the
 workflow (`.github/workflows/release.yml`) type-checks and tests it,
 builds one file per system (`illi-linux-x64`, `illi-linux-arm64`,
 `illi-darwin-x64`, `illi-darwin-arm64`) and publishes them with their
-`SHA256SUMS`. Every installed illi takes the latest within a day
+`SHA256SUMS`. Every installed illi takes the latest as it next starts
 (`src/config/Update.ts`; `autoupdate` in [Config](config.md)): it
 checks the file against the sums, runs it with `--version`, which must
 print exactly `illi X.Y.Z` (main.ts), then renames it over itself. `bun

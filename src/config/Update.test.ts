@@ -10,7 +10,7 @@
 // build for this system, no connection: nothing changed, logged, never
 // told. A folder illi can't write: nothing downloaded, told once a
 // release. notify only tells; off never asks; a source run never looks;
-// a look at most once a day, one that fails again next time; an illi
+// a look at most once in ten minutes, one that fails again next time; an illi
 // whose file was replaced since it started never again. Two at once both
 // install, safely. A folder left mid-way goes as illi quits or runs again
 // in place, or, an illi killed, once unwritten for an hour. `illi
@@ -153,7 +153,7 @@ test("a file that doesn't match its sum, won't say its version, or isn't built f
   }
 });
 
-test("no connection: nothing changed, logged, never told; the next look not a day away", async () => {
+test("no connection: nothing changed, logged, never told; the next look not ten minutes away", async () => {
   const { place, root } = here();
   expect(await Update.check(root, "on", { ...place, base: OFFLINE })).toBe("");
   expect(says(place.exec)).toBe("illi 0.1.0");
@@ -191,14 +191,14 @@ test("notify only tells; off never asks; a source run never looks", async () => 
   expect(fs.existsSync(off.root + "/" + STATE)).toBe(false);
 });
 
-test("a look at most once a day, every illi's (the root keeps when)", async () => {
+test("a look at each start, but at most once in ten minutes, every illi's (the root keeps when)", async () => {
   const { place, root } = here("0.2.0");
   const now = Date.now();
   await Update.check(root, "on", place, now);
-  await Update.check(root, "on", place, now + 3600e3);
-  await Update.check(root, "notify", place, now + 23 * 3600e3);
+  await Update.check(root, "on", place, now + 60e3);
+  await Update.check(root, "notify", place, now + 9 * 60e3);
   expect(asked).toEqual(["/releases/latest"]);
-  await Update.check(root, "on", place, now + 24 * 3600e3);
+  await Update.check(root, "on", place, now + 10 * 60e3);
   expect(asked).toEqual(["/releases/latest", "/releases/latest"]);
 });
 
