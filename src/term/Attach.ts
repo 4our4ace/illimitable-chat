@@ -7,6 +7,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { Run } from "../config/Run.ts";
 import { term_form_paste } from "./Asks.ts";
 import { term_chooser_find } from "./Commands.ts";
 import { term_draw } from "./Frame.ts";
@@ -112,7 +113,7 @@ async function term_clipboard(): Promise<Uint8Array<ArrayBuffer> | null> {
     : process.env.WAYLAND_DISPLAY ? ["wl-paste", "--no-newline", "--type", "image/png"]
     : ["xclip", "-selection", "clipboard", "-t", "image/png", "-o"];
   try {
-    const proc = Bun.spawn(run, { stdin: "ignore", stdout: "pipe", stderr: "ignore", timeout: CLIP_WAIT });
+    const proc = Bun.spawn(run, { env: { ...process.env, PATH: Run.own_path() }, stdin: "ignore", stdout: "pipe", stderr: "ignore", timeout: CLIP_WAIT });
     const out  = Buffer.from(await new Response(proc.stdout).arrayBuffer());
     if ((await proc.exited) !== 0 || out.length === 0) {
       return null;

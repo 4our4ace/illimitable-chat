@@ -13,6 +13,7 @@
 // output none, waited on WAIT at most.
 
 import * as path from "node:path";
+import { Run } from "../config/Run.ts";
 import { host_wsl } from "./Host.ts";
 
 // Constants
@@ -55,7 +56,7 @@ export function browser_commands(url: string, env: Record<string, string | undef
 // in turn till one opens it: null, none to try; else, once done, "" or
 // why none did
 export function browser_open(url: string, wait = WAIT): Promise<string> | null {
-  const runs = browser_commands(url, process.env, process.platform, host_wsl(), (program) => Bun.which(program));
+  const runs = browser_commands(url, process.env, process.platform, host_wsl(), (program) => Bun.which(program, { PATH: Run.own_path() }));
   if (runs.length === 0) {
     return null;
   }
@@ -79,8 +80,9 @@ export async function browser_run(run: string[], wait = WAIT): Promise<string> {
   const name = path.basename(run[0]);
   let proc: Bun.Subprocess;
   try {
-    const { ILLI_RUN: _, ...env } = process.env;
-    proc = Bun.spawn(run, { cwd: path.dirname(Bun.which(run[0]) ?? run[0]), env, stdin: "ignore", stdout: "ignore", stderr: "ignore", detached: true });
+    const { ILLI_RUN: _, ...rest } = process.env;
+    const env = { ...rest, PATH: Run.own_path() };
+    proc = Bun.spawn(run, { cwd: path.dirname(Bun.which(run[0], { PATH: env.PATH }) ?? run[0]), env, stdin: "ignore", stdout: "ignore", stderr: "ignore", detached: true });
   } catch {
     return name + " couldn't start";
   }

@@ -108,6 +108,7 @@ import { Anthropic } from "../claude-api/Anthropic.ts";
 import { EFFORTS, Pick, type Model } from "../../ai/Pick.ts";
 import { FAILED, live_push, type Limit, type Plan } from "../../ui/View.ts";
 import * as config from "../../config/Config.ts";
+import { Run as Programs } from "../../config/Run.ts";
 import { json_object } from "../../tools/Clip.ts";
 import { Mcp } from "../../tools/Mcp.ts";
 import { FACTS } from "./Facts.ts";
@@ -609,6 +610,7 @@ export namespace ClaudeCode {
     env.CLAUDE_CODE_ENTRYPOINT = "illi";
     env.CLAUDE_CODE_DISABLE_ARTIFACT = "1";
     env.CLAUDE_CODE_DISABLE_TERMINAL_TITLE = "1";
+    env.PATH = Programs.own_path();
     if (dir !== "") {
       env.CLAUDE_CONFIG_DIR = dir;
     }

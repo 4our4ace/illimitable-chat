@@ -7,6 +7,9 @@
 // with neither (main.ts's first line), shown on a folder planting both,
 // first run with plain `bun`, as illi ran before, to show the plants do
 // run there; and every place the one file is built leaves both out.
+// A program of illi's own, run by name, is never the project's: a
+// relative PATH folder (node_modules/.bin) first, its planted bash and
+// ps never run for the shell tool, nor are they Claude Code's to find.
 
 import { expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -51,4 +54,23 @@ test("every place the one file is built leaves a folder's bunfig.toml and .env o
     expect(b).toContain("--no-compile-autoload-bunfig");
     expect(b).toContain("--no-compile-autoload-dotenv");
   }
+});
+
+test("a program of illi's own is never the project's, a relative PATH folder first: the shell tool's bash and ps run the system's, Claude Code finds none there", () => {
+  const dir = temp_dir("illi-path-");
+  fs.mkdirSync(dir + "/node_modules/.bin", { recursive: true });
+  for (const name of ["bash", "ps"]) {
+    fs.writeFileSync(`${dir}/node_modules/.bin/${name}`, `#!/bin/sh\ntouch '${dir}/ran-${name}'\n`, { mode: 0o755 });
+  }
+  const script = `
+    const { Machine } = await import(${JSON.stringify(REPO + "src/tools/Machine.ts")});
+    const { ClaudeCode } = await import(${JSON.stringify(REPO + "src/providers/claude-code/ClaudeCode.ts")});
+    const out = await Machine.shell(process.cwd(), "echo ran", new AbortController().signal);
+    Machine.end();
+    console.log(JSON.stringify([out.text.split("\\n")[0], ClaudeCode.folder_env("").PATH.split(":").includes("node_modules/.bin")]));
+  `;
+  const env = { ...(process.env as Record<string, string>), ILLI_DIR: dir + "/illi", PATH: "node_modules/.bin:" + process.env.PATH };
+  const run = Bun.spawnSync([process.execPath, "--no-env-file", "--config=/dev/null", "-e", script], { cwd: dir, env, stdout: "pipe", stderr: "pipe" });
+  expect([run.stdout.toString().trim(), run.stderr.toString()]).toEqual([JSON.stringify(["ran", false]), ""]);
+  expect(["ran-bash", "ran-ps"].filter((mark) => fs.existsSync(dir + "/" + mark))).toEqual([]);
 });

@@ -24,6 +24,7 @@ import { LARGEST, image_fit } from "../ai/Image.ts";
 import { CAP, clip, clip_end } from "./Clip.ts";
 import * as config from "../config/Config.ts";
 import { profile_chat } from "../config/Profiles.ts";
+import { Run } from "../config/Run.ts";
 import { HEAD, IMAGES, image_kind, type Background } from "../ui/View.ts";
 
 // Types
@@ -53,8 +54,8 @@ type Box = [number, number, number, number];
 
 // the shell commands run in: bash whatever the user's own is, as the
 // permission checks read commands as bash does (Shell.ts) and models
-// write bash; where there is none, sh
-const SHELL = Bun.which("bash") ?? "/bin/sh";
+// write bash; where there is none, sh (illi's own: Run.own_path)
+const SHELL = Bun.which("bash", { PATH: Run.own_path() }) ?? "/bin/sh";
 
 // this illi's mark, set as ILLI_RUN on every process its shells start
 // (each child inherits it), and how to list this user's processes with
@@ -274,7 +275,7 @@ export namespace Machine {
         Machine.kill(-proc.pid);
       }
     }
-    const ps = Bun.spawnSync(PS).stdout.toString();
+    const ps = Bun.spawnSync(PS, { env: { ...process.env, PATH: Run.own_path() } }).stdout.toString();
     for (const line of ps.split("\n")) {
       if (line.includes("ILLI_RUN=" + RUN)) {
         Machine.kill(Number(line.trim().split(" ")[0]));

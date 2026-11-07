@@ -21,6 +21,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { Run } from "./config/Run.ts";
 import { HERE, Update, VERSION } from "./config/Update.ts";
 import { Vendors } from "./providers/Vendors.ts";
 
@@ -60,7 +61,7 @@ async function main_upgrade(): Promise<number> {
   }
   const clone = path.dirname(import.meta.dir);
   if (fs.existsSync(path.join(clone, ".git"))) {
-    return Bun.spawn(["git", "-C", clone, "pull", "--ff-only"], { stdio: ["inherit", "inherit", "inherit"] }).exited;
+    return Bun.spawn(["git", "-C", clone, "pull", "--ff-only"], { env: { ...process.env, PATH: Run.own_path() }, stdio: ["inherit", "inherit", "inherit"] }).exited;
   }
   console.error("illi: " + clone + " is no git clone: install the latest with\n  curl -fsSL " + INSTALLER + " | bash");
   return 1;

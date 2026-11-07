@@ -36,6 +36,7 @@ import * as path from "node:path";
 import { Accounts } from "./Accounts.ts";
 import { Projects } from "../chat/Projects.ts";
 import { json_object } from "../tools/Clip.ts";
+import { Run } from "./Run.ts";
 
 // Types
 // =====
@@ -452,7 +453,7 @@ function profile_walk(dir: string, rel: string): void {
 
 // tar run, on its args: what it printed; failed, why (its last word)
 async function profile_tar(args: string[]): Promise<string> {
-  const proc = Bun.spawn(["tar", ...args], { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+  const proc = Bun.spawn(["tar", ...args], { env: { ...process.env, PATH: Run.own_path() }, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
   if (code !== 0) {
     throw new Error("tar: " + (err.trim().split("\n").at(-1) || "exited " + code));

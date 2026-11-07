@@ -11,7 +11,10 @@
 // (an execve fires no exit, so that one calls it too); one not
 // (SessionEnd's) outlives illi. One reaped has what it left running
 // killed once its output is in (a command run again and again would
-// pile its jobs up).
+// pile its jobs up). A program of illi's own, run by name, is looked for
+// in PATH's absolute folders alone (own_path).
+
+import * as path from "node:path";
 
 // Types
 // =====
@@ -54,6 +57,16 @@ const RUNNING = new Set<number>();
 // ===
 
 export namespace Run {
+
+  // PATH as illi runs a program of its own by name (Claude Code, bash, ps,
+  // tar, git, a clipboard's or a browser's): its absolute folders alone.
+  // A relative one (., node_modules/.bin) is the project's, so a
+  // repository's own program of the name would run in its place. A
+  // command of the user's (the shell tool's, a hook's, an MCP server's)
+  // has PATH whole
+  export function own_path(): string {
+    return (process.env.PATH ?? "").split(path.delimiter).filter((d) => path.isAbsolute(d)).join(path.delimiter);
+  }
 
   export async function run(command: string, o: Options): Promise<Ran> {
     const [cap, grace, settle] = [o.cap ?? CAP, o.grace ?? GRACE, o.settle ?? SETTLE];
