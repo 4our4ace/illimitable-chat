@@ -641,5 +641,9 @@ How much of the window a turn sends is each model's auto compact
 
 The vendors never mix: a chat's summaries and subagents run on its own
 vendor's models. `compactor` and `agents` take one pick per vendor,
-comma-separated, and a chat uses its own vendor's. All settings are in
-[Config](config.md).
+comma-separated, and a chat uses its own vendor's. A summary that's
+stuck (its vendor refusing or down) tries again every minute, each try
+on the summaries' model of the chat's vendor as it is then, and at once
+as the chat moves to another vendor, so it follows the chat there. None
+is lost by quitting: what isn't summarized yet is, at the next start.
+All settings are in [Config](config.md).

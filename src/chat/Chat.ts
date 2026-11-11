@@ -430,10 +430,14 @@ export namespace Chat {
 
   // the chat's pick set to pick (saved by the caller): on another vendor,
   // that vendor's account asked (Chat.account), as only the one in use is,
-  // where the chat asks its accounts (`asking`)
+  // where the chat asks its accounts (`asking`), and a summary stuck
+  // waiting asks again at once, on that vendor's compactor (AskAI.wake)
   export function use(chat: Chat, pick: Pick): void {
     const was = chat.pick.vendor;
     chat.pick = chat.mem.pick = pick;
+    if (pick.vendor !== was) {
+      AskAI.wake();
+    }
     if (chat.asking && pick.vendor !== was) {
       Chat.account(chat);
     }

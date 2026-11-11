@@ -15,6 +15,9 @@
 // kept first, a line in each place; the items themselves untouched. A
 // stream closed before its last event ends its step where its wire says
 // it ended (an API that may leave its usage out), else it ended early.
+// A patient call (a summary's) asks again as its `anew` says then, at
+// once as AskAI.wake wakes it (a chat moved to another vendor); stopped,
+// it asks no more.
 
 import { expect, test } from "bun:test";
 import { temp_dir } from "../../test/repo.ts";
@@ -189,4 +192,35 @@ test("a request carries at most 20 images: the oldest left out by halves, the sa
   expect(JSON.stringify(next.slice(0, 4))).toBe(JSON.stringify(thin));
   const many = Agent.thin([user, back(3, 25)]);
   expect(kept(many)).toEqual(Array.from({ length: 20 }, (_, k) => "p" + (8 + k)));
+});
+
+test("a patient call asks again as its anew says then (a summary's: the compactor of the chat's pick now), at once as AskAI.wake wakes it; stopped, no more", async () => {
+  const start = AskAI.start;
+  const asked: string[] = [];
+  AskAI.start = ((ask: any) => {
+    asked.push(ask.vendor);
+    const end = ask.vendor === "claude-code" ? { ok: true, text: "the summary", left: [] } : { ...AskAI.end("403 Forbidden"), stop: "down" };
+    return { send: () => {}, stop: () => {}, done: Promise.resolve(end) };
+  }) as any;
+  try {
+    let vendor = "github-copilot";
+    const stuck: string[] = [];
+    const ask = () => ({ vendor, model: "m", effort: "low", speed: "slow", system: "", blocks: [], searches: 0, server: "", patient: true, stuck: (why: string) => stuck.push(why), anew: ask }) as any;
+    const call = AskAI.ask(ask(), () => {});
+    await Bun.sleep(20);
+    expect([asked, stuck]).toEqual([["github-copilot"], ["403 Forbidden"]]);
+    vendor = "claude-code";
+    AskAI.wake();
+    expect(await call.done).toEqual({ ok: true, text: "the summary", left: [] });
+    expect(asked).toEqual(["github-copilot", "claude-code"]);
+    vendor = "github-copilot";
+    const held = AskAI.ask(ask(), () => {});
+    await Bun.sleep(20);
+    held.stop();
+    AskAI.wake();
+    expect((await held.done).ok).toBe(false);
+    expect(asked).toEqual(["github-copilot", "claude-code", "github-copilot"]);
+  } finally {
+    AskAI.start = start;
+  }
 });

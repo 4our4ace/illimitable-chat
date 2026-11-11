@@ -12,7 +12,7 @@
 // messages came. A try cut after a line keeps the best one; a node cut
 // as the chat ends (Memory.stop) builds at the next start.
 
-import { AskAI, type Block, type Call } from "../ai/AskAI.ts";
+import { AskAI, type Ask, type Block, type Call } from "../ai/AskAI.ts";
 import * as config from "../config/Config.ts";
 import { Pick } from "../ai/Pick.ts";
 import { Memory, type Part } from "./Memory.ts";
@@ -209,10 +209,15 @@ export namespace Compactor {
   }
 
   // a call of a summary, its blocks, on the compactor of the chat's
-  // pick's vendor; a try that failed told (mem.stuck)
+  // pick's vendor, each try again on the compactor of its pick then (the
+  // chat moved to another vendor while one was stuck: on that one's); a
+  // try that failed told (mem.stuck)
   export function ask(mem: Memory, blocks: Block[]): Call {
-    const share = mem.share();
-    return AskAI.ask({ ...share, ...Pick.ask(config.config_role("compactor", share)), blocks, patient: true, stuck: (why) => mem.stuck?.(why) }, () => {});
+    const make = (): Ask => {
+      const share = mem.share();
+      return { ...share, ...Pick.ask(config.config_role("compactor", share)), blocks, patient: true, stuck: (why) => mem.stuck?.(why), anew: make };
+    };
+    return AskAI.ask(make(), () => {});
   }
 
   // a summary's try: its call's end, the call held in `calls` till then

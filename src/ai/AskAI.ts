@@ -7,12 +7,17 @@
 // (Agent.ts), but a runner's (Provider.ts ask), whose own program runs
 // the steps in its own loop, with illi's prompt and tools: claude-code,
 // the user's Claude Code (ClaudeCode.ts); antigravity, Google's
-// Antigravity CLI (Antigravity.ts). A patient call (a summary's) asks again, AGAIN after each
-// try nothing answered (the vendor down or refusing it, as when the API
-// key's credit is gone; our setup failing), each time telling why (its
-// `stuck`), till one is answered or we stop it: an outage only delays it, and no summary is made of a failure
-// that isn't its input's (Memory.ts). A call's events and end go to its
-// sink.
+// Antigravity CLI (Antigravity.ts); github-copilot, GitHub's Copilot CLI
+// (Copilot.ts). A patient call (a summary's) asks again, AGAIN after
+// each try nothing answered (the vendor down or refusing it, as when the
+// API key's credit is gone; our setup failing), each time telling why
+// (its `stuck`), till one is answered or we stop it: an outage only
+// delays it, and no summary is made of a failure that isn't its input's
+// (Memory.ts). Each try asks as the call's `anew` says then (a
+// summary's: the compactor of the chat's pick as it is now), and one
+// waiting asks again at once as the chat moves to another vendor
+// (AskAI.wake), so a summary stuck on a vendor follows the chat off it.
+// A call's events and end go to its sink.
 //
 // Cache: a marked block ends a prefix the vendor caches; a request keeps
 // the last marks its vendor takes (Wire.marks, AskAI.marks). Single flight
@@ -69,7 +74,8 @@ export type Block = { text: string; mark: boolean };
 // the most tokens a step may read before the call ends `full` once its
 // tools ran (a turn's: Chat.refit goes on from the chat as it then is;
 // an agent's: Tools.refit from its recap; none: no end); stuck: a
-// patient call's try failed, why, as it waits to ask again; listed: its
+// patient call's try failed, why, as it waits to ask again; anew: what
+// a patient call asks as it asks again (none: as it first did); listed: its
 // agent's tools list as illi reads it (none: no list), whose MCP names
 // keep Claude Code's own servers on claude-code (ClaudeCode.cut)
 export type Ask = Pick & {
@@ -85,6 +91,7 @@ export type Ask = Pick & {
   max?      : number;
   room?     : number;
   stuck?    : (why: string) => void;
+  anew?     : () => Ask;
   listed?   : string[] | null;
 };
 
@@ -152,6 +159,9 @@ export type Call = Try;
 // vendor meanwhile (a chat's JOBS each asking once a minute)
 const AGAIN = 60e3;
 
+// the patient calls waiting to ask again, each one's wake (AskAI.wake)
+const NAPS = new Set<() => void>();
+
 
 // the prefixes cached, by key (AskAI.keys)
 const CACHE = new Map<string, Cached>();
@@ -181,18 +191,28 @@ export namespace AskAI {
         const wait = ask.patient === true && !end.ok && end.stop !== "fail" && end.stop !== "full" && end.stop !== "lost";
         if (wait) {
           ask.stuck?.(end.text);
-          await Machine.nap(AGAIN, halt.signal);
+          const woke = new AbortController();
+          const up   = () => woke.abort();
+          NAPS.add(up);
+          await Machine.nap(AGAIN, AbortSignal.any([halt.signal, woke.signal]));
+          NAPS.delete(up);
         }
         if (halt.signal.aborted || !wait) {
           return end;
         }
-        call = AskAI.start(ask, feed.on);
+        call = AskAI.start(ask.anew?.() ?? ask, feed.on);
         end.left.forEach(send);
         end = await call.done;
       }
     };
     run().then(feed.end, (err) => feed.end(AskAI.end(String(err?.message ?? err))));
     return out;
+  }
+
+  // the patient calls waiting to ask again ask at once (a chat moved to
+  // another vendor: a summary's asks the compactor of its pick now)
+  export function wake(): void {
+    [...NAPS].forEach((up) => up());
   }
 
   // a call fed by its sink (its tries), which passes all to `on` and
