@@ -212,8 +212,10 @@ function term_shut(t: Term, c: Chooser): void {
 // input nor quits); the key that opened it closes it (Ctrl+P's); a
 // question illi asks, just shown, holds Enter (Question.ts
 // question_held); the lit option's own keys first (the model picker's
-// effort and speed, the permission question's Esc); then Up and Down (or
-// Tab, Shift+Tab) move round the options shown, PgUp and PgDn a page (a
+// effort and speed, the permission question's Esc; a line asked's, at
+// -1: a sign-in's page opened again); then Up and Down (or
+// Tab, Shift+Tab; Left and Right too, on buttons: Chooser buttons) move
+// round the options shown, PgUp and PgDn a page (a
 // question's lead, where it is cut, half one: Popup.ts popup_page),
 // Ctrl+Home and Ctrl+End to the first and the last (Home and End too,
 // with nothing to type in), the wheel scrolls (Popup.ts), Enter picks the
@@ -227,7 +229,7 @@ export function term_choose_key(t: Term, c: Chooser, press: string): boolean {
   const key  = press === "Ctrl+C" || press === "Ctrl+D" ? "Esc" : press;
   const n    = c.shown.length;
   const lit  = c.shown[c.at]?.k;
-  const move = ({ Up: -1, "Shift+Tab": -1, Down: 1, Tab: 1 } as Record<string, number>)[key];
+  const move = ({ Up: -1, "Shift+Tab": -1, Down: 1, Tab: 1, ...(c.buttons === true && c.ask === null ? { Left: -1, Right: 1 } : {}) } as Record<string, number>)[key];
   const page = ["PgUp", "PgDn", "Ctrl+Home", "Ctrl+End", ...(c.find === null ? ["Home", "End"] : [])].includes(key);
   if (key === c.key) {
     term_shut(t, c);
@@ -239,7 +241,7 @@ export function term_choose_key(t: Term, c: Chooser, press: string): boolean {
   if (key === "Enter" && question_held(t)) {
     return true;
   }
-  if (lit !== undefined && c.keys(lit, key)) {
+  if ((lit !== undefined || c.ask !== null) && c.keys(lit ?? -1, key)) {
     return true;
   }
   if (key === "Enter" && c.ask !== null) {

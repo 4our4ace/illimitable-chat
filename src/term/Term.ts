@@ -321,7 +321,19 @@ export type Under = { $: "popup" } | { $: "hit"; hit: Hit } | { $: "copy"; copy:
 // it; open: shown whole, Ctrl+O's); answers: a question's options, each
 // marked an answer (GLYPH.option) as nothing is picked yet;
 // detail: lines under them of the lit option k, made for w columns (the
-// model picker's autocompact gauge)
+// model picker's autocompact gauge);
+// body: what a step of a list's own says in its popup over its options
+// or the line it asks (/login's: a sign-in's page and code, a
+// download's progress), each line wrapped to the box (an empty one a
+// gap), cleaned as laid out; size: the box's width and height with its
+// frame, the screen's room allowing, as wide whatever it shows (but a
+// name, never cut) and as tall at least (/login's, every step of it one
+// size: LoginCommands.ts BOX); hold: a click outside doesn't close it (a
+// step waiting on something, as a sign-in: Esc alone stops it); buttons:
+// its options are actions, not choices (a sign-in's Open the page, Copy
+// the code; Try again), drawn as square buttons side by side (Popup.ts
+// popup_buttons), beside a line asked too, where a click alone presses
+// one (its keys take them there)
 export type Chooser = {
   title  : string;
   names  : string[];
@@ -347,6 +359,10 @@ export type Chooser = {
   detail?: (k: number, w: number) => Paint.Line[];
   ask    : { hint: string; done: (text: string) => string | null; secret?: boolean } | null;
   back?  : () => void;
+  body?  : Paint.Line[];
+  size?  : { w: number; h: number };
+  hold?  : boolean;
+  buttons?: boolean;
 };
 
 // a line of the side drawn and what a click on it does (null: nothing);
@@ -842,7 +858,7 @@ export function term_hint(): string {
 
 // the start's note while nothing is connected: what /login connects
 // (Vendors.ways: No provider connected yet: type /login to connect your
-// ChatGPT, Claude or Google AI plan, or an API key.)
+// ChatGPT, Claude, Google AI or GitHub Copilot plan, or an API key.)
 function term_none(): string {
   return "No provider connected yet: type /login to connect " + Vendors.ways() + ".";
 }

@@ -3,17 +3,19 @@ Providers
 
 illi runs on your ChatGPT plan, your Claude plan (through your own
 Claude Code), your Google AI plan (through Google's Antigravity CLI),
-your OpenCode Go plan (by its API key), or Anthropic and OpenAI API
-keys. Each is a vendor.
+your OpenCode Go plan (by its API key), your GitHub Copilot plan
+(through GitHub's Copilot CLI), or Anthropic and OpenAI API keys. Each
+is a vendor.
 
 Connecting: /login
 ------------------
 
 Type `/login` in the chat (`/logout` opens the same screen). It lists
-the providers, **ChatGPT**, **Claude**, **Gemini** and **OpenCode**,
-each saying what of it is connected, the one the chat runs on marked.
-Enter on one opens its ways in: its plan (**ChatGPT plan**, **Claude
-plan**, **Google AI plan**) and, for ChatGPT and Claude, an API key
+the providers, **ChatGPT**, **Claude**, **Gemini**, **OpenCode** and
+**GitHub**, each saying what of it is connected, the one the chat runs
+on marked. Enter on one opens its ways in: its plan (**ChatGPT plan**,
+**Claude plan**, **Google AI plan**, **GitHub Copilot plan**) and, for
+ChatGPT and Claude, an API key
 (**OpenAI API key**, **Anthropic API key**); OpenCode's Go plan is
 reached by its key (**OpenCode Go API key**). Each says what it's
 connected with. Esc goes back a level, from every list and question
@@ -29,13 +31,27 @@ connected with. Esc goes back a level, from every list and question
   then the one in use; the last row logs out of the provider (asked
   first).
 
+All of it happens in one popup in the middle of the screen, the same
+size for every provider and every step: the lists, the questions, and
+each sign-in as it goes (the page and the code, the code you paste,
+what illi waits on, a download's progress, a key being checked). What a
+step offers is a row of buttons at its foot (**Open the page**, **Copy
+the code**, **Try again**…): Left and Right move between them, Enter or
+a click presses one. Its text is chosen as the chat's is: drag over it
+and it's copied as you let go. Esc stops a sign-in and goes back to the
+list it came from; a click outside doesn't close it while it waits.
+When one fails, the popup says why, with **Try again**. If something
+else takes the screen meanwhile (Ctrl+P's palette), the sign-in keeps
+waiting and `/login` shows it again. What you connect is said in the
+chat once it's done.
+
 What you connect is offered at once (`/model` lists its models), and
 what you log out of is gone at once: a chat on it moves to another
 provider's default model, saying so (a turn running finishes first).
 Every profile shares the same accounts. illi keeps them in
 `~/.illi/accounts.json`, readable by you alone; a profile you export
-leaves it out, with the logins and the Claude Code and Antigravity
-folders below
+leaves it out, with the logins and the Claude Code, Antigravity and
+Copilot folders below
 ([Profiles](profiles.md)). The `vendors` setting, if you set it, names
 the vendors offered instead ([Config](config.md)); `/login` then says
 when it leaves out one you connected.
@@ -49,7 +65,8 @@ ChatGPT plan
 Pick **ChatGPT**, then **ChatGPT plan**, in `/login` to sign in with
 ChatGPT Plus or Pro:
 illi opens OpenAI's page in your browser and shows a code to enter
-there (it is in your clipboard too), then keeps and renews the login
+there (it is in your clipboard too; rows under it open the page again
+and copy the code or the link), then keeps and renews the login
 itself. The code is good for 15 minutes, and illi waits for it till
 then; Esc stops waiting. The browser is your system's: on WSL Windows'
 default, asked through `rundll32.exe url.dll,FileProtocolHandler`
@@ -93,7 +110,7 @@ in. illi signs in through Claude Code itself: Claude Code opens
 Claude's page in your browser (illi shows the link too), and you paste
 the code the page shows into illi, where it shows as dots. Esc stops
 the sign-in, as soon as it starts; with no code after 10 minutes, illi
-stops it itself. When it fails, the note gives Claude Code's own words.
+stops it itself. When it fails, the popup gives Claude Code's own words.
 A sign-in that doesn't end with the account kept (failed, stopped, or
 the accounts file couldn't be saved) logs its folder out again and
 removes it, so no login is left behind unlisted.
@@ -282,7 +299,7 @@ accounts on its own.
   Otherwise each illi runs one version of it, the one it was tried
   with (`src/providers/antigravity/Pinned.ts` names it), as T3 Code
   does. With none here, adding an account first offers to download it,
-  saying its size (about 70 MB, about 240 MB once unpacked). illi takes
+  saying its size (about 70 MB, about 250 MB once unpacked). illi takes
   it only from the CLI's releases on GitHub
   ([google-antigravity/antigravity-cli](https://github.com/google-antigravity/antigravity-cli/releases)),
   checks it as it comes against the checksum this illi carries, unpacks
@@ -399,6 +416,110 @@ Usage on at opencode.ai, OpenCode bills your credit instead). The side
 shows no use for the plan yet (OpenCode's usage page isn't part of its
 public API), and there's no web search.
 
+GitHub Copilot plan
+-------------------
+
+For a GitHub Copilot plan (Free, Pro, Pro+, Max, or a Business or
+Enterprise seat), pick **GitHub**, then **GitHub Copilot plan**, in
+`/login`. illi runs GitHub's own Copilot CLI the way GitHub's Copilot
+SDK runs it (`copilot --headless --stdio`, its JSON-RPC server), the
+route GitHub offers apps that build on Copilot: unmodified, named illi,
+signed in with GitHub's own sign-in. Your plan pays for it as for the
+CLI itself (its AI credits, by the tokens each model reads and writes).
+illi never reads the CLI's token and never switches accounts on its
+own.
+
+- **The CLI**: if you installed GitHub's Copilot CLI yourself
+  (`copilot` on your `PATH`, in one of its absolute folders), version
+  1.0.100 or later, illi runs yours, at the version installed (none of
+  the newer ones it downloads of itself), and keeping it current is
+  yours (`copilot update`); illi asks its version once, in the
+  background, and again only once the program changes. Otherwise each
+  illi runs one version of it, the one it was tried with
+  (`src/providers/github-copilot/Pinned.ts` names it), downloaded the
+  way Google's Antigravity CLI is: with none here, adding an account
+  first offers to download it, saying its size (about 145 MB, about
+  210 MB once unpacked, and the CLI unpacks about as much again as it
+  first runs). illi takes it only from the CLI's releases on GitHub
+  ([github/copilot-cli](https://github.com/github/copilot-cli/releases)),
+  checks it as it comes against the checksum this illi carries, and
+  unpacks it into `~/.illi/copilot/cli/<version>/`, where what it
+  unpacks of itself goes too; Esc stops the download, leaving nothing
+  behind. An illi update to a newer version downloads it by itself
+  (with `autoupdate` on and a GitHub account connected), and every
+  other version goes once no illi still running uses it, as on Google's
+  plan. illi speaks the CLI's protocol 3 (GitHub's SDK's): a CLI that
+  speaks another is refused, saying whether `copilot update` or an illi
+  update brings one that fits. To run another command line, set
+  `ILLI_COPILOT` to it.
+- **Signing in**: illi runs the CLI's device sign-in, opens GitHub's
+  page in your browser (and shows the link) and copies the code to
+  enter there; enter it and allow the CLI, and illi waits for it (Esc
+  stops it). Each account gets a folder of its own,
+  `~/.illi/copilot/<id>/`, readable by you alone: the CLI's home
+  (`COPILOT_HOME`). The CLI keeps the token in your system's keychain
+  where there is one (by your GitHub login, so a Mac's or a desktop
+  keyring's is shared with your own `copilot` signed in as the same
+  user). Where there's none (WSL, a server), illi asks first whether
+  the CLI may keep it in its config file in that folder instead (only
+  you can read it); no stops the sign-in. An account GitHub gives no
+  Copilot (its subscription ended, or it never had one) still signs
+  in, and the popup says why, with whether Copilot Free is open to it
+  and a button to GitHub's Copilot page
+  (https://github.com/settings/copilot/features); once Copilot is on
+  there it just works, no sign-in again. Until then its row says "no
+  Copilot from GitHub", and a turn on it says the same, never GitHub's
+  raw answer. An account shows by its GitHub login, with its plan. Signing in again as a login already connected
+  takes its place. Logging one out logs the CLI out of it and removes
+  its folder. A turn never signs in: when a sign-in has run out, the
+  turn says so at once, and /login shows **Sign in again** under your
+  accounts. GitHub Enterprise Cloud with data residency (`*.ghe.com`)
+  isn't offered yet.
+- **Your prompt, in place of Copilot's**: illi's prompt replaces
+  Copilot's own whole, so none of Copilot's instructions, nor your
+  Copilot settings, instructions, MCP servers, hooks, skills or plugins
+  (the account's folder has none), reach a turn.
+- **illi's tools**: a turn runs in the CLI with illi's tools over MCP
+  (the CLI names each `illi-` and its name), run by illi, so your
+  permissions, hooks and background jobs work as on every provider. Of
+  the CLI's own tools only its web fetch (and its web search, where it
+  has one) are on, where a turn searches the web, each asked at illi's
+  screen as Claude Code's are; GitHub's own MCP servers are off. It runs
+  in an empty folder, so no project's rules load twice (illi reads them
+  itself); no GitHub token or host, nor Copilot setting, of your
+  environment reaches it, nor its telemetry.
+- **Each turn starts fresh**: a turn is a session of the CLI's own, with
+  the chat illi sends, its compaction, memory and large-output files
+  off (illi folds the chat itself), and its files are removed as it
+  ends; the CLI's log goes as it ends. The CLI dates the message
+  itself.
+- **The models**: the models your plan offers, as the CLI lists them
+  when you sign in and as the chat is on the plan (one your
+  organization's policy turns off, or one without tools, left out),
+  each with its window, efforts and price (its input's, in dollars a
+  million tokens, an AI credit a cent); a model your plan adds is
+  offered at once (unless `models` names those offered), one it drops
+  is gone, and the list is kept for the next start. **auto** is
+  Copilot's own pick for each turn (at its discount); its window is the
+  one the CLI holds the turn to. Before your first sign-in, illi offers
+  **auto** alone.
+- **Your plan's use at the side**: the Usage section shows how much of
+  the month's premium requests (or AI credits) is used and when it
+  starts anew, as the CLI tells it at sign-in, as the chat is on the
+  plan and after each request. When they're used up, illi says so, and
+  when they start anew; when GitHub limits your rate, a later turn may
+  answer; when your organization's policy refuses, illi says GitHub's
+  words.
+- **What's different**: a message you send mid-turn waits for the next
+  one; the CLI retries a busy service a few times before it says so
+  (Esc stops the turn); the CLI takes about 200 MB. illi starts one for
+  the account as a turn needs it (about two seconds; turns at once share
+  it) and keeps it for the next, ending it after 10 minutes with no
+  turn. None is left once illi ends, nor what it caches as it runs (the
+  tool lists of the MCP servers it ran, in a folder of the account's,
+  removed as it ends); your own `copilot` keeps what it unpacks of
+  itself where it does when you run it, so it isn't unpacked twice.
+
 API keys
 --------
 
@@ -428,7 +549,7 @@ Each default names a family, not a version: it is the newest model of
 that family the vendor offers you, so it moves on by itself when a newer
 one comes (`*` stands for the version). OpenCode Go's models come and
 go too often for a family, so its defaults are rules over the models it
-offers, by price:
+offers, by price; GitHub Copilot's too, as each plan offers its own:
 
 | Vendor        | Pick                  | Summaries                   | Today            |
 | ------------- | --------------------- | --------------------------- | ---------------- |
@@ -438,6 +559,7 @@ offers, by price:
 | `antigravity` | `gemini-*-flash`, high | `gemini-*-flash`, low      | gemini-3.8-flash |
 | `claude-api`  | `sonnet-*`            | `haiku-*`                   | sonnet-5.5, haiku-5.5 |
 | `opencode-go` | the middle one by price, medium | the cheapest, low | hy4, mimo-v2.6-flash |
+| `github-copilot` | `claude-sonnet-*`, else `gpt-*`, else `auto`, medium | the cheapest by price, else `claude-haiku-*`, else `auto`, low | your plan's |
 
 `chats` names your own chat model per provider, and `compactor` the
 model that writes its summaries. As you connect a provider, /login reads
@@ -492,6 +614,7 @@ usage:
 | `antigravity` | the models your account may use, each at its thinking levels; the window of the model a turn ran on | the models at sign-in and as each turn starts; the window during each turn |
 | `openai-api`  | nothing: its windows are built in (1.05M)                        |                                        |
 | `opencode-go` | the models your plan offers that illi runs ([OpenCode Go plan](#opencode-go-plan)), each one's window, efforts and price (OpenCode's catalog) | at start, after `/login` (here or in another terminal), before a turn till it answers |
+| `github-copilot` | the models your plan offers, as Copilot's CLI lists them ([GitHub Copilot plan](#github-copilot-plan)), each one's window, efforts and price; the plan's use; Auto's window, as a turn tells it | at start, as the chat moves to it, after `/login`; the use after each request too |
 
 On ChatGPT the list is your account's own: a model it adds is offered
 at once (unless `models` names those offered), one it drops is gone. A

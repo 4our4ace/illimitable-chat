@@ -136,7 +136,9 @@ one:
 - vendors: the vendors offered, named by hand: chatgpt, claude-code (the
   user's Claude plan, through Claude Code), antigravity (the user's
   Google AI plan, through Google's Antigravity CLI), claude-api,
-  openai-api, opencode-go (the user's OpenCode Go plan, by its key).
+  openai-api, opencode-go (the user's OpenCode Go plan, by its key),
+  github-copilot (the user's GitHub Copilot plan, through GitHub's
+  Copilot CLI).
   Unset (the default), they are what the user connected in /login, so
   leave it unset unless the user asks: to connect a provider, point them
   to /login
@@ -323,7 +325,8 @@ Code's: shell {command, description}, read/write {path, ...}, edit
 other names (Write, Edit, Agent, TodoWrite...) match nothing, as illi
 runs its own tools on every provider, but WebFetch and WebSearch: Claude
 Code's own on the claude-code vendor, and Google's CLI's web search
-and page reading on antigravity, matched only in PreToolUse (their
+and page reading on antigravity, and Copilot's CLI's web fetch on
+github-copilot, matched only in PreToolUse (their
 program runs them, so PostToolUse never sees them); each said at the
 start. A command gets the event as JSON on stdin;
 docs/customize.md lists the fields and answers. Say what a hook will run
@@ -345,7 +348,7 @@ user's yes first.
   FILE).
 - Keep secrets out of these files.
 - Leave illi's own state alone: login.json, accounts.json, claude/,
-  antigravity/, claude-code.json, models.json, update.json, profile,
+  antigravity/, copilot/, claude-code.json, models.json, update.json, profile,
   project-profiles.json, chat/, profiles/.
 - Say when it applies: agents, commands, skills (a plugin's too) and the
   rules file's text at the next message; config.json, theme.json,

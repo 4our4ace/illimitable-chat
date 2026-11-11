@@ -190,20 +190,20 @@ test("a sign-in still ending as its account's connected (its wait let go after):
   expect([t.choose?.title, t.notices.at(-1).text]).toEqual(["Summaries on your Fake plan: which model writes them?", "Signed in."]);
 });
 
-test("its models read first, a note saying so while they come; a list that never comes says where to choose them", async () => {
+test("its models read first, /login's popup saying so while they come; a list that never comes says where to choose them", async () => {
   let tell = (_: boolean) => {};
   telling = new Promise<boolean>((done) => (tell = done));
   const t = fresh();
   login_after(t, "fake" as any, "Connected.");
   await Bun.sleep(5);
-  expect([t.choose, t.notices.at(-1).text]).toEqual([null, "Reading the models your Fake plan offers…"]);
+  expect([t.choose.title, t.choose.body, t.choose.size, t.notices.map((n: any) => n.text)]).toEqual(["Models on your Fake plan", [[expect.objectContaining({ x: "Reading the models your Fake plan offers…" })]], { w: 80, h: 14 }, ["Connected."]]);
   tell(true);
-  await until(() => t.choose !== null);
-  expect([t.choose?.title, t.notices.map((n: any) => n.text)]).toEqual(["Summaries on your Fake plan: which model writes them?", ["Connected."]]);
+  await until(() => t.choose?.title.startsWith("Summaries") === true);
+  expect([t.choose?.title, t.choose?.size, t.notices.map((n: any) => n.text)]).toEqual(["Summaries on your Fake plan: which model writes them?", { w: 80, h: 14 }, ["Connected."]]);
   telling = Promise.reject(new Error("offline"));
   const u = fresh();
   login_after(u, "fake" as any, "Connected.");
-  await until(() => u.notices.at(-1).text !== "Reading the models your Fake plan offers…" && u.notices.at(-1).text !== "Connected.");
+  await until(() => u.notices.at(-1).text !== "Connected.");
   expect([u.choose, u.notices.at(-1).text]).toEqual([null, "Its list of models didn't come. /login, Fake plan, Models chooses which of them your Fake plan runs on."]);
   telling = undefined;
 });

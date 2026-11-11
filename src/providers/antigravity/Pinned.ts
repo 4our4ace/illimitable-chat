@@ -1,15 +1,15 @@
 // Pinned
 // ======
 // The build of Google's Antigravity CLI this illi runs (its `acp`), for
-// each machine (Agy.machine): the version tried with this illi
+// each machine (Cli.ts cli_machine): the version tried with this illi
 // (Live.test.ts), taken from the CLI's releases on GitHub. Written by
 // pin.ts, not by hand: a new version is taken as docs/development.md says.
 
-import type { Build } from "./Agy.ts";
+import type { Build } from "../Cli.ts";
 
 export const PINNED: Record<string, Build> = {
-  "darwin-aarch64": { version: "1.5.2", archive: "https://github.com/google-antigravity/antigravity-cli/releases/download/1.5.2/agy_cli_mac_arm64.tar.gz", sha256: "c3f56b381c4755cdd02e5de67373c24788b2a2aeade156756b4419b67253bd0c", bytes: 64486606, unpacked: 206461088, cmd: "antigravity", args: ["acp"] },
-  "darwin-x86_64": { version: "1.5.2", archive: "https://github.com/google-antigravity/antigravity-cli/releases/download/1.5.2/agy_cli_mac_x64.tar.gz", sha256: "fe99ebacc6bd46b4bf2d85c718420b28b699210cf7c2e3055242e2dad7a1beb3", bytes: 70102814, unpacked: 215321248, cmd: "antigravity", args: ["acp"] },
-  "linux-aarch64": { version: "1.5.2", archive: "https://github.com/google-antigravity/antigravity-cli/releases/download/1.5.2/agy_cli_linux_arm64.tar.gz", sha256: "cd155ecd9bc962037423e6826ed0b61d3b16d84d350cdc9a8c14478f24f5f235", bytes: 69123808, unpacked: 232870264, cmd: "antigravity", args: ["acp"] },
-  "linux-x86_64": { version: "1.5.2", archive: "https://github.com/google-antigravity/antigravity-cli/releases/download/1.5.2/agy_cli_linux_x64.tar.gz", sha256: "da696a8dc6122a63d5ffbdd21b02c8a62d5361fba0ed7d3bc2d2619889e62711", bytes: 72934660, unpacked: 244044176, cmd: "antigravity", args: ["acp"] },
+  "darwin-aarch64": { version: "1.5.5", archive: "https://github.com/google-antigravity/antigravity-cli/releases/download/1.5.5/agy_cli_mac_arm64.tar.gz", sha256: "e079f5ba69d548443031d4d9a66a998fe2781c6ee9380a9bc6e9565ba7d093b7", bytes: 65509958, unpacked: 209824176, cmd: "antigravity", args: ["acp"] },
+  "darwin-x86_64": { version: "1.5.5", archive: "https://github.com/google-antigravity/antigravity-cli/releases/download/1.5.5/agy_cli_mac_x64.tar.gz", sha256: "8c42c5ce94d74ad2551ebc2d5500e6cd6a0443f65f8501dac5f419937ad33021", bytes: 71220827, unpacked: 218859568, cmd: "antigravity", args: ["acp"] },
+  "linux-aarch64": { version: "1.5.5", archive: "https://github.com/google-antigravity/antigravity-cli/releases/download/1.5.5/agy_cli_linux_arm64.tar.gz", sha256: "f6faff7b47ad2d9a60ebca9d774239a1cd23e53a8ca6d812c1e9583909dca655", bytes: 70187550, unpacked: 236540280, cmd: "antigravity", args: ["acp"] },
+  "linux-x86_64": { version: "1.5.5", archive: "https://github.com/google-antigravity/antigravity-cli/releases/download/1.5.5/agy_cli_linux_x64.tar.gz", sha256: "bfe2c25edeadd98c2942417c9972ee0e1faa3f0afdc90711e84d5f3a633b5078", bytes: 74057768, unpacked: 247853456, cmd: "antigravity", args: ["acp"] },
 };

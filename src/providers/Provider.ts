@@ -158,6 +158,12 @@ export type Hint = { text: string; trouble: boolean };
 // - hint: what the start says of its login (null: nothing);
 // - check: an API key checked with it, asking what costs nothing (""
 //   good, else why not, never the fetch error's own words);
+// - logout: an account's folder logged out by its own program (its
+//   sign-in gone, a keychain's too), as `illi uninstall` logs out each
+//   account before illi's folder goes (config/Uninstall.ts); false: it
+//   couldn't;
+// - programs: what of its own program illi downloaded (Cli.programs), as
+//   `illi uninstall` removes it while your chats stay;
 // - close: what it runs in the background stopped, as illi ends
 export type Provider = {
   facts     : Facts;
@@ -173,5 +179,7 @@ export type Provider = {
   servers?  : Servers;
   hint?     : () => Hint | null;
   check?    : (key: string) => Promise<string>;
+  logout?   : (folder: string) => Promise<boolean>;
+  programs? : () => string[];
   close?    : () => void;
 };

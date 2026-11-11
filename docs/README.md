@@ -5,7 +5,8 @@ illi's docs
   the mouse and the side panel.
 - [Providers](providers.md): your ChatGPT plan, your Claude plan through
   Claude Code, your Google AI plan through Google's Antigravity CLI,
-  API keys, and which models do what.
+  your OpenCode Go plan, your GitHub Copilot plan through GitHub's
+  Copilot CLI, API keys, and which models do what.
 - [Customize](customize.md): agents, commands, skills, MCP servers,
   plugins, hooks, a status line, the theme and its accent, rules.
 - [Permissions](permissions.md): what illi runs without asking, the
@@ -13,7 +14,7 @@ illi's docs
 - [Profiles](profiles.md): separate chats on one global setup, exported
   and imported.
 - [Config](config.md): every setting and variable, the files illi keeps,
-  troubleshooting.
+  removing illi, troubleshooting.
 - [Development](development.md): the code's layout and its tests.
 - [Design language](design.md): how illi looks and reads: its marks,
   keys and words (a draft).

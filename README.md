@@ -27,7 +27,8 @@ Then type `illi` in any project. Linux and macOS (on Windows, WSL).
 Once you trust the folder, it gets to work on its own in the project,
 and asks before it reaches outside it or opens a `.env` file with its
 read tool ([Permissions](docs/permissions.md)). It keeps itself up to
-date.
+date, and `illi uninstall` removes it, your chats too if you like
+([Removing illi](docs/config.md#removing-illi)).
 
 It remembers
 ------------
@@ -100,8 +101,9 @@ Your plan or your keys
 
 Your ChatGPT plan, your Claude plan through your own [Claude
 Code](https://code.claude.com), your Google AI plan through Google's
-Antigravity CLI, your OpenCode Go plan by its key, or Anthropic and
-OpenAI API keys, each connected with `/login`, which also adds a second account and switches
+Antigravity CLI, your OpenCode Go plan by its key, your GitHub Copilot
+plan through GitHub's Copilot CLI, or Anthropic and OpenAI API keys,
+each connected with `/login`, which also adds a second account and switches
 between them. The side shows how much of your plan is used
 ([Providers](docs/providers.md)).
 

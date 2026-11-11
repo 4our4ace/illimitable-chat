@@ -77,5 +77,5 @@ test("each provider's facts, code and page agree", () => {
 });
 
 test("what /login connects, in words, from the makers", () => {
-  expect([Vendors.ways(), Vendors.list(["A"], "or"), Vendors.list(["A", "B", "C"], "and")]).toEqual(["your ChatGPT, Claude or Google AI plan, or an API key", "A", "A, B and C"]);
+  expect([Vendors.ways(), Vendors.list(["A"], "or"), Vendors.list(["A", "B", "C"], "and")]).toEqual(["your ChatGPT, Claude, Google AI or GitHub Copilot plan, or an API key", "A", "A, B and C"]);
 });

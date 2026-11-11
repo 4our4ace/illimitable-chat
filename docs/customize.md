@@ -216,7 +216,7 @@ width its rows may take), `LINES`, `ILLI_PROJECT_DIR` and
 | `cwd`, `workspace.current_dir` | the folder illi works in |
 | `workspace.project_dir` | the project's top |
 | `model.id`, `model.display_name` | the model, as illi names it (`sonnet-5.5`) |
-| `model.vendor` | illi's: `chatgpt`, `claude-code`, `antigravity`, `claude-api`, `openai-api`, `opencode-go` |
+| `model.vendor` | illi's: `chatgpt`, `claude-code`, `antigravity`, `claude-api`, `openai-api`, `opencode-go`, `github-copilot` |
 | `effort.level` | the effort |
 | `fast_mode` | the speed is fast (or faster) |
 | `version` | illi's |
@@ -357,7 +357,8 @@ over. What differs:
   its own on every provider, but a `PreToolUse` one naming its
   `WebFetch` or `WebSearch`, which runs on `claude-code` as Claude Code
   asks leave for one (and on `antigravity`, as Google's CLI asks for
-  its web search or page reading, named so); each is said at the
+  its web search or page reading, named so, and on `github-copilot`,
+  as Copilot's CLI asks for its web fetch); each is said at the
   start.
 - Its own MCP servers' tools are `mcp__<server>__<tool>`: Claude Code's
   `mcp__plugin_<plugin>_<server>__` is read as that, in its agents and
@@ -429,10 +430,11 @@ it follows the theme) or a list of those.
 
 `tool.before` sees every tool call, Claude Code's own on `claude-code`
 too (its web fetch and search, its MCP servers' tools, as they ask
-leave), and Google's CLI's web search and page reading on
-`antigravity` (as `WebSearch` and `WebFetch`, as they ask leave);
-`tool.after` every call illi runs (Claude Code and Google's CLI run
-their own, so it doesn't see theirs).
+leave), Google's CLI's web search and page reading on `antigravity`
+(as `WebSearch` and `WebFetch`, as they ask leave), and Copilot's CLI's
+web fetch on `github-copilot` (as `WebFetch`); `tool.after` every call
+illi runs (Claude Code, Google's CLI and Copilot's run their own, so
+it doesn't see theirs).
 
 - Hooks run one after another: the plugins in the order they load
   (global, profile, project; by name), each one's in the order it gave
@@ -611,7 +613,8 @@ its input:
   so `PostToolUse` doesn't see them). On `antigravity`, Google's CLI's
   web search and page reading come as `WebSearch` and `WebFetch` as
   they ask leave, `PreToolUse` alone seeing them too; one given other
-  input is refused, as the agent can't take it.
+  input is refused, as the agent can't take it. On `github-copilot`,
+  Copilot's CLI's web fetch comes the same way, as `WebFetch`.
 - No `session_id` or `transcript_path`: one chat per project, which `cwd`
   names. `permission_mode` holds illi's modes.
 - Only `command` hooks, and the seven events above.

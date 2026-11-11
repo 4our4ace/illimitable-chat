@@ -37,7 +37,9 @@
 // button copies all the same, as a window's first click does on Windows
 // (back from pasting elsewhere, the next copy takes one click). Under a
 // popup the mouse is its alone (Popup.ts popup_mouse, before all of
-// this): nothing is chosen there, and nothing lights; a question at the
+// this): nothing under it is chosen, and nothing lights, but the popup's
+// own text is chosen as any (its area: POPUP), a drag there choosing,
+// a click on an option still picking; a question at the
 // input takes the presses on its answers alone (and on a line of a
 // folded command saying what it hides; its lead's other text is chosen
 // as any other), and on it only its answers and such a line light.
@@ -52,6 +54,10 @@ import { question_of } from "./Question.ts";
 import * as Screen from "../ui/Screen.ts";
 import type { Area, Box, Cell, Field, Ink, Sel, Term, Under } from "./Term.ts";
 import * as View from "../ui/View.ts";
+
+// the area a popup's text is (Popup.ts popup_paint): what's inside its
+// frame, chosen as any other's (term_box_press)
+export const POPUP = "popup";
 
 // a drag past a chat's edge scrolls it a line each DRIFT ms; text chosen
 // shows on a fill SELECT of the way from the background to the accent; a
@@ -238,6 +244,42 @@ function term_unit(area: Area, at: Cell, n: number): [Cell, Cell] {
 // whether a cell comes after another
 function term_after(x: Cell, y: Cell): boolean {
   return x.line > y.line || (x.line === y.line && x.col > y.col);
+}
+
+// text chosen in a popup's box (Popup.ts popup_mouse: the presses there
+// are its), as anywhere: a press starts it at the cell under it (twice:
+// its word; three times: its line), a drag grows it (term_box_drag), and
+// let go having moved it's copied (term_box_release: true), the click
+// that press was given up
+export function term_box_press(t: Term, unit: number): void {
+  const area = t.areas.find((a) => a.key === POPUP);
+  const at   = area === undefined ? null : term_cell(area, t.scr.point);
+  t.sel = null;
+  if (area !== undefined && at !== null) {
+    const root = term_unit(area, at, unit);
+    t.sel = { key: POPUP, a: root[0], b: root[1], held: true, moved: unit > 1 && !term_after(root[0], root[1]), unit, root };
+  }
+}
+
+export function term_box_drag(t: Term): void {
+  if (t.sel?.held && t.sel.key === POPUP) {
+    term_follow(t);
+  }
+}
+
+export function term_box_release(t: Term): boolean {
+  const sel = t.sel;
+  if (sel === null || sel.key !== POPUP || !sel.held) {
+    return false;
+  }
+  term_follow(t);
+  sel.held = false;
+  if (!sel.moved) {
+    t.sel = null;
+    return false;
+  }
+  term_copied(t, term_selected(t));
+  return true;
 }
 
 // a choice let go unfinished (a popup opened under a drag): nothing

@@ -661,12 +661,16 @@ function term_agent_set(t: Term, arg: string): void {
 // with `used`, the more used first among matches as good), what else the
 // lit option takes and what the foot says of it (the model picker's),
 // what shows at each option's right end, each option's group (the
-// palette's), the key that opened it, to close it, and what Esc does
-// besides closing it (the list a level up opened again: /login's)
-export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; detail?: Chooser["detail"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; heads?: string[]; grouped?: boolean; key?: string; back?: Chooser["back"] } = {}): void {
+// palette's), the key that opened it, to close it, what Esc does
+// besides closing it (the list a level up opened again: /login's), what
+// it says over its options, its size, and whether its options are
+// buttons (a step of /login's: Chooser body, size, hold, buttons); the
+// picker
+export function term_chooser(t: Term, title: string, names: string[], about: string[], here: number, pick: (k: number) => void, more: { find?: boolean; keys?: Chooser["keys"]; foot?: Chooser["foot"]; detail?: Chooser["detail"]; hay?: string[]; used?: Chooser["used"]; aside?: string[]; heads?: string[]; grouped?: boolean; key?: string; back?: Chooser["back"]; body?: Chooser["body"]; size?: Chooser["size"]; hold?: boolean; buttons?: boolean } = {}): Chooser {
   const shown = Screen.ed_rank("", names);
-  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, heads: more.heads, grouped: more.grouped, key: more.key, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), detail: more.detail, ask: null, back: more.back };
+  t.choose = { title, names, about, hay: more.hay, used: more.used, aside: more.aside, heads: more.heads, grouped: more.grouped, key: more.key, here, pick, find: more.find ? Screen.ed_new() : null, shown, at: Math.max(0, here), top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), detail: more.detail, ask: null, back: more.back, body: more.body, size: more.size, hold: more.hold, buttons: more.buttons };
   t.pane   = null;
+  return t.choose;
 }
 
 // a question's picker opened in the input's place (Question.ts: a
@@ -679,9 +683,10 @@ export function term_chooser(t: Term, title: string, names: string[], about: str
 // them folds (Chooser fold), what Esc does besides closing it (the
 // list that asked it opened again), and whether it's a step of a list's
 // own (popup: /login's), shown in the list's popup instead (term_place;
-// no lead there)
-export function term_question(t: Term, title: string, names: string[], about: string[], pick: (k: number) => void, more: { keys?: Chooser["keys"]; foot?: Chooser["foot"]; lead?: Chooser["lead"]; fold?: Chooser["fold"]; back?: Chooser["back"]; popup?: boolean } = {}): Chooser {
-  const c: Chooser = { title, names, about, lead: more.lead, fold: more.fold, answers: true, here: -1, pick, find: null, shown: Screen.ed_rank("", names), at: 0, top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null, back: more.back };
+// no lead there, but what it says over its answers and its size: Chooser
+// body, size, hold)
+export function term_question(t: Term, title: string, names: string[], about: string[], pick: (k: number) => void, more: { keys?: Chooser["keys"]; foot?: Chooser["foot"]; lead?: Chooser["lead"]; fold?: Chooser["fold"]; back?: Chooser["back"]; popup?: boolean; body?: Chooser["body"]; size?: Chooser["size"]; hold?: boolean } = {}): Chooser {
+  const c: Chooser = { title, names, about, lead: more.lead, fold: more.fold, answers: true, here: -1, pick, find: null, shown: Screen.ed_rank("", names), at: 0, top: 0, keys: more.keys ?? (() => false), foot: more.foot ?? (() => ""), ask: null, back: more.back, body: more.body, size: more.size, hold: more.hold };
   term_place(t, c, more.popup === true);
   return c;
 }
@@ -821,11 +826,18 @@ export function term_shortcut(t: Term, run: string): void {
 // stays, saying it); with `more`, a secret's (an API key) shown a dot a
 // character, what Esc does besides closing it (back: a sign-in waiting on
 // it stopped), and whether it's a step of a list's own (popup: /login's
-// key, a sign-in's code), shown in the list's popup instead (term_place)
-export function term_ask(t: Term, title: string, hint: string, start: string, foot: string, done: (text: string) => string | null, more: { secret?: boolean; back?: () => void; popup?: boolean } = {}): Chooser {
+// key, a sign-in's code), shown in the list's popup instead (term_place),
+// with what it says over the line, its size, the keys it takes besides
+// typing (a sign-in's: its page opened again, its link copied; Chooser
+// body, size, hold, keys at -1), and the buttons under the line that do
+// the same at a click (their names, what pressing button k does: Chooser
+// buttons)
+export function term_ask(t: Term, title: string, hint: string, start: string, foot: string, done: (text: string) => string | null, more: { secret?: boolean; back?: () => void; popup?: boolean; body?: Chooser["body"]; size?: Chooser["size"]; hold?: boolean; keys?: (key: string) => boolean; names?: string[]; press?: (k: number) => void } = {}): Chooser {
   const find = Screen.ed_new();
   Screen.ed_set(find, start);
-  const c: Chooser = { title, names: [], about: [], here: -1, pick: () => {}, find, shown: [], at: 0, top: 0, keys: () => false, foot: () => foot, ask: { hint, done, secret: more.secret }, back: more.back };
+  const keys = more.keys;
+  const names = more.names ?? [];
+  const c: Chooser = { title, names, about: names.map(() => ""), here: -1, pick: more.press ?? (() => {}), find, shown: [], at: 0, top: 0, keys: keys === undefined ? () => false : (_, key) => keys(key), foot: () => foot, ask: { hint, done, secret: more.secret }, back: more.back, body: more.body, size: more.size, hold: more.hold, buttons: names.length > 0 };
   term_place(t, c, more.popup === true);
   return c;
 }
@@ -984,10 +996,10 @@ function term_model(t: Term, arg: string): void {
 // and Shift+Right and kept per model while the picker is open: Enter
 // sends each one changed with the pick, Esc drops them. From another pick
 // than the chat's, the choice goes to `done` (a setting's: Settings.ts;
-// /login's models: LoginCommands.ts), Esc to `back` if given. Each row
-// says its window and its price (dollars a million tokens in) where
-// known
-export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "Model", from = View.view_asked(t.v)!, done = (p: Pick): unknown => term_act(t, { $: "Pick", to: p }), gauge = false, back?: () => void): void {
+// /login's models: LoginCommands.ts), Esc to `back` if given, its popup
+// the size asked, if one is (/login's: Chooser size). Each row says its
+// window and its price (dollars a million tokens in) where known
+export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "Model", from = View.view_asked(t.v)!, done = (p: Pick): unknown => term_act(t, { $: "Pick", to: p }), gauge = false, back?: () => void, size?: Chooser["size"]): void {
   let want    = from;
   const many  = new Set(rows.map(([vendor]) => vendor)).size > 1;
   const heads = many ? rows.map(([vendor]) => Pick.title(vendor)) : undefined;
@@ -1031,7 +1043,7 @@ export function term_model_pick(t: Term, rows: Array<[Vendor, Model]>, title = "
     done(pick(k));
     moved.forEach((share, label) => term_send(t, { $: "autocompact", label, value: share + "%" }));
   };
-  term_chooser(t, title, rows.map(([, m]) => m.label), about, here, chosen, { find: true, keys, foot, detail: gauge ? detail : undefined, back, heads, grouped: many, hay: heads?.map((head, k) => rows[k][1].label + "  " + head) });
+  term_chooser(t, title, rows.map(([, m]) => m.label), about, here, chosen, { find: true, keys, foot, detail: gauge ? detail : undefined, back, heads, grouped: many, hay: heads?.map((head, k) => rows[k][1].label + "  " + head), size });
 }
 
 // a model's auto compact as the picker shows it: its share stepped while

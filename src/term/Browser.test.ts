@@ -11,7 +11,7 @@
 // out): its arguments as given, from its own folder, in a session of its
 // own, its output dropped; a failure, a kill, one not found said in plain words; one
 // still running taken as opened; the next tried after one that fails.
-// /login's ChatGPT sign-in notice: true whether the browser opens or
+// /login's ChatGPT sign-in popup: true whether the browser opens or
 // not, and put right in place when it didn't.
 
 import { afterAll, expect, test } from "bun:test";
@@ -96,29 +96,31 @@ test("browser_open tries each in turn till one opens it, saying why none did; no
   expect(browser_open(URL)).toBeNull();
 });
 
-test("/login's notice: the link and code either way, 'opening in your browser' while it tries; a browser that fails puts it right in place", async () => {
+test("/login's sign-in popup: the link and code either way, the page opening in the browser while it tries; a browser that fails puts it right in place", async () => {
   process.env.SSH_TTY = "/dev/pts/9";
   process.env.BROWSER = script("broken", "sleep 0.2; exit 5");
   const device = ChatGPT.device;
   let grant = () => {};
   ChatGPT.device = async () => ({ url: URL, code: "ABCD-1234", done: new Promise<void>((done) => (grant = done)) });
   const t: any = { v: View.view_new(), scr: { tty: true, ed: Screen.ed_new() }, choose: null, question: null, pane: null, notices: [], due: true, ver: 0, login: null, chat: null };
+  const said = () => (t.choose?.body ?? []).map((l: any[]) => l.map((r) => r.x).join("")).join("\n");
   const write = process.stdout.write;
   process.stdout.write = (() => true) as any;
   try {
     const login = login_chatgpt(t);
     await Bun.sleep(20);
-    expect(t.notices.map((n: any) => n.text)).toEqual(["Sign in to ChatGPT at " + URL + " (opening in your browser) with the code ABCD-1234 (copied; it is good for 15 minutes). illi waits for it: Esc stops."]);
-    for (let k = 0; k < 100 && !t.notices[0].text.includes("didn't"); k++) {
+    expect([t.choose.title, t.choose.names, t.notices]).toEqual(["Sign in to ChatGPT", ["Open the page", "Copy the code", "Copy the link"], []]);
+    expect(said()).toBe("Open " + URL + " and enter this code:\n\n    ABCD-1234\n\nilli opened the page in your browser and copied the code. The code is good for 15 minutes; illi waits for you to sign in there.");
+    for (let k = 0; k < 100 && !said().includes("didn't"); k++) {
       await Bun.sleep(20);
     }
-    expect(t.notices.map((n: any) => n.text)).toEqual(["Sign in to ChatGPT: your browser didn't open (broken exited 5), so open " + URL + " and enter the code ABCD-1234 (copied; it is good for 15 minutes). illi waits for it: Esc stops."]);
-    expect(t.notices[0].until).toBeGreaterThan(Date.now() + 14 * 60000);
+    expect(said()).toEndWith("\n\nYour browser didn't open (broken exited 5): open the page yourself. illi copied the code. The code is good for 15 minutes; illi waits for you to sign in there.");
     grant();
     await login;
   } finally {
     process.stdout.write = write;
     ChatGPT.device = device;
   }
+  expect(t.choose).toBeNull();
   expect(t.notices.map((n: any) => n.text).join("\n")).toMatch(/^Signed in to ChatGPT\./);
 });

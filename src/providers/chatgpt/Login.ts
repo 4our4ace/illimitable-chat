@@ -1,8 +1,9 @@
 // ChatGPT plan's /login page
 // ==========================
 // chatgpt in /login (LoginCommands.ts): connected by its device login
-// (its page opened, its code copied: login_chatgpt), or opencode's login
-// if /login left it to opencode. Esc stops a sign-in waiting (term_esc).
+// (its page opened, its code copied, in /login's popup: login_chatgpt),
+// or opencode's login if /login left it to opencode. Esc stops a sign-in
+// waiting.
 // Its accounts: the one in use in its login file, opencode's while illi
 // may use it, the others kept apart (ChatGPT.swap): a switch puts one in
 // the login file and keeps the one there apart, so each renews in its
@@ -11,12 +12,9 @@
 import * as fs from "node:fs";
 import type { Saved } from "../../config/Accounts.ts";
 import * as config from "../../config/Config.ts";
-import { browser_open } from "../../term/Browser.ts";
-import { term_question } from "../../term/Commands.ts";
-import { LOGIN, LOGIN_FAILED, login_after, login_sure, type Account, type Page } from "../../term/LoginCommands.ts";
-import { term_note, term_notify, term_unnotify, type Notice } from "../../term/Notices.ts";
+import { login_after, login_device, login_question, login_step, login_sure, type Account, type Page } from "../../term/LoginCommands.ts";
+import { term_note } from "../../term/Notices.ts";
 import type { Term } from "../../term/Term.ts";
-import * as Screen from "../../ui/Screen.ts";
 import { ChatGPT } from "./ChatGPT.ts";
 import { LoginFile } from "./Facts.ts";
 
@@ -42,8 +40,8 @@ function login_chatgpt_provider(t: Term): Page {
     const using = ChatGPT.kept(ChatGPT.file());
     return using !== null ? "connected: " + login_chatgpt_name(using) : login_chatgpt_opencode() !== null ? "opencode's login is there: Enter connects it" : "your ChatGPT plan (Plus or Pro): Enter signs in";
   };
-  const add = (back: () => void) => (login_chatgpt_opencode() !== null ? login_chatgpt_connect(t, back) : void login_chatgpt(t));
-  return { name: "ChatGPT plan", vendor: "chatgpt", about, accounts, adds: "+ add another account", add: (back) => (accounts().length === 0 ? add(back) : void login_chatgpt(t)), out: (back) => login_chatgpt_out(t, back) };
+  const add = (back: () => void) => (login_chatgpt_opencode() !== null ? login_chatgpt_connect(t, back) : void login_chatgpt(t, back));
+  return { name: "ChatGPT plan", vendor: "chatgpt", about, accounts, adds: "+ add another account", add: (back) => (accounts().length === 0 ? add(back) : void login_chatgpt(t, back)), out: (back) => login_chatgpt_out(t, back) };
 }
 
 // an account's name: its email (none told: its account's start), its
@@ -64,49 +62,33 @@ function login_chatgpt_opencode(): Saved | null {
 // that one, or a sign-in to another (Esc back to `back`)
 function login_chatgpt_connect(t: Term, back: () => void): void {
   const other = login_chatgpt_opencode()!;
-  term_question(t, "Connect ChatGPT plan", ["Use opencode's login", "Sign in to another account"], [login_chatgpt_name(other), "with a code at OpenAI's page"], (k) => {
+  login_question(t, "Connect ChatGPT plan", ["Use opencode's login", "Sign in to another account"], [login_chatgpt_name(other), "with a code at OpenAI's page"], (k) => {
     if (k === 1) {
-      return void login_chatgpt(t);
+      return void login_chatgpt(t, back);
     }
     const why = ChatGPT.allow(true);
     return why !== null ? term_note(t, "Can't change the accounts: " + why + ".") : login_after(t, "chatgpt", "ChatGPT runs on opencode's login (" + login_chatgpt_name(other) + ").");
-  }, { back, popup: true });
+  }, back);
 }
 
-// ChatGPT's device login: its page and code said (the code copied), the
-// login kept once the person gives it (in the file `login` names, else
-// as illi's own; the account there before kept apart: ChatGPT.swap);
+// ChatGPT's device login, in /login's popup (login_step: Esc stops it,
+// back to `back`): its page and code said (the code copied, the page
+// opened: login_device), the login kept once the person gives it (in the
+// file `login` names, else as illi's own; the account there before kept
+// apart: ChatGPT.swap), said in the chat; failed, said there, Try again;
 // again, a new code (the last one let go)
-export async function login_chatgpt(t: Term): Promise<void> {
-  t.login?.abort();
-  const stop = new AbortController();
-  t.login = stop;
-  let asked: Notice | null = null;
+export async function login_chatgpt(t: Term, back: () => void = () => {}): Promise<void> {
+  const step = login_step(t, "Sign in to ChatGPT", back);
+  step.wait("Asking OpenAI for a code…");
   try {
-    const { url, code, done } = await ChatGPT.device(stop.signal);
-    Screen.screen_copy(code);
-    const until   = Date.now() + LOGIN;
-    const opening = t.scr.tty ? browser_open(url) : null;
-    const open    = (why: string) => "Sign in to ChatGPT: " + why + "open " + url + " and enter the code " + code + " (copied; it is good for 15 minutes). illi waits for it: Esc stops.";
-    asked = term_notify(t, opening === null ? open("") : "Sign in to ChatGPT at " + url + " (opening in your browser) with the code " + code + " (copied; it is good for 15 minutes). illi waits for it: Esc stops.", false, LOGIN);
-    void opening?.then((why) => {
-      if (why !== "" && t.login === stop && asked !== null) {
-        term_unnotify(t, asked);
-        asked = term_notify(t, open("your browser didn't open (" + why + "), so "), false, Math.max(0, until - Date.now()));
-      }
-    });
+    const { url, code, done } = await ChatGPT.device(step.stop.signal);
+    login_device(t, step, url, code, "sign in");
     await done;
+    step.close();
     const now = ChatGPT.kept(ChatGPT.own());
     login_after(t, "chatgpt", "Signed in to ChatGPT" + (now === null ? "" : " as " + login_chatgpt_name(now)) + ". illi keeps the login in " + config.config_home(ChatGPT.own()) + (LoginFile.set === null ? "" : " (the file `login` names)") + " and renews it there.");
   } catch (err: any) {
-    if (!stop.signal.aborted) {
-      term_notify(t, "Login failed: " + err.message + ".", false, LOGIN_FAILED);
-    }
-  } finally {
-    t.login = t.login === stop ? null : t.login;
-    if (asked !== null) {
-      term_unnotify(t, asked);
-    }
+    step.fail("Login failed: " + err.message + ".", () => void login_chatgpt(t, back));
   }
 }
 

@@ -2,9 +2,10 @@
 // ============================
 // antigravity in /login (LoginCommands.ts): its accounts, each a folder of
 // illi's own (Antigravity.ts), signed in by Google's Antigravity CLI's own
-// sign-in: illi opens Google's page (the CLI tells its link), the person
-// signs in there and pastes the code the page shows into illi, shown as
-// dots, which gives it to the CLI (Esc stops the sign-in, term_esc); the
+// sign-in, in /login's popup: illi opens Google's page (the CLI tells its
+// link), the person signs in there and pastes the code the page shows
+// into illi, shown as dots, which gives it to the CLI (Esc stops the
+// sign-in); the
 // CLI keeps the sign-in in the account's folder, made as the sign-in
 // starts so two terminals never share one, and gone again if the sign-in
 // ends without it kept. An account whose sign-in ran out (or that Google's
@@ -14,8 +15,8 @@
 // none here, adding an account first offers to download it, saying how
 // big it is (Esc stops the download too); with another version here (an
 // older illi's), the page says it needs an update, and a row under the
-// accounts offers it. Google's CLI tells no email, so an account is named
-// by its number and its plan. Logging one out logs its folder's CLI out
+// accounts offers it (CliLogin.ts, as every CLI's). Google's CLI tells
+// no email, so an account is named by its number and its plan. Logging one out logs its folder's CLI out
 // and removes the folder. Accounts are never switched but here: illi
 // doesn't rotate them.
 
@@ -23,14 +24,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { Accounts, type Folder } from "../../config/Accounts.ts";
 import * as config from "../../config/Config.ts";
-import { browser_open } from "../../term/Browser.ts";
-import { term_ask, term_question } from "../../term/Commands.ts";
-import { term_draw } from "../../term/Frame.ts";
-import { LOGIN, LOGIN_FAILED, login_after, login_edit, login_sure, type Account, type Page, type Row } from "../../term/LoginCommands.ts";
-import { term_notify, term_unnotify, type Notice } from "../../term/Notices.ts";
+import { login_after, login_edit, login_paste, login_step, login_sure, type Account, type Page, type Row } from "../../term/LoginCommands.ts";
 import type { Term } from "../../term/Term.ts";
 import { Antigravity } from "./Antigravity.ts";
-import { Agy, MINIMUM, type Build } from "./Agy.ts";
+import { cli_lack, cli_rows, cli_then } from "../CliLogin.ts";
+import { Agy } from "./Agy.ts";
 
 // the Google AI plan as a provider: its accounts, each a folder of
 // illi's, named by its number, told by the plan the CLI named (one to
@@ -48,36 +46,16 @@ function login_agy_provider(t: Term): Page {
   const about = () => {
     const now = kept();
     const a   = now?.accounts.find((a) => a.id === now.use);
-    const lack = Agy.ready() ? (a !== undefined && lapsed(a) ? " · needs signing in again" : "") : " · Google's CLI " + (Agy.progress() !== null ? "is downloading" : Agy.other() === null ? "isn't here" : "needs an update");
+    const lack = cli_lack(Agy) || (a !== undefined && lapsed(a) ? " · needs signing in again" : "");
     return a === undefined ? "your Google AI plan, through Google's Antigravity CLI" : "connected: " + login_agy_name(a) + lack;
   };
   const more = (): Row[] => {
     const now = kept();
     const a   = now?.accounts.find((a) => a.id === now.use);
     const again: Row[] = a !== undefined && lapsed(a) ? [{ name: "Sign in again to " + login_agy_name(a), about: "Google's page, then the code it shows", enter: "sign in", pick: (back) => login_agy_again(t, a.id, back) }] : [];
-    const b = Agy.pin;
-    if (b === null || Agy.ready()) {
-      return again;
-    }
-    const was = Agy.other();
-    const up  = login_agy_older(was);
-    const how = Agy.progress();
-    if (how !== null) {
-      return [...again, { name: (up ? "Updating" : "Downloading") + " Google's Antigravity CLI", about: (up ? was + " → " : "") + b.version + ", " + (how.share === null ? "in another illi" : how.share + "% of " + login_agy_mb(b.bytes)), enter: "see how far", pick: (back) => back() }];
-    }
-    return [...again, { name: (up ? "Update" : "Download") + " Google's Antigravity CLI", about: (up ? was + " → " : "") + b.version + ", " + login_agy_mb(b.bytes), enter: up ? "update it" : "download it", pick: (back) => login_agy_offer(t, back, null) }];
+    return [...again, ...cli_rows(t, Agy)];
   };
   return { name: "Google AI plan", vendor: "antigravity", about, accounts, more, adds: "+ add another account", add: (back) => login_agy_add(t, back), out: (back) => login_agy_out(t, back) };
-}
-
-// whether a version here is older than this illi's build (one to update)
-function login_agy_older(was: string | null): was is string {
-  return was !== null && Agy.pin !== null && Agy.newer(was, Agy.pin.version) > 0;
-}
-
-// a size said in MB
-function login_agy_mb(bytes: number): string {
-  return Math.round(bytes / 1e6) + " MB";
 }
 
 // an account's name: its number (Google's CLI tells no email)
@@ -87,87 +65,16 @@ function login_agy_name(a: Folder): string {
 
 // an account more: Google's CLI found (the user's own: Agy.look), else
 // this illi's build downloaded first (asked, saying its size; one
-// downloading by itself said, to wait for), then a sign-in in a new
-// folder
+// downloading by itself said, to wait for: cli_then), then a sign-in in a
+// new folder
 function login_agy_add(t: Term, back: () => void): void {
-  void Agy.look().then(() => login_agy_then(t, back, () => login_agy_sign(t, null, back)));
+  cli_then(t, Agy, back, () => login_agy_sign(t, null, back));
 }
 
 // an account's sign-in again, in its own folder (its sign-in ran out, or
 // Google's old agent made it): as one more's, Google's CLI first
 function login_agy_again(t: Term, id: string, back: () => void): void {
-  void Agy.look().then(() => login_agy_then(t, back, () => login_agy_sign(t, id, back)));
-}
-
-// a sign-in once Google's CLI is here: now if it is; else once this
-// illi's build is downloaded (asked first); one downloading by itself
-// said, to wait for
-function login_agy_then(t: Term, back: () => void, sign: () => Promise<void>): void {
-  if (Agy.ready()) {
-    void sign();
-    return;
-  }
-  if (Agy.progress() !== null) {
-    term_notify(t, Agy.why() + ".", false, LOGIN_FAILED);
-    term_draw(t);
-    return;
-  }
-  login_agy_offer(t, back, sign);
-}
-
-// this illi's build of Google's CLI offered (Esc back to `back`), what it
-// takes said, in place of an older version here; downloaded, the sign-in
-// asked for follows (`then`). None for this machine: said
-function login_agy_offer(t: Term, back: () => void, then: (() => Promise<void>) | null): void {
-  const b = Agy.pin;
-  if (b === null) {
-    term_notify(t, Agy.why() + ".", false, LOGIN_FAILED);
-    return;
-  }
-  const was  = Agy.other();
-  const up   = login_agy_older(was);
-  const what = "Antigravity CLI " + (up ? was + " → " : "") + b.version + " from Google's releases on GitHub: " + login_agy_mb(b.bytes) + ", " + login_agy_mb(b.unpacked) + " once unpacked";
-  const why  = up ? "this illi runs " + b.version + "; " + was + " goes once no illi runs it" : was !== null ? "this illi runs " + b.version + "; " + was + ", a newer illi's, stays" : "the Google AI plan runs on it (or install agy " + MINIMUM + " or later yourself)";
-  term_question(t, (up ? "Update" : "Download") + " Google's Antigravity CLI?", [up ? "Update it" : "Download it", "Not now"], [what, why], (k) => {
-    if (k === 0) {
-      void login_agy_fetch(t, b, up, then);
-    }
-  }, { back, popup: true });
-  term_draw(t);
-}
-
-// Google's CLI downloaded (Esc stops it, nothing left behind), its
-// progress said; then the sign-in asked for, if one is
-async function login_agy_fetch(t: Term, b: Build, up: boolean, then: (() => Promise<void>) | null): Promise<void> {
-  t.login?.abort();
-  const stop = new AbortController();
-  t.login = stop;
-  const doing = up ? "Updating" : "Downloading";
-  let note: Notice = term_notify(t, doing + " Google's Antigravity CLI… (Esc stops)", false, LOGIN);
-  let shown = -1;
-  try {
-    await Agy.download(b, stop.signal, (bytes, of) => {
-      const share = Math.floor((bytes / (of || b.bytes)) * 100);
-      if (share !== shown && share % 5 === 0) {
-        shown = share;
-        term_unnotify(t, note);
-        note = term_notify(t, doing + " Google's Antigravity CLI: " + Math.min(share, 100) + "% of " + login_agy_mb(of || b.bytes) + "… (Esc stops)", false, LOGIN);
-      }
-    });
-  } catch (err: any) {
-    if (!stop.signal.aborted) {
-      term_notify(t, "Google's Antigravity CLI wasn't downloaded: " + err.message + ".", false, LOGIN_FAILED);
-    }
-    return;
-  } finally {
-    t.login = t.login === stop ? null : t.login;
-    term_unnotify(t, note);
-  }
-  term_notify(t, (up ? "Updated Google's Antigravity CLI to " : "Downloaded Google's Antigravity CLI ") + b.version + ".", false);
-  if (then !== null) {
-    return then();
-  }
-  term_draw(t);
+  cli_then(t, Agy, back, () => login_agy_sign(t, id, back));
 }
 
 // a new folder of illi's, made now (readable by the user alone), so
@@ -192,56 +99,31 @@ function login_agy_id(): string {
 }
 
 // a folder signed in (Antigravity.signin): an account's own (`want`:
-// signed in again), else a new one (login_agy_id). A note says it starts
-// (Esc stops it); Google's page opened as the CLI tells its link (and
-// said, if the browser didn't open), the code the page shows asked for
-// here, shown as dots (Esc stops it all, back to `back`), given the CLI,
-// a note saying it signs in meanwhile; signed in, the account kept and
-// in use. A new folder not kept in the
-// end (the sign-in failed or was stopped) is gone; an account's own stays
-// as it was
+// signed in again), else a new one (login_agy_id), in /login's popup
+// (login_step: Esc stops it, back to `back`): it says it starts; as the
+// CLI tells Google's page, the page opened and the code it shows asked
+// for, shown as dots (login_paste; asked again, said so), given the CLI,
+// the step saying it signs in meanwhile; signed in, the account kept and
+// in use, said in the chat; failed, said there, Try again. A new folder
+// not kept in the end (the sign-in failed or was stopped) is gone; an
+// account's own stays as it was
 async function login_agy_sign(t: Term, want: string | null, back: () => void): Promise<void> {
-  t.login?.abort();
-  const stop = new AbortController();
-  t.login = stop;
+  const step = login_step(t, "Sign in with Google", back);
   let id = want;
-  let asked: Notice | null = term_notify(t, "Starting the sign-in with Google… (Esc stops)", false, LOGIN);
-  let line: Term["choose"] = null;
+  let asked = 0;
   let give = (_code: string) => {};
-  const ask = (url: string) => {
-    const say = (why: string) => "Sign in with Google: " + why + "open " + url + " in a browser, then paste the code the page shows.";
-    if (asked !== null) {
-      term_unnotify(t, asked);
-    }
-    const opening = t.scr.tty ? browser_open(url) : null;
-    asked = term_notify(t, opening === null ? say("") : "Sign in with Google in your browser (opening it now), then paste the code the page shows.", false, LOGIN);
-    void opening?.then((why) => {
-      if (why !== "" && t.login === stop && asked !== null) {
-        term_unnotify(t, asked);
-        asked = term_notify(t, say("your browser didn't open (" + why + "), so "), false, LOGIN);
-      }
-    });
-    line = term_ask(t, "Google AI plan", "paste the code from Google's page", "", "Enter sign in · Esc stop", (code) => {
-      if (code.trim() === "") {
-        return "Paste the code first.";
-      }
-      if (asked !== null) {
-        term_unnotify(t, asked);
-      }
-      asked = term_notify(t, "Signing in with Google… (Esc stops)", false, LOGIN);
-      give(code);
-      return null;
-    }, { secret: true, popup: true, back: () => {
-      stop.abort();
-      back();
-    } });
-    term_draw(t);
-  };
+  step.wait("Starting the sign-in with Google…");
+  const ask = (url: string) => login_paste(t, step, url, "with Google", (code) => {
+    step.wait("Signing in with Google…");
+    give(code);
+    return null;
+  }, false, asked++ > 0);
   try {
     id ??= login_agy_id();
-    const run = Antigravity.signin(Accounts.folder(config.ROOT, "antigravity", id), stop.signal, ask);
+    const run = Antigravity.signin(Accounts.folder(config.ROOT, "antigravity", id), step.stop.signal, ask);
     give = run.give;
     const plan = await run.done;
+    step.close();
     const a = { id, email: "", plan, org: "" };
     const done = login_edit(t, (store) => {
       const was = store.antigravity?.accounts ?? [];
@@ -251,16 +133,8 @@ async function login_agy_sign(t: Term, want: string | null, back: () => void): P
       login_after(t, "antigravity", "Signed in to your Google AI plan (" + login_agy_name(a) + (plan === "" ? "" : ", " + plan) + "): illi runs on it now.");
     }
   } catch (err: any) {
-    if (!stop.signal.aborted) {
-      term_notify(t, "Login failed: " + err.message + ".", false, LOGIN_FAILED);
-    }
+    step.fail("Login failed: " + err.message + ".", () => cli_then(t, Agy, back, () => login_agy_sign(t, want, back)));
   } finally {
-    t.login = t.login === stop ? null : t.login;
-    t.choose = t.choose === line ? null : t.choose;
-    if (asked !== null) {
-      term_unnotify(t, asked);
-    }
-    term_draw(t);
     if (id !== null && id !== want && !(config.config_accounts_read()?.antigravity?.accounts ?? []).some((a) => a.id === id)) {
       void login_agy_forget(id, false);
     }

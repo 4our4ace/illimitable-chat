@@ -12,11 +12,12 @@ import { FACTS as ANTIGRAVITY } from "./antigravity/Facts.ts";
 import { FACTS as CHATGPT } from "./chatgpt/Facts.ts";
 import { FACTS as CLAUDE_API } from "./claude-api/Facts.ts";
 import { FACTS as CLAUDE_CODE } from "./claude-code/Facts.ts";
+import { FACTS as GITHUB_COPILOT } from "./github-copilot/Facts.ts";
 import { FACTS as OPENAI_API } from "./openai-api/Facts.ts";
 import { FACTS as OPENCODE_GO } from "./opencode-go/Facts.ts";
 import type { Facts } from "./Provider.ts";
 
-const ALL = [CLAUDE_API, OPENAI_API, CHATGPT, CLAUDE_CODE, ANTIGRAVITY, OPENCODE_GO] as const;
+const ALL = [CLAUDE_API, OPENAI_API, CHATGPT, CLAUDE_CODE, ANTIGRAVITY, OPENCODE_GO, GITHUB_COPILOT] as const;
 
 // a provider's id, as saved
 export type Vendor = (typeof ALL)[number]["id"];

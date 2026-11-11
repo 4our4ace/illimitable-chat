@@ -28,11 +28,14 @@
 // ChatGPT no longer offered. The Claude plan (Claude Code stood in for):
 // your Claude Code logged in, its login connects it (or a sign-in to
 // another), run on as its environment names it; another account signs
-// in in a folder of illi's, Claude Code's page's link told, the code
-// asked as dots and given it, a wrong one saying why (in Claude Code's
-// words, said to be its) and Esc stopping it, each leaving no folder,
-// as does one signed in that can't be kept (logged out); signed in,
-// kept and in use, its folder readable by its owner alone. Enter
+// in in a folder of illi's, in /login's popup at its one size (what it
+// waits on, then Claude Code's page's link told, the code asked as dots
+// and given it), a wrong one saying why there (in Claude Code's words,
+// said to be its) with Try again, and Esc stopping it, back to the
+// accounts, each leaving no folder, as does one signed in that can't be
+// kept (logged out); a sign-in whose popup something else took is shown
+// again by /login; signed in, kept and in use, its folder readable by
+// its owner alone. Enter
 // switches; Del leaves your Claude Code logged in, and logs one of
 // illi's out, its folder gone; logging out of the Claude plan logs all
 // of illi's out, the plan no longer offered, your Claude Code still
@@ -76,7 +79,7 @@ esac
 `, { mode: 0o755 });
 
 const { term_login } = await import("./LoginCommands.ts");
-const { term_esc } = await import("./Keys.ts");
+const { term_choose_key, term_esc } = await import("./Keys.ts");
 const { ChatGPT } = await import("../providers/chatgpt/ChatGPT.ts");
 const { ClaudeCode } = await import("../providers/claude-code/ClaudeCode.ts");
 const { Accounts, ENV } = await import("../config/Accounts.ts");
@@ -119,8 +122,22 @@ const until = async (ok: () => boolean) => {
   }
 };
 
-// the picker's row named name picked
-const pick = (t: any, name: string) => t.choose.pick(t.choose.names.indexOf(name));
+// the picker's row named name picked, as Enter picks it (Keys.ts): the
+// popup shut first, so what it opens (a step of a sign-in) has it
+const pick = (t: any, name: string) => {
+  const c  = t.choose;
+  t.choose = null;
+  c.pick(c.names.indexOf(name));
+};
+
+// what the popup says over its options (a step's body), as text
+const said = (t: any) => (t.choose?.body ?? []).map((l: any[]) => l.map((r) => r.x).join("")).join("\n");
+
+// a line given to what the popup asks, as Enter gives it (Keys.ts)
+const enter = (t: any, text: string) => {
+  Screen.ed_set(t.choose.find, text);
+  term_choose_key(t, t.choose, "Enter");
+};
 
 // a question's answer k given as Enter gives it (Keys.ts): the question
 // (in /login's popup) shut first, so what it leads to may open a list (a
@@ -139,11 +156,11 @@ const open = (t: any, name: string) => {
   pick(t, name);
 };
 
-test("the picker lists the providers, ChatGPT, Claude, Gemini and OpenCode, each opening its plan and its API key, each saying what it's connected with", () => {
+test("the picker lists the providers, ChatGPT, Claude, Gemini, OpenCode and GitHub, each opening its plan and its API key, each saying what it's connected with", () => {
   const t = term();
   term_login(t);
-  expect([t.choose.title, t.choose.names, t.choose.here, t.choose.foot(0)]).toEqual(["Providers", ["ChatGPT", "Claude", "Gemini", "OpenCode"], -1, "Enter open"]);
-  expect(t.choose.about).toEqual(["by OpenAI: your ChatGPT plan or an API key", "by Anthropic: your Claude plan or an API key", "by Google: your Google AI plan, through Antigravity", "by OpenCode: your OpenCode Go plan, by an API key"]);
+  expect([t.choose.title, t.choose.names, t.choose.here, t.choose.foot(0)]).toEqual(["Providers", ["ChatGPT", "Claude", "Gemini", "OpenCode", "GitHub"], -1, "Enter open"]);
+  expect(t.choose.about).toEqual(["by OpenAI: your ChatGPT plan or an API key", "by Anthropic: your Claude plan or an API key", "by Google: your Google AI plan, through Antigravity", "by OpenCode: your OpenCode Go plan, by an API key", "by GitHub: your Copilot plan, through GitHub's Copilot CLI"]);
   pick(t, "ChatGPT");
   expect([t.choose.title, t.choose.names, t.choose.about]).toEqual(["ChatGPT", ["ChatGPT plan", "OpenAI API key"], ["your ChatGPT plan (Plus or Pro): Enter signs in", "a key from platform.openai.com"]]);
   term_login(t);
@@ -157,6 +174,9 @@ test("the picker lists the providers, ChatGPT, Claude, Gemini and OpenCode, each
   term_login(t);
   pick(t, "OpenCode");
   expect([t.choose.title, t.choose.names, t.choose.about]).toEqual(["OpenCode", ["OpenCode Go API key"], ["a key from opencode.ai"]]);
+  term_login(t);
+  pick(t, "GitHub");
+  expect([t.choose.title, t.choose.names, t.choose.about]).toEqual(["GitHub", ["GitHub Copilot plan"], ["your GitHub Copilot plan, through GitHub's Copilot CLI"]]);
   expect(config.OFFER.vendors).toEqual(["chatgpt"]);
 });
 
@@ -178,7 +198,6 @@ test("an API whose variable is set connects on it, checked with its provider fir
 });
 
 test("Esc goes a level up: from a way in's accounts to its maker's ways in, to the providers, then closed; from a question, back to the list that asked it", async () => {
-  const { term_choose_key } = await import("./Keys.ts");
   const esc = (t: any) => term_choose_key(t, t.question ?? t.choose, "Esc");
   const t = term();
   open(t, "Anthropic API key");
@@ -376,7 +395,7 @@ test("Del logs an account out, asked first: one kept apart forgotten, the one in
   pick(t, "ChatGPT plan");
   expect([t.choose.title, t.choose.names, t.choose.about]).toEqual(["Connect ChatGPT plan", ["Use opencode's login", "Sign in to another account"], ["home@example.com", "with a code at OpenAI's page"]]);
   answer(t, 0);
-  await until(() => t.choose !== null);
+  await until(() => t.choose?.title.startsWith("Summaries") === true);
   expect([note(t), ChatGPT.key(), config.OFFER.vendors, t.choose.title]).toEqual(["ChatGPT runs on opencode's login (home@example.com).", "acct-3", ["chatgpt", "openai-api"], "Summaries on your ChatGPT plan: which model writes them?"]);
   open(t, "ChatGPT plan");
   pick(t, "Log out of ChatGPT plan");
@@ -396,15 +415,16 @@ test("the Claude plan, your Claude Code logged in: its login connects it (or a s
   pick(t, "Claude");
   expect([t.choose.names[0], t.choose.about[0]]).toEqual(["Claude plan", "your Claude plan, through Claude Code"]);
   pick(t, "Claude plan");
-  await until(() => t.choose?.title === "Connect Claude plan");
-  expect([t.choose.title, t.choose.names, t.choose.about]).toEqual(["Connect Claude plan", ["Use your Claude Code's login", "Sign in to another account"], ["me@example.com", "with a code at Claude's page"]]);
+  expect([t.choose.title, said(t), t.choose.foot(0), t.choose.hold]).toEqual(["Connect Claude plan", "Asking your Claude Code whom it's logged in as…", "Esc stop", true]);
+  await until(() => t.choose?.names.length === 2);
+  expect([t.choose.title, t.choose.names, t.choose.about, t.choose.size]).toEqual(["Connect Claude plan", ["Use your Claude Code's login", "Sign in to another account"], ["me@example.com", "with a code at Claude's page"], { w: 80, h: 14 }]);
   answer(t, 0);
-  await until(() => t.choose !== null);
+  await until(() => t.choose?.title.startsWith("Summaries") === true);
   expect([note(t), t.choose.title]).toEqual(["Connected your Claude plan (me@example.com): its models are in /model.", "Summaries on your Claude plan: which model writes them?"]);
   expect([claude(), config.OFFER.vendors, config.config_folder("claude-code"), ClaudeCode.env({} as any).CLAUDE_CONFIG_DIR]).toEqual([{ use: "own", accounts: [{ id: "own", email: "me@example.com", plan: "max", org: "Org" }] }, ["openai-api", "claude-code"], "", OWN_CLAUDE]);
 });
 
-test("another account signs in in a folder of illi's: Claude Code's page's link told, the code asked as dots and given it; a wrong one says why, Esc stops it, each leaving no folder; signed in, kept and in use", async () => {
+test("another account signs in in a folder of illi's, in /login's popup: Claude Code's page's link told, the code asked as dots and given it; a wrong one says why there, Try again; Esc stops it, back to the accounts; each leaving no folder; signed in, kept and in use", async () => {
   const t = term();
   const add = async () => {
     open(t, "Claude plan");
@@ -414,32 +434,55 @@ test("another account signs in in a folder of illi's: Claude Code's page's link 
   open(t, "Claude plan");
   expect([t.choose.names, t.choose.about[0], t.choose.here]).toEqual([["me@example.com", "Models", "+ add another account", "Log out of Claude plan"], "max · your Claude Code", 0]);
   await add();
-  expect([t.choose.ask.hint, t.choose.ask.secret, note(t)]).toEqual(["paste the code from Claude's page", true, "Sign in to Claude in your browser (if it didn't open: https://claude.com/cai/oauth/authorize?code=true&state=s1), then paste the code the page shows."]);
-  expect(t.choose.ask.done("")).toBe("Paste the code first.");
-  t.choose.ask.done("bad-code");
-  expect(await noted(t, "Login failed")).toBe("Login failed: Claude Code said “OAuth error: Invalid code”.");
+  expect([t.choose.title, t.choose.ask.hint, t.choose.ask.secret, t.choose.size, t.choose.hold, t.notices]).toEqual(["Sign in to Claude", "paste the code from the page", true, { w: 80, h: 14 }, true, []]);
+  expect(said(t)).toBe("Sign in to Claude in your browser, then paste the code the page shows here.\n\nIts page opened in your browser (if it didn't, open this one):\nhttps://claude.com/cai/oauth/authorize?code=true&state=s1");
+  expect(t.choose.foot()).toBe("Enter sign in · Ctrl+O open the page · Ctrl+Y copy its link · Esc stop");
+  enter(t, "");
+  expect([t.choose.ask.hint, t.choose.foot()]).toEqual(["paste the code from the page", "Paste the code first"]);
+  enter(t, "bad-code");
+  expect(said(t)).toBe("Signing in to Claude…");
+  await until(() => said(t).startsWith("Login failed"));
+  expect([said(t), t.choose.names, t.choose.foot(0), t.notices]).toEqual(["Login failed: Claude Code said “OAuth error: Invalid code”.", ["Try again"], "Enter try again · Esc back", []]);
   await until(() => !fs.existsSync(FOLDER("c1")));
-  expect(t.choose).toBeNull();
-  await add();
-  t.choose.back();
+  pick(t, "Try again");
+  await until(() => t.choose?.ask != null);
+  expect(t.choose.title).toBe("Sign in to Claude");
+  term_choose_key(t, t.choose, "Esc");
   await until(() => t.login === null && !fs.existsSync(FOLDER("c1")));
-  expect([t.question, t.choose.title, note(t)]).toEqual([null, "Claude plan", "Login failed: Claude Code said “OAuth error: Invalid code”."]);
+  await Bun.sleep(50);
+  expect([t.question, t.choose.title, t.notices]).toEqual([null, "Claude plan", []]);
   await add();
+  t.choose = null;
   term_esc(t);
   expect(note(t)).toBe("The sign-in stopped: /login starts it again.");
   await until(() => t.login === null && !fs.existsSync(FOLDER("c1")));
   const kept = fs.readFileSync(Accounts.file(config.ROOT), "utf8");
   fs.writeFileSync(Accounts.file(config.ROOT), "{ broken");
   await add();
-  t.choose.ask.done("good-code");
+  enter(t, "good-code");
   expect(await noted(t, "Can't change")).toStartWith("Can't change the accounts: the accounts file");
   await until(() => !fs.existsSync(FOLDER("c1")));
   fs.writeFileSync(Accounts.file(config.ROOT), kept);
   await add();
-  t.choose.ask.done("good-code");
+  enter(t, "good-code");
   expect(await noted(t, "Signed in")).toBe("Signed in to your Claude plan as c1@example.com: illi runs on it now.");
   expect(claude()).toEqual({ use: "c1", accounts: [{ id: "own", email: "me@example.com", plan: "max", org: "Org" }, { id: "c1", email: "c1@example.com", plan: "max", org: "Org" }] });
   expect([config.config_folder("claude-code"), ClaudeCode.env({} as any).CLAUDE_CONFIG_DIR, fs.statSync(FOLDER("c1")).mode & 0o777]).toEqual([FOLDER("c1"), FOLDER("c1"), 0o700]);
+});
+
+test("a sign-in shown again: something else took the popup meanwhile (Ctrl+P's), the sign-in waits there, /login shows it again", async () => {
+  const t = term();
+  open(t, "Claude plan");
+  pick(t, "+ add another account");
+  await until(() => t.choose?.ask != null);
+  const step = t.choose;
+  t.choose = { title: "Palette", names: [] };
+  term_login(t);
+  expect(t.choose).toBe(step);
+  term_choose_key(t, t.choose, "Esc");
+  await until(() => t.login === null && !fs.existsSync(FOLDER("c2")));
+  term_login(t);
+  expect(t.choose.title).toBe("Providers");
 });
 
 test("a sign-in ends as Claude Code does, though a child it left holds its output open: a wrong code says why, a stop ends it at once", async () => {
@@ -483,12 +526,12 @@ test("Enter switches; Del leaves your Claude Code logged in, logs one of illi's 
   expect(await noted(t, "Logged out of c1")).toBe("Logged out of c1@example.com.");
   expect([fs.existsSync(FOLDER("c1")), claude(), config.OFFER.vendors]).toEqual([false, undefined, ["openai-api"]]);
   open(t, "Claude plan");
-  await until(() => t.choose?.title === "Connect Claude plan");
-  t.choose.pick(0);
+  await until(() => t.choose?.names.length === 2);
+  answer(t, 0);
   open(t, "Claude plan");
   pick(t, "+ add another account");
   await until(() => t.choose?.ask != null);
-  t.choose.ask.done("good-code");
+  enter(t, "good-code");
   await noted(t, "Signed in");
   open(t, "Claude plan");
   pick(t, "Log out of Claude plan");

@@ -1136,14 +1136,16 @@ export namespace ClaudeCode {
 // claude-code's code, as the rest of illi asks it (Provider.ts): a call
 // run by Claude Code itself (a runner), while the chat is on it (once a
 // day an account) the plan's list and windows asked (the list waited on,
-// the windows told as they change), the plan at the side, and Claude
-// Code's own MCP servers as its last call told them
+// the windows told as they change), the plan at the side, Claude Code's
+// own MCP servers as its last call told them, and an account's folder
+// logged out by Claude Code as `illi uninstall` asks
 export const PROVIDER: Provider = {
   facts   : FACTS,
   ask     : ClaudeCode.ask,
   account : ClaudeCode.list,
   watch   : ClaudeCode.watch,
   plan    : ClaudeCode.told,
+  logout  : (dir) => ClaudeCode.logout(dir).catch(() => false),
   servers : {
     by    : "Claude Code",
     list  : ClaudeCode.servers,

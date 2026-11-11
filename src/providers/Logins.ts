@@ -11,6 +11,7 @@ import type { Term } from "../term/Term.ts";
 import { PAGE as ANTIGRAVITY } from "./antigravity/Login.ts";
 import { PAGE as CHATGPT } from "./chatgpt/Login.ts";
 import { PAGE as CLAUDE_CODE } from "./claude-code/Login.ts";
+import { PAGE as GITHUB_COPILOT } from "./github-copilot/Login.ts";
 
 // the pages added as illi starts (Logins.add)
 const ADDED: Record<string, (t: Term) => Page> = {};
@@ -19,7 +20,7 @@ export namespace Logins {
 
   // a plan's page, made for this terminal (none: the provider has none)
   export function of(vendor: string): ((t: Term) => Page) | undefined {
-    const pages: Record<string, (t: Term) => Page> = { chatgpt: CHATGPT, "claude-code": CLAUDE_CODE, antigravity: ANTIGRAVITY, ...ADDED };
+    const pages: Record<string, (t: Term) => Page> = { chatgpt: CHATGPT, "claude-code": CLAUDE_CODE, antigravity: ANTIGRAVITY, "github-copilot": GITHUB_COPILOT, ...ADDED };
     return pages[vendor];
   }
 

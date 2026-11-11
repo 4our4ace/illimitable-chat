@@ -19,7 +19,7 @@ The types of all three are in `src/providers/Provider.ts`.
 namespace or imports its folder; each provider's facts, code and page
 agree. `src/providers/Fake.test.ts` adds a provider no list names (as
 a test may: `Vendors.add`, `Providers.add`, `Logins.add`) and runs it
-end to end. illi has six vendors:
+end to end. illi has seven vendors:
 
 | Vendor        | Paid by      | Runs in                | Its folder |
 | ------------- | ------------ | ---------------------- | ---------- |
@@ -29,6 +29,7 @@ end to end. illi has six vendors:
 | `claude-code` | a plan login | the user's Claude Code (another account's: in a Claude Code folder of illi's) | `src/providers/claude-code` (`ClaudeCode.ts`) |
 | `opencode-go` | a plan's API key | illi's own loop     | `src/providers/opencode-go` (`OpenCodeGo.ts`: Chat Completions; the plan's catalog, its defaults rules by price) |
 | `antigravity` | a plan login | Google's own Antigravity CLI (`agy acp`), run unmodified over the Agent Client Protocol (each account a folder of illi's) | `src/providers/antigravity` (`Antigravity.ts`: the runner and its pool of CLIs; `Acp.ts`: the connection; `Agy.ts`: the CLI found, yours or downloaded by /login; `Login.ts`: its /login page) |
+| `github-copilot` | a plan login | GitHub's own Copilot CLI (`copilot --headless --stdio`), run unmodified as GitHub's Copilot SDK runs it (each account a folder of illi's) | `src/providers/github-copilot` (`Copilot.ts`: the runner and its CLIs; `Rpc.ts`: the connection; `CopilotCli.ts`: the CLI found, yours or downloaded by /login; `Login.ts`: its /login page) |
 
 1. Its facts
 ------------
@@ -180,13 +181,26 @@ its program run there, `config_folder`):
   (`term_hint`).
 - `PROVIDER.close()`: what it runs in the background stopped, as illi
   ends.
+- `PROVIDER.logout(folder)` and `PROVIDER.programs()`, a runner's whose
+  program keeps a sign-in outside its folder (a keychain) or that illi
+  downloads: an account's folder logged out by the program, and what of
+  the program illi downloaded, which `illi uninstall` asks
+  (`src/config/Uninstall.ts`: everything logs each account out before
+  illi's folder goes; programs alone removes the downloads).
+- A program illi downloads (Google's Antigravity CLI, GitHub's Copilot
+  CLI) is a `cli(spec)` of `src/providers/Cli.ts`: the user's own on
+  `PATH` once it's the spec's minimum or later, else the build its
+  `Pinned.ts` names (written by its `pin.ts`, through `Pin.ts`), its
+  download checked, unpacked, marked in use and tidied, by itself with
+  `autoupdate` on; its /login rows and question are
+  `src/providers/CliLogin.ts`'s.
 - `/login` and `/logout` (`src/term/LoginCommands.ts`): a plan's page
   is its folder's `Login.ts` (`PAGE`, a `Page`, listed in `Logins.ts`),
   under its maker: its row's text, its accounts (the one in use marked,
   what Enter and Del do on each), the rows it adds under them as they
   stand now (`more`, each a `Row`: its name, what it says, what Enter
-  does; antigravity's offers its agent's update while another version
-  is here), what connects one more and what logs out of it all. Its sign-in runs there (chatgpt's device code,
+  does; antigravity's and github-copilot's offer their CLI's download
+  while none is here), what connects one more and what logs out of it all. Its sign-in runs there (chatgpt's device code,
   claude-code's `claude auth login` through pipes, antigravity's agent
   asked to `authenticate`, illi opening the page whose link it
   prints), its accounts kept in
@@ -339,7 +353,7 @@ the pages they name.
 
 A wire's tests stub `fetch`, a runner's its program (a script that
 plays its part: `ClaudeCode.test.ts`'s Claude Code, `Antigravity.test.ts`'s
-ACP agent, never the real one): a turn streamed
+ACP agent, `Copilot.test.ts`'s Copilot CLI, never the real one): a turn streamed
 and its usage, each failure's `stop` and plain words (beside the wire,
 in its folder; claude-api's against a fake Anthropic in `test/`),
 the login renewed and a refused token spoilt (`ChatGPT.test.ts`,

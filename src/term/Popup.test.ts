@@ -34,6 +34,11 @@
 // answers dotted: Question.test.ts; but a list's own steps, /login's,
 // stay in its popup: a question's answers as its options, a line asked
 // in its search's place, a secret a dot a character, never its text.)
+// A popup's own text is chosen as anywhere, a drag over it copied, the
+// click given up (a press and a release on an option still pick it). A
+// step's actions are square buttons side by side at the box's foot,
+// moved among by Left and Right, pressed by Enter or a click; beside a
+// line asked, a click presses one, the line kept.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -42,7 +47,7 @@ import * as os from "node:os";
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-popup-");
 process.env.ILLI_DIR = DIR;
 
-const { term_chooser } = await import("./Commands.ts");
+const { term_ask, term_chooser } = await import("./Commands.ts");
 const { term_paint } = await import("./Frame.ts");
 const { term_grab, term_press, term_type } = await import("./Keys.ts");
 const { term_palette } = await import("./Palette.ts");
@@ -623,5 +628,74 @@ test("a list's own step stays in its popup: a line asked (an API key) a dot a ch
     expect([got, t.choose, out.join("").includes("secret42"), JSON.stringify(t.ruled.rows).includes("secret42")]).toEqual(["sk-ant-secret42", null, false, false]);
     term_question(t, "Log out of Anthropic API?", ["Keep it", "Log out"], ["", "illi forgets its keys"], () => {}, { popup: true });
     expect([t.choose?.names, t.choose?.at, t.question]).toEqual([["Keep it", "Log out"], 0, null]);
+  });
+});
+
+// the screen spot of a button (Chooser buttons) named name: its label's
+// row, a column inside it
+const button = (t: any, name: string) => {
+  const k   = t.choose.names.indexOf(name);
+  const row = t.box.rows.findIndex((r: any) => Array.isArray(r) && r.some((s: any) => s.aim.k === k));
+  const s   = t.box.rows[row + 1].find((s: any) => s.aim.k === k);
+  return { row: t.box.row + row + 1, col: t.box.col + t.box.inset + s.col + 2 };
+};
+
+test("a popup's own text is chosen as anywhere: a drag over it copies it, the click given up; a double click a word; a press and a release on an option still pick it", () => {
+  sized(120, 30, () => {
+    const t = term();
+    const picked: number[] = [];
+    const write = process.stdout.write;
+    process.stdout.write = (() => true) as any;
+    try {
+      term_chooser(t, "Sign in to GitHub", ["Open the page", "Copy the code"], ["", ""], -1, (k) => picked.push(k), { body: [[Paint.Run("Open https://github.com/login/device and enter this code:")]], size: { w: 80, h: 14 }, buttons: true });
+      paint(t);
+      const [row, col] = [t.box.row + 1, t.box.col + 2];
+      press(t, row, col + 5);
+      drag(t, row, col + 35);
+      paint(t);
+      expect(t.sel).toMatchObject({ key: "popup", held: true, moved: true });
+      let_go(t, row, col + 35);
+      expect([picked, t.notices.at(-1)?.text, t.choose.title]).toEqual([[], "Copied 31 characters", "Sign in to GitHub"]);
+      press(t, row, col + 8);
+      again(t, row, col + 8);
+      let_go(t, row, col + 8);
+      expect(t.notices.at(-1)?.text).toBe("Copied 31 characters");
+      paint(t);
+      const at = button(t, "Copy the code");
+      click(t, at.row, at.col);
+      expect(picked).toEqual([1]);
+    } finally {
+      process.stdout.write = write;
+    }
+  });
+});
+
+test("a step's actions are square buttons side by side at the box's foot, the lit one bold; Left and Right move among them, Enter or a click presses one; beside a line asked, a click presses one, the line kept", () => {
+  sized(120, 30, () => {
+    const t = term();
+    const picked: number[] = [];
+    term_chooser(t, "Sign in to GitHub", ["Open the page", "Copy the code", "Copy the link"], ["", "", ""], -1, (k) => picked.push(k), { body: [[Paint.Run("Open the page and enter this code:")]], size: { w: 80, h: 14 }, buttons: true });
+    paint(t);
+    const rows = inside(t, 120);
+    expect(rows.slice(-3).map((r: string) => r.trimEnd())).toEqual([
+      "┌───────────────┐  ┌───────────────┐  ┌───────────────┐",
+      "│ Open the page │  │ Copy the code │  │ Copy the link │",
+      "└───────────────┘  └───────────────┘  └───────────────┘",
+    ]);
+    expect(text(t.ruled.rows[t.box.row], 120)).toContain(" Sign in to GitHub · ←→ Enter · Esc ");
+    term_grab(t, "Right");
+    term_grab(t, "Right");
+    expect(lit(t)).toBe("Copy the link");
+    term_grab(t, "Left");
+    term_grab(t, "Enter");
+    expect(picked).toEqual([1]);
+    const u = term();
+    const pressed: number[] = [];
+    const typed = term_ask(u, "Sign in with Google", "paste the code from the page", "", "Enter sign in", () => null, { popup: true, size: { w: 80, h: 14 }, names: ["Open the page", "Copy the link"], press: (k) => pressed.push(k) });
+    Screen.ed_set(typed.find!, "abc");
+    paint(u);
+    const at = button(u, "Copy the link");
+    click(u, at.row, at.col);
+    expect([pressed, u.choose, typed.find!.text]).toEqual([[1], typed, "abc"]);
   });
 });

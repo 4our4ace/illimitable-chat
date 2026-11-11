@@ -435,7 +435,7 @@ Messages by date
 Ask illi what you did yesterday afternoon or last Tuesday, and it works
 the dates out itself: each call's message names the time now after the
 working dir, as `Now: Sun 2026-10-25 14:05 UTC-4` (`Tools.here`,
-`When.now`; on `claude-code` and `antigravity` without the date, which
+`When.now`; on `claude-code`, `antigravity` and `github-copilot` without the date, which
 their own programs add: a vendor's facts' `dated`). The line is built once a call and sits after every cache
 mark a later call reads, so a new minute never costs a cached prefix.
 One `date` call then shows that stretch, or one `search` finds words
@@ -959,6 +959,10 @@ config_models_told`), so most starts run no Claude Code.
    window as their whole one. `antigravity`'s list is the account's
    models as Google's CLI last listed them (at a sign-in, as a turn
    starts: `Antigravity.ts learn`), with the windows its turns told.
+   `github-copilot`'s is the plan's models as Copilot's CLI last listed
+   them (at a sign-in, as the chat is on the plan: `Copilot.ts learn`),
+   each with its window, efforts and price, and Auto's window as a turn
+   told it.
    `claude-code`'s is the plan's models as Claude Code last listed them
    (its newest of each family: `ClaudeCode.ts lineup`), with the windows
    it told. `claude-api`'s is the key's models as Anthropic's Models
@@ -974,7 +978,7 @@ config_models_told`), so most starts run no Claude Code.
    windows again (each writes only windows new to it); a `told` lost
    only has the next start ask once more.
 3. At the start (`config_models`), the chatgpt, antigravity,
-   claude-code and claude-api lists are taken whole, whatever their account (the login
+   claude-code, claude-api and github-copilot lists are taken whole, whatever their account (the login
    isn't read yet), until the catalog answers (antigravity's: its next
    sign-in or turn; claude-code's: as the start asks Claude Code, once a
 day); a
@@ -989,7 +993,7 @@ Accounts
 
 `~/.illi/accounts.json` keeps what `/login` connected, every profile's
 (`src/config/Accounts.ts`):
-`{ "claude-api"?: keyed, "openai-api"?: keyed, "opencode-go"?: keyed, "claude-code"?: folders, antigravity?: folders, chatgpt?: logins }`.
+`{ "claude-api"?: keyed, "openai-api"?: keyed, "opencode-go"?: keyed, "claude-code"?: folders, antigravity?: folders, "github-copilot"?: folders, chatgpt?: logins }`.
 
 - `keyed` is `{ use, keys: [{ id, key, added }] }`: the keys pasted and
   the one in use, by its id or `"env"` (the environment's variable,
@@ -1013,7 +1017,24 @@ Accounts
   asked again only once it changes. While an
   illi downloads its version by itself (`autoupdate`), `agent/.updating`
   holds its process id, so another illi starting meanwhile leaves the
-  download to it.
+  download to it. On `github-copilot` each is `copilot/<id>` in illi's
+  root (`gh1`, `gh2`…), the home of GitHub's Copilot CLI run for it
+  (`COPILOT_HOME`: its sign-in there, its token in the system's keychain
+  where there is one, else, as you allowed it at /login, in its
+  `config.json`; `email` the GitHub login, `plan` its Copilot
+  plan's tier; `.illi-stamp` telling it apart from a folder made anew;
+  `work/` the empty folder the CLI works in, so no project's rules
+  load from it; in `cache/` a folder for each CLI running, its
+  `COPILOT_CACHE_HOME`, gone as it ends, and one a crash left a day
+  old). The CLI is the user's own `copilot` (1.0.100 or later), else
+  the version this illi runs, downloaded as Google's is into
+  `copilot/cli/<version>/` (`src/providers/github-copilot/Pinned.ts`),
+  with its `agent.json`, `.users/` and, in `cache/`, what the CLI
+  unpacks of itself as it first runs (its `COPILOT_PKG_CACHE_HOME`; the
+  user's own CLI unpacks where it does when the user runs it);
+  `copilot/copilot.json` keeps the version of the user's own
+  `copilot`, and `cli/.updating` names the illi downloading it by
+  itself, as Google's do.
 - `logins` is `{ opencode, saved: [{ key, email, plan, entry }] }`:
   whether opencode's ChatGPT login is one of the accounts, and the
   accounts not in use, each its login entry in opencode's shape. The
@@ -1022,7 +1043,8 @@ Accounts
 How it is kept:
 
 1. An API in the file is connected while its key in use is there, a
-   plan run by another program (`folders`: Claude's, Google AI's) while
+   plan run by another program (`folders`: Claude's, Google AI's,
+   GitHub Copilot's) while
    it has an account, the file listing them in the order they were
    (ChatGPT, while a login is there to run on, comes first). Config.ts
    reads it at the start into the keys in use, the ChatGPT login file,
@@ -1054,7 +1076,7 @@ How it is kept:
    the one picked is taken from `saved` as read then, and a switch to
    the account already there writes nothing.
 5. A profile's export leaves out `accounts.json`, its lock, its
-   temporary files, `claude/` and `antigravity/` (each plan's
+   temporary files, `claude/`, `antigravity/` and `copilot/` (each plan's
    `folders`: `Accounts.owned`), and a ChatGPT login being written
    (`.auth.<pid>.json`, which a crash may leave beside `login.json`);
    an import drops them.

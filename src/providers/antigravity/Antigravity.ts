@@ -1165,12 +1165,15 @@ export namespace Antigravity {
 // start, as the chat moves to it, after /login: Chat.account), this
 // illi's build of the CLI downloaded by itself where autoupdate is on, an
 // account is connected and no CLI is here (Agy.auto); the chat told as
-// the account's models change; its CLIs ended as illi ends, and the
-// downloads no illi runs any more gone
+// the account's models change; an account logged out by the CLI, and
+// the CLI's downloads, as `illi uninstall` asks; its CLIs ended as illi
+// ends, and the downloads no illi runs any more gone
 export const PROVIDER: Provider = {
-  facts   : FACTS,
-  ask     : Antigravity.ask,
-  account : () => Agy.auto(config.AUTOUPDATE, config.config_folder("antigravity") !== "") ?? undefined,
-  watch   : Antigravity.watch,
-  close   : Antigravity.close,
+  facts    : FACTS,
+  ask      : Antigravity.ask,
+  account  : () => Agy.auto(config.AUTOUPDATE, config.config_folder("antigravity") !== "") ?? undefined,
+  watch    : Antigravity.watch,
+  logout   : Antigravity.logout,
+  programs : Agy.programs,
+  close    : Antigravity.close,
 };

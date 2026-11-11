@@ -2,12 +2,12 @@
 // =========================
 // claude-code in /login (LoginCommands.ts): its accounts, each a Claude
 // Code folder (ClaudeCode.ts), connected by your Claude Code's login, or
-// a sign-in (Claude Code's own, its code pasted here as dots:
-// login_claude_sign; the first, with none connected and your Claude Code
-// logged in to none, your own Claude Code's; else in a new folder of
-// illi's, made as it starts so two terminals never share one, and logged
-// out and removed if the sign-in ends without it kept; your own Claude
-// Code is never logged out). Esc stops a sign-in waiting (term_esc).
+// a sign-in (Claude Code's own, in /login's popup, its code pasted
+// there as dots: login_claude_sign; the first, with none connected and
+// your Claude Code logged in to none, your own Claude Code's; else in a
+// new folder of illi's, made as it starts so two terminals never share
+// one, and logged out and removed if the sign-in ends without it kept;
+// your own Claude Code is never logged out). Esc stops a sign-in waiting.
 // Its accounts: your Claude Code's (logging out leaves it logged in) and
 // those signed in to in folders of illi's own (logging out logs them out,
 // their folders gone).
@@ -16,10 +16,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { Accounts, OWN, type Folder } from "../../config/Accounts.ts";
 import * as config from "../../config/Config.ts";
-import { term_ask, term_question } from "../../term/Commands.ts";
-import { term_draw } from "../../term/Frame.ts";
-import { LOGIN, LOGIN_FAILED, login_after, login_edit, login_sure, type Account, type Page } from "../../term/LoginCommands.ts";
-import { term_note, term_notify, term_unnotify, type Notice } from "../../term/Notices.ts";
+import { login_after, login_edit, login_paste, login_question, login_step, login_sure, type Account, type Page } from "../../term/LoginCommands.ts";
 import type { Term } from "../../term/Term.ts";
 import { ClaudeCode } from "./ClaudeCode.ts";
 
@@ -51,38 +48,32 @@ function login_claude_name(a: Folder, all: Folder[] = []): string {
 
 // an account more: none yet, the user's own Claude Code's (its login, if
 // it's logged in, or a sign-in to another, asked once Claude Code said,
-// a note saying illi asks it meanwhile, Esc stopping it as a sign-in's:
-// drawn then; not, it signs in);
-// else one signed in to in a new folder of illi's. Esc on what it asks
-// goes back to `back`
+// a step of /login's saying illi asks it meanwhile, Esc stopping it as a
+// sign-in's; not, it signs in); else one signed in to in a new folder of
+// illi's. Esc on what it asks goes back to `back`
 async function login_claude_add(t: Term, back: () => void): Promise<void> {
   if ((config.config_accounts_read()?.["claude-code"]?.accounts.length ?? 0) > 0) {
     return login_claude_sign(t, null, back);
   }
+  const step = login_step(t, "Connect Claude plan", back);
+  step.wait("Asking your Claude Code whom it's logged in as…");
   let who: Awaited<ReturnType<typeof ClaudeCode.status>>;
-  t.login?.abort();
-  const stop = new AbortController();
-  t.login = stop;
-  const asking = term_notify(t, "Asking your Claude Code whom it's logged in as… (Esc stops)", false, 60e3);
   try {
     who = await ClaudeCode.status("");
   } catch (err: any) {
-    return stop.signal.aborted ? undefined : term_note(t, err.message + ".");
-  } finally {
-    t.login = t.login === stop ? null : t.login;
-    term_unnotify(t, asking);
+    return step.fail(err.message + ".", () => void login_claude_add(t, back));
   }
-  if (stop.signal.aborted) {
+  if (step.stop.signal.aborted) {
     return;
   }
+  step.close();
   if (who === null) {
     return login_claude_sign(t, OWN, back);
   }
   const mine = { id: OWN, ...who };
-  term_question(t, "Connect Claude plan", ["Use your Claude Code's login", "Sign in to another account"], [login_claude_name(mine), "with a code at Claude's page"], (k) => {
+  login_question(t, "Connect Claude plan", ["Use your Claude Code's login", "Sign in to another account"], [login_claude_name(mine), "with a code at Claude's page"], (k) => {
     return k === 1 ? void login_claude_sign(t, null, back) : void login_claude_keep(t, mine, "Connected your Claude plan (" + login_claude_name(mine) + "): its models are in /model.");
-  }, { back, popup: true });
-  term_draw(t);
+  }, back);
 }
 
 // a new folder of illi's, made now (readable by the user alone), so
@@ -120,60 +111,41 @@ function login_claude_keep(t: Term, a: Folder, said: string): boolean {
 }
 
 // a folder signed in to a Claude plan (ClaudeCode.signin): the user's own
-// Claude Code's (OWN), or a new one of illi's (null: login_claude_id). A
-// note says it starts (Esc stops it); Claude Code opens its page; the
-// code the page shows asked for here, shown as dots (Esc stops it all,
-// back to `back`), given it; signed in, whom it's logged in as kept and
-// in use. One of illi's folders not kept in the end (the sign-in failed
-// or was stopped, or the account couldn't be kept) is logged out and
-// gone
+// Claude Code's (OWN), or a new one of illi's (null: login_claude_id), in
+// /login's popup (login_step: Esc stops it, back to `back`): it says it
+// starts; Claude Code opens its page; the code the page shows asked for,
+// shown as dots (login_paste; asked again, said so), given it, the step
+// saying it signs in meanwhile; signed in, whom it's logged in as kept
+// and in use, said in the chat; failed, said there, Try again. One of
+// illi's folders not kept in the end (the sign-in failed or was stopped,
+// or the account couldn't be kept) is logged out and gone
 async function login_claude_sign(t: Term, want: string | null, back: () => void): Promise<void> {
-  t.login?.abort();
-  const stop = new AbortController();
-  t.login = stop;
+  const step = login_step(t, "Sign in to Claude", back);
   let id = want;
-  let asked: Notice | null = term_notify(t, "Starting the sign-in: Claude Code opens Claude's page in your browser. Esc stops it.", false, LOGIN);
-  let line: Term["choose"] = null;
+  let asked = 0;
   let give = (_code: string) => {};
-  const ask = (url: string) => {
-    if (asked !== null) {
-      term_unnotify(t, asked);
-    }
-    asked = term_notify(t, "Sign in to Claude in your browser" + (url === "" ? "" : " (if it didn't open: " + url + ")") + ", then paste the code the page shows.", false, LOGIN);
-    line = term_ask(t, "Claude plan", "paste the code from Claude's page", "", "Enter sign in · Esc stop", (code) => {
-      if (code === "") {
-        return "Paste the code first.";
-      }
-      give(code);
-      return null;
-    }, { secret: true, popup: true, back: () => {
-      stop.abort();
-      back();
-    } });
-  };
+  step.wait("Starting the sign-in: Claude Code opens Claude's page in your browser…");
+  const ask = (url: string) => login_paste(t, step, url, "to Claude", (code) => {
+    step.wait("Signing in to Claude…");
+    give(code);
+    return null;
+  }, true, asked++ > 0);
   try {
     id ??= login_claude_id();
     const dir = Accounts.folder(config.ROOT, "claude-code", id);
-    const run = ClaudeCode.signin(dir, stop.signal, ask);
+    const run = ClaudeCode.signin(dir, step.stop.signal, ask);
     give = run.give;
     await run.done;
     const who = await ClaudeCode.status(dir);
     if (who === null) {
       throw new Error("Claude Code says it isn't logged in");
     }
+    step.close();
     const a = { id, ...who };
     login_claude_keep(t, a, "Signed in to your Claude plan as " + login_claude_name(a) + ": illi runs on it now.");
   } catch (err: any) {
-    if (!stop.signal.aborted) {
-      term_notify(t, "Login failed: " + err.message + ".", false, LOGIN_FAILED);
-    }
+    step.fail("Login failed: " + err.message + ".", () => void login_claude_sign(t, want, back));
   } finally {
-    t.login = t.login === stop ? null : t.login;
-    t.choose = t.choose === line ? null : t.choose;
-    if (asked !== null) {
-      term_unnotify(t, asked);
-    }
-    term_draw(t);
     if (id !== null && id !== OWN && !(config.config_accounts_read()?.["claude-code"]?.accounts ?? []).some((a) => a.id === id)) {
       await login_claude_forget(id).catch(() => {});
     }

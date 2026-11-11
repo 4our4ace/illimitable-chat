@@ -18,7 +18,7 @@ profile's own `config.json` goes over it, key by key; its `off` and
 
 | Key          | Default                           | What                                             |
 | ------------ | --------------------------------- | ------------------------------------------------ |
-| `vendors`    | those `/login` connected          | the vendors offered, named yourself: `chatgpt`, `claude-code` (your Claude plan, through Claude Code), `antigravity` (your Google AI plan, through Google's Antigravity CLI), `claude-api`, `openai-api`, `opencode-go` (API keys; the last your OpenCode Go plan's); unset, what you connected in `/login` ([Providers](providers.md)) |
+| `vendors`    | those `/login` connected          | the vendors offered, named yourself: `chatgpt`, `claude-code` (your Claude plan, through Claude Code), `antigravity` (your Google AI plan, through Google's Antigravity CLI), `claude-api`, `openai-api`, `opencode-go` (API keys; the last your OpenCode Go plan's), `github-copilot` (your GitHub Copilot plan, through GitHub's Copilot CLI); unset, what you connected in `/login` ([Providers](providers.md)) |
 | `pick`       | `chatgpt:gpt-*-sol:medium:slow` | vendor:model:effort:speed (`/model` per chat); default: the first vendor's. The model by version (`opus-5.5`) or by family, `*` for the version (`opus-*`: the newest offered, as the vendor's models change; quote it in a shell). Efforts: `low`, `medium`, `high`, `xhigh`, `max`; speeds: `slow`, `fast`, `ultrafast`, as a model offers them |
 | `chats`      | each provider's own               | what new chats start on, by provider: a pick per provider, comma-separated, a family too (`claude-code:opus-*:high:slow`). /login asks it as you connect one, and its Models row any time; your first provider's is the default, unless `pick` is set |
 | `compactor`  | each vendor's small model         | writes the summaries: a pick per vendor, comma-separated (a family too: `claude-code:haiku-*:low:slow`). /login asks it as you connect one, and its Models row any time |
@@ -46,7 +46,7 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `theme`      | `theme.json`: the profile's, else `~/.illi`'s | the theme's file                   |
 | `mcp`        | `mcp.json` in the profile's folder | the MCP servers' file; `~/.illi/mcp.json` is read too, and a trusted project's `.illi/mcp.json` |
 | `login`      | `~/.illi/login.json`, opencode's  | the ChatGPT login file, which `/login` writes    |
-| `autoupdate` | `on`                              | a new release installs itself: looked for as illi starts on a terminal (not again within ten minutes of any illi's look), downloaded and checked in the background, it runs from the next start (a note says so); `notify` only tells; `off` never looks. The installer's one file only: a source clone never updates itself. On, it also downloads the version of Google's Antigravity CLI an updated illi runs, once a Google account is connected; `notify` and `off` leave that to `/login` |
+| `autoupdate` | `on`                              | a new release installs itself: looked for as illi starts on a terminal (not again within ten minutes of any illi's look), downloaded and checked in the background, it runs from the next start (a note says so); `notify` only tells; `off` never looks. The installer's one file only: a source clone never updates itself. On, it also downloads the version of Google's Antigravity CLI or GitHub's Copilot CLI an updated illi runs, once a Google or GitHub account is connected; `notify` and `off` leave that to `/login` |
 
 API keys come from `/login`, which also offers `ANTHROPIC_API_KEY`,
 `OPENAI_API_KEY` and `OPENCODE_API_KEY` if they're set
@@ -65,6 +65,8 @@ Other variables:
 | `ILLI_CLAUDE`  | the `claude` program the `claude-code` vendor runs (by name, it's found in `PATH`'s absolute folders alone, as every program of illi's own is: `bash`, `ps`, `tar`, `git`, the clipboard's and the browser's; a relative folder there, `.` or `node_modules/.bin`, is the project's. A command of yours, in the shell tool, a hook or an MCP server, keeps `PATH` whole) |
 | `ILLI_ANTIGRAVITY` | the command line that starts Google's Antigravity CLI's ACP server for the `antigravity` vendor, split at spaces (`agy acp`, or a path and `acp`), in place of your own `agy` on `PATH` or the one `/login` downloads; run if it's 1.5.2 or later, so keeping it current is yours |
 | `ILLI_ANTIGRAVITY_GATEWAY` | an AI API gateway of your own the `antigravity` vendor's CLI uses in place of Google's services, signed in to it alone (tests use a stand-in) |
+| `ILLI_COPILOT` | the command line that starts GitHub's Copilot CLI for the `github-copilot` vendor, split at spaces, in place of your own `copilot` on `PATH` or the one `/login` downloads; run if it speaks the protocol illi does (3), so keeping it current is yours |
+| `ILLI_COPILOT_GATEWAY` | an OpenAI-compatible API of your own the `github-copilot` vendor's CLI asks its models of, in place of GitHub's, as its bring-your-own-key provider (tests use a stand-in) |
 | `BROWSER`      | what opens `/login`'s page: programs `:`-separated, tried in turn (`%s` is the link, else it goes last), before the system's; `none`: never open one |
 | `ILLI_INSTALL`, `ILLI_SOURCE` | where the installer puts illi; `1`: build from the source |
 
@@ -99,7 +101,8 @@ What else illi keeps in `~/.illi`:
 | `accounts.json` | what `/login` connected, readable by you alone: the API keys pasted and the one in use, ChatGPT's other accounts (and whether opencode's login is one), the Claude plan's and the Google AI plan's accounts and the one in use of each ([Providers](providers.md#connecting-login)); changed under a lock, `.accounts.lock` beside it, so two illis take turns ([Storage](storage.md#accounts)) |
 | `claude/`       | a Claude Code folder for each Claude account `/login` added beside your own Claude Code's, its login in it |
 | `antigravity/`  | a folder for each Google AI plan account `/login` signed in (`g1`, `g2`…: the home of Google's Antigravity CLI run for it, its sign-in in it), in `agent/<version>/` the CLI `/login` downloaded, the version this illi runs, and in `agy.json` the version of your own `agy` as illi last asked it ([Providers](providers.md#google-ai-plan)) |
-| `models.json`   | the models the vendors told last: a catalog vendor's whole list (ChatGPT's for the account named in it, the Claude plan's, the Google AI plan's, the Anthropic key's, OpenCode Go's), each one's window, speeds, efforts and price, and when the Claude plan last told its list, so a start within a day asks Claude Code nothing ([Storage](storage.md#models)) |
+| `copilot/`      | a folder for each GitHub Copilot plan account `/login` signed in (`gh1`, `gh2`…: the home of GitHub's Copilot CLI run for it, `COPILOT_HOME`; its token in your keychain where there is one, else, as you allowed it, in its `config.json`), in `cli/<version>/` the CLI `/login` downloaded, the version this illi runs, with what it unpacks of itself, and in `copilot.json` the version of your own `copilot` as illi last asked it ([Providers](providers.md#github-copilot-plan)) |
+| `models.json`   | the models the vendors told last: a catalog vendor's whole list (ChatGPT's for the account named in it, the Claude plan's, the Google AI plan's, the Anthropic key's, OpenCode Go's, the GitHub Copilot plan's), each one's window, speeds, efforts and price, and when the Claude plan last told its list, so a start within a day asks Claude Code nothing ([Storage](storage.md#models)) |
 | `claude-code.json` | the name of each of Claude Code's own MCP servers illi has seen, case and all, and those last seen waiting on a login, so `off`, an agent's `tools:` and a login missing leave one out of the first call after a start too ([Providers](providers.md#claude-plan)) |
 | `used.json`     | how often you ran each command: among those a `/word` matches alike, the most used come first; a use counts half as much 100 uses later, and a command you stopped using drops out (two illis at once each add theirs: [Storage](storage.md#usage-counts)) |
 | `picked.json`   | the same for what you pick in Ctrl+P's list, kept apart |
@@ -114,6 +117,44 @@ What else illi keeps in `~/.illi`:
 | `illi.log`      | what went wrong (each profile's own)                  |
 
 `/export` writes `./illi-memory.json`, `/tree` `./illi-tree.html`.
+
+Removing illi
+-------------
+
+    illi uninstall
+
+It asks what goes, then says each thing it removed:
+
+1. **illi and the CLIs it downloaded**: the `illi` the installer put in
+   place, and the Antigravity and Copilot CLIs `/login` downloaded into
+   `~/.illi`. Your chats, settings and accounts stay in `~/.illi`, so an
+   illi you install again picks up where you were.
+2. **Everything**: that, and all of `~/.illi`, every profile's chats,
+   settings, keys and accounts. Before the folder goes, illi logs each
+   account of the Claude, Google AI and GitHub Copilot plans out
+   through its own CLI, which also removes its sign-in from your
+   system's keychain (deleting the folder alone would leave those
+   behind). It asks once more, as the chats can't come back: export a
+   profile first to keep a copy (`/profile`, Ctrl+E).
+
+`illi uninstall --programs` and `illi uninstall --everything` pick
+without asking (off a terminal, it needs one of them). Quit every illi
+first: it won't run while one is open in another terminal. With
+`ILLI_DIR` set, that folder is the one removed, never your home folder
+or one holding it, and only if it looks like illi's.
+
+What isn't illi's stays: your own Claude Code, `agy` and `copilot` and
+what they keep (your Claude Code's own login, the Claude plan's account
+that is yours, stays signed in), a project's own `.illi/` folder,
+`~/.agents`, opencode's ChatGPT login (`~/.local/share/opencode/auth.json`,
+if `/login` used it), and Bun, if the installer installed it to build
+illi (`~/.bun`). An illi run from its source (a git clone) leaves the
+clone: delete it, and the `illi` on your `PATH` that starts it,
+yourself.
+
+By hand: log out of each account in `/login` (that clears the
+keychain's sign-ins), quit illi, then delete `~/.illi` and the `illi`
+file (`~/.local/bin/illi`, or where `ILLI_INSTALL` put it).
 
 Troubleshooting
 ---------------

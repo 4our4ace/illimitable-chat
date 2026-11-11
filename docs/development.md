@@ -119,15 +119,20 @@ the LGPL parts' sources are. A release on another Bun takes that
 section anew from that version's lists.
 
 Google's Antigravity CLI, which the Google AI plan runs
-(`src/providers/antigravity`), is pinned too, though not built in:
-each illi runs the user's own `agy` when it is 1.5.2 or later
-(`MINIMUM` in `Agy.ts`, the oldest version tried with illi), else the
-one version `Pinned.ts` names for its machine, the one tried with it,
-and /login downloads that one, checked against the checksum there.
-To take a new version: write the table anew from the CLI's releases on
-GitHub (`pin.ts`, the latest release or the version named: each
-machine's archive, with the checksum and size GitHub tells, downloaded
-whole to check it and list its files, as illi unpacks them); run the
+(`src/providers/antigravity`), and GitHub's Copilot CLI, which the
+GitHub Copilot plan runs (`src/providers/github-copilot`), are pinned
+too, though not built in. Both are found and downloaded the same way
+(`src/providers/Cli.ts`, each CLI by its spec: `Agy.ts`,
+`CopilotCli.ts`): each illi runs the user's own `agy` or `copilot` when
+it is its `MINIMUM` or later (the oldest version tried with illi:
+`agy` 1.5.2, `copilot` 1.0.100), else the one version its `Pinned.ts`
+names for its machine, the one tried with it, and /login downloads
+that one, checked against the checksum there. To take a new version:
+write the table anew from the CLI's releases on GitHub (its `pin.ts`,
+through `src/providers/Pin.ts`: the latest release or the one named;
+each machine's archive, with the checksum and size GitHub tells,
+downloaded whole to check it and list its files, as illi unpacks
+them). For Google's CLI, run the
 live trial on it, Google's real CLI through illi's runner against a
 stand-in for Google's services, no model asked nor account signed in,
 nothing sent to Google (the build downloaded once into the folder
@@ -148,3 +153,28 @@ illi still running uses it. A new CLI may change what illi reads of it
 in an account's folder): the trial is what tells. Raising `MINIMUM`
 is for a version illi needs; a user's own CLI older than it is said,
 not run.
+
+For GitHub's CLI, the live trial runs the CLI named through illi's
+runner against a stand-in for the model's API (the CLI's
+bring-your-own-key provider) and for illi's tools, no account signed
+in, nothing sent to GitHub's models: a turn (illi's prompt alone,
+illi's tools alone), a tool called, a full window, a stop, two calls at
+once on one CLI, its web fetch asking illi first, and nothing left
+behind. Run it on the newly pinned release, this machine's archive
+unpacked into a folder of its own (the CLI's first run unpacks about
+260 MB more into `COPILOT_PKG_CACHE_HOME`, kept there for the next
+trial, out of your own cache), then test and commit:
+
+    bun src/providers/github-copilot/pin.ts [tag]
+    mkdir -p ~/.cache/illi-copilot-live
+    curl -fsSL https://github.com/github/copilot-cli/releases/download/<tag>/copilot-linux-x64.tar.gz | tar xz -C ~/.cache/illi-copilot-live
+    ILLI_COPILOT_LIVE=~/.cache/illi-copilot-live/copilot COPILOT_PKG_CACHE_HOME=~/.cache/illi-copilot-live bun test --isolate src/providers/github-copilot/Live.test.ts
+    bun run test
+
+(`copilot-darwin-arm64.tar.gz` on an Apple silicon Mac, and so on.)
+
+Run it before a release too, on your own `copilot`, and when GitHub's
+CLI changes much. `MINIMUM` is the oldest release the trial passed
+on (1.0.98 and before don't take `--disable-client-telemetry`); illi
+also checks the CLI speaks its SDK's protocol (`PROTOCOL` in
+`Copilot.ts`, 3), and says, not runs, one that doesn't.

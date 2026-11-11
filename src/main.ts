@@ -6,9 +6,11 @@
 // own, so a switch leaves the one before running), or, by its argument,
 // `illi upgrade` (the latest in this one's place: for the one file, the
 // update the chat looks for as it starts, config/Update.ts, run now; for
-// a git clone, a pull), `illi version`, `illi help` (USAGE). The chat is
-// imported only to run it, so an upgrade works whatever its settings
-// say; a setting that won't do stops it with one line on why.
+// a git clone, a pull), `illi uninstall` (illi and what it downloaded
+// removed, the chats too if the user picks: config/Uninstall.ts),
+// `illi version`, `illi help` (USAGE). The chat is imported only to run
+// it, so an upgrade works whatever its settings say; a setting that
+// won't do stops it with one line on why.
 //
 // Bun reads a bunfig.toml (its preload: code run before this) and a .env
 // (variables, an ILLI_* one a setting) from the folder it starts in,
@@ -29,17 +31,21 @@ import { Vendors } from "./providers/Vendors.ts";
 // clone
 const INSTALLER = "https://raw.githubusercontent.com/4our4ace/illimitable-chat/main/install.sh";
 
-const ARGS    = process.argv.slice(2);
-const HELP    = ARGS.some((a) => ["help", "--help", "-h"].includes(a));
-const ASKED   = ARGS.some((a) => ["version", "--version", "-v"].includes(a));
-const UPGRADE = ARGS.includes("upgrade");
-const ODD     = ARGS.find((a) => !["help", "--help", "-h", "version", "--version", "-v", "upgrade"].includes(a));
+const ARGS      = process.argv.slice(2);
+const HELP      = ARGS.some((a) => ["help", "--help", "-h"].includes(a));
+const ASKED     = ARGS.some((a) => ["version", "--version", "-v"].includes(a));
+const UPGRADE   = ARGS.includes("upgrade");
+const UNINSTALL = ARGS[0] === "uninstall";
+const ODD       = ARGS.find((a, k) => !["help", "--help", "-h", "version", "--version", "-v", "upgrade", ...(UNINSTALL ? ["uninstall", "--programs", "--everything"] : [])].includes(a) || (a === "uninstall" && k > 0));
 
 // an argument that means to sign in, which the chat does (/login)
 const LOGIN = /^-*(login|logout|signin|auth)$/i;
 
 const USAGE = `Usage: illi            the chat; its tools work in this folder
        illi upgrade    the latest release in this one's place, now
+       illi uninstall  illi and the CLIs it downloaded removed; it asks
+                       whether your chats, settings and accounts go too
+                       (--programs: they stay; --everything: they go)
        illi version    this illi's version
        illi help       this
 First, run illi in a project folder and type /login to connect
@@ -81,6 +87,8 @@ if (HELP || ODD !== undefined) {
   console.log("illi " + VERSION);
 } else if (UPGRADE) {
   process.exit(await main_upgrade());
+} else if (UNINSTALL) {
+  process.exit(await (await import("./config/Uninstall.ts")).uninstall(ARGS.slice(1)));
 } else if (main_windowed()) {
   (await import("./term/Window.ts")).window_run();
 } else {
