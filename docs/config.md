@@ -116,6 +116,7 @@ What else illi keeps in `~/.illi`:
 | `update.json`   | when illi last looked for a new release (`autoupdate`), the release it found (the trust question shows it where it's newer), and the one it last said it couldn't install |
 | `locks/`        | a lock per project, held while its chat is open (by the system: a crash never leaves one held), the socket a second terminal joins it by, and the chat's state for the other terminals' side panel |
 | `illi.log`      | what went wrong (each profile's own)                  |
+| `.made-by-illi` | in a folder `ILLI_DIR` names, that illi made it (it wasn't there before): `illi uninstall` removes such a folder whole, never one without it |
 
 `/export` writes `./illi-memory.json`, `/tree` `./illi-tree.html`.
 
@@ -143,7 +144,10 @@ It asks what goes, then says each thing it removed:
 without asking (off a terminal, it needs one of them). Quit every illi
 first: it won't run while one is open in another terminal. With
 `ILLI_DIR` set, that folder is the one removed, never your home folder
-or one holding it, and only if it looks like illi's.
+or one holding it, and only if illi made it (its `.made-by-illi` says
+so). One that was there before may hold files of yours beside illi's,
+so Everything isn't offered there: delete illi's files in it yourself,
+or the folder if all of it is illi's.
 
 What isn't illi's stays: your own Claude Code, `agy` and `copilot` and
 what they keep (your Claude Code's own login, the Claude plan's account

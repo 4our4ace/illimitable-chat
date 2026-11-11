@@ -23,7 +23,8 @@
 // Never while another illi runs (one holding a project's chat: Lock.ts),
 // as it would write the folder anew. illi's folder goes whole only where
 // it is illi's (it holds a chat, a config, a login or accounts) and isn't
-// the home folder or one holding it. An illi run from its source (a
+// the home folder or one holding it; one ILLI_DIR names, only where illi
+// made it (Profiles.ts MARK), else everything isn't offered. An illi run from its source (a
 // clone) leaves the clone, saying so. What's not illi's stays: a
 // project's own .illi folder, ~/.agents, the user's own Claude Code, agy
 // and copilot, and what they keep (docs/config.md, Removing illi), but
@@ -36,6 +37,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as readline from "node:readline/promises";
+import { MARK } from "./Profiles.ts";
 import { HERE, VERSION } from "./Update.ts";
 
 // Types
@@ -47,9 +49,9 @@ export type Pick = "programs" | "everything";
 // Constants
 // =========
 
-// what makes a folder illi's: one of these in it (Profiles.ts reads a
-// root by the same)
-const ROOTED = ["chat", "config.json", "login.json", "profile", "accounts.json"];
+// what makes a folder look like illi's: one of these in it (Profiles.ts
+// reads a root by the same), or its mark that illi made it (MARK)
+const ROOTED = ["chat", "config.json", "login.json", "profile", "accounts.json", MARK];
 
 // Uninstall
 // =========
@@ -80,14 +82,14 @@ export async function uninstall(args: string[]): Promise<number> {
     return 1;
   }
   const programs = Providers.all().flatMap((p) => (p.programs?.() ?? []).filter((at) => fs.existsSync(at)).map((at) => ({ at, what: p.facts.row })));
-  const pick = picked ?? (await uninstall_ask(root, programs.map((p) => p.at)));
+  const whole    = uninstall_whole(root);
+  const pick     = picked ?? (await uninstall_ask(root, programs.map((p) => p.at), whole));
   if (pick === null) {
     console.log("Nothing was removed.");
     return 1;
   }
-  const whole = uninstall_whole(root);
   if (pick === "everything" && whole !== null) {
-    console.error("illi: " + uninstall_show(root) + " isn't removed whole, as " + whole + ": nothing was removed. Remove illi's files there yourself (docs/config.md, Removing illi).");
+    console.error("illi: " + uninstall_show(root) + " isn't removed whole, as " + whole + ": nothing was removed. If all in it is illi's, delete it yourself; else delete illi's files there (docs/config.md, Removing illi).");
     return 1;
   }
   let ok = true;
@@ -144,9 +146,10 @@ function uninstall_dirs(root: string): string[] {
 
 // the pick asked on a terminal: what each takes said, then a second ask
 // for everything (each answer the next line typed, one typed ahead kept);
-// null: stopped (Enter, the input ended, or no terminal: said how to
-// pick)
-async function uninstall_ask(root: string, programs: string[]): Promise<Pick | null> {
+// everything not offered where illi's folder isn't removed whole (whole:
+// why), said so; null: stopped (Enter, the input ended, or no terminal:
+// said how to pick)
+async function uninstall_ask(root: string, programs: string[], whole: string | null): Promise<Pick | null> {
   if (!process.stdin.isTTY) {
     console.error("illi: uninstall asks what to remove on a terminal; here, run illi uninstall --programs (illi and the CLIs it downloaded) or --everything (also your chats, settings and accounts)");
     return null;
@@ -165,14 +168,19 @@ async function uninstall_ask(root: string, programs: string[]): Promise<Pick | n
     console.log("");
     console.log("  1  illi and the CLIs it downloaded (" + size(programs) + "). Your chats, settings and accounts");
     console.log("     stay in " + home + " (" + uninstall_mb(kept) + "), for an illi you install again.");
-    console.log("  2  Everything: also your chats, settings and accounts in " + home + ", every profile's,");
-    console.log("     each account logged out first.");
+    if (whole === null) {
+      console.log("  2  Everything: also your chats, settings and accounts in " + home + ", every profile's,");
+      console.log("     each account logged out first.");
+    } else {
+      console.log("  Not everything: " + home + " isn't removed whole, as " + whole + ".");
+      console.log("  If all in it is illi's, delete it yourself (docs/config.md, Removing illi).");
+    }
     console.log("");
-    const k = await ask("Which? 1 or 2 (Enter stops): ");
+    const k = await ask(whole === null ? "Which? 1 or 2 (Enter stops): " : "1 to go on (Enter stops): ");
     if (k === "1") {
       return "programs";
     }
-    if (k !== "2") {
+    if (k !== "2" || whole !== null) {
       return null;
     }
     const sure = (await ask("Your chats can't come back once they're gone (/profile's export, Ctrl+E, copies them first).\nType yes to remove everything: ")).toLowerCase();
@@ -183,15 +191,24 @@ async function uninstall_ask(root: string, programs: string[]): Promise<Pick | n
 }
 
 // why illi's folder isn't removed whole (null: it may be): it's the
-// home folder or holds it, or it isn't illi's
+// home folder or holds it, or it isn't illi's; one ILLI_DIR names (not
+// ~/.illi) only where illi made it (its MARK: Config.ts config_private),
+// as one that was there before may hold the user's own files beside
+// illi's
 function uninstall_whole(root: string): string | null {
   const at   = path.resolve(root);
   const home = path.resolve(os.homedir());
   if (at === path.parse(at).root || at === home || home.startsWith(at + path.sep)) {
     return "it's your home folder, or holds it";
   }
-  if (fs.existsSync(at) && !ROOTED.some((part) => fs.existsSync(path.join(at, part)))) {
+  if (!fs.existsSync(at)) {
+    return null;
+  }
+  if (!ROOTED.some((part) => fs.existsSync(path.join(at, part)))) {
     return "it doesn't look like illi's folder";
+  }
+  if (at !== path.join(home, ".illi") && !fs.existsSync(path.join(at, MARK))) {
+    return "illi didn't make it (ILLI_DIR names a folder that was there before), so it may hold files that aren't illi's";
   }
   return null;
 }

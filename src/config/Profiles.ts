@@ -64,6 +64,12 @@ export const NAMED   = "a-z, 0-9, - and _, a letter or digit first";
 // a folder that is a profile's: <root>/profiles/<name>
 const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
 
+// the file in the root saying illi made it (Config.ts config_private:
+// it wasn't there before), so `illi uninstall` may remove a root that
+// isn't ~/.illi whole (Uninstall.ts); what it says, for one who finds it
+export const MARK = ".made-by-illi";
+export const MARKED = "illi made this folder (ILLI_DIR) for itself: `illi uninstall --everything` removes it whole.\n";
+
 // the file in a profile's folder (not the default's) that keeps when it
 // was made, a line (an ISO time): the profiles are listed in that order
 // (profile_list); it goes with the folder as it's renamed
@@ -91,8 +97,9 @@ const WRITING = /^\.auth\.\d+\.json$/;
 const EXCLUDE = "--exclude=.auth.[0-9]*.json";
 
 // the default's folder's, besides OWN (above: the others, which was used
-// last, the release looked for, the state every profile shares)
-const ROOTED = ["profiles", "profile", "project-profiles.json", "update.json", "models.json", "trust.json", "seen.json", "used.json", "picked.json"];
+// last, the release looked for, the state every profile shares; that
+// illi made it)
+const ROOTED = ["profiles", "profile", "project-profiles.json", "update.json", "models.json", "trust.json", "seen.json", "used.json", "picked.json", MARK];
 
 // the profile used last in each project, by its key (Projects.place),
 // kept in the root

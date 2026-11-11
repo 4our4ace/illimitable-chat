@@ -36,7 +36,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { Vendor } from "../ai/AskAI.ts";
 import { LABELS, VENDORS, Pick, type Model, type Offer } from "../ai/Pick.ts";
-import { profile_pick } from "./Profiles.ts";
+import { MARK, MARKED, profile_pick } from "./Profiles.ts";
 import type { Mode } from "./Update.ts";
 import { json_object } from "../tools/Clip.ts";
 import { Accounts, ENV, OWN, type Store } from "./Accounts.ts";
@@ -55,6 +55,10 @@ const PICKED         = profile_pick(config_path(process.env.ILLI_DIR ?? "~/.illi
 export const ROOT    = PICKED.root;
 export const PROFILE = PICKED.name;
 export const DIR     = PICKED.dir;
+
+// whether illi's folder wasn't there as this illi started: one made now
+// is marked as illi's (config_private)
+const FRESH = !fs.existsSync(ROOT);
 
 // the settings that are lists of names: a profile's adds to the root's,
 // so what is off or on globally is so in every profile
@@ -876,10 +880,15 @@ export function config_down(cwd: string): string[] {
 // user's alone, as a session starts: made so, or made so if another user
 // may read it (a Mac's home is open to all, and so are the chats' files
 // in it, made as a process makes them). One the user doesn't own is left
-// as it is
+// as it is. One made here (not there as this illi started: FRESH) is
+// marked as made by illi (Profiles.ts MARK), so `illi uninstall` knows
+// it holds nothing of the user's but illi's
 export function config_private(): void {
   try {
     fs.mkdirSync(ROOT, { recursive: true, mode: 0o700 });
+    if (FRESH) {
+      fs.writeFileSync(path.join(ROOT, MARK), MARKED, { flag: "wx" });
+    }
     if ((fs.statSync(ROOT).mode & 0o077) !== 0) {
       fs.chmodSync(ROOT, 0o700);
     }

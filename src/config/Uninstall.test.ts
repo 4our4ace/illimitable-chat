@@ -11,8 +11,9 @@
 // both refused; any other word after it (upgrade, version) is unknown
 // and does nothing, help shows the usage. Never while another illi
 // holds a project's chat; never illi's folder whole where it's the home
-// folder, holds it, or isn't illi's. An illi run from its source says the
-// source is left.
+// folder, holds it, or isn't illi's, nor one ILLI_DIR names that illi
+// didn't make (marked so as illi makes it). An illi run from its source
+// says the source is left.
 
 import { afterAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -22,6 +23,26 @@ import * as path from "node:path";
 
 const TMP  = fs.mkdtempSync(os.tmpdir() + "/illi-uninstall-");
 const MAIN = path.join(import.meta.dir, "..", "main.ts");
+
+test("a folder ILLI_DIR names goes whole only where illi made it (marked so as it was made); one that was there before isn't offered, nothing removed", async () => {
+  const at   = home("named");
+  const mine = path.join(at.home, "data");
+  fs.mkdirSync(mine);
+  fs.writeFileSync(mine + "/report.txt", "keep");
+  fs.cpSync(at.root, mine, { recursive: true });
+  const kept = await run({ home: at.home, root: mine }, "--everything");
+  expect([kept.code, kept.out]).toEqual([1, expect.stringContaining("~/data isn't removed whole, as illi didn't make it (ILLI_DIR names a folder that was there before), so it may hold files that aren't illi's: nothing was removed")]);
+  expect([fs.existsSync(mine + "/report.txt"), fs.existsSync(mine + "/chat/projects/home.sqlite"), fs.existsSync(at.home + "/claude.log")]).toEqual([true, true, false]);
+  const made = path.join(at.home, "illi-data");
+  const start = Bun.spawnSync([process.execPath, "--no-env-file", "-e", "(await import(" + JSON.stringify(path.join(import.meta.dir, "Config.ts")) + ")).config_private()"], { env: { PATH: process.env.PATH ?? "", HOME: at.home, ILLI_DIR: made } });
+  expect(start.exitCode).toBe(0);
+  expect(fs.readFileSync(made + "/.made-by-illi", "utf8")).toContain("illi made this folder");
+  Bun.spawnSync([process.execPath, "--no-env-file", "-e", "(await import(" + JSON.stringify(path.join(import.meta.dir, "Config.ts")) + ")).config_private()"], { env: { PATH: process.env.PATH ?? "", HOME: at.home, ILLI_DIR: mine } });
+  expect(fs.existsSync(mine + "/.made-by-illi")).toBe(false);
+  fs.cpSync(at.root, made, { recursive: true });
+  const gone = await run({ home: at.home, root: made }, "--everything");
+  expect([gone.code, fs.existsSync(made), fs.existsSync(mine + "/report.txt")]).toEqual([0, false, true]);
+});
 
 afterAll(() => fs.rmSync(TMP, { recursive: true, force: true }));
 
