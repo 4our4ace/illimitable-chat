@@ -6,8 +6,10 @@ Separate setups and chats, e.g. work and personal: the default in
 chat per project (each git repo, and home outside them); most people
 need just the one profile.
 
-`/profile` opens the list (the side panel shows them too), and all of it
-happens there:
+`/profile` opens the list (the side panel shows them too): the default
+first, then the others in the order you made them (each folder's
+`created` keeps when; one made before illi kept it goes by when its
+folder was made). All of it happens there:
 
 | Key or row          | Does                                         |
 | ------------------- | -------------------------------------------- |
@@ -85,7 +87,8 @@ Export and import
   inside the profile's folder, `accounts.json`, the Claude Code folders
   in `claude/`, the Antigravity ones and Google's CLI in
   `antigravity/`, and a login or accounts file a crash left half written
-  beside `login.json` or `accounts.json`), their locks and the log;
+  beside `login.json` or `accounts.json`), their locks, the log and
+  when the profile was made (an import is made as it comes in);
   the default's, what every profile shares too: the other profiles, the
   models the vendors told (naming your ChatGPT account), the folders
   you trust, the commands' counts.

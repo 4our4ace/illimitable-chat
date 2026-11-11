@@ -7,10 +7,12 @@
 // (<root>/project-profiles.json, kept as a terminal's illi starts shown
 // and as a switch shows one: Member.ts member_keep),
 // else the one used last anywhere (<root>/profile, a line), else the
-// default; Config.ts takes its folder as DIR. A profile is made
-// empty (profile_new), the root's setup its own (Config.ts, Custom.ts,
-// Mcp.ts: the global layer), and may take the running one's chat along
-// (profile_move_chat); any but the default may be renamed or deleted. A
+// default; Config.ts takes its folder as DIR. They're listed the default
+// first, then as they were made (profile_list). A profile is made empty
+// but for when it was (profile_new), the root's setup its own
+// (Config.ts, Custom.ts, Mcp.ts: the global layer), and may take the
+// running one's chat along (profile_move_chat); any but the default may
+// be renamed or deleted. A
 // profile goes out as one archive (tar.gz, by the system's tar, found in
 // PATH's absolute folders alone: Run.own_path): its
 // folder but the login (a login file its config names too, wherever in
@@ -62,6 +64,12 @@ export const NAMED   = "a-z, 0-9, - and _, a letter or digit first";
 // a folder that is a profile's: <root>/profiles/<name>
 const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
 
+// the file in a profile's folder (not the default's) that keeps when it
+// was made, a line (an ISO time): the profiles are listed in that order
+// (profile_list); it goes with the folder as it's renamed
+const MADE = "created";
+const ISO  = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/;
+
 // what a profile's folder holds that is never a profile's to give: the
 // login (the root's, shared) and its lock, the accounts /login connected
 // (their API keys, logins and Claude Code folders: Accounts.owned), the
@@ -71,8 +79,9 @@ const FOLDER = /^(.+)\/profiles\/([a-z0-9][a-z0-9_-]*)$/;
 // release of itself (Update.ts), and the state every profile shares: the
 // models the vendors told (models.json, naming the ChatGPT account), the
 // folders trusted (Trusted.ts), the project files seen (Seen.ts), the
-// commands run and picked (Commands.ts USED, PICKED)
-const OWN    = ["login.json", "login.json.lock", "accounts.json", "locks", "illi.log"];
+// commands run and picked (Commands.ts USED, PICKED). When the profile
+// was made (MADE) stays too: one imported was made as it came in
+const OWN    = ["login.json", "login.json.lock", "accounts.json", "locks", "illi.log", MADE];
 
 // a login being written to move over the login file (ChatGPT.write),
 // which a crash may leave: never a profile's to give either, in the
@@ -194,12 +203,39 @@ export function profile_chat(root: string, file: string): string | null {
   return deep === 0 ? null : path.join(base, ...rel.slice(0, deep));
 }
 
-// the profiles: the default, then the others by name
+// the profiles: the default, then the others as they were made (the
+// oldest first; one made in the same instant, or when unknown, by name)
 export function profile_list(root: string): string[] {
   const dir  = root + "/profiles";
   const all  = fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }) : [];
-  const more = all.filter((e) => e.isDirectory() && NAME.test(e.name) && e.name !== DEFAULT).map((e) => e.name);
-  return [DEFAULT, ...more.sort()];
+  const more = all.filter((e) => e.isDirectory() && NAME.test(e.name) && e.name !== DEFAULT).map((e) => ({ name: e.name, at: profile_made(dir + "/" + e.name) }));
+  return [DEFAULT, ...more.sort((a, b) => a.at - b.at || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)).map((p) => p.name)];
+}
+
+// when a profile's folder was made, in ms: the time kept in it (MADE,
+// an ISO time), else, one made before illi kept it (or by hand), its
+// folder's birth
+// as the file system tells it (a copy of the folder's: when it was
+// copied); neither told: Infinity, after the rest
+function profile_made(dir: string): number {
+  try {
+    const line = fs.readFileSync(dir + "/" + MADE, "utf8").trim();
+    const at   = ISO.test(line) ? Date.parse(line) : NaN;
+    if (!Number.isNaN(at)) {
+      return at;
+    }
+  } catch {}
+  try {
+    const born = fs.statSync(dir).birthtimeMs;
+    return born > 0 ? born : Infinity;
+  } catch {
+    return Infinity;
+  }
+}
+
+// a profile's folder marked as made now (MADE)
+function profile_mark(dir: string): void {
+  fs.writeFileSync(dir + "/" + MADE, new Date().toISOString() + "\n");
 }
 
 // the profile used last, kept for the next start
@@ -219,10 +255,11 @@ export function profile_why(root: string, name: string): string | null {
   return fs.existsSync(profile_dir(root, name)) ? "There's a profile " + name + " already." : null;
 }
 
-// a new profile's folder, empty
+// a new profile's folder, empty but for when it was made (MADE)
 export function profile_new(root: string, name: string): void {
   fs.mkdirSync(root + "/profiles", { recursive: true });
   fs.mkdirSync(profile_dir(root, name));
+  profile_mark(profile_dir(root, name));
 }
 
 // a profile renamed (never the default: its folder is the root), and the
@@ -402,6 +439,7 @@ export async function profile_import(root: string, file: string, name: string): 
     if (why !== null) {
       throw new Error(why);
     }
+    profile_mark(tmp);
     fs.renameSync(tmp, profile_dir(root, name));
     return { keys, servers: on.length, plugins, aside };
   } catch (err) {

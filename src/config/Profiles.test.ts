@@ -11,8 +11,10 @@
 // profile or global, the profile's `off` leaving some out, its lists
 // (off, sticky) added to the root's; a shortcut of the root's dropped in
 // a profile stays dropped.
-// Names a profile takes. Secrets left out of a JSON file. An export: no
-// login, accounts (their API keys; one being written too), locks, log,
+// Names a profile takes; the profiles listed as they were made (the
+// time each keeps, else its folder's birth). Secrets left out of a JSON
+// file. An export: no login, accounts (their API keys; one being written
+// too), locks, log, when it was made,
 // update.json nor the state every profile shares (models.json,
 // trust.json, the counts), its config stripped; an import: a new
 // profile only, its config's commands dropped and a login or accounts
@@ -64,7 +66,7 @@ test("the default runs first: the root itself", () => {
   expect(Profiles.profile_list(ROOT)).toEqual(["default"]);
 });
 
-test("a new profile: named well, never twice, never default (new is a name like any); its folder empty", () => {
+test("a new profile: named well, never twice, never default (new is a name like any); its folder empty but for when it was made; listed as they were made", () => {
   expect(Profiles.profile_why(ROOT, "Work")).toContain("Only a-z");
   expect(Profiles.profile_why(ROOT, "-x")).toContain("Only a-z");
   expect(Profiles.profile_why(ROOT, "a/b")).toContain("Only a-z");
@@ -72,12 +74,34 @@ test("a new profile: named well, never twice, never default (new is a name like 
   expect(Profiles.profile_why(ROOT, "new")).toBeNull();
   expect(Profiles.profile_why(ROOT, "work")).toBeNull();
   Profiles.profile_new(ROOT, "work");
+  Bun.sleepSync(5);
   Profiles.profile_new(ROOT, "copy");
   expect(Profiles.profile_why(ROOT, "work")).toContain("already");
-  expect(fs.readdirSync(ROOT + "/profiles/work")).toEqual([]);
+  expect(fs.readdirSync(ROOT + "/profiles/work")).toEqual(["created"]);
+  expect(Date.now() - Date.parse(fs.readFileSync(ROOT + "/profiles/work/created", "utf8").trim())).toBeLessThan(60000);
   fs.mkdirSync(ROOT + "/profiles/.import-x");
   fs.mkdirSync(ROOT + "/profiles/Bad");
-  expect(Profiles.profile_list(ROOT)).toEqual(["default", "copy", "work"]);
+  expect(Profiles.profile_list(ROOT)).toEqual(["default", "work", "copy"]);
+});
+
+test("the profiles as they were made: the time each keeps, else its folder's birth (one made before illi kept it), the same instant by name; a rename keeps its place; an import is made as it comes in, the export leaving its time out", async () => {
+  const root = temp_dir("illi-profiles-made-");
+  const made = (name: string, at: string) => put(root + "/profiles/" + name + "/created", at + "\n");
+  made("zeta", "2026-01-01T00:00:00.000Z");
+  made("beta", "2026-03-01T00:00:00.000Z");
+  made("alpha", "2026-03-01T00:00:00.000Z");
+  made("old", "5");
+  Bun.sleepSync(20);
+  fs.mkdirSync(root + "/profiles/hand");
+  expect(Profiles.profile_list(root)).toEqual(["default", "zeta", "alpha", "beta", "old", "hand"]);
+  Profiles.profile_rename(root, "zeta", "omega");
+  expect(Profiles.profile_list(root)).toEqual(["default", "omega", "alpha", "beta", "old", "hand"]);
+  const file = TMP + "/illi-profile-omega.tar.gz";
+  await Profiles.profile_export(root, "omega", file);
+  expect(tar(["-tzf", file]).split("\n")).not.toContain("./created");
+  await Profiles.profile_import(root, file, "again");
+  expect(Profiles.profile_list(root).at(-1)).toBe("again");
+  expect(Date.now() - Date.parse(fs.readFileSync(root + "/profiles/again/created", "utf8").trim())).toBeLessThan(60000);
 });
 
 test("the one asked, else the one used last (if still there), else the default", () => {
@@ -235,7 +259,7 @@ test("an import: a new profile, its config's commands and files dropped (a login
   expect(JSON.parse(fs.readFileSync(other + "/profiles/evil/config.json", "utf8"))).toEqual({ side: "right", off: "x, kit, spy" });
   expect(["hooks.json", "permissions.json", "hooks.json.imported", "permissions.json.imported"].map((f) => fs.existsSync(other + "/profiles/evil/" + f))).toEqual([false, false, true, true]);
   expect(["login.json", "accounts.json", ".accounts.7.json", ".auth.7.json"].map((f) => fs.existsSync(other + "/profiles/evil/" + f))).toEqual([false, false, false, false]);
-  expect(Profiles.profile_list(other)).toEqual(["default", "evil", "home"]);
+  expect(Profiles.profile_list(other)).toEqual(["default", "home", "evil"]);
   expect(fs.readdirSync(other + "/profiles").filter((p) => p.startsWith("."))).toEqual([]);
 });
 
