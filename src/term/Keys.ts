@@ -213,9 +213,10 @@ function term_shut(t: Term, c: Chooser): void {
 // question illi asks, just shown, holds Enter (Question.ts
 // question_held); the lit option's own keys first (the model picker's
 // effort and speed, the permission question's Esc; a line asked's, at
-// -1: a sign-in's page opened again); then Up and Down (or
-// Tab, Shift+Tab; Left and Right too, on buttons: Chooser buttons) move
-// round the options shown, PgUp and PgDn a page (a
+// -1: a sign-in's page opened again); then Up and Down (or Tab,
+// Shift+Tab; Left and Right too, on buttons with no line asked, where
+// they'd edit it: Chooser buttons) move round the options shown, PgUp
+// and PgDn a page (a
 // question's lead, where it is cut, half one: Popup.ts popup_page),
 // Ctrl+Home and Ctrl+End to the first and the last (Home and End too,
 // with nothing to type in), the wheel scrolls (Popup.ts), Enter picks the

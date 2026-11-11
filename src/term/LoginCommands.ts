@@ -284,8 +284,6 @@ export function login_edit(t: Term, f: (store: Store) => Store | null): boolean 
 
 // a question that asks before a log out (Enter on its second answer;
 // Esc goes back to `back`)
-// a question that asks before a log out (Enter on its second answer;
-// Esc goes back to `back`)
 export function login_sure(t: Term, title: string, about: string, done: () => void, back: () => void): void {
   login_question(t, title, ["Keep it", "Log out"], ["", about], (k) => (k === 1 ? done() : undefined), back);
 }
@@ -323,7 +321,7 @@ export function login_again(again: () => void): Act {
 // unless it leaves (Act leaves). Esc runs `esc`, said in the foot as
 // `stop` or `back`; held, a click outside doesn't close it. Each time it
 // shows, by `put` (a step's: shown only while the popup is its; null:
-// not shown)
+// not shown), it is a new popup (Enter shut the one before: Keys.ts)
 function login_offer(t: Term, title: string, body: Body, acts: Act[], esc: () => void, said: string, hold: boolean, put: (make: () => Chooser) => Chooser | null): Chooser | null {
   let did = "";
   let at  = -1;
@@ -367,7 +365,10 @@ export function login_lines(body: Body): Paint.Line[] {
 // it stopped; term_esc stops it as nothing shows it; /login shows it
 // again). Each of its states shows while the popup is free for it
 // (Step), held against a click outside while it runs; failed, it says why
-// with Try again, Esc back
+// with Try again, Esc back. A step lets go of t.login and `running`
+// (release) as Esc stops it, as it fails and as it closes: a caller
+// that ends it any other way (stopped from outside: Member.ts
+// member_hide) closes it too, or /login would show it again
 export function login_step(t: Term, title: string, back: () => void, own = true): Step {
   const stop = new AbortController();
   if (own) {
@@ -448,7 +449,7 @@ export function login_step(t: Term, title: string, back: () => void, own = true)
 // opened in the browser (on a terminal: one that won't open said, to open
 // it oneself), both said with what the person does there (`then`) and
 // how long the code is good; meanwhile the page opened again, the code
-// and the link copied again, each from a row
+// and the link copied again, each by a button (login_offer)
 export function login_device(t: Term, step: Step, url: string, code: string, then: string, minutes = 15): void {
   Screen.screen_copy(code);
   const opening = t.scr.tty ? browser_open(url) : null;

@@ -214,9 +214,10 @@ export function profile_list(root: string): string[] {
 
 // when a profile's folder was made, in ms: the time kept in it (MADE,
 // an ISO time), else, one made before illi kept it (or by hand), its
-// folder's birth
-// as the file system tells it (a copy of the folder's: when it was
-// copied); neither told: Infinity, after the rest
+// folder's birth as the file system tells it (a copy of the folder's:
+// when it was copied); neither told (a file system that keeps no birth
+// time: 0 there): Infinity, after the rest, those by name. Nothing is
+// written here: a folder with no time kept stays so
 function profile_made(dir: string): number {
   try {
     const line = fs.readFileSync(dir + "/" + MADE, "utf8").trim();

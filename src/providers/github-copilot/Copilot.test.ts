@@ -9,9 +9,9 @@
 // browser of its own, no telemetry, none of its built-in MCP servers, in
 // an empty folder, its cache a folder of its own there, gone as it ends,
 // what it unpacks of itself where the user's own CLI keeps it (illi's
-// build: in its version's folder); illi's prompt in place of Copilot's, with how its
-// tools are named; on the pick's model at its effort where the model
-// takes one; illi's tools over MCP, Copilot's own but its web tools left
+// build: in its version's folder); illi's prompt in place of Copilot's,
+// with how its tools are named; on the pick's model at its effort where
+// the model takes one; illi's tools over MCP, Copilot's own but its web tools left
 // out, none of its compaction, memory, skills or large-output files; its
 // session gone as it ends. Its words and thoughts stream live and are
 // logged whole, the tokens its first request read told, a window the

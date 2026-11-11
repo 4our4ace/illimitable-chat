@@ -27,7 +27,13 @@
 // starts: popup_find_at), a click outside closes it, the click that only
 // focuses the terminal does nothing; nothing reaches the chat, a pane,
 // the side, the tabs or the input under it (no button lights, no text
-// is chosen), and a paste goes to its search, if any. What is at the
+// is chosen), and a paste goes to its search, if any. Its own text is
+// chosen as the chat's (Select.ts POPUP: a drag over it copied as it's
+// let go, that click given up). A step of a list's own (/login's) may
+// say something over its options (Chooser body), ask its own size
+// (size: one box for all of /login), take no click outside while it
+// waits (hold) and offer its actions as square buttons at its foot
+// (buttons: popup_buttons). What is at the
 // input takes only the mouse on it: a question there (the row under the
 // pointer lit, a press on an answer, a tab or a row of illi's form its,
 // or on a line of a folded command saying what it hides; its lead's text
@@ -605,7 +611,9 @@ function popup_about(text: string, w: number): string {
 // (none but its own: a drag begun before it opened is let go, nothing
 // copied); its own text is chosen as any (Select.ts term_box_press: a
 // drag from a press in its box, copied as it's let go, the click given
-// up; a double click a word there, but on an option). With none, what is at the input takes the reports on it, all
+// up, on an option or a button too once the pointer leaves the cell
+// pressed; a double click a word there, but on an option). With none,
+// what is at the input takes the reports on it, all
 // else going on as if it weren't there: the question (Question.ts) the
 // presses on its answers (illi's form: on its tabs and rows; a folded
 // command: on a line saying what it hides; a press on the rest of its
@@ -752,9 +760,9 @@ function popup_light(t: Term, on: object, at: Target): boolean {
 // what Enter does there (run, or filled in: one that needs words). A
 // step that holds (Chooser hold: a sign-in waiting) takes no click
 // outside: Esc alone stops it. A button beside a line asked (Chooser
-// buttons) is pressed at once, the line kept as typed. On a line of the question's folded command
-// saying what it hides: the command shown whole (held by nothing: it
-// answers nothing). The box, nothing
+// buttons) is pressed at once, the line kept as typed. On a line of the
+// question's folded command saying what it hides: the command shown
+// whole (held by nothing: it answers nothing). The box, nothing
 function popup_click(t: Term, on: object, at: Pointed): void {
   const open = term_form(t);
   const sug  = term_suggest(t);

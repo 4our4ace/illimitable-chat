@@ -261,12 +261,17 @@ export function term_box_press(t: Term, unit: number): void {
   }
 }
 
+// a drag while a choice in a popup's box is held: grown to the pointer
 export function term_box_drag(t: Term): void {
   if (t.sel?.held && t.sel.key === POPUP) {
     term_follow(t);
   }
 }
 
+// the button let go on a choice held in a popup's box (true: text was
+// chosen and is copied, so the release is no click): one that never
+// left the cell pressed is dropped, the click going on to what it's on;
+// one copied stays (t.sel, key POPUP) as the chat's does
 export function term_box_release(t: Term): boolean {
   const sel = t.sel;
   if (sel === null || sel.key !== POPUP || !sel.held) {

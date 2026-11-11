@@ -98,7 +98,7 @@ What else illi keeps in `~/.illi`:
 | File            | Holds                                                 |
 | --------------- | ----------------------------------------------------- |
 | `login.json`    | the ChatGPT login in use, which `/login` makes (else opencode's, in `~/.local/share/opencode/auth.json`) |
-| `accounts.json` | what `/login` connected, readable by you alone: the API keys pasted and the one in use, ChatGPT's other accounts (and whether opencode's login is one), the Claude plan's and the Google AI plan's accounts and the one in use of each ([Providers](providers.md#connecting-login)); changed under a lock, `.accounts.lock` beside it, so two illis take turns ([Storage](storage.md#accounts)) |
+| `accounts.json` | what `/login` connected, readable by you alone: the API keys pasted and the one in use, ChatGPT's other accounts (and whether opencode's login is one), the Claude plan's, the Google AI plan's and the GitHub Copilot plan's accounts and the one in use of each ([Providers](providers.md#connecting-login)); changed under a lock, `.accounts.lock` beside it, so two illis take turns ([Storage](storage.md#accounts)) |
 | `claude/`       | a Claude Code folder for each Claude account `/login` added beside your own Claude Code's, its login in it |
 | `antigravity/`  | a folder for each Google AI plan account `/login` signed in (`g1`, `g2`…: the home of Google's Antigravity CLI run for it, its sign-in in it), in `agent/<version>/` the CLI `/login` downloaded, the version this illi runs, and in `agy.json` the version of your own `agy` as illi last asked it ([Providers](providers.md#google-ai-plan)) |
 | `copilot/`      | a folder for each GitHub Copilot plan account `/login` signed in (`gh1`, `gh2`…: the home of GitHub's Copilot CLI run for it, `COPILOT_HOME`; its token in your keychain where there is one, else, as you allowed it, in its `config.json`), in `cli/<version>/` the CLI `/login` downloaded, the version this illi runs, with what it unpacks of itself, and in `copilot.json` the version of your own `copilot` as illi last asked it ([Providers](providers.md#github-copilot-plan)) |
@@ -109,6 +109,7 @@ What else illi keeps in `~/.illi`:
 | `related.json`  | what happened to the side's Related lines (shown, opened, pinned, dismissed), counted by each line's score, every profile's: counts and scores alone, no text, no id, no project; where those you opened and pinned score sets how strong a line must be to be given to illi ([Storage](storage.md#related-counts)) |
 | `profile`       | the profile used last, for a project illi hasn't run in yet |
 | `project-profiles.json` | the profile used last in each project: illi opens a project in it |
+| `profiles/`     | the other profiles, a folder each ([Profiles](profiles.md)); in each, `created` keeps when it was made, a line: `/profile` lists them in that order |
 | `seen.json`     | what of each project runs as you work (its `hooks.json`, `mcp.json` and plugins), as illi last saw it (each one's hash), so one new or changed is said at the start |
 | `plugin-data/`  | each plugin's own folder (`CLAUDE_PLUGIN_DATA`), kept across its updates; a profile's plugins' in the profile's folder ([Plugins](customize.md#plugins)) |
 | `trust.json`    | the folders you trust illi in (a repo's top covers the repo, a plain folder the folders in it but a repo), every profile's: the question at the start asks only for others; edit or delete it to trust less |
@@ -130,9 +131,10 @@ It asks what goes, then says each thing it removed:
    `~/.illi`. Your chats, settings and accounts stay in `~/.illi`, so an
    illi you install again picks up where you were.
 2. **Everything**: that, and all of `~/.illi`, every profile's chats,
-   settings, keys and accounts. Before the folder goes, illi logs each
-   account of the Claude, Google AI and GitHub Copilot plans out
-   through its own CLI, which also removes its sign-in from your
+   settings, keys and accounts, and whatever else you keep there (your
+   own rules, skills, commands, agents, hooks and plugins). Before the
+   folder goes, illi logs each account of the Claude, Google AI and GitHub Copilot plans
+   out through its own CLI, which also removes its sign-in from your
    system's keychain (deleting the folder alone would leave those
    behind). It asks once more, as the chats can't come back: export a
    profile first to keep a copy (`/profile`, Ctrl+E).
@@ -145,12 +147,24 @@ or one holding it, and only if it looks like illi's.
 
 What isn't illi's stays: your own Claude Code, `agy` and `copilot` and
 what they keep (your Claude Code's own login, the Claude plan's account
-that is yours, stays signed in), a project's own `.illi/` folder,
+that is yours, stays signed in; a `copilot` of your own that illi ran
+keeps what it unpacked of itself in its own cache), a project's own
+`.illi/` folder,
 `~/.agents`, opencode's ChatGPT login (`~/.local/share/opencode/auth.json`,
 if `/login` used it), and Bun, if the installer installed it to build
 illi (`~/.bun`). An illi run from its source (a git clone) leaves the
 clone: delete it, and the `illi` on your `PATH` that starts it,
 yourself.
+
+One sign-in is shared: where GitHub's Copilot CLI keeps its token in
+your system's keychain, it keeps it by your GitHub login, the same
+entry your own `copilot` uses. Logging that account out, here or in
+`/login`, removes it for both, so your own `copilot` asks you to sign
+in again (`copilot login`).
+
+`illi uninstall` exits 0 once it removed what you picked, 1 if it
+stopped or something couldn't be removed (it says what, and how to
+remove it yourself).
 
 By hand: log out of each account in `/login` (that clears the
 keychain's sign-ins), quit illi, then delete `~/.illi` and the `illi`

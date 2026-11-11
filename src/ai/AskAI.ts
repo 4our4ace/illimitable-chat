@@ -159,7 +159,8 @@ export type Call = Try;
 // vendor meanwhile (a chat's JOBS each asking once a minute)
 const AGAIN = 60e3;
 
-// the patient calls waiting to ask again, each one's wake (AskAI.wake)
+// the patient calls waiting to ask again, each one's wake (AskAI.wake):
+// there only while it waits between two tries
 const NAPS = new Set<() => void>();
 
 

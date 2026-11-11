@@ -37,8 +37,11 @@ each sign-in as it goes (the page and the code, the code you paste,
 what illi waits on, a download's progress, a key being checked). What a
 step offers is a row of buttons at its foot (**Open the page**, **Copy
 the code**, **Try again**…): Left and Right move between them, Enter or
-a click presses one. Its text is chosen as the chat's is: drag over it
-and it's copied as you let go. Esc stops a sign-in and goes back to the
+a click presses one. Where a step asks for a line (the code a page
+shows), typing goes to the line, so its buttons take a click, or
+Ctrl+O (open the page again) and Ctrl+Y (copy its link). Its text is
+chosen as the chat's is: drag over it and it's copied as you let go, a
+double click copies a word. Esc stops a sign-in and goes back to the
 list it came from; a click outside doesn't close it while it waits.
 When one fails, the popup says why, with **Try again**. If something
 else takes the screen meanwhile (Ctrl+P's palette), the sign-in keeps
@@ -65,8 +68,8 @@ ChatGPT plan
 Pick **ChatGPT**, then **ChatGPT plan**, in `/login` to sign in with
 ChatGPT Plus or Pro:
 illi opens OpenAI's page in your browser and shows a code to enter
-there (it is in your clipboard too; rows under it open the page again
-and copy the code or the link), then keeps and renews the login
+there (it is in your clipboard too; buttons under it open the page
+again and copy the code or the link), then keeps and renews the login
 itself. The code is good for 15 minutes, and illi waits for it till
 then; Esc stops waiting. The browser is your system's: on WSL Windows'
 default, asked through `rundll32.exe url.dll,FileProtocolHandler`
@@ -469,9 +472,12 @@ own.
   (https://github.com/settings/copilot/features); once Copilot is on
   there it just works, no sign-in again. Until then its row says "no
   Copilot from GitHub", and a turn on it says the same, never GitHub's
-  raw answer. An account shows by its GitHub login, with its plan. Signing in again as a login already connected
-  takes its place. Logging one out logs the CLI out of it and removes
-  its folder. A turn never signs in: when a sign-in has run out, the
+  raw answer. An account shows by its GitHub login, with its plan.
+  Signing in again as a login already connected takes its place.
+  Logging one out logs the CLI out of it and removes its folder; where
+  the token is in a keychain, that sign-in is the one your own
+  `copilot` uses for the same GitHub login, so it asks you to sign in
+  again (`copilot login`). A turn never signs in: when a sign-in has run out, the
   turn says so at once, and /login shows **Sign in again** under your
   accounts. GitHub Enterprise Cloud with data residency (`*.ghe.com`)
   isn't offered yet.
@@ -643,7 +649,8 @@ The vendors never mix: a chat's summaries and subagents run on its own
 vendor's models. `compactor` and `agents` take one pick per vendor,
 comma-separated, and a chat uses its own vendor's. A summary that's
 stuck (its vendor refusing or down) tries again every minute, each try
-on the summaries' model of the chat's vendor as it is then, and at once
-as the chat moves to another vendor, so it follows the chat there. None
+on the summaries' model of the chat's vendor as it is then (a change
+of `compactor` is followed too), and one waiting tries at once as a
+chat moves to another vendor, so it follows the chat there. None
 is lost by quitting: what isn't summarized yet is, at the next start.
 All settings are in [Config](config.md).

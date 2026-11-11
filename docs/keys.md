@@ -224,8 +224,9 @@ of the best match first, that match lit.
   moves; a click does what Enter does; a click in its search puts the
   cursor where it lands, as in your message (on a search too long to
   show whole, a click on the `…` goes to where what shows starts); a
-  click outside closes it. Shift+drag selects text in it, as the
-  terminal does.
+  click outside closes it. A drag over its text copies what it covers,
+  as in the chat, and a double click a word (on an option it's a
+  click); a press let go where it landed still picks.
 - On a question the row under the pointer lights and a click does what
   Enter does. What leads its answers (a command, why it is asked) shows
   whole up to half the screen, then cut, a dim line saying how much more
@@ -260,8 +261,14 @@ of the best match first, that match lit.
   and Right set the effort, Enter on what's lit keeps it unset). What it
   asks on the way stays in its popup: Connect?, Log out?, and a key to
   paste or a sign-in's code, a line shown as dots, never in the message
-  field. Esc goes back a level, from those too (a sign-in's code: Esc
-  there stops the sign-in); a click outside it closes it all.
+  field. A sign-in runs there too, step by step, in a popup of one
+  size: what a step offers is a row of buttons at its foot (Left and
+  Right move between them, Enter or a click presses one); where it
+  asks for a code, the buttons take a click, or Ctrl+O (open the page)
+  and Ctrl+Y (copy its link). Esc goes back a level, from those too (a
+  sign-in: Esc there stops it); a click outside it closes it all, but
+  not while a sign-in waits. Ctrl+P still opens its list over one, and
+  `/login` shows the sign-in again.
 
 Panes (`/help`, `/agents`, `/mcp` with no servers) open in the chat's place,
 on a background of their own: Esc or Enter closes one, the arrows and
@@ -333,8 +340,9 @@ hidden with their profile ([Profiles](profiles.md)); a quit stops them,
 so Ctrl+D (or a second Ctrl+C) first says how many it stops; illi is
 told they were stopped, so it starts them again if it needs them. A
 process that left its group (`setsid`, a daemon) isn't listed but is
-stopped at the quit all the same. On the `claude-code` and
-`antigravity` providers too: illi runs the shell there as everywhere.
+stopped at the quit all the same. On the `claude-code`, `antigravity`
+and `github-copilot` providers too: illi runs the shell there as
+everywhere.
 
 Related
 -------
@@ -390,10 +398,11 @@ have opened or pinned 20 lines that matched a path or an error, the bar
 moves to where the lowest quarter of those lines scored, never below a
 floor. The memory tools (zoom, search, date) and illi's own steps
 (todo, a subagent started or told) never get a line. On the
-`claude-code` and `antigravity` providers illi runs the tools too, so
-they get lines as everywhere; Claude Code's own web search and fetch
-and its MCP servers' tools, and Google's CLI's web search and page
-reading, which run inside them, don't.
+`claude-code`, `antigravity` and `github-copilot` providers illi runs
+the tools too, so they get lines as everywhere; Claude Code's own web
+search and fetch and its MCP servers' tools, Google's CLI's web search
+and page reading, and Copilot's CLI's web fetch and search, which run
+inside them, don't.
 
 The `related` setting is `on` (the side, and the strong lines given to
 illi), `screen` (the side only) or `off`.
@@ -419,8 +428,8 @@ Mouse and side panel
   it answered; a web search by OpenAI's or ChatGPT's models from before
   illi 0.3.1). A report, or a thought or a result with no call, is a
   line of its own. A stop answers a call still running, as failed; on
-  `claude-code` and `antigravity`, where the provider's own program
-  runs the steps, a call cut off gets no answer. A click on a call's line opens that call alone, under it
+  `claude-code`, `antigravity` and `github-copilot`, where the
+  provider's own program runs the steps, a call cut off gets no answer. A click on a call's line opens that call alone, under it
   behind a bar: the thinking before it, its whole input, its whole
   result; its siblings stay shut.
   A click on its line again, anywhere down its bar, or anywhere in it

@@ -150,6 +150,13 @@ page as `webfetch` (its URL). Anything else the agent asks leave for is
 refused, and so is one a hook gave other input, as the agent can't take
 it.
 
+On `github-copilot` it is the same
+([Providers](providers.md#github-copilot-plan)): illi runs its own
+tools, checked as everywhere, and of Copilot's CLI's own only its web
+fetch and search run, where a turn searches the web. A page it fetches
+is asked of illi as `webfetch` (its URL); anything else the CLI asks
+leave for is refused, and so is a fetch a hook gave other input.
+
 How rules decide
 ----------------
 

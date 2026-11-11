@@ -2,10 +2,10 @@
 // Gemini's and others, as GitHub serves them), through GitHub's own
 // Copilot CLI run as its SDK runs it (`copilot --headless --stdio`, the
 // user's own install or the one /login downloads, unmodified: Copilot.ts,
-// CopilotCli.ts), signed in with its own
-// GitHub sign-in. Its accounts are folders of illi's own, in copilot/ of
-// illi's root, each the CLI's home (COPILOT_HOME: its sign-in, its
-// sessions' files), as each sign-in is a folder's.
+// CopilotCli.ts), signed in with its own GitHub sign-in. Its accounts
+// are folders of illi's own, in copilot/ of illi's root, each the CLI's
+// home (COPILOT_HOME: its sign-in, its sessions' files), as each sign-in
+// is a folder's.
 
 import type { Model } from "../../ai/Pick.ts";
 import type { Facts, Maker } from "../Provider.ts";

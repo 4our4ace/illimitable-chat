@@ -92,7 +92,7 @@ ends the call; a vendor gives it a `Wire` (`PROVIDER.wire`):
 | `idle`    | how long a silent stream lives before it is taken as dead |
 
 A vendor whose own program runs the loop (Claude Code, Google's
-Antigravity CLI) has no wire but a runner (`PROVIDER.ask`):
+Antigravity CLI, GitHub's Copilot CLI) has no wire but a runner (`PROVIDER.ask`):
 `Agent.ask` hands it the call, and it must give back a `Try` with the
 same `Event`s and `End`. A provider has one of the two. A call `once` (a recap) runs
 no tool and takes no message sent meanwhile: the runner leaves it in
@@ -109,8 +109,8 @@ Failures must land in the right `stop`, since each is handled apart:
   step's tool results went in is `grew` (the turn's own work outgrew the
   window: its share stays, and the count of refits starts anew, a
   subagent's too); `Agent.loop` sets it for a wire, a runner of its own
-  loop must set it itself (Claude Code's and Antigravity's, once a
-  tool's result came back).
+  loop must set it itself (Claude Code's, Antigravity's and Copilot's,
+  once a tool's result came back).
 - `marks`: the request held more cache marks than the API takes. Only
   Claude Code's runner says it: Claude Code marks a request itself, at
   times all four the API allows, and illi's one beside them is refused
@@ -159,7 +159,7 @@ list tells, as `Anthropic.models` does) must ask again for a new one
 with `PROVIDER.check(key)`, asking a list that costs nothing; its reason
 never the fetch error's own text, which may hold a header's whole
 value, the key. A plan login needs what `ChatGPT.ts` has (a runner's,
-like Claude Code's or Antigravity's, is its own: a folder an account,
+like Claude Code's, Antigravity's or Copilot's, is its own: a folder an account,
 its program run there, `config_folder`):
 
 - `token()`: the login on disk, renewed before it ends, under the lock
@@ -218,7 +218,18 @@ its program run there, `config_folder`):
   newest of it (`login_models_keep`). What a page asks on the way
   (`term_question`, `term_ask`) passes `popup: true`, so the step shows
   in /login's popup, never at the input: a key or a sign-in's code is a
-  secret (`secret: true`), drawn as dots. The page's sign-in should end
+  secret (`secret: true`), drawn as dots. A sign-in is a `login_step`
+  (titled, with where Esc goes back to): `wait` says what it waits on,
+  `ask` asks a line, `question` a choice, `fail` says why with Try
+  again, `close` ends it; each shows in /login's popup at its one size
+  (`BOX`) while the popup is free for it, else waits for `/login` to
+  show it again. Use `login_device` for a device code (the code copied,
+  the page opened, buttons for both), `login_paste` for a code the page
+  shows, `login_say` for a message with buttons, and `login_question`
+  and `login_ask` for the rest, so every provider's sign-in reads the
+  same; pass the step's `stop.signal` to what it runs, and end every
+  path in `fail` or `close` (an abort from outside too), which let
+  `t.login` go. The page's sign-in should end
   (its `t.login` let go) as it calls `login_after`, since the models'
   step waits a tick and opens only while nothing else is on screen.
 
@@ -265,7 +276,8 @@ learn them, from best:
   autocompact window (500k of Opus's 1M) while its compaction is on, so
   a summary's reply, which runs with it on, tells none.
 - What a runner's stream tells as a turn runs (Antigravity's
-  `usage_update`, its `size`): `Pick.told`.
+  `usage_update`, its `size`; Copilot's `session.usage_info`, its
+  `tokenLimit`, for a model its list tells no window of): `Pick.told`.
 - Nothing told (the OpenAI API): the windows built in, from the vendor's
   docs.
 
@@ -273,7 +285,7 @@ Keep what was learned for the next start with
 `config.config_models_keep(vendor, Pick.list(vendor))`: models.json
 holds each vendor's list on its own. At the start `config_models` takes
 a catalog vendor's list whole (its facts' `catalog`: chatgpt's,
-antigravity's, claude-code's, claude-api's) and only
+antigravity's, claude-code's, claude-api's, github-copilot's) and only
 the windows of the others' built-in models, by id. Ask the
 vendor at the start (`term_account`), and again when the account
 changes (chatgpt's `follow`). models.json's `account` and `capped`
@@ -323,8 +335,9 @@ plan's name.
 
 A vendor in illi's loop gets illi's tools (`src/tools/`) as function
 definitions in its body. A vendor running its own loop gets illi's
-prompt (in place of its own on Claude Code; after Google's on
-Antigravity, whose agent puts its own first) and the same tools over
+prompt (in place of its own on Claude Code and on Copilot's CLI; after
+Google's on Antigravity, whose agent puts its own first) and the same
+tools over
 MCP instead, illi running each (`Tools.list`'s `hosted` adds the
 `approve` tool, through which its permission prompts reach illi's
 checks). Antigravity's agent tells none of its MCP calls' results, so
@@ -339,8 +352,9 @@ model the date itself (its facts' `dated`) gets illi's line of where it
 works with the time alone (`Tools.here`). Web
 search is a server tool where the vendor has one (`Ask.searches`; a
 runner's program's own, Claude Code's web search and fetch,
-Antigravity's web search and page reading, each asked of the user
-through `approve` as `WebSearch` and `WebFetch`):
+Antigravity's web search and page reading, Copilot's CLI's web fetch,
+each asked of the user through `approve` as `WebSearch` and
+`WebFetch`):
 each search logged as a call with its result, and the pages a reply
 cites but doesn't link ending the reply, in one `Sources:` line (`OpenAI.entries`), never a result no call made.
 The citation marks a ChatGPT model writes in its text (U+E200 `cite`

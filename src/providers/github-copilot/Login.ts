@@ -8,9 +8,11 @@
 // (its token in the system's keychain where there is one, else, asked
 // first, in a file in the folder), the folder made as the sign-in starts
 // so two terminals never share one, and gone again if the sign-in ends
-// without it kept. A GitHub login signed in again in a new
-// folder takes the place of the one it had. An account whose sign-in ran
-// out signs in again in its own folder, from a row under the accounts.
+// without it kept. A GitHub login signed in again in a new folder takes
+// the place of the one it had (that folder gone, not logged out: a
+// keychain's token is by the GitHub login, the new sign-in's too). An
+// account whose sign-in ran out signs in again in its own folder, from
+// a row under the accounts.
 // The CLI is the user's own `copilot` (1.0.100 or later), else the build
 // this illi is pinned to (CopilotCli.ts): with none here, adding an
 // account first offers to download it, saying how big it is (Esc stops

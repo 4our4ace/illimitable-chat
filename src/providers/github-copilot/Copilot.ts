@@ -46,10 +46,11 @@
 // organization, a busy service; and, whatever its kind, an account
 // GitHub gives no Copilot (its subscription ended, none ever: said with
 // what's open to it and where, never GitHub's raw answer; its models
-// refused as they're listed tell it first: Copilot.listed). A stop aborts the turn (session.abort),
-// given up past CANCEL. Each request's usage tells the tokens read, the
-// plan's use (the side's), and a model's window where its list told none
-// (Auto's: the model it picked).
+// refused as they're listed tell it first: Copilot.listed). A stop
+// aborts the turn (session.abort), given up past CANCEL. Each request's
+// usage tells the tokens read, the plan's use (the side's), and a
+// model's window where its list told none (Auto's: the model it
+// picked).
 //
 // The CLIs run one an account, as a call needs it (about two seconds),
 // each taking any number of sessions at once, and end once no call has
@@ -118,7 +119,8 @@ type Run = {
 };
 
 // what a sign-in tells of the account: its GitHub login, its plan
-// ("business"; "": none told)
+// ("Business"; "": none told), why GitHub gives it no Copilot ("": it
+// does: Copilot.lack)
 export type Who = { login: string; plan: string; lack: string };
 
 // Constants
@@ -182,7 +184,9 @@ const BUSY = /overloaded|unavailable|try again later|timed? ?out|ECONN|socket ha
 const DENIED = /not authorized to use this Copilot feature|no Copilot access/i;
 export const SETTINGS = "https://github.com/settings/copilot/features";
 
-
+// what a call says with no account in use, and with one whose sign-in
+// ran out (the second also tells /login to offer the sign-in again:
+// LAPSED)
 const NO_ACCOUNT = "no GitHub account is in use for Copilot: /login signs in to one";
 const NO_SIGNIN  = "your GitHub sign-in for Copilot has run out: /login signs in again";
 
@@ -213,6 +217,11 @@ export namespace Copilot {
   // shorter)
   export let cancel = CANCEL;
 
+  // a call (Provider.ts ask): run on the account in use (Copilot.run),
+  // its end with what was sent mid-run left for the next turn; a stop
+  // aborts the turn (session.abort) and gives it up past `cancel`. One
+  // that goes on from another request, or with no account in use, ends
+  // at once, saying so
   export function ask(ask: Ask, on: (ev: Event) => void): Try {
     const left: Say[] = [];
     const end = AskAI.end("");
@@ -524,10 +533,10 @@ export namespace Copilot {
 
   // a failure in plain words, by the kind the CLI tells: too long for the
   // window; an account GitHub gives no Copilot (why, as last asked:
-  // Copilot.lack, with where to start a plan); a sign-in run out; the plan's credits used up (when they
-  // start anew, where told); a rate limit (a later try may answer); the
-  // account's organization's policy; a busy service; else as the CLI says
-  // it. Why no CLI is here (CopilotCli.why) is said as it is, never
+  // Copilot.lack, with where to start a plan); a sign-in run out; the
+  // plan's credits used up (when they start anew, where told); a rate
+  // limit (a later try may answer); the account's organization's policy;
+  // a busy service (a CLI that ended too); else as the CLI says it. Why no CLI is here (CopilotCli.why) is said as it is, never
   // logged as the CLI's failure
   export function failed(run: Run, e: any): End {
     const said = String(e?.message ?? "").replace(/\s+/g, " ").trim();
@@ -658,6 +667,8 @@ export namespace Copilot {
     Copilot.wake();
   }
 
+  // a CLI ended (asked, then killed: Rpc.stop), no call taking it from
+  // now; its calls still running end as it does, saying why
   export function kill(p: Proc, why: string): void {
     procs = procs.filter((o) => o !== p);
     Rpc.stop(p.conn, why);

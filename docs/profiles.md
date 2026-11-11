@@ -9,7 +9,9 @@ need just the one profile.
 `/profile` opens the list (the side panel shows them too): the default
 first, then the others in the order you made them (each folder's
 `created` keeps when; one made before illi kept it goes by when its
-folder was made). All of it happens there:
+folder was made, or, on a file system that doesn't tell, after the
+rest by name). A rename keeps a profile's place. All of it happens
+there:
 
 | Key or row          | Does                                         |
 | ------------------- | -------------------------------------------- |
@@ -86,7 +88,8 @@ Export and import
   `/login` connected (`login.json` and a login file its config names
   inside the profile's folder, `accounts.json`, the Claude Code folders
   in `claude/`, the Antigravity ones and Google's CLI in
-  `antigravity/`, and a login or accounts file a crash left half written
+  `antigravity/`, the Copilot ones and GitHub's CLI in `copilot/`, and
+  a login or accounts file a crash left half written
   beside `login.json` or `accounts.json`), their locks, the log and
   when the profile was made (an import is made as it comes in);
   the default's, what every profile shares too: the other profiles, the

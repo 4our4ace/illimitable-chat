@@ -23,8 +23,11 @@
 // the home folder or one holding it. An illi run from its source (a
 // clone) leaves the clone, saying so. What's not illi's stays: a
 // project's own .illi folder, ~/.agents, the user's own Claude Code, agy
-// and copilot, and what they keep (docs/config.md, Removing illi). Each
-// step is said, then what's left; the exit code: 0 removed, 1 not.
+// and copilot, and what they keep (docs/config.md, Removing illi), but
+// one sign-in: GitHub's CLI keeps a keychain's token by the GitHub
+// login, so an account's logout takes it from the user's own copilot of
+// that login too. Each step is said, then what's left; the exit code: 0
+// removed, 1 not.
 
 import * as fs from "node:fs";
 import * as os from "node:os";

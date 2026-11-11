@@ -61,15 +61,15 @@ export type Tarred = { name: string; size: number; type: string };
 // archive is called), and /login's page (CliLogin.ts): its short name,
 // the plan that runs on it, where it comes from, what more it unpacks of
 // itself as it first runs ("": nothing); the log line's vendor; the
-// user's own program on
-// PATH, its arguments, the variable that names a command line of the
-// user's own, and what brings the user's own current; where its archives
-// are (its releases' download URL, a tag's start before the version: "v"
-// for v1.0.109), the oldest version illi runs, the builds this illi is
-// pinned to by machine; the folder of illi's root its builds are kept in,
-// the file beside it the user's own program's version is kept in; how
-// its version is asked (the arguments, and what more of the environment
-// keeps the ask from updating it or unpacking it elsewhere)
+// user's own program on PATH, its arguments, the variable that names a
+// command line of the user's own, and what brings the user's own
+// current; where its archives are (its releases' download URL, a tag's
+// start before the version: "v" for v1.0.109), the oldest version illi
+// runs, the builds this illi is pinned to by machine; the folder of
+// illi's root its builds are kept in, the file beside it the user's own
+// program's version is kept in; how its version is asked (the
+// arguments, and what more of the environment keeps the ask from
+// updating it or unpacking it elsewhere)
 export type Spec = {
   name     : string;
   maker    : string;
