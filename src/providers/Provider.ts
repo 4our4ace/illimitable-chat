@@ -149,6 +149,9 @@ export type Hint = { text: string; trouble: boolean };
 //   most) to ask a vendor connected anew which of its models to run on,
 //   so it should settle once the list is known;
 // - watch: tells f each time its account, plan or catalog changed;
+// - notes: tells f what it did by itself that the person should know,
+//   a line (its program downloaded in the background: Cli.ts notes),
+//   the chat showing it as a note;
 // - plan: its plan's limits and use, as the side shows them (null: none
 //   told);
 // - refused: a model this account refused as too long past its standard
@@ -178,6 +181,7 @@ export type Provider = {
   windows?  : () => boolean;
   account?  : () => Promise<boolean> | void;
   watch?    : (f: () => void) => void;
+  notes?    : (f: (text: string) => void) => void;
   plan?     : () => Plan | null;
   refused?  : (label: string) => boolean;
   servers?  : Servers;

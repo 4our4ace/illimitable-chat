@@ -40,7 +40,8 @@
 // a reboot), is dead, whatever its pid: the next illi claims the
 // download in its place, one alone (claim). A download by itself that
 // gets no byte for STALL gives up, so none holds the lock stuck. A call
-// meanwhile says it's downloading. `illi uninstall` removes the
+// meanwhile says it's downloading; its end is told the chat, a note
+// (notes: Provider.ts notes). `illi uninstall` removes the
 // downloads (programs).
 
 import * as fs from "node:fs";
@@ -131,6 +132,7 @@ export type Cli = {
   older     : (version: string) => string;
   stale     : () => string | null;
   told      : (text: string) => boolean;
+  notes     : (f: (text: string) => void) => void;
   newer     : (a: string, b: string) => number;
   takes     : (b: Build) => boolean;
   plain     : (name: string) => boolean;
@@ -246,6 +248,7 @@ export function cli(spec: Spec): Cli {
   // (bytes of `of`), its end; the version it was tried for this run; the
   // lock this illi holds for it (claim; null: none)
   let updating: { b: Build; bytes: number; of: number; done: Promise<boolean> } | null = null;
+  let note = (_: string): void => {};
   let tried = "";
   let held: string | null = null;
 
@@ -648,7 +651,14 @@ export function cli(spec: Spec): Cli {
     // byte comes for STALL, so a lock is fresh only while its illi gets
     // on. true: downloaded now; false: not (none to take, here already,
     // another illi's under way, or it failed: logged, /login offers it as
-    // before)
+    // before). Its end is told (notes): downloaded (an older version
+    // here: updated, from which), or why not
+    // what a download by itself tells as it ends (update), a line, told
+    // f from now on (one listener: the chat's, which shows it as a note)
+    notes(f) {
+      note = f;
+    },
+
     update() {
       if (updating !== null) {
         return updating.done;
@@ -683,10 +693,17 @@ export function cli(spec: Spec): Cli {
         } catch {}
       }, BEAT);
       beat.unref();
+      const was = c.other();
       now.done = c.download(b, stall.signal, (bytes, of) => {
         [now.bytes, now.of] = [bytes, of || b.bytes];
-      }).then(() => true, (err: any) => {
-        console.error(spec.vendor + ": " + spec.name + " " + b.version + " wasn't downloaded: " + (stall.signal.aborted ? "GitHub sent nothing for " + STALL / 1e3 + " seconds" : String(err?.message ?? err)));
+      }).then(() => {
+        const up = was !== null && c.newer(was, b.version) > 0;
+        note(spec.name + (up ? " is updated to " + b.version + " (from " + was + ")" : " " + b.version + " is downloaded") + ": " + spec.plan + " runs on it now.");
+        return true;
+      }, (err: any) => {
+        const why = stall.signal.aborted ? "GitHub sent nothing for " + STALL / 1e3 + " seconds" : String(err?.message ?? err);
+        console.error(spec.vendor + ": " + spec.name + " " + b.version + " wasn't downloaded: " + why);
+        note(spec.name + " " + b.version + " didn't download (" + why.replace(/\.$/, "") + "): /login offers it again.");
         return false;
       }).finally(() => {
         clearInterval(beat);

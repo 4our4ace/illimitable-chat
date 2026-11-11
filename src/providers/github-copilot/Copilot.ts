@@ -1147,7 +1147,8 @@ export namespace Copilot {
 // the start, as the chat moves to it, after /login: Chat.account), the
 // account's models and plan asked (this illi's CLI downloaded first by
 // itself, with autoupdate on and none here); the chat told as the
-// account's models change; an account logged out by the CLI, and the
+// account's models change, and as a download by itself ends
+// (CopilotCli.notes); an account logged out by the CLI, and the
 // CLI's downloads, as `illi uninstall` asks; its CLIs ended as illi ends
 // (their end waited for by the uninstall), its download by itself let
 // go, and the downloads no illi runs any more gone
@@ -1156,6 +1157,7 @@ export const PROVIDER: Provider = {
   ask      : Copilot.ask,
   account  : Copilot.account,
   watch    : Copilot.watch,
+  notes    : CopilotCli.notes,
   plan     : Copilot.plan,
   logout   : Copilot.logout,
   programs : CopilotCli.programs,

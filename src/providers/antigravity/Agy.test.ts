@@ -23,9 +23,9 @@
 // one illi at a time on the machine (one whose illi lives, its lock
 // written within the minute, is left to it; a lock gone unwritten for
 // longer is dead though a process has its pid, and one illi alone claims
-// the download in its place), a call meanwhile told it's downloading;
-// the same build put in place meanwhile by another illi is kept as it
-// is.
+// the download in its place), a call meanwhile told it's downloading,
+// its end told (updated, from which); the same build put in place
+// meanwhile by another illi is kept as it is.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -307,6 +307,8 @@ test("with autoupdate on and an account connected, this illi's build downloads b
   other.kill();
   await other.exited;
   expect(Agy.progress()).toBeNull();
+  const said: string[] = [];
+  Agy.notes((text) => said.push(text));
   const one = tar([{ name: "antigravity", data: "#!/bin/sh\necho auto\n" }]);
   let release = () => {};
   HELD["auto.tgz"] = new Promise<void>((done) => (release = done));
@@ -318,6 +320,7 @@ test("with autoupdate on and an account connected, this illi's build downloads b
   release();
   expect(await done).toBe(true);
   expect([Agy.ready(), locks(), Agy.progress(), await Agy.update()]).toEqual([true, [], null, false]);
+  expect(said).toEqual(["Google's Antigravity CLI is updated to 2.0.1 (from 1.5.9): the Google AI plan runs on it now."]);
   const cmd = Agy.home() + "/2.0.1/antigravity";
   const ino = fs.statSync(cmd).ino;
   await Agy.download(Agy.pin, new AbortController().signal, () => {});

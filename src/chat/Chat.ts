@@ -310,7 +310,8 @@ export namespace Chat {
     // chat's vendor, the cut fitted anew while no turn runs, once the
     // windows known are the account's own (windows: the start's waits on
     // them, as a plan or a login told first must: the windows kept last
-    // may be smaller, and a cut never moves back)
+    // may be smaller, and a cut never moves back). What a provider did by
+    // itself (notes: its program downloaded) told the views as a note
     for (const provider of Providers.all()) {
       provider.watch?.(() => {
         if (!chat.busy && chat.pick.vendor === provider.facts.id && provider.windows?.() !== false) {
@@ -318,6 +319,7 @@ export namespace Chat {
         }
         Chat.change(chat);
       });
+      provider.notes?.((text) => Chat.all(chat, { $: "note", text }));
     }
     Chat.follow(chat);
     // a saved pick not offered gave way: told once

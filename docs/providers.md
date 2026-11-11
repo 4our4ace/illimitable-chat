@@ -312,7 +312,8 @@ accounts on its own.
   background as it starts on Google's plan or a chat moves to it (with
   `autoupdate` on, the default, and a Google account connected; one
   illi at a time on the machine), and a turn meanwhile says it's
-  downloading; with `autoupdate` set to `notify` or `off`, a turn says
+  downloading; a note says once it's done (or why it couldn't be); with
+  `autoupdate` set to `notify` or `off`, a turn says
   an update is needed and /login offers it under your accounts
   (**Update Google's Antigravity CLI**). Every other version there goes
   once no illi still running uses it, and illi's own goes too while
@@ -449,7 +450,8 @@ own.
   unpacks it into `~/.illi/copilot/cli/<version>/`, where what it
   unpacks of itself goes too; Esc stops the download, leaving nothing
   behind. An illi update to a newer version downloads it by itself
-  (with `autoupdate` on and a GitHub account connected), and every
+  (with `autoupdate` on and a GitHub account connected, a note saying
+  once it's done), and every
   other version goes once no illi still running uses it, as on Google's
   plan. illi speaks the CLI's protocol 3 (GitHub's SDK's): a CLI that
   speaks another is refused, saying whether `copilot update` or an illi

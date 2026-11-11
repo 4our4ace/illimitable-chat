@@ -181,6 +181,9 @@ its program run there, `config_folder`):
   (`term_hint`).
 - `PROVIDER.close()`: what it runs in the background stopped, as illi
   ends.
+- `PROVIDER.notes(f)`: what it did by itself that the person should
+  know, a line at a time (its program downloaded in the background:
+  `Cli.ts` `notes`), which the chat shows as a note.
 - `PROVIDER.logout(folder)` and `PROVIDER.programs()`, a runner's whose
   program keeps a sign-in outside its folder (a keychain) or that illi
   downloads: an account's folder logged out by the program, and what of
