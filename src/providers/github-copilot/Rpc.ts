@@ -7,7 +7,10 @@
 // call waits for its answer (an error's message thrown, its code and data
 // kept on the error); what the CLI asks of illi and tells it (a session's
 // events) go to `heard`. The CLI ending fails every call waiting, saying
-// why; a stop asks it to end (SIGTERM), then ends it (SIGKILL) past KILL.
+// why: one that ended before it told anything didn't start, said with its
+// exit code and the last line it wrote to stderr (a library it lacks, a
+// folder it may not run from), as the CLI is named. A stop asks it to end
+// (SIGTERM), then ends it (SIGKILL) past KILL, its end to wait for.
 // Closing its input ends it too, as it does when illi ends however it
 // ends.
 
@@ -20,14 +23,20 @@ import type { Subprocess } from "bun";
 // a request of its own (with its id, to answer)
 export type Heard = { method: string; params: any; id?: number | string };
 
-// a connection: the CLI's process, the calls waiting for their answers,
-// whether it ended and why, the last of what it wrote to stderr
+// a connection: the CLI's process and what its sentences call it, the
+// calls waiting for their answers, whether it told anything yet, whether
+// it ended and why, its exit code where it ended by itself (null: it
+// runs, or illi ended it), the last of what it wrote to stderr, its end
+// (the process gone, every call waiting failed)
 export type Conn = {
   proc   : Subprocess<"pipe", "pipe", "pipe">;
+  name   : string;
   next   : number;
   waits  : Map<number, { done: (result: any) => void; fail: (err: Error) => void }>;
+  began  : boolean;
   ended  : boolean;
   why    : string;
+  code   : number | null;
   tail   : string;
   exited : Promise<void>;
 };
@@ -38,8 +47,14 @@ export type Conn = {
 // how long a stop waits for the CLI to end before killing it (ms)
 const KILL = 3e3;
 
-// how much of what the CLI wrote to stderr is kept, to say why it ended
+// how much of what the CLI wrote to stderr is kept, to say why it ended,
+// and how much of its last line is said
 const TAIL = 4096;
+const LAST = 300;
+
+// how long a write the CLI's input refused waits for the CLI's end, which
+// says why (ms): then the closed input is all there is to say
+const SHUT = 2e3;
 
 // the end of a message's header, and its length in it
 const BREAK  = Buffer.from("\r\n\r\n");
@@ -50,11 +65,12 @@ const LENGTH = /^content-length:\s*(\d+)\s*$/im;
 
 export namespace Rpc {
 
-  // the CLI started (thrown at once: it isn't there); `heard` gets what
-  // it asks and tells
-  export function start(cmd: string[], cwd: string, env: Record<string, string>, heard: (conn: Conn, m: Heard) => void): Conn {
+  // the CLI started, named as its sentences call it (thrown at once: it
+  // isn't there); `heard` gets what it asks and tells. Its end, unless
+  // illi asked for it (stop), is said with its exit code (gone)
+  export function start(name: string, cmd: string[], cwd: string, env: Record<string, string>, heard: (conn: Conn, m: Heard) => void): Conn {
     const proc = Bun.spawn(cmd, { cwd, env, stdin: "pipe", stdout: "pipe", stderr: "pipe" });
-    const conn: Conn = { proc, next: 0, waits: new Map(), ended: false, why: "", tail: "", exited: Promise.resolve() };
+    const conn: Conn = { proc, name, next: 0, waits: new Map(), began: false, ended: false, why: "", code: null, tail: "", exited: Promise.resolve() };
     const out = Rpc.each(proc.stdout, (() => {
       let buf: Buffer = Buffer.alloc(0);
       return (chunk: Uint8Array) => void (buf = Rpc.take(Buffer.concat([buf, chunk]), (body) => Rpc.read(conn, body, heard)));
@@ -64,9 +80,23 @@ export namespace Rpc {
     conn.exited = (async () => {
       const code = await proc.exited;
       await Promise.race([Promise.all([out, err]), Bun.sleep(500)]);
-      Rpc.end(conn, conn.why || "it ended (exit code " + code + ")");
+      if (conn.why === "") {
+        conn.code = code;
+      }
+      Rpc.end(conn, Rpc.gone(conn, code));
     })();
     return conn;
+  }
+
+  // why a CLI that ended by itself did: one that told nothing didn't
+  // start, said by its name with the last line it wrote to stderr; one
+  // that had, it ended
+  export function gone(conn: Conn, code: number): string {
+    if (conn.began) {
+      return "it ended (exit code " + code + ")";
+    }
+    const last = conn.tail.split("\n").map((l) => l.trim()).filter((l) => l !== "").at(-1);
+    return conn.name + " didn't start (exit " + code + ")" + (last === undefined ? "" : ": " + last.slice(0, LAST));
   }
 
   // each chunk of a stream as it comes, till it ends (never thrown)
@@ -112,6 +142,7 @@ export namespace Rpc {
     if (m === null || typeof m !== "object") {
       return;
     }
+    conn.began = true;
     if (typeof m.method === "string") {
       heard(conn, { method: m.method, params: m.params ?? {}, ...(m.id !== undefined ? { id: m.id } : {}) });
       return;
@@ -162,7 +193,10 @@ export namespace Rpc {
     Rpc.write(conn, { jsonrpc: "2.0", id, error: { code: -32601, message } });
   }
 
-  // a message to the CLI, after its header (none once it ended)
+  // a message to the CLI, after its header (none once it ended). An
+  // input that won't take it is a CLI ending: its end says why (its exit
+  // code, what it wrote), waited for SHUT before the closed input is all
+  // that's said
   export function write(conn: Conn, msg: unknown): void {
     if (conn.ended) {
       return;
@@ -173,18 +207,20 @@ export namespace Rpc {
       conn.proc.stdin.write(body);
       conn.proc.stdin.flush();
     } catch {
-      Rpc.end(conn, "its input closed");
+      void Promise.race([conn.exited, Bun.sleep(SHUT)]).then(() => Rpc.end(conn, "its input closed"));
     }
   }
 
   // the CLI asked to end, then ended past KILL; why, as calls waiting
-  // are told
-  export function stop(conn: Conn, why: string): void {
+  // are told. Its end, a little past KILL at most, for one who waits on
+  // it (`illi uninstall`, before it removes the CLI's folder)
+  export function stop(conn: Conn, why: string): Promise<void> {
     if (!conn.ended) {
       conn.why ||= why;
       conn.proc.kill("SIGTERM");
       setTimeout(() => conn.proc.kill("SIGKILL"), KILL).unref();
     }
+    return conn.exited;
   }
 
   // the connection ended: every call waiting fails, saying why

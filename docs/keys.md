@@ -226,7 +226,9 @@ of the best match first, that match lit.
   show whole, a click on the `…` goes to where what shows starts); a
   click outside closes it. A drag over its text copies what it covers,
   as in the chat, and a double click a word (on an option it's a
-  click); a press let go where it landed still picks.
+  click), and Ctrl+C copies it again; a press on an option or a button
+  still picks it though the pointer slips along it before it's let go
+  (a drag off it chooses text).
 - On a question the row under the pointer lights and a click does what
   Enter does. What leads its answers (a command, why it is asked) shows
   whole up to half the screen, then cut, a dim line saying how much more

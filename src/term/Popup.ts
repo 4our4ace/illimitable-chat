@@ -105,6 +105,11 @@ type Aim = Target | Span[] | null;
 // the columns between two buttons side by side (popup_buttons)
 const GAP = 2;
 
+// the lines of a step's body (as given, each wrapped as it must be)
+// kept ahead of its buttons on a short screen (a device's: the line
+// saying where to go, a gap, its code)
+const LEAD = 3;
+
 // what a popup's content asks of its box, in columns with its frame: its
 // options' names whole, with their marks (names); all it shows whole
 // (wants); the least it takes (least); its rows with its frame at an
@@ -146,8 +151,9 @@ export function popup_size(m: Measure, w: number, h: number, was = 0): Place {
 // background not told), the box on a background of its own, at its
 // place (popup_size; as wide as it was painted last, if it is still the
 // one open); kept as painted (t.box), the pointer's row seen as it first
-// shows (it lights a row once it moves). The cursor's spot in it, if it
-// takes the typing (null: none)
+// shows (it lights a row once it moves), text chosen in another popup's
+// box let go (it stood for that one's text). The cursor's spot in it, if
+// it takes the typing (null: none)
 export function popup_paint(t: Term, rows: Screen.Piece[][], w: number, h: number): Screen.Spot | null {
   const of    = t.choose!;
   const was   = t.box?.of === of ? t.box : null;
@@ -159,9 +165,12 @@ export function popup_paint(t: Term, rows: Screen.Piece[][], w: number, h: numbe
   for (const piece of rows.flat()) {
     piece.line = piece.line.map((run) => ({ ...run, s: ink }));
   }
+  if (t.sel?.key === POPUP && was === null) {
+    t.sel = null;
+  }
   const text  = term_area(t, { key: POPUP, lines: box.lines, first: 0, row: at.row + 1, col: at.col + 2, w: at.w - 4, tall: box.lines.length });
   Paint.frame(text, at.w, box.title, box.foot).forEach((line, k) => {
-    rows[at.row + k].push({ col: at.col, w: at.w, line: panel === undefined ? line : line.map((r) => ({ ...r, s: { ...r.s, g: r.s.g || panel } })) });
+    rows[at.row + k]?.push({ col: at.col, w: at.w, line: panel === undefined ? line : line.map((r) => ({ ...r, s: { ...r.s, g: r.s.g || panel } })) });
   });
   t.box = { of, ...at, inset: 2, rows: box.rows, ...box.shape };
   if (box.field !== undefined) {
@@ -222,8 +231,14 @@ function popup_body(c: Chooser, iw: number): Paint.Line[] {
   if (c.body === undefined || c.body.length === 0) {
     return [];
   }
-  const lines = c.body.flatMap((l) => (l.length === 0 ? [[]] : Paint.runs_wrap(l.map((r) => ({ ...r, x: Paint.text_clean(r.x) })), Math.max(1, iw), false)));
+  const lines = popup_wrap(c.body, iw);
   return c.find !== null || c.names.length > 0 ? [...lines, []] : lines;
+}
+
+// lines as a box shows them iw wide: each wrapped at its words (a word
+// too long at its characters), cleaned, an empty one a gap
+function popup_wrap(body: Paint.Line[], iw: number): Paint.Line[] {
+  return body.flatMap((l) => (l.length === 0 ? [[]] : Paint.runs_wrap(l.map((r) => ({ ...r, x: Paint.text_clean(r.x) })), Math.max(1, iw), false)));
 }
 
 // a list's title, its keys after it (a line asked's: no arrows), as fits
@@ -354,14 +369,20 @@ function popup_heights(c: Chooser, list: Array<string | number>, iw: number): nu
 // place, after ASKED, its hint while empty, a secret's a dot a character
 // (never its text), with no options and no note; its foot what it takes.
 // A step's body (/login's) leads it all, a blank line after it, cut to
-// leave its search and a few options room on a short screen; a step of
-// no options and no line asked shows its body alone. Options that are
-// buttons (Chooser buttons) sit at the box's foot, side by side
-// (popup_buttons), under the line asked if there is one
+// leave its search and a few options room on a short screen (an
+// ellipsis where its words were cut: popup_said); a step of no options
+// and no line asked shows its body alone. Options that are buttons
+// (Chooser buttons) sit at the box's foot, side by side (popup_buttons),
+// under the line asked if there is one: boxed where the body still shows
+// whole, else a line a row, as many as fit beside the body's first LEAD
+// lines (a device's code). Never more lines than the box holds
 function popup_list(c: Chooser, w: number, h: number): Omit<Laid, "place"> {
   const iw    = w - 4;
-  const keys  = c.buttons === true ? popup_buttons(c, iw) : null;
-  const said  = popup_body(c, iw).slice(0, Math.max(0, h - 2 - (c.find === null ? 0 : 1) - (keys?.length ?? Math.min(c.names.length, 3))));
+  const body  = popup_body(c, iw);
+  const space = h - 2 - (c.find === null ? 0 : 1);
+  const ahead = Math.min(body.length, popup_wrap((c.body ?? []).slice(0, LEAD), iw).length);
+  const keys  = c.buttons === true ? popup_buttons(c, iw, space - body.length, Math.max(1, space - ahead)) : null;
+  const said  = popup_said(body, Math.max(0, space - (keys?.length ?? Math.min(c.names.length, 3))), iw);
   const room  = h - 2 - said.length;
   const lead  = c.ask !== null ? ASKED : GLYPH.find;
   const fits  = iw - 1 - Paint.text_width(lead);
@@ -384,7 +405,7 @@ function popup_list(c: Chooser, w: number, h: number): Omit<Laid, "place"> {
   const says  = popup_foot(c);
   const foot  = says === "" ? [] : [Paint.Run(popup_cut(" " + says + " ", iw + 1), { ...Paint.DIM, b: true })];
   const title = [Paint.Run(popup_title(c, iw + 1), { ...Paint.DIM, b: true })];
-  const fill  = [...items, ...blank(h - 2 - items.length)];
+  const fill  = [...items, ...blank(h - 2 - items.length)].slice(0, Math.max(0, h - 2));
   const after = Paint.text_width(text.slice(c.find?.pos ?? 0));
   const at    = c.find === null ? undefined : { row: 1 + said.length, col: Math.min(w - 3, 2 + Paint.text_width(lead) + Math.max(0, Paint.text_width(typed) - after)) };
   const from  = typed === text ? 0 : text.length - (typed.length - "…".length);
@@ -392,16 +413,30 @@ function popup_list(c: Chooser, w: number, h: number): Omit<Laid, "place"> {
   return { lines: fill.map(([l]) => l), title, foot, rows: [null, ...fill.map(([, aim]) => aim), null], at, shape: { list: 1 + said.length + find.length, lines: rows, tall: keys !== null ? 0 : view.length, ahead: 0, lead: 0, folds: false }, field };
 }
 
+// a step's body as its box shows it in n lines: whole where it fits,
+// else its first lines, the last of them ending in an ellipsis (none
+// where only gaps were left out)
+function popup_said(body: Paint.Line[], n: number, iw: number): Paint.Line[] {
+  if (body.slice(n).every((l) => l.length === 0)) {
+    return body.slice(0, n);
+  }
+  return n === 0 ? [] : [...body.slice(0, n - 1), [...Paint.line_cut(body[n - 1], 0, Math.max(0, iw - 1))[1], Paint.Run("…", Paint.DIM)]];
+}
+
 // a step's actions as buttons (Chooser buttons: not a list to choose
 // from), as many side by side as fit iw wide (GAP between), the rest on
-// rows under them; each its name in a square box, the lit one in the
-// accent, bold (none lit beside a line asked: typing goes there). Three
-// lines a row, each with the buttons it crosses (Box spans: a click
-// anywhere on one presses it)
-function popup_buttons(c: Chooser, iw: number): Array<[Paint.Line, Span[]]> {
+// rows under them; each its name (cut to fit) in a square box, the lit
+// one in the accent, bold (none lit beside a line asked: typing goes
+// there). Three lines a row, each with the buttons it crosses (Box
+// spans: a click anywhere on one presses it), where they fit in `room`
+// lines (what the body leaves whole); else a line a row, each name in
+// brackets ([ Open the page ]), as many rows as fit in `most`, the lit
+// one's first
+function popup_buttons(c: Chooser, iw: number, room = Infinity, most = room): Array<[Paint.Line, Span[]]> {
   const lit  = c.ask !== null ? -1 : c.shown[c.at]?.k ?? -1;
   const ks   = c.ask !== null ? c.names.map((_, k) => k) : c.shown.map((m) => m.k);
-  const wide = (k: number) => Paint.text_width(Paint.text_clean(c.names[k])) + 4;
+  const name = (k: number) => popup_cut(Paint.text_clean(c.names[k]), Math.max(1, iw - 4));
+  const wide = (k: number) => Paint.text_width(name(k)) + 4;
   const rows: number[][] = [];
   let used = 0;
   for (const k of ks) {
@@ -414,25 +449,32 @@ function popup_buttons(c: Chooser, iw: number): Array<[Paint.Line, Span[]]> {
     }
   }
   const accent = Draw.draw_tokens().accent;
-  return rows.flatMap((row) => {
-    const lines: Array<[Paint.Line, Span[]]> = [[[], []], [[], []], [[], []]];
+  const boxed  = 3 * rows.length <= room;
+  const all    = rows.map((row) => {
+    const lines: Array<[Paint.Line, Span[]]> = boxed ? [[[], []], [[], []], [[], []]] : [[[], []]];
     let col = 0;
     row.forEach((k, n) => {
-      const name  = Paint.text_clean(c.names[k]);
       const w     = wide(k);
       const on    = k === lit;
       const edge  = on ? { ...Paint.INK, b: true, c: accent } : Paint.DIM;
       const label = on ? { ...Paint.INK, b: true, c: accent } : Paint.INK;
       const gap   = n === 0 ? [] : [Paint.Run(" ".repeat(GAP))];
       col += n === 0 ? 0 : GAP;
-      lines[0][0].push(...gap, Paint.Run("┌" + "─".repeat(w - 2) + "┐", edge));
-      lines[1][0].push(...gap, Paint.Run("│ ", edge), Paint.Run(name, label), Paint.Run(" │", edge));
-      lines[2][0].push(...gap, Paint.Run("└" + "─".repeat(w - 2) + "┘", edge));
+      if (boxed) {
+        lines[0][0].push(...gap, Paint.Run("┌" + "─".repeat(w - 2) + "┐", edge));
+        lines[1][0].push(...gap, Paint.Run("│ ", edge), Paint.Run(name(k), label), Paint.Run(" │", edge));
+        lines[2][0].push(...gap, Paint.Run("└" + "─".repeat(w - 2) + "┘", edge));
+      } else {
+        lines[0][0].push(...gap, Paint.Run("[ ", edge), Paint.Run(name(k), label), Paint.Run(" ]", edge));
+      }
       lines.forEach(([, spans]) => spans.push({ col, to: col + w, aim: { $: "option", k } }));
       col += w;
     });
     return lines;
   });
+  const fit   = Math.max(0, Math.min(rows.length, boxed ? rows.length : most));
+  const first = Math.max(0, Math.min(rows.findIndex((row) => row.includes(lit)), rows.length - fit));
+  return all.slice(first, first + fit).flat();
 }
 
 // the end of a text, as many of its last characters as fit in w
@@ -624,7 +666,11 @@ function popup_about(text: string, w: number): string {
 // the option there, a paint only as the lit one changes (popup_hover); a
 // press arms what it lands on (an option, a row, a command, the box,
 // outside) and a release on the same takes it (popup_click), so a slip
-// never picks; a drag, the right button, nothing; in a popup or the
+// never picks; a drag, the right button, nothing. In a list's popup a
+// press also starts a choice of its text (Select.ts term_box_press), a
+// drag grows it and a release copies it, no click then; one pressed on
+// an option or a button chooses only once the pointer leaves it, so a
+// press that slips along it still picks it; in a popup or the
 // question, the click that only focused the terminal's window (Screen
 // focusing), nothing either. A press taken keeps its release, though its
 // box be gone since; a press again (a double or triple click) goes
@@ -663,8 +709,9 @@ export function popup_mouse(t: Term, key: string): boolean {
     return aim.press !== null;
   }
   const took = of !== null || aim.press !== null;
+  const still = of !== null && t.sel?.key === POPUP && t.sel.held && !t.sel.moved && typeof aim.press?.on === "object" && aim.press.on !== null && at !== null && popup_same(aim.press.on, at);
   if (of !== null && t.sel?.held) {
-    if (t.sel.key === POPUP && key === "Drag") {
+    if (t.sel.key === POPUP && key === "Drag" && !still) {
       term_box_drag(t);
     } else if (t.sel.key !== POPUP) {
       term_let_go(t);
@@ -673,7 +720,10 @@ export function popup_mouse(t: Term, key: string): boolean {
   if (key === "Release" || key === "RightRelease") {
     const press  = aim.press;
     aim.press    = null;
-    const chosen = key === "Release" && of !== null && term_box_release(t);
+    if (still) {
+      t.sel = null;
+    }
+    const chosen = key === "Release" && of !== null && !still && term_box_release(t);
     if (!chosen && key === "Release" && on !== null && press?.of === on && at !== null && popup_same(press.on, at)) {
       popup_click(t, on, at);
     }

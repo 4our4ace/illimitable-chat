@@ -5,8 +5,11 @@
 // --programs removes the CLIs illi downloaded (each provider's
 // programs) and keeps the chats, settings and accounts; --everything logs
 // each account of a plan's own program out by it (Claude Code's, stood in
-// for), then removes illi's folder whole; neither, off a terminal, says
-// how to pick and removes nothing; both refused. Never while another illi
+// for), then removes illi's folder whole, once the CLIs that logged them
+// out have ended (one that writes its folder as it ends leaves nothing
+// behind); neither, off a terminal, says how to pick and removes nothing;
+// both refused; any other word after it (upgrade, version) is unknown
+// and does nothing, help shows the usage. Never while another illi
 // holds a project's chat; never illi's folder whole where it's the home
 // folder, holds it, or isn't illi's. An illi run from its source says the
 // source is left.
@@ -49,8 +52,8 @@ function home(name: string): { home: string; root: string } {
 
 // `illi uninstall` run with these arguments, in that home: its output and
 // exit code
-async function run(where: { home: string; root?: string }, ...args: string[]): Promise<{ out: string; code: number }> {
-  const env: Record<string, string> = { PATH: process.env.PATH ?? "", HOME: where.home, ILLI_CLAUDE: path.join(where.home, "bin", "claude"), ILLI_VENDORS: "claude-api" };
+async function run(where: { home: string; root?: string; env?: Record<string, string> }, ...args: string[]): Promise<{ out: string; code: number }> {
+  const env: Record<string, string> = { PATH: process.env.PATH ?? "", HOME: where.home, ILLI_CLAUDE: path.join(where.home, "bin", "claude"), ILLI_VENDORS: "claude-api", ...where.env };
   if (where.root !== undefined) {
     env.ILLI_DIR = where.root;
   }
@@ -81,6 +84,49 @@ test("--everything logs each account of a plan's own program out by it (illi's a
   expect(out).toContain("Removed ~/.illi (illi's folder: your chats, settings and accounts, ");
   expect(fs.existsSync(at.root)).toBe(false);
   expect(fs.existsSync(at.home + "/bin/claude")).toBe(true);
+});
+
+test("--everything waits for a CLI that logged an account out to end before illi's folder goes: one that writes its folder as it ends leaves nothing behind", async () => {
+  const at  = home("late");
+  const cli = path.join(at.home, "copilot.js");
+  fs.mkdirSync(at.root + "/copilot/gh1", { recursive: true });
+  fs.writeFileSync(at.root + "/accounts.json", JSON.stringify({ "github-copilot": { use: "gh1", accounts: [{ id: "gh1", email: "octocat", plan: "", org: "" }] } }));
+  fs.writeFileSync(cli, String.raw`
+const fs = require("node:fs");
+const out = (m) => { const body = Buffer.from(JSON.stringify(m)); process.stdout.write("Content-Length: " + body.length + "\r\n\r\n"); process.stdout.write(body); };
+const late = () => setTimeout(() => { fs.mkdirSync(process.env.COPILOT_HOME + "/logs", { recursive: true }); fs.writeFileSync(process.env.COPILOT_HOME + "/logs/late.log", "bye"); process.exit(0); }, 400);
+process.on("SIGTERM", late);
+let buf = Buffer.alloc(0);
+process.stdin.on("data", (chunk) => {
+  buf = Buffer.concat([buf, chunk]);
+  for (;;) {
+    const at = buf.indexOf("\r\n\r\n");
+    if (at < 0) break;
+    const n = Number(/Content-Length: (\d+)/i.exec(buf.subarray(0, at).toString())[1]);
+    if (buf.length < at + 4 + n) break;
+    const m = JSON.parse(buf.subarray(at + 4, at + 4 + n).toString());
+    buf = buf.subarray(at + 4 + n);
+    const result = m.method === "connect" ? { protocolVersion: 3 } : m.method === "account.getCurrentAuth" ? { authInfo: { login: "octocat" } } : {};
+    out({ jsonrpc: "2.0", id: m.id, result });
+  }
+});
+`);
+  const { out, code } = await run({ home: at.home, env: { ILLI_COPILOT: process.execPath + " " + cli } }, "--everything");
+  expect([code, out.includes("Logged out of octocat (GitHub Copilot plan)."), out.includes("Removed ~/.illi (illi's folder")]).toEqual([0, true, true]);
+  await Bun.sleep(800);
+  expect(fs.existsSync(at.root)).toBe(false);
+});
+
+test("after uninstall, only what goes may follow: upgrade and version are unknown there and do nothing; help shows the usage", async () => {
+  const at = home("words");
+  for (const word of ["upgrade", "version", "--version", "uninstall"]) {
+    const odd = await run({ home: at.home }, "--programs", word);
+    expect([odd.code, odd.out.startsWith("illi: unknown argument " + word + ".\n\nUsage: illi")]).toEqual([1, true]);
+    expect(odd.out).not.toContain("upgrading");
+  }
+  const help = await run({ home: at.home }, "--everything", "--help");
+  expect([help.code, help.out.startsWith("Usage: illi"), help.out.includes("uninstalling")]).toEqual([0, true, false]);
+  expect([fs.existsSync(at.root + "/copilot/cli/1.0.109/copilot"), fs.existsSync(at.root + "/chat/projects/home.sqlite")]).toEqual([true, true]);
 });
 
 test("neither off a terminal says how to pick, both are refused; nothing removed", async () => {

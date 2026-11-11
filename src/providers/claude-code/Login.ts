@@ -16,7 +16,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { Accounts, OWN, type Folder } from "../../config/Accounts.ts";
 import * as config from "../../config/Config.ts";
-import { login_after, login_edit, login_paste, login_question, login_step, login_sure, type Account, type Page } from "../../term/LoginCommands.ts";
+import { login_after, login_edit, login_paste, login_step, login_sure, type Account, type Page } from "../../term/LoginCommands.ts";
 import type { Term } from "../../term/Term.ts";
 import { ClaudeCode } from "./ClaudeCode.ts";
 
@@ -48,9 +48,10 @@ function login_claude_name(a: Folder, all: Folder[] = []): string {
 
 // an account more: none yet, the user's own Claude Code's (its login, if
 // it's logged in, or a sign-in to another, asked once Claude Code said,
-// a step of /login's saying illi asks it meanwhile, Esc stopping it as a
-// sign-in's; not, it signs in); else one signed in to in a new folder of
-// illi's. Esc on what it asks goes back to `back`
+// by the step of /login's saying illi asks it meanwhile, Esc stopping it
+// as a sign-in's, so the answer never takes a list opened meanwhile;
+// not, it signs in); else one signed in to in a new folder of illi's.
+// Esc on what it asks goes back to `back`
 async function login_claude_add(t: Term, back: () => void): Promise<void> {
   if ((config.config_accounts_read()?.["claude-code"]?.accounts.length ?? 0) > 0) {
     return login_claude_sign(t, null, back);
@@ -66,14 +67,15 @@ async function login_claude_add(t: Term, back: () => void): Promise<void> {
   if (step.stop.signal.aborted) {
     return;
   }
-  step.close();
   if (who === null) {
+    step.close();
     return login_claude_sign(t, OWN, back);
   }
   const mine = { id: OWN, ...who };
-  login_question(t, "Connect Claude plan", ["Use your Claude Code's login", "Sign in to another account"], [login_claude_name(mine), "with a code at Claude's page"], (k) => {
+  step.question([], ["Use your Claude Code's login", "Sign in to another account"], [login_claude_name(mine), "with a code at Claude's page"], (k) => {
+    step.close();
     return k === 1 ? void login_claude_sign(t, null, back) : void login_claude_keep(t, mine, "Connected your Claude plan (" + login_claude_name(mine) + "): its models are in /model.");
-  }, back);
+  });
 }
 
 // a new folder of illi's, made now (readable by the user alone), so

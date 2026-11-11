@@ -30,7 +30,9 @@
 // it does. A stop cancels the turn, what streamed logged as cut off; a
 // message sent mid-run is left. The CLIs run in a pool: calls at once
 // share one, a spare stands ready, one ends once its calls did, all as
-// illi ends. A CLI older than 1.5.2 is refused. No sign-in, or one run
+// illi ends. A CLI older than 1.5.2 is refused; one that can't start
+// says why (its exit code, its own last words) and isn't tried again. No
+// sign-in, or one run
 // out, ends a call at once, never waiting on a browser, and /login offers
 // a sign-in again; /login's sign-in tells Google's page's link, gives the
 // CLI the code pasted, tells the plan and marks the folder signed in (the
@@ -537,6 +539,23 @@ test("a CLI that fails to start (one older than 1.5.2) ends, so no later call ta
   delete process.env.FAKE_VERSION;
   expect((await call("turn")).end.ok).toBe(true);
   Antigravity.close();
+});
+
+test("a CLI that can't start says why, with its exit code and its own last words, and isn't tried again", async () => {
+  Antigravity.close();
+  await Bun.sleep(100);
+  const bin = Agy.bin;
+  fs.writeFileSync(DIR + "/broken", "#!/bin/sh\necho 'starting' >&2\necho 'agy: error while loading shared libraries: libfoo.so: cannot open shared object file' >&2\nexit 127\n", { mode: 0o755 });
+  Agy.bin = [DIR + "/broken"];
+  try {
+    const { end } = await call("turn");
+    expect([end.ok, end.stop, end.again, end.text]).toEqual([false, "down", undefined, "Google's Antigravity CLI didn't start (exit 127): agy: error while loading shared libraries: libfoo.so: cannot open shared object file"]);
+    await Bun.sleep(300);
+    expect(Antigravity.running()).toBe(0);
+  } finally {
+    Agy.bin = bin;
+    Antigravity.close();
+  }
 });
 
 test("no sign-in, or one run out, ends a call at once, never signing in nor waiting on a browser; /login offers a sign-in again till a session is made (signed in again elsewhere)", async () => {

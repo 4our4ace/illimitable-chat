@@ -22,14 +22,16 @@
 // the web's. Each failure the CLI tells lands as its kind says: too long
 // (`full`, what streamed logged as cut off), a sign-in run out (/login
 // offers a sign-in again), the plan's credits, a rate limit, a policy, a
-// busy service, a CLI that died. A stop aborts the turn, what streamed
+// busy service, a CLI that died; one that can't start says why (its exit
+// code, its own last words) and isn't tried again. A stop aborts the turn, what streamed
 // logged as cut off; a message sent mid-run is left. Calls at once share
 // one CLI; a CLI whose protocol illi doesn't speak is refused and ends;
 // all end as illi ends. The account's models are its own, as the CLI
 // lists them, kept for the next start, the chat told; its plan's use
 // told. /login's sign-in tells GitHub's page and the code, and whom it
-// signed in as; a failed one says the CLI's words; its logout logs the
-// folder out. No account, or no CLI, says what to do. The CLI: each
+// signed in as; a failed one says the CLI's words; one stopped while the
+// CLI starts ends at once, no page told, the CLI let go; its logout logs
+// the folder out. No account, or no CLI, says what to do. The CLI: each
 // machine's pinned build is one illi takes (1.0.100 or later, from
 // GitHub's releases); the user's own runs once it's 1.0.100 or later, its
 // version asked as illi runs it (`--no-auto-update --version`), an older
@@ -55,7 +57,8 @@ fs.writeFileSync(DIR + "/accounts.json", JSON.stringify({ "github-copilot": { us
 
 // the stand-in CLI: logs what it's started with and each request; signs
 // in over its connection (session.accounts.login) as the real one does,
-// telling GitHub's page and a code; plays the scene its message names
+// telling GitHub's page and a code; plays the scene its message names;
+// takes FAKE_START ms to start (to answer connect)
 const FAKE = String.raw`
 const fs = require("node:fs");
 const log = (o) => fs.appendFileSync(process.env.FAKE_LOG, JSON.stringify({ pid: process.pid, ...o }) + "\n");
@@ -155,7 +158,7 @@ async function advance(params) {
 }
 async function handle(m) {
   switch (m.method) {
-    case "connect": return { protocolVersion: Number(e.FAKE_PROTOCOL ?? 3) };
+    case "connect": await new Promise((done) => setTimeout(done, Number(e.FAKE_START ?? 0))); return { protocolVersion: Number(e.FAKE_PROTOCOL ?? 3) };
     case "ping": return { message: "pong", protocolVersion: Number(e.FAKE_PROTOCOL ?? 3) };
     case "session.create": sessions.set(m.params.sessionId, m.params); return { sessionId: m.params.sessionId };
     case "session.send": setTimeout(() => play(m.params.sessionId, m.params.prompt), 10); return { messageId: "u1" };
@@ -242,6 +245,7 @@ beforeEach(() => {
   delete process.env.FAKE_PROTOCOL;
   delete process.env.FAKE_LOGIN;
   delete process.env.FAKE_BARRED;
+  delete process.env.FAKE_START;
 });
 
 // what the stand-in logged
@@ -339,6 +343,48 @@ test("a CLI that dies mid-call ends it as busy; the next call starts another", a
   expect([died.end.ok, died.end.stop, died.end.again]).toEqual([false, "down", true]);
   const next = await call("turn");
   expect(next.end.text).toBe("Hello");
+});
+
+test("a CLI that can't start says why, with its exit code and its own last words, and isn't tried again; a sign-in says the same", async () => {
+  Copilot.close();
+  await Bun.sleep(100);
+  const bin = CopilotCli.bin;
+  fs.writeFileSync(DIR + "/broken", "#!/bin/sh\necho 'starting' >&2\necho 'copilot: error while loading shared libraries: libfoo.so: cannot open shared object file' >&2\nexit 127\n", { mode: 0o755 });
+  CopilotCli.bin = [DIR + "/broken"];
+  try {
+    const why = "GitHub's Copilot CLI didn't start (exit 127): copilot: error while loading shared libraries: libfoo.so: cannot open shared object file";
+    const { end } = await call("turn");
+    expect([end.ok, end.stop, end.again, end.text]).toEqual([false, "down", undefined, why]);
+    await expect(Copilot.signin(DIR + "/copilot/gh10", new AbortController().signal, () => {}, async () => true)).rejects.toThrow(why);
+    expect(Copilot.running()).toBe(0);
+  } finally {
+    CopilotCli.bin = bin;
+  }
+});
+
+test("a sign-in stopped while the CLI starts ends at once: no page or code told, no session made, the CLI let go once it started; one stopped before it began starts no CLI", async () => {
+  Copilot.close();
+  await Bun.sleep(100);
+  process.env.FAKE_START = "1000";
+  const stop = new AbortController();
+  const asked: string[] = [];
+  const held = Copilot.signin(DIR + "/copilot/gh8", stop.signal, (url) => asked.push(url), async () => true);
+  for (let n = 0; n < 250 && !logged().some((l) => l.method === "connect"); n++) {
+    await Bun.sleep(20);
+  }
+  stop.abort();
+  await expect(held).rejects.toThrow("the sign-in was stopped");
+  expect([Copilot.running(), Copilot.held()]).toEqual([1, 1]);
+  for (let n = 0; n < 250 && Copilot.held() > 0; n++) {
+    await Bun.sleep(20);
+  }
+  await Bun.sleep(100);
+  expect([asked, Copilot.held(), logged().filter((l) => l.method !== undefined).map((l) => l.method)]).toEqual([[], 0, ["connect"]]);
+  Copilot.close();
+  await Bun.sleep(100);
+  fs.rmSync(process.env.FAKE_LOG!, { force: true });
+  await expect(Copilot.signin(DIR + "/copilot/gh9", AbortSignal.abort(), (url) => asked.push(url), async () => true)).rejects.toThrow("the sign-in was stopped");
+  expect([asked, Copilot.running(), logged(), fs.existsSync(DIR + "/copilot/gh9")]).toEqual([[], 0, [], false]);
 });
 
 test("a stop aborts the turn, what streamed logged as cut off; one the CLI doesn't end is given up; a message sent mid-run is left", async () => {

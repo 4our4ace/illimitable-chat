@@ -160,8 +160,11 @@ export type Call = Try;
 const AGAIN = 60e3;
 
 // the patient calls waiting to ask again, each one's wake (AskAI.wake):
-// there only while it waits between two tries
+// there only while it waits between two tries; how many wakes there
+// were, so a try out as one came asks again at once as it fails, the
+// nap skipped (the chat moved meanwhile)
 const NAPS = new Set<() => void>();
+let woken  = 0;
 
 
 // the prefixes cached, by key (AskAI.keys)
@@ -185,13 +188,16 @@ export namespace AskAI {
       call.stop();
     };
     const [out, feed] = AskAI.tie(on, send, stop);
-    let call = AskAI.start(ask, feed.on);
+    let since = woken;
+    let call  = AskAI.start(ask, feed.on);
     const run = async (): Promise<End> => {
       let end = await call.done;
       for (;;) {
         const wait = ask.patient === true && !end.ok && end.stop !== "fail" && end.stop !== "full" && end.stop !== "lost";
         if (wait) {
           ask.stuck?.(end.text);
+        }
+        if (wait && woken === since) {
           const woke = new AbortController();
           const up   = () => woke.abort();
           NAPS.add(up);
@@ -201,7 +207,8 @@ export namespace AskAI {
         if (halt.signal.aborted || !wait) {
           return end;
         }
-        call = AskAI.start(ask.anew?.() ?? ask, feed.on);
+        since = woken;
+        call  = AskAI.start(ask.anew?.() ?? ask, feed.on);
         end.left.forEach(send);
         end = await call.done;
       }
@@ -213,6 +220,7 @@ export namespace AskAI {
   // the patient calls waiting to ask again ask at once (a chat moved to
   // another vendor: a summary's asks the compactor of its pick now)
   export function wake(): void {
+    woken += 1;
     [...NAPS].forEach((up) => up());
   }
 

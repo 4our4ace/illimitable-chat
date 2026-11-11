@@ -221,7 +221,7 @@ test.skipIf(!LIVE)("Google's real CLI, the pinned build, through illi's runner a
   expect(cmd[0]).toBe(path.join(Agy.home(), Agy.pin.version, Agy.pin.cmd));
 
   // the CLI says it's the pinned version
-  const conn  = Acp.start([...cmd, ...Antigravity.flags(FOLDER)], Antigravity.work(FOLDER), Antigravity.env(FOLDER), () => {}, () => {});
+  const conn  = Acp.start("Google's Antigravity CLI", [...cmd, ...Antigravity.flags(FOLDER)], Antigravity.work(FOLDER), Antigravity.env(FOLDER), () => {}, () => {});
   const hello = await Acp.call(conn, "initialize", Antigravity.hello(), 90e3);
   Acp.stop(conn, "its version read");
   await conn.exited;

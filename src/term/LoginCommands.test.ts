@@ -34,9 +34,12 @@
 // said to be its) with Try again, and Esc stopping it, back to the
 // accounts, each leaving no folder, as does one signed in that can't be
 // kept (logged out); a sign-in whose popup something else took is shown
-// again by /login; signed in, kept and in use, its folder readable by
-// its owner alone. Enter
-// switches; Del leaves your Claude Code logged in, and logs one of
+// again by /login, as is an answer come meanwhile (whom Claude Code is
+// logged in as, never over the list that took the popup), one stopped
+// from outside (a profile's switch) never; a step's button pressed
+// shows the same popup again, what changed of it kept; signed in, kept
+// and in use, its folder readable by its owner alone. Enter switches;
+// Del leaves your Claude Code logged in, and logs one of
 // illi's out, its folder gone; logging out of the Claude plan logs all
 // of illi's out, the plan no longer offered, your Claude Code still
 // logged in.
@@ -78,7 +81,7 @@ case "$1 $2" in
 esac
 `, { mode: 0o755 });
 
-const { term_login } = await import("./LoginCommands.ts");
+const { login_device, login_step, term_login } = await import("./LoginCommands.ts");
 const { term_choose_key, term_esc } = await import("./Keys.ts");
 const { ChatGPT } = await import("../providers/chatgpt/ChatGPT.ts");
 const { ClaudeCode } = await import("../providers/claude-code/ClaudeCode.ts");
@@ -407,6 +410,35 @@ test("Del logs an account out, asked first: one kept apart forgotten, the one in
 const claude = () => Accounts.read(config.ROOT)?.["claude-code"];
 const FOLDER = (id: string) => config.ROOT + "/claude/" + id;
 
+test("an answer come while another list took the popup waits for /login: Claude Code's whom-it's-logged-in-as, Ctrl+P's palette open meanwhile", async () => {
+  fs.mkdirSync(OWN_CLAUDE, { recursive: true });
+  fs.writeFileSync(OWN_CLAUDE + "/who.json", JSON.stringify({ loggedIn: true, authMethod: "claude.ai", email: "me@example.com", subscriptionType: "max", orgName: "Org" }));
+  const t = term();
+  term_login(t);
+  pick(t, "Claude");
+  const status = ClaudeCode.status;
+  let told = false;
+  ClaudeCode.status = (async (...args: Parameters<typeof status>) => {
+    const who = await status(...args);
+    told = true;
+    return who;
+  }) as typeof status;
+  try {
+    pick(t, "Claude plan");
+    const palette = { title: "Palette", names: [] };
+    t.choose = palette;
+    await until(() => told);
+    await Bun.sleep(10);
+    expect(t.choose).toBe(palette);
+    term_login(t);
+    expect([t.choose.title, t.choose.names]).toEqual(["Connect Claude plan", ["Use your Claude Code's login", "Sign in to another account"]]);
+    term_choose_key(t, t.choose, "Esc");
+    expect(t.login).toBeNull();
+  } finally {
+    ClaudeCode.status = status;
+  }
+});
+
 test("the Claude plan, your Claude Code logged in: its login connects it (or a sign-in to another); runs on it as its environment names it", async () => {
   fs.mkdirSync(OWN_CLAUDE, { recursive: true });
   fs.writeFileSync(OWN_CLAUDE + "/who.json", JSON.stringify({ loggedIn: true, authMethod: "claude.ai", email: "me@example.com", subscriptionType: "max", orgName: "Org" }));
@@ -483,6 +515,28 @@ test("a sign-in shown again: something else took the popup meanwhile (Ctrl+P's),
   await until(() => t.login === null && !fs.existsSync(FOLDER("c2")));
   term_login(t);
   expect(t.choose.title).toBe("Providers");
+});
+
+test("a step's button pressed shows the same popup again, what changed of it since kept (a browser that didn't open, said in its body); a sign-in stopped from outside (a profile's switch) never shows again", () => {
+  const t = term();
+  t.scr.tty = false;
+  const write = process.stdout.write;
+  process.stdout.write = (() => true) as any;
+  try {
+    const step = login_step(t, "Sign in to GitHub", () => {});
+    login_device(t, step, "https://github.com/login/device", "ABCD-1234", "authorize");
+    const c = t.choose;
+    c.body = [[{ x: "Your browser didn't open", s: {} }]];
+    term_choose_key(t, c, "Right");
+    term_choose_key(t, c, "Enter");
+    expect([t.choose, said(t), c.foot(1)]).toEqual([c, "Your browser didn't open", "Copied the code · Esc stop"]);
+    t.choose = { title: "Palette", names: [] };
+    t.login.abort();
+    term_login(t);
+    expect(t.choose.title).toBe("Providers");
+  } finally {
+    process.stdout.write = write;
+  }
 });
 
 test("a sign-in ends as Claude Code does, though a child it left holds its output open: a wrong code says why, a stop ends it at once", async () => {

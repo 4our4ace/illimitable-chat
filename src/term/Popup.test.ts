@@ -38,7 +38,11 @@
 // click given up (a press and a release on an option still pick it). A
 // step's actions are square buttons side by side at the box's foot,
 // moved among by Left and Right, pressed by Enter or a click; beside a
-// line asked, a click presses one, the line kept.
+// line asked, a click presses one, the line kept. On a small screen they
+// never leave the box: a line each, as many rows as fit, the body cut
+// with an ellipsis. A press that slips along a button or an option
+// still presses it; Ctrl+C copies a popup's chosen text again; text
+// chosen is let go as another popup shows, or none does.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -697,5 +701,78 @@ test("a step's actions are square buttons side by side at the box's foot, the li
     const at = button(u, "Copy the link");
     click(u, at.row, at.col);
     expect([pressed, u.choose, typed.find!.text]).toEqual([[1], typed, "abc"]);
+  });
+});
+
+test("on a small screen a step's buttons never leave its box: a line each in brackets where boxes would cut its body, as many rows as fit (the lit one's), the body cut with an ellipsis, its code kept where there's room", () => {
+  const body = [[Paint.Run("Open https://github.com/login/device and enter this code:")], [], [Paint.Run("    ABCD-1234")], [], [Paint.Run("illi opened the page in your browser and copied the code. The code is good for 15 minutes; illi waits for you to authorize there.")]];
+  const show = (cols: number, rows: number, keys: string[] = []) => sized(cols, rows, () => {
+    const t = term();
+    term_chooser(t, "Sign in to GitHub", ["Open the page", "Copy the code", "Copy the link"], ["", "", ""], -1, () => {}, { body, size: { w: 80, h: 14 }, buttons: true });
+    keys.forEach((k) => term_grab(t, k));
+    paint(t);
+    expect(t.box.row + t.box.h).toBeLessThanOrEqual(rows - 1);
+    return inside(t, cols).join("\n");
+  });
+  for (const [cols, rows] of [[60, 8], [36, 10], [30, 8], [44, 12]]) {
+    const shown = show(cols, rows);
+    expect([shown.includes("┌"), shown.includes("[ Open the page ]"), shown.includes("…")]).toEqual([false, true, true]);
+  }
+  expect(show(36, 10)).toContain("ABCD-1234…");
+  expect(show(36, 10, ["Right", "Right"])).toContain("[ Copy the link ]");
+  const tall = show(50, 24);
+  expect([tall.includes("authorize"), tall.includes("there."), tall.includes("[ Copy the link ]"), tall.includes("┌")]).toEqual([true, true, true, false]);
+  expect(show(120, 30)).toContain("│ Copy the link │");
+});
+
+test("a press on a button or an option that slips along it still presses it; Ctrl+C copies the popup's chosen text again, the step kept; text chosen is let go as another popup shows, or none does", () => {
+  sized(120, 30, () => {
+    const t = term();
+    const picked: number[] = [];
+    let backs = 0;
+    const write = process.stdout.write;
+    process.stdout.write = (() => true) as any;
+    try {
+      const c = term_chooser(t, "Sign in to GitHub", ["Open the page", "Copy the code"], ["", ""], -1, (k) => picked.push(k), { body: [[Paint.Run("Open https://github.com/login/device and enter this code:")]], size: { w: 80, h: 14 }, buttons: true, back: () => backs++ });
+      paint(t);
+      const at = button(t, "Copy the code");
+      press(t, at.row, at.col);
+      drag(t, at.row, at.col + 1);
+      let_go(t, at.row, at.col + 1);
+      expect([picked, t.notices.length]).toEqual([[1], 0]);
+      t.choose = c;
+      paint(t);
+      const [row, from] = [t.box.row + 1, t.box.col + 2];
+      press(t, row, from + 5);
+      drag(t, row, from + 35);
+      let_go(t, row, from + 35);
+      expect(t.notices.at(-1)?.text).toBe("Copied 31 characters");
+      t.notices = [];
+      Screen.screen_feed(t.scr, "\x03");
+      expect([t.choose, backs, t.notices.at(-1)?.text]).toEqual([c, 0, "Copied 31 characters"]);
+      paint(t);
+      press(t, row, from + 5);
+      drag(t, row, from + 35);
+      let_go(t, row, from + 35);
+      expect(t.sel?.key).toBe("popup");
+      term_chooser(t, "Agents", ["illi", "reviewer"], ["", ""], -1, (k) => picked.push(10 + k));
+      paint(t);
+      expect(t.sel).toBeNull();
+      const r = row_of(t, "reviewer");
+      press(t, r, col(t));
+      drag(t, r, col(t) + 1);
+      let_go(t, r, col(t) + 1);
+      expect(picked).toEqual([1, 11]);
+      t.choose = c;
+      paint(t);
+      press(t, row, from + 5);
+      drag(t, row, from + 35);
+      let_go(t, row, from + 35);
+      t.choose = null;
+      paint(t);
+      expect(t.sel).toBeNull();
+    } finally {
+      process.stdout.write = write;
+    }
   });
 });

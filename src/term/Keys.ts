@@ -24,7 +24,7 @@ import * as Paint from "../ui/Paint.ts";
 import { popup_mouse, popup_page, popup_wheel, term_popup } from "./Popup.ts";
 import { question_folds, question_form_wheel, question_held, question_of, question_over, question_toggle } from "./Question.ts";
 import * as Screen from "../ui/Screen.ts";
-import { term_copied, term_hover, term_mouse, term_selected, term_target, term_typing, term_wordy } from "./Select.ts";
+import { POPUP, term_copied, term_hover, term_mouse, term_selected, term_target, term_typing, term_wordy } from "./Select.ts";
 import { term_act, term_primaries, term_quit, type Chooser, type Cmd, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
 
@@ -129,7 +129,9 @@ function term_keyed(key: string): Cmd | undefined {
 // leader go and goes on to what has it: the popup, the question, a pane,
 // else the chat). A key while a list's popup, a question at the input,
 // the commands suggested or a pane is open: theirs first (true: taken).
-// A list as term_choose_key, every key but PASS's; a question at the
+// A list as term_choose_key, every key but PASS's (Ctrl+C with its text
+// chosen copies it again, as the chat's; text chosen there is let go as
+// the chat's is, at a key not KEEP's or at typing); a question at the
 // input as term_question_key; the commands move by Up and Down, fill one
 // in by Tab, run it by Enter; a pane scrolls by the arrows, the pages and
 // the wheel, Esc and Enter close it, and no editing key reaches the input
@@ -142,7 +144,11 @@ export function term_grab(t: Term, key: string): boolean {
     return true;
   }
   t.lead = false;
+  if (term_popup(t) && key === "Ctrl+C" && t.sel?.key === POPUP && t.sel.moved && !t.sel.held) {
+    return false;
+  }
   if (term_popup(t)) {
+    t.sel = t.sel?.key === POPUP && (t.scr.typed || !KEEP.includes(key)) ? null : t.sel;
     return term_choose_key(t, t.choose!, key);
   }
   const asked = question_of(t);

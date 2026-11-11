@@ -15,7 +15,10 @@
 //               accounts), each account of a plan's own program logged
 //               out by it first (each provider's logout: its sign-in
 //               gone, a keychain's too, which deleting the folder would
-//               leave), asked once more, as the chats can't come back
+//               leave), asked once more, as the chats can't come back;
+//               the CLIs that logged them out waited for till they
+//               ended (each provider's close), so none writes the
+//               folder anew as it goes
 //
 // Never while another illi runs (one holding a project's chat: Lock.ts),
 // as it would write the folder anew. illi's folder goes whole only where
@@ -97,7 +100,7 @@ export async function uninstall(args: string[]): Promise<number> {
       return done ? "Logged out of " + name + "." : "Couldn't log out of " + name + ": its sign-in may stay in your system's keychain.";
     }));
     said.forEach((line) => console.log(line));
-    Providers.all().forEach((p) => p.close?.());
+    await Promise.all(Providers.all().map((p) => p.close?.()));
     ok = uninstall_remove(root, "illi's folder: your chats, settings and accounts") && ok;
   } else {
     for (const { at, what } of programs) {

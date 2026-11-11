@@ -4,14 +4,17 @@
 // Login.ts) says and offers of the CLI the plan runs on (Cli.ts) while
 // none is here. The page's line says the CLI isn't here, is downloading,
 // or needs an update; a row under the accounts offers this illi's build
-// (its version and size; one downloading by itself: how far it got).
-// Adding an account, or signing one in again, finds the user's own CLI
-// first; with none, it offers the download, saying how big it is, then
-// signs in once it's done, each in /login's popup (Esc stops the
-// download, nothing left behind).
+// (its version and size; one downloading by itself: how far it got; one
+// another illi downloads, written within the last minute, Cli.ts STALE:
+// said, and offered here all the same, so the row never leaves the
+// person waiting on an illi they can't see). Adding an account, or
+// signing one in again, finds the user's own CLI first; with none, it
+// offers the download, saying how big it is, then signs in once it's
+// done, each in /login's popup (Esc stops the download, nothing left
+// behind).
 
 import { term_draw } from "../term/Frame.ts";
-import { login_lines, login_question, login_say, login_step, type Row } from "../term/LoginCommands.ts";
+import { login_lines, login_question, login_say, login_step, type Row, type Step } from "../term/LoginCommands.ts";
 import { term_note } from "../term/Notices.ts";
 import type { Term } from "../term/Term.ts";
 import type { Build, Cli } from "./Cli.ts";
@@ -23,7 +26,9 @@ export function cli_lack(c: Cli): string {
 
 // the row under the accounts while no CLI is here: this illi's build
 // offered (an update of an older version here), or how far its download
-// by itself got; none: the CLI is here, or no build for this machine
+// by itself got; one another illi downloads says so, and is offered
+// here too (cli_offer); none: the CLI is here, or no build for this
+// machine
 export function cli_rows(t: Term, c: Cli): Row[] {
   const b = c.pin;
   if (b === null || c.ready()) {
@@ -32,8 +37,11 @@ export function cli_rows(t: Term, c: Cli): Row[] {
   const was = c.other();
   const up  = cli_older(c, was);
   const how = c.progress();
+  if (how !== null && how.share !== null) {
+    return [{ name: (up ? "Updating " : "Downloading ") + c.spec.name, about: (up ? was + " → " : "") + b.version + ", " + how.share + "% of " + cli_mb(b.bytes), enter: "see how far", pick: (back) => back() }];
+  }
   if (how !== null) {
-    return [{ name: (up ? "Updating " : "Downloading ") + c.spec.name, about: (up ? was + " → " : "") + b.version + ", " + (how.share === null ? "in another illi" : how.share + "% of " + cli_mb(b.bytes)), enter: "see how far", pick: (back) => back() }];
+    return [{ name: (up ? "Updating " : "Downloading ") + c.spec.name, about: (up ? was + " → " : "") + b.version + ", " + cli_mb(b.bytes) + ", in another illi", enter: (up ? "update" : "download") + " it here", pick: (back) => cli_offer(t, c, back, null) }];
   }
   return [{ name: (up ? "Update " : "Download ") + c.spec.name, about: (up ? was + " → " : "") + b.version + ", " + cli_mb(b.bytes), enter: up ? "update it" : "download it", pick: (back) => cli_offer(t, c, back, null) }];
 }
@@ -49,40 +57,57 @@ function cli_mb(bytes: number): string {
 }
 
 // a sign-in once the CLI is here (the user's own looked for first:
-// Cli.look): now if it is; else once this illi's build is downloaded
-// (asked first, Esc back to `back`); one downloading by itself said, to
-// wait for
+// Cli.look, a step of /login's saying so meanwhile, Esc stopping it, so
+// what follows never takes a list opened meanwhile): now if it is; else
+// once this illi's build is downloaded (asked first, Esc back to `back`:
+// one another illi downloads too, said there); one this illi downloads
+// by itself said, to wait for
 export function cli_then(t: Term, c: Cli, back: () => void, sign: () => Promise<void>): void {
+  const step = login_step(t, c.spec.name, back);
+  step.wait("Looking for " + c.spec.program + " on this computer…");
   void c.look().then(() => {
+    if (step.stop.signal.aborted) {
+      return;
+    }
     if (c.ready()) {
+      step.close();
       void sign();
-    } else if (c.progress() !== null) {
-      login_say(t, c.spec.name, c.why() + ".", back);
+    } else if (typeof c.progress()?.share === "number") {
+      step.fail(c.why() + ".");
     } else {
-      cli_offer(t, c, back, sign);
+      cli_offer(t, c, back, sign, step);
     }
   });
 }
 
 // this illi's build offered (Esc back to `back`), what it takes said, in
-// place of an older version here; downloaded, the sign-in asked for
-// follows (`then`). None for this machine: said
-export function cli_offer(t: Term, c: Cli, back: () => void, then: (() => Promise<void>) | null): void {
+// place of an older version here (one another illi downloads now: said
+// under Not now, which waits for it); downloaded, the sign-in asked for
+// follows (`then`). None for this machine: said. Asked by a sign-in's
+// step (cli_then), it asks through it
+export function cli_offer(t: Term, c: Cli, back: () => void, then: (() => Promise<void>) | null, step?: Step): void {
   const b = c.pin;
   if (b === null) {
-    login_say(t, c.spec.name, c.why() + ".", back);
-    return;
+    return step === undefined ? void login_say(t, c.spec.name, c.why() + ".", back) : step.fail(c.why() + ".");
   }
   const s    = c.spec;
   const was  = c.other();
   const up   = cli_older(c, was);
   const what = s.name.replace(s.maker + " ", "") + " " + (up ? was + " → " : "") + b.version + " from " + s.from + ": " + cli_mb(b.bytes) + ", " + cli_mb(b.unpacked) + " once unpacked" + (s.grows === "" ? "" : ", " + s.grows);
-  const why  = up ? "this illi runs " + b.version + "; " + was + " goes once no illi runs it" : was !== null ? "this illi runs " + b.version + "; " + was + ", a newer illi's, stays" : s.plan + " runs on it (or install " + s.program + " " + s.minimum + " or later yourself)";
-  login_question(t, (up ? "Update " : "Download ") + s.name + "?", [up ? "Update it" : "Download it", "Not now"], [what, why], (k) => {
+  const wait = c.progress()?.share === null ? "another illi is downloading it now: it's here once that's done" : null;
+  const why  = wait !== null ? wait : up ? "this illi runs " + b.version + "; " + was + " goes once no illi runs it" : was !== null ? "this illi runs " + b.version + "; " + was + ", a newer illi's, stays" : s.plan + " runs on it (or install " + s.program + " " + s.minimum + " or later yourself)";
+  const title = (up ? "Update " : "Download ") + s.name + "?";
+  const pick  = (k: number) => {
+    step?.close();
     if (k === 0) {
       void cli_fetch(t, c, b, up, then, back);
     }
-  }, back);
+  };
+  if (step !== undefined) {
+    step.question([], [up ? "Update it" : "Download it", "Not now"], [what, why], pick, title);
+  } else {
+    login_question(t, title, [up ? "Update it" : "Download it", "Not now"], [what, why], pick, back);
+  }
   term_draw(t);
 }
 

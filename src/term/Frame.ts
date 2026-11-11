@@ -27,7 +27,7 @@ import { DEFAULT } from "../config/Profiles.ts";
 import { Projects } from "../chat/Projects.ts";
 import { related_list, related_shown } from "./Related.ts";
 import * as Screen from "../ui/Screen.ts";
-import { term_area, term_light, term_under } from "./Select.ts";
+import { POPUP, term_area, term_light, term_under } from "./Select.ts";
 import { term_side, term_side_drawn, term_side_width, term_tokens } from "./Side.ts";
 import { status_rows } from "./Status.ts";
 import { term_act, type Area, type Pane, type Sug, type Target, type Term } from "./Term.ts";
@@ -183,7 +183,8 @@ export function term_draw(t: Term): void {
 // typed in too: question_kept, popup_paint). A list's popup open (Popup.ts)
 // over all of it, all else dimmed, the cursor in its search (none:
 // hidden), and nothing under it takes a click or lights; with
-// none, the cursor in the question's line or words, if it takes typing
+// none (text chosen in a popup's box let go: it stood for that box's),
+// the cursor in the question's line or words, if it takes typing
 // (blinking: it waits on you), else the input's. A pipe gets the notes
 // as text
 export function term_paint(t: Term): void {
@@ -281,6 +282,7 @@ export function term_paint(t: Term): void {
   }
   term_light(t, rows);
   const popped = pop ? popup_paint(t, rows, w, h) : null;
+  t.sel = !pop && t.sel?.key === POPUP ? null : t.sel;
   t.hover = t.sel?.held ? undefined : term_under(t, t.scr.point);
   const cursor = pop ? popped : input.at === null ? null : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
   const drawn  = t.lead ? rows.map((row) => row.map((p) => ({ ...p, line: p.line.map((r) => ({ ...r, s: { ...r.s, d: true, c: "", g: "" } })) }))) : rows;

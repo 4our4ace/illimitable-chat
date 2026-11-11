@@ -194,13 +194,13 @@ test("a request carries at most 20 images: the oldest left out by halves, the sa
   expect(kept(many)).toEqual(Array.from({ length: 20 }, (_, k) => "p" + (8 + k)));
 });
 
-test("a patient call asks again as its anew says then (a summary's: the compactor of the chat's pick now), at once as AskAI.wake wakes it; stopped, no more", async () => {
+test("a patient call asks again as its anew says then (a summary's: the compactor of the chat's pick now), at once as AskAI.wake wakes it (one during a try: as that try fails); stopped, no more", async () => {
   const start = AskAI.start;
   const asked: string[] = [];
   AskAI.start = ((ask: any) => {
     asked.push(ask.vendor);
     const end = ask.vendor === "claude-code" ? { ok: true, text: "the summary", left: [] } : { ...AskAI.end("403 Forbidden"), stop: "down" };
-    return { send: () => {}, stop: () => {}, done: Promise.resolve(end) };
+    return { send: () => {}, stop: () => {}, done: ask.vendor === "slow" ? Bun.sleep(30).then(() => end) : Promise.resolve(end) };
   }) as any;
   try {
     let vendor = "github-copilot";
@@ -213,13 +213,20 @@ test("a patient call asks again as its anew says then (a summary's: the compacto
     AskAI.wake();
     expect(await call.done).toEqual({ ok: true, text: "the summary", left: [] });
     expect(asked).toEqual(["github-copilot", "claude-code"]);
+    vendor = "slow";
+    const mid = AskAI.ask(ask(), () => {});
+    await Bun.sleep(5);
+    vendor = "claude-code";
+    AskAI.wake();
+    expect(await mid.done).toEqual({ ok: true, text: "the summary", left: [] });
+    expect(asked).toEqual(["github-copilot", "claude-code", "slow", "claude-code"]);
     vendor = "github-copilot";
     const held = AskAI.ask(ask(), () => {});
     await Bun.sleep(20);
     held.stop();
     AskAI.wake();
     expect((await held.done).ok).toBe(false);
-    expect(asked).toEqual(["github-copilot", "claude-code", "github-copilot"]);
+    expect(asked).toEqual(["github-copilot", "claude-code", "slow", "claude-code", "github-copilot"]);
   } finally {
     AskAI.start = start;
   }

@@ -164,7 +164,11 @@ export type Hint = { text: string; trouble: boolean };
 //   couldn't;
 // - programs: what of its own program illi downloaded (Cli.programs), as
 //   `illi uninstall` removes it while your chats stay;
-// - close: what it runs in the background stopped, as illi ends
+// - close: what it runs in the background stopped, as illi ends, at
+//   once (a quit never waits on it). Where its own programs take a
+//   moment to end, it gives a promise, done once they have (a few
+//   seconds at most, never failing), which `illi uninstall` waits for
+//   before illi's folder goes, so none writes it anew
 export type Provider = {
   facts     : Facts;
   wire?     : Wire<any>;
@@ -181,5 +185,5 @@ export type Provider = {
   check?    : (key: string) => Promise<string>;
   logout?   : (folder: string) => Promise<boolean>;
   programs? : () => string[];
-  close?    : () => void;
+  close?    : () => void | Promise<void>;
 };

@@ -46,7 +46,10 @@
 // organization, a busy service; and, whatever its kind, an account
 // GitHub gives no Copilot (its subscription ended, none ever: said with
 // what's open to it and where, never GitHub's raw answer; its models
-// refused as they're listed tell it first: Copilot.listed). A stop
+// refused as they're listed tell it first: Copilot.listed); and a CLI
+// that can't start (a library it lacks, a folder it may not run from),
+// said with its exit code and its own last words, never tried again. A
+// stop
 // aborts the turn (session.abort), given up past CANCEL. Each request's
 // usage tells the tokens read, the plan's use (the side's), and a
 // model's window where its list told none (Auto's: the model it
@@ -54,8 +57,9 @@
 //
 // The CLIs run one an account, as a call needs it (about two seconds),
 // each taking any number of sessions at once, and end once no call has
-// run for IDLE, or as illi ends (close; a CLI ends too as its input
-// closes, however illi ends). A call never signs in: the CLI uses the
+// run for IDLE, or as illi ends (close, which `illi uninstall` waits on
+// till they have; a CLI ends too as its input closes, however illi
+// ends). A call never signs in: the CLI uses the
 // sign-in its folder keeps, and with none (or one run out) the call fails
 // at once, saying /login signs in again. The account's models are its
 // own, as the CLI lists them (models.list: the policy's disabled ones and
@@ -198,9 +202,11 @@ const LAPSED = new Set<string>();
 // models refused: Copilot.listed), each with why (Copilot.lack)
 const BARRED = new Map<string, string>();
 
-// the CLIs running, and when they end with no call (IDLE)
+// the CLIs running, and when they end with no call (IDLE); those asked
+// to end, each till it has (close waits on them)
 let procs: Proc[] = [];
 let idle: Timer | null = null;
+const ending = new Set<Promise<void>>();
 
 // what to call as the account's models change (one: the chat's)
 let watcher = () => {};
@@ -531,12 +537,14 @@ export namespace Copilot {
     return { ok: true, text: run.reply, left: [], ...first };
   }
 
-  // a failure in plain words, by the kind the CLI tells: too long for the
-  // window; an account GitHub gives no Copilot (why, as last asked:
+  // a failure in plain words: a CLI that didn't start (Rpc.gone: its
+  // exit code and last words, as they are, a later try ending the same);
+  // else by the kind the CLI tells: too long for the window; an account GitHub gives no Copilot (why, as last asked:
   // Copilot.lack, with where to start a plan); a sign-in run out; the
   // plan's credits used up (when they start anew, where told); a rate
   // limit (a later try may answer); the account's organization's policy;
-  // a busy service (a CLI that ended too); else as the CLI says it. Why no CLI is here (CopilotCli.why) is said as it is, never
+  // a busy service (a CLI that ended mid-call too: a later try may
+  // answer); else as the CLI says it. Why no CLI is here (CopilotCli.why) is said as it is, never
   // logged as the CLI's failure
   export function failed(run: Run, e: any): End {
     const said = String(e?.message ?? "").replace(/\s+/g, " ").trim();
@@ -547,6 +555,9 @@ export namespace Copilot {
     }
     if (kind !== "rate_limit" && kind !== "quota") {
       console.error("github-copilot: " + (kind === "" ? "" : kind + ": ") + said.slice(0, 300));
+    }
+    if (said.startsWith(CopilotCli.spec.name + " didn't start")) {
+      return { ok: false, text: said.slice(0, 400), stop: "down", ...cut };
     }
     if (kind === "context_limit" || e?.providerErrorCode === "context_length_exceeded" || Agent.full(said)) {
       return { ok: false, text: said || "the request was too long for the model's window", stop: "full", grew: run.grew, ...cut };
@@ -613,7 +624,9 @@ export namespace Copilot {
   // cache a folder of its own (Copilot.cache), its protocol asked (one
   // illi doesn't speak refused): ready. Any failure to start ends it, so
   // no call takes it; as it ends, its calls end (failing, saying why), and
-  // its log and cache go. Thrown: the CLI isn't here
+  // its log and cache go; one that ended by itself has what it last wrote
+  // to stderr logged. Thrown: the CLI isn't here, or won't run (a folder
+  // it may not run from)
   export function spawn(folder: string, cmd: string[] | null): Proc {
     if (cmd === null) {
       throw new Error(CopilotCli.why());
@@ -621,10 +634,10 @@ export namespace Copilot {
     const p = { folder, stamp: Copilot.stamp(folder), live: 0, runs: new Map() } as unknown as Proc;
     const cache = Copilot.cache(folder);
     try {
-      p.conn = Rpc.start([...cmd, ...Copilot.flags()], Copilot.work(folder), Copilot.env(folder, cmd, cache), (_, m) => Copilot.heard(p, m));
+      p.conn = Rpc.start(CopilotCli.spec.name, [...cmd, ...Copilot.flags()], Copilot.work(folder), Copilot.env(folder, cmd, cache), (_, m) => Copilot.heard(p, m));
     } catch (err: any) {
       Copilot.uncache(cache);
-      throw new Error(/ENOENT|not found|EACCES/i.test(String(err?.message)) ? CopilotCli.why() : String(err?.message ?? err));
+      throw new Error(/ENOENT|not found/i.test(String(err?.message)) ? CopilotCli.why() : CopilotCli.spec.name + " didn't start: " + String(err?.message ?? err));
     }
     p.ready = (async () => Copilot.known(await Copilot.hello(p.conn)))();
     p.ready.catch(() => Copilot.kill(p, "it didn't start"));
@@ -632,6 +645,9 @@ export namespace Copilot {
     void p.conn.exited.then(() => {
       procs = procs.filter((o) => o !== p);
       p.runs.forEach((run) => run.idle());
+      if (p.conn.code !== null && p.conn.tail.trim() !== "") {
+        console.error("github-copilot: its CLI ended (exit " + p.conn.code + "), having written: " + p.conn.tail.trim().replace(/\s*\n\s*/g, " / "));
+      }
       Copilot.unlog(folder, pid);
       Copilot.uncache(cache);
     });
@@ -668,10 +684,13 @@ export namespace Copilot {
   }
 
   // a CLI ended (asked, then killed: Rpc.stop), no call taking it from
-  // now; its calls still running end as it does, saying why
+  // now; its calls still running end as it does, saying why. Till it has,
+  // it's among those ending (close)
   export function kill(p: Proc, why: string): void {
     procs = procs.filter((o) => o !== p);
-    Rpc.stop(p.conn, why);
+    const gone = Rpc.stop(p.conn, why);
+    ending.add(gone);
+    void gone.then(() => ending.delete(gone));
   }
 
   // the CLIs end once no call has run for IDLE
@@ -683,16 +702,27 @@ export namespace Copilot {
     idle.unref();
   }
 
-  // every CLI ended, the downloads no illi runs any more gone (illi
-  // ends: CopilotCli.tidy)
-  export function close(): void {
+  // every CLI asked to end, this illi's download by itself let go
+  // (CopilotCli.unlock), the downloads no illi runs any more gone (illi
+  // ends: CopilotCli.tidy), all at once: a quit never waits. Done once
+  // every CLI asked to end has, those of a logout just before too (a
+  // little past Rpc's KILL at most), which `illi uninstall` waits for
+  // (Provider.ts close)
+  export function close(): Promise<void> {
     [...procs].forEach((p) => Copilot.kill(p, "illi ended"));
+    CopilotCli.unlock();
     CopilotCli.tidy();
+    return Promise.all([...ending]).then(() => {});
   }
 
   // the CLIs running (a test's look)
   export function running(): number {
     return procs.length;
+  }
+
+  // the calls the CLIs running are held by (a test's look)
+  export function held(): number {
+    return procs.reduce((n, p) => n + p.live, 0);
   }
 
   // Account
@@ -833,19 +863,38 @@ export namespace Copilot {
   // (its config.json), which `keep` asks the person (no: not kept, so not
   // signed in). Signed in: whom it's signed in as asked, and the models it
   // offers learned (Copilot.whom), then the folder's stamp made anew
-  // (renew); done, who. Stop cancels it, as does SIGNIN passing; thrown:
-  // why it didn't sign in (the CLI isn't here: why)
+  // (renew); done, who. Stop cancels it, as does SIGNIN passing, from its
+  // first step on: while the CLI starts (seconds, as it first unpacks
+  // itself), the sign-in ends at once and the CLI, once started, is let
+  // go; a stop already asked starts none; and neither `ask` nor `keep` is
+  // called past one (no page opened, no code copied, after the person
+  // left). Thrown: why it didn't sign in (the CLI isn't here: why)
   export async function signin(folder: string, stop: AbortSignal, ask: (url: string, code: string) => void, keep: () => Promise<boolean>): Promise<Who> {
-    fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
-    const p = await Copilot.take(folder);
-    const sid = crypto.randomUUID();
-    const late = AbortSignal.timeout(SIGNIN);
+    const late  = AbortSignal.timeout(SIGNIN);
+    const over  = () => stop.aborted || late.aborted;
+    const why   = () => new Error(stop.aborted ? "the sign-in was stopped" : "no sign-in came in " + SIGNIN / 60e3 + " minutes, so illi stopped waiting");
     const ended = new Promise<never>((_, fail) => {
-      const end = () => fail(new Error(stop.aborted ? "the sign-in was stopped" : "no sign-in came in " + SIGNIN / 60e3 + " minutes, so illi stopped waiting"));
+      const end = () => fail(why());
+      if (over()) {
+        return end();
+      }
       stop.addEventListener("abort", end, { once: true });
       late.addEventListener("abort", end, { once: true });
     });
     ended.catch(() => {});
+    if (over()) {
+      throw why();
+    }
+    fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
+    const taken = Copilot.take(folder);
+    let p: Proc;
+    try {
+      p = await Promise.race([taken, ended]);
+    } catch (err) {
+      void taken.then(Copilot.release, () => {});
+      throw err;
+    }
+    const sid = crypto.randomUUID();
     const call = (method: string, params: object, ms = SETUP) => Promise.race([Rpc.call(p.conn, method, { sessionId: sid, ...params }, ms), ended]);
     let flow = "";
     let done = false;
@@ -856,6 +905,9 @@ export namespace Copilot {
       const next = (input?: string) => call("session.accounts.login.advance", { flowId: flow, ...(input === undefined ? {} : { input }) }, 0);
       for (let step = begun?.step; ; ) {
         const kind = String(step?.kind ?? "");
+        if (over()) {
+          throw why();
+        }
         if (kind === "device-code") {
           ask(String(step.verificationUri ?? ""), String(step.userCode ?? ""));
           step = await next();
@@ -1096,8 +1148,9 @@ export namespace Copilot {
 // account's models and plan asked (this illi's CLI downloaded first by
 // itself, with autoupdate on and none here); the chat told as the
 // account's models change; an account logged out by the CLI, and the
-// CLI's downloads, as `illi uninstall` asks; its CLIs ended as illi ends,
-// and the downloads no illi runs any more gone
+// CLI's downloads, as `illi uninstall` asks; its CLIs ended as illi ends
+// (their end waited for by the uninstall), its download by itself let
+// go, and the downloads no illi runs any more gone
 export const PROVIDER: Provider = {
   facts    : FACTS,
   ask      : Copilot.ask,

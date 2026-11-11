@@ -228,6 +228,7 @@ export function member_keep(switched: boolean): void {
 // device login, Claude Code's), text chosen and the leader let go
 export function member_hide(t: Term, to: string): void {
   t.login?.abort();
+  t.login = null;
   member_rest(t);
   member_send({ $: "hide", to });
 }

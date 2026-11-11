@@ -84,7 +84,7 @@ test("a new profile: named well, never twice, never default (new is a name like 
   expect(Profiles.profile_list(ROOT)).toEqual(["default", "work", "copy"]);
 });
 
-test("the profiles as they were made: the time each keeps, else its folder's birth (one made before illi kept it), the same instant by name; a rename keeps its place; an import is made as it comes in, the export leaving its time out", async () => {
+test("the profiles as they were made: the time each keeps, else its folder's birth (one made before illi kept it), kept in it as it's first listed, the same instant by name; a rename keeps its place; an import is made as it comes in, the export leaving its time out", async () => {
   const root = temp_dir("illi-profiles-made-");
   const made = (name: string, at: string) => put(root + "/profiles/" + name + "/created", at + "\n");
   made("zeta", "2026-01-01T00:00:00.000Z");
@@ -94,6 +94,7 @@ test("the profiles as they were made: the time each keeps, else its folder's bir
   Bun.sleepSync(20);
   fs.mkdirSync(root + "/profiles/hand");
   expect(Profiles.profile_list(root)).toEqual(["default", "zeta", "alpha", "beta", "old", "hand"]);
+  expect(Date.parse(fs.readFileSync(root + "/profiles/hand/created", "utf8").trim())).toBe(Math.floor(fs.statSync(root + "/profiles/hand").birthtimeMs));
   Profiles.profile_rename(root, "zeta", "omega");
   expect(Profiles.profile_list(root)).toEqual(["default", "omega", "alpha", "beta", "old", "hand"]);
   const file = TMP + "/illi-profile-omega.tar.gz";

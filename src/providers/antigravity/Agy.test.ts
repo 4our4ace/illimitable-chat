@@ -20,9 +20,12 @@
 // said, never a crash; an empty file unpacks; another terminal's
 // download, still under way, is left be. With autoupdate on and an
 // account connected, this illi's build downloads by itself, once a run,
-// one illi at a time on the machine (one whose illi lives is left to
-// it), a call meanwhile told it's downloading; the same build put in
-// place meanwhile by another illi is kept as it is.
+// one illi at a time on the machine (one whose illi lives, its lock
+// written within the minute, is left to it; a lock gone unwritten for
+// longer is dead though a process has its pid, and one illi alone claims
+// the download in its place), a call meanwhile told it's downloading;
+// the same build put in place meanwhile by another illi is kept as it
+// is.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -283,14 +286,24 @@ test("a write that fails is said, never a crash; an empty file unpacks; another 
   expect(Agy.versions()).toEqual(["1.5.9"]);
 });
 
-test("with autoupdate on and an account connected, this illi's build downloads by itself, once, one illi at a time on the machine; a call meanwhile told it's downloading; the same build put in place by another illi meanwhile kept", async () => {
-  const lock = () => Agy.home() + "/.updating";
+test("with autoupdate on and an account connected, this illi's build downloads by itself, once, one illi at a time on the machine: a fresh lock is left to its illi, one unwritten for a minute is taken over though its pid lives, one whose illi ended too; a call meanwhile told it's downloading; the same build put in place by another illi meanwhile kept", async () => {
+  const lock  = (n = 1) => Agy.home() + "/.updating-" + n;
+  const locks = () => fs.readdirSync(Agy.home()).filter((n) => n.startsWith(".updating")).sort();
   const other = Bun.spawn(["sleep", "30"]);
   Agy.pin = BUILT("2.0.0", "lock.tgz", tar([{ name: "antigravity", data: "x" }]));
   expect([Agy.auto("notify", true), Agy.auto("off", true), Agy.auto("on", false)]).toEqual([null, null, null]);
   fs.writeFileSync(lock(), String(other.pid));
   expect([await Agy.auto("on", true), Agy.progress(), Agy.why()]).toEqual([false, { share: null }, "Google's Antigravity CLI 2.0.0 is downloading in another illi: try again once it's done"]);
   expect(Agy.told(Agy.why())).toBe(true);
+  expect([Agy.claim(), locks()]).toEqual([null, [".updating-1"]]);
+  fs.utimesSync(lock(), new Date(Date.now() - 120e3), new Date(Date.now() - 120e3));
+  expect([Agy.lives(other.pid), Agy.progress(), Agy.why()]).toEqual([true, null, "Google's Antigravity CLI 1.5.9 is here, and this illi runs 2.0.0: /login updates it"]);
+  expect([Agy.claim(), locks(), fs.readFileSync(lock(2), "utf8")]).toEqual([lock(2), [".updating-2"], String(process.pid)]);
+  expect([Agy.claim(), Agy.progress()]).toEqual([null, null]);
+  fs.writeFileSync(lock(7), String(other.pid));
+  expect([Agy.progress(), fs.existsSync(lock(2))]).toEqual([{ share: null }, true]);
+  Agy.unlock();
+  expect(locks()).toEqual([".updating-7"]);
   other.kill();
   await other.exited;
   expect(Agy.progress()).toBeNull();
@@ -301,10 +314,10 @@ test("with autoupdate on and an account connected, this illi's build downloads b
   Agy.pin = BUILT("2.0.1", "auto.tgz", one);
   const done = Agy.auto("on", true)!;
   await Bun.sleep(50);
-  expect([Agy.update() === Agy.update(), fs.readFileSync(lock(), "utf8"), Agy.progress(), Agy.why()]).toEqual([true, String(process.pid), { share: 0 }, "Google's Antigravity CLI 2.0.1 is downloading (0%): try again once it's done"]);
+  expect([Agy.update() === Agy.update(), locks(), fs.readFileSync(lock(8), "utf8"), Agy.progress(), Agy.why()]).toEqual([true, [".updating-8"], String(process.pid), { share: 0 }, "Google's Antigravity CLI 2.0.1 is downloading (0%): try again once it's done"]);
   release();
   expect(await done).toBe(true);
-  expect([Agy.ready(), fs.existsSync(lock()), Agy.progress(), await Agy.update()]).toEqual([true, false, null, false]);
+  expect([Agy.ready(), locks(), Agy.progress(), await Agy.update()]).toEqual([true, [], null, false]);
   const cmd = Agy.home() + "/2.0.1/antigravity";
   const ino = fs.statSync(cmd).ino;
   await Agy.download(Agy.pin, new AbortController().signal, () => {});

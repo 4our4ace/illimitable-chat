@@ -1015,9 +1015,11 @@ Accounts
   place). `antigravity/agy.json` keeps the version of the user's own
   `agy` as illi last asked it, with its path, size and time, so it's
   asked again only once it changes. While an
-  illi downloads its version by itself (`autoupdate`), `agent/.updating`
-  holds its process id, so another illi starting meanwhile leaves the
-  download to it. On `github-copilot` each is `copilot/<id>` in illi's
+  illi downloads its version by itself (`autoupdate`),
+  `agent/.updating-<n>` holds its process id, written anew every few
+  seconds, so another illi starting meanwhile leaves the download to
+  it, and takes it over once that illi ended or the file went a minute
+  unwritten. On `github-copilot` each is `copilot/<id>` in illi's
   root (`gh1`, `gh2`…), the home of GitHub's Copilot CLI run for it
   (`COPILOT_HOME`: its sign-in there, its token in the system's keychain
   where there is one, else, as you allowed it at /login, in its
@@ -1033,7 +1035,7 @@ Accounts
   unpacks of itself as it first runs (its `COPILOT_PKG_CACHE_HOME`; the
   user's own CLI unpacks where it does when the user runs it);
   `copilot/copilot.json` keeps the version of the user's own
-  `copilot`, and `cli/.updating` names the illi downloading it by
+  `copilot`, and `cli/.updating-<n>` names the illi downloading it by
   itself, as Google's do.
 - `logins` is `{ opencode, saved: [{ key, email, plan, entry }] }`:
   whether opencode's ChatGPT login is one of the accounts, and the

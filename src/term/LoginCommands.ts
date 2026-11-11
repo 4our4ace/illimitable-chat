@@ -97,7 +97,8 @@ export type Act = { name: string; enter: string; run: () => string; leaves?: boo
 // it runs, stopped by Esc (which goes back then); shown waiting (what it
 // says, what it offers meanwhile), asking for a line (a sign-in's code,
 // a secret: what Enter gives, a reason keeping it; the keys it takes
-// besides), asking a question (its answers), failed (why, said; Try
+// besides), asking a question (its answers; its own title, if it has
+// one: the step's else), failed (why, said; Try
 // again, given what that runs), closed. Each state is the popup shown
 // (null: the step was stopped), in the popup while it's free for it
 // (nothing else open, the step itself, or another step), else kept for
@@ -107,7 +108,7 @@ export type Step = {
   stop     : AbortController;
   wait     : (body: Body, acts?: Act[]) => Chooser | null;
   ask      : (body: Body, hint: string, foot: string, give: (text: string) => string | null, keys?: Record<string, Act>) => Chooser | null;
-  question : (body: Body, names: string[], about: string[], pick: (k: number) => void) => Chooser | null;
+  question : (body: Body, names: string[], about: string[], pick: (k: number) => void, title?: string) => Chooser | null;
   fail     : (why: string, again?: () => void) => void;
   close    : () => void;
 };
@@ -144,8 +145,10 @@ let seen: Vendor[] | null = null;
 // /login (and /logout): the providers' picker, the accounts read again
 // first (another terminal's change: a view's illi follows no chat that
 // would have); while a sign-in runs, its step again (login_step), where
-// something took the popup's place meanwhile
+// something took the popup's place meanwhile (one stopped from outside,
+// as a profile's switch stops it, let go)
 export function term_login(t: Term): void {
+  running = running?.stop.signal.aborted === true ? null : running;
   if (running !== null && running.t === t && t.login === running.stop) {
     t.choose = running.c;
     t.pane   = null;
@@ -319,27 +322,33 @@ export function login_again(again: () => void): Act {
 // buttons (none: Esc alone), the first lit; pressing one runs it, the
 // popup shown again with what it did in its foot (the one pressed lit),
 // unless it leaves (Act leaves). Esc runs `esc`, said in the foot as
-// `stop` or `back`; held, a click outside doesn't close it. Each time it
-// shows, by `put` (a step's: shown only while the popup is its; null:
-// not shown), it is a new popup (Enter shut the one before: Keys.ts)
+// `stop` or `back`; held, a click outside doesn't close it. It shows by
+// `put` (a step's: shown only while the popup is its; null: not shown),
+// and is one popup all along (Enter shut it: Keys.ts; shown again, the
+// same), so what its caller changes of it (its body) stays
 function login_offer(t: Term, title: string, body: Body, acts: Act[], esc: () => void, said: string, hold: boolean, put: (make: () => Chooser) => Chooser | null): Chooser | null {
   let did = "";
   let at  = -1;
-  const foot  = (k: number) => [k === at && did !== "" ? did : acts.length === 0 ? "" : "Enter " + acts[k].enter, "Esc " + said].filter(Boolean).join(" · ");
-  const place = (lit: number): Chooser | null => put(() => {
-    const c = term_chooser(t, title, acts.map((a) => a.name), acts.map(() => ""), -1, (k) => {
-      const a = acts[k];
-      const told = a.run();
-      if (a.leaves !== true) {
-        [did, at] = [told, k];
-        place(k);
-      }
-    }, { foot, back: esc, body: login_lines(body), size: BOX, hold, buttons: true });
-    c.at = Math.max(0, lit);
+  let c: Chooser | null = null;
+  const foot = (k: number) => [k === at && did !== "" ? did : acts.length === 0 ? "" : "Enter " + acts[k].enter, "Esc " + said].filter(Boolean).join(" · ");
+  const show = (): Chooser | null => put(() => {
+    if (c === null) {
+      c = term_chooser(t, title, acts.map((a) => a.name), acts.map(() => ""), -1, (k) => {
+        const a    = acts[k];
+        const told = a.run();
+        if (a.leaves !== true) {
+          [did, at] = [told, k];
+          c!.at = Math.max(0, c!.shown.findIndex((m) => m.k === k));
+          show();
+        }
+      }, { foot, back: esc, body: login_lines(body), size: BOX, hold, buttons: true });
+    } else {
+      [t.choose, t.pane] = [c, null];
+    }
     term_draw(t);
     return c;
   });
-  return place(0);
+  return show();
 }
 
 // Steps
@@ -422,8 +431,8 @@ export function login_step(t: Term, title: string, back: () => void, own = true)
       return c;
     });
   };
-  const question = (body: Body, names: string[], about: string[], pick: (k: number) => void): Chooser | null => {
-    return put(() => term_question(t, title, names, about, pick, { foot: () => "Esc stop", back: esc, popup: true, body: login_lines(body), size: BOX, hold: true }));
+  const question = (body: Body, names: string[], about: string[], pick: (k: number) => void, named = title): Chooser | null => {
+    return put(() => term_question(t, named, names, about, pick, { foot: () => "Esc stop", back: esc, popup: true, body: login_lines(body), size: BOX, hold: true }));
   };
   const fail = (why: string, again?: () => void): void => {
     release();

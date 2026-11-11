@@ -204,7 +204,8 @@ export function profile_chat(root: string, file: string): string | null {
 }
 
 // the profiles: the default, then the others as they were made (the
-// oldest first; one made in the same instant, or when unknown, by name)
+// oldest first; one made in the same instant, or when unknown, by name),
+// each one's time kept in it as it's first listed (profile_made)
 export function profile_list(root: string): string[] {
   const dir  = root + "/profiles";
   const all  = fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }) : [];
@@ -213,11 +214,12 @@ export function profile_list(root: string): string[] {
 }
 
 // when a profile's folder was made, in ms: the time kept in it (MADE,
-// an ISO time), else, one made before illi kept it (or by hand), its
+// an ISO time); else (one made before illi kept it, or by hand) its
 // folder's birth as the file system tells it (a copy of the folder's:
-// when it was copied); neither told (a file system that keeps no birth
-// time: 0 there): Infinity, after the rest, those by name. Nothing is
-// written here: a folder with no time kept stays so
+// when it was copied), or, one that keeps no birth time (0 there), the
+// oldest change of the folder and what it holds, kept in it from now
+// (profile_mark), so its place never moves again; nothing told:
+// Infinity, after the rest, those by name
 function profile_made(dir: string): number {
   try {
     const line = fs.readFileSync(dir + "/" + MADE, "utf8").trim();
@@ -226,17 +228,24 @@ function profile_made(dir: string): number {
       return at;
     }
   } catch {}
+  let at = Infinity;
   try {
     const born = fs.statSync(dir).birthtimeMs;
-    return born > 0 ? born : Infinity;
+    at = born > 0 ? born : Math.min(...[dir, ...fs.readdirSync(dir).map((f) => dir + "/" + f)].map((f) => fs.lstatSync(f).mtimeMs).filter((ms) => ms > 0));
   } catch {
     return Infinity;
   }
+  if (Number.isFinite(at)) {
+    try {
+      profile_mark(dir, at);
+    } catch {}
+  }
+  return at;
 }
 
-// a profile's folder marked as made now (MADE)
-function profile_mark(dir: string): void {
-  fs.writeFileSync(dir + "/" + MADE, new Date().toISOString() + "\n");
+// a profile's folder marked as made now, or at `at` (ms) (MADE)
+function profile_mark(dir: string, at = Date.now()): void {
+  fs.writeFileSync(dir + "/" + MADE, new Date(at).toISOString() + "\n");
 }
 
 // the profile used last, kept for the next start

@@ -9,9 +9,9 @@ need just the one profile.
 `/profile` opens the list (the side panel shows them too): the default
 first, then the others in the order you made them (each folder's
 `created` keeps when; one made before illi kept it goes by when its
-folder was made, or, on a file system that doesn't tell, after the
-rest by name). A rename keeps a profile's place. All of it happens
-there:
+folder was made, or, on a file system that doesn't tell, by the
+oldest change in it, and keeps that from then on). A rename keeps a
+profile's place. All of it happens there:
 
 | Key or row          | Does                                         |
 | ------------------- | -------------------------------------------- |

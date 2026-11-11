@@ -60,8 +60,11 @@
 // needs it (about a second), takes up to MOST sessions at once, and ends
 // once none of its sessions runs; one more is started ready beside them
 // (the spare), so the next call needs no start. None runs while no call
-// has for IDLE, nor after illi ends (close; a CLI ends too as its input
-// closes, however illi ends). A call never signs in: the CLI uses the
+// has for IDLE, nor after illi ends (close, which `illi uninstall` waits
+// on till they have; a CLI ends too as its input closes, however illi
+// ends). One that can't start (a library it lacks, a folder it may not
+// run from) is said with its exit code and its own last words, never
+// tried again. A call never signs in: the CLI uses the
 // sign-in its folder keeps, and with none (or one run out) the call fails
 // at once, saying /login signs in again (Google's own sign-in would open
 // a browser).
@@ -226,9 +229,11 @@ const LAPSED = new Set<string>();
 // the accounts' folders tidied this run (Antigravity.tidy)
 const TIDIED = new Set<string>();
 
-// the agents running, and when they end with no call (IDLE)
+// the agents running, and when they end with no call (IDLE); those
+// asked to end, each till it has (close waits on them)
 let procs: Proc[] = [];
 let idle: Timer | null = null;
+const ending = new Set<Promise<void>>();
 
 // what to call as the account's models change (one: the chat's)
 let watcher = () => {};
@@ -342,7 +347,7 @@ export namespace Antigravity {
       return;
     }
     if (proc.runs.size === 1) {
-      Acp.stop(proc.conn, "it didn't stop the turn");
+      Antigravity.quit(proc.conn, "it didn't stop the turn");
       return;
     }
     proc.started = MOST;
@@ -728,14 +733,19 @@ export namespace Antigravity {
     return { ok: false, text: why, left: [], stop: "fail", cut: run.said, ...first };
   }
 
-  // a failure in plain words: too long for the window; the plan's limit
-  // (when it resets, as the agent tells it); a sign-in run out; a busy
-  // service (a later try may answer); else as the agent says it
+  // a failure in plain words: a CLI that didn't start (Acp.gone: its
+  // exit code and last words, as they are, a later try ending the same);
+  // too long for the window; the plan's limit (when it resets, as the
+  // agent tells it); a sign-in run out; a busy service (a CLI that ended
+  // mid-call too: a later try may answer); else as the agent says it
   export function failed(run: Run, words: string): End {
     const said = words.replace(/^\s*⚠\uFE0F?\s*/, "");
     const cut  = { left: [], cut: run.said };
     if (!Agy.told(said) && said !== NO_SIGNIN) {
       console.error("antigravity: " + said.replace(/\s+/g, " ").slice(0, 300));
+    }
+    if (said.startsWith(Agy.spec.name + " didn't start")) {
+      return { ok: false, text: said.replace(/\s+/g, " ").trim().slice(0, 400), stop: "down", ...cut };
     }
     if (Agent.full(said) || FULL.test(said)) {
       return { ok: false, text: said, stop: "full", grew: run.grew, ...cut };
@@ -804,7 +814,9 @@ export namespace Antigravity {
   // signed in to the gateway named, if one is (ready); never to Google:
   // the CLI uses the sign-in the folder keeps, a call failing at once
   // without one. Any failure to start ends it (so no call takes it), its
-  // log going with it. Thrown: the CLI isn't here
+  // log going with it; one that ended by itself has what it last wrote
+  // to stderr logged. Thrown: the CLI isn't here, or won't run (a folder
+  // it may not run from)
   export function spawn(folder: string): Proc {
     const cmd = Agy.command();
     if (cmd === null) {
@@ -813,9 +825,9 @@ export namespace Antigravity {
     Antigravity.tidy(folder);
     const p = { folder, stamp: Antigravity.stamp(folder), started: 0, live: 0, runs: new Map() } as unknown as Proc;
     try {
-      p.conn = Acp.start([...cmd, ...Antigravity.flags(folder)], Antigravity.work(folder), Antigravity.env(folder), (_, m) => Antigravity.heard(p, m), () => {});
+      p.conn = Acp.start(Agy.spec.name, [...cmd, ...Antigravity.flags(folder)], Antigravity.work(folder), Antigravity.env(folder), (_, m) => Antigravity.heard(p, m), () => {});
     } catch (err: any) {
-      throw new Error(/ENOENT|not found|EACCES/i.test(String(err?.message)) ? Agy.why() : String(err?.message ?? err));
+      throw new Error(/ENOENT|not found/i.test(String(err?.message)) ? Agy.why() : Agy.spec.name + " didn't start: " + String(err?.message ?? err));
     }
     p.ready = (async () => {
       Antigravity.known(await Acp.call(p.conn, "initialize", Antigravity.hello(), READY));
@@ -827,6 +839,9 @@ export namespace Antigravity {
     const pid = p.conn.proc.pid;
     void p.conn.exited.then(() => {
       procs = procs.filter((o) => o !== p);
+      if (p.conn.code !== null && p.conn.tail.trim() !== "") {
+        console.error("antigravity: its CLI ended (exit " + p.conn.code + "), having written: " + p.conn.tail.trim().replace(/\s*\n\s*/g, " / "));
+      }
       Antigravity.unlog(folder, pid);
     });
     procs.push(p);
@@ -851,9 +866,18 @@ export namespace Antigravity {
     Antigravity.wake();
   }
 
+  // a CLI ended, no call taking it from now (Antigravity.quit)
   export function kill(p: Proc, why: string): void {
     procs = procs.filter((o) => o !== p);
-    Acp.stop(p.conn, why);
+    Antigravity.quit(p.conn, why);
+  }
+
+  // a connection's CLI ended (asked, then killed: Acp.stop); till it has,
+  // it's among those ending (close)
+  export function quit(conn: Conn, why: string): void {
+    const gone = Acp.stop(conn, why);
+    ending.add(gone);
+    void gone.then(() => ending.delete(gone));
   }
 
   // the CLIs end once no call has run for IDLE (the spare too)
@@ -865,13 +889,19 @@ export namespace Antigravity {
     idle.unref();
   }
 
-  // every CLI ended, and the forwarder; the downloads no illi runs any
-  // more gone (illi ends: Agy.tidy)
-  export function close(): void {
+  // every CLI asked to end, and the forwarder; this illi's download by
+  // itself let go (Agy.unlock), the downloads no illi runs any more gone
+  // (illi ends: Agy.tidy), all at once: a quit never waits. Done once
+  // every CLI asked to end has, a logout's just before too (a little past
+  // Acp's KILL at most), which `illi uninstall` waits for (Provider.ts
+  // close)
+  export function close(): Promise<void> {
     [...procs].forEach((p) => Antigravity.kill(p, "illi ended"));
     forwarder?.stop(true);
     forwarder = null;
+    Agy.unlock();
     Agy.tidy();
+    return Promise.all([...ending]).then(() => {});
   }
 
   // the CLIs running (a test's look)
@@ -1115,7 +1145,7 @@ export namespace Antigravity {
   export async function plan(folder: string, cmd: string[]): Promise<string> {
     let conn: Conn;
     try {
-      conn = Acp.start([...cmd, ...Antigravity.flags(folder)], Antigravity.work(folder), Antigravity.env(folder), (c, m) => m.id !== undefined && Acp.refuse(c, m.id, "not while signing in"), () => {});
+      conn = Acp.start(Agy.spec.name, [...cmd, ...Antigravity.flags(folder)], Antigravity.work(folder), Antigravity.env(folder), (c, m) => m.id !== undefined && Acp.refuse(c, m.id, "not while signing in"), () => {});
     } catch {
       return "";
     }
@@ -1127,7 +1157,7 @@ export namespace Antigravity {
     } catch {
       return "";
     } finally {
-      Acp.stop(conn, "signed in");
+      Antigravity.quit(conn, "signed in");
       void conn.exited.then(() => Antigravity.unlog(folder, conn.proc.pid));
     }
   }
@@ -1143,7 +1173,7 @@ export namespace Antigravity {
     }
     let conn: Conn;
     try {
-      conn = Acp.start([...cmd, ...Antigravity.flags(folder)], Antigravity.work(folder), Antigravity.env(folder), (c, m) => m.id !== undefined && Acp.refuse(c, m.id, "not while logging out"), () => {});
+      conn = Acp.start(Agy.spec.name, [...cmd, ...Antigravity.flags(folder)], Antigravity.work(folder), Antigravity.env(folder), (c, m) => m.id !== undefined && Acp.refuse(c, m.id, "not while logging out"), () => {});
     } catch {
       return false;
     }
@@ -1154,7 +1184,7 @@ export namespace Antigravity {
     } catch {
       return false;
     } finally {
-      Acp.stop(conn, "logged out");
+      Antigravity.quit(conn, "logged out");
     }
   }
 
@@ -1167,7 +1197,8 @@ export namespace Antigravity {
 // account is connected and no CLI is here (Agy.auto); the chat told as
 // the account's models change; an account logged out by the CLI, and
 // the CLI's downloads, as `illi uninstall` asks; its CLIs ended as illi
-// ends, and the downloads no illi runs any more gone
+// ends (their end waited for by the uninstall), its download by itself
+// let go, and the downloads no illi runs any more gone
 export const PROVIDER: Provider = {
   facts    : FACTS,
   ask      : Antigravity.ask,

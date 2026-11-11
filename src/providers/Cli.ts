@@ -32,9 +32,16 @@
 // lingers. A download's folder left beside them (.new-*) goes a day old.
 // With autoupdate on, illi downloads its own build by itself once an
 // account is connected and no CLI is here (an illi update moved the pin:
-// update), in the background, one illi at a time on the machine
-// (.updating names the one doing it); a call meanwhile says it's
-// downloading. `illi uninstall` removes the downloads (programs).
+// update), in the background, one illi at a time on the machine: a lock
+// names the one doing it (.updating-<n>, its pid), which writes it anew
+// as it goes (each BEAT) and removes it as it's done or as illi ends
+// (unlock, the providers' close). A lock whose illi ended, or one not
+// written for STALE (its illi killed, its pid since another process's:
+// a reboot), is dead, whatever its pid: the next illi claims the
+// download in its place, one alone (claim). A download by itself that
+// gets no byte for STALL gives up, so none holds the lock stuck. A call
+// meanwhile says it's downloading. `illi uninstall` removes the
+// downloads (programs).
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -56,6 +63,10 @@ export type Theirs = { at: string; version: string };
 
 // a file in a tar archive: its name, size, its type (0: a plain file)
 export type Tarred = { name: string; size: number; type: string };
+
+// a download's lock (LOCK): its file and number, the pid it names (NaN:
+// none written yet), how long since it was written (ms)
+export type Lock = { at: string; n: number; pid: number; idle: number };
 
 // what makes a CLI: what its sentences call it (its maker's, as its
 // archive is called), and /login's page (CliLogin.ts): its short name,
@@ -133,6 +144,10 @@ export type Cli = {
   auto      : (mode: string, account: boolean) => Promise<boolean> | null;
   update    : () => Promise<boolean>;
   progress  : () => { share: number | null } | null;
+  lock      : () => Lock | null;
+  dead      : (lock: Lock) => boolean;
+  claim     : () => string | null;
+  unlock    : () => void;
   get       : (b: Build, file: string, signal: AbortSignal, got: (bytes: number, of: number) => void) => Promise<void>;
   untar     : (from: Readable, into: string | null) => Promise<Tarred[]>;
   paxed     : (data: Buffer) => Record<string, string>;
@@ -162,9 +177,19 @@ const ASKING = 30e3;
 // a tar archive's blocks
 const BLOCK = 512;
 
-// the file naming the illi that downloads its build by itself (its pid),
-// in the CLI's folder: one at a time on the machine (update)
-const LOCK = ".updating";
+// the files naming the illi that downloads its build by itself (its
+// pid), in the CLI's folder, one at a time on the machine (update): LOCK
+// and a number, the highest the one that counts, each made new by the
+// illi that claims the download (claim), never written over. Its illi
+// writes it anew each BEAT while it downloads and unpacks (ms); one not
+// written for STALE is dead, though a process has its pid (as
+// config/Update.ts takes a folder unwritten for its STALE as a dead
+// illi's). A download by itself gives up once no byte comes for STALL
+// (as Update.ts's does past its IDLE)
+const LOCK  = ".updating-";
+const BEAT  = 5e3;
+const STALE = 60e3;
+const STALL = 30e3;
 
 // Cli
 // ===
@@ -218,9 +243,11 @@ export function cli(spec: Spec): Cli {
   let settled = false;
 
   // this illi's download by itself (update): its build, how far it got
-  // (bytes of `of`), its end; the version it was tried for this run
+  // (bytes of `of`), its end; the version it was tried for this run; the
+  // lock this illi holds for it (claim; null: none)
   let updating: { b: Build; bytes: number; of: number; done: Promise<boolean> } | null = null;
   let tried = "";
+  let held: string | null = null;
 
   // the user's own CLI looked for this run (look): what it found (null:
   // none, or too old to run), and the look itself
@@ -615,10 +642,13 @@ export function cli(spec: Spec): Cli {
 
     // this illi's build downloaded by itself, in the background: once a
     // run for a version (one asked again shares the first), one illi at a
-    // time on the machine (LOCK: another's, its process alive, is left to
-    // it; one whose illi ended goes). true: downloaded now; false: not
-    // (none to take, here already, another illi's under way, or it failed:
-    // logged, /login offers it as before)
+    // time on the machine (claim: another's lock, alive, is left to it;
+    // a dead one's download is taken in its place). The lock is written
+    // anew each BEAT while it goes, and the download given up once no
+    // byte comes for STALL, so a lock is fresh only while its illi gets
+    // on. true: downloaded now; false: not (none to take, here already,
+    // another illi's under way, or it failed: logged, /login offers it as
+    // before)
     update() {
       if (updating !== null) {
         return updating.done;
@@ -628,50 +658,123 @@ export function cli(spec: Spec): Cli {
         return Promise.resolve(false);
       }
       tried = b.version;
-      const lock = path.join(c.home(), LOCK);
-      try {
-        fs.mkdirSync(c.home(), { recursive: true, mode: 0o700 });
-        if (cli_lives(Number(fs.readFileSync(lock, "utf8")))) {
-          return Promise.resolve(false);
-        }
-      } catch {}
-      try {
-        fs.rmSync(lock, { force: true });
-        fs.writeFileSync(lock, String(process.pid), { flag: "wx" });
-      } catch {
+      const lock = c.claim();
+      if (lock === null) {
         return Promise.resolve(false);
       }
-      const now = { b, bytes: 0, of: b.bytes, done: Promise.resolve(false) };
-      now.done = c.download(b, new AbortController().signal, (bytes, of) => {
+      if (c.ready()) {
+        c.unlock();
+        return Promise.resolve(false);
+      }
+      const now   = { b, bytes: 0, of: b.bytes, done: Promise.resolve(false) };
+      const stall = new AbortController();
+      let [seen, last] = [0, Date.now()];
+      const beat = setInterval(() => {
+        const at = Date.now();
+        if (now.bytes !== seen) {
+          [seen, last] = [now.bytes, at];
+        }
+        if (now.bytes < now.of && at - last > STALL) {
+          stall.abort();
+          return;
+        }
+        try {
+          fs.utimesSync(lock, at / 1e3, at / 1e3);
+        } catch {}
+      }, BEAT);
+      beat.unref();
+      now.done = c.download(b, stall.signal, (bytes, of) => {
         [now.bytes, now.of] = [bytes, of || b.bytes];
       }).then(() => true, (err: any) => {
-        console.error(spec.vendor + ": " + spec.name + " " + b.version + " wasn't downloaded: " + String(err?.message ?? err));
+        console.error(spec.vendor + ": " + spec.name + " " + b.version + " wasn't downloaded: " + (stall.signal.aborted ? "GitHub sent nothing for " + STALL / 1e3 + " seconds" : String(err?.message ?? err)));
         return false;
       }).finally(() => {
+        clearInterval(beat);
         updating = null;
-        try {
-          if (fs.readFileSync(lock, "utf8") === String(process.pid)) {
-            fs.rmSync(lock, { force: true });
-          }
-        } catch {}
+        c.unlock();
       });
       updating = now;
       return now.done;
     },
 
     // the download of this illi's build under way by itself: in this
-    // illi, its share done (%); in another (LOCK, its process alive),
-    // share null; none: null
+    // illi, its share done (%); in another (its lock alive), share null;
+    // none: null
     progress() {
       if (updating !== null) {
         return { share: Math.min(100, Math.floor((updating.bytes / (updating.of || 1)) * 100)) };
       }
+      const lock = c.lock();
+      return lock !== null && lock.pid !== process.pid && !c.dead(lock) && !c.ready() ? { share: null } : null;
+    },
+
+    // the lock that counts: the highest numbered in the CLI's folder
+    // (null: none)
+    lock() {
       try {
-        const pid = Number(fs.readFileSync(path.join(c.home(), LOCK), "utf8"));
-        return pid !== process.pid && cli_lives(pid) && !c.ready() ? { share: null } : null;
+        const ns = fs.readdirSync(c.home()).filter((f) => f.startsWith(LOCK) && /^\d+$/.test(f.slice(LOCK.length))).map((f) => Number(f.slice(LOCK.length)));
+        if (ns.length === 0) {
+          return null;
+        }
+        const n  = Math.max(...ns);
+        const at = path.join(c.home(), LOCK + n);
+        return { at, n, pid: Number(fs.readFileSync(at, "utf8") || NaN), idle: Math.abs(Date.now() - fs.statSync(at).mtimeMs) };
       } catch {
         return null;
       }
+    },
+
+    // whether a lock's illi downloads no more: the lock wasn't written
+    // for STALE (a time ahead of now counts as one behind: a clock set
+    // back), whatever process has its pid, or its illi ended (one just
+    // made, its pid not written yet, lives)
+    dead(lock) {
+      return lock.idle > STALE || (!Number.isNaN(lock.pid) && !cli_lives(lock.pid));
+    },
+
+    // the download claimed by this illi: a lock made new, numbered past
+    // the one that counts, once that one is dead or none is. A file is
+    // made by one illi alone (never written over, never moved), so of
+    // those claiming at once one gets it; one that made a lock under
+    // another's (made and let go meanwhile) lets its own go. The dead
+    // ones before it go. Its file; null: another illi's lives, or none
+    // can be made
+    claim() {
+      const was = c.lock();
+      if (was !== null && !c.dead(was)) {
+        return null;
+      }
+      const at = path.join(c.home(), LOCK + ((was?.n ?? 0) + 1));
+      try {
+        fs.mkdirSync(c.home(), { recursive: true, mode: 0o700 });
+        fs.writeFileSync(at, String(process.pid), { flag: "wx" });
+      } catch {
+        return null;
+      }
+      held = at;
+      if (c.lock()?.at !== at) {
+        c.unlock();
+        return null;
+      }
+      try {
+        for (const f of fs.readdirSync(c.home()).filter((f) => f.startsWith(LOCK) && Number(f.slice(LOCK.length)) <= (was?.n ?? 0))) {
+          fs.rmSync(path.join(c.home(), f), { force: true });
+        }
+      } catch {}
+      return at;
+    },
+
+    // this illi's lock gone, if it holds one still (its download by
+    // itself done, or illi ends: the providers' close), so another illi
+    // may claim the download at once
+    unlock() {
+      const at = held;
+      held = null;
+      try {
+        if (at !== null && fs.readFileSync(at, "utf8") === String(process.pid)) {
+          fs.rmSync(at, { force: true });
+        }
+      } catch {}
     },
 
     // the archive to a file, its sha256 reckoned as it comes and checked;

@@ -31,12 +31,17 @@ import { Vendors } from "./providers/Vendors.ts";
 // clone
 const INSTALLER = "https://raw.githubusercontent.com/4our4ace/illimitable-chat/main/install.sh";
 
+// the arguments: `uninstall` first takes its own alone after it (what
+// goes, or help: `illi uninstall upgrade` upgrades nothing); else help,
+// the version, an upgrade. ODD: the first that is none of them
 const ARGS      = process.argv.slice(2);
-const HELP      = ARGS.some((a) => ["help", "--help", "-h"].includes(a));
-const ASKED     = ARGS.some((a) => ["version", "--version", "-v"].includes(a));
-const UPGRADE   = ARGS.includes("upgrade");
+const HELPS     = ["help", "--help", "-h"];
 const UNINSTALL = ARGS[0] === "uninstall";
-const ODD       = ARGS.find((a, k) => !["help", "--help", "-h", "version", "--version", "-v", "upgrade", ...(UNINSTALL ? ["uninstall", "--programs", "--everything"] : [])].includes(a) || (a === "uninstall" && k > 0));
+const REST      = UNINSTALL ? ARGS.slice(1) : ARGS;
+const HELP      = REST.some((a) => HELPS.includes(a));
+const ASKED     = !UNINSTALL && REST.some((a) => ["version", "--version", "-v"].includes(a));
+const UPGRADE   = !UNINSTALL && REST.includes("upgrade");
+const ODD       = REST.find((a) => ![...HELPS, ...(UNINSTALL ? ["--programs", "--everything"] : ["version", "--version", "-v", "upgrade"])].includes(a));
 
 // an argument that means to sign in, which the chat does (/login)
 const LOGIN = /^-*(login|logout|signin|auth)$/i;
