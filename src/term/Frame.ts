@@ -2,10 +2,12 @@
 // =====
 // The screen painted as the work at hand is done (a key's at once), a
 // frame at most each FRAME ms: the head; the chat (or a pane; over its
-// foot the commands suggested), the side beside it (Side.ts); the notes,
+// foot the commands suggested); the notes,
 // the toast and the jump to the end; the rule (what runs, the ∞ traced),
 // the input (or a question in its place: Question.ts), the pages, the
-// pick; a list's popup open (Popup.ts) over all of it, all else dimmed,
+// pick; the side (Side.ts) beside all under the head, the screen's
+// height, scrolled by the wheel where it's longer (its edge the
+// scrollbar); a list's popup open (Popup.ts) over all of it, all else dimmed,
 // the cursor in its search if it has one; all of it grey while the
 // leader waits for its key (Commands.ts term_lead); the terminal's
 // title. A pipe gets text.
@@ -239,7 +241,7 @@ export function term_paint(t: Term): void {
   const panel = side === 0 ? null : term_side_drawn(t, sw, h - 1);
   const sides = panel?.items ?? [];
   const jobs  = panel?.background !== true;
-  const sided = term_area(t, { key: "side", lines: sides.map((s) => s[0]), first: 0, row: 1, col: left > 0 ? 1 : at + 2, w: sw, tall: sides.length });
+  const sided = term_area(t, { key: "side", lines: panel?.lines ?? [], first: panel?.first ?? 0, row: 1, col: left > 0 ? 1 : at + 2, w: sw, tall: sides.length });
   const lit   = { ...Paint.INK, c: Draw.draw_tokens().accent };
   const toast = box !== null ? [] : [...lead, Paint.Run(" ".repeat(Math.max(1, cw - Paint.line_width(lead) - Paint.text_width(said.toast)))), Paint.Run(said.toast, lit)];
   const lines = [...above, toast, term_rule(t, iw, ruled, asked?.rule), ...input.lines, ...(paned ? [] : [Paint.rule(iw)]), ...status, Paint.tabs_line(t.v, iw, side === 0, jobs, side === 0 ? related_shown(t).length : 0)];
@@ -597,7 +599,7 @@ function term_view(t: Term, w: number, tall: number, row: number, col: number): 
 }
 
 // the commands suggested as a /word is typed (none: null), over the
-// chat's foot, room lines at most, iw wide (over the side too), each
+// chat's foot, room lines at most, iw wide (the side beside them), each
 // line with the command it stands for
 function term_box(t: Term, iw: number, room: number): { sug: Sug; lines: Array<[Paint.Line, Target | null]> } | null {
   const sug = term_suggest(t);

@@ -332,8 +332,9 @@ A shell call that starts a process in the background, its output going
 to a file (`npm run dev > dev.log 2>&1 &`), ends while that process
 runs on: a background job. Whoever started it, illi or a subagent, it
 shows in the side panel's Background section (a click opens
-`/background`); without the side panel, or with it too full, the bottom
-line counts them (`● 2 in background`, a click opens `/background`).
+`/background`); without the side panel, or with them scrolled out of
+its view, the bottom line counts them (`● 2 in background`, a click
+opens `/background`).
 `/background` lists each one, who started it and how long it has run:
 Enter or Del stops it.
 

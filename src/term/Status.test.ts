@@ -135,6 +135,32 @@ test("it runs once the state is known: its rows above the bottom line, 3 at most
   status_stop(t);
 });
 
+test("beside the side panel it's told the foot's width, and told it anew as the side's width changes", async () => {
+  const { setting_live } = await import("./Settings.ts");
+  const cols = DIR + "/side-cols.txt";
+  const was = Object.getOwnPropertyDescriptor(process.stdout, "columns");
+  Object.defineProperty(process.stdout, "columns", { value: 160, configurable: true });
+  try {
+    config.config_set("side", "right");
+    config.config_set("side_width", "40");
+    config.config_set("statusline", sh("cols.sh", "cat > /dev/null; echo \"$COLUMNS\" >> " + cols + "; echo hi"));
+    const t = term();
+    setting_live(t);
+    status_set(t);
+    await until(() => fs.existsSync(cols));
+    config.config_set("side_width", "60");
+    setting_live(t);
+    await until(() => fs.readFileSync(cols, "utf8").trim().split("\n").length === 2);
+    expect(fs.readFileSync(cols, "utf8").trim().split("\n")).toEqual([String(160 - 1 - 40 - 4), String(160 - 1 - 60 - 4)]);
+    status_stop(t);
+  } finally {
+    Object.defineProperty(process.stdout, "columns", was ?? { value: undefined, configurable: true });
+    config.config_set("side", null);
+    config.config_set("side_width", null);
+    config.config_set("statusline", null);
+  }
+});
+
 test("a job it leaves running is killed once its output is in; once illi leaves, nothing runs it again", async () => {
   const pid = DIR + "/job.pid";
   config.config_set("statusline", sh("job.sh", "sleep 30 & echo $! > " + pid + "; echo hi"));

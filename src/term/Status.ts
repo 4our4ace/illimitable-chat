@@ -33,6 +33,7 @@ import { Trusted } from "../config/Trusted.ts";
 import { VERSION } from "../config/Update.ts";
 import { MARGIN, term_draw } from "./Frame.ts";
 import { term_note } from "./Notices.ts";
+import { term_side_width } from "./Side.ts";
 import * as Paint from "../ui/Paint.ts";
 import * as Screen from "../ui/Screen.ts";
 import type { Term } from "./Term.ts";
@@ -336,7 +337,7 @@ async function status_run(t: Term): Promise<void> {
   let ran: Ran | null = null;
   try {
     const top = Trusted.folder(cwd);
-    const cols = status_width() - set.padding;
+    const cols = status_width(t) - set.padding;
     ran = await Run.run(set.command, { cwd, env: { COLUMNS: String(Math.max(1, cols)), LINES: String(Screen.screen_size().h), ILLI_PROJECT_DIR: top, CLAUDE_PROJECT_DIR: top }, input: JSON.stringify(status_input(t.v, cwd, s.id)) + "\n", timeout: LIMIT, signal: stop.signal, cap: CAP, full: true, reap: true });
   } catch (err: any) {
     console.error("illi: status line: " + String(err?.stack ?? err));
@@ -377,12 +378,14 @@ function status_took(t: Term, set: config.Statusline, ran: Ran): void {
   }
 }
 
-// the width its rows may take: the foot's
-function status_width(): number {
-  return Screen.screen_size().w - 1 - 2 * MARGIN;
+// the width its rows may take: the foot's, as wide as the chat (the
+// side panel beside it takes the rest: Frame.ts)
+function status_width(t: Term): number {
+  const w = Screen.screen_size().w;
+  return w - 1 - term_side_width(t, w) - 2 * MARGIN;
 }
 
 // what a run is given, as a key: its input, the width and the command
 function status_key(t: Term, set: config.Statusline): string {
-  return JSON.stringify(status_input(t.v, process.cwd(), t.status.id)) + "\0" + status_width() + "\0" + set.command + "\0" + set.padding;
+  return JSON.stringify(status_input(t.v, process.cwd(), t.status.id)) + "\0" + status_width(t) + "\0" + set.command + "\0" + set.padding;
 }

@@ -10,7 +10,10 @@
 // is on claude-code, those not connected counted in one line), the
 // requests refused, the plugins' lines, and illi's to-do list or, with
 // none, illi's version and what is known of a newer release
-// (Update.said); the side and side_width settings place it.
+// (Update.said); the side and side_width settings place it. It runs the
+// screen's height under the head, beside the chat and the input (Frame.ts);
+// longer than that, it scrolls by the wheel over it (Keys.ts term_slide),
+// its edge a scrollbar.
 
 import type { Theirs } from "../providers/Provider.ts";
 import { term_background, term_choose, term_mcp, term_mcp_state, term_owner, term_stick, term_theirs } from "./Commands.ts";
@@ -84,10 +87,11 @@ export function term_side(t: Term, w: number, tall: number): Item[] {
 
 // the side, as term_side, and whether its background jobs show whole
 // (none running: yes); not (scrolled out of view), the last line counts
-// them (Paint.tabs_line); the first of its lines shown and the most
-// that can be (0: it fits whole); scrolling, the rows of its scrollbar's
-// thumb (from, to: past the last; null: it fits whole)
-export function term_side_drawn(t: Term, w: number, tall: number): { items: Item[]; background: boolean; first: number; most: number; thumb: [number, number] | null } {
+// them (Paint.tabs_line); all its lines, those out of view too (text
+// chosen in it keeps to its lines as it scrolls); the first shown and
+// the most that can be (0: it fits whole); scrolling, the rows of its
+// scrollbar's thumb (from, to: past the last; null: it fits whole)
+export function term_side_drawn(t: Term, w: number, tall: number): { items: Item[]; lines: Paint.Line[]; background: boolean; first: number; most: number; thumb: [number, number] | null } {
   const bold  = { ...Paint.INK, b: true };
   const head  = (text: string, run: (() => void) | null = null): Item => [[Paint.Run(text, bold)], run];
   const item  = (here: boolean, text: string, run: () => void): Item => [[Paint.Run((here ? GLYPH.here : GLYPH.tab) + " " + text, here ? Paint.INK : Paint.DIM)], run];
@@ -108,10 +112,11 @@ export function term_side_drawn(t: Term, w: number, tall: number): { items: Item
   const items = room > 0 ? [...top, ...fill(room), ...foot] : [...top, gap, ...foot];
   const most  = Math.max(0, items.length - tall);
   const first = Math.max(0, Math.min(most, t.slid ?? (todo.length === 0 ? 0 : top.length + 1)));
+  const lines = items.map(([line]) => Paint.runs_wrap(line, w, true)[0]);
   const kept  = items.slice(first, first + tall);
   const size  = Math.max(1, Math.round((tall * tall) / items.length));
   const from  = most === 0 ? 0 : Math.round((first * (tall - size)) / most);
-  return { items: kept.map(([line, run, aside]) => [Paint.runs_wrap(line, w, true)[0], run, aside]), background: bg.every((x) => kept.includes(x)), first, most, thumb: most === 0 ? null : [from, from + size] };
+  return { items: kept.map(([, run, aside], k) => [lines[first + k], run, aside]), lines, background: bg.every((x) => kept.includes(x)), first, most, thumb: most === 0 ? null : [from, from + size] };
 }
 
 // two lists, w wide: the second beside the first, GAP after the first's

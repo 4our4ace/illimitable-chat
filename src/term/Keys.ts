@@ -5,7 +5,8 @@
 // shortcut, before all else), and what takes keys first: a list's popup
 // open (Popup.ts) every key but PASS's, so none reaches the chat, a
 // pane, the input or the commands suggested under it (its search the
-// text typed too); then a question at the input (Question.ts) every key
+// text typed too); then the side under the pointer the wheel, where it
+// scrolls (term_slide); then a question at the input (Question.ts) every key
 // but PASS's, the leader, the wheel off it and Ctrl+C with text chosen
 // (its line or illi's form's words the text typed too); then the
 // commands suggested and a pane; Enter (a skill named mid-message told),

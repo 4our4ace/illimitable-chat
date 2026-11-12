@@ -207,6 +207,28 @@ test("the side at the screen's full height, beside the chat and its foot, as wid
   });
 });
 
+test("text chosen in the side keeps to its lines as the wheel scrolls it: the same text copied, lit where it now shows", async () => {
+  const { term_grab } = await import("./Keys.ts");
+  const { term_selected } = await import("./Select.ts");
+  await sized(160, 14, async () => {
+    const t = term();
+    t.v.todo = Array.from({ length: 14 }, (_, k) => ({ text: "step " + k, status: k === 0 ? "active" : "pending" }));
+    t.todo = true;
+    await written(async () => term_paint(t));
+    const line = t.areas.find((a: any) => a.key === "side").lines.findIndex((l: any[]) => l.map((r) => r.x).join("").trimEnd().endsWith(" step 3"));
+    const ends = [{ line, col: 0 }, { line, col: 30 }];
+    t.sel = { key: "side", a: ends[0], b: ends[1], held: false, moved: true, unit: 1, root: ends };
+    const lit = () => t.ruled.rows.slice(1).flatMap((r: any[], k: number) => (r[1]?.line.some((x: any) => x.s.v || x.s.g) ? [k] : []));
+    await written(async () => term_paint(t));
+    const was = lit();
+    expect([term_selected(t), was.length]).toEqual(["□ step 3", 1]);
+    t.scr.point = { row: 5, col: 130 };
+    term_grab(t, "WheelUp");
+    await written(async () => term_paint(t));
+    expect([term_selected(t), lit()]).toEqual(["□ step 3", [was[0] + 3]]);
+  });
+});
+
 test("while work runs beside the side, a tick writes the rule's row whole with the side's part of it kept", async () => {
   await sized(160, 30, async () => {
     const t = term();

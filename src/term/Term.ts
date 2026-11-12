@@ -3,8 +3,9 @@
 // `illi`: the agent (Chat.ts), run in this process, and a terminal view
 // of it, full screen (Screen.ts): a head (the folder, the page shown);
 // the chat as its agent sees it (View.ts, laid out by Paint.ts), its end
-// followed till it is scrolled up (the wheel, PgUp); beside it, on a wide
-// screen, the side panel (Side.ts); under it the input and its bars. A
+// followed till it is scrolled up (the wheel, PgUp); under it the input
+// and its bars; beside them, on a wide screen, the side panel (Side.ts),
+// the screen's height. A
 // paint (Frame.ts) lays the chat out anew (each row's lines made once)
 // and writes only the rows that changed. A drag anywhere chooses text
 // and copies it as it's let go (Select.ts); in the chat, a click opens,
@@ -250,7 +251,8 @@ export type Area = { key: string; lines: Paint.Line[]; first: number; row: numbe
 // list's search. What it was painted for (a picker, illi's form; the
 // input: null), its editor and the text it showed; the rows and columns
 // a press there takes, from its first row and column on the screen (the
-// input's and a line asked's: their rows whole, the rule under them too,
+// input's and a line asked's: their rows as wide as the chat and its
+// margins, the side's columns left to it, the rule under them too,
 // for the text's end); where a press at a row and column of those, from
 // its first, puts the cursor
 export type Field = { of: object | null; ed: Screen.Ed; text: string; row: number; col: number; w: number; tall: number; at: (row: number, col: number) => number };

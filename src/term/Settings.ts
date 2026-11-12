@@ -27,7 +27,7 @@ import { Plugins } from "../config/Plugins.ts";
 import { term_note } from "./Notices.ts";
 import { Pick } from "../ai/Pick.ts";
 import * as Screen from "../ui/Screen.ts";
-import { status_set } from "./Status.ts";
+import { status_hear, status_set } from "./Status.ts";
 import { term_act, term_send, type Term } from "./Term.ts";
 
 // the widest a value shows in the picker, so what it is fits beside it
@@ -314,12 +314,15 @@ export function setting_told(t: Term): void {
 
 // what the terminal holds of the settings, from them as they are now:
 // where the side panel shows and how wide, and the status line (run anew
-// only once it changed, as that kills a run in flight); every other key
-// is read where it is used
+// only once it changed, as that kills a run in flight; told the foot's
+// width anew as the side's changes it); every other key is read where
+// it is used
 export function setting_live(t: Term): void {
   t.side = { place: config.SIDE, width: config.SIDE_WIDTH };
   if (JSON.stringify(t.scr.tty ? config.STATUSLINE : null) !== JSON.stringify(t.status.set)) {
     status_set(t);
+  } else {
+    status_hear(t);
   }
 }
 
