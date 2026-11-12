@@ -86,10 +86,11 @@ export type Limit = { window: number; used: number; reset: number };
 
 // how full the chat a turn sends is (tokens), the most it holds before
 // its oldest messages fold into the tree (its auto compact, as it
-// applies), its model's window; the auto compact set for the model (set:
-// as written, "60%" or "400k"; own: the model's own, else the global
-// one), the most it may be (tokens)
-export type Fill = { used: number; cap: number; window: number; set: string; own: boolean; most: number };
+// applies), the window it's fitted to (told: its model's, as its vendor
+// told; else config.UNTOLD: Providers.window); the auto compact set for
+// the model (set: as written, "60%" or "400k"; own: the model's own,
+// else the global one), the most it may be (tokens)
+export type Fill = { used: number; cap: number; window: number; told: boolean; set: string; own: boolean; most: number };
 
 // the auto compacts set: the global one and each model's own, by label
 // (the /model gauge's, whatever the chat's model's window)

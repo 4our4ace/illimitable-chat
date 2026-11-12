@@ -741,6 +741,18 @@ test("a model whose window no one told (ChatGPT's before its catalog answers) mo
   }
 });
 
+test("a model whose window no call tells first (Copilot's Auto) is fitted to UNTOLD meanwhile: its cut moves, its fill says the window isn't told", () => {
+  const was = chat.pick;
+  chat.pick = { vendor: "github-copilot", model: "auto", effort: "medium", speed: "slow" };
+  try {
+    expect(Pick.window(chat.pick)).toBeUndefined();
+    const fill = (Chat.state(chat) as any).use.fill;
+    expect([Chat.cap(chat) > 0, Chat.cap(chat) <= config.UNTOLD * config.MOST, fill.window, fill.told, fill.cap]).toEqual([true, true, config.UNTOLD, false, Chat.cap(chat)]);
+  } finally {
+    chat.pick = was;
+  }
+});
+
 test("a failed turn asks to try again only when a later try may answer; a reply begun is cut off", () => {
   Chat.failed(chat, "the AI service is busy or unavailable right now", { ok: false, text: "", left: [], stop: "down", again: true });
   expect(last()).toBe("No reply: the AI service is busy or unavailable right now. Send a message to try again.");

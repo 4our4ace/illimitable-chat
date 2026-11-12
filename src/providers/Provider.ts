@@ -56,6 +56,11 @@ export type Context = {
 //   ("ChatGPT plan", "Anthropic API key");
 // - models: as built in (each window as the vendor states it; none: not
 //   known till it tells);
+// - window: the most a call on any of its models takes in, where its own
+//   program holds a call below its models' windows (Google's CLI fits
+//   each in 256k tokens of its count, whatever the model's own 1M): each
+//   model's window is that at most, and one never told any is that
+//   (Pick.ts); none: its models' own;
 // - defaults: illi's own pick on it (the first offered vendor's is
 //   illi's default, while `chats` names none for it) and the
 //   compactor's, while `compactor` names none: each names its model by
@@ -90,6 +95,7 @@ export type Facts = {
   maker     : Maker;
   row       : string;
   models    : Model[];
+  window?   : number;
   defaults  : { pick: Rule; compactor: Rule };
   ttl       : number;
   accounts  : "keys" | "folders" | "logins";
@@ -136,7 +142,10 @@ export type Hint = { text: string; trouble: boolean };
 // - spent: a refusal that means the plan behind it is used up (said: the
 //   error's words), what to do about it ("": not one);
 // - ready: before a call, its model's window told (on chatgpt, the
-//   account's catalog asked); null: ready, else why not;
+//   account's catalog asked); null: ready, else why not. A provider
+//   without one can't tell a window before a call (Copilot's Auto: its
+//   first call tells it), so a model it told none of is fitted to
+//   config.UNTOLD meanwhile (Providers.window);
 // - windows: whether the windows known are the account's own this run
 //   (none: always); while not, the chat's cut waits for them, as one
 //   fitted to smaller windows kept last would fold the chat for good;

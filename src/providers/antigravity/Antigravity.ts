@@ -32,9 +32,13 @@
 // (Ask.searches), each asked of the user at illi's screen as Claude
 // Code's are (Tools.approve, through the call's tools URL); none else. A
 // call without tools (a summary, a goal check, a recap: `once`) has none.
-// The blocks go as one message, the images after; a message sent mid-run
-// is left for the next turn (End.left), as the CLI takes one message a
-// turn. Its session's files are removed as it ends, each CLI's log as the
+// The chat goes after illi's prompt in the append, which the CLI passes
+// whole; the newest text alone is the message (its start too, past the
+// MESSAGE bytes the CLI keeps of one: it cuts the rest without a word),
+// the images after (Antigravity.split); a call past what the CLI takes
+// (CALL) is never sent, said too long for the window, so illi folds the
+// chat. A message sent mid-run is left for the next turn (End.left), as
+// the CLI takes one message a turn. Its session's files are removed as it ends, each CLI's log as the
 // CLI ends, and what else the CLI leaves in the account's folder (other
 // terminals' logs, crash reports, notes of each start) once a day old.
 // The CLI tells
@@ -54,7 +58,8 @@
 // reached (when it resets), the sign-in run out (/login signs in again),
 // a busy service; a stop cancels the turn (session/cancel), the CLI
 // killed if it doesn't end it in CANCEL. Each step's usage tells the
-// model's window, learned and kept for the next start.
+// model's window, where the CLI sends one, learned and kept for the next
+// start, at most the CLI's own (Facts.ts WINDOW).
 //
 // The CLIs run in a pool, an account's at a time: one starts as a call
 // needs it (about a second), takes up to MOST sessions at once, and ends
@@ -182,6 +187,27 @@ const LEAVES = ["log", "crashes", "implicit"];
 // 48 KB whatever this says; illi's own cut its tools' answers sooner)
 const OUTPUT = 1_000_000;
 
+// the most bytes of a message the CLI passes whole: it cuts a longer one
+// at 192,025, keeping its start and dropping the rest without a word
+// (measured on 1.5.5), so the newest of a long call's text never reached
+// the model; while its system prompt's append goes whole, as long as the
+// call fits (Antigravity.split)
+const MESSAGE = 190_000;
+
+// the most bytes of illi's own a call carries (the append and the
+// message): the CLI fits a call in 256k tokens of its own count (3 bytes
+// a token: 768 KB), its own prompt (16 to 28 KB) and tools' declarations
+// (14 KB, more with illi's) with it, and one past that fails saying only
+// that the agent's execution ended in an error (its log: maxMessageTokens
+// must be positive), so illi tells it's too long before sending it
+const CALL = 660_000;
+
+// said where a new text too long for the message goes on in it
+const ON = "[it goes on in the message]";
+
+// a call too long for the window
+const TOO_LONG = "the request was too long for the model's window";
+
 // the agent's web tools, where a call searches the web
 const WEB = ["search_web", "read_url_content"];
 
@@ -208,7 +234,7 @@ const PLACE = "Antigravity's own instructions above, of a workspace folder, an a
 
 // what a failure says: too long for the window, a plan's limit, a sign-in
 // run out, a busy service (the API's own words, as the agent passes them)
-const FULL  = /exceeds the maximum number of tokens|input token count|too many tokens|context (window|length)/i;
+const FULL  = /exceeds the maximum number of tokens|input token count|too many tokens|context (window|length)|could not fit in the available context limit/i;
 const LIMIT = /usage limit reached|reached your current quota|resource.?exhausted|quota.?exhausted|\b429\b/i;
 const LOGIN = /sign in again|log back in|authentication (required|expired)|auth_required|not (signed|logged) in|not logged into|credentials|unauthenticated|\b401\b/i;
 const BUSY  = /overloaded|unavailable|try again later|connection (was )?lost|deadline|timed? ?out|\b5\d\d\b|ECONN/i;
@@ -257,6 +283,9 @@ export namespace Antigravity {
     const none = (text: string, stop: End["stop"]): Try => ({ send: (say) => left.push(say), stop: () => {}, done: Promise.resolve({ ...end, text, stop, left }) });
     if (ask.from !== undefined) {
       return none("Antigravity can't go on from another request", "fail");
+    }
+    if (Antigravity.split(ask).too) {
+      return none(TOO_LONG, "full");
     }
     const folder = config.config_folder("antigravity");
     if (folder === "") {
@@ -356,12 +385,13 @@ export namespace Antigravity {
 
   // a session's settings: the account's empty folder; illi's tools
   // through the forwarder and the agent's web tools where the call has
-  // them (none else); illi's prompt after Google's
+  // them (none else); illi's prompt after Google's, the chat after it
+  // (Antigravity.split)
   export function session(run: Run, folder: string): unknown {
     const tools = run.ask.server !== "" && !run.ask.once;
     const web   = tools && run.ask.searches > 0;
     const mcp   = tools ? [{ type: "http", name: "illi", url: Antigravity.forward() + "/" + run.token, headers: [] }] : [];
-    return { cwd: Antigravity.work(folder), mcpServers: mcp, _meta: { antigravity: { enabledTools: web ? WEB : [], eagerMcpServers: tools ? ["illi"] : [], mcpMaxOutputBytes: OUTPUT, systemPrompt: { append: Antigravity.instructions(run.ask) } } } };
+    return { cwd: Antigravity.work(folder), mcpServers: mcp, _meta: { antigravity: { enabledTools: web ? WEB : [], eagerMcpServers: tools ? ["illi"] : [], mcpMaxOutputBytes: OUTPUT, systemPrompt: { append: Antigravity.split(run.ask).append } } } };
   }
 
   // illi's prompt, and in a call with tools how they're named there, then
@@ -370,10 +400,41 @@ export namespace Antigravity {
     return [ask.system, ...(ask.server !== "" && !ask.once ? [NAMED] : []), PLACE].join("\n\n");
   }
 
-  // the message: the blocks' texts, then the images
+  // the message: the newest of the call's text (Antigravity.split), then
+  // the images
   export function prompt(ask: Ask): unknown[] {
-    const text = ask.blocks.map((b) => b.text).filter((t) => t !== "").join("\n\n");
-    return [{ type: "text", text }, ...(ask.imgs ?? []).map((img) => ({ type: "image", mimeType: img.type, data: img.data }))];
+    return [{ type: "text", text: Antigravity.split(ask).message }, ...(ask.imgs ?? []).map((img) => ({ type: "image", mimeType: img.type, data: img.data }))];
+  }
+
+  // a call's text as the CLI takes it whole: illi's prompt (instructions)
+  // and every block but the last (the chat, where illi works...), in
+  // order, as its system prompt's append; the last (a turn's new text, a
+  // summary's task) the message, whose start, past MESSAGE bytes, goes
+  // last in the append (ON said there), so the CLI never cuts the newest
+  // of it. Too: past CALL bytes in all, which the CLI would refuse
+  export function split(ask: Ask): { append: string; message: string; too: boolean } {
+    const texts   = ask.blocks.map((b) => b.text).filter((t) => t !== "");
+    const last    = texts.at(-1) ?? "";
+    const at      = Antigravity.tail(last, MESSAGE);
+    const append  = [Antigravity.instructions(ask), ...texts.slice(0, -1), ...(at > 0 ? [last.slice(0, at) + ON] : [])].join("\n\n");
+    const message = last.slice(at);
+    return { append, message, too: Buffer.byteLength(append) + Buffer.byteLength(message) > CALL };
+  }
+
+  // where the end of `text` that's `most` bytes at most starts, at a
+  // line's start where one starts in its first part (0: it's all of it)
+  export function tail(text: string, most: number): number {
+    if (Buffer.byteLength(text) <= most) {
+      return 0;
+    }
+    let [lo, hi] = [0, text.length];
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      [lo, hi] = Buffer.byteLength(text.slice(mid)) <= most ? [lo, mid] : [mid + 1, hi];
+    }
+    const line = text.indexOf("\n", lo);
+    const at   = line !== -1 && line - lo < most / 8 ? line + 1 : lo;
+    return at < text.length && /[\uDC00-\uDFFF]/.test(text[at]) ? at + 1 : at;
   }
 
   // the session set on the pick's model (Antigravity's model offered of
@@ -726,7 +787,7 @@ export namespace Antigravity {
       return { ok: true, text: run.reply, left: [], ...first };
     }
     if (stop === "max_tokens" && !run.said && run.text.trim() === "") {
-      return { ok: false, text: "the request was too long for the model's window", left: [], stop: "full", grew: run.grew, ...first };
+      return { ok: false, text: TOO_LONG, left: [], stop: "full", grew: run.grew, ...first };
     }
     Antigravity.flush(run);
     const why = stop === "max_turn_requests" ? "Antigravity ended the turn: it took more steps than it allows in one" : Agent.stopped(stop, "Antigravity ended the turn (" + (stop || "no reason told") + ")");

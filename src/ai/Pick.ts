@@ -53,14 +53,27 @@ export const VENDORS: Vendor[] = IDS;
 
 // each vendor's models, at the speeds it runs them: as its facts build
 // them in (each a copy, which what the vendor tells changes: learn,
-// told), each window as its vendor states it
-const MODELS: Record<string, Model[]> = Object.fromEntries(FACTS.map((f) => [f.id, f.models.map((m) => ({ ...m }))]));
+// told), each window as its vendor states it, at most its facts' own
+// (held)
+const MODELS: Record<string, Model[]> = Object.fromEntries(FACTS.map((f) => [f.id, f.models.map((m) => held(f.id, { ...m }))]));
 
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 
 export const SPEEDS = ["slow", "fast", "ultrafast"];
 
 export const LABELS = [...new Set(Object.values(MODELS).flat().map((m) => m.label))];
+
+// a model's window held to what its vendor's facts say a call on it
+// takes at most (Facts window: its own program's limit, Google's CLI's),
+// that where none is told; another vendor's as told (the model itself,
+// changed)
+function held(vendor: string, model: Model): Model {
+  const most = Vendors.of(vendor)?.window;
+  if (most !== undefined) {
+    model.window = Math.min(model.window ?? most, most);
+  }
+  return model;
+}
 
 // what a family's * stands for: a version, a number or numbers with dots
 // (opus-* is opus-5.5, gemini-*-flash gemini-3.8-flash)
@@ -85,14 +98,14 @@ export namespace Pick {
     const fresh: string[] = [];
     const list = MODELS[vendor];
     if (how === "replace" && models.length > 0) {
-      list.splice(0, list.length, ...models.map((m) => ({ ...m })));
+      list.splice(0, list.length, ...models.map((m) => held(vendor, { ...m })));
     }
     for (const m of models) {
       const known = Pick.model(vendor, m.label);
       if (known === undefined) {
-        list.push({ ...m });
+        list.push(held(vendor, { ...m }));
       } else if (how !== "replace") {
-        Object.assign(known, Object.fromEntries(Object.entries(m).filter(([key, v]) => v !== undefined && key !== "label" && key !== "id")));
+        held(vendor, Object.assign(known, Object.fromEntries(Object.entries(m).filter(([key, v]) => v !== undefined && key !== "label" && key !== "id"))));
       }
       if (!LABELS.includes(m.label)) {
         LABELS.push(m.label);
@@ -124,13 +137,15 @@ export namespace Pick {
   }
 
   // a vendor's model, by the id it runs as, takes `window` tokens in, as
-  // its vendor told (a model not known: none); true: that's news
+  // its vendor told (a model not known: none), at most what its facts
+  // say a call takes (held); true: that's news
   export function told(vendor: Vendor, id: string, window: number): boolean {
     const model = Pick.by_id(vendor, id);
-    if (model === undefined || !(window > 0) || model.window === window) {
+    const most  = Vendors.of(vendor)?.window ?? Infinity;
+    if (model === undefined || !(window > 0) || model.window === Math.min(window, most)) {
       return false;
     }
-    model.window = window;
+    model.window = Math.min(window, most);
     return true;
   }
 

@@ -7,7 +7,9 @@
 // program (one of the two), an API key's provider able to check a key,
 // a plan's page in /login, its default picks its own models, each named
 // by family (opus-*: the newest of it), never by a version, or a rule over
-// its models (the cheapest, say) that gives one of them.
+// its models (the cheapest, say) that gives one of them. Each model's
+// window is at most what its provider says a call takes, one never told
+// that; a model no call tells first (no ready) is fitted to UNTOLD.
 // `bun test Providers.test.ts`.
 
 import { expect, test } from "bun:test";
@@ -78,4 +80,18 @@ test("each provider's facts, code and page agree", () => {
 
 test("what /login connects, in words, from the makers", () => {
   expect([Vendors.ways(), Vendors.list(["A"], "or"), Vendors.list(["A", "B", "C"], "and")]).toEqual(["your ChatGPT, Claude, Google AI or GitHub Copilot plan, or an API key", "A", "A, B and C"]);
+});
+
+test("each model's window is at most what its provider says a call takes (Google's CLI's), one never told that; a model no call tells first fitted to UNTOLD, none where its vendor tells it first (ready)", async () => {
+  const config = await import("../config/Config.ts");
+  const most = Vendors.of("antigravity")!.window!;
+  Pick.learn("antigravity", [{ label: "gemini-test-9", id: "gemini-test-9", speeds: ["slow"] }, { label: "gemini-test-10", id: "gemini-test-10", speeds: ["slow"], window: 1048576 }]);
+  expect([Pick.model("antigravity", "gemini-test-9")?.window, Pick.model("antigravity", "gemini-test-10")?.window]).toEqual([most, most]);
+  expect([Pick.told("antigravity", "gemini-test-9", 1048576), Pick.told("antigravity", "gemini-test-9", 100000), Pick.model("antigravity", "gemini-test-9")?.window]).toEqual([false, true, 100000]);
+  expect(Pick.list("antigravity").every((m) => m.window !== undefined && m.window <= most)).toBe(true);
+  Pick.learn("github-copilot", [{ label: "copilot-test-9", id: "copilot-test-9", speeds: ["slow"] }]);
+  Pick.learn("chatgpt", [{ label: "gpt-test-9", id: "gpt-test-9", speeds: ["slow"] }]);
+  const at = (vendor: string, model: string) => Providers.window({ vendor: vendor as Vendor, model, effort: "medium", speed: "slow" });
+  expect([Providers.of("github-copilot")!.ready, Providers.of("chatgpt")!.ready !== undefined]).toEqual([undefined, true]);
+  expect([at("github-copilot", "copilot-test-9"), at("chatgpt", "gpt-test-9"), at("antigravity", "gemini-test-10")]).toEqual([{ window: config.UNTOLD, told: false }, undefined, { window: most, told: true }]);
 });

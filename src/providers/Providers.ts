@@ -8,6 +8,8 @@
 // on first use, not as this file loads: a provider's code imports what
 // imports this file (Agent.ts), so its PROVIDER may not be made yet then.
 
+import { Pick } from "../ai/Pick.ts";
+import * as config from "../config/Config.ts";
 import { PROVIDER as ANTIGRAVITY } from "./antigravity/Antigravity.ts";
 import { PROVIDER as CHATGPT } from "./chatgpt/ChatGPT.ts";
 import { PROVIDER as CLAUDE_API } from "./claude-api/Anthropic.ts";
@@ -45,6 +47,18 @@ export namespace Providers {
   // in a chat)
   export function of(vendor: string | undefined): Provider | undefined {
     return Providers.all().find((p) => p.facts.id === vendor);
+  }
+
+  // the window a chat or an agent on a pick is fitted to: its model's as
+  // told, else, on a vendor that can't tell it before a call (no ready),
+  // config.UNTOLD; told: whether it's the model's. None where the vendor
+  // tells it first (ChatGPT's ready): its calls wait for it
+  export function window(pick: Pick): { window: number; told: boolean } | undefined {
+    const window = Pick.window(pick);
+    if (window !== undefined) {
+      return { window, told: true };
+    }
+    return Providers.of(pick.vendor)?.ready === undefined ? { window: config.UNTOLD, told: false } : undefined;
   }
 
 }

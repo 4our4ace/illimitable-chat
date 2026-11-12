@@ -636,20 +636,22 @@ export namespace Chat {
   // the cut fitted to the chat's model now (Memory.cutoff: it may move
   // and is saved), where a call's messages go whole from: as many of the
   // chat's tokens as its model takes (config_context), TOKEN bytes each;
-  // a model whose window isn't known (ChatGPT's catalog not answered)
-  // moves none, as a guess could fold the chat for good. A read of where
-  // it is (mem.cut) moves nothing
+  // a model whose window its vendor tells before a call but hasn't yet
+  // (ChatGPT's catalog not answered) moves none, as a guess could fold
+  // the chat for good; one no call tells first, as config.UNTOLD takes
+  // (Providers.window). A read of where it is (mem.cut) moves nothing
   export function cut(chat: Chat): number {
-    return Pick.window(chat.pick) === undefined ? chat.mem.cut : Memory.cutoff(chat.mem, Chat.cap(chat) * TOKEN);
+    return Providers.window(chat.pick) === undefined ? chat.mem.cut : Memory.cutoff(chat.mem, Chat.cap(chat) * TOKEN);
   }
 
   // the tokens of the chat a turn sends on the chat's model (its
-  // autocompact, room left for what a request takes beside the chat), its
-  // share as the chat's refits left it (fit); none while its window isn't
-  // known (never guessed: a message waits for the next turn, which says
-  // why it can't start)
+  // autocompact of the window it's fitted to: Providers.window, room left
+  // for what a request takes beside the chat), its share as the chat's
+  // refits left it (fit); none while its vendor hasn't told the window
+  // it tells before a call (never guessed: a message waits for the next
+  // turn, which says why it can't start)
   export function cap(chat: Chat): number {
-    const window = Pick.window(chat.pick);
+    const window = Providers.window(chat.pick)?.window;
     const beside = chat.beside.get(chat.pick.vendor + ":" + chat.pick.model) ?? 0;
     return window === undefined ? 0 : Math.round(config.config_context(chat.pick.model, window, beside, Pick.room(chat.pick)) * chat.fit);
   }
@@ -1170,9 +1172,9 @@ export namespace Chat {
   export function state(chat: Chat): { $: "state" } & State {
     const agents = Tools.working(chat.tools).map((a) => a.name);
     const tools  = Tools.state(chat.tools, chat.pick.vendor);
-    const window = Pick.window(chat.pick);
+    const fitted = Providers.window(chat.pick);
     const beside = chat.beside.get(chat.pick.vendor + ":" + chat.pick.model) ?? 0;
-    const fill   = window === undefined ? null : { used: Math.round(Memory.fill(chat.mem) / TOKEN), cap: Chat.cap(chat), window, ...config.config_autocompact_of(chat.pick.model), most: config.config_most(window, beside, Pick.room(chat.pick)) };
+    const fill   = fitted === undefined ? null : { used: Math.round(Memory.fill(chat.mem) / TOKEN), cap: Chat.cap(chat), window: fitted.window, told: fitted.told, ...config.config_autocompact_of(chat.pick.model), most: config.config_most(fitted.window, beside, Pick.room(chat.pick)) };
     const asks   = chat.asks.map(({ done, ...q }) => q);
     const catalog = Object.fromEntries(config.OFFER.vendors.map((v) => [v, Pick.list(v)]));
     return { $: "state", busy: chat.busy || chat.checking !== null, wait: Chat.waits(chat), agents, pick: chat.pick, agent: chat.mem.agent, ...config.OFFER, catalog, ...tools, use: { ...tools.use, fill, compacts: config.config_autocompacts() }, suggest: chat.suggest.on && config.SUGGEST ? chat.suggest.text : "", asks };

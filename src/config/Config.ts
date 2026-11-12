@@ -320,11 +320,15 @@ let ROLES: Record<Role, Partial<Record<Vendor, Pick>>> = { chats: {}, agents: {}
 // fold more (Chat.ts, Agent.ts), what the prompt and tools take beside
 // the chat left out of the autocompact too; a model whose vendor tells
 // its own (ChatGPT's effective_context_window_percent: Pick's room), that.
-// No window is ever guessed: a model whose window no one told (ChatGPT's,
-// till its catalog tells it) has none, so Chat.cut moves nothing, and no
-// turn nor subagent starts on it (ChatGPT.ready)
+// A model whose window no one told: on a vendor that tells it before a
+// call (ChatGPT's catalog: its ready), none, so Chat.cut moves nothing,
+// and no turn nor subagent starts on it, as a guess could fold the chat
+// for good; on another (Copilot's Auto, till its first call tells it),
+// UNTOLD, which most models take, so a chat still folds there rather than
+// going whole however long it grows (Providers.window)
 export const MOST       = 0.7;
 export const ROOM       = 0.9;
+export const UNTOLD     = 128000;
 let AUTOCOMPACT_SET     = "";
 let AUTOCOMPACTS: Record<string, unknown> = {};
 

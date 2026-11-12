@@ -213,7 +213,8 @@ function term_side_plan(t: Term, w: number): Item[] {
 // what the calls use, w wide, a label a line: how full the chat a turn
 // sends is, of the most it holds before its oldest messages fold into the
 // tree (summarized), the share, a bar under it (in the accent, as
-// term_bar colors it), then where it folds and its model's window; the
+// term_bar colors it), then where it folds and its model's window (one
+// its vendor hasn't told: not told, as the fold is UNTOLD's); the
 // memory's size. What won't fit says less
 function term_side_use(t: Term, w: number): Item[] {
   const c      = Draw.draw_tokens().accent;
@@ -225,7 +226,8 @@ function term_side_use(t: Term, w: number): Item[] {
   const of     = window === undefined ? [] : [Paint.Run(" / " + term_tokens(window), Paint.DIM)];
   const part   = share === null ? [] : [Paint.Run(" · ", Paint.DIM), term_pct(share, c)];
   const bar    = share === null ? [] : [term_bar(tokens! > 0 ? Math.max(share, 1e-9) : 0, w, c)];
-  const says   = fill === null ? [] : ["auto compact at " + term_tokens(fill.cap) + " · window " + term_tokens(fill.window), "auto compact at " + term_tokens(fill.cap), "at " + term_tokens(fill.cap)];
+  const of_it  = fill === null ? "" : fill.told === false ? " · window not told" : " · window " + term_tokens(fill.window);
+  const says   = fill === null ? [] : ["auto compact at " + term_tokens(fill.cap) + of_it, "auto compact at " + term_tokens(fill.cap), "at " + term_tokens(fill.cap)];
   const folds  = says.length === 0 ? [] : [[[Paint.Run(says.find((x) => Paint.text_width(x) <= w) ?? says[says.length - 1], Paint.DIM)], null] as Item];
   const count  = View.view_count(t.v);
   const n      = Paint.Run(count + (count === 1 ? " message" : " messages"));

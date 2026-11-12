@@ -957,7 +957,7 @@ export namespace Tools {
     const ask = Tools.ask(tools, agent);
     const pick = Tools.pick(tools, agent.role);
     const log = Logs.view(tools.mem, agent.name);
-    const window = Pick.window(pick);
+    const window = Providers.window(pick)?.window;
     let most = window === undefined ? Memory.bytes(Logs.fit(log)) : config.config_most(window, 0, Pick.room(pick)) * TOKEN;
     tools.hooks.on(agent, { $: "Entry", kind: "mind", text: RECAPPING });
     for (let k = 0; k < REFITS; k++, most /= 2) {

@@ -363,6 +363,15 @@ accounts on its own.
   3.8 Flash). With two accounts on different plans, the list is the one
   whose CLI told it last; a model the account in use doesn't offer says
   what it does offer.
+- **How much of the chat fits**: Google's CLI fits each turn in 256k
+  tokens by its own count (about 768 KB of text, its own prompt and
+  tools included), whatever the model's own 1M, so every Gemini model's
+  window here is 192k of illi's tokens (4 bytes each), and the chat
+  folds at its auto compact of that. The CLI keeps only the first
+  192 KB of a message, so illi sends the chat after its prompt, which
+  the CLI passes whole, and only your newest message as the message. A
+  turn the CLI would refuse is never sent: illi folds more of the chat
+  and goes on.
 - **What's different**: a message you send mid-turn waits for the next
   one; a tool's answer reaches the model cut at about 48 KB (illi's own
   tools cut theirs sooner); when Google is busy or your plan's limit
@@ -518,6 +527,15 @@ own.
   when they start anew; when GitHub limits your rate, a later turn may
   answer; when your organization's policy refuses, illi says GitHub's
   words.
+- **How much of the chat fits**: Google's CLI fits each turn in 256k
+  tokens by its own count (about 768 KB of text, its own prompt and
+  tools included), whatever the model's own 1M, so every Gemini model's
+  window here is 192k of illi's tokens (4 bytes each), and the chat
+  folds at its auto compact of that. The CLI keeps only the first
+  192 KB of a message, so illi sends the chat after its prompt, which
+  the CLI passes whole, and only your newest message as the message. A
+  turn the CLI would refuse is never sent: illi folds more of the chat
+  and goes on.
 - **What's different**: a message you send mid-turn waits for the next
   one; the CLI retries a busy service a few times before it says so
   (Esc stops the turn); the CLI takes about 200 MB. illi starts one for
@@ -619,7 +637,7 @@ usage:
 | `chatgpt`     | the models your account may use, each one's window, efforts and speeds | at start, after `/login` and `/logout`, when the account changes; every 5 minutes while it doesn't answer |
 | `claude-api`  | the models your key may use, the newest active one of each family (opus, sonnet, haiku…), each one's window and efforts (Anthropic's Models API) | at start, after `/login` (here or in another terminal) |
 | `claude-code` | the models your plan offers, as Claude Code lists them: the newest of each family (Opus, Fable, Sonnet, Haiku), with their efforts; each model's window, as Claude Code has it for a turn (asked, no message sent); the window of the model a turn's reply ran on | at start, once a day for an account (a start within it goes on what it told, so no Claude Code runs as illi opens), and after `/login` (here or in another terminal); after each turn's reply |
-| `antigravity` | the models your account may use, each at its thinking levels; the window of the model a turn ran on | the models at sign-in and as each turn starts; the window during each turn |
+| `antigravity` | the models your account may use, each at its thinking levels; the window of the model a turn ran on, where the CLI tells one (192k at most: the CLI's own) | the models at sign-in and as each turn starts; the window during each turn |
 | `openai-api`  | nothing: its windows are built in (1.05M)                        |                                        |
 | `opencode-go` | the models your plan offers that illi runs ([OpenCode Go plan](#opencode-go-plan)), each one's window, efforts and price (OpenCode's catalog) | at start, after `/login` (here or in another terminal), before a turn till it answers |
 | `github-copilot` | the models your plan offers, as Copilot's CLI lists them ([GitHub Copilot plan](#github-copilot-plan)), each one's window, efforts and price; the plan's use; Auto's window, as a turn tells it | at start, as the chat moves to it, after `/login`; the use after each request too |
@@ -641,7 +659,10 @@ weigh. If your account refuses a chat that long at a turn's start, illi
 keeps to the usual window for that model from then on. A pick whose
 effort or speed the model doesn't have runs at the nearest one it has.
 The other vendors' windows are built in until they tell (Claude Code's:
-200k, which it tells right away: 1M on a plan with long context).
+200k, which it tells right away: 1M on a plan with long context). A
+model whose window no one has told yet, on a vendor that tells it only
+as a turn runs (Copilot's Auto), is fitted to 128k meanwhile, so a long
+chat still folds; the side says its window isn't told.
 
 How much of the window a turn sends is each model's auto compact
 ([Config](config.md)): `/autocompact` sets it for the chat's model, and

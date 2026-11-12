@@ -16,7 +16,11 @@
 // starts. Its words and thoughts stream live and are logged whole as the
 // turn ends (a step's usage mid-stream splits nothing), the tokens its
 // first step read told (a step's usage, else a one-step turn's whole),
-// the model's window learned and kept. illi's tools reach the CLI
+// the model's window learned and kept (at most the CLI's own; one never
+// told is that). A long call's chat goes whole after illi's prompt in
+// the append, its newest text alone the message (its start in the
+// append past what the CLI keeps of one); one past what the CLI takes in
+// all is never sent, too long (`full`). illi's tools reach the CLI
 // through illi's forwarder, which logs each call with its answer (the
 // CLI's own note of it, named mcp_illi_, isn't logged twice); the CLI's
 // permission for them is given once; its web search and page reading are
@@ -24,7 +28,8 @@
 // refused as that answers, and logged with what they answered; a
 // workspace's trust is refused. A call without tools has none, nor the
 // web's. An error the CLI says as a message (a warning sign before it,
-// or not) is never a reply: busy, too long (`full`), the plan's limit
+// or not) is never a reply: busy, too long (`full`: the API's words, or
+// the CLI's own past its limit), the plan's limit
 // (when it resets; words streamed before it logged as cut off), a turn
 // past its window; a model the account doesn't offer fails saying what
 // it does. A stop cancels the turn, what streamed logged as cut off; a
@@ -98,7 +103,7 @@ const ask = (method, params) => new Promise((done) => { const id = ++next; waits
 const update = (sessionId, u) => out({ jsonrpc: "2.0", method: "session/update", params: { sessionId, update: u } });
 const say = (sid, text) => update(sid, { sessionUpdate: "agent_message_chunk", content: { type: "text", text } });
 const think = (sid, text) => update(sid, { sessionUpdate: "agent_thought_chunk", content: { type: "text", text } });
-const used = (sid, n) => update(sid, { sessionUpdate: "usage_update", used: n, size: 1000000 });
+const used = (sid, n) => update(sid, { sessionUpdate: "usage_update", used: n, size: 100000 });
 const USAGE = { inputTokens: 1400, outputTokens: 100, totalTokens: 1500 };
 const OPTS = [{ optionId: "allow_always", name: "Allow Always (risky)", kind: "allow_always" }, { optionId: "allow", name: "Allow", kind: "allow_once" }, { optionId: "deny", name: "Deny", kind: "reject_once" }];
 const FAMILIES = ["gemini-4-argon", "gemini-3.8-flash", "claude-opus-test"];
@@ -161,6 +166,10 @@ async function prompt(p) {
   }
   if (scene.includes("long")) {
     say(sid, "⚠ The input token count (2000000) exceeds the maximum number of tokens allowed (1048576).");
+    return { stopReason: "end_turn" };
+  }
+  if (scene.includes("nofit")) {
+    say(sid, "⚠ the most recent step (CORTEX_STEP_TYPE_USER_INPUT) could not fit in the available context limit: Total attempted tokens ~300000 (exceeding cascade_config.checkpoint_config.max_token_limit (256000))");
     return { stopReason: "end_turn" };
   }
   if (scene.includes("limit")) {
@@ -339,8 +348,8 @@ test("a turn: the CLI run as illi in the account's folder, never signed in by il
   expect(log.find((l) => l.method === "session/prompt").params.prompt).toEqual([{ type: "text", text: "turn" }]);
   expect([fs.readdirSync(CLI + "/conversations"), fs.readdirSync(CLI + "/brain")]).toEqual([[], []]);
   expect([fs.existsSync(FOLDER + "/.gemini/antigravity-acp"), fs.readdirSync(CLI + "/crashes"), fs.readdirSync(CLI + "/implicit").includes("old.pb"), ["acp-server-old-1.log", "acp-server-new-2.log"].map((f) => fs.existsSync(CLI + "/log/" + f))]).toEqual([false, [], false, [false, true]]);
-  expect(Pick.model("antigravity", "gemini-3.8-flash")?.window).toBe(1000000);
-  expect(JSON.parse(fs.readFileSync(DIR + "/models.json", "utf8")).vendors.antigravity.find((m: any) => m.id === "gemini-3.8-flash").window).toBe(1000000);
+  expect(Pick.model("antigravity", "gemini-3.8-flash")?.window).toBe(100000);
+  expect(JSON.parse(fs.readFileSync(DIR + "/models.json", "utf8")).vendors.antigravity.find((m: any) => m.id === "gemini-3.8-flash").window).toBe(100000);
 });
 
 test("illi's tools reach the CLI through the forwarder, each logged with its answer (the CLI's own note of it not logged again), its words before it logged first; the CLI's permission given once; the tokens read told of a one-step turn alone", async () => {
@@ -388,6 +397,8 @@ test("an error the CLI says as a message (a warning sign before it, or not) is n
   expect(entries(busy.events)).toEqual([]);
   const long = await call("long");
   expect([long.end.stop, entries(long.events)]).toEqual(["full", []]);
+  const nofit = await call("nofit");
+  expect([nofit.end.stop, entries(nofit.events)]).toEqual(["full", []]);
   const swamped = await call("swamped");
   expect([swamped.end.ok, swamped.end.stop, swamped.end.again, entries(swamped.events)]).toEqual([false, "down", true, [["illi", "Done so far.\n[cut off]"]]]);
   const limit = await call("limit");
@@ -395,6 +406,28 @@ test("an error the CLI says as a message (a warning sign before it, or not) is n
   expect(entries(limit.events)).toEqual([["illi", "Part one.\n[cut off]"]]);
   const max = await call("max");
   expect(max.end.stop).toBe("full");
+});
+
+test("a long call: the chat after illi's prompt in the append, whole; the newest text alone the message, its start in the append past what the CLI keeps of one (said so, at a line's start, in bytes); one past what the CLI takes in all never sent, too long", async () => {
+  const ask = (blocks: string[]) => ({ vendor: "antigravity", model: "gemini-3.8-flash", effort: "medium", speed: "slow", system: "ILLI PROMPT", blocks: blocks.map((text) => ({ text, mark: false })), searches: 0, server: "", once: true }) as any;
+  const short = Antigravity.split(ask(["<chat>\nold\n", "", "WHERE", "Turn: new"]));
+  expect(short).toEqual({ append: Antigravity.instructions(ask([])) + "\n\n<chat>\nold\n\n\nWHERE", message: "Turn: new", too: false });
+  const chat = "<chat>\n" + "an old line of the chat, summarized\n".repeat(8000) + "</chat>\n";
+  const last = "Turn: the user's new message:\n\nFIRST\n" + "a new line of the paste\n".repeat(12000) + "NEWEST";
+  const long = Antigravity.split(ask([chat, last]));
+  const cut  = long.append.slice(long.append.indexOf("</chat>\n") + 10, -"[it goes on in the message]".length);
+  expect([long.too, long.append.includes(chat), long.message.endsWith("NEWEST"), cut.startsWith("Turn: the user's new message:\n\nFIRST\n"), cut + long.message]).toEqual([false, true, true, true, last]);
+  expect([Buffer.byteLength(long.message) <= 190_000, Buffer.byteLength(long.message) > 189_000, cut.endsWith("\n")]).toEqual([true, true, true]);
+  const wide = Antigravity.split(ask(["ä".repeat(150_000)]));
+  expect([Buffer.byteLength(wide.message), wide.message.length + wide.append.length - Antigravity.instructions(ask([])).length - 2 - "[it goes on in the message]".length]).toEqual([190_000, 150_000]);
+  expect(Antigravity.split(ask(["x".repeat(500_000), "y".repeat(170_000)])).too).toBe(true);
+  const before = logged().filter((l) => l.method === "session/new").length;
+  const { end } = await call("turn", { blocks: [{ text: "x".repeat(500_000), mark: false }, { text: "turn", mark: true }] , server: "", once: true, system: "y".repeat(170_000) });
+  expect([end.ok, end.stop, end.text, logged().filter((l) => l.method === "session/new").length]).toEqual([false, "full", "the request was too long for the model's window", before]);
+  const sent = await call("turn", { blocks: [{ text: "<chat>\nCHAT\n</chat>\n", mark: false }, { text: "turn", mark: true }] });
+  expect(sent.end.ok).toBe(true);
+  const made = logged().filter((l) => l.method === "session/new").at(-1).params;
+  expect([made._meta.antigravity.systemPrompt.append.endsWith("<chat>\nCHAT\n</chat>\n"), logged().filter((l) => l.method === "session/prompt").at(-1).params.prompt]).toEqual([true, [{ type: "text", text: "turn" }]]);
 });
 
 test("a turn past the most the model may write, or declined, keeps what it said and ends in plain words, as illi's own loop ends one", async () => {
@@ -420,10 +453,10 @@ test("the account's models, as its CLI lists them, are those offered: each famil
   await call("turn", { model: "gemini-4-argon", effort: "low" });
   expect(logged().filter((l) => l.method === "session/set_config_option").map((l) => [l.params.configId, l.params.value])).toEqual([["model", "gemini-4-argon"], ["thinking_level", "low"]]);
   const shown = () => Pick.list("antigravity").map((m: any) => [m.label, m.efforts, m.window]);
-  expect(shown()).toEqual([["gemini-4-argon", ["low", "medium", "high"], 1000000], ["gemini-3.8-flash", ["low", "medium", "high"], 1000000]]);
+  expect(shown()).toEqual([["gemini-4-argon", ["low", "medium", "high"], 100000], ["gemini-3.8-flash", ["low", "medium", "high"], 100000]]);
   const real = { configOptions: [{ id: "model", currentValue: "gemini-3.8-flash", options: [{ value: "gemini-5-test", name: "Gemini 5 Test" }, { value: "gemini-3.8-flash", name: "Gemini 3.8 Flash" }] }, { id: "thinking_level", currentValue: "high", options: [{ value: "low" }, { value: "high" }] }], models: { availableModels: [{ modelId: "gemini-5-test-high" }, { modelId: "gemini-5-test-low" }, { modelId: "gemini-3.8-flash-high" }, { modelId: "gemini-3.8-flash-medium" }, { modelId: "gemini-3.8-flash-low" }] } };
   Antigravity.learn(real);
-  expect(shown()).toEqual([["gemini-5-test", ["low", "high"], undefined], ["gemini-3.8-flash", ["low", "medium", "high"], 1000000]]);
+  expect(shown()).toEqual([["gemini-5-test", ["low", "high"], 192000], ["gemini-3.8-flash", ["low", "medium", "high"], 100000]]);
   expect([config.OFFER.models.includes("gemini-5-test"), told.length]).toEqual([true, 1]);
   expect(JSON.parse(fs.readFileSync(DIR + "/models.json", "utf8")).vendors.antigravity.map((m: any) => m.label)).toEqual(["gemini-5-test", "gemini-3.8-flash"]);
   Antigravity.learn(real);

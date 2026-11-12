@@ -1090,8 +1090,9 @@ export function term_gauge(g: Gauge, w: number): Paint.Line[] {
 
 // /autocompact: the chat's model's autocompact said (no value), or set
 // for it (by the chat's process: from another terminal too): a share of
-// its window, tokens, or default (its own taken out, the global one
-// holds), said once the chat took it (a variable setting them: why not)
+// its window (one not told: the one it's fitted to, said so), tokens, or
+// default (its own taken out, the global one holds), said once the chat
+// took it (a variable setting them: why not)
 function term_autocompact(t: Term, arg: string): void {
   const fill  = t.v.use.fill ?? null;
   const model = t.v.pick?.model;
@@ -1102,15 +1103,16 @@ function term_autocompact(t: Term, arg: string): void {
   if (fill === null) {
     return term_note(t, model + "'s window isn't known yet: its vendor hasn't told it.");
   }
+  const of_it = fill.told === false ? " of the " + term_tokens(fill.window) + " illi fits it to (its window isn't told)" : " of its " + term_tokens(fill.window) + " window";
   if (text === "") {
-    return term_note(t, "Auto compact for " + model + " at " + fill.set + (fill.own ? "" : " (the global one)") + ": " + term_tokens(fill.cap) + " of its " + term_tokens(fill.window) + " window. /autocompact 50%, 300k or default changes it; in /model, Shift + <-/->.");
+    return term_note(t, "Auto compact for " + model + " at " + fill.set + (fill.own ? "" : " (the global one)") + ": " + term_tokens(fill.cap) + of_it + ". /autocompact 50%, 300k or default changes it; in /model, Shift + <-/->.");
   }
   const value = text === "default" ? null : text;
   const want  = value === null ? null : config.config_tokens(value, fill.window);
   if (value !== null && want === null) {
     return term_note(t, "/autocompact takes a share of the window (50%), a size (300k) or default.");
   }
-  const said = want === null ? ": back to the global one" : " at " + value + ": " + (want > fill.most ? "held to " : "") + term_tokens(Math.min(want, fill.most)) + " of its " + term_tokens(fill.window) + " window";
+  const said = want === null ? ": back to the global one" : " at " + value + ": " + (want > fill.most ? "held to " : "") + term_tokens(Math.min(want, fill.most)) + of_it;
   term_send(t, { $: "autocompact", label: model, value }, undefined, "Auto compact for " + model + said + ".");
 }
 
