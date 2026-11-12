@@ -40,7 +40,8 @@
 // Its stream: the model's thoughts and words shown live, logged as a
 // tool call follows them or the turn ends; each tool's call logged with
 // what it answered, as the CLI tells both. Its failures come as the
-// CLI's own kinds: too long for the window (`full`: illi folds the chat),
+// CLI's own kinds: too long for the window (`full`: illi folds the chat;
+// the CLI's own count past it too, which has no kind: BUDGET),
 // the plan's credits used up, a rate limit (a later try may answer), a
 // sign-in run out (/login signs in again), a policy of the account's
 // organization, a busy service; and, whatever its kind, an account

@@ -527,15 +527,12 @@ own.
   when they start anew; when GitHub limits your rate, a later turn may
   answer; when your organization's policy refuses, illi says GitHub's
   words.
-- **How much of the chat fits**: Google's CLI fits each turn in 256k
-  tokens by its own count (about 768 KB of text, its own prompt and
-  tools included), whatever the model's own 1M, so every Gemini model's
-  window here is 192k of illi's tokens (4 bytes each), and the chat
-  folds at its auto compact of that. The CLI keeps only the first
-  192 KB of a message, so illi sends the chat after its prompt, which
-  the CLI passes whole, and only your newest message as the message. A
-  turn the CLI would refuse is never sent: illi folds more of the chat
-  and goes on.
+- **How much of the chat fits**: the chat folds at each model's auto
+  compact of its window (Auto's taken as 128k till a turn tells it).
+  The CLI counts a request itself before sending it and refuses one
+  past the model's prompt budget (its window less the room it keeps for
+  the reply); the model may refuse one too. Either way illi folds more
+  of the chat and goes on.
 - **What's different**: a message you send mid-turn waits for the next
   one; the CLI retries a busy service a few times before it says so
   (Esc stops the turn); the CLI takes about 200 MB. illi starts one for
