@@ -20,7 +20,13 @@
 // point reads alone: whole messages (one of three pages stands where its
 // first is dated), a clock set back ending it all the same; a search in
 // a span keeps the lines over its messages alone, the best of those, not
-// the best of all cut down, in each chat's own span.
+// the best of all cut down, in each chat's own span. A chat's messages
+// are found by their own words (a call by its input's values, a result
+// without its <history> line), indexed in order from the first not held,
+// a slice at a time, by the index thread, every other project's after
+// (an older illi's chat: its index made); a message whose own line holds
+// the words comes once, as the line; one found by its words shows the
+// passage of it where the most of them meet.
 
 import { afterAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -156,7 +162,7 @@ test("a search of all: each chat's best first, so a big chat's many matches neve
   const cut = new Map();
   Store.search(home, ["needle"], null, cut);
   expect([...cut]).toEqual([["app-k3f9x2", { n: 1, more: true }]]);
-  expect(Projects.search(home, "needle", "all").split("\n").slice(19)).toEqual(["app-k3f9x2 900+1|user: step 900 needle needle", "More lines in: app-k3f9x2 (1+); search with project to see them."]);
+  expect(Projects.search(home, "needle", "all").split("\n").slice(19)).toEqual(["app-k3f9x2 900+1|user: step 900 needle needle", "More in: app-k3f9x2 (1+); search with project to see them."]);
   expect(Projects.search(home, "small needle", "all")).toBe("site-7q2m0d 0+1|user: a needle in a small project");
   expect(Projects.search(home, "needle", "nope")).toBe("No project nope: projects lists them.");
   const seek = Store.seek;
@@ -307,4 +313,145 @@ test("a search in a span keeps the lines over its messages alone, the best of th
   expect(where(Store.search(home, ["cache", "bug"], null, undefined, span))).toEqual(["app-k3f9x2 40+1", "app-k3f9x2 40+4", "site-7q2m0d 0+2"]);
   expect(Store.search(home, ["cache"], null, undefined, { from: Date.parse(day(23, 0)), to: Date.parse(day(24, 0)) })).toEqual([]);
   [home, app, site].forEach(Store.close);
+});
+
+test("a chat's messages are found by their own words: indexed in order from the first not held, a slice at a time; a call by its input's values, unescaped; a result without its <history> line; a message whose own line holds the words, once, as the line", () => {
+  const store = Store.open(DIR + "/said", APP);
+  const log = "x ".repeat(400) + "error: ENOENT: no such file, open 'src/chat/Store.ts' " + "y ".repeat(400);
+  const rows = [
+    { kind: "user", text: "read the waveform file" },
+    { kind: "tool", text: 'edit {"path":"a.ts","old":"one\\nbarbaz two"}' },
+    { kind: "echo", text: log + "\n\n<history>#3+1 · when the needle broke</history>" },
+    { kind: "illi", text: "done" },
+  ] as const;
+  Store.push(store, rows.map((r, i) => ({ i, kind: r.kind, text: r.text, date, size: r.text.length })), "/work");
+  Store.nodes(store, [{ first: 0, n: 1, text: "user: read the waveform file" }, { first: 2, n: 1, text: "echo: a read that failed" }]);
+  expect(Store.said_end(store)).toBe(0);
+  expect(Store.said_fill(store, 1)).toBe(3);
+  expect(Store.said_end(store)).toBe(1);
+  expect(Store.said_fill(store, 1e6)).toBe(0);
+  expect([Store.said_end(store), Store.said_fill(store, 1e6)]).toEqual([4, 0]);
+  const found = (words: string[]) => Store.search(store, words, [store.file]).map((f) => [f.first + "+" + f.n, f.said, f.text]);
+  const [hit] = found(["enoent", "store.ts"]);
+  expect(hit.slice(0, 2)).toEqual(["2+1", true]);
+  expect(hit[2]).toMatch(/^echo: …(x )+error: ENOENT: no such file, open 'src\/chat\/Store\.ts' (y )+y…$/);
+  expect(found(["barbaz"])).toEqual([["1+1", true, "tool: edit a.ts one barbaz two"]]);
+  expect(found(["needle"])).toEqual([]);
+  expect(found(["waveform"])).toEqual([["0+1", false, "user: read the waveform file"]]);
+  expect(Store.said_text("tool", 'shell {"command":"ls\\ttmp","timeout":30}')).toBe("shell\nls\ttmp\n30");
+  expect(Store.said_text("tool", "shell {not json")).toBe("shell {not json");
+  Store.close(store);
+});
+
+test("a message's passage: its words where the most of them meet, cut at spaces, … where cut, case and accents aside; one holding none, its start; a short one whole", () => {
+  const long = "alpha ".repeat(60) + "the Café bug is here " + "beta ".repeat(10) + "cafe again and the bug " + "gamma ".repeat(60);
+  const cut = Store.passage(long, ["cafe", "bug"]);
+  expect(cut.length).toBeLessThanOrEqual(302);
+  expect(cut).toMatch(/^…(alpha )+the Café bug is here (beta )+cafe again and the bug (gamma )+gamma…$/);
+  expect(Store.passage("  short\n\ttext  ", ["x"])).toBe("short text");
+  expect(Store.passage("word ".repeat(100), ["nothing"])).toMatch(/^(word ){59}word…$/);
+  expect(Store.passage("x ".repeat(200) + "e-mail here " + "y ".repeat(200), ["e-mail"])).toContain("e-mail here");
+});
+
+test("a chat an older illi kept, without the index of its messages' words: a search gives its lines alone; opened, the index is made and catches up from its first message; a search in a span keeps the messages in it alone", () => {
+  const dir = DIR + "/older";
+  const first = Store.open(dir, SITE);
+  first.db.run("drop table said_" + first.chat);
+  Store.push(first, [0, 1, 2].map((i) => ({ i, kind: "user" as const, text: "the quartz clock " + i, date: new Date(Date.UTC(2026, 9, 20 + i)).toISOString(), size: 1 })), "/work");
+  Store.nodes(first, [{ first: 0, n: 1, text: "user: a clock" }]);
+  expect(Store.said_has(first.db, first.chat)).toBe(false);
+  expect(Store.said_fill(first, 1e6)).toBe(0);
+  expect(Store.search(first, ["quartz"], [first.file])).toEqual([]);
+  Store.close(first);
+  const again = Store.open(dir, SITE);
+  expect([Store.said_has(again.db, again.chat), Store.said_end(again), Store.said_fill(again, 1e6), Store.said_end(again)]).toEqual([true, 0, 0, 3]);
+  const span = { from: Date.UTC(2026, 9, 21), to: Date.UTC(2026, 9, 22) };
+  expect(Store.search(again, ["quartz"], [again.file], undefined, span).map((f) => f.first + "+" + f.n + " " + f.text)).toEqual(["1+1 user: the quartz clock 1"]);
+  Store.close(again);
+});
+
+test("the index thread puts a chat's messages in its index of words a slice at a time, till none is left, and once more for one logged meanwhile; then every other project's, an older illi's index made", async () => {
+  const site = Store.open(DIR + "/thread", SITE);
+  site.db.run("drop table said_" + site.chat);
+  Store.push(site, [{ i: 0, kind: "user", text: "an older illi's word: zephyr", date, size: 30 }], "/work");
+  Store.close(site);
+  const store = Store.open(DIR + "/thread", APP);
+  Store.push(store, Array.from({ length: 300 }, (_, i) => ({ i, kind: "user" as const, text: "line " + i + " " + "z".repeat(20000), date, size: 20000 })), "/work");
+  Projects.index(store);
+  Store.push(store, [{ i: 300, kind: "user", text: "the last one, logged meanwhile", date, size: 30 }], "/work");
+  Projects.index(store);
+  for (let k = 0; k < 400 && Store.said_end(store) < 301; k++) {
+    await Bun.sleep(25);
+  }
+  expect(Store.said_end(store)).toBe(301);
+  expect(Store.search(store, ["meanwhile"], [store.file]).map((f) => f.first)).toEqual([300]);
+  const other = () => Store.search(store, ["zephyr"], null).map((f) => f.project + " " + f.first + "+" + f.n + " " + f.said);
+  for (let k = 0; k < 400 && other().length === 0; k++) {
+    await Bun.sleep(25);
+  }
+  expect(other()).toEqual(["site-7q2m0d 0+1 true"]);
+  Store.close(store);
+});
+
+// a stand-in for the model: a line's vector by the words it holds (cache,
+// bug, cake; else a fourth way), of length 1, kept small
+const { Embed } = await import("./Embed.ts");
+const { tiny_model } = await import("../../test/model.ts");
+function meant(text: string): Uint8Array {
+  const v = [/cache/.test(text) ? 1 : 0, /bug/.test(text) ? 1 : 0, /cake/.test(text) ? 1 : 0, 0];
+  v[3] = v.some((x) => x > 0) ? 0 : 1;
+  const len = Math.hypot(...v);
+  return Embed.pack(Float32Array.from(v, (x) => x / len));
+}
+
+test("the summary lines' vectors are made in order, from the first without one, a slice at a time; another model's are all made anew; the lines nearest a query, those at the floor or more, one a stretch, in a span too", () => {
+  const store = Store.open(DIR + "/vectors", APP);
+  const day = (d: number) => new Date(Date.UTC(2026, 9, d)).toISOString();
+  Store.push(store, [0, 1, 2, 3].map((i) => ({ i, kind: "user" as const, text: "m" + i, date: day(20 + i), size: 2 })), "/work");
+  Store.nodes(store, [
+    { first: 0, n: 1, text: "user: the cache bug" },
+    { first: 1, n: 1, text: "user: a cake recipe" },
+    { first: 0, n: 2, text: "user: the cache bug, then cake" },
+    { first: 2, n: 1, text: "user: the bug again" },
+    { first: 3, n: 1, text: "user: nothing" },
+  ]);
+  Store.vec_make(store.db, store.chat, "tiny@1");
+  expect([Store.vec_end(store), Store.vec_fill(store, meant, 2), Store.vec_end(store)]).toEqual([1, 3, 3]);
+  expect([Store.vec_fill(store, meant, 10), Store.vec_end(store)]).toEqual([0, 6]);
+  const q = Float32Array.from([Math.SQRT1_2, Math.SQRT1_2, 0, 0]);
+  const near = (span: any = null) => Store.near(store, [store.file], (v) => Embed.cosine(q, v), span, 0.3).map((f) => f.first + "+" + f.n + " " + Math.round(f.score * 100) / 100);
+  expect(near()).toEqual(["0+1 1", "2+1 0.71"]);
+  expect(near({ from: Date.UTC(2026, 9, 22), to: Date.UTC(2026, 9, 24) })).toEqual(["2+1 0.71"]);
+  Store.vec_make(store.db, store.chat, "tiny@2");
+  expect([Store.vec_end(store), Store.vec_fill(store, meant, 10), Store.vec_end(store)]).toEqual([1, 0, 6]);
+  Store.close(store);
+});
+
+test("found by words and by meaning: every word held, those first, never pushed out, five by meaning alone at most in the room left; any word held, one list by reciprocal rank, one in both rising; a line by meaning alone, not holding the words, marked ≈", () => {
+  const at = (first: number, text = "line " + first) => ({ project: "app", chat: 1, first, n: 1, text, said: false });
+  const ids = (found: any[]) => found.map((f) => f.first);
+  expect(ids(Projects.fuse([at(1), at(2), at(3)], [at(3), at(9)], true))).toEqual([3, 1, 2, 9]);
+  expect(ids(Projects.fuse([at(1), at(2), at(3)], [at(3), at(9)], false))).toEqual([1, 2, 3, 9]);
+  expect(ids(Projects.fuse([1, 2, 3].map((k) => at(k)), [10, 11, 12, 13, 14, 15, 16].map((k) => at(k)), false))).toEqual([1, 2, 3, 10, 11, 12, 13, 14]);
+  expect(ids(Projects.fuse(Array.from({ length: 20 }, (_, k) => at(k)), [at(99)], false))).toEqual(Array.from({ length: 20 }, (_, k) => k));
+  const look = { found: [at(1, "user: the cache"), at(9, "user: a slow store")], or: false, cut: [], none: null };
+  expect(Projects.said(look, "cache", "", null, [at(9, "user: a slow store")])).toBe("app 1+1|user: the cache\n≈ app 9+1|user: a slow store");
+  expect(Projects.holds("The Café, again", ["cafe"])).toBe(true);
+  expect(Projects.holds("cafeteria", ["cafe"])).toBe(false);
+});
+
+test("the index thread gives the summary lines their vectors once the model is there; a search finds them by meaning too, beside those by words", async () => {
+  const folder = DIR + "/tiny/models/m";
+  tiny_model(folder, { cache: [1, 0, 0, 0], store: [0.9, 0.1, 0, 0], cake: [0, 0, 0, 1] });
+  const store = Store.open(DIR + "/meaning", SITE);
+  Store.push(store, [0, 1, 2].map((i) => ({ i, kind: "user" as const, text: "m" + i, date, size: 2 })), "/work");
+  Store.nodes(store, [{ first: 0, n: 1, text: "user: the cache again" }, { first: 1, n: 1, text: "user: the store is slow" }, { first: 2, n: 1, text: "user: cake" }]);
+  Projects.index(store, folder);
+  for (let k = 0; k < 400 && (!Store.vec_has(store.db, store.chat) || Store.vec_end(store) < 4); k++) {
+    await Bun.sleep(25);
+  }
+  expect(Store.vec_end(store)).toBe(4);
+  expect(await Projects.seek(store, "cache", "", null, folder)).toBe("site-7q2m0d 0+1|user: the cache again\n≈ site-7q2m0d 1+1|user: the store is slow");
+  expect(await Projects.seek(store, "cache", "", null, null)).toBe("site-7q2m0d 0+1|user: the cache again");
+  Store.close(store);
 });

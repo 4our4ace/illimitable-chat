@@ -61,7 +61,7 @@ Every project file has the same schema, created by `SCHEMA` in
 
 | Table      | One row is                                      | Key                     | Written                        |
 | ---------- | ----------------------------------------------- | ----------------------- | ------------------------------ |
-| `meta`     | a fact about the file (today only `compat`)     | `key`                   | with the schema; by upgrades   |
+| `meta`     | a fact about the file (`compat`; `vectors`, the model `vec_<chat>` is of) | `key`  | with the schema; by upgrades; `vectors` by the index thread |
 | `project`  | the place illi ran in (one row per file)        | `id`                    | once, at the first run there   |
 | `chat`     | the project's chat (one today, room for more)   | `id`                    | once, with its project         |
 | `msg`      | a message, or one page of a long message        | `(chat, i)`             | once; never changed            |
@@ -72,6 +72,8 @@ Every project file has the same schema, created by `SCHEMA` in
 | `image`    | an image a message names (its bytes, its smaller copy for models) | `id`, unique `(chat, name)` | once (the name is its hash) |
 | `todo`     | a chat's to-do list, whole                      | `chat`                  | written over                   |
 | `find_<chat>` | one chat's search index (FTS5)               | `rowid`                 | one row with each new `node`   |
+| `said_<chat>` | one chat's index of its messages' own words (FTS5, no text kept) | `rowid`: the message's `i` | by the index thread, in order |
+| `vec_<chat>` | one chat's summary lines' vectors, to search by meaning | `id`: the line's `rowid` in `find_<chat>` | by the index thread, in order |
 
 The columns, by table:
 
@@ -128,6 +130,25 @@ The columns, by table:
   tables, `find_<chat>_data`, `_idx`, `_content`, `_docsize` and
   `_config`.
 
+- **vec_\<chat\>**: `id` (the line's `rowid` in `find_<chat>`), `first`,
+  `n` (the messages it covers, so a span needs no join), `v` (its
+  vector, 256 signed bytes: [Search by meaning](#search-by-meaning)).
+  Made by the index thread once the model is there, with `meta`'s
+  `vectors` naming the model they're of: a file whose vectors are
+  another model's has every `vec_<chat>` dropped and made anew.
+- **said_\<chat\>**: an FTS5 table of one column, `text`, made with
+  `content = ''`: it keeps only where each word is, never the text,
+  which is in `msg` already. Its `rowid` is the message's (the page's)
+  `i`. A message is indexed by its own words (`Store.said_text`): its
+  text; a tool call's (`name {input}`), its name and the values its input
+  holds, each on a line, unescaped (in JSON a newline's `\n` would join
+  two words into one); a result's, without the `<history>` line recall
+  appended to it. Same tokenizer as `find_<chat>`; FTS5 keeps it in four
+  more tables (`_data`, `_idx`, `_docsize`, `_config`). Made as the
+  chat is opened (`Store.open` → `Store.said_make`), not with the chat,
+  since an older illi makes chats without it; filled by the index thread
+  ([The index of the messages' words](#the-index-of-the-messages-words)).
+
 ```mermaid
 erDiagram
   project ||--o{ chat : ""
@@ -139,6 +160,8 @@ erDiagram
   chat ||--o{ image : ""
   chat ||--o| todo : ""
   chat ||--|| find_chat : "made with it"
+  chat ||--o| said_chat : "made as it's opened"
+  chat ||--o| vec_chat : "made once the model is here"
 ```
 
 ### The rules the tables follow
@@ -149,7 +172,9 @@ erDiagram
    file ([Forgetting](#forgetting-a-project)); no code deletes a message,
    a line or an image.
 3. **A search index never loses a line.** So a chat's line count is its
-   highest `rowid`, which [search](#search) relies on.
+   highest `rowid`, which [search](#search) relies on. The index of the
+   messages' words is filled in order, each message once: the one after
+   its highest `rowid` is the first it doesn't hold yet.
 4. **A file holds one project.** `Store.place` adds a project row only to
    an empty file.
 
@@ -188,6 +213,7 @@ note, illi going on.
 | **The search thread** (`Seeker.ts`) | its own connections, to each file a search covers, each closed after | each `search` the model calls | `Projects.seek` |
 | **The radar's thread** (`Seeker.ts`, a second worker) | its own connection to this project's file, closed after each search | after each step of a turn, with `related` on | `Projects.radar` |
 | **Recall's thread** (`Seeker.ts`, a third worker) | its own connection to this project's file, closed after each search | as a tool call runs, one at a time, with `related` on | `Projects.recall` |
+| **The index thread** (`Seeker.ts`, a fourth worker) | its own connection to a project's file, closed after each slice; it writes (the index of the messages' words) | as the chat opens and each time messages are logged; then, once a run, every other project's file | `Projects.index` |
 | **A profile export** | read-write to each file, for a snapshot | `/profile` export | `Profiles.ts profile_snapshot` |
 
 Other projects' files are opened read-write even just to read, because
@@ -219,6 +245,9 @@ Opening, step by step
    else's: the file is closed and step 2 tries `<name>-2.sqlite`, then
    `-3`, and so on. Then it finds the project's first chat, or creates it
    with an empty `find_<chat>`.
+5. **`Store.said_make`**: the chat's `said_<chat>` is made, empty, if
+   it isn't there (a new chat, or one an older illi kept), in a write
+   transaction of its own. The index thread fills it.
 
 A file that won't open (not an SQLite file, say) stops illi at start
 with one line naming it: *illi: chat: app-k3f9x2.sqlite won't open: file
@@ -276,7 +305,9 @@ as above), so a crash mid-step rolls the step back whole.
   everything that makes a chat (`Store.place` calls `Store.words`). A
   step adding another such table must create it when a chat is first
   used, because an older illi may still be creating chats without it, or
-  else raise `compat`.
+  else raise `compat`. `said_<chat>` is one: made as the chat is opened,
+  and caught up from its first message an older illi logged without it,
+  so it needed no new version.
 - A file made new and a file brought up by the steps end with the same
   schema.
 
@@ -519,11 +550,15 @@ again (`Tools.chat_of`, as zoom and `date(id)` do).
 Search
 ------
 
-The model's `search` tool finds summary lines by their words, in this
-project, in another one by name, or in `all`. Every line ever written can
-be found, however old: nothing is capped by age. The radar (the side
+The model's `search` tool finds summary lines by their words, and
+messages by their own words, in this project, in another one by name, or
+in `all`. A message longer than a leaf's 512 bytes is a summary in
+`find_<chat>`, so its exact words (an error's line in a long log, a
+path, a name) would be lost to search; `said_<chat>` keeps them
+findable. Every line ever written, and every message indexed, can be
+found, however old: nothing is capped by age. The radar (the side
 panel's Related lines, and the strong ones given to the model,
-[below](#the-radar)) reads the same index, in threads of its own, so a
+[below](#the-radar)) reads the same indexes, in threads of its own, so a
 search the model asks never waits on it.
 
 ```mermaid
@@ -532,9 +567,10 @@ flowchart TD
   S --> W["Seeker.ts: open this project's file"]
   W --> P["Projects.search: split words, pick the files"]
   P --> R["Store.search: each file in turn (Store.lines)"]
-  R --> C["each chat of it, in one read transaction: Store.seek, best 20 by bm25"]
-  C --> M["merge: each chat's best, then each one's second…; first 20"]
-  M --> E{"nothing, and several words?"}
+  R --> C["each chat of it, in one read transaction: Store.seek, its lines' best 20 and its messages' best 20, by bm25"]
+  C --> M["merge: each list's best, then each one's second…; one place once; first 20"]
+  M --> G["Store.passages: each message's passage holding the words"]
+  G --> E{"nothing, and several words?"}
   E -- yes --> O["again with any word (OR)"]
   E -- no --> X["lines back to the model"]
   O --> X
@@ -553,19 +589,22 @@ with `related` on: a worker takes longer to start than a call's end
 waits on its search), so the side's never queues behind one of
 recall's either: a search can't be cut off, and one whose answer came
 too late still runs to its end (`Projects.thread` posts to any of
-them: each its own worker and its own searches waiting). A message is
-`{ id, file, $: "search", words, scope, span }` (span: the `from` and
-`to` asked, in ms, or null), `{ id, file, $: "radar", ask }` or
-`{ id, file, $: "recall", ask }`, answered `{ id, out }` or
+them: each its own worker and its own searches waiting).
+`Projects.index` sends a fourth the slices of indexing the messages'
+words ([below](#the-index-of-the-messages-words)), so no search waits
+on one. A message is `{ id, file, $: "search", words, scope, span }`
+(span: the `from` and `to` asked, in ms, or null),
+`{ id, file, $: "radar", ask }`, `{ id, file, $: "recall", ask }` or
+`{ id, file, $: "index", most }`, answered `{ id, out }` or
 `{ id, error }`. For each the worker:
 
 1. opens this project's file (`Store.peek`);
 2. runs `Projects.search`, the same code the main thread would run,
    which opens every other file the search covers and closes each after
    (the radar's: `Radar.search`; recall's: `Radar.recall`; both on this
-   file alone);
-3. sends back the text (the radar's lines, recall's line or none), or
-   the error;
+   file alone; a slice of indexing: `Projects.fill`, on the file named);
+3. sends back the text (the radar's lines, recall's line or none, the
+   slice's messages left), or the error;
 4. closes its connection (`Store.close`, so it really closes at once).
 
 The main thread never waits: during a 2.9 s search on a 2-million-line
@@ -579,7 +618,7 @@ nothing new till the next step, or the call's result goes without a
 line. In the compiled binary, the workers' code is a second
 entry of the build (`src/chat/Seeker.ts` in `package.json`'s `build`,
 `install.sh` and the release workflow), found at `./chat/Seeker.ts`:
-all three workers start from that one entry.
+all four workers start from that one entry.
 
 ### Projects.search
 
@@ -589,12 +628,14 @@ all three workers start from that one entry.
    a name can't point anywhere else; an unknown name answers *No project
    X: projects lists them.*); `all` means every project's.
 3. Calls `Store.search`, then writes each line as `project first+n|text`,
-   its newlines flattened to spaces. With nothing found it says so,
-   naming the scope, and the span if one was asked.
-4. In `all`, if lines were left out (step 4 of `Store.search` keeps 20),
-   it adds a last line naming the projects they're in, the most first,
-   with how many: *More lines in: app-k3f9x2 (12+), site-7q2m0d (3);
-   search with project to see them.* A `+` means a chat of that project
+   its newlines flattened to spaces. A message found by its own words is
+   `project i+1|kind: passage`: `zoom(i, 1)` reads it whole, as a leaf
+   line's would. With nothing found it says so (*No summary line or
+   message holds…*), naming the scope, and the span if one was asked.
+4. In `all`, if places were left out (step 4 of `Store.search` keeps
+   20), it adds a last line naming the projects they're in, the most
+   first, with how many: *More in: app-k3f9x2 (12+), site-7q2m0d (3);
+   search with project to see them.* A `+` means a list of that project
    gave its most (20), so it may hold more still. The model can then
    search that project alone.
 
@@ -608,22 +649,35 @@ all three workers start from that one entry.
    transaction, so the file is seen as it was when its first read began.
    Another project's file that won't open (forgotten meanwhile) gives no
    lines; an error in this project's own file is thrown.
-3. **Each chat** gives up to 20 lines from its own index (`Store.seek`),
-   ranked by bm25. With a span, each chat's messages in it are found
-   first ([Messages by date](#messages-by-date)), and only lines over
-   those messages alone count.
-4. **Merge.** Sorted by rank within its chat first, then by score: every
-   chat's best line, best first; then every chat's second; and so on.
-   The first 20 are kept; the rest are counted by project (`cut`), for
-   the *More lines in* line above. A chat's bm25 scores weigh each word
-   by how rare it is *in that chat*, so scores from a big chat and a
-   small one can't be compared. Sorted by raw score, one big chat's
-   matches would fill all 20 places and hide every small project's. With
-   many projects, though, each gets only a line or two: 20 projects with
-   matches give one line each.
-5. **AND, then OR.** First a line must hold *all* the terms. If nothing
-   matches and there was more than one term, it searches again for
-   lines holding *any* of them.
+3. **Each chat** gives two lists (`Store.seek`), ranked by bm25: up to 20
+   lines from its index of lines, and up to 20 messages from its index
+   of the messages' words (none from a chat without it). With a span,
+   each chat's messages in it are found first ([Messages by
+   date](#messages-by-date)), and only lines over those messages alone,
+   and those messages, count.
+4. **Merge.** Sorted by rank within its list first, then by score: every
+   list's best, best first; then every list's second; and so on. A
+   list's bm25 scores weigh each word by how rare it is *in that index*,
+   so scores from a big chat and a small one can't be compared, nor a
+   chat's lines with its messages. Sorted by raw score, one big chat's
+   matches would fill all 20 places and hide every small project's, and
+   a chat's messages its lines. With many projects, though, each gets
+   only a few: 20 lists with matches give one place each.
+5. **One place once.** A message found by its own words whose leaf line
+   was found too (a short message's line is its text) comes once, as
+   the line, where the first of the two ranked. The first 20 places are
+   kept; the rest are counted by project (`cut`), for the *More in* line
+   above.
+6. **Passages** (`Store.passages`): each message kept is read from its
+   project's file and given as its kind and `Store.passage`: its text
+   on one line, 300 characters around the terms where the most of them
+   meet (the first such place, from 80 characters before), cut at
+   spaces, `…` where cut. A term is matched as the index matches it,
+   case and accents aside. One whose project was forgotten meanwhile is
+   left out.
+7. **AND, then OR.** First a line or message must hold *all* the terms.
+   If nothing matches and there was more than one term, it searches
+   again for those holding *any* of them.
 
 ### Store.seek: one chat
 
@@ -636,7 +690,10 @@ all three workers start from that one entry.
    that isn't a letter or digit. A quoted word with punctuation becomes a
    phrase: `e-mail` matches the two tokens `e mail` side by side.
 3. **The chat's size.** `lines` is the chat's highest rowid, its number
-   of lines, since no line is ever deleted.
+   of lines, since no line is ever deleted. In the index of the
+   messages' words a row is a message, its `rowid` its index (from 0),
+   so a message is `first = rowid, n = 1`, and a span is `rowid >= a and
+   rowid < b`; its size is its highest rowid plus one.
 4. **Common words, in big chats only.** With more than `LARGE` (20,000)
    lines, each term is checked in three stretches of `SAMPLE` (1,000)
    lines: the newest, the middle and the oldest. Each check is one count
@@ -678,6 +735,98 @@ Across projects, each file is opened anew for each search (about 0.4 ms
 a file). Measured on WSL2, ext4: an `all` search of 100 small projects
 took 47–107 ms, and of 6 projects of 150,000 lines each 172–181 ms.
 
+### The index of the messages' words
+
+`said_<chat>` is filled in the background, in order, from the first
+message it doesn't hold yet, so it never holds one twice nor skips one:
+
+1. **When.** As the chat opens (`Chat.open` → `Projects.index`), so a
+   chat an older illi kept, or one it wrote to since, is caught up with;
+   and each time messages are logged (`Chat.logged`). Asked again while
+   a project's file is under way, it runs one slice more after.
+2. **A slice** (`Projects.fill`, on the index thread's own connection):
+   each chat of the file gets its `said_<chat>` made if missing, and the
+   first chat with messages left gets up to `SLICE` (1 MiB) of their
+   text, in one write transaction (`Store.said_fill`): the first message
+   not held is read inside it, so two writers (two illis, or the thread
+   and the main thread) never index one twice. Slices follow one
+   another, the event loop turning between, till none is left.
+3. **Every other project**, once a run, after this one's: each file in
+   turn, in the thread alone, its chats' indexes made if missing, so a
+   search of another project or of `all` finds their messages too.
+4. **No thread.** If the worker can't start, this project's slices run
+   on the main thread, on the chat's own connection, 256 KiB each; the
+   other projects' are skipped. A slice that fails ends that file's
+   indexing; the next message logged starts it again where it stopped.
+
+Measured on WSL2, ext4, on a copy of a real chat of 3,095 messages (15
+MB of text, a 57.6 MB file): indexing it whole took 315 ms (about 47 MB
+of text a second), the 256 KiB slices 4.8 ms each (11.5 ms at most), so
+a 1 MiB slice holds the write lock about 20 ms: the longest the main
+thread can wait on it to log a message. The file grew by 4.4 MB (8%),
+the index about 30% of the text it holds. A search for `error` in it,
+lines and messages both, took 8.7 ms.
+
+### Search by meaning
+
+With `meaning` on (the default), `search` also finds summary lines close
+in meaning to its words, not only those holding them: "the screen
+flickers" finds the line about a redraw on every resize. No model call:
+a small static model runs on this machine (`src/chat/Embed.ts`).
+
+- **The model** is MinishLab's potion-code-16M-v2 (Model2Vec, MIT
+  licence), trained on what people ask against code and docs, so it
+  reads prose, code, paths and errors alike. Three files from Hugging
+  Face at one pinned revision (`MODEL`: `config.json`, `tokenizer.json`,
+  `model.safetensors`, 33 MB in all), each checked against its pinned
+  SHA-256 as it comes, then moved into place whole, into
+  `~/.illi/models/potion-code-16M-v2` (every profile's). `Chat.open`
+  downloads them once, in the background, and says so once they're in
+  (a note); till then, and offline, search goes by words alone. A part
+  file an illi killed mid-download left goes at the next try. `meaning`
+  off downloads nothing (`autoupdate` doesn't govern it), and `illi
+  uninstall --programs` removes them.
+- **A vector** (`Embed.vector`) is model2vec's own: BERT's normalizer
+  and WordPiece tokenizer, written here in TypeScript, each token a row
+  of the model's table (63,457 rows of 256 half floats), the mean of the
+  rows, of length 1. Checked against MinishLab's Python on prose, code,
+  errors, accents, Greek, Turkish and CJK: the same tokens, the values
+  within 1e-6 (`Embed.test.ts`, with `ILLI_EMBED_LIVE`). A line's kind
+  tags (`user: `, `illi: `…) are taken out first. English and code read
+  best: a text in another script gets a vector that tells little, and
+  is found by its words alone.
+- **Kept** as 256 signed bytes (`Embed.pack`: scaled so its largest is
+  127), a quarter of the floats' room, the angle between two the same to
+  about a hundredth.
+- **Filled** by the index thread, after the messages' words (each slice
+  of `Projects.fill`): each chat's lines from the first without a vector,
+  160 a slice (about 20 ms), embedded before the write transaction, so
+  the write lock is held only for the inserts. The index thread reads
+  the model once (`Projects.model`).
+- **Searched** (`Projects.near`, on the index thread, at once with the
+  search by words on its own): the query's vector, then each chat's
+  vectors read one at a time (`Store.near`), the 200 nearest kept, those
+  with a cosine of 0.3 or more (an unrelated query's best, on a real
+  chat, was 0.2; a related one's 0.37 to 0.49); of each chat's, one a
+  stretch of messages (a line over or under a better one left out, as
+  the levels of one episode would fill every place); the 20 best of all.
+- **Fused** (`Projects.fuse`), 20 places at most. When the places found
+  by words hold every word (or the one word), they come first, as they
+  ranked, so an exact match is never pushed out, and the lines found by
+  meaning alone follow in the room left, 5 at most: fused by rank, they
+  pushed out up to 8 of an identifier's 20 exact matches on the real
+  chat below. When no line held every word (the search fell back to any
+  of them), the two are as loose a match, and are one list by reciprocal
+  rank fusion: each place 1 / (60 + its rank) from each list it is in,
+  so one in both rises; equal, the one by words first. A line found by
+  meaning alone that holds none of the words starts with `≈ `
+  (`Projects.said`).
+
+Measured on WSL2, ext4, on a copy of a real chat of 3,095 messages and
+6,184 lines: the lines' vectors took 0.86 s in all (0.12 ms a line; the
+first slice 122 ms, reading the model), the file grew about 1 MB, and a
+search by meaning took 10–12 ms.
+
 ### The radar
 
 While illi works, the terminal searches the chat after each step for
@@ -694,14 +843,22 @@ connection:
    only by its name, `ENOENT`; a rare word). Every unit the run gives is
    sent, 200 at most. `select count(*) from (select 1 from find_<chat>
    where find_<chat> match ? limit 4001)`: read from the index's lists of
-   where each word is, no line's columns. A unit in none, or in more
-   than 4,000 lines, is dropped. Of the rest, the 24 that weigh most by
+   where each word is, no line's columns. An error's name is counted in
+   `said_<chat>` too, the messages holding it by their own words: a long
+   log's error, which its summary line may not name. A unit in none, or
+   in more than 4,000, is dropped. Of the rest, the 24 that weigh most by
    that count go on (weight × idf, by lines: `Store.indexed`, the lines
-   in all), so a rare word is never cut for where it sorts.
+   in all; an error's, by lines and messages), so a rare word is never
+   cut for where it sorts.
 2. **Their lines** (`Store.held`): `select first, n from find_<chat>
    where find_<chat> match ? and first + n <= ? limit 4000`: only lines
    before the messages left out at the chat's end (the recent ones, and
-   those the view holds at message detail just before them).
+   those the view holds at message detail just before them). An error's
+   name, the messages holding it too (`select rowid as first, 1 as n
+   from said_<chat> … and rowid < ?`), each a line of one message. Only
+   an error's name: a path or a name is in many a tool's output (a
+   listing, a file read whole), which would make every episode that read
+   a file look related to every other.
 3. **Too common, dropped:** a unit in more than a tenth of the chat's
    episodes (each 16 messages; three at least, so a topic come back
    twice in a young chat still counts). Of the rest, the 12 that weigh
@@ -801,8 +958,9 @@ cache holds. It is never read as part of the result: `history_bare`
 (`Clip.ts`) takes that exact line off a result's end wherever one is
 read.
 
-- `Memory.source` gives a result's leaf without it, so the line is never
-  summarized, indexed in `find_<chat>`, or found again as if it had
+- `Memory.source` gives a result's leaf without it, and
+  `Store.said_text` a result's words, so the line is never summarized,
+  indexed in `find_<chat>` or `said_<chat>`, or found again as if it had
   happened.
 - The radar's query and its failure check, how a call ended (an exit
   code at the result's end), a result's lines as drawn, and their counts
@@ -1086,9 +1244,18 @@ How it is kept:
 Known limits
 ------------
 
-- **An `all` search gives 20 lines in all,** shared out across the
-  projects with matches, so with many projects each gets a line or two.
-  The rest are named, not shown (*More lines in: …*).
+- **An `all` search gives 20 places in all,** shared out across the
+  projects with matches, so with many projects each gets one or two.
+  The rest are named, not shown (*More in: …*).
+- **Search by meaning reads every vector of each chat it covers,**
+  about 12 ms for 6,000 lines; a chat of millions of lines takes seconds
+  (in the index thread, the screen unaffected).
+- **A message is found by its own words once it is indexed.** At the
+  first start after an upgrade, a big chat's take a moment in the
+  background (about a second for 50 MB of text), and other projects'
+  are indexed after this one's, once a run: a search meanwhile finds
+  their lines, not yet all their messages. A project illi never runs in
+  again is indexed by the next run that starts anywhere.
 - **Each search opens every file it covers anew,** about 0.4 ms a file.
   A worker that kept its connections open would avoid that.
 - **A search keeps a snapshot of a file for as long as it reads it,** so

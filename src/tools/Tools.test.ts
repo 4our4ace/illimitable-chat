@@ -428,7 +428,7 @@ test("projects: the table, this chat's marked; a search in this project, another
   const table = (await call("projects", {})).text;
   expect(table).toContain(here + " (this chat's) · " + REPO);
   expect(table).toContain("site-7q2m0d · /work/site · 2026-10-01 · 1 message\n  lately: user: the waveform on the landing page");
-  expect((await call("search", { words: "waveform" })).text).toBe("No summary line holds that word in this project.");
+  expect((await call("search", { words: "waveform" })).text).toBe("No summary line or message holds that word in this project.");
   expect((await call("search", { words: "landing waveform", project: "all" })).text).toBe("site-7q2m0d 0+1|user: the waveform on the landing page");
   expect((await call("search", { words: "waveform", project: "site-7q2m0d" })).text).toStartWith("site-7q2m0d 0+1|");
   expect((await call("zoom", { id: 0, n: 1, project: "site-7q2m0d" })).text).toBe("0+0|user: the waveform on the landing page");

@@ -178,3 +178,18 @@ CLI changes much. `MINIMUM` is the oldest release the trial passed
 on (1.0.98 and before don't take `--disable-client-telemetry`); illi
 also checks the CLI speaks its SDK's protocol (`PROTOCOL` in
 `Copilot.ts`, 3), and says, not runs, one that doesn't.
+
+The search model (`src/chat/Embed.ts`: MinishLab's potion-code-16M-v2,
+for search by meaning) is pinned the same way: a Hugging Face revision
+and each file's size and SHA-256 (`MODEL`). The tests run on a tiny
+model of their own (`test/model.ts`) and keep `meaning` off, so none
+downloads it. To check illi's encoder against the real model (its
+tokens and values, as MinishLab's Python gives them), download it once
+into a folder kept for the next check, then run:
+
+    ILLI_EMBED_LIVE=~/.cache/illi-embed-live bun test --isolate src/chat/Embed.test.ts
+
+To take a new revision or model: its files' sizes and SHA-256 (Hugging
+Face's LFS hash for the table; the small files hashed yourself), the
+reference values in `Embed.test.ts` anew from MinishLab's Python, and
+`VECTORS` moves on by itself, so each file's vectors are made anew.

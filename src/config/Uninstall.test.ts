@@ -153,7 +153,7 @@ test("after uninstall, only what goes may follow: upgrade and version are unknow
 test("neither off a terminal says how to pick, both are refused; nothing removed", async () => {
   const at = home("neither");
   const none = await run({ home: at.home });
-  expect([none.code, none.out]).toEqual([1, expect.stringContaining("run illi uninstall --programs (illi and the CLIs it downloaded) or --everything")]);
+  expect([none.code, none.out]).toEqual([1, expect.stringContaining("run illi uninstall --programs (illi, the CLIs and search model it downloaded) or --everything")]);
   const both = await run({ home: at.home }, "--programs", "--everything");
   expect([both.code, both.out]).toEqual([1, expect.stringContaining("not both")]);
   expect(fs.existsSync(at.root + "/copilot/cli/1.0.109/copilot")).toBe(true);

@@ -11,7 +11,9 @@
 // widened to its summary node; boilerplate alone finds nothing; a rare
 // word is found however many words come with it; a topic come back in a
 // young chat is still told; what the view holds at message detail
-// or recent, or the user dismissed, is never found nor widened into. The
+// or recent, or the user dismissed, is never found nor widened into; an
+// error's name only a long log held (its line not naming it) is found by
+// the log's own words once they're indexed. The
 // list shown stays still: found again it keeps its place, new lines join
 // at the foot; one not found fades, and leaves under the floor, or for
 // one far stronger, one a step; one opened or pinned stays.
@@ -271,4 +273,27 @@ test("rare words are found however many words come with them, wherever they sort
   expect(Radar.search(YOUNG, { chat: YOUNG.chat, units: zoo, end: 160, out: [] }).map((f) => f.first + "+" + f.n)).toEqual(["96+16"]);
   expect(zoo.length).toBe(29);
   expect(zoo.map((u) => u.q)).toEqual(expect.arrayContaining(["kiwi", "yurt", "zebu"]));
+});
+
+test("an error's name only a long log held, its line not naming it, is found by the log's own words once they're indexed, widened to its episode", () => {
+  const log = "bundling src/chat/Chat.ts\n".repeat(40) + "error: Cannot find module './chat/Seeker.ts' (ERR_MODULE_NOT_FOUND)\n(exit 1 in 4.0 s)";
+  const BUILD: Array<[string, string]> = [
+    ["user", "the build breaks on a fresh clone"],
+    ["tool", 'shell {"command":"bun run build"}'],
+    ["echo", log],
+    ["illi", "The worker's module isn't in the bundle; it needs an entry of its own."],
+    ...noise(9).slice(4),
+  ];
+  const msgs = [...noise(0), ...noise(1), ...BUILD, ...[2, 3, 4, 5, 6, 7, 8, 10, 11, 12].flatMap(noise)];
+  const logs = chat("logs", msgs);
+  // the log's line, as the compactor would write it: what failed, not the error's name
+  logs.db.run("delete from find_" + logs.chat + " where first = 34 and n = 1");
+  const run = [{ kind: "user", text: "ERR_MODULE_NOT_FOUND on the build again" }];
+  const ask = () => Radar.search(logs, { chat: logs.chat, units: Radar.units(run[0].text, []), end: msgs.length, out: [] });
+  expect(Radar.units(run[0].text, []).map((u) => u.k + ":" + u.q)).toEqual(["error:err module not found"]);
+  expect(ask()).toEqual([]);
+  expect(Store.said_fill(logs, 1e7)).toBe(0);
+  expect(spans(ask())).toEqual(["32+16"]);
+  expect(ask()[0].anchored).toBe(true);
+  Store.close(logs);
 });

@@ -82,6 +82,7 @@ import { Logs, MAIN } from "../chat/Logs.ts";
 import { Memory, TOKEN } from "../chat/Memory.ts";
 import PROMPT from "./prompt.txt" with { type: "text" };
 import { EFFORTS, Pick } from "../ai/Pick.ts";
+import { Embed } from "../chat/Embed.ts";
 import { Projects } from "../chat/Projects.ts";
 import { Recall } from "../chat/Recall.ts";
 import { Store } from "../chat/Store.ts";
@@ -246,8 +247,11 @@ then, not what is now: zoom it if it helps, else ignore it.
 Each project has its own chat: the git repo illi runs in, or home outside
 any repo; this one is named at the start of each message. projects()
 lists them all; search(words) finds summary lines holding the words,
-with project in that project's chat, or in all ("all"), with from and
-to only in that span; zoom and date take a project too.`;
+and messages by their own words (each as a passage holding them: zoom
+it to read it whole), and lines close in meaning ("≈" before one that
+doesn't hold the words), with project in that project's chat, or in all
+("all"), with from and to only in that span; zoom and date take a
+project too.`;
 
 // an agent's log starts with a note of what it is: SUB_NOTE, the user's
 // agent it runs as (a plugin's as plugin:name), its effort if not the
@@ -345,7 +349,7 @@ const OWN: Spec[] = [
   spec("zoom", "Open the line id+n of the view into the two lines of n/2 under it; n = 1 gives the message whole. With an agent's name as id, give that agent's whole chat. A long text comes in pages from character at, saying where to go on. With project (its name, from projects), the line, message or agent of that project's chat.", { id: { type: ["integer", "string"] }, n: INT, at: INT, project: STR }, ["id"]),
   spec("date", "The date and time of message id. Or, with from (and to), local times as 2026-10-21 or 2026-10-21 14:00, a month (2026-10), a year, today or yesterday (no to: till the end of from's day, month or year), the lines of that span. With project, in that project's chat.", { id: INT, from: STR, to: STR, project: STR }, []),
   spec("projects", "The user's projects, each with a chat of its own (a git repo illi ran in, or home: outside any repo), the one used last first: its folder, its first and last day, its messages, its latest summary line. Look here first when the user means work that isn't in your view.", {}, []),
-  spec("search", "Find summary lines holding all the words (else any of them), the best first, as \"project id+n|text\": in this project's chat; with project (its name, from projects), in that one's; with project \"all\", in every one, then the projects with more lines named, to search in. Zoom a line with its project. With from, to or both (as date's; to alone: all up to it), only lines inside that span; a span that won't read is left out, saying so.", { words: STR, project: STR, from: STR, to: STR }, ["words"]),
+  spec("search", "Find summary lines holding all the words (else any of them), messages by their own words, and lines close in meaning, the best first, as \"project id+n|text\" (a message: \"project id+1|kind: passage\", the passage of it holding the words, … where cut; a line close in meaning that doesn't hold the words: \"≈ \" first): in this project's chat; with project (its name, from projects), in that one's; with project \"all\", in every one, then the projects with more found named, to search in. Zoom a line or message with its project. With from, to or both (as date's; to alone: all up to it), only lines and messages inside that span; a span that won't read is left out, saying so.", { words: STR, project: STR, from: STR, to: STR }, ["words"]),
 ];
 const SPAWN = "Start one subagent per task, in parallel, and return their names at once. Each one's report reaches you as a message \"[Name] report\" when it finishes. A subagent gets a map of the chat (a few dozen lines; it zooms and searches for more) and the user's instructions, but knows what you want only from its task: put in it what matters. With fresh, it gets no map nor any of the chat, only its task and the user's instructions: for a test or review that must not be swayed by what came before.";
 const FRESH = { type: "boolean", description: "Start them without the chat: no map, and no tools that read it. Leave it out to give them the map (an agent listed as fresh starts so always)." };
@@ -754,7 +758,7 @@ export namespace Tools {
         const span = typeof asked === "string" ? null : asked;
         const note = typeof asked === "string" ? "Every date searched: the span won't read (" + asked.replace(/\.$/, "") + ").\n\n" : "";
         const project = args.project === undefined || args.project === null ? "" : String(args.project);
-        return { text: note + (await Projects.seek(mem.store, String(args.words ?? ""), project, span)), fail: false };
+        return { text: note + (await Projects.seek(mem.store, String(args.words ?? ""), project, span, Embed.use(config.ROOT, config.MEANING))), fail: false };
       }
       case "spawn": {
         const effort = args.effort === undefined ? null : String(args.effort);

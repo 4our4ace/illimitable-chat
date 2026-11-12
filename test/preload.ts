@@ -10,7 +10,9 @@
 // (Browser.ts: BROWSER none), whatever a test does. The vendors are the
 // test script's while none are set (a file run alone runs as in the
 // suite: on claude-api, whose windows are built in; a file on ChatGPT sets
-// its own, and its models' windows, as its catalog would).
+// its own, and its models' windows, as its catalog would). Search by
+// meaning is off while none sets it (ILLI_MEANING), so no test downloads
+// its model from Hugging Face (Embed.fetch).
 // git can't reach another repository nor leave the machine: its
 // repository variables (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, ...: what
 // `git rev-parse --local-env-vars` lists, set as a git hook runs the
@@ -54,6 +56,7 @@ process.env.BROWSER         = "none";
 process.env.ILLI_VENDORS   ??= "claude-api";
 process.env.ILLI_PICK      ??= "claude-api:sonnet-5.5:medium:slow";
 process.env.ILLI_COMPACTOR ??= "claude-api:haiku-5.5:high:slow";
+process.env.ILLI_MEANING   ??= "off";
 
 // whether a process runs
 function alive(pid: number): boolean {

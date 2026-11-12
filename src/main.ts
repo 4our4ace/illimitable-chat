@@ -48,8 +48,9 @@ const LOGIN = /^-*(login|logout|signin|auth)$/i;
 
 const USAGE = `Usage: illi            the chat; its tools work in this folder
        illi upgrade    the latest release in this one's place, now
-       illi uninstall  illi and the CLIs it downloaded removed; it asks
-                       whether your chats, settings and accounts go too
+       illi uninstall  illi, the CLIs and search model it downloaded
+                       removed; it asks whether your chats, settings and
+                       accounts go too
                        (--programs: they stay; --everything: they go)
        illi version    this illi's version
        illi help       this

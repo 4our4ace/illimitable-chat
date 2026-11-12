@@ -40,7 +40,9 @@ sessions.
 Every message is kept, for weeks, months, years, and saved before illi
 answers, so not even a crash loses one. Old messages fold into a tree
 of summary lines, coarser with age, and any line unfolds back to the
-exact words.
+exact words. illi also searches every message's own words, and what's
+close in meaning, so an error line from a long log months ago, or "that
+caching bug", is one search away.
 
 The tree only ever grows at its end, so nearly every call is a prompt
 cache hit: a chat a year long stays fast and cheap.

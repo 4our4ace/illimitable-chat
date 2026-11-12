@@ -29,6 +29,7 @@ import * as fs from "node:fs";
 import { AskAI, type Call, type End, type Event, type Kind, type Vendor } from "../ai/AskAI.ts";
 import { Custom, type Profile } from "../config/Custom.ts";
 import { Disk } from "./Disk.ts";
+import { Embed } from "./Embed.ts";
 import { Compactor } from "./Compactor.ts";
 import { Lock } from "./Lock.ts";
 import { Logs, MAIN } from "./Logs.ts";
@@ -264,6 +265,9 @@ const RECAP_STOP = "Compaction stopped; the chat is as it was.";
 const HELLO      = "Hi, I'm illi, short for illimitable: an AI, so I can make mistakes. One chat that never ends, kept in a memory tree, the newest messages in the most detail. I work in the folder you start me in; each git repo gets a chat of its own. Ask me anything, for days, weeks, years; /help lists the commands.";
 const HELLO_LINE = "illi: hello: illi (illimitable), one endless chat in a memory tree, one per git repo; works in the folder it starts in; /help for commands.";
 
+// told once the model to search by meaning is downloaded (Embed.fetch)
+const MEANT = "Search now finds what's close in meaning too, not only the words: illi downloaded its small search model (33 MB), once.";
+
 // how often the accounts are looked at (ms: config.config_accounts), a
 // provider /login connected or let go in another terminal offered or
 // gone here by then; the chats open, following them, and the vendors
@@ -331,6 +335,20 @@ export namespace Chat {
     }
     if (mem.count === 0) {
       Memory.push(mem, [{ kind: "illi", text: HELLO, line: HELLO_LINE }]);
+    }
+    // the messages not in the chat's index of words yet (all of a chat an
+    // older illi kept) put in it, in the background, the summary lines
+    // given their vectors too once the model to search by meaning is here;
+    // not yet (and `meaning` on), it's downloaded first, in the
+    // background, told once done, then they're given theirs
+    Projects.index(mem.store, Embed.use(config.ROOT, config.MEANING));
+    if (config.MEANING && !Embed.ready(config.ROOT)) {
+      Embed.fetch(config.ROOT).then((got) => {
+        if (got && !chat.mem.done) {
+          Chat.note(chat, MEANT);
+          Projects.index(chat.mem.store, Embed.use(config.ROOT, config.MEANING));
+        }
+      }, () => {});
     }
     if (Providers.of(chat.pick.vendor)?.windows?.() !== false) {
       Chat.cut(chat);
@@ -936,6 +954,7 @@ export namespace Chat {
   // as such to the views)
   export function logged(chat: Chat, msgs: Array<{ kind: Kind; text: string; images?: string[] }>): Root[] {
     const roots = Memory.push(chat.mem, msgs);
+    Projects.index(chat.mem.store, Embed.use(config.ROOT, config.MEANING));
     let a = 0;
     while (a < roots.length) {
       let b = a + 1;

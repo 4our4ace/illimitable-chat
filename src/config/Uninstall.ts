@@ -7,8 +7,9 @@
 //   programs    illi itself (the one file the installer put in place:
 //               Update.ts HERE) and the CLIs it downloaded for its
 //               plans (each provider's programs: Google's Antigravity
-//               CLI, GitHub's Copilot CLI); the chats, settings and
-//               accounts stay in illi's folder, for an illi installed
+//               CLI, GitHub's Copilot CLI) and its search model
+//               (Embed.ts: models/ in its folder); the chats, settings
+//               and accounts stay in illi's folder, for an illi installed
 //               again
 //   everything  that, and illi's folder whole (ILLI_DIR, default
 //               ~/.illi: every profile's chats, settings, keys and
@@ -81,7 +82,11 @@ export async function uninstall(args: string[]): Promise<number> {
     console.error("illi: illi is open in " + (busy === 1 ? "another terminal" : busy + " other terminals") + ": quit it there first (Ctrl+D), then run illi uninstall again.");
     return 1;
   }
-  const programs = Providers.all().flatMap((p) => (p.programs?.() ?? []).filter((at) => fs.existsSync(at)).map((at) => ({ at, what: p.facts.row })));
+  const models   = path.join(root, "models");
+  const programs = [
+    ...Providers.all().flatMap((p) => (p.programs?.() ?? []).filter((at) => fs.existsSync(at)).map((at) => ({ at, what: "the " + p.facts.row + "'s CLI" }))),
+    ...(fs.existsSync(models) ? [{ at: models, what: "the search model" }] : []),
+  ];
   const whole    = uninstall_whole(root);
   const pick     = picked ?? (await uninstall_ask(root, programs.map((p) => p.at), whole));
   if (pick === null) {
@@ -106,7 +111,7 @@ export async function uninstall(args: string[]): Promise<number> {
     ok = uninstall_remove(root, "illi's folder: your chats, settings and accounts") && ok;
   } else {
     for (const { at, what } of programs) {
-      ok = uninstall_remove(at, "the " + what + "'s CLI", !fs.statSync(at).isDirectory()) && ok;
+      ok = uninstall_remove(at, what, !fs.statSync(at).isDirectory()) && ok;
     }
   }
   if (HERE !== null) {
@@ -151,7 +156,7 @@ function uninstall_dirs(root: string): string[] {
 // said how to pick)
 async function uninstall_ask(root: string, programs: string[], whole: string | null): Promise<Pick | null> {
   if (!process.stdin.isTTY) {
-    console.error("illi: uninstall asks what to remove on a terminal; here, run illi uninstall --programs (illi and the CLIs it downloaded) or --everything (also your chats, settings and accounts)");
+    console.error("illi: uninstall asks what to remove on a terminal; here, run illi uninstall --programs (illi, the CLIs and search model it downloaded) or --everything (also your chats, settings and accounts)");
     return null;
   }
   const home = uninstall_show(root);
@@ -166,7 +171,7 @@ async function uninstall_ask(root: string, programs: string[], whole: string | n
   };
   try {
     console.log("");
-    console.log("  1  illi and the CLIs it downloaded (" + size(programs) + "). Your chats, settings and accounts");
+    console.log("  1  illi, the CLIs and search model it downloaded (" + size(programs) + "). Your chats, settings and accounts");
     console.log("     stay in " + home + " (" + uninstall_mb(kept) + "), for an illi you install again.");
     if (whole === null) {
       console.log("  2  Everything: also your chats, settings and accounts in " + home + ", every profile's,");

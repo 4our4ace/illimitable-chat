@@ -114,6 +114,7 @@ const TABLE = {
   side       : { def: "right", values: ["right", "left", "off"], now: true, what: "where the side panel shows", shape: [/^(right|left|off)$/, "right, left or off"] },
   side_width : { def: "25%", values: ["20%", "25%", "30%", "35%", "40%"], now: true, what: "the side panel's width", shape: [/^\d+(\.\d+)?%?$/, "columns (40) or a share of the screen (30%)"] },
   related    : { def: "on", values: ["on", "screen", "off"], now: true, what: "past topics related to the work, at the side; the strong ones given to illi too (screen: the side alone)", shape: [/^(on|screen|off|true|false|0|1)$/i, "on, screen or off"] },
+  meaning    : { def: "on", values: ["on", "off"], now: true, what: "search finds lines close in meaning too, by a small model run here (33 MB, downloaded once)", shape: ON_OFF },
   accent     : { def: "auto", values: ACCENTS, now: true, what: "the color everything is themed in", shape: [new RegExp("^(" + ACCENTS.join("|") + "|#[0-9a-f]{6}|25[0-5]|2[0-4]\\d|1?\\d?\\d)$", "i"), "auto, illi (its aqua), a color's name (" + ACCENTS.slice(2).join(", ") + "), a palette index (0-255) or #rrggbb"] },
   leader     : { def: "Ctrl+X", values: "text", now: true, what: "the key before a shortcut", shape: [/^(ctrl|alt)\+[a-z]$/i, "Ctrl or Alt and a letter, like Ctrl+X"] },
   shortcuts  : { def: "", values: "text", now: true, what: "the keys after the leader, as JSON", none: "illi's own" },
@@ -291,6 +292,10 @@ export let SIDE_WIDTH = "";
 // (true, 1), never with screen (the side alone) or off
 export let RELATED    = true;
 export let RECALL     = true;
+
+// search by meaning (Embed.ts): its model downloaded at a start, then
+// used, unless off (or false, 0)
+export let MEANING    = true;
 
 // the accent (Theme.theme_tokens): "auto" (the theme's own), illi's
 // aqua, a color's name, a palette index or #rrggbb
@@ -521,6 +526,7 @@ function config_live(): void {
   SIDE_WIDTH  = config_value("side_width");
   RELATED     = !OFFS.includes(related);
   RECALL      = RELATED && related !== "screen";
+  MEANING     = !OFFS.includes(String(config_value("meaning")).trim().toLowerCase());
   ACCENT      = String(config_value("accent")).trim();
   PICK        = pick;
   ROLES       = roles;

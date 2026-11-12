@@ -186,6 +186,9 @@ one:
   work, in the side panel while illi works (a local search of the chat's
   summaries); on also gives you a strong match as one <history> line
   after a tool's result, screen keeps it to the side panel
+- meaning: on or off, whether your search finds summary lines close in
+  meaning too (a small model run on this machine, downloaded once, 33
+  MB); off: by words alone
 - accent: the color everything on the screen is themed in, at once: auto
   (the theme's; illi's aqua by default), illi, blue, magenta, cyan,
   green, yellow, red, a palette index or #rrggbb. For "make it orange",

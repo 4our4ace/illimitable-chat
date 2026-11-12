@@ -34,7 +34,8 @@ profile's own `config.json` goes over it, key by key; its `off` and
 | `mode`       | `default`                         | what runs without asking: `default` (everything inside the project; a folder outside it, the read tool's `.env` read and what your rules ask are asked about, saying why), `trust` (everything, but what your rules deny; a hook's ask is asked, and while your rules won't read, what touches your computer); an older illi's `yolo` reads as `trust`, its other modes as `default`; `/mode` switches it for a session ([Permissions](permissions.md)) |
 | `permissions` | `permissions.json` in the profile's folder | your permission rules (`allow`, `ask` or `deny`, by action and pattern: `shell`, `read`, `edit`, `external_directory`, an MCP tool's name...) and, per project, what "don't ask again" saved ([Permissions](permissions.md)) |
 | `side`       | `right`                           | side panel: `left`, `off`; `side_width` `25%`    |
-| `related`    | `on`                              | while illi works, past topics that may be related to it, in the side panel (counted on the bottom line without it): a search of the chat's own summaries after each step, on its own thread, no model call; `on` also gives illi a strong match after a tool call's result, one line at most a round of calls, never slower ([Related](keys.md#related)); `screen` the side panel alone, nothing given to illi; `off` (`true` and `false` read as `on` and `off`) |
+| `related`    | `on`                              | while illi works, past topics that may be related to it, in the side panel (counted on the bottom line without it): a search of the chat's own summaries after each step (an error's name, its messages' own words too), on its own thread, no model call; `on` also gives illi a strong match after a tool call's result, one line at most a round of calls, never slower ([Related](keys.md#related)); `screen` the side panel alone, nothing given to illi; `off` (`true` and `false` read as `on` and `off`) |
+| `meaning`    | `on`                              | illi's `search` finds summary lines close in meaning too, not only those holding the words (marked `≈` when they don't): a small model, MinishLab's potion-code-16M-v2 (33 MB, MIT), downloaded once from Hugging Face in the background at a start, checked against its pinned SHA-256, and run on this machine, no model call ([Storage](storage.md#search-by-meaning)). English and code read best; a text in another script is found by its words alone. `off`: by words alone, nothing downloaded |
 | `accent`     | `auto`                            | the color everything is themed in, at once: `auto` (the theme's: illi's aqua, else the palette's or `theme.json`'s), `illi`, `blue`, `magenta`, `cyan`, `green`, `yellow`, `red`, a palette index or `#rrggbb` ([Theme](customize.md#theme)) |
 | `leader`     | `Ctrl+X`                          | the key before a shortcut: Ctrl or Alt and a letter illi doesn't use ([Keys](keys.md#shortcuts)) |
 | `shortcuts`  | illi's own                        | the keys after the leader: `{ "c": "/compact", "o": "Ctrl+O", "t": "" }`, over illi's own (`""` drops one; a key in capitals is the lower-case one); `/shortcuts` edits them |
@@ -127,9 +128,9 @@ Removing illi
 
 It asks what goes, then says each thing it removed:
 
-1. **illi and the CLIs it downloaded**: the `illi` the installer put in
-   place, and the Antigravity and Copilot CLIs `/login` downloaded into
-   `~/.illi`. Your chats, settings and accounts stay in `~/.illi`, so an
+1. **illi, the CLIs and search model it downloaded**: the `illi` the
+   installer put in place, the Antigravity and Copilot CLIs `/login`
+   downloaded into `~/.illi`, and the search model (`~/.illi/models`). Your chats, settings and accounts stay in `~/.illi`, so an
    illi you install again picks up where you were.
 2. **Everything**: that, and all of `~/.illi`, every profile's chats,
    settings, keys and accounts, and whatever else you keep there (your

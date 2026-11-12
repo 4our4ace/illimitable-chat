@@ -5,8 +5,9 @@ The libraries compiled into illi (`package.json`'s dependencies, pinned in
 `bun.lock`), each under the MIT License (one icon in Pele under ISC, and
 pelext's character width table, generated from Unicode's data, under the
 Unicode License v3); Bun's runtime, which each release file holds, under
-the licenses Bun lists for it, the LGPL among them; and the color
-schemes illi's palettes are drawn from (at the end).
+the licenses Bun lists for it, the LGPL among them; the search model
+illi downloads; and the color schemes illi's palettes are drawn from (at
+the end).
 
 ## Pele
 
@@ -261,6 +262,17 @@ LICENSE.md names its CSS lexer too), and its CSS parser as derived from
 [Lightning CSS](https://github.com/parcel-bundler/lightningcss) and
 [Servo](https://github.com/servo/servo) (license.mdx), naming no
 license for them.
+
+## potion-code-16M-v2
+
+[potion-code-16M-v2](https://huggingface.co/minishlab/potion-code-16M-v2),
+by MinishLab, is the small model illi's search by meaning runs
+(`src/chat/Embed.ts`). It isn't in illi's files: illi downloads it from
+Hugging Face once, with `meaning` on, into `~/.illi/models`. Its model
+card puts it under the MIT License. illi reads it with its own code,
+which follows the method of MinishLab's
+[model2vec](https://github.com/MinishLab/model2vec) (MIT License,
+Copyright (c) 2024 Thomas van Dongen) and holds none of its code.
 
 ## Color schemes
 

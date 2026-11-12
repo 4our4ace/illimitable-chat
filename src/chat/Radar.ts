@@ -5,8 +5,10 @@
 // Related.ts), searched after each step of a turn; the strong ones for
 // the model too (Radar.recall, searched as each of its tool calls runs:
 // Recall.ts appends one to the call's result). No model call: the chat's
-// own index of its summary lines (find_<chat>, Store.ts), searched in a
-// thread of its own (Seeker.ts: one for the side's, one for recall's).
+// own index of its summary lines (find_<chat>, Store.ts), and for an
+// error's name its index of its messages' own words too (said_<chat>: a
+// long log's error, which its line may not name), searched in a thread of
+// its own (Seeker.ts: one for the side's, one for recall's).
 //
 // The query (Radar.units): the run's user message, then the AI's latest
 // words, tool calls (their paths, commands, names) and failed results
@@ -22,7 +24,9 @@
 // the search, which knows how rare each is, chooses.
 //
 // The search (Radar.search): each unit counted by the lines holding it
-// (the index's lists of where each word is: no line read); one in none,
+// (the index's lists of where each word is: no line read; an error's
+// name, the messages holding it by their own words too, each a line of
+// one message, its rarity among lines and messages both); one in none,
 // or in more than LINES (however big the chat), dropped; of the rest,
 // the CHOSEN weighing most by that count (weight × idf, by lines) have
 // their lines before the messages left out at the chat's end (Ask's end)
@@ -348,14 +352,17 @@ export namespace Radar {
     const all   = Math.max(1, Math.ceil(ask.end / EPISODE));
     const most  = Math.max(LEAST, Math.floor(all * COMMON));
     const total = Math.max(1, Store.indexed(store));
+    const said  = Store.indexed(store, true);
     const idf   = (n: number, of: number) => Math.log(1 + (of - n + 0.5) / (n + 0.5));
     const left  = (first: number, n: number) => ask.out.some(([a, b]) => first < b && first + n > a);
+    // an error's name is looked for in the messages' own words too
+    const raw   = (u: Unit) => u.k === "error";
     // each unit counted by its lines, anywhere (no line read); those
     // read, the CHOSEN weighing most by that count
-    const chosen = ask.units.map((u) => ({ u, lines: Store.hits(store, u.q, LINES + 1) })).filter((c) => c.lines > 0 && c.lines <= LINES)
-      .map((c) => ({ u: c.u, guess: c.u.w * idf(c.lines, total) })).sort((a, b) => b.guess - a.guess).slice(0, CHOSEN);
+    const chosen = ask.units.map((u) => ({ u, lines: Store.hits(store, u.q, LINES + 1) + (raw(u) ? Store.hits(store, u.q, LINES + 1, true) : 0) })).filter((c) => c.lines > 0 && c.lines <= LINES)
+      .map((c) => ({ u: c.u, guess: c.u.w * idf(c.lines, raw(c.u) ? total + said : total) })).sort((a, b) => b.guess - a.guess).slice(0, CHOSEN);
     const held  = chosen.map(({ u }) => {
-      const at = Store.held(store, u.q, ask.end, LINES);
+      const at = [...Store.held(store, u.q, ask.end, LINES), ...(raw(u) ? Store.held(store, u.q, ask.end, LINES, true) : [])];
       return { u, at, in: new Set(at.filter(({ n }) => n <= EPISODE).map(({ first }) => Math.floor(first / EPISODE))).size };
     }).filter((h) => h.in > 0 && h.in <= most);
     const used  = held.map((h) => ({ ...h, idf: idf(h.in, all) })).sort((a, b) => b.u.w * b.idf - a.u.w * a.idf).slice(0, UNITS);

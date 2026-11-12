@@ -26,9 +26,18 @@
 // work, cut...), never rebuilt from the facts (the cache holds by it);
 // and its to-do list (todo), the agent's, given whole each time.
 // Derived from node: each chat's index of its summary lines' words, for
-// search (find_<chat>, an FTS table made with the chat). Messages are
-// logged as they come, so their dates rise: a span of time is found by
-// bisection over their keys (Store.span), with no index of dates.
+// search (find_<chat>, an FTS table made with the chat). Derived from
+// msg: each chat's index of its messages' own words (said_<chat>, an FTS
+// table that keeps no text: a message's is in msg), its rows the
+// messages' indexes, filled in order from the first not indexed yet
+// (Store.said_fill), by the index thread (Projects.index), so a long
+// chat's never holds the screen up, and one an older illi wrote to is
+// caught up with. Derived from find_<chat>: each chat's vectors of its
+// summary lines (vec_<chat>, by a line's row there, with the messages it
+// covers: Embed.ts), filled in order the same way (Store.vec_fill), a
+// file's all of one model (meta's `vectors`: another's, made anew). Messages are logged as they come, so their dates rise:
+// a span of time is found by bisection over their keys (Store.span), with
+// no index of dates.
 //
 // Durable as files were: each write is one transaction, in WAL mode at
 // synchronous NORMAL, so a crash never leaves half a write and no write
@@ -46,13 +55,15 @@
 // write it, allows, else refused. A later schema moves an older file on
 // by steps that only add (a table, an index, a column with a default),
 // or raises compat. A table for each chat (find_<chat>) is made with the
-// chat (Store.place: Store.words). All of it, step by step:
-// docs/storage.md.
+// chat (Store.place: Store.words); said_<chat>, as the chat is opened
+// (Store.open: Store.said_make), since an older illi makes chats without
+// it. All of it, step by step: docs/storage.md.
 
 import { Database, type Statement } from "bun:sqlite";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Kind } from "../ai/AskAI.ts";
+import { history_bare } from "../tools/Clip.ts";
 import { Disk } from "./Disk.ts";
 import type { Span } from "./When.ts";
 
@@ -78,8 +89,10 @@ export type Place = { key: string; name: string; path: string };
 // last message (null: none yet), messages, its latest summary line
 export type Project = { file: string; name: string; path: string; first: string | null; last: string | null; count: number; lately: string };
 
-// a summary line found: its project, chat, the messages it covers, text
-export type Found = { project: string; chat: number; first: number; n: number; text: string };
+// a summary line found, or a message by its own words (said: its text the
+// passage holding them, its kind first): its project, chat, the messages
+// it covers (a message: its index, n 1), text
+export type Found = { project: string; chat: number; first: number; n: number; text: string; said: boolean };
 
 // a project's lines a search found but left out (more: maybe more still)
 export type Cut = { n: number; more: boolean };
@@ -133,7 +146,7 @@ pragma user_version = ${VERSION};
 `;
 
 // the most lines a search gives
-const FOUND = 20;
+export const FOUND = 20;
 
 // a chat of more summary lines has its words' shares seen, a word in
 // most lines left out (Store.seek); one of fewer, every word as given
@@ -141,6 +154,25 @@ const LARGE = 20000;
 
 // the lines of each stretch a word's share is seen in
 const SAMPLE = 1000;
+
+// the most of a message a search shows, around the words it holds, and
+// how much of that comes before the first of them
+const PASSAGE = 300;
+const LEAD    = 80;
+
+// the most places of the words in one message weighed for its passage
+// (a word all through a long log: its first ones)
+const HITS = 400;
+
+// the messages read at once as they're indexed (Store.said_fill)
+const BATCH = 256;
+
+// the lines closest in meaning one chat's search keeps as it reads its
+// vectors, before those over or under a better one go (Store.near)
+const NEAREST = 200;
+
+// a tool call as logged: its name, a space, its input's JSON
+const CALL = /^(\S+) (\{[\s\S]*)$/;
 
 // how long a connection waits for another's lock, ms
 const WAIT = 10000;
@@ -171,7 +203,7 @@ export namespace Store {
 
   // the file of the project at `place`, made if new (a file another
   // place's already: the next number's); the project's first chat, made
-  // if new
+  // if new, its index of its messages' words too
   export function open(dir: string, place: Place = HOME): Store {
     fs.mkdirSync(dir + PROJECTS, { recursive: true });
     for (let k = 1; ; k++) {
@@ -180,6 +212,7 @@ export namespace Store {
       try {
         const at = Store.place(db, place, Store.name(file));
         if (at !== null) {
+          Store.said_make(db, at.chat);
           return { file, db, ...at };
         }
       } catch (err) {
@@ -300,6 +333,46 @@ export namespace Store {
     db.run(`create virtual table find_${chat} using fts5(text, first unindexed, n unindexed, tokenize = 'unicode61 remove_diacritics 2')`);
   }
 
+  // a chat's index of its messages' own words (said_<chat>), made empty if
+  // not there: it keeps no text (content ''), only where each word is,
+  // its rows the messages' indexes (Store.said_fill)
+  export function said_make(db: Database, chat: number): void {
+    if (!Store.said_has(db, chat)) {
+      db.transaction(() => db.run(`create virtual table if not exists said_${chat} using fts5(text, content = '', tokenize = 'unicode61 remove_diacritics 2')`)).immediate();
+    }
+  }
+
+  // a chat's vectors of its summary lines (vec_<chat>), made empty if not
+  // there; a file whose vectors are another model's (meta's `vectors`,
+  // none: none yet) has every chat's dropped first, so the model's own
+  // are made anew (one write)
+  export function vec_make(db: Database, chat: number, model: string): void {
+    const kept = () => (query(db, "select value from meta where key = 'vectors'").get() as { value: string } | null)?.value ?? null;
+    if (kept() === model && Store.vec_has(db, chat)) {
+      return;
+    }
+    db.transaction(() => {
+      if (kept() !== model) {
+        for (const { name } of query(db, "select name from sqlite_schema where type = 'table' and name glob 'vec_[0-9]*'").all() as Array<{ name: string }>) {
+          db.run(`drop table ${name}`);
+        }
+        query(db, "insert into meta (key, value) values ('vectors', ?) on conflict (key) do update set value = excluded.value").run(model);
+      }
+      db.run(`create table if not exists vec_${chat} (id integer primary key, first integer not null, n integer not null, v blob not null)`);
+    }).immediate();
+  }
+
+  // whether a chat has its vectors' table
+  export function vec_has(db: Database, chat: number): boolean {
+    return query(db, "select 1 as y from sqlite_schema where type = 'table' and name = ?").get("vec_" + chat) !== null;
+  }
+
+  // whether a chat has its index of its messages' words (one an older
+  // illi made, not opened by this one since: not)
+  export function said_has(db: Database, chat: number): boolean {
+    return query(db, "select 1 as y from sqlite_schema where type = 'table' and name = ?").get("said_" + chat) !== null;
+  }
+
   // a store's connection closed (Store.shut)
   export function close(store: Store): void {
     Store.shut(store.db);
@@ -417,6 +490,147 @@ export namespace Store {
       }
     })();
     Store.wrote(store);
+  }
+
+  // the first message of the store's chat its index of words doesn't hold
+  // yet: they're indexed in order, so the one after its last
+  export function said_end(store: Store): number {
+    const last = query(store.db, `select rowid from said_${store.chat} order by rowid desc limit 1`).get() as { rowid: number } | null;
+    return last === null ? 0 : last.rowid + 1;
+  }
+
+  // the store's chat's messages not indexed yet put in its index of words
+  // (each by its own words: Store.said_text), in order, in one write,
+  // till `most` characters of them: the messages left after (0: all
+  // held). Never two at once nor one twice: the first not held is read
+  // inside the write. A chat without the index (an older illi's, not
+  // opened by this one): 0
+  export function said_fill(store: Store, most: number): number {
+    return store.db.transaction(() => {
+      if (!Store.said_has(store.db, store.chat)) {
+        return 0;
+      }
+      const add  = query(store.db, `insert into said_${store.chat} (rowid, text) values (?, ?)`);
+      const read = query(store.db, "select i, kind, text from msg where chat = ? and i >= ? order by i limit ?");
+      let [at, size] = [Store.said_end(store), 0];
+      while (size < most) {
+        const rows = read.all(store.chat, at, BATCH) as Array<{ i: number; kind: string; text: string }>;
+        for (const r of rows) {
+          if (size >= most) {
+            break;
+          }
+          add.run(r.i, Store.said_text(r.kind, r.text));
+          [at, size] = [r.i + 1, size + r.text.length];
+        }
+        if (rows.length < BATCH) {
+          break;
+        }
+      }
+      return Math.max(0, Store.count(store) - at);
+    }).immediate();
+  }
+
+  // the first summary line (its row in find_<chat>) of the store's chat
+  // without a vector yet: they're made in order, so the one after the last
+  export function vec_end(store: Store): number {
+    const last = query(store.db, `select id from vec_${store.chat} order by id desc limit 1`).get() as { id: number } | null;
+    return last === null ? 1 : last.id + 1;
+  }
+
+  // the store's chat's summary lines without a vector given theirs
+  // (`vector`: a line's text to its vector, kept small), in order, `most`
+  // at most: read and made first, then written in one write, unless
+  // another wrote them meanwhile (the first without one moved); the lines
+  // left after (0: all have theirs). A chat without the table: 0
+  export function vec_fill(store: Store, vector: (text: string) => Uint8Array, most: number): number {
+    if (!Store.vec_has(store.db, store.chat)) {
+      return 0;
+    }
+    const from = Store.vec_end(store);
+    const rows = query(store.db, `select rowid as id, first, n, text from find_${store.chat} where rowid >= ? order by rowid limit ?`).all(from, most) as Array<{ id: number; first: number; n: number; text: string }>;
+    const made = rows.map((r) => ({ ...r, v: vector(r.text) }));
+    store.db.transaction(() => {
+      if (Store.vec_end(store) === from) {
+        const add = query(store.db, `insert into vec_${store.chat} (id, first, n, v) values (?, ?, ?, ?)`);
+        made.forEach((r) => add.run(r.id, r.first, r.n, r.v));
+      }
+    }).immediate();
+    return Math.max(0, Store.indexed(store) - Store.vec_end(store) + 1);
+  }
+
+  // the summary lines closest in meaning to a query, in the projects'
+  // files given, each chat's by its vectors (`near`: a vector's cosine
+  // to the query's), those at `floor` or more, read one at a time (a big
+  // chat's never all at once), the NEAREST best kept as they come; with a
+  // span, only lines over messages all dated in it (Store.span). Of each
+  // chat's, one a stretch of messages: a line over or under a better one
+  // left out (the levels of one episode would fill every place). The
+  // FOUND best of all, best first, each its cosine as its score. Another
+  // project's file that won't read: none
+  export function near(store: Store, files: string[], near: (v: Uint8Array) => number, span: Span | null, floor: number): Array<Found & { score: number }> {
+    const out: Array<Found & { score: number }> = [];
+    for (const file of files) {
+      const project = Store.name(file);
+      const read = (s: Store) => s.db.transaction(() => {
+        for (const chat of Store.chats(s).filter((c) => Store.vec_has(s.db, c))) {
+          const within = span === null ? null : Store.span({ ...s, chat }, span);
+          if (within !== null && within[0] === within[1]) {
+            continue;
+          }
+          const best: Array<{ id: number; first: number; n: number; score: number }> = [];
+          const rows = query(s.db, `select id, first, n, v from vec_${chat}` + (within === null ? "" : " where first >= ? and first + n <= ?"));
+          for (const r of rows.iterate(...(within ?? [])) as IterableIterator<{ id: number; first: number; n: number; v: Uint8Array }>) {
+            const score = near(r.v);
+            if (score >= floor && (best.length < NEAREST || score > best[best.length - 1].score)) {
+              const at = best.findIndex((b) => b.score < score);
+              best.splice(at < 0 ? best.length : at, 0, { id: r.id, first: r.first, n: r.n, score });
+              best.length = Math.min(best.length, NEAREST);
+            }
+          }
+          const kept: typeof best = [];
+          for (const b of best) {
+            if (kept.length < FOUND && !kept.some((k) => b.first < k.first + k.n && k.first < b.first + b.n)) {
+              kept.push(b);
+            }
+          }
+          const text = query(s.db, `select text from find_${chat} where rowid = ?`);
+          for (const k of kept) {
+            out.push({ project, chat, first: k.first, n: k.n, text: (text.get(k.id) as { text: string } | null)?.text ?? "", said: false, score: k.score });
+          }
+        }
+      })();
+      try {
+        Store.visit(store, file, read);
+      } catch (err) {
+        if (file === store.file) {
+          throw err;
+        }
+      }
+    }
+    return out.sort((a, b) => b.score - a.score).slice(0, FOUND);
+  }
+
+  // the words a message is found by: its own text; a tool call's (`name
+  // {input}`), its name and the values its input holds, each on a line,
+  // unescaped (in JSON a newline's \n would join two words); a result's,
+  // without the <history> line recall appended to it (never found again
+  // as if it had happened)
+  export function said_text(kind: string, text: string): string {
+    if (kind === "echo") {
+      return history_bare(text);
+    }
+    const m = kind === "tool" ? CALL.exec(text) : null;
+    if (m === null) {
+      return text;
+    }
+    try {
+      const out: string[] = [m[1]];
+      const walk = (x: unknown): unknown => (typeof x === "string" || typeof x === "number" ? out.push(String(x)) : Array.isArray(x) ? x.forEach(walk) : x !== null && typeof x === "object" ? Object.values(x).forEach(walk) : undefined);
+      walk(JSON.parse(m[2]));
+      return out.join("\n");
+    } catch {
+      return text;
+    }
   }
 
   // Nodes
@@ -651,39 +865,63 @@ export namespace Store {
     return { name: Store.name(store.file), path: (query(store.db, "select path from project where id = ?").get(store.project) as { path: string }).path };
   }
 
-  // the summary lines holding all of the words (none: any of them), in
-  // the projects' files given (null: every one), each chat's from its own
-  // index (Store.seek): each chat's best first, the best of those first,
-  // then each one's second, and so on, as one index's scores weigh its
-  // words by how rare they are in it, not in all, so a big chat's would
-  // crowd out every small one's. With a span (When.Span), only lines over
-  // messages all dated in it, each chat's own (Store.span). The lines past
-  // the FOUND given are counted in `cut`, by project (more: a chat of it
-  // had FOUND lines, its most, so it may hold more still)
-  export function search(store: Store, words: string[], files: string[] | null, cut?: Map<string, Cut>, span: Span | null = null): Found[] {
+  // the summary lines and messages holding all of the words (none: any of
+  // them), in the projects' files given (null: every one), each chat's
+  // lines from its index of them and its messages from its index of their
+  // own words (Store.seek), each its own list: every list's best first,
+  // the best of those first, then each one's second, and so on, as one
+  // index's scores weigh its words by how rare they are in it, not in all,
+  // so a big chat's would crowd out every small one's, and its messages'
+  // its lines'. One place once: a message found by its words and its own
+  // line too, as the line, ranked where the first of them is (a short
+  // message's line is its text). With a span (When.Span), only lines over
+  // messages all dated in it, and those messages, each chat's own
+  // (Store.span). The places past the FOUND given are counted in `cut`, by
+  // project (more: a list of it had FOUND, its most, so it may hold more
+  // still); a message given, its passage holding the words (Store.passage).
+  // how.or: set true when it searched for any of the words
+  export function search(store: Store, words: string[], files: string[] | null, cut?: Map<string, Cut>, span: Span | null = null, how?: { or: boolean }): Found[] {
     const terms = words.filter((w) => /[\p{L}\p{N}\p{Co}]/u.test(w));
     if (terms.length === 0) {
       return [];
     }
-    const ask = (or: boolean) => (files ?? Store.files(store)).flatMap((file) => Store.lines(store, file, terms, or, span)).sort((a, b) => a.k - b.k || a.score - b.score);
-    const and = ask(false);
-    const all = and.length > 0 || terms.length === 1 ? and : ask(true);
+    const from   = files ?? Store.files(store);
+    const ask    = (or: boolean) => from.flatMap((file) => Store.lines(store, file, terms, or, span)).sort((a, b) => a.k - b.k || a.score - b.score);
+    const and    = ask(false);
+    const sorted = and.length > 0 || terms.length === 1 ? and : ask(true);
+    if (how !== undefined) {
+      how.or = sorted !== and;
+    }
+    const place  = (f: Found) => f.project + "/" + f.chat + "/" + f.first + "+" + f.n;
+    const lined  = new Map(sorted.filter((f) => !f.said).map((f) => [place(f), f]));
+    const seen   = new Set<string>();
+    const all    = sorted.flatMap((f) => {
+      const at = place(f);
+      if (seen.has(at)) {
+        return [];
+      }
+      seen.add(at);
+      return [lined.get(at) ?? f];
+    });
     for (const { project, full } of all.slice(FOUND)) {
       const was = cut?.get(project);
       cut?.set(project, { n: (was?.n ?? 0) + 1, more: (was?.more ?? false) || full });
     }
-    return all.slice(0, FOUND).map(({ score, k, full, ...found }) => found);
+    return Store.passages(store, from, all.slice(0, FOUND).map(({ score, k, full, ...found }) => found), terms);
   }
 
-  // a project's lines with the words (or: any), each chat's best
-  // (Store.seek) with its rank in it (k), as its file was when they began
-  // (one read transaction); with a span, each chat's messages in it found
-  // first (Store.span); another project's file that won't read (gone
-  // meanwhile): none
+  // a project's lines and messages with the words (or: any), each list's
+  // best (Store.seek) with its rank in it (k), as its file was when they
+  // began (one read transaction); with a span, each chat's messages in it
+  // found first (Store.span); another project's file that won't read
+  // (gone meanwhile): none
   export function lines(store: Store, file: string, terms: string[], or: boolean, span: Span | null = null): Array<Found & { score: number; k: number; full: boolean }> {
     const project = Store.name(file);
-    const seek = (s: Store, chat: number) => Store.seek(s.db, chat, terms, or, span === null ? null : Store.span({ ...s, chat }, span));
-    const read = (s: Store) => s.db.transaction(() => Store.chats(s).flatMap((chat) => seek(s, chat).map((l, k, all) => ({ project, chat, k, full: all.length === FOUND, ...l }))))();
+    const seek = (s: Store, chat: number) => {
+      const within = span === null ? null : Store.span({ ...s, chat }, span);
+      return [false, true].flatMap((said) => Store.seek(s.db, chat, terms, or, within, said).map((l, k, all) => ({ project, chat, k, full: all.length === FOUND, said, ...l })));
+    };
+    const read = (s: Store) => s.db.transaction(() => Store.chats(s).flatMap((chat) => seek(s, chat)))();
     try {
       return Store.visit(store, file, read);
     } catch (err) {
@@ -695,48 +933,130 @@ export namespace Store {
   }
 
   // one chat's best lines with the words (or: any), by bm25, with their
-  // scores: every match ranked, however old; with `within` ([a, b)), only
-  // lines over messages a… b - 1, kept by the query itself, so the best of
-  // those are found, not the best of all cut down. In a chat of more lines
-  // than LARGE, a word in most lines all along (over half of each of three
-  // stretches of SAMPLE: the oldest, the middle, the newest) is left out
-  // while a rarer one is in: bm25 gives it next to no weight, so the
-  // ranking stays, and its lines are the most to read
-  export function seek(db: Database, chat: number, terms: string[], or: boolean, within: [number, number] | null = null): Array<Line & { score: number }> {
-    const table = "find_" + chat;
-    if (within !== null && within[0] === within[1]) {
+  // scores: every match ranked, however old; said: its best messages, by
+  // their own words (said_<chat>: each its index, n 1, no text; a chat
+  // without that index, none). With `within` ([a, b)), only lines over
+  // messages a… b - 1, or those messages, kept by the query itself, so
+  // the best of those are found, not the best of all cut down. In an index
+  // of more rows than LARGE, a word in most rows all along (over half of
+  // each of three stretches of SAMPLE: the oldest, the middle, the newest)
+  // is left out while a rarer one is in: bm25 gives it next to no weight,
+  // so the ranking stays, and its rows are the most to read
+  export function seek(db: Database, chat: number, terms: string[], or: boolean, within: [number, number] | null = null, said = false): Array<Line & { score: number }> {
+    const table = (said ? "said_" : "find_") + chat;
+    if ((within !== null && within[0] === within[1]) || (said && !Store.said_has(db, chat))) {
       return [];
     }
+    // a line's row is from 1, a message's its index (from 0): the rows
+    // are never deleted, so the last tells how many
+    const base  = said ? 0 : 1;
     const quote = (words: string[]) => words.map((w) => '"' + w.replace(/"/g, '""') + '"').join(or ? " OR " : " ");
-    const lines = (query(db, `select rowid from ${table} order by rowid desc limit 1`).get() as { rowid: number } | null)?.rowid ?? 0;
-    const held = query(db, `select count(*) as n from (select 1 from ${table} where ${table} match ? and rowid >= ? and rowid < ?)`);
-    const most = (word: string) => lines > LARGE && [lines - SAMPLE + 1, Math.floor((lines - SAMPLE) / 2) + 1, 1].every((from) => (held.get(quote([word]), from, from + SAMPLE) as { n: number }).n > SAMPLE / 2);
-    const rare = terms.filter((w) => !most(w));
-    const span = within === null ? "" : " and first >= ? and first + n <= ?";
-    return query(db, `select first, n, text, bm25(${table}) as score from ${table} where ${table} match ?${span} order by score limit ${FOUND}`).all(quote(rare.length > 0 ? rare : terms), ...(within ?? [])) as Array<Line & { score: number }>;
+    const last  = (query(db, `select rowid from ${table} order by rowid desc limit 1`).get() as { rowid: number } | null)?.rowid;
+    const rows  = last === undefined ? 0 : last + 1 - base;
+    const held  = query(db, `select count(*) as n from (select 1 from ${table} where ${table} match ? and rowid >= ? and rowid < ?)`);
+    const most  = (word: string) => rows > LARGE && [rows - SAMPLE, Math.floor((rows - SAMPLE) / 2), 0].every((from) => (held.get(quote([word]), base + from, base + from + SAMPLE) as { n: number }).n > SAMPLE / 2);
+    const rare  = terms.filter((w) => !most(w));
+    const span  = within === null ? "" : said ? " and rowid >= ? and rowid < ?" : " and first >= ? and first + n <= ?";
+    const what  = said ? "rowid as first, 1 as n, '' as text" : "first, n, text";
+    return query(db, `select ${what}, bm25(${table}) as score from ${table} where ${table} match ?${span} order by score limit ${FOUND}`).all(quote(rare.length > 0 ? rare : terms), ...(within ?? [])) as Array<Line & { score: number }>;
+  }
+
+  // the places found, each message's text its kind and the passage of it
+  // holding the terms (Store.passage), read from its project's file
+  // (among `files`); one whose file or message won't read meanwhile (its
+  // project forgotten): left out
+  export function passages(store: Store, files: string[], found: Found[], terms: string[]): Found[] {
+    const texts = new Map<Found, string>();
+    for (const file of files) {
+      const here = found.filter((f) => f.said && f.project === Store.name(file));
+      if (here.length === 0) {
+        continue;
+      }
+      try {
+        Store.visit(store, file, (s) => here.forEach((f) => {
+          const row = query(s.db, "select kind, text from msg where chat = ? and i = ?").get(f.chat, f.first) as { kind: string; text: string } | null;
+          if (row !== null) {
+            texts.set(f, row.kind + ": " + Store.passage(Store.said_text(row.kind, row.text), terms));
+          }
+        }));
+      } catch (err) {
+        if (file === store.file) {
+          throw err;
+        }
+      }
+    }
+    return found.flatMap((f) => (!f.said ? [f] : texts.has(f) ? [{ ...f, text: texts.get(f)! }] : []));
+  }
+
+  // the PASSAGE characters of a text, on one line, around the terms where
+  // the most of them meet (the first such place), from LEAD before the
+  // first of them, cut at spaces, "…" where cut. A term is the index's
+  // words of it side by side (as the index matches it: case and accents
+  // aside); a text holding none: its start
+  export function passage(text: string, terms: string[]): string {
+    const flat = text.replace(/\s+/g, " ").trim();
+    if (flat.length <= PASSAGE) {
+      return flat;
+    }
+    const fold  = (w: string) => w.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+    const split = (s: string) => [...s.matchAll(/[\p{L}\p{M}\p{N}\p{Co}]+/gu)];
+    const words = split(flat).map((m) => ({ at: m.index, w: fold(m[0]) }));
+    const asked = terms.map((t) => split(t).map((m) => fold(m[0]))).filter((t) => t.length > 0);
+    const hits  = words.flatMap((_, j) => asked.flatMap((t, k) => (t.every((w, d) => words[j + d]?.w === w) ? [{ at: words[j].at, k }] : []))).slice(0, HITS);
+    const meet  = (from: number) => new Set(hits.filter((h) => h.at >= from && h.at < from + PASSAGE - LEAD).map((h) => h.k)).size;
+    const best  = hits.reduce<{ at: number; n: number } | null>((b, h) => {
+      const n = meet(h.at);
+      return b === null || n > b.n ? { at: h.at, n } : b;
+    }, null);
+    let a = Math.max(0, (best?.at ?? 0) - LEAD);
+    let z = Math.min(flat.length, a + PASSAGE);
+    a = Math.max(0, Math.min(a, z - PASSAGE));
+    if (a > 0) {
+      const space = flat.indexOf(" ", a);
+      a = space >= 0 && space < (best?.at ?? a) ? space + 1 : a;
+    }
+    if (z < flat.length) {
+      const space = flat.lastIndexOf(" ", z);
+      z = space > a ? space : z;
+    }
+    return (a > 0 ? "…" : "") + flat.slice(a, z) + (z < flat.length ? "…" : "");
   }
 
   // the lines the store's chat's index holds (its last rowid: lines are
-  // never deleted; the radar's: Radar.ts)
-  export function indexed(store: Store): number {
+  // never deleted); said: the messages its index of their words holds
+  // (the radar's: Radar.ts)
+  export function indexed(store: Store, said = false): number {
+    if (said) {
+      return Store.said_has(store.db, store.chat) ? Store.said_end(store) : 0;
+    }
     const table = "find_" + store.chat;
     return (query(store.db, `select rowid from ${table} order by rowid desc limit 1`).get() as { rowid: number } | null)?.rowid ?? 0;
   }
 
   // how many lines of the store's chat hold a phrase (its words side by
   // side), anywhere, `most` at most, from the index's lists of where each
-  // word is alone, no line read (the radar's: Radar.ts)
-  export function hits(store: Store, phrase: string, most: number): number {
-    const table = "find_" + store.chat;
+  // word is alone, no line read; said: how many messages, by their own
+  // words (the radar's: Radar.ts)
+  export function hits(store: Store, phrase: string, most: number, said = false): number {
+    const table = (said ? "said_" : "find_") + store.chat;
+    if (said && !Store.said_has(store.db, store.chat)) {
+      return 0;
+    }
     return (query(store.db, `select count(*) as n from (select 1 from ${table} where ${table} match ? limit ?)`).get('"' + phrase.replace(/"/g, '""') + '"', most) as { n: number }).n;
   }
 
   // the lines of the store's chat holding a phrase (its words side by
   // side), each before message `end` (it and all after left out), `most`
-  // at most: the messages each covers (the radar's: Radar.ts)
-  export function held(store: Store, phrase: string, end: number, most: number): Array<{ first: number; n: number }> {
-    const table = "find_" + store.chat;
-    return query(store.db, `select first, n from ${table} where ${table} match ? and first + n <= ? limit ?`).all('"' + phrase.replace(/"/g, '""') + '"', end, most) as Array<{ first: number; n: number }>;
+  // at most: the messages each covers; said: the messages holding it by
+  // their own words, each its index, n 1 (the radar's: Radar.ts)
+  export function held(store: Store, phrase: string, end: number, most: number, said = false): Array<{ first: number; n: number }> {
+    const table = (said ? "said_" : "find_") + store.chat;
+    if (said && !Store.said_has(store.db, store.chat)) {
+      return [];
+    }
+    const at = said ? "rowid as first, 1 as n" : "first, n";
+    const to = said ? "rowid < ?" : "first + n <= ?";
+    return query(store.db, `select ${at} from ${table} where ${table} match ? and ${to} limit ?`).all('"' + phrase.replace(/"/g, '""') + '"', end, most) as Array<{ first: number; n: number }>;
   }
 
   // the date of message i (null: none), its text not read

@@ -354,7 +354,9 @@ step (your message, each round of tool results, the turn's end) and
 shows past topics that may be related in the side panel's Related
 section: up to 4 lines, each how long ago it ended, its summary and its
 id (`#1234+16`: the 16 messages from #1234). It reads the chat's own
-index of its summaries, on a thread of its own: no model call. What
+index of its summaries (and, for an error's name, of its messages' own
+words, so an error only a long log named is found too), on a thread of
+its own: no model call. What
 illi already sees in detail (the recent messages, and those its view
 holds one by one) is left out, and so is what you dismissed. The list
 holds still while you read it: a new line joins at its foot, and a line
