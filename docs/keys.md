@@ -464,14 +464,17 @@ Mouse and side panel
   within 5 seconds takes the quote out again. A reply's buttons are left
   out of what's quoted or copied, and a right drag never starts on one.
 - The wheel scrolls the chat, a pane, or the list open; over a question,
-  its lead (or illi's questions' lines), where they are cut.
+  its lead (or illi's questions' lines), where they are cut; over the
+  side panel, the panel, where it's too long for the screen.
 - The click that only brings the terminal's window to the front does
   nothing, in the chat as in a list, a question or the trust question
   (in tmux, with `set -g focus-events on`). On a reply's copy button it
   copies all the same, so after pasting elsewhere, the next copy takes
   one click.
-- From 100 columns on, a side panel shows the primary agents by name (a
-  click makes one the main agent) and beside them your sticky skills,
+- From 100 columns on, a side panel runs the screen's height beside the
+  chat and the input (which take the width it leaves). It shows the
+  primary agents by name (a click makes one the main agent) and beside
+  them your sticky skills,
   each on (●) or off (◯), a click turning it on or off (under the agents
   when a name won't fit whole beside them), the subagents of this run,
   at work or done (a click shows one's tab), the background jobs (a click
@@ -488,8 +491,12 @@ Mouse and side panel
   to-do list, gone once every item is done or on `/clear`. Without one,
   its foot says illi's version, and, once a look found a newer release,
   `update available (0.4.1)`, or `restart to apply update (0.4.1)` once
-  it is installed ([Config](config.md), `autoupdate`). The `side`
-  and `side_width` settings place it.
+  it is installed ([Config](config.md), `autoupdate`). Too long for the
+  screen, it scrolls: the wheel over it, its edge a scrollbar (the
+  heavier part what shows). It shows its top at first, or with a to-do
+  list as much of the list as fits from its head; where the wheel leaves
+  it holds till it fits again. The `side` and `side_width` settings
+  place it.
 - The bottom line ends with `trust mode` in the error color while
   that mode is on (a click opens `/mode`). Before it, the background
   jobs are counted when the side panel doesn't show them, and before

@@ -72,18 +72,22 @@ const SUMMARY = 20;
 // (term_side_related), the MCP servers (a click: /mcp), the requests
 // refused (a click: /permissions on it), each plugin's lines
 // (Plugins.side); at its
-// foot illi's to-do list, which, longer than the room, pushes the rest up
-// (its head stays); with none, illi's version, faint, and what is said
-// of a newer release (t.update: available, or restart to apply it), as
-// the trust question's foot says it, if it fits
+// foot illi's to-do list; with none, illi's version, faint, and what is
+// said of a newer release (t.update: available, or restart to apply
+// it), as the trust question's foot says it. Longer than the room, it
+// all goes on under a gap and scrolls (the wheel over it: t.slid),
+// showing at first its top, or with a to-do list the list's head (as
+// much above it as leaves it whole)
 export function term_side(t: Term, w: number, tall: number): Item[] {
   return term_side_drawn(t, w, tall).items;
 }
 
 // the side, as term_side, and whether its background jobs show whole
-// (none running: yes); not (a long to-do list pushed them out, or a short
-// screen cut them), the last line counts them (Paint.tabs_line)
-export function term_side_drawn(t: Term, w: number, tall: number): { items: Item[]; background: boolean } {
+// (none running: yes); not (scrolled out of view), the last line counts
+// them (Paint.tabs_line); the first of its lines shown and the most
+// that can be (0: it fits whole); scrolling, the rows of its scrollbar's
+// thumb (from, to: past the last; null: it fits whole)
+export function term_side_drawn(t: Term, w: number, tall: number): { items: Item[]; background: boolean; first: number; most: number; thumb: [number, number] | null } {
   const bold  = { ...Paint.INK, b: true };
   const head  = (text: string, run: (() => void) | null = null): Item => [[Paint.Run(text, bold)], run];
   const item  = (here: boolean, text: string, run: () => void): Item => [[Paint.Run((here ? GLYPH.here : GLYPH.tab) + " " + text, here ? Paint.INK : Paint.DIM)], run];
@@ -101,12 +105,13 @@ export function term_side_drawn(t: Term, w: number, tall: number): { items: Item
   const top   = [...term_side_beside([head("Agents"), ...mains], (room, whole) => term_side_sticky(t, room, whole), w), gap, ...(subs.length === 0 ? [] : [head("Subagents"), ...subs, gap]), ...(bg.length === 0 ? [] : [...bg, gap]), ...term_side_profiles(t), ...(plan.length === 0 ? [] : [...plan, gap]), head("Chat"), ...term_side_use(t, w), ...(rel.length === 0 ? [] : [gap, ...rel]), ...(mcp.length === 0 ? [] : [gap, head("MCP", () => term_mcp(t)), ...mcp]), ...(nos.length === 0 ? [] : [gap, head("Refused", () => term_permissions(t)), ...nos]), ...term_side_plugins(w)];
   const foot  = todo.length === 0 ? keys : todo;
   const room  = tall - top.length - foot.length;
-  const items = room > 0 ? [...top, ...fill(room), ...foot]
-    : todo.length === 0 ? top
-    : todo.length < tall ? [...top, gap, ...todo].slice(-tall)
-    : todo;
-  const kept  = items.slice(0, tall);
-  return { items: kept.map(([line, run, aside]) => [Paint.runs_wrap(line, w, true)[0], run, aside]), background: bg.every((x) => kept.includes(x)) };
+  const items = room > 0 ? [...top, ...fill(room), ...foot] : [...top, gap, ...foot];
+  const most  = Math.max(0, items.length - tall);
+  const first = Math.max(0, Math.min(most, t.slid ?? (todo.length === 0 ? 0 : top.length + 1)));
+  const kept  = items.slice(first, first + tall);
+  const size  = Math.max(1, Math.round((tall * tall) / items.length));
+  const from  = most === 0 ? 0 : Math.round((first * (tall - size)) / most);
+  return { items: kept.map(([line, run, aside]) => [Paint.runs_wrap(line, w, true)[0], run, aside]), background: bg.every((x) => kept.includes(x)), first, most, thumb: most === 0 ? null : [from, from + size] };
 }
 
 // two lists, w wide: the second beside the first, GAP after the first's

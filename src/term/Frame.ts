@@ -28,7 +28,7 @@ import { Projects } from "../chat/Projects.ts";
 import { related_list, related_shown } from "./Related.ts";
 import * as Screen from "../ui/Screen.ts";
 import { POPUP, term_area, term_light, term_under } from "./Select.ts";
-import { term_side, term_side_drawn, term_side_width, term_tokens } from "./Side.ts";
+import { term_side_drawn, term_side_width, term_tokens } from "./Side.ts";
 import { status_rows } from "./Status.ts";
 import { term_act, type Area, type Pane, type Sug, type Target, type Term } from "./Term.ts";
 import * as View from "../ui/View.ts";
@@ -159,8 +159,9 @@ export function term_draw(t: Term): void {
   }
 }
 
-// the screen, top to bottom: the head; the chat (or a pane), the side
-// beside it on a wide screen; as a /word is typed, over their foot, its
+// the screen, top to bottom: the head; on a wide screen the side beside
+// all under it, the chat and its foot as wide as the room it leaves;
+// the chat (or a pane); as a /word is typed, over its foot, its
 // last line right on the input, the commands it matches (as wide as the
 // input); a row with, at the chat's right end, a toast in the accent; a
 // rule (what runs, while it does), the input, a rule, the pages, the
@@ -205,7 +206,9 @@ export function term_paint(t: Term): void {
   const side  = term_side_width(t, w);
   const left  = t.side.place === "left" ? side : 0;
   const cw    = full - side - 2 * MARGIN;
-  const iw    = full - 2 * MARGIN;
+  const iw    = cw;
+  const fc    = left + MARGIN;
+  const fw    = side === 0 ? Infinity : cw + 2 * MARGIN;
   const off   = !View.view_typing(t.v);
   const room  = h - AROUND;
   const asked = question_laid(t, iw, h, room);
@@ -216,7 +219,7 @@ export function term_paint(t: Term): void {
   const notes = term_notes(idle ? said.notes : said.notes.slice(-1), iw - 2 * NOTE_IN);
   const ruled = idle && asked === null ? notes.pop() : undefined;
   const last  = notes.at(-1);
-  const roomy = last !== undefined && NOTE_IN + Paint.line_width(last) + 1 + Paint.text_width(said.toast) <= left + cw;
+  const roomy = last !== undefined && NOTE_IN + Paint.line_width(last) + 1 + Paint.text_width(said.toast) <= cw;
   const lead  = roomy ? [Paint.Run(" ".repeat(NOTE_IN)), ...notes.pop()!] : [];
   const most  = Math.max(0, Math.min(Math.floor(h / 4), room + (paned ? 1 : 0) - input.lines.length));
   const above = notes.slice(notes.length - most).map((l) => [Paint.Run(" ".repeat(NOTE_IN)), ...l]);
@@ -233,44 +236,45 @@ export function term_paint(t: Term): void {
   const shown = term_area(t, view);
   const sw    = side - (left > 0 ? 3 : 2);
   const at    = left > 0 ? 0 : full - side;
-  const panel = side === 0 ? null : term_side_drawn(t, sw, tall);
+  const panel = side === 0 ? null : term_side_drawn(t, sw, h - 1);
   const sides = panel?.items ?? [];
   const jobs  = panel?.background !== true;
   const sided = term_area(t, { key: "side", lines: sides.map((s) => s[0]), first: 0, row: 1, col: left > 0 ? 1 : at + 2, w: sw, tall: sides.length });
   const lit   = { ...Paint.INK, c: Draw.draw_tokens().accent };
-  const toast = box !== null ? [] : [...lead, Paint.Run(" ".repeat(Math.max(1, left + cw - Paint.line_width(lead) - Paint.text_width(said.toast)))), Paint.Run(said.toast, lit)];
+  const toast = box !== null ? [] : [...lead, Paint.Run(" ".repeat(Math.max(1, cw - Paint.line_width(lead) - Paint.text_width(said.toast)))), Paint.Run(said.toast, lit)];
   const lines = [...above, toast, term_rule(t, iw, ruled, asked?.rule), ...input.lines, ...(paned ? [] : [Paint.rule(iw)]), ...status, Paint.tabs_line(t.v, iw, side === 0, jobs, side === 0 ? related_shown(t).length : 0)];
-  const foot  = term_area(t, { key: "foot", lines, first: 0, row: 1 + tall, col: MARGIN, w: iw, tall: lines.length });
+  const foot  = term_area(t, { key: "foot", lines, first: 0, row: 1 + tall, col: fc, w: iw, tall: lines.length });
   const head  = term_area(t, { key: "head", lines: [term_head(t, full)], first: 0, row: 0, col: 0, w: full, tall: 1 });
   const rows  = ROWS;
   const with_: number[] = [];
   rows.length = 0;
   rows.push([{ col: 0, w: full, line: head[0] }]);
   for (let k = 0; k < tall; k++) {
-    const row: Screen.Piece[] = [{ col: left + MARGIN, w: cw, line: shown[k] }];
-    if (sides[k] !== undefined && 1 + k < top) {
-      row.push({ col: at, w: side, line: term_side_line(sided[k], sw, left > 0) });
-      with_.push(k);
-    }
-    rows.push(row);
-    // a side row's click: its item's, but from a second column on (Item's
-    // aside, its col into the line, which starts 1 in on the left side
-    // and 2 in on the right) that column's; none under a popup
-    const aside = row.length === 1 ? undefined : sides[k][2];
-    const split = aside === undefined ? at + side : at + (left > 0 ? 1 : 2) + aside.col;
-    term_hit(t, 1 + k, at, split, row.length === 1 || pop ? null : sides[k][1]);
-    term_hit(t, 1 + k, split, at + side, pop ? null : aside?.run ?? null);
+    rows.push([{ col: left + MARGIN, w: cw, line: shown[k] }]);
   }
   for (const line of foot) {
-    rows.push([{ col: MARGIN, w: iw, line }]);
+    rows.push([{ col: fc, w: iw, line }]);
+  }
+  // the side's rows, beside the chat's and its foot's (each a row's
+  // second piece: term_side_again), its edge the scrollbar where it
+  // scrolls; a row's click: its item's, but from a second column on
+  // (Item's aside, its col into the line, which starts 1 in on the left
+  // side and 2 in on the right) that column's; none under a popup
+  for (let k = 0; k < sides.length && 1 + k < rows.length; k++) {
+    rows[1 + k].push({ col: at, w: side, line: term_side_line(sided[k], sw, left > 0, term_thumb(panel!.thumb, k)) });
+    with_.push(k);
+    const aside = sides[k][2];
+    const split = aside === undefined ? at + side : at + (left > 0 ? 1 : 2) + aside.col;
+    term_hit(t, 1 + k, at, split, pop ? null : sides[k][1]);
+    term_hit(t, 1 + k, split, at + side, pop ? null : aside?.run ?? null);
   }
   if (typed !== null) {
-    term_typed(t, typed, 3 + tall + above.length);
+    term_typed(t, typed, 3 + tall + above.length, fc, left, fw);
   }
   if (box !== null) {
-    term_over(t, rows, box, top, MARGIN, iw);
+    term_over(t, rows, box, top, fc, iw);
   } else if (asked !== null && !pop) {
-    question_kept(t, asked, 3 + tall + above.length, MARGIN, iw);
+    question_kept(t, asked, 3 + tall + above.length, fc, iw, left, fw);
   } else if (!pop) {
     t.box = null;
   }
@@ -278,32 +282,43 @@ export function term_paint(t: Term): void {
     term_jump(t, rows, tall, left + MARGIN, cw, lit);
   }
   if (!pop) {
-    term_tabs(t, h - 1, side === 0, iw, jobs);
+    term_tabs(t, h - 1, side === 0, fc, iw, jobs);
   }
   term_light(t, rows);
   const popped = pop ? popup_paint(t, rows, w, h) : null;
   t.sel = !pop && t.sel?.key === POPUP ? null : t.sel;
   t.hover = t.sel?.held ? undefined : term_under(t, t.scr.point);
-  const cursor = pop ? popped : input.at === null ? null : { row: 3 + tall + above.length + input.at.row, col: MARGIN + input.at.col };
+  const cursor = pop ? popped : input.at === null ? null : { row: 3 + tall + above.length + input.at.row, col: fc + input.at.col };
   const drawn  = t.lead ? rows.map((row) => row.map((p) => ({ ...p, line: p.line.map((r) => ({ ...r, s: { ...r.s, d: true, c: "", g: "" } })) }))) : rows;
-  t.ruled ={ row: 2 + tall + above.length, w: iw, at: cursor, rows: drawn, side: box === null && !pop ? { at, w: side, sw, left: left > 0, tall, with: with_ } : null, spin: term_spinner(Date.now() - t.since) };
+  t.slid   = panel === null || panel.most === 0 || t.slid === null ? null : panel.first;
+  t.ruled  = { row: 2 + tall + above.length, col: fc, w: iw, at: cursor, rows: drawn, side: pop || panel === null ? null : { at, w: side, sw, left: left > 0, tall: h - 1, with: with_, first: panel.first, most: panel.most }, spin: term_spinner(Date.now() - t.since) };
   t.scr.blink = idle || asked !== null;
   Screen.screen_paint(t.scr, drawn, cursor);
   painted = Date.now();
 }
 
-// the input as painted from screen row `row`, kept for a press to put
-// its cursor (Select.ts term_put): its rows whole and the rule under
-// them (the text's end), from MARGIN in
-function term_typed(t: Term, typed: { lines: Paint.Line[]; top: number; laid: Screen.Laid }, row: number): void {
+// the input as painted from screen row `row`, column `col`, kept for a
+// press to put its cursor (Select.ts term_put): its rows whole and the
+// rule under them (the text's end), across the columns from `from`, w of
+// them (the chat's, its margins too: the side beside them keeps its
+// clicks)
+function term_typed(t: Term, typed: { lines: Paint.Line[]; top: number; laid: Screen.Laid }, row: number, col: number, from: number, w: number): void {
   const rows = typed.lines.length;
-  t.fields.push({ of: null, ed: t.scr.ed, text: t.scr.ed.text, row, col: 0, w: Infinity, tall: rows + 1, at: (r, c) => Screen.ed_at(typed.laid, typed.top, r < rows ? r : Infinity, c - MARGIN) });
+  t.fields.push({ of: null, ed: t.scr.ed, text: t.scr.ed.text, row, col: from, w, tall: rows + 1, at: (r, c) => Screen.ed_at(typed.laid, typed.top, r < rows ? r : Infinity, c + from - col) });
 }
 
 // a line of the side, w wide, with its edge toward the chat: the side
-// on the left, its line at its right; else at its left
-function term_side_line(line: Paint.Line, w: number, left: boolean): Paint.Line {
-  return left ? [Paint.Run(" "), ...line, Paint.Run(" ".repeat(Math.max(0, w - Paint.line_width(line))) + " │", Paint.DIM)] : [Paint.Run("│ ", Paint.DIM), ...line];
+// on the left, its line at its right; else at its left. The edge is the
+// side's scrollbar where it scrolls: its thumb on this row, heavy, in
+// the ink
+function term_side_line(line: Paint.Line, w: number, left: boolean, thumb: boolean): Paint.Line {
+  const edge = thumb ? Paint.Run("┃", Paint.INK) : Paint.Run("│", Paint.DIM);
+  return left ? [Paint.Run(" "), ...line, Paint.Run(" ".repeat(Math.max(0, w - Paint.line_width(line)) + 1)), edge] : [edge, Paint.Run(" "), ...line];
+}
+
+// whether the side's row k holds its scrollbar's thumb (term_side_drawn)
+function term_thumb(thumb: [number, number] | null, k: number): boolean {
+  return thumb !== null && k >= thumb[0] && k < thumb[1];
 }
 
 // the notes' lines, oldest first, w wide: the newest in the ink, the
@@ -429,7 +444,8 @@ function term_tick(t: Term): void {
     tr.step   = Math.floor(ms / WORDS);
     if (!fits || Math.floor(ms / 1000) !== tr.sec || t.doing.verb !== was.verb || t.doing.tokens !== was.tokens || t.doing.rate !== was.rate) {
       [tr.head, tr.sec] = [head, Math.floor(ms / 1000)];
-      Screen.screen_row(t.scr, r.row, [{ col: MARGIN, w: r.w, line: term_working(t, t.doing, r.w, now) }], r.at);
+      r.rows[r.row][0] = { col: r.col, w: r.w, line: term_working(t, t.doing, r.w, now) };
+      Screen.screen_row(t.scr, r.row, r.rows[r.row], r.at);
     }
   }
   if (t.doing !== null && head !== tr.head) {
@@ -452,7 +468,7 @@ function term_traced(t: Term, head: number, was: number): Screen.Piece[] {
   const c      = Draw.draw_tokens().accent;
   const cells  = term_trace(head * TRACE, c, t.scr.canvas);
   const before = was < 0 ? [] : term_trace(was * TRACE, c, t.scr.canvas);
-  const col    = MARGIN + Paint.text_width(RULE_HEAD);
+  const col    = (t.ruled?.col ?? MARGIN) + Paint.text_width(RULE_HEAD);
   const pieces: Screen.Piece[] = [];
   cells.forEach((run, k) => {
     const last = pieces.at(-1);
@@ -470,18 +486,28 @@ function term_traced(t: Term, head: number, was: number): Screen.Piece[] {
 }
 
 // the side's rows written again alone, beside the chat's as last painted
-// (each written only if it changed); a box over them: a whole paint
+// (each written only if it changed; on the rule's row, the side's cells
+// alone, as the clock writes the ∞'s there alone); a popup over them, or
+// no side then: a whole paint
 export function term_side_again(t: Term): void {
   const r = t.ruled!;
   if (r.side === null) {
     return term_paint(t);
   }
   const { at, w, sw, left, tall } = r.side;
-  const sides = term_side(t, sw, tall);
+  const drawn = term_side_drawn(t, sw, tall);
   for (const k of r.side.with) {
-    if (sides[k] !== undefined) {
-      r.rows[1 + k][1] = { col: at, w, line: term_side_line(sides[k][0], sw, left) };
+    const item = drawn.items[k];
+    if (item === undefined) {
+      continue;
+    }
+    const was   = r.rows[1 + k][1];
+    const piece = { col: at, w, line: term_side_line(item[0], sw, left, term_thumb(drawn.thumb, k)) };
+    r.rows[1 + k][1] = piece;
+    if (1 + k !== r.row) {
       Screen.screen_row(t.scr, 1 + k, r.rows[1 + k], r.at);
+    } else if (Paint.line_ansi(was.line) !== Paint.line_ansi(piece.line)) {
+      Screen.screen_cells(t.scr, 1 + k, [piece], r.at);
     }
   }
 }
@@ -728,7 +754,7 @@ function term_found(text: string, about: string, at: number[], ink: Paint.Ink): 
   return [Paint.Run(text.slice(0, a), ink), Paint.Run(text.slice(a, b), { ...ink, d: false, b: true, c: Draw.draw_tokens().accent }), Paint.Run(text.slice(b), ink)];
 }
 
-// the pages' line at screen row `row`, w wide (all of them, or the one
+// the pages' line at screen row `row` from column `at`, w wide (all of them, or the one
 // shown alone: the side lists them), then the profile's name, if shown,
 // the related lines' count (all: the side doesn't show), the background
 // jobs' count (jobs: shown) and trust mode at its end (Paint.tabs_mode:
@@ -736,22 +762,22 @@ function term_found(text: string, about: string, at: number[], ink: Paint.Ink): 
 // opens the profiles, on the related count lists them, on the jobs'
 // /background, on the mode /mode. The right end's first: a click takes
 // the first hit, and tabs too many for the line run under it
-function term_tabs(t: Term, row: number, all: boolean, w: number, jobs: boolean): void {
+function term_tabs(t: Term, row: number, all: boolean, at: number, w: number, jobs: boolean): void {
   const mw = Paint.line_width(Paint.tabs_mode(t.v, w));
   if (mw > 0) {
-    term_hit(t, row, MARGIN + w - mw, MARGIN + w, () => term_mode(t, ""));
+    term_hit(t, row, at + w - mw, at + w, () => term_mode(t, ""));
   }
   const bw = Paint.line_width(Paint.tabs_background(t.v, w, jobs));
   if (bw > 0) {
-    const end = MARGIN + w - mw - (mw > 0 ? 3 : 0);
+    const end = at + w - mw - (mw > 0 ? 3 : 0);
     term_hit(t, row, end - bw, end, () => term_background(t));
   }
   const rw = Paint.line_width(Paint.tabs_related(all ? related_shown(t).length : 0, w));
   if (rw > 0) {
-    const end = MARGIN + w - mw - (mw > 0 ? 3 : 0) - bw - (bw > 0 ? 3 : 0);
+    const end = at + w - mw - (mw > 0 ? 3 : 0) - bw - (bw > 0 ? 3 : 0);
     term_hit(t, row, end - rw, end, () => related_list(t));
   }
-  let col = MARGIN;
+  let col = at;
   for (const tab of View.view_tabs(t.v).filter((tab) => all || tab.here)) {
     const tw = Paint.text_width(tab.text);
     term_hit(t, row, col, col + tw, () => term_act(t, { $: "Goto", name: tab.name }));

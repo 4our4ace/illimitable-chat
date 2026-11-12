@@ -209,30 +209,36 @@ function written(f: () => void): string[] {
   return out;
 }
 
-test("a press on the input puts its cursor where it lands, at once, as a key moves it: typing goes there, nothing sent, the text as it was; past a row's text at its end, on the margin or the indent at its start, on the rule under it at the text's end; the side on either hand or none", () => {
+test("a press on the input puts its cursor where it lands, at once, as a key moves it: typing goes there, nothing sent, the text as it was; past a row's text at its end, on the margin or the indent at its start, on the rule under it at the text's end; the side on either hand, beside it at its full height (a press there moves nothing), or none", () => {
   for (const place of ["right", "left", "off"]) {
     sized(100, 30, () => {
       const t = terminal();
       t.side.place = place;
       Screen.ed_set(t.scr.ed, "first line\nsecond line here");
       paint(t);
-      expect(t.areas.some((a: any) => a.key === "side" && a.tall > 0)).toBe(place !== "off");
-      const r = row_of(t, "> first line");
-      expect(text(t.ruled.rows[r + 1])).toBe("    second line here");
-      press(t, r + 1, 11);
+      expect(t.areas.some((a: any) => a.key === "side" && a.tall === 29)).toBe(place !== "off");
+      const c    = t.ruled.col - 2;
+      const foot = (row: any[]) => text(row).slice(c, t.ruled.col + t.ruled.w).trimEnd();
+      const r    = t.ruled.rows.findIndex((row: any[]) => foot(row).startsWith("  > first line"));
+      expect([c, foot(t.ruled.rows[r + 1])]).toEqual([place === "left" ? 25 : 0, "    second line here"]);
+      press(t, r + 1, c + 11);
       expect([t.scr.ed.pos, t.scr.ed.moved, t.scr.ed.text, t.v.out]).toEqual([18, true, "first line\nsecond line here", []]);
-      let_go(t, r + 1, 11);
+      let_go(t, r + 1, c + 11);
       paint(t);
-      expect([t.scr.ed.pos, t.ruled.at]).toEqual([18, { row: r + 1, col: 11 }]);
+      expect([t.scr.ed.pos, t.ruled.at]).toEqual([18, { row: r + 1, col: c + 11 }]);
       Screen.screen_feed(t.scr, "X");
       expect(t.scr.ed.text).toBe("first line\nsecond Xline here");
       paint(t);
-      click(t, r, 40);
+      click(t, r, c + 40);
       expect(t.scr.ed.pos).toBe(10);
-      click(t, r + 1, 0);
+      click(t, r + 1, c);
       expect(t.scr.ed.pos).toBe(11);
-      expect(text(t.ruled.rows[r + 2]).trim()).toMatch(/^─+$/);
-      click(t, r + 2, 30);
+      if (place !== "off") {
+        click(t, r, place === "left" ? 5 : 90);
+        expect(t.scr.ed.pos).toBe(11);
+      }
+      expect(foot(t.ruled.rows[r + 2]).trim()).toMatch(/^─+$/);
+      click(t, r + 2, c + 30);
       expect([t.scr.ed.pos, t.scr.ed.text, t.v.out]).toEqual([t.scr.ed.text.length, "first line\nsecond Xline here", []]);
     });
   }
@@ -311,23 +317,24 @@ test("an input taller than it shows stays put under a press on a row it shows: a
     const body = Array.from({ length: 15 }, (_, k) => "row " + k).join("\n");
     Screen.ed_set(t.scr.ed, body);
     paint(t);
-    const r    = row_of(t, "  row 5");
-    const rows = t.ruled.rows.slice(r, r + 10).map(text);
+    const foot = (row: any[]) => text(row).slice(0, t.ruled.col + t.ruled.w).trimEnd();
+    const r    = t.ruled.rows.findIndex((row: any[]) => foot(row).slice(2).startsWith("  row 5"));
+    const rows = t.ruled.rows.slice(r, r + 10).map(foot);
     expect([rows[0], rows[9]]).toEqual(["    row 5", "    row 14"]);
     click(t, r, 5);
     paint(t);
-    expect([t.scr.ed.pos, t.ruled.rows.slice(r, r + 10).map(text)]).toEqual([body.indexOf("row 5") + 1, rows]);
+    expect([t.scr.ed.pos, t.ruled.rows.slice(r, r + 10).map(foot)]).toEqual([body.indexOf("row 5") + 1, rows]);
     again(t, r, 5);
     expect([term_selected(t), t.scr.ed.pos]).toEqual(["row", body.indexOf("row 5") + 1]);
     written(() => let_go(t, r, 5));
     t.scr.ed.pos = 0;
     paint(t);
-    const first = row_of(t, "> row 0");
-    expect(text(t.ruled.rows[first + 9])).toBe("    row 9");
-    expect(text(t.ruled.rows[first + 10]).trim()).toMatch(/^─+$/);
+    const first = t.ruled.rows.findIndex((row: any[]) => foot(row).slice(2).startsWith("> row 0"));
+    expect(foot(t.ruled.rows[first + 9])).toBe("    row 9");
+    expect(foot(t.ruled.rows[first + 10]).trim()).toMatch(/^─+$/);
     click(t, first + 10, 30);
     paint(t);
-    expect([t.scr.ed.pos, text(t.ruled.rows[first + 9])]).toEqual([body.length, "    row 14"]);
+    expect([t.scr.ed.pos, foot(t.ruled.rows[first + 9])]).toEqual([body.length, "    row 14"]);
   });
 });
 

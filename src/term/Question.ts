@@ -10,7 +10,7 @@
 // instead (Commands.ts term_place). The lists a person opens are popups (Popup.ts); one
 // opened over a question (Ctrl+P) shows over it, the question back as
 // it closes. A question has the rows between the
-// rules round the input, its full width (under the side panel too): the
+// rules round the input, its full width (the side panel beside it): the
 // rule over it says its title (the form's: who asks), its keys and what
 // the lit answer takes besides (its foot); under it, the lines leading
 // its answers (why it asks; what it would do, bold), then its answers,
@@ -438,16 +438,17 @@ function question_rule(w: number, title: string, said: string[]): Paint.Line {
 // the question at the input as painted, its first line on screen row
 // `row`, column `col`, w wide, kept (t.box: the mouse over it is
 // Popup.ts's), and its line typed in (t.fields: a press puts its cursor,
-// Select.ts term_put; a line asked takes its rows whole, as the input,
-// the form's words the box's columns); the pointer's row seen as it
-// first shows (it lights a row once it moves)
-export function question_kept(t: Term, asked: Asked, row: number, col: number, w: number): void {
+// Select.ts term_put; a line asked takes its rows across the columns
+// from `from`, `wide` of them, as the input, the form's words the box's
+// columns); the pointer's row seen as it first shows (it lights a row
+// once it moves)
+export function question_kept(t: Term, asked: Asked, row: number, col: number, w: number, from = 0, wide = Infinity): void {
   const was = t.box?.of === asked.of;
   const f   = asked.field;
   t.box     = { of: asked.of, row, col, w, h: asked.lines.length, inset: 0, rows: asked.rows, ...asked.shape };
   if (f !== undefined) {
-    const at = f.wide ? (r: number, c: number) => f.at(r, c - col - f.col) : f.at;
-    t.fields.push({ of: asked.of, ed: f.ed, text: f.ed.text, row: row + f.row, col: f.wide ? 0 : col + f.col, w: f.wide ? Infinity : f.w, tall: f.tall, at });
+    const at = f.wide ? (r: number, c: number) => f.at(r, c + from - col - f.col) : f.at;
+    t.fields.push({ of: asked.of, ed: f.ed, text: f.ed.text, row: row + f.row, col: f.wide ? from : col + f.col, w: f.wide ? wide : f.w, tall: f.tall, at });
   }
   if (!was) {
     t.aim.row = t.scr.point.row;

@@ -155,7 +155,7 @@ const armed = (t: any) => (t.asking.shown -= 600);
 
 // the question as last painted, cols wide: the rule over it, its lines,
 // the rule under it, each inside the margins
-const asked = (t: any, cols: number) => t.ruled.rows.slice(t.box.row - 1, t.box.row + t.box.h + 1).map((r: any[]) => text(r, cols).slice(2, cols - 1).trimEnd());
+const asked = (t: any, cols: number) => t.ruled.rows.slice(t.box.row - 1, t.box.row + t.box.h + 1).map((r: any[]) => text(r, cols).slice(t.box.col, t.box.col + t.box.w).trimEnd());
 
 // the screen row of the question's answer named name, and a column on it
 const row_of = (t: any, name: string) => t.box.row + t.box.rows.findIndex((aim: any) => aim?.k === t.question.names.indexOf(name));
@@ -179,7 +179,7 @@ const TALL = "rm -r ./no-such-folder-here\n" + Array.from({ length: 299 }, (_, k
 
 for (const [what, said] of [[LONG, "a 2,000-character command on one line"], [TALL, "a 300-line command"]]) {
   for (const [cols, rows] of [[80, 24], [200, 50]]) {
-    test("the permission question with " + said + " at " + cols + "x" + rows + ": every answer shows, no row drawn twice, no control character, no blank row inside, half the rows at most, the cursor hidden", () => {
+    test("the permission question with " + said + " at " + cols + "x" + rows + ": every answer shows, no row drawn twice, no control character, no blank row inside, half the rows at most, the cursor hidden; as wide as the chat, the side beside it where it shows", () => {
       sized(cols, rows, () => {
         const t = term();
         ask(t, what);
@@ -190,8 +190,8 @@ for (const [what, said] of [[LONG, "a 2,000-character command on one line"], [TA
           pieces.forEach((p: any, k: number) => expect(p.col + p.w).toBeLessThanOrEqual(pieces[k + 1]?.col ?? cols));
           expect(row.flatMap((p: any) => p.line).filter((r: any) => /[\x00-\x1f\x7f-\x9f]/.test(r.x))).toEqual([]);
         }
-        expect(drawn.slice(t.box.row - 1, t.box.row + t.box.h + 1).every((r: any[]) => r.length === 1)).toBe(true);
-        expect([t.box.col, t.box.w, t.ruled.at]).toEqual([2, cols - 5, null]);
+        expect(drawn.slice(t.box.row - 1, t.box.row + t.box.h + 1).every((r: any[]) => r.length === (cols === 80 ? 1 : 2))).toBe(true);
+        expect([t.box.col, t.box.w, t.ruled.at]).toEqual([2, cols === 80 ? 75 : 145, null]);
         expect(t.box.h).toBeLessThanOrEqual(rows / 2);
         const lines = asked(t, cols);
         expect(lines[0]).toStartWith("── Allow shell? · ↑↓ Enter · Esc no ──");
@@ -407,6 +407,7 @@ test("the rows holding a risk are found where the line shows it, past tabs (two 
     for (const cols of [80, 120]) {
       sized(cols, 30, () => {
         const t = term();
+        t.side.place = "off";
         risky(t, what, [spot(what, "rm -rf", "old-site")]);
         const lines = asked(t, cols).slice(2, -4);
         expect([t.box.folds, lines.join(" ").includes("rm -rf ~/projects/old-site"), lines.filter((l: string) => /^… \d+ rows$/.test(l)).length]).toEqual([true, true, 2]);
@@ -443,7 +444,7 @@ for (const [cols, rows] of [[80, 16], [40, 10]]) {
   }
 }
 
-test("a question takes the input's full width with the side left or right, nothing dimmed: the head and the side as with none, only the chat's rows fewer", () => {
+test("a question takes the input's place, as wide as the chat, the side beside it at its full height, left or right, nothing dimmed: the head and the side as with none, only the chat's rows fewer", () => {
   for (const place of ["left", "right"]) {
     sized(160, 40, () => {
       const t = term();
@@ -452,7 +453,7 @@ test("a question takes the input's full width with the side left or right, nothi
       const seen = (r: any[]) => r.map((p: any) => [p.col, p.w, p.line.map((run: any) => [run.x, run.s])]);
       const none = t.ruled.rows.slice(0, 6).map(seen);
       ask(t, "rm -r build");
-      expect([t.box.col, t.box.w]).toEqual([2, 155]);
+      expect([t.box.col, t.box.w]).toEqual([place === "left" ? 42 : 2, 115]);
       expect(t.ruled.rows.slice(0, 6).map(seen)).toEqual(none);
       expect(asked(t, 160).slice(1, -1)).toEqual(["Why: it deletes files", "rm -r build", "> ● Yes", "  ○ Yes, and don't ask again for rm -r build in this project", "  ○ No", "  ○ No, and say why"]);
     });
@@ -686,8 +687,8 @@ test("illi's form takes the input's place, its full width, who asks in the rule:
     Screen.ed_set(t.scr.ed, "my draft");
     own(t, [DB, CACHE]);
     paint(t);
-    expect([t.box.of, t.box.col, t.box.w, t.box.h]).toEqual([t.asking.form, 2, 105, 7]);
-    expect(asked(t, 110)).toEqual(["── illi asks " + "─".repeat(92), " Database   Cache   Review", "Which database?  pick one", "> ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip", "─".repeat(105)]);
+    expect([t.box.of, t.box.col, t.box.w, t.box.h]).toEqual([t.asking.form, 2, 78, 7]);
+    expect(asked(t, 110)).toEqual(["── illi asks " + "─".repeat(65), " Database   Cache   Review", "Which database?  pick one", "> ○ Postgres  you know it", "  ○ SQLite", "  ○ MySQL", "  > Something else: type your own", "↑↓ move · Space pick · type your own · Enter next · Tab switch · Esc skip", "─".repeat(78)]);
     expect(t.ruled.rows.some((r: any[]) => text(r, 110).includes("my draft"))).toBe(false);
     expect([t.ruled.at, t.scr.blink]).toEqual([{ row: t.box.row + 5, col: 2 + 4 }, true]);
     const chat = (u: any) => u.ruled.rows.slice(0, u.box.row - 1).map((r: any[]) => text(r, 110));
@@ -702,7 +703,7 @@ test("illi's form takes the input's place, its full width, who asks in the rule:
     expect([chat(t), t.box.row, t.box.h, t.ruled.at]).toEqual([...was, null]);
     term_grab(t, "Esc");
     paint(t);
-    expect([sent(t).length, t.box, text(t.ruled.rows[31], 110).trimEnd()]).toEqual([1, null, "  > my draft"]);
+    expect([sent(t).length, t.box, text(t.ruled.rows[31], 110).slice(0, t.ruled.col + t.ruled.w).trimEnd()]).toEqual([1, null, "  > my draft"]);
   });
 });
 
@@ -787,6 +788,7 @@ test("a press on illi's form's words puts their cursor where it lands, lighting 
 test("illi's form taller than half the screen: its tabs and keys hold, its lines scroll to keep the lit row in view; the wheel over it scrolls them, the lit row held while it shows, else the nearest, the row under the pointer lit, stopping at their ends; the wheel elsewhere scrolls the chat", () => {
   sized(100, 20, () => {
     const t = term();
+    t.side.place = "off";
     const many = { text: "Which one?", head: "One", options: Array.from({ length: 20 }, (_, k) => ({ label: "o" + k, about: "" })), multi: false };
     own(t, [many]);
     paint(t);

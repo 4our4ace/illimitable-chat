@@ -433,7 +433,7 @@ test("a double click on an option picks once, its second press going nowhere onc
     const u = term();
     u.v.perm = { ...u.v.perm, mode: "trust" };
     paint(u);
-    const mode = u.hits.find((h: any) => h.row === 29 && h.to === 2 + 115);
+    const mode = u.hits.find((h: any) => h.row === 29 && h.to === u.ruled.col + u.ruled.w);
     click(u, 29, mode.col);
     paint(u);
     expect(u.choose.title).toBe("Mode, this session");

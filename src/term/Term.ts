@@ -102,10 +102,13 @@ import * as View from "../ui/View.ts";
 // profs: the profiles, as last read; hits: what a click on the screen does;
 // since: when the work running began, spin: the spinner's clock,
 // ruled: the screen as last painted, for the clock to write the rule and
-// the side's rows again alone (null: none yet): the rule's row and width,
-// the cursor, the rows, the side (where, how wide, its rows; null: a box
-// over it), the subagents' spinner then; doing: what ran then (null:
-// nothing); subs:
+// the side's rows again alone (null: none yet): the rule's row, column
+// and width, the cursor, the rows, the side (where, how wide, its rows,
+// the first of its lines shown and the most that can be, past which it
+// won't scroll; null: a popup over it), the subagents' spinner then;
+// doing: what ran then (null: nothing); slid: the side's first line
+// shown as the wheel over it left it (null: as it falls: its top, or
+// the to-do list's head: Side.ts), till it fits whole again; subs:
 // the subagents of this run, whether at work (false: done, till the
 // person's next message); side: where the side panel shows and how wide
 // (config.SIDE, SIDE_WIDTH); update: what the side's foot says of a
@@ -164,8 +167,9 @@ export type Term = {
   hits    : Hit[];
   since   : number;
   spin    : Timer | undefined;
-  ruled   : { row: number; w: number; at: Screen.Spot | null; rows: Screen.Piece[][]; side: { at: number; w: number; sw: number; left: boolean; tall: number; with: number[] } | null; spin: string } | null;
+  ruled   : { row: number; col: number; w: number; at: Screen.Spot | null; rows: Screen.Piece[][]; side: { at: number; w: number; sw: number; left: boolean; tall: number; with: number[]; first: number; most: number } | null; spin: string } | null;
   doing   : View.Doing | null;
+  slid    : number | null;
   subs    : Map<string, boolean>;
   side    : { place: string; width: string };
   update  : string;
@@ -439,6 +443,7 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
     spin    : undefined,
     ruled   : null,
     doing   : null,
+    slid    : null,
     subs    : new Map(),
     side    : { place: config.SIDE, width: config.SIDE_WIDTH },
     update  : Update.said(config.ROOT),

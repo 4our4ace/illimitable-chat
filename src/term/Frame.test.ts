@@ -6,7 +6,9 @@
 // title names illi and the project, a small ∞ traced in the ∞'s place
 // while work runs. A click on the side's second column
 // (the sticky skills beside the agents) hits what it shows, the side on
-// either hand. A /word's setting lights the letters matched in its key.
+// either hand. The side runs the screen's full height and scrolls once
+// longer than that. A /word's setting lights the letters matched in its
+// key.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -155,6 +157,71 @@ for (const place of ["right", "left"]) {
     }
   });
 }
+
+// f run on a screen cols by rows
+async function sized(cols: number, rows: number, f: () => Promise<void>): Promise<void> {
+  const was = [Object.getOwnPropertyDescriptor(process.stdout, "columns"), Object.getOwnPropertyDescriptor(process.stdout, "rows")];
+  Object.defineProperty(process.stdout, "columns", { value: cols, configurable: true });
+  Object.defineProperty(process.stdout, "rows", { value: rows, configurable: true });
+  try {
+    await f();
+  } finally {
+    Object.defineProperty(process.stdout, "columns", was[0] ?? { value: undefined, configurable: true });
+    Object.defineProperty(process.stdout, "rows", was[1] ?? { value: undefined, configurable: true });
+  }
+}
+
+test("the side at the screen's full height, beside the chat and its foot, as wide as the room it leaves; longer than that it scrolls: a to-do list's head at first, the wheel over it moving it and the thumb on its edge, stopping at its ends, the wheel elsewhere scrolling the chat; fitting again, the wheel's place let go", async () => {
+  const { term_grab } = await import("./Keys.ts");
+  await sized(160, 14, async () => {
+    const t = term();
+    t.v.todo = Array.from({ length: 14 }, (_, k) => ({ text: "step " + k, status: k === 0 ? "active" : "pending" }));
+    t.todo = true;
+    await written(async () => term_paint(t));
+    const side  = () => t.ruled.rows.slice(1).map((r: any[]) => r[1]);
+    const said  = () => side().map((p: any) => p.line.map((r: any) => r.x).join("").slice(2).trimEnd());
+    const thumb = () => side().flatMap((p: any, k: number) => (p.line[0].x === "┃" ? [k] : []));
+    const run   = (from: number, n: number) => Array.from({ length: n }, (_, k) => from + k);
+    expect([t.ruled.rows.length, side().every((p: any) => p?.col === 119 && p.w === 40), t.ruled.col, t.ruled.w]).toEqual([14, true, 2, 115]);
+    expect(t.ruled.rows.slice(1).every((r: any[]) => r[0].col + r[0].w <= 119)).toBe(true);
+    expect([t.ruled.side.first, t.ruled.side.most, said()[0], said().at(-1), thumb()]).toEqual([7, 9, "Todo  0/14                         [-]", "□ step 11", run(4, 8)]);
+    t.scr.point = { row: 5, col: 130 };
+    expect(term_grab(t, "WheelUp")).toBe(true);
+    await written(async () => term_paint(t));
+    expect([t.slid, t.ruled.side.first, thumb()]).toEqual([4, 4, run(2, 8)]);
+    term_grab(t, "WheelUp");
+    term_grab(t, "WheelUp");
+    await written(async () => term_paint(t));
+    expect([t.ruled.side.first, said()[0], thumb()]).toEqual([0, "Agents", run(0, 8)]);
+    term_grab(t, "WheelDown");
+    term_grab(t, "WheelDown");
+    term_grab(t, "WheelDown");
+    term_grab(t, "WheelDown");
+    await written(async () => term_paint(t));
+    expect([t.ruled.side.first, said().at(-1), thumb()]).toEqual([9, "□ step 13", run(5, 8)]);
+    t.scr.point = { row: 5, col: 40 };
+    expect([term_grab(t, "WheelUp"), t.slid]).toEqual([false, 9]);
+    t.v.todo = [];
+    await written(async () => term_paint(t));
+    expect([t.slid, t.ruled.side.most, thumb()]).toEqual([null, 0, []]);
+  });
+});
+
+test("while work runs beside the side, a tick writes the rule's row whole with the side's part of it kept", async () => {
+  await sized(160, 30, async () => {
+    const t = term();
+    t.v.busy = true;
+    const out = await written(async () => {
+      term_paint(t);
+      await Bun.sleep(1150);
+      t.v.busy = false;
+      term_paint(t);
+    });
+    const whole = out.slice(1, -1).filter((s) => s.includes("Working")).map((s) => s.replace(/\x1b\[[0-9;]*m/g, ""));
+    expect(whole.length).toBeGreaterThanOrEqual(2);
+    expect(whole.every((s) => s.includes("│"))).toBe(true);
+  });
+});
 
 test("a /word's setting suggested as /set <key>: the letters it matched lit in its key, not in /set", async () => {
   const { term_suggest } = await import("./Commands.ts");

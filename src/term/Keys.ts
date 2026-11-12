@@ -46,7 +46,7 @@ const MOUSE  = ["Move", "Press", "Drag", "Release", "RightPress", "RightDrag", "
 // how soon a second Ctrl+C quits (ms)
 const AGAIN = 2000;
 
-// the lines a turn of the wheel scrolls
+// the lines a turn of the wheel scrolls (the side's too)
 const WHEEL = 3;
 
 // the share of what shows PgUp and PgDn scroll text by: half, so the
@@ -126,8 +126,9 @@ function term_keyed(key: string): Cmd | undefined {
 }
 
 // a key after the leader: its shortcut's (term_after; the wheel lets the
-// leader go and goes on to what has it: the popup, the question, a pane,
-// else the chat). A key while a list's popup, a question at the input,
+// leader go and goes on to what has it: the popup, the side under the
+// pointer where it scrolls, the question, a pane, else the chat). A key
+// while a list's popup, a question at the input,
 // the commands suggested or a pane is open: theirs first (true: taken).
 // A list as term_choose_key, every key but PASS's (Ctrl+C with its text
 // chosen copies it again, as the chat's; text chosen there is let go as
@@ -151,6 +152,9 @@ export function term_grab(t: Term, key: string): boolean {
     t.sel = t.sel?.key === POPUP && (t.scr.typed || !KEEP.includes(key)) ? null : t.sel;
     return term_choose_key(t, t.choose!, key);
   }
+  if ((key === "WheelUp" || key === "WheelDown") && term_slide(t, key === "WheelUp" ? -WHEEL : WHEEL)) {
+    return true;
+  }
   const asked = question_of(t);
   if (asked !== null && term_question_key(t, key)) {
     return true;
@@ -172,6 +176,21 @@ export function term_grab(t: Term, key: string): boolean {
     t.pane = null;
   }
   return move !== undefined || shut || Screen.ed_key(Screen.ed_new(), key);
+}
+
+// the side scrolled by `by` lines, as the wheel over it does, where it
+// scrolls (Side.ts: longer than its room) and the pointer is over it as
+// last painted (true: it was; else the wheel goes on as it would, to
+// the question, a pane or the chat), held between its top and its end;
+// turns before the next paint each move it on
+function term_slide(t: Term, by: number): boolean {
+  const s = t.ruled?.side;
+  const p = t.scr.point;
+  if (s === undefined || s === null || s.most === 0 || p.row < 1 || p.row > s.tall || p.col < s.at || p.col >= s.at + s.w) {
+    return false;
+  }
+  t.slid = Math.max(0, Math.min(s.most, (t.slid ?? s.first) + by));
+  return true;
 }
 
 // a key while a question shows at the input (true: taken): every one but
