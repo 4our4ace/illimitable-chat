@@ -18,7 +18,7 @@ import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { Embed, MODEL, type Model } from "./Embed.ts";
+import { Embed, MODEL, VECTORS, type Model } from "./Embed.ts";
 import { tiny_model } from "../../test/model.ts";
 
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-embed-");
@@ -82,7 +82,7 @@ test("a model is read from its folder (its tokenizer and F16 table); one of anot
   expect(() => Embed.load(dir)).toThrow("isn't BERT's WordPiece");
 });
 
-test("a download is checked against its sha256 as it comes, redirects followed; one that doesn't match is refused; a model there isn't downloaded again", async () => {
+test("a download is checked against its sha256 as it comes, redirects followed, stopped past its size; one that doesn't match is refused", async () => {
   const body = "the model's bytes";
   const server = Bun.serve({ port: 0, fetch: (req) => (new URL(req.url).pathname === "/moved" ? Response.redirect("/file", 302) : new Response(body)) });
   const sha = new Bun.CryptoHasher("sha256").update(body).digest("hex");
@@ -90,18 +90,41 @@ test("a download is checked against its sha256 as it comes, redirects followed; 
     await Embed.get(server.url + "moved", DIR + "/got", sha);
     expect(fs.readFileSync(DIR + "/got", "utf8")).toBe(body);
     expect(Embed.get(server.url + "file", DIR + "/bad", "0".repeat(64))).rejects.toThrow("didn't match the checksum");
-    const root = DIR + "/root";
-    for (const f of MODEL.files) {
-      fs.mkdirSync(Embed.folder(root), { recursive: true });
-      fs.writeFileSync(path.join(Embed.folder(root), f.name), Buffer.alloc(f.bytes));
-    }
-    expect([Embed.ready(root), await Embed.fetch(root, undefined, server.url.origin)]).toEqual([true, false]);
-    fs.rmSync(path.join(Embed.folder(root), "config.json"));
-    fs.writeFileSync(path.join(Embed.folder(root), "config.json.999999999.part"), "an ended illi's");
-    expect(Embed.ready(root)).toBe(false);
-    expect(Embed.fetch(root, undefined, server.url.origin)).rejects.toThrow("didn't match the checksum");
-    expect(fs.readdirSync(Embed.folder(root)).sort()).toEqual(["model.safetensors", "tokenizer.json"]);
+    expect(Embed.get(server.url + "file", DIR + "/big", sha, undefined, body.length - 1)).rejects.toThrow("didn't match the checksum");
   } finally {
+    server.stop(true);
+  }
+});
+
+test("the model made ready: each file there checked, one not as pinned downloaded, then marked ready and an earlier revision's folder removed; ready, none is fetched; one found not to read, all are checked again", async () => {
+  const body = "the model's bytes";
+  let asked = 0;
+  const server = Bun.serve({ port: 0, fetch: () => (asked++, new Response(body)) });
+  const files = MODEL.files;
+  const root  = DIR + "/root";
+  const dir   = Embed.folder(root);
+  const file  = path.join(dir, "config.json");
+  try {
+    (MODEL as any).files = [{ name: "config.json", bytes: body.length, sha256: new Bun.CryptoHasher("sha256").update(body).digest("hex") }];
+    fs.mkdirSync(root + "/models/" + MODEL.name, { recursive: true });
+    fs.mkdirSync(root + "/models/" + MODEL.name + "@000000000000", { recursive: true });
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file + ".999999999.part", "an ended illi's");
+    expect([Embed.ready(root), await Embed.fetch(root, undefined, server.url.origin), Embed.ready(root), asked]).toEqual([false, true, true, 1]);
+    expect([fs.readdirSync(root + "/models"), fs.readdirSync(dir).sort()]).toEqual([[VECTORS], ["config.json", "ok"]]);
+    expect([await Embed.fetch(root, undefined, server.url.origin), asked]).toEqual([false, 1]);
+    Embed.spoilt(dir);
+    expect([Embed.ready(root), await Embed.fetch(root, undefined, server.url.origin), asked]).toEqual([false, true, 1]);
+    fs.writeFileSync(file, "x".repeat(body.length));
+    Embed.spoilt(dir);
+    expect([await Embed.fetch(root, undefined, server.url.origin), asked, fs.readFileSync(file, "utf8")]).toEqual([true, 2, body]);
+    (MODEL as any).files = [{ name: "config.json", bytes: body.length, sha256: "0".repeat(64) }];
+    Embed.spoilt(dir);
+    expect(Embed.fetch(root, undefined, server.url.origin)).rejects.toThrow("didn't match the checksum");
+    await Bun.sleep(50);
+    expect([Embed.ready(root), fs.readdirSync(dir)]).toEqual([false, ["config.json"]]);
+  } finally {
+    (MODEL as any).files = files;
     server.stop(true);
   }
 });

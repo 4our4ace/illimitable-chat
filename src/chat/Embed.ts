@@ -91,24 +91,37 @@ const TAGS = /(^|[\s;,(])(?:user|illi|tool|echo|mind|note|work|recap): /g;
 // how long a download may go without a byte
 const STALL = 60000;
 
+// the file in the model's folder that says its files are all there,
+// each checked (Embed.fetch): its revision's name (VECTORS)
+const OK = "ok";
+
 // Embed
 // =====
 
 export namespace Embed {
 
-  // the model's folder in illi's root
+  // the model's folder in illi's root, of its revision (VECTORS), so a
+  // later illi's never reads an earlier one's files
   export function folder(root: string): string {
-    return path.join(root, "models", MODEL.name);
+    return path.join(root, "models", VECTORS);
   }
 
-  // whether the model's files are all there (in illi's root; in a folder:
-  // present): each is moved into place whole, once checked (Embed.fetch)
+  // whether the model's files are all there, each checked (in illi's
+  // root; in a folder: present): OK written once they are (Embed.fetch),
+  // gone once one won't read (Embed.spoilt)
   export function ready(root: string): boolean {
     return Embed.present(Embed.folder(root));
   }
 
   export function present(dir: string): boolean {
-    return MODEL.files.every((f) => fs.existsSync(path.join(dir, f.name)));
+    return fs.existsSync(path.join(dir, OK));
+  }
+
+  // the model's files in a folder found not to read (a file cut short,
+  // changed on disk): not ready, so the next start checks each again
+  // and downloads the one that isn't as pinned
+  export function spoilt(dir: string): void {
+    fs.rmSync(path.join(dir, OK), { force: true });
   }
 
   // the model's folder to search by meaning with: while `meaning` is on
@@ -117,15 +130,19 @@ export namespace Embed {
     return on && Embed.ready(root) ? Embed.folder(root) : null;
   }
 
-  // the model's files not there (or not of their size) downloaded from
-  // Hugging Face (host: the tests' own), each checked against its sha256
-  // as it comes and moved into place whole (one illi's part file its own,
-  // so two at once never mix; one an ended illi left goes first); whether
-  // any was. Thrown: no connection, a refusal, a file not as pinned, a
-  // stall, a stop
+  // the model made ready (Embed.ready): each file there checked against
+  // its sha256, one not there or not as pinned downloaded from Hugging
+  // Face (host: the tests' own), checked as it comes and moved into place
+  // whole (one illi's part file its own, so two at once never mix; one an
+  // ended illi left goes first); then OK written, and an earlier
+  // revision's folder removed; whether it was made ready now (false: it
+  // was already). Thrown: no connection, a refusal, a file not as pinned,
+  // a stall, a stop
   export async function fetch(root: string, stop?: AbortSignal, host = "https://huggingface.co"): Promise<boolean> {
     const dir = Embed.folder(root);
-    let got = false;
+    if (Embed.ready(root)) {
+      return false;
+    }
     // a part file of an illi that ended mid-download (killed) goes
     for (const name of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
       const pid = Number(/\.(\d+)\.part$/.exec(name)?.[1]);
@@ -135,20 +152,25 @@ export namespace Embed {
     }
     for (const f of MODEL.files) {
       const file = path.join(dir, f.name);
-      if (fs.existsSync(file) && fs.statSync(file).size === f.bytes) {
+      if (fs.existsSync(file) && fs.statSync(file).size === f.bytes && new Bun.CryptoHasher("sha256").update(fs.readFileSync(file)).digest("hex") === f.sha256) {
         continue;
       }
       fs.mkdirSync(dir, { recursive: true });
       const part = file + "." + process.pid + ".part";
       try {
-        await Embed.get(host + "/" + MODEL.repo + "/resolve/" + MODEL.rev + "/" + f.name, part, f.sha256, stop);
+        await Embed.get(host + "/" + MODEL.repo + "/resolve/" + MODEL.rev + "/" + f.name, part, f.sha256, stop, f.bytes);
         fs.renameSync(part, file);
-        got = true;
       } finally {
         fs.rmSync(part, { force: true });
       }
     }
-    return got;
+    fs.writeFileSync(path.join(dir, OK), VECTORS + "\n");
+    for (const name of fs.readdirSync(path.dirname(dir))) {
+      if (name !== VECTORS && (name === MODEL.name || name.startsWith(MODEL.name + "@"))) {
+        fs.rmSync(path.join(path.dirname(dir), name), { recursive: true, force: true });
+      }
+    }
+    return true;
   }
 
   // whether a process runs (one of another user's: it does)
@@ -162,8 +184,9 @@ export namespace Embed {
   }
 
   // a file downloaded to `file`, its sha256 reckoned as it comes and
-  // checked (redirects followed: Hugging Face's go to its CDN)
-  export async function get(url: string, file: string, sha256: string, stop?: AbortSignal): Promise<void> {
+  // checked (redirects followed: Hugging Face's go to its CDN), stopped
+  // once past its bytes
+  export async function get(url: string, file: string, sha256: string, stop?: AbortSignal, bytes = Infinity): Promise<void> {
     const quiet = new AbortController();
     let timer = setTimeout(() => quiet.abort(), STALL);
     const signal = stop === undefined ? quiet.signal : AbortSignal.any([stop, quiet.signal]);
@@ -179,17 +202,22 @@ export namespace Embed {
       }
       const hash = new Bun.CryptoHasher("sha256");
       const out  = fs.openSync(file, "w", 0o600);
+      let came   = 0;
       try {
         for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
           clearTimeout(timer);
           timer = setTimeout(() => quiet.abort(), STALL);
+          came += chunk.length;
+          if (came > bytes) {
+            break;
+          }
           hash.update(chunk);
           fs.writeSync(out, chunk);
         }
       } finally {
         fs.closeSync(out);
       }
-      if (hash.digest("hex") !== sha256) {
+      if (came > bytes || hash.digest("hex") !== sha256) {
         throw new Error(path.basename(url) + " didn't match the checksum illi takes it by, so illi didn't keep it");
       }
     } finally {

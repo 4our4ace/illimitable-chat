@@ -339,10 +339,11 @@ export namespace Chat {
     // the messages not in the chat's index of words yet (all of a chat an
     // older illi kept) put in it, in the background, the summary lines
     // given their vectors too once the model to search by meaning is here;
-    // not yet (and `meaning` on), it's downloaded first, in the
-    // background, told once done, then they're given theirs
+    // not yet (and `meaning` on), a terminal's illi downloads it first, in
+    // the background, told once done, then they're given theirs (a pipe's
+    // illi ends before it would be done)
     Projects.index(mem.store, Embed.use(config.ROOT, config.MEANING));
-    if (config.MEANING && !Embed.ready(config.ROOT)) {
+    if (config.MEANING && process.stdin.isTTY === true && process.stdout.isTTY === true && !Embed.ready(config.ROOT)) {
       Embed.fetch(config.ROOT).then((got) => {
         if (got && !chat.mem.done) {
           Chat.note(chat, MEANT);

@@ -1,16 +1,16 @@
 // Seeker
 // ======
 // The searches of the chats' indexes in a thread of their own, so however
-// long one takes, the screen goes on: the model's (Projects.search) in
+// long one takes, the screen goes on: the model's (Projects.look) in
 // one, the radar's (Radar.search) in another of this module, recall's
 // (Radar.recall) in a third, so none waits on another (Projects.thread);
 // and in a fourth, the messages put in their chat's index of words and
 // the summary lines given their vectors, a slice at a time (Projects.fill:
 // Projects.index), and the searches by meaning (Projects.near), where the
-// model is read, once (Projects.model). Each runs on
-// connections of its own to the projects' files (WAL: it reads beside the
-// writes), each closed after it (Store.close: its statements finalized,
-// so it closes at once). Asked
+// model is read, once (Projects.model). Each runs on connections of its
+// own to the projects' files (WAL: it reads beside the writes), each
+// closed after it (Store.close: its statements finalized, so it closes
+// at once). Asked
 // { id, file, $: "search", words, scope, span }, { id, file, $: "radar", ask },
 // { id, file, $: "recall", ask }, { id, file, $: "index", most, model } or
 // { id, file, $: "near", words, scope, span, model }, file the asking

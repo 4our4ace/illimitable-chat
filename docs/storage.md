@@ -213,7 +213,7 @@ note, illi going on.
 | **The search thread** (`Seeker.ts`) | its own connections, to each file a search covers, each closed after | each `search` the model calls | `Projects.seek` |
 | **The radar's thread** (`Seeker.ts`, a second worker) | its own connection to this project's file, closed after each search | after each step of a turn, with `related` on | `Projects.radar` |
 | **Recall's thread** (`Seeker.ts`, a third worker) | its own connection to this project's file, closed after each search | as a tool call runs, one at a time, with `related` on | `Projects.recall` |
-| **The index thread** (`Seeker.ts`, a fourth worker) | its own connection to a project's file, closed after each slice; it writes (the index of the messages' words) | as the chat opens and each time messages are logged; then, once a run, every other project's file | `Projects.index` |
+| **The index thread** (`Seeker.ts`, a fourth worker) | its own connection to a project's file, closed after each slice or search; it writes (the index of the messages' words, the lines' vectors) | as the chat opens and each time messages are logged; then, once a run (again once the model arrives), every other project's file; each `search`, with `meaning` on, to read the vectors | `Projects.index`, `Projects.seek` |
 | **A profile export** | read-write to each file, for a snapshot | `/profile` export | `Profiles.ts profile_snapshot` |
 
 Other projects' files are opened read-write even just to read, because
@@ -590,21 +590,30 @@ waits on its search), so the side's never queues behind one of
 recall's either: a search can't be cut off, and one whose answer came
 too late still runs to its end (`Projects.thread` posts to any of
 them: each its own worker and its own searches waiting).
-`Projects.index` sends a fourth the slices of indexing the messages'
-words ([below](#the-index-of-the-messages-words)), so no search waits
-on one. A message is `{ id, file, $: "search", words, scope, span }`
-(span: the `from` and `to` asked, in ms, or null),
-`{ id, file, $: "radar", ask }`, `{ id, file, $: "recall", ask }` or
-`{ id, file, $: "index", most }`, answered `{ id, out }` or
+`Projects.index` sends a fourth, the index thread, the slices of
+indexing the messages' words
+([below](#the-index-of-the-messages-words)) and of the lines' vectors,
+so no search by words waits on one; `Projects.seek` sends it the search
+by meaning too ([below](#search-by-meaning)), as the model is read
+there, once. A message is
+`{ id, file, $: "search", words, scope, span }` (span: the `from` and
+`to` asked, in ms, or null), `{ id, file, $: "radar", ask }`,
+`{ id, file, $: "recall", ask }`, `{ id, file, $: "index", most, model }`
+or `{ id, file, $: "near", words, scope, span, model }` (model: the
+model's folder; an index's null: no vectors), answered `{ id, out }` or
 `{ id, error }`. For each the worker:
 
-1. opens this project's file (`Store.peek`);
-2. runs `Projects.search`, the same code the main thread would run,
-   which opens every other file the search covers and closes each after
-   (the radar's: `Radar.search`; recall's: `Radar.recall`; both on this
-   file alone; a slice of indexing: `Projects.fill`, on the file named);
-3. sends back the text (the radar's lines, recall's line or none, the
-   slice's messages left), or the error;
+1. opens this project's file (`Store.peek`; a slice of indexing: the
+   file named);
+2. runs `Projects.look`, the same code the main thread would run, which
+   opens every other file the search covers and closes each after (the
+   radar's: `Radar.search`; recall's: `Radar.recall`; both on this file
+   alone; a slice of indexing: `Projects.fill`; a search by meaning:
+   `Projects.near`);
+3. sends back what it found (the search's places, which the main thread
+   fuses with those by meaning and writes: `Projects.said`; the radar's
+   lines, recall's line or none, the slice's messages or lines left, the
+   lines near in meaning), or the error;
 4. closes its connection (`Store.close`, so it really closes at once).
 
 The main thread never waits: during a 2.9 s search on a 2-million-line
@@ -615,7 +624,10 @@ still waiting on it runs on the main thread, and that thread's next
 search starts a new worker; the other workers go on. The radar's and
 recall's never run on the main thread: they fail, and the side shows
 nothing new till the next step, or the call's result goes without a
-line. In the compiled binary, the workers' code is a second
+line. A search by meaning never runs there either: failing, the search
+goes by words alone. A slice of this project's indexing does (the
+messages' words alone, no vectors); the other projects' don't. In the
+compiled binary, the workers' code is a second
 entry of the build (`src/chat/Seeker.ts` in `package.json`'s `build`,
 `install.sh` and the release workflow), found at `./chat/Seeker.ts`:
 all four workers start from that one entry.
@@ -753,7 +765,10 @@ message it doesn't hold yet, so it never holds one twice nor skips one:
    another, the event loop turning between, till none is left.
 3. **Every other project**, once a run, after this one's: each file in
    turn, in the thread alone, its chats' indexes made if missing, so a
-   search of another project or of `all` finds their messages too.
+   search of another project or of `all` finds their messages too; and
+   once more when the model arrives mid-run, so their lines get their
+   vectors too. Every slice gives vectors with the model as it is when
+   the slice starts.
 4. **No thread.** If the worker can't start, this project's slices run
    on the main thread, on the chat's own connection, 256 KiB each; the
    other projects' are skipped. A slice that fails ends that file's
@@ -779,13 +794,21 @@ a small static model runs on this machine (`src/chat/Embed.ts`).
   reads prose, code, paths and errors alike. Three files from Hugging
   Face at one pinned revision (`MODEL`: `config.json`, `tokenizer.json`,
   `model.safetensors`, 33 MB in all), each checked against its pinned
-  SHA-256 as it comes, then moved into place whole, into
-  `~/.illi/models/potion-code-16M-v2` (every profile's). `Chat.open`
+  SHA-256 as it comes (and stopped past its size), then moved into
+  place whole, into a folder of that revision,
+  `~/.illi/models/potion-code-16M-v2@e9d2a44ca6a0` (every profile's).
+  Once all three are in, an `ok` file marks the folder ready, and an
+  earlier revision's folder goes. A terminal's illi (`Chat.open`)
   downloads them once, in the background, and says so once they're in
-  (a note); till then, and offline, search goes by words alone. A part
-  file an illi killed mid-download left goes at the next try. `meaning`
-  off downloads nothing (`autoupdate` doesn't govern it), and `illi
-  uninstall --programs` removes them.
+  (a note); a pipe's never does, as it ends first. Till then, and
+  offline, search goes by words alone. A part file an illi killed
+  mid-download left goes at the next try. A file there that won't read
+  (cut short, changed on disk) takes the `ok` away: that run searches
+  by words alone, and the next start checks each file against its
+  SHA-256 and downloads the one that isn't as pinned. `meaning` off
+  downloads nothing (`autoupdate` doesn't govern it), and `illi
+  uninstall --programs` removes them. A profile's export leaves them
+  out.
 - **A vector** (`Embed.vector`) is model2vec's own: BERT's normalizer
   and WordPiece tokenizer, written here in TypeScript, each token a row
   of the model's table (63,457 rows of 256 half floats), the mean of the

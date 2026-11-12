@@ -67,11 +67,15 @@ let ASKS = 0;
 // the thread messages are put in their chat's index of words in
 // (Projects.fill), a fourth, so no search waits on it; the files being
 // indexed, each with whether it was asked again meanwhile (a slice once
-// more, after); whether this run caught up with the other projects'
-// files yet (once a run, after this one's)
+// more, after) and who to tell once it's done; the model's folder every
+// slice gives vectors with: the one Projects.index was told last (null:
+// none, `meaning` off or the model not here yet); how far this run
+// caught up with the other projects' files: not yet (0), their words
+// (1), their vectors too (2)
 const INDEX: Thread = { worker: null, asked: new Map() };
-const FILLING = new Map<string, { again: boolean }>();
-let OTHERS = false;
+const FILLING = new Map<string, { again: boolean; done: Array<() => void> }>();
+let MEANS: string | null = null;
+let OTHERS = 0;
 
 // what one slice of indexing puts in at most, in characters (about 47 MB
 // a second, measured on a 15 MB chat): in the thread, about 20 ms, so a
@@ -96,7 +100,7 @@ const RRF   = 60;
 const BESIDE = 5;
 
 // the models a thread read (by their folder), each once
-const MODELS = new Map<string, Model>();
+const MODELS = new Map<string, Model | null>();
 
 // what a search by words found (Projects.look): the places (Store.search),
 // whether they hold any of the words, not all (or), the projects with
@@ -191,49 +195,64 @@ export namespace Projects {
   // thread (one it can't run, here, on the store's own connection, a
   // smaller slice, the event loop turning between), till none is left;
   // asked again while under way (a message logged meanwhile), a slice
-  // once more after. Then, once a run, every other project's file in
-  // turn, in the thread alone, so a search of another project or all
-  // finds their messages too (one an older illi kept, its chats'
-  // indexes made). A slice that fails ends that file's: the next ask
-  // starts again where it stopped
+  // once more after. Then every other project's file in turn, in the
+  // thread alone, so a search of another project or all finds their
+  // messages too (one an older illi kept, its chats' indexes made): once
+  // a run, and once more when the model's folder (model: from now on
+  // every slice's, MEANS) comes, so they get their vectors too. A slice
+  // that fails ends that file's: the next ask starts again where it
+  // stopped
   export function index(store: File, model: string | null = null): void {
-    Projects.filling(store.file, model, () => Projects.fill(store, SLICE_HERE, null), () => {
-      if (!OTHERS) {
-        OTHERS = true;
-        Projects.others(Store.files(store).filter((file) => file !== store.file), model);
+    MEANS = model;
+    Projects.filling(store.file, () => Projects.fill(store, SLICE_HERE, null), () => {
+      const want = MEANS === null ? 1 : 2;
+      if (OTHERS < want) {
+        OTHERS = want;
+        Projects.others(Projects.listed(store).filter((file) => file !== store.file));
       }
     });
   }
 
+  // every project's file, as Store.files; none once their folder is gone
+  // (a profile removed while its last slice ran)
+  export function listed(store: File): string[] {
+    try {
+      return Store.files(store);
+    } catch {
+      return [];
+    }
+  }
+
   // the other projects' files indexed one after another, in the thread
   // alone
-  export function others(files: string[], model: string | null): void {
+  export function others(files: string[]): void {
     const [file, ...rest] = files;
     if (file !== undefined) {
-      Projects.filling(file, model, null, () => Projects.others(rest, model));
+      Projects.filling(file, null, () => Projects.others(rest));
     }
   }
 
   // a project's file indexed, a slice at a time, till none is left, its
-  // lines' vectors too with the model's folder (model; null: none);
-  // here: how a slice the thread can't run is run here (null: it isn't);
-  // done: told once it is, or a slice failed. Asked while under way: once
-  // more after, done told then
-  export function filling(file: string, model: string | null, here: (() => number) | null, done: () => void): void {
+  // lines' vectors too with the model's folder (MEANS, as each slice
+  // starts); here: how a slice the thread can't run is run here (null:
+  // it isn't); done: told once it is, or a slice failed. Asked while
+  // under way: once more after, and both told then
+  export function filling(file: string, here: (() => number) | null, done: () => void): void {
     const on = FILLING.get(file);
     if (on !== undefined) {
       on.again = true;
+      on.done.push(done);
       return;
     }
-    const state = { again: false };
+    const state = { again: false, done: [done] };
     const end   = () => {
       FILLING.delete(file);
-      done();
+      state.done.forEach((f) => f());
     };
     FILLING.set(file, state);
     const slice = (): void => {
       state.again = false;
-      Projects.thread<number>(INDEX, { $: "index", file, most: SLICE, model }, here).then((left) => (left > 0 || state.again ? void setTimeout(slice, 0).unref() : end()), end);
+      Projects.thread<number>(INDEX, { $: "index", file, most: SLICE, model: MEANS }, here).then((left) => (left > 0 || state.again ? void setTimeout(slice, 0).unref() : end()), end);
     };
     slice();
   }
@@ -271,7 +290,9 @@ export namespace Projects {
   }
 
   // the model in its folder, read once (Embed.load); null: its files
-  // aren't all there yet, or won't read (each ask tries again)
+  // aren't all there yet (each ask looks again), or won't read: then
+  // none this run, and it's no longer ready (Embed.spoilt), so the next
+  // start checks its files and downloads one again
   export function model(folder: string): Model | null {
     const kept = MODELS.get(folder);
     if (kept !== undefined || !Embed.present(folder)) {
@@ -281,7 +302,10 @@ export namespace Projects {
       const read = Embed.load(folder);
       MODELS.set(folder, read);
       return read;
-    } catch {
+    } catch (err) {
+      console.error("illi: the search model in " + folder + " won't read, so it's checked again at the next start: " + String(err));
+      MODELS.set(folder, null);
+      Embed.spoilt(folder);
       return null;
     }
   }

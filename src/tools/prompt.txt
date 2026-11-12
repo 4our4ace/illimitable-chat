@@ -48,8 +48,10 @@ Tools:
   (2026-10), a year (2026), today or yesterday (no to: till the end of from's
   day, month or year)
 - projects() lists the user's projects, each with a chat of its own
-- search(words) finds summary lines holding the words; with project, in that
-  project's chat, or in all ("all"); with from, to or both, only in that span
+- search(words) finds summary lines and messages holding the words (a message
+  as id+1|kind: and a passage of it; zoom(id, 1) reads it whole), and lines
+  close in meaning, marked ≈; with project, in that project's chat, or in all
+  ("all"); with from, to or both, only in that span
 - zoom and date take a project too: its chat's line or message
 
 # Turns

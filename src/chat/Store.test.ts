@@ -350,6 +350,8 @@ test("a message's passage: its words where the most of them meet, cut at spaces,
   expect(cut).toMatch(/^…(alpha )+the Café bug is here (beta )+cafe again and the bug (gamma )+gamma…$/);
   expect(Store.passage("  short\n\ttext  ", ["x"])).toBe("short text");
   expect(Store.passage("word ".repeat(100), ["nothing"])).toMatch(/^(word ){59}word…$/);
+  const emoji = Store.passage("😀".repeat(400) + "-needle-" + "😀".repeat(400), ["needle"]);
+  expect([emoji.isWellFormed(), emoji.includes("needle")]).toEqual([true, true]);
   expect(Store.passage("x ".repeat(200) + "e-mail here " + "y ".repeat(200), ["e-mail"])).toContain("e-mail here");
 });
 
@@ -440,17 +442,34 @@ test("found by words and by meaning: every word held, those first, never pushed 
   expect(Projects.holds("cafeteria", ["cafe"])).toBe(false);
 });
 
-test("the index thread gives the summary lines their vectors once the model is there; a search finds them by meaning too, beside those by words", async () => {
+test("the index thread gives the summary lines their vectors once the model is there, another project's too; a search finds them by meaning too, beside those by words", async () => {
   const folder = DIR + "/tiny/models/m";
   tiny_model(folder, { cache: [1, 0, 0, 0], store: [0.9, 0.1, 0, 0], cake: [0, 0, 0, 1] });
+  const other = Store.open(DIR + "/meaning", APP);
+  Store.push(other, [{ i: 0, kind: "user", text: "o0", date, size: 2 }], "/work");
+  Store.nodes(other, [{ first: 0, n: 1, text: "user: a cache elsewhere" }]);
+  Store.close(other);
   const store = Store.open(DIR + "/meaning", SITE);
   Store.push(store, [0, 1, 2].map((i) => ({ i, kind: "user" as const, text: "m" + i, date, size: 2 })), "/work");
   Store.nodes(store, [{ first: 0, n: 1, text: "user: the cache again" }, { first: 1, n: 1, text: "user: the store is slow" }, { first: 2, n: 1, text: "user: cake" }]);
+  Projects.index(store, null);
   Projects.index(store, folder);
   for (let k = 0; k < 400 && (!Store.vec_has(store.db, store.chat) || Store.vec_end(store) < 4); k++) {
     await Bun.sleep(25);
   }
   expect(Store.vec_end(store)).toBe(4);
+  const theirs = () => {
+    const o = Store.open(DIR + "/meaning", APP);
+    try {
+      return Store.vec_has(o.db, o.chat) ? Store.vec_end(o) : 0;
+    } finally {
+      Store.close(o);
+    }
+  };
+  for (let k = 0; k < 400 && theirs() < 2; k++) {
+    await Bun.sleep(25);
+  }
+  expect(theirs()).toBe(2);
   expect(await Projects.seek(store, "cache", "", null, folder)).toBe("site-7q2m0d 0+1|user: the cache again\n≈ site-7q2m0d 1+1|user: the store is slow");
   expect(await Projects.seek(store, "cache", "", null, null)).toBe("site-7q2m0d 0+1|user: the cache again");
   Store.close(store);

@@ -103,6 +103,7 @@ What else illi keeps in `~/.illi`:
 | `claude/`       | a Claude Code folder for each Claude account `/login` added beside your own Claude Code's, its login in it |
 | `antigravity/`  | a folder for each Google AI plan account `/login` signed in (`g1`, `g2`…: the home of Google's Antigravity CLI run for it, its sign-in in it), in `agent/<version>/` the CLI `/login` downloaded, the version this illi runs, and in `agy.json` the version of your own `agy` as illi last asked it ([Providers](providers.md#google-ai-plan)) |
 | `copilot/`      | a folder for each GitHub Copilot plan account `/login` signed in (`gh1`, `gh2`…: the home of GitHub's Copilot CLI run for it, `COPILOT_HOME`; its token in your keychain where there is one, else, as you allowed it, in its `config.json`), in `cli/<version>/` the CLI `/login` downloaded, the version this illi runs, with what it unpacks of itself, and in `copilot.json` the version of your own `copilot` as illi last asked it ([Providers](providers.md#github-copilot-plan)) |
+| `models/`       | the search model, for `meaning`: MinishLab's potion-code-16M-v2 (33 MB), downloaded once from Hugging Face, every profile's, left out of a profile's export ([Storage](storage.md#search-by-meaning)); deleted, the next start in a terminal downloads it again |
 | `models.json`   | the models the vendors told last: a catalog vendor's whole list (ChatGPT's for the account named in it, the Claude plan's, the Google AI plan's, the Anthropic key's, OpenCode Go's, the GitHub Copilot plan's), each one's window, speeds, efforts and price, and when the Claude plan last told its list, so a start within a day asks Claude Code nothing ([Storage](storage.md#models)) |
 | `claude-code.json` | the name of each of Claude Code's own MCP servers illi has seen, case and all, and those last seen waiting on a login, so `off`, an agent's `tools:` and a login missing leave one out of the first call after a start too ([Providers](providers.md#claude-plan)) |
 | `used.json`     | how often you ran each command: among those a `/word` matches alike, the most used come first; a use counts half as much 100 uses later, and a command you stopped using drops out (two illis at once each add theirs: [Storage](storage.md#usage-counts)) |
@@ -130,8 +131,9 @@ It asks what goes, then says each thing it removed:
 
 1. **illi, the CLIs and search model it downloaded**: the `illi` the
    installer put in place, the Antigravity and Copilot CLIs `/login`
-   downloaded into `~/.illi`, and the search model (`~/.illi/models`). Your chats, settings and accounts stay in `~/.illi`, so an
-   illi you install again picks up where you were.
+   downloaded into `~/.illi`, and the search model (`~/.illi/models`).
+   Your chats, settings and accounts stay in `~/.illi`, so an illi you
+   install again picks up where you were.
 2. **Everything**: that, and all of `~/.illi`, every profile's chats,
    settings, keys and accounts, and whatever else you keep there (your
    own rules, skills, commands, agents, hooks and plugins). Before the

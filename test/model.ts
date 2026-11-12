@@ -9,7 +9,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 // the model's files in `dir`: a vocabulary of [PAD], [UNK] and the words
-// given (in that order), each its row
+// given (in that order), each its row; marked ready (Embed.ready)
 export function tiny_model(dir: string, rows: Record<string, number[]>): void {
   const words = Object.keys(rows);
   const dim   = rows[words[0]].length;
@@ -26,4 +26,5 @@ export function tiny_model(dir: string, rows: Record<string, number[]>): void {
     model: { type: "WordPiece", unk_token: "[UNK]", continuing_subword_prefix: "##", max_input_chars_per_word: 100, vocab },
   }));
   fs.writeFileSync(path.join(dir, "model.safetensors"), Buffer.concat([size, head, Buffer.from(table.buffer)]));
+  fs.writeFileSync(path.join(dir, "ok"), "tiny\n");
 }

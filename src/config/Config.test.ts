@@ -52,7 +52,7 @@ function start(env: Record<string, string>, args: string[] = []): { code: number
   const dir = fs.mkdtempSync(os.tmpdir() + "/illi-config-start-");
   const clean = Object.fromEntries(Object.entries(process.env).filter(([k]) => !k.startsWith("ILLI_"))) as Record<string, string>;
   try {
-    const run = Bun.spawnSync(["bun", import.meta.dir + "/../main.ts", ...args], { env: { ...clean, ILLI_DIR: dir, ...env }, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+    const run = Bun.spawnSync(["bun", import.meta.dir + "/../main.ts", ...args], { env: { ...clean, ILLI_DIR: dir, ILLI_MEANING: "off", ...env }, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
     return { code: run.exitCode, err: run.stderr.toString(), out: run.stdout.toString() };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

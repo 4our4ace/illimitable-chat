@@ -97,9 +97,9 @@ const WRITING = /^\.auth\.\d+\.json$/;
 const EXCLUDE = "--exclude=.auth.[0-9]*.json";
 
 // the default's folder's, besides OWN (above: the others, which was used
-// last, the release looked for, the state every profile shares; that
-// illi made it)
-const ROOTED = ["profiles", "profile", "project-profiles.json", "update.json", "models.json", "trust.json", "seen.json", "used.json", "picked.json", MARK];
+// last, the release looked for, the state every profile shares, the
+// search model's files; that illi made it)
+const ROOTED = ["profiles", "profile", "project-profiles.json", "update.json", "models.json", "trust.json", "seen.json", "used.json", "picked.json", "models", MARK];
 
 // the profile used last in each project, by its key (Projects.place),
 // kept in the root

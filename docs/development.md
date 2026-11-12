@@ -192,4 +192,6 @@ into a folder kept for the next check, then run:
 To take a new revision or model: its files' sizes and SHA-256 (Hugging
 Face's LFS hash for the table; the small files hashed yourself), the
 reference values in `Embed.test.ts` anew from MinishLab's Python, and
-`VECTORS` moves on by itself, so each file's vectors are made anew.
+`VECTORS` moves on by itself, so the model goes in a folder of its own
+(the earlier one removed once it's in) and each file's vectors are made
+anew.

@@ -35,9 +35,10 @@
 // caught up with. Derived from find_<chat>: each chat's vectors of its
 // summary lines (vec_<chat>, by a line's row there, with the messages it
 // covers: Embed.ts), filled in order the same way (Store.vec_fill), a
-// file's all of one model (meta's `vectors`: another's, made anew). Messages are logged as they come, so their dates rise:
-// a span of time is found by bisection over their keys (Store.span), with
-// no index of dates.
+// file's all of one model (meta's `vectors`: another's, made anew).
+// Messages are logged as they come, so their dates rise: a span of time
+// is found by bisection over their keys (Store.span), with no index of
+// dates.
 //
 // Durable as files were: each write is one transaction, in WAL mode at
 // synchronous NORMAL, so a crash never leaves half a write and no write
@@ -57,7 +58,9 @@
 // or raises compat. A table for each chat (find_<chat>) is made with the
 // chat (Store.place: Store.words); said_<chat>, as the chat is opened
 // (Store.open: Store.said_make), since an older illi makes chats without
-// it. All of it, step by step: docs/storage.md.
+// it; vec_<chat>, by the index thread once the model is there
+// (Projects.fill: Store.vec_make). All of it, step by step:
+// docs/storage.md.
 
 import { Database, type Statement } from "bun:sqlite";
 import * as fs from "node:fs";
@@ -990,9 +993,9 @@ export namespace Store {
 
   // the PASSAGE characters of a text, on one line, around the terms where
   // the most of them meet (the first such place), from LEAD before the
-  // first of them, cut at spaces, "…" where cut. A term is the index's
-  // words of it side by side (as the index matches it: case and accents
-  // aside); a text holding none: its start
+  // first of them, cut at spaces (else between characters), "…" where
+  // cut. A term is the index's words of it side by side (as the index
+  // matches it: case and accents aside); a text holding none: its start
   export function passage(text: string, terms: string[]): string {
     const flat = text.replace(/\s+/g, " ").trim();
     if (flat.length <= PASSAGE) {
@@ -1019,6 +1022,10 @@ export namespace Store {
       const space = flat.lastIndexOf(" ", z);
       z = space > a ? space : z;
     }
+    // never between a surrogate pair's halves (an emoji's)
+    const low = (k: number) => k > 0 && k < flat.length && /[\udc00-\udfff]/.test(flat[k]);
+    a = low(a) ? a + 1 : a;
+    z = low(z) ? z - 1 : z;
     return (a > 0 ? "…" : "") + flat.slice(a, z) + (z < flat.length ? "…" : "");
   }
 
