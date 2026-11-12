@@ -294,6 +294,15 @@ export namespace Access {
     return [...new Set([...dirs, path.join(config.AGENTS_DIR, "skills", "*"), ...rules].map(slash))];
   }
 
+  // what of illi's own a change to `resources` touches (those its guarded
+  // places hold: guarded), in words, in this order: its agents, skills,
+  // commands, rules (RULES.md, where the `rules` setting puts it too)
+  export function owned(resources: string[]): string[] {
+    const guarded = Access.guarded();
+    const kinds   = resources.flatMap((r) => guarded.filter((g) => Permissions.match(r, g)).map((g) => /\/(skills|commands|agents)\/\*$/.exec(g)?.[1] ?? "rules"));
+    return ["agents", "skills", "commands", "rules"].filter((k) => kinds.includes(k));
+  }
+
   // illi's own files allowed alone of their folders: its RULES.md and
   // theme.json, its root's and its profile's, and those the `rules` and
   // `theme` settings name

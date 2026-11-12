@@ -1196,15 +1196,25 @@ export namespace Tools {
   }
 
   // why a request is asked or refused: the folders outside, which (one
-  // inside another said as that one: Access.outermost); a .env read; the
-  // user's rule that says so
+  // inside another said as that one: Access.outermost); a .env read; a
+  // change to illi's own agents, skills, commands or rules (Access.owned),
+  // said to be asked apart from the folder's access, so it never reads as
+  // that question asked again; the user's rule that says so
   export function why(rules: { base: Rule[]; user: Rule[]; saved: Rule[] }, req: Want, v: { effect: Effect; by: number[] }, top: string): string {
     const folder = (r: string) => Access.said("external_directory", r, top).replace(/^files in /, "");
     const rule = Permissions.evaluate(req.action, req.resources[v.by[0]] ?? "*", v.effect === "deny" ? [...rules.base, ...rules.user] : [...rules.base, ...rules.user, ...Tools.counted(rules.saved, req)]);
     if (rules.base.includes(rule)) {
-      return req.action === "external_directory" ? "it reaches outside the project: " + Access.outermost(v.by.map((k) => req.resources[k])).map(folder).join(", ") : req.action === "read" ? "it reads a .env file, which may hold secrets" : req.action === "edit" ? "it changes illi's own instructions, which every chat follows" : "illi's rules ask about " + req.action;
+      return req.action === "external_directory" ? "it reaches outside the project: " + Access.outermost(v.by.map((k) => req.resources[k])).map(folder).join(", ") : req.action === "read" ? "it reads a .env file, which may hold secrets" : req.action === "edit" ? Tools.own(req.resources) : "illi's rules ask about " + req.action;
     }
     return "your rule " + (v.effect === "deny" ? "denies " : "asks about ") + (rule.action === "shell" ? "" : rule.action + " ") + rule.resource;
+  }
+
+  // why a change to illi's own files is asked: what of them it changes,
+  // that every later chat follows them, and that a change is asked apart
+  // from the folder's access (its folder allowed, reading unasked)
+  export function own(resources: string[]): string {
+    const kinds = Access.owned(resources);
+    return "it changes illi's own " + (kinds.length === 0 ? "instructions" : Vendors.list(kinds, "and")) + ", which every later chat follows. A change to them is asked separately from access to their folder";
   }
 
   // the mode now: /mode's for this run, else the setting's

@@ -122,7 +122,10 @@ project always comes first:
   stay in its sight) and the `RULES.md` files. What a project's text
   talks the model into writing there (a planted instruction in a file
   it read) would reach every later session, in every project, as your
-  own rules, skills or agents do. "Don't ask again" saves that place
+  own rules, skills or agents do. The question says which of them it
+  changes, and that this is asked separately from access to their
+  folder: allowing `~/.illi/` (or reading there, which is never asked)
+  doesn't cover a change. "Don't ask again" saves that place
   alone (`changes to ~/.illi/skills/`), never every change, and an
   approval of every change saved before (`any file change`) doesn't
   cover them. To have them all run unasked again, allow them:
