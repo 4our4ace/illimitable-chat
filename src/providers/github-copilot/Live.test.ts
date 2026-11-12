@@ -17,7 +17,8 @@
 // It tries: a turn (the tokens it read told; illi's prompt alone, the
 // message dated by the CLI; illi's tools alone, by their MCP names); a
 // window learned from the CLI; illi's tool called and its answer echoed;
-// too long for the window (full); a stop mid-stream (lost, at once); two
+// too long for the window (full: the model's refusal, and the CLI's own
+// count past it, never sent); a stop mid-stream (lost, at once); two
 // calls at once on one CLI; the CLI's web fetch asking illi first
 // (refused here); nothing left behind (no session's files, no log, no
 // cache, no CLI running). The CLI retries a busy service (500) five times over
@@ -161,9 +162,12 @@ test.skipIf(!LIVE)("illi's tool called through its MCP server and its answer ech
   expect(TOLD.filter((t) => t.m.method === "tools/call").map((t) => t.m.params.name)).toEqual(["zoom"]);
 }, 60000);
 
-test.skipIf(!LIVE)("too long for the window ends `full`", async () => {
+test.skipIf(!LIVE)("too long for the window ends `full`: the model's refusal, and the CLI's own count past it (never sent)", async () => {
   const { end } = await call("[T3] long");
   expect([end.ok, end.stop]).toEqual([false, "full"]);
+  const sent = SENT.length;
+  const big = await call("[T1] " + "a line of an older talk, nothing in it\n".repeat(16000));
+  expect([big.end.ok, big.end.stop, SENT.length]).toEqual([false, "full", sent]);
 }, 60000);
 
 test.skipIf(!LIVE)("a stop mid-stream ends the call at once, what streamed logged as cut off", async () => {

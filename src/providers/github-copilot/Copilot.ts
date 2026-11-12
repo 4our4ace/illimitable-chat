@@ -181,6 +181,12 @@ const NAMED = "Here illi's tools come through its MCP server: each is named illi
 // what a failure says, beyond the kind the CLI tells: a busy service
 const BUSY = /overloaded|unavailable|try again later|timed? ?out|ECONN|socket hang up/i;
 
+// the CLI's own refusal of a request it counts past the model's window,
+// before sending it (a `query` failure, no kind of its own: "Request
+// exceeds the model's prompt budget after reserving output (130042
+// tokens; limit 128000)")
+const BUDGET = /exceeds the model's prompt budget/i;
+
 // what GitHub says of an account it gives no Copilot (its subscription
 // ended, or it never had one: its models not listed, every request
 // refused), and where an account starts Copilot Free or a plan (the
@@ -539,7 +545,9 @@ export namespace Copilot {
 
   // a failure in plain words: a CLI that didn't start (Rpc.gone: its
   // exit code and last words, as they are, a later try ending the same);
-  // else by the kind the CLI tells: too long for the window; an account GitHub gives no Copilot (why, as last asked:
+  // else by the kind the CLI tells: too long for the window (the model's
+  // refusal, or the CLI's own before it sends: BUDGET); an account GitHub
+  // gives no Copilot (why, as last asked:
   // Copilot.lack, with where to start a plan); a sign-in run out; the
   // plan's credits used up (when they start anew, where told); a rate
   // limit (a later try may answer); the account's organization's policy;
@@ -559,7 +567,7 @@ export namespace Copilot {
     if (said.startsWith(CopilotCli.spec.name + " didn't start")) {
       return { ok: false, text: said.slice(0, 400), stop: "down", ...cut };
     }
-    if (kind === "context_limit" || e?.providerErrorCode === "context_length_exceeded" || Agent.full(said)) {
+    if (kind === "context_limit" || e?.providerErrorCode === "context_length_exceeded" || BUDGET.test(said) || Agent.full(said)) {
       return { ok: false, text: said || "the request was too long for the model's window", stop: "full", grew: run.grew, ...cut };
     }
     if (DENIED.test(said)) {

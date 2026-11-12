@@ -123,6 +123,7 @@ async function play(sid, scene) {
     say(sid, "Part of it");
     return fail(sid, { errorType: "context_limit", message: "prompt token count of 200000 exceeds the limit of 128000", statusCode: 400 });
   }
+  if (scene === "budget") return fail(sid, { errorType: "query", message: "Request exceeds the model's prompt budget after reserving output (130042 tokens; limit 128000). Reduce context or compact before continuing." });
   if (scene === "signedout") return fail(sid, { errorType: "authentication", message: "Not authenticated. Please authenticate first." });
   if (scene === "credits") return fail(sid, { errorType: "quota", errorCode: "quota_exceeded", message: "You have no AI credits left this month." });
   if (scene === "rate") return fail(sid, { errorType: "rate_limit", errorCode: "user_global_rate_limited", message: "Sorry, you've been rate-limited.", statusCode: 429 });
@@ -316,9 +317,11 @@ test("a call without tools has none, nor the web's, nor their naming", async () 
   expect(logged().find((l) => l.method === "session.create").params.availableTools).toEqual([]);
 });
 
-test("each failure lands as the CLI's kind says: too long (what streamed cut off), the plan's credits, a rate limit, a policy, a busy service, its own words", async () => {
+test("each failure lands as the CLI's kind says: too long (what streamed cut off; the CLI's own count past it too), the plan's credits, a rate limit, a policy, a busy service, its own words", async () => {
   const long = await call("long");
   expect([long.end.ok, long.end.stop, entries(long.events)]).toEqual([false, "full", [["illi", "Part of it\n[cut off]"]]]);
+  const budget = await call("budget");
+  expect([budget.end.ok, budget.end.stop]).toEqual([false, "full"]);
   const credits = await call("credits");
   expect([credits.end.stop, credits.end.text]).toEqual(["down", "your GitHub Copilot plan's usage is used up: it starts anew " + new Date("2026-12-01T00:00:00Z").toDateString() + " (GitHub said: You have no AI credits left this month.)"]);
   const rate = await call("rate");
