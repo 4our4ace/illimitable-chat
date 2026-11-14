@@ -38,10 +38,11 @@
 // can't follow (case, functions, arrays, aliases, a script made as it
 // runs) leaves no parts, only why: Access.ts then splits such a command
 // crudely (its rules still meet most of what is in it, its paths found
-// by their look), each piece read here on its own too. Past BUDGET
-// scripts read (a git alias that runs itself twice), the scripts left
-// are each their text alone, the rest of the command read as ever. The shell tool runs bash (Machine.ts), so this is the
-// language it runs.
+// by their look), each piece read here on its own too. Past the check's
+// work (Work: a git alias that runs itself twice, aliases naming each
+// other in a long row), the scripts and aliases left are each their
+// text alone, left unread, so the check asks. The shell tool runs bash
+// (Machine.ts), so this is the language it runs.
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -105,9 +106,9 @@ export type Span = [number, number];
 // holds it: its word, its command. rough: a script a program runs (a
 // variable's, a git setting's) that this couldn't read, its text alone
 // as written, which Access.ts meets crudely as it does a command
-// unread; "spent": one left unread as the command's reading had read
-// BUDGET scripts already, met crudely alone (its pieces not read on
-// their own: Access rough)
+// unread; "spent": one left unread as the check's work was done (Work),
+// met crudely alone (its pieces not read on their own: Access rough),
+// and the check asks
 export type Part = {
   argv   : Word[];
   plain  : Word[][];
@@ -168,7 +169,8 @@ type Doc = { delim: string; strip: boolean; expand: boolean; redir: Redir; inpip
 // first, the one past the last: Part feed); the scripts a command runs
 // read so far (read: by text, where they run and what they're given,
 // Shell script, so one that every git command of a line runs is read
-// once), and how many were read (reads: BUDGET at most); what scripts
+// once), and the work the reading may still do (work: Work, shared by
+// every reading of one check); what scripts
 // were given of git's settings, each by a short id (ids: given_key); git's settings
 // in force for what the git command being read runs (given: its -c and
 // its environment's, which git passes on to what it runs, so a git
@@ -192,7 +194,7 @@ type Scan = {
   depth : number;
   pipes : Span[];
   read  : Set<string>;
-  reads : number;
+  work  : Work;
   given : Setting[];
   ids   : Map<string, string>;
   tops  : Map<string, string | null>;
@@ -220,6 +222,13 @@ type Opts = { args: string[]; flags?: string[]; tail?: string[]; num?: boolean }
 // whether an option of one dash may be a long one (single: -chdir=x)
 type Global = { args: string[]; flags: string[]; opt?: string[]; nums?: string[]; dirs?: string[]; subs: number; single?: boolean };
 
+// the work one check's readings may still do, shared by all of them
+// (Shell.parse's, each piece Access.ts reads on its own too): a unit for
+// each part read, each script read, each step through an alias. Spent,
+// the scripts and aliases left are left unread (Part rough "spent"), so
+// the check asks (Access: never allowed by rules on what was read)
+export type Work = { left: number };
+
 // a git setting given with a command: its key (null: known only as it
 // runs), its value (null: none, a yes), as written; whether it may be
 // any setting (any: a key known only as it runs, its value known)
@@ -236,18 +245,27 @@ class Unread extends Error {}
 const MOST = 16;
 const NEST = 64;
 
-// the most scripts one command's reading reads (Shell script; those read
-// once already not counted): those past it are left unread, their text
-// alone (Part rough "spent"), the rest of the command read as ever
-const BUDGET = 2000;
+// the work one check's readings may do (Work): far past any command a
+// person or a model writes (an everyday one takes a few units, the
+// trickiest aliases tried a thousand or so), short of what makes a check
+// take more than a moment (scripts that run themselves in a new folder
+// each time, aliases naming each other in a long row)
+const WORK = 5000;
 
-// what scripts are given of git's settings (given_key), by the variables
-// and by the settings they're made of: an id for each (Scan ids)
+// what scripts are given (given_key), by the variables and by the
+// settings they're made of: an id for each (Scan ids)
 const GIVEN_VARS = new WeakMap<Map<string, Word>, string>();
 const GIVEN_SETS = new WeakMap<Setting[], string>();
 
 // what ends a word unquoted
 const META = " \t\n;&|()<>";
+
+// Globals
+// =======
+
+// whether a script read once a reading is read from memory after
+// (Shell script; off: Shell.unmemoed)
+let MEMO = true;
 
 // an exit, as the command after a || (its own: not piped nor in the
 // background, which would run it in a subshell; not a heredoc's body
@@ -375,7 +393,7 @@ const GLOBALS: Record<string, Global> = {
 // alias's is one only past a !, else it stands for git's words (Shell
 // git_settings); a submodule's update only past a !, else a way to
 // update
-const GIT_RUNS = /^(?:core\.(?:sshcommand|pager|editor|fsmonitor|askpass|gitproxy|alternaterefscommand)|tar\..+\.command|sequence\.editor|diff\.external|diff\..+\.(?:textconv|command)|(?:diff|merge)tool\..+\.cmd|merge\..+\.driver|filter\..+\.(?:clean|smudge|process)|credential(?:\..+)?\.helper|gpg(?:\..+)?\.program|gpg\.ssh\.defaultkeycommand|pager\..+|interactive\.difffilter|remote\..+\.(?:uploadpack|receivepack)|trailer\..+\.(?:cmd|command)|sendemail\.(?:tocmd|cccmd|headercmd|sendmailcmd)|submodule\..+\.update|imap\.tunnel|web\.browser|browser\..+\.cmd|man\..+\.cmd|uploadpack\.packobjectshook)$/i;
+const GIT_RUNS = /^(?:core\.(?:sshcommand|pager|editor|fsmonitor|askpass|gitproxy|alternaterefscommand)|tar\..+\.command|sequence\.editor|diff\.external|diff\..+\.(?:textconv|command)|(?:diff|merge)tool\..+\.cmd|merge\..+\.driver|filter\..+\.(?:clean|smudge|process)|credential(?:\..+)?\.helper|gpg(?:\..+)?\.program|gpg\.ssh\.defaultkeycommand|pager\..+|interactive\.difffilter|remote\..+\.(?:uploadpack|receivepack)|trailer\..+\.(?:cmd|command)|sendemail\.(?:.+\.)?(?:tocmd|cccmd|headercmd|sendmailcmd)|submodule\..+\.update|imap\.tunnel|web\.browser|browser\..+\.cmd|man\..+\.cmd|uploadpack\.packobjectshook)$/i;
 
 // a setting's value that is a yes or a no (pager.diff=false), never a
 // command
@@ -427,15 +445,31 @@ export namespace Shell {
   // whose text isn't there as written). Not sete: run where a set -e in
   // it may not hold (a wrapper illi doesn't make, as Claude Code's Bash
   // runs it in: an eval inside a && list ignores it), so none is trusted
-  export function parse(command: string, cwd: string, at: number | Span = 0, sete = true): Part[] | string {
+  export function parse(command: string, cwd: string, at: number | Span = 0, sete = true, work: Work = Shell.work()): Part[] | string {
     const [base, box]: [number | null, Span] = typeof at === "number" ? [at, [at, at + command.length]] : [null, at];
-    const s: Scan = { src: command, at: 0, base, box, parts: [], cwd, vars: new Map(), wild: false, errexit: false, sete, docs: [], root: false, fed: false, inpipe: false, depth: 0, pipes: [], read: new Set(), reads: 0, given: [], ids: new Map(), tops: new Map() };
+    const s: Scan = { src: command, at: 0, base, box, parts: [], cwd, vars: new Map(), wild: false, errexit: false, sete, docs: [], root: false, fed: false, inpipe: false, depth: 0, pipes: [], read: new Set(), work, given: [], ids: new Map(), tops: new Map() };
     try {
       scan_list(s, "");
       pipe_feeds(s);
       return s.parts;
     } catch (err: any) {
       return err instanceof Unread ? err.message : "illi failed to read it (" + String(err?.message ?? err) + ")";
+    }
+  }
+
+  // the work one check's readings may do, to share among them (Work)
+  export function work(): Work {
+    return { left: WORK };
+  }
+
+  // a check's readings made with no script read twice from memory (Scan
+  // read), every one read anew: the same readings, slower (a test's)
+  export function unmemoed<T>(f: () => T): T {
+    MEMO = false;
+    try {
+      return f();
+    } finally {
+      MEMO = true;
     }
   }
 
@@ -1431,8 +1465,12 @@ function scan_test(s: Scan, cmd: Cmd): void {
 }
 
 // for NAME in WORDS (after the for): NAME stands for each of the words
-// (none listed: the script's arguments, known only as it runs); for ((...))
+// (none listed: the script's arguments, known only as it runs); one
+// naming a command a program runs (RUNS) or one of git's settings in the
+// environment (GIT_CONF) gives each word so, as an assignment would (it
+// may be exported); for ((...))
 function scan_for(s: Scan): void {
+  const from = s.at;
   blank(s, false);
   if (s.src.startsWith("((", s.at)) {
     s.at = arith(s, s.at + 2);
@@ -1462,6 +1500,21 @@ function scan_for(s: Scan): void {
   const alts = values.flatMap((v) => v.alts);
   const many = alts.length > MOST || alts.length === 0;
   var_set(s, name.raw, next?.raw !== "in" ? DYN : { alts: many ? [""] : alts, raw: "", dynamic: alts.length > MOST || values.some((v) => v.dynamic), glob: values.some((v) => v.glob), fd: false });
+  if (RUNS.has(name.raw) || GIT_CONF.test(name.raw)) {
+    const ctx = { cwd: s.cwd, at: s.cwd, root: s.root, fed: s.fed, piped: s.inpipe, span: place(s, from, s.at) };
+    values.forEach((v) => runs(s, [{ name: name.raw, value: v }], ctx));
+  }
+}
+
+// a variable's value after NAME+=word: what it held, each of its values
+// with the word's after it, where known; else made as it runs, its text
+// the word's (as a script it's read by that text: Shell script)
+function appended(s: Scan, name: string, w: Word): Word {
+  const was = s.vars.get(name);
+  if (was !== undefined && !was.dynamic && !w.dynamic && was.alts.length * w.alts.length <= MOST) {
+    return { ...w, alts: was.alts.flatMap((a) => w.alts.map((b) => a + b)), raw: was.raw + w.raw, at: undefined };
+  }
+  return { ...w, dynamic: true };
 }
 
 // a command's text read as another's, in this one's scope (scope() around
@@ -1560,9 +1613,10 @@ function forget(s: Scan): void {
 
 // a nested reading, NEST deep at most
 function deeper(s: Scan, run: () => void): void {
-  if (++s.depth > NEST) {
+  if (s.depth >= NEST) {
     throw new Unread("commands nested too deep");
   }
+  s.depth++;
   try {
     run();
   } finally {
@@ -1603,7 +1657,7 @@ function cmd_word(s: Scan, cmd: Cmd, word: Word): boolean {
   } else if (s.src[s.at] === "(") {
     throw new Unread("an array");
   } else {
-    cmd.env.push({ name: set[1], value: set[2] === "+" ? DYN : Shell.cut(word, set[0].length) });
+    cmd.env.push({ name: set[1], value: set[2] === "+" ? appended(s, set[1], Shell.cut(word, set[0].length)) : Shell.cut(word, set[0].length) });
   }
   return true;
 }
@@ -1715,7 +1769,7 @@ function cmd_after(s: Scan, argv: Word[], own: boolean, top = false): void {
       for (const a of args) {
         const set = /^([A-Za-z_]\w*)(\+?)=/.exec(value(a) ?? a.raw);
         if (set !== null) {
-          var_set(s, set[1], set[2] === "+" ? DYN : Shell.cut(a, set[0].length));
+          var_set(s, set[1], set[2] === "+" ? appended(s, set[1], Shell.cut(a, set[0].length)) : Shell.cut(a, set[0].length));
         } else if (value(a) === null) {
           forget(s);
         }
@@ -1928,8 +1982,8 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
     dirs.push(...read.dirs);
   }
   const sets = DECLARES.has(Shell.program(argv[0])) ? argv.slice(1).flatMap((w) => {
-    const m = /^([A-Za-z_]\w*)=/.exec(w.alts[0]);
-    return m === null ? [] : [{ name: m[1], value: Shell.cut(w, m[0].length) }];
+    const m = /^([A-Za-z_]\w*)(\+?)=/.exec(w.alts[0]);
+    return m === null ? [] : [{ name: m[1], value: m[2] === "+" ? appended(s, m[1], Shell.cut(w, m[0].length)) : Shell.cut(w, m[0].length) }];
   }) : [];
   runs(s, sets, ctx);
   if (Shell.program(argv[0]) === "find") {
@@ -1940,12 +1994,14 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
 }
 
 // the assignments a wrapper gives the command before its name (env X=1
-// cmd, sudo X=1 cmd), and the words after them
+// cmd, sudo X=1 cmd: each as the wrapper is given it, its quotes gone,
+// env "X=1 2" too), and the words after them
 function assigns(words: Word[]): { sets: Env[]; rest: Word[] } {
   const sets: Env[] = [];
+  const text = (w: Word) => (!w.dynamic && w.alts.length === 1 ? w.alts[0] : w.raw);
   let k = 0;
-  for (; k < words.length && /^[A-Za-z_]\w*=/.test(words[k].raw); k++) {
-    const set = /^([A-Za-z_]\w*)=/.exec(words[k].raw)!;
+  for (; k < words.length && /^[A-Za-z_]\w*=/.test(text(words[k])); k++) {
+    const set = /^([A-Za-z_]\w*)=/.exec(text(words[k]))!;
     sets.push({ name: set[1], value: Shell.cut(words[k], set[0].length) });
   }
   return { sets, rest: words.slice(k) };
@@ -1983,13 +2039,20 @@ function globals(s: Scan, argv: Word[], env: Env[], ctx: Ctx): { readings: Word[
   if (g === undefined) {
     return null;
   }
-  const passes = ways(argv, g).flatMap((each) => {
+  const many = ways(argv, g);
+  const passes = many.ways.flatMap((each) => {
     const one = strip(each, g, ctx.cwd);
     return one.doubt ? [one, strip(each, g, ctx.cwd, true)] : [one];
   });
   const [pass] = passes;
   const at = pass.odd || pass.cwd === undefined ? ctx : { ...ctx, cwd: pass.cwd };
   const readings = passes.filter((p) => p.took && !p.odd && p.kept.length > 1).map((p) => [...p.kept, ...p.rest]);
+  // past WAYS: what it does without the words before it that may be
+  // options, and the command left unread (it asks: Access)
+  if (many.past !== null) {
+    readings.push(many.past);
+    part_rough(s, argv.map((w) => w.raw).join(" "), ctx, "spent");
+  }
   const dirs = passes.flatMap((p) => p.dirs).filter((d, k, all) => all.findIndex((o) => o.word === d.word && o.from === d.from) === k);
   if (name === "git") {
     const settings = passes.flatMap((p) => p.settings).filter((o, k, all) => all.findIndex((x) => x.v === o.v) === k).flatMap((o) => given(s, o.v, o.env, env));
@@ -1998,25 +2061,42 @@ function globals(s: Scan, argv: Word[], env: Env[], ctx: Ctx): { readings: Word[
   return readings.length === 0 && dirs.length === 0 ? null : { readings, ctx: at, dirs };
 }
 
-// a command's words, each option word of several known values before
-// the first that isn't one taken a value at a time (WAYS at most): as
+// a command's words, each option word of several known values among
+// its options (each option's value passed over: -c a=b $o, then $o's)
+// taken a value at a time, each way read on as that value makes it: as
 // written where none is. One whose every value is a flag (Shell
-// global_flag) needs none, as each is passed over alike; one that would
-// take the ways past WAYS stays as it is, a word of several values,
-// which no option is told from (Shell global_opt): the command then has
-// no reading with its options off
-function ways(argv: Word[], g: Global): Word[][] {
-  let out = [argv];
-  for (let k = 1; k < argv.length; k++) {
-    const w = argv[k];
-    if (w.dynamic || !w.alts.every((a) => a.startsWith("-"))) {
-      break;
+// global_flag) needs none, as each is passed over alike. Past WAYS ways,
+// the words as written, and (past) the command with every word before
+// what it does that may be an option left off (git $a $a $a $a push:
+// git push)
+function ways(argv: Word[], g: Global): { ways: Word[][]; past: Word[] | null } {
+  const out: Word[][] = [];
+  let open = 1;
+  const walk = (words: Word[], k: number): void => {
+    while (k < words.length) {
+      const w = words[k];
+      if (w.dynamic || !w.alts.every((a) => a.startsWith("-"))) {
+        break;
+      }
+      if (w.alts.length > 1 && !w.alts.every((a) => global_flag(a, g))) {
+        open += w.alts.length - 1;
+        if (open > WAYS) {
+          return;
+        }
+        w.alts.forEach((a) => walk([...words.slice(0, k), Shell.lit(a), ...words.slice(k + 1)], k));
+        return;
+      }
+      const o = global_opt(words, k, g);
+      k += o === null ? 1 : o.n;
     }
-    if (w.alts.length > 1 && !w.alts.every((a) => global_flag(a, g)) && out.length * w.alts.length <= WAYS) {
-      out = out.flatMap((o) => w.alts.map((a) => [...o.slice(0, k), Shell.lit(a), ...o.slice(k + 1)]));
-    }
+    out.push(words);
+  };
+  walk(argv, 1);
+  if (open <= WAYS) {
+    return { ways: out, past: null };
   }
-  return out;
+  const first = argv.findIndex((w, k) => k > 0 && (w.dynamic || !w.alts.every((a) => a.startsWith("-"))));
+  return { ways: [argv], past: first < 0 ? null : [argv[0], ...argv.slice(first)] };
 }
 
 // a program's own options before the words naming what it does taken off
@@ -2162,10 +2242,14 @@ function given(s: Scan, v: Word, env: boolean, vars: Env[]): Setting[] {
 }
 
 // git's settings its environment gives the command (GIT_CONFIG_KEY_n and
-// GIT_CONFIG_VALUE_n, as GIT_CONFIG_COUNT counts them; and
-// GIT_CONFIG_PARAMETERS, quoted as git quotes them), from what the
-// command is given and what the shell set before it (exported or not:
-// read either way); one known only as it runs as written, but a key
+// GIT_CONFIG_VALUE_n, every one set, whatever GIT_CONFIG_COUNT says:
+// it isn't read; and GIT_CONFIG_PARAMETERS, quoted as git quotes them),
+// from what the command is given and what the shell set before it
+// (exported or not: read either way), in the order they were set, not
+// git's (its KEY_n by number, then PARAMETERS, then its -c), which
+// matters not, as every value an alias is given is read (git_reads);
+// one known
+// only as it runs as written, but a key
 // made as it runs with its value given: any setting, by that value's
 // text (Setting any, as -c alias.$K=push)
 function git_env(s: Scan, env: Env[]): Setting[] {
@@ -2197,8 +2281,10 @@ function git_env(s: Scan, env: Env[]): Setting[] {
 // runs a command (GIT_RUNS) a script of its own, run where git runs it
 // (Shell scripts: the top of its repository too; a credential helper
 // named alone as git's credential-<name>; a yes or a no none; a
-// submodule's update only past a !); its aliases (the last given of a
-// name standing) each a reading of the command (`base`: its options off)
+// submodule's update only past a !); its aliases (every value given a
+// name, in whatever order git would take them: -c, its environment's
+// by number or in GIT_CONFIG_PARAMETERS, one given without a value
+// taking none away) each a reading of the command (`base`: its options off)
 // with the word naming it put as git puts it (its value split as git
 // splits it, its options off again, the settings among them taken as
 // these are, one standing for another followed,
@@ -2226,14 +2312,22 @@ function git_settings(s: Scan, settings: Setting[], base: Word[], ctx: Ctx, env:
 // as that git was), all given on to what it runs (Scan given), an
 // alias's own as it's taken
 function git_reads(s: Scan, settings: Setting[], inherited: Setting[], base: Word[], ctx: Ctx, env: Env[]): Word[][] {
-  const aliases = new Map<string, Word>();
+  const aliases = new Map<string, Word[]>();
+  const own = new Set<string>();
   const wild: Word[] = [];
+  // an alias's value given, beside any given it before
+  const alias_add = (name: string, value: Word | null) => {
+    const all = aliases.get(name) ?? [];
+    if (value !== null && !all.some((v) => v.raw === value.raw && v.alts.join("\0") === value.alts.join("\0"))) {
+      aliases.set(name, [...all, value]);
+    }
+  };
   for (const { key, value, any } of inherited) {
     const alias = key === null ? null : /^alias\.(.+)$/i.exec(key);
     if (any === true && value !== null) {
       wild.push(value);
     } else if (alias !== null && alias !== undefined) {
-      value === null ? aliases.delete(alias[1].toLowerCase()) : aliases.set(alias[1].toLowerCase(), value);
+      alias_add(alias[1].toLowerCase(), value);
     }
   }
   const take = ({ key, value, raw, any }: Setting): void => {
@@ -2248,7 +2342,8 @@ function git_reads(s: Scan, settings: Setting[], inherited: Setting[], base: Wor
     }
     const alias = /^alias\.(.+)$/i.exec(key);
     if (alias !== null) {
-      value === null ? aliases.delete(alias[1].toLowerCase()) : aliases.set(alias[1].toLowerCase(), value);
+      alias_add(alias[1].toLowerCase(), value);
+      own.add(alias[1].toLowerCase());
       return;
     }
     if (value === null || !GIT_RUNS.test(key) || (!value.dynamic && value.alts.every((a) => GIT_BOOL.test(a.trim())))) {
@@ -2280,34 +2375,42 @@ function git_reads(s: Scan, settings: Setting[], inherited: Setting[], base: Wor
   };
   const head = base[1];
   const starts = head === undefined ? [] : head.dynamic ? [...aliases.keys()] : head.alts;
-  for (const start of starts) {
-    let words = !head.dynamic && head.alts.length === 1 ? base : [base[0], Shell.lit(start), ...base.slice(2)];
-    const seen = new Set<string>();
-    for (;;) {
-      const sub = words[1] === undefined || words[1].dynamic || words[1].alts.length !== 1 ? null : words[1].alts[0].toLowerCase();
-      const v = sub === null ? undefined : aliases.get(sub);
-      if (v === undefined || seen.has(sub!)) {
-        break;
+  // each alias followed from the word naming it, through each value it
+  // was given, the aliases each names after it too (one already on its
+  // way not again)
+  const todo: Array<{ words: Word[]; seen: Set<string> }> = starts.map((start) => ({ words: !head.dynamic && head.alts.length === 1 ? base : [base[0], Shell.lit(start), ...base.slice(2)], seen: new Set<string>() }));
+  following: for (let one = todo.pop(); one !== undefined; one = todo.pop()) {
+    const { words, seen } = one;
+    const sub = words[1] === undefined || words[1].dynamic || words[1].alts.length !== 1 ? null : words[1].alts[0].toLowerCase();
+    const values = sub === null ? undefined : aliases.get(sub);
+    if (values === undefined || seen.has(sub!)) {
+      continue;
+    }
+    named.add(sub!);
+    for (const v of values) {
+      // each step is work (Work): past it, the command left unread
+      if (s.work.left-- <= 0) {
+        part_rough(s, base.map((w) => w.raw).join(" "), ctx, "spent");
+        break following;
       }
-      seen.add(sub!);
-      named.add(sub!);
       if (v.dynamic || v.alts.length !== 1) {
         said(v).forEach((t) => {
           const r = run(t, words);
           r !== null && readings.push(r);
         });
-        break;
+        continue;
       }
       const next = run(v.alts[0], words);
       if (next === null) {
-        break;
+        continue;
       }
       const again = strip(next, GLOBALS.git, ctx.cwd);
       const more = again.settings.filter((o, k, each) => each.findIndex((x) => x.v === o.v) === k).flatMap((o) => given(s, o.v, o.env, env));
       s.given = [...s.given, ...more];
       more.forEach(take);
-      words = again.took && !again.odd && again.kept.length > 1 ? [...again.kept, ...again.rest] : next;
-      readings.push(words);
+      const then = again.took && !again.odd && again.kept.length > 1 ? [...again.kept, ...again.rest] : next;
+      readings.push(then);
+      todo.push({ words: then, seen: new Set([...seen, sub!]) });
     }
   }
   if (head !== undefined) {
@@ -2316,9 +2419,12 @@ function git_reads(s: Scan, settings: Setting[], inherited: Setting[], base: Wor
       r !== null && readings.push(r);
     });
   }
-  for (const [name, v] of aliases) {
-    if (!named.has(name)) {
-      said(v).filter((t) => t.startsWith("!")).forEach((t) => scripts(s, Shell.lit(t.slice(1)), ctx));
+  // every ! one given here and not followed a script too (a word made as
+  // it runs may name it); not one it inherited, read as the git that
+  // gave it was
+  for (const [name, values] of aliases) {
+    if (!named.has(name) && own.has(name)) {
+      values.flatMap(said).filter((t) => t.startsWith("!")).forEach((t) => scripts(s, Shell.lit(t.slice(1)), ctx));
     }
   }
   return readings;
@@ -2421,17 +2527,21 @@ function repo(s: Scan, cwd: string | null): string | null {
 // y, its text alone). One this can't read (a script bash would read in a
 // way this can't follow, a head cut short) is its text alone (Part
 // rough), so a rule still meets it, and nothing else in the command goes
-// unread. Each is read once a reading where it runs (Scan read)
+// unread. Each is read once a reading where it runs and as the shell
+// is then (Scan read: its variables, git's settings given it); past the
+// check's work (Work), its text alone, left unread (Part rough "spent")
 function script(s: Scan, w: Word, ctx: Ctx): void {
   const inside = quoted_inside(w);
   const text = !w.dynamic ? w.alts : [inside ?? w.alts[0]];
-  const key = [ctx.cwd, ctx.root, ctx.fed, ctx.piped, s.depth, s.wild, w.dynamic, w.raw, ...text, given_key(s)].join("\0");
-  if (s.read.has(key)) {
+  const key = [ctx.cwd, ctx.root, ctx.fed, ctx.piped, s.wild, s.errexit, w.dynamic, w.raw, ...text, given_key(s)].join("\0");
+  if (MEMO && s.read.has(key)) {
     return;
   }
-  if (++s.reads > BUDGET) {
+  // marked read as it starts, so one that runs itself (an alias's) meets
+  // itself read and goes no deeper
+  s.read.add(key);
+  if (s.work.left-- <= 0) {
     text.every((t) => t.trim() === "") || part_rough(s, text.join("\n").trim(), ctx, "spent");
-    s.read.add(key);
     return;
   }
   if (!text.every((t) => t.trim() === "") && !attempt(s, () => nested(s, w.dynamic ? Shell.lit(text[0]) : w, ctx, true))) {
@@ -2441,16 +2551,17 @@ function script(s: Scan, w: Word, ctx: Ctx): void {
   if (more !== "" && more !== text[0].trim()) {
     part_rough(s, more, ctx);
   }
-  s.read.add(key);
 }
 
-// what a script read is given of git's settings (a git command in it
-// reads them): those in force a git there takes (Scan given: aliases,
-// and any of a key made as it runs: git_reads) and the variables setting
-// them (GIT_CONF), as text, so a script read again once they change is
-// read anew (Shell script); as two short ids (Scan ids), kept for the
-// variables and the settings they were made of (GIVEN_VARS, GIVEN_SETS),
-// as neither changes in place (var_set)
+// what a script read is given: git's settings in force a git there
+// takes (Scan given: aliases, and any of a key made as it runs:
+// git_reads) and the shell's variables (its own words expand by them,
+// a git in it reads its settings from them: GIT_CONF), as text, so a
+// script read again once they change is read anew (Shell script); as
+// two short ids (Scan ids), kept for the variables and the settings they
+// were made of (GIVEN_VARS, GIVEN_SETS), as neither changes in place
+// (var_set); the settings in no order, each once, as aliases take every
+// value given, in any order (git_reads)
 function given_key(s: Scan): string {
   const word = (w: Word | null) => (w === null ? "" : w.raw + "\x01" + w.alts.join("\x01"));
   const id = (text: string) => {
@@ -2462,22 +2573,19 @@ function given_key(s: Scan): string {
   };
   let vars = GIVEN_VARS.get(s.vars);
   if (vars === undefined) {
-    GIVEN_VARS.set(s.vars, (vars = id([...s.vars].filter(([n]) => GIT_CONF.test(n)).map(([n, v]) => n + "=" + word(v)).join("\0"))));
+    GIVEN_VARS.set(s.vars, (vars = id([...s.vars].map(([n, v]) => n + "=" + word(v)).join("\0"))));
   }
   let sets = GIVEN_SETS.get(s.given);
   if (sets === undefined) {
-    GIVEN_SETS.set(s.given, (sets = id(s.given.filter((g) => g.any === true || /^alias\./i.test(g.key ?? "")).map((g) => g.raw + "\x01" + (g.key ?? "") + "\x01" + word(g.value)).join("\0"))));
+    GIVEN_SETS.set(s.given, (sets = id([...new Set(s.given.filter((g) => g.any === true || /^alias\./i.test(g.key ?? "")).map((g) => g.raw + "\x01" + (g.key ?? "") + "\x01" + word(g.value)))].sort().join("\0"))));
   }
   return vars + "/" + sets;
 }
 
-// a variable set in the shell read; one of git's settings (GIT_CONF) in
-// a new map, so what a script was given before stays as it was
-// (given_key)
+// a variable set in the shell read, in a new map, so what a script was
+// given before stays as it was (given_key)
 function var_set(s: Scan, name: string, value: Word): void {
-  if (GIT_CONF.test(name)) {
-    s.vars = new Map(s.vars);
-  }
+  s.vars = new Map(s.vars);
   s.vars.set(name, value);
 }
 
@@ -2538,7 +2646,7 @@ function loose(w: Word): string {
 }
 
 // a script's text alone, as a part this can't read (Part rough; spent:
-// one left unread past BUDGET)
+// one left unread past the check's work, Work)
 function part_rough(s: Scan, text: string, ctx: Ctx, rough: true | "spent" = true): void {
   part_push(s, [{ ...DYN, raw: text }], [], [], text, ctx);
   s.parts[s.parts.length - 1].rough = rough;
@@ -2546,7 +2654,7 @@ function part_rough(s: Scan, text: string, ctx: Ctx, rough: true | "spent" = tru
 
 // a reading that may be refused (Unread): undone if it is, false
 function attempt(s: Scan, read: () => void): boolean {
-  const [parts, pipes, was, root, fed, inpipe, done] = [s.parts.length, s.pipes.length, state_of(s), s.root, s.fed, s.inpipe, new Set(s.read)];
+  const [parts, pipes, was, root, fed, inpipe, done, depth] = [s.parts.length, s.pipes.length, state_of(s), s.root, s.fed, s.inpipe, new Set(s.read), s.depth];
   try {
     read();
     return true;
@@ -2557,7 +2665,7 @@ function attempt(s: Scan, read: () => void): boolean {
     s.parts.length = parts;
     s.pipes.length = pipes;
     state_put(s, was);
-    Object.assign(s, { root, fed, inpipe, read: done });
+    Object.assign(s, { root, fed, inpipe, read: done, depth });
     return false;
   }
 }
@@ -2707,6 +2815,7 @@ function stdin(r: Redir): boolean {
 }
 
 function part_push(s: Scan, argv: Word[], env: Env[], redirs: Redir[], full: string, ctx: Ctx, more: { taken?: Word[]; dirs?: Dir[]; plain?: Word[][] } = {}): void {
+  s.work.left--;
   s.parts.push({ argv, plain: more.plain ?? [], taken: more.taken ?? [], dirs: more.dirs ?? [], env, redirs, cwd: ctx.cwd, at: ctx.at, text: argv.map((w) => w.raw).join(" "), full, root: ctx.root, fed: ctx.fed, piped: ctx.piped, span: ctx.span });
 }
 

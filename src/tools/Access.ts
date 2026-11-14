@@ -86,7 +86,7 @@ import * as config from "../config/Config.ts";
 import { Custom } from "../config/Custom.ts";
 import { Plugins } from "../config/Plugins.ts";
 import { Permissions } from "./Permissions.ts";
-import { Shell, type Part, type Span, type Word } from "./Shell.ts";
+import { Shell, type Env, type Part, type Span, type Word, type Work } from "./Shell.ts";
 
 // Types
 // =====
@@ -94,8 +94,10 @@ import { Shell, type Part, type Span, type Word } from "./Shell.ts";
 // a request: its action, its resources, what "don't ask again" saves
 // (patterns of the same action), and where each resource is in a shell
 // command (null: not in one), so a question folding a long command
-// still shows those lines
-export type Request = { action: string; resources: string[]; save: string[]; spots: Array<Span | null> };
+// still shows those lines; failed: why it wasn't all read, so it asks
+// whatever the rules allow (a rule that denies still refuses it:
+// Tools.guard)
+export type Request = { action: string; resources: string[]; save: string[]; spots: Array<Span | null>; failed?: string };
 
 // where a call is judged: the working dir, the project's top, illi's own
 // files allowed alone of their folders (RULES.md, theme.json)
@@ -110,8 +112,22 @@ export type Where = { cwd: string; top: string; files: string[]; guarded: string
 type Target = { absolute: string; place: string; resource: string; real?: string; outside?: { resource: string; save: string } };
 
 // a command's piece as written, and where it is; what "don't ask again"
-// saves for it, where not its family's (Access.family)
-type Piece = { text: string; span: Span; save?: string[] };
+// saves for it, where not its family's (Access.family); odd: it saves
+// itself alone (Access readings: a dry run, a word blank or holding * or
+// ?, one short of what it does)
+type Piece = { text: string; span: Span; save?: string[]; odd?: boolean };
+
+// what a command's reading met: its pieces to meet the rules, the
+// folders outside it touches, and whether some of it was left unread
+// (a script past the check's work, Shell Work; unreadable ones nested
+// ROUGH deep), so it asks
+type Met = { pieces: Piece[]; found: Array<{ target: Target; span: Span | null }>; unread: boolean };
+
+// one check's reading of a command: the work its readings share (Shell
+// Work), and the scripts it couldn't read met so far (rough: one met
+// again where it was, as a script read over and over leaves it, adds
+// nothing)
+type Check = { work: Work; rough: Set<string> };
 
 // Constants
 // =========
@@ -133,8 +149,15 @@ const GIT_PATHS = new Set(["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_IN
 const BARE = 16;
 
 // how deep a command illi can't read has its pieces read on their own
-// (rough): a script in a piece that can't be read either is one deeper
+// (rough): a script in a piece that can't be read either is one deeper;
+// one deeper still is left unread, so it asks
 const ROUGH = 4;
+
+// why a command left partly unread asks (Request failed)
+const UNREAD = "it runs more scripts, or nests unreadable ones deeper, than illi reads";
+
+// the git commands whose -n is a dry run (dry)
+const GIT_DRY = new Set(["push", "add", "mv", "rm", "clean", "prune"]);
 
 // the words that open a shell's own syntax, not a command (left off a
 // piece's front, the piece dropped if a loop's head)
@@ -203,15 +226,29 @@ export namespace Access {
   }
 
   // a shell command's requests: the folders outside it touches, then its
-  // commands (Shell.ts's parts, the wrappers' and scripts' own too; one
-  // it can't read, in crude pieces, each read on its own too: rough)
+  // commands (Shell.ts's parts, the wrappers' and scripts' own too, and
+  // its simple commands at its top as written: tops; one it can't read,
+  // in crude pieces, each read on its own too: rough), all its readings
+  // sharing one check's work (Shell Work). One left partly unread asks
+  // (Request failed: past that work, or unreadable scripts nested ROUGH
+  // deep), what was read still meeting the rules that deny
   export function shell(where: Where, command: string): Request[] {
-    const parts = Shell.parse(command, where.cwd);
-    const met = typeof parts === "string" ? rough(where, command, where.cwd, null) : met_parts(where, parts);
-    const pieces = typeof parts === "string" ? met.pieces : [...met.pieces, ...outer(command)];
-    const found = met.found;
+    const check: Check = { work: Shell.work(), rough: new Set() };
+    const parts = Shell.parse(command, where.cwd, 0, true, check.work);
+    REALS = new Map();
+    let met: Met;
+    try {
+      met = typeof parts === "string" ? rough(where, command, where.cwd, null, 0, check) : met_parts(where, parts, 0, check);
+    } finally {
+      REALS = null;
+    }
+    const pieces = typeof parts === "string" ? met.pieces : [...met.pieces, ...tops(command, met.pieces)];
     const runs = commands(pieces);
-    return [...external(found), ...(runs.length === 0 ? [] : [{ action: "shell", resources: runs.map((r) => r.text), save: [...new Set(runs.flatMap((r) => r.save ?? [Access.family(r.text)]))].filter((x) => x !== ""), spots: runs.map((r) => r.span) }])];
+    const shell: Request = { action: "shell", resources: runs.map((r) => r.text), save: [...new Set(runs.flatMap((r) => r.save ?? [Access.family(r.text)]))].filter((x) => x !== ""), spots: runs.map((r) => r.span) };
+    if (met.unread) {
+      return [...external(met.found), { ...shell, ...(runs.length === 0 ? { resources: [command], spots: [null] } : {}), failed: UNREAD }];
+    }
+    return [...external(met.found), ...(runs.length === 0 ? [] : [shell])];
   }
 
   // a path's place (Target), from the working dir (~ as home); outside,
@@ -302,16 +339,17 @@ export namespace Access {
   // quoted or not (git -C x status as it is, never git -C *: a later git
   // -C x push that illi can't read without its options would take it),
   // one is blank or holds * or ? (a rule's own wildcards: git '*' would
-  // save git * *), it is a dry run (dry: approving make deploy -n never
-  // approves make deploy), or it is short of its family's words (git, npm
-  // run alone: never git *); "" (nothing saved) where that command holds
-  // a * or ?, as it would save more than itself (git '*' as git *)
+  // save git * *, '*' x * *), it is a dry run (dry: approving make deploy
+  // -n never approves make deploy), or it is short of its family's words
+  // (git, npm run alone: never git *); "" (nothing saved) where that
+  // command holds a * or ?, as it would save more than itself (git '*'
+  // as git *)
   export function family(text: string): string {
     const all = words(text);
     const names = all.map((w) => w.replace(/['"\\]/g, ""));
     names[0] = Shell.program(Shell.lit(names[0] ?? "")) || (names[0] ?? "");
     const n = Access.arity(names).length;
-    const odd = names.slice(1, n).some((v) => v.startsWith("-") || v.trim() === "" || /[*?]/.test(v)) || dry(names) || n < Access.wanted(names);
+    const odd = names.slice(1, n).some((v) => v.startsWith("-")) || names.slice(0, n).some((v) => v.trim() === "" || /[*?]/.test(v)) || dry(names) || n < Access.wanted(names);
     return !odd ? all.slice(0, n).join(" ") + " *" : /[*?]/.test(text) ? "" : text;
   }
 
@@ -501,6 +539,19 @@ function outer(cmd: string): Piece[] {
   return out;
 }
 
+// a command's simple commands at its top (outer), each saving itself
+// alone where a command read in it saves itself alone (Piece odd: a dry
+// run, a word blank or holding * or ?, one short of what it does), or
+// nothing where one saves nothing, so its text as written (a comment
+// after it, a parenthesis, a variable not yet filled in) never saves
+// that command's family in its place
+function tops(cmd: string, met: Piece[]): Piece[] {
+  return outer(cmd).map((o) => {
+    const odd = met.filter((m) => m.odd === true && m.span[0] >= o.span[0] && m.span[1] <= o.span[1]);
+    return odd.length === 0 ? o : { ...o, save: /[*?]/.test(o.text) || odd.some((m) => m.save?.length === 0) ? [] : [o.text], odd: true };
+  });
+}
+
 // a command Shell.ts can't read, in crude pieces: split at every ; & |
 // newline, $( ` ( and ), quotes or not, so a rule finds a command
 // wherever it sits
@@ -539,10 +590,12 @@ function paths(w: Word, cd: boolean, sets: boolean): string[] {
 // a command's parts as Shell.ts read them, met: the folders outside it
 // they touch (where each runs, the paths its words name, its
 // redirections'), and its pieces to meet the rules (readings; a script
-// in it this can't read, roughly: rough, `depth` deep)
-function met_parts(where: Where, parts: Part[], depth = 0): { pieces: Piece[]; found: Array<{ target: Target; span: Span | null }> } {
+// in it this can't read, roughly: rough, `depth` deep), its readings
+// sharing the check's work; whether any of it was left unread (Met)
+function met_parts(where: Where, parts: Part[], depth: number, check: Check): Met {
   const found: Array<{ target: Target; span: Span | null }> = [];
   const pieces: Piece[] = [];
+  let unread = false;
   for (const p of parts) {
     const at = p.at ?? where.cwd;
     const run = p.cwd ?? at;
@@ -578,14 +631,28 @@ function met_parts(where: Where, parts: Part[], depth = 0): { pieces: Piece[]; f
       });
     }
     if (p.rough !== undefined && p.rough !== false) {
-      const met = rough(where, p.text, run, p.span, p.rough === "spent" ? ROUGH : depth + 1);
-      pieces.push(...met.pieces);
-      found.push(...met.found);
+      const deep = p.rough === "spent" ? ROUGH : depth + 1;
+      const key = [p.text, run, p.span, deep].join("\0");
+      if (!check.rough.has(key)) {
+        check.rough.add(key);
+        const met = rough(where, p.text, run, p.span, deep, check);
+        add(pieces, met.pieces);
+        add(found, met.found);
+        unread ||= met.unread;
+      }
     } else if (!cd) {
-      pieces.push(...readings(p));
+      add(pieces, readings(p));
     }
   }
-  return { pieces, found };
+  return { pieces, found, unread };
+}
+
+// a list's items put at another's end, one by one (a push of them all at
+// once, as arguments, overflows the stack past some thousands)
+function add<T>(to: T[], items: T[]): void {
+  for (const item of items) {
+    to.push(item);
+  }
 }
 
 // a command illi can't read (or a script in one: Part rough), met
@@ -595,10 +662,10 @@ function met_parts(where: Where, parts: Part[], depth = 0): { pieces: Piece[]; f
 // Shell.ts reads it (met_parts, ROUGH deep at most), so a construct it
 // can't follow (an array, a case) leaves the rest of the command read as
 // ever (git -C x push; x=(a): git push too); these only add to what the
-// crude reading meets, never take from it. A script Shell.ts left unread
-// past its budget (Part rough "spent") isn't read so: its pieces would
-// run past it each again
-function rough(where: Where, text: string, from: string, span: Span | null, depth = 0): { pieces: Piece[]; found: Array<{ target: Target; span: Span | null }> } {
+// crude reading meets, never take from it, and share the check's work. A
+// script Shell.ts left unread past that work (Part rough "spent") isn't
+// read so, nor one ROUGH deep: left unread (Met), so the check asks
+function rough(where: Where, text: string, from: string, span: Span | null, depth: number, check: Check): Met {
   const split = [...outer(text), ...crude(text)];
   const pieces = split.map((p) => (span === null ? p : { ...p, span }));
   const found: Array<{ target: Target; span: Span | null }> = [];
@@ -610,22 +677,25 @@ function rough(where: Where, text: string, from: string, span: Span | null, dept
     const t = path_target(where, m[2], from, null);
     t !== null && found.push({ target: t, span: span ?? [at, at + m[2].length] });
   }
-  if (depth < ROUGH) {
-    const seen = new Set([text.trim()]);
-    for (const piece of split) {
-      if (seen.has(piece.text)) {
-        continue;
-      }
-      seen.add(piece.text);
-      const parts = Shell.parse(piece.text, from, span ?? piece.span[0]);
-      if (typeof parts !== "string") {
-        const met = met_parts(where, parts, depth + 1);
-        pieces.push(...met.pieces.map((p) => (span === null ? p : { ...p, span })));
-        found.push(...met.found.map((f) => (span === null ? f : { ...f, span })));
-      }
+  if (depth >= ROUGH) {
+    return { pieces, found, unread: true };
+  }
+  let unread = false;
+  const seen = new Set([text.trim()]);
+  for (const piece of split) {
+    if (seen.has(piece.text)) {
+      continue;
+    }
+    seen.add(piece.text);
+    const parts = Shell.parse(piece.text, from, span ?? piece.span[0], true, check.work);
+    if (typeof parts !== "string") {
+      const met = met_parts(where, parts, depth + 1, check);
+      add(pieces, met.pieces.map((p) => (span === null ? p : { ...p, span })));
+      add(found, met.found.map((f) => (span === null ? f : { ...f, span })));
+      unread ||= met.unread;
     }
   }
-  return { pieces, found };
+  return { pieces, found, unread };
 }
 
 // a part's commands to meet the rules: as written whole (wrappers too),
@@ -640,14 +710,21 @@ function rough(where: Where, text: string, from: string, span: Span | null, dept
 // is, and a git -C x push still asks. Where a word up to there is blank
 // or holds * or ? (git -C '*' status), each saves itself alone, one
 // with a * or ? none, those being a rule's wildcards; so too a dry run
-// as its words would expand (N=-n; make deploy $N), with options to
-// take off or not
+// as its words would expand (N=-n; make deploy $N; one its own options
+// read off name: git -C x push -n), and one short of the words naming
+// what it does (npm --prefix x run), with options to take off or not.
+// Each one that saves itself alone is marked so (Piece odd)
 function readings(p: Part): Piece[] {
   const [one, ...more] = p.plain;
   const named = one === undefined ? -1 : p.argv.indexOf(one[Math.max(0, Access.arity(named_words(one)).length - 1)]);
   const fam = named >= 0 ? named : Access.arity(named_words(p.argv)).length - 1;
-  const odd = dry(named_words(p.argv)) || p.argv.slice(0, fam + 1).some((w) => (w.dynamic ? [w.raw] : w.alts).some((v) => v.trim() === "" || /[*?]/.test(v)));
-  const exact = (text: string) => ({ save: /[*?]/.test(text) ? [] : [text] });
+  const what = named_words(one ?? p.argv);
+  const short = Access.arity(what).length < Access.wanted(what);
+  const odd = short || dry(named_words(p.argv), p.env) || p.plain.some((r) => dry(named_words(r), p.env)) || p.argv.slice(0, fam + 1).some((w) => (w.dynamic ? [w.raw] : w.alts).some((v) => v.trim() === "" || /[*?]/.test(v)));
+  // a dry run by what it's given (MAKEFLAGS=n make deploy) saves nothing:
+  // its text as matched leaves that out, and would stand for the real run
+  const given = dry(named_words(p.argv), p.env) && !dry(named_words(p.argv)) && !p.plain.some((r) => dry(named_words(r)));
+  const exact = (text: string) => ({ save: given || /[*?]/.test(text) ? [] : [text], odd: true });
   const lead = p.full.indexOf(p.text);
   const through = p.argv.slice(0, named + 1);
   const save = (text: string, by: string[]) => (odd ? exact(text) : named < 0 ? {} : { save: by });
@@ -659,14 +736,22 @@ function readings(p: Part): Piece[] {
   ];
 }
 
-// whether a command (its words as the rules' families read them) is a
-// dry run, whose approval mustn't stand for the real one: --dry-run
-// anywhere (git push, npm publish, kubectl apply, helm, rsync), make's
-// -n, -t, -q anywhere (it reads its options after the targets too; alone
-// or among others, -kn, before an option taking a value)
-function dry(names: string[]): boolean {
+// whether a command (its words as the rules' families read them, and
+// what it's given: env) is a dry run, whose approval mustn't stand for
+// the real one: --dry-run anywhere (git push, npm publish, kubectl
+// apply, helm, rsync), or as short as a program may take it (--dry,
+// --dry-r); git's -n where it is one (GIT_DRY: git push -n, alone or
+// among others, -nf); make's -n, -t, -q anywhere (it reads its options
+// after the targets too; alone or among others, -kn, before an option
+// taking a value), its long ones as short as it takes them (--just-print,
+// --recon, --touch, --question: --just), or given in MAKEFLAGS or MFLAGS
+// (MAKEFLAGS=n). A guess that's too wide only saves a command alone
+function dry(names: string[], env: Env[] = []): boolean {
   const make = names[0] === "make" || names[0] === "gmake";
-  return names.slice(1).some((v) => /^--dry-run(=|$)/.test(v) || (make && (/^--(just-print|recon|touch|question)$/.test(v) || /^-[^-CfIjloOW]*[ntq]/.test(v))));
+  const git = names[0] === "git" && GIT_DRY.has(names[1] ?? "");
+  const made = (v: string) => /^--(ju|rec|to|qu)[a-z-]*$/.test(v) || /^-[^-CfIjloOW]*[ntq]/.test(v);
+  const flags = make ? env.filter((e) => e.name === "MAKEFLAGS" || e.name === "MFLAGS").flatMap((e) => (e.value.dynamic ? [e.value.raw] : e.value.alts)) : [];
+  return names.slice(1).some((v) => /^--dry(-(r(un?)?)?)?(=|$)/.test(v) || (git && /^-[^-oe]*n/.test(v)) || (make && made(v))) || flags.some((f) => f.trim().split(/\s+/).some((v, k) => made(v) || (k === 0 && /^[a-zA-Z]*[ntq]/.test(v))));
 }
 
 // a command's words as the rules' families read them: its program by
@@ -738,8 +823,20 @@ function top_exists(absolute: string): boolean {
 // a path's real place: each link on its way followed, one whose target
 // isn't there too (a write through it makes that file), as far as links
 // go (a loop: where it stops); what isn't there yet, as written below
-// the real folder holding it
+// the real folder holding it. Worked out once a shell check (REALS)
 function real(p: string, hops = 0): string {
+  const known = hops === 0 ? REALS?.get(p) : undefined;
+  if (known !== undefined) {
+    return known;
+  }
+  const got = real_of(p, hops);
+  if (hops === 0) {
+    REALS?.set(p, got);
+  }
+  return got;
+}
+
+function real_of(p: string, hops: number): string {
   try {
     return fs.realpathSync(p);
   } catch {}
@@ -773,6 +870,11 @@ function mine(absolute: string): boolean {
 // a folder's real path, worked out once (illi's own, asked at each path
 // a call names)
 const REAL = new Map<string, string>();
+
+// the real places worked out in the shell check under way (Access.shell:
+// the files don't change within it, and its paths share their folders);
+// null: none under way
+let REALS: Map<string, string> | null = null;
 function really(dir: string): string {
   let got = REAL.get(dir);
   if (got === undefined) {

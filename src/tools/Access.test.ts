@@ -262,6 +262,74 @@ test("\"don't ask again\" never saves a whole program: its family read on the pr
   expect(saves("sudo git -C . status")).toEqual(["sudo git -C . status *", "git -C . status *", "git status *"]);
 });
 
+test("a command's text at its top (a comment after it, a parenthesis) saves itself alone where a command read in it does, nothing where that saves nothing; git's dry runs by -n and as short as git takes them, make's long ones as short too and by MAKEFLAGS; one short of what it does behind its options; a program word with * or ?", () => {
+  const saves = (c: string) => Access.shell(WHERE, c).find((r) => r.action === "shell")!.save;
+  const widens = (c: string, family: string) => saves(c).some((x) => Permissions.match(family, x));
+  for (const [c, real] of [
+    ["N=-n; make deploy $N # dry", "make deploy"],
+    ["make deploy $'-n' # dry", "make deploy"],
+    ["N=-n; ( make deploy $N )", "make deploy"],
+    ["( git push $'--dry-run' origin )", "git push --force origin"],
+    ["git push -n origin", "git push --force origin"],
+    ["git -C . push -nf origin", "git -C . push --force origin"],
+    ["git push --dry origin", "git push --force origin"],
+    ["make deploy --dry", "make deploy"],
+    ["make deploy --just", "make deploy"],
+    ["MAKEFLAGS=n make deploy", "make deploy"],
+    ["npm --prefix app run", "npm --prefix app run deploy"],
+    ["git -C . stash", "git -C . stash drop"],
+    ["( * x )", "rm -rf build"],
+  ]) {
+    expect([c, widens(c, real)]).toEqual([c, false]);
+  }
+  expect(saves("MAKEFLAGS=n make deploy")).toEqual([]);
+  // git's -n where it isn't a dry run (commit: no hooks) saves its family
+  expect(saves("git commit -n -m x")).toContain("git commit *");
+});
+
+test("each script is read once a check where it runs and as the shell is then: a variable set before, a subshell's own, git's settings given it; reading each anew loses no reading", () => {
+  const external = (c: string) => Access.shell(WHERE, c).filter((r) => r.action === "external_directory").flatMap((r) => r.resources);
+  expect(external("(HOME=x; EDITOR='cat $HOME/.ssh/id_rsa' true); (EDITOR='cat $HOME/.ssh/id_rsa' git commit)")).toContain(os.homedir() + "/.ssh/*");
+  expect(judge("(SHELL=x; PAGER='$SHELL -c \"rm -rf y\"' true); (PAGER='$SHELL -c \"rm -rf y\"' man ls)", [rule("shell", "rm *", "deny")])).toEqual(["deny"]);
+  const all = (c: string) => Access.shell(WHERE, c).flatMap((r) => r.resources);
+  for (const c of [
+    "(HOME=x; EDITOR='cat $HOME/.ssh/id_rsa' true); (EDITOR='cat $HOME/.ssh/id_rsa' git commit)",
+    "EDITOR='vim a' git commit; X=1; EDITOR='vim a' git commit; cd /tmp; EDITOR='vim a' git commit",
+    "git -c alias.p='!git -c alias.q=push q' p; git -c alias.q=status p",
+    "GIT_SSH_COMMAND='ssh -i k' git fetch; GIT_SSH_COMMAND='ssh -i k' git -C .. fetch",
+  ]) {
+    const on = all(c);
+    expect([c, Shell.unmemoed(() => all(c)).filter((x) => !on.includes(x))]).toEqual([c, []]);
+  }
+});
+
+test("git aliases however given (-c, the environment by number, GIT_CONFIG_PARAMETERS, a key with no value), each value read whatever the order; an option word of several values among options taking values, or past their ways; += and a for loop's variable; a quoted assignment to env or sudo; a sendemail identity's command", () => {
+  const deny = [rule("shell", "git push *", "deny"), rule("shell", "rm *", "deny")];
+  for (const c of [
+    "GIT_CONFIG_KEY_0=alias.x git -c alias.x=push x",
+    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.x GIT_CONFIG_VALUE_0=status git -c alias.x=push x",
+    "GIT_CONFIG_PARAMETERS=\"'alias.x=status'\" git -c alias.x=push x",
+    "GIT_CONFIG_KEY_1=alias.x GIT_CONFIG_VALUE_1=push GIT_CONFIG_KEY_0=alias.x GIT_CONFIG_VALUE_0=status GIT_CONFIG_COUNT=2 git x",
+    "for o in -c -C; do git -c a=b $o alias.x=push x; done",
+    "for o in -c -C; do git --git-dir .git $o alias.x=push x; done",
+    "for a in -p --git-dir=.git; do git $a $a $a $a push; done",
+    "GIT_SSH_COMMAND+='rm -rf y' git fetch",
+    "export GIT_SSH_COMMAND+='rm -rf y'; git fetch",
+    "GIT_SSH_COMMAND=rm; GIT_SSH_COMMAND+=' -rf y' git fetch",
+    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.x GIT_CONFIG_VALUE_0+=push git x",
+    "export GIT_SSH_COMMAND; for GIT_SSH_COMMAND in 'rm -rf y'; do git fetch; done",
+    "env \"A=1 2\" git push origin",
+    "sudo \"A=1 2\" git push origin",
+    "env \"GIT_SSH_COMMAND=rm -rf y\" git fetch",
+    "git -c sendemail.identity=x -c sendemail.x.sendmailcmd='rm -rf y' send-email p",
+  ]) {
+    expect([c, judge(c, deny)]).toEqual([c, ["deny"]]);
+  }
+  // past its ways, the command asks too, whatever else allows it
+  const past = Access.shell(WHERE, "for a in -p --git-dir=.git; do git $a $a $a $a status; done").at(-1)!;
+  expect(past.failed).toBeDefined();
+});
+
 test("a value made as it runs is read by its text, loosely past a variable; a git setting's key made as it runs taken as any; aliases followed however deep; git's settings in variables read where set and into a shell of its own; tar's command; an option word of several values read with each, a number's option before a word made as it runs both ways", () => {
   const deny = [rule("shell", "rm *", "deny"), rule("shell", "git push *", "deny")];
   for (const c of [
@@ -318,18 +386,41 @@ test("a folder named by an option is asked for from the folder in force where it
   expect(shell("export GIT_WORK_TREE=" + LIB + "; git status")[0][1]).toEqual([LIB + "/*"]);
 });
 
-test("past the scripts one command's reading reads (Shell BUDGET), those left are their text alone, met crudely, the rest of the command read as ever: its options off, its rules met; read in a moment, as is an alias that runs itself twice", () => {
+test("past the work one check may do (Shell Work), the scripts and aliases left are their text alone, met crudely, and the check asks (failed) though a rule allows all it read; a rule that denies what was read still refuses it; the rest of the command read as ever; read in a moment", () => {
   const many = Array.from({ length: 2100 }, (_, i) => "EDITOR='vim a" + i + "' git commit").join("; ");
   const pagers = "export GIT_CONFIG_COUNT=50 " + Array.from({ length: 50 }, (_, i) => "GIT_CONFIG_KEY_" + i + "=core.pager GIT_CONFIG_VALUE_" + i + "='less " + i + "'").join(" ") + "; " + Array.from({ length: 40 }, (_, i) => "git -c a.b=" + i + " log").join("; ");
   const t0 = performance.now();
   const parts = Shell.parse(many + "; git -C x push", WHERE.cwd) as any[];
   expect(parts.filter((p) => p.rough === "spent").length).toBeGreaterThan(0);
   expect(parts.at(-1).text).toBe("git -C x push");
-  for (const c of [many + "; git -C x push", many + "; EDITOR='rm -rf y' git commit", pagers + "; git -C x push"]) {
+  for (const c of [many + "; git -C x push", many + "; EDITOR='rm -rf y' git commit"]) {
     expect(judge(c, [rule("shell", "git push *", "deny"), rule("shell", "rm *", "deny")])).toEqual(["deny"]);
   }
+  expect(judge(pagers + "; git -C x push", [rule("shell", "git push *", "deny")])).toEqual(["deny"]);
+  // all it read allowed: it asks all the same, as the rest went unread
+  const spent = Access.shell(WHERE, many + "; EDITOR='/bin/rm -rf y' git commit").at(-1)!;
+  expect([spent.failed, Permissions.decide("shell", spent.resources, [rule("shell", "*", "allow")], []).effect]).toEqual([expect.stringContaining("more scripts"), "allow"]);
+  // one that fans out into a new folder at each step, past the work
+  const fan = Access.shell(WHERE, "git -c alias.a='!git -C x a; git -C y a' a; GIT_SSH_COMMAND=\"/bin/rm -rf y\" git fetch").at(-1)!;
+  expect(fan.failed).toBeDefined();
+  // a nesting too deep leaves what comes after it read as ever
+  expect(judge("false && git -c alias.a='!git -c alias.x=1 a; git -c alias.y=1 a' a; GIT_SSH_COMMAND=\"/bin/rm -rf y\" git fetch", [rule("shell", "rm *", "deny")])).toEqual(["deny"]);
   expect(judge("git -c alias.a='!git a 1; git a 2; git push' a", [rule("shell", "git push *", "deny")])).toEqual(["deny"]);
-  expect(performance.now() - t0).toBeLessThan(3000);
+  expect(performance.now() - t0).toBeLessThan(5000);
+});
+
+test("a check that would grow without end (an alias's script running itself in a new folder each time, aliases in a long row named by a word made as it runs, scripts nested in scripts) takes no more than a moment", () => {
+  const n = (k: number) => [...Array(k).keys()];
+  for (const c of [
+    "git -c alias.a='!git -C x a; git -C y a; git -C z a' a",
+    "git " + n(800).map((i) => "-c alias.a" + i + "=a" + (i + 1)).join(" ") + " $Y",
+    "git -c alias.a='!git -c alias.x=1 a; git -c alias.y=1 a; " + n(200).map((i) => "git -C d" + i + " s" + i).join("; ") + "' a",
+    "x=(a); " + n(100).map((i) => "git -c alias.a" + i + "='!git -c alias.x=1 a" + i + "; git -c alias.y=1 a" + i + "' a" + i).join("; "),
+  ]) {
+    const t0 = performance.now();
+    Access.shell(WHERE, c);
+    expect(performance.now() - t0).toBeLessThan(3000);
+  }
 });
 
 test("git's settings in the environment, many, met by many git commands, read in a moment", () => {
