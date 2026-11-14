@@ -125,7 +125,9 @@ export type Event =
 // agent's Tools.run); cut: a reply had begun; first: the tokens its
 // first request read, as its vendor told (the chat learns from it what
 // a request takes beside the chat: Chat.cap; none: that request was
-// refused, or read nothing told)
+// refused, or read nothing told); owned: a runner's failed end whose
+// streamed text it settled itself, logged or dropped as the vendor's
+// error said as text, so Agent.watched logs none of it
 export type End = {
   ok     : boolean;
   text   : string;
@@ -136,6 +138,7 @@ export type End = {
   grew?  : boolean;
   cut?   : boolean;
   first? : number;
+  owned? : boolean;
 };
 
 // one try at a vendor
@@ -174,10 +177,33 @@ const CACHE = new Map<string, Cached>();
 // agent), whole, by its tools URL
 const LAST = new Map<string, Last>();
 
+// the requests open at illi's tools, by the caller's tools URL (Ask
+// server): counted as the tools' server takes each and answers it
+// (Tools.fetch), so a call run by its vendor's own program, waiting on a
+// tool of illi's (a command running, a question waiting on the user), is
+// never taken as gone quiet (Agent.watched)
+const OPEN = new Map<string, number>();
+
 // AskAI
 // =====
 
 export namespace AskAI {
+
+  // a request at illi's tools opened (1) or answered (-1), by its
+  // caller's tools URL
+  export function opened(server: string, n: 1 | -1): void {
+    const now = (OPEN.get(server) ?? 0) + n;
+    if (now > 0) {
+      OPEN.set(server, now);
+    } else {
+      OPEN.delete(server);
+    }
+  }
+
+  // whether a caller waits on a request open at illi's tools
+  export function waiting(server: string | undefined): boolean {
+    return server !== undefined && (OPEN.get(server.replace(/[?#].*$/, "")) ?? 0) > 0;
+  }
 
   // a call: its tries, one after another (a patient one's)
   export function ask(ask: Ask, on: (ev: Event) => void): Call {

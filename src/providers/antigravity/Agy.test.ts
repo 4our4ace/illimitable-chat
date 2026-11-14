@@ -140,7 +140,7 @@ test("each machine's pinned build is one illi takes, one for every machine illi 
   expect([MINIMUM, Agy.least("1.5.2"), Agy.least("1.6"), Agy.least("1.5.1"), Agy.least("1.4.5"), Agy.least("v1.6")]).toEqual(["1.5.2", true, true, false, false, false]);
 });
 
-test("a download checked as it comes, unpacked runnable, put in place, run; one that doesn't match, holds a folder or a link, leaves nothing", async () => {
+test("a download checked as it comes, unpacked runnable, put in place, run; one without room on the disk refused first; one that doesn't match, holds a folder or a link, leaves nothing", async () => {
   const one = tar([{ name: "pax", data: "20 path=antigravity\n", type: "x" }, { name: "antigravity-cut-short", data: "#!/bin/sh\necho one\n" }, { name: "pax", data: "13 mtime=1.5\n", type: "x" }, { name: "NOTICE", data: "notice" }]);
   SERVED["one.tgz"] = one;
   Agy.pin = BUILT("1.5.2", "one.tgz", one);
@@ -152,6 +152,9 @@ test("a download checked as it comes, unpacked runnable, put in place, run; one 
   expect([Agy.command(), Agy.ready(), got.at(-1), fs.readFileSync(at + "/NOTICE", "utf8")]).toEqual([[at + "/antigravity", "acp"], true, one.length, "notice"]);
   expect([fs.statSync(at + "/antigravity").mode & 0o777, fs.statSync(at + "/NOTICE").mode & 0o777]).toEqual([0o755, 0o755]);
   expect(fs.existsSync(at + "/.users/" + process.pid)).toBe(true);
+  // a disk without room for the archive and its files at once says so
+  // before any byte
+  await expect(Agy.download({ ...BUILT("1.5.5", "none-asked.tgz", one), unpacked: 1e18 }, new AbortController().signal, () => {})).rejects.toThrow(/^it needs \d+ MB free while it unpacks, and .* has \d+ MB: free some space, then try again$/);
   const two = tar([{ name: "antigravity", data: "two" }]);
   SERVED["two.tgz"] = two;
   await expect(Agy.download({ ...BUILT("1.5.3", "two.tgz", two), sha256: sha(one) }, new AbortController().signal, () => {})).rejects.toThrow("didn't match the checksum");
@@ -169,9 +172,17 @@ test("a download checked as it comes, unpacked runnable, put in place, run; one 
   SERVED["short.tgz"] = zlib.gzipSync(zlib.gunzipSync(short).subarray(0, 1024));
   await expect(Agy.download(BUILT("1.5.4", "short.tgz", SERVED["short.tgz"]), new AbortController().signal, () => {})).rejects.toThrow("ended short");
   expect([fs.readdirSync(Agy.home()), fs.existsSync(DIR + "/escape"), Agy.versions()]).toEqual([["1.5.2"], false, ["1.5.2"]]);
+  // a file cut short since (a power cut, a tidy killed midway) is no
+  // download: /login offers it again
+  expect(JSON.parse(fs.readFileSync(at + "/agent.json", "utf8")).files).toEqual({ antigravity: 19, NOTICE: 6 });
+  const whole = fs.readFileSync(at + "/NOTICE");
+  fs.writeFileSync(at + "/NOTICE", "not");
+  expect([Agy.ready(), Agy.command()]).toEqual([false, null]);
+  fs.writeFileSync(at + "/NOTICE", whole);
+  expect(Agy.ready()).toBe(true);
 });
 
-test("the user's own agy runs once it's 1.5.2 or later, its version asked once and kept till it changes; an older one is said", async () => {
+test("the user's own agy runs once it's 1.5.2 or later, its version asked once and kept till it changes (one that tells none, too); an older one is said", async () => {
   const at = theirs("1.5.3");
   Agy.which = async () => at;
   Agy.unlook();
@@ -186,9 +197,12 @@ test("the user's own agy runs once it's 1.5.2 or later, its version asked once a
   expect([Agy.installed(), await Agy.look(), ASKED(), Agy.stale()]).toEqual([null, null, 2, "1.5.1"]);
   Agy.pin = { ...Agy.pin!, sha256: "f".repeat(64) };
   expect(Agy.why()).toBe("Google's Antigravity CLI isn't here: /login downloads it (your own agy is 1.5.1, older than the 1.5.2 illi runs: `agy update` brings it current)");
-  fs.writeFileSync(at, "#!/bin/sh\nexit 1\n");
+  // one that tells no version is kept so, asked once, not at every run
+  fs.writeFileSync(at, "#!/bin/sh\necho x >> " + DIR + "/bin/asked\nexit 1\n");
   Agy.unlook();
-  expect([await Agy.look(), Agy.stale()]).toEqual([null, null]);
+  expect([await Agy.look(), Agy.stale(), ASKED()]).toEqual([null, null, 3]);
+  Agy.unlook();
+  expect([await Agy.look(), Agy.installed(), ASKED()]).toEqual([null, null, 3]);
   Agy.which = async () => null;
   Agy.unlook();
   Agy.pin = BUILT("1.5.2", "one.tgz", SERVED["one.tgz"]);
@@ -216,7 +230,7 @@ test("only this illi's build runs of those downloaded: another version here is s
   Agy.pin = here;
 });
 
-test("every other version goes once no live illi uses it, this illi's own too while the user's own CLI runs; one in use stays", async () => {
+test("every older version goes once no live illi uses it, this illi's own too while the user's own CLI runs; one in use stays, and a newer one always (a newer illi's: it tidies that itself)", async () => {
   const keep = (version: string, pid?: number) => {
     fs.mkdirSync(Agy.home() + "/" + version + "/.users", { recursive: true });
     fs.writeFileSync(Agy.home() + "/" + version + "/agent.json", JSON.stringify({ cmd: "antigravity", args: ["acp"], sha256: "a".repeat(64) }));
@@ -233,12 +247,18 @@ test("every other version goes once no live illi uses it, this illi's own too wh
   keep("1.4.2");
   keep("1.9.0");
   Agy.tidy();
-  expect(Agy.versions()).toEqual(["1.5.2", "1.5.1"]);
+  expect(Agy.versions()).toEqual(["1.9.0", "1.5.2", "1.5.1"]);
   expect(fs.existsSync(Agy.home() + "/1.5.2/.users/" + process.pid)).toBe(true);
   live.kill();
   await live.exited;
   Agy.tidy();
-  expect(Agy.versions()).toEqual(["1.5.2"]);
+  expect(Agy.versions()).toEqual(["1.9.0", "1.5.2"]);
+  const pinned = Agy.pin;
+  Agy.pin = null;
+  Agy.tidy();
+  expect(Agy.versions()).toEqual(["1.9.0", "1.5.2"]);
+  Agy.pin = pinned;
+  fs.rmSync(Agy.home() + "/1.9.0", { recursive: true });
   const at = theirs("1.6.0");
   Agy.which = async () => at;
   Agy.unlook();
@@ -269,21 +289,47 @@ test("a tar header's ustar prefix is POSIX's alone: GNU's keeps other fields the
   expect(Agy.paxed(Buffer.from("20 path=antigravity\n13 mtime=1.5\nbad"))).toEqual({ path: "antigravity", mtime: "1.5" });
 });
 
-test("a write that fails is said, never a crash; an empty file unpacks; another terminal's download under way is left be, a day-old one goes", async () => {
+test("a write that fails is said, never a crash; an empty file unpacks; another terminal's download under way is left be, one whose illi ended or a day-old one goes", async () => {
   const one = tar([{ name: "antigravity", data: "x" }]);
   SERVED["w.tgz"] = one;
   await expect(Agy.get(BUILT("1.5.8", "w.tgz", one), DIR + "/no/such/folder/cli.tar.gz", new AbortController().signal, () => {})).rejects.toThrow("ENOENT");
   const empty = tar([{ name: "antigravity", data: "run" }, { name: "EMPTY", data: "" }]);
   SERVED["e.tgz"] = empty;
+  const ended = Bun.spawn(["true"]);
+  await ended.exited;
+  const live  = Bun.spawn(["sleep", "30"]);
   const young = Agy.home() + "/.new-other";
   const old   = Agy.home() + "/.new-stale";
-  fs.mkdirSync(young, { recursive: true });
-  fs.mkdirSync(old, { recursive: true });
+  const theirs = Agy.home() + "/.new-" + live.pid + "-x";
+  const cut   = Agy.home() + "/.new-" + ended.pid + "-x";
+  for (const dir of [young, old, theirs, cut]) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
   fs.utimesSync(old, new Date(Date.now() - 2 * 86400e3), new Date(Date.now() - 2 * 86400e3));
   Agy.pin = BUILT("1.5.9", "e.tgz", empty);
   await Agy.download(Agy.pin, new AbortController().signal, () => {});
-  expect([fs.readFileSync(Agy.home() + "/1.5.9/EMPTY", "utf8"), fs.existsSync(young), fs.existsSync(old)]).toEqual(["", true, false]);
+  expect([fs.readFileSync(Agy.home() + "/1.5.9/EMPTY", "utf8"), fs.existsSync(young), fs.existsSync(old), fs.existsSync(theirs), fs.existsSync(cut)]).toEqual(["", true, false, true, false]);
+  live.kill();
+  await live.exited;
+  fs.rmSync(theirs, { recursive: true });
   expect(Agy.versions()).toEqual(["1.5.9"]);
+});
+
+test("this illi's own download under way is left be by its tidy, gone once it's in place", async () => {
+  const one = tar([{ name: "antigravity", data: "x" }]);
+  let release = () => {};
+  HELD["own.tgz"] = new Promise<void>((done) => (release = done));
+  SERVED["own.tgz"] = one;
+  const mine = () => fs.readdirSync(Agy.home()).filter((n) => n.startsWith(".new-" + process.pid + "-"));
+  const done = Agy.download(BUILT("1.5.10", "own.tgz", one), new AbortController().signal, () => {});
+  while (mine().length === 0) {
+    await Bun.sleep(10);
+  }
+  Agy.tidy();
+  expect(mine().length).toBe(1);
+  release();
+  await done;
+  expect([mine(), fs.existsSync(Agy.home() + "/1.5.10/antigravity")]).toEqual([[], true]);  fs.rmSync(Agy.home() + "/1.5.10", { recursive: true });
 });
 
 test("with autoupdate on and an account connected, this illi's build downloads by itself, once, one illi at a time on the machine: a fresh lock is left to its illi, one unwritten for a minute is taken over though its pid lives, one whose illi ended too; a call meanwhile told it's downloading; the same build put in place by another illi meanwhile kept", async () => {

@@ -73,7 +73,7 @@ export namespace Rpc {
     const conn: Conn = { proc, name, next: 0, waits: new Map(), began: false, ended: false, why: "", code: null, tail: "", exited: Promise.resolve() };
     const out = Rpc.each(proc.stdout, (() => {
       let buf: Buffer = Buffer.alloc(0);
-      return (chunk: Uint8Array) => void (buf = Rpc.take(Buffer.concat([buf, chunk]), (body) => Rpc.read(conn, body, heard)));
+      return (chunk: Uint8Array) => void (buf = Rpc.take(Buffer.concat([buf, chunk]), (body) => Rpc.safely(conn, () => Rpc.read(conn, body, heard))));
     })());
     const text = new TextDecoder();
     const err = Rpc.each(proc.stderr, (chunk) => void (conn.tail = (conn.tail + text.decode(chunk, { stream: true })).slice(-TAIL)));
@@ -107,6 +107,16 @@ export namespace Rpc {
         got(r.value);
       }
     } catch {}
+  }
+
+  // a message read: one illi can't follow is logged, never the end of
+  // reading the CLI (all it says after would go unheard, its call hung)
+  export function safely(conn: Conn, read: () => void): void {
+    try {
+      read();
+    } catch (err: any) {
+      console.error(conn.name + ": a message illi couldn't read: " + err?.message);
+    }
   }
 
   // what came so far: each whole message's body given to `got`, what's

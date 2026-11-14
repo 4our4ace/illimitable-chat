@@ -323,8 +323,11 @@ export namespace OpenCodeGo {
   // at the most it may write or by a filter (failed), its calls (tools),
   // else done
   export function step(st: State, ask: Ask): Step {
-    const calls = st.calls.filter((c) => c !== undefined).map((c, k) => ({ ...c, id: c.id || "call_" + k }));
-    const turn  = { role: "assistant", content: st.text === "" ? null : st.text, reasoning_content: st.mind === "" ? undefined : st.mind, tool_calls: calls.length === 0 ? undefined : calls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.args || "{}" } })) };
+    // a call's arguments that aren't a JSON object go back as {} (the tool
+    // answered that they weren't one), so the vendor is never sent the
+    // broken text it may refuse the turn for
+    const calls = st.calls.filter((c) => c !== undefined).map((c, k) => ({ ...c, id: c.id || "call_" + k, sent: Agent.object(c.args) ? c.args || "{}" : "{}" }));
+    const turn  = { role: "assistant", content: st.text === "" ? null : st.text, reasoning_content: st.mind === "" ? undefined : st.mind, tool_calls: calls.length === 0 ? undefined : calls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.sent } })) };
     const uses: Use[] = calls.map((c) => ({ id: c.id, name: c.name, input: Agent.parse(c.args) }));
     const entries: Entry[] = [
       ...(st.mind.trim() === "" ? [] : [{ kind: "mind" as const, text: st.mind.trim() }]),

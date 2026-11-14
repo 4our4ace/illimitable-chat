@@ -139,6 +139,14 @@ export type Hint = { text: string; trouble: boolean };
 //   request and runs the tools), or
 // - ask: its own program runs the call (a runner: Claude Code, Google's
 //   Antigravity CLI), giving back the same Events and End as Agent.ask;
+//   Agent.watched runs it, so every runner's call ends once it goes
+//   quiet, settles soon after a stop, and keeps a reply cut short;
+//   it tells `beat` of every message its program sends the call, so a
+//   program at work on its own (a tool of its own running, its usage
+//   told) isn't taken as quiet;
+// - quiet: how long (ms) a runner's call may go without a word (no event
+//   or beat, none of its caller's requests open at illi's tools) before
+//   it is taken as hung (Agent.QUIET where none);
 // - spent: a refusal that means the plan behind it is used up (said: the
 //   error's words), what to do about it ("": not one);
 // - ready: before a call, its model's window told (on chatgpt, the
@@ -184,7 +192,8 @@ export type Hint = { text: string; trouble: boolean };
 export type Provider = {
   facts     : Facts;
   wire?     : Wire<any>;
-  ask?      : (ask: Ask, on: (ev: Event) => void) => Try;
+  ask?      : (ask: Ask, on: (ev: Event) => void, beat: () => void) => Try;
+  quiet?    : number;
   spent?    : (said: string, err: any) => string;
   ready?    : (model: string, halt?: AbortSignal) => Promise<string | null>;
   windows?  : () => boolean;

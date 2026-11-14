@@ -100,6 +100,36 @@ no tool and takes no message sent meanwhile: the runner leaves it in
 `End.left`, as Agent.ts does (an agent's log holds it for its next
 call).
 
+`Agent.watched` runs every runner's call, so they all end the same way
+whatever their program does:
+
+- A call with no word for `PROVIDER.quiet` ms (20 minutes when unset)
+  is stopped and ends `down` with `again`. A word is an event, or any
+  message the runner read for the call: `ask` gets a third argument,
+  `beat`, to call for every message of the call's session, so a program
+  busy on its own (a tool of its own running, its usage told) isn't
+  taken as quiet. The clock also pauses while a request of the call's
+  caller is open at illi's tools, such as a command running or a
+  question waiting on the user, and counts no time the machine slept.
+  What it stops is a program that hung, or one whose output illi can no
+  longer read. A reply that lands after the stop was sent still stands.
+- A stopped call settles `lost` within a few seconds even if its program
+  never ends. Messages sent to it that it never took (no `user` entry
+  for them yet) go back in `End.left`, and its later events are dropped.
+- When a call fails, the text it streamed since its last entry is
+  logged and marked cut off, so a reply read as it came isn't lost when
+  the program dies mid-stream. Any entry the runner logs clears what
+  the guard holds. Two ends log nothing: `full`, as the call goes again
+  refitted, and an end the runner marks `owned`, having settled what
+  streamed itself. Antigravity does that when Google's CLI says its
+  error as message text: that text is the error, not a reply.
+- A program whose `done` rejects ends the call failed with the error's
+  message.
+
+A runner's reader should survive a message it can't follow: log it and
+read the next (ClaudeCode.ts, `Rpc.safely`, Acp.ts), so one odd message
+never leaves the rest of the call unheard.
+
 A runner must get the whole call to the model, its newest text above
 all: measure what its program passes on before trusting it. Google's
 CLI keeps only the first 192 KB of a message and drops the rest without

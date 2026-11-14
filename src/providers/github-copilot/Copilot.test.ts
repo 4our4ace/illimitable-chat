@@ -24,7 +24,8 @@
 // offers a sign-in again), the plan's credits, a rate limit, a policy, a
 // busy service, a CLI that died; one that can't start says why (its exit
 // code, its own last words) and isn't tried again. A stop aborts the turn, what streamed
-// logged as cut off; a message sent mid-run is left. Calls at once share
+// logged as cut off; a message sent mid-run is left; a CLI that doesn't
+// end the turn is taken as hung and ended. Calls at once share
 // one CLI; a CLI whose protocol illi doesn't speak is refused and ends;
 // all end as illi ends. The account's models are its own, as the CLI
 // lists them, kept for the next start, the chat told; its plan's use
@@ -162,7 +163,7 @@ async function handle(m) {
     case "connect": await new Promise((done) => setTimeout(done, Number(e.FAKE_START ?? 0))); return { protocolVersion: Number(e.FAKE_PROTOCOL ?? 3) };
     case "ping": return { message: "pong", protocolVersion: Number(e.FAKE_PROTOCOL ?? 3) };
     case "session.create": sessions.set(m.params.sessionId, m.params); return { sessionId: m.params.sessionId };
-    case "session.send": setTimeout(() => play(m.params.sessionId, m.params.prompt), 10); return { messageId: "u1" };
+    case "session.send": await new Promise((done) => setTimeout(done, Number(e.FAKE_SEND ?? 0))); setTimeout(() => play(m.params.sessionId, m.params.prompt), 10); return { messageId: "u1" };
     case "session.abort": aborts.get(m.params.sessionId)?.(); return { success: true };
     case "sessions.delete": return {};
     case "session.permissions.handlePendingPermissionRequest": permits.get(m.params.requestId)?.(m.params.result); return { success: true };
@@ -390,7 +391,7 @@ test("a sign-in stopped while the CLI starts ends at once: no page or code told,
   expect([asked, Copilot.running(), logged(), fs.existsSync(DIR + "/copilot/gh9")]).toEqual([[], 0, [], false]);
 });
 
-test("a stop aborts the turn, what streamed logged as cut off; one the CLI doesn't end is given up; a message sent mid-run is left", async () => {
+test("a stop aborts the turn, what streamed logged as cut off; one the CLI doesn't end is given up, that CLI ended; a message sent mid-run is left", async () => {
   const events: any[] = [];
   const run = Copilot.ask({ vendor: "github-copilot", model: "claude-sonnet-9.1", effort: "medium", speed: "slow", system: "P", blocks: [{ text: "slow", mark: false }], searches: 0, server: SERVER } as any, (ev) => events.push(ev));
   while (!events.some((e) => e.$ === "Delta")) {
@@ -408,6 +409,30 @@ test("a stop aborts the turn, what streamed logged as cut off; one the CLI doesn
   }
   held.stop();
   expect((await held.done).stop).toBe("lost");
+  // the CLI that didn't end it is taken as hung: ended, the next call
+  // runs on a new one
+  expect(Copilot.running()).toBe(0);
+  expect((await call("hold")).end.text).toBe("held");
+});
+
+test("a stop while the CLI takes the message aborts its turn once it's out; a turn that starts after that abort is aborted once more, the CLI kept", async () => {
+  Copilot.close();
+  await Bun.sleep(100);
+  process.env.FAKE_SEND = "300";
+  try {
+    const events: any[] = [];
+    const run = Copilot.ask({ vendor: "github-copilot", model: "claude-sonnet-9.1", effort: "medium", speed: "slow", system: "P", blocks: [{ text: "slow", mark: false }], searches: 0, server: SERVER } as any, (ev) => events.push(ev));
+    while (!logged().some((l) => l.method === "session.send")) {
+      await Bun.sleep(10);
+    }
+    run.stop();
+    const end = await run.done;
+    expect([end.stop, logged().filter((l) => l.method === "session.abort").length, Copilot.running()]).toEqual(["lost", 2, 1]);
+  } finally {
+    delete process.env.FAKE_SEND;
+    Copilot.close();
+    await Bun.sleep(100);
+  }
 });
 
 test("calls at once share one CLI; one whose protocol illi doesn't speak is refused and ends; all end as illi ends", async () => {

@@ -177,6 +177,10 @@ export namespace OpenAI {
     const out: any[] = res.output;
     const calls = out.filter((o) => o.type === "function_call");
     const uses: Use[] = calls.map((o) => ({ id: o.call_id, name: o.name, input: Agent.parse(o.arguments) }));
+    // a call's arguments that aren't a JSON object go back as {} (the
+    // tool answered that they weren't one), as Anthropic's do, so the
+    // vendor is never sent the broken text it may refuse the turn for
+    calls.filter((o) => !Agent.object(o.arguments)).forEach((o) => (o.arguments = "{}"));
     const ran = OpenAI.tier(res);
     const note = ran !== ask.speed ? "ran at " + ran + " speed" : "";
     const refusals = out.flatMap((o) => (o.type === "message" ? o.content : [])).filter((c: any) => c.type === "refusal");

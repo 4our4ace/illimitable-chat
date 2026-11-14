@@ -291,7 +291,7 @@ export namespace ClaudeCode {
   // the CLI run
   export let bin = process.env.ILLI_CLAUDE ?? "claude";
 
-  export function ask(ask: Ask, on: (ev: Event) => void): Try {
+  export function ask(ask: Ask, on: (ev: Event) => void, beat: () => void = () => {}): Try {
     ClaudeCode.account();
     const end = AskAI.end("");
     const left: Say[] = [];
@@ -353,9 +353,16 @@ export namespace ClaudeCode {
       const errs = new Response(proc.stderr).text();
       try {
         for await (const line of AskAI.lines(proc.stdout)) {
+          beat();
           const m: any = Agent.parse(line);
           if (m !== null && !stopped) {
-            ClaudeCode.read(run, m);
+            // one message illi can't follow is logged, never the call's
+            // end: the next is read as ever
+            try {
+              ClaudeCode.read(run, m);
+            } catch (err: any) {
+              console.error("claude-code: a " + String(m.type) + " message illi couldn't read: " + err?.message);
+            }
           }
           if (m?.type === "result") {
             shut();

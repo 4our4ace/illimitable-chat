@@ -1,7 +1,9 @@
 // Agent
 // =====
-// claude-api, openai-api and chatgpt in illi's own loop (claude-code
-// runs in Claude Code's: ClaudeCode.ts); a Wire
+// claude-api, openai-api and chatgpt in illi's own loop (claude-code,
+// antigravity and github-copilot run in their vendor's program, each
+// call watched alike: Agent.watched, ending one gone quiet, settling a
+// stop, keeping a reply cut short); a Wire
 // (Anthropic.ts, OpenAI.ts, ChatGPT.ts) shapes requests and reads streams,
 // signed with its API key or, chatgpt's, a login's token it renews (one
 // the vendor refused, renewed, is asked again); a response's headers are
@@ -42,7 +44,7 @@
 
 import { AskAI, type Ask, type Block, type Flight, type Try, type End, type Event, type Img, type Kind, type Say, type Usage, type Vendor } from "./AskAI.ts";
 import { FAILED, live_push } from "../ui/View.ts";
-import { stream_events } from "../tools/Clip.ts";
+import { stream_events, unreached as unreached_words } from "../tools/Clip.ts";
 import { Machine, type Spec } from "../tools/Machine.ts";
 import * as config from "../config/Config.ts";
 import { Providers } from "../providers/Providers.ts";
@@ -157,6 +159,15 @@ const FULL  = /prompt is too long|exceed(s|ed)? (the )?context (limit|window|len
 // from none to some and back (Agent.step)
 const ASKING = new Map<string, number>();
 
+// a call run by its vendor's own program (Agent.watched): how long it may
+// go without a word before it is taken as hung (as illi's loop's wires
+// wait on a silent stream: Wire idle; a CLI retrying quietly for minutes
+// fits in it), how often that is looked at, and how long a stop waits on
+// the program to end before the call settles without it
+export const QUIET = 20 * 60e3;
+const LOOK  = 15e3;
+const GRACE = 6e3;
+
 // Agent
 // =====
 
@@ -168,11 +179,12 @@ export namespace Agent {
   }
 
   // a call on its vendor: run by the vendor's own program if it has one
-  // (a runner: Provider.ts ask), else in illi's loop on its wire
+  // (a runner: Provider.ts ask, watched: Agent.watched), else in illi's
+  // loop on its wire
   export function ask(ask: Ask, on: (ev: Event) => void): Try {
     const provider = Providers.of(ask.vendor);
     if (provider?.ask !== undefined) {
-      return provider.ask(ask, on);
+      return Agent.watched(provider.ask, ask, on, provider.quiet ?? QUIET);
     }
     const end = AskAI.end("");
     const run: Run = { ask, on, sent: [], abort: new AbortController(), end };
@@ -185,7 +197,7 @@ export namespace Agent {
       try {
         if (provider?.wire === undefined) {
           end.text = "illi has no provider " + ask.vendor + " here";
-          end.stop = "fail";
+          end.stop = "down";
         } else {
           await Agent.loop(provider.wire, run);
         }
@@ -197,6 +209,109 @@ export namespace Agent {
       return end;
     })();
     return { send, stop, done };
+  }
+
+  // a runner's call, watched as illi's loop watches its own, so every
+  // vendor's program ends alike:
+  // - quiet past `quiet` ms (no word: no event, no message its runner
+  //   read, the beat it is given; none of its caller's requests open at
+  //   illi's tools: a command running, a question waiting on the user,
+  //   AskAI.waiting) it is stopped, and ends down, again (a later try may
+  //   answer), saying so, as a silent stream is (a CLI that hung, or
+  //   whose output illi could no longer read); an end the stop didn't
+  //   bring (a reply that lands meanwhile, the vendor's own failure, as
+  //   `full`) stands. Quiet is counted on the clock's own ticks, so a
+  //   machine asleep (a tick far later than due) counts none of it;
+  // - stopped, it settles `lost` `grace` ms after at most, whatever its
+  //   program still waits on (a CLI starting, a session made), giving
+  //   back what was sent it and not taken (no `user` entry for it yet:
+  //   sent in order, taken in order), its later events dropped;
+  // - ending failed, what it streamed since its last entry is logged,
+  //   marked cut off (End.cut), as illi's loop keeps a stream cut short
+  //   (Agent.fail), so the reply read as it came isn't lost: unless the
+  //   runner settled it (End.owned: logged, or dropped as the vendor's
+  //   error said as text) or the call goes again refitted (`full`: as
+  //   the loop logs none of a request too long); a failed end whose
+  //   step's reply had begun (an illi entry since its last tool call,
+  //   logged by the runner or so) is cut, as the loop's is;
+  // - its program failing outright (done rejecting) ends it with why
+  export function watched(run: (ask: Ask, on: (ev: Event) => void, beat: () => void) => Try, ask: Ask, on: (ev: Event) => void, quiet: number, grace = GRACE): Try {
+    let settled = false;
+    let hushed = false;
+    let stopped = false;
+    let said = false;
+    // quiet so far, counted per tick (a tick far later than due: asleep)
+    let still = 0;
+    const every = Math.min(LOOK, quiet / 4);
+    let ticked = Date.now();
+    const live: Entry[] = [];
+    const sent: Say[] = [];
+    const beat = () => {
+      still = 0;
+    };
+    const tell = (ev: Event) => {
+      if (settled) {
+        return;
+      }
+      still = 0;
+      if (ev.$ === "Entry") {
+        live.length = 0;
+        said = ev.kind === "illi" || (said && ev.kind !== "tool");
+        if (ev.kind === "user" && sent[0]?.text === ev.text) {
+          sent.shift();
+        }
+      } else {
+        live_push(live, ev.kind, ev.text, ev.fresh);
+      }
+      on(ev);
+    };
+    const inner = run(ask, tell, beat);
+    let give = (_: End) => {};
+    const given = new Promise<End>((done) => (give = done));
+    const halt = () => {
+      if (!stopped) {
+        stopped = true;
+        inner.stop();
+        setTimeout(() => give({ ...AskAI.end("stopped"), stop: "lost", left: [...sent], cut: said }), grace).unref?.();
+      }
+    };
+    const clock = setInterval(() => {
+      const now = Date.now();
+      const gap = now - ticked;
+      ticked = now;
+      if (AskAI.waiting(ask.server)) {
+        still = 0;
+      } else if (gap <= 2 * every) {
+        still += gap;
+        if (still > quiet && !stopped) {
+          hushed = true;
+          halt();
+        }
+      }
+    }, every);
+    clock.unref?.();
+    const failed = (err: any): End => ({ ...AskAI.end(String(err?.message ?? err)), left: [...sent], ...(stopped ? { stop: "lost" as const } : {}) });
+    const done = Promise.race([inner.done, given]).then((end) => end, failed).then((end) => {
+      clearInterval(clock);
+      if (hushed && end.stop === "lost") {
+        end = { ...end, stop: "down", again: true, text: "no word from " + (Vendors.of(ask.vendor)?.name ?? ask.vendor) + " in " + Math.round(quiet / 60e3) + " min, so the call was stopped" };
+      }
+      if (!end.ok && !end.owned && end.stop !== "full" && live.some((e) => e.text.trim() !== "")) {
+        const cut = Agent.fail("", live).entries;
+        cut.forEach((e) => on({ $: "Entry", ...e }));
+        said ||= cut.some((e) => e.kind === "illi");
+      }
+      if (!end.ok && said) {
+        end = { ...end, cut: true };
+      }
+      settled = true;
+      return end;
+    });
+    const send = (say: Say) => {
+      sent.push(say);
+      inner.send(say);
+    };
+    return { send, stop: () => ((hushed = false), halt()), done };
   }
 
   export async function loop<S>(wire: Wire<S>, run: Run): Promise<void> {
@@ -353,9 +468,10 @@ export namespace Agent {
     return why.startsWith(AWAY) ? why : BUSY;
   }
 
-  // a request that never reached its host (no connection, no DNS, refused)
-  export function unreached(url: string): string {
-    return AWAY + new URL(url).host + ": check your connection";
+  // a request that never reached its host (no connection, no DNS, refused,
+  // a certificate not trusted: Clip unreached), starting AWAY (gone)
+  export function unreached(url: string, err?: unknown): string {
+    return unreached_words(url, err);
   }
 
   // a request asks `model` again; the first says why
@@ -396,13 +512,29 @@ export namespace Agent {
       flight.end();
       return { res: null, step: Agent.fail("stopped", []) };
     }
-    return Agent.send(wire, run, token, make(Math.min(MAX, run.ask.max ?? MAX)), flight, seen);
+    // its place in flight let go whatever throws (the body made, the
+    // wire's start), so no request after it waits on it for ever
+    let body: unknown;
+    try {
+      body = make(Math.min(MAX, run.ask.max ?? MAX));
+    } catch (err) {
+      flight.end();
+      throw err;
+    }
+    return Agent.send(wire, run, token, body, flight, seen);
   }
 
   export async function send<S>(wire: Wire<S>, run: Run, token: string, body: unknown, flight: Flight, seen: Entry[]): Promise<{ res: Response | null; step: Step }> {
     const idle = new AbortController();
     const timer = setTimeout(() => idle.abort(new Error("no word from the API in " + wire.idle / 1e3 + " s")), wire.idle);
-    const st = wire.start(run.ask);
+    let st: S;
+    try {
+      st = wire.start(run.ask);
+    } catch (err) {
+      clearTimeout(timer);
+      flight.end();
+      throw err;
+    }
     const read: Read = { done: false };
     let res: Response | null = null;
     let step: Step;
@@ -425,7 +557,7 @@ export namespace Agent {
       if (away) {
         console.error(run.ask.model + ": " + (token === "" ? err.message : String(err.message).split(token).join("<key>")));
       }
-      step = Agent.fail(away ? Agent.unreached(wire.url) : err.message, [], "busy");
+      step = Agent.fail(away ? Agent.unreached(wire.url, err) : err.message, [], "busy");
     }
     clearTimeout(timer);
     flight.end();
@@ -464,7 +596,10 @@ export namespace Agent {
     if (Agent.full(body)) {
       return Agent.fail(why, [], "full");
     }
-    if (down && (res.status === 401 || res.status === 403) && !wire.auth) {
+    // 401 alone is the key; a 403 is the vendor refusing this request with
+    // a working key (a model the key may not use, a region), said in its
+    // words, as a new key wouldn't help
+    if (down && res.status === 401 && !wire.auth) {
       return Agent.fail(Agent.maker(wire.key) + " refused the API key (" + why + "): /login replaces it", [], "down");
     }
     return Agent.fail(why, [], down ? "down" : "busy");
@@ -577,6 +712,12 @@ export namespace Agent {
     } catch {
       return null;
     }
+  }
+
+  // whether a tool call's arguments are a JSON object (none given: {})
+  export function object(json: string): boolean {
+    const x = Agent.parse(json);
+    return x !== null && typeof x === "object" && !Array.isArray(x);
   }
 
   // Tools

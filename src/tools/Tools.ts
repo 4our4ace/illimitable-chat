@@ -651,11 +651,19 @@ export namespace Tools {
       return new Response(null, { status: 202 });
     }
     const no = { error: { code: -32601, message: "no method " + msg.method } };
-    const out = await Tools.answer(tools, who, msg.method, msg.params ?? {}, req.signal, hosted).then(
-      (result) => (result === null ? no : { result }),
-      (err) => ({ error: { code: -32603, message: String(err?.message ?? err) } }),
-    );
-    return Response.json({ jsonrpc: "2.0", id: msg.id, ...out });
+    // counted open while it runs, so its caller's call, run by its vendor's
+    // own program, isn't taken as gone quiet meanwhile (Agent.watched)
+    const at = Tools.at(tools, who);
+    AskAI.opened(at, 1);
+    try {
+      const out = await Tools.answer(tools, who, msg.method, msg.params ?? {}, req.signal, hosted).then(
+        (result) => (result === null ? no : { result }),
+        (err) => ({ error: { code: -32603, message: String(err?.message ?? err) } }),
+      );
+      return Response.json({ jsonrpc: "2.0", id: msg.id, ...out });
+    } finally {
+      AskAI.opened(at, -1);
+    }
   }
 
   // null: no such method
@@ -1006,10 +1014,12 @@ export namespace Tools {
     const server = Tools.at(tools, agent.name);
     const profile = Custom.agent(tools.cwd, agent.role.agent);
     const pick = Tools.pick(tools, agent.role);
-    const run = Pick.ask(pick);
+    // the spawn's effort fitted to the model as any pick is (Pick.fit: the
+    // nearest it lists), so no vendor is sent one its model refuses
+    const run = Pick.ask({ ...pick, effort: agent.role.effort ?? pick.effort });
     const system = Tools.system((agent.role.fresh ? SUB_FRESH : SUB) + Custom.section(profile), tools.cwd);
     const blocks = [...agent.view, Tools.here(tools, run.vendor), log];
-    const effort = agent.role.effort ?? run.effort;
+    const effort = run.effort;
     const window = Pick.window(pick);
     const room = window === undefined ? undefined : Math.round(window * (Pick.room(pick) ?? config.ROOM));
     const ask = { ...run, effort, system, blocks, searches: SEARCHES, server, listed: profile?.tools, room };

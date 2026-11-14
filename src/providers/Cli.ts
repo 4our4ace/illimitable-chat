@@ -10,8 +10,8 @@
 // it is the spec's minimum or later (look: its version asked once in the
 // background, as a CLI may take a second or more to tell it, and kept by
 // its path, size and time in a file beside the builds, so a start never
-// waits on it; its own updates keep it current, as the user installed
-// it). Else illi runs the one build this illi is pinned to (the CLI's
+// waits on it; one that tells none kept so a day, logged; its own
+// updates keep it current, as the user installed it). Else illi runs the one build this illi is pinned to (the CLI's
 // Pinned.ts: the version tried with this illi, as its pin.ts takes it
 // from the CLI's releases on GitHub), as /login downloads it into a
 // version's folder of illi's root, with what illi took it as (agent.json:
@@ -20,9 +20,11 @@
 // A download is taken only from the CLI's releases on GitHub (the spec's
 // releases), its archive checked against the pinned sha256 as it comes,
 // unpacked by illi (each file by its own name, none in a folder, none but
-// plain files: nothing outside the version's folder), made runnable, then
-// moved into place in one rename, so a download stopped halfway leaves
-// nothing that looks installed. An illi that runs a version, or downloads
+// plain files: nothing outside the version's folder), made runnable, put
+// on disk (fsync; each file's size kept in agent.json, so one cut short
+// since, by a power cut, is no download and /login offers it again),
+// then moved into place in one rename, so a download stopped halfway
+// leaves nothing that looks installed. An illi that runs a version, or downloads
 // it, marks it in use while it lives (.users/<its pid>). Each version but
 // this illi's own build goes once no live illi uses it (none kept while
 // the user's own CLI runs in its place, which lasts: illi's download is
@@ -50,6 +52,7 @@ import * as zlib from "node:zlib";
 import { Readable, Transform, Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import * as config from "../config/Config.ts";
+import { fsynced, unreached } from "../tools/Clip.ts";
 
 // Types
 // =====
@@ -233,6 +236,22 @@ export function cli_lives(pid: number): boolean {
   }
 }
 
+// the bytes free for this user on the disk holding a folder; null: not
+// known (the system won't say)
+export function cli_free(dir: string): number | null {
+  try {
+    const st = fs.statfsSync(dir);
+    return Number(st.bavail) * Number(st.bsize);
+  } catch {
+    return null;
+  }
+}
+
+// a size as a person reads it, in MB
+function cli_mb(bytes: number): string {
+  return Math.round(bytes / 1e6) + " MB";
+}
+
 // a CLI as its spec makes it: each part below, the one a test may put in
 // place of its own (bin, which, pin) read through the CLI itself
 export function cli(spec: Spec): Cli {
@@ -243,6 +262,10 @@ export function cli(spec: Spec): Cli {
   // whether this illi has marked the build it runs in use and tidied
   // (settle)
   let settled = false;
+
+  // this illi's downloads under way: their folders (.new-<pid>-), which
+  // its own tidy leaves be
+  const fetching = new Set<string>();
 
   // this illi's download by itself (update): its build, how far it got
   // (bytes of `of`), its end; the version it was tried for this run; the
@@ -311,18 +334,21 @@ export function cli(spec: Spec): Cli {
     // version as the spec's file kept it for this program, else asked of
     // it (its own update not started by it) and kept; the minimum or
     // later, it's run in place of illi's build. null: none, too old, or
-    // it told no version
+    // it told no version (kept so too, and logged, so a CLI that won't
+    // tell costs ASKING once, not at every run: asked again once it
+    // changes, or a day on)
     look() {
       looking ??= (async () => {
         const at = await c.which();
         let version = at === null ? null : c.recalled(at);
         if (at !== null && version === null) {
-          version = await c.asked(at);
-          if (version !== null) {
-            c.recall(at, version);
+          version = (await c.asked(at)) ?? "";
+          c.recall(at, version);
+          if (version === "") {
+            console.error(spec.vendor + ": " + at + " didn't tell its version (" + spec.asks.join(" ") + "), so illi runs its own build; it asks again once that program changes, or in a day");
           }
         }
-        found = at !== null && version !== null && c.least(version) ? { at, version } : null;
+        found = at !== null && version !== null && version !== "" && c.least(version) ? { at, version } : null;
         return found;
       })();
       return looking;
@@ -334,13 +360,14 @@ export function cli(spec: Spec): Cli {
     },
 
     // the program the spec's file keeps, and its version, while it's the
-    // same file (its size and time as then); null: none kept, or it
-    // changed
+    // same file (its size and time as then; "": it told none, kept a day
+    // at most); null: none kept, or it changed
     remembered() {
       try {
         const kept = JSON.parse(fs.readFileSync(path.join(c.home(), "..", spec.file), "utf8"));
         const now  = fs.statSync(String(kept?.at ?? ""));
-        return kept.size === now.size && kept.time === now.mtimeMs && typeof kept.version === "string" && VERSION.test(kept.version) ? { at: kept.at, version: kept.version } : null;
+        const told = typeof kept.version === "string" && (VERSION.test(kept.version) || (kept.version === "" && Math.abs(Date.now() - Number(kept.asked)) < LEFT));
+        return kept.size === now.size && kept.time === now.mtimeMs && told ? { at: kept.at, version: kept.version } : null;
       } catch {
         return null;
       }
@@ -354,12 +381,13 @@ export function cli(spec: Spec): Cli {
     },
 
     // a program's version kept in the spec's file, by its path, size and
-    // time (one that can't be kept: asked again next run, never failing)
+    // time, and when it was asked ("": it told none; one that can't be
+    // kept: asked again next run, never failing)
     recall(at, version) {
       try {
         const now = fs.statSync(at);
         fs.mkdirSync(path.join(c.home(), ".."), { recursive: true, mode: 0o700 });
-        fs.writeFileSync(path.join(c.home(), "..", spec.file), JSON.stringify({ at, size: now.size, time: now.mtimeMs, version }) + "\n");
+        fs.writeFileSync(path.join(c.home(), "..", spec.file), JSON.stringify({ at, size: now.size, time: now.mtimeMs, version, asked: Date.now() }) + "\n");
       } catch {}
     },
 
@@ -416,12 +444,17 @@ export function cli(spec: Spec): Cli {
       return kept !== null && kept.sha256 === b.sha256 && kept.cmd === b.cmd;
     },
 
-    // a downloaded version's agent.json, its program there; null: none
+    // a downloaded version's agent.json, its program there, each file it
+    // lists the size it was unpacked at (one cut short, by a power cut or a
+    // tidy killed midway, is no download: /login offers it again; an
+    // agent.json of an older illi lists none); null: none
     kept(version) {
       try {
-        const k   = JSON.parse(fs.readFileSync(path.join(c.home(), version, "agent.json"), "utf8"));
+        const dir = path.join(c.home(), version);
+        const k   = JSON.parse(fs.readFileSync(path.join(dir, "agent.json"), "utf8"));
         const cmd = String(k?.cmd ?? "");
-        return cli_plain(cmd) && fs.existsSync(path.join(c.home(), version, cmd)) ? { cmd, args: Array.isArray(k.args) ? k.args.map(String) : [], sha256: String(k.sha256 ?? "") } : null;
+        const whole = Object.entries(k?.files ?? {}).every(([name, size]) => cli_plain(name) && fs.statSync(path.join(dir, name)).size === size);
+        return cli_plain(cmd) && whole && fs.existsSync(path.join(dir, cmd)) ? { cmd, args: Array.isArray(k.args) ? k.args.map(String) : [], sha256: String(k.sha256 ?? "") } : null;
       } catch {
         return null;
       }
@@ -495,10 +528,11 @@ export function cli(spec: Spec): Cli {
     },
 
     // the version of the user's own CLI that is too old to run, as the
-    // spec's file kept it (null: none, or one the minimum or later)
+    // spec's file kept it (null: none, one the minimum or later, or one
+    // that told none)
     stale() {
       const v = c.remembered()?.version ?? null;
-      return v !== null && !c.least(v) ? v : null;
+      return v !== null && v !== "" && !c.least(v) ? v : null;
     },
 
     // whether a call's failure is one why said
@@ -565,14 +599,21 @@ export function cli(spec: Spec): Cli {
 
     lives: cli_lives,
 
-    // what's left beside the build this illi runs: each version no live
-    // illi uses but this illi's own build (none kept while the user's own
-    // CLI runs in its place, as it lasts; kept while the variable's does,
-    // as that's mostly for a while), and each download's folder a day old
-    // (a younger one may be another terminal's download). One that won't
-    // go is left, never failing
+    // what's left beside the build this illi runs: each version older
+    // than this illi's own build that no live illi uses, and its own too
+    // while the user's own CLI runs in its place (as that lasts; kept while
+    // the variable's does, as that's mostly for a while). A newer one is
+    // never this illi's to remove: a newer illi downloaded it (a session
+    // left open across an update quitting after it), and tidies it once it
+    // is old to it. With no build of its own (none pinned here), none.
+    // Each download's folder whose illi is gone (.new-<pid>-: a quit cut
+    // it, or a crash) or this illi's own but under way no more (one its
+    // download couldn't remove), or a day old (one of an older illi's,
+    // unnamed, or a pid used again); this illi's own under way never.
+    // One that won't go is left, never failing
     tidy() {
-      const keep = c.installed() !== null ? null : c.pin?.version ?? null;
+      const own = c.pin?.version ?? null;
+      const theirs = c.installed() !== null;
       let names: string[];
       try {
         names = fs.readdirSync(c.home());
@@ -582,11 +623,15 @@ export function cli(spec: Spec): Cli {
       for (const n of names) {
         const at = path.join(c.home(), n);
         try {
+          if (fetching.has(at)) {
+            continue;
+          }
           if (n.startsWith(".new-")) {
-            if (Date.now() - fs.statSync(at).mtimeMs > LEFT) {
+            const pid = Number(/^\.new-(\d+)-/.exec(n)?.[1] ?? NaN);
+            if (pid === process.pid || (Number.isInteger(pid) && !cli_lives(pid)) || Date.now() - fs.statSync(at).mtimeMs > LEFT) {
               fs.rmSync(at, { recursive: true, force: true });
             }
-          } else if (VERSION.test(n) && n !== keep && !c.used(n)) {
+          } else if (VERSION.test(n) && own !== null && (cli_newer(n, own) > 0 || (n === own && theirs)) && !c.used(n)) {
             fs.rmSync(at, { recursive: true, force: true });
           }
         } catch {}
@@ -600,8 +645,12 @@ export function cli(spec: Spec): Cli {
       return [c.home(), path.join(c.home(), "..", spec.file)];
     },
 
-    // a build downloaded and put in place (its archive checked as it
-    // comes, `got` told the bytes so far and of how many; the same build
+    // a build downloaded and put in place (the room for its archive and
+    // its files at once looked for first: a disk short of it says so
+    // before any byte, not after the whole download; its archive checked as it
+    // comes, `got` told the bytes so far and of how many; each file put on
+    // disk, its size kept in agent.json, before the one rename: a power
+    // cut after never leaves a short file that looks installed, kept; the same build
     // put there meanwhile by another illi kept as it is, as it may be
     // running), marked in use by this illi (before it's in place, so
     // another illi's tidy never finds it unmarked), what's left beside it
@@ -609,26 +658,36 @@ export function cli(spec: Spec): Cli {
     // behind
     async download(b, signal, got) {
       fs.mkdirSync(c.home(), { recursive: true, mode: 0o700 });
-      const tmp = fs.mkdtempSync(path.join(c.home(), ".new-"));
+      const free = cli_free(c.home());
+      if (free !== null && free < b.bytes + b.unpacked) {
+        throw new Error("it needs " + cli_mb(b.bytes + b.unpacked) + " free while it unpacks, and " + config.config_home(c.home()) + " has " + cli_mb(free) + ": free some space, then try again");
+      }
+      const tmp = fs.mkdtempSync(path.join(c.home(), ".new-" + process.pid + "-"));
+      fetching.add(tmp);
       try {
         const tgz = path.join(tmp, "cli.tar.gz");
         await c.get(b, tgz, signal, got);
         const into = path.join(tmp, "cli");
         fs.mkdirSync(into);
-        await c.untar(fs.createReadStream(tgz, { signal }), into);
+        const files = await c.untar(fs.createReadStream(tgz, { signal }), into);
         fs.rmSync(tgz, { force: true });
         if (!fs.existsSync(path.join(into, b.cmd))) {
           throw new Error(spec.maker + " archive has no " + b.cmd);
         }
-        fs.writeFileSync(path.join(into, "agent.json"), JSON.stringify({ cmd: b.cmd, args: b.args, sha256: b.sha256 }, null, 2) + "\n");
+        const sizes = Object.fromEntries(files.map((f) => [f.name, f.size]));
+        fs.writeFileSync(path.join(into, "agent.json"), JSON.stringify({ cmd: b.cmd, args: b.args, sha256: b.sha256, files: sizes }, null, 2) + "\n");
+        fsynced(path.join(into, "agent.json"));
+        fsynced(into, true);
         fs.mkdirSync(path.join(into, USERS), { mode: 0o700 });
         fs.writeFileSync(path.join(into, USERS, String(process.pid)), "");
         if (!c.has(b)) {
           const at = path.join(c.home(), b.version);
           fs.rmSync(at, { recursive: true, force: true });
           fs.renameSync(into, at);
+          fsynced(c.home(), true);
         }
       } finally {
+        fetching.delete(tmp);
         fs.rmSync(tmp, { recursive: true, force: true });
       }
       c.use(b.version);
@@ -802,7 +861,7 @@ export function cli(spec: Spec): Cli {
       try {
         res = await globalThis.fetch(b.archive, { headers: { "user-agent": "illi", "accept-encoding": "identity" }, signal });
       } catch (err) {
-        throw signal.aborted ? err : new Error("GitHub can't be reached: check your connection");
+        throw signal.aborted ? err : new Error(unreached(b.archive, err));
       }
       if (!res.ok || res.body === null) {
         throw new Error("GitHub answered " + res.status + " for " + spec.name);
@@ -853,6 +912,7 @@ export function cli(spec: Spec): Cli {
               return;
             }
             if (file.fd !== null) {
+              fs.fsyncSync(file.fd);
               fs.closeSync(file.fd);
             }
             skip = pad(file.size);

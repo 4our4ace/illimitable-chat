@@ -17,7 +17,13 @@
 // it ended (an API that may leave its usage out), else it ended early.
 // A patient call (a summary's) asks again as its `anew` says then, at
 // once as AskAI.wake wakes it (a chat moved to another vendor); stopped,
-// it asks no more.
+// it asks no more. A runner's call (a vendor's own program, Agent.watched)
+// that goes quiet is stopped and ends down, to try again, saying so,
+// unless a request of its is open at illi's tools (a command running, a
+// question waiting); stopped, it settles lost soon after even if its
+// program never ends, giving back what it never took, its later events
+// dropped; what it streamed since its last entry is logged cut off when
+// it fails, once.
 
 import { expect, test } from "bun:test";
 import { temp_dir } from "../../test/repo.ts";
@@ -230,4 +236,182 @@ test("a patient call asks again as its anew says then (a summary's: the compacto
   } finally {
     AskAI.start = start;
   }
+});
+
+// a runner scripted by hand: what it got sent, its events, how it ends
+function runner() {
+  let on: (ev: any) => void = () => {};
+  let finish: (end: any) => void = () => {};
+  const r = {
+    stops: 0,
+    sent: [] as any[],
+    emit: (ev: any) => on(ev),
+    end: (end: any) => finish(end),
+    run: (_ask: any, tell: (ev: any) => void) => {
+      on = tell;
+      return { send: (say: any) => r.sent.push(say), stop: () => r.stops++, done: new Promise<any>((done) => (finish = done)) };
+    },
+  };
+  return r;
+}
+
+const SERVER = "http://127.0.0.1:1/k/main";
+const runner_ask = { vendor: "claude-code", model: "m", effort: "low", speed: "slow", system: "", blocks: [], searches: 0, server: SERVER + "?t=1" } as any;
+
+test("a runner's call quiet past its limit is stopped and ends down, to try again, its streamed text logged cut off; never while a request of its is open at illi's tools", async () => {
+  const quiet = 120;
+  const r = runner();
+  const seen: any[] = [];
+  const call = Agent.watched(r.run, runner_ask, (ev) => seen.push(ev), quiet, 50);
+  r.emit({ $: "Delta", kind: "illi", text: "half a re" });
+  r.emit({ $: "Delta", kind: "illi", text: "ply" });
+  const end = await call.done;
+  expect(r.stops).toBe(1);
+  expect(end).toMatchObject({ ok: false, stop: "down", again: true, cut: true });
+  expect(end.text).toContain("no word from your Claude plan");
+  expect(seen.filter((ev) => ev.$ === "Entry")).toEqual([{ $: "Entry", kind: "illi", text: "half a reply\n[cut off]" }]);
+
+  // a command running at illi's tools: the silence isn't the call's
+  const busy = runner();
+  const call2 = Agent.watched(busy.run, runner_ask, () => {}, quiet, 50);
+  AskAI.opened(SERVER, 1);
+  await Bun.sleep(quiet * 4);
+  expect(busy.stops).toBe(0);
+  AskAI.opened(SERVER, -1);
+  busy.end({ ok: true, text: "done", left: [] });
+  expect(await call2.done).toEqual({ ok: true, text: "done", left: [] });
+});
+
+test("a runner's call stopped settles lost soon after though its program never ends: what it never took given back, its later events dropped", async () => {
+  const r = runner();
+  const seen: any[] = [];
+  const call = Agent.watched(r.run, runner_ask, (ev) => seen.push(ev), 60_000, 50);
+  const one = { text: "first", imgs: [] };
+  const two = { text: "second", imgs: [] };
+  call.send(one);
+  call.send(two);
+  expect(r.sent).toEqual([one, two]);
+  r.emit({ $: "Entry", kind: "user", text: "first" });
+  call.stop();
+  call.stop();
+  const end = await call.done;
+  expect(r.stops).toBe(1);
+  expect(end).toMatchObject({ ok: false, stop: "lost", text: "stopped", left: [two] });
+  r.emit({ $: "Delta", kind: "illi", text: "late" });
+  r.end({ ok: false, text: "stopped", left: [], stop: "lost" });
+  expect(seen).toEqual([{ $: "Entry", kind: "user", text: "first" }]);
+});
+
+test("a runner's call that fails logs what streamed since its last entry, cut off, once: none where its runner logged its own", async () => {
+  const r = runner();
+  const seen: any[] = [];
+  const call = Agent.watched(r.run, runner_ask, (ev) => seen.push(ev), 60_000, 50);
+  r.emit({ $: "Delta", kind: "illi", text: "said" });
+  r.emit({ $: "Entry", kind: "illi", text: "said" });
+  r.emit({ $: "Delta", kind: "mind", text: "thinking on" });
+  r.end({ ok: false, text: "it ended", left: [], stop: "down" });
+  const end = await call.done;
+  expect(end.cut).toBe(true);
+  expect(seen.filter((ev) => ev.$ === "Entry")).toEqual([{ $: "Entry", kind: "illi", text: "said" }, { $: "Entry", kind: "mind", text: "thinking on\n[cut off]" }]);
+
+  const own = runner();
+  const seen2: any[] = [];
+  const call2 = Agent.watched(own.run, runner_ask, (ev) => seen2.push(ev), 60_000, 50);
+  own.emit({ $: "Delta", kind: "illi", text: "half" });
+  own.emit({ $: "Entry", kind: "illi", text: "half\n[cut off]" });
+  own.end({ ok: false, text: "it ended", left: [], stop: "down", cut: true });
+  expect(await call2.done).toMatchObject({ cut: true });
+  expect(seen2.filter((ev) => ev.$ === "Entry")).toHaveLength(1);
+
+  // a reply logged, a tool run, then half a second message: that half
+  // kept too, though the runner says a reply had begun
+  const more = runner();
+  const seen4: any[] = [];
+  const call4 = Agent.watched(more.run, runner_ask, (ev) => seen4.push(ev), 60_000, 50);
+  more.emit({ $: "Entry", kind: "illi", text: "first part" });
+  more.emit({ $: "Entry", kind: "tool", text: "shell" });
+  more.emit({ $: "Delta", kind: "illi", text: "second ha" });
+  more.end({ ok: false, text: "it ended", left: [], stop: "down", cut: true });
+  expect(await call4.done).toMatchObject({ cut: true });
+  expect(seen4.filter((ev) => ev.$ === "Entry").map((ev) => ev.text)).toEqual(["first part", "shell", "second ha\n[cut off]"]);
+
+  // answered: nothing more logged
+  const fine = runner();
+  const seen3: any[] = [];
+  const call3 = Agent.watched(fine.run, runner_ask, (ev) => seen3.push(ev), 60_000, 50);
+  fine.emit({ $: "Delta", kind: "illi", text: "all" });
+  fine.end({ ok: true, text: "all", left: [] });
+  await call3.done;
+  expect(seen3.filter((ev) => ev.$ === "Entry")).toHaveLength(0);
+});
+
+test("a runner's failed end logs nothing it streamed where the runner settled it (End.owned: the vendor's error said as text) or the call goes again refitted (full)", async () => {
+  for (const end of [{ ok: false, text: "The model is overloaded.", left: [], stop: "down", again: true, owned: true }, { ok: false, text: "too long", left: [], stop: "full" }]) {
+    const r = runner();
+    const seen: any[] = [];
+    const call = Agent.watched(r.run, runner_ask, (ev) => seen.push(ev), 60_000, 50);
+    r.emit({ $: "Delta", kind: "illi", text: "The model is overloaded." });
+    r.end(end);
+    expect((await call.done).cut).toBeUndefined();
+    expect(seen.filter((ev) => ev.$ === "Entry")).toEqual([]);
+  }
+});
+
+test("a runner's call quiet only by events is kept while its runner reads messages (beat); a reply or the vendor's own end that lands after a quiet stop stands; a machine asleep counts no quiet; a program failing outright ends the call with why", async () => {
+  const quiet = 120;
+  let beat = () => {};
+  const r = runner();
+  const run = (ask: any, tell: any, b: () => void) => ((beat = b), r.run(ask, tell));
+  const call = Agent.watched(run, runner_ask, () => {}, quiet, 50);
+  for (let n = 0; n < 8; n++) {
+    await Bun.sleep(quiet / 3);
+    beat();
+  }
+  expect(r.stops).toBe(0);
+  r.end({ ok: true, text: "kept", left: [] });
+  expect(await call.done).toEqual({ ok: true, text: "kept", left: [] });
+
+  // the stop sent, the answer came all the same
+  const late = runner();
+  const call2 = Agent.watched(late.run, runner_ask, () => {}, quiet, 5_000);
+  for (let n = 0; n < 50 && late.stops === 0; n++) {
+    await Bun.sleep(quiet / 4);
+  }
+  expect(late.stops).toBe(1);
+  late.end({ ok: true, text: "fine", left: [] });
+  expect(await call2.done).toEqual({ ok: true, text: "fine", left: [] });
+
+  // the stop sent, the vendor's own end came first: it stands (full
+  // goes again refitted, never as a quiet call's down)
+  const full = runner();
+  const call5 = Agent.watched(full.run, runner_ask, () => {}, quiet, 5_000);
+  for (let n = 0; n < 50 && full.stops === 0; n++) {
+    await Bun.sleep(quiet / 4);
+  }
+  full.end({ ok: false, text: "too long", left: [], stop: "full" });
+  expect(await call5.done).toMatchObject({ ok: false, text: "too long", stop: "full" });
+
+  // the clock jumps far past `quiet` between two ticks (asleep, or a
+  // clock set anew): none of it counts
+  const now = Date.now;
+  let ahead = 0;
+  Date.now = () => now() + ahead;
+  try {
+    const slept = runner();
+    const call3 = Agent.watched(slept.run, runner_ask, () => {}, quiet, 50);
+    ahead = quiet * 100;
+    await Bun.sleep(quiet * 0.75);
+    expect(slept.stops).toBe(0);
+    slept.end({ ok: true, text: "awake", left: [] });
+    expect((await call3.done).ok).toBe(true);
+  } finally {
+    Date.now = now;
+  }
+
+  // its done rejects: the call ends, saying why, what was sent given back
+  const broke = runner();
+  const run4 = (ask: any, tell: any) => ({ ...broke.run(ask, tell), done: Promise.reject(new Error("no such file")) });
+  const call4 = Agent.watched(run4, runner_ask, () => {}, quiet, 50);
+  call4.send({ text: "more", imgs: [] });
+  expect(await call4.done).toEqual({ ok: false, text: "no such file", left: [{ text: "more", imgs: [] }] });
 });

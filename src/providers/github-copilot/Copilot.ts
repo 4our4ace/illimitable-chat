@@ -51,7 +51,9 @@
 // that can't start (a library it lacks, a folder it may not run from),
 // said with its exit code and its own last words, never tried again. A
 // stop
-// aborts the turn (session.abort), given up past CANCEL. Each request's
+// aborts the turn (session.abort), given up past CANCEL, the CLI then
+// taken as hung: killed, or, running others' calls, given no new one
+// (Copilot.deaf). Each request's
 // usage tells the tokens read, the plan's use (the side's), and a
 // model's window where its list told none (Auto's: the model it
 // picked).
@@ -94,18 +96,24 @@ type Proc = {
   ready  : Promise<void>;
   live   : number;
   runs   : Map<string, Run>;
+  deaf?  : boolean;
 };
 
-// a call as it runs: what it asks and where its events go, its CLI and
-// session; the words and thoughts streaming, not logged yet, whether the
+// a call as it runs: what it asks and where its events go (beat: told of
+// every event of its session, Agent.watched), its CLI and session; the
+// words and thoughts streaming, not logged yet, whether the
 // next piece starts an entry; the last words logged, whether any were;
 // the tokens its first request read; whether a tool's answer came back;
 // the tools called, waiting for their answers; the failure the CLI told
 // (null: none); whether it was stopped (halt: what it waits on stops
-// then); its end waited on (idle: the session is idle, or given up)
+// then), whether its turn is out (the message taken: a stop aborts it,
+// Copilot.abort), the aborts sent and the wait before it's given up
+// (null: none yet); its end waited on (idle: the session is idle, or
+// given up)
 type Run = {
   ask     : Ask;
   on      : (ev: Event) => void;
+  beat    : () => void;
   proc    : Proc | null;
   sid     : string;
   text    : string;
@@ -118,6 +126,9 @@ type Run = {
   calls   : Set<string>;
   error   : any;
   stopped : boolean;
+  out     : boolean;
+  aborts  : number;
+  giving  : ReturnType<typeof setTimeout> | null;
   halt    : AbortController;
   idled   : Promise<void>;
   idle    : () => void;
@@ -232,10 +243,11 @@ export namespace Copilot {
 
   // a call (Provider.ts ask): run on the account in use (Copilot.run),
   // its end with what was sent mid-run left for the next turn; a stop
-  // aborts the turn (session.abort) and gives it up past `cancel`. One
+  // aborts the turn once it is out (Copilot.abort; before, the run ends
+  // as its setup step answers, sending none). One
   // that goes on from another request, or with no account in use, ends
   // at once, saying so
-  export function ask(ask: Ask, on: (ev: Event) => void): Try {
+  export function ask(ask: Ask, on: (ev: Event) => void, beat: () => void = () => {}): Try {
     const left: Say[] = [];
     const end = AskAI.end("");
     const none = (text: string, stop: End["stop"]): Try => ({ send: (say) => left.push(say), stop: () => {}, done: Promise.resolve({ ...end, text, stop, left }) });
@@ -248,17 +260,16 @@ export namespace Copilot {
     }
     let idle = () => {};
     const idled = new Promise<void>((done) => (idle = done));
-    const run: Run = { ask, on, proc: null, sid: crypto.randomUUID(), text: "", mind: "", fresh: false, reply: "", said: false, first: null, grew: false, calls: new Set(), error: null, stopped: false, halt: new AbortController(), idled, idle };
+    const run: Run = { ask, on, beat, proc: null, sid: crypto.randomUUID(), text: "", mind: "", fresh: false, reply: "", said: false, first: null, grew: false, calls: new Set(), error: null, stopped: false, out: false, aborts: 0, giving: null, halt: new AbortController(), idled, idle };
     const stop = () => {
       if (run.stopped) {
         return;
       }
       run.stopped = true;
       run.halt.abort();
-      if (run.proc !== null) {
-        void Rpc.call(run.proc.conn, "session.abort", { sessionId: run.sid, reason: "user_initiated" }).catch(() => {});
+      if (run.out) {
+        Copilot.abort(run);
       }
-      setTimeout(run.idle, Copilot.cancel).unref();
     };
     const done = Copilot.run(run, folder).then((e) => ({ ...e, left }));
     return { send: (say) => left.push(say), stop, done };
@@ -292,6 +303,10 @@ export namespace Copilot {
         return Copilot.lost(run);
       }
       await Rpc.call(proc.conn, "session.send", { sessionId: run.sid, ...Copilot.prompt(run.ask) }, SETUP);
+      run.out = true;
+      if (run.stopped) {
+        Copilot.abort(run);
+      }
       await run.idled;
       const end = proc.conn.ended && !run.stopped && run.error === null ? Copilot.failed(run, { message: proc.conn.why }) : Copilot.end(run);
       if (end.text !== NO_SIGNIN) {
@@ -362,11 +377,18 @@ export namespace Copilot {
   // ------
 
   // what the CLI asked or told: a session's event, to its call (a
-  // sub-agent's left: illi runs its own); anything it asks, refused
+  // sub-agent's left: illi runs its own); anything it asks, refused. A
+  // stopped call's turn still going after its abort is aborted once
+  // more: a CLI that took the message before starting its turn may
+  // have had the first abort land on none (Copilot.abort)
   export function heard(proc: Proc, m: Heard): void {
     if (m.method === "session.event") {
       const run = proc.runs.get(String(m.params?.sessionId ?? ""));
       const ev  = m.params?.event;
+      run?.beat();
+      if (run !== undefined && run.stopped && run.aborts === 1 && !["abort", "session.idle"].includes(ev?.type)) {
+        Copilot.abort(run);
+      }
       if (run !== undefined && ev !== undefined && ev.agentId === undefined) {
         Copilot.read(proc, run, ev);
       }
@@ -618,7 +640,7 @@ export namespace Copilot {
     for (const p of procs.filter((p) => (p.folder !== folder || p.stamp !== stamp) && p.live === 0)) {
       Copilot.kill(p, "another account is in use");
     }
-    const p = procs.find((p) => p.folder === folder && p.stamp === stamp && !p.conn.ended) ?? Copilot.spawn(folder, cmd ?? CopilotCli.command());
+    const p = procs.find((p) => p.folder === folder && p.stamp === stamp && !p.conn.ended && p.deaf !== true) ?? Copilot.spawn(folder, cmd ?? CopilotCli.command());
     p.live++;
     try {
       await p.ready;
@@ -689,7 +711,43 @@ export namespace Copilot {
   // a call's CLI let go (it stays for the next, till IDLE)
   export function release(p: Proc): void {
     p.live = Math.max(0, p.live - 1);
+    if (p.deaf === true && p.live === 0) {
+      Copilot.kill(p, "it didn't stop a turn");
+    }
     Copilot.wake();
+  }
+
+  // a stopped call's turn, out on its CLI: aborted (session.abort), given
+  // up past `cancel` (Copilot.deaf), that wait begun again at a second
+  // abort (Copilot.heard). Only a turn out is: a CLI still making the
+  // session, or taking the message, may be slow but well (the run ends
+  // as that step answers), and its abort would come before the turn it
+  // means
+  export function abort(run: Run): void {
+    const proc = run.proc!;
+    run.aborts++;
+    void Rpc.call(proc.conn, "session.abort", { sessionId: run.sid, reason: "user_initiated" }).catch(() => {});
+    if (run.giving !== null) {
+      clearTimeout(run.giving);
+    }
+    run.giving = setTimeout(() => Copilot.deaf(proc, run), Copilot.cancel);
+    run.giving.unref();
+  }
+
+  // a stop the CLI didn't honour in CANCEL (a CLI that hung, as a call
+  // gone quiet is stopped: Agent.watched): one running this call alone
+  // killed; one others share takes no new call (deaf), ending once theirs
+  // did. The call is given up either way, so the next runs on a CLI that
+  // answers
+  export function deaf(proc: Proc, run: Run): void {
+    if (proc.runs.has(run.sid)) {
+      if (proc.runs.size === 1) {
+        Copilot.kill(proc, "it didn't stop the turn");
+      } else {
+        proc.deaf = true;
+      }
+    }
+    run.idle();
   }
 
   // a CLI ended (asked, then killed: Rpc.stop), no call taking it from

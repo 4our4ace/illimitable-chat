@@ -382,7 +382,7 @@ export namespace ChatGPT {
         throw err;
       }
       console.error("chatgpt: " + url + ": " + err?.message);
-      throw new Error(Agent.unreached(url));
+      throw new Error(Agent.unreached(url, err));
     }
   }
 

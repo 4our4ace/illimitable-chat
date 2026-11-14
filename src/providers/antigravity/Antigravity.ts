@@ -106,8 +106,9 @@ type Proc = {
   runs    : Map<string, Run>;
 };
 
-// a call as it runs: what it asks and where its events go, its CLI and
-// session, its tools' path at the forwarder; the words and thoughts
+// a call as it runs: what it asks and where its events go (beat: told of
+// every update of its session, Agent.watched), its CLI and session, its
+// tools' path at the forwarder; the words and thoughts
 // streaming, not logged yet (last: their last piece), whether the next
 // piece starts an entry; the last words logged, whether any were; the
 // tokens its first step read (as a step's usage tells it); whether a
@@ -119,6 +120,7 @@ type Proc = {
 type Run = {
   ask     : Ask;
   on      : (ev: Event) => void;
+  beat    : () => void;
   proc    : Proc | null;
   sid     : string;
   token   : string;
@@ -277,7 +279,7 @@ export namespace Antigravity {
   // shorter)
   export let cancel = CANCEL;
 
-  export function ask(ask: Ask, on: (ev: Event) => void): Try {
+  export function ask(ask: Ask, on: (ev: Event) => void, beat: () => void = () => {}): Try {
     const left: Say[] = [];
     const end = AskAI.end("");
     const none = (text: string, stop: End["stop"]): Try => ({ send: (say) => left.push(say), stop: () => {}, done: Promise.resolve({ ...end, text, stop, left }) });
@@ -293,7 +295,7 @@ export namespace Antigravity {
     }
     let give = () => {};
     const gave = new Promise<null>((done) => (give = () => done(null)));
-    const run: Run = { ask, on, proc: null, sid: "", token: crypto.randomUUID(), text: "", mind: "", last: "", fresh: false, reply: "", said: false, first: null, grew: false, steps: false, calls: new Set(), n: 0, stopped: false, halt: new AbortController(), gave, give };
+    const run: Run = { ask, on, beat, proc: null, sid: "", token: crypto.randomUUID(), text: "", mind: "", last: "", fresh: false, reply: "", said: false, first: null, grew: false, steps: false, calls: new Set(), n: 0, stopped: false, halt: new AbortController(), gave, give };
     const stop = () => {
       if (run.stopped) {
         return;
@@ -347,8 +349,11 @@ export namespace Antigravity {
       proc.runs.set(run.sid, run);
       Antigravity.learn(made);
       const why = run.stopped ? null : await Antigravity.choose(proc.conn, run, made?.configOptions);
+      // a model the account doesn't offer is the vendor's refusal (down:
+      // its why says what to do), never the model's own answer failing
+      // (fail), which a summary would take as its input's doing and clip
       if (why !== null) {
-        return { ok: false, text: why, left: [], stop: "fail" };
+        return { ok: false, text: why, left: [], stop: "down" };
       }
       if (run.stopped) {
         return Antigravity.lost(run);
@@ -549,6 +554,7 @@ export namespace Antigravity {
   export function heard(proc: Proc, m: Heard): void {
     if (m.method === "session/update") {
       const run = proc.runs.get(String(m.params?.sessionId ?? ""));
+      run?.beat();
       if (run !== undefined && !run.stopped) {
         Antigravity.read(run, m.params?.update ?? {});
       }
@@ -780,7 +786,7 @@ export namespace Antigravity {
       Agent.fail("", [{ kind: "mind", text: run.mind }, { kind: "illi", text: before }]).entries.forEach((e) => run.on({ $: "Entry", ...e }));
       run.said ||= before.trim() !== "";
       [run.mind, run.text, run.last] = ["", "", ""];
-      return { ...Antigravity.failed(run, said), ...first };
+      return { ...Antigravity.failed(run, said), ...first, owned: true };
     }
     if (stop === "end_turn" || stop === "") {
       Antigravity.flush(run);

@@ -72,7 +72,13 @@ export namespace Acp {
     const out = (async () => {
       try {
         for await (const line of AskAI.lines(proc.stdout)) {
-          Acp.read(conn, line, heard);
+          // one line illi can't follow is logged, never the end of
+          // reading the agent (all it says after would go unheard)
+          try {
+            Acp.read(conn, line, heard);
+          } catch (err: any) {
+            console.error(name + ": a message illi couldn't read: " + err?.message);
+          }
         }
       } catch {}
     })();
