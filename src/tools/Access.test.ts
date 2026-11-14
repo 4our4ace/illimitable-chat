@@ -21,7 +21,17 @@
 // wildcard), folders inside another said as the outermost by their
 // paths; Claude Code's tools as illi's like ones. And
 // the rules on them: sudo * denies sudo's commands, bash * a bash -c, rm
-// * an rm in a case, rm -rf /* a quoted 'rm' -rf "/" and /bin/rm.
+// * an rm in a case, rm -rf /* a quoted 'rm' -rf "/" and /bin/rm; git
+// push * a git -C x push, git -C * the same (both readings met), its
+// words as written through its family saved with that family (never git
+// -C * nor git *; a blank or wildcard word, a dry run, a command short
+// of its family saved exactly), so a git -C x push --force still asks;
+// rm * one a git setting, an alias or GIT_SSH_COMMAND runs, one made as
+// it runs or set for a shell of its own too; the folder git -C, make -C
+// or sudo -D moves to asked for from the folder in force there, a
+// redirection made in the shell's, a script git runs from its
+// repository's top too, a wrapper's own paths (time -o, flock), git's
+// path variables. Many settings met by many git commands read quickly.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -30,6 +40,7 @@ import * as path from "node:path";
 import * as config from "../config/Config.ts";
 import { Access, type Where } from "./Access.ts";
 import { Permissions, type Rule } from "./Permissions.ts";
+import { Shell } from "./Shell.ts";
 
 const DIR   = fs.realpathSync(fs.mkdtempSync(os.tmpdir() + "/illi-access-"));
 const APP   = DIR + "/app";
@@ -195,6 +206,137 @@ test("rules on shell: sudo * denies sudo's commands, bash * a bash -c's, rm * an
   expect(judge("git status", [rule("shell", "git push *", "ask")])).toEqual(["allow"]);
   expect(judge("cd " + LIB + " && ls", [])).toEqual(["ask", "allow"]);
   expect(judge("cd " + LIB + " && ls", [rule("external_directory", LIB + "/*", "allow")])).toEqual(["allow", "allow"]);
+});
+
+test("rules find a command however its program's own options sit before what it does (git -C x push), and those naming an option it as written; \"don't ask again\" saves its words through its family and that family, never every use of the option; a command a git setting, an alias or a variable runs found as well", () => {
+  expect(judge("git -C . push --force", [rule("shell", "git push *", "ask")])).toEqual(["ask"]);
+  expect(judge("sudo npm install -g x", [rule("shell", "npm install -g *", "deny")])).toEqual(["deny"]);
+  expect(judge("timeout 5 kubectl --context prod delete ns x", [rule("shell", "kubectl --context prod *", "deny")])).toEqual(["deny"]);
+  expect(judge("git -c alias.push=status push", [rule("shell", "git push *", "deny")])).toEqual(["deny"]);
+  expect(judge("git -c alias.p=push p", [rule("shell", "git push *", "deny")])).toEqual(["deny"]);
+  expect(judge("kubectl --context prod -n x delete pod y", [rule("shell", "kubectl delete *", "ask")])).toEqual(["ask"]);
+  expect(judge("GIT_SSH_COMMAND='rm -rf x' git fetch", [rule("shell", "rm *", "deny")])).toEqual(["deny"]);
+  expect(judge("git -c core.pager='rm -rf x' log", [rule("shell", "rm *", "deny")])).toEqual(["deny"]);
+  expect(judge("export EDITOR=\"${EDITOR:-vim}\"; sudo rm -rf build", [rule("shell", "rm *", "deny")])).toEqual(["deny"]);
+  expect(judge("git -c 'alias.x=!f() { rm -rf y; }; f' x", [rule("shell", "rm *", "deny")])).toEqual(["deny"]);
+  expect(shell("git -C . push origin")).toEqual([["shell", ["git -C . push origin", "git push origin"], ["git -C . push *", "git push *"]]]);
+  expect(shell("make -n deploy")).toEqual([["shell", ["make -n deploy"], ["make -n deploy"]]]);
+  const ask = [...Permissions.base([]), rule("shell", "git *", "ask")];
+  const saved = Access.shell(WHERE, "git -C . status")[0].save.map((r) => rule("shell", r, "allow"));
+  const decide = (c: string) => Permissions.decide("shell", Access.shell(WHERE, c)[0].resources, ask, saved).effect;
+  expect(["git -C . status", "git -C . status -s", "git status", "git -C . push --force", "git -C . --no-literal-pathspecs push --force", "git -C ../x status"].map(decide)).toEqual(["allow", "allow", "allow", "ask", "ask", "ask"]);
+});
+
+test("the folder a program's option or a wrapper moves to asks, from the shell's folder (one known only as it runs by its known head, one with a ~ as home); a redirection is made in the shell's folder; the paths a wrapper's own words name ask, its other words not", () => {
+  expect(shell("git -C " + LIB + " status")[0]).toEqual(["external_directory", [LIB + "/*"], [LIB + "/*"]]);
+  expect(shell("make -C ../../lib deploy")[0][1]).toEqual([LIB + "/*"]);
+  expect(shell("env -C ../../lib ls")[0][1]).toEqual([LIB + "/*"]);
+  expect(shell("sudo -D " + LIB + " ls")[0][1]).toEqual([LIB + "/*"]);
+  expect(shell("git -C " + LIB + "/$X log")[0][1]).toEqual([LIB + "/*"]);
+  expect(shell("git -C sub log > ../../lib/out")[0][1]).toEqual([LIB + "/*"]);
+  expect(shell("/usr/bin/time -o " + LIB + "/t true")[0][1]).toEqual([LIB + "/*"]);
+  expect(shell("flock " + LIB + "/lock -c 'true'")[0][1]).toEqual([LIB + "/*"]);
+  expect(shell("git --git-dir=" + LIB + "/repo/.git log")[0][1]).toEqual([LIB + "/repo/.git/*"]);
+  expect(shell("timeout 5 git -C . status; xargs -d / echo; exec -a /bin/x ls")).toHaveLength(1);
+});
+
+test("\"don't ask again\" never saves a whole program: its family read on the program by name (/usr/bin/git, 'git'), its options quoted or not; a word up to there blank or holding * or ? saved exactly (none with a wildcard); a command short of its family, and a dry run, exactly; leading assignments off its saves, a wrapper's through its family", () => {
+  const saves = (c: string) => Access.shell(WHERE, c).find((r) => r.action === "shell")!.save;
+  expect(saves("/usr/bin/git -C . status")).toEqual(["/usr/bin/git -C . status *", "git -C . status *", "/usr/bin/git status *", "git status *"]);
+  expect(saves("'git' -C . status")).not.toContain("git *");
+  expect(saves("git '-C' . status 2>/dev/null")).toEqual(["git '-C' . status *", "git -C . status *", "git status *"]);
+  expect(saves("git -C '*' status")).toEqual(["git status"]);
+  expect(saves("git -C . ''")).toEqual(["git -C . ''", "git -C .", "git ''", "git"]);
+  expect(saves("kubectl -n prod ''")).not.toContain("kubectl *");
+  expect(saves("git")).toEqual(["git"]);
+  expect(saves("npm run")).toEqual(["npm run"]);
+  expect(saves("make deploy -n")).toEqual(["make deploy -n"]);
+  expect(saves("make -kn deploy")).toEqual(["make -kn deploy"]);
+  expect(saves("make -j4 deploy")).toEqual(["make -j4 deploy *", "make deploy *"]);
+  expect(saves("git -C . push --dry-run")).toEqual(["git -C . push --dry-run", "git push --dry-run"]);
+  expect(saves("N=-n; make deploy $N")).toEqual(["make deploy $N", "make deploy -n"]);
+  expect(saves("D=--dry-run; git push $D")).toEqual(["git push $D", "git push --dry-run"]);
+  expect(saves("make deploy $'-n'")).toEqual(["make deploy $'-n'", "make deploy -n"]);
+  expect([saves("git '*'"), saves("npm run '*'"), saves("X='*'; git \"$X\"")]).toEqual([[], [], ["git \"$X\""]]);
+  expect(saves("FOO=1 git -C . status")).toEqual(["git -C . status *", "git status *"]);
+  expect(saves("sudo git -C . status")).toEqual(["sudo git -C . status *", "git -C . status *", "git status *"]);
+});
+
+test("a value made as it runs is read by its text, loosely past a variable; a git setting's key made as it runs taken as any; aliases followed however deep; git's settings in variables read where set and into a shell of its own; tar's command; an option word of several values read with each, a number's option before a word made as it runs both ways", () => {
+  const deny = [rule("shell", "rm *", "deny"), rule("shell", "git push *", "deny")];
+  for (const c of [
+    "git -c \"core.pager=rm -rf y $NOPE\" log",
+    "GIT_SSH_COMMAND=$NOPE'rm -rf y' git fetch",
+    "git -c core.pager=$NOPE'rm -rf y' log",
+    "git -c alias.p=$NOPE'!rm -rf y' p",
+    "git -c alias.p=\"push $X\" p",
+    "git -c alias.p='push '$X p",
+    "git -c alias.$X=push p",
+    "git -c $X=push p --force",
+    "git -c alias.a=b -c alias.b=c -c alias.c=d -c alias.d=e -c alias.e=f -c alias.f=g -c alias.g=h -c alias.h=i -c alias.i=push a --force",
+    "export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0='rm -rf x'; bash -c 'git fetch'",
+    "export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.s GIT_CONFIG_VALUE_0=push; bash -c 'git s --force'",
+    "export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.sshCommand GIT_CONFIG_VALUE_0='rm -rf x'; ./build.sh",
+    "git -c tar.x.command='rm -rf y' archive --format=x HEAD",
+    "for o in -p -P; do git $o push --force; done",
+    "git {-C,-p} . push --force",
+    // settings inside an alias's value; settings git hands down to what it
+    // runs (its -c, its environment's, exported or the command's own)
+    "git -c 'alias.p=-c alias.q=push q' p",
+    "git -c 'alias.p=-c \"alias.q=!rm -rf x\" q' p",
+    "git -c alias.a='!git b' -c alias.b=push a",
+    "GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=alias.a GIT_CONFIG_VALUE_0='!git b' GIT_CONFIG_KEY_1=alias.b GIT_CONFIG_VALUE_1=push git a",
+    "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push EDITOR='git p' git commit",
+    "export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=alias.a GIT_CONFIG_VALUE_0='!git b' GIT_CONFIG_KEY_1=alias.b GIT_CONFIG_VALUE_1=push; git a",
+    // a script read again once git's settings change
+    "export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=status; EDITOR='git p' git commit; export GIT_CONFIG_VALUE_0=push; EDITOR='git p' git commit",
+    // an option word of several values, each a flag, however many
+    "git {-p,-P} {-p,-P} {-p,-P} {-p,-P} push",
+    "for o in -p -P -p; do git $o $o -c alias.x=push x; done",
+    "git {-p,-P,--no-pager,--paginate,--no-replace-objects,--no-lazy-fetch,--no-optional-locks,--no-advice,--literal-pathspecs} push",
+    // what illi can't read leaves the rest of the command read
+    "git -C x push; x=(a)",
+    "GIT_PAGER='rm -rf y' git log; x=(a)",
+    "EDITOR='git -C x push; x=(a)' true",
+    // a key made as it runs in the environment; a brace's value made so
+    "K=$(cat k); GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.$K GIT_CONFIG_VALUE_0='push --force' git p",
+    "git -c core.{pager,editor}=\"$X\"'rm -rf y' log",
+  ]) {
+    expect([c, judge(c, deny)]).toEqual([c, ["deny"]]);
+  }
+  expect(judge("git -c '' status", deny)).toEqual(["allow"]);
+  expect(judge("make -j $N deploy", [rule("shell", "make deploy *", "ask")])).toEqual(["ask"]);
+});
+
+test("a folder named by an option is asked for from the folder in force where it's read (a wrapper's, an earlier option's); a script git runs from its repository's top too; git's path variables as paths", () => {
+  expect(shell("env -C /etc git -C ../$X status")[0][1]).toEqual(["/etc/*", "/*"]);
+  expect((shell("git -C ../../lib/repo -C .. status")[0][1] as string[]).sort()).toEqual([LIB + "/*", LIB + "/repo/*"]);
+  expect(shell("git -C .. status")).toHaveLength(1);
+  expect(shell("git -c 'alias.x=!cat ../y' x")[0][1]).toEqual([DIR + "/*"]);
+  expect(shell("EDITOR='cat ../y' git commit")[0][1]).toEqual([DIR + "/*"]);
+  expect(shell("GIT_DIR=../../lib/repo/.git git status")[0][1]).toEqual([LIB + "/repo/.git/*"]);
+  expect(shell("export GIT_WORK_TREE=" + LIB + "; git status")[0][1]).toEqual([LIB + "/*"]);
+});
+
+test("past the scripts one command's reading reads (Shell BUDGET), those left are their text alone, met crudely, the rest of the command read as ever: its options off, its rules met; read in a moment, as is an alias that runs itself twice", () => {
+  const many = Array.from({ length: 2100 }, (_, i) => "EDITOR='vim a" + i + "' git commit").join("; ");
+  const pagers = "export GIT_CONFIG_COUNT=50 " + Array.from({ length: 50 }, (_, i) => "GIT_CONFIG_KEY_" + i + "=core.pager GIT_CONFIG_VALUE_" + i + "='less " + i + "'").join(" ") + "; " + Array.from({ length: 40 }, (_, i) => "git -c a.b=" + i + " log").join("; ");
+  const t0 = performance.now();
+  const parts = Shell.parse(many + "; git -C x push", WHERE.cwd) as any[];
+  expect(parts.filter((p) => p.rough === "spent").length).toBeGreaterThan(0);
+  expect(parts.at(-1).text).toBe("git -C x push");
+  for (const c of [many + "; git -C x push", many + "; EDITOR='rm -rf y' git commit", pagers + "; git -C x push"]) {
+    expect(judge(c, [rule("shell", "git push *", "deny"), rule("shell", "rm *", "deny")])).toEqual(["deny"]);
+  }
+  expect(judge("git -c alias.a='!git a 1; git a 2; git push' a", [rule("shell", "git push *", "deny")])).toEqual(["deny"]);
+  expect(performance.now() - t0).toBeLessThan(3000);
+});
+
+test("git's settings in the environment, many, met by many git commands, read in a moment", () => {
+  const many = (m: number, n: number) => "export GIT_CONFIG_COUNT=" + m + " " + Array.from({ length: m }, (_, i) => "GIT_CONFIG_KEY_" + i + "=core.pager GIT_CONFIG_VALUE_" + i + "='less; less'").join(" ") + "; " + Array.from({ length: n }, () => "git log").join("; ");
+  const t0 = performance.now();
+  Access.shell(WHERE, many(120, 600));
+  expect(performance.now() - t0).toBeLessThan(3000);
 });
 
 test("Claude Code's tools that ask in illi's calls, as illi's like ones: its web fetch and search theirs, one of its MCP servers' by its name; illi's own none", () => {

@@ -17,15 +17,27 @@
 //                       system program by name ('rm' -rf "/", /bin/rm -rf
 //                       / and rm -rf "$X" with X=/ as rm -rf /: bare);
 //                       each command a wrapper or a script runs (rm -rf /,
-//                       bash -c's script's) and the wrapper's or script's
-//                       own; "don't ask again" saves each one's head and *
-//                       (git push *: arity). Folders outside: those it cds
-//                       into, and paths its words or redirections name
+//                       bash -c's script's, a git setting's or a variable's
+//                       naming a command: GIT_SSH_COMMAND) and the
+//                       wrapper's or script's own; a program read also with
+//                       its own options before what it does off (git -C x
+//                       push also as git push: Shell.ts globals) and each
+//                       git alias given to it put; "don't ask again" saves
+//                       each one's head and * (git push *: arity), one so
+//                       read its words as written through that head (git
+//                       -C x push *), the command itself where an option
+//                       is among them (Access.family). Folders outside:
+//                       those it cds into or a wrapper or option moves it
+//                       to (sudo -D, git -C: named from the shell's
+//                       folder), and paths its words (from its folder and
+//                       the shell's), a wrapper's own (time -o x, flock x:
+//                       Part taken) or redirections (from the shell's) name
 //                       (absolute, ~, ~user, ..; a value glued to an
 //                       option, --file=/x or -o/x, or after a name, of=/x;
 //                       one made as it runs by its head), the stream
 //                       devices left out (/dev/null, /dev/tty). A command
-//                       Shell.ts can't read is split crudely into pieces,
+//                       Shell.ts can't read (or a script in one: Part
+//                       rough) is split crudely into pieces,
 //                       its paths found by their look, so a rule still
 //                       finds most of what is in it
 //   spawn, skill, ask   subagent (its agent's name), skill (its name),
@@ -97,8 +109,9 @@ export type Where = { cwd: string; top: string; files: string[]; guarded: string
 // ~/*/* would allow every folder in home)
 type Target = { absolute: string; place: string; resource: string; real?: string; outside?: { resource: string; save: string } };
 
-// a command's piece as written, and where it is
-type Piece = { text: string; span: Span };
+// a command's piece as written, and where it is; what "don't ask again"
+// saves for it, where not its family's (Access.family)
+type Piece = { text: string; span: Span; save?: string[] };
 
 // Constants
 // =========
@@ -110,9 +123,18 @@ const CD = new Set(["cd", "chdir", "pushd", "popd"]);
 // folder (export PATH=~/bin:$PATH)
 const SETS = new Set(["export", "declare", "typeset", "local", "readonly"]);
 
+// the variables naming where git keeps or finds a repository's files, its
+// work tree or its settings: a value given, set or exported names a path
+// as an argument does (GIT_DIR=../x/.git git status)
+const GIT_PATHS = new Set(["GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG"]);
+
 // how many expansions of a command's words a rule meets at most (bare):
 // past it, a word's values in a row
 const BARE = 16;
+
+// how deep a command illi can't read has its pieces read on their own
+// (rough): a script in a piece that can't be read either is one deeper
+const ROUGH = 4;
 
 // the words that open a shell's own syntax, not a command (left off a
 // piece's front, the piece dropped if a loop's head)
@@ -182,51 +204,14 @@ export namespace Access {
 
   // a shell command's requests: the folders outside it touches, then its
   // commands (Shell.ts's parts, the wrappers' and scripts' own too; one
-  // it can't read, in crude pieces)
+  // it can't read, in crude pieces, each read on its own too: rough)
   export function shell(where: Where, command: string): Request[] {
     const parts = Shell.parse(command, where.cwd);
-    const found: Array<{ target: Target; span: Span | null }> = [];
-    const pieces: Piece[] = [];
-    if (typeof parts === "string") {
-      pieces.push(...outer(command), ...crude(command));
-      for (const m of command.matchAll(/(^|[\s=('"<>|;&`]|(?<=\s)-[A-Za-z])((?:~[\w.-]*|\.\.)?\/[^\s'"`;|&<>()$]*|\.\.(?=$|[\s'"`;|&<>)]))/g)) {
-        if (m[1].startsWith("-") && m[2] === "/") {
-          continue;
-        }
-        const at = m.index! + m[1].length;
-        const t = path_target(where, m[2], where.cwd, null);
-        t !== null && found.push({ target: t, span: [at, at + m[2].length] });
-      }
-    } else {
-      for (const p of parts) {
-        const run = p.cwd ?? where.cwd;
-        if (p.cwd !== null && p.cwd !== where.cwd) {
-          found.push({ target: Access.target(where, p.cwd, "directory"), span: p.span });
-        }
-        const program = Shell.program(p.argv[0]);
-        const cd = CD.has(program);
-        const sets = SETS.has(program);
-        p.argv.slice(1).forEach((w) => paths(w, cd, sets).forEach((v) => {
-          const t = path_target(where, v, run, cd ? "directory" : null);
-          t !== null && found.push({ target: t, span: p.span });
-        }));
-        for (const r of p.redirs) {
-          if (r.op.startsWith("<<") || (r.op.includes("&") && /^(?:\d+|-)$/.test(r.target.alts[0] ?? ""))) {
-            continue;
-          }
-          r.target.alts.forEach((v) => {
-            const t = path_target(where, v, run, null, true);
-            t !== null && found.push({ target: t, span: p.span });
-          });
-        }
-        if (!cd) {
-          pieces.push({ text: p.full, span: p.span }, { text: p.text, span: p.span }, ...bare(p).map((text) => ({ text, span: p.span })));
-        }
-      }
-      pieces.push(...outer(command));
-    }
+    const met = typeof parts === "string" ? rough(where, command, where.cwd, null) : met_parts(where, parts);
+    const pieces = typeof parts === "string" ? met.pieces : [...met.pieces, ...outer(command)];
+    const found = met.found;
     const runs = commands(pieces);
-    return [...external(found), ...(runs.length === 0 ? [] : [{ action: "shell", resources: runs.map((r) => r.text), save: [...new Set(runs.map((r) => Access.arity(words(r.text)).join(" ") + " *"))], spots: runs.map((r) => r.span) }])];
+    return [...external(found), ...(runs.length === 0 ? [] : [{ action: "shell", resources: runs.map((r) => r.text), save: [...new Set(runs.flatMap((r) => r.save ?? [Access.family(r.text)]))].filter((x) => x !== ""), spots: runs.map((r) => r.span) }])];
   }
 
   // a path's place (Target), from the working dir (~ as home); outside,
@@ -311,15 +296,40 @@ export namespace Access {
     return [...new Set([...[config.ROOT, config.DIR].flatMap((d) => [path.join(d, "RULES.md"), path.join(d, "theme.json")]), ...set])];
   }
 
-  // the words that name a command (ARITY), of its words as written
-  export function arity(tokens: string[]): string[] {
+  // what "don't ask again" saves for a command: its family (the words
+  // that name it, Access.arity, its program by name) and any more after
+  // them; the command itself where an option is among those words,
+  // quoted or not (git -C x status as it is, never git -C *: a later git
+  // -C x push that illi can't read without its options would take it),
+  // one is blank or holds * or ? (a rule's own wildcards: git '*' would
+  // save git * *), it is a dry run (dry: approving make deploy -n never
+  // approves make deploy), or it is short of its family's words (git, npm
+  // run alone: never git *); "" (nothing saved) where that command holds
+  // a * or ?, as it would save more than itself (git '*' as git *)
+  export function family(text: string): string {
+    const all = words(text);
+    const names = all.map((w) => w.replace(/['"\\]/g, ""));
+    names[0] = Shell.program(Shell.lit(names[0] ?? "")) || (names[0] ?? "");
+    const n = Access.arity(names).length;
+    const odd = names.slice(1, n).some((v) => v.startsWith("-") || v.trim() === "" || /[*?]/.test(v)) || dry(names) || n < Access.wanted(names);
+    return !odd ? all.slice(0, n).join(" ") + " *" : /[*?]/.test(text) ? "" : text;
+  }
+
+  // how many words name a command (ARITY), of its words as written: its
+  // family's, though fewer are given
+  export function wanted(tokens: string[]): number {
     for (let n = Math.min(tokens.length, 3); n > 0; n--) {
       const k = ARITY[tokens.slice(0, n).join(" ")];
       if (k !== undefined) {
-        return tokens.slice(0, k);
+        return k;
       }
     }
-    return tokens.slice(0, 1);
+    return 1;
+  }
+
+  // the words that name a command (ARITY), of its words as written
+  export function arity(tokens: string[]): string[] {
+    return tokens.slice(0, Access.wanted(tokens));
   }
 
   // what "don't ask again" saves, in words (the question's: "Yes, and
@@ -376,8 +386,9 @@ function external(found: Array<{ target: Target; span: Span | null }>): Request[
 // =====
 
 // the commands of a shell command's pieces, as matched: each its leading
-// assignments and shell words (do, then, !) left off, a loop's or case's
-// head and a cd dropped, each once
+// assignments and shell words (do, then, !) left off (its saves too), a
+// loop's or case's head and a cd dropped, each once (what it saves as
+// the first that says)
 function commands(pieces: Piece[]): Piece[] {
   const out: Piece[] = [];
   for (const p of pieces) {
@@ -390,8 +401,13 @@ function commands(pieces: Piece[]): Piece[] {
       continue;
     }
     const text = p.text.slice(ws[k].at).trim();
-    if (text !== "" && !out.some((o) => o.text === text)) {
-      out.push({ text, span: p.span });
+    const lead = p.text.slice(0, ws[k].at);
+    const save = p.save?.map((x) => (x.startsWith(lead) ? x.slice(lead.length).trim() : x));
+    const known = out.find((o) => o.text === text);
+    if (known !== undefined) {
+      known.save ??= save;
+    } else if (text !== "") {
+      out.push({ text, span: p.span, ...(save === undefined ? {} : { save }) });
     }
   }
   return out;
@@ -520,14 +536,155 @@ function paths(w: Word, cd: boolean, sets: boolean): string[] {
   })];
 }
 
+// a command's parts as Shell.ts read them, met: the folders outside it
+// they touch (where each runs, the paths its words name, its
+// redirections'), and its pieces to meet the rules (readings; a script
+// in it this can't read, roughly: rough, `depth` deep)
+function met_parts(where: Where, parts: Part[], depth = 0): { pieces: Piece[]; found: Array<{ target: Target; span: Span | null }> } {
+  const found: Array<{ target: Target; span: Span | null }> = [];
+  const pieces: Piece[] = [];
+  for (const p of parts) {
+    const at = p.at ?? where.cwd;
+    const run = p.cwd ?? at;
+    const froms = [...new Set([run, at])];
+    if (p.cwd !== null && p.cwd !== where.cwd) {
+      found.push({ target: Access.target(where, p.cwd, "directory"), span: p.span });
+    }
+    const program = Shell.program(p.argv[0]);
+    const cd = CD.has(program);
+    const sets = SETS.has(program);
+    const named = (w: Word, dir: boolean, set: boolean) => paths(w, dir, set).forEach((v) => froms.forEach((from) => {
+      const t = path_target(where, v, from, dir ? "directory" : null);
+      t !== null && found.push({ target: t, span: p.span });
+    }));
+    [...p.argv.slice(1), ...p.plain.flatMap((r) => r.slice(1)).filter((w) => !p.argv.includes(w))].filter((w) => !p.dirs.some((d) => d.word === w)).forEach((w) => named(w, cd, sets));
+    p.taken.forEach((w) => named(w, false, false));
+    p.env.filter((e) => GIT_PATHS.has(e.name)).forEach((e) => named(e.value, false, false));
+    sets && p.argv.slice(1).forEach((w) => {
+      const m = /^([A-Za-z_]\w*)=/.exec(w.alts[0] ?? "");
+      m !== null && GIT_PATHS.has(m[1]) && named(Shell.cut(w, m[0].length), false, false);
+    });
+    p.dirs.forEach((d) => paths(d.word, false, false).forEach((v) => (d.from === null ? froms : [d.from]).forEach((from) => {
+      const t = path_target(where, v, from, "directory");
+      t !== null && found.push({ target: t, span: p.span });
+    })));
+    for (const r of p.redirs) {
+      if (r.op.startsWith("<<") || (r.op.includes("&") && /^(?:\d+|-)$/.test(r.target.alts[0] ?? ""))) {
+        continue;
+      }
+      r.target.alts.forEach((v) => {
+        const t = path_target(where, v, at, null, true);
+        t !== null && found.push({ target: t, span: p.span });
+      });
+    }
+    if (p.rough !== undefined && p.rough !== false) {
+      const met = rough(where, p.text, run, p.span, p.rough === "spent" ? ROUGH : depth + 1);
+      pieces.push(...met.pieces);
+      found.push(...met.found);
+    } else if (!cd) {
+      pieces.push(...readings(p));
+    }
+  }
+  return { pieces, found };
+}
+
+// a command illi can't read (or a script in one: Part rough), met
+// crudely: its pieces (outer, crude: its rules still meet most of what is
+// in it) and the paths it names by their look, from `from`; each where
+// it is in it, or all at `span`. Each piece is read on its own too, where
+// Shell.ts reads it (met_parts, ROUGH deep at most), so a construct it
+// can't follow (an array, a case) leaves the rest of the command read as
+// ever (git -C x push; x=(a): git push too); these only add to what the
+// crude reading meets, never take from it. A script Shell.ts left unread
+// past its budget (Part rough "spent") isn't read so: its pieces would
+// run past it each again
+function rough(where: Where, text: string, from: string, span: Span | null, depth = 0): { pieces: Piece[]; found: Array<{ target: Target; span: Span | null }> } {
+  const split = [...outer(text), ...crude(text)];
+  const pieces = split.map((p) => (span === null ? p : { ...p, span }));
+  const found: Array<{ target: Target; span: Span | null }> = [];
+  for (const m of text.matchAll(/(^|[\s=('"<>|;&`]|(?<=\s)-[A-Za-z])((?:~[\w.-]*|\.\.)?\/[^\s'"`;|&<>()$]*|\.\.(?=$|[\s'"`;|&<>)]))/g)) {
+    if (m[1].startsWith("-") && m[2] === "/") {
+      continue;
+    }
+    const at = m.index! + m[1].length;
+    const t = path_target(where, m[2], from, null);
+    t !== null && found.push({ target: t, span: span ?? [at, at + m[2].length] });
+  }
+  if (depth < ROUGH) {
+    const seen = new Set([text.trim()]);
+    for (const piece of split) {
+      if (seen.has(piece.text)) {
+        continue;
+      }
+      seen.add(piece.text);
+      const parts = Shell.parse(piece.text, from, span ?? piece.span[0]);
+      if (typeof parts !== "string") {
+        const met = met_parts(where, parts, depth + 1);
+        pieces.push(...met.pieces.map((p) => (span === null ? p : { ...p, span })));
+        found.push(...met.found.map((f) => (span === null ? f : { ...f, span })));
+      }
+    }
+  }
+  return { pieces, found };
+}
+
+// a part's commands to meet the rules: as written whole (wrappers too),
+// its words as written and as they'd expand (Shell bare), then each of
+// its other readings likewise (Part plain: its program's own options
+// off, a git alias put as git puts it), so a rule naming an option (git
+// -c *, kubectl --context prod *) meets the first, one on what it does
+// (git push *) the others. One read so saves its words as written
+// through those naming what it does, its family measured on the words
+// as they'd run (/usr/bin/git -C x status as git status: git -C x
+// status *, never git -C * nor git *): approved, it runs again as it
+// is, and a git -C x push still asks. Where a word up to there is blank
+// or holds * or ? (git -C '*' status), each saves itself alone, one
+// with a * or ? none, those being a rule's wildcards; so too a dry run
+// as its words would expand (N=-n; make deploy $N), with options to
+// take off or not
+function readings(p: Part): Piece[] {
+  const [one, ...more] = p.plain;
+  const named = one === undefined ? -1 : p.argv.indexOf(one[Math.max(0, Access.arity(named_words(one)).length - 1)]);
+  const fam = named >= 0 ? named : Access.arity(named_words(p.argv)).length - 1;
+  const odd = dry(named_words(p.argv)) || p.argv.slice(0, fam + 1).some((w) => (w.dynamic ? [w.raw] : w.alts).some((v) => v.trim() === "" || /[*?]/.test(v)));
+  const exact = (text: string) => ({ save: /[*?]/.test(text) ? [] : [text] });
+  const lead = p.full.indexOf(p.text);
+  const through = p.argv.slice(0, named + 1);
+  const save = (text: string, by: string[]) => (odd ? exact(text) : named < 0 ? {} : { save: by });
+  return [
+    { text: p.full, span: p.span, ...(p.full === p.text ? {} : lead < 0 ? save(p.full, []) : save(p.full, [p.full.slice(0, lead) + through.map((w) => w.raw).join(" ") + " *"])) },
+    { text: p.text, span: p.span, ...save(p.text, [through.map((w) => w.raw).join(" ") + " *"]) },
+    ...bare(p.argv).map((text) => ({ text, span: p.span, ...save(text, bare(through).map((b) => b + " *")) })),
+    ...[one, ...more].filter((r) => r !== undefined).flatMap((r) => [r.map((w) => w.raw).join(" "), ...bare(r)]).map((text) => ({ text, span: p.span, ...(odd ? exact(text) : {}) })),
+  ];
+}
+
+// whether a command (its words as the rules' families read them) is a
+// dry run, whose approval mustn't stand for the real one: --dry-run
+// anywhere (git push, npm publish, kubectl apply, helm, rsync), make's
+// -n, -t, -q anywhere (it reads its options after the targets too; alone
+// or among others, -kn, before an option taking a value)
+function dry(names: string[]): boolean {
+  const make = names[0] === "make" || names[0] === "gmake";
+  return names.slice(1).some((v) => /^--dry-run(=|$)/.test(v) || (make && (/^--(just-print|recon|touch|question)$/.test(v) || /^-[^-CfIjloOW]*[ntq]/.test(v))));
+}
+
+// a command's words as the rules' families read them: its program by
+// name (/usr/bin/git, 'git' as git), each word as it'd expand where it
+// has one value (as written where it has several, or is known only as
+// it runs)
+function named_words(argv: Word[]): string[] {
+  return argv.map((w, k) => (k === 0 && Shell.program(w) !== "" ? Shell.program(w) : !w.dynamic && w.alts.length === 1 ? w.alts[0] : w.raw));
+}
+
 // a command's words as they'd expand (unquoted, ~ and the variables
 // known filled in; one known only as it runs as written), its program by
 // name if a system one (/bin/rm as rm): so a rule on rm -rf /* meets
 // 'rm' -rf "/" too. A word of several values (a brace's, a loop's
 // variable's) gives a command for each (past BARE, its values in a row),
 // so a rule on rm -rf /var/* meets for d in /tmp /var; do rm -rf $d; done
-function bare(p: Part): string[] {
-  const [head, ...rest] = p.argv;
+function bare(argv: Word[]): string[] {
+  const [head, ...rest] = argv;
   if (head === undefined) {
     return [];
   }

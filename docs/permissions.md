@@ -84,21 +84,92 @@ project always comes first:
   command for each (`for d in /tmp /var; do rm -rf $d; done` gives `rm
   -rf /tmp` and `rm -rf /var`). A script a wrapper runs gives its
   commands too, beside the wrapper's own: `bash -c 'ls; rm x'` gives
-  `ls`, `rm x` and `bash -c 'ls; rm x'`. So a rule matches either. A
-  `cd` is no command: it asks only for its folder, if outside.
-- A shell command's folders outside: those it `cd`s into, and the paths
-  its words and redirections name (an absolute path, `~`, `~user`, a
+  `ls`, `rm x` and `bash -c 'ls; rm x'`. So a rule matches either.
+- A program's own options before what it does give the command without
+  them too, beside it as written: `git -C app push origin` gives `git -C
+  app push origin` and `git push origin`, and so do `kubectl -n prod
+  delete pod x`, `npm --prefix app run build`, `make -C app -j4 deploy`
+  and the like (git, kubectl, helm, docker, podman, npm, pnpm, yarn,
+  bun, npx, bunx, make, cargo, uv, poetry, terraform, tofu, systemctl,
+  tmux, aws, gcloud, az). So a rule on what it does (`git push *`) and
+  one naming an option (`git -c *`, `kubectl --context prod *`) both
+  match. "Don't ask again" saves that command's words as written up to
+  what it does, and what it does alone (`git -C app push *` and `git
+  push *`, `/usr/bin/git` and `'git'` read as `git`), never every use of
+  the option: `git -C app push --force` still asks under `git push
+  --force*`, and so does `git -C app status` once only `git -C app push
+  *` is saved. A command whose words up to what it does are blank or
+  hold `*` or `?` (a rule's own wildcards), one short of the words
+  naming what it does (`git` alone, `npm run`), and a dry run
+  (`--dry-run` anywhere, make's `-n`, `-t`, `-q` anywhere: `make deploy
+  -n`, `N=-n; make deploy $N`, `make deploy $'-n'`, as its words
+  expand) are saved as written alone, so approving one never approves
+  the real run; one of those whose text holds `*` or `?` itself (`git
+  '*'`) saves nothing, as its text would match more than itself. A
+  word of several values that are each one of the program's flags
+  (`git {-p,-P} push`, `for o in -p -P; do git $o …`) is passed over
+  as one, however many there are.
+- A git setting given with the command that runs a command (`git -c
+  core.sshCommand=…`, `core.pager`, `core.editor`, a credential helper,
+  a diff or merge tool's, `tar.<format>.command`, and the rest of
+  git's), whether given by `-c`, `--config-env` or the environment
+  (`GIT_CONFIG_COUNT` with its `GIT_CONFIG_KEY_n` and
+  `GIT_CONFIG_VALUE_n`, `GIT_CONFIG_PARAMETERS`), gives that command
+  too; so does a variable naming one (`GIT_SSH_COMMAND`, `GIT_EDITOR`,
+  `EDITOR`, `PAGER`, `GH_PAGER`, `KUBE_EDITOR` and the like, given to a
+  command, through `env` or `sudo`, exported or set). Settings in the
+  environment are read where they're set, and reach a shell of its own
+  (`bash -c 'git fetch'`), so a script or program run after them meets
+  them too. An alias given with `-c` gives the command as git runs it
+  too (`git -c alias.p=push p` is `git p` and `git push`; one naming
+  another is followed, however deep, the settings given inside one read
+  too, `git -c 'alias.p=-c alias.q=push q' p`; one past its `!` is a
+  script, the words after it added; a setting whose key is made as it
+  runs, `alias.$X=push` or `GIT_CONFIG_KEY_0=alias.$X`, is taken as
+  any, an alias of what the command does among them). git hands its
+  settings down to what it runs (its `-c`s, and those its environment
+  gives it, set for the command or exported), so a git command in an
+  alias, a pager or an editor reads them as its own: `git -c
+  alias.a='!git b' -c alias.b=push a` is `git push` too, and a script
+  read once is read again where git's settings have changed since. A
+  command whose scripts run themselves over and over, past 2,000 read,
+  is read crudely whole, as below. A value made as it runs is read by its text: one
+  double-quoted string's inside (`GIT_SSH_COMMAND="ssh -i $KEY"` gives
+  `ssh -i $KEY`), else what is known of it and, crudely, what is
+  written after each variable (`$NOPE'rm -rf y'` gives `rm -rf y`). A
+  script git runs is read from the folder git is called in and from the
+  top of its repository, where git runs it. A script in one illi can't
+  follow is split crudely, as below.
+- A `cd` is no command: it asks only for its folder, if outside.
+- A shell command's folders outside: those it `cd`s into or a wrapper
+  or a program's option moves it to (`sudo -D /x`, `env -C /x`, `git -C
+  /x`, `make -C /x`: each named from the folder in force where it's
+  read, the shell's or the one a wrapper or an earlier option moved to
+  (`env -C /etc git -C ../x` names `/x`; `git -C a -C ..` the folder it
+  started in), by what is known of one made as it runs, `git -C
+  /etc/$X` asking for `/etc`, and a `~`
+  the shell leaves, `--directory=~/x`, as home), and the paths its words,
+  a wrapper's own (`time -o /x`, `flock /x`, `xargs -a /x`), git's path
+  variables (`GIT_DIR=../x/.git`, `GIT_WORK_TREE`, `GIT_CONFIG_GLOBAL`,
+  given, set or exported) and its redirections name (an absolute path, `~`, `~user`, a
   `..`; spaces and quotes in it or not; a value glued to an option,
   `--out=/x` or `-o/x`, but a lone `/`, `cut -d/`; after a name, `dd
   of=/x`, but a variable `export` or `declare` sets; each of a list,
-  `--path=/a:/b`), from the folder each command runs in. Streams
+  `--path=/a:/b`). A redirection is made from the folder the shell is
+  in (`git -C app log > ../x` writes `../x` beside the project, not
+  beside `app`); a program's words from both the folder it runs in and
+  the shell's, as programs differ (`git -C app add ../x` asks for what
+  `../x` names from either). Streams
   (`/dev/null`, `/dev/zero`, `/dev/random`, `/dev/tty`, `/dev/stdin`,
   `/dev/stdout`, `/dev/stderr`, `/dev/fd`) and what only looks like a
   path (`grep -r '/api/v1'`, whose top folder `/api` isn't there) aren't
   asked; a disk's device (`/dev/sda`) is.
 - A command illi's shell reader can't follow (`case`, a function, an
-  array) is split crudely at `;`, `&`, `|`, newlines, `$(`, backticks
-  and parentheses, quotes or not, and its paths are found by their look
+  array), and a script in a git setting or a variable it can't follow
+  (`git -c 'alias.x=!f() { …; }; f'`), is split crudely at `;`, `&`, `|`, newlines, `$(`, backticks
+  and parentheses, quotes or not, each piece read on its own too where
+  illi can (`git -C app push; x=(a)` gives `git push` too, and `GIT_PAGER='rm
+  -rf y' git log; x=(a)` its pager's `rm -rf y`), and its paths are found by their look
   (one with a space in it up to the space), so a rule still finds most
   of what is in it: a script quoted whole with none of those in it stays
   one piece (in a `case`, `bash -c 'rm x'` matches a rule on `bash *`,
@@ -361,8 +432,31 @@ Limits
   asked about all the same.
 - A rule matches a command as written or as its words expand: a word
   known only as it runs stays as written (`rm -rf "$(cat dir)"` isn't
-  `rm -rf /*`), `rm -fr /` isn't `rm -rf /*`, `git -C app push` isn't
-  `git push *`.
+  `rm -rf /*`), `rm -fr /` isn't `rm -rf /*`. An option illi doesn't
+  know before what a program does leaves the command as written alone
+  (`git --frobnicate push` isn't `git push *`), and so do an option
+  after the first word naming what it does (`gh pr -R o/r merge`) and
+  an alias from git's own config files (`git p`, with `p` set to `push`
+  in `~/.gitconfig`, or a file `-c include.path=` names, which asks
+  only for its folder). A git setting that names a program by its path,
+  or a folder of hooks, gives no command either, and asks only for its
+  folder (`core.hooksPath`, `difftool.<tool>.path`); nor does the
+  command in an `ext::` address
+  (`git -c protocol.ext.allow=always clone 'ext::…'`).
+- In a command illi's shell reader can't follow, a piece read on its
+  own is read without what came before it: `cd sub; git -C x push;
+  x=(a)` reads `git -C x push` from the shell's folder, and a variable
+  set in an earlier piece is unknown to a later one. A piece that can't
+  be read on its own stays as written.
+- A rule on what a command does, without its options, covers that
+  reading alone: with `git *` asking, `git status *` allowing doesn't
+  allow `git -C app status`, whose written form `git *` still asks
+  about; "don't ask again" on it saves both.
+- A variable or setting that names a command is seen where the command
+  line sets it (given, `export`ed, assigned, through `env` or `sudo`);
+  one set unseen (`read`, `printf -v`, `${X:=…}`, a `source`d file, or
+  your shell's own environment) isn't, nor are variables illi doesn't
+  list (`LESSOPEN`, `GIT_EXEC_PATH`).
 - A file rule (`read`, `edit`) is for the file tools (`read`, `write`,
   `edit`): a shell command that reads or writes a file meets your
   `shell` rules alone (and, outside the project, the folder's
