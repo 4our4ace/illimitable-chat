@@ -11,8 +11,9 @@
 // told. A folder illi can't write: nothing downloaded, told once a
 // release. notify only tells; off never asks; a source run never looks;
 // a look at most once in ten minutes, one that fails again next time; an illi
-// whose file was replaced since it started never again. Two at once both
-// install, safely. A folder left mid-way goes as illi quits or runs again
+// whose file was replaced since it started never again. Two at once: one
+// installs, the other gives way, saying nothing; a file replaced while
+// the download ran is kept. A folder left mid-way goes as illi quits or runs again
 // in place, or, an illi killed, once unwritten for an hour. `illi
 // upgrade` says each step, and why it changed nothing. A file run with
 // --version says exactly what an update checks it by, whatever its
@@ -21,7 +22,8 @@
 import { afterAll, beforeEach, expect, spyOn, test } from "bun:test";
 import * as fs from "node:fs";
 import * as os from "node:os";
-import { STATE, Update, VERSION, type Place } from "./Update.ts";
+import { Elsewhere, STATE, Update, VERSION, type Place } from "./Update.ts";
+import { Flock } from "./Flock.ts";
 
 const TMP = fs.mkdtempSync(os.tmpdir() + "/illi-update-");
 process.env.ILLI_DIR = TMP + "/illi";
@@ -112,7 +114,7 @@ test("the latest release is where its page redirects, no API asked; a page that 
   expect(await Update.latest(BASE)).toBe("0.2.0");
   expect(asked).toEqual(["/releases/latest"]);
   await expect(Update.latest("http://127.0.0.1:" + server.port + "/none")).rejects.toThrow("won't give latest now (HTTP 404)");
-  await expect(Update.latest(OFFLINE)).rejects.toThrow("can't reach 127.0.0.1:" + PORT + " (offline?)");
+  await expect(Update.latest(OFFLINE)).rejects.toThrow(new RegExp("^can't reach 127\\.0\\.0\\.1:" + PORT + " \\(the connection was (refused|cut)\\): check your connection, or your proxy$"));
 });
 
 test("a newer release installs over the running file, runnable, nothing else left beside it; the note says so", async () => {
@@ -136,7 +138,7 @@ test("the same release, or an older one, does nothing: only the page is asked", 
   expect(asked).toEqual(["/releases/latest", "/releases/latest"]);
 });
 
-test("a file that doesn't match its sum, won't say its version, or isn't built for this system changes nothing: logged, never told", async () => {
+test("a file that doesn't match its sum, won't say its version, or isn't built for this system changes nothing: logged, and told once, saying why", async () => {
   const cases: Array<[Partial<typeof SERVED>, string]> = [
     [{ sums: "0".repeat(64) + "  " + Update.asset() + "\n" }, Update.asset() + " doesn't match the release's SHA256SUMS"],
     [{ says: "illi 0.1.9" }, "the new illi won't run here (illi 0.1.9)"],
@@ -146,18 +148,46 @@ test("a file that doesn't match its sum, won't say its version, or isn't built f
     Object.assign(release, SERVED, served);
     logged.length = 0;
     const { place, bin, root } = here();
-    expect(await Update.check(root, "on", place)).toBe("");
+    expect(await Update.check(root, "on", place)).toBe("illi 0.2.0 is out, but it didn't install: " + why + ". illi tries again later; illi upgrade tries now.");
     expect(says(place.exec)).toBe("illi 0.1.0");
     expect(fs.readdirSync(bin)).toEqual(["illi"]);
     expect(logged).toEqual(["update: " + why]);
   }
 });
 
+test("a release that didn't install is tried again only past a wait, longer each time (an hour, six, then a day), told the first time alone; a newer release tries at once; one that installs is forgotten", async () => {
+  Object.assign(release, SERVED, { says: "illi 0.1.9" });
+  const { place, root } = here();
+  const failed = () => JSON.parse(fs.readFileSync(root + "/" + STATE, "utf8")).failed;
+  const at = Date.now();
+  expect(await Update.check(root, "on", place, at)).toContain("illi 0.2.0 is out, but it didn't install: the new illi won't run here");
+  const tried = downloads().length;
+  expect(failed()).toMatchObject({ version: "0.2.0", tries: 1, at });
+  expect(await Update.check(root, "on", place, at + 0.5 * 3600e3)).toBe("");
+  expect(downloads()).toHaveLength(tried);
+  expect(await Update.check(root, "on", place, at + 1.1 * 3600e3)).toBe("");
+  expect(downloads().length).toBeGreaterThan(tried);
+  expect(failed()).toMatchObject({ tries: 2 });
+  const again = downloads().length;
+  expect(await Update.check(root, "on", place, at + 6 * 3600e3)).toBe("");
+  expect(downloads()).toHaveLength(again);
+  expect(await Update.check(root, "on", place, at + 7.2 * 3600e3)).toBe("");
+  expect(failed()).toMatchObject({ tries: 3 });
+  expect(await Update.check(root, "on", place, at + 30 * 3600e3)).toBe("");
+  expect(failed()).toMatchObject({ tries: 3 });
+  Object.assign(release, { version: "0.3.0", says: "illi 0.2.9" });
+  expect(await Update.check(root, "on", place, at + 30.5 * 3600e3)).toContain("illi 0.3.0 is out, but it didn't install");
+  expect(failed()).toMatchObject({ version: "0.3.0", tries: 1 });
+  Object.assign(release, { says: "illi 0.3.0" });
+  expect(await Update.check(root, "on", place, at + 32 * 3600e3)).toBe("illi 0.3.0 is installed: it runs from the next start.");
+  expect(failed()).toBeUndefined();
+});
+
 test("no connection: nothing changed, logged, never told; the next look not ten minutes away", async () => {
   const { place, root } = here();
   expect(await Update.check(root, "on", { ...place, base: OFFLINE })).toBe("");
   expect(says(place.exec)).toBe("illi 0.1.0");
-  expect(logged).toEqual(["update: can't reach 127.0.0.1:" + PORT + " (offline?)"]);
+  expect(logged).toEqual([expect.stringMatching(new RegExp("^update: can't reach 127\\.0\\.0\\.1:" + PORT + " \\(the connection was (refused|cut)\\): check your connection, or your proxy$"))]);
   expect(fs.existsSync(root + "/" + STATE)).toBe(false);
   expect(await Update.check(root, "notify", place)).toBe("illi 0.2.0 is out: illi upgrade installs it.");
 });
@@ -215,11 +245,32 @@ test("an illi whose file was replaced since it started looks no more, a day on t
   expect(asked.slice(seen)).toEqual(["/releases/latest"]);
 });
 
-test("two illis installing at once both do, safely: the new file whole, nothing left beside it", async () => {
+test("two illis installing at once: one does, the other gives way (a look says nothing, records no failure); the new file whole, nothing left beside it", async () => {
   const { place, bin } = here();
-  await Promise.all([Update.install(place, "0.2.0"), Update.install(place, "0.2.0")]);
+  const both = await Promise.allSettled([Update.install(place, "0.2.0"), Update.install(place, "0.2.0")]);
+  expect(both.map((r) => r.status).sort()).toEqual(["fulfilled", "rejected"]);
+  expect((both.find((r) => r.status === "rejected") as PromiseRejectedResult).reason).toBeInstanceOf(Elsewhere);
   expect(says(place.exec)).toBe("illi 0.2.0");
   expect(fs.readdirSync(bin)).toEqual(["illi"]);
+  // a look while another illi installs: nothing said, no failure kept
+  const other = here();
+  const held = fs.openSync(other.place.exec, "r");
+  Flock.take(held);
+  try {
+    expect(await Update.check(other.root, "on", other.place)).toBe("");
+  } finally {
+    fs.closeSync(held);
+  }
+  expect(JSON.parse(fs.readFileSync(other.root + "/update.json", "utf8")).failed).toBeUndefined();
+  expect(says(other.place.exec)).toBe("illi 0.1.0");
+});
+
+test("a file replaced while the update downloaded (a newer illi upgraded, install.sh ran) is kept: the update gives way", async () => {
+  const { place } = here();
+  fs.writeFileSync(place.exec, "#!/bin/sh\necho 'illi 0.3.0'\n", { mode: 0o755 });
+  fs.utimesSync(place.exec, new Date(), new Date(Date.now() + 5000));
+  await expect(Update.install(place, "0.2.0")).rejects.toBeInstanceOf(Elsewhere);
+  expect(says(place.exec)).toBe("illi 0.3.0");
 });
 
 test("a download's folder goes as illi quits mid-way; one left by an illi killed goes once unwritten for an hour, one in use stays", async () => {
@@ -295,8 +346,8 @@ test("illi upgrade says each step; the latest already, so; a failure why, nothin
   expect(says(bad.place.exec)).toBe("illi 0.1.0");
   expect(await upgrade({ ...bad.place, base: OFFLINE })).toBe(1);
   expect(err).toEqual([
-    "illi: " + Update.asset() + " doesn't match the release's SHA256SUMS: nothing changed.",
-    "illi: can't reach 127.0.0.1:" + PORT + " (offline?): nothing changed.",
+    "illi: " + Update.asset() + " doesn't match the release's SHA256SUMS. Nothing changed.",
+    expect.stringMatching(new RegExp("^illi: can't reach 127\\.0\\.0\\.1:" + PORT + " \\(the connection was (refused|cut)\\): check your connection, or your proxy\\. Nothing changed\\.$")),
   ]);
   expect(out).toEqual(["Downloading illi 0.2.0 (" + Update.asset() + ")"]);
 });

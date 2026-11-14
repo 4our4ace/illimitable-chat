@@ -7,9 +7,13 @@
 // no API asked, so no rate limit), compared with VERSION as semver. One
 // newer is installed (install): the release's SHA256SUMS read, its file
 // for this system streamed into a folder of its own beside the running
-// file (its name unique: two illis at once never meet), checked against
-// the sum, made runnable and run once (`--version` must name it), then
-// renamed over the running file in one step. The illi running goes on,
+// file (its name unique), checked against the sum, made runnable and run
+// once (`--version` must name it), put on disk (fsync), then renamed over
+// the running file in one step, only if that file is still the one this
+// illi found (one a newer illi or install.sh put there meanwhile is
+// kept). The running file's flock is held all the while, so two illis
+// never install at once: the second gives way (Elsewhere), saying
+// nothing. The illi running goes on,
 // its code in memory; the next start runs the new one. Anything short of
 // that changes nothing: the folder is removed (as illi quits or runs
 // again in place, too: Update.drop; one left by an illi killed mid-way
@@ -35,7 +39,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import pkg from "../../package.json" with { type: "json" };
-import { json_object } from "../tools/Clip.ts";
+import { fsynced, json_object, unreached } from "../tools/Clip.ts";
+import { Flock } from "./Flock.ts";
 import { Vendors } from "../providers/Vendors.ts";
 
 // Types
@@ -74,6 +79,13 @@ const IDLE  = 60e3;
 const SPACE = 600e3;
 const STALE = 3600e3;
 
+// how long an install that failed waits before the next try of the same
+// release, by the tries so far (the last for any past them): an hour,
+// six, then a day each, so a release that won't install here (a build
+// that won't run, a proxy changing the file, a full disk) isn't
+// downloaded whole at every start; a newer release tries at once
+const AGAIN = [3600e3, 6 * 3600e3, 24 * 3600e3];
+
 // the signals that end `illi upgrade`, turned into an exit, so its
 // download's folder goes as it does
 const SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
@@ -92,6 +104,12 @@ const DENIED = ["EACCES", "EPERM", "EROFS"];
 // replaced
 export const HERE: Place | null = COMPILED ? update_place(update_real(process.execPath)) : null;
 
+// an install that gave way to another illi's: one installing over the
+// same file now, or one that replaced the file since this illi started
+// (a newer illi upgraded, install.sh ran). Not a failure: a look says
+// nothing of it, and tries no sooner for it
+export class Elsewhere extends Error {}
+
 // the download folders in use, removed as illi quits (an exit) or runs
 // again in place (Update.drop: an execve fires no exit); once dropped,
 // none starts (a look or a download landing as illi leaves)
@@ -108,8 +126,10 @@ export namespace Update {
   // gone, since this illi started), at most once in SPACE, every illi's
   // (a look that fails, again next time), and installed ("on")
   // or only told of ("notify"). The note to show ("": none). It never
-  // throws: a failure is logged, but for a folder it can't write, told
-  // once a release
+  // throws: a failure is logged, and told once a release (a folder it
+  // can't write: how to install it; any other: why, and that illi
+  // upgrade tries again), the release tried again only past its wait
+  // (AGAIN, by its tries: `failed` in the state)
   export async function check(root: string, mode: Mode, place = HERE, now = Date.now()): Promise<string> {
     if (dropped || mode === "off" || place === null || Update.stamp(place.exec) !== place.stamp) {
       return "";
@@ -124,9 +144,10 @@ export namespace Update {
       }
       const version = await Update.latest(place.base);
       // the look kept once it succeeds, before any install: another
-      // start meanwhile, the download still running, looks no more (so
-      // never two at once); one that failed is kept not at all. The
-      // release it found kept with it, for the trust question (known)
+      // start meanwhile, the download still running, looks no more (one
+      // past SPACE that does gives way to it: Update.install's flock);
+      // one that failed is kept not at all. The release it found kept
+      // with it, for the trust question (known)
       update_keep(file, { ...(json_object(file) ?? {}), checked: new Date(now).toISOString(), latest: version });
       if (!Update.newer(version, place.version)) {
         return "";
@@ -134,16 +155,35 @@ export namespace Update {
       if (mode === "notify") {
         return "illi " + version + " is out: illi upgrade installs it.";
       }
+      const failed = update_failed(was.failed, version);
+      // a try stamped ahead too (the clock set back) waits no longer
+      if (failed !== null && Math.abs(now - failed.at) < AGAIN[Math.min(failed.tries, AGAIN.length) - 1]) {
+        return "";
+      }
       try {
         await Update.install(place, version);
       } catch (err) {
-        if (!Update.denied(err) || was.told === version) {
+        if (err instanceof Elsewhere) {
+          return "";
+        }
+        const why = String((err as Error)?.message ?? err);
+        update_keep(file, { ...(json_object(file) ?? {}), failed: { version, why, tries: (failed?.tries ?? 0) + 1, at: now } });
+        if (Update.denied(err)) {
+          if (was.told === version) {
+            throw err;
+          }
+          update_keep(file, { ...(json_object(file) ?? {}), told: version });
+          console.error("update: can't write " + path.dirname(place.exec) + ": " + why);
+          return "illi " + version + " is out, but illi can't write " + update_home(path.dirname(place.exec)) + " to install it: run sudo illi upgrade.";
+        }
+        if (failed !== null) {
           throw err;
         }
-        update_keep(file, { ...(json_object(file) ?? {}), told: version });
-        console.error("update: can't write " + path.dirname(place.exec) + ": " + (err as Error).message);
-        return "illi " + version + " is out, but illi can't write " + update_home(path.dirname(place.exec)) + " to install it: run sudo illi upgrade.";
+        console.error("update: " + why);
+        return "illi " + version + " is out, but it didn't install: " + why.replace(/\.$/, "") + ". illi tries again later; illi upgrade tries now.";
       }
+      const { failed: _, ...kept } = json_object(file) ?? {};
+      update_keep(file, kept);
       console.log("update: installed illi " + version + " in " + place.exec);
       return "illi " + version + " is installed: it runs from the next start.";
     } catch (err: any) {
@@ -190,7 +230,7 @@ export namespace Update {
       out("Installed illi " + version + " in " + place.exec);
       return 0;
     } catch (e: any) {
-      const why = Update.denied(e) ? "can't write " + path.dirname(place.exec) + ": run sudo illi upgrade, or install illi again in a folder of yours" : e?.message + ": nothing changed";
+      const why = Update.denied(e) ? "can't write " + path.dirname(place.exec) + ": run sudo illi upgrade, or install illi again in a folder of yours" : String(e?.message ?? e).replace(/\.$/, "") + ". Nothing changed";
       err("illi: " + why + ".");
       return 1;
     } finally {
@@ -229,42 +269,26 @@ export namespace Update {
   // a release installed over place's file: its file for this system
   // (Update.asset) downloaded into a folder of its own beside it, checked
   // against the release's SHA256SUMS, run once (it must say its version),
-  // then renamed over the file in one step; each step said (say). It
-  // throws why it didn't, nothing changed (a folder it can't write
-  // throws first, before any download: Update.denied)
+  // then renamed over the file in one step; each step said (say). The
+  // file's flock held all the while (on the file itself: no lock file
+  // left beside it), so no two illis install over it at once, and the
+  // rename made only over the file as this illi found it (one replaced
+  // meanwhile, by a newer illi or install.sh, kept). It throws why it
+  // didn't, nothing changed (a folder it can't write throws first, before
+  // any download: Update.denied; another illi's install, or a file
+  // replaced: Elsewhere)
   export async function install(place: Place, version: string, say: (text: string) => void = () => {}): Promise<void> {
-    const asset = Update.asset();
-    const dir   = path.dirname(place.exec);
-    const from  = place.base + "/download/v" + version + "/";
     if (dropped) {
       throw new Error("illi is leaving");
     }
-    update_clear(dir);
-    const away  = fs.mkdtempSync(path.join(dir, AWAY));
-    const file  = path.join(away, "illi");
-    const gone  = () => {
-      LIVE.delete(away);
-      fs.rmSync(away, { recursive: true, force: true });
-    };
-    LIVE.add(away);
-    process.on("exit", gone);
+    const held = fs.openSync(place.exec, "r");
     try {
-      const sums = await (await update_get(from + "SHA256SUMS", AbortSignal.timeout(SUMS))).text();
-      const want = Update.sum(sums, asset, version);
-      say("Downloading illi " + version + " (" + asset + ")");
-      if ((await update_download(from + asset, file)) !== want) {
-        throw new Error(asset + " doesn't match the release's SHA256SUMS");
+      if (Flock.take(held) === "held") {
+        throw new Elsewhere("another illi is installing an update now: try again in a minute");
       }
-      fs.chmodSync(file, 0o755);
-      const said = await update_run(file);
-      if (said !== "illi " + version) {
-        throw new Error("the new illi won't run here (" + (said || "it printed nothing") + ")");
-      }
-      say("Checked: it matches the release's SHA256SUMS and runs");
-      fs.renameSync(file, place.exec);
+      await update_install(place, version, say);
     } finally {
-      process.off("exit", gone);
-      gone();
+      fs.closeSync(held);
     }
   }
 
@@ -325,8 +349,8 @@ async function update_get(url: string, stop: AbortSignal, redirect: RequestRedir
   let res: Response;
   try {
     res = await fetch(url, { redirect, signal: stop });
-  } catch {
-    throw new Error(stop.aborted ? host + " took too long to answer" : "can't reach " + host + " (offline?)");
+  } catch (err) {
+    throw new Error(stop.aborted ? host + " took too long to answer" : unreached(url, err));
   }
   if (res.status >= 400) {
     void res.body?.cancel();
@@ -376,6 +400,47 @@ async function update_run(file: string): Promise<string> {
   }
 }
 
+// Update.install's steps, the file's flock held; the new file on disk
+// before it takes the old one's place (fsynced: a power cut after never
+// leaves an empty illi)
+async function update_install(place: Place, version: string, say: (text: string) => void): Promise<void> {
+  const asset = Update.asset();
+  const dir   = path.dirname(place.exec);
+  const from  = place.base + "/download/v" + version + "/";
+  update_clear(dir);
+  const away  = fs.mkdtempSync(path.join(dir, AWAY));
+  const file  = path.join(away, "illi");
+  const gone  = () => {
+    LIVE.delete(away);
+    fs.rmSync(away, { recursive: true, force: true });
+  };
+  LIVE.add(away);
+  process.on("exit", gone);
+  try {
+    const sums = await (await update_get(from + "SHA256SUMS", AbortSignal.timeout(SUMS))).text();
+    const want = Update.sum(sums, asset, version);
+    say("Downloading illi " + version + " (" + asset + ")");
+    if ((await update_download(from + asset, file)) !== want) {
+      throw new Error(asset + " doesn't match the release's SHA256SUMS");
+    }
+    fs.chmodSync(file, 0o755);
+    const said = await update_run(file);
+    if (said !== "illi " + version) {
+      throw new Error("the new illi won't run here (" + (said || "it printed nothing") + ")");
+    }
+    say("Checked: it matches the release's SHA256SUMS and runs");
+    if (Update.stamp(place.exec) !== place.stamp) {
+      throw new Elsewhere("illi was replaced while this one downloaded (illi --version says which runs now)");
+    }
+    fsynced(file);
+    fs.renameSync(file, place.exec);
+    fsynced(dir, true);
+  } finally {
+    process.off("exit", gone);
+    gone();
+  }
+}
+
 // the folders beside the file that an illi left mid-way (killed during a
 // download: one quit removes its own) cleared, once neither one nor its
 // file was written for STALE, so none still in use
@@ -397,6 +462,16 @@ function update_list(dir: string): string[] {
   } catch {
     return [];
   }
+}
+
+// the install of this release that failed before (update.json's
+// `failed`: its release, why, how many tries, when the last was); null:
+// none, or one of another release (a newer one tries at once)
+function update_failed(was: unknown, version: string): { tries: number; at: number } | null {
+  const f = was as { version?: unknown; tries?: unknown; at?: unknown } | null | undefined;
+  const tries = Number(f?.tries);
+  const at = Number(f?.at);
+  return f?.version === version && Number.isInteger(tries) && tries > 0 && Number.isFinite(at) ? { tries, at } : null;
 }
 
 // the state kept: written whole beside its file, then moved over it (no
