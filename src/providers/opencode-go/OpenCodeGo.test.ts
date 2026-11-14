@@ -67,6 +67,9 @@ globalThis.fetch = (async (url: string, init: any = {}) => {
   }
   if (String(url).endsWith("/v1/models")) {
     const auth = init.headers?.authorization ?? "";
+    if (auth === "Bearer oc_sk_barred") {
+      return Response.json({ error: { type: "forbidden", message: "Forbidden" } }, { status: 403 });
+    }
     return auth === "Bearer oc_sk_wrong" ? Response.json({ error: { type: "server_error", message: "Invalid credential" } }, { status: 401 }) : Response.json(CATALOG);
   }
   const next = ANSWERS.shift();
@@ -106,8 +109,9 @@ test("the catalog: what Chat Completions serves itself, with tools, priced, no c
   expect(SENT.filter((s) => s.url.endsWith("/v1/models")).map((s) => [s.url, s.headers.authorization, s.headers["user-agent"].startsWith("illi/")])).toEqual([["https://opencode.ai/inference/go/v1/models", "Bearer oc_sk_test_0001", true]]);
 });
 
-test("a key is checked against the catalog: one it refuses said so, never in its words", async () => {
+test("a key is checked against the catalog: one it refuses said so, never in its words; one it bars (403) not said to be wrong", async () => {
   expect([await OpenCodeGo.check("oc_sk_test_0001"), await OpenCodeGo.check("oc_sk_wrong")]).toEqual(["", "OpenCode refused the key"]);
+  expect(await OpenCodeGo.check("oc_sk_barred")).toBe("OpenCode knows the key but refused it access (HTTP 403): check its permissions, its organization or your region");
 });
 
 test("a request names illi and the chat, one session for its every call; an effort fitted to the model's own, only to one that lists efforts; the reply capped at the model's most", async () => {
@@ -146,6 +150,16 @@ test("a stream's thoughts, reply and tool calls read as they come; the turn sent
     { role: "assistant", content: null, reasoning_content: "Let me check.", tool_calls: [{ id: "call_1", type: "function", function: { name: "echo", arguments: "{\"a\":1}" } }] },
     { role: "tool", tool_call_id: "call_1", content: "echoed {\"a\":1}" },
   ]);
+});
+
+test("a call's arguments that aren't a JSON object go back as {} and are logged so; none given are {}; the tool is given them as they came", () => {
+  const st = PROVIDER.wire!.start({ speed: "slow" } as any);
+  st.calls = [{ id: "call_1", name: "echo", args: "[1]" }, { id: "call_2", name: "echo", args: "" }];
+  st.finish = "tool_calls";
+  const step = OpenCodeGo.step(st, { speed: "slow" } as any);
+  expect((step.out[0] as any).tool_calls.map((c: any) => c.function.arguments)).toEqual(["{}", "{}"]);
+  expect(step.entries.map((e) => e.text)).toEqual(["echo {}", "echo {}"]);
+  expect(step.uses.map((u) => u.input)).toEqual([[1], {}]);
 });
 
 test("its usage read: the prompt less what the cache gave", () => {

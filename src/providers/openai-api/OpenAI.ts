@@ -53,7 +53,7 @@ export namespace OpenAI {
   export async function check(key: string): Promise<string> {
     try {
       const res = await fetch(LIST, { headers: { authorization: "Bearer " + key }, signal: AbortSignal.timeout(15e3) });
-      return res.ok ? "" : res.status === 401 || res.status === 403 ? "OpenAI refused the key" : "OpenAI answered HTTP " + res.status;
+      return Agent.checked("OpenAI", res.status);
     } catch (err: any) {
       return "illi couldn't reach OpenAI (" + (err?.name === "TimeoutError" ? "no answer in 15 seconds" : "no connection") + ")";
     }
@@ -178,8 +178,9 @@ export namespace OpenAI {
     const calls = out.filter((o) => o.type === "function_call");
     const uses: Use[] = calls.map((o) => ({ id: o.call_id, name: o.name, input: Agent.parse(o.arguments) }));
     // a call's arguments that aren't a JSON object go back as {} (the
-    // tool answered that they weren't one), as Anthropic's do, so the
-    // vendor is never sent the broken text it may refuse the turn for
+    // tool answered that they weren't one), as every wire's do, so the
+    // vendor is never sent the broken text it may refuse the turn for;
+    // logged so too (OpenAI.entries reads them after)
     calls.filter((o) => !Agent.object(o.arguments)).forEach((o) => (o.arguments = "{}"));
     const ran = OpenAI.tier(res);
     const note = ran !== ask.speed ? "ran at " + ran + " speed" : "";

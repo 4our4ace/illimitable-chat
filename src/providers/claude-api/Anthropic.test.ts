@@ -15,3 +15,11 @@ test("a server tool's result is failed when an error stands in its place or its 
   expect(result({ type: "bash_code_execution_result", stdout: "ok", stderr: "", return_code: 0 })?.text).toBe("ok");
   expect(result([{ title: "bend", url: "https://example.com/bend" }])).toEqual({ kind: "echo", text: "bend https://example.com/bend", of: "s1" });
 });
+
+test("a tool call's input that isn't a JSON object goes back as {} and is logged so; the tool is given it as it came", () => {
+  const blocks = [{ type: "text", text: "hi" }, { type: "tool_use", id: "t1", name: "read", input: {} }, { type: "tool_use", id: "t2", name: "read", input: {} }];
+  const step = Anthropic.step({ blocks, json: [undefined, "[1]", "{\"a\":1}"], stop: "tool_use", why: null, use: {}, error: null } as any, { speed: "slow" } as any);
+  expect(step.out).toEqual([{ type: "text", text: "hi" }, { type: "tool_use", id: "t1", name: "read", input: {} }, { type: "tool_use", id: "t2", name: "read", input: { a: 1 } }]);
+  expect(step.entries.map((e) => e.text)).toEqual(["hi", "read {}", "read {\"a\":1}"]);
+  expect(step.uses.map((u) => u.input)).toEqual([[1], { a: 1 }]);
+});

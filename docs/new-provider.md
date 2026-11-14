@@ -92,6 +92,12 @@ ends the call; a vendor gives it a `Wire` (`PROVIDER.wire`):
 | `ended`   | whether a stream that closed before its last event still ended its step (an API that may leave its usage out); without it, such a stream is busy and asked again |
 | `idle`    | how long a silent stream lives before it is taken as dead |
 
+A wire's `step` sends a tool call's arguments that aren't a JSON
+object (broken text, an array) back to the vendor as `{}`
+(`Agent.object`), and logs them so, so no vendor refuses the turn over
+text it wrote itself; the tool is given them as they came, and answers
+that they aren't an object (`Agent.use`).
+
 A vendor whose own program runs the loop (Claude Code, Google's
 Antigravity CLI, GitHub's Copilot CLI) has no wire but a runner (`PROVIDER.ask`):
 `Agent.ask` hands it the call, and it must give back a `Try` with the
@@ -112,7 +118,10 @@ whatever their program does:
   caller is open at illi's tools, such as a command running or a
   question waiting on the user, and counts no time the machine slept.
   What it stops is a program that hung, or one whose output illi can no
-  longer read. A reply that lands after the stop was sent still stands.
+  longer read. An end the runner still gives that isn't `lost` (a reply,
+  the vendor's own failure, `full`) stands; the three runners here read
+  nothing more once stopped, so theirs is `lost` and the call ends
+  `down`.
 - A stopped call settles `lost` within a few seconds even if its program
   never ends. Messages sent to it that it never took (no `user` entry
   for them yet) go back in `End.left`, and its later events are dropped.
@@ -160,15 +169,20 @@ Failures must land in the right `stop`, since each is handled apart:
   `Chat.unmark` goes on from a note, the next call with no block marked
   (`AskAI.unmarked`), once; a subagent's run does the same
   (`Tools.run`).
-- `down`: the vendor refused (a wrong key, credit or plan used up).
+- `down`: the vendor refused (a wrong key, credit or plan used up, a
+  model the account doesn't offer).
   `Agent.spent` says what to do in plain words: a plan's own refusals
   (its usage limit) are read by `PROVIDER.spent(said, err)`; an API
-  key's credit used up, by its facts' `key.credit`.
+  key's credit used up, by its facts' `key.credit`. On a wire, a 401
+  alone names the key (/login replaces it); a 403 goes in the vendor's
+  words, as a new key wouldn't help. A key's `check` (as /login takes
+  it) words its answer alike (`Agent.checked`).
 - `busy`: a passing failure (no connection, 429, 5xx); asked again,
   `TRIES` times at most, then the call ends `down` (`again`: a later
   try may answer).
 - `fail`: the model's own answer failed (a refusal, a stop reason in
-  `STOPS`).
+  `STOPS`). Never the vendor's refusal: a summary takes `fail` as its
+  input's doing and isn't asked again.
 
 3. Effort and speed
 -------------------

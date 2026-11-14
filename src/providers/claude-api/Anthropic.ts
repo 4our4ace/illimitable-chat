@@ -112,7 +112,7 @@ export namespace Anthropic {
   export async function check(key: string): Promise<string> {
     try {
       const res = await fetch(LIST, { headers: { "x-api-key": key, "anthropic-version": "2023-06-01" }, signal: AbortSignal.timeout(15e3) });
-      return res.ok ? "" : res.status === 401 || res.status === 403 ? "Anthropic refused the key" : "Anthropic answered HTTP " + res.status;
+      return Agent.checked("Anthropic", res.status);
     } catch (err: any) {
       return "illi couldn't reach Anthropic (" + (err?.name === "TimeoutError" ? "no answer in 15 seconds" : "no connection") + ")";
     }
@@ -332,7 +332,10 @@ export namespace Anthropic {
       if (b.type === "tool_use") {
         uses.push({ id: b.id, name: b.name, input: b.input });
       }
-      if (b.input === null) {
+      // arguments that aren't a JSON object go back as {} (the tool
+      // answered that they weren't one), so the vendor is never sent what
+      // it may refuse the turn for
+      if (b.input !== undefined && (b.input === null || typeof b.input !== "object" || Array.isArray(b.input))) {
         b.input = {};
       }
     });

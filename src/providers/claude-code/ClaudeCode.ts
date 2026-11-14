@@ -349,10 +349,19 @@ export namespace ClaudeCode {
         setTimeout(() => proc.kill("SIGKILL"), KILL).unref();
       }
     };
+    // Claude Code's output read till it ends, or till DRAIN past its exit:
+    // a child it left (an MCP server of its own, a browser's launcher) may
+    // hold the output open, and the call ends as Claude Code does (lines
+    // after that go unread)
+    const drained = (p: Promise<unknown>) => p.then(() => new Promise<void>((done) => setTimeout(done, DRAIN).unref?.()));
     const done = (async () => {
-      const errs = new Response(proc.stderr).text();
-      try {
+      const errs = new Response(proc.stderr).text().catch(() => "");
+      let over = false;
+      const reading = (async () => {
         for await (const line of AskAI.lines(proc.stdout)) {
+          if (over) {
+            break;
+          }
           beat();
           const m: any = Agent.parse(line);
           if (m !== null && !stopped) {
@@ -368,15 +377,18 @@ export namespace ClaudeCode {
             shut();
           }
         }
-      } catch {}
+      })().catch(() => {});
+      await Promise.race([reading, drained(proc.exited)]);
+      over = true;
       shut();
       const code = await proc.exited;
+      const said = await Promise.race([errs, drained(Promise.resolve()).then(() => "")]);
       fs.rmSync(dir, { recursive: true, force: true });
       if (stopped) {
         Agent.fail("stopped", run.st === null ? [] : run.seen).entries.forEach((e) => on({ $: "Entry", ...e }));
         return { ...end, text: "stopped", stop: "lost", left: [...run.sent, ...left] } as End;
       }
-      return { ...ClaudeCode.end(run, (await errs).trim(), code), left: [...run.sent, ...left] };
+      return { ...ClaudeCode.end(run, said.trim(), code), left: [...run.sent, ...left] };
     })();
     return { send, stop, done };
   }

@@ -167,6 +167,12 @@ if (scene.includes("turn")) {
 } else if (scene.includes("crash")) {
   process.stderr.write("boom\n");
   process.exit(3);
+} else if (scene.includes("held")) {
+  // a child it leaves holds its output open past its exit
+  result({ result: "done" });
+  Bun.spawn(["sleep", "8"], { stdout: "inherit", stderr: "inherit" }).unref();
+  save();
+  process.exit(0);
 } else if (scene.includes("hang")) {
   ev({ type: "message_start", message: { usage: {} } });
   ev({ type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
@@ -497,6 +503,13 @@ test("a plan's limit, a missing login, a chat too long (grown once a tool's resu
   expect(grown.log.compact).toBe("1");
   expect((await call("long", true)).log.compact).toBeNull();
   expect((await call("crash")).end).toMatchObject({ ok: false, stop: "down", text: "boom" });
+});
+
+test("a call ends as Claude Code does, its reply whole, though a child it left holds its output open", async () => {
+  const at = Date.now();
+  const { end } = await call("held");
+  expect(end).toMatchObject({ ok: true, text: "done" });
+  expect(Date.now() - at).toBeLessThan(4000);
 });
 
 test("a request holding more cache marks than the API takes (Claude Code's own four beside illi's) ends the call `marks` in plain words, a reply begun cut", async () => {

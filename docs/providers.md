@@ -298,16 +298,24 @@ accounts on its own.
   (`agy` on your `PATH`, in one of its absolute folders), version 1.5.2
   or later, illi runs yours, and
   keeping it current is yours (`agy update`); illi asks its version
-  once, in the background, and again only once the program changes.
+  once, in the background, and again only once the program changes. One
+  that answers with no version isn't run: illi runs its own build
+  meanwhile, logs that, and asks again once the program changes, or a
+  day on; one that doesn't answer in time (or fails) is asked again at
+  the next start.
   Otherwise each illi runs one version of it, the one it was tried
   with (`src/providers/antigravity/Pinned.ts` names it), as T3 Code
   does. With none here, adding an account first offers to download it,
-  saying its size (about 70 MB, about 250 MB once unpacked). illi takes
+  saying its size (about 70 MB, about 250 MB once unpacked). A disk
+  without room for both at once says so before anything is downloaded.
+  illi takes
   it only from the CLI's releases on GitHub
   ([google-antigravity/antigravity-cli](https://github.com/google-antigravity/antigravity-cli/releases)),
   checks it as it comes against the checksum this illi carries, unpacks
   it into `~/.illi/antigravity/agent/<version>/` and keeps it for every
-  profile; Esc stops the download, leaving nothing behind. When an illi
+  profile; Esc stops the download, leaving nothing behind, and one a
+  power cut left short isn't taken as installed: /login offers it
+  again. When an illi
   update moves to a newer version, illi downloads it by itself in the
   background as it starts on Google's plan or a chat moves to it (with
   `autoupdate` on, the default, and a Google account connected; one
@@ -315,9 +323,10 @@ accounts on its own.
   downloading; a note says once it's done (or why it couldn't be); with
   `autoupdate` set to `notify` or `off`, a turn says
   an update is needed and /login offers it under your accounts
-  (**Update Google's Antigravity CLI**). Every other version there goes
-  once no illi still running uses it, and illi's own goes too while
-  yours runs in its place, so nothing lingers (Google's older
+  (**Update Google's Antigravity CLI**). Every older version there goes
+  once no illi still running uses it (a newer one is a newer illi's,
+  which removes it in its turn), and illi's own
+  goes too while yours runs in its place, so nothing lingers (Google's older
   `antigravity-acp` agent, which illi ran before 0.3.14, included). To
   run another command line, set `ILLI_ANTIGRAVITY` to it (`agy acp`, or
   a path and `acp`): illi runs it if it's 1.5.2 or later.
@@ -376,7 +385,9 @@ accounts on its own.
   one; a tool's answer reaches the model cut at about 48 KB (illi's own
   tools cut theirs sooner); when Google is busy or your plan's limit
   is reached, the CLI may retry quietly for minutes before it says so
-  (Esc stops the turn); each CLI takes about 200 MB. illi starts one as
+  (Esc stops the turn; a CLI that sends nothing for 20 minutes is
+  stopped as hung: [how a turn ends](#how-a-turn-ends)); each CLI takes
+  about 200 MB. illi starts one as
   a turn needs it (turns running at once share one, four at most) and
   ends it once its turns have; it keeps one more ready so the next turn
   needn't wait, which ends after 10 minutes with no turn. None is left
@@ -447,7 +458,9 @@ own.
   1.0.100 or later, illi runs yours, at the version installed (none of
   the newer ones it downloads of itself), and keeping it current is
   yours (`copilot update`); illi asks its version once, in the
-  background, and again only once the program changes. Otherwise each
+  background, and again only once the program changes (one that
+  answers with no version: a day on, illi's own build run meanwhile;
+  one that doesn't answer: at the next start). Otherwise each
   illi runs one version of it, the one it was tried with
   (`src/providers/github-copilot/Pinned.ts` names it), downloaded the
   way Google's Antigravity CLI is: with none here, adding an account
@@ -461,7 +474,7 @@ own.
   behind. An illi update to a newer version downloads it by itself
   (with `autoupdate` on and a GitHub account connected, a note saying
   once it's done), and every
-  other version goes once no illi still running uses it, as on Google's
+  older version goes once no illi still running uses it, as on Google's
   plan. illi speaks the CLI's protocol 3 (GitHub's SDK's): a CLI that
   speaks another is refused, saying whether `copilot update` or an illi
   update brings one that fits. To run another command line, set
@@ -535,7 +548,10 @@ own.
   of the chat and goes on.
 - **What's different**: a message you send mid-turn waits for the next
   one; the CLI retries a busy service a few times before it says so
-  (Esc stops the turn); the CLI takes about 200 MB. illi starts one for
+  (Esc stops the turn; a CLI that sends nothing for 20 minutes is
+  stopped as hung: [how a turn ends](#how-a-turn-ends)); a stop the CLI
+  doesn't follow in a few seconds ends that CLI, and the next turn
+  starts a new one; the CLI takes about 200 MB. illi starts one for
   the account as a turn needs it (about two seconds; turns at once share
   it) and keeps it for the next, ending it after 10 minutes with no
   turn. None is left once illi ends, nor what it caches as it runs (the
@@ -563,6 +579,38 @@ logs out of the API (asked first): illi never moves to the variable's
 key without asking, so Enter connects it again if you want it. **Log
 out of …** stops the API altogether. The APIs run in illi's own loop,
 with no SDKs.
+
+A key the provider refuses (HTTP 401), as `/login` checks it or
+mid-chat, says so, and `/login` replaces it. A 403 is no fault of the
+key (its permissions, its organization, a model it may not use, a
+region): `/login` says the provider knows the key but refused it
+access, and a chat says the provider's own words. A request that can't
+reach its host says why (the name won't resolve, the connection was
+refused or cut, a certificate isn't trusted).
+
+How a turn ends
+---------------
+
+A turn ends in the same ways on every provider, whether illi's own
+loop runs it (the API keys, ChatGPT, OpenCode Go) or the vendor's
+program does (Claude Code, Google's CLI, GitHub's CLI):
+
+- **Stopped** (Esc): what had streamed is kept, marked cut off. The
+  turn is yours again within a few seconds, even if the vendor's program
+  takes longer to end; a message you sent that it never took is kept
+  for the next turn.
+- **Failed**: the note says why. It starts "Reply cut off" when a reply
+  had begun, and what streamed of it is kept, marked cut off; else "No
+  reply". It ends "Send a message to try again" when a later try may
+  answer (the vendor busy or out of reach), and not when the vendor
+  refused (a key, a plan used up), where the note says what to do.
+- **Gone quiet**: illi's loop takes a stream that sends nothing for 5
+  minutes (Anthropic's API) or 20 (the others) as dead and asks again.
+  A vendor's program that sends
+  nothing for 20 minutes is stopped as hung, the note saying so
+  ([Troubleshooting](config.md#troubleshooting)). Time a command of the
+  chat's runs, or a question waits on you, doesn't count, nor time the
+  computer sleeps.
 
 Models
 ------

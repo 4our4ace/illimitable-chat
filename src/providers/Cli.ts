@@ -11,27 +11,33 @@
 // background, as a CLI may take a second or more to tell it, and kept by
 // its path, size and time in a file beside the builds, so a start never
 // waits on it; one that tells none kept so a day, logged; its own
-// updates keep it current, as the user installed it). Else illi runs the one build this illi is pinned to (the CLI's
+// updates keep it current, as the user installed it). Else illi runs
+// the one build this illi is pinned to (the CLI's
 // Pinned.ts: the version tried with this illi, as its pin.ts takes it
 // from the CLI's releases on GitHub), as /login downloads it into a
 // version's folder of illi's root, with what illi took it as (agent.json:
 // its command, arguments and sha256). Another version there is never
 // run: /login offers this illi's in its place (why says so to a call).
-// A download is taken only from the CLI's releases on GitHub (the spec's
+// A download first looks for room on the disk (its archive and its
+// files at once: one short of it says so before any byte), and is
+// taken only from the CLI's releases on GitHub (the spec's
 // releases), its archive checked against the pinned sha256 as it comes,
 // unpacked by illi (each file by its own name, none in a folder, none but
 // plain files: nothing outside the version's folder), made runnable, put
 // on disk (fsync; each file's size kept in agent.json, so one cut short
 // since, by a power cut, is no download and /login offers it again),
 // then moved into place in one rename, so a download stopped halfway
-// leaves nothing that looks installed. An illi that runs a version, or downloads
-// it, marks it in use while it lives (.users/<its pid>). Each version but
-// this illi's own build goes once no live illi uses it (none kept while
-// the user's own CLI runs in its place, which lasts: illi's download is
-// then dead weight; the variable's command line keeps it, being mostly
-// for a while), as this illi first runs a CLI, downloads one, and ends
-// (the providers' close), so a version an illi update left never
-// lingers. A download's folder left beside them (.new-*) goes a day old.
+// leaves nothing that looks installed. An illi that runs a version, or
+// downloads it, marks it in use while it lives (.users/<its pid>). Each
+// version older than this illi's own build goes once no live illi uses
+// it (its own too while the user's own CLI runs in its place, which
+// lasts: illi's download is then dead weight; the variable's command
+// line keeps it, being mostly for a while; a newer one is a newer
+// illi's, left to it), as this illi first runs a CLI, downloads one,
+// and ends (the providers' close), so a version an illi update left
+// never lingers. A download's folder left beside them (.new-<pid>-*)
+// goes once its illi is gone, or a day old; this illi's own, under way
+// (fetching), never (tidy).
 // With autoupdate on, illi downloads its own build by itself once an
 // account is connected and no CLI is here (an illi update moved the pin:
 // update), in the background, one illi at a time on the machine: a lock
@@ -334,18 +340,24 @@ export function cli(spec: Spec): Cli {
     // version as the spec's file kept it for this program, else asked of
     // it (its own update not started by it) and kept; the minimum or
     // later, it's run in place of illi's build. null: none, too old, or
-    // it told no version (kept so too, and logged, so a CLI that won't
-    // tell costs ASKING once, not at every run: asked again once it
-    // changes, or a day on)
+    // it told no version: one that answered without one is kept so (and
+    // logged), asked again once it changes, or a day on; one that didn't
+    // answer (not in ASKING, failing, not run) is kept not at all, asked
+    // again next run, so a slow start once never sets the user's CLI
+    // aside for a day
     look() {
       looking ??= (async () => {
         const at = await c.which();
         let version = at === null ? null : c.recalled(at);
         if (at !== null && version === null) {
-          version = (await c.asked(at)) ?? "";
-          c.recall(at, version);
+          version = await c.asked(at);
+          if (version !== null) {
+            c.recall(at, version);
+          }
           if (version === "") {
             console.error(spec.vendor + ": " + at + " didn't tell its version (" + spec.asks.join(" ") + "), so illi runs its own build; it asks again once that program changes, or in a day");
+          } else if (version === null) {
+            console.error(spec.vendor + ": " + at + " didn't answer " + spec.asks.join(" ") + ", so illi runs its own build this run");
           }
         }
         found = at !== null && version !== null && version !== "" && c.least(version) ? { at, version } : null;
@@ -392,9 +404,10 @@ export function cli(spec: Spec): Cli {
     },
 
     // a program's version as it tells it (the spec's asks), its first
-    // line's end alone (numbers between dots); null: none told in ASKING
-    // (its output never waited on past it, though a child of its own
-    // holds it open)
+    // line's end alone (numbers between dots); "": it ended well in time
+    // but told none; null: no answer (not in ASKING, its output never
+    // waited on past it, though a child of its own holds it open; it
+    // failed; it wouldn't run)
     async asked(at) {
       try {
         const run  = Bun.spawn([at, ...spec.asks], { stdin: "ignore", stdout: "pipe", stderr: "ignore", env: { ...process.env, ...spec.quiet() }, timeout: ASKING });
@@ -402,7 +415,10 @@ export function cli(spec: Spec): Cli {
         const text = await Promise.race([new Response(run.stdout).text(), late]);
         const code = await Promise.race([run.exited, late]);
         const said = TOLD_VERSION.exec(text?.trim().split("\n")[0]?.trim() ?? "")?.[1] ?? "";
-        return code === 0 && VERSION.test(said) ? said : null;
+        if (text === null || code !== 0 || run.signalCode !== null) {
+          return null;
+        }
+        return VERSION.test(said) ? said : "";
       } catch {
         return null;
       }

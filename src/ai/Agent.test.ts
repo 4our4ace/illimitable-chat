@@ -335,6 +335,18 @@ test("a runner's call that fails logs what streamed since its last entry, cut of
   expect(await call4.done).toMatchObject({ cut: true });
   expect(seen4.filter((ev) => ev.$ === "Entry").map((ev) => ev.text)).toEqual(["first part", "shell", "second ha\n[cut off]"]);
 
+  // a reply logged, then a tool run (or a message taken), then a failure
+  // with nothing more said: no reply cut, as illi's loop says, though the
+  // runner says one had begun
+  for (const between of ["tool", "user"]) {
+    const after = runner();
+    const call5 = Agent.watched(after.run, runner_ask, () => {}, 60_000, 50);
+    after.emit({ $: "Entry", kind: "illi", text: "I'll look" });
+    after.emit({ $: "Entry", kind: between, text: "shell" });
+    after.end({ ok: false, text: "busy", left: [], stop: "down", cut: true });
+    expect((await call5.done).cut).toBeUndefined();
+  }
+
   // answered: nothing more logged
   const fine = runner();
   const seen3: any[] = [];

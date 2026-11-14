@@ -177,7 +177,7 @@ export namespace OpenCodeGo {
   export async function check(key: string): Promise<string> {
     try {
       const res = await fetch(LIST, { headers: { authorization: "Bearer " + key, "user-agent": AGENT }, signal: AbortSignal.timeout(15e3) });
-      return res.ok ? "" : res.status === 401 || res.status === 403 ? "OpenCode refused the key" : "OpenCode answered HTTP " + res.status;
+      return Agent.checked("OpenCode", res.status);
     } catch (err: any) {
       return "illi couldn't reach OpenCode (" + (err?.name === "TimeoutError" ? "no answer in 15 seconds" : "no connection") + ")";
     }
@@ -325,14 +325,15 @@ export namespace OpenCodeGo {
   export function step(st: State, ask: Ask): Step {
     // a call's arguments that aren't a JSON object go back as {} (the tool
     // answered that they weren't one), so the vendor is never sent the
-    // broken text it may refuse the turn for
+    // broken text it may refuse the turn for; logged so too, as every
+    // wire logs what it sends back
     const calls = st.calls.filter((c) => c !== undefined).map((c, k) => ({ ...c, id: c.id || "call_" + k, sent: Agent.object(c.args) ? c.args || "{}" : "{}" }));
     const turn  = { role: "assistant", content: st.text === "" ? null : st.text, reasoning_content: st.mind === "" ? undefined : st.mind, tool_calls: calls.length === 0 ? undefined : calls.map((c) => ({ id: c.id, type: "function", function: { name: c.name, arguments: c.sent } })) };
     const uses: Use[] = calls.map((c) => ({ id: c.id, name: c.name, input: Agent.parse(c.args) }));
     const entries: Entry[] = [
       ...(st.mind.trim() === "" ? [] : [{ kind: "mind" as const, text: st.mind.trim() }]),
       ...(st.text.trim() === "" ? [] : [{ kind: "illi" as const, text: st.text.trim() }]),
-      ...calls.map((c) => ({ kind: "tool" as const, text: c.name + " " + (c.args || "{}"), of: c.id })),
+      ...calls.map((c) => ({ kind: "tool" as const, text: c.name + " " + c.sent, of: c.id })),
     ];
     const step: Step = { out: [turn], uses, entries, stop: "done", why: "", note: "" };
     if (st.error !== null) {

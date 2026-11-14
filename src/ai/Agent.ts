@@ -231,9 +231,10 @@ export namespace Agent {
   //   (Agent.fail), so the reply read as it came isn't lost: unless the
   //   runner settled it (End.owned: logged, or dropped as the vendor's
   //   error said as text) or the call goes again refitted (`full`: as
-  //   the loop logs none of a request too long); a failed end whose
-  //   step's reply had begun (an illi entry since its last tool call,
-  //   logged by the runner or so) is cut, as the loop's is;
+  //   the loop logs none of a request too long); a failed end is cut
+  //   where its step's reply had begun (an illi entry since its last tool
+  //   call or message, logged by the runner or so), else not, whatever
+  //   the runner said, as the loop's is;
   // - its program failing outright (done rejecting) ends it with why
   export function watched(run: (ask: Ask, on: (ev: Event) => void, beat: () => void) => Try, ask: Ask, on: (ev: Event) => void, quiet: number, grace = GRACE): Try {
     let settled = false;
@@ -256,7 +257,7 @@ export namespace Agent {
       still = 0;
       if (ev.$ === "Entry") {
         live.length = 0;
-        said = ev.kind === "illi" || (said && ev.kind !== "tool");
+        said = ev.kind === "illi" || (said && ev.kind !== "tool" && ev.kind !== "user");
         if (ev.kind === "user" && sent[0]?.text === ev.text) {
           sent.shift();
         }
@@ -301,8 +302,9 @@ export namespace Agent {
         cut.forEach((e) => on({ $: "Entry", ...e }));
         said ||= cut.some((e) => e.kind === "illi");
       }
-      if (!end.ok && said) {
-        end = { ...end, cut: true };
+      if (!end.ok) {
+        const { cut: _, ...rest } = end;
+        end = said ? { ...rest, cut: true } : rest;
       }
       settled = true;
       return end;
@@ -714,6 +716,18 @@ export namespace Agent {
     }
   }
 
+  // a key /login checks, by the HTTP status its vendor's list answered
+  // with ("": it worked): 401 alone is the key refused; a 403 is the
+  // vendor refusing this key that list (its permissions, its
+  // organization, a region), as a request's 403 is (Agent.step), so the
+  // key isn't said to be wrong
+  export function checked(maker: string, status: number): string {
+    if (status >= 200 && status < 300) {
+      return "";
+    }
+    return status === 401 ? maker + " refused the key" : status === 403 ? maker + " knows the key but refused it access (HTTP 403): check its permissions, its organization or your region" : maker + " answered HTTP " + status;
+  }
+
   // whether a tool call's arguments are a JSON object (none given: {})
   export function object(json: string): boolean {
     const x = Agent.parse(json);
@@ -727,7 +741,7 @@ export namespace Agent {
     if (!tools.some((t) => t.name === use.name)) {
       return { text: "No tool " + use.name + ".", fail: true };
     }
-    if (use.input === null || typeof use.input !== "object") {
+    if (use.input === null || typeof use.input !== "object" || Array.isArray(use.input)) {
       return { text: "The input is not a JSON object.", fail: true };
     }
     try {

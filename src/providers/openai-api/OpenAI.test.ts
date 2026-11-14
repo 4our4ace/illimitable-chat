@@ -81,3 +81,15 @@ test("a web search is logged with its result: searched, or failed as its status 
   expect(search("failed")[1]).toEqual({ kind: "echo", text: "error: the search failed", of: "ws_1" });
   expect([search("searching"), search("in_progress")]).toEqual([0, 1].map(() => [{ kind: "tool", text: 'web_search {"type":"search","query":"bend"}' }]));
 });
+
+test("a call's arguments that aren't a JSON object go back as {} and are logged so; the tool is given them as they came, and refuses them", async () => {
+  const { Agent } = await import("../../ai/Agent.ts");
+  const output = [["c1", "[1,2]"], ["c2", "{broken"], ["c3", "{\"a\":1}"]].map(([call_id, args]) => ({ type: "function_call", call_id, name: "read", arguments: args }));
+  const step = OpenAI.step({ res: { status: "completed", output }, error: null, use: {} as any }, ASK);
+  expect(step.out.map((o: any) => o.arguments)).toEqual(["{}", "{}", "{\"a\":1}"]);
+  expect(step.entries.map((e) => e.text)).toEqual(["read {}", "read {}", "read {\"a\":1}"]);
+  expect(step.uses.map((u) => u.input)).toEqual([[1, 2], null, { a: 1 }]);
+  for (const use of step.uses.slice(0, 2)) {
+    expect(await Agent.use({} as any, [{ name: "read" }] as any, use)).toEqual({ text: "The input is not a JSON object.", fail: true });
+  }
+});

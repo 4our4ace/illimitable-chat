@@ -182,7 +182,7 @@ test("a download checked as it comes, unpacked runnable, put in place, run; one 
   expect(Agy.ready()).toBe(true);
 });
 
-test("the user's own agy runs once it's 1.5.2 or later, its version asked once and kept till it changes (one that tells none, too); an older one is said", async () => {
+test("the user's own agy runs once it's 1.5.2 or later, its version asked once and kept till it changes (one that answers without one, too; one that fails, not); an older one is said", async () => {
   const at = theirs("1.5.3");
   Agy.which = async () => at;
   Agy.unlook();
@@ -197,12 +197,21 @@ test("the user's own agy runs once it's 1.5.2 or later, its version asked once a
   expect([Agy.installed(), await Agy.look(), ASKED(), Agy.stale()]).toEqual([null, null, 2, "1.5.1"]);
   Agy.pin = { ...Agy.pin!, sha256: "f".repeat(64) };
   expect(Agy.why()).toBe("Google's Antigravity CLI isn't here: /login downloads it (your own agy is 1.5.1, older than the 1.5.2 illi runs: `agy update` brings it current)");
-  // one that tells no version is kept so, asked once, not at every run
-  fs.writeFileSync(at, "#!/bin/sh\necho x >> " + DIR + "/bin/asked\nexit 1\n");
+  // one that answers without a version is kept so, asked once, not at
+  // every run
+  fs.writeFileSync(at, "#!/bin/sh\necho x >> " + DIR + "/bin/asked\necho agy\n");
   Agy.unlook();
   expect([await Agy.look(), Agy.stale(), ASKED()]).toEqual([null, null, 3]);
   Agy.unlook();
   expect([await Agy.look(), Agy.installed(), ASKED()]).toEqual([null, null, 3]);
+  // one that fails (as a slow or broken start may) is kept not at all:
+  // asked again next run
+  fs.writeFileSync(at, "#!/bin/sh\necho x >> " + DIR + "/bin/asked\nexit 1\n");
+  fs.utimesSync(at, new Date(Date.now() + 9000), new Date(Date.now() + 9000));
+  Agy.unlook();
+  expect([await Agy.look(), ASKED()]).toEqual([null, 4]);
+  Agy.unlook();
+  expect([await Agy.look(), ASKED()]).toEqual([null, 5]);
   Agy.which = async () => null;
   Agy.unlook();
   Agy.pin = BUILT("1.5.2", "one.tgz", SERVED["one.tgz"]);
