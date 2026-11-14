@@ -11,7 +11,7 @@
 // row unused stop them, one used starts the count anew; an answer of
 // nothing, thanks or praise, or in illi's voice, is none.
 
-import { expect, test } from "bun:test";
+import { expect, setDefaultTimeout, test } from "bun:test";
 import { temp_dir, temp_repo } from "./repo.ts";
 
 const DIR = temp_dir("illi-suggest-");
@@ -94,9 +94,15 @@ globalThis.fetch = (async (url: string, init: any) => {
   return stream({ type: "text", text: "Done." }, init.signal, turn === "hold");
 }) as any;
 
+// a condition waited on, looked at every few ms, given up on (never)
+// past UNTIL: a turn takes long on a busy machine, so the bound is by
+// the clock, not a count of looks, and the tests' own past it
+const UNTIL = 20_000;
+setDefaultTimeout(2 * UNTIL);
+
 async function until(ok: () => boolean): Promise<void> {
-  for (let k = 0; !ok(); k++) {
-    if (k > 400) {
+  for (const end = Date.now() + UNTIL; !ok(); ) {
+    if (Date.now() > end) {
       throw new Error("never");
     }
     await Bun.sleep(5);

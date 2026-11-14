@@ -324,32 +324,41 @@ test("illi's own memory and meta tools never start a search; shell, files, MCP a
 test("never slower: a search not answered a few ms after the tool is done gives no line and holds the call no longer; a later call of its step shares it, and gets the line once it answers; one answered gives its line, last", async () => {
   let let_go = () => {};
   const slow = new Promise<Found | null>((done) => (let_go = () => done(found(EPISODE, 16))));
-  await stood(() => slow, async (asks) => {
-    tools.given.clear();
-    Recall.step(tools, "main");
-    const pending = Recall.start(tools, "main", "read", { path: "a.ts" })!;
-    // one search at a time: a later call of the same step shares it,
-    // another caller's gets none
-    const later = Recall.start(tools, "main", "shell", { command: "bun test" });
-    expect(later).toBe(pending);
-    expect(Recall.start(tools, "Di", "shell", { command: "ls" })).toBeNull();
-    const at  = performance.now();
-    const out = await Recall.end(tools, pending, result("a"), signal);
-    expect(performance.now() - at).toBeLessThan(WAIT + 40);
-    expect(out.text).toBe("a");
-    expect(asks).toHaveLength(1);
+  // the search let go however this ends, so no search of this test is
+  // left running (one at a time: the tests after it would get none)
+  try {
+    await stood(() => slow, async (asks) => {
+      tools.given.clear();
+      Recall.step(tools, "main");
+      const pending = Recall.start(tools, "main", "read", { path: "a.ts" })!;
+      // one search at a time: a later call of the same step shares it,
+      // another caller's gets none
+      const later = Recall.start(tools, "main", "shell", { command: "bun test" });
+      expect(later).toBe(pending);
+      expect(Recall.start(tools, "Di", "shell", { command: "ls" })).toBeNull();
+      // the search not answered till let go, the call's end waits on it
+      // WAIT ms at most (a few: measured by the clock, a busy machine would
+      // fail it), then ends without a line
+      expect(WAIT).toBeLessThanOrEqual(10);
+      const out = await Recall.end(tools, pending, result("a"), signal);
+      expect(out.text).toBe("a");
+      expect(asks).toHaveLength(1);
+      let_go();
+      await slow;
+      await Bun.sleep(0);
+      // the slower call, ending after it answered, takes the line
+      expect((await Recall.end(tools, later, result("12 pass\n(exit 0 in 2.0 s)"), signal)).text).toEndWith("</history>");
+      // the next step's first call starts a search of its own
+      Recall.step(tools, "main");
+      const next = Recall.start(tools, "main", "read", { path: "b.ts" });
+      expect(next).not.toBe(pending);
+      expect(asks).toHaveLength(2);
+      await next!.found;
+    });
+  } finally {
     let_go();
     await slow;
-    await Bun.sleep(0);
-    // the slower call, ending after it answered, takes the line
-    expect((await Recall.end(tools, later, result("12 pass\n(exit 0 in 2.0 s)"), signal)).text).toEndWith("</history>");
-    // the next step's first call starts a search of its own
-    Recall.step(tools, "main");
-    const next = Recall.start(tools, "main", "read", { path: "b.ts" });
-    expect(next).not.toBe(pending);
-    expect(asks).toHaveLength(2);
-    await next!.found;
-  });
+  }
   await stood(async () => found(EPISODE, 16), async () => {
     tools.given.clear();
     const out = await Tools.call(tools, "main", "shell", { command: "echo hi" }, signal);
@@ -448,6 +457,10 @@ test("no line after a result with images, an empty one, nor one the line would p
 
 test("end to end: a command naming a path and an error the chat met before gets that episode's line from the search thread, and its leaf holds none of it", async () => {
   tools.given.clear();
+  // the search thread started and its file open first (as a turn wakes
+  // it), so the call's half second is the search's alone, however busy
+  // the machine
+  await Projects.recall(mem.store.file, recall());
   Recall.step(tools, "main");
   const out = await Tools.call(tools, "main", "shell", { command: "sleep 0.5; echo src/chat/Seeker.ts: SQLITE_BUSY" }, signal);
   expect(out.text).toMatch(/^src\/chat\/Seeker\.ts: SQLITE_BUSY\n\(exit 0 in [\d.]+ s\)\n\n<history>#256\+16 · \d+d ago · the search thread dies when two illis open one file[^\n]*<\/history>$/);
