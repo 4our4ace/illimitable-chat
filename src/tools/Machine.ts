@@ -322,6 +322,14 @@ export namespace Machine {
     return INHERITED;
   }
 
+  // what an illi run again in place (an execve: ProfileCommands.ts
+  // term_restart) gives its new run's environment back: the mark it was
+  // started with, so the new run still spares that run's processes
+  // (Machine.marked)
+  export function handed(): Record<string, string> {
+    return INHERITED === "" ? {} : { ILLI_RUN: INHERITED };
+  }
+
   // `limit` lines from line `offset`, from its character `at`: a page of
   // them (Clip.ts), and past it where to go on; failed if there are none.
   // An image (by its first bytes) answers as one instead (Machine.image)

@@ -127,7 +127,8 @@ function term_profile_busy(t: Term, what: string): boolean {
 // one let go; if it fails, illi runs again where it was, saying why),
 // and illi runs in its place, on the same terminal and folder (in a
 // window, the same PTY, shown or hidden as it is); the API keys it took
-// out of the environment go back in, and ILLI_WINDOW.
+// out of the environment go back in, ILLI_WINDOW, and the run mark it
+// was started with (Machine.handed).
 // keep: the project's lock kept through the step (this project
 // forgotten: no illi opens it meanwhile), let go as illi runs again.
 // Background jobs running (this illi runs the chat) stop with it, so it
@@ -160,7 +161,7 @@ export async function term_restart(t: Term, name: string, step?: () => void | Pr
     Profiles.profile_keep(config.ROOT, to);
   }
   const self = /\$bunfs|~BUN/.test(import.meta.path) ? [] : [...process.execArgv, process.argv[1]];
-  const env  = { ...config.config_env(), ...member_env(), ILLI_PROFILE: to, ...(process.env.ILLI_DIR === undefined ? {} : { ILLI_DIR: config.ROOT }) };
+  const env  = { ...config.config_env(), ...member_env(), ...Machine.handed(), ILLI_PROFILE: to, ...(process.env.ILLI_DIR === undefined ? {} : { ILLI_DIR: config.ROOT }) };
   try {
     process.execve!(process.execPath, [process.execPath, ...self, ...process.argv.slice(2)], env);
   } catch (err: any) {

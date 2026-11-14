@@ -255,6 +255,29 @@ test("a chat file deleted while it's open is found gone, and written back whole 
   Store.close(back);
 });
 
+test("a view's reader (another process) never makes the chat's file: one deleted as its holder runs isn't there for it, the holder's WAL left be, till the holder writes it back; then it reads the holder's", () => {
+  const holder = Store.open(DIR + "/view", APP);
+  say(holder, "kept");
+  fs.rmSync(holder.file);
+  const script = DIR + "/view.ts";
+  fs.writeFileSync(script, `
+    const { Store } = await import(${JSON.stringify(import.meta.dir + "/Store.ts")});
+    try {
+      const store = Store.open(${JSON.stringify(DIR + "/view")}, ${JSON.stringify(APP)}, false);
+      console.log(Store.count(store));
+    } catch {
+      console.log("none");
+    }
+  `);
+  const view = () => Bun.spawnSync(["bun", script], { env: { ...process.env, ILLI_DIR: DIR } }).stdout.toString().trim();
+  expect([view(), fs.existsSync(holder.file)]).toEqual(["none", false]);
+  say(holder, "after");
+  expect(Store.count(holder)).toBe(2);
+  Store.restore(holder);
+  expect(view()).toBe("2");
+  Store.close(holder);
+});
+
 test("a chat file that won't open, or won't read, is said by its name; a damaged one says what to do", () => {
   fs.mkdirSync(DIR + "/junk/projects", { recursive: true });
   fs.writeFileSync(DIR + "/junk/projects/app-k3f9x2.sqlite", "not a database, a few bytes more than a header would take".repeat(4));

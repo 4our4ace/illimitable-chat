@@ -1126,6 +1126,12 @@ test("what streams is kept ahead in the chat's state (a tool call at once, text 
   expect(saved().left[""]).toHaveLength(1);
   await Bun.sleep(2100);
   expect(saved().left).toEqual({ "": [{ kind: "tool", text: "shell: make" }, { kind: "illi", text: "half a reply" }] });
+  // the same piece growing on is kept again as it grows
+  Chat.delta(chat, null, { $: "Delta", kind: "illi", text: " and more" });
+  Chat.ahead(chat);
+  expect(saved().left[""][1]).toEqual({ kind: "illi", text: "half a reply and more" });
+  chat.live[1].text = "half a reply";
+  Chat.ahead(chat);
 
   // as a crash leaves it: the next start logs what was kept
   const count = chat.mem.count;

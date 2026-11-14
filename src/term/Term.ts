@@ -565,7 +565,13 @@ function term_gone(t: Term, why: string, heard: boolean): void {
     setTimeout(() => void term_restart(t, config.PROFILE), GONE);
     return;
   }
-  const name = Store.named(t.mem().store).name;
+  const name = (() => {
+    try {
+      return Store.named(t.mem().store).name;
+    } catch {
+      return "this project's chat";
+    }
+  })();
   term_after("illi: " + name + " is open in another terminal, but " + (why || "it can't be reached") + ": quit illi there, then start it here again.");
   process.exit(1);
 }
@@ -896,13 +902,34 @@ function term_none(): string {
 }
 
 // the project's chat to read, in a view of another terminal's: as saved,
-// read anew each time
+// read anew each time. Its file is never made here: one deleted as its
+// holder runs is the holder's to write back (Chat.kept, at the latest as
+// this view joins), and a file made here in its place would part the
+// holder from its own. Opened as it's first read, and again once the
+// holder wrote it back (Store.lost); meanwhile the one open is read.
+// Thrown: none there yet to read
 function term_reader(): () => Memory {
   const dir   = config.DIR + "/chat";
-  const store = Store.open(dir, Projects.place(process.cwd()));
-  return () => Memory.read(dir, store, () => {
-    throw new Error("a view's chat to read builds nothing");
-  }, true);
+  const place = Projects.place(process.cwd());
+  let store: Store | null = null;
+  return () => {
+    if (store === null || Store.lost(store) !== null) {
+      try {
+        const now = Store.open(dir, place, false);
+        if (store !== null) {
+          Store.close(store);
+        }
+        store = now;
+      } catch (err) {
+        if (store === null) {
+          throw err;
+        }
+      }
+    }
+    return Memory.read(dir, store, () => {
+      throw new Error("a view's chat to read builds nothing");
+    }, true);
+  };
 }
 
 // the start's login note let go (a provider connected, the chat's

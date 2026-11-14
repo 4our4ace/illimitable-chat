@@ -429,10 +429,12 @@ async function update_install(place: Place, version: string, say: (text: string)
       throw new Error("the new illi won't run here (" + (said || "it printed nothing") + ")");
     }
     say("Checked: it matches the release's SHA256SUMS and runs");
+    // on disk first (a while, for a whole binary), so the look at the
+    // running file comes right before the rename
+    fsynced(file);
     if (Update.stamp(place.exec) !== place.stamp) {
       throw new Elsewhere("illi was replaced while this one downloaded (illi --version says which runs now)");
     }
-    fsynced(file);
     fs.renameSync(file, place.exec);
     fsynced(dir, true);
   } finally {

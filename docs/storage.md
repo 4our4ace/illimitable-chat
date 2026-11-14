@@ -113,7 +113,9 @@ The columns, by table:
   chat logs none of; before them, the chat's entries held back while a
   message is being logged (`Chat.hold`: a call and its result, a note,
   an agent's report), kept `whole` so they're logged as they were; a
-  quit logs it all at once), whether
+  quit logs it all at once; a kill in the moment between an entry being
+  logged and the state saved after it logs that entry again at the
+  next start), whether
   the last quit cut a tool call as it ran (`lost`: the resume note says
   its effect is unknown, so the model checks before running it again),
   the cut, `show` and `top`, the last `/clear` or `/compact` recap: the
@@ -288,8 +290,13 @@ shared-memory files the deleted file left at the path are removed
 before the move: SQLite would read a WAL left beside a file not its own
 into it, and the file would then be damaged. The old connection closes
 without touching the path, as SQLite checks that its file moved (and
-it is told to keep its WAL besides). It looks once more as illi quits.
-Another file put at its path instead is only told, left as it is.
+it is told to keep its WAL besides). It looks too as a view joins (a
+second terminal), and once more as illi quits. A view never makes the
+chat's file (`Store.open` with `make` false): a file it made in its
+place would start a WAL of its own over the one illi still uses. Till
+the file is back it reads the one it had open, or fails to open; once
+it is, it opens the file anew (`Term.ts`, `term_reader`). Another file
+put at its path instead is only told, left as it is.
 
 Opening an existing file costs about 0.6 ms; making a new one about
 30–45 ms, nearly all of it the fsyncs of its first commits and close.
@@ -842,7 +849,11 @@ a small static model runs on this machine (`src/chat/Embed.ts`).
   offline, search goes by words alone. A part file an illi killed
   mid-download left goes at the next try; one another illi is still
   writing stays, even once a third made the model ready, and that
-  illi's download, failing then, counts as done. A file there that won't read
+  illi's download, failing then, counts as done. A download that fails
+  is kept in that folder's `failed.json` (why, how many tries, when the
+  last was), logged, and told the first time (a note); the next is tried
+  only once an hour is past, then six, then a day (`Embed.due`), and
+  the file goes once one succeeds. A file there that won't read
   (cut short, changed on disk) takes the `ok` away: that run searches
   by words alone, and the next start checks each file against its
   SHA-256 and downloads the one that isn't as pinned. `meaning` off

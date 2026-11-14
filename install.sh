@@ -38,9 +38,16 @@ main() {
   new="$BIN/.illi.new.$$"
   trap 'rm -rf "$tmp"; rm -f "$new"' EXIT
 
-  # the latest release's tag, where GitHub's latest page redirects (none:
-  # no release yet), so the binary and its sums come from one release
-  tag="$(curl -sS --connect-timeout 15 --max-time 60 -o /dev/null -w '%{redirect_url}' "https://github.com/$REPO/releases/latest")" || die "can't reach GitHub (offline?): try again later"
+  # the latest release's tag, where GitHub's latest page redirects (to
+  # the releases' page: no release yet), so the binary and its sums come
+  # from one release; any other answer (a rate limit, an error) stops it
+  local got
+  got="$(curl -sS --connect-timeout 15 --max-time 60 -o /dev/null -w '%{http_code} %{redirect_url}' "https://github.com/$REPO/releases/latest")" || die "can't reach GitHub (offline?): try again later"
+  case "${got%% *}" in
+    301 | 302 | 303 | 307 | 308) ;;
+    *) die "GitHub won't say which release is the latest now (HTTP ${got%% *}): try again later" ;;
+  esac
+  tag="${got#* }"
   tag="${tag##*/releases/tag/}"
   case "$tag" in
     v[0-9]*) ;;

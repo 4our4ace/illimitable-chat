@@ -3,7 +3,11 @@
 // flock(2) on a lock file beside the file it guards: illis changing the
 // accounts file (Accounts.edit: sync, the thread held while it waits, as
 // a change under it takes a moment), opencode's tools and illi renewing
-// a ChatGPT login (ChatGPT.locked: its wait async). flock(2) is loaded
+// a ChatGPT login (ChatGPT.locked: its wait async), illis changing
+// illi's other files, each under a lock of its own (Flock.beside, kept:
+// config.json, the approvals, the trusted folders, models.json,
+// seen.json, the projects' profiles), and an update holding the running
+// file itself (Update.install: Flock.take). flock(2) is loaded
 // from the system's C library through bun:ffi (libc.so.6 on Linux,
 // libSystem.B.dylib on macOS; its operations' numbers the same on both),
 // with errno (__errno_location, __error) to tell a lock another holds

@@ -117,7 +117,7 @@ test("a request that never reached its host says why, by its error's code, and w
   expect(unreached("not a url")).toBe("can't reach not a url: check your connection");
 });
 
-test("a file written whole: new, in a new folder; its mode and group kept; through a link, the file it leads to; one with another name, in a folder illi may not write in, with a name too long for the suffix, or no plain file, in place; nothing left beside it", async () => {
+test("a file written whole: new, in a new folder; its mode and group kept; through a link, the file it leads to; one with another name, in a folder illi may not write in, with a name too long for the suffix, or no plain file, in place; a read-only one refused; nothing left beside it", async () => {
   const W = DIR + "/whole";
   whole(W + "/a/new.txt", "one");
   expect(fs.readFileSync(W + "/a/new.txt", "utf8")).toBe("one");
@@ -159,6 +159,13 @@ test("a file written whole: new, in a new folder; its mode and group kept; throu
     fs.chownSync(W + "/a/private", process.getuid!(), other);
     whole(W + "/a/private", "nine");
     expect([fs.statSync(W + "/a/private").gid, fs.readFileSync(W + "/a/private", "utf8")]).toEqual([other, "nine"]);
+  }
+  // a file made read-only is refused, as a write in place is, and kept
+  if (process.getuid?.() !== 0) {
+    fs.writeFileSync(W + "/a/kept.txt", "x");
+    fs.chmodSync(W + "/a/kept.txt", 0o444);
+    expect(() => whole(W + "/a/kept.txt", "ten")).toThrow(/EACCES/);
+    expect([fs.readFileSync(W + "/a/kept.txt", "utf8"), fs.statSync(W + "/a/kept.txt").mode & 0o777]).toEqual(["x", 0o444]);
   }
   expect([...fs.readdirSync(W + "/a"), ...fs.readdirSync(W)].filter((f) => f.endsWith(".tmp"))).toEqual([]);
 });

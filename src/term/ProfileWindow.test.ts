@@ -20,6 +20,9 @@ const NONCE = "0123456789abcdef0123456789abcdef";
 process.env.ILLI_DIR    = DIR;
 process.env.ILLI_WINDOW = "1:" + NONCE + ":shown";
 delete process.env.ILLI_PROFILE;
+// as an illi started from another run's shell is (Machine.inherited)
+const MARK = crypto.randomUUID();
+process.env.ILLI_RUN = MARK;
 fs.mkdirSync(DIR + "/profiles/work", { recursive: true });
 fs.mkdirSync(DIR + "/profiles/home", { recursive: true });
 
@@ -183,7 +186,8 @@ test("a profile hidden here that runs again in place (its chat's holder gone) is
   fs.writeFileSync(DIR + "/profile", "work\n");
   const [execve, pause] = [process.execve, process.stdin.pause];
   let ran: string[] = [];
-  process.execve = ((_path: string, args: string[]) => void (ran = args)) as any;
+  let env: Record<string, string> = {};
+  process.execve = ((_path: string, args: string[], given: Record<string, string>) => void ((ran = args), (env = given))) as any;
   process.stdin.pause = (() => process.stdin) as any;
   try {
     await said(() => term_restart(t, "default"));
@@ -191,4 +195,6 @@ test("a profile hidden here that runs again in place (its chat's holder gone) is
     [process.execve, process.stdin.pause] = [execve, pause];
   }
   expect([ran.length > 0, fs.readFileSync(DIR + "/profile", "utf8")]).toEqual([true, "work\n"]);
+  // the run mark it was started with goes with it (Machine.handed)
+  expect(env.ILLI_RUN).toBe(MARK);
 });

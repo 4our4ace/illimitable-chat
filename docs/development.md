@@ -94,7 +94,17 @@ and so `install.sh` and every illi's look, never points to. Every
 installed illi takes the latest as it next starts
 (`src/config/Update.ts`; `autoupdate` in [Config](config.md)): it
 checks the file against the sums, runs it with `--version`, which must
-print exactly `illi X.Y.Z` (main.ts), then renames it over itself. `bun
+print exactly `illi X.Y.Z` (main.ts), then renames it over itself. It
+holds a flock on the running file all the while, so of two illis
+updating at once the second gives way (a start's look saying nothing,
+`illi upgrade` saying another illi is installing); it syncs the new
+file to disk before the rename, and makes the rename only if the file
+is still the one it started from (its inode and last write,
+`Update.stamp`), so one `install.sh` or a newer illi put there
+meanwhile is kept. `install.sh` takes no lock: it finds the release
+once, takes the binary and its `SHA256SUMS` from it, copies the new
+file beside where it goes, runs it there (`--version`), then moves it
+in. `bun
 run build`'s `./illi` is such a file and updates itself too
 (`ILLI_AUTOUPDATE=off` keeps it); a source run never does.
 

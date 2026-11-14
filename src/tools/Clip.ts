@@ -173,8 +173,9 @@ export function fsynced(p: string, folder = false): void {
 // beside it (IN_PLACE: a folder illi may not write in, a file mounted on
 // its own, a name too long for the suffix). A full or failing disk never
 // falls back so, as that would cut the file short: thrown, the file as
-// it was. Its folder made where new. A move still loses what illi can't
-// see: extended attributes and ACLs
+// it was, as is a file illi may not write (read-only: refused as a
+// write in place is, never moved over). Its folder made where new. A
+// move still loses what illi can't see: extended attributes and ACLs
 export function whole(file: string, data: string | Uint8Array): void {
   let target = file;
   let was: fs.Stats | null = null;
@@ -190,6 +191,11 @@ export function whole(file: string, data: string | Uint8Array): void {
   if (was !== null && (!was.isFile() || was.nlink > 1 || (process.getuid !== undefined && was.uid !== process.getuid()))) {
     fs.writeFileSync(target, data);
     return;
+  }
+  // a file illi may not write (one made read-only) refused, as a write in
+  // place would be (thrown: EACCES), never replaced by a move
+  if (was !== null) {
+    fs.accessSync(target, fs.constants.W_OK);
   }
   const dir = path.dirname(target);
   fs.mkdirSync(dir, { recursive: true });

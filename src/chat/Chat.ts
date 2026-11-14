@@ -614,15 +614,16 @@ export namespace Chat {
   // what streams kept in the chat's state as it changes (Memory left), so
   // a start after a crash or a kill logs it (Chat.left): at once as a tool
   // call starts or ends, as an entry is logged; a piece streamed, AHEAD ms
-  // later at most (Chat.delta)
+  // later at most (Chat.delta). Kept as a copy: what streams grows in
+  // place (live_push), and the state must not grow with it unsaved
   export function ahead(chat: Chat): void {
     if (chat.ahead !== null) {
       clearTimeout(chat.ahead);
       chat.ahead = null;
     }
-    const now = Chat.inflight(chat);
-    if (!chat.mem.done && JSON.stringify(now) !== JSON.stringify(chat.mem.left)) {
-      chat.mem.left = now;
+    const now = JSON.stringify(Chat.inflight(chat));
+    if (!chat.mem.done && now !== JSON.stringify(chat.mem.left)) {
+      chat.mem.left = JSON.parse(now);
       Chat.save(chat);
     }
   }
@@ -1551,7 +1552,10 @@ export namespace Chat {
   }
 
   // a view joins on the chat as it is now
+  // a view joined: the chat's file looked at first (Chat.kept), so one
+  // deleted as illi idled is there again for the view to read
   export function join(chat: Chat, sock: Sock): void {
+    Chat.kept(chat);
     chat.socks.add(sock);
     chat.told.delete(sock);
     Chat.tell(chat, [sock]);

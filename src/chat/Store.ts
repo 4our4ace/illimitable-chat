@@ -100,7 +100,9 @@ export type Found = { project: string; chat: number; first: number; n: number; t
 // a project's lines a search found but left out (more: maybe more still)
 export type Cut = { n: number; more: boolean };
 
-// a project's file, its connection, the project and chat its rows are of
+// a project's file, its connection, the project and chat its rows are
+// of; ino: the file's inode as it was opened (Store.open's alone), by
+// which one deleted or replaced since is found (Store.lost)
 export type Store = { file: string; db: Database; project: number; chat: number; ino?: number };
 
 // Constants
@@ -206,12 +208,13 @@ export namespace Store {
 
   // the file of the project at `place`, made if new (a file another
   // place's already: the next number's); the project's first chat, made
-  // if new, its index of its messages' words too
-  export function open(dir: string, place: Place = HOME): Store {
+  // if new, its index of its messages' words too. make false: never a
+  // file made, one not there thrown (a view's reader: Term.ts)
+  export function open(dir: string, place: Place = HOME, make = true): Store {
     fs.mkdirSync(dir + PROJECTS, { recursive: true });
     for (let k = 1; ; k++) {
       const file = dir + PROJECTS + "/" + place.name + (k === 1 ? "" : "-" + k) + SQLITE;
-      const db = Store.connect(file, true);
+      const db = Store.connect(file, make);
       try {
         const at = Store.place(db, place, Store.name(file));
         if (at !== null) {

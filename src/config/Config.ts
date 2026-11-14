@@ -749,7 +749,7 @@ export function config_models_tell(vendor: Vendor, of: string): void {
 // written whole (Clip whole); a failure logged, the file as it was
 function config_models_write(change: (file: ReturnType<typeof config_models_file>) => object): void {
   try {
-    const done = Flock.beside(MODELS_FILE, LOCKED, () => whole(MODELS_FILE, JSON.stringify(change(config_models_file()), null, 2) + "\n"));
+    const done = Flock.beside(MODELS_FILE, LOCKED, () => (whole(MODELS_FILE, JSON.stringify(change(config_models_file()), null, 2) + "\n"), true));
     if (done === undefined) {
       console.error("models: " + MODELS_FILE + " wasn't kept: another illi held it");
     }

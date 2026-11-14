@@ -153,7 +153,7 @@ the container only, so write it from the side that mounted it. An
 back.
 | `plugin-data/`  | each plugin's own folder (`CLAUDE_PLUGIN_DATA`), kept across its updates; a profile's plugins' in the profile's folder ([Plugins](customize.md#plugins)) |
 | `trust.json`    | the folders you trust illi in (a repo's top covers the repo, a plain folder the folders in it but a repo), every profile's: the question at the start asks only for others; edit or delete it to trust less |
-| `update.json`   | when illi last looked for a new release (`autoupdate`), the release it found (the trust question shows it where it's newer), and the one it last said it couldn't install |
+| `update.json`   | when illi last looked for a new release (`autoupdate`), the release it found (the trust question shows it where it's newer), the one it last said it couldn't install, and the install that failed last (`failed`: its release, why, how many tries, when), by which the next try waits |
 | `locks/`        | a lock per project, held while its chat is open (by the system: a crash never leaves one held), the socket a second terminal joins it by, and the chat's state for the other terminals' side panel |
 | `illi.log`      | what went wrong (each profile's own)                  |
 | `.made-by-illi` | in a folder `ILLI_DIR` names, that illi made it (it wasn't there before): `illi uninstall` removes such a folder whole, never one without it |

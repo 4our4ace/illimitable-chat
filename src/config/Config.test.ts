@@ -153,7 +153,16 @@ test("a pick named by family (* for its version) runs on the newest model of it 
   const was = Pick.list("claude-api");
   Pick.learn("claude-api", [...was, { label: "opus-6", id: "claude-opus-6", speeds: ["slow"] }, { label: "haiku-6", id: "claude-haiku-6", speeds: ["slow"] }], "replace");
   config.OFFER.models.push("opus-6", "haiku-6");
-  config.config_models_keep("claude-api", Pick.list("claude-api"));
+  // kept with nothing said: a write that worked logs no failure
+  const logged: string[] = [];
+  const error = console.error;
+  console.error = (text: string) => logged.push(text);
+  try {
+    config.config_models_keep("claude-api", Pick.list("claude-api"));
+  } finally {
+    console.error = error;
+  }
+  expect(logged).toEqual([]);
   expect([config.PICK.model, config.config_role("compactor", config.PICK).model]).toEqual(["opus-6", "haiku-6"]);
   Pick.learn("claude-api", was, "replace");
   config.OFFER.models.splice(config.OFFER.models.indexOf("opus-6"), 2);

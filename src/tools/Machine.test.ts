@@ -142,6 +142,27 @@ test("an illi started from a killed run's shell (a terminal its tmux opened) sto
   }
 });
 
+test("an illi run again in place (an execve) still knows the mark it was started with, so it spares that run's processes then too", () => {
+  const run = crypto.randomUUID();
+  const file = DIR + "/again.ts";
+  fs.writeFileSync(file, [
+    "const { Machine } = await import(" + JSON.stringify(import.meta.dir + "/Machine.ts") + ");",
+    "if (process.argv[2] === \"again\") {",
+    "  console.log(Machine.inherited() === " + JSON.stringify(run) + ", process.env.ILLI_RUN === undefined, Machine.marked(" + JSON.stringify(run) + "));",
+    "} else {",
+    "  process.execve!(process.execPath, [process.execPath, " + JSON.stringify(file) + ", \"again\"], { ...process.env, ...Machine.handed() } as any);",
+    "}",
+  ].join("\n"));
+  const pane = Bun.spawn(["sleep", "30"], { env: { ...process.env, ILLI_RUN: run } });
+  try {
+    const out = Bun.spawnSync([process.execPath, file], { env: { ...process.env, ILLI_RUN: run } });
+    expect(out.stdout.toString().trim()).toBe("true true 0");
+    expect(Machine.alive(pane.pid)).toBe(true);
+  } finally {
+    pane.kill();
+  }
+});
+
 test("an edit whose later file won't write puts the earlier ones back and says so; none left changed", () => {
   if (process.getuid?.() === 0) {
     return;
