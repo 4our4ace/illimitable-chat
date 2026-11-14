@@ -39,7 +39,12 @@
 //                       Shell.ts can't read (or a script in one: Part
 //                       rough) is split crudely into pieces,
 //                       its paths found by their look, so a rule still
-//                       finds most of what is in it
+//                       finds most of what is in it. One left partly
+//                       unread (past a check's work, Shell Work;
+//                       unreadable scripts nested ROUGH deep; scripts
+//                       nested past Shell's NEST; a word whose use illi
+//                       can't tell) asks whatever the rules allow
+//                       (Request failed), and saves nothing
 //   spawn, skill, ask   subagent (its agent's name), skill (its name),
 //                       question
 //   an MCP tool, any    its own name, on *
@@ -120,7 +125,8 @@ type Piece = { text: string; span: Span; save?: string[]; odd?: boolean };
 // what a command's reading met: its pieces to meet the rules, the
 // folders outside it touches, and whether some of it was left unread
 // (a script past the check's work, Shell Work; unreadable ones nested
-// ROUGH deep), so it asks
+// ROUGH deep; one nested too deep, Part rough "deep"; a word whose use
+// illi can't tell), so it asks
 type Met = { pieces: Piece[]; found: Array<{ target: Target; span: Span | null }>; unread: boolean };
 
 // one check's reading of a command: the work its readings share (Shell
@@ -154,10 +160,18 @@ const BARE = 16;
 const ROUGH = 4;
 
 // why a command left partly unread asks (Request failed)
-const UNREAD = "it runs more scripts, or nests unreadable ones deeper, than illi reads";
+const UNREAD = "it runs more scripts, or nests them deeper, than illi reads, or holds a word whose use illi can't tell";
 
 // the git commands whose -n is a dry run (dry)
 const GIT_DRY = new Set(["push", "add", "mv", "rm", "clean", "prune"]);
+
+// make's long options that make a dry run, taken as short as any start
+// of each (dry)
+const MAKE_DRY = ["dry-run", "just-print", "recon", "touch", "question"];
+
+// a word wholly made as it runs, as the rules' families read it (dry):
+// one variable, a command's output, a $'...' read crudely
+const MADE = /^["']?(?:\$(?:\{[^}]*\}|[A-Za-z_]\w*|\d|\(.*\)|'[^']*')|`.*`)["']?$/;
 
 // the words that open a shell's own syntax, not a command (left off a
 // piece's front, the piece dropped if a loop's head)
@@ -245,7 +259,7 @@ export namespace Access {
     const pieces = typeof parts === "string" ? met.pieces : [...met.pieces, ...tops(command, met.pieces)];
     const runs = commands(pieces);
     const shell: Request = { action: "shell", resources: runs.map((r) => r.text), save: [...new Set(runs.flatMap((r) => r.save ?? [Access.family(r.text)]))].filter((x) => x !== ""), spots: runs.map((r) => r.span) };
-    if (met.unread) {
+    if (met.unread || parts === Shell.DEEP) {
       return [...external(met.found), { ...shell, ...(runs.length === 0 ? { resources: [command], spots: [null] } : {}), failed: UNREAD }];
     }
     return [...external(met.found), ...(runs.length === 0 ? [] : [shell])];
@@ -343,13 +357,15 @@ export namespace Access {
   // -n never approves make deploy), or it is short of its family's words
   // (git, npm run alone: never git *); "" (nothing saved) where that
   // command holds a * or ?, as it would save more than itself (git '*'
-  // as git *)
-  export function family(text: string): string {
+  // as git *). Crude (a piece of a command illi can't read: Access
+  // rough), a word that looks wholly made as it runs ($N) may be a dry
+  // run's; else such a word was read for what it is (a loop's $f)
+  export function family(text: string, crude = false): string {
     const all = words(text);
     const names = all.map((w) => w.replace(/['"\\]/g, ""));
     names[0] = Shell.program(Shell.lit(names[0] ?? "")) || (names[0] ?? "");
     const n = Access.arity(names).length;
-    const odd = names.slice(1, n).some((v) => v.startsWith("-")) || names.slice(0, n).some((v) => v.trim() === "" || /[*?]/.test(v)) || dry(names) || n < Access.wanted(names);
+    const odd = names.slice(1, n).some((v) => v.startsWith("-")) || names.slice(0, n).some((v) => v.trim() === "" || /[*?]/.test(v)) || dry(crude ? names : names.filter((v) => !MADE.test(v))) || (crude && all.slice(1).some((v) => MADE.test(v))) || n < Access.wanted(names);
     return !odd ? all.slice(0, n).join(" ") + " *" : /[*?]/.test(text) ? "" : text;
   }
 
@@ -544,10 +560,21 @@ function outer(cmd: string): Piece[] {
 // run, a word blank or holding * or ?, one short of what it does), or
 // nothing where one saves nothing, so its text as written (a comment
 // after it, a parenthesis, a variable not yet filled in) never saves
-// that command's family in its place
+// that command's family in its place (the odd ones in order, each
+// outer one's found by where it starts: a command of many thousand
+// parts checked in a moment)
 function tops(cmd: string, met: Piece[]): Piece[] {
+  const odds = met.filter((m) => m.odd === true).sort((a, b) => a.span[0] - b.span[0]);
   return outer(cmd).map((o) => {
-    const odd = met.filter((m) => m.odd === true && m.span[0] >= o.span[0] && m.span[1] <= o.span[1]);
+    let lo = 0;
+    for (let hi = odds.length; lo < hi; ) {
+      const mid = (lo + hi) >> 1;
+      odds[mid].span[0] < o.span[0] ? (lo = mid + 1) : (hi = mid);
+    }
+    const odd: Piece[] = [];
+    for (let k = lo; k < odds.length && odds[k].span[0] <= o.span[1]; k++) {
+      odds[k].span[1] <= o.span[1] && odd.push(odds[k]);
+    }
     return odd.length === 0 ? o : { ...o, save: /[*?]/.test(o.text) || odd.some((m) => m.save?.length === 0) ? [] : [o.text], odd: true };
   });
 }
@@ -633,9 +660,10 @@ function met_parts(where: Where, parts: Part[], depth: number, check: Check): Me
     if (p.rough !== undefined && p.rough !== false) {
       const deep = p.rough === "spent" ? ROUGH : depth + 1;
       const key = [p.text, run, p.span, deep].join("\0");
+      unread ||= p.rough === "deep";
       if (!check.rough.has(key)) {
         check.rough.add(key);
-        const met = rough(where, p.text, run, p.span, deep, check);
+        const met = rough(where, p.text, run, p.span, deep, check, true);
         add(pieces, met.pieces);
         add(found, met.found);
         unread ||= met.unread;
@@ -662,12 +690,16 @@ function add<T>(to: T[], items: T[]): void {
 // Shell.ts reads it (met_parts, ROUGH deep at most), so a construct it
 // can't follow (an array, a case) leaves the rest of the command read as
 // ever (git -C x push; x=(a): git push too); these only add to what the
-// crude reading meets, never take from it, and share the check's work. A
-// script Shell.ts left unread past that work (Part rough "spent") isn't
-// read so, nor one ROUGH deep: left unread (Met), so the check asks
-function rough(where: Where, text: string, from: string, span: Span | null, depth: number, check: Check): Met {
+// crude reading meets, never take from it, and share the check's work.
+// A script's (own: Part rough) is read whole on its own too, as it may
+// be read so (one nested too deep, one read loosely: GIT_PAGER=$NOPE'/bin/rm
+// -rf y' as /bin/rm -rf y, so as rm -rf y too); a whole command isn't,
+// as it was just read so. A script Shell.ts left unread past that work
+// (Part rough "spent") isn't read so, nor one ROUGH deep: left unread
+// (Met), so the check asks
+function rough(where: Where, text: string, from: string, span: Span | null, depth: number, check: Check, own = false): Met {
   const split = [...outer(text), ...crude(text)];
-  const pieces = split.map((p) => (span === null ? p : { ...p, span }));
+  const pieces = split.map((p) => ({ ...p, ...(span === null ? {} : { span }), save: [Access.family(p.text, true)].filter((x) => x !== "") }));
   const found: Array<{ target: Target; span: Span | null }> = [];
   for (const m of text.matchAll(/(^|[\s=('"<>|;&`]|(?<=\s)-[A-Za-z])((?:~[\w.-]*|\.\.)?\/[^\s'"`;|&<>()$]*|\.\.(?=$|[\s'"`;|&<>)]))/g)) {
     if (m[1].startsWith("-") && m[2] === "/") {
@@ -681,7 +713,7 @@ function rough(where: Where, text: string, from: string, span: Span | null, dept
     return { pieces, found, unread: true };
   }
   let unread = false;
-  const seen = new Set([text.trim()]);
+  const seen = new Set(own ? [] : [text.trim()]);
   for (const piece of split) {
     if (seen.has(piece.text)) {
       continue;
@@ -720,10 +752,10 @@ function readings(p: Part): Piece[] {
   const fam = named >= 0 ? named : Access.arity(named_words(p.argv)).length - 1;
   const what = named_words(one ?? p.argv);
   const short = Access.arity(what).length < Access.wanted(what);
-  const odd = short || dry(named_words(p.argv), p.env) || p.plain.some((r) => dry(named_words(r), p.env)) || p.argv.slice(0, fam + 1).some((w) => (w.dynamic ? [w.raw] : w.alts).some((v) => v.trim() === "" || /[*?]/.test(v)));
+  const odd = short || dry(dry_words(p.argv), p.env) || p.plain.some((r) => dry(dry_words(r), p.env)) || p.argv.slice(0, fam + 1).some((w) => (w.dynamic ? [w.raw] : w.alts).some((v) => v.trim() === "" || /[*?]/.test(v)));
   // a dry run by what it's given (MAKEFLAGS=n make deploy) saves nothing:
   // its text as matched leaves that out, and would stand for the real run
-  const given = dry(named_words(p.argv), p.env) && !dry(named_words(p.argv)) && !p.plain.some((r) => dry(named_words(r)));
+  const given = dry(dry_words(p.argv), p.env) && !dry(dry_words(p.argv)) && !p.plain.some((r) => dry(dry_words(r)));
   const exact = (text: string) => ({ save: given || /[*?]/.test(text) ? [] : [text], odd: true });
   const lead = p.full.indexOf(p.text);
   const through = p.argv.slice(0, named + 1);
@@ -737,21 +769,26 @@ function readings(p: Part): Piece[] {
 }
 
 // whether a command (its words as the rules' families read them, and
-// what it's given: env) is a dry run, whose approval mustn't stand for
-// the real one: --dry-run anywhere (git push, npm publish, kubectl
-// apply, helm, rsync), or as short as a program may take it (--dry,
-// --dry-r); git's -n where it is one (GIT_DRY: git push -n, alone or
-// among others, -nf); make's -n, -t, -q anywhere (it reads its options
-// after the targets too; alone or among others, -kn, before an option
-// taking a value), its long ones as short as it takes them (--just-print,
-// --recon, --touch, --question: --just), or given in MAKEFLAGS or MFLAGS
-// (MAKEFLAGS=n). A guess that's too wide only saves a command alone
+// what it's given: env) may be a dry run, whose approval mustn't stand
+// for the real one: --dry-run anywhere (git push, npm publish, kubectl
+// apply, helm, rsync), or any start of it (--dr, --dry-run=x: as git and
+// make take a long option); git's -n where it is one (GIT_DRY, among
+// its words: git push -n, git remote prune -n; alone or among others,
+// -nf); make's -n, -t, -q anywhere (it reads its options after the
+// targets too; alone or among others, -kn, before an option taking a
+// value), any start of its long ones (--just-print, --recon, --touch,
+// --question: --re), or its flags given in any way (MAKEFLAGS, MFLAGS,
+// GNUMAKEFLAGS: by the environment, as an argument); a word that is
+// wholly made as it runs ($N, "$N", ${D:---dry-run}, $'-n'), which may
+// be any of these. A guess that's too wide only saves a command alone
 function dry(names: string[], env: Env[] = []): boolean {
   const make = names[0] === "make" || names[0] === "gmake";
-  const git = names[0] === "git" && GIT_DRY.has(names[1] ?? "");
-  const made = (v: string) => /^--(ju|rec|to|qu)[a-z-]*$/.test(v) || /^-[^-CfIjloOW]*[ntq]/.test(v);
-  const flags = make ? env.filter((e) => e.name === "MAKEFLAGS" || e.name === "MFLAGS").flatMap((e) => (e.value.dynamic ? [e.value.raw] : e.value.alts)) : [];
-  return names.slice(1).some((v) => /^--dry(-(r(un?)?)?)?(=|$)/.test(v) || (git && /^-[^-oe]*n/.test(v)) || (make && made(v))) || flags.some((f) => f.trim().split(/\s+/).some((v, k) => made(v) || (k === 0 && /^[a-zA-Z]*[ntq]/.test(v))));
+  const git = names[0] === "git" && names.slice(1).some((w) => GIT_DRY.has(w));
+  const long = (v: string, all: string[]) => {
+    const m = /^--([^=]+)/.exec(v);
+    return m !== null && all.some((o) => o.startsWith(m[1]));
+  };
+  return names.slice(1).some((v) => long(v, ["dry-run"]) || MADE.test(v) || (git && /^-[^-oe]*n/.test(v)) || (make && (long(v, MAKE_DRY) || /^-[^-CfIjloOW]*[ntq]/.test(v) || /^(?:MAKEFLAGS|MFLAGS|GNUMAKEFLAGS)=/.test(v)))) || (make && env.some((e) => /^(?:MAKEFLAGS|MFLAGS|GNUMAKEFLAGS)$/.test(e.name)));
 }
 
 // a command's words as the rules' families read them: its program by
@@ -760,6 +797,13 @@ function dry(names: string[], env: Env[] = []): boolean {
 // it runs)
 function named_words(argv: Word[]): string[] {
   return argv.map((w, k) => (k === 0 && Shell.program(w) !== "" ? Shell.program(w) : !w.dynamic && w.alts.length === 1 ? w.alts[0] : w.raw));
+}
+
+// a command's words as a dry run is looked for in them (dry): its
+// program by name, each value of a word of several (for o in -n -f; do
+// git push $o), one known only as it runs as written
+function dry_words(argv: Word[]): string[] {
+  return argv.flatMap((w, k) => (k === 0 && Shell.program(w) !== "" ? [Shell.program(w)] : w.dynamic ? [w.raw] : w.alts));
 }
 
 // a command's words as they'd expand (unquoted, ~ and the variables

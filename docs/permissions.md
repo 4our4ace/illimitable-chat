@@ -101,23 +101,33 @@ project always comes first:
   *` is saved. A command whose words up to what it does are blank or
   hold `*` or `?` (a rule's own wildcards), one short of the words
   naming what it does (`git` alone, `npm run`, `npm --prefix app
-  run`), and a dry run (`--dry-run` anywhere, or as short as a program
-  takes it, `--dry`; git's `-n` for `push`, `add`, `mv`, `rm`, `clean`
-  and `prune`; make's `-n`, `-t`, `-q` anywhere, its `--just-print`,
-  `--recon`, `--touch` and `--question` as short as it takes them: `make
-  deploy -n`, `N=-n; make deploy $N`, `make deploy $'-n'`, as its words
-  expand) are saved as written alone, so approving one never approves
-  the real run, nor does the line around it as written (`N=-n; make
-  deploy $N # dry`, `( git push $'--dry-run' )`). One of those whose
-  text holds `*` or `?` itself (`git '*'`, `( * x )`) saves nothing, as
-  its text would match more than itself, and so does a dry run made by
-  what make is given (`MAKEFLAGS=n make deploy`), as its text alone is
-  the real run's. A word of several values that are each one of the
-  program's flags (`git {-p,-P} push`, `for o in -p -P; do git $o …`)
-  is passed over as one, however many there are; one of several
-  options is read with each (`for o in -c -C; do git $o alias.x=push
-  x`), up to 8 ways, past which the command is read without the words
-  before what it does that may be options, and asks.
+  run`), and a dry run or what may be one (`--dry-run` anywhere, or any
+  start of it, `--dr`, `--dry-run=x`; git's `-n` where `push`, `add`,
+  `mv`, `rm`, `clean` or `prune` is among its words, `git remote prune
+  -n`; make's `-n`, `-t`, `-q` anywhere, any start of its
+  `--just-print`, `--recon`, `--touch` and `--question`, `--re`, and its
+  flags given in any way, `MAKEFLAGS`, `MFLAGS` or `GNUMAKEFLAGS` by the
+  environment or as an argument; a word wholly made as it runs, `$N`,
+  `${D:---dry-run}`: `make deploy -n`, `N=-n; make deploy $N`, `make
+  deploy $'-n'`, as its words expand) are saved as written alone, so
+  approving one never approves the real run, nor does the line around
+  it as written (`N=-n; make deploy $N # dry`, `( git push $'--dry-run'
+  )`). One of those whose text holds `*` or `?` itself (`git '*'`, `( *
+  x )`) saves nothing, as its text would match more than itself, and so
+  does a dry run made by what make is given (`MAKEFLAGS=n make
+  deploy`), as its text alone is the real run's. The question names
+  what "don't ask again" saves, so read it before you take it. A word of
+  several values that are each one of the program's flags (`git
+  {-p,-P} push`, `for o in -p -P; do git $o …`) is passed over as one,
+  however many there are; one of several values some of which are
+  options, or none (`for o in -c -C`, `for o in -c status`, `for o in ''
+  -c`), is read with each, whatever their order, up to 8 ways, past
+  which the command is read without the words before what it does that
+  may be options, and asks. A word known only as it runs among a
+  program's options, with words after it (`git $O alias.x=push x`, `git
+  "$@" push`), may be an option, its value or what the program does, so
+  the command asks too (`make -j $N deploy` doesn't: a number's option
+  is read with that word its value and without).
 - A git setting given with the command that runs a command (`git -c
   core.sshCommand=…`, `core.pager`, `core.editor`, a credential helper,
   a diff or merge tool's, `tar.<format>.command`, and the rest of
@@ -126,7 +136,10 @@ project always comes first:
   `GIT_CONFIG_VALUE_n`, `GIT_CONFIG_PARAMETERS`), gives that command
   too; so does a variable naming one (`GIT_SSH_COMMAND`, `GIT_EDITOR`,
   `EDITOR`, `PAGER`, `GH_PAGER`, `KUBE_EDITOR` and the like, given to a
-  command, through `env` or `sudo`, exported or set). Settings in the
+  command, through `env` or `sudo`, exported or set; a word of several
+  values given `env` or `sudo` is an assignment of each that is one,
+  `for V in 'GIT_SSH_COMMAND=…' X=1; do env "$V" git fetch`, and asks if
+  some aren't, as it may then be the program). Settings in the
   environment are read where they're set, and reach a shell of its own
   (`bash -c 'git fetch'`), so a script or program run after them meets
   them too. An alias given with `-c` gives the command as git runs it
@@ -139,7 +152,8 @@ project always comes first:
   alias is given is read, whatever the order git would take them in
   (`-c`, the environment's by number, `GIT_CONFIG_PARAMETERS`), so one
   given later never hides another. A variable added to (`+=`) is read
-  as what it then holds, and a `for` loop's variable naming a command
+  as what it then holds, one set before it in the same command too
+  (`A=/bin/r A+='m -rf y' …`), and a `for` loop's variable naming a command
   (`for GIT_SSH_COMMAND in …`) gives each of its words. git hands its
   settings down to what it runs (its `-c`s, and those its environment
   gives it, set for the command or exported), so a git command in an
@@ -147,12 +161,19 @@ project always comes first:
   alias.a='!git b' -c alias.b=push a` is `git push` too, and a script
   read once is read again where the shell's variables or git's settings
   have changed since (one running itself, an alias's, is read once).
-  One check reads at most a few thousand commands, scripts and alias
-  steps in all, far past any everyday command; a command whose scripts
-  or aliases grow past that (one running itself in a new folder each
-  time, aliases naming each other in a long row) has the rest split
-  crudely, as below, and asks whatever the rules allow, a rule that
-  denies what was read still refusing it. A value made as it runs is read by its text: one
+  One check follows scripts and aliases until it has read 5,000
+  commands, scripts and alias steps in all, far past any everyday
+  command (a command's own plain commands are all read, however many);
+  a command whose scripts or aliases grow past that (one running itself
+  in a new folder each time, aliases naming each other in a long row)
+  has the rest split crudely, as below, and asks whatever the rules
+  allow, with nothing to save, a rule that denies what was read still
+  refusing it. So does a script nested deeper than illi follows (64
+  subshells and scripts inside one another), read again on its own (so
+  without the variables and git settings around it) so a rule that
+  denies it still meets it, and a variable grown past 64 KB (`X=$X$X`,
+  again and again), whose value illi then holds as unknown. A value
+  made as it runs is read by its text: one
   double-quoted string's inside (`GIT_SSH_COMMAND="ssh -i $KEY"` gives
   `ssh -i $KEY`), else what is known of it and, crudely, what is
   written after each variable (`$NOPE'rm -rf y'` gives `rm -rf y`). A
@@ -472,7 +493,10 @@ Limits
   command asks whatever the rules allow.
 - A brace's words are read as one word of several values, not as
   several words: `rm {-rf,/}` isn't `rm -rf /`. A dry run set unseen
-  (`export MAKEFLAGS=n` before `make deploy`) isn't one.
+  (`export MAKEFLAGS=n` before `make deploy`) isn't one, nor is one
+  spelled as no rule above has it (a program's own dry option other
+  than `--dry-run`): "don't ask again" saves its family, as the question
+  shows.
 - A command given to a program's own command by an option or a word of
   that command isn't read: `git rebase --exec 'rm -rf x'`, `git
   submodule foreach 'git push'`, `git bisect run rm -rf x`, `git clone

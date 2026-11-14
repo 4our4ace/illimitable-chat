@@ -276,6 +276,19 @@ test("a command's text at its top (a comment after it, a parenthesis) saves itse
     ["make deploy --dry", "make deploy"],
     ["make deploy --just", "make deploy"],
     ["MAKEFLAGS=n make deploy", "make deploy"],
+    ["git push --dr origin main", "git push --force origin"],
+    ["git push --dry-run=x origin", "git push --force origin"],
+    ["git push ${D:---dry-run} origin", "git push --force origin"],
+    ["D=--dry-run; git push $D origin", "git push --force origin"],
+    ["git remote prune -n origin", "git remote prune origin"],
+    ["make deploy --dr", "make deploy"],
+    ["make deploy --re", "make deploy"],
+    ["make deploy MAKEFLAGS=n", "make deploy"],
+    ["GNUMAKEFLAGS=-n make deploy", "make deploy"],
+    ["MAKEFLAGS='k --dry-run' make deploy", "make deploy"],
+    ["MAKEFLAGS=--dr make deploy", "make deploy"],
+    ["N=-n; make deploy $N; x=(a)", "make deploy"],
+    ["( git push $'--dry-run' ); x=(a)", "git push --force origin"],
     ["npm --prefix app run", "npm --prefix app run deploy"],
     ["git -C . stash", "git -C . stash drop"],
     ["( * x )", "rm -rf build"],
@@ -428,6 +441,74 @@ test("git's settings in the environment, many, met by many git commands, read in
   const t0 = performance.now();
   Access.shell(WHERE, many(120, 600));
   expect(performance.now() - t0).toBeLessThan(3000);
+});
+
+test("a script nested too deep asks, read again on its own so a rule that denies it still refuses it, and a like script after it is read as ever; one read loosely, as its own text too", () => {
+  const deep = (n: number, c: string) => "( ".repeat(n) + c + " )".repeat(n);
+  const deny = [rule("shell", "rm *", "deny"), rule("shell", "git push *", "deny")];
+  const pager = "GIT_PAGER='/bin/rm -rf y' git log";
+  const nested = "git -c alias.x=push -c core.pager='bash -c \"bash -c \\\"git x\\\"\"' log";
+  for (const c of [deep(63, pager), deep(63, pager) + "; " + pager, deep(60, nested) + "; " + nested, "GIT_PAGER=$NOPE'/bin/rm -rf y' git log"]) {
+    expect([c.slice(-60), judge(c, deny).includes("deny")]).toEqual([c.slice(-60), true]);
+    const all = (x: string) => Access.shell(WHERE, x).flatMap((r) => r.resources);
+    const on = all(c);
+    expect([c.slice(-60), Shell.unmemoed(() => all(c)).filter((x) => !on.includes(x))]).toEqual([c.slice(-60), []]);
+  }
+  // read on its own, the alias git was given is gone: it asks
+  for (const c of [deep(63, "GIT_PAGER='less' git log"), deep(60, nested), "( ".repeat(70) + "ls" + " )".repeat(70)]) {
+    expect(Access.shell(WHERE, c).at(-1)!.failed).toBeDefined();
+  }
+});
+
+test("an option word of several values read with each, whatever their order, values not options too (each value its own words, as bash splits it); one known only as it runs among a program's options asks", () => {
+  const deny = [rule("shell", "git push *", "deny"), rule("shell", "rm *", "deny")];
+  for (const c of [
+    "for o in -p -c; do git $o alias.x=push x; done",
+    "for o in --no-pager -c; do git $o alias.x=push x; done",
+    "for o in -c status; do git $o alias.x=push x; done",
+    "for o in status -c; do git $o alias.x=push x; done",
+    "for o in '' -c; do git $o alias.x=push x; done",
+    "for o in -p -C; do git -c alias.x=push $o status x; done",
+    "for o in -c status; do git $o core.pager='rm -rf y' log; done",
+  ]) {
+    expect([c, judge(c, deny)]).toEqual([c, ["deny"]]);
+  }
+  // a value bash splits at its blanks is known only as it runs: it asks
+  for (const c of ["git $O alias.x=push x", "git ${O:--c} alias.x=push x", "git \"$O\" alias.x=push x", "for o in '-c alias.x=push' -p; do git $o x; done", "O='-c alias.x=push'; git $O x"]) {
+    expect([c, Access.shell(WHERE, c).at(-1)!.failed]).toEqual([c, expect.any(String)]);
+  }
+  expect(Access.shell(WHERE, "git -C \"$DIR\" status").at(-1)!.failed).toBeUndefined();
+});
+
+test("an assignment's += on one made before it in the same command; a word of several values given env or sudo, each an assignment; one that may be an assignment or the program asks", () => {
+  const deny = [rule("shell", "rm *", "deny")];
+  for (const c of [
+    "GIT_SSH_COMMAND=/bin/r GIT_SSH_COMMAND+='m -rf y' git fetch",
+    "export GIT_SSH_COMMAND=/bin/r GIT_SSH_COMMAND+='m -rf y'; git fetch",
+    "declare -x GIT_SSH_COMMAND=/bin/r GIT_SSH_COMMAND+='m -rf y'; git fetch",
+    "for V in 'GIT_SSH_COMMAND=rm -rf y' X=1; do env \"$V\" git fetch; done",
+    "for V in GIT_SSH_COMMAND GIT_EDITOR; do env $V='rm -rf y' git fetch; done",
+    "for V in GIT_SSH_COMMAND GIT_EDITOR; do sudo $V='rm -rf y' git fetch; done",
+  ]) {
+    expect([c, judge(c, deny)]).toEqual([c, ["deny"]]);
+  }
+  expect(Access.shell(WHERE, "for V in X=1 true; do env \"$V\" git fetch; done").at(-1)!.failed).toBeDefined();
+});
+
+test("a variable's value grown past what illi holds asks; many variables, scripts among them, read in a moment", () => {
+  const n = (k: number) => [...Array(k).keys()];
+  const grown = Access.shell(WHERE, "X=aaaaaaaa; " + n(26).map(() => "X=$X$X").join("; ") + "; echo $X").at(-1)!;
+  expect(grown.failed).toBeDefined();
+  for (const c of [
+    n(20000).map((i) => "A" + i + "=1").join("; "),
+    n(2500).map((i) => "A" + i + "=1; EDITOR=e").join("; "),
+    n(400).map((i) => "GIT_CONFIG_KEY_" + i + "=alias.a GIT_CONFIG_VALUE_" + i + "=v" + i).join(" ") + "; " + n(1000).map(() => "git b").join("; "),
+    "git " + n(400).map((i) => "-c alias.a=v" + i).join(" ") + " -c alias.z='!" + n(800).map(() => "git b").join("; ") + "' z",
+  ]) {
+    const t0 = performance.now();
+    Access.shell(WHERE, c);
+    expect([c.slice(0, 40), performance.now() - t0 < 1500]).toEqual([c.slice(0, 40), true]);
+  }
 });
 
 test("Claude Code's tools that ask in illi's calls, as illi's like ones: its web fetch and search theirs, one of its MCP servers' by its name; illi's own none", () => {
