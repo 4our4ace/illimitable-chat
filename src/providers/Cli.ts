@@ -10,8 +10,10 @@
 // it is the spec's minimum or later (look: its version asked once in the
 // background, as a CLI may take a second or more to tell it, and kept by
 // its path, size and time in a file beside the builds, so a start never
-// waits on it; one that tells none kept so a day, logged; its own
-// updates keep it current, as the user installed it). Else illi runs
+// waits on it; one that answers with no version kept so a day, logged;
+// one that doesn't answer (too slow, failing) kept not at all, asked
+// again at the next start; its own updates keep it current, as the
+// user installed it). Else illi runs
 // the one build this illi is pinned to (the CLI's
 // Pinned.ts: the version tried with this illi, as its pin.ts takes it
 // from the CLI's releases on GitHub), as /login downloads it into a
@@ -58,7 +60,7 @@ import * as zlib from "node:zlib";
 import { Readable, Transform, Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import * as config from "../config/Config.ts";
-import { fsynced, unreached } from "../tools/Clip.ts";
+import { fsynced, stream_text, unreached } from "../tools/Clip.ts";
 
 // Types
 // =====
@@ -184,6 +186,10 @@ const LEFT = 24 * 60 * 60e3;
 
 // how long the user's own CLI may take to tell its version (ms)
 const ASKING = 30e3;
+
+// how long its version's last words are waited for once it ended (ms):
+// a child of its own (an update check) may hold its output open
+const DRAIN = 1e3;
 
 // a tar archive's blocks
 const BLOCK = 512;
@@ -405,17 +411,19 @@ export function cli(spec: Spec): Cli {
 
     // a program's version as it tells it (the spec's asks), its first
     // line's end alone (numbers between dots); "": it ended well in time
-    // but told none; null: no answer (not in ASKING, its output never
-    // waited on past it, though a child of its own holds it open; it
-    // failed; it wouldn't run)
+    // but told none; null: no answer (not in ASKING; it failed; it
+    // wouldn't run). Its output is read till DRAIN past its end at most,
+    // as a child of its own may hold it open
     async asked(at) {
       try {
         const run  = Bun.spawn([at, ...spec.asks], { stdin: "ignore", stdout: "pipe", stderr: "ignore", env: { ...process.env, ...spec.quiet() }, timeout: ASKING });
         const late = Bun.sleep(ASKING + 1e3).then(() => null);
-        const text = await Promise.race([new Response(run.stdout).text(), late]);
-        const code = await Promise.race([run.exited, late]);
-        const said = TOLD_VERSION.exec(text?.trim().split("\n")[0]?.trim() ?? "")?.[1] ?? "";
-        if (text === null || code !== 0 || run.signalCode !== null) {
+        const ended = Promise.race([run.exited, late]);
+        const told = stream_text(run.stdout, ended.then(() => Bun.sleep(DRAIN)));
+        const code = await ended;
+        const text = await told;
+        const said = TOLD_VERSION.exec(text.trim().split("\n")[0]?.trim() ?? "")?.[1] ?? "";
+        if (code !== 0 || run.signalCode !== null) {
           return null;
         }
         return VERSION.test(said) ? said : "";

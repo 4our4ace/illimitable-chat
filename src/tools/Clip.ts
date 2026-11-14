@@ -4,8 +4,8 @@
 // keeps a command's output to 30,000 too). A command's output is clipped
 // to its head and tail as it streams (Machine.ts); any text kept is never
 // cut, but goes in pages (a message logged, a zoom, a read). It imports
-// nothing of illi's, so any file may use what it holds: a stream's lines
-// and events, a file's JSON, a file's writes made durable (fsynced), a
+// nothing of illi's, so any file may use what it holds: a stream's lines,
+// events and text (till a deadline: stream_text), a file's JSON, a file's writes made durable (fsynced), a
 // file written whole, never half there (whole), a
 // request that never reached its host in plain words (unreached), the
 // <history> line recall appends to a
@@ -119,6 +119,25 @@ export async function* stream_lines(stream: ReadableStream<Uint8Array>): AsyncGe
   } finally {
     reader.cancel().catch(() => {});
   }
+}
+
+// a byte stream's text, as much as came till it ended or `by` settled,
+// whichever was first; the stream let go then, as a child of the program
+// that wrote it may hold it open past the program's end. One that fails
+// gives what came before
+export async function stream_text(stream: ReadableStream<Uint8Array>, by: Promise<unknown>): Promise<string> {
+  const reader = stream.getReader();
+  const text = new TextDecoder();
+  let said = "";
+  const read = (async () => {
+    for (let got = await reader.read(); !got.done; got = await reader.read()) {
+      said += text.decode(got.value, { stream: true });
+    }
+  })().catch(() => {});
+  await Promise.race([read, by.then(() => {}, () => {})]);
+  const out = said + text.decode();
+  reader.cancel().catch(() => {});
+  return out;
 }
 
 // each event's data in a server-sent event stream (its data: lines,

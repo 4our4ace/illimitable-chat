@@ -55,7 +55,9 @@
 // as its stream tells, go with its end (End.first), so the chat learns
 // what the prompt and tools Claude Code sends take beside it (Chat.cap). A
 // stop interrupts it (SIGINT, then SIGKILL), what streamed of its
-// message logged as cut off. A model's window is learned (Pick.told, by
+// message logged as cut off. A call ends as Claude Code does, its
+// output read DRAIN past its exit at most (a child it left may hold it
+// open). A model's window is learned (Pick.told, by
 // its canonical id) and kept for the next start: as Claude Code has it
 // for a turn, asked as soon as the plan's account is in use (while the
 // chat is on the plan: at the start, as the chat moves to it, at a /login
@@ -109,7 +111,7 @@ import { EFFORTS, Pick, type Model } from "../../ai/Pick.ts";
 import { FAILED, live_push, type Limit, type Plan } from "../../ui/View.ts";
 import * as config from "../../config/Config.ts";
 import { Run as Programs } from "../../config/Run.ts";
-import { json_object } from "../../tools/Clip.ts";
+import { json_object, stream_text } from "../../tools/Clip.ts";
 import { Mcp } from "../../tools/Mcp.ts";
 import { FACTS } from "./Facts.ts";
 import type { Provider, Theirs } from "../Provider.ts";
@@ -252,8 +254,11 @@ const AUTH = 30e3;
 // page is good for, about
 const SIGNIN = 10 * 60e3;
 
-// how long a sign-in's last words are waited for once Claude Code ended
-// (ms): a child it left (a browser's launcher) may hold its output open
+// how long a call's or a sign-in's last words are waited for once
+// Claude Code ended (ms): a child it left (an MCP server of its own, a
+// browser's launcher) may hold its output open. A call waits so for its
+// output and for what it said of a failure (stderr, read as it comes)
+// at once, both let go then
 const DRAIN = 1e3;
 
 // how long the Claude plan's models and windows told hold for its
@@ -353,9 +358,11 @@ export namespace ClaudeCode {
     // a child it left (an MCP server of its own, a browser's launcher) may
     // hold the output open, and the call ends as Claude Code does (lines
     // after that go unread)
-    const drained = (p: Promise<unknown>) => p.then(() => new Promise<void>((done) => setTimeout(done, DRAIN).unref?.()));
     const done = (async () => {
-      const errs = new Response(proc.stderr).text().catch(() => "");
+      // one deadline for both: what it said of a failure (stderr) read as
+      // it comes, so a child holding it open loses none said before
+      const last = proc.exited.then(() => new Promise<void>((done) => setTimeout(done, DRAIN).unref?.()));
+      const errs = stream_text(proc.stderr, last);
       let over = false;
       const reading = (async () => {
         for await (const line of AskAI.lines(proc.stdout)) {
@@ -378,11 +385,11 @@ export namespace ClaudeCode {
           }
         }
       })().catch(() => {});
-      await Promise.race([reading, drained(proc.exited)]);
+      await Promise.race([reading, last]);
       over = true;
       shut();
       const code = await proc.exited;
-      const said = await Promise.race([errs, drained(Promise.resolve()).then(() => "")]);
+      const said = await errs;
       fs.rmSync(dir, { recursive: true, force: true });
       if (stopped) {
         Agent.fail("stopped", run.st === null ? [] : run.seen).entries.forEach((e) => on({ $: "Entry", ...e }));

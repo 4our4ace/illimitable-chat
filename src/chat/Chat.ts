@@ -1551,9 +1551,9 @@ export namespace Chat {
     return why[code] ?? why[code.replace(/^(SQLITE_[A-Z]+)_.*$/, "$1")] ?? String(err?.message ?? err);
   }
 
-  // a view joins on the chat as it is now
-  // a view joined: the chat's file looked at first (Chat.kept), so one
-  // deleted as illi idled is there again for the view to read
+  // a view joins on the chat as it is now: the chat's file looked at
+  // first (Chat.kept), so one deleted as illi idled is there again for
+  // the view to read
   export function join(chat: Chat, sock: Sock): void {
     Chat.kept(chat);
     chat.socks.add(sock);

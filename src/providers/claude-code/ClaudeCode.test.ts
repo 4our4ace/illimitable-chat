@@ -164,6 +164,14 @@ if (scene.includes("turn")) {
   out({ type: "assistant", message: { content: [{ type: "text", text: "Looking." }] }, parent_tool_use_id: null });
   out({ type: "assistant", message: { model: "<synthetic>", content: [{ type: "text", text: why }] }, error: "unknown", is_api_error_message: true, api_error_status: 400, parent_tool_use_id: null });
   result({ is_error: true, api_error_status: 400, terminal_reason: "api_error", result: why });
+} else if (scene.includes("gone")) {
+  // it fails before any result, saying why on stderr only; "kept": a
+  // child it leaves holds that open past its exit
+  process.stderr.write("Not logged in · Please run /login\n");
+  if (scene.includes("kept")) {
+    Bun.spawn(["sleep", "8"], { stdout: "inherit", stderr: "inherit" }).unref();
+  }
+  process.exit(3);
 } else if (scene.includes("crash")) {
   process.stderr.write("boom\n");
   process.exit(3);
@@ -510,6 +518,11 @@ test("a call ends as Claude Code does, its reply whole, though a child it left h
   const { end } = await call("held");
   expect(end).toMatchObject({ ok: true, text: "done" });
   expect(Date.now() - at).toBeLessThan(4000);
+  // what it said of a failure on stderr is kept too, alike with a child
+  // holding that open or none
+  const kept = await call("gone kept");
+  expect(kept.end).toEqual((await call("gone")).end);
+  expect(kept.end.text).not.toContain("exit code");
 });
 
 test("a request holding more cache marks than the API takes (Claude Code's own four beside illi's) ends the call `marks` in plain words, a reply begun cut", async () => {

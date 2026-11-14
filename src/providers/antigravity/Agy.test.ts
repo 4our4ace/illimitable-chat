@@ -204,14 +204,24 @@ test("the user's own agy runs once it's 1.5.2 or later, its version asked once a
   expect([await Agy.look(), Agy.stale(), ASKED()]).toEqual([null, null, 3]);
   Agy.unlook();
   expect([await Agy.look(), Agy.installed(), ASKED()]).toEqual([null, null, 3]);
+  // one that tells it and leaves a child holding its output is heard in
+  // time, and kept
+  fs.writeFileSync(at, "#!/bin/sh\necho x >> " + DIR + "/bin/asked\necho 1.5.6\nsleep 8 &\n");
+  fs.utimesSync(at, new Date(Date.now() + 7000), new Date(Date.now() + 7000));
+  Agy.unlook();
+  const asking = Date.now();
+  expect([await Agy.look(), ASKED()]).toEqual([{ at, version: "1.5.6" }, 4]);
+  expect(Date.now() - asking).toBeLessThan(10000);
+  Agy.unlook();
+  expect([Agy.installed(), ASKED()]).toEqual([{ at, version: "1.5.6" }, 4]);
   // one that fails (as a slow or broken start may) is kept not at all:
   // asked again next run
   fs.writeFileSync(at, "#!/bin/sh\necho x >> " + DIR + "/bin/asked\nexit 1\n");
   fs.utimesSync(at, new Date(Date.now() + 9000), new Date(Date.now() + 9000));
   Agy.unlook();
-  expect([await Agy.look(), ASKED()]).toEqual([null, 4]);
-  Agy.unlook();
   expect([await Agy.look(), ASKED()]).toEqual([null, 5]);
+  Agy.unlook();
+  expect([await Agy.look(), ASKED()]).toEqual([null, 6]);
   Agy.which = async () => null;
   Agy.unlook();
   Agy.pin = BUILT("1.5.2", "one.tgz", SERVED["one.tgz"]);

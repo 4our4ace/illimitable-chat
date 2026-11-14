@@ -228,7 +228,7 @@ background job or a program running.
 | Who | Connection | When | Code |
 | --- | --- | --- | --- |
 | **The holder**: the illi that holds a project's lock and runs its chat (shown, or a profile left running hidden in a window) | read-write to its project's file, kept open until illi quits | always, one per project and profile in use | `Memory.load` → `Store.open(dir, place)` |
-| **A view**: an illi started where another holds the project's chat, in the same profile (a second terminal's, a pipe's) | read-write to the same file, kept open until illi quits | to read exports, the tree and the projects list; the chat itself comes from the holder over a socket | `Term.ts term_reader` |
+| **A view**: an illi started where another holds the project's chat, in the same profile (a second terminal's, a pipe's) | read-write to the same file, opened as it's first read (never made: one not there fails the read) and kept open until illi quits; opened anew once the holder wrote a deleted one back | to read exports, the tree and the projects list; the chat itself comes from the holder over a socket | `Term.ts term_reader` |
 | **A look at other projects**: the projects list, a zoom or date into another project, an export of one, the image count before a forget | read-write to that project's file, opened for the read and closed right after | each time | `Store.visit` → `Store.peek` |
 | **The search thread** (`Seeker.ts`) | its own connections, to each file a search covers, each closed after | each `search` the model calls | `Projects.seek` |
 | **The radar's thread** (`Seeker.ts`, a second worker) | its own connection to this project's file, closed after each search | after each step of a turn, with `related` on | `Projects.radar` |
