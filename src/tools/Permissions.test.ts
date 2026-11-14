@@ -121,7 +121,7 @@ test("none: no rules, nothing saved; approvals saved by project, the file made; 
   expect(Permissions.read(FILE, "/w/other")).toEqual({ rules: [], saved: [] });
   expect(Permissions.revoke(FILE, "/w/app", "shell", "git push *")).toBeNull();
   expect((Permissions.read(FILE, "/w/app") as any).saved).toEqual([rule("shell", "npm publish *", "allow"), rule("external_directory", "/w/lib/*", "allow")]);
-  expect(fs.readdirSync(DIR + "/sub")).toEqual(["permissions.json"]);
+  expect(fs.readdirSync(DIR + "/sub").sort()).toEqual([".permissions.json.lock", "permissions.json"]);
 });
 
 test("rules by action, in the file's order: a pattern's effect, or one for all; ~/ as home but in a shell pattern; a save keeps what else the file has", () => {

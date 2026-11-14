@@ -37,6 +37,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Accounts } from "./Accounts.ts";
+import { Flock } from "./Flock.ts";
+import { whole } from "../tools/Clip.ts";
 import { Projects } from "../chat/Projects.ts";
 import { json_object } from "../tools/Clip.ts";
 import { Run } from "./Run.ts";
@@ -54,6 +56,10 @@ export type Imported = { keys: string[]; servers: number; plugins: string[]; asi
 
 // Constants
 // =========
+
+// how long a change to the projects' profiles waits on another illi's
+// (Flock beside) before it gives up
+const LOCKED = 5000;
 
 // the default profile's name (no other profile takes it); a profile's
 // name, and as a person is told it
@@ -170,22 +176,19 @@ export function profile_here_keep(root: string, cwd: string, name: string): void
 }
 
 // the projects' profiles changed: each project's name given to `change`,
-// its answer kept (null: the project's dropped). Read again once written,
-// and written again (twice at most) if another illi's write, at the same
-// moment, left the change out
+// its answer kept (null: the project's dropped), under the file's lock
+// (Flock kept: another illi's change at that moment kept too), written
+// whole (Clip whole); one another illi held past LOCKED left out, said in
+// the log (Flock kept: a project's profile is then the one used last)
 function profile_here_set(root: string, change: (all: Record<string, string>) => Record<string, string | null>): void {
   const file = root + "/" + HERE;
-  for (let k = 0; k < 3; k++) {
+  Flock.kept(file, LOCKED, () => {
     const was  = (json_object(file) ?? {}) as Record<string, string>;
     const next = Object.fromEntries(Object.entries(change(was)).filter(([, name]) => name !== null));
-    if (JSON.stringify(next) === JSON.stringify(was)) {
-      return;
+    if (JSON.stringify(next) !== JSON.stringify(was)) {
+      whole(file, JSON.stringify(next, null, 2) + "\n");
     }
-    fs.mkdirSync(root, { recursive: true });
-    const tmp = file + "." + process.pid;
-    fs.writeFileSync(tmp, JSON.stringify(next, null, 2) + "\n");
-    fs.renameSync(tmp, file);
-  }
+  });
 }
 
 // a profile's folder: the root itself for the default
@@ -252,13 +255,12 @@ function profile_made(dir: string): number {
 
 // a profile's folder marked as made now, or at `at` (ms) (MADE)
 function profile_mark(dir: string, at = Date.now()): void {
-  fs.writeFileSync(dir + "/" + MADE, new Date(at).toISOString() + "\n");
+  whole(dir + "/" + MADE, new Date(at).toISOString() + "\n");
 }
 
 // the profile used last, kept for the next start
 export function profile_keep(root: string, name: string): void {
-  fs.mkdirSync(root, { recursive: true });
-  fs.writeFileSync(root + "/profile", name + "\n");
+  whole(root + "/profile", name + "\n");
 }
 
 // why a name can't be a new profile's (null: it can)

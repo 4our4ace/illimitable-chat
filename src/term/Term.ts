@@ -44,6 +44,7 @@
 // what every part shares (notes, toasts, quitting).
 
 import * as fs from "node:fs";
+import * as path from "node:path";
 import { term_paste } from "./Attach.ts";
 import { Chat } from "../chat/Chat.ts";
 import { Lock } from "../chat/Lock.ts";
@@ -404,6 +405,10 @@ const LOG = config.DIR + "/illi.log";
 const HOLD = 24 * 3600 * 1000;
 let hint: Notice | null = null;
 
+// the chat's file this illi holds ("": none yet), named by a crash its
+// SQLite gave (term_crash)
+let held = "";
+
 // how long the note that the other terminal's illi quit shows before
 // this one runs again in its place, ms; how many times in a row one not
 // reached is tried again
@@ -495,15 +500,28 @@ function term_new(chat: Chat | null, mem: () => Memory, scr: Screen.Screen): Ter
     term_resize(t);
     status_hear(t);
   });
+  // each step of a quit on its own, so one that fails (the chat's file on
+  // a full disk) never leaves a process running: the background jobs
+  // noted (Chat.leaving), then what runs stopped, then the chat closed
   process.on("exit", () => {
-    void Plugins.quit(process.cwd(), "other");
-    Run.end();
+    const step = (f: () => void) => {
+      try {
+        f();
+      } catch (err: any) {
+        console.error("illi: quitting: " + (err?.message ?? err));
+      }
+    };
+    step(() => void Plugins.quit(process.cwd(), "other"));
+    step(() => Run.end());
     if (chat !== null) {
-      Chat.close(chat);
+      step(() => Chat.leaving(chat));
     }
-    Machine.end();
-    Mcp.stop();
-    Providers.all().forEach((p) => p.close?.());
+    step(() => Machine.end());
+    step(() => Mcp.stop());
+    Providers.all().forEach((p) => step(() => p.close?.()));
+    if (chat !== null) {
+      step(() => Chat.close(chat));
+    }
   });
   for (const sig of ["SIGHUP", "SIGTERM", "SIGINT"]) {
     process.on(sig, () => term_bye(t));
@@ -702,7 +720,8 @@ export function term_crash(err: unknown): void {
   try {
     fs.appendFileSync(LOG, new Date().toISOString() + " illi: crashed: " + (e.stack ?? e.message) + "\n");
   } catch {}
-  term_after("illi: crashed: " + e.message + " (details in " + LOG + ")");
+  const sqlite = held !== "" && String((e as any).code ?? "").startsWith("SQLITE_");
+  term_after("illi: crashed: " + (sqlite ? Store.why(path.basename(held), e, held).message : e.message) + " (details in " + LOG + ")");
   process.exit(1);
 }
 
@@ -767,7 +786,12 @@ export async function term_start(): Promise<void> {
   // characters: they may carry what illi didn't write (an MCP server's
   // line, an HTTP error's body)
   if (process.stdout.isTTY) {
-    const log = (...args: unknown[]) => fs.appendFileSync(LOG, new Date().toISOString() + " " + args.map(String).join(" ") + "\n");
+    // never throwing (a full disk): a line that can't be kept is lost
+    const log = (...args: unknown[]) => {
+      try {
+        fs.appendFileSync(LOG, new Date().toISOString() + " " + args.map(String).join(" ") + "\n");
+      } catch {}
+    };
     console.log = console.warn = console.error = log;
   } else if (process.stderr.isTTY) {
     const said = console.error;
@@ -797,6 +821,7 @@ export async function term_start(): Promise<void> {
   Hooks.load(process.cwd(), (cwd) => Trusted.has(Trusted.folder(cwd)));
   void Plugins.emit("start", { cwd: process.cwd(), profile: config.PROFILE, chat: holds });
   const chat = holds ? Chat.open(process.cwd()) : null;
+  held = chat?.mem.store.file ?? "";
   if (chat !== null) {
     Plugins.attach_chat({ mode: () => Tools.mode(chat.tools), halt: (why) => Chat.stop(chat, why) });
   }

@@ -6,7 +6,9 @@
 // another terminal's view joins (Remote.ts), only its user's to reach,
 // and the chat's state as its holder last told it (Lock.tell: a question
 // waiting, at work, its background jobs), which every other illi's side
-// reads (Lock.states), a lock no one holds saying nothing.
+// reads (Lock.states), a lock no one holds saying nothing; and the mark
+// its shells' processes carry (Lock.mark: ILLI_RUN), so the next holder
+// stops those a holder killed outright left running.
 
 import { Database } from "bun:sqlite";
 import * as fs from "node:fs";
@@ -162,6 +164,25 @@ export namespace Lock {
     return lock.replace(/\.lock$/, ".state");
   }
 
+  // this holder's run mark (Machine's ILLI_RUN) kept beside the lock it
+  // holds, as long as it holds it (Lock.release takes it away); the one
+  // there before, the last holder's that never let go (killed, or its
+  // machine down: its processes may still run), "" if none
+  export function mark(run: string): string {
+    if (LOCK === "") {
+      return "";
+    }
+    const file = LOCK.replace(/\.lock$/, ".run");
+    let was = "";
+    try {
+      was = fs.readFileSync(file, "utf8").trim();
+    } catch {}
+    try {
+      fs.writeFileSync(file, run + "\n");
+    } catch {}
+    return was === run ? "" : was;
+  }
+
   // the state of the chat this process holds, told beside its lock for
   // the other illis' side (Lock.states), whole or not at all, readable by
   // its user alone; none held, nothing
@@ -235,6 +256,7 @@ export namespace Lock {
     }
     if (LOCK !== "") {
       fs.rmSync(Lock.state(LOCK), { force: true });
+      fs.rmSync(LOCK.replace(/\.lock$/, ".run"), { force: true });
     }
     held?.stop();
     [held, LOCK] = [null, ""];

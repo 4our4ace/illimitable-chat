@@ -10,7 +10,8 @@
 // line's kind tags are no part of it. A model is read from its folder
 // (one of another shape refused); a download is checked against its
 // sha256, redirects followed, and one that doesn't match is refused; a
-// model there already isn't downloaded again. With ILLI_EMBED_LIVE (a
+// model there already isn't downloaded again; one that fails is kept and
+// tried again only past a growing wait. With ILLI_EMBED_LIVE (a
 // folder the real model is downloaded to once), the real model's tokens
 // and vectors are MinishLab's own, as their Python gives them.
 
@@ -122,7 +123,48 @@ test("the model made ready: each file there checked, one not as pinned downloade
     Embed.spoilt(dir);
     expect(Embed.fetch(root, undefined, server.url.origin)).rejects.toThrow("didn't match the checksum");
     await Bun.sleep(50);
-    expect([Embed.ready(root), fs.readdirSync(dir)]).toEqual([false, ["config.json"]]);
+    expect([Embed.ready(root), fs.readdirSync(dir).sort()]).toEqual([false, ["config.json", "failed.json"]]);
+  } finally {
+    (MODEL as any).files = files;
+    server.stop(true);
+  }
+});
+
+test("a download that fails is kept (why, its tries), tried again only past a wait, an hour, six, then a day; one that succeeds forgets it; one that fails as another illi makes the model ready is none; a live illi's part file stays", async () => {
+  const body = "the model's bytes";
+  let ok = false;
+  let other = false;
+  const server = Bun.serve({ port: 0, fetch: () => (other && fs.writeFileSync(path.join(dir, "ok"), VECTORS + "\n"), ok ? new Response(body) : new Response("no", { status: 503 })) });
+  const files = MODEL.files;
+  const root  = DIR + "/again";
+  const dir   = Embed.folder(root);
+  try {
+    (MODEL as any).files = [{ name: "config.json", bytes: body.length, sha256: new Bun.CryptoHasher("sha256").update(body).digest("hex") }];
+    expect([Embed.due(root), Embed.failed(root)]).toEqual([true, null]);
+    await expect(Embed.fetch(root, undefined, server.url.origin)).rejects.toThrow("Hugging Face answered 503");
+    const first = Embed.failed(root)!;
+    expect([first.why, first.tries]).toEqual(["Hugging Face answered 503 for config.json", 1]);
+    expect([Embed.due(root, first.at + 3599e3), Embed.due(root, first.at + 3600e3)]).toEqual([false, true]);
+    await expect(Embed.fetch(root, undefined, server.url.origin)).rejects.toThrow("503");
+    const second = Embed.failed(root)!;
+    expect([second.tries, Embed.due(root, second.at + 3600e3), Embed.due(root, second.at + 6 * 3600e3)]).toEqual([2, false, true]);
+    // a stop is no failure
+    const stop = new AbortController();
+    stop.abort();
+    await expect(Embed.fetch(root, stop.signal, server.url.origin)).rejects.toThrow();
+    expect(Embed.failed(root)!.tries).toBe(2);
+    ok = true;
+    expect(await Embed.fetch(root, undefined, server.url.origin)).toBe(true);
+    expect([Embed.failed(root), Embed.due(root)]).toEqual([null, true]);
+    fs.writeFileSync(path.join(dir, "config.json." + process.pid + ".part"), "a live pid's, left");
+    expect(await Embed.fetch(root, undefined, server.url.origin)).toBe(false);
+    expect(fs.readdirSync(dir).sort()).toEqual(["config.json", "config.json." + process.pid + ".part", "ok"]);
+    fs.rmSync(path.join(dir, "config.json." + process.pid + ".part"));
+    ok = false;
+    other = true;
+    Embed.spoilt(dir);
+    fs.rmSync(path.join(dir, "config.json"));
+    expect([await Embed.fetch(root, undefined, server.url.origin), Embed.failed(root), Embed.ready(root)]).toEqual([false, null, true]);
   } finally {
     (MODEL as any).files = files;
     server.stop(true);

@@ -80,6 +80,8 @@ const View = await import("../ui/View.ts");
 const { Tools } = await import("../tools/Tools.ts");
 const { Machine } = await import("../tools/Machine.ts");
 const { Permissions } = await import("../tools/Permissions.ts");
+const { Store } = await import("./Store.ts");
+const { Logs } = await import("./Logs.ts");
 
 // the model: answers `reply` to a call that sees the user's message, after
 // `hold` resolves
@@ -774,9 +776,23 @@ test("summaries stuck are told once, again only after one is built", () => {
   chat.mem.stuck!("");
   chat.mem.stuck!("down");
   expect(count()).toBe(was + 2);
+
+  // the chat's logging held (a /compact's recap waiting on them): told
+  // to the views at once, not logged
+  const all = Chat.all;
+  const told: string[] = [];
+  Chat.all = (_c: any, msg: any) => void (msg.$ === "note" && told.push(msg.text));
+  chat.held = [];
+  try {
+    chat.mem.stuck!("");
+    chat.mem.stuck!("held up");
+  } finally {
+    [Chat.all, chat.held] = [all, null];
+  }
+  expect([told, count()]).toEqual([["Summaries are stuck: held up; retrying every minute."], was + 2]);
 });
 
-test("a save that fails is told to the views, never thrown (what ran, the suggested reply), in plain words (SQLite's too)", () => {
+test("a save that fails is told to the views, never thrown (what ran, the suggested reply), in plain words (SQLite's too), once till a save goes through", () => {
   const got: any[] = [];
   const sock: any = { data: { seen: new Set() }, send: (text: string) => got.push(JSON.parse(text)), close: () => {} };
   const save = Memory.save;
@@ -789,11 +805,22 @@ test("a save that fails is told to the views, never thrown (what ran, the sugges
     expect(() => Chat.change(chat)).not.toThrow();
     chat.mem.suggest = chat.suggest.text = "Commit it";
     expect(() => Suggest.drop(chat)).not.toThrow();
+    expect(got.filter((m) => m.$ === "note").length).toBe(1);
+  } finally {
+    Memory.save = save;
+  }
+  Chat.save(chat);
+  Memory.save = () => {
+    throw Object.assign(new Error("ENOSPC: no space left on device, write"), { code: "ENOSPC" });
+  };
+  try {
+    Chat.save(chat);
     expect(got.filter((m) => m.$ === "note").length).toBe(2);
   } finally {
     Memory.save = save;
     chat.socks.delete(sock);
   }
+  Chat.save(chat);
   expect(got.find((m) => m.$ === "note").text).toBe("Can't save the chat: disk full (" + chat.mem.dir + ").");
   expect(["SQLITE_FULL", "SQLITE_READONLY", "SQLITE_IOERR_WRITE", "SQLITE_BUSY", "SQLITE_MISMATCH"].map((code) => Chat.unsaved(Object.assign(new Error("as SQLite says it"), { code })))).toEqual(["disk full", "read-only disk", "the disk failed to write", "another illi kept the file busy too long", "as SQLite says it"]);
 });
@@ -1087,6 +1114,150 @@ test("background jobs over the pipe: a shell call's in every view's state, its c
   expect(Memory.message(chat.mem, chat.mem.count - 1)).toMatchObject({ kind: "note", text: "illi quit, stopping its background jobs: sleep 30 > /dev/null 2>&1 & (reviewer's)." });
   Machine.end();
   v.ws!.close();
+});
+
+test("what streams is kept ahead in the chat's state (a tool call at once, text a moment later), so a start after a crash logs it, the call as it was and the text cut off, and its resume note says a call was cut; a quit logs what streams at once, and the next start says so", async () => {
+  const saved = () => Memory.load(chat.mem.dir, () => ({}) as any, HERE);
+  chat.calls = { c1: "shell: make" };
+  Chat.live(chat, null, [{ kind: "tool", text: "shell: make" }]);
+  expect(saved().left).toEqual({ "": [{ kind: "tool", text: "shell: make" }] });
+  Chat.delta(chat, null, { $: "Delta", kind: "illi", text: "half a re", fresh: true });
+  Chat.delta(chat, null, { $: "Delta", kind: "illi", text: "ply" });
+  expect(saved().left[""]).toHaveLength(1);
+  await Bun.sleep(2100);
+  expect(saved().left).toEqual({ "": [{ kind: "tool", text: "shell: make" }, { kind: "illi", text: "half a reply" }] });
+
+  // as a crash leaves it: the next start logs what was kept
+  const count = chat.mem.count;
+  [chat.calls, chat.live] = [{}, []];
+  expect(Chat.left(chat)).toBe(true);
+  expect(lasts(2)).toEqual(["tool: shell: make", "illi: half a reply\n[cut off]"]);
+  expect(chat.mem.count).toBe(count + 2);
+  expect([chat.mem.left, saved().left]).toEqual([{}, {}]);
+  expect(Chat.left(chat)).toBe(false);
+  await Chat.resume(chat, ["ghost"], true);
+  expect(lasts(1)).toEqual(["note: illi restarted, cutting ghost. A tool call logged without its result was cut as it ran: whether it did its work is unknown, so check before running it again. Go on."]);
+  await Chat.resume(chat, ["ghost"]);
+  expect(lasts(1)).toEqual(["note: illi restarted, cutting ghost. Go on."]);
+
+  // a quit: logged at once, cleared, the next start told a call was cut
+  chat.calls = { c2: "shell: deploy" };
+  chat.live = [{ kind: "tool", text: "shell: deploy" }, { kind: "mind", text: "waiting on it" }, { kind: "illi", text: "Deploying" }];
+  Chat.cutoff(chat);
+  expect(lasts(2)).toEqual(["tool: shell: deploy", "illi: Deploying\n[cut off]"]);
+  expect([chat.calls, chat.live, saved().left, saved().lost]).toEqual([{}, [], {}, true]);
+  expect(Chat.left(chat)).toBe(true);
+  expect(saved().lost).toBe(false);
+});
+
+test("a tool's result held behind a post's logging is kept ahead in the chat's state with its call, both whole, never shown as streaming: a start after a crash logs them as they were, no call cut; let go, logged once, the state cleared; a call stopped meanwhile kept as cut", async () => {
+  const saved = () => Memory.load(chat.mem.dir, () => ({}) as any, HERE);
+  const shown: any[] = [];
+  const all = Chat.all;
+  Chat.all = (c: any, msg: any) => (msg.$ === "live" && shown.push(msg.live), all(c, msg));
+  let release = () => {};
+  const post = Chat.writing(chat, () => new Promise<void>((done) => (release = done)));
+  try {
+    await until(() => chat.held !== null);
+    Chat.on(chat, null, { $: "Entry", kind: "tool", text: "shell: make", of: "h1" });
+    Chat.on(chat, null, { $: "Entry", kind: "echo", text: "built", of: "h1" });
+    expect(saved().left).toEqual({ "": [{ kind: "tool", text: "shell: make", whole: true }, { kind: "echo", text: "built", whole: true }] });
+    expect(shown.at(-1)).toEqual([]);
+  } finally {
+    Chat.all = all;
+  }
+
+  // as a crash leaves it: logged as they were, no call said cut
+  const count = chat.mem.count;
+  const [held, holding] = [chat.held, chat.holding];
+  [chat.held, chat.holding] = [null, []];
+  expect(Chat.left(chat)).toBe(false);
+  expect(lasts(2)).toEqual(["tool: shell: make", "echo: built"]);
+  [chat.held, chat.holding] = [held, holding];
+
+  // let go instead: logged once, the state cleared
+  release();
+  await post;
+  expect([chat.mem.count, lasts(2), saved().left]).toEqual([count + 4, ["tool: shell: make", "echo: built"], {}]);
+
+  // a call stopped while held: kept without its result, so said cut
+  const again = Chat.writing(chat, () => new Promise<void>((done) => (release = done)));
+  await until(() => chat.held !== null);
+  Chat.on(chat, null, { $: "Entry", kind: "tool", text: "shell: deploy", of: "h2" });
+  Chat.unanswered(chat, null);
+  expect(saved().left).toEqual({ "": [{ kind: "tool", text: "shell: deploy" }] });
+  release();
+  await again;
+  expect([lasts(1), saved().left]).toEqual([["tool: shell: deploy"], {}]);
+});
+
+test("a write to the chat that fails (a full disk) is told to the views once, a note never logged, what runs stopped; nothing throws, and the next write that goes through ends it; a message answers why in plain words; a closed chat's writes are dropped", () => {
+  const [push, all] = [Memory.push, Chat.all];
+  const told: string[] = [];
+  Memory.push = () => {
+    throw Object.assign(new Error("database or disk is full"), { code: "SQLITE_FULL" });
+  };
+  Chat.all = (c: any, msg: any) => {
+    if (msg.$ === "note") {
+      told.push(msg.text);
+    }
+    all(c, msg);
+  };
+  const count = chat.mem.count;
+  try {
+    expect(() => Chat.note(chat, "one")).not.toThrow();
+    expect(() => Chat.on(chat, null, { $: "Entry", kind: "illi", text: "two" })).not.toThrow();
+    expect(() => Chat.note(chat, "three")).not.toThrow();
+  } finally {
+    [Memory.push, Chat.all] = [push, all];
+  }
+  expect(told).toEqual(["one", "Can't save the chat: disk full (" + chat.mem.dir + "). What ran is stopped; send a message to go on once it's fixed.", "three"]);
+  expect([chat.unwritten, chat.mem.count]).toEqual([true, count]);
+  Chat.note(chat, "back");
+  expect([chat.unwritten, lasts(1)]).toEqual([false, ["note: back"]]);
+  expect(Chat.fail(Object.assign(new Error("database or disk is full"), { code: "SQLITE_FULL" }))).toEqual({ error: "Can't save the chat: disk full." });
+  // another file's error is its own, never the chat's
+  expect(Chat.fail(Object.assign(new Error("EACCES: permission denied, open '/x/config.json'"), { code: "EACCES", path: "/x/config.json" }))).toEqual({ error: "No permission: /x/config.json." });
+  expect(Chat.fail(Object.assign(new Error("ENOENT: no such file or directory, open '/x/pic.png'"), { code: "ENOENT", path: "/x/pic.png" }))).toEqual({ error: "ENOENT: no such file or directory, open '/x/pic.png'" });
+  chat.mem.done = true;
+  try {
+    expect(Chat.push(chat, null, "note", "after close")).toEqual({ id: chat.mem.count, end: chat.mem.count });
+  } finally {
+    chat.mem.done = false;
+  }
+  expect(lasts(1)).toEqual(["note: back"]);
+});
+
+test("the chat's file deleted as illi runs is written back at the next save, told once, illi going on in it: what's logged after, an agent's log too, in the file; deleted again, its WAL left beside, written back again, told no more", () => {
+  const file = chat.mem.store.file;
+  const notes: string[] = [];
+  const all = Chat.all;
+  Chat.all = (c: any, msg: any) => (msg.$ === "note" && notes.push(msg.text), all(c, msg));
+  try {
+    fs.rmSync(file.slice(0, file.lastIndexOf("/")), { recursive: true });
+    Chat.note(chat, "after the delete");
+    Chat.save(chat);
+    expect(fs.existsSync(file)).toBe(true);
+    Chat.note(chat, "in it");
+    Logs.push(chat.mem, "helper", "illi", "an agent's line");
+    fs.rmSync(file);
+    Chat.note(chat, "deleted again");
+    Chat.save(chat);
+    Chat.note(chat, "last");
+  } finally {
+    Chat.all = all;
+  }
+  expect(notes.filter((n) => n.startsWith("The chat's file"))).toEqual(["The chat's file was deleted as illi ran: written back (" + file + "), illi goes on in it."]);
+  const peek = Store.peek(file);
+  try {
+    const n = Store.count(peek);
+    const texts = Array.from({ length: 4 }, (_, k) => Store.msg(peek, n - 4 + k)!.text);
+    expect(texts).toEqual(["after the delete", "in it", "deleted again", "last"]);
+    expect((peek.db.query("select text from work where text = ?").all("an agent's line") as any[]).length).toBe(1);
+    expect((peek.db.query("pragma integrity_check").get() as any).integrity_check).toBe("ok");
+  } finally {
+    Store.close(peek);
+  }
 });
 
 test("the suggested reply stays as the chat closes, so the next start shows it (a screen that asks for none, none); let go, saved so", async () => {

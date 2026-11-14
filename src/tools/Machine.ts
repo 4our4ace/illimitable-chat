@@ -23,7 +23,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Out } from "../ai/Agent.ts";
 import { LARGEST, image_fit } from "../ai/Image.ts";
-import { CAP, clip, clip_end } from "./Clip.ts";
+import { CAP, clip, clip_end, whole } from "./Clip.ts";
 import * as config from "../config/Config.ts";
 import { profile_chat } from "../config/Profiles.ts";
 import { Run } from "../config/Run.ts";
@@ -61,10 +61,18 @@ const SHELL = Bun.which("bash", { PATH: Run.own_path() }) ?? "/bin/sh";
 
 // this illi's mark, set as ILLI_RUN on every process its shells start
 // (each child inherits it), and how to list this user's processes with
-// their environment, to find those that left their shell's group
-const RUN = crypto.randomUUID();
-const UID = String(process.getuid?.() ?? "");
-const PS  = process.platform === "darwin" ? ["ps", "-wwE", "-U", UID, "-o", "pid=,command="] : ["ps", "-wwe", "-u", UID, "-o", "pid=,args=", "e"];
+// their parents and environment, to find those that left their shell's
+// group. A mark is a UUID (MARK), as only a whole one names a run
+const RUN  = crypto.randomUUID();
+const UID  = String(process.getuid?.() ?? "");
+const PS   = process.platform === "darwin" ? ["ps", "-wwE", "-U", UID, "-o", "pid=,ppid=,command="] : ["ps", "-wwe", "-u", UID, "-o", "pid=,ppid=,args=", "e"];
+const MARK = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+// the mark this illi was started with (one started from another's shell,
+// a terminal its tmux opened, say: that illi's; "": none), taken out of
+// its environment, so nothing it starts carries another run's mark
+const INHERITED = process.env.ILLI_RUN ?? "";
+delete process.env.ILLI_RUN;
 
 // the shells started here, kept until their process groups are empty, so
 // end() kills a backgrounded job whose shell already exited; the last
@@ -277,12 +285,41 @@ export namespace Machine {
         Machine.kill(-proc.pid);
       }
     }
-    const ps = Bun.spawnSync(PS, { env: { ...process.env, PATH: Run.own_path() } }).stdout.toString();
-    for (const line of ps.split("\n")) {
-      if (line.includes("ILLI_RUN=" + RUN)) {
-        Machine.kill(Number(line.trim().split(" ")[0]));
-      }
+    Machine.marked(RUN);
+  }
+
+  // this illi's mark, which every process its shells start carries
+  // (ILLI_RUN)
+  export function mark(): string {
+    return RUN;
+  }
+
+  // the processes carrying a run's mark (ILLI_RUN: this illi's, or one
+  // killed outright, whose own end never ran) killed; how many there were.
+  // Never this illi nor a process it runs under (a shell, a tmux server);
+  // none at all where this illi was started with that mark itself (from
+  // that run's shell: its other processes are the user's terminal now).
+  // A mark that's no UUID names none
+  export function marked(run: string): number {
+    if (!MARK.test(run) || run === INHERITED) {
+      return 0;
     }
+    const ps = Bun.spawnSync(PS, { env: { ...process.env, PATH: Run.own_path() } }).stdout.toString();
+    const rows = ps.split("\n").map((line) => /^(\d+)\s+(\d+)\s(.*)$/.exec(line.trim())).filter((m) => m !== null);
+    const parent = new Map(rows.map((m) => [Number(m[1]), Number(m[2])]));
+    const above = new Set<number>();
+    for (let pid = process.pid; pid > 1 && !above.has(pid); pid = parent.get(pid) ?? 0) {
+      above.add(pid);
+    }
+    const mark = new RegExp("(^|\\s)ILLI_RUN=" + run + "(\\s|$)");
+    const pids = rows.filter((m) => mark.test(m[3])).map((m) => Number(m[1])).filter((pid) => pid > 0 && !above.has(pid));
+    pids.forEach((pid) => Machine.kill(pid));
+    return pids.length;
+  }
+
+  // the mark this illi was started with ("": none: Machine.marked)
+  export function inherited(): string {
+    return INHERITED;
   }
 
   // `limit` lines from line `offset`, from its character `at`: a page of
@@ -357,19 +394,21 @@ export namespace Machine {
   }
 
 
-  // a file (named as given: shown) written whole: its diff (a new one's,
-  // all its lines added), so a write reads as an edit
+  // a file (named as given: shown) written whole, never half there (Clip
+  // whole: a crash or a full disk leaves it as it was): its diff (a new
+  // one's, all its lines added), so a write reads as an edit
   export function write(file: string, shown: string, content: string): Out {
     const was = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, content);
+    whole(file, content);
     return { text: text_diff(shown, was, content), fail: false };
   }
 
   // the edits, in order, each on its file as the ones before left it;
   // every file is written only once all of them apply, so a failed one
-  // changes none. Each file, named as its first edit gives it, answers
-  // its diff
+  // changes none, each whole (Clip whole). One that won't write (a full
+  // disk, a file illi may not change) puts those written before it back,
+  // naming any it couldn't. Each file, named as its first edit gives it,
+  // answers its diff
   export function edit(cwd: string, edits: unknown): Out {
     const list  = Array.isArray(edits) ? edits : [];
     const files = new Map<string, { shown: string; was: string; text: string }>();
@@ -389,8 +428,23 @@ export namespace Machine {
     if (files.size === 0) {
       return { text: "edits is empty: give a list of {path, old, new}.", fail: true };
     }
+    const done: Array<[string, { shown: string; was: string }]> = [];
     for (const [file, f] of files) {
-      fs.writeFileSync(file, f.text);
+      try {
+        whole(file, f.text);
+        done.push([file, f]);
+      } catch (err: any) {
+        const stuck = done.filter(([at, g]) => {
+          try {
+            whole(at, g.was);
+            return false;
+          } catch {
+            return true;
+          }
+        });
+        const why = "Couldn't write " + f.shown + ": " + String(err?.message ?? err) + ".";
+        return { text: why + (stuck.length === 0 ? " No file was changed." : " These stay changed, as they couldn't be put back: " + stuck.map(([, g]) => g.shown).join(", ") + "."), fail: true };
+      }
     }
     const diffs = [...files.values()].map((f) => text_diff(f.shown, f.was, f.text));
     return { text: diffs.join("\n"), fail: false };

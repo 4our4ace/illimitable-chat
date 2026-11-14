@@ -94,6 +94,15 @@ as one changed in the first does: the first reads `config.json` again,
 then each other terminal's illi does too. Quit the first, and the
 second takes the chat over on its own.
 
+What illi's shell commands leave running (a dev server sent to the
+background) stops as illi quits. If illi is killed outright instead (its
+terminal's machine down, `kill -9`), the next illi to open the project
+stops what it left running, by the mark those processes carry, and
+notes so in the chat. It never stops a process it runs under itself (a
+shell, a tmux server). An illi started from the killed one's shells
+(in a tmux session that illi opened, say) stops none of them: they are
+your terminal now.
+
 What else illi keeps in `~/.illi`:
 
 | File            | Holds                                                 |
@@ -113,6 +122,35 @@ What else illi keeps in `~/.illi`:
 | `project-profiles.json` | the profile used last in each project: illi opens a project in it |
 | `profiles/`     | the other profiles, a folder each ([Profiles](profiles.md)); in each, `created` keeps when it was made, a line: `/profile` lists them in that order |
 | `seen.json`     | what of each project runs as you work (its `hooks.json`, `mcp.json` and plugins), as illi last saw it (each one's hash), so one new or changed is said at the start |
+
+illi writes each of these files whole: to a file beside it, synced, then
+renamed over it, so a crash or a full disk leaves the old file, never
+half of one. Those two illis may change at once (`config.json`, the
+approvals, the trusted folders, `models.json`, `seen.json`,
+`project-profiles.json`) are changed holding a lock, a hidden
+`.<file>.lock` beside each, so neither loses the other's change. In a
+folder where the lock can't be made, the file is changed without it,
+as no other illi can lock it there either. A change another illi's
+lock held off for 5 s that's no failure to lose (a folder trusted, a
+project's last profile) is written to `illi.log` only: the folder is
+trusted for this run, and the question comes again next time.
+
+The `write` and `edit` tools write your files the same way, keeping
+each file's mode and group and writing through a link to the file it
+leads to. The new contents are readable by you alone until they are
+written, so a private file's words never show to others meanwhile. A
+file is written in place instead when a move would part it from what it
+is, or no file can be made beside it: one with other names (a hard
+link), another owner, a group you're not in, or no plain file (a fifo);
+a folder illi may not write in, a file mounted on its own, a name too
+long for one more suffix. A full or failing disk never falls back so,
+as that would cut the file short: the write fails, the file as it was.
+What a move still loses is what illi can't see: a file's extended
+attributes and ACLs (Finder tags, an ACL set on the file itself). A
+file bind-mounted into a container from outside it is replaced outside
+the container only, so write it from the side that mounted it. An
+`edit` across files whose later file won't write puts the earlier ones
+back.
 | `plugin-data/`  | each plugin's own folder (`CLAUDE_PLUGIN_DATA`), kept across its updates; a profile's plugins' in the profile's folder ([Plugins](customize.md#plugins)) |
 | `trust.json`    | the folders you trust illi in (a repo's top covers the repo, a plain folder the folders in it but a repo), every profile's: the question at the start asks only for others; edit or delete it to trust less |
 | `update.json`   | when illi last looked for a new release (`autoupdate`), the release it found (the trust question shows it where it's newer), and the one it last said it couldn't install |
@@ -184,10 +222,12 @@ Troubleshooting
   `~/.illi/illi.log` (another profile's: `~/.illi/profiles/<name>/illi.log`).
 - illi didn't update itself: it looks as it starts (`update.json` says
   when it last did). A look that can't reach GitHub (offline) is tried
-  again at the next start; a
-  release it couldn't download or check (a stalled download, not
-  matching its SHA256SUMS) waits for the next look. Both are logged in `illi.log`. `illi upgrade`
-  updates it now, saying each step.
+  again at the next start. A release it couldn't install (a stalled
+  download, a file not matching its SHA256SUMS, a build that won't run
+  here) is said once, with why, and tried again only after a wait that
+  grows each time: an hour, six hours, then a day (`update.json` keeps
+  the tries); a newer release is tried at once. Both are logged in
+  `illi.log`. `illi upgrade` updates it now, saying each step.
 - "illi can't write <folder>": illi is installed where you can't write
   (as with sudo into `/usr/local/bin`). Run `sudo illi upgrade`, or
   install it again into a folder of yours (`ILLI_INSTALL`).
@@ -195,6 +235,25 @@ Troubleshooting
   (or "it doesn't answer"): the illi there can't take a second screen,
   as after an update. Quit illi there (Ctrl+D), then start it here
   again.
+- "no word from your Claude plan in 20 min, so the call was stopped" (or
+  your Google AI or GitHub Copilot plan): that plan's own program (Claude
+  Code, or Google's or GitHub's CLI) sent nothing for 20 minutes while
+  no command or question of the chat's was open at illi's tools, so
+  illi stopped it as hung. A tool of the program's own (one of Claude
+  Code's MCP servers, say) running that long with no output looks the
+  same.
+  What it had written so far is kept, marked cut off. Send a message to
+  try again (a summary tries again by itself). If it keeps happening,
+  update that program or use another plan for a while.
+- "can't reach <host> (its certificate isn't trusted here, …)": a
+  proxy or security tool between you and the internet inspects TLS
+  with its own certificate. Set `NODE_EXTRA_CA_CERTS` to that
+  certificate's file (your IT department has it) before starting illi;
+  `HTTPS_PROXY` names a proxy illi must go through.
+- Search finds words only ("illi couldn't download its small search
+  model"): the download of the model for `meaning` failed (the reason
+  is in `illi.log`). illi tries again after an hour, then six hours,
+  then a day; a start in a terminal past that wait tries at once.
 - "chat: <name>.sqlite won't open": that project's file in
   `~/.illi/chat/projects/` is damaged or isn't illi's. Move it away (the
   project then starts fresh), or restore it from a backup.

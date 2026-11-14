@@ -10,6 +10,8 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as config from "./Config.ts";
+import { Flock } from "./Flock.ts";
+import { whole } from "../tools/Clip.ts";
 
 export namespace Seen {
 
@@ -33,23 +35,24 @@ export namespace Seen {
 }
 
 // whether a key's value differs from the one kept (none kept: it does);
-// the new one kept then (a temporary file renamed over, so a crash never
-// leaves half a file; one that can't be written said, still taken as new)
+// the new one kept then, under the file's lock (Flock kept: another
+// illi's key kept at that moment kept too), written whole (Clip whole);
+// one that can't be written said, still taken as new
 function seen_keep(key: string, now: string): boolean {
   const file = path.join(config.ROOT, "seen.json");
-  let seen: Record<string, string> = {};
-  try {
-    const data = JSON.parse(fs.readFileSync(file, "utf8"));
-    seen = typeof data === "object" && data !== null && !Array.isArray(data) ? data : {};
-  } catch {
-    // none seen yet
-  }
-  if (seen[key] === now) {
+  const read = (): Record<string, string> => {
+    try {
+      const data = JSON.parse(fs.readFileSync(file, "utf8"));
+      return typeof data === "object" && data !== null && !Array.isArray(data) ? data : {};
+    } catch {
+      return {};
+    }
+  };
+  if (read()[key] === now) {
     return false;
   }
   try {
-    fs.writeFileSync(file + ".tmp", JSON.stringify({ ...seen, [key]: now }, null, 2) + "\n");
-    fs.renameSync(file + ".tmp", file);
+    Flock.kept(file, config.LOCKED, () => whole(file, JSON.stringify({ ...read(), [key]: now }, null, 2) + "\n"));
   } catch (err: any) {
     console.error("illi: " + file + ": " + String(err?.message ?? err));
   }

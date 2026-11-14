@@ -223,10 +223,45 @@ test("a project forgotten is gone, its file deleted, its WAL too, the others kep
   expect(fs.readdirSync(DIR + "/forget/projects").sort()).toEqual(["app-k3f9x2.sqlite", "home.sqlite"]);
 });
 
-test("a chat file that won't open is said by its name", () => {
+test("a chat file deleted while it's open is found gone, and written back whole from the open connection, what was logged after the delete too, the store going on in it; its WAL left at the path, never read into it; another file at its path is found replaced", () => {
+  const store = Store.open(DIR + "/gone", APP);
+  say(store, "before");
+  expect(Store.lost(store)).toBeNull();
+  fs.rmSync(DIR + "/gone/projects", { recursive: true });
+  say(store, "after");
+  expect(Store.lost(store)).toBe("gone");
+  Store.restore(store);
+  expect(Store.lost(store)).toBeNull();
+  say(store, "in it");
+  const reader = Store.peek(store.file);
+  expect(Store.count(reader)).toBe(3);
+  Store.close(reader);
+  // the file alone deleted, its WAL and shared memory left beside (a WAL
+  // of many pages, so the file written back lies otherwise than it)
+  for (let k = 0; k < 300; k++) {
+    say(store, "more " + k + " " + "x".repeat(2000));
+  }
+  fs.rmSync(store.file);
+  expect(fs.existsSync(store.file + "-wal")).toBe(true);
+  say(store, "after again");
+  Store.restore(store);
+  say(store, "last");
+  Store.close(store);
+  const back = Store.open(DIR + "/gone", APP);
+  expect([Store.count(back), (back.db.query("pragma integrity_check").get() as any).integrity_check]).toEqual([305, "ok"]);
+  fs.writeFileSync(back.file + ".other", "");
+  fs.renameSync(back.file + ".other", back.file);
+  expect(Store.lost(back)).toBe("replaced");
+  Store.close(back);
+});
+
+test("a chat file that won't open, or won't read, is said by its name; a damaged one says what to do", () => {
   fs.mkdirSync(DIR + "/junk/projects", { recursive: true });
   fs.writeFileSync(DIR + "/junk/projects/app-k3f9x2.sqlite", "not a database, a few bytes more than a header would take".repeat(4));
-  expect(() => Store.open(DIR + "/junk", APP)).toThrow("chat: app-k3f9x2.sqlite won't open: file is not a database");
+  expect(() => Store.open(DIR + "/junk", APP)).toThrow("chat: app-k3f9x2.sqlite won't open: file is not a database. The file is damaged: move it away to start the project fresh (" + DIR + "/junk/projects/app-k3f9x2.sqlite), or save what it holds first with sqlite3's .recover");
+  const rotten = Object.assign(new Error("database disk image is malformed"), { code: "SQLITE_CORRUPT" });
+  expect(Store.why("x.sqlite won't read", rotten, "/p/x.sqlite").message).toBe("chat: x.sqlite won't read: database disk image is malformed. The file is damaged: move it away to start the project fresh (/p/x.sqlite), or save what it holds first with sqlite3's .recover");
+  expect(Store.why("x.sqlite won't read", Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" }), "/p/x.sqlite").message).toBe("chat: x.sqlite won't read: database is locked");
 });
 
 // the reads of a statement on a store's connection, counted as it runs

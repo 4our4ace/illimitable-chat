@@ -104,8 +104,19 @@ The columns, by table:
   chat's latest line at once.
 - **state**: `chat`, `saved` (JSON: the chat's view, `seen` (the
   compactions' view), the pick, the goal, the suggested reply (so it
-  shows again after a restart), the main agent, what ran, the
-  cut, `show` and `top`, the last `/clear` or `/compact` recap: the
+  shows again after a restart), the main agent, what ran, what
+  streams and isn't logged yet (`left`: the chat's and each agent's
+  tool calls awaiting their results and the text coming, kept as a call
+  starts or ends and two seconds after a piece streams at most, so a
+  start after a crash or a kill logs it, each call as it was, without a
+  result, and the reply marked cut off, never the reasoning, which the
+  chat logs none of; before them, the chat's entries held back while a
+  message is being logged (`Chat.hold`: a call and its result, a note,
+  an agent's report), kept `whole` so they're logged as they were; a
+  quit logs it all at once), whether
+  the last quit cut a tool call as it ran (`lost`: the resume note says
+  its effect is unknown, so the model checks before running it again),
+  the cut, `show` and `top`, the last `/clear` or `/compact` recap: the
   chat's view starts there, so nothing before it is sent; `show`, where
   the screen shows messages whole from, may be before `top` (a
   `/compact` leaves the screen as it was); loaded, they are held to
@@ -200,10 +211,17 @@ Who opens them
 Several processes and threads can have a file open at once. SQLite
 allows any number of readers and one writer at a time. A writer that
 finds another writing waits up to `busy_timeout` (10 s) and then fails.
-A write that fails so, or for a full disk, is told on the screen: a
-command's (`/clear`, `/goal`...) as its answer; a save of the chat's
-state as a turn starts or ends (what ran, the suggested reply) as a
-note, illi going on.
+A write that fails so, or for a full disk, is told on the screen,
+illi going on: a command's (`/clear`, `/goal`...) as its answer; your
+message's as its answer too ("Can't save the chat: disk full"), the
+text back in the input; a save of the chat's state as a turn starts or
+ends (what ran, the suggested reply) as a note, once till a save goes
+through again (`chat.stale`); a message the turn or
+an agent logs as a note never logged, once till a write goes through
+again, what runs stopped then (it can't keep what it does), the note
+it was writing shown all the same (`Chat.unwritten`). As illi quits,
+each step runs on its own, so a write that fails never leaves a
+background job or a program running.
 
 | Who | Connection | When | Code |
 | --- | --- | --- | --- |
@@ -249,10 +267,29 @@ Opening, step by step
    it isn't there (a new chat, or one an older illi kept), in a write
    transaction of its own. The index thread fills it.
 
-A file that won't open (not an SQLite file, say) stops illi at start
-with one line naming it: *illi: chat: app-k3f9x2.sqlite won't open: file
-is not a database*. Every error a chat file raises reads *chat: …*, and
-`main.ts` prints it so, never as a crash.
+A file that won't open (not an SQLite file, say), or won't read as
+the chat loads (a damaged page among those read at start), stops illi at
+start with one line naming it: *illi: chat: app-k3f9x2.sqlite won't
+open: file is not a database*; a damaged one adds what to do: move it
+away to start the project fresh, or save what it holds first with
+sqlite3's `.recover`. Every error a chat file raises as it opens and
+loads reads *chat: …*, and `main.ts` prints it so, never as a crash.
+One later (a damaged page read while illi runs) ends illi as a crash,
+named the same way, its trace in the log.
+
+A chat's file deleted while illi holds it open (its folder removed, say)
+would take every message logged after with it as illi quits: illi
+notices at its next save (`Store.lost`: the path gone), writes the chat
+back whole from what its connection still holds (`Store.restore`:
+`VACUUM INTO` a file beside it, moved in), tells you, and goes on in
+that file on a new connection, so its search index thread, and any
+other reader, writes and reads the same file illi does. The WAL and
+shared-memory files the deleted file left at the path are removed
+before the move: SQLite would read a WAL left beside a file not its own
+into it, and the file would then be damaged. The old connection closes
+without touching the path, as SQLite checks that its file moved (and
+it is told to keep its WAL besides). It looks once more as illi quits.
+Another file put at its path instead is only told, left as it is.
 
 Opening an existing file costs about 0.6 ms; making a new one about
 30–45 ms, nearly all of it the fsyncs of its first commits and close.
@@ -387,6 +424,7 @@ lives in the profile's `locks/` (`~/.illi/locks/`, another profile's
 | `<code>.lock` | the lock. `<code>` is a 12-character hash of the project's folder, or `home` (`Projects.lock`) |
 | `<code>.sock` | the holder's socket (mode 0600), where a second terminal's view connects |
 | `<code>.state` | the chat's state as its holder last told it (mode 0600): `{"asks", "working", "jobs", "holds"}`, for the other terminals' side panel |
+| `<code>.run` | the holder's run mark (`Lock.mark`, a UUID), which every process its shells start carries as `ILLI_RUN`. A quit removes it; one a killed holder left tells the next holder which processes to stop (`Chat.orphans`, `Machine.marked`): never one it runs under, and none where it was started with that mark itself (from the killed holder's shells); illi takes the mark out of its own environment as it starts, so nothing it runs carries another run's |
 
 Each profile's illi takes it as it starts (`Term.ts term_start`): on a
 terminal, the members under the window, shown or hidden; alone
@@ -802,7 +840,9 @@ a small static model runs on this machine (`src/chat/Embed.ts`).
   downloads them once, in the background, and says so once they're in
   (a note); a pipe's never does, as it ends first. Till then, and
   offline, search goes by words alone. A part file an illi killed
-  mid-download left goes at the next try. A file there that won't read
+  mid-download left goes at the next try; one another illi is still
+  writing stays, even once a third made the model ready, and that
+  illi's download, failing then, counts as done. A file there that won't read
   (cut short, changed on disk) takes the `ok` away: that run searches
   by words alone, and the next start checks each file against its
   SHA-256 and downloads the one that isn't as pinned. `meaning` off
@@ -1151,13 +1191,14 @@ config_models_told`), so most starts run no Claude Code.
    `Anthropic.ts lineup`), with their windows.
 2. Each write is one vendor's list (or one vendor's `told`): illi reads
    the file as it is now, puts that vendor's list in, leaves the
-   others' as they are, writes the whole to `models.json.<pid>.tmp` and
-   renames it over the file, so no reader sees half a file and one
-   vendor's learning never drops another's. Two illis writing in the
-   same instant can still lose one's list: chatgpt's comes back at the
-   catalog's next answer, the others' once a later illi is told their
-   windows again (each writes only windows new to it); a `told` lost
-   only has the next start ask once more.
+   others' as they are, and writes the whole beside it, synced, then
+   renamed over it, so no reader sees half a file and one vendor's
+   learning never drops another's. It does so holding the file's lock,
+   a flock on `.models.json.lock` beside it, so two illis writing at
+   once take turns and neither loses the other's list. illi's other
+   files it changes this way too: `config.json`, the approvals
+   (`permissions.json`), the trusted folders, `seen.json` and
+   `project-profiles.json`.
 3. At the start (`config_models`), the chatgpt, antigravity,
    claude-code, claude-api and github-copilot lists are taken whole, whatever their account (the login
    isn't read yet), until the catalog answers (antigravity's: its next

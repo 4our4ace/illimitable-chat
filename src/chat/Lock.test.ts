@@ -67,3 +67,21 @@ test("a state left by an illi killed says nothing, its lock let go; one let go c
   expect(fs.existsSync(own)).toBe(false);
   Lock.release();
 });
+
+test("the holder's run mark is kept beside its lock: the next holder gets the one a holder that never let go left, none after a clean release, never its own", async () => {
+  expect(await Lock.take(MINE)).toBe(true);
+  expect(Lock.mark("run-a")).toBe("");
+  expect(Lock.mark("run-a")).toBe("");
+  const run = DIR + "/locks/" + fs.readdirSync(DIR + "/locks").find((f) => f.endsWith(".run"));
+  expect(fs.readFileSync(run, "utf8")).toBe("run-a\n");
+  // as a holder killed outright leaves it: the next one is told its mark
+  const lock = run.replace(/\.run$/, ".lock");
+  Lock.release(true);
+  expect(Lock.mark("run-b")).toBe("run-a");
+  Lock.release();
+  expect(fs.existsSync(run)).toBe(false);
+  expect(fs.existsSync(lock)).toBe(true);
+  expect(await Lock.take(MINE)).toBe(true);
+  expect(Lock.mark("run-c")).toBe("");
+  Lock.release();
+});

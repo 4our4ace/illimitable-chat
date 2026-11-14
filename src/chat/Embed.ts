@@ -12,7 +12,10 @@
 // The model is three files from Hugging Face at one revision (MODEL),
 // each checked against its sha256 as it comes, then moved into place
 // whole, into models/<name> in illi's root (every profile's), downloaded
-// once in the background while `meaning` is on (Embed.fetch). It is read
+// once in the background while `meaning` is on (Embed.fetch); a download
+// that fails is kept (why, its tries), logged and told the first time,
+// and tried again only past a wait, an hour, six, then a day (Embed.due).
+// It is read
 // where vectors are made and compared (the index thread: Seeker.ts), once
 // (Embed.load): its tokenizer's vocabulary and its table (F16 rows).
 //
@@ -35,6 +38,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { unreached } from "../tools/Clip.ts";
 
 // Types
 // =====
@@ -95,6 +99,15 @@ const STALL = 60000;
 // each checked (Embed.fetch): its revision's name (VECTORS)
 const OK = "ok";
 
+// the file in the model's folder that keeps a download that failed: why,
+// how many tries, when the last was (Embed.failed)
+const FAILED = "failed.json";
+
+// how long a failed download waits before the next try, by its tries:
+// an hour, six, then a day (a link that can't reach Hugging Face isn't
+// asked at every start)
+const AGAIN = [3600e3, 6 * 3600e3, 24 * 3600e3];
+
 // Embed
 // =====
 
@@ -134,36 +147,39 @@ export namespace Embed {
   // its sha256, one not there or not as pinned downloaded from Hugging
   // Face (host: the tests' own), checked as it comes and moved into place
   // whole (one illi's part file its own, so two at once never mix; one an
-  // ended illi left goes first); then OK written, and an earlier
-  // revision's folder removed; whether it was made ready now (false: it
-  // was already). Thrown: no connection, a refusal, a file not as pinned,
-  // a stall, a stop
+  // ended illi left goes first, a live one's stays, its download going
+  // on even once another made the model ready); then OK written, and an
+  // earlier revision's folder removed; whether it was made ready now
+  // (false: it was already, or another illi made it ready as this one
+  // failed). Thrown: no connection, a refusal, a file not as pinned, a
+  // stall, a stop; kept (FAILED: Embed.failed), but a stop, till a try
+  // succeeds
   export async function fetch(root: string, stop?: AbortSignal, host = "https://huggingface.co"): Promise<boolean> {
     const dir = Embed.folder(root);
-    if (Embed.ready(root)) {
-      return false;
-    }
-    // a part file of an illi that ended mid-download (killed) goes
+    const ready = Embed.ready(root);
     for (const name of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
       const pid = Number(/\.(\d+)\.part$/.exec(name)?.[1]);
       if (pid > 0 && !Embed.lives(pid)) {
         fs.rmSync(path.join(dir, name), { force: true });
       }
     }
-    for (const f of MODEL.files) {
-      const file = path.join(dir, f.name);
-      if (fs.existsSync(file) && fs.statSync(file).size === f.bytes && new Bun.CryptoHasher("sha256").update(fs.readFileSync(file)).digest("hex") === f.sha256) {
-        continue;
-      }
-      fs.mkdirSync(dir, { recursive: true });
-      const part = file + "." + process.pid + ".part";
-      try {
-        await Embed.get(host + "/" + MODEL.repo + "/resolve/" + MODEL.rev + "/" + f.name, part, f.sha256, stop, f.bytes);
-        fs.renameSync(part, file);
-      } finally {
-        fs.rmSync(part, { force: true });
-      }
+    if (ready) {
+      return false;
     }
+    try {
+      await embed_fetch(dir, stop, host);
+    } catch (err: any) {
+      if (stop?.aborted !== true && Embed.ready(root)) {
+        return false;
+      }
+      if (stop?.aborted !== true) {
+        const was = Embed.failed(root);
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, FAILED), JSON.stringify({ why: String(err?.message ?? err), tries: (was?.tries ?? 0) + 1, at: Date.now() }) + "\n");
+      }
+      throw err;
+    }
+    fs.rmSync(path.join(dir, FAILED), { force: true });
     fs.writeFileSync(path.join(dir, OK), VECTORS + "\n");
     for (const name of fs.readdirSync(path.dirname(dir))) {
       if (name !== VECTORS && (name === MODEL.name || name.startsWith(MODEL.name + "@"))) {
@@ -171,6 +187,27 @@ export namespace Embed {
       }
     }
     return true;
+  }
+
+  // the download of the model that failed last (FAILED: why, how many
+  // tries, when the last was); null: none
+  export function failed(root: string): { why: string; tries: number; at: number } | null {
+    try {
+      const f = JSON.parse(fs.readFileSync(path.join(Embed.folder(root), FAILED), "utf8"));
+      const tries = Number(f?.tries);
+      const at = Number(f?.at);
+      return Number.isInteger(tries) && tries > 0 && Number.isFinite(at) ? { why: String(f.why ?? ""), tries, at } : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // whether the model may be downloaded now: none failed, or the last
+  // failure's wait (AGAIN, by its tries) is over (one stamped ahead, the
+  // clock set back, waits no longer)
+  export function due(root: string, now = Date.now()): boolean {
+    const f = Embed.failed(root);
+    return f === null || Math.abs(now - f.at) >= AGAIN[Math.min(f.tries, AGAIN.length) - 1];
   }
 
   // whether a process runs (one of another user's: it does)
@@ -195,7 +232,7 @@ export namespace Embed {
       try {
         res = await globalThis.fetch(url, { headers: { "user-agent": "illi" }, signal });
       } catch (err) {
-        throw signal.aborted ? err : new Error("Hugging Face can't be reached: check your connection");
+        throw signal.aborted ? err : new Error(unreached(url, err));
       }
       if (!res.ok || res.body === null) {
         throw new Error("Hugging Face answered " + res.status + " for " + path.basename(url));
@@ -389,4 +426,22 @@ export namespace Embed {
     return norm === 0 ? 0 : dot / Math.sqrt(norm);
   }
 
+}
+
+// Embed.fetch's downloads: each file not there or not as pinned
+async function embed_fetch(dir: string, stop: AbortSignal | undefined, host: string): Promise<void> {
+  for (const f of MODEL.files) {
+    const file = path.join(dir, f.name);
+    if (fs.existsSync(file) && fs.statSync(file).size === f.bytes && new Bun.CryptoHasher("sha256").update(fs.readFileSync(file)).digest("hex") === f.sha256) {
+      continue;
+    }
+    fs.mkdirSync(dir, { recursive: true });
+    const part = file + "." + process.pid + ".part";
+    try {
+      await Embed.get(host + "/" + MODEL.repo + "/resolve/" + MODEL.rev + "/" + f.name, part, f.sha256, stop, f.bytes);
+      fs.renameSync(part, file);
+    } finally {
+      fs.rmSync(part, { force: true });
+    }
+  }
 }

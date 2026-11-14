@@ -10,7 +10,14 @@
 // its exit in its lines' name, and its leaf in the memory tree (and so
 // the index the radar and search read) holds none of the line; a read's
 // lines and a change's still count; a line never shows where a result is
-// drawn.
+// drawn. A request that never reached its host says why by its error's
+// code (a certificate, DNS, a refusal, a timeout, a cut), never only
+// "offline"; a file is synced, a folder that won't sync left as it is.
+// A file written whole: a new one in a new folder, an old one's mode and
+// group kept, through a link the file it leads to (the link kept), one
+// with other names (a hard link), in a folder illi may not write in,
+// with a name too long for the suffix, or no plain file (a fifo) written
+// in place, no temporary file left either way.
 
 import { afterAll, expect, test } from "bun:test";
 import * as fs from "node:fs";
@@ -19,7 +26,7 @@ import * as os from "node:os";
 const DIR = fs.mkdtempSync(os.tmpdir() + "/illi-clip-");
 process.env.ILLI_DIR = DIR;
 
-const { history_bare, history_block } = await import("./Clip.ts");
+const { fsynced, history_bare, history_block, unreached, whole } = await import("./Clip.ts");
 const Call = await import("../ui/Call.ts");
 const Md = await import("../ui/Md.ts");
 const { Memory } = await import("../chat/Memory.ts");
@@ -94,4 +101,72 @@ test("a read's lines and a change's still count with a line appended; a result t
   // a result standing alone counts its own lines
   const alone = View.view_acts(View.view_new(), [...View.entry_rows(1, "user", "go"), ...View.entry_rows(2, "echo", "one\ntwo" + LINE)])[1] as Row & { $: "Act" };
   expect(alone.rows.flatMap((r: Row) => (r.$ === "Item" ? [r.outcome] : []))).toEqual(["2 lines"]);
+});
+
+test("a request that never reached its host says why, by its error's code, and what to do; one with none, to check the connection", () => {
+  const url = "https://api.example.dev/v1/x";
+  const err = (code: string, name = "Error") => Object.assign(new Error("x"), { code, name });
+  expect(unreached(url, err("DEPTH_ZERO_SELF_SIGNED_CERT"))).toBe("can't reach api.example.dev (its certificate isn't trusted here, DEPTH_ZERO_SELF_SIGNED_CERT): behind a proxy that inspects TLS, set NODE_EXTRA_CA_CERTS to that proxy's certificate");
+  expect(unreached(url, err("UNABLE_TO_GET_ISSUER_CERT_LOCALLY"))).toContain("isn't trusted here");
+  expect(unreached(url, err("ENOTFOUND"))).toBe("can't reach api.example.dev (its name won't resolve): check your connection, or your proxy");
+  expect(unreached(url, err("ConnectionRefused"))).toBe("can't reach api.example.dev (the connection was refused): check your connection, or your proxy");
+  expect(unreached(url, err("23", "TimeoutError"))).toBe("can't reach api.example.dev (no answer in time): check your connection");
+  expect(unreached(url, err("ConnectionClosed"))).toBe("can't reach api.example.dev (the connection was cut): check your connection, or your proxy");
+  expect(unreached(url, err("FailedToOpenSocket"))).toBe("can't reach api.example.dev (FailedToOpenSocket): check your connection");
+  expect(unreached(url, new Error("x"))).toBe("can't reach api.example.dev: check your connection");
+  expect(unreached("not a url")).toBe("can't reach not a url: check your connection");
+});
+
+test("a file written whole: new, in a new folder; its mode and group kept; through a link, the file it leads to; one with another name, in a folder illi may not write in, with a name too long for the suffix, or no plain file, in place; nothing left beside it", async () => {
+  const W = DIR + "/whole";
+  whole(W + "/a/new.txt", "one");
+  expect(fs.readFileSync(W + "/a/new.txt", "utf8")).toBe("one");
+  fs.chmodSync(W + "/a/new.txt", 0o750);
+  whole(W + "/a/new.txt", "two");
+  expect([fs.readFileSync(W + "/a/new.txt", "utf8"), fs.statSync(W + "/a/new.txt").mode & 0o777]).toEqual(["two", 0o750]);
+  fs.symlinkSync(W + "/a/new.txt", W + "/link");
+  whole(W + "/link", "three");
+  expect([fs.lstatSync(W + "/link").isSymbolicLink(), fs.readFileSync(W + "/a/new.txt", "utf8")]).toEqual([true, "three"]);
+  fs.linkSync(W + "/a/new.txt", W + "/hard");
+  whole(W + "/hard", "four");
+  expect(fs.readFileSync(W + "/a/new.txt", "utf8")).toBe("four");
+  if (process.getuid?.() !== 0) {
+    fs.writeFileSync(W + "/a/shut.txt", "x");
+    fs.chmodSync(W + "/a", 0o555);
+    try {
+      whole(W + "/a/shut.txt", "five");
+      expect(fs.readFileSync(W + "/a/shut.txt", "utf8")).toBe("five");
+    } finally {
+      fs.chmodSync(W + "/a", 0o755);
+    }
+  }
+  // a name with no room for the suffix, and a fifo: in place
+  const long = W + "/" + "n".repeat(250);
+  fs.writeFileSync(long, "x");
+  whole(long, "six");
+  expect(fs.readFileSync(long, "utf8")).toBe("six");
+  Bun.spawnSync(["mkfifo", W + "/fifo"]);
+  const reader = Bun.spawn(["sh", "-c", "cat fifo > out"], { cwd: W });
+  whole(W + "/fifo", "seven");
+  await reader.exited;
+  expect([fs.statSync(W + "/fifo").isFIFO(), fs.readFileSync(W + "/out", "utf8")]).toEqual([true, "seven"]);
+  // a private file stays so; a group the user's in kept
+  fs.writeFileSync(W + "/a/private", "x", { mode: 0o600 });
+  whole(W + "/a/private", "eight");
+  expect(fs.statSync(W + "/a/private").mode & 0o777).toBe(0o600);
+  const other = process.getgroups?.().find((g) => g !== process.getgid?.());
+  if (other !== undefined) {
+    fs.chownSync(W + "/a/private", process.getuid!(), other);
+    whole(W + "/a/private", "nine");
+    expect([fs.statSync(W + "/a/private").gid, fs.readFileSync(W + "/a/private", "utf8")]).toEqual([other, "nine"]);
+  }
+  expect([...fs.readdirSync(W + "/a"), ...fs.readdirSync(W)].filter((f) => f.endsWith(".tmp"))).toEqual([]);
+});
+
+test("a file's writes are synced; a file that won't open throws, a folder that won't is left as it is", () => {
+  fs.writeFileSync(DIR + "/synced", "x");
+  expect(() => fsynced(DIR + "/synced")).not.toThrow();
+  expect(() => fsynced(DIR)).not.toThrow();
+  expect(() => fsynced(DIR + "/none")).toThrow();
+  expect(() => fsynced(DIR + "/none", true)).not.toThrow();
 });

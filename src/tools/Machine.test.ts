@@ -104,6 +104,64 @@ test("a shell call that ends leaving a process in its group is a background job 
   Machine.watch(() => {});
 });
 
+test("the processes a run's mark names (ILLI_RUN) are stopped, another run's left alone, as is one whose mark only starts so; this illi's own mark is its own, none it was started with in its environment; a mark that's no UUID names none", async () => {
+  const killed = crypto.randomUUID();
+  const env = (run: string) => ({ ...process.env, ILLI_RUN: run });
+  const left = Bun.spawn(["sleep", "30"], { env: env(killed) });
+  const other = Bun.spawn(["sleep", "30"], { env: env(crypto.randomUUID()) });
+  const longer = Bun.spawn(["sleep", "30"], { env: env(killed + "0") });
+  try {
+    await Bun.sleep(50);
+    expect(Machine.marked(killed)).toBe(1);
+    expect(await Promise.race([left.exited.then(() => "gone"), Bun.sleep(3000).then(() => "running")])).toBe("gone");
+    expect([Machine.alive(other.pid), Machine.alive(longer.pid)]).toEqual([true, true]);
+    expect([Machine.marked(""), Machine.marked("1"), Machine.marked(killed.slice(0, 8))]).toEqual([0, 0, 0]);
+    expect(Machine.mark()).not.toBe(killed);
+    expect(process.env.ILLI_RUN).toBeUndefined();
+  } finally {
+    other.kill();
+    longer.kill();
+  }
+});
+
+test("an illi started from a killed run's shell (a terminal its tmux opened) stops none of that run's processes: they are the user's terminal now; one under its own shell never stops the shells it runs under", async () => {
+  const run = crypto.randomUUID();
+  const sweep = "const { Machine } = await import(" + JSON.stringify(import.meta.dir + "/Machine.ts") + "); console.log(Machine.marked(" + JSON.stringify(run) + "), Machine.inherited() === " + JSON.stringify(run) + ");";
+  const pane = Bun.spawn(["sleep", "30"], { env: { ...process.env, ILLI_RUN: run } });
+  try {
+    const inside = Bun.spawnSync([process.execPath, "-e", sweep], { env: { ...process.env, ILLI_RUN: run } });
+    expect(inside.stdout.toString().trim()).toBe("0 true");
+    expect(Machine.alive(pane.pid)).toBe(true);
+    // its parent shell carries the mark though illi doesn't (taken out on
+    // the way): the shell lives, the run's other process goes
+    const under = Bun.spawnSync(["/bin/sh", "-c", "env -u ILLI_RUN " + JSON.stringify(process.execPath) + " -e '" + sweep.replace(/'/g, "'\\''") + "'; echo shell-alive"], { env: { ...process.env, ILLI_RUN: run } });
+    expect(under.stdout.toString().trim().split("\n")).toEqual(["1 false", "shell-alive"]);
+    expect(await Promise.race([pane.exited.then(() => "gone"), Bun.sleep(3000).then(() => "running")])).toBe("gone");
+  } finally {
+    pane.kill();
+  }
+});
+
+test("an edit whose later file won't write puts the earlier ones back and says so; none left changed", () => {
+  if (process.getuid?.() === 0) {
+    return;
+  }
+  fs.mkdirSync(DIR + "/shut");
+  fs.writeFileSync(DIR + "/open.txt", "a\n");
+  fs.writeFileSync(DIR + "/shut/locked.txt", "a\n");
+  fs.chmodSync(DIR + "/shut/locked.txt", 0o444);
+  fs.chmodSync(DIR + "/shut", 0o555);
+  try {
+    const out = Machine.edit(DIR, [{ path: "open.txt", old: "a", new: "b" }, { path: "shut/locked.txt", old: "a", new: "b" }]);
+    expect(out.fail).toBe(true);
+    expect(out.text).toStartWith("Couldn't write shut/locked.txt: ");
+    expect(out.text).toEndWith(" No file was changed.");
+    expect([fs.readFileSync(DIR + "/open.txt", "utf8"), fs.readFileSync(DIR + "/shut/locked.txt", "utf8")]).toEqual(["a\n", "a\n"]);
+  } finally {
+    fs.chmodSync(DIR + "/shut", 0o755);
+  }
+});
+
 test("no read, write or edit reaches a chat's folder, this profile's or another's; elsewhere they work", async () => {
   const live = new AbortController().signal;
   const run  = (name: string, input: object) => Machine.run({ name, input, cwd: DIR }, live);

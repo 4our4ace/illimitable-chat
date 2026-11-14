@@ -41,12 +41,13 @@
 // chat's view's messages in a few dozen lines, the newest each its own,
 // detail fading with age.
 
+import * as path from "node:path";
 import type { Ask, Block, Call, Img, Kind, Say } from "../ai/AskAI.ts";
 import { Compactor } from "./Compactor.ts";
 import { clip_page, clip_pages, history_bare } from "../tools/Clip.ts";
 import { HOME, Store, type Place } from "./Store.ts";
 import { FIT, IMAGE, PICS, PIXELS, image_fit } from "../ai/Image.ts";
-import { image_kind } from "../ui/View.ts";
+import { image_kind, type Live } from "../ui/View.ts";
 import { When, type Span } from "./When.ts";
 
 // Types
@@ -75,9 +76,14 @@ export type Share = Omit<Ask, "blocks">;
 // a view as saved
 type Kept = { parts: Array<[number, number]>; batch: boolean };
 
+// what streamed and wasn't logged yet (Memory.left), as Live; whole: an
+// entry complete, held back from the chat's log (Chat.hold), so logged
+// as it is, never as cut off
+export type Left = Live & { whole?: boolean };
+
 // the state: the chat's view, the compactions' (none: the chat's); top:
 // the chat's view's first message (`from`)
-type Saved = Kept & { seen?: Kept; pick: object | null; goal?: string | null; suggest?: string; work?: string[]; agent?: string | null; cut?: number; show?: number; top?: number };
+type Saved = Kept & { seen?: Kept; pick: object | null; goal?: string | null; suggest?: string; work?: string[]; left?: Record<string, Left[]>; lost?: boolean; agent?: string | null; cut?: number; show?: number; top?: number };
 
 // store: its file (Store.ts); cwd: the folder illi runs in, logged with
 // each message ("": unknown); count: the pages logged; pick: the chat's,
@@ -86,7 +92,13 @@ type Saved = Kept & { seen?: Kept; pick: object | null; goal?: string | null; su
 // suggest: the suggested reply shown as the last turn ended
 // (Suggest.ask; "": none), so a start shows it again; agent: the main
 // agent's profile (Custom.ts; null: illi's own); work:
-// what ran, as last saved; cut: the first message a turn's call gets
+// what ran, as last saved; left: what streamed and wasn't logged yet, as
+// last saved (the chat's, "", and each agent's at work: its tool calls
+// awaiting results, the text coming, and before them the chat's entries
+// a held log hasn't taken yet, whole: Chat.hold; Chat.ahead), lost: a
+// tool call was
+// cut as it ran by the last quit (logged so: Chat.cutoff), till the next
+// start says so; cut: the first message a turn's call gets
 // whole (Memory.cutoff; those before, as the view's lines), show: the
 // first the screen shows whole (at the cut, or before it, as /compact
 // leaves it: the screen keeps what it showed above the recap), tail: the
@@ -111,6 +123,8 @@ export type Memory = {
   suggest: string;
   agent  : string | null;
   work   : string[];
+  left   : Record<string, Left[]>;
+  lost   : boolean;
   cut    : number;
   show   : number;
   tail   : { cut: number; count: number; bytes: number };
@@ -182,18 +196,24 @@ export namespace Memory {
 
   // the chat of the project at `place` (none: home)
   export function load(dir: string, share: Memory["share"], place: Place = HOME): Memory {
-    const mem = Memory.read(dir, Store.open(dir, place), share, false);
-    Memory.roots(mem.count).flatMap((part) => Memory.todo(mem, part)).forEach((part) => Memory.ready(mem, part, true));
-    Memory.fit(mem);
-    Memory.save(mem);
-    return mem;
+    const store = Store.open(dir, place);
+    try {
+      const mem = Memory.read(dir, store, share, false);
+      Memory.roots(mem.count).flatMap((part) => Memory.todo(mem, part)).forEach((part) => Memory.ready(mem, part, true));
+      Memory.fit(mem);
+      Memory.save(mem);
+      return mem;
+    } catch (err) {
+      Store.close(store);
+      throw Store.why(path.basename(store.file) + " won't read", err, store.file);
+    }
   }
 
   // a store's chat as saved; alone: to read while another illi runs it
   // (Remote.ts), never saved, nothing built
   export function read(dir: string, store: Store, share: Memory["share"], alone: boolean): Memory {
     const mem: Memory = {
-      dir, store, cwd: "", count: Store.count(store), pick: null, goal: null, suggest: "", agent: null, work: [], cut: 0, show: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), logs: new Map(), ready: [],
+      dir, store, cwd: "", count: Store.count(store), pick: null, goal: null, suggest: "", agent: null, work: [], left: {}, lost: false, cut: 0, show: 0, tail: { cut: 0, count: 0, bytes: 0 }, nodes: new Map(), agents: new Map(), logs: new Map(), ready: [],
       view: { parts: [], size: 0, batch: false, high: Infinity, from: 0 }, seen: { parts: [], size: 0, batch: false, high: SEEN, from: 0 },
       busy: new Set(), calls: new Map(), hold: alone, done: alone, wait: new Set(), share,
     };
@@ -206,6 +226,9 @@ export namespace Memory {
     mem.suggest = typeof saved?.suggest === "string" ? saved.suggest : "";
     mem.agent = typeof saved?.agent === "string" ? saved.agent : null;
     mem.work = Array.isArray(saved?.work) ? saved.work : [];
+    const left = saved?.left !== null && typeof saved?.left === "object" && !Array.isArray(saved.left) ? saved.left : {};
+    mem.left = Object.fromEntries(Object.entries(left).map(([name, live]) => [name, Array.isArray(live) ? live.filter((l) => typeof l?.kind === "string" && typeof l?.text === "string").map((l): Left => (l.whole === true ? { kind: l.kind, text: l.text, whole: true } : { kind: l.kind, text: l.text })) : []]).filter(([, live]) => live.length > 0));
+    mem.lost = saved?.lost === true;
     // from <= cut <= count, show <= cut, whatever was saved
     mem.view.from = Math.min(index(saved?.top, 0), mem.count);
     mem.cut = Math.max(Math.min(index(saved?.cut, 0), mem.count), mem.view.from);
@@ -241,7 +264,7 @@ export namespace Memory {
       return;
     }
     const [chat, seen] = [mem.view, mem.seen].map((view): Kept => ({ parts: view.parts.map((part) => [part.l, part.i]), batch: view.batch }));
-    Store.save(mem.store, { ...chat, seen, pick: mem.pick, goal: mem.goal, suggest: mem.suggest, agent: mem.agent, work: mem.work, cut: mem.cut, show: mem.show, top: mem.view.from });
+    Store.save(mem.store, { ...chat, seen, pick: mem.pick, goal: mem.goal, suggest: mem.suggest, agent: mem.agent, work: mem.work, left: mem.left, lost: mem.lost, cut: mem.cut, show: mem.show, top: mem.view.from });
   }
 
   export function slot(l: number, i: number): number {

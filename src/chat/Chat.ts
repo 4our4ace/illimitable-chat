@@ -35,7 +35,8 @@ import { Lock } from "./Lock.ts";
 import { Logs, MAIN } from "./Logs.ts";
 import { Machine } from "../tools/Machine.ts";
 import { Suggest, type Suggested } from "./Suggest.ts";
-import { Memory, TOKEN, type Root, type Share } from "./Memory.ts";
+import { Memory, TOKEN, type Left, type Root, type Share } from "./Memory.ts";
+import { Store } from "./Store.ts";
 import { Pick } from "../ai/Pick.ts";
 import { Plugins } from "../config/Plugins.ts";
 import { Projects } from "./Projects.ts";
@@ -69,7 +70,8 @@ type Check = { call: Call; goal: string };
 // waiting; next: those sent as a stopped turn winds down, a new turn's;
 // after: the commands run after turns (config.AFTER); writes,
 // held: the posts logging, one after another, and the logging held
-// meanwhile (null: none); switched: a main agent switch not noted in the
+// meanwhile (null: none), holding: what those held steps log, kept in
+// the state meanwhile (Chat.hold); switched: a main agent switch not noted in the
 // chat yet, was: the agent and pick noted before it; picks: what each
 // main agent ran on when left, if not its own (by name, "": illi's);
 // suggest: the suggested reply; fit: the share of its context a turn
@@ -89,7 +91,13 @@ type Check = { call: Call; goal: string };
 // every call of the run (Plugins.context, asked as the chat opens); idle:
 // the wait after a reply before the hooks hear the user is waited on
 // (Chat.idle); told: the state each view was last told, each field's
-// JSON (Chat.tell)
+// JSON (Chat.tell); ahead: what streams waiting to be kept in the state
+// (Chat.ahead: AHEAD ms after a piece at most; null: none waits);
+// unwritten: a write to the chat failed, told, none since went through
+// (Chat.unwritten); stale: a save of the chat's state failed, told, none
+// since went through (Chat.save); restored: the chat's file was deleted as illi ran
+// and written back, told (Chat.kept); replaced: another file was put at
+// its path, told
 export type Chat = {
   mem   : Memory;
   tools : Tools;
@@ -110,6 +118,7 @@ export type Chat = {
   after : Promise<void>;
   writes: Promise<unknown>;
   held  : Array<() => void> | null;
+  holding: Left[];
   switched: boolean;
   was   : { agent: string | null; pick: string } | null;
   picks : Map<string, Pick>;
@@ -128,6 +137,11 @@ export type Chat = {
   idle  : ReturnType<typeof setTimeout> | undefined;
   told  : WeakMap<Sock, Record<string, string>>;
   asking: boolean;
+  ahead : ReturnType<typeof setTimeout> | null;
+  unwritten: boolean;
+  stale : boolean;
+  restored: boolean;
+  replaced: boolean;
 };
 
 // a question asked of the user (Chat.question), and what its answer does
@@ -178,6 +192,16 @@ const REFITS     = 3;
 // that the account takes only its standard one (Chat.capped)
 const CAPPED     = 0.75;
 const GO_ON      = "Go on where you were.";
+
+// how long a piece streamed waits at most to be kept in the chat's
+// state (Chat.ahead): what a crash or a kill can lose of a reply
+const AHEAD      = 2000;
+
+// a reply cut short, marked as illi's loop marks one (Agent.fail)
+const CUT_OFF    = "\n[cut off]";
+
+// the resume note's words for a tool call a quit or a crash cut as it ran
+const CALL_CUT   = " A tool call logged without its result was cut as it ran: whether it did its work is unknown, so check before running it again.";
 const STAY       = "Send a message to go on (autocontinue is off).";
 const REFIT      = "The chat outgrew #'s window: more of it is summarized now, each summary a zoom away. " + GO_ON;
 const CAPPED_NOTE = "This @ account takes at most # of $'s window, kept from now on: more of the chat is summarized now, each summary a zoom away. " + GO_ON;
@@ -265,8 +289,10 @@ const RECAP_STOP = "Compaction stopped; the chat is as it was.";
 const HELLO      = "Hi, I'm illi, short for illimitable: an AI, so I can make mistakes. One chat that never ends, kept in a memory tree, the newest messages in the most detail. I work in the folder you start me in; each git repo gets a chat of its own. Ask me anything, for days, weeks, years; /help lists the commands.";
 const HELLO_LINE = "illi: hello: illi (illimitable), one endless chat in a memory tree, one per git repo; works in the folder it starts in; /help for commands.";
 
-// told once the model to search by meaning is downloaded (Embed.fetch)
-const MEANT = "Search now finds what's close in meaning too, not only the words: illi downloaded its small search model (33 MB), once.";
+// told once the model to search by meaning is downloaded (Embed.fetch);
+// once it first fails to (WHY: why; tried again past a wait, Embed.due)
+const MEANT   = "Search now finds what's close in meaning too, not only the words: illi downloaded its small search model (33 MB), once.";
+const UNMEANT = "Search finds words only for now: illi couldn't download its small search model to search by meaning too (WHY). It tries again later.";
 
 // how often the accounts are looked at (ms: config.config_accounts), a
 // provider /login connected or let go in another terminal offered or
@@ -303,10 +329,10 @@ export namespace Chat {
     const chat: Chat = {
       mem, tools, pick, socks: new Set(), busy: false, call: null, model: "", asked: false, open: 0, sent: [], wait: [], next: [],
       halt: new AbortController(), live: [], calls: {}, eye: { parts: [], from: 0 }, after: Promise.resolve(),
-      writes: Promise.resolve(), held: null, switched: false, was: null, picks: new Map(),
+      writes: Promise.resolve(), held: null, holding: [], switched: false, was: null, picks: new Map(),
       suggest: { on: false, due: false, text: mem.suggest, call: null, passed: false, unused: 0 }, fit: 1, beside: new Map(), refits: 0, unmarked: false, asks: [], compacting: false,
       goings: 0, going: false, saying: Promise.resolve(), checking: null, context: Promise.resolve([]), idle: undefined,
-      told: new WeakMap(), asking: false,
+      told: new WeakMap(), asking: false, ahead: null, unwritten: false, stale: false, restored: false, replaced: false,
     };
     chat.context = Plugins.context({ cwd });
     Machine.watch(() => Chat.change(chat));
@@ -341,15 +367,23 @@ export namespace Chat {
     // given their vectors too once the model to search by meaning is here;
     // not yet (and `meaning` on), a terminal's illi downloads it first, in
     // the background, told once done, then they're given theirs (a pipe's
-    // illi ends before it would be done)
+    // illi ends before it would be done); one that fails is logged, told
+    // the first time, and tried again only past a wait (Embed.due). Ready,
+    // the fetch only sweeps part files left beside it
     Projects.index(mem.store, Embed.use(config.ROOT, config.MEANING));
-    if (config.MEANING && process.stdin.isTTY === true && process.stdout.isTTY === true && !Embed.ready(config.ROOT)) {
+    if (config.MEANING && process.stdin.isTTY === true && process.stdout.isTTY === true && Embed.due(config.ROOT)) {
       Embed.fetch(config.ROOT).then((got) => {
         if (got && !chat.mem.done) {
           Chat.note(chat, MEANT);
           Projects.index(chat.mem.store, Embed.use(config.ROOT, config.MEANING));
         }
-      }, () => {});
+      }, (err) => {
+        const why = String(err?.message ?? err).replace(/\.$/, "");
+        console.error("meaning: the search model didn't download: " + why);
+        if (Embed.failed(config.ROOT)?.tries === 1 && !chat.mem.done) {
+          Chat.note(chat, UNMEANT.replace("WHY", why));
+        }
+      });
     }
     if (Providers.of(chat.pick.vendor)?.windows?.() !== false) {
       Chat.cut(chat);
@@ -365,9 +399,11 @@ export namespace Chat {
       stuck = why !== "";
     };
     const work = mem.work;
+    Chat.orphans(chat);
+    const cut = Chat.left(chat);
     Tools.todo_finished(tools);
     Compactor.pump(mem);
-    Chat.resume(chat, work).finally(() => Chat.change(chat)).catch((err) => console.error("illi: resume: " + (err?.message ?? err)));
+    Chat.resume(chat, work, cut).finally(() => Chat.change(chat)).catch((err) => console.error("illi: resume: " + (err?.message ?? err)));
     return chat;
   }
 
@@ -390,13 +426,16 @@ export namespace Chat {
   // still being asked, dropped); then the lock let go (keep: kept,
   // Lock.release), so the next illi in the project (another terminal's
   // view: Remote.ts) opens it as left. Background jobs running are noted
-  // first (Chat.leaving)
+  // first (Chat.leaving), and what streams logged (Chat.cutoff: the stop's
+  // own end would come once the chat's file is closed)
   export function close(chat: Chat, keep = false): void {
     FOLLOWED.delete(chat);
     Chat.leaving(chat);
+    Chat.cutoff(chat);
     Chat.stop(chat, null);
     chat.suggest.call?.stop();
     chat.suggest.call = null;
+    Chat.kept(chat);
     Memory.stop(chat.mem);
     Lock.release(keep);
   }
@@ -485,7 +524,106 @@ export namespace Chat {
   export function leaving(chat: Chat): void {
     const jobs = Machine.background();
     if (jobs.length > 0) {
-      Chat.push(chat, null, "note","illi quit, stopping its background jobs: " + jobs.map((j) => j.command + " (" + j.agent + "'s)").join(", ") + ".");
+      Chat.safely(chat, () => Chat.push(chat, null, "note", "illi quit, stopping its background jobs: " + jobs.map((j) => j.command + " (" + j.agent + "'s)").join(", ") + "."));
+    }
+  }
+
+  // what streams as illi quits, the chat's and each agent's at work,
+  // logged at once, never held (Chat.leaving): each tool call awaiting
+  // its result as it is, without one (cut as it ran: the next start says
+  // so, mem.lost), the reply coming marked cut off, as a stop logs them
+  // (reasoning, as ever, not: Chat.lay); so no reply read on screen is
+  // lost, and what the stop's end would log after is gone (their calls
+  // and text cleared)
+  export function cutoff(chat: Chat): void {
+    const now = Chat.inflight(chat);
+    if (Object.keys(now).length === 0) {
+      return;
+    }
+    Chat.safely(chat, () => {
+      chat.mem.lost ||= Chat.lay(chat, now);
+    });
+    for (const at of [chat, ...Tools.working(chat.tools)]) {
+      [at.calls, at.live] = [{}, []];
+    }
+    chat.holding = [];
+    chat.mem.left = {};
+    Chat.save(chat);
+  }
+
+  // what streamed as illi last ended without logging it (a crash, a kill:
+  // kept ahead, Chat.ahead; a quit logs its own, Chat.cutoff), logged as
+  // the chat opens, as a quit would have; whether a tool call was cut as
+  // it ran, then or by the last quit. One that won't write stays kept, for
+  // the next start
+  export function left(chat: Chat): boolean {
+    const left = chat.mem.left;
+    if (Object.keys(left).length === 0 && !chat.mem.lost) {
+      return false;
+    }
+    try {
+      const lost = Chat.lay(chat, left) || chat.mem.lost;
+      [chat.mem.left, chat.mem.lost] = [{}, false];
+      Chat.save(chat);
+      return lost;
+    } catch (err: any) {
+      console.error("illi: logging what the last run left: " + (err?.message ?? err));
+      return chat.mem.lost;
+    }
+  }
+
+  // the processes the last holder's shells left running, as it was
+  // killed outright (its mark beside the lock: Lock.mark; a quit stops
+  // its own, Machine.end), stopped as that quit would have, and noted, so
+  // the model knows its background jobs are gone
+  export function orphans(chat: Chat): void {
+    const n = Machine.marked(Lock.mark(Machine.mark()));
+    if (n > 0) {
+      Chat.safely(chat, () => Chat.push(chat, null, "note", "illi's last run here ended without quitting (killed, or its machine went down): the " + (n === 1 ? "process" : n + " processes") + " its shells left running were stopped, its background jobs among them."));
+    }
+  }
+
+  // what streamed, by whom ("": the chat), logged: a tool call as it is,
+  // text marked cut off, an entry whole (one a held log hadn't taken:
+  // Chat.hold) as it is, each in its own log; reasoning never (the chat
+  // logs none: Chat.on); whether a call without its result was among it
+  export function lay(chat: Chat, left: Record<string, Left[]>): boolean {
+    let calls = false;
+    for (const [name, live] of Object.entries(left)) {
+      for (const l of live.filter((l) => l.text.trim() !== "" && l.kind !== "mind")) {
+        const text = l.kind === "tool" || l.whole === true ? l.text : l.text.trim() + CUT_OFF;
+        calls ||= l.kind === "tool" && l.whole !== true;
+        if (name === "") {
+          Chat.push(chat, null, l.kind, text);
+        } else {
+          Logs.push(chat.mem, name, l.kind, text);
+        }
+      }
+    }
+    return calls;
+  }
+
+  // what streams now, the chat's ("": after what its held log hasn't
+  // taken yet, Chat.hold) and each agent's at work, those with any text
+  // alone; a recap's none (a quit drops it: Chat.running)
+  export function inflight(chat: Chat): Record<string, Left[]> {
+    const all: Array<[string, Left[]]> = [["", [...chat.holding, ...(chat.compacting ? [] : chat.live)]], ...Tools.working(chat.tools).map((a): [string, Left[]] => [a.name, a.live])];
+    return Object.fromEntries(all.map(([name, live]): [string, Left[]] => [name, live.filter((l) => l.text.trim() !== "")]).filter(([, live]) => live.length > 0));
+  }
+
+  // what streams kept in the chat's state as it changes (Memory left), so
+  // a start after a crash or a kill logs it (Chat.left): at once as a tool
+  // call starts or ends, as an entry is logged; a piece streamed, AHEAD ms
+  // later at most (Chat.delta)
+  export function ahead(chat: Chat): void {
+    if (chat.ahead !== null) {
+      clearTimeout(chat.ahead);
+      chat.ahead = null;
+    }
+    const now = Chat.inflight(chat);
+    if (!chat.mem.done && JSON.stringify(now) !== JSON.stringify(chat.mem.left)) {
+      chat.mem.left = now;
+      Chat.save(chat);
     }
   }
 
@@ -563,19 +701,28 @@ export namespace Chat {
         const held = chat.held ?? [];
         chat.held = null;
         held.forEach((step) => step());
+        Chat.ahead(chat);
       }
     });
     chat.writes = run.catch(() => {});
     return run;
   }
 
-  // a step that logs to the chat: now, or once the post logging ends
-  export function hold(chat: Chat, step: () => void): void {
+  // a step that logs to the chat: now, or once the post logging ends,
+  // what it logs (entries) kept in the state meanwhile (holding:
+  // Chat.inflight), so a kill as it waits loses none; taken out as the
+  // step runs
+  export function hold(chat: Chat, step: () => void, entries: Left[] = []): void {
     if (chat.held === null) {
       step();
-    } else {
-      chat.held.push(step);
+      return;
     }
+    chat.holding.push(...entries);
+    chat.held.push(() => {
+      chat.holding = chat.holding.filter((e) => !entries.includes(e));
+      step();
+    });
+    Chat.ahead(chat);
   }
 
   // a message logged: to the running call if it goes whole in what the
@@ -889,7 +1036,7 @@ export namespace Chat {
       Chat.note(chat, why.replace(GO_ON, STAY));
       return false;
     }
-    Chat.hold(chat, () => Chat.take(chat, Chat.push(chat, null, "note", why)));
+    Chat.hold(chat, () => Chat.take(chat, Chat.push(chat, null, "note", why)), [{ kind: "note", text: why, whole: true }]);
     return true;
   }
 
@@ -906,7 +1053,7 @@ export namespace Chat {
       Chat.note(chat, UNMARKED.replace(GO_ON, STAY));
       return false;
     }
-    Chat.hold(chat, () => Chat.take(chat, Chat.push(chat, null, "note", UNMARKED)));
+    Chat.hold(chat, () => Chat.take(chat, Chat.push(chat, null, "note", UNMARKED)), [{ kind: "note", text: UNMARKED, whole: true }]);
     return true;
   }
 
@@ -919,15 +1066,52 @@ export namespace Chat {
   }
 
   // a summary's try failed (Memory's stuck): why, as a note; how to stop
-  // a turn waiting on it
+  // a turn waiting on it. While the chat's logging is held (a /compact's
+  // recap waits on the summaries: Chat.writing), told to the views at once
+  // instead, never logged, as the note would come only once the wait it
+  // explains is over
   export function stuck(chat: Chat, why: string): void {
     const turn = Chat.waits(chat) !== SUMMARIES ? "" : chat.compacting ? " (Esc stops the compaction)" : " (Esc stops this turn)";
-    Chat.note(chat, "Summaries are stuck: " + why.replace(/\.$/, "") + "; retrying every minute" + turn + ".");
+    const text = "Summaries are stuck: " + why.replace(/\.$/, "") + "; retrying every minute" + turn + ".";
+    if (chat.held !== null) {
+      Chat.all(chat, { $: "note", text });
+    } else {
+      Chat.note(chat, text);
+    }
   }
 
-  // a note in the chat, why work ended as it did
+  // a note in the chat, why work ended as it did; one that won't write,
+  // told to the views all the same (Chat.unwritten)
   export function note(chat: Chat, text: string): void {
-    Chat.hold(chat, () => Chat.push(chat, null, "note", text));
+    Chat.hold(chat, () => Chat.safely(chat, () => Chat.push(chat, null, "note", text), text), [{ kind: "note", text, whole: true }]);
+  }
+
+  // a write to the chat (or an agent's log) that may fail, a full disk
+  // or a file illi may not write: its failure told, never thrown
+  // (Chat.unwritten), with `text`, what it wrote, shown all the same
+  export function safely(chat: Chat, write: () => void, text?: string): void {
+    try {
+      write();
+    } catch (err) {
+      Chat.unwritten(chat, err, text);
+    }
+  }
+
+  // a write to the chat failed: what runs stopped (it can't keep what it
+  // does), and the views told once, a note never logged, till a write
+  // goes through again; illi goes on, so the user can make room and send
+  // again. `text`: what the write held, shown to the views as a note
+  export function unwritten(chat: Chat, err: unknown, text?: string): void {
+    if (text !== undefined) {
+      Chat.all(chat, { $: "note", text });
+    }
+    if (chat.unwritten) {
+      return;
+    }
+    chat.unwritten = true;
+    console.error("illi: writing the chat: " + String((err as any)?.message ?? err));
+    Chat.all(chat, { $: "note", text: "Can't save the chat: " + Chat.unsaved(err) + " (" + chat.mem.dir + "). What ran is stopped; send a message to go on once it's fixed." });
+    Chat.stop(chat, null);
   }
 
   // to the chat (in pages), or an agent's log; each told to every view,
@@ -935,8 +1119,12 @@ export namespace Chat {
   // an entry of its own just before the message (the turn gets it among
   // the recent ones)
   export function push(chat: Chat, agent: Agent | null, kind: Kind, text: string, images: string[] = []): Msg {
+    if (chat.mem.done) {
+      return { id: chat.mem.count, end: chat.mem.count };
+    }
     if (agent !== null) {
       const id = Logs.push(chat.mem, agent.name, kind, text);
+      chat.unwritten = false;
       Chat.all(chat, { $: "entry", agent: agent.name, id, kind, text });
       void Plugins.emit("message", { id, kind, text, agent: agent.name });
       return { id, end: id + 1 };
@@ -946,6 +1134,7 @@ export namespace Chat {
       [chat.switched, chat.was] = [false, null];
     }
     const roots = Chat.logged(chat, [...note, { kind, text, images }]);
+    chat.unwritten = false;
     return { id: roots[note.length].i, end: chat.mem.count };
   }
 
@@ -1014,12 +1203,13 @@ export namespace Chat {
     } else if (ev.kind !== "user") {
       const call = ev.of === undefined ? undefined : at.calls[ev.of];
       delete at.calls[ev.of ?? ""];
-      Chat.logs(chat, agent, () => {
+      const entries: Left[] = [...(call === undefined ? [] : [{ kind: "tool" as const, text: call, whole: true }]), { kind: ev.kind, text: ev.text, whole: true }];
+      Chat.logs(chat, agent, () => Chat.safely(chat, () => {
         if (call !== undefined) {
           Chat.push(chat, agent, "tool", call);
         }
         Chat.push(chat, agent, ev.kind, ev.text);
-      });
+      }), entries);
     }
     Chat.live(chat, agent, Chat.waiting(at));
   }
@@ -1027,9 +1217,9 @@ export namespace Chat {
   // a step that logs: an agent's at once (its log is its own, in no order
   // with the chat's, so a recap holds none back), the chat's as Chat.hold
   // has it
-  export function logs(chat: Chat, agent: Agent | null, step: () => void): void {
+  export function logs(chat: Chat, agent: Agent | null, step: () => void, entries: Left[] = []): void {
     if (agent === null) {
-      Chat.hold(chat, step);
+      Chat.hold(chat, step, entries);
     } else {
       step();
     }
@@ -1040,6 +1230,10 @@ export namespace Chat {
   export function delta(chat: Chat, agent: Agent | null, ev: Event & { $: "Delta" }): void {
     live_push((agent ?? chat).live, ev.kind, ev.text, ev.fresh);
     Chat.all(chat, { $: "delta", agent: agent?.name, kind: ev.kind, text: ev.text, fresh: ev.fresh });
+    if (chat.ahead === null) {
+      chat.ahead = setTimeout(() => Chat.ahead(chat), AHEAD);
+      chat.ahead.unref?.();
+    }
   }
 
   // what streams once an entry came: the tool calls awaiting their
@@ -1055,7 +1249,7 @@ export namespace Chat {
     const at = agent ?? chat;
     const calls = Object.values(at.calls);
     at.calls = {};
-    Chat.logs(chat, agent, () => calls.forEach((call) => Chat.push(chat, agent, "tool", call)));
+    Chat.logs(chat, agent, () => Chat.safely(chat, () => calls.forEach((call) => Chat.push(chat, agent, "tool", call))), calls.map((text) => ({ kind: "tool", text })));
     Chat.live(chat, agent, []);
   }
 
@@ -1072,10 +1266,12 @@ export namespace Chat {
     }
   }
 
-  // what streams for the chat (agent: null) or an agent, set and told
+  // what streams for the chat (agent: null) or an agent, set and told,
+  // and kept (Chat.ahead)
   export function live(chat: Chat, agent: Agent | null, live: Live[]): void {
     (agent ?? chat).live = live;
     Chat.all(chat, { $: "live", agent: agent?.name, live });
+    Chat.ahead(chat);
   }
 
   // an agent's report, once it ends: a turn of its own, unless stopped
@@ -1084,12 +1280,14 @@ export namespace Chat {
     Chat.unanswered(chat, agent);
     Chat.live(chat, agent, []);
     Chat.hold(chat, () => {
-      const msg = Chat.push(chat, null, "work", text);
-      if (!stopped) {
-        Chat.take(chat, msg);
-      }
+      Chat.safely(chat, () => {
+        const msg = Chat.push(chat, null, "work", text);
+        if (!stopped) {
+          Chat.take(chat, msg);
+        }
+      }, text);
       Chat.change(chat);
-    });
+    }, [{ kind: "work", text, whole: true }]);
   }
 
   // config.AFTER, a shell command, after each turn, in illi's environment
@@ -1109,12 +1307,13 @@ export namespace Chat {
   }
 
   // the work a quit cut goes on, told so: each agent, and illi's turn by a
-  // note
-  export async function resume(chat: Chat, work: string[]): Promise<void> {
+  // note, saying whether a tool call was cut as it ran (cut: its effect
+  // unknown, so the model checks before running it again)
+  export async function resume(chat: Chat, work: string[], cut = false): Promise<void> {
     if (work.length === 0) {
       return;
     }
-    const text = "illi restarted, cutting " + work.join(", ") + "; nothing was lost: go on.";
+    const text = "illi restarted, cutting " + work.join(", ") + "." + (cut ? CALL_CUT : "") + " Go on.";
     const msg = Chat.push(chat, null, "note", text);
     await Promise.all(work.map((w) => (w === TURN ? Chat.take(chat, msg) : Tools.tell(chat.tools, w, text))));
   }
@@ -1294,13 +1493,49 @@ export namespace Chat {
   }
 
   // the chat's state saved; a save that fails is told to the views, never
-  // thrown (nothing stops for it: what ran, the suggested reply)
+  // thrown (nothing stops for it: what ran, the suggested reply). Its
+  // file looked at too (Chat.kept)
   export function save(chat: Chat): void {
     try {
       Memory.save(chat.mem);
+      chat.stale = false;
     } catch (err: any) {
-      console.error("illi: saving the chat: " + err.message);
-      Chat.all(chat, { $: "note", text: "Can't save the chat: " + Chat.unsaved(err) + " (" + chat.mem.dir + ")." });
+      if (!chat.stale) {
+        chat.stale = true;
+        console.error("illi: saving the chat: " + err.message);
+        Chat.all(chat, { $: "note", text: "Can't save the chat: " + Chat.unsaved(err) + " (" + chat.mem.dir + ")." });
+      }
+    }
+    Chat.kept(chat);
+  }
+
+  // the chat's file deleted while illi runs (what it writes would go
+  // nowhere once it quits): written back at once from what illi holds
+  // open, illi going on in it (Store.restore), the views told the first
+  // time; looked at once more as illi quits. One another file replaced
+  // is told alone, left as it is
+  export function kept(chat: Chat): void {
+    const store = chat.mem.store;
+    if (chat.mem.done) {
+      return;
+    }
+    const lost = Store.lost(store);
+    if (lost === null) {
+      return;
+    }
+    try {
+      if (lost === "gone") {
+        Store.restore(store);
+        if (!chat.restored) {
+          chat.restored = true;
+          Chat.all(chat, { $: "note", text: "The chat's file was deleted as illi ran: written back (" + store.file + "), illi goes on in it." });
+        }
+      } else if (!chat.replaced) {
+        chat.replaced = true;
+        Chat.all(chat, { $: "note", text: "The chat's file was replaced as illi ran (" + store.file + "): what illi logs from now on is lost as it quits. Quit and start illi again." });
+      }
+    } catch (err: any) {
+      console.error("illi: writing the chat back: " + (err?.message ?? err));
     }
   }
 
@@ -1340,8 +1575,17 @@ export namespace Chat {
     Chat.send(sock, { $: "ack", id: msg?.id, ...out });
   }
 
-  // what a message or act that threw answers
+  // what a message or act that threw answers: a write to the chat that
+  // failed in plain words (Chat.unsaved)
   export function fail(err: any): Answer {
+    const code = String(err?.code ?? "");
+    const why  = Chat.unsaved(err);
+    if (code.startsWith("SQLITE_")) {
+      return { error: "Can't save the chat: " + why + "." };
+    }
+    if (typeof err?.path === "string" && why !== String(err?.message ?? err)) {
+      return { error: why[0].toUpperCase() + why.slice(1) + ": " + err.path + "." };
+    }
     return { error: String(err?.message ?? err) };
   }
 

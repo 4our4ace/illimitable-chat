@@ -48,6 +48,8 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { Flock } from "../config/Flock.ts";
+import { whole } from "./Clip.ts";
 
 // Types
 // =====
@@ -79,6 +81,10 @@ type Seen = { file: string; stamp: string; data: Record<string, any> | null | st
 
 // Constants
 // =========
+
+// how long a change to the approvals waits on another illi's (Flock
+// beside) before it gives up
+const LOCKED = 5000;
 
 const EFFECTS: Effect[] = ["allow", "ask", "deny"];
 
@@ -269,29 +275,29 @@ export namespace Permissions {
     }
   }
 
-  // a project's saved approvals changed: the file read now, the project's
-  // approvals (an older illi's grants among them, kept as approvals from
-  // now on) changed, the file written to a temporary one and renamed
-  // over it; null: done, else why not (one that won't read is left as it
-  // is)
+  // a project's saved approvals changed, under the file's lock (Flock
+  // beside: another illi's saved at that moment kept too): the file read
+  // then, the project's approvals (an older illi's grants among them,
+  // kept as approvals from now on) changed, the file written whole (Clip
+  // whole); null: done, else why not (one that won't read is left as it
+  // is; another illi held the lock past LOCKED)
   export function change(file: string, folder: string, edit: (saved: Rule[]) => Rule[]): string | null {
-    const got = Permissions.parse(file);
-    if (typeof got === "string") {
-      return got;
-    }
-    const data = got ?? {};
-    const object = (x: unknown): x is Record<string, any> => x !== null && typeof x === "object" && !Array.isArray(x);
-    const projects = object(data.projects) ? data.projects : (data.projects = {});
-    const { granted: _, ...project } = object(projects[folder]) ? projects[folder] : {};
-    projects[folder] = { ...project, saved: edit(Permissions.saved(projects[folder])).map((s) => ({ action: s.action, resource: s.resource })) };
-    const tmp = file + "." + process.pid + ".tmp";
     try {
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(tmp, JSON.stringify(data, null, 2) + "\n");
-      fs.renameSync(tmp, file);
-      return null;
+      const why = Flock.beside(file, LOCKED, () => {
+        const got = Permissions.parse(file);
+        if (typeof got === "string") {
+          return got;
+        }
+        const data = got ?? {};
+        const object = (x: unknown): x is Record<string, any> => x !== null && typeof x === "object" && !Array.isArray(x);
+        const projects = object(data.projects) ? data.projects : (data.projects = {});
+        const { granted: _, ...project } = object(projects[folder]) ? projects[folder] : {};
+        projects[folder] = { ...project, saved: edit(Permissions.saved(projects[folder])).map((s) => ({ action: s.action, resource: s.resource })) };
+        whole(file, JSON.stringify(data, null, 2) + "\n");
+        return null;
+      });
+      return why === undefined ? file + ": another illi is changing it just now" : why;
     } catch (err: any) {
-      fs.rmSync(tmp, { force: true });
       return file + ": " + String(err?.message ?? err);
     }
   }

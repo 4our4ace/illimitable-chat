@@ -62,7 +62,7 @@
 // (Projects.fill: Store.vec_make). All of it, step by step:
 // docs/storage.md.
 
-import { Database, type Statement } from "bun:sqlite";
+import { Database, constants, type Statement } from "bun:sqlite";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { Kind } from "../ai/AskAI.ts";
@@ -101,7 +101,7 @@ export type Found = { project: string; chat: number; first: number; n: number; t
 export type Cut = { n: number; more: boolean };
 
 // a project's file, its connection, the project and chat its rows are of
-export type Store = { file: string; db: Database; project: number; chat: number };
+export type Store = { file: string; db: Database; project: number; chat: number; ino?: number };
 
 // Constants
 // =========
@@ -216,7 +216,7 @@ export namespace Store {
         const at = Store.place(db, place, Store.name(file));
         if (at !== null) {
           Store.said_make(db, at.chat);
-          return { file, db, ...at };
+          return { file, db, ...at, ino: fs.statSync(file).ino };
         }
       } catch (err) {
         Store.shut(db);
@@ -256,15 +256,19 @@ export namespace Store {
       if (db !== null) {
         Store.shut(db);
       }
-      throw Store.why(path.basename(file) + " won't open", err);
+      throw Store.why(path.basename(file) + " won't open", err, file);
     }
   }
 
   // an error as a chat file's, said at start in one line (main.ts: "chat:
-  // ..."): what failed, then SQLite's words; one said so already, as is
-  export function why(what: string, err: any): Error {
+  // ..."): what failed, then SQLite's words, and for a file that is
+  // damaged (corrupt, or no database), what to do (file: its path); one
+  // said so already, as is
+  export function why(what: string, err: any, file = ""): Error {
     const text = String(err?.message ?? err);
-    return text.startsWith("chat: ") ? err : new Error("chat: " + what + ": " + text, { cause: err });
+    const code = String(err?.code ?? "");
+    const damaged = file !== "" && /^SQLITE_(CORRUPT|NOTADB)/.test(code) ? ". The file is damaged: move it away to start the project fresh (" + file + "), or save what it holds first with sqlite3's .recover" : "";
+    return text.startsWith("chat: ") ? err : new Error("chat: " + what + ": " + text + damaged, { cause: err });
   }
 
   // a connection's file in WAL mode, which it keeps once set: tried
@@ -379,6 +383,50 @@ export namespace Store {
   // a store's connection closed (Store.shut)
   export function close(store: Store): void {
     Store.shut(store.db);
+  }
+
+  // whether a store's file is still where it was opened: gone (deleted
+  // while illi holds it open: what illi writes goes nowhere once it
+  // closes), replaced (another file at its path), or there (null); one
+  // opened without its file's number (another project's, to read) is
+  // taken as there
+  export function lost(store: Store): "gone" | "replaced" | null {
+    if (store.ino === undefined) {
+      return null;
+    }
+    const at = fs.statSync(store.file, { throwIfNoEntry: false });
+    return at === undefined ? "gone" : at.ino !== store.ino ? "replaced" : null;
+  }
+
+  // a store's chat written whole to its path again, from what its open
+  // connection still holds (VACUUM INTO a file beside it, then moved in),
+  // its folder made again if gone; the store goes on in that file, on a
+  // connection to it in place of the old. The WAL and shared memory the
+  // deleted file left at the path go first (a WAL beside a file not its
+  // own would be read into it, the file then damaged); the old
+  // connection, its file moved, closes leaving the path's files be
+  // (SQLite's own check, its WAL kept besides). A failure leaves the
+  // store as it was
+  export function restore(store: Store): void {
+    const tmp = store.file + "." + process.pid + ".restore";
+    fs.mkdirSync(path.dirname(store.file), { recursive: true });
+    fs.rmSync(tmp, { force: true });
+    try {
+      store.db.run("vacuum into ?", [tmp]);
+      fs.rmSync(store.file + "-wal", { force: true });
+      fs.rmSync(store.file + "-shm", { force: true });
+      fs.renameSync(tmp, store.file);
+    } finally {
+      fs.rmSync(tmp, { force: true });
+    }
+    const db  = Store.connect(store.file, false);
+    const old = store.db;
+    store.db  = db;
+    store.ino = fs.statSync(store.file).ino;
+    try {
+      old.fileControl(constants.SQLITE_FCNTL_PERSIST_WAL, 1);
+    } catch {}
+    Store.shut(old);
   }
 
   // a connection closed, its statements finalized first so it closes at

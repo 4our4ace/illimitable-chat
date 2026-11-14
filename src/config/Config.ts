@@ -38,7 +38,8 @@ import type { Vendor } from "../ai/AskAI.ts";
 import { LABELS, VENDORS, Pick, type Model, type Offer } from "../ai/Pick.ts";
 import { MARK, MARKED, profile_pick } from "./Profiles.ts";
 import type { Mode } from "./Update.ts";
-import { json_object } from "../tools/Clip.ts";
+import { json_object, whole } from "../tools/Clip.ts";
+import { Flock } from "./Flock.ts";
 import { Accounts, ENV, OWN, type Store } from "./Accounts.ts";
 import { FACTS, Vendors } from "../providers/Vendors.ts";
 import type { Rule } from "../providers/Provider.ts";
@@ -142,6 +143,10 @@ export const SETTINGS: Record<Key, Setting> = TABLE;
 // the offer is made: a new one is offered (unless `models` names those
 // offered), each one's window known; kept in the root, every profile's
 export const MODELS_FILE = ROOT + "/models.json";
+
+// how long a change to one of illi's files waits on another illi's
+// (Flock beside) before it gives up
+export const LOCKED = 5000;
 
 // what happened to the radar's lines at the side (shown, opened, pinned,
 // dismissed), counted by score (Related.ts related_count), and where a
@@ -740,40 +745,47 @@ export function config_models_tell(vendor: Vendor, of: string): void {
   config_models_write((file) => ({ ...file, told: { ...(file.told ?? {}), [vendor]: { of: Bun.hash(of).toString(16), at: new Date().toISOString() } } }));
 }
 
-// models.json changed: read, changed, written whole, then moved over (a
-// failure logged, the file as it was)
+// models.json changed under its lock (Flock beside): read, changed,
+// written whole (Clip whole); a failure logged, the file as it was
 function config_models_write(change: (file: ReturnType<typeof config_models_file>) => object): void {
-  const tmp = MODELS_FILE + "." + process.pid + ".tmp";
   try {
-    fs.mkdirSync(ROOT, { recursive: true });
-    fs.writeFileSync(tmp, JSON.stringify(change(config_models_file()), null, 2) + "\n");
-    fs.renameSync(tmp, MODELS_FILE);
+    const done = Flock.beside(MODELS_FILE, LOCKED, () => whole(MODELS_FILE, JSON.stringify(change(config_models_file()), null, 2) + "\n"));
+    if (done === undefined) {
+      console.error("models: " + MODELS_FILE + " wasn't kept: another illi held it");
+    }
   } catch (err: any) {
     console.error("models: " + MODELS_FILE + " wasn't kept: " + err?.message);
   }
 }
 
 // a key set in config.json (null: taken out, so its default holds), the
-// file's other keys kept; what changes while illi runs (config_live) is
-// read again, the rest at the next start. One that won't do (config_check)
-// throws, the file untouched
+// file's other keys kept, under its lock (Flock beside: another illi's
+// change at that moment kept too), written whole (Clip whole); what
+// changes while illi runs (config_live) is read again, the rest at the
+// next start. One that won't do (config_check) throws, the file
+// untouched, as does one another illi's lock held off
 export function config_set(key: Key, value: unknown, root = false): void {
   const why = config_check(key, value);
   if (why !== null) {
     throw new Error(why);
   }
-  const [dir, at] = root ? [ROOT, ROOT + "/config.json"] : [DIR, PATH];
-  const file = fs.existsSync(at) ? JSON.parse(fs.readFileSync(at, "utf8")) : {};
-  if (value === null) {
-    delete file[key];
-  } else {
-    file[key] = value;
+  const at = root ? ROOT + "/config.json" : PATH;
+  const done = Flock.beside(at, LOCKED, () => {
+    const file = fs.existsSync(at) ? JSON.parse(fs.readFileSync(at, "utf8")) : {};
+    if (value === null) {
+      delete file[key];
+    } else {
+      file[key] = value;
+    }
+    for (const was of Object.keys(RENAMED).filter((was) => RENAMED[was] === key)) {
+      delete file[was];
+    }
+    whole(at, JSON.stringify(file, null, 2) + "\n");
+    return true;
+  });
+  if (done === undefined) {
+    throw new Error("another illi is changing " + at + " just now: try again in a moment");
   }
-  for (const was of Object.keys(RENAMED).filter((was) => RENAMED[was] === key)) {
-    delete file[was];
-  }
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(at, JSON.stringify(file, null, 2) + "\n");
   FILE = config_files();
   GONE.delete(key);
   config_offer();

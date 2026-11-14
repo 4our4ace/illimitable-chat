@@ -16,6 +16,7 @@
 
 import { dlopen, read, type Pointer } from "bun:ffi";
 import * as fs from "node:fs";
+import * as path from "node:path";
 
 // flock(2)'s operations
 const EX = 2;
@@ -110,6 +111,35 @@ export namespace Flock {
         Flock.free(fd);
       }
       fs.closeSync(fd);
+    }
+  }
+
+  // f run holding a file's own lock (.<name>.lock beside it, its folder
+  // made), so illis changing the file (read, changed, written whole) one
+  // at a time never lose another's change; undefined: another held it
+  // past `wait` ms, f not run. A folder illi may not make the lock in
+  // (one it can write the file in all the same: Clip whole) runs f
+  // without it, as no other illi of this user can take it there either
+  export function beside<T>(file: string, wait: number, f: () => T): T | undefined {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const lock = path.join(path.dirname(file), "." + path.basename(file) + ".lock");
+    try {
+      fs.closeSync(fs.openSync(lock, "a", 0o600));
+    } catch (err: any) {
+      if (["EACCES", "EPERM", "EROFS"].includes(err?.code)) {
+        return f();
+      }
+      throw err;
+    }
+    return Flock.sync(lock, wait, f);
+  }
+
+  // the same where a change left out is no failure (one made again, or
+  // asked again, later): another illi holding the lock past `wait` said
+  // in the log alone
+  export function kept(file: string, wait: number, f: () => void): void {
+    if (Flock.beside(file, wait, () => (f(), true)) === undefined) {
+      console.error("illi: another illi held " + file + " past " + wait / 1000 + " s, so a change to it isn't kept");
     }
   }
 

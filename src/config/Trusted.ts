@@ -18,6 +18,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as config from "./Config.ts";
+import { Flock } from "./Flock.ts";
+import { whole } from "../tools/Clip.ts";
 import { Projects } from "../chat/Projects.ts";
 
 // Constants
@@ -72,20 +74,21 @@ export namespace Trusted {
     return KEPT;
   }
 
-  // a folder trusted from now on: kept (the file written whole and then
-  // put in place, so a crash between leaves the old one), or, home's or
-  // one above it, for this run
+  // a folder trusted from now on: kept (under the file's lock, read as it
+  // is then, so another illi's at that moment is kept too: Flock kept;
+  // written whole, Clip whole), or, home's or one above it, or one
+  // another illi's lock held off, for this run
   export function trust(folder: string): void {
     RUN.add(folder);
     if (Trusted.home(folder)) {
       return;
     }
-    KEPT = null;
-    const folders = [...new Set([...Trusted.kept(), folder])].sort();
-    fs.mkdirSync(path.dirname(FILE), { recursive: true });
-    fs.writeFileSync(FILE + ".tmp", JSON.stringify({ folders }, null, 2) + "\n");
-    fs.renameSync(FILE + ".tmp", FILE);
-    KEPT = folders;
+    Flock.kept(FILE, config.LOCKED, () => {
+      KEPT = null;
+      const folders = [...new Set([...Trusted.kept(), folder])].sort();
+      whole(FILE, JSON.stringify({ folders }, null, 2) + "\n");
+      KEPT = folders;
+    });
   }
 
 }

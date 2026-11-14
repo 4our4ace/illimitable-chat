@@ -5,12 +5,16 @@
 // to its head and tail as it streams (Machine.ts); any text kept is never
 // cut, but goes in pages (a message logged, a zoom, a read). It imports
 // nothing of illi's, so any file may use what it holds: a stream's lines
-// and events, a file's JSON, the <history> line recall appends to a
+// and events, a file's JSON, a file's writes made durable (fsynced), a
+// file written whole, never half there (whole), a
+// request that never reached its host in plain words (unreached), the
+// <history> line recall appends to a
 // result (history_block, history_bare: the radar's thread reads results
 // through it too). A clip is a copy (a slice would keep its source
 // alive).
 
 import * as fs from "node:fs";
+import * as path from "node:path";
 
 // Constants
 // =========
@@ -21,6 +25,20 @@ export const CAP = 30000;
 // blank line, then the tag round one line, a line's id first (#1234+16:
 // View.block_name) and " · " after it
 const HISTORY = /\n\n<history>#\d+(?:\+\d+)? · [^\n]*<\/history>$/;
+
+// the failures that leave a file written whole in place instead (whole):
+// no file may be made, changed or moved beside it (a folder illi may not
+// write in, a group it's in none of, a file mounted on its own, another
+// file system between, a name too long for the suffix, a file system
+// that keeps no modes); never a full or failing disk
+const IN_PLACE = ["EACCES", "EPERM", "EBUSY", "EXDEV", "ENAMETOOLONG", "ENOTSUP", "EOPNOTSUPP"];
+
+// Globals
+// =======
+
+// whole's temporary files made by this process so far (each its own
+// name)
+let WHOLE = 0;
 
 // Clip
 // ====
@@ -120,6 +138,118 @@ export async function* stream_events(stream: ReadableStream<Uint8Array>): AsyncG
   if (data.length > 0) {
     yield data.join("\n");
   }
+}
+
+// a file's (or a folder's) writes put on disk (fsync), so a rename after
+// it never lands an empty or a short file after a power cut, nor one
+// that is lost (its folder synced after the rename). Thrown: why a
+// file's won't; a folder's is left as it is where the system won't sync
+// one
+export function fsynced(p: string, folder = false): void {
+  try {
+    const fd = fs.openSync(p, "r");
+    try {
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (err) {
+    if (!folder) {
+      throw err;
+    }
+  }
+}
+
+// a file written whole, never half there: its new contents to a file
+// beside it (named by the process, and a count; its owner's alone till
+// it's written, so a private file's words never show to others
+// meanwhile), made durable, then moved over it, so a crash, a full disk
+// or a reader at that moment meets the old file or the new, never a part
+// of either. Its mode and group kept; through a link, the file it leads
+// to. Written in place instead, as before, where a move would part the
+// file from what it is: one not a plain file (a fifo, a device), one
+// with other names (hard links), another owner, a group illi can't give
+// a file, a link leading nowhere; and where no file can be made or moved
+// beside it (IN_PLACE: a folder illi may not write in, a file mounted on
+// its own, a name too long for the suffix). A full or failing disk never
+// falls back so, as that would cut the file short: thrown, the file as
+// it was. Its folder made where new. A move still loses what illi can't
+// see: extended attributes and ACLs
+export function whole(file: string, data: string | Uint8Array): void {
+  let target = file;
+  let was: fs.Stats | null = null;
+  try {
+    target = fs.realpathSync(file);
+    was = fs.statSync(target);
+  } catch {
+    if (fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      fs.writeFileSync(file, data);
+      return;
+    }
+  }
+  if (was !== null && (!was.isFile() || was.nlink > 1 || (process.getuid !== undefined && was.uid !== process.getuid()))) {
+    fs.writeFileSync(target, data);
+    return;
+  }
+  const dir = path.dirname(target);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmp = path.join(dir, "." + path.basename(target) + "." + process.pid + "." + ++WHOLE + ".tmp");
+  try {
+    const fd = fs.openSync(tmp, "wx", was === null ? 0o666 : 0o600);
+    try {
+      fs.writeFileSync(fd, data);
+      if (was !== null) {
+        if (fs.fstatSync(fd).gid !== was.gid) {
+          fs.fchownSync(fd, was.uid, was.gid);
+        }
+        fs.fchmodSync(fd, was.mode & 0o7777);
+      }
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    fs.renameSync(tmp, target);
+  } catch (err: any) {
+    try {
+      fs.rmSync(tmp, { force: true });
+    } catch {}
+    if (!IN_PLACE.includes(err?.code)) {
+      throw err;
+    }
+    fs.writeFileSync(target, data);
+    return;
+  }
+  fsynced(dir, true);
+}
+
+// a request that never reached its host, in plain words, by fetch's
+// error: "can't reach <host>", why (a certificate not trusted here, as
+// behind a proxy that inspects TLS; a name that won't resolve; a
+// refusal; no answer in time; a connection cut; else the error's code,
+// where it has one), and what to do, so a failure on a working
+// connection isn't read as being offline
+export function unreached(url: string, err?: unknown): string {
+  const e = err as { code?: unknown; name?: unknown } | undefined;
+  const code = typeof e?.code === "string" ? e.code : "";
+  const host = (() => {
+    try {
+      return new URL(url).host;
+    } catch {
+      return url;
+    }
+  })();
+  const why = /CERT|SELF_SIGNED|UNABLE_TO_(?:GET|VERIFY)|SSL|TLS/i.test(code)
+    ? " (its certificate isn't trusted here, " + code + "): behind a proxy that inspects TLS, set NODE_EXTRA_CA_CERTS to that proxy's certificate"
+    : /ENOTFOUND|EAI_AGAIN|DNS/i.test(code)
+      ? " (its name won't resolve): check your connection, or your proxy"
+      : /REFUSED/i.test(code)
+        ? " (the connection was refused): check your connection, or your proxy"
+        : /TIMEDOUT|Timeout/i.test(code + String(e?.name ?? ""))
+          ? " (no answer in time): check your connection"
+          : /RESET|CLOSED/i.test(code)
+            ? " (the connection was cut): check your connection, or your proxy"
+            : (code === "" ? "" : " (" + code + ")") + ": check your connection";
+  return "can't reach " + host + why;
 }
 
 // a file's JSON object; null: no file, not JSON, or not an object
