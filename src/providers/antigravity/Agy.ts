@@ -27,8 +27,10 @@ export const RELEASES = "https://github.com/google-antigravity/antigravity-cli/r
 // the oldest version illi runs: the one `agy acp` was first tried with
 // (1.5.0 put Google's ACP server in the CLI; 1.5.1 lists every model an
 // account offers to every client; 1.5.2 shows a session its own agent's
-// commands). A later pin may be newer; one older is never taken
-export const MINIMUM = "1.5.2";
+// commands), past the oldest tried with the hooks illi's gate on its own
+// tools is (1.5.5: Antigravity.hook; an older one may run none, and its
+// tools with them). A later pin may be newer; one older is never taken
+export const MINIMUM = "1.5.5";
 
 export const Agy = cli({
   name     : "Google's Antigravity CLI",

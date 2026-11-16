@@ -32,6 +32,13 @@
 // (Ask.searches), each asked of the user at illi's screen as Claude
 // Code's are (Tools.approve, through the call's tools URL); none else. A
 // call without tools (a summary, a goal check, a recap: `once`) has none.
+// The CLI offers the model its own tools whatever a session says (files,
+// commands, timers, agents and subagents of its own, the web's), some
+// run unasked, so a hook of illi's runs before each tool the model calls
+// (the gate: the CLI's own hooks, in the account's folder,
+// Antigravity.hook): illi's own go on, the rest are asked of illi
+// (Antigravity.judge: its web tools as above), and what's turned down is
+// told the model with why, so it goes on with illi's.
 // The chat goes after illi's prompt in the append, which the CLI passes
 // whole; the newest text alone is the message (its start too, past the
 // MESSAGE bytes the CLI keeps of one: it cuts the rest without a word),
@@ -119,7 +126,11 @@ type Proc = {
 // the calls through the forwarder so far; whether it was stopped (halt:
 // what it waits on stops then); a stop the CLI didn't honour in CANCEL on
 // a CLI others share: the call given up (gave, give), not waited for;
-// when its message went to the CLI (ms; 0: not yet)
+// when its message went to the CLI (ms; 0: not yet); the web tools' calls
+// the user allowed as the gate asked (Antigravity.judge), so the CLI
+// asking leave for one after is never asked of them again (each as
+// Antigravity.web says it); why the gate turned down each tool's call
+// (by its id), shown as its answer (the CLI tells none)
 type Run = {
   ask     : Ask;
   on      : (ev: Event) => void;
@@ -143,6 +154,8 @@ type Run = {
   gave    : Promise<null>;
   give    : () => void;
   sent    : number;
+  passed  : Set<string>;
+  turned  : Map<string, string>;
 };
 
 // Constants
@@ -227,6 +240,58 @@ const TOO_LONG = "the request was too long for the model's window";
 // the agent's web tools, where a call searches the web
 const WEB = ["search_web", "read_url_content"];
 
+// the gate: a hook the CLI runs before each tool the model calls (one of
+// its own hooks, global: in its own folder's config, so an account's,
+// each CLI there running it; rewritten as a CLI starts: Antigravity.hook),
+// its script beside it, and the most it waits on illi (s: as long as the
+// user may take to say whether a web search runs; the CLI kills it past
+// that, which turns the tool down)
+const HOOKS = "hooks.json";
+const GATE  = "illi-gate.sh";
+const WAIT  = 3600;
+
+// the gate's script, run by the CLI with what the model called on its
+// input (JSON, on a line): illi's own tools go on at once, so a CLI an
+// older illi started (or one that ended) still runs them; any other is
+// asked of the illi that started the CLI (ILLI_GATE: its forwarder's
+// gate, Antigravity.judge), whose answer passes only as one of the two
+// it gives; else, or with no answer (no curl, no illi there, no time
+// left), the tool is turned down. It says something whatever happens: a
+// hook that says nothing lets the tool run. The name is the last of the
+// line's id and name pairs, the tool call's (the CLI's keys come in
+// order: what the model gave as its input before, the CLI's own paths
+// after; a quote in what the model wrote can't end a string)
+const SCRIPT = `# illi's gate on the tools of Google's Antigravity CLI, written by illi
+# (written again as it starts the CLI here: a change made here won't
+# last). The CLI runs it before each tool the model calls (hooks.json):
+# illi's own go on, illi judges each; any other is asked of the illi that
+# started the CLI, else turned down. It always answers: a hook that
+# answers nothing lets the tool run.
+in=$(cat)
+s='[[:space:]]*'
+name=$(printf '%s\\n' "$in" | sed -n "s/.*\\"id\\"$s:$s\\"[^\\"]*\\"$s,$s\\"name\\"$s:$s\\"\\([A-Za-z0-9_.-]*\\)\\"$s}.*/\\1/p")
+case "$name" in
+  mcp_illi_*) echo '{"decision":"allow"}'; exit 0 ;;
+esac
+if [ -n "$ILLI_GATE" ]; then
+  said=$(printf '%s' "$in" | curl -q -sf --noproxy '*' --connect-timeout 5 --max-time ${WAIT - 10} -H 'content-type: application/json' --data-binary @- "$ILLI_GATE" 2>/dev/null)
+  case "$said" in
+    '{"decision":"allow"}'|'{"decision":"deny","reason":"'*'"}') printf '%s\\n' "$said"; exit 0 ;;
+  esac
+fi
+echo '{"decision":"deny","reason":"Only illi'"'"'s tools, named mcp_illi_ and the tool, run here."}'
+`;
+
+// what the gate tells the model of a tool turned down: one of the CLI's
+// own; a web tool where the call doesn't search the web; one the user
+// didn't allow (illi's own words, else these), one a hook of the user's
+// gave other input, which the CLI can't take; one of a call gone
+const THEIRS  = (name: string) => name + " is one of Antigravity's own tools, which don't run in illi: use illi's tools (named mcp_illi_ and the tool) instead.";
+const NO_WEB  = "Web search is off for this request: go on without it.";
+const NOT_YES = "The user didn't allow it.";
+const CHANGED = "A hook of the user's changed what it would do, which this tool can't take: ask the user.";
+const GONE    = "This request has ended.";
+
 // a Gemini model's id, the only ones illi runs on a Google AI plan
 const GEMINI = /^gemini-[a-z0-9.-]+$/;
 
@@ -280,9 +345,12 @@ const ending = new Set<Promise<void>>();
 // what to call as the account's models change (one: the chat's)
 let watcher = () => {};
 
-// the forwarder of illi's tools, and the calls it serves, by their path
+// the forwarder of illi's tools, and the calls it serves, by their path;
+// the path of the gate's questions there (Antigravity.judge), this run's
+// secret
 let forwarder: ReturnType<typeof Bun.serve> | null = null;
 const RUNS = new Map<string, Run>();
+const KEY = "gate/" + crypto.randomUUID();
 
 // Antigravity
 // ===========
@@ -312,7 +380,7 @@ export namespace Antigravity {
     }
     let give = () => {};
     const gave = new Promise<null>((done) => (give = () => done(null)));
-    const run: Run = { ask, on, beat, proc: null, sid: "", token: crypto.randomUUID(), text: "", mind: "", last: "", fresh: false, reply: "", said: false, first: null, grew: false, steps: false, calls: new Set(), n: 0, stopped: false, halt: new AbortController(), gave, give, sent: 0 };
+    const run: Run = { ask, on, beat, proc: null, sid: "", token: crypto.randomUUID(), text: "", mind: "", last: "", fresh: false, reply: "", said: false, first: null, grew: false, steps: false, calls: new Set(), n: 0, stopped: false, halt: new AbortController(), gave, give, sent: 0, passed: new Set(), turned: new Map() };
     const stop = () => {
       if (run.stopped) {
         return;
@@ -412,9 +480,14 @@ export namespace Antigravity {
   // (Antigravity.split)
   export function session(run: Run, folder: string): unknown {
     const tools = run.ask.server !== "" && !run.ask.once;
-    const web   = tools && run.ask.searches > 0;
     const mcp   = tools ? [{ type: "http", name: "illi", url: Antigravity.forward() + "/" + run.token, headers: [] }] : [];
-    return { cwd: Antigravity.work(folder), mcpServers: mcp, _meta: { antigravity: { enabledTools: web ? WEB : [], eagerMcpServers: tools ? ["illi"] : [], mcpMaxOutputBytes: OUTPUT, systemPrompt: { append: Antigravity.split(run.ask).append } } } };
+    return { cwd: Antigravity.work(folder), mcpServers: mcp, _meta: { antigravity: { enabledTools: Antigravity.searches(run.ask) ? WEB : [], eagerMcpServers: tools ? ["illi"] : [], mcpMaxOutputBytes: OUTPUT, systemPrompt: { append: Antigravity.split(run.ask).append } } } };
+  }
+
+  // whether a call has the agent's web tools: one with illi's tools that
+  // searches the web
+  export function searches(ask: Ask): boolean {
+    return ask.server !== "" && !ask.once && ask.searches > 0;
   }
 
   // illi's prompt, and in a call with tools how they're named there, then
@@ -667,7 +740,8 @@ export namespace Antigravity {
         }
         run.calls.delete(id);
         const content = Array.isArray(u.content) ? u.content.map((c: any) => c?.content ?? c) : [];
-        const text = AskAI.show(content) || (typeof u.rawOutput === "string" ? u.rawOutput : "");
+        const text = AskAI.show(content) || (typeof u.rawOutput === "string" ? u.rawOutput : "") || (run.turned.get(id) ?? "");
+        run.turned.delete(id);
         run.on({ $: "Entry", kind: "echo", text: (u.status === "failed" ? FAILED : "") + (text || "(no output)"), of: id });
         run.grew = true;
         return;
@@ -701,13 +775,22 @@ export namespace Antigravity {
   // its title
   export function called(u: any): string {
     const input = u.rawInput ?? {};
-    if (u.kind === "search") {
-      return "WebSearch " + JSON.stringify({ query: String(input.query ?? "") });
+    const web   = Antigravity.web(String(u.kind ?? ""), input);
+    return web !== null ? web[0] + " " + JSON.stringify(web[1]) : String(u.title ?? "tool") + " " + JSON.stringify(input);
+  }
+
+  // one of the agent's web tools' calls as illi's own asks and shows it,
+  // by its kind (as the CLI tells and asks leave for it) or its name (as
+  // the gate's hook tells it): its search as WebSearch by the query, its
+  // page reading as WebFetch by the URL; null: not one
+  export function web(kind: string, input: any): [string, unknown] | null {
+    if (kind === "search" || kind === "search_web") {
+      return ["WebSearch", { query: String(input?.query ?? "") }];
     }
-    if (u.kind === "fetch") {
-      return "WebFetch " + JSON.stringify({ url: String(input.Url ?? input.url ?? "") });
+    if (kind === "fetch" || kind === "read_url_content") {
+      return ["WebFetch", { url: String(input?.Url ?? input?.url ?? "") }];
     }
-    return String(u.title ?? "tool") + " " + JSON.stringify(input);
+    return null;
   }
 
   // a piece of words or thought, shown live
@@ -740,8 +823,9 @@ export namespace Antigravity {
 
   // a permission the agent asks: a workspace's trust, refused; illi's own
   // tools, allowed once (illi judges each as it comes); its web search and
-  // page reading, asked of the user as illi asks Claude Code's (approve);
-  // anything else, refused
+  // page reading, where the call searches the web, allowed as the gate's
+  // asking the user did (passed), else asked of them as illi asks Claude
+  // Code's (approve); anything else, refused
   export async function permit(proc: Proc, id: number | string, p: any): Promise<void> {
     const opts: any[] = Array.isArray(p.options) ? p.options : [];
     const pick = (kind: string) => opts.find((o) => o?.kind === kind)?.optionId;
@@ -758,26 +842,68 @@ export namespace Antigravity {
     if (Antigravity.ours(call)) {
       return answer(pick("allow_once"));
     }
-    const input = call.rawInput ?? {};
-    const web: [string, unknown] | null = call.kind === "search" ? ["WebSearch", { query: String(input.query ?? "") }] : call.kind === "fetch" ? ["WebFetch", { url: String(input.Url ?? input.url ?? "") }] : null;
-    const yes = web !== null && (await Antigravity.approve(run, web[0], web[1]));
+    const web = Antigravity.searches(run.ask) ? Antigravity.web(String(call.kind ?? ""), call.rawInput ?? {}) : null;
+    const yes = web !== null && (run.passed.delete(JSON.stringify(web)) || (await Antigravity.approve(run, web[0], web[1])) === null);
     answer(pick(yes ? "allow_once" : "reject_once"));
   }
 
   // one of the agent's own tools asked of the user, as Claude Code's are
-  // (Tools.approve, through the call's tools URL: a yes, unless a hook
-  // changed its input, which the agent can't take)
-  export async function approve(run: Run, tool: string, input: unknown): Promise<boolean> {
+  // (Tools.approve, through the call's tools URL), till the call stops or
+  // `signal` does: null, a yes; else why not, for the model (the user's
+  // no, in illi's words; a hook's change of its input, which the agent
+  // can't take; no answer)
+  export async function approve(run: Run, tool: string, input: unknown, signal: AbortSignal = run.halt.signal): Promise<string | null> {
     if (run.ask.server === "") {
-      return false;
+      return NOT_YES;
     }
     try {
-      const res  = await fetch(run.ask.server + "?hosted", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "approve", arguments: { tool_name: tool, input } } }), signal: run.halt.signal });
+      const res  = await fetch(run.ask.server + "?hosted", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "approve", arguments: { tool_name: tool, input } } }), signal: AbortSignal.any([signal, run.halt.signal]) });
       const said = JSON.parse((await res.json())?.result?.content?.[0]?.text ?? "{}");
-      return said?.behavior === "allow" && said.updatedInput === undefined;
+      if (said?.behavior === "allow") {
+        return said.updatedInput === undefined ? null : CHANGED;
+      }
+      return typeof said?.message === "string" && said.message.trim() !== "" ? said.message : NOT_YES;
     } catch {
-      return false;
+      return NOT_YES;
     }
+  }
+
+  // a tool the model called, as the gate (the CLI's hook: Antigravity.hook)
+  // asks illi of it, judged till `signal` stops (the hook gone): illi's
+  // own go on (illi judges each as it comes); the CLI's web search and
+  // page reading, where the call searches the web, asked of the user as
+  // Claude Code's are (approve: a yes kept, passed, so the CLI asking
+  // leave for it after isn't asked again); any other, or one of a call
+  // gone, turned down, saying why, which the model reads and goes on (and
+  // the chat shows as the call's answer: turned)
+  export async function judge(heard: any, signal: AbortSignal): Promise<{ decision: "allow" } | { decision: "deny"; reason: string }> {
+    const call = heard?.toolCall ?? {};
+    const name = String(call.name ?? "");
+    const sid  = String(heard?.conversationId ?? "");
+    const run  = sid === "" ? undefined : procs.map((p) => p.runs.get(sid)).find((r) => r !== undefined);
+    if (/^mcp_illi_/.test(name)) {
+      return { decision: "allow" };
+    }
+    if (run === undefined || run.stopped) {
+      return { decision: "deny", reason: GONE };
+    }
+    const deny = (reason: string) => {
+      run.turned.set(String(call.id ?? ""), reason);
+      return { decision: "deny" as const, reason };
+    };
+    const web = Antigravity.web(name, call.args ?? {});
+    if (web === null) {
+      return deny(THEIRS(name || "That tool"));
+    }
+    if (!Antigravity.searches(run.ask)) {
+      return deny(NO_WEB);
+    }
+    const no = await Antigravity.approve(run, web[0], web[1], signal);
+    if (no !== null) {
+      return deny(no);
+    }
+    run.passed.add(JSON.stringify(web));
+    return { decision: "allow" };
   }
 
   // Forwarder
@@ -794,7 +920,11 @@ export namespace Antigravity {
   // stops); a tool's call logged as it goes, with what it answered as that
   // comes back
   export async function relay(req: Request): Promise<Response> {
-    const run = RUNS.get(new URL(req.url).pathname.slice(1));
+    const at = new URL(req.url).pathname.slice(1);
+    if (at === KEY && req.method === "POST") {
+      return Response.json(await Antigravity.judge(await req.json().catch(() => null), req.signal));
+    }
+    const run = RUNS.get(at);
     if (run === undefined) {
       return new Response(null, { status: 404 });
     }
@@ -951,8 +1081,10 @@ export namespace Antigravity {
     return p;
   }
 
-  // a CLI started for an account (its folder tidied first, once a run),
-  // initialized (one older than MINIMUM refused: Antigravity.known), and
+  // a CLI started for an account (its folder tidied first, once a run;
+  // the gate written there, its hook told where to ask this illi:
+  // ILLI_GATE), initialized (one older than MINIMUM refused:
+  // Antigravity.known), and
   // signed in to the gateway named, if one is (ready); never to Google:
   // the CLI uses the sign-in the folder keeps, a call failing at once
   // without one. Any failure to start ends it (so no call takes it), its
@@ -965,9 +1097,15 @@ export namespace Antigravity {
       throw new Error(Agy.why());
     }
     Antigravity.tidy(folder);
-    const p = { folder, stamp: Antigravity.stamp(folder), started: 0, live: 0, runs: new Map() } as unknown as Proc;
     try {
-      p.conn = Acp.start(Agy.spec.name, [...cmd, ...Antigravity.flags(folder)], Antigravity.work(folder), Antigravity.env(folder), (_, m) => Antigravity.heard(p, m), () => {});
+      Antigravity.hook(folder);
+    } catch (err: any) {
+      throw new Error(Agy.spec.name + " didn't start: illi couldn't write its gate on the CLI's own tools (" + String(err?.message ?? err) + ")");
+    }
+    const p = { folder, stamp: Antigravity.stamp(folder), started: 0, live: 0, runs: new Map() } as unknown as Proc;
+    const env = { ...Antigravity.env(folder), ILLI_GATE: Antigravity.forward() + "/" + KEY };
+    try {
+      p.conn = Acp.start(Agy.spec.name, [...cmd, ...Antigravity.flags(folder)], Antigravity.work(folder), env, (_, m) => Antigravity.heard(p, m), () => {});
     } catch (err: any) {
       throw new Error(/ENOENT|not found/i.test(String(err?.message)) ? Agy.why() : Agy.spec.name + " didn't start: " + String(err?.message ?? err));
     }
@@ -1115,6 +1253,29 @@ export namespace Antigravity {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
     fs.mkdirSync(path.join(folder, "tmp"), { recursive: true, mode: 0o700 });
     return dir;
+  }
+
+  // the gate written in an account's folder, where the CLI takes its own
+  // hooks (its own folder's config): the script (SCRIPT), then the hooks
+  // naming it (HOOKS: before every tool, the script run where it is, for
+  // WAIT at most), each written only as it differs (another illi may run
+  // CLIs there: whole, a file put in place at once). Thrown: it can't be
+  // written, so no CLI starts without it
+  export function hook(folder: string): void {
+    const dir = path.join(Antigravity.home(folder, ""), "config");
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const hooks = { illi: { PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: "sh ./" + GATE, timeout: WAIT }] }] } };
+    for (const [file, text] of [[GATE, SCRIPT], [HOOKS, JSON.stringify(hooks, null, 2) + "\n"]]) {
+      const at = path.join(dir, file);
+      try {
+        if (fs.readFileSync(at, "utf8") === text) {
+          continue;
+        }
+      } catch {}
+      const temp = at + "." + process.pid + "." + crypto.randomUUID().slice(0, 8);
+      fs.writeFileSync(temp, text, { mode: 0o600 });
+      fs.renameSync(temp, at);
+    }
   }
 
   // the CLI's own folder in an account's (--gemini-dir), or one of the

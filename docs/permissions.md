@@ -310,10 +310,12 @@ same way: `WebFetch` as `webfetch` (the URL), `WebSearch` as
 
 On `antigravity` too, illi runs its own tools, checked as on every
 provider ([Providers](providers.md#google-ai-plan)). Of Google's CLI's
-own tools only its web search and page reading run, and each is asked
-of illi as Claude Code's are: the search as `websearch` (the query), a
-page as `webfetch` (its URL). Anything else the agent asks leave for is
-refused, and so is one a hook gave other input, as the agent can't take
+own tools only its web search and page reading run, where a turn
+searches the web, and each is asked of illi as Claude Code's are: the
+search as `websearch` (the query), a page as `webfetch` (its URL).
+Every other tool of the CLI's is turned down before it runs, by a hook
+illi gives the CLI (the model is told why and goes on), and so is a
+web search one of your hooks gave other input, as the CLI can't take
 it.
 
 On `github-copilot` it is the same

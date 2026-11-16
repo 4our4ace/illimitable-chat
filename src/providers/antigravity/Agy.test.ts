@@ -3,13 +3,13 @@
 // `bun test Agy.test.ts`. Google's Antigravity CLI as illi finds and
 // downloads it, with no real download: the build each machine's illi is
 // pinned to, each one illi takes (the CLI's releases on GitHub, its
-// checksum and sizes, a command by its own name, 1.5.2 or later), one
+// checksum and sizes, a command by its own name, 1.5.5 or later), one
 // for every machine illi is released for; an archive (a .tar.gz, served
 // here) checked against its sha256 as it comes, unpacked (each file by
 // its own name, runnable; a pax header passed over), put in place in one
 // rename, found as the CLI's command; one that doesn't match, holds a
 // file in a folder, or a link, leaves nothing and keeps what was there.
-// The user's own `agy` runs in place of illi's build once it is 1.5.2 or
+// The user's own `agy` runs in place of illi's build once it is 1.5.5 or
 // later (its version asked once, kept by its path, size and time; asked
 // again once it changed); an older one is said. Only this illi's build
 // runs of those downloaded: another version here is said (older: /login
@@ -123,7 +123,7 @@ test("the user's own agy is found on PATH's absolute folders alone, never a rela
   }
 });
 
-test("each machine's pinned build is one illi takes, one for every machine illi is released for, all one version, 1.5.2 or later", () => {
+test("each machine's pinned build is one illi takes, one for every machine illi is released for, all one version, 1.5.5 or later", () => {
   const all = Object.values(PINNED);
   expect(all.every((b) => Agy.takes(b))).toBe(true);
   expect(new Set(all.map((b) => b.version)).size).toBe(1);
@@ -132,32 +132,32 @@ test("each machine's pinned build is one illi takes, one for every machine illi 
   const good = PINNED["linux-x86_64"];
   expect([good.cmd, good.args, good.archive.startsWith(RELEASES + good.version + "/")]).toEqual(["antigravity", ["acp"], true]);
   const other = (name: string) => ({ ...good, archive: RELEASES + good.version + "/" + name });
-  for (const bad of [{ ...good, archive: "http://github.com/google-antigravity/antigravity-cli/releases/download/" + good.version + "/agy_cli_linux_x64.tar.gz" }, { ...good, archive: "https://github.com.evil.test/x.tar.gz" }, { ...good, archive: RELEASES + "1.5.3/agy_cli_linux_x64.tar.gz" }, other("x/agy_cli_linux_x64.tar.gz"), other("agy_cli_linux_x64.zip"), { ...good, sha256: "" }, { ...good, cmd: "../bin/sh" }, { ...good, cmd: "bin/agy" }, { ...good, bytes: 0 }, { ...good, version: "latest" }, { ...other("agy.tar.gz"), version: "1.5.1", archive: RELEASES + "1.5.1/agy.tar.gz" }]) {
+  for (const bad of [{ ...good, archive: "http://github.com/google-antigravity/antigravity-cli/releases/download/" + good.version + "/agy_cli_linux_x64.tar.gz" }, { ...good, archive: "https://github.com.evil.test/x.tar.gz" }, { ...good, archive: RELEASES + "1.5.6/agy_cli_linux_x64.tar.gz" }, other("x/agy_cli_linux_x64.tar.gz"), other("agy_cli_linux_x64.zip"), { ...good, sha256: "" }, { ...good, cmd: "../bin/sh" }, { ...good, cmd: "bin/agy" }, { ...good, bytes: 0 }, { ...good, version: "latest" }, { ...other("agy.tar.gz"), version: "1.5.4", archive: RELEASES + "1.5.4/agy.tar.gz" }]) {
     expect(Agy.takes(bad)).toBe(false);
   }
   expect(Agy.machine()).toMatch(/^(linux|darwin|windows)-/);
-  expect(["1.4.5", "1.10.0", "1.5.12"].sort(Agy.newer)).toEqual(["1.10.0", "1.5.12", "1.4.5"]);
-  expect([MINIMUM, Agy.least("1.5.2"), Agy.least("1.6"), Agy.least("1.5.1"), Agy.least("1.4.5"), Agy.least("v1.6")]).toEqual(["1.5.2", true, true, false, false, false]);
+  expect(["1.4.5", "1.10.0", "1.5.15"].sort(Agy.newer)).toEqual(["1.10.0", "1.5.15", "1.4.5"]);
+  expect([MINIMUM, Agy.least("1.5.5"), Agy.least("1.6"), Agy.least("1.5.4"), Agy.least("1.4.5"), Agy.least("v1.6")]).toEqual(["1.5.5", true, true, false, false, false]);
 });
 
 test("a download checked as it comes, unpacked runnable, put in place, run; one without room on the disk refused first; one that doesn't match, holds a folder or a link, leaves nothing", async () => {
   const one = tar([{ name: "pax", data: "20 path=antigravity\n", type: "x" }, { name: "antigravity-cut-short", data: "#!/bin/sh\necho one\n" }, { name: "pax", data: "13 mtime=1.5\n", type: "x" }, { name: "NOTICE", data: "notice" }]);
   SERVED["one.tgz"] = one;
-  Agy.pin = BUILT("1.5.2", "one.tgz", one);
+  Agy.pin = BUILT("1.5.5", "one.tgz", one);
   expect([Agy.command(), Agy.ready(), Agy.why()]).toEqual([null, false, "Google's Antigravity CLI isn't here: /login downloads it"]);
   expect(Agy.told(Agy.why())).toBe(true);
   const got: number[] = [];
   await Agy.download(Agy.pin, new AbortController().signal, (bytes) => got.push(bytes));
-  const at = Agy.home() + "/1.5.2";
+  const at = Agy.home() + "/1.5.5";
   expect([Agy.command(), Agy.ready(), got.at(-1), fs.readFileSync(at + "/NOTICE", "utf8")]).toEqual([[at + "/antigravity", "acp"], true, one.length, "notice"]);
   expect([fs.statSync(at + "/antigravity").mode & 0o777, fs.statSync(at + "/NOTICE").mode & 0o777]).toEqual([0o755, 0o755]);
   expect(fs.existsSync(at + "/.users/" + process.pid)).toBe(true);
   // a disk without room for the archive and its files at once says so
   // before any byte
-  await expect(Agy.download({ ...BUILT("1.5.5", "none-asked.tgz", one), unpacked: 1e18 }, new AbortController().signal, () => {})).rejects.toThrow(/^it needs \d+ MB free while it unpacks, and .* has \d+ MB: free some space, then try again$/);
+  await expect(Agy.download({ ...BUILT("1.5.8", "none-asked.tgz", one), unpacked: 1e18 }, new AbortController().signal, () => {})).rejects.toThrow(/^it needs \d+ MB free while it unpacks, and .* has \d+ MB: free some space, then try again$/);
   const two = tar([{ name: "antigravity", data: "two" }]);
   SERVED["two.tgz"] = two;
-  await expect(Agy.download({ ...BUILT("1.5.3", "two.tgz", two), sha256: sha(one) }, new AbortController().signal, () => {})).rejects.toThrow("didn't match the checksum");
+  await expect(Agy.download({ ...BUILT("1.5.6", "two.tgz", two), sha256: sha(one) }, new AbortController().signal, () => {})).rejects.toThrow("didn't match the checksum");
   for (const [name, files, why] of [
     ["climb.tgz", [{ name: "antigravity", data: "x" }, { name: "../escape", data: "x" }], "holds a file in a folder"],
     ["folder.tgz", [{ name: "antigravity", data: "x", prefix: "bin" }], "holds a file in a folder"],
@@ -166,12 +166,12 @@ test("a download checked as it comes, unpacked runnable, put in place, run; one 
   ] as const) {
     const bad = tar([...files]);
     SERVED[name] = bad;
-    await expect(Agy.download(BUILT("1.5.4", name, bad), new AbortController().signal, () => {})).rejects.toThrow(why);
+    await expect(Agy.download(BUILT("1.5.7", name, bad), new AbortController().signal, () => {})).rejects.toThrow(why);
   }
   const short = tar([{ name: "antigravity", data: "x".repeat(2000) }]);
   SERVED["short.tgz"] = zlib.gzipSync(zlib.gunzipSync(short).subarray(0, 1024));
-  await expect(Agy.download(BUILT("1.5.4", "short.tgz", SERVED["short.tgz"]), new AbortController().signal, () => {})).rejects.toThrow("ended short");
-  expect([fs.readdirSync(Agy.home()), fs.existsSync(DIR + "/escape"), Agy.versions()]).toEqual([["1.5.2"], false, ["1.5.2"]]);
+  await expect(Agy.download(BUILT("1.5.7", "short.tgz", SERVED["short.tgz"]), new AbortController().signal, () => {})).rejects.toThrow("ended short");
+  expect([fs.readdirSync(Agy.home()), fs.existsSync(DIR + "/escape"), Agy.versions()]).toEqual([["1.5.5"], false, ["1.5.5"]]);
   // a file cut short since (a power cut, a tidy killed midway) is no
   // download: /login offers it again
   expect(JSON.parse(fs.readFileSync(at + "/agent.json", "utf8")).files).toEqual({ antigravity: 19, NOTICE: 6 });
@@ -182,21 +182,21 @@ test("a download checked as it comes, unpacked runnable, put in place, run; one 
   expect(Agy.ready()).toBe(true);
 });
 
-test("the user's own agy runs once it's 1.5.2 or later, its version asked once and kept till it changes (one that answers without one, too; one that fails, not); an older one is said", async () => {
-  const at = theirs("1.5.3");
+test("the user's own agy runs once it's 1.5.5 or later, its version asked once and kept till it changes (one that answers without one, too; one that fails, not); an older one is said", async () => {
+  const at = theirs("1.5.6");
   Agy.which = async () => at;
   Agy.unlook();
   expect(Agy.installed()).toBeNull();
-  expect(await Agy.look()).toEqual({ at, version: "1.5.3" });
+  expect(await Agy.look()).toEqual({ at, version: "1.5.6" });
   expect([Agy.command(), Agy.ready(), ASKED()]).toEqual([[at, "acp"], true, 1]);
   Agy.unlook();
-  expect([Agy.installed(), await Agy.look(), ASKED()]).toEqual([{ at, version: "1.5.3" }, { at, version: "1.5.3" }, 1]);
-  theirs("1.5.1");
+  expect([Agy.installed(), await Agy.look(), ASKED()]).toEqual([{ at, version: "1.5.6" }, { at, version: "1.5.6" }, 1]);
+  theirs("1.5.4");
   fs.utimesSync(at, new Date(Date.now() + 5000), new Date(Date.now() + 5000));
   Agy.unlook();
-  expect([Agy.installed(), await Agy.look(), ASKED(), Agy.stale()]).toEqual([null, null, 2, "1.5.1"]);
+  expect([Agy.installed(), await Agy.look(), ASKED(), Agy.stale()]).toEqual([null, null, 2, "1.5.4"]);
   Agy.pin = { ...Agy.pin!, sha256: "f".repeat(64) };
-  expect(Agy.why()).toBe("Google's Antigravity CLI isn't here: /login downloads it (your own agy is 1.5.1, older than the 1.5.2 illi runs: `agy update` brings it current)");
+  expect(Agy.why()).toBe("Google's Antigravity CLI isn't here: /login downloads it (your own agy is 1.5.4, older than the 1.5.5 illi runs: `agy update` brings it current)");
   // one that answers without a version is kept so, asked once, not at
   // every run
   fs.writeFileSync(at, "#!/bin/sh\necho x >> " + DIR + "/bin/asked\necho agy\n");
@@ -206,14 +206,14 @@ test("the user's own agy runs once it's 1.5.2 or later, its version asked once a
   expect([await Agy.look(), Agy.installed(), ASKED()]).toEqual([null, null, 3]);
   // one that tells it and leaves a child holding its output is heard in
   // time, and kept
-  fs.writeFileSync(at, "#!/bin/sh\necho x >> " + DIR + "/bin/asked\necho 1.5.6\nsleep 8 &\n");
+  fs.writeFileSync(at, "#!/bin/sh\necho x >> " + DIR + "/bin/asked\necho 1.5.9\nsleep 8 &\n");
   fs.utimesSync(at, new Date(Date.now() + 7000), new Date(Date.now() + 7000));
   Agy.unlook();
   const asking = Date.now();
-  expect([await Agy.look(), ASKED()]).toEqual([{ at, version: "1.5.6" }, 4]);
+  expect([await Agy.look(), ASKED()]).toEqual([{ at, version: "1.5.9" }, 4]);
   expect(Date.now() - asking).toBeLessThan(10000);
   Agy.unlook();
-  expect([Agy.installed(), ASKED()]).toEqual([{ at, version: "1.5.6" }, 4]);
+  expect([Agy.installed(), ASKED()]).toEqual([{ at, version: "1.5.9" }, 4]);
   // one that fails (as a slow or broken start may) is kept not at all:
   // asked again next run
   fs.writeFileSync(at, "#!/bin/sh\necho x >> " + DIR + "/bin/asked\nexit 1\n");
@@ -224,27 +224,27 @@ test("the user's own agy runs once it's 1.5.2 or later, its version asked once a
   expect([await Agy.look(), ASKED()]).toEqual([null, 6]);
   Agy.which = async () => null;
   Agy.unlook();
-  Agy.pin = BUILT("1.5.2", "one.tgz", SERVED["one.tgz"]);
+  Agy.pin = BUILT("1.5.5", "one.tgz", SERVED["one.tgz"]);
 });
 
 test("only this illi's build runs of those downloaded: another version here is said, never run, though a logout may use it; none for this machine is said", () => {
   const here = Agy.pin!;
-  const at = Agy.home() + "/1.5.2/antigravity";
-  Agy.pin = { ...here, version: "1.5.3" };
-  expect([Agy.command(), Agy.ready(), Agy.other(), Agy.any()]).toEqual([null, false, "1.5.2", [at, "acp"]]);
-  expect(Agy.why()).toBe("Google's Antigravity CLI 1.5.2 is here, and this illi runs 1.5.3: /login updates it");
-  Agy.pin = { ...here, version: "1.5.1" };
-  expect(Agy.why()).toBe("Google's Antigravity CLI 1.5.2 is here, and this illi runs 1.5.1: /login downloads it");
+  const at = Agy.home() + "/1.5.5/antigravity";
+  Agy.pin = { ...here, version: "1.5.6" };
+  expect([Agy.command(), Agy.ready(), Agy.other(), Agy.any()]).toEqual([null, false, "1.5.5", [at, "acp"]]);
+  expect(Agy.why()).toBe("Google's Antigravity CLI 1.5.5 is here, and this illi runs 1.5.6: /login updates it");
+  Agy.pin = { ...here, version: "1.5.4" };
+  expect(Agy.why()).toBe("Google's Antigravity CLI 1.5.5 is here, and this illi runs 1.5.4: /login downloads it");
   Agy.pin = { ...here, sha256: "f".repeat(64) };
   expect([Agy.command(), Agy.other(), Agy.why()]).toEqual([null, null, "Google's Antigravity CLI isn't here: /login downloads it"]);
   Agy.pin = null;
-  expect(Agy.why()).toBe("Google's Antigravity CLI has no build for this machine (" + Agy.machine() + ") that illi runs: install agy 1.5.2 or later, or let ILLI_ANTIGRAVITY name one of your own");
+  expect(Agy.why()).toBe("Google's Antigravity CLI has no build for this machine (" + Agy.machine() + ") that illi runs: install agy 1.5.5 or later, or let ILLI_ANTIGRAVITY name one of your own");
   expect(Agy.told("Google's Antigravity CLI isn't here")).toBe(false);
   Agy.bin = ["/opt/agy/agy", "acp"];
   expect([Agy.command(), Agy.ready()]).toEqual([["/opt/agy/agy", "acp"], true]);
   Agy.pin = here;
   Agy.tidy();
-  expect(Agy.versions()).toEqual(["1.5.2"]);
+  expect(Agy.versions()).toEqual(["1.5.5"]);
   Agy.bin = null;
   Agy.pin = here;
 });
@@ -261,28 +261,28 @@ test("every older version goes once no live illi uses it, this illi's own too wh
   const ended = Bun.spawn(["true"]);
   await ended.exited;
   const live = Bun.spawn(["sleep", "30"]);
-  keep("1.5.1", live.pid);
+  keep("1.5.4", live.pid);
   keep("1.4.5", ended.pid);
   keep("1.4.2");
   keep("1.9.0");
   Agy.tidy();
-  expect(Agy.versions()).toEqual(["1.9.0", "1.5.2", "1.5.1"]);
-  expect(fs.existsSync(Agy.home() + "/1.5.2/.users/" + process.pid)).toBe(true);
+  expect(Agy.versions()).toEqual(["1.9.0", "1.5.5", "1.5.4"]);
+  expect(fs.existsSync(Agy.home() + "/1.5.5/.users/" + process.pid)).toBe(true);
   live.kill();
   await live.exited;
   Agy.tidy();
-  expect(Agy.versions()).toEqual(["1.9.0", "1.5.2"]);
+  expect(Agy.versions()).toEqual(["1.9.0", "1.5.5"]);
   const pinned = Agy.pin;
   Agy.pin = null;
   Agy.tidy();
-  expect(Agy.versions()).toEqual(["1.9.0", "1.5.2"]);
+  expect(Agy.versions()).toEqual(["1.9.0", "1.5.5"]);
   Agy.pin = pinned;
   fs.rmSync(Agy.home() + "/1.9.0", { recursive: true });
   const at = theirs("1.6.0");
   Agy.which = async () => at;
   Agy.unlook();
   await Agy.look();
-  fs.rmSync(Agy.home() + "/1.5.2/.users", { recursive: true, force: true });
+  fs.rmSync(Agy.home() + "/1.5.5/.users", { recursive: true, force: true });
   Agy.tidy();
   expect(Agy.versions()).toEqual([]);
   fs.rmSync(at);
@@ -311,7 +311,7 @@ test("a tar header's ustar prefix is POSIX's alone: GNU's keeps other fields the
 test("a write that fails is said, never a crash; an empty file unpacks; another terminal's download under way is left be, one whose illi ended or a day-old one goes", async () => {
   const one = tar([{ name: "antigravity", data: "x" }]);
   SERVED["w.tgz"] = one;
-  await expect(Agy.get(BUILT("1.5.8", "w.tgz", one), DIR + "/no/such/folder/cli.tar.gz", new AbortController().signal, () => {})).rejects.toThrow("ENOENT");
+  await expect(Agy.get(BUILT("1.5.11", "w.tgz", one), DIR + "/no/such/folder/cli.tar.gz", new AbortController().signal, () => {})).rejects.toThrow("ENOENT");
   const empty = tar([{ name: "antigravity", data: "run" }, { name: "EMPTY", data: "" }]);
   SERVED["e.tgz"] = empty;
   const ended = Bun.spawn(["true"]);
@@ -325,13 +325,13 @@ test("a write that fails is said, never a crash; an empty file unpacks; another 
     fs.mkdirSync(dir, { recursive: true });
   }
   fs.utimesSync(old, new Date(Date.now() - 2 * 86400e3), new Date(Date.now() - 2 * 86400e3));
-  Agy.pin = BUILT("1.5.9", "e.tgz", empty);
+  Agy.pin = BUILT("1.5.12", "e.tgz", empty);
   await Agy.download(Agy.pin, new AbortController().signal, () => {});
-  expect([fs.readFileSync(Agy.home() + "/1.5.9/EMPTY", "utf8"), fs.existsSync(young), fs.existsSync(old), fs.existsSync(theirs), fs.existsSync(cut)]).toEqual(["", true, false, true, false]);
+  expect([fs.readFileSync(Agy.home() + "/1.5.12/EMPTY", "utf8"), fs.existsSync(young), fs.existsSync(old), fs.existsSync(theirs), fs.existsSync(cut)]).toEqual(["", true, false, true, false]);
   live.kill();
   await live.exited;
   fs.rmSync(theirs, { recursive: true });
-  expect(Agy.versions()).toEqual(["1.5.9"]);
+  expect(Agy.versions()).toEqual(["1.5.12"]);
 });
 
 test("this illi's own download under way is left be by its tidy, gone once it's in place", async () => {
@@ -340,7 +340,7 @@ test("this illi's own download under way is left be by its tidy, gone once it's 
   HELD["own.tgz"] = new Promise<void>((done) => (release = done));
   SERVED["own.tgz"] = one;
   const mine = () => fs.readdirSync(Agy.home()).filter((n) => n.startsWith(".new-" + process.pid + "-"));
-  const done = Agy.download(BUILT("1.5.10", "own.tgz", one), new AbortController().signal, () => {});
+  const done = Agy.download(BUILT("1.5.13", "own.tgz", one), new AbortController().signal, () => {});
   while (mine().length === 0) {
     await Bun.sleep(10);
   }
@@ -348,7 +348,7 @@ test("this illi's own download under way is left be by its tidy, gone once it's 
   expect(mine().length).toBe(1);
   release();
   await done;
-  expect([mine(), fs.existsSync(Agy.home() + "/1.5.10/antigravity")]).toEqual([[], true]);  fs.rmSync(Agy.home() + "/1.5.10", { recursive: true });
+  expect([mine(), fs.existsSync(Agy.home() + "/1.5.13/antigravity")]).toEqual([[], true]);  fs.rmSync(Agy.home() + "/1.5.13", { recursive: true });
 });
 
 test("with autoupdate on and an account connected, this illi's build downloads by itself, once, one illi at a time on the machine: a fresh lock is left to its illi, one unwritten for a minute is taken over though its pid lives, one whose illi ended too; a call meanwhile told it's downloading; the same build put in place by another illi meanwhile kept", async () => {
@@ -362,7 +362,7 @@ test("with autoupdate on and an account connected, this illi's build downloads b
   expect(Agy.told(Agy.why())).toBe(true);
   expect([Agy.claim(), locks()]).toEqual([null, [".updating-1"]]);
   fs.utimesSync(lock(), new Date(Date.now() - 120e3), new Date(Date.now() - 120e3));
-  expect([Agy.lives(other.pid), Agy.progress(), Agy.why()]).toEqual([true, null, "Google's Antigravity CLI 1.5.9 is here, and this illi runs 2.0.0: /login updates it"]);
+  expect([Agy.lives(other.pid), Agy.progress(), Agy.why()]).toEqual([true, null, "Google's Antigravity CLI 1.5.12 is here, and this illi runs 2.0.0: /login updates it"]);
   expect([Agy.claim(), locks(), fs.readFileSync(lock(2), "utf8")]).toEqual([lock(2), [".updating-2"], String(process.pid)]);
   expect([Agy.claim(), Agy.progress()]).toEqual([null, null]);
   fs.writeFileSync(lock(7), String(other.pid));
@@ -385,7 +385,7 @@ test("with autoupdate on and an account connected, this illi's build downloads b
   release();
   expect(await done).toBe(true);
   expect([Agy.ready(), locks(), Agy.progress(), await Agy.update()]).toEqual([true, [], null, false]);
-  expect(said).toEqual(["Google's Antigravity CLI is updated to 2.0.1 (from 1.5.9): the Google AI plan runs on it now."]);
+  expect(said).toEqual(["Google's Antigravity CLI is updated to 2.0.1 (from 1.5.12): the Google AI plan runs on it now."]);
   const cmd = Agy.home() + "/2.0.1/antigravity";
   const ino = fs.statSync(cmd).ino;
   await Agy.download(Agy.pin, new AbortController().signal, () => {});

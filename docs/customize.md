@@ -431,7 +431,8 @@ it follows the theme) or a list of those.
 `tool.before` sees every tool call, Claude Code's own on `claude-code`
 too (its web fetch and search, its MCP servers' tools, as they ask
 leave), Google's CLI's web search and page reading on `antigravity`
-(as `WebSearch` and `WebFetch`, as they ask leave), and Copilot's CLI's
+(as `WebSearch` and `WebFetch`, as illi's hook in the CLI asks of them
+before they run), and Copilot's CLI's
 web fetch on `github-copilot` (as `WebFetch`); `tool.after` every call
 illi runs (Claude Code, Google's CLI and Copilot's run their own, so
 it doesn't see theirs).
@@ -612,8 +613,9 @@ its input:
   refusal, input and decision reach those tools (Claude Code runs them,
   so `PostToolUse` doesn't see them). On `antigravity`, Google's CLI's
   web search and page reading come as `WebSearch` and `WebFetch` as
-  they ask leave, `PreToolUse` alone seeing them too; one given other
-  input is refused, as the agent can't take it. On `github-copilot`,
+  illi's hook in the CLI asks of them before they run, `PreToolUse`
+  alone seeing them too; one given other input is refused, as the agent
+  can't take it. On `github-copilot`,
   Copilot's CLI's web fetch comes the same way, as `WebFetch`.
 - No `session_id` or `transcript_path`: one chat per project, which `cwd`
   names. `permission_mode` holds illi's modes.

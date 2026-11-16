@@ -139,7 +139,7 @@ too, though not built in. Both are found and downloaded the same way
 (`src/providers/Cli.ts`, each CLI by its spec: `Agy.ts`,
 `CopilotCli.ts`): each illi runs the user's own `agy` or `copilot` when
 it is its `MINIMUM` or later (the oldest version tried with illi:
-`agy` 1.5.2, `copilot` 1.0.100), else the one version its `Pinned.ts`
+`agy` 1.5.5, `copilot` 1.0.100), else the one version its `Pinned.ts`
 names for its machine, the one tried with it, and /login downloads
 that one, checked against the checksum there. To take a new version:
 write the table anew from the CLI's releases on GitHub (its `pin.ts`,

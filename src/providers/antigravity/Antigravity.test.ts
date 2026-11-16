@@ -1,7 +1,7 @@
 // Antigravity test
 // ================
 // `bun test Antigravity.test.ts`. Google's Antigravity CLI stood in for by
-// a script that speaks the Agent Client Protocol (as the real 1.5.2 does:
+// a script that speaks the Agent Client Protocol (as the real 1.5.5 does:
 // Live.test.ts) and plays a scene, named by the call's message; illi's
 // tools by a stand-in server. A call runs the CLI as illi (its name and
 // version), never signing it in (the sign-in its folder keeps), its own
@@ -27,7 +27,13 @@
 // asked of the user through the call's tools URL (approve), allowed or
 // refused as that answers, and logged with what they answered; a
 // workspace's trust is refused. A call without tools has none, nor the
-// web's. An error the CLI says as a message (a warning sign before it,
+// web's. The gate (the CLI's hooks, written in the account's folder, run
+// by the stand-in as the CLI runs them) lets illi's tools go on, asks
+// illi of the rest: the web's, where the call searches, asked of the
+// user (once: the CLI asking leave after isn't asked again), any other
+// turned down with why (shown as its answer); its script alone turns
+// down whatever it can't ask illi of, or what illi didn't answer as
+// illi does. An error the CLI says as a message (a warning sign before it,
 // or not) is never a reply: busy, too long (`full`: the API's words, or
 // the CLI's own past its limit), the plan's limit
 // (when it resets; words streamed before it logged as cut off), a turn
@@ -35,7 +41,7 @@
 // it does. A stop cancels the turn, what streamed logged as cut off; a
 // message sent mid-run is left. The CLIs run in a pool: calls at once
 // share one, a spare stands ready, one ends once its calls did, all as
-// illi ends. A CLI older than 1.5.2 is refused; one that can't start
+// illi ends. A CLI older than 1.5.5 is refused; one that can't start
 // says why (its exit code, its own last words) and isn't tried again. No
 // sign-in, or one run
 // out, ends a call at once, never waiting on a browser, and /login offers
@@ -110,10 +116,52 @@ const FAMILIES = ["gemini-4-argon", "gemini-3.8-flash", "claude-opus-test"];
 const LISTED = ["gemini-4-argon-medium", "gemini-4-argon-high", "gemini-4-argon-low", "gemini-3.8-flash-high", "gemini-3.8-flash-medium", "gemini-3.8-flash-low", "claude-opus-test-thinking", "gpt-oss-test-medium"];
 const options = (model) => [{ id: "model", currentValue: model, type: "select", category: "model", options: FAMILIES.map((value) => ({ value, name: value })) }, { id: "thought_level", currentValue: "high", type: "select", category: "thought_level", options: ["low", "medium", "high"].map((value) => ({ value, name: value })) }, { id: "mode", currentValue: "default", type: "select", category: "mode", options: [{ value: "default", name: "Default" }] }];
 const models = () => ({ availableModels: LISTED.map((modelId) => ({ modelId, name: modelId, description: modelId })), currentModelId: "gemini-3.8-flash-high" });
+// the hooks run before a tool, as the real CLI runs them: its own
+// folder's config/hooks.json, each PreToolUse hook whose matcher takes
+// the tool, run by sh in that folder (its environment the CLI's) with the
+// call on its input (one line, keys in order); a hook that fails turns the
+// tool down, one that says nothing lets it run
+async function hooked(sid, name, args, id) {
+  const dir = GEM + "/config";
+  let sets = {};
+  try { sets = JSON.parse(fs.readFileSync(dir + "/hooks.json", "utf8")); } catch {}
+  for (const set of Object.values(sets)) {
+    for (const group of set.PreToolUse ?? []) {
+      if (group.matcher !== "*" && group.matcher !== "" && !new RegExp("^(" + group.matcher + ")$").test(name)) continue;
+      for (const h of group.hooks ?? []) {
+        const input = JSON.stringify({ artifactDirectoryPath: GEM + "/brain/" + sid, conversationId: sid, cwd: process.cwd(), hookEventName: "PreToolUse", lastUserInput: "", modelName: "m", stepIdx: 1, toolCall: { args, id, name }, transcriptPath: GEM + "/t", workspacePaths: [process.cwd()] });
+        const p = Bun.spawn(["sh", "-c", h.command], { cwd: dir, stdin: new Blob([input + "\n"]), stdout: "pipe", stderr: "pipe", env: process.env });
+        const said = (await new Response(p.stdout).text()).trim();
+        if ((await p.exited) !== 0) return { decision: "deny", reason: "the hook failed" };
+        if (said === "") continue;
+        const d = JSON.parse(said);
+        if (d.decision !== "allow") return d;
+      }
+    }
+  }
+  return { decision: "allow" };
+}
 async function prompt(p) {
   const sid = p.sessionId;
   const scene = p.prompt.map((c) => c.text ?? "").join("");
   used(sid, 0);
+  if (scene.includes("gated")) {
+    for (const [name, args] of [["mcp_illi_zoom", { id: 3 }], ["schedule", { Prompt: "later" }], ["search_web", { query: "illi agent" }]]) {
+      const id = crypto.randomUUID();
+      const kind = name === "search_web" ? "search" : "other";
+      update(sid, { sessionUpdate: "tool_call", toolCallId: id, name, status: "in_progress", kind, title: "Run " + name, rawInput: args });
+      const d = await hooked(sid, name, args, id);
+      log({ gate: name, decision: d.decision, reason: d.reason ?? null });
+      if (d.decision === "allow" && kind === "search" && scene.includes("asks")) {
+        const ok = await ask("session/request_permission", { sessionId: sid, toolCall: { toolCallId: id, title: "Run search_web?", kind, rawInput: args }, options: OPTS });
+        log({ permitted: kind, outcome: ok.result?.outcome });
+      }
+      const found = d.decision === "allow" && kind === "search";
+      update(sid, d.decision === "allow" ? { sessionUpdate: "tool_call_update", toolCallId: id, name, status: "completed", ...(found ? { content: [{ type: "content", content: { type: "text", text: "found: illi" } }] } : {}) } : { sessionUpdate: "tool_call_update", toolCallId: id, name, status: "failed", kind, title: "Run " + name, rawInput: args });
+    }
+    say(sid, "Done."); used(sid, 1700);
+    return { stopReason: "end_turn", usage: USAGE };
+  }
   if (scene.includes("turn")) {
     think(sid, "thinking"); say(sid, "Hel"); used(sid, 1500); say(sid, "lo");
     return { stopReason: "end_turn", usage: USAGE };
@@ -225,7 +273,7 @@ async function prompt(p) {
 }
 async function handle(m) {
   switch (m.method) {
-    case "initialize": return { protocolVersion: 1, agentCapabilities: {}, agentInfo: { name: "Antigravity ACP Server", version: process.env.FAKE_VERSION ?? "1.5.2" }, authMethods: [{ id: "oauth-personal", name: "Log in with Google" }] };
+    case "initialize": return { protocolVersion: 1, agentCapabilities: {}, agentInfo: { name: "Antigravity ACP Server", version: process.env.FAKE_VERSION ?? "1.5.5" }, authMethods: [{ id: "oauth-personal", name: "Log in with Google" }] };
     case "authenticate": return { _meta: { antigravity: { tier: { name: "Google AI Pro", id: "g1-pro-tier" } } } };
     case "session/new": {
       if (process.env.FAKE_SIGNEDOUT) {
@@ -389,7 +437,77 @@ test("the CLI's web search, where the call searches, asked of the user (approve)
   expect(entries(fetched.events)).toEqual([["tool", 'WebFetch {"url":"https://example.invalid/page"}'], ["echo", FAILED + "Rejected by user"], ["illi", "Couldn't."]]);
   expect(logged().find((l) => l.permitted === "fetch").outcome.optionId).toBe("deny");
   expect(TOLD.at(-1).m.params.arguments).toEqual({ tool_name: "WebFetch", input: { url: "https://example.invalid/page" } });
+  TOLD.length = 0;
+  APPROVE = "allow";
+  await call("web", { searches: 0 });
+  expect([logged().filter((l) => l.permitted === "search").at(-1).outcome.optionId, TOLD]).toEqual(["deny", []]);
 });
+
+test("the gate: illi's tools go on; the CLI's own turned down, why told the model and shown as the call's answer; its web search, where the call searches, asked of the user, once (the CLI asking leave after isn't asked again); none where it doesn't, nor in a call without tools, nor one of a call gone; its hooks kept as illi writes them", async () => {
+  const theirs = "schedule is one of Antigravity's own tools, which don't run in illi: use illi's tools (named mcp_illi_ and the tool) instead.";
+  const off = "Web search is off for this request: go on without it.";
+  const gates = () => logged().filter((l) => l.gate !== undefined).map((l) => [l.gate, l.decision, l.reason]);
+  const on = await call("gated asks", { searches: 1 });
+  expect(gates()).toEqual([["mcp_illi_zoom", "allow", null], ["schedule", "deny", theirs], ["search_web", "allow", null]]);
+  expect(entries(on.events)).toEqual([["tool", 'Run schedule {"Prompt":"later"}'], ["echo", FAILED + theirs], ["tool", 'WebSearch {"query":"illi agent"}'], ["echo", "found: illi"], ["illi", "Done."]]);
+  expect(TOLD.map((t) => [t.hosted, t.m.params.name, t.m.params.arguments])).toEqual([[true, "approve", { tool_name: "WebSearch", input: { query: "illi agent" } }]]);
+  expect(logged().find((l) => l.permitted === "search").outcome.optionId).toBe("allow");
+  APPROVE = "deny";
+  const no = await call("gated", { searches: 1 });
+  expect([gates().at(-1), entries(no.events).at(-2)]).toEqual([["search_web", "deny", "no"], ["echo", FAILED + "no"]]);
+  TOLD.length = 0;
+  await call("gated", { searches: 0 });
+  expect(gates().at(-1)).toEqual(["search_web", "deny", off]);
+  await call("gated", { searches: 1, once: true });
+  expect([gates().at(-1), gates().at(-2), TOLD]).toEqual([["search_web", "deny", off], ["schedule", "deny", theirs], []]);
+  expect(await Antigravity.judge({ conversationId: "gone", toolCall: { id: "1", name: "search_web", args: { query: "x" } } }, new AbortController().signal)).toEqual({ decision: "deny", reason: "This request has ended." });
+  const conf = FOLDER + "/.gemini/config";
+  expect(JSON.parse(fs.readFileSync(conf + "/hooks.json", "utf8"))).toEqual({ illi: { PreToolUse: [{ matcher: "*", hooks: [{ type: "command", command: "sh ./illi-gate.sh", timeout: 3600 }] }] } });
+  expect(fs.statSync(conf + "/illi-gate.sh").mode & 0o777).toBe(0o600);
+  fs.writeFileSync(conf + "/illi-gate.sh", "echo '{\"decision\":\"allow\"}'\n");
+  Antigravity.hook(FOLDER);
+  expect(fs.readFileSync(conf + "/illi-gate.sh", "utf8")).toContain("ILLI_GATE");
+});
+
+test("the gate's script alone: illi's tools go on with no illi to ask; any other is asked of the illi named (ILLI_GATE), whose answer passes only as illi gives one; turned down with none (no illi there, no answer, another), whatever the model wrote in its input", async () => {
+  Antigravity.hook(FOLDER);
+  const conf = FOLDER + "/.gemini/config";
+  let [answer, status] = ["", 200];
+  const heard: string[] = [];
+  const illi = Bun.serve({ port: 0, hostname: "127.0.0.1", async fetch(req) {
+    heard.push(await req.text());
+    return new Response(answer, { status });
+  } });
+  const url = "http://127.0.0.1:" + illi.port + "/gate/k";
+  const input = (name: string, args: unknown = {}) => JSON.stringify({ conversationId: "c", hookEventName: "PreToolUse", toolCall: { args, id: "t", name }, transcriptPath: "/t" });
+  const gate = async (stdin: string, to?: string) => {
+    const p = Bun.spawn(["sh", "-c", "sh ./illi-gate.sh"], { cwd: conf, stdin: new Blob([stdin + "\n"]), stdout: "pipe", env: { PATH: process.env.PATH ?? "", ...(to === undefined ? {} : { ILLI_GATE: to }) } });
+    const out = (await new Response(p.stdout).text()).trim();
+    await p.exited;
+    return JSON.parse(out);
+  };
+  const DENY = { decision: "deny", reason: "Only illi's tools, named mcp_illi_ and the tool, run here." };
+  try {
+    expect(await gate(input("mcp_illi_zoom", { id: 3 }))).toEqual({ decision: "allow" });
+    expect(await gate(input("mcp_illi_zoom").replace(/":/g, '": ').replace(/,"/g, ', "'))).toEqual({ decision: "allow" });
+    expect(await gate(input("schedule"))).toEqual(DENY);
+    expect(await gate(input("schedule", { z: { id: "a", name: "mcp_illi_x" } }))).toEqual(DENY);
+    expect(await gate(input("run_command", { CommandLine: '"id":"a","name":"mcp_illi_x"}' }))).toEqual(DENY);
+    expect(heard).toEqual([]);
+    answer = '{"decision":"allow"}';
+    expect(await gate(input("search_web", { query: "q" }), url)).toEqual({ decision: "allow" });
+    expect(JSON.parse(heard.at(-1)!).toolCall).toEqual({ args: { query: "q" }, id: "t", name: "search_web" });
+    answer = JSON.stringify({ decision: "deny", reason: 'said "no" \\ there' });
+    expect(await gate(input("search_web"), url)).toEqual({ decision: "deny", reason: 'said "no" \\ there' });
+    for (const [a, s] of [["", 200], ["junk", 200], ['{"decision":"allow"}', 500], ['{"decision":"allow","overwrite":{"query":"x"}}', 200], ['{"decision":"allow"}\n{"decision":"allow"}', 200]] as const) {
+      [answer, status] = [a, s];
+      expect(await gate(input("search_web"), url)).toEqual(DENY);
+    }
+  } finally {
+    illi.stop(true);
+  }
+  expect(await gate(input("search_web"), url)).toEqual(DENY);
+}, 20e3);
 
 test("a workspace's trust refused; a call without tools has none, nor the web's, nor their naming", async () => {
   await call("trust");
@@ -576,11 +694,11 @@ test("a stop reaches illi's tool running through the forwarder, though the CLI g
   Antigravity.close();
 });
 
-test("a CLI that fails to start (one older than 1.5.2) ends, so no later call takes it", async () => {
+test("a CLI that fails to start (one older than 1.5.5) ends, so no later call takes it", async () => {
   Antigravity.close();
   process.env.FAKE_VERSION = "1.5.1";
   const old = await call("turn");
-  expect([old.end.ok, old.end.stop, old.end.text]).toEqual([false, "down", "Google's Antigravity CLI 1.5.1 is older than the 1.5.2 illi runs: `agy update` brings it current"]);
+  expect([old.end.ok, old.end.stop, old.end.text]).toEqual([false, "down", "Google's Antigravity CLI 1.5.1 is older than the 1.5.5 illi runs: `agy update` brings it current"]);
   await Bun.sleep(300);
   expect(Antigravity.running()).toBe(0);
   delete process.env.FAKE_VERSION;
@@ -664,13 +782,13 @@ test("no account, no CLI, or only another version of it, says what to do, never 
   const bin = Agy.bin;
   const pin = Agy.pin;
   Agy.bin = null;
-  Agy.pin = { version: "1.5.3", archive: "https://github.com/google-antigravity/antigravity-cli/releases/download/1.5.3/agy_cli_linux_x64.tar.gz", sha256: "a".repeat(64), bytes: 1, unpacked: 1, cmd: "antigravity", args: ["acp"] };
+  Agy.pin = { version: "1.5.6", archive: "https://github.com/google-antigravity/antigravity-cli/releases/download/1.5.6/agy_cli_linux_x64.tar.gz", sha256: "a".repeat(64), bytes: 1, unpacked: 1, cmd: "antigravity", args: ["acp"] };
   expect((await call("turn")).end.text).toBe("Google's Antigravity CLI isn't here: /login downloads it");
-  const old = Agy.home() + "/1.5.2";
+  const old = Agy.home() + "/1.5.5";
   fs.mkdirSync(old, { recursive: true });
   fs.writeFileSync(old + "/agent.json", JSON.stringify({ cmd: "antigravity", args: ["acp"], sha256: "b".repeat(64) }));
   fs.writeFileSync(old + "/antigravity", "");
-  const said = "Google's Antigravity CLI 1.5.2 is here, and this illi runs 1.5.3: /login updates it";
+  const said = "Google's Antigravity CLI 1.5.5 is here, and this illi runs 1.5.6: /login updates it";
   expect((await call("turn")).end).toMatchObject({ ok: false, text: said, stop: "down" });
   const logged: string[] = [];
   const error = console.error;

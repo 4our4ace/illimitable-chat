@@ -20,8 +20,11 @@
 // and its answer echoed (a turn of two steps: no tokens told); a
 // picture; thoughts and a reply in pieces; too long for the window
 // (full); a model the plan doesn't offer (said plainly); a stop during a
-// tool (lost); two calls at once on one CLI; the CLI's own web search
-// asking illi first (refused here); nothing left behind (no session's
+// tool (lost); two calls at once on one CLI; illi's gate (the CLI's hook)
+// before every tool: the CLI's own web search asked of illi first
+// (refused here), off in a call without tools, and its other tools (a
+// timer, a command) turned down with why, the model going on; nothing
+// left behind (no session's
 // files, no log, no CLI running), nothing asked that the stand-in
 // doesn't answer. The CLI retries a busy service (503) for minutes, so
 // that isn't tried; it tells no model's window against the stand-in.
@@ -90,7 +93,9 @@ function script(body: any): { call: string; args: any } | { text: string } {
     case "T1": return { text: "Hello from the stand-in. Tools I see: " + names.join(", ") };
     case "T2": return asked === 0 ? { call: find("echo"), args: { x: "ping" } } : { text: "T2 got: " + last };
     case "T3": return asked === 0 ? { call: find("picture"), args: {} } : { text: "T3 got: " + last };
-    case "T5": return asked === 0 ? { call: "search_web", args: { query: "illi agent", toolAction: "Searching the web", toolSummary: "Web search" } } : { text: "T5 got: " + last };
+    case "T4": return asked === 0 ? { call: "run_command", args: { CommandLine: "echo live", WaitMsBeforeAsync: 1000 } } : { text: "T4 got: " + last };
+    case "T5": return asked === 0 ? { call: "search_web", args: { query: "illi agent" } } : { text: "T5 got: " + last };
+    case "T7": return asked === 0 ? { call: "schedule", args: { Prompt: "later", DurationSeconds: 1 } } : { text: "T7 got: " + last };
     case "T6": return asked === 0 ? { call: find("slow"), args: {} } : { text: "T6 got: " + last };
     default: return { text: "no marker" };
   }
@@ -139,7 +144,8 @@ const GATEWAY = Bun.serve({ port: 0, hostname: "127.0.0.1", idleTimeout: 120, as
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==";
 
 // a stand-in for illi's tools (its MCP server): echo, picture, slow (three
-// seconds); no approve, so the agent's web search is refused
+// seconds); no approve, so the agent's web search is refused (the gate
+// says the user didn't allow it)
 const TOOLS = Bun.serve({ port: 0, hostname: "127.0.0.1", idleTimeout: 120, async fetch(req) {
   if (req.method !== "POST") {
     return new Response("", { status: 405 });
@@ -180,6 +186,7 @@ const { Antigravity } = await import("./Antigravity.ts");
 const { Agy } = await import("./Agy.ts");
 const { Acp } = await import("./Acp.ts");
 const { Pick } = await import("../../ai/Pick.ts");
+const { FAILED } = await import("../../ui/View.ts");
 
 const FOLDER = path.join(KEEP, "antigravity", "live");
 
@@ -267,10 +274,20 @@ test.skipIf(!LIVE)("Google's real CLI, the pinned build, through illi's runner a
   const both = await Promise.all([call("T1 at once A"), call("T1 at once B")]);
   expect([both[0].end.ok, both[1].end.ok, Antigravity.running()]).toEqual([true, true, 1]);
 
-  // the CLI's own web search asks illi first (refused here)
+  // illi's gate before every tool (its hook, written in the account's
+  // folder): the CLI's own web search asked of illi first (refused here:
+  // the stand-in has no approve), none in a call without tools; its own
+  // timer and command turned down, saying why, the model going on
+  expect(fs.readFileSync(path.join(Antigravity.home(FOLDER, ""), "config", "hooks.json"), "utf8")).toContain("sh ./illi-gate.sh");
   const web = await call("T5 web search", { searches: 1 });
-  expect(web.end.ok).toBe(true);
-  expect(web.end.text).toContain("search_web");
+  expect([web.end.ok, web.end.text]).toEqual([true, expect.stringContaining("denied by pre-tool hook: The user didn't allow it.")]);
+  const once = await call("T5 web search, no tools", { searches: 1, once: true });
+  expect([once.end.ok, once.end.text]).toEqual([true, expect.stringContaining("denied by pre-tool hook: Web search is off for this request")]);
+  for (const [marker, tool] of [["T7", "schedule"], ["T4", "run_command"]]) {
+    const theirs = await call(marker + " the CLI's own tool");
+    expect([theirs.end.ok, theirs.end.text]).toEqual([true, expect.stringContaining("denied by pre-tool hook: " + tool + " is one of Antigravity's own tools")]);
+    expect(theirs.shown).toContain("echo: " + FAILED + tool + " is one of Antigravity's own tools, which don't run in illi: use illi's tools (named mcp_illi_ and the tool) instead.");
+  }
 
   // nothing left behind
   Antigravity.close();

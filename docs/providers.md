@@ -295,7 +295,7 @@ never reads the CLI's sign-in, never runs `agy -p`, and never switches
 accounts on its own.
 
 - **The CLI**: if you installed Google's Antigravity CLI yourself
-  (`agy` on your `PATH`, in one of its absolute folders), version 1.5.2
+  (`agy` on your `PATH`, in one of its absolute folders), version 1.5.5
   or later, illi runs yours, and
   keeping it current is yours (`agy update`); illi asks its version
   once, in the background, and again only once the program changes. One
@@ -329,7 +329,7 @@ accounts on its own.
   goes too while yours runs in its place, so nothing lingers (Google's older
   `antigravity-acp` agent, which illi ran before 0.3.14, included). To
   run another command line, set `ILLI_ANTIGRAVITY` to it (`agy acp`, or
-  a path and `acp`): illi runs it if it's 1.5.2 or later.
+  a path and `acp`): illi runs it if it's 1.5.5 or later.
 - **Signing in**: illi opens Google's page in your browser (and shows
   the link); sign in there, then paste the code the page shows into
   illi (shown as dots), which gives it to the CLI. Esc stops it. Each
@@ -353,7 +353,15 @@ accounts on its own.
   MCP, run by illi, so your permissions, hooks and background jobs work
   as on every provider. Of the CLI's own tools only its web search and
   page reading are on, where a turn searches the web, each asked at
-  illi's screen as Claude Code's are. It runs in an empty folder, so no
+  illi's screen as Claude Code's are. The CLI offers the model its other
+  tools anyway (files, commands, timers, agents of its own), so illi
+  writes a hook of the CLI's own in the account's folder
+  (`.gemini/config/hooks.json` and `illi-gate.sh`, written again as a
+  CLI starts there) that runs before every tool the model calls: illi's
+  go on, its web search is asked of illi, and anything else is turned
+  down, telling the model why, so it goes on with illi's tools. The hook
+  needs `curl` to ask illi of the web search: without it, the search is
+  turned down too. It runs in an empty folder, so no
   project's rules load twice (illi reads them itself); no Gemini,
   Google or Antigravity key or setting of your environment reaches it,
   nor its own updates or telemetry.
