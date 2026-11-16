@@ -469,11 +469,19 @@ export namespace Antigravity {
       const set = await Acp.call(conn, "session/set_config_option", { sessionId: run.sid, configId: "model", value: want }, SETUP);
       now = Array.isArray(set?.configOptions) ? set.configOptions : all;
     }
-    const level = now.find((o: any) => o?.id === "thinking_level");
+    const level = Antigravity.level(now);
     if (level !== undefined && level.currentValue !== effort && Antigravity.values(level).includes(effort)) {
-      await Acp.call(conn, "session/set_config_option", { sessionId: run.sid, configId: "thinking_level", value: effort }, SETUP);
+      await Acp.call(conn, "session/set_config_option", { sessionId: run.sid, configId: String(level.id), value: effort }, SETUP);
     }
     return null;
+  }
+
+  // a session's thinking level option: ACP's thought_level category's
+  // (Google's service names it thought_level, on every CLI illi runs),
+  // else one of the ids it has had (thinking_level, in older CLIs)
+  export function level(options: unknown): any {
+    const all = Array.isArray(options) ? options : [];
+    return all.find((o: any) => o?.category === "thought_level") ?? all.find((o: any) => o?.id === "thought_level" || o?.id === "thinking_level");
   }
 
   // a select option's values (its groups' too)
@@ -493,7 +501,7 @@ export namespace Antigravity {
   // runs)
   export function catalog(made: any): Model[] {
     const all    = Array.isArray(made?.configOptions) ? made.configOptions : [];
-    const levels = Antigravity.values(all.find((o: any) => o?.id === "thinking_level")).filter((e) => EFFORTS.includes(e));
+    const levels = Antigravity.values(Antigravity.level(all)).filter((e) => EFFORTS.includes(e));
     const listed = (Array.isArray(made?.models?.availableModels) ? made.models.availableModels : []).map((m: any) => String(m?.modelId ?? ""));
     const tells  = new RegExp("^(.+)-(" + EFFORTS.join("|") + ")$");
     const found  = new Map<string, Set<string>>();
