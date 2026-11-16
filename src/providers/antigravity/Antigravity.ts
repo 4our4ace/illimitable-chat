@@ -822,15 +822,15 @@ export namespace Antigravity {
   // long for the window (`full`); else what it said logged and the stop in
   // plain words (Agent.stopped: the most the model may write at once, a
   // refusal), as illi's own loop ends one. The tokens its first step read
-  // (first): as a step's usage told them, else a one-step turn's whole as
-  // the result's usage tells it (that counts every step, so a turn that
-  // called a tool tells none)
+  // (first): a one-step turn's, as the result's usage tells them (it counts
+  // every step, so only there); else as the first step's usage told them
+  // (what its context holds after it: what it read, and wrote too)
   export function end(run: Run, result: any): End {
     const stop  = String(result?.stopReason ?? "");
     const used  = result?.usage !== undefined && result?.usage !== null;
     const error = run.text.trim() !== "" && (!used || ERROR.test(run.last));
     const read  = Number(result?.usage?.inputTokens);
-    const first = run.first !== null ? { first: run.first } : !run.steps && read > 0 ? { first: read } : {};
+    const first = !run.steps && read > 0 ? { first: read } : run.first !== null ? { first: run.first } : {};
     if (run.stopped || stop === "cancelled") {
       return Antigravity.lost(run);
     }

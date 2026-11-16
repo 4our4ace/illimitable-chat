@@ -341,7 +341,7 @@ const entries = (events: any[]) => events.filter((e) => e.$ === "Entry").map((e)
 
 test("a turn: the CLI run as illi in the account's folder, never signed in by illi, illi's prompt after Google's, the pick's model and level; its words logged whole; the window the CLI tells (the model's own 1M) never raising the most it takes; its session's files gone, Google's old agent's sign-in and what the CLI left a day old too", async () => {
   const { events, end } = await call("turn");
-  expect([end.ok, end.text, end.first]).toEqual([true, "Hello", 1500]);
+  expect([end.ok, end.text, end.first]).toEqual([true, "Hello", 1400]);
   expect(events.filter((e) => e.$ === "Delta").map((e) => [e.kind, e.text])).toEqual([["mind", "thinking"], ["illi", "Hel"], ["illi", "lo"]]);
   expect(entries(events)).toEqual([["mind", "thinking"], ["illi", "Hello"]]);
   const log = logged();
@@ -363,9 +363,9 @@ test("a turn: the CLI run as illi in the account's folder, never signed in by il
   expect(Pick.model("antigravity", "gemini-3.8-flash")).toMatchObject({ window: 384000, standard: 192000 });
 });
 
-test("illi's tools reach the CLI through the forwarder, each logged with its answer (the CLI's own note of it not logged again), its words before it logged first; the CLI's permission given once; the tokens read told of a one-step turn alone", async () => {
+test("illi's tools reach the CLI through the forwarder, each logged with its answer (the CLI's own note of it not logged again), its words before it logged first; the CLI's permission given once; the tokens read told of a one-step turn by its result, of one that called a tool by its first step's usage alone", async () => {
   const { events, end } = await call("tool");
-  expect([end.ok, end.text]).toEqual([true, "Done."]);
+  expect([end.ok, end.text, end.first]).toEqual([true, "Done.", 1600]);
   const plain = await call("plain");
   const quiet = await call("quiet");
   expect([plain.end.first, quiet.end.first, entries(quiet.events)]).toEqual([1400, undefined, [["illi", "quiet"]]]);

@@ -240,7 +240,7 @@ test.skipIf(!LIVE)("Google's real CLI, the pinned build, through illi's runner a
 
   // illi's tool called, its answer echoed; a picture
   const echo = await call("T2 echo");
-  expect([echo.end.ok, echo.shown.slice(0, 2), echo.end.first]).toEqual([true, ['tool: echo {"x":"ping"}', "echo: ECHO:ping"], undefined]);
+  expect([echo.end.ok, echo.shown.slice(0, 2), echo.end.first]).toEqual([true, ['tool: echo {"x":"ping"}', "echo: ECHO:ping"], 1246]);
   const pic = await call("T3 picture");
   expect(pic.end.ok).toBe(true);
   expect(pic.shown).toContain("echo: [image]\na red dot");
@@ -252,7 +252,7 @@ test.skipIf(!LIVE)("Google's real CLI, the pinned build, through illi's runner a
   // too long for the window; a model the plan doesn't offer
   expect((await call("T8 too long")).end).toMatchObject({ ok: false, stop: "full" });
   const none = await call("T1 on a model not offered", { model: "gemini-3.8-flash" });
-  expect(none.end).toMatchObject({ ok: false, stop: "fail" });
+  expect(none.end).toMatchObject({ ok: false, stop: "down" });
   expect(none.end.text).toContain("doesn't offer gemini-3.8-flash");
 
   // a stop during a tool
