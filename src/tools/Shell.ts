@@ -195,7 +195,8 @@ type Doc = { delim: string; strip: boolean; expand: boolean; redir: Redir; inpip
 // repository each folder is in, as looked for (tops: Shell repo); the
 // scripts cut nested too deep (cuts: part_rough); whether any of it was
 // left unread past the check's work (spent: part_rough), kept though a
-// reading holding it is undone (attempt), so the command still asks
+// reading holding it is undone (attempt), so the command still asks; how
+// many scripts deep the reading is (inner: nested)
 type Scan = {
   src   : string;
   at    : number;
@@ -220,6 +221,7 @@ type Scan = {
   tops  : Map<string, string | null>;
   cuts  : number;
   spent : boolean;
+  inner : number;
 };
 
 // what a command run in a subshell changes of the shell, as it was
@@ -246,15 +248,19 @@ type Global = { args: string[]; flags: string[]; opt?: string[]; nums?: string[]
 
 // the work one check's readings may still do, shared by all of them
 // (Shell.parse's, each piece Access.ts reads on its own too): a unit for
-// each part read, each script read (nested: more for a shell of its own
+// each part a script read runs (a command's own parts, bounded by its
+// length, spend none, so many of them never leave a script after them
+// unread), each script read (nested: more for a shell of its own
 // by the variables it copies, VARS), each step through an alias, each
 // EXPAND of the variables' text put in words, each VARS variables copied
 // to be set (vars_own). Spent, the scripts and aliases left are left
 // unread (Part rough "spent"), and so are long words and the variables
 // past it, so the check asks (Access: never allowed by rules on what was
-// read). A command's plain parts spend it but are all read, however
-// many: only scripts, alias steps, words and copies stop at it
-export type Work = { left: number };
+// read). A script's plain parts spend it but are all read, however
+// many: only scripts, alias steps, words and copies stop at it. Split
+// values put as words and wrappers taken off in long rows spend their own
+// (spread), so spending it never leaves the rest unread
+export type Work = { left: number; spread: number };
 
 // a git setting given with a command: its key (null: known only as it
 // runs), its value (null: none, a yes), as written; whether it may be
@@ -273,15 +279,22 @@ class Unread extends Error {
 // =========
 
 // the most values a word takes (more: dynamic); the deepest nesting of
-// subshells and nested scripts read
+// subshells and nested scripts read; the deepest braces in braces expanded
+// (deeper: the word is known only as it runs), so one brace's look costs
+// its length times this at most
 const MOST = 16;
 const NEST = 64;
+const BRACES = 32;
 
 // a word that is wholly one variable, unquoted ($o, ${o}): bash splits
 // its value into words; how many such words are a unit of a check's work
 // (Work: a long value split again and again asks, var_put)
 const LONE = /^\$(?:\{[A-Za-z_]\w*\}|[A-Za-z_]\w*)$/;
-const SPLIT = 16;
+const SPLIT = 4;
+
+// a word wholly made as it runs, unquoted (a variable, a command's
+// output): bash drops it where it comes out blank
+const BLANKS = /^(?:\$(?:\{[^}]*\}|[A-Za-z_]\w*|\(.*\))|`.*`)$/s;
 
 // the work one check's readings may do (Work): far past any command a
 // person or a model writes (an everyday one takes a few units, the
@@ -320,6 +333,10 @@ const VARS = 256;
 // work more: one read again and again (eval eval ... x, 2,000 deep, in a
 // long script) asks rather than taking seconds
 const SCRIPT = 256;
+
+// how many words after a wrapper taken off (unwrap) are a unit of the
+// check's work more: thousands of wrappers in a row ask in a moment
+const WRAPPED = 1024;
 
 // the longest value a variable holds as known (var_set), or a word (add),
 // far past any a command gives one: longer, it is known only as it runs
@@ -542,7 +559,7 @@ export namespace Shell {
   // runs it in: an eval inside a && list ignores it), so none is trusted
   export function parse(command: string, cwd: string, at: number | Span = 0, sete = true, work: Work = Shell.work()): Part[] | string {
     const [base, box]: [number | null, Span] = typeof at === "number" ? [at, [at, at + command.length]] : [null, at];
-    const s: Scan = { src: command, at: 0, base, box, parts: [], cwd, vars: new Map(), wild: false, errexit: false, sete, docs: [], root: false, fed: false, inpipe: false, depth: 0, pipes: [], read: new Set(), work, given: [], ids: new Map(), tops: new Map(), cuts: 0, spent: false };
+    const s: Scan = { src: command, at: 0, base, box, parts: [], cwd, vars: new Map(), wild: false, errexit: false, sete, docs: [], root: false, fed: false, inpipe: false, depth: 0, pipes: [], read: new Set(), work, given: [], ids: new Map(), tops: new Map(), cuts: 0, spent: false, inner: 0 };
     try {
       scan_list(s, "");
       pipe_feeds(s);
@@ -567,7 +584,7 @@ export namespace Shell {
 
   // the work one check's readings may do, to share among them (Work)
   export function work(): Work {
-    return { left: WORK };
+    return { left: WORK, spread: WORK };
   }
 
   // a check's readings made with no script read twice from memory (Scan
@@ -946,7 +963,10 @@ function scan_word(s: Scan): Word {
       output(s, b, scan_tick(s), !/^[A-Za-z_]\w*\+?=/.test(s.src.slice(start, s.at)));
     } else if (c === "~" && (s.at === start || /^[A-Za-z_]\w*\+?=$/.test(s.src.slice(start, s.at)))) {
       scan_tilde(s, b);
-    } else if (c === "{" && (x = brace(s.src, s.at)) !== null) {
+    } else if (c === "{" && !b.dynamic && (x = brace(s.src, s.at)) !== null) {
+      // a word already known only as it runs gains nothing from a brace's
+      // values, so its { is read as itself (else each { of a long word
+      // nested deep would look to the word's end again)
       if (x === "many") {
         unknown(b);
         add(b, [c]);
@@ -1017,10 +1037,14 @@ function closes(src: string, at: number): boolean {
 // values, or holding what this doesn't expand (quotes, $, `, \: the word
 // is then known only as it runs, its characters still read one by one, so
 // a command in it is still found); null: not one (no comma nor .. at its
-// top, or the word ends first), a plain {
-function brace(src: string, at: number): { end: number; alts: string[] } | "many" | null {
+// top, or the word ends first), a plain {. One inside BRACES others is
+// "many" too
+function brace(src: string, at: number, level = 0): { end: number; alts: string[] } | "many" | null {
   if (OPEN !== null && OPEN.src === src && at > OPEN.close && at < OPEN.end) {
     return null;
+  }
+  if (level >= BRACES) {
+    return "many";
   }
   const items: string[] = [];
   let [depth, from, odd, close] = [0, at + 1, false, at];
@@ -1046,7 +1070,7 @@ function brace(src: string, at: number): { end: number; alts: string[] } | "many
       if (items.length < 2 && seq === null) {
         return null;
       }
-      const each = seq !== null ? (seq === "many" ? null : seq) : items.map(brace_all);
+      const each = seq !== null ? (seq === "many" ? null : seq) : items.map((x) => brace_all(x, level + 1));
       const alts = odd || each === null || each.some((x) => x === null) ? null : each.flatMap((x) => x ?? []);
       return alts === null || alts.length > MOST ? "many" : { end: i + 1, alts };
     }
@@ -1055,14 +1079,14 @@ function brace(src: string, at: number): { end: number; alts: string[] } | "many
 }
 
 // a text with every brace expansion in it done (null: too many values)
-function brace_all(text: string): string[] | null {
+function brace_all(text: string, level: number): string[] | null {
   for (let i = 0; i < text.length; i++) {
-    const x = text[i] === "{" ? brace(text, i) : null;
+    const x = text[i] === "{" ? brace(text, i, level) : null;
     if (x === "many") {
       return null;
     }
     if (x !== null) {
-      const tail = brace_all(text.slice(x.end));
+      const tail = brace_all(text.slice(x.end), level);
       const out = tail === null ? null : x.alts.flatMap((a) => tail.map((t) => text.slice(0, i) + a + t));
       return out === null || out.length > MOST ? null : out;
     }
@@ -1248,17 +1272,16 @@ function var_put(s: Scan, b: Build, name: string, split = false): void {
     return;
   }
   if (split && known.some((x) => /[ \t\n]/.test(x))) {
-    // its words the check's work too (SPLIT): each read as a word of its
-    // own wherever it is put
+    // its words the check's work too (SPLIT, one at least each time):
+    // each read as a word of its own wherever it is put; past the work,
+    // one word known only as it runs, and the command asks (Scan spent)
     const whole = !b.dynamic && b.split === undefined && b.alts.length === 1 && b.alts[0] === "" && v?.dynamic !== true;
-    const words = Math.floor(known.reduce((n, x) => n + x.split(/[ \t\n]+/).length, 0) / SPLIT);
-    s.work.left -= whole ? words : 0;
+    const words = Math.ceil(known.reduce((n, x) => n + x.split(/[ \t\n]+/).length, 0) / SPLIT);
+    s.work.spread -= whole ? words : 0;
     unknown(b);
-    b.split = whole && (words === 0 || s.work.left > 0) ? known : null;
-    if (whole && words > 0 && s.work.left <= 0) {
-      b.alts = [""];
-      b.long = true;
-    }
+    const kept = whole && s.work.spread > 0;
+    b.split = kept ? known : whole ? undefined : null;
+    s.spent ||= whole && !kept;
     return;
   }
   add(b, known);
@@ -1880,6 +1903,11 @@ function cmd_word(s: Scan, cmd: Cmd, word: Word): boolean {
     }
   }
   const set = cmd.words.length === 0 ? /^([A-Za-z_]\w*)(\+?)=/.exec(word.raw) : null;
+  if (set === null && cmd.words.length === 0 && /^[A-Za-z_]\w*\[[^\]]*$/.test(word.raw) && /^\s[^\n;&|]*\]\+?=/.test(s.src.slice(s.at))) {
+    // an element set whose index holds a blank (x[a b]=1 make deploy:
+    // one word to bash)
+    throw new Unread("an array");
+  }
   const element = set === null && cmd.words.length === 0 ? /^([A-Za-z_]\w*)\[[^\]]*\]\+?=/.exec(word.raw) : null;
   if (element !== null) {
     // an array's element set (x[0]=1 rm -rf y: an assignment, rm runs):
@@ -1934,14 +1962,43 @@ function cmd_run(s: Scan, cmd: Cmd, full: string, piped: boolean, top: boolean, 
     env.forEach((e) => var_set(s, e.name, e.value));
     runs(s, env, ctx);
     part_push(s, [], env, cmd.redirs, full, ctx);
+    as_one(s, cmd, words, full, ctx);
     return;
   }
   const run = unwrap(s, words, cmd.env, cmd.redirs, full, ctx);
+  as_one(s, cmd, words, full, ctx);
   if (run !== null) {
-    if (run.own && SPECIALS.has(Shell.program(run.argv[0]))) {
+    // its assignments last where it may run no program at all: every
+    // word may come out blank (V=5 $Z), or a special builtin runs
+    if ((run.own && SPECIALS.has(Shell.program(run.argv[0]))) || words.every((w) => w.dynamic && !Array.isArray(w.split) && BLANKS.test(w.raw))) {
       cmd.env.forEach((e) => var_set(s, e.name, DYN));
     }
     cmd_after(s, run.argv, run.own, top && cmd.redirs.length === 0);
+  }
+}
+
+// a command whose words bash splits or drops as blank (spread_words) read
+// as written too, each such word one known only as it runs: its value
+// may be stale where it runs (a loop's body is read once: V='5 x'; for i
+// in 1 2; do timeout $V rm y; V=5; done runs rm y the second time; an
+// assignment that may last), so a rule that denies what runs either way
+// still meets it. The shell as it was after (not run: its first reading
+// changes the shell); one that can't be read so is read crudely
+function as_one(s: Scan, cmd: Cmd, words: Word[], full: string, ctx: Ctx): void {
+  if (words === cmd.words) {
+    return;
+  }
+  const one = cmd.words.map((w) => (Array.isArray(w.split) ? { ...w, split: undefined } : w));
+  const was = state_of(s);
+  try {
+    unwrap(s, one, cmd.env, cmd.redirs, full, ctx);
+  } catch (err) {
+    if (!(err instanceof Unread) || err.deep) {
+      throw err;
+    }
+    part_rough(s, full, ctx);
+  } finally {
+    state_put(s, was);
   }
 }
 
@@ -2114,9 +2171,32 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
   const taken: Word[] = [];
   const dirs: Dir[] = [];
   const aside = () => (redirs.length > 0 || taken.length > 0 || dirs.length > 0) && part_push(s, [], env, redirs, full, ctx, { taken, dirs });
+  // the command asks, its text once (a doubt, a word that may be the
+  // program, the work spent), however many wrappers say so
+  let asked = false;
+  const ask = (why: boolean) => {
+    if (why && !asked) {
+      asked = true;
+      part_rough(s, full, ctx, "spent");
+    }
+  };
+  // a wrapper taken off is the check's work by the words after it, one
+  // per WRAPPED (so a row of thousands costs its length squared), of its
+  // own (Work spread): past it, the rest is left as it is, and it asks.
+  // One with fewer words costs none, so it is taken off even once that
+  // work is spent
+  const spend_wrap = () => {
+    const cost = Math.floor(argv.length / WRAPPED);
+    s.work.spread -= cost;
+    ask(cost > 0 && s.work.spread <= 0);
+    return cost === 0 || s.work.spread > 0;
+  };
   runs(s, env, ctx);
   for (;;) {
     const name = Shell.program(argv[0]);
+    if ((ROOTS[name] !== undefined || WRAPS[name] !== undefined) && !spend_wrap()) {
+      break;
+    }
     const rest = argv.slice(1);
     if (name === "su" || name === "sudoedit") {
       ctx = { ...ctx, root: true };
@@ -2124,7 +2204,7 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
     }
     if (ROOTS[name] !== undefined) {
       const { rest: after, got, doubt } = Shell.opts(rest, { args: ROOTS[name] });
-      doubt && part_rough(s, argv.map((w) => w.raw).join(" "), ctx, "spent");
+      ask(doubt);
       const used = rest.slice(0, rest.length - after.length);
       const edit = name === "sudo" && used.some((w) => w.raw === "--edit" || /^-[^-ughpCDrtTU]*e/.test(w.raw));
       const dir = got.get("-D") ?? got.get("--chdir");
@@ -2135,7 +2215,7 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
       const given = name === "sudo" && !edit ? assigns(after) : { sets: [], rest: after, mixed: false };
       env = [...env, ...given.sets];
       runs(s, given.sets, ctx);
-      given.mixed && part_rough(s, argv.map((w) => w.raw).join(" "), ctx, "spent");
+      ask(given.mixed);
       argv = edit ? [Shell.lit("sudoedit"), ...after] : given.rest;
       continue;
     }
@@ -2149,7 +2229,7 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
       if (odd !== null) {
         throw new Unread(name + " " + odd + ": an option illi doesn't know");
       }
-      doubt && part_rough(s, argv.map((w) => w.raw).join(" "), ctx, "spent");
+      ask(doubt);
       let next = after.slice(wrap.then ?? 0);
       taken.push(...(wrap.files ?? []).flatMap((o) => got.get(o) ?? []), ...(wrap.held === true ? after.slice(0, wrap.then ?? 0) : []));
       if (name === "time" && /^[A-Za-z_]\w*\+?=/.test(next[0]?.raw ?? "")) {
@@ -2167,7 +2247,7 @@ function unwrap(s: Scan, words: Word[], env: Env[], redirs: Redir[], full: strin
         const given = assigns(next);
         env = [...env, ...given.sets];
         runs(s, given.sets, ctx);
-        given.mixed && part_rough(s, argv.map((w) => w.raw).join(" "), ctx, "spent");
+        ask(given.mixed);
         next = given.rest;
       }
       if (name === "xargs") {
@@ -3178,6 +3258,7 @@ function nested(s: Scan, script: Word, ctx: Ctx, sub: boolean, words: Word[] = [
   const box  = last !== undefined && words.every((w) => w.at !== undefined) ? place(s, words[0].at!, last.at! + last.raw.length) : ctx.span;
   const [root, fed, cwd, inpipe] = [s.root, s.fed, s.cwd, s.inpipe];
   Object.assign(s, { root: ctx.root, fed: ctx.fed, cwd: ctx.cwd, inpipe: ctx.piped });
+  s.inner++;
   try {
     for (const text of script.alts) {
       // each script read is the check's work, more by its text (SCRIPT:
@@ -3201,6 +3282,7 @@ function nested(s: Scan, script: Word, ctx: Ctx, sub: boolean, words: Word[] = [
       }
     }
   } finally {
+    s.inner--;
     Object.assign(s, { root, fed, inpipe });
     s.cwd = sub ? cwd : s.cwd;
   }
@@ -3310,7 +3392,7 @@ function stdin(r: Redir): boolean {
 }
 
 function part_push(s: Scan, argv: Word[], env: Env[], redirs: Redir[], full: string, ctx: Ctx, more: { taken?: Word[]; dirs?: Dir[]; plain?: Word[][] } = {}): void {
-  s.work.left--;
+  s.work.left -= s.inner > 0 ? 1 : 0;
   s.parts.push({ argv, plain: more.plain ?? [], taken: more.taken ?? [], dirs: more.dirs ?? [], env, redirs, cwd: ctx.cwd, at: ctx.at, text: argv.map((w) => w.raw).join(" "), full, root: ctx.root, fed: ctx.fed, piped: ctx.piped, span: ctx.span });
 }
 

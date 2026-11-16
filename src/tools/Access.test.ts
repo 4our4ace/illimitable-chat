@@ -550,7 +550,7 @@ test("a word grown past what illi holds, or given more of the variables' text th
 });
 
 test("a command illi can't read saves each command in it by its family, its leading assignments and shell words off, never every command; nested deeper than it reads, it asks", () => {
-  const wrong = (save: string[]) => save.filter((s) => s === "*" || /^(?:[A-Za-z_]\w*(?:\[[^\]]*\])?\+?=|\((?!\()|(?:!|time|do|then|\{|coproc|in)(?:\s|$))/.test(s) || /^(?:\[\[|\(\(|let) \*$/.test(s));
+  const wrong = (save: string[]) => save.filter((s) => s === "*" || /^(?:[A-Za-z_]\w*(?:\[[^\]]*\])?\+?=|\((?!\()|(?:!|time|do|then|\{|coproc|in)(?:\s|$))/.test(s) || (/ \*$/.test(s) && /^(?:\[\[|\(\(|let |[A-Za-z_]\w*\[)/.test(s)));
   for (const [c, family] of [
     ["x=(a); X=1 make deploy", "make deploy *"],
     ["for o in a b; do eval \"ls $o\"; done", "eval *"],
@@ -566,6 +566,9 @@ test("a command illi can't read saves each command in it by its family, its lead
     ["x=(a); for o\nin a b; do ls; done", "ls *"],
     ["[[ a =~ (b) ]]; ls", "ls *"],
     ["x=(a); [[ -f x ]] && ls", "ls *"],
+    ["((i++)); ls", "ls *"],
+    ["x=(a); ((X=1 make deploy)); ls", "ls *"],
+    ["x[a b]=1 make deploy", "make deploy *"],
   ]) {
     const save = Access.shell(WHERE, c).find((r) => r.action === "shell")!.save;
     expect([c, save.includes(family), wrong(save)]).toEqual([c, true, []]);
@@ -646,6 +649,25 @@ test("eval's --, coproc, an array's element set before a command, a variable's k
   ]) {
     expect([c, judge(c, deny)]).toEqual([c, ["deny"]]);
   }
+  // a split value read as one word too, as it may be stale where it runs
+  // (a loop's body read once; an assignment that may last): a wrapper's
+  // or an option's value either way
+  for (const c of [
+    "V='5 x'; for i in 1 2; do timeout $V rm y; V=5; done",
+    "V='root x'; for i in 1 2; do sudo -u $V rm y; V=root; done",
+    "V='5 x'; for i in 1 2; do nice -n $V rm y; V=5; done",
+    "V='1 x'; for i in 1 2; do xargs -n $V rm; V=1; done",
+    "V='5 x'; for i in 1 2; do timeout $V git push; V=5; done",
+    "V='5 x'; while timeout $V rm y; do V=5; done",
+    "V='5 x'; for i in 1 2; do timeout $V rm y; read V; done",
+    "V='5 x'; V=5 $Z; timeout $V rm y",
+    "V='5 x'; for o in '' x; do V=5 $o; done; timeout $V rm y",
+    "V='5 x'; [[ 1 -eq V=5 ]]; timeout $V rm y",
+    "V='5 x'; x[V=5]=1; timeout $V rm y",
+    "x[a b]=1 make deploy",
+  ]) {
+    expect([c, judge(c, deny)]).toEqual([c, ["deny"]]);
+  }
   // a value bash splits glued to an option, a short option's value made
   // as it runs that may be blank: the words after it may be read wrong
   for (const c of ["D='x -c'; git --git-dir=$D alias.x=push x", "env -u$D ls", "sudo -u$U ls"]) {
@@ -684,16 +706,41 @@ test("git's settings in the environment, as many as a command may give and its a
     Access.shell(WHERE, c);
     expect([c.slice(0, 40), performance.now() - t0 < 1500]).toEqual([c.slice(0, 40), true]);
   }
-  // past 128 KB, its crude pieces alone, each read on its own: it asks,
-  // a rule that denies what is in it still refusing it, in a moment
+  // wrappers in a long row, a split value naming them, each the check's
+  // work: they ask in a moment
+  for (const c of ["sudo -u$U ".repeat(12000) + "rm y", "env -u$D ".repeat(14000) + "rm y", "V='sudo env'; " + "$V ".repeat(30000) + "rm y", "sudo ".repeat(20000) + "rm y"]) {
+    const t0 = performance.now();
+    expect([c.slice(0, 20), Access.shell(WHERE, c).at(-1)!.failed, performance.now() - t0 < 1500]).toEqual([c.slice(0, 20), expect.any(String), true]);
+  }
+  // past 128 KB, its crude pieces alone, each read on its own (past 256
+  // KB, each distinct one): it asks, a rule that denies what is in it
+  // still refusing it, in a moment
   const pad = "echo " + "a".repeat(140000) + "; ";
-  for (const c of [pad + "git -C app push", pad + "sudo rm -rf y", pad + "rm y; " + n(4000).map((i) => "export GIT_CONFIG_KEY_" + i + "=alias.a" + i + " GIT_CONFIG_VALUE_" + i + "='!git a" + (i + 1) + "'").join("; ")]) {
+  const doc = "cat > x <<'EOF'\n" + "line of text\n".repeat(25000) + "EOF\n";
+  for (const c of [pad + "git -C app push", pad + "sudo rm -rf y", pad + "rm y; " + n(4000).map((i) => "export GIT_CONFIG_KEY_" + i + "=alias.a" + i + " GIT_CONFIG_VALUE_" + i + "='!git a" + (i + 1) + "'").join("; "), "ls; ".repeat(75000) + "rm -rf y", doc + "sudo rm -rf y", "ls; ".repeat(75000) + "git -C . push"]) {
     const t0 = performance.now();
     expect([c.slice(-20), judge(c, [rule("shell", "git push *", "deny"), rule("shell", "rm *", "deny")]).includes("deny"), Access.shell(WHERE, c).at(-1)!.failed, performance.now() - t0 < 3000]).toEqual([c.slice(-20), true, expect.any(String), true]);
   }
   // a few settings, read as ever
   expect(judge("GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push git p", [rule("shell", "git push *", "deny")])).toEqual(["deny"]);
   expect(Access.shell(WHERE, "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=less git log").at(-1)!.failed).toBeUndefined();
+});
+
+test("work spent one way leaves the rest read: a command's own parts spend none, a split value's words and long wrapper rows their own; braces nested deep read in a moment", () => {
+  const deny = [rule("shell", "rm *", "deny")];
+  // many short commands, many uses of a split value, a long wrapper row:
+  // a short wrapped command or a script after them is still read, its
+  // denied command still denied
+  for (const c of ["echo a; ".repeat(6000) + "eval 'sudo rm y'", "sudo ls; ".repeat(6000) + "sudo rm y", "V='a b'; " + "echo $V; ".repeat(6000) + "sudo sudo timeout 5 rm y", "V='a b'; " + "echo $V; ".repeat(6000) + "eval 'sudo rm y'", "sudo ".repeat(4000) + "ls; eval 'sudo rm y'"]) {
+    expect([c.slice(-30), judge(c, deny)]).toEqual([c.slice(-30), ["deny"]]);
+  }
+  // braces nested deep: past 32 the word is known only as it runs, and
+  // its other {s are read as themselves, in a moment, what follows still read
+  for (const c of ["echo " + "{a,{b,".repeat(12000) + "}}".repeat(12000) + "; rm y", "echo " + "{a,".repeat(16000) + "b" + "}".repeat(16000) + "; rm y"]) {
+    const t0 = performance.now();
+    expect([c.slice(0, 20), judge(c, deny), performance.now() - t0 < 1500]).toEqual([c.slice(0, 20), ["deny"], true]);
+  }
+  expect(Access.shell(WHERE, "echo " + "{a,".repeat(20) + "b" + "}".repeat(20)).at(-1)!.failed).toBeUndefined();
 });
 
 test("Claude Code's tools that ask in illi's calls, as illi's like ones: its web fetch and search theirs, one of its MCP servers' by its name; illi's own none", () => {

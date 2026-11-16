@@ -218,10 +218,11 @@ test("words expand as far as known: variables, loops, tildes, braces; globs and 
   expect(Shell.program((Shell.parse("/usr/bin/rm x", "/w") as Part[])[0].argv[0])).toBe("rm");
   expect(Shell.program((Shell.parse("./rm x", "/w") as Part[])[0].argv[0])).toBe("");
   expect(parts("echo $'\\x72m' \"a$HOME\"")).toEqual(["echo rm a" + HOME + " @/w"]);
-  expect(parts("x=\"rm -rf src\"; $x; \"$x\"; y=$x")).toEqual(["x=rm -rf src @/w", "rm -rf src @/w", "rm -rf src @/w", "y=rm -rf src @/w"]);
-  // unquoted, a known value is the words bash splits it into (rm runs);
-  // quoted, one word; a loop's values each so too
-  expect((Shell.parse("x=\"rm -rf src\"; $x; \"$x\"", "/w") as Part[]).slice(1).map((p) => [Shell.program(p.argv[0]), p.argv.length])).toEqual([["rm", 3], ["rm -rf src", 1]]);
+  expect(parts("x=\"rm -rf src\"; $x; \"$x\"; y=$x")).toEqual(["x=rm -rf src @/w", "rm -rf src @/w", "~ @/w", "rm -rf src @/w", "y=rm -rf src @/w"]);
+  // unquoted, a known value is the words bash splits it into (rm runs),
+  // and one word known only as it runs too (it may be stale where it
+  // runs); quoted, one word; a loop's values each so too
+  expect((Shell.parse("x=\"rm -rf src\"; $x; \"$x\"", "/w") as Part[]).slice(1).map((p) => [Shell.program(p.argv[0]), p.argv.length])).toEqual([["rm", 3], ["", 1], ["rm -rf src", 1]]);
   expect(parts("x='a b'; for o in $x c; do echo $o; done")).toEqual(["x=a b @/w", "echo a|b|c @/w"]);
   expect(parts("g='*.ts'; ls $g \"$g\"")).toEqual(["g=*.ts @/w", "ls **.ts *.ts @/w"]);
 });

@@ -139,7 +139,12 @@ project always comes first:
   that bash splits at its blanks is read as the words it makes
   (`X='push -f'; git $X` is `git push -f`, `X='git push'; $X` too; a
   loop's values each so, `for o in '-c alias.x=push' -p; do git $o x`,
-  and a loop over one, `for o in $X`), while such a value glued to more
+  and a loop over one, `for o in $X`), and as one word known only as it
+  runs too, as the value read may be stale where it runs (a loop's body
+  is read once: `V='5 x'; for i in 1 2; do timeout $V rm y; V=5; done`
+  runs `rm y` the second time; an assignment before words that may all
+  come out blank, `V=5 $Z`, lasts), so a rule that denies what runs
+  either way refuses it; such a value glued to more
   (`git --git-dir=$D alias.x=push x` with `D='x -c'`) asks, as the words
   after it are known only as it runs. A command's first word of several
   values gives a command for each (`for o in ls rm; do $o -rf y` meets
@@ -187,14 +192,18 @@ project always comes first:
   read once is read again where the shell's variables or git's settings
   have changed since (one running itself, an alias's, is read once).
   One check follows scripts and aliases until it has done 5,000 units
-  of work, far past any everyday command (a command, a script, an
-  alias step, an `eval` each one, and one more for each 256 characters
+  of work, far past any everyday command (a command a script runs, a
+  script, an alias step, an `eval` each one, and one more for each 256 characters
   of the script it reads; a script run in a shell of its own one
   more for each 256 variables the shell set; 1 KB of the variables'
-  text put in words one, 16 words a variable's value is split into one;
-  16 of git's settings, read for a git command or where the
-  environment gives them, one; a command's own plain commands are all read,
-  however many); a command whose scripts or aliases grow past that (one
+  text put in words one, each use of a value split into words one, and
+  one more for each 4 words; a wrapper taken off one for each 1,024
+  words after it, so one with fewer is always taken off (these two from
+  5,000 units of their own, so spending those leaves nothing else
+  unread); 16 of git's settings, read for a git command or where the
+  environment gives them, one; a command's own plain commands are all
+  read, however many, and spend none); a command whose scripts,
+  aliases or wrappers grow past that (one
   running itself in a new folder each time, aliases naming each other
   in a long row, thousands of variables copied for each of thousands of
   scripts, a long variable put in words again and again) has the rest
@@ -208,8 +217,10 @@ project always comes first:
   value illi then holds as unknown, even where that leaves the whole
   command unread. So does a command longer than 128 KB (none is typed;
   a file written through a heredoc may be; Linux runs none that long),
-  met by the crude pieces of its first 256 KB, as below (a rule that
-  denies what lies past that asks instead); one
+  met by the crude pieces of its first 256 KB, as below, and by each
+  distinct crude piece of the rest up to 2 MB (as illi passes a
+  command, no system runs a longer one), so a rule that denies one
+  still refuses it; one
   whose readings grow past 4 MB of text (a loop's long values put in
   thousands of commands), the rest met as written; and any failure
   reading a command, met by its crude pieces. A path longer than the
@@ -260,7 +271,7 @@ project always comes first:
   push *`), saving nothing (the variable may not hold that value there:
   `F=; F=--dry-run; git push $F`). "Don't ask again" saves each piece by its family,
   its leading assignments and shell words off (`x=(a); X=1 make deploy`
-  saves `make deploy *`, `x[0]=1`, `coproc`, a `(` glued to its first
+  saves `make deploy *`, `x[0]=1` and `x[a b]=1`, `coproc`, a `(` glued to its first
   word and a loop's `in` too; never `*`), and a test or a sum of the
   shell's own (`[[`, `((`, `let`, which run what an array's index in
   them holds) exactly, never its family. A piece nested deeper than illi
@@ -547,7 +558,9 @@ Limits
   command or a script it can't follow) is split crudely alone, and the
   command asks whatever the rules allow.
 - A brace's words are read as one word of several values, not as
-  several words: `rm {-rf,/}` isn't `rm -rf /`. A dry run set unseen
+  several words: `rm {-rf,/}` isn't `rm -rf /`. One nested inside more
+  than 32 others, like one of more than 16 values, makes its word known
+  only as it runs. A dry run set unseen
   (`export MAKEFLAGS=n` before `make deploy`) isn't one, nor is one
   spelled as no rule above has it (a program's own dry option other
   than `--dry-run`): "don't ask again" saves its family, as the question

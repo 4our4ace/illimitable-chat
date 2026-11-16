@@ -175,11 +175,14 @@ const TEXT = 1 << 22;
 // however long the command
 const COMMAND = 1 << 17;
 
-// how much of a command past COMMAND is met (crudely, each piece read on
-// its own under the check's work): the rest isn't, so a rule that denies
-// what is there asks instead (Linux on 4 KB pages runs none past 128 KB
-// in one argument, as illi passes it; macOS takes 1 MB in all)
+// how much of a command past COMMAND is met crudely, each piece read on
+// its own under the check's work (rough); the rest up to LONGEST by its
+// distinct crude pieces (tail), RUN of those read on their own too, so a
+// rule that denies one still refuses it. No system hands a shell a longer command than LONGEST as
+// illi passes it, one argument (Linux 128 KB on 4 KB pages, 2 MB on 64
+// KB ones; macOS 1 MB in all): past it, nothing more is met
 const RUN = 1 << 18;
+const LONGEST = 1 << 21;
 
 // the longest path the system opens (PATH_MAX): a longer one names no
 // place it can reach, so it is taken as written (real)
@@ -293,6 +296,20 @@ export namespace Access {
     let met: Met;
     try {
       met = typeof parts === "string" ? rough(where, text, where.cwd, null, 0, check) : met_parts(where, parts, 0, check);
+      if (text !== command) {
+        // from where a piece starts before RUN, so none is cut in two
+        let cut = RUN;
+        while (cut > RUN - 4096 && !/[;&|\n`()]/.test(command[cut - 1])) {
+          cut--;
+        }
+        // each distinct piece read on its own too, RUN of them at most
+        const rest = tail(command.slice(cut, LONGEST), cut);
+        let size = 0;
+        const read = rest.filter((p) => (size += p.text.length + 1) <= RUN);
+        const more = rough(where, read.map((p) => p.text).join("\n"), where.cwd, [cut, Math.min(command.length, LONGEST)], 0, check);
+        add(met.pieces, [...rest, ...more.pieces]);
+        add(met.found, more.found);
+      }
     } catch {
       // a failure meeting it (a bug, the stack outgrown) never lets it
       // through: its crude pieces alone, and it asks
@@ -410,7 +427,7 @@ export namespace Access {
     const names = all.map((w) => w.replace(/['"\\]/g, ""));
     names[0] = Shell.program(Shell.lit(names[0] ?? "")) || (names[0] ?? "");
     const n = Access.arity(names).length;
-    const odd = TESTS.has(names[0]) || names.slice(1, n).some((v) => v.startsWith("-")) || names.slice(0, n).some((v) => v.trim() === "" || /[*?]/.test(v)) || dry(crude ? names : names.filter((v) => !MADE.test(v))) || (crude && all.slice(1).some((v) => MADE.test(v))) || n < Access.wanted(names);
+    const odd = TESTS.has(names[0]) || /^(?:\(\(|\[\[)/.test(names[0]) || names.slice(1, n).some((v) => v.startsWith("-")) || names.slice(0, n).some((v) => v.trim() === "" || /[*?]/.test(v)) || dry(crude ? names : names.filter((v) => !MADE.test(v))) || (crude && all.slice(1).some((v) => MADE.test(v))) || n < Access.wanted(names);
     return !odd ? all.slice(0, n).join(" ") + " *" : /[*?]/.test(text) ? "" : text;
   }
 
@@ -508,6 +525,9 @@ function commands(pieces: Piece[]): Piece[] {
         k += 2;
       } else if (RESERVED.has(w) || /^[A-Za-z_]\w*(?:\[[^\]]*\])?\+?=/.test(w)) {
         k++;
+      } else if (/^[A-Za-z_]\w*\[[^\]]*$/.test(w) && ws.slice(k + 1).some((x) => /^[^\]]*\]\+?=/.test(x.raw))) {
+        // an element set whose index holds a blank: x[a b]=1 make deploy
+        k += 1 + ws.slice(k + 1).findIndex((x) => /^[^\]]*\]\+?=/.test(x.raw)) + 1;
       } else {
         break;
       }
@@ -661,6 +681,27 @@ function crude(cmd: string): Piece[] {
   return out;
 }
 
+// a long command's text past RUN (from `at` in it) in its crude pieces,
+// each text once, read no further: in a moment, however many
+function tail(text: string, at: number): Piece[] {
+  const seen = new Map<string, Piece>();
+  const re = /[;&|\n`()]|\$\(/g;
+  for (let start = 0; ; ) {
+    const m = re.exec(text);
+    const end = m === null ? text.length : m.index;
+    const raw = text.slice(start, end);
+    const piece = raw.trim();
+    if (piece !== "" && !seen.has(piece)) {
+      const lead = at + start + raw.length - raw.trimStart().length;
+      seen.set(piece, { text: piece, span: [lead, lead + piece.length], crude: true });
+    }
+    if (m === null) {
+      return [...seen.values()];
+    }
+    start = end + m[0].length;
+  }
+}
+
 // the plain values a command illi can't read gives its variables as
 // written (P=push, P='a b', for o in a b), each name's BARE at most: its
 // pieces are read on their own, so none knows them (filled)
@@ -685,28 +726,44 @@ function crude_vars(text: string): Map<string, string[]> {
 // plain value to (crude_vars) put with each value too (x=(a); P=push; git
 // $P: git push), BARE ways at most, so a rule meets what it runs, each
 // saving nothing (a value it may not hold then: F=; F=--dry-run; git push
-// $F); their text the check's (Check text: past it, none more)
+// $F); their text the check's (Check text: past it, none more). A piece
+// met before, or a way met before, isn't put again; each way is made in
+// one pass over its piece, however many variables it uses
 function filled(pieces: Piece[], vars: Map<string, string[]>, check: Check): Piece[] {
   if (vars.size === 0) {
     return pieces;
   }
   const out = [...pieces];
+  const met = new Set(pieces.map((p) => p.text));
+  const done = new Set<string>();
+  const use = /\$(?:\{([A-Za-z_]\w*)\}|([A-Za-z_]\w*))/g;
   for (const p of pieces) {
     if (check.text <= 0) {
       break;
     }
-    let ways = [p.text];
-    for (const m of new Set([...p.text.matchAll(/\$\{?([A-Za-z_]\w*)\}?/g)].map((m) => m[1]))) {
-      const values = vars.get(m);
-      if (values !== undefined && ways.length * values.length <= BARE) {
-        const use = new RegExp("\\$(?:\\{" + m + "\\}|" + m + "(?!\\w))", "g");
-        ways = ways.flatMap((w) => values.map((v) => w.replace(use, () => v)));
+    if (done.has(p.text)) {
+      continue;
+    }
+    done.add(p.text);
+    // each way, the value each variable takes in it; one of one value is
+    // in every way, another taken while the ways are BARE at most
+    let ways = [new Map<string, string>()];
+    for (const name of new Set([...p.text.matchAll(use)].map((m) => m[1] ?? m[2]))) {
+      const values = vars.get(name);
+      if (values !== undefined && values.length === 1) {
+        ways.forEach((w) => w.set(name, values[0]));
+      } else if (values !== undefined && ways.length * values.length <= BARE) {
+        ways = ways.flatMap((w) => values.map((v) => new Map(w).set(name, v)));
       }
     }
-    ways.filter((w) => w !== p.text).forEach((text) => {
-      check.text -= text.length;
-      out.push({ text, span: p.span, save: [] });
-    });
+    for (const way of ways) {
+      const text = way.size === 0 ? p.text : p.text.replace(use, (m, a?: string, b?: string) => way.get(a ?? b ?? "") ?? m);
+      if (!met.has(text)) {
+        met.add(text);
+        check.text -= text.length;
+        out.push({ text, span: p.span, save: [] });
+      }
+    }
   }
   return out;
 }
