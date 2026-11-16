@@ -84,199 +84,25 @@ project always comes first:
   command for each (`for d in /tmp /var; do rm -rf $d; done` gives `rm
   -rf /tmp` and `rm -rf /var`). A script a wrapper runs gives its
   commands too, beside the wrapper's own: `bash -c 'ls; rm x'` gives
-  `ls`, `rm x` and `bash -c 'ls; rm x'`. So a rule matches either.
-- A program's own options before what it does give the command without
-  them too, beside it as written: `git -C app push origin` gives `git -C
-  app push origin` and `git push origin`, and so do `kubectl -n prod
-  delete pod x`, `npm --prefix app run build`, `make -C app -j4 deploy`
-  and the like (git, kubectl, helm, docker, podman, npm, pnpm, yarn,
-  bun, npx, bunx, make, cargo, uv, poetry, terraform, tofu, systemctl,
-  tmux, aws, gcloud, az). So a rule on what it does (`git push *`) and
-  one naming an option (`git -c *`, `kubectl --context prod *`) both
-  match. "Don't ask again" saves that command's words as written up to
-  what it does, and what it does alone (`git -C app push *` and `git
-  push *`, `/usr/bin/git` and `'git'` read as `git`), never every use of
-  the option: `git -C app push --force` still asks under `git push
-  --force*`, and so does `git -C app status` once only `git -C app push
-  *` is saved. A command whose words up to what it does are blank or
-  hold `*` or `?` (a rule's own wildcards), one short of the words
-  naming what it does (`git` alone, `npm run`, `npm --prefix app
-  run`), and a dry run or what may be one (`--dry-run` anywhere, or any
-  start of it, `--dr`, `--dry-run=x`; git's `-n` where `push`, `add`,
-  `mv`, `rm`, `clean` or `prune` is among its words, `git remote prune
-  -n`; make's `-n`, `-t`, `-q` anywhere, any start of its
-  `--just-print`, `--recon`, `--touch` and `--question`, `--re`, and its
-  flags given in any way, `MAKEFLAGS`, `MFLAGS` or `GNUMAKEFLAGS` by the
-  environment or as an argument; a word wholly made as it runs, `$N`,
-  `${D:---dry-run}`: `make deploy -n`, `N=-n; make deploy $N`, `make
-  deploy $'-n'`, as its words expand) are saved as written alone, so
-  approving one never approves the real run, nor does the line around
-  it as written (`N=-n; make deploy $N # dry`, `( git push $'--dry-run'
-  )`). One of those whose text holds `*` or `?` itself (`git '*'`, `( *
-  x )`) saves nothing, as its text would match more than itself, and so
-  does a dry run made by what make is given (`MAKEFLAGS=n make
-  deploy`), as its text alone is the real run's. The question names
-  what "don't ask again" saves, so read it before you take it. A word of
-  several values that are each one of the program's flags (`git
-  {-p,-P} push`, `for o in -p -P; do git $o …`) is passed over as one,
-  however many there are; one of several values some of which are
-  options, or none (`for o in -c -C`, `for o in -c status`, `for o in ''
-  -c`), is read with each, whatever their order, up to 8 ways, past
-  which the command is read without the words before what it does that
-  may be options, and asks. A word known only as it runs among a
-  program's options, with words after it (`git $O alias.x=push x`, `git
-  -$O alias.x=push x`, `git "$@" push`), may be an option, its value or
-  what the program does, so the command asks too; so does one after an
-  option with its value glued in it (`git --git-dir=$D $O alias.x=push
-  x`). That option itself doesn't (`git -C"$DIR" status`, `kubectl
-  --context=$CTX get pods`), and a short one's value wholly made as it
-  runs may be blank, its value then the next word, so it is read that
-  way too (`git -C$D x -c alias.y=push y` as `git push`). Nor does `make
-  -j $N deploy`: a number's option is read with that word its value and
-  without. A variable's blank value is no word at all, as bash drops it
-  (`for o in '' x; do git $o push` meets `git push *`), while a quoted
-  blank (`git "" push`) is a word of its own. A variable's known value
-  that bash splits at its blanks is read as the words it makes
-  (`X='push -f'; git $X` is `git push -f`, `X='git push'; $X` too; a
-  loop's values each so, `for o in '-c alias.x=push' -p; do git $o x`,
-  and a loop over one, `for o in $X`), and as one word known only as it
-  runs too, as the value read may be stale where it runs (a loop's body
-  is read once: `V='5 x'; for i in 1 2; do timeout $V rm y; V=5; done`
-  runs `rm y` the second time; an assignment before words that may all
-  come out blank, `V=5 $Z`, lasts), so a rule that denies what runs
-  either way refuses it; such a value glued to more
-  (`git --git-dir=$D alias.x=push x` with `D='x -c'`) asks, as the words
-  after it are known only as it runs. A command's first word of several
-  values gives a command for each (`for o in ls rm; do $o -rf y` meets
-  `rm *`), a blank one leaving the next word the program (`for o in ''
-  x; do sudo $o git push` meets `git push *`), as may a variable or a
-  command's output known only as it runs (`sudo -u$U $O rm y` meets `rm
-  *` too). A wrapper's option with its value made as it runs glued in
-  it (`env -u$D`, `timeout --signal=$S`, `nice -n$N`, `xargs -I$I`) is
-  read past to what it runs; a short one's value may be blank, the next
-  word its value then, so it asks too. `eval --` runs what follows as
-  `eval` does, `coproc` runs what follows as in the background, and an
-  array element's assignment before a command (`x[0]=1 rm -rf y`) is
-  one, leaving that array known only as it runs.
-- A git setting given with the command that runs a command (`git -c
-  core.sshCommand=…`, `core.pager`, `core.editor`, a credential helper,
-  a diff or merge tool's, `tar.<format>.command`, and the rest of
-  git's), whether given by `-c`, `--config-env` or the environment
-  (`GIT_CONFIG_COUNT` with its `GIT_CONFIG_KEY_n` and
-  `GIT_CONFIG_VALUE_n`, `GIT_CONFIG_PARAMETERS`), gives that command
-  too; so does a variable naming one (`GIT_SSH_COMMAND`, `GIT_EDITOR`,
-  `EDITOR`, `PAGER`, `GH_PAGER`, `KUBE_EDITOR` and the like, given to a
-  command, through `env` or `sudo`, exported or set; a word of several
-  values given `env` or `sudo` is an assignment of each that is one,
-  `for V in 'GIT_SSH_COMMAND=…' X=1; do env "$V" git fetch`, and asks if
-  some aren't, as it may then be the program). Settings in the
-  environment are read where they're set, and reach a shell of its own
-  (`bash -c 'git fetch'`), so a script or program run after them meets
-  them too. An alias given with `-c` gives the command as git runs it
-  too (`git -c alias.p=push p` is `git p` and `git push`; one naming
-  another is followed, however deep, the settings given inside one read
-  too, `git -c 'alias.p=-c alias.q=push q' p`; one past its `!` is a
-  script, the words after it added; a setting whose key is made as it
-  runs, `alias.$X=push` or `GIT_CONFIG_KEY_0=alias.$X`, is taken as
-  any, an alias of what the command does among them). Every value an
-  alias is given is read, whatever the order git would take them in
-  (`-c`, the environment's by number, `GIT_CONFIG_PARAMETERS`), so one
-  given later never hides another. A variable added to (`+=`) is read
-  as what it then holds, one set before it in the same command too
-  (`A=/bin/r A+='m -rf y' …`), and a `for` loop's variable naming a command
-  (`for GIT_SSH_COMMAND in …`) gives each of its words. git hands its
-  settings down to what it runs (its `-c`s, and those its environment
-  gives it, set for the command or exported), so a git command in an
-  alias, a pager or an editor reads them as its own: `git -c
-  alias.a='!git b' -c alias.b=push a` is `git push` too, and a script
-  read once is read again where the shell's variables or git's settings
-  have changed since (one running itself, an alias's, is read once).
-  One check follows scripts and aliases until it has done 5,000 units
-  of work, far past any everyday command (a command a script runs, a
-  script, an alias step, an `eval` each one, and one more for each 256 characters
-  of the script it reads; a script run in a shell of its own one
-  more for each 256 variables the shell set; 1 KB of the variables'
-  text put in words one, each use of a value split into words one, and
-  one more for each 4 words; a wrapper taken off one for each 1,024
-  words after it, so one with fewer is always taken off (these two from
-  5,000 units of their own, so spending those leaves nothing else
-  unread); 16 of git's settings, read for a git command or where the
-  environment gives them, one; a command's own plain commands are all
-  read, however many, and spend none); a command whose scripts,
-  aliases or wrappers grow past that (one
-  running itself in a new folder each time, aliases naming each other
-  in a long row, thousands of variables copied for each of thousands of
-  scripts, a long variable put in words again and again) has the rest
-  split crudely, as below, and asks whatever the rules allow, with
-  nothing to save, a rule that denies what was read still refusing it,
-  so a check takes a moment at most. So does a script nested deeper
-  than illi follows (64 subshells and scripts inside one another), read
-  again on its own (so without the variables and git settings around
-  it) so a rule that denies it still meets it, and a variable or a word
-  grown past 64 KB (`X=$X$X`, again and again; `bash -c "$X$X"`), whose
-  value illi then holds as unknown, even where that leaves the whole
-  command unread. So does a command longer than 128 KB (none is typed;
-  a file written through a heredoc may be; Linux runs none that long),
-  met by the crude pieces of its first 256 KB, as below, and by each
-  distinct crude piece of the rest up to 2 MB (as illi passes a
-  command, no system runs a longer one), so a rule that denies one
-  still refuses it; one
-  whose readings grow past 4 MB of text (a loop's long values put in
-  thousands of commands), the rest met as written; and any failure
-  reading a command, met by its crude pieces. A path longer than the
-  system opens (4 KB) is taken as written. A value
-  made as it runs is read by its text: one
-  double-quoted string's inside (`GIT_SSH_COMMAND="ssh -i $KEY"` gives
-  `ssh -i $KEY`), else what is known of it and, crudely, what is
-  written after each variable (`$NOPE'rm -rf y'` gives `rm -rf y`). A
-  script git runs is read from the folder git is called in and from the
-  top of its repository, where git runs it. A script in one illi can't
-  follow is split crudely, as below.
-- A `cd` is no command: it asks only for its folder, if outside.
-- A shell command's folders outside: those it `cd`s into or a wrapper
-  or a program's option moves it to (`sudo -D /x`, `env -C /x`, `git -C
-  /x`, `make -C /x`: each named from the folder in force where it's
-  read, the shell's or the one a wrapper or an earlier option moved to
-  (`env -C /etc git -C ../x` names `/x`; `git -C a -C ..` the folder it
-  started in), by what is known of one made as it runs, `git -C
-  /etc/$X` asking for `/etc`, and a `~`
-  the shell leaves, `--directory=~/x`, as home), and the paths its words,
-  a wrapper's own (`time -o /x`, `flock /x`, `xargs -a /x`), git's path
-  variables (`GIT_DIR=../x/.git`, `GIT_WORK_TREE`, `GIT_CONFIG_GLOBAL`,
-  given, set or exported) and its redirections name (an absolute path, `~`, `~user`, a
+  `ls`, `rm x` and `bash -c 'ls; rm x'`. So a rule matches either. A
+  `cd` is no command: it asks only for its folder, if outside.
+- A shell command's folders outside: those it `cd`s into, and the paths
+  its words and redirections name (an absolute path, `~`, `~user`, a
   `..`; spaces and quotes in it or not; a value glued to an option,
   `--out=/x` or `-o/x`, but a lone `/`, `cut -d/`; after a name, `dd
   of=/x`, but a variable `export` or `declare` sets; each of a list,
-  `--path=/a:/b`). A redirection is made from the folder the shell is
-  in (`git -C app log > ../x` writes `../x` beside the project, not
-  beside `app`); a program's words from both the folder it runs in and
-  the shell's, as programs differ (`git -C app add ../x` asks for what
-  `../x` names from either). Streams
+  `--path=/a:/b`), from the folder each command runs in. Streams
   (`/dev/null`, `/dev/zero`, `/dev/random`, `/dev/tty`, `/dev/stdin`,
   `/dev/stdout`, `/dev/stderr`, `/dev/fd`) and what only looks like a
   path (`grep -r '/api/v1'`, whose top folder `/api` isn't there) aren't
   asked; a disk's device (`/dev/sda`) is.
 - A command illi's shell reader can't follow (`case`, a function, an
-  array, a named `coproc`: `coproc N { …; }`), and a script in a git setting or a variable it can't follow
-  (`git -c 'alias.x=!f() { …; }; f'`), is split crudely at `;`, `&`, `|`, newlines, `$(`, backticks
-  and parentheses, quotes or not, each piece read on its own too where
-  illi can (`git -C app push; x=(a)` gives `git push` too, and `GIT_PAGER='rm
-  -rf y' git log; x=(a)` its pager's `rm -rf y`), and its paths are found by their look
+  array) is split crudely at `;`, `&`, `|`, newlines, `$(`, backticks
+  and parentheses, quotes or not, and its paths are found by their look
   (one with a space in it up to the space), so a rule still finds most
   of what is in it: a script quoted whole with none of those in it stays
   one piece (in a `case`, `bash -c 'rm x'` matches a rule on `bash *`,
-  not one on `rm *`). A piece using a variable the command gives a plain
-  value (`P=push`, `P='a b'`, `for o in a b`) is read with each of its
-  values too, as no piece knows it (`x=(a); P=push; git $P` meets `git
-  push *`), saving nothing (the variable may not hold that value there:
-  `F=; F=--dry-run; git push $F`). "Don't ask again" saves each piece by its family,
-  its leading assignments and shell words off (`x=(a); X=1 make deploy`
-  saves `make deploy *`, `x[0]=1` and `x[a b]=1`, `coproc`, a `(` glued to its first
-  word and a loop's `in` too; never `*`), and a test or a sum of the
-  shell's own (`[[`, `((`, `let`, which run what an array's index in
-  them holds) exactly, never its family. A piece nested deeper than illi
-  follows (`x=(a); eval eval … git push`, 64 deep and more) asks, as
-  its pieces never meet what runs at its end.
+  not one on `rm *`).
 - illi's own folder (`~/.illi`, `ILLI_DIR`) is outside every project,
   the home chat's too, where it sits in the folder you work in, and one
   started in it: its settings, hooks and permissions are asked about
@@ -538,47 +364,8 @@ Limits
   asked about all the same.
 - A rule matches a command as written or as its words expand: a word
   known only as it runs stays as written (`rm -rf "$(cat dir)"` isn't
-  `rm -rf /*`), `rm -fr /` isn't `rm -rf /*`. An option illi doesn't
-  know before what a program does leaves the command as written alone
-  (`git --frobnicate push` isn't `git push *`), and so do an option
-  after the first word naming what it does (`gh pr -R o/r merge`) and
-  an alias from git's own config files (`git p`, with `p` set to `push`
-  in `~/.gitconfig`, or a file `-c include.path=` names, which asks
-  only for its folder). A git setting that names a program by its path,
-  or a folder of hooks, gives no command either, and asks only for its
-  folder (`core.hooksPath`, `difftool.<tool>.path`); nor does the
-  command in an `ext::` address
-  (`git -c protocol.ext.allow=always clone 'ext::…'`).
-- In a command illi's shell reader can't follow, a piece read on its
-  own is read without what came before it: `cd sub; git -C x push;
-  x=(a)` reads `git -C x push` from the shell's folder, and a variable
-  set in an earlier piece is unknown to a later one. A piece that can't
-  be read on its own stays as written. The third such text inside one
-  another (a script illi can't follow, in one it can't follow, in a
-  command or a script it can't follow) is split crudely alone, and the
-  command asks whatever the rules allow.
-- A brace's words are read as one word of several values, not as
-  several words: `rm {-rf,/}` isn't `rm -rf /`. One nested inside more
-  than 32 others, like one of more than 16 values, makes its word known
-  only as it runs. A dry run set unseen
-  (`export MAKEFLAGS=n` before `make deploy`) isn't one, nor is one
-  spelled as no rule above has it (a program's own dry option other
-  than `--dry-run`): "don't ask again" saves its family, as the question
-  shows.
-- A command given to a program's own command by an option or a word of
-  that command isn't read: `git rebase --exec 'rm -rf x'`, `git
-  submodule foreach 'git push'`, `git bisect run rm -rf x`, `git clone
-  -u '…'` match a rule on `git rebase *` and the like, not one on `rm
-  *` or `git push *`.
-- A rule on what a command does, without its options, covers that
-  reading alone: with `git *` asking, `git status *` allowing doesn't
-  allow `git -C app status`, whose written form `git *` still asks
-  about; "don't ask again" on it saves both.
-- A variable or setting that names a command is seen where the command
-  line sets it (given, `export`ed, assigned, through `env` or `sudo`);
-  one set unseen (`read`, `printf -v`, `${X:=…}`, a `source`d file, or
-  your shell's own environment) isn't, nor are variables illi doesn't
-  list (`LESSOPEN`, `GIT_EXEC_PATH`).
+  `rm -rf /*`), `rm -fr /` isn't `rm -rf /*`, `git -C app push` isn't
+  `git push *`.
 - A file rule (`read`, `edit`) is for the file tools (`read`, `write`,
   `edit`): a shell command that reads or writes a file meets your
   `shell` rules alone (and, outside the project, the folder's

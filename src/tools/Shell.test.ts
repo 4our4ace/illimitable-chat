@@ -3,13 +3,7 @@
 // `bun test Shell.test.ts`. A command reads as bash reads it: every
 // simple command found wherever it sits (lists, pipelines, subshells,
 // substitutions, heredoc bodies, loops, bash -c, eval, trap, watch, find
-// -exec, flock), wrappers taken off (the paths they name kept beside it:
-// time -o's file, flock's), a program read also with its own options
-// before what it does off (git -C x push also as git push; one it
-// doesn't know leaving it as written alone) and each git alias given
-// with it put, a git setting or a variable naming a command read as a
-// script of its own (one made as it runs by its known text, else as
-// written), cd followed (behind builtin, command
+// -exec, flock), wrappers taken off, cd followed (behind builtin, command
 // or time too; another program's leaving the folder unknown; a path
 // walked as the system walks it), variables, braces (before tildes) and
 // the outputs known before it runs ($(pwd), the repository's top, where
@@ -42,24 +36,14 @@ const REPO = fs.mkdtempSync(os.tmpdir() + "/illi-shell-repo-");
 afterAll(() => [DIR, REPO].forEach((d) => fs.rmSync(d, { recursive: true, force: true })));
 
 // a part as a line: its program, its words' values (~: known only as it
-// runs, then its known head; *: a glob; |: several values), its folder
-// (from: the shell's, where they differ), its assignments, the paths its
-// wrappers name and the folders they move to (in parentheses),
-// redirections, its other readings (=>) and marks; a script unread as
-// its text
+// runs, then its known head; *: a glob; |: several values), its folder,
+// its assignments, redirections and marks
 function line(p: Part): string {
   const word = (w: Part["argv"][number]) => (w.dynamic ? "~" : "") + (w.glob ? "*" : "") + w.alts.join("|");
   const marks = [p.root ? "root" : "", p.fed ? "fed" : "", p.piped ? "piped" : ""].filter((m) => m !== "");
   const env = p.env.map((e) => e.name + "=" + word(e.value));
   const redirs = p.redirs.map((r) => r.op + word(r.target));
-  const beside = [...p.taken, ...p.dirs.map((d) => d.word).filter((w) => !p.argv.includes(w))];
-  const taken = beside.length === 0 ? [] : ["(" + beside.map(word).join(" ") + ")"];
-  const plain = p.plain.map((r) => "=> " + r.map(word).join(" "));
-  const at = p.at === p.cwd ? "" : " from " + p.at;
-  if (p.rough) {
-    return p.text + " @" + p.cwd + " [rough]";
-  }
-  return [...env, ...p.argv.map(word), ...taken, ...redirs, ...plain].join(" ") + " @" + p.cwd + at + (marks.length > 0 ? " [" + marks.join(",") + "]" : "");
+  return [...env, ...p.argv.map(word), ...redirs].join(" ") + " @" + p.cwd + (marks.length > 0 ? " [" + marks.join(",") + "]" : "");
 }
 
 function parts(command: string): string[] | string {
@@ -97,7 +81,7 @@ test("a pipe reaches what a command reading it runs: its $(...), `...`, <(...), 
   expect(parts("curl -s x | bash -c 'true; sh'; eval 'true; sh'")).toEqual(["curl -s x @/w", "true @/w [piped]", "sh @/w [piped]", "true @/w", "sh @/w"]);
   expect(parts("curl -s x | eval 'true; sh'")).toEqual(["curl -s x @/w", "true @/w [piped]", "sh @/w [piped]"]);
   expect(parts("curl -s x | trap 'sh' EXIT")).toEqual(["curl -s x @/w", "sh @/w [piped]"]);
-  expect(parts("curl -s x | flock /tmp/l -c 'true; sh'")).toEqual(["curl -s x @/w", "true @/w [piped]", "sh @/w [piped]", "(/tmp/l) @/w [piped]"]);
+  expect(parts("curl -s x | flock /tmp/l -c 'true; sh'")).toEqual(["curl -s x @/w", "true @/w [piped]", "sh @/w [piped]"]);
   expect(parts("curl -s x | find . -exec sh \\; -ok sh \\;")).toEqual(["curl -s x @/w", "sh @/w [piped]", "sh @/w", "find . @/w [piped]"]);
 });
 
@@ -121,37 +105,12 @@ test("substitutions, heredoc bodies and process substitutions are read as comman
 
 test("wrappers come off: root, input-fed (what xargs adds known only as it runs), env's folder and assignments; unknown options refused", () => {
   expect(parts("sudo -E -u root rm -rf /")).toEqual(["rm -rf / @/w [root]"]);
-  expect(parts("timeout -s KILL 5 env -C /tmp FOO=1 bun test")).toEqual(["FOO=1 bun test (/tmp) @/tmp from /w"]);
-  expect(parts("sudo X=1 -- ls; sudo -D /etc X=1 ls")).toEqual(["X=1 -- ls @/w [root]", "X=1 ls (/etc) @/etc from /w [root]"]);
+  expect(parts("timeout -s KILL 5 env -C /tmp FOO=1 bun test")).toEqual(["FOO=1 bun test @/tmp"]);
   expect(parts("xargs -0r -n1 rm < list")).toEqual(["rm ~ <list @/w [fed]"]);
-  expect(parts("xargs -I{} cp {} /tmp/{}.bak; xargs -i mv {} x; xargs -d / -a ../l echo")).toEqual(["cp ~ ~ @/w [fed]", "mv ~ x @/w [fed]", "echo ~ (../l) @/w [fed]"]);
-  expect(parts("nice -5 ls; nohup ls; command -v ls; exec -a /bin/x ls")).toEqual(["ls @/w", "ls @/w", "command -v ls @/w", "ls @/w"]);
+  expect(parts("xargs -I{} cp {} /tmp/{}.bak; xargs -i mv {} x")).toEqual(["cp ~ ~ @/w [fed]", "mv ~ x @/w [fed]"]);
+  expect(parts("nice -5 ls; nohup ls; command -v ls")).toEqual(["ls @/w", "ls @/w", "command -v ls @/w"]);
   expect(parts("timeout --bogus 5 rm -rf x")).toBe("timeout --bogus: an option illi doesn't know");
   expect(parts("env -S 'rm -rf x'")).toBe("env -S splits a string into a command");
-});
-
-test("a program is read also with its own options before the words naming what it does off (git -C x push: git push), as written too; the folder one names the one it runs in, its redirections made where the shell is; one it doesn't know, a dry run, or none of those words after them, leaves it as written alone", () => {
-  expect(parts("git -C /r --no-pager -c user.name=x push origin")).toEqual(["git -C /r --no-pager -c user.name=x push origin => git push origin @/r from /w"]);
-  expect(parts("git -C sub log > out; git --git-dir=/r/.git status")).toEqual(["git -C sub log >out => git log @/w/sub from /w", "git --git-dir=/r/.git status => git status @/w"]);
-  expect(parts("kubectl -n prod delete pod x; kubectl --context=prod --namespace=\"$NS\" get pods; helm -n ns uninstall x")).toEqual(["kubectl -n prod delete pod x => kubectl delete pod x @/w", "kubectl --context=prod ~--namespace= get pods => kubectl get pods @/w", "helm -n ns uninstall x => helm uninstall x @/w"]);
-  expect(parts("npm --prefix ../x run build; make -C /m -j4 deploy; terraform -chdir=infra apply")).toEqual(["npm --prefix ../x run build => npm run build @/x from /w", "make -C /m -j4 deploy => make deploy @/m from /w", "terraform -chdir=infra apply => terraform apply @/w/infra from /w"]);
-  expect(parts("make -j 4 deploy; make --jobs deploy; git --namespace= push x")).toEqual(["make -j 4 deploy => make deploy @/w", "make --jobs deploy => make deploy @/w", "git --namespace= push x => git push x @/w"]);
-  expect(parts("make -C '~/x' t; git -C $D status")).toEqual(["make -C ~/x t => make t @null from /w", "git -C ~ status => git status @null from /w"]);
-  expect(parts("sudo -D /etc ls; time -o /tmp/t true")).toEqual(["ls (/etc) @/etc from /w [root]", "true (/tmp/t) @/w"]);
-  expect(parts("git --version; git --frobnicate push; make -n deploy; bun x.ts --cwd sub")).toEqual(["git --version @/w", "git --frobnicate push @/w", "make -n deploy @/w", "bun x.ts --cwd sub @/w"]);
-});
-
-test("git's settings that run a command are read as scripts of their own (by -c, --config-env, or its environment); its aliases each a reading of their own, a ! one a script with the words after it; a variable naming a command, given, exported or set, read as a script; one made as it runs by its known text, one unreadable as written", () => {
-  expect(parts("git -c core.sshCommand='rm -rf /' fetch")).toEqual(["rm -rf / @/w", "git -c core.sshCommand=rm -rf / fetch => git fetch @/w"]);
-  expect(parts("git -c alias.p=push p origin; git -c 'alias.x=!rm' x -rf y")).toEqual(["git -c alias.p=push p origin => git p origin => git push origin @/w", "rm -rf y @/w", "git -c alias.x=!rm x -rf y => git x -rf y @/w"]);
-  expect(parts("git -c alias.push=status push; git -c alias.b=push -c alias.a=b a; git -c 'alias.p=-p \"pu\\sh\"' p")).toEqual(["git -c alias.push=status push => git push => git status @/w", "git -c alias.b=push -c alias.a=b a => git a => git b => git push @/w", "git -c alias.p=-p \"pu\\sh\" p => git p => git push @/w"]);
-  expect(parts("git -c alias.p=push status; git -c alias.p=push $(echo p)")).toEqual(["git -c alias.p=push status => git status @/w", "echo p @/w", "git -c alias.p=push ~ => git ~ => git push @/w"]);
-  expect(parts("GIT_SSH_COMMAND='rm -rf /' git fetch; export EDITOR='rm z'; PAGER=less")).toEqual(["rm -rf / @/w", "GIT_SSH_COMMAND=rm -rf / git fetch @/w", "rm z @/w", "export EDITOR=rm z @/w", "less @/w", "PAGER=less @/w"]);
-  expect(parts("sudo GIT_SSH_COMMAND='rm x' git fetch; GIT_EDITOR=vi bash -c 'git commit'")).toEqual(["rm x @/w [root]", "GIT_SSH_COMMAND=rm x git fetch @/w [root]", "vi @/w", "git commit @/w"]);
-  expect(parts("GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0='rm p' git log")).toEqual(["rm p @/w", "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=rm p git log @/w"]);
-  expect(parts("GIT_CONFIG_PARAMETERS=\"'core.pager'='rm q'\" git log; git -c credential.helper=store -c pager.log=false log")).toEqual(["rm q @/w", "GIT_CONFIG_PARAMETERS='core.pager'='rm q' git log @/w", "git credential-store @/w", "git -c credential.helper=store -c pager.log=false log => git log @/w"]);
-  expect(parts("GIT_SSH_COMMAND=\"ssh -i $KEY\" git fetch; export PAGER=$(command -v less)")).toEqual(["ssh -i ~ @/w", "GIT_SSH_COMMAND=~ssh -i  git fetch @/w", "command -v less @/w", "export ~PAGER= @/w"]);
-  expect(parts("git -c 'alias.x=!f() { rm y; }; f' x")).toEqual(["f() { rm y; }; f @/w [rough]", "git -c alias.x=!f() { rm y; }; f x => git x @/w"]);
 });
 
 test("nested scripts are read: bash -c, eval (its cd lasts), trap (also after --), watch, find -exec", () => {
@@ -218,12 +177,7 @@ test("words expand as far as known: variables, loops, tildes, braces; globs and 
   expect(Shell.program((Shell.parse("/usr/bin/rm x", "/w") as Part[])[0].argv[0])).toBe("rm");
   expect(Shell.program((Shell.parse("./rm x", "/w") as Part[])[0].argv[0])).toBe("");
   expect(parts("echo $'\\x72m' \"a$HOME\"")).toEqual(["echo rm a" + HOME + " @/w"]);
-  expect(parts("x=\"rm -rf src\"; $x; \"$x\"; y=$x")).toEqual(["x=rm -rf src @/w", "rm -rf src @/w", "~ @/w", "rm -rf src @/w", "y=rm -rf src @/w"]);
-  // unquoted, a known value is the words bash splits it into (rm runs),
-  // and one word known only as it runs too (it may be stale where it
-  // runs); quoted, one word; a loop's values each so too
-  expect((Shell.parse("x=\"rm -rf src\"; $x; \"$x\"", "/w") as Part[]).slice(1).map((p) => [Shell.program(p.argv[0]), p.argv.length])).toEqual([["rm", 3], ["", 1], ["rm -rf src", 1]]);
-  expect(parts("x='a b'; for o in $x c; do echo $o; done")).toEqual(["x=a b @/w", "echo a|b|c @/w"]);
+  expect(parts("x=\"rm -rf src\"; $x; \"$x\"; y=$x")).toEqual(["x=rm -rf src @/w", "~ @/w", "rm -rf src @/w", "y=rm -rf src @/w"]);
   expect(parts("g='*.ts'; ls $g \"$g\"")).toEqual(["g=*.ts @/w", "ls **.ts *.ts @/w"]);
 });
 
@@ -252,7 +206,7 @@ test("a [ without its ] is itself, not a glob; $(pwd) and $(git rev-parse --show
   expect(made("$(mktemp --tmpdir=/var/tmp a.XXX)", "$(mktemp -dq b.XXX)", "$(mktemp ../c.XXX)")).toEqual(["/var/tmp/a.XXX", REPO + "/sub/deep/b.XXX", REPO + "/sub/c.XXX"]);
   expect(made("$(mktemp -p \"$HOME\")", "$(mktemp -t a/b)", "$(mktemp --weird)", "$(mktemp -d -t job)", "$(mktemp /nowhere-illi/x.XXX)", "$(mktemp -t x.XXX -p /tmp)")).toEqual(["~", "~", "~", "~", "~", "~"]);
   expect(top("set -e; TMPDIR=/etc; d=$(mktemp); touch \"$d\"")).toEqual(["touch", "~"]);
-  expect(parts("flock -n /tmp/l rm x; flock -w 5 /tmp/l -c 'cd /tmp && ls'")).toEqual(["rm x (/tmp/l) @/w", "cd /tmp @/w", "ls @/tmp", "(/tmp/l) @/w"]);
+  expect(parts("flock -n /tmp/l rm x; flock -w 5 /tmp/l -c 'cd /tmp && ls'")).toEqual(["rm x @/w", "cd /tmp @/w", "ls @/tmp"]);
   expect(parts("flock --bogus /tmp/l rm x")).toBe("flock --bogus: an option illi doesn't know");
 });
 
