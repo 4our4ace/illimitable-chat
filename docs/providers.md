@@ -382,8 +382,9 @@ accounts on its own.
   384k of illi's tokens (4 bytes each), and the chat folds at its auto
   compact of that. The first time the CLI refuses a turn on a model as
   too long, illi learns that model takes 192k (256k of the CLI's count),
-  says so in a note, keeps it from then on (`~/.illi/models.json`), and
-  folds more of the chat. The CLI keeps only the first 192 KB of a
+  says so in a note, keeps it for a week (`~/.illi/models.json`: then it
+  tries the most again, as Google may have raised it), and folds more
+  of the chat. The refusal comes at once and costs no quota. The CLI keeps only the first 192 KB of a
   message, so illi sends the chat after its prompt, which the CLI
   passes whole, and only your newest message as the message. A turn
   past a model's window is never sent: illi folds more of the chat and

@@ -1001,7 +1001,9 @@ export namespace Chat {
   // from that (chatgpt: Provider.ts refused): the account takes no more
   // than the standard window, learned for it. Or one whose vendor learned
   // that itself, as its own program said so (End capped: Antigravity's,
-  // on any of its calls, a summary's too). true: learned, the turn goes
+  // which learns on any of its calls, an agent's or a summary's too,
+  // though only a turn's end comes here: once a model, as its cap tells
+  // one learned already as a plain `full`). true: learned, the turn goes
   // on fitted to it
   export function capped(chat: Chat, end: End, carried: { model: string; tokens: number }): boolean {
     if (end.capped === true) {

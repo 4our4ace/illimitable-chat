@@ -697,7 +697,7 @@ export function config_autocompact(label: string, value: string | null): string 
 // the models listed last, learned (a file that won't read: none): a
 // catalog's list (a provider whose facts say `catalog`: chatgpt's) as it
 // last gave it, whatever account it was of (not known yet; the catalog's
-// answer replaces it), a window or a share
+// answer replaces it), a window, a share or a time capped
 // that isn't one (not a count above 0; a room past 0 to 1) none, so never
 // a wrong one; the others' windows on the models built in, and only those
 // (their speeds and list are illi's own: a model a later illi dropped, or
@@ -708,7 +708,7 @@ function config_models(): void {
   for (const vendor of Object.keys(kept).filter((v) => VENDORS.includes(v as Vendor) && Array.isArray(kept[v])) as Vendor[]) {
     const models = kept[vendor].filter((m: any) => typeof m?.label === "string" && typeof m.id === "string" && Array.isArray(m.speeds));
     if (Vendors.of(vendor)?.catalog) {
-      Pick.learn(vendor, models.map((m: any) => ({ ...m, window: count(m.window), standard: count(m.standard), room: count(m.room) !== undefined && m.room <= 1 ? m.room : undefined, price: typeof m.price === "number" && m.price >= 0 && Number.isFinite(m.price) ? m.price : undefined })), "replace");
+      Pick.learn(vendor, models.map((m: any) => ({ ...m, window: count(m.window), standard: count(m.standard), room: count(m.room) !== undefined && m.room <= 1 ? m.room : undefined, price: typeof m.price === "number" && m.price >= 0 && Number.isFinite(m.price) ? m.price : undefined, capped: count(m.capped) })), "replace");
     } else {
       models.forEach((m: any) => Pick.told(vendor, m.id, Number(m.window)));
     }

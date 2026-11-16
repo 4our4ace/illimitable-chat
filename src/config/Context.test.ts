@@ -180,7 +180,6 @@ test("a turn's first request refused as too long past the usual window makes it 
   expect(Chat.capped(chat, { ...full, grew: true }, carried)).toBe(false);
   expect(Chat.capped(chat, { ...full, grew: true, capped: true }, carried)).toBe(true);
   expect(Pick.model("chatgpt", "gpt-6.1-sol")).toMatchObject({ window: 872000, standard: 272000 });
-  expect(Pick.model("chatgpt", "gpt-6.1-sol")).toMatchObject({ window: 872000, standard: 272000 });
   expect(Chat.capped(chat, full, carried)).toBe(true);
   expect(Pick.model("chatgpt", "gpt-6.1-sol")).toMatchObject({ window: 272000, standard: undefined });
   expect(ChatGPT.refused("gpt-6.1-sol")).toBe(false);

@@ -1190,7 +1190,13 @@ config_models_told`), so most starts run no Claude Code.
    models that account refused past their usual window, which keep that
    window as their whole one. `antigravity`'s list is the account's
    models as Google's CLI last listed them (at a sign-in, as a turn
-   starts: `Antigravity.ts learn`), with the windows its turns told.
+   starts: `Antigravity.ts learn`), each with its `window` (384k, the
+   most Google's CLI takes, till the CLI refuses a turn on it as too
+   long: 192k from then on, `Antigravity.ts cap`) and its `standard`
+   one (192k), and when it was lowered (`capped`). A model kept
+   without `standard` (by an older illi), or lowered a week ago or
+   more, starts at 384k again (`Pick.ts held`), so a limit Google
+   raises is tried again; a lowered window holds for every account.
    `github-copilot`'s is the plan's models as Copilot's CLI last listed
    them (at a sign-in, as the chat is on the plan: `Copilot.ts learn`),
    each with its window, efforts and price, and Auto's window as a turn

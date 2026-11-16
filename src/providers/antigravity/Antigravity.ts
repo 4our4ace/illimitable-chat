@@ -36,8 +36,8 @@
 // whole; the newest text alone is the message (its start too, past the
 // MESSAGE bytes the CLI keeps of one: it cuts the rest without a word),
 // the images after (Antigravity.split); a call past what the CLI takes
-// of its model (Antigravity.most, by its window) is never sent, said too long for the window, so illi folds the
-// chat. A message sent mid-run is left for the next turn (End.left), as
+// of its model (Antigravity.most, by its window) is never sent, said too
+// long for the window, so illi folds the chat. A message sent mid-run is left for the next turn (End.left), as
 // the CLI takes one message a turn. Its session's files are removed as it ends, each CLI's log as the
 // CLI ends, and what else the CLI leaves in the account's folder (other
 // terminals' logs, crash reports, notes of each start) once a day old.
@@ -118,7 +118,8 @@ type Proc = {
 // than one step); the CLI's web tools' calls waiting for their answers;
 // the calls through the forwarder so far; whether it was stopped (halt:
 // what it waits on stops then); a stop the CLI didn't honour in CANCEL on
-// a CLI others share: the call given up (gave, give), not waited for
+// a CLI others share: the call given up (gave, give), not waited for;
+// when its message went to the CLI (ms; 0: not yet)
 type Run = {
   ask     : Ask;
   on      : (ev: Event) => void;
@@ -141,6 +142,7 @@ type Run = {
   halt    : AbortController;
   gave    : Promise<null>;
   give    : () => void;
+  sent    : number;
 };
 
 // Constants
@@ -210,9 +212,11 @@ const BESIDE = 108_000;
 // the CLI's refusal of a call past what Google's service lets it take of
 // the model, before it asks the model anything: its own words (1.5.9's);
 // an older CLI says only that the agent's execution ended in an error,
-// which means that of a call past the standard window's most alone
+// which means that of a call past the standard window's most alone, said
+// at once (QUICK: ms after its message went, a refusal taking a second)
 const REFUSED = /maxMessageTokens must be positive/i;
 const ENDED   = /^Agent execution terminated due to error\.?$/i;
+const QUICK   = 3e3;
 
 // said where a new text too long for the message goes on in it
 const ON = "[it goes on in the message]";
@@ -289,6 +293,9 @@ export namespace Antigravity {
   // shorter)
   export let cancel = CANCEL;
 
+  // how soon an older CLI's bare error is a refusal (QUICK; a test's none)
+  export let quick = QUICK;
+
   export function ask(ask: Ask, on: (ev: Event) => void, beat: () => void = () => {}): Try {
     const left: Say[] = [];
     const end = AskAI.end("");
@@ -305,7 +312,7 @@ export namespace Antigravity {
     }
     let give = () => {};
     const gave = new Promise<null>((done) => (give = () => done(null)));
-    const run: Run = { ask, on, beat, proc: null, sid: "", token: crypto.randomUUID(), text: "", mind: "", last: "", fresh: false, reply: "", said: false, first: null, grew: false, steps: false, calls: new Set(), n: 0, stopped: false, halt: new AbortController(), gave, give };
+    const run: Run = { ask, on, beat, proc: null, sid: "", token: crypto.randomUUID(), text: "", mind: "", last: "", fresh: false, reply: "", said: false, first: null, grew: false, steps: false, calls: new Set(), n: 0, stopped: false, halt: new AbortController(), gave, give, sent: 0 };
     const stop = () => {
       if (run.stopped) {
         return;
@@ -368,6 +375,7 @@ export namespace Antigravity {
       if (run.stopped) {
         return Antigravity.lost(run);
       }
+      run.sent = Date.now();
       const result = await Promise.race([Acp.call(proc.conn, "session/prompt", { sessionId: run.sid, prompt: Antigravity.prompt(run.ask) }), run.gave]);
       return result === null ? Antigravity.lost(run) : Antigravity.end(run, result);
     } catch (err: any) {
@@ -445,24 +453,33 @@ export namespace Antigravity {
   }
 
   // whether a failed call's words are the CLI's refusal of it as past
-  // what Google's service lets it take of the model, before any step
-  // (REFUSED; an older CLI's ENDED, of a call past the standard window's
-  // most alone): never the model's own words of its 1M (FULL), which no
-  // window learned from a refusal would help
+  // what Google's service lets it take of the model: before any step, of
+  // a call past the standard window's most (one within it no cap would
+  // help: a plain `full`), in its own words (REFUSED) or an older CLI's
+  // (ENDED, said at once, with nothing streamed nor used before it).
+  // Never the model's own words of its 1M (FULL)
   export function refused(run: Run, said: string): boolean {
-    return !run.steps && (REFUSED.test(said) || (ENDED.test(said.trim()) && Antigravity.split(run.ask).bytes > Antigravity.most(FACTS.standard)));
+    const words = REFUSED.test(said) || (ENDED.test(said.trim()) && run.first === null && !run.said && run.sent > 0 && Date.now() - run.sent < Antigravity.quick);
+    return words && !run.steps && Antigravity.split(run.ask).bytes > Antigravity.most(FACTS.standard);
   }
 
   // a model a call on which the CLI refused (Antigravity.refused), its
   // window past its standard one, learned: the standard one is its window
   // from now on, kept for the next start, the chat told (watch); false:
-  // it had that already, so the refusal is the chat's to fold
+  // it had that already (another call's refusal taught it). Whatever the
+  // call: a turn's goes on with a note saying so (End capped:
+  // Chat.capped); an agent's or its recap's is recapped to the new window
+  // with no such note (Tools.refit), a summary's node is clipped
+  // (Compactor.build). It holds a week (Model capped: when, Pick held),
+  // so a limit Google raises later is tried again, at one refusal's cost
+  // (at once, no quota); another illi running on an older list may write
+  // it back at the most meanwhile, which costs the same
   export function cap(label: string): boolean {
     const model = Pick.model("antigravity", label);
     if (model?.standard === undefined || model.window === undefined || model.window <= model.standard) {
       return false;
     }
-    model.window = model.standard;
+    [model.window, model.capped] = [model.standard, Date.now()];
     config.config_models_keep("antigravity", Pick.list("antigravity"));
     watcher();
     return true;
@@ -559,7 +576,7 @@ export namespace Antigravity {
       const own = EFFORTS.filter((e) => at.has(e));
       const efforts = own.length > 0 ? own : levels.length > 0 ? levels : undefined;
       const kept = Pick.model("antigravity", family);
-      return { label: family, id: family, speeds: ["slow"], window: kept?.window, standard: kept?.standard, efforts };
+      return { label: family, id: family, speeds: ["slow"], window: kept?.window, standard: kept?.standard, capped: kept?.capped, efforts };
     });
   }
 
@@ -869,7 +886,8 @@ export namespace Antigravity {
       return { ok: false, text: said.replace(/\s+/g, " ").trim().slice(0, 400), stop: "down", ...cut };
     }
     if (Antigravity.refused(run, said)) {
-      return { ok: false, text: TOO_LONG, stop: "full", ...(Antigravity.cap(run.ask.model) ? { capped: true } : {}), ...cut };
+      Antigravity.cap(run.ask.model);
+      return { ok: false, text: TOO_LONG, stop: "full", capped: true, ...cut };
     }
     if (Agent.full(said) || FULL.test(said)) {
       return { ok: false, text: said, stop: "full", grew: run.grew, ...cut };

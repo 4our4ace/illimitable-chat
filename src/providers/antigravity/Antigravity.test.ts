@@ -686,26 +686,36 @@ test("no account, no CLI, or only another version of it, says what to do, never 
   Agy.pin = pin;
 });
 
-test("a call the CLI refuses as past what Google's service lets it take of the model teaches its standard window, kept for the next start, the chat told (an older CLI's bare error only of a call past that window's most); the model's own words of its 1M, or a refusal at the standard window, teach nothing; a window the CLI tells only lowers it", async () => {
+test("a call the CLI refuses as past what Google's service lets it take of the model (past the standard window's most) teaches its standard window for a week, kept for the next start, the chat told; an older CLI's bare error so only said at once; a refusal within that window, the model's own words of its 1M, or one taught already teach nothing; a window the CLI tells only lowers it", async () => {
   const told: number[] = [];
   Antigravity.watch(() => told.push(1));
   const flash = () => Pick.model("antigravity", "gemini-3.8-flash");
   const argon = () => Pick.model("antigravity", "gemini-4-argon");
   const kept  = (id: string) => JSON.parse(fs.readFileSync(DIR + "/models.json", "utf8")).vendors.antigravity.find((m: any) => m.id === id);
   const ask   = (model: string, bytes: number) => ({ vendor: "antigravity", model, effort: "medium", speed: "slow", system: "", blocks: [{ text: "x".repeat(bytes), mark: false }], searches: 0, server: "", once: true }) as any;
+  const big   = (scene: string, model = "gemini-3.8-flash") => call(scene, { model, blocks: [{ text: "x".repeat(700_000), mark: false }, { text: scene, mark: true }] });
   expect([flash(), Antigravity.split(ask("gemini-3.8-flash", 700_000)).too]).toEqual([expect.objectContaining({ window: 384000, standard: 192000 }), false]);
-  const refused = await call("refuse");
-  expect([refused.end.ok, refused.end.stop, refused.end.capped, refused.end.text, entries(refused.events)]).toEqual([false, "full", true, "the request was too long for the model's window", []]);
+  const small = await call("refuse");
+  expect([small.end.stop, small.end.capped, flash()?.window, told.length]).toEqual(["full", undefined, 384000, 0]);
+  const t0 = Date.now();
+  const [refused, also] = await Promise.all([big("refuse"), big("refuse")]);
+  expect([refused.end.ok, refused.end.stop, refused.end.capped, refused.end.text, entries(refused.events), also.end.capped]).toEqual([false, "full", true, "the request was too long for the model's window", [], true]);
   expect([flash(), kept("gemini-3.8-flash"), told.length]).toEqual([expect.objectContaining({ window: 192000, standard: 192000 }), expect.objectContaining({ window: 192000, standard: 192000 }), 1]);
+  expect([flash()!.capped! >= t0, kept("gemini-3.8-flash").capped]).toEqual([true, flash()!.capped]);
   expect([Antigravity.split(ask("gemini-3.8-flash", 659_000)).too, Antigravity.split(ask("gemini-3.8-flash", 661_000)).too]).toEqual([false, true]);
-  const again = await call("refuse");
-  expect([again.end.stop, again.end.capped, flash()?.window, told.length]).toEqual(["full", undefined, 192000, 1]);
-  const small = await call("ended", { model: "gemini-4-argon" });
-  expect([small.end.stop, small.end.capped, small.end.text, argon()?.window]).toEqual(["down", undefined, "Antigravity said: Agent execution terminated due to error.", 384000]);
-  const big = await call("ended", { model: "gemini-4-argon", blocks: [{ text: "x".repeat(700_000), mark: false }, { text: "ended", mark: true }] });
-  expect([big.end.stop, big.end.capped, argon()?.window, told.length]).toEqual(["full", true, 192000, 2]);
-  Pick.learn("antigravity", [{ label: "gemini-4-argon", id: "gemini-4-argon", speeds: ["slow"], window: 192000 }, { label: "gemini-3.8-flash", id: "gemini-3.8-flash", speeds: ["slow"], window: 192000, standard: 192000 }], "replace");
+  const ended = await call("ended", { model: "gemini-4-argon" });
+  expect([ended.end.stop, ended.end.capped, ended.end.text, argon()?.window]).toEqual(["down", undefined, "Antigravity said: Agent execution terminated due to error.", 384000]);
+  Antigravity.quick = 0;
+  const slow = await big("ended", "gemini-4-argon");
+  expect([slow.end.stop, slow.end.capped, argon()?.window]).toEqual(["down", undefined, 384000]);
+  Antigravity.quick = 3e3;
+  const quick = await big("ended", "gemini-4-argon");
+  expect([quick.end.stop, quick.end.capped, argon()?.window, told.length]).toEqual(["full", true, 192000, 2]);
+  const day = 24 * 60 * 60e3;
+  Pick.learn("antigravity", [{ label: "gemini-4-argon", id: "gemini-4-argon", speeds: ["slow"], window: 192000 }, { label: "gemini-3.8-flash", id: "gemini-3.8-flash", speeds: ["slow"], window: 192000, standard: 192000, capped: Date.now() - 6 * day }], "replace");
   expect([argon(), flash()]).toEqual([expect.objectContaining({ window: 384000, standard: 192000 }), expect.objectContaining({ window: 192000, standard: 192000 })]);
+  Pick.learn("antigravity", [{ label: "gemini-4-argon", id: "gemini-4-argon", speeds: ["slow"] }, { label: "gemini-3.8-flash", id: "gemini-3.8-flash", speeds: ["slow"], window: 192000, standard: 192000, capped: Date.now() - 8 * day }], "replace");
+  expect(flash()).toEqual(expect.objectContaining({ window: 384000, standard: 192000, capped: undefined }));
   await call("narrow", { model: "gemini-4-argon" });
   expect([argon()?.window, kept("gemini-4-argon").window]).toEqual([100000, 100000]);
   await call("turn", { model: "gemini-4-argon" });

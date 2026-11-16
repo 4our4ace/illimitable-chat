@@ -41,8 +41,10 @@ export type Move = "next" | "prev" | "model" | "up" | "down" | "effort" | "speed
 // request may fill, as its vendor tells it (ChatGPT's
 // effective_context_window_percent, else Codex's 95%; none: config.ROOM);
 // price: what a million tokens in cost on it, in dollars, as its vendor
-// lists it (none: not told), which a provider's default may go by
-export type Model = { label: string; id: string; speeds: string[]; window?: number; standard?: number; efforts?: string[]; tiers?: Record<string, string>; room?: number; price?: number };
+// lists it (none: not told), which a provider's default may go by;
+// capped: when its window was learned down to its standard one past what
+// its vendor's facts say (ms: Antigravity cap), which holds LAPSE
+export type Model = { label: string; id: string; speeds: string[]; window?: number; standard?: number; efforts?: string[]; tiers?: Record<string, string>; room?: number; price?: number; capped?: number };
 
 // what a server offers: vendors, and models by label
 export type Offer = { vendors: Vendor[]; models: string[] };
@@ -64,20 +66,25 @@ export const SPEEDS = ["slow", "fast", "ultrafast"];
 
 export const LABELS = [...new Set(Object.values(MODELS).flat().map((m) => m.label))];
 
+// how long a model's window learned down to its standard one holds (ms:
+// Model capped), a vendor's limit changing unannounced
+const LAPSE = 7 * 24 * 60 * 60e3;
+
 // a model's window held to what its vendor's facts say a call on it
 // takes at most (Facts window: its own program's limit, Google's CLI's),
 // that where none is told; another vendor's as told (the model itself,
 // changed). Where the facts give a standard window too (Facts standard),
 // each model has it: one without it (new, or kept by an illi before it,
-// its window that older limit's own) starts at the most, one learned
-// past it (its window at most the standard: capped, Antigravity cap)
-// stays so
+// its window that older limit's own) starts at the most, as does one
+// capped LAPSE ago or more (Model capped); one learned past it since (its
+// window at most the standard: Antigravity cap) stays so
 function held(vendor: string, model: Model): Model {
   const facts = Vendors.of(vendor);
   const most  = facts?.window;
   if (most !== undefined) {
-    if (facts?.standard !== undefined && model.standard === undefined) {
-      [model.window, model.standard] = [undefined, facts.standard];
+    const lapsed = model.capped !== undefined && !(Date.now() - model.capped < LAPSE);
+    if (facts?.standard !== undefined && (model.standard === undefined || lapsed)) {
+      [model.window, model.standard, model.capped] = [undefined, facts.standard, undefined];
     }
     model.window = Math.min(model.window ?? most, most);
   }

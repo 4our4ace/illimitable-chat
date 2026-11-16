@@ -34,7 +34,7 @@ const MODELS: Model[] = [
 // tells it, and changes it unannounced. So each model's window is this
 // most, till a call on it is refused as too long (Antigravity cap): the
 // standard window from then on (STANDARD: 256k of the CLI's count, what
-// every model took), kept. What a step's usage tells (Antigravity.read:
+// every model took), kept for a week (Pick held). What a step's usage tells (Antigravity.read:
 // the model's own 1M) only ever lowers it (Pick.told)
 const WINDOW   = 384000;
 const STANDARD = 192000;
