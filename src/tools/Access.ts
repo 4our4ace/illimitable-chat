@@ -134,8 +134,9 @@ type Met = { pieces: Piece[]; found: Array<{ target: Target; span: Span | null }
 // one check's reading of a command: the work its readings share (Shell
 // Work), and the scripts it couldn't read met so far (rough: one met
 // again where it was, as a script read over and over leaves it, adds
-// nothing)
-type Check = { work: Work; rough: Set<string> };
+// nothing); how much more text its parts' readings may make (text: TEXT
+// at first)
+type Check = { work: Work; rough: Set<string>; text: number };
 
 // Constants
 // =========
@@ -161,6 +162,29 @@ const BARE = 16;
 // one deeper still is left unread, so it asks
 const ROUGH = 4;
 
+// how much text a check's parts' readings make at most (readings: a word
+// of many values gives a command its values in a row, each reading of
+// it as long), so a loop's long values put in thousands of commands ask
+// rather than take seconds and hundreds of megabytes: past it, each part
+// is met as written alone, and the command asks
+const TEXT = 1 << 22;
+
+// the longest command illi reads (none typed is near it; a model writing
+// a file through a heredoc may pass it): a longer one is met by its crude
+// pieces alone (rough, ROUGH deep), and asks, so a check takes a moment
+// however long the command
+const COMMAND = 1 << 17;
+
+// how much of a command past COMMAND is met (crudely, each piece read on
+// its own under the check's work): the rest isn't, so a rule that denies
+// what is there asks instead (Linux on 4 KB pages runs none past 128 KB
+// in one argument, as illi passes it; macOS takes 1 MB in all)
+const RUN = 1 << 18;
+
+// the longest path the system opens (PATH_MAX): a longer one names no
+// place it can reach, so it is taken as written (real)
+const PATH_MAX = 4096;
+
 // why a command left partly unread asks (Request failed)
 const UNREAD = "it runs more scripts, or nests them deeper, than illi reads, or holds a word too long to read, or whose use illi can't tell";
 
@@ -175,10 +199,19 @@ const MAKE_DRY = ["dry-run", "just-print", "recon", "touch", "question"];
 // one variable, a command's output, a $'...' read crudely
 const MADE = /^["']?(?:\$(?:\{[^}]*\}|[A-Za-z_]\w*|\d|\(.*\)|'[^']*')|`.*`)["']?$/;
 
+// the shell's own tests and sums, whose words bash may take as a sum and
+// run what an array's index in it holds: a command's family never saved
+const TESTS = new Set(["[[", "((", "let"]);
+
+// a word wholly made as it runs, unquoted (a variable, a command's
+// output): bash drops it where it comes out blank
+const BLANK = /^(?:\$(?:\{[^}]*\}|[A-Za-z_]\w*|\d|\(.*\))|`.*`)$/s;
+
 // the words that open a shell's own syntax, not a command (left off a
-// piece's front, the piece dropped if a loop's head)
-const RESERVED = new Set(["if", "then", "else", "elif", "fi", "do", "done", "while", "until", "esac", "!", "{", "}", "(", ")", "time"]);
-const HEADS    = new Set(["for", "select", "case", "function"]);
+// piece's front, the piece dropped if a loop's head: its words after in,
+// on a line of their own too)
+const RESERVED = new Set(["if", "then", "else", "elif", "fi", "do", "done", "while", "until", "esac", "!", "{", "}", "(", ")", "time", "coproc"]);
+const HEADS    = new Set(["for", "select", "case", "function", "in"]);
 
 // how many words name a command, by its first words (git push, npm run
 // build): a family "don't ask again" saves (head and *); any other, its
@@ -245,18 +278,25 @@ export namespace Access {
   // commands (Shell.ts's parts, the wrappers' and scripts' own too, and
   // its simple commands at its top as written: tops; one it can't read,
   // in crude pieces, each read on its own too: rough), all its readings
-  // sharing one check's work (Shell Work). One left partly unread asks
-  // (Request failed: past that work, unreadable scripts nested ROUGH
+  // sharing one check's work (Shell Work); one past COMMAND long met by
+  // its crude pieces alone. One left partly unread asks
+  // (Request failed: past that work, past COMMAND, unreadable scripts nested ROUGH
   // deep, scripts or the command itself nested past Shell's NEST, a word
   // or a variable too long to know, a word whose use illi can't tell:
   // Shell DEEP, SPENT), what was read still meeting the rules that deny
   export function shell(where: Where, command: string): Request[] {
-    const check: Check = { work: Shell.work(), rough: new Set() };
-    const parts = Shell.parse(command, where.cwd, 0, true, check.work);
+    const check: Check = { work: Shell.work(), rough: new Set(), text: TEXT };
+    const long = command.length > COMMAND;
+    const text = command.length > RUN ? command.slice(0, RUN) : command;
+    const parts = long ? Shell.SPENT : Shell.parse(command, where.cwd, 0, true, check.work);
     REALS = new Map();
     let met: Met;
     try {
-      met = typeof parts === "string" ? rough(where, command, where.cwd, null, 0, check) : met_parts(where, parts, 0, check);
+      met = typeof parts === "string" ? rough(where, text, where.cwd, null, 0, check) : met_parts(where, parts, 0, check);
+    } catch {
+      // a failure meeting it (a bug, the stack outgrown) never lets it
+      // through: its crude pieces alone, and it asks
+      met = { pieces: [...outer(text), ...crude(text)].map((p) => ({ ...p, crude: true })), found: [], unread: true };
     } finally {
       REALS = null;
     }
@@ -359,7 +399,8 @@ export namespace Access {
   // one is blank or holds * or ? (a rule's own wildcards: git '*' would
   // save git * *, '*' x * *), it is a dry run (dry: approving make deploy
   // -n never approves make deploy), or it is short of its family's words
-  // (git, npm run alone: never git *); "" (nothing saved) where that
+  // (git, npm run alone: never git *), or it is a test or a sum of the
+  // shell's own (TESTS: [[ 1 -eq 'a[$(x)]' ]] runs x); "" (nothing saved) where that
   // command holds a * or ?, as it would save more than itself (git '*'
   // as git *). Crude (a piece of a command illi can't read: Access
   // rough), a word that looks wholly made as it runs ($N) may be a dry
@@ -369,7 +410,7 @@ export namespace Access {
     const names = all.map((w) => w.replace(/['"\\]/g, ""));
     names[0] = Shell.program(Shell.lit(names[0] ?? "")) || (names[0] ?? "");
     const n = Access.arity(names).length;
-    const odd = names.slice(1, n).some((v) => v.startsWith("-")) || names.slice(0, n).some((v) => v.trim() === "" || /[*?]/.test(v)) || dry(crude ? names : names.filter((v) => !MADE.test(v))) || (crude && all.slice(1).some((v) => MADE.test(v))) || n < Access.wanted(names);
+    const odd = TESTS.has(names[0]) || names.slice(1, n).some((v) => v.startsWith("-")) || names.slice(0, n).some((v) => v.trim() === "" || /[*?]/.test(v)) || dry(crude ? names : names.filter((v) => !MADE.test(v))) || (crude && all.slice(1).some((v) => MADE.test(v))) || n < Access.wanted(names);
     return !odd ? all.slice(0, n).join(" ") + " *" : /[*?]/.test(text) ? "" : text;
   }
 
@@ -444,9 +485,11 @@ function external(found: Array<{ target: Target; span: Span | null }>): Request[
 // =====
 
 // the commands of a shell command's pieces, as matched: each its leading
-// assignments and shell words (do, then, !) left off (its saves too, so
-// a family is taken from what it runs: x=(a); X=1 make deploy saves make
-// deploy *, never *), a loop's or case's head and a cd dropped, each once
+// assignments (an array's element's too, x[0]=1) and shell words (do,
+// then, !, coproc and its name, a ( glued to what follows) left off (its
+// saves too, so a family is taken from what it runs: x=(a); X=1 make
+// deploy saves make deploy *, never *), a loop's or case's head and a cd
+// dropped, each once
 // (what it saves as the first that says; crude where any piece of that
 // text was)
 function commands(pieces: Piece[]): Piece[] {
@@ -455,8 +498,19 @@ function commands(pieces: Piece[]): Piece[] {
   for (const p of pieces) {
     const ws = tokens(p.text);
     let k = 0;
-    while (k < ws.length && (RESERVED.has(ws[k].raw) || /^[A-Za-z_][A-Za-z0-9_]*\+?=/.test(ws[k].raw))) {
-      k++;
+    while (k < ws.length) {
+      const w = ws[k].raw;
+      if (/^\((?!\()./s.test(w)) {
+        // a subshell's ( glued to its first word: (X=1 make deploy
+        ws[k] = { raw: w.slice(1), at: ws[k].at + 1 };
+      } else if (w === "coproc" && /^[A-Za-z_]\w*$/.test(ws[k + 1]?.raw ?? "") && /^(?:\{|\(|if|while|until|for|case|select)/.test(ws[k + 2]?.raw ?? "")) {
+        // coproc NAME { ...: its name before what it runs
+        k += 2;
+      } else if (RESERVED.has(w) || /^[A-Za-z_]\w*(?:\[[^\]]*\])?\+?=/.test(w)) {
+        k++;
+      } else {
+        break;
+      }
     }
     if (k >= ws.length || HEADS.has(ws[k].raw) || CD.has(ws[k].raw)) {
       continue;
@@ -607,6 +661,56 @@ function crude(cmd: string): Piece[] {
   return out;
 }
 
+// the plain values a command illi can't read gives its variables as
+// written (P=push, P='a b', for o in a b), each name's BARE at most: its
+// pieces are read on their own, so none knows them (filled)
+function crude_vars(text: string): Map<string, string[]> {
+  const vars = new Map<string, string[]>();
+  const unquote = (v: string) => v.replace(/^(['"])(.*)\1$/s, "$2");
+  const put = (name: string, v: string) => {
+    const values = vars.get(name) ?? [];
+    values.length < BARE && !values.includes(v) && values.push(v);
+    vars.set(name, values);
+  };
+  for (const m of text.matchAll(/(?<![^\s;&|(){}])([A-Za-z_]\w*)=('[^']*'|"[^"$`\\]*"|[^\s;&|()<>$`'"\\]*)(?=[\s;&|()]|$)/g)) {
+    put(m[1], unquote(m[2]));
+  }
+  for (const m of text.matchAll(/(?<![^\s;&|(){}])for\s+([A-Za-z_]\w*)\s+in\s+([^;&|\n`$()]*)/g)) {
+    words(m[2]).forEach((w) => put(m[1], unquote(w)));
+  }
+  return vars;
+}
+
+// pieces of a command illi can't read, each using a variable it gives a
+// plain value to (crude_vars) put with each value too (x=(a); P=push; git
+// $P: git push), BARE ways at most, so a rule meets what it runs, each
+// saving nothing (a value it may not hold then: F=; F=--dry-run; git push
+// $F); their text the check's (Check text: past it, none more)
+function filled(pieces: Piece[], vars: Map<string, string[]>, check: Check): Piece[] {
+  if (vars.size === 0) {
+    return pieces;
+  }
+  const out = [...pieces];
+  for (const p of pieces) {
+    if (check.text <= 0) {
+      break;
+    }
+    let ways = [p.text];
+    for (const m of new Set([...p.text.matchAll(/\$\{?([A-Za-z_]\w*)\}?/g)].map((m) => m[1]))) {
+      const values = vars.get(m);
+      if (values !== undefined && ways.length * values.length <= BARE) {
+        const use = new RegExp("\\$(?:\\{" + m + "\\}|" + m + "(?!\\w))", "g");
+        ways = ways.flatMap((w) => values.map((v) => w.replace(use, () => v)));
+      }
+    }
+    ways.filter((w) => w !== p.text).forEach((text) => {
+      check.text -= text.length;
+      out.push({ text, span: p.span, save: [] });
+    });
+  }
+  return out;
+}
+
 // a word's values that may name a path: each value (a dynamic word's,
 // its head; one whose ~user the system's passwd lacks, as written) and
 // what follows its first = (dd of=/x; not a variable a builtin sets:
@@ -678,8 +782,13 @@ function met_parts(where: Where, parts: Part[], depth: number, check: Check): Me
         add(found, met.found);
         unread ||= met.unread;
       }
+    } else if (!cd && check.text <= 0) {
+      add(pieces, [{ text: p.full, span: p.span }, { text: p.text, span: p.span }]);
+      unread = true;
     } else if (!cd) {
-      add(pieces, readings(p));
+      const read = readings(p);
+      read.forEach((r) => (check.text -= r.text.length));
+      add(pieces, read);
     }
   }
   return { pieces, found, unread };
@@ -710,11 +819,14 @@ function add<T>(to: T[], items: T[]): void {
 // reads (Shell DEEP: x=(a); eval eval ... git push, its crude pieces
 // never meeting what runs at its end)
 function rough(where: Where, text: string, from: string, span: Span | null, depth: number, check: Check, own = false): Met {
-  const split = [...outer(text), ...crude(text)];
+  // its variables' plain values put in only where its pieces are read on
+  // (short of ROUGH: one left unread past that asks all the same)
+  const split = depth >= ROUGH ? [...outer(text), ...crude(text)] : filled([...outer(text), ...crude(text)], crude_vars(text), check);
   const pieces: Piece[] = split.map((p) => ({ ...p, ...(span === null ? {} : { span }), crude: true }));
   const found: Array<{ target: Target; span: Span | null }> = [];
-  for (const m of text.matchAll(/(^|[\s=('"<>|;&`]|(?<=\s)-[A-Za-z])((?:~[\w.-]*|\.\.)?\/[^\s'"`;|&<>()$]*|\.\.(?=$|[\s'"`;|&<>)]))/g)) {
-    if (m[1].startsWith("-") && m[2] === "/") {
+  for (const m of text.matchAll(/(^|[\s=('"<>|;&`]|(?<=\s)-[A-Za-z])((?:~[\w.-]*|\.\.)?\/[^\s'"`;|&<>()$]*|\.\.(?=$|[\s'"`;|&<>)])|~[\w.-]*(?=$|[\s'"`;|&<>)]))/g)) {
+    if ((m[1].startsWith("-") && m[2] === "/") || (m[1] === "=" && m[2].startsWith("~") && /^\s?$/.test(text[m.index! - 1] ?? ""))) {
+      // a lone / glued to an option (cut -d/); [[ a =~ b ]]'s operator
       continue;
     }
     const at = m.index! + m[1].length;
@@ -724,7 +836,8 @@ function rough(where: Where, text: string, from: string, span: Span | null, dept
   if (depth >= ROUGH) {
     return { pieces, found, unread: true };
   }
-  let unread = false;
+  // the check's text spent (filled's, the readings'): some of it unmet
+  let unread = check.text <= 0;
   const seen = new Set(own ? [] : [text.trim()]);
   for (const piece of split) {
     if (seen.has(piece.text)) {
@@ -734,7 +847,10 @@ function rough(where: Where, text: string, from: string, span: Span | null, dept
     const parts = Shell.parse(piece.text, from, span ?? piece.span[0], true, check.work);
     if (typeof parts !== "string") {
       const met = met_parts(where, parts, depth + 1, check);
-      add(pieces, met.pieces.map((p) => (span === null ? p : { ...p, span })));
+      // a piece filled with a variable's value meets the rules, saving
+      // nothing (filled: F=; F=--dry-run; git push $F never saves git push *)
+      const quiet = piece.save !== undefined;
+      add(pieces, met.pieces.map((p) => ({ ...p, ...(span === null ? {} : { span }), ...(quiet ? { save: [] } : {}) })));
       add(found, met.found.map((f) => (span === null ? f : { ...f, span })));
       unread ||= met.unread;
     }
@@ -825,21 +941,27 @@ function dry_words(argv: Word[]): string[] {
 // 'rm' -rf "/" too. A word of several values (a brace's, a loop's
 // variable's) gives a command for each (past BARE, its values in a row),
 // so a rule on rm -rf /var/* meets for d in /tmp /var; do rm -rf $d; done.
-// A variable's value bash splits into words is put so (Shell spread), and
-// a blank one is no word at all: for o in '' x; do git $o push meets git
-// push *
+// A variable's value bash splits into words is put so (Shell spread; its
+// several known values too, Word split: for o in 'push -f' x; do git $o),
+// and a blank one is no word at all: for o in '' x; do git $o push meets
+// git push *. So too the first word: a command for each of its values
+// (for o in ls rm; do $o -rf y: rm -rf y), a blank one leaving the next
+// word the program (for o in '' x; do $o git push: git push), as may one
+// wholly made as it runs (BLANK: sudo -u$U $O rm y meets rm *)
 function bare(argv: Word[]): string[] {
   const [head, ...rest] = argv;
   if (head === undefined) {
     return [];
   }
-  let out = [Shell.program(head) || (head.dynamic ? head.raw : head.alts.join(" "))];
+  const program = Shell.program(head);
+  const made = (w: Word) => w.dynamic && !Array.isArray(w.split);
+  let out = program !== "" && program.trim() === program ? [program] : made(head) ? [head.raw, ...(BLANK.test(head.raw) ? [""] : [])] : Shell.spread(head).map((v) => v ?? "");
   const put = (o: string, v: string | null) => (v === null ? o : o + " " + v);
   for (const w of rest) {
-    const values = w.dynamic ? [w.raw] : Shell.spread(w);
+    const values = made(w) ? [w.raw] : Shell.spread(w);
     out = out.length * values.length > BARE ? out.map((o) => put(o, values.filter((v) => v !== null).join(" "))) : out.flatMap((o) => values.map((v) => put(o, v)));
   }
-  return [...new Set(out.map((o) => o.trim()))];
+  return [...new Set(out.map((o) => o.trim()))].filter((o) => o !== "");
 }
 
 // a path's ~ as the home it names (Shell.home; a user the system's
@@ -886,6 +1008,9 @@ function top_exists(absolute: string): boolean {
 // go (a loop: where it stops); what isn't there yet, as written below
 // the real folder holding it. Worked out once a shell check (REALS)
 function real(p: string, hops = 0): string {
+  if (p.length > PATH_MAX) {
+    return p;
+  }
   const known = hops === 0 ? REALS?.get(p) : undefined;
   if (known !== undefined) {
     return known;
@@ -945,10 +1070,12 @@ function really(dir: string): string {
 }
 
 // the project a folder is in: the git repository holding it (but home
-// or /), else the folder
+// or /), else the folder. Its folders past PATH_MAX long are passed over,
+// as none the system opens can hold a .git
 function project(folder: string): string {
   const home = os.homedir();
-  for (let dir = folder; dir !== path.dirname(dir) && dir !== home; dir = path.dirname(dir)) {
+  const fits = folder.length <= PATH_MAX ? folder : folder.slice(0, Math.max(1, folder.lastIndexOf("/", PATH_MAX)));
+  for (let dir = fits; dir !== path.dirname(dir) && dir !== home; dir = path.dirname(dir)) {
     if (fs.existsSync(path.join(dir, ".git"))) {
       return dir;
     }

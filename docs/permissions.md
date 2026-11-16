@@ -135,7 +135,24 @@ project always comes first:
   -j $N deploy`: a number's option is read with that word its value and
   without. A variable's blank value is no word at all, as bash drops it
   (`for o in '' x; do git $o push` meets `git push *`), while a quoted
-  blank (`git "" push`) is a word of its own.
+  blank (`git "" push`) is a word of its own. A variable's known value
+  that bash splits at its blanks is read as the words it makes
+  (`X='push -f'; git $X` is `git push -f`, `X='git push'; $X` too; a
+  loop's values each so, `for o in '-c alias.x=push' -p; do git $o x`,
+  and a loop over one, `for o in $X`), while such a value glued to more
+  (`git --git-dir=$D alias.x=push x` with `D='x -c'`) asks, as the words
+  after it are known only as it runs. A command's first word of several
+  values gives a command for each (`for o in ls rm; do $o -rf y` meets
+  `rm *`), a blank one leaving the next word the program (`for o in ''
+  x; do sudo $o git push` meets `git push *`), as may a variable or a
+  command's output known only as it runs (`sudo -u$U $O rm y` meets `rm
+  *` too). A wrapper's option with its value made as it runs glued in
+  it (`env -u$D`, `timeout --signal=$S`, `nice -n$N`, `xargs -I$I`) is
+  read past to what it runs; a short one's value may be blank, the next
+  word its value then, so it asks too. `eval --` runs what follows as
+  `eval` does, `coproc` runs what follows as in the background, and an
+  array element's assignment before a command (`x[0]=1 rm -rf y`) is
+  one, leaving that array known only as it runs.
 - A git setting given with the command that runs a command (`git -c
   core.sshCommand=…`, `core.pager`, `core.editor`, a credential helper,
   a diff or merge tool's, `tar.<format>.command`, and the rest of
@@ -171,9 +188,12 @@ project always comes first:
   have changed since (one running itself, an alias's, is read once).
   One check follows scripts and aliases until it has done 5,000 units
   of work, far past any everyday command (a command, a script, an
-  alias step, an `eval` each one; a script run in a shell of its own one
+  alias step, an `eval` each one, and one more for each 256 characters
+  of the script it reads; a script run in a shell of its own one
   more for each 256 variables the shell set; 1 KB of the variables'
-  text put in words one; a command's own plain commands are all read,
+  text put in words one, 16 words a variable's value is split into one;
+  16 of git's settings, read for a git command or where the
+  environment gives them, one; a command's own plain commands are all read,
   however many); a command whose scripts or aliases grow past that (one
   running itself in a new folder each time, aliases naming each other
   in a long row, thousands of variables copied for each of thousands of
@@ -186,7 +206,14 @@ project always comes first:
   it) so a rule that denies it still meets it, and a variable or a word
   grown past 64 KB (`X=$X$X`, again and again; `bash -c "$X$X"`), whose
   value illi then holds as unknown, even where that leaves the whole
-  command unread. A value
+  command unread. So does a command longer than 128 KB (none is typed;
+  a file written through a heredoc may be; Linux runs none that long),
+  met by the crude pieces of its first 256 KB, as below (a rule that
+  denies what lies past that asks instead); one
+  whose readings grow past 4 MB of text (a loop's long values put in
+  thousands of commands), the rest met as written; and any failure
+  reading a command, met by its crude pieces. A path longer than the
+  system opens (4 KB) is taken as written. A value
   made as it runs is read by its text: one
   double-quoted string's inside (`GIT_SSH_COMMAND="ssh -i $KEY"` gives
   `ssh -i $KEY`), else what is known of it and, crudely, what is
@@ -219,7 +246,7 @@ project always comes first:
   path (`grep -r '/api/v1'`, whose top folder `/api` isn't there) aren't
   asked; a disk's device (`/dev/sda`) is.
 - A command illi's shell reader can't follow (`case`, a function, an
-  array), and a script in a git setting or a variable it can't follow
+  array, a named `coproc`: `coproc N { …; }`), and a script in a git setting or a variable it can't follow
   (`git -c 'alias.x=!f() { …; }; f'`), is split crudely at `;`, `&`, `|`, newlines, `$(`, backticks
   and parentheses, quotes or not, each piece read on its own too where
   illi can (`git -C app push; x=(a)` gives `git push` too, and `GIT_PAGER='rm
@@ -227,9 +254,16 @@ project always comes first:
   (one with a space in it up to the space), so a rule still finds most
   of what is in it: a script quoted whole with none of those in it stays
   one piece (in a `case`, `bash -c 'rm x'` matches a rule on `bash *`,
-  not one on `rm *`). "Don't ask again" saves each piece by its family,
+  not one on `rm *`). A piece using a variable the command gives a plain
+  value (`P=push`, `P='a b'`, `for o in a b`) is read with each of its
+  values too, as no piece knows it (`x=(a); P=push; git $P` meets `git
+  push *`), saving nothing (the variable may not hold that value there:
+  `F=; F=--dry-run; git push $F`). "Don't ask again" saves each piece by its family,
   its leading assignments and shell words off (`x=(a); X=1 make deploy`
-  saves `make deploy *`, never `*`). A piece nested deeper than illi
+  saves `make deploy *`, `x[0]=1`, `coproc`, a `(` glued to its first
+  word and a loop's `in` too; never `*`), and a test or a sum of the
+  shell's own (`[[`, `((`, `let`, which run what an array's index in
+  them holds) exactly, never its family. A piece nested deeper than illi
   follows (`x=(a); eval eval … git push`, 64 deep and more) asks, as
   its pieces never meet what runs at its end.
 - illi's own folder (`~/.illi`, `ILLI_DIR`) is outside every project,

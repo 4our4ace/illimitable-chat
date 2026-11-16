@@ -470,11 +470,14 @@ test("an option word of several values read with each, whatever their order, val
     "for o in '' -c; do git $o alias.x=push x; done",
     "for o in -p -C; do git -c alias.x=push $o status x; done",
     "for o in -c status; do git $o core.pager='rm -rf y' log; done",
+    // a known value bash splits at its blanks: its words
+    "for o in '-c alias.x=push' -p; do git $o x; done",
+    "O='-c alias.x=push'; git $O x",
   ]) {
     expect([c, judge(c, deny)]).toEqual([c, ["deny"]]);
   }
-  // a value bash splits at its blanks is known only as it runs: it asks
-  for (const c of ["git $O alias.x=push x", "git ${O:--c} alias.x=push x", "git \"$O\" alias.x=push x", "for o in '-c alias.x=push' -p; do git $o x; done", "O='-c alias.x=push'; git $O x"]) {
+  // one known only as it runs: it asks
+  for (const c of ["git $O alias.x=push x", "git ${O:--c} alias.x=push x", "git \"$O\" alias.x=push x"]) {
     expect([c, Access.shell(WHERE, c).at(-1)!.failed]).toEqual([c, expect.any(String)]);
   }
   expect(Access.shell(WHERE, "git -C \"$DIR\" status").at(-1)!.failed).toBeUndefined();
@@ -547,7 +550,7 @@ test("a word grown past what illi holds, or given more of the variables' text th
 });
 
 test("a command illi can't read saves each command in it by its family, its leading assignments and shell words off, never every command; nested deeper than it reads, it asks", () => {
-  const wrong = (save: string[]) => save.filter((s) => s === "*" || /^(?:[A-Za-z_]\w*\+?=|(?:!|time|do|then|\{)(?:\s|$))/.test(s));
+  const wrong = (save: string[]) => save.filter((s) => s === "*" || /^(?:[A-Za-z_]\w*(?:\[[^\]]*\])?\+?=|\((?!\()|(?:!|time|do|then|\{|coproc|in)(?:\s|$))/.test(s) || /^(?:\[\[|\(\(|let) \*$/.test(s));
   for (const [c, family] of [
     ["x=(a); X=1 make deploy", "make deploy *"],
     ["for o in a b; do eval \"ls $o\"; done", "eval *"],
@@ -556,6 +559,13 @@ test("a command illi can't read saves each command in it by its family, its lead
     ["x=(a); ! ls", "ls *"],
     ["x=(a); time ls", "ls *"],
     ["x=(a); { ls; }", "ls *"],
+    ["x=(a); coproc ls", "ls *"],
+    ["x=(a); coproc N { make deploy; }", "make deploy *"],
+    ["x=(a); x[0]=1 ls", "ls *"],
+    ["x=(a); (X=1 make deploy)", "make deploy *"],
+    ["x=(a); for o\nin a b; do ls; done", "ls *"],
+    ["[[ a =~ (b) ]]; ls", "ls *"],
+    ["x=(a); [[ -f x ]] && ls", "ls *"],
   ]) {
     const save = Access.shell(WHERE, c).find((r) => r.action === "shell")!.save;
     expect([c, save.includes(family), wrong(save)]).toEqual([c, true, []]);
@@ -577,6 +587,113 @@ test("a word known only as it runs among a program's options asks, but for an op
   for (const c of ["git -C$D x -c alias.y=push y", "for o in '' x; do git $o push; done", "o=; git $o push", "O=''; git $O push"]) {
     expect([c, judge(c, deny).includes("deny")]).toEqual([c, true]);
   }
+});
+
+test("a first word of several values is a command for each (a blank one leaving the next word the program), through a wrapper too; one that may be an assignment or the program, given env or sudo, still meets a rule that denies it", () => {
+  const deny = [rule("shell", "rm *", "deny"), rule("shell", "git push *", "deny")];
+  for (const c of [
+    "for o in X=1 rm; do env $o y; done",
+    "for o in X=1 rm; do sudo $o y; done",
+    "for o in X=1 rm; do env $o -rf y; done",
+    "for o in X=1 git; do env $o push; done",
+    "for o in '' x; do $o git push; done",
+    "for o in '' x; do env $o git push; done",
+    "for o in '' x; do sudo $o git push; done",
+    "for o in '' x; do timeout 5 $o git push; done",
+    "for o in '' x; do nohup $o git push; done",
+    "for o in '' x; do command $o git push; done",
+    "for o in ls rm; do $o -rf y; done",
+    "for o in ls git; do $o push; done",
+  ]) {
+    expect([c, judge(c, deny)]).toEqual([c, ["deny"]]);
+  }
+  // all it read allowed, it asks: the value may be the program
+  expect(Access.shell(WHERE, "for o in X=1 ls; do env $o y; done").at(-1)!.failed).toBeDefined();
+});
+
+test("eval's --, coproc, an array's element set before a command, a variable's known value bash splits (among a command's words, a loop's, its first word), a wrapper's option with a value made as it runs glued in it, a command illi can't read using a plain value it gives a variable: each read as it runs, so a rule that denies what runs refuses it", () => {
+  const deny = [rule("shell", "rm *", "deny"), rule("shell", "git push *", "deny"), rule("shell", "make deploy *", "deny")];
+  for (const c of [
+    "eval -- git push",
+    "x=(a); eval -- git push",
+    "coproc rm -rf y",
+    "x=(a); coproc rm -rf y",
+    "coproc make deploy",
+    "coproc git -C app push",
+    "coproc sudo rm -rf y",
+    "coproc N { rm -rf y; }",
+    "x[0]=1 rm -rf y",
+    "x=(a); x[0]=1 rm -rf y",
+    "x[0]=1 /bin/rm -rf y",
+    "x[0]=1 env -u HOME rm y",
+    "env x[0]=1 rm -rf y",
+    "o=' '; $o git push",
+    "X='push -f'; git $X",
+    "X='push origin'; git -C app $X",
+    "o='rm -rf'; $o y",
+    "X='git push'; $X",
+    "X='sudo rm'; $X y",
+    "for o in 'push -f' status; do git $o; done",
+    "X='a b'; for o in $X rm; do $o -rf y; done",
+    "env -u$D rm y",
+    "timeout -s$S 5 rm y",
+    "timeout --signal=$S 5 rm y",
+    "nice -n$N rm y",
+    "sudo -u$U $O rm y",
+    "xargs -I$I rm y",
+    "x=(a); P=push; git $P",
+    "x=(a); for o in ls rm; do $o -rf y; done",
+  ]) {
+    expect([c, judge(c, deny)]).toEqual([c, ["deny"]]);
+  }
+  // a value bash splits glued to an option, a short option's value made
+  // as it runs that may be blank: the words after it may be read wrong
+  for (const c of ["D='x -c'; git --git-dir=$D alias.x=push x", "env -u$D ls", "sudo -u$U ls"]) {
+    expect([c, Access.shell(WHERE, c).at(-1)!.failed]).toEqual([c, expect.any(String)]);
+  }
+  for (const c of ["timeout --signal=$S 5 ls", "X='status -s'; git $X", "o=; $o ls"]) {
+    expect([c, Access.shell(WHERE, c).at(-1)!.failed]).toEqual([c, undefined]);
+  }
+  // the words it runs, as bash splits them
+  expect(Access.shell(WHERE, "X='push -f'; git $X").at(-1)!.resources).toContain("git push -f");
+  // a crude piece filled with a variable's value saves nothing: the value
+  // may not be the one it holds there
+  for (const [c, never] of [["x=(a); F=; F=--dry-run; git push $F", "git push *"], ["x=(a); N=; read N; make deploy $N", "make deploy *"]]) {
+    expect([c, Access.shell(WHERE, c).at(-1)!.save.includes(never)]).toEqual([c, false]);
+  }
+  // a test's family is never saved
+  expect(Access.shell(WHERE, "[[ -f x ]] && ls").at(-1)!.save).toEqual(["[[ -f x ]]", "ls *"]);
+});
+
+test("git's settings in the environment, as many as a command may give and its aliases naming each other, cost the check's work: read in a moment, or asked past it; text past what a check reads, a long path, a long glob, brace or ~ word in a moment, never a throw", () => {
+  const n = (k: number) => [...Array(k).keys()];
+  for (const c of [
+    n(1500).map((i) => "GIT_CONFIG_KEY_" + i + "=alias.a" + i + " GIT_CONFIG_VALUE_" + i + "=status").join("; ") + "; " + n(1500).map((i) => "git a" + i).join("; "),
+    "export GIT_CONFIG_COUNT=1500; " + n(1500).map((i) => "export GIT_CONFIG_KEY_" + i + "=alias.a" + i + " GIT_CONFIG_VALUE_" + i + "='!git a" + (i + 1) + "'").join("; ") + "; " + n(1500).map((i) => "git a" + i).join("; "),
+    n(3000).map((i) => "GIT_CONFIG_KEY_" + i + "=a.b; ( git log )").join("; "),
+    "o=; git " + n(12000).map(() => "$o").join(" ") + " push",
+    "git " + n(400).map((i) => "-c alias.a" + i + "='!git a" + (i + 1) + "; git a" + (i + 1) + "'").join(" ") + " a0",
+    "for X in " + n(16).map((i) => "a".repeat(60) + i).join(" ") + "; do " + n(2000).map(() => "git $X $X $X $X").join("; ") + "; done",
+    "echo " + "[a".repeat(50000),
+    "echo " + "{a,".repeat(40000),
+    "echo " + "~a/".repeat(40000),
+    "echo " + "/a".repeat(50000),
+  ]) {
+    expect(c.length).toBeLessThan(1 << 17);
+    const t0 = performance.now();
+    Access.shell(WHERE, c);
+    expect([c.slice(0, 40), performance.now() - t0 < 1500]).toEqual([c.slice(0, 40), true]);
+  }
+  // past 128 KB, its crude pieces alone, each read on its own: it asks,
+  // a rule that denies what is in it still refusing it, in a moment
+  const pad = "echo " + "a".repeat(140000) + "; ";
+  for (const c of [pad + "git -C app push", pad + "sudo rm -rf y", pad + "rm y; " + n(4000).map((i) => "export GIT_CONFIG_KEY_" + i + "=alias.a" + i + " GIT_CONFIG_VALUE_" + i + "='!git a" + (i + 1) + "'").join("; ")]) {
+    const t0 = performance.now();
+    expect([c.slice(-20), judge(c, [rule("shell", "git push *", "deny"), rule("shell", "rm *", "deny")]).includes("deny"), Access.shell(WHERE, c).at(-1)!.failed, performance.now() - t0 < 3000]).toEqual([c.slice(-20), true, expect.any(String), true]);
+  }
+  // a few settings, read as ever
+  expect(judge("GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=alias.p GIT_CONFIG_VALUE_0=push git p", [rule("shell", "git push *", "deny")])).toEqual(["deny"]);
+  expect(Access.shell(WHERE, "GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.pager GIT_CONFIG_VALUE_0=less git log").at(-1)!.failed).toBeUndefined();
 });
 
 test("Claude Code's tools that ask in illi's calls, as illi's like ones: its web fetch and search theirs, one of its MCP servers' by its name; illi's own none", () => {
