@@ -17,19 +17,27 @@ export const GEMINI: Maker = { name: "Gemini", offers: "by Google: your Google A
 // here), as a Google AI Ultra account's agent listed them: an account's
 // own list replaces these as its CLI tells it (Antigravity.learn: at the
 // sign-in, each call), kept for the next start (catalog). Each one's
-// window is the CLI's (WINDOW)
+// window is the most the CLI takes (WINDOW) till a call on it is refused
+// past its standard one (STANDARD)
 const MODELS: Model[] = [
   { label: "gemini-4-argon",   id: "gemini-4-argon",   speeds: ["slow"], efforts: ["low", "medium", "high"] },
   { label: "gemini-3.8-flash", id: "gemini-3.8-flash", speeds: ["slow"], efforts: ["low", "medium", "high"] },
 ];
 
-// the window of every model the CLI runs, in illi's tokens (4 bytes
-// each): the CLI fits a call in 256k tokens of its own count (3 bytes a
-// token: 768 KB), its own prompt and tools' with it, whatever the model's
-// own 1M (Gemini 4 Carbon's, Argon's, 3.8 Flash's, as the CLI's records
-// tell them), so no more of a chat reaches the model; what a step's usage
-// tells (Antigravity.read) holds only below it (Pick.told)
-const WINDOW = 192000;
+// the most a call on a model the CLI runs takes, in illi's tokens (4
+// bytes each): the CLI fits a call in what Google's service lets it take
+// of that model, in tokens of its own count (3 bytes a token), its own
+// prompt and tools' with it, whatever the model's own 1M (as the CLI's
+// records tell it). That's 512k (1.5 MB) on Gemini 4 Carbon, Argon and
+// Hydrogen, 256k (768 KB) on 3.8 Flash, measured on a Google AI Ultra
+// account (November 2026), the same on every CLI; the service never
+// tells it, and changes it unannounced. So each model's window is this
+// most, till a call on it is refused as too long (Antigravity cap): the
+// standard window from then on (STANDARD: 256k of the CLI's count, what
+// every model took), kept. What a step's usage tells (Antigravity.read:
+// the model's own 1M) only ever lowers it (Pick.told)
+const WINDOW   = 384000;
+const STANDARD = 192000;
 
 export const FACTS = {
   id       : "antigravity" as const,
@@ -38,6 +46,7 @@ export const FACTS = {
   row      : "Google AI plan",
   models   : MODELS,
   window   : WINDOW,
+  standard : STANDARD,
   defaults : { pick: "antigravity:gemini-*-flash:high:slow", compactor: "antigravity:gemini-*-flash:low:slow" },
   ttl      : 300e3,
   accounts : "folders" as const,

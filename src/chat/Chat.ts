@@ -999,9 +999,14 @@ export namespace Chat {
   // takes beside it) past its model's standard window, yet well within its
   // whole one (no misjudged size explains it), on a vendor that learns
   // from that (chatgpt: Provider.ts refused): the account takes no more
-  // than the standard window, learned for it. true: learned, the turn
-  // goes on fitted to it
+  // than the standard window, learned for it. Or one whose vendor learned
+  // that itself, as its own program said so (End capped: Antigravity's,
+  // on any of its calls, a summary's too). true: learned, the turn goes
+  // on fitted to it
   export function capped(chat: Chat, end: End, carried: { model: string; tokens: number }): boolean {
+    if (end.capped === true) {
+      return true;
+    }
     const at    = carried.model.indexOf(":");
     const model = Pick.model(carried.model.slice(0, at) as Vendor, carried.model.slice(at + 1));
     const sent  = carried.tokens + (chat.beside.get(carried.model) ?? 0);

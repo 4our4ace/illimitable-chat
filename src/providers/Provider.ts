@@ -58,9 +58,14 @@ export type Context = {
 //   known till it tells);
 // - window: the most a call on any of its models takes in, where its own
 //   program holds a call below its models' windows (Google's CLI fits
-//   each in 256k tokens of its count, whatever the model's own 1M): each
-//   model's window is that at most, and one never told any is that
-//   (Pick.ts); none: its models' own;
+//   each in 512k tokens of its count at most, whatever the model's own
+//   1M): each model's window is that at most, and one never told any is
+//   that (Pick.ts); none: its models' own;
+// - standard: with a window, what a call on every one of its models
+//   surely takes, where its service lets some take more and never says
+//   which (Google's: 256k of the CLI's count on some models, 512k on
+//   others): each model's standard window, its window till a call on it
+//   is refused as too long past it (Antigravity cap);
 // - defaults: illi's own pick on it (the first offered vendor's is
 //   illi's default, while `chats` names none for it) and the
 //   compactor's, while `compactor` names none: each names its model by
@@ -96,6 +101,7 @@ export type Facts = {
   row       : string;
   models    : Model[];
   window?   : number;
+  standard? : number;
   defaults  : { pick: Rule; compactor: Rule };
   ttl       : number;
   accounts  : "keys" | "folders" | "logins";

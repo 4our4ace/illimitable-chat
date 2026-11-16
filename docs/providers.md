@@ -372,15 +372,22 @@ accounts on its own.
   3.8 Flash). With two accounts on different plans, the list is the one
   whose CLI told it last; a model the account in use doesn't offer says
   what it does offer.
-- **How much of the chat fits**: Google's CLI fits each turn in 256k
-  tokens by its own count (about 768 KB of text, its own prompt and
-  tools included), whatever the model's own 1M, so every Gemini model's
-  window here is 192k of illi's tokens (4 bytes each), and the chat
-  folds at its auto compact of that. The CLI keeps only the first
-  192 KB of a message, so illi sends the chat after its prompt, which
-  the CLI passes whole, and only your newest message as the message. A
-  turn the CLI would refuse is never sent: illi folds more of the chat
-  and goes on.
+- **How much of the chat fits**: Google's CLI fits each turn in what
+  Google's service lets it take of the model, by the CLI's own count
+  (3 bytes a token, its own prompt and tools included), whatever the
+  model's own 1M. That's 512k (about 1.5 MB of text) on Gemini 4
+  Carbon, Argon and Hydrogen, and 256k (about 768 KB) on Gemini 3.8
+  Flash, as measured in November 2026; Google doesn't say it, and
+  changes it unannounced. So every Gemini model's window here starts at
+  384k of illi's tokens (4 bytes each), and the chat folds at its auto
+  compact of that. The first time the CLI refuses a turn on a model as
+  too long, illi learns that model takes 192k (256k of the CLI's count),
+  says so in a note, keeps it from then on (`~/.illi/models.json`), and
+  folds more of the chat. The CLI keeps only the first 192 KB of a
+  message, so illi sends the chat after its prompt, which the CLI
+  passes whole, and only your newest message as the message. A turn
+  past a model's window is never sent: illi folds more of the chat and
+  goes on.
 - **What's different**: a message you send mid-turn waits for the next
   one; a tool's answer reaches the model cut at about 48 KB (illi's own
   tools cut theirs sooner); when Google is busy or your plan's limit
@@ -682,7 +689,7 @@ usage:
 | `chatgpt`     | the models your account may use, each one's window, efforts and speeds | at start, after `/login` and `/logout`, when the account changes; every 5 minutes while it doesn't answer |
 | `claude-api`  | the models your key may use, the newest active one of each family (opus, sonnet, haiku…), each one's window and efforts (Anthropic's Models API) | at start, after `/login` (here or in another terminal) |
 | `claude-code` | the models your plan offers, as Claude Code lists them: the newest of each family (Opus, Fable, Sonnet, Haiku), with their efforts; each model's window, as Claude Code has it for a turn (asked, no message sent); the window of the model a turn's reply ran on | at start, once a day for an account (a start within it goes on what it told, so no Claude Code runs as illi opens), and after `/login` (here or in another terminal); after each turn's reply |
-| `antigravity` | the models your account may use, each at its thinking levels; the window of the model a turn ran on, where the CLI tells one (192k at most: the CLI's own) | the models at sign-in and as each turn starts; the window during each turn |
+| `antigravity` | the models your account may use, each at its thinking levels; a model's window, learned smaller as the CLI refuses a turn on it as too long (384k at most, 192k then: the CLI's own), or as the CLI tells a smaller one | the models at sign-in and as each turn starts; the window as a turn is refused, or during each turn |
 | `openai-api`  | nothing: its windows are built in (1.05M)                        |                                        |
 | `opencode-go` | the models your plan offers that illi runs ([OpenCode Go plan](#opencode-go-plan)), each one's window, efforts and price (OpenCode's catalog) | at start, after `/login` (here or in another terminal), before a turn till it answers |
 | `github-copilot` | the models your plan offers, as Copilot's CLI lists them ([GitHub Copilot plan](#github-copilot-plan)), each one's window, efforts and price; the plan's use; Auto's window, as a turn tells it | at start, as the chat moves to it, after `/login`; the use after each request too |

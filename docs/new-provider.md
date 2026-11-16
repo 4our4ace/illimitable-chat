@@ -44,7 +44,8 @@ illi lists their models in):
 | `name` | as a note names it, "the" or "your" first: "the Anthropic API", "your ChatGPT plan" (`Pick.provider`); without that word, its title ("Anthropic API", `Pick.title`), the head over its models in `/model` and what a search there finds them by. `Providers.test.ts` fails a name that starts with neither |
 | `maker`, `row` | under whom /login lists it (`Maker`: its name, what its row says while none of its providers is connected, its place; a maker's plan before its API key) and its row's name ("ChatGPT plan", "Anthropic API key") |
 | `models` | as built in (5: their windows, efforts and speeds) |
-| `window` | the most a call on any of its models takes in, where its own program holds a call below its models' windows (Google's CLI fits each in 256k tokens of its count, whatever the model's 1M): every model's window is that at most, one never told any is that (5) |
+| `window` | the most a call on any of its models takes in, where its own program holds a call below its models' windows (Google's CLI fits each in 512k tokens of its count at most, whatever the model's 1M): every model's window is that at most, one never told any is that (5) |
+| `standard` | with `window`, what a call on every one of its models surely takes, where its service lets some take more and never says which (Google's: 256k of the CLI's count on some models): each model's standard window, its window once a call on it is refused past it (5) |
 | `defaults` | illi's own pick on it (the first offered vendor's is illi's default pick, while `chats` names none for it) and the summaries', while `compactor` names none for it. Each names its model by family, `*` for the version (`opus-*`, `gemini-*-flash`): the newest of it the vendor offers (`Pick.newest`), so it never needs a new illi when a model comes or goes; or it's a rule, a function given the models offered (each with its `price` where the vendor lists one) that returns the pick's text (the cheapest, say). `Providers.test.ts` fails a default named by version, or one its built-in list has none of |
 | `ttl` | how long it keeps a cached prefix unused, in ms (`AskAI.wait`) |
 | `accounts` | its entry's shape in `accounts.json` (`Accounts.ts`): `keys` (an API's), `folders` (a plan its own program runs, each account a folder: `folders` names theirs in illi's root, which a profile's export leaves out, `Accounts.owned`; the folder in use is `config_folder(vendor)`), `logins` (a plan whose login is a file of its own: `outside`) |
@@ -145,8 +146,12 @@ CLI keeps only the first 192 KB of a message and drops the rest without
 a word, while its system prompt's append goes whole, so Antigravity
 sends the chat after illi's prompt there and only the last block (a
 turn's new text) as the message (`Antigravity.split`). A call its
-program would refuse without saying why (the CLI past 256k tokens of its
-count) is never sent: say it `full` first, so illi folds the chat.
+program would refuse (the CLI past what Google's service lets it take of
+the model) is never sent: say it `full` first, so illi folds the chat.
+Where the program's refusal is the only way to learn a model's limit,
+learn it there: Antigravity's `cap` sets the model's standard window as
+the CLI refuses a call on its first send, and ends `full` with `capped`,
+so the chat's note says the account takes that much from now on.
 
 Failures must land in the right `stop`, since each is handled apart:
 
@@ -369,9 +374,14 @@ the side says its window isn't told. The others that tell
 theirs (Anthropic's API, Claude Code) get built-in ones till they tell;
 one that tells none (the OpenAI API), the ones its docs state. Where a
 runner's own program holds a call below its models' windows, its facts'
-`window` says so (Antigravity's 192k: Google's CLI fits a call in 256k
-tokens of 3 bytes, illi's are 4): `Pick.ts` holds every model's window to
-it, a told or kept one too, and gives it to one never told any.
+`window` says so (Antigravity's 384k: Google's CLI fits a call in 512k
+tokens of 3 bytes at most, illi's are 4): `Pick.ts` holds every model's
+window to it, a told or kept one too, and gives it to one never told
+any. Where only some models take that much and the service never says
+which, `standard` gives the window every model takes (Antigravity's
+192k): each model has it, and a refusal past it makes it the model's
+window, kept (a model kept without it, by an older illi, starts at the
+most again).
 
 6. The plan and its usage
 -------------------------

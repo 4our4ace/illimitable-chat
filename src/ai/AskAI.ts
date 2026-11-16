@@ -127,7 +127,10 @@ export type Event =
 // a request takes beside the chat: Chat.cap; none: that request was
 // refused, or read nothing told); owned: a runner's failed end whose
 // streamed text it settled itself, logged or dropped as the vendor's
-// error said as text, so Agent.watched logs none of it
+// error said as text, so Agent.watched logs none of it; capped: full as
+// the vendor's own program said the account takes less of the model than
+// its window, the provider having learned its standard window for it
+// (Antigravity cap), so the chat goes on fitted to that (Chat.capped)
 export type End = {
   ok     : boolean;
   text   : string;
@@ -139,6 +142,7 @@ export type End = {
   cut?   : boolean;
   first? : number;
   owned? : boolean;
+  capped?: boolean;
 };
 
 // one try at a vendor

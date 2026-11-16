@@ -36,7 +36,7 @@
 // whole; the newest text alone is the message (its start too, past the
 // MESSAGE bytes the CLI keeps of one: it cuts the rest without a word),
 // the images after (Antigravity.split); a call past what the CLI takes
-// (CALL) is never sent, said too long for the window, so illi folds the
+// of its model (Antigravity.most, by its window) is never sent, said too long for the window, so illi folds the
 // chat. A message sent mid-run is left for the next turn (End.left), as
 // the CLI takes one message a turn. Its session's files are removed as it ends, each CLI's log as the
 // CLI ends, and what else the CLI leaves in the account's folder (other
@@ -54,12 +54,14 @@
 // a turn that used nothing ended on an error, as did one whose last piece
 // is one of the CLI's own words for one (ERROR: the words streamed
 // before it logged as cut off), never a reply. Its end in plain words:
-// too long for the window (`full`: illi folds the chat), the plan's limit
-// reached (when it resets), the sign-in run out (/login signs in again),
-// a busy service; a stop cancels the turn (session/cancel), the CLI
-// killed if it doesn't end it in CANCEL. Each step's usage tells the
-// model's window, where the CLI sends one, learned and kept for the next
-// start, at most the CLI's own (Facts.ts WINDOW).
+// too long for the window (`full`: illi folds the chat; the CLI's own
+// refusal of a call past what Google's service lets it take of the model
+// teaches its standard window, kept from then on: Antigravity.cap), the
+// plan's limit reached (when it resets), the sign-in run out (/login
+// signs in again), a busy service; a stop cancels the turn
+// (session/cancel), the CLI killed if it doesn't end it in CANCEL. Each
+// step's usage tells the model's own window, where the CLI sends one,
+// which only ever lowers the one known (Facts.ts WINDOW).
 //
 // The CLIs run in a pool, an account's at a time: one starts as a call
 // needs it (about a second), takes up to MOST sessions at once, and ends
@@ -191,18 +193,26 @@ const OUTPUT = 1_000_000;
 
 // the most bytes of a message the CLI passes whole: it cuts a longer one
 // at 192,025, keeping its start and dropping the rest without a word
-// (measured on 1.5.5), so the newest of a long call's text never reached
-// the model; while its system prompt's append goes whole, as long as the
-// call fits (Antigravity.split)
+// (measured on 1.5.5 and 1.5.9, on every model), so the newest of a long
+// call's text never reached the model; while its system prompt's append
+// goes whole, as long as the call fits (Antigravity.split)
 const MESSAGE = 190_000;
 
-// the most bytes of illi's own a call carries (the append and the
-// message): the CLI fits a call in 256k tokens of its own count (3 bytes
-// a token: 768 KB), its own prompt (16 to 28 KB) and tools' declarations
-// (14 KB, more with illi's) with it, and one past that fails saying only
-// that the agent's execution ended in an error (its log: maxMessageTokens
-// must be positive), so illi tells it's too long before sending it
-const CALL = 660_000;
+// what the CLI adds to a call beside illi's own text, with room to spare
+// (bytes): its own prompt (16 to 28 KB) and its tools' declarations (14
+// KB, more with illi's). A call carries at most its model's window (4
+// bytes a token) less this of illi's own, the append and the message
+// (Antigravity.most: 660,000 bytes at the standard window, 1,428,000 at
+// the most); the CLI refuses one past what it takes at once
+// (Antigravity.refused), so illi tells it's too long before sending it
+const BESIDE = 108_000;
+
+// the CLI's refusal of a call past what Google's service lets it take of
+// the model, before it asks the model anything: its own words (1.5.9's);
+// an older CLI says only that the agent's execution ended in an error,
+// which means that of a call past the standard window's most alone
+const REFUSED = /maxMessageTokens must be positive/i;
+const ENDED   = /^Agent execution terminated due to error\.?$/i;
 
 // said where a new text too long for the message goes on in it
 const ON = "[it goes on in the message]";
@@ -236,7 +246,7 @@ const PLACE = "Antigravity's own instructions above, of a workspace folder, an a
 
 // what a failure says: too long for the window, a plan's limit, a sign-in
 // run out, a busy service (the API's own words, as the agent passes them)
-const FULL  = /exceeds the maximum number of tokens|input token count|too many tokens|context (window|length)|could not fit in the available context limit/i;
+const FULL  = /exceeds the maximum number of tokens|input token count|too many tokens|context (window|length)|could not fit in the available context limit|maxMessageTokens must be positive/i;
 const LIMIT = /usage limit reached|reached your current quota|resource.?exhausted|quota.?exhausted|\b429\b/i;
 const LOGIN = /sign in again|log back in|authentication (required|expired)|auth_required|not (signed|logged) in|not logged into|credentials|unauthenticated|\b401\b/i;
 const BUSY  = /overloaded|unavailable|try again later|connection (was )?lost|deadline|timed? ?out|\b5\d\d\b|ECONN/i;
@@ -245,7 +255,7 @@ const BUSY  = /overloaded|unavailable|try again later|connection (was )?lost|dea
 // errors', a lost connection's; the API's, as it passes them on; a
 // warning sign before them, as the CLI marks them), told apart from the
 // model's by these alone
-const ERROR = /^\s*(?:⚠\uFE0F?\s*)?(Usage Limit Reached|Agent execution error:|Agent connection was lost|The input token count \(\d+\) exceeds|The model (API )?is (currently )?overloaded|Servers are overloaded|Resource has been exhausted)/i;
+const ERROR = /^\s*(?:⚠\uFE0F?\s*)?(Usage Limit Reached|Agent execution error:|agent executor error:|Agent connection was lost|The input token count \(\d+\) exceeds|The model (API )?is (currently )?overloaded|Servers are overloaded|Resource has been exhausted)/i;
 
 const NO_ACCOUNT = "no Google account is in use for Antigravity: /login signs in to one";
 const NO_SIGNIN  = "your Google sign-in for Antigravity has run out: /login signs in again";
@@ -416,14 +426,46 @@ export namespace Antigravity {
   // order, as its system prompt's append; the last (a turn's new text, a
   // summary's task) the message, whose start, past MESSAGE bytes, goes
   // last in the append (ON said there), so the CLI never cuts the newest
-  // of it. Too: past CALL bytes in all, which the CLI would refuse
-  export function split(ask: Ask): { append: string; message: string; too: boolean } {
+  // of it. Its bytes in all; too: past the most its model's window
+  // carries (Antigravity.most), which the CLI would refuse
+  export function split(ask: Ask): { append: string; message: string; bytes: number; too: boolean } {
     const texts   = ask.blocks.map((b) => b.text).filter((t) => t !== "");
     const last    = texts.at(-1) ?? "";
     const at      = Antigravity.tail(last, MESSAGE);
     const append  = [Antigravity.instructions(ask), ...texts.slice(0, -1), ...(at > 0 ? [last.slice(0, at) + ON] : [])].join("\n\n");
     const message = last.slice(at);
-    return { append, message, too: Buffer.byteLength(append) + Buffer.byteLength(message) > CALL };
+    const bytes   = Buffer.byteLength(append) + Buffer.byteLength(message);
+    return { append, message, bytes, too: bytes > Antigravity.most(Pick.model("antigravity", ask.model)?.window ?? FACTS.standard) };
+  }
+
+  // the most bytes of illi's own text a call carries on a model of this
+  // window (illi's tokens, 4 bytes each), the CLI's own beside it (BESIDE)
+  export function most(window: number): number {
+    return window * 4 - BESIDE;
+  }
+
+  // whether a failed call's words are the CLI's refusal of it as past
+  // what Google's service lets it take of the model, before any step
+  // (REFUSED; an older CLI's ENDED, of a call past the standard window's
+  // most alone): never the model's own words of its 1M (FULL), which no
+  // window learned from a refusal would help
+  export function refused(run: Run, said: string): boolean {
+    return !run.steps && (REFUSED.test(said) || (ENDED.test(said.trim()) && Antigravity.split(run.ask).bytes > Antigravity.most(FACTS.standard)));
+  }
+
+  // a model a call on which the CLI refused (Antigravity.refused), its
+  // window past its standard one, learned: the standard one is its window
+  // from now on, kept for the next start, the chat told (watch); false:
+  // it had that already, so the refusal is the chat's to fold
+  export function cap(label: string): boolean {
+    const model = Pick.model("antigravity", label);
+    if (model?.standard === undefined || model.window === undefined || model.window <= model.standard) {
+      return false;
+    }
+    model.window = model.standard;
+    config.config_models_keep("antigravity", Pick.list("antigravity"));
+    watcher();
+    return true;
   }
 
   // where the end of `text` that's `most` bytes at most starts, at a
@@ -497,8 +539,8 @@ export namespace Antigravity {
   // order: each a family (its model option's values, and the models it
   // lists, each id a family at a thinking level: gemini-3.8-flash-high),
   // its efforts the levels listed of it (else the session's thinking
-  // levels), Gemini's alone; each window as known (none: told as a call
-  // runs)
+  // levels), Gemini's alone; each window, and standard one, as known
+  // (none: the most, Pick held)
   export function catalog(made: any): Model[] {
     const all    = Array.isArray(made?.configOptions) ? made.configOptions : [];
     const levels = Antigravity.values(Antigravity.level(all)).filter((e) => EFFORTS.includes(e));
@@ -516,7 +558,8 @@ export namespace Antigravity {
     return [...found].map(([family, at]) => {
       const own = EFFORTS.filter((e) => at.has(e));
       const efforts = own.length > 0 ? own : levels.length > 0 ? levels : undefined;
-      return { label: family, id: family, speeds: ["slow"], window: Pick.model("antigravity", family)?.window, efforts };
+      const kept = Pick.model("antigravity", family);
+      return { label: family, id: family, speeds: ["slow"], window: kept?.window, standard: kept?.standard, efforts };
     });
   }
 
@@ -617,7 +660,10 @@ export namespace Antigravity {
         if (used > 0) {
           run.first ??= used;
         }
-        if (Pick.told("antigravity", run.ask.model, Number(u.size))) {
+        // the size told is the model's own (its 1M), never what the CLI
+        // takes of a call (Facts.ts WINDOW): it only ever lowers a window
+        const size = Number(u.size);
+        if (size < (Pick.model("antigravity", run.ask.model)?.window ?? Infinity) && Pick.told("antigravity", run.ask.model, size)) {
           config.config_models_keep("antigravity", Pick.list("antigravity"));
         }
         return;
@@ -821,6 +867,9 @@ export namespace Antigravity {
     }
     if (said.startsWith(Agy.spec.name + " didn't start")) {
       return { ok: false, text: said.replace(/\s+/g, " ").trim().slice(0, 400), stop: "down", ...cut };
+    }
+    if (Antigravity.refused(run, said)) {
+      return { ok: false, text: TOO_LONG, stop: "full", ...(Antigravity.cap(run.ask.model) ? { capped: true } : {}), ...cut };
     }
     if (Agent.full(said) || FULL.test(said)) {
       return { ok: false, text: said, stop: "full", grew: run.grew, ...cut };

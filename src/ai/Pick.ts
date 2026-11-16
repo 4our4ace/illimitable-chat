@@ -34,7 +34,8 @@ export type Move = "next" | "prev" | "model" | "up" | "down" | "effort" | "speed
 // a model: as shown, as the vendor names it, its speeds; its context
 // window, the whole of it as its vendor tells it (input and output share
 // it); standard: the vendor's usual window when below that (ChatGPT's
-// context_window, which Codex uses unless set higher); its efforts, as its
+// context_window, which Codex uses unless set higher; Antigravity's, the
+// one every model takes: Facts standard); its efforts, as its
 // vendor names them (none told: EFFORTS); the service tier each speed
 // sends (none: OpenAI.body's own names); room: the share of its window a
 // request may fill, as its vendor tells it (ChatGPT's
@@ -66,10 +67,18 @@ export const LABELS = [...new Set(Object.values(MODELS).flat().map((m) => m.labe
 // a model's window held to what its vendor's facts say a call on it
 // takes at most (Facts window: its own program's limit, Google's CLI's),
 // that where none is told; another vendor's as told (the model itself,
-// changed)
+// changed). Where the facts give a standard window too (Facts standard),
+// each model has it: one without it (new, or kept by an illi before it,
+// its window that older limit's own) starts at the most, one learned
+// past it (its window at most the standard: capped, Antigravity cap)
+// stays so
 function held(vendor: string, model: Model): Model {
-  const most = Vendors.of(vendor)?.window;
+  const facts = Vendors.of(vendor);
+  const most  = facts?.window;
   if (most !== undefined) {
+    if (facts?.standard !== undefined && model.standard === undefined) {
+      [model.window, model.standard] = [undefined, facts.standard];
+    }
     model.window = Math.min(model.window ?? most, most);
   }
   return model;
