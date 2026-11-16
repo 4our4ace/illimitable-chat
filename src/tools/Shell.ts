@@ -43,7 +43,8 @@
 // other in a long row), the scripts and aliases left are each their
 // text alone, left unread, so the check asks; so it does of a script
 // nested past NEST (its text read on its own: Part rough "deep"), a
-// variable grown past VALUE, and a word whose use this can't tell (one
+// variable or a word grown past VALUE (even where that leaves the whole
+// command unread: Shell SPENT), and a word whose use this can't tell (one
 // known only as it runs among a program's options, a wrapper's word
 // that may be an assignment or the program). The shell tool runs bash
 // (Machine.ts), so this is the language it runs.
@@ -150,8 +151,10 @@ type Ctx = { cwd: string | null; at: string | null; root: boolean; fed: boolean;
 
 // a word's values as it is read; made: as Word's (undefined: no mktemp
 // in it yet; null: something else in it known only as it runs, a
-// command's output after it, or too many values)
-type Build = { alts: string[]; dynamic: boolean; glob: boolean; made?: string[] | null };
+// command's output after it, or too many values); long: a value grown
+// past VALUE, or the variables put in it past the check's work (EXPAND),
+// so it is known only as it runs and the command asks (scan_word)
+type Build = { alts: string[]; dynamic: boolean; glob: boolean; made?: string[] | null; long?: boolean };
 
 // a heredoc waiting for its body (the lines after its command's):
 // its end line, whether tabs before that are dropped (<<-), whether its
@@ -182,7 +185,10 @@ type Doc = { delim: string; strip: boolean; expand: boolean; redir: Redir; inpip
 // in force for what the git command being read runs (given: its -c and
 // its environment's, which git passes on to what it runs, so a git
 // command among them reads them as its own); the top of the git
-// repository each folder is in, as looked for (tops: Shell repo)
+// repository each folder is in, as looked for (tops: Shell repo); the
+// scripts cut nested too deep (cuts: part_rough); whether any of it was
+// left unread past the check's work (spent: part_rough), kept though a
+// reading holding it is undone (attempt), so the command still asks
 type Scan = {
   src   : string;
   at    : number;
@@ -206,6 +212,7 @@ type Scan = {
   ids   : Map<string, string>;
   tops  : Map<string, string | null>;
   cuts  : number;
+  spent : boolean;
 };
 
 // what a command run in a subshell changes of the shell, as it was
@@ -232,11 +239,14 @@ type Global = { args: string[]; flags: string[]; opt?: string[]; nums?: string[]
 
 // the work one check's readings may still do, shared by all of them
 // (Shell.parse's, each piece Access.ts reads on its own too): a unit for
-// each part read, each script read, each step through an alias. Spent,
-// the scripts and aliases left are left unread (Part rough "spent"), so
-// the check asks (Access: never allowed by rules on what was read). A
-// command's plain parts spend it but are all read, however many: only
-// scripts and alias steps stop at it
+// each part read, each script read (nested: more for a shell of its own
+// by the variables it copies, VARS), each step through an alias, each
+// EXPAND of the variables' text put in words, each VARS variables copied
+// to be set (vars_own). Spent, the scripts and aliases left are left
+// unread (Part rough "spent"), and so are long words and the variables
+// past it, so the check asks (Access: never allowed by rules on what was
+// read). A command's plain parts spend it but are all read, however
+// many: only scripts, alias steps, words and copies stop at it
 export type Work = { left: number };
 
 // a git setting given with a command: its key (null: known only as it
@@ -273,12 +283,40 @@ const WORK = 5000;
 const GIVEN_VARS = new WeakMap<Map<string, Word>, { id: string; since: string[] }>();
 const GIVEN_SETS = new WeakMap<Setting[], string>();
 
-// the longest value a variable holds as known (var_set), far past any a
-// command gives one: longer, it is known only as it runs
+// the variables giving git settings (GIT_CONF) of a variables map, in
+// the order set (conf_vars): kept as they are set (var_set), so a git
+// finds them in a moment however many others are set
+const CONF_VARS = new WeakMap<Map<string, Word>, Set<string>>();
+
+// the variables maps a State holds (state_of), never changed in place: a
+// set made on one copies it first (vars_own), so a subshell, a group, a
+// heredoc or a reading tried costs no copy of every variable
+const SHARED = new WeakSet<Map<string, Word>>();
+
+// how many variables a copy of them (vars_own) or a shell of a script's
+// own (nested) copies for each unit of the check's work (Work): a check
+// copies a million or so at most, many variables copied again and again
+// never taking it past a moment
+const VARS = 256;
+
+// the longest value a variable holds as known (var_set), or a word (add),
+// far past any a command gives one: longer, it is known only as it runs
 const VALUE = 1 << 16;
+
+// how much of the variables' text a word is given (var_put) for each unit
+// of the check's work (Work): a check puts some 5 MB in its words at
+// most (a script made of them read too in a moment), a variable of VALUE
+// put thousands of times asking instead of taking seconds and gigabytes
+const EXPAND = 1 << 10;
 
 // what ends a word unquoted
 const META = " \t\n;&|()<>";
+
+// the characters scan_word reads as more than themselves (META, quotes,
+// escapes, expansions, a ~, a brace, a glob's), and scan_quoted inside
+// double quotes: a run of any others is added to a word at once
+const PLAIN = META + "\\'\"$`~{*?[";
+const QUOTED = "\"\\$`";
 
 // Globals
 // =======
@@ -467,19 +505,28 @@ export namespace Shell {
   // runs it in: an eval inside a && list ignores it), so none is trusted
   export function parse(command: string, cwd: string, at: number | Span = 0, sete = true, work: Work = Shell.work()): Part[] | string {
     const [base, box]: [number | null, Span] = typeof at === "number" ? [at, [at, at + command.length]] : [null, at];
-    const s: Scan = { src: command, at: 0, base, box, parts: [], cwd, vars: new Map(), wild: false, errexit: false, sete, docs: [], root: false, fed: false, inpipe: false, depth: 0, pipes: [], read: new Set(), work, given: [], ids: new Map(), tops: new Map(), cuts: 0 };
+    const s: Scan = { src: command, at: 0, base, box, parts: [], cwd, vars: new Map(), wild: false, errexit: false, sete, docs: [], root: false, fed: false, inpipe: false, depth: 0, pipes: [], read: new Set(), work, given: [], ids: new Map(), tops: new Map(), cuts: 0, spent: false };
     try {
       scan_list(s, "");
       pipe_feeds(s);
+      if (s.spent && !s.parts.some((p) => p.rough === "spent")) {
+        part_rough(s, command, { cwd, at: cwd, root: false, fed: false, piped: false, span: box }, "spent");
+      }
       return s.parts;
     } catch (err: any) {
-      return err instanceof Unread ? err.message : "illi failed to read it (" + String(err?.message ?? err) + ")";
+      return s.spent ? Shell.SPENT : err instanceof Unread ? err.message : "illi failed to read it (" + String(err?.message ?? err) + ")";
     }
   }
 
   // why a command nesting deeper than NEST can't be read (parse's), so
   // Access.ts asks of one (its pieces read on their own, as ever)
   export const DEEP = "commands nested too deep";
+
+  // why a command some of which was left unread past the check's work
+  // (Part rough "spent") can't be read, where a reading holding that was
+  // refused after (parse's: bash -c "$X$X", X too long to know, as a
+  // script made as it runs), so Access.ts asks of it as of DEEP
+  export const SPENT = "commands past the check's work";
 
   // the work one check's readings may do, to share among them (Work)
   export function work(): Work {
@@ -524,6 +571,17 @@ export namespace Shell {
   // a plain word, as if written unquoted
   export function lit(x: string): Word {
     return { alts: [x], raw: x, dynamic: false, glob: false, fd: false };
+  }
+
+  // a known word's values as the program is given them, each the words
+  // bash makes of it in a row (split_value: O='-c  x' as -c x); null for
+  // one that makes none (o=; git $o push runs git push), while a blank
+  // quoted ("") is a word of its own
+  export function spread(w: Word): Array<string | null> {
+    return w.alts.map((a) => {
+      const words = split_value(w, a);
+      return words.length === 0 ? null : words.map((x) => x.alts[0]).join(" ");
+    });
   }
 
   // a path from a folder as the system finds it: each .. from where the
@@ -847,11 +905,19 @@ function scan_word(s: Scan): Word {
         b.glob ||= x.alts.some((a) => /[*?[]/.test(a));
         s.at = x.end;
       }
-    } else {
-      b.glob ||= c === "*" || c === "?" || (c === "[" && closes(s.src, s.at));
+    } else if (c === "*" || c === "?" || c === "[") {
+      b.glob ||= c !== "[" || closes(s.src, s.at);
       add(b, [c]);
       s.at++;
+    } else {
+      // a run of characters that are only themselves, added at once
+      const end = plain_end(s.src, s.at + 1, PLAIN);
+      add(b, [s.src.slice(s.at, end)]);
+      s.at = end;
     }
+  }
+  if (b.long === true) {
+    part_rough(s, s.src.slice(start, s.at), { cwd: s.cwd, at: s.cwd, root: s.root, fed: s.fed, piped: s.inpipe, span: place(s, start, s.at) }, "spent");
   }
   return { alts: b.alts, raw: s.src.slice(start, s.at), dynamic: b.dynamic, glob: b.glob, fd: false, at: start, ...(Array.isArray(b.made) ? { made: b.made } : {}) };
 }
@@ -951,7 +1017,8 @@ function brace_seq(item: string): string[] | "many" | null {
 }
 
 // text added to each value a word can take (none once it is dynamic: its
-// known head stays); past MOST values, nothing of it is known
+// known head stays); past MOST values, nothing of it is known; one grown
+// past VALUE, known only as it runs (long)
 function add(b: Build, xs: string[]): void {
   if (Array.isArray(b.made)) {
     b.made = b.made.flatMap((a) => xs.map((x) => a + x));
@@ -962,6 +1029,10 @@ function add(b: Build, xs: string[]): void {
     if (b.alts.length > MOST) {
       unknown(b);
       b.alts = [""];
+    } else if (b.alts.some((a) => a.length > VALUE)) {
+      unknown(b);
+      b.alts = [""];
+      b.long = true;
     }
   }
 }
@@ -995,10 +1066,21 @@ function scan_quoted(s: Scan, b: Build): void {
     } else if (c === "`") {
       output(s, b, scan_tick(s));
     } else {
-      add(b, [c]);
-      s.at++;
+      const end = plain_end(s.src, s.at + 1, QUOTED);
+      add(b, [s.src.slice(s.at, end)]);
+      s.at = end;
     }
   }
+}
+
+// where a run of characters that are only themselves ends (a word's
+// unquoted: PLAIN; inside double quotes: QUOTED), from `at`
+function plain_end(src: string, at: number, special: string): number {
+  let i = at;
+  while (i < src.length && !special.includes(src[i])) {
+    i++;
+  }
+  return i;
 }
 
 // a $: an arithmetic, a command's output, a variable, or itself; split:
@@ -1069,6 +1151,16 @@ function var_put(s: Scan, b: Build, name: string, split = false): void {
   const known = v !== undefined ? v.alts : name === "PWD" ? (s.cwd === null ? null : [s.cwd]) : s.wild || name === "OLDPWD" || process.env[name] === undefined ? null : [process.env[name]!];
   if (known === null || (split && (ifs(s) || known.some((x) => /[ \t\n]/.test(x))))) {
     unknown(b);
+    return;
+  }
+  // its text the check's work (EXPAND): past it, a long one is known only
+  // as it runs
+  const cost = b.dynamic ? 0 : Math.floor((b.alts.length * known.reduce((n, x) => n + x.length, 0)) / EXPAND);
+  s.work.left -= cost;
+  if (cost > 0 && s.work.left <= 0) {
+    unknown(b);
+    b.alts = [""];
+    b.long = true;
     return;
   }
   add(b, known);
@@ -1620,9 +1712,11 @@ function scope(s: Scan, run: () => void): void {
   state_put(s, was);
 }
 
-// the shell as a subshell would leave it (State), to put back
+// the shell as a subshell would leave it (State), to put back: its
+// variables as they are, never changed in place from now on (SHARED)
 function state_of(s: Scan): State {
-  return { cwd: s.cwd, vars: new Map(s.vars), wild: s.wild, errexit: s.errexit };
+  SHARED.add(s.vars);
+  return { cwd: s.cwd, vars: s.vars, wild: s.wild, errexit: s.errexit };
 }
 
 function state_put(s: Scan, was: State): void {
@@ -2131,8 +2225,9 @@ function globals(s: Scan, argv: Word[], env: Env[], ctx: Ctx): { readings: Word[
 // written, and (past) the command with every word before what it does
 // that may be an option left off (git $a $a $a $a push: git push);
 // unknown: a word known only as it runs among them, words after it (git
-// $O alias.x=push x: an option taking a value, a flag or what it does,
-// none can tell)
+// $O alias.x=push x, git -$O alias.x=push x: an option taking a value, a
+// flag or what it does, none can tell), but for an option with its value
+// glued in it (--git-dir=$D x)
 function ways(argv: Word[], g: Global): { ways: Word[][]; past: Word[] | null; unknown: boolean } {
   const out: Word[][] = [];
   let open = 1;
@@ -2141,8 +2236,28 @@ function ways(argv: Word[], g: Global): { ways: Word[][]; past: Word[] | null; u
     while (k < words.length) {
       const w = words[k];
       if (w.dynamic) {
-        unknown ||= k + 1 < words.length && !/^-/.test(w.alts[0] ?? "");
-        break;
+        // an option whose value is glued in it, made as it runs
+        // (--git-dir=$D, --manifest-path=$M, -C$D): one word, passed over;
+        // a short one's value wholly made so may be blank (D=; git -C$D x
+        // -c ...: -C x), the next word its value then, a way of its own.
+        // Any other (-$O, -p$X, $O: it may take the next word, or name
+        // what runs) leaves the words after it unknown
+        const o = global_opt(words, k, g);
+        if (!/^--[^=]+=/.test(w.alts[0] ?? "") && (o === null || o.value === null || o.n !== 1)) {
+          unknown ||= k + 1 < words.length;
+          break;
+        }
+        if (o !== null && w.alts[0] === o.name && g.args.includes(o.name) && k + 1 < words.length) {
+          open += 1;
+          if (open > WAYS) {
+            return;
+          }
+          walk(words, k + 1);
+          walk([...words.slice(0, k), Shell.lit(o.name), ...words.slice(k + 1)], k);
+          return;
+        }
+        k++;
+        continue;
       }
       const each = w.alts.map((a) => split_value(w, a));
       const options = each.some((one) => one.length !== 1 || one[0].alts[0].startsWith("-"));
@@ -2341,7 +2456,7 @@ function given(s: Scan, v: Word, env: boolean, vars: Env[]): Setting[] {
 // its value given: any setting, by that value's text (Setting any, as
 // -c alias.$K=push)
 function git_env(s: Scan, env: Env[]): Setting[] {
-  const vars = new Map<string, Word>([...s.vars, ...env.map((e): [string, Word] => [e.name, e.value])]);
+  const vars = new Map<string, Word>([...[...conf_vars(s.vars)].map((n): [string, Word] => [n, s.vars.get(n)!]), ...env.filter((e) => GIT_CONF.test(e.name)).map((e): [string, Word] => [e.name, e.value])]);
   const out: Setting[] = [];
   for (const [name, w] of vars) {
     const n = /^GIT_CONFIG_KEY_(\d+)$/.exec(name)?.[1];
@@ -2701,8 +2816,42 @@ function var_set(s: Scan, name: string, value: Word): void {
     value = { ...DYN, raw: "$" + name };
     part_rough(s, name + "=…", { cwd: s.cwd, at: s.cwd, root: s.root, fed: s.fed, piped: s.inpipe, span: place(s, s.at, s.at) }, "spent");
   }
+  vars_own(s);
   s.vars.set(name, value);
   GIVEN_VARS.get(s.vars)?.since.push(name + "=" + given_word(value));
+  GIT_CONF.test(name) && CONF_VARS.get(s.vars)?.add(name);
+}
+
+// the shell's variables its own to set: a map a State holds (SHARED)
+// copied, its ids kept (GIVEN_VARS, CONF_VARS), the copy the check's work
+// (VARS). Past that work, every variable is known only as it runs from
+// there (forget) and the command asks (Part rough "spent")
+function vars_own(s: Scan): void {
+  if (!SHARED.has(s.vars)) {
+    return;
+  }
+  const cost = Math.floor(s.vars.size / VARS);
+  s.work.left -= cost;
+  if (cost > 0 && s.work.left <= 0) {
+    forget(s);
+    part_rough(s, "…", { cwd: s.cwd, at: s.cwd, root: s.root, fed: s.fed, piped: s.inpipe, span: place(s, s.at, s.at) }, "spent");
+    return;
+  }
+  const vars = new Map(s.vars);
+  const known = GIVEN_VARS.get(s.vars);
+  const conf = CONF_VARS.get(s.vars);
+  known !== undefined && GIVEN_VARS.set(vars, { id: known.id, since: known.since.slice() });
+  conf !== undefined && CONF_VARS.set(vars, new Set(conf));
+  s.vars = vars;
+}
+
+// the variables giving git settings of a map (CONF_VARS), found once
+function conf_vars(vars: Map<string, Word>): Set<string> {
+  let names = CONF_VARS.get(vars);
+  if (names === undefined) {
+    CONF_VARS.set(vars, (names = new Set([...vars.keys()].filter((n) => GIT_CONF.test(n)))));
+  }
+  return names;
 }
 
 // a word that is one double-quoted string, its text inside as bash
@@ -2768,6 +2917,7 @@ function part_rough(s: Scan, text: string, ctx: Ctx, rough: true | "spent" | "de
   part_push(s, [{ ...DYN, raw: text }], [], [], text, ctx);
   s.parts[s.parts.length - 1].rough = rough;
   s.cuts += rough === "deep" ? 1 : 0;
+  s.spent ||= rough === "spent";
 }
 
 // a reading that may be refused (Unread): undone if it is, and why; null:
@@ -2813,7 +2963,14 @@ function nested(s: Scan, script: Word, ctx: Ctx, sub: boolean, words: Word[] = [
   Object.assign(s, { root: ctx.root, fed: ctx.fed, cwd: ctx.cwd, inpipe: ctx.piped });
   try {
     for (const text of script.alts) {
-      if (sub) {
+      // each script read is the check's work, a shell of its own more by
+      // its variables made anew (VARS): past it, the script left unread
+      // (Part rough "spent"), so evals nested again and again, or many
+      // variables copied for each script, never take a check past a moment
+      s.work.left -= 1 + (sub ? Math.floor(s.vars.size / VARS) : 0);
+      if (s.work.left <= 0) {
+        part_rough(s, text.trim(), ctx, "spent");
+      } else if (sub) {
         scope(s, () => {
           s.vars = new Map([...s.vars.keys(), ...env.map((e) => e.name)].map((n) => [n, GIT_CONF.test(n) ? (env.find((e) => e.name === n)?.value ?? s.vars.get(n) ?? DYN) : DYN]));
           s.errexit = false;

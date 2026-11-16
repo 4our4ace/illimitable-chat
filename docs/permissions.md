@@ -125,9 +125,17 @@ project always comes first:
   which the command is read without the words before what it does that
   may be options, and asks. A word known only as it runs among a
   program's options, with words after it (`git $O alias.x=push x`, `git
-  "$@" push`), may be an option, its value or what the program does, so
-  the command asks too (`make -j $N deploy` doesn't: a number's option
-  is read with that word its value and without).
+  -$O alias.x=push x`, `git "$@" push`), may be an option, its value or
+  what the program does, so the command asks too; so does one after an
+  option with its value glued in it (`git --git-dir=$D $O alias.x=push
+  x`). That option itself doesn't (`git -C"$DIR" status`, `kubectl
+  --context=$CTX get pods`), and a short one's value wholly made as it
+  runs may be blank, its value then the next word, so it is read that
+  way too (`git -C$D x -c alias.y=push y` as `git push`). Nor does `make
+  -j $N deploy`: a number's option is read with that word its value and
+  without. A variable's blank value is no word at all, as bash drops it
+  (`for o in '' x; do git $o push` meets `git push *`), while a quoted
+  blank (`git "" push`) is a word of its own.
 - A git setting given with the command that runs a command (`git -c
   core.sshCommand=…`, `core.pager`, `core.editor`, a credential helper,
   a diff or merge tool's, `tar.<format>.command`, and the rest of
@@ -161,18 +169,24 @@ project always comes first:
   alias.a='!git b' -c alias.b=push a` is `git push` too, and a script
   read once is read again where the shell's variables or git's settings
   have changed since (one running itself, an alias's, is read once).
-  One check follows scripts and aliases until it has read 5,000
-  commands, scripts and alias steps in all, far past any everyday
-  command (a command's own plain commands are all read, however many);
-  a command whose scripts or aliases grow past that (one running itself
-  in a new folder each time, aliases naming each other in a long row)
-  has the rest split crudely, as below, and asks whatever the rules
-  allow, with nothing to save, a rule that denies what was read still
-  refusing it. So does a script nested deeper than illi follows (64
-  subshells and scripts inside one another), read again on its own (so
-  without the variables and git settings around it) so a rule that
-  denies it still meets it, and a variable grown past 64 KB (`X=$X$X`,
-  again and again), whose value illi then holds as unknown. A value
+  One check follows scripts and aliases until it has done 5,000 units
+  of work, far past any everyday command (a command, a script, an
+  alias step, an `eval` each one; a script run in a shell of its own one
+  more for each 256 variables the shell set; 1 KB of the variables'
+  text put in words one; a command's own plain commands are all read,
+  however many); a command whose scripts or aliases grow past that (one
+  running itself in a new folder each time, aliases naming each other
+  in a long row, thousands of variables copied for each of thousands of
+  scripts, a long variable put in words again and again) has the rest
+  split crudely, as below, and asks whatever the rules allow, with
+  nothing to save, a rule that denies what was read still refusing it,
+  so a check takes a moment at most. So does a script nested deeper
+  than illi follows (64 subshells and scripts inside one another), read
+  again on its own (so without the variables and git settings around
+  it) so a rule that denies it still meets it, and a variable or a word
+  grown past 64 KB (`X=$X$X`, again and again; `bash -c "$X$X"`), whose
+  value illi then holds as unknown, even where that leaves the whole
+  command unread. A value
   made as it runs is read by its text: one
   double-quoted string's inside (`GIT_SSH_COMMAND="ssh -i $KEY"` gives
   `ssh -i $KEY`), else what is known of it and, crudely, what is
@@ -213,7 +227,11 @@ project always comes first:
   (one with a space in it up to the space), so a rule still finds most
   of what is in it: a script quoted whole with none of those in it stays
   one piece (in a `case`, `bash -c 'rm x'` matches a rule on `bash *`,
-  not one on `rm *`).
+  not one on `rm *`). "Don't ask again" saves each piece by its family,
+  its leading assignments and shell words off (`x=(a); X=1 make deploy`
+  saves `make deploy *`, never `*`). A piece nested deeper than illi
+  follows (`x=(a); eval eval … git push`, 64 deep and more) asks, as
+  its pieces never meet what runs at its end.
 - illi's own folder (`~/.illi`, `ILLI_DIR`) is outside every project,
   the home chat's too, where it sits in the folder you work in, and one
   started in it: its settings, hooks and permissions are asked about

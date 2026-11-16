@@ -511,6 +511,74 @@ test("a variable's value grown past what illi holds asks; many variables, script
   }
 });
 
+test("a word grown past what illi holds, or given more of the variables' text than a check reads, asks in a moment, though a reading holding it is refused after; many variables, met by many subshells, scripts and git commands, read in a moment", () => {
+  const n = (k: number) => [...Array(k).keys()];
+  const X = "X=aaaaaaaa; " + n(12).map(() => "X=$X$X").join("; ") + "; ";
+  const vars = n(5000).map((i) => "A" + i + "=1").join(" ") + "; ";
+  const deny = [rule("shell", "git push *", "deny")];
+  const push = "X='git push;'; " + n(13).map(() => "X=$X$X").join("; ") + "; ";
+  for (const c of [push + 'bash -c "$X$X"', push + "eval $X$X", push + 'echo "$X$X"']) {
+    expect([c.slice(-14), Access.shell(WHERE, c).at(-1)!.failed]).toEqual([c.slice(-14), expect.any(String)]);
+  }
+  for (const c of [
+    X + "echo " + "$X".repeat(8000),
+    X + "echo " + n(8000).map(() => "$X").join(" "),
+    X + 'bash -c "' + "$X".repeat(600) + '"',
+    X + n(800).map((i) => "A" + i + "=$X; EDITOR=e" + i + " crontab -e").join("; "),
+    X + n(3000).map((i) => 'bash -c "$X; e' + i + '"').join("; "),
+  ]) {
+    const t0 = performance.now();
+    const failed = Access.shell(WHERE, c).at(-1)!.failed;
+    expect([c.slice(-30), failed, performance.now() - t0 < 1500]).toEqual([c.slice(-30), expect.any(String), true]);
+  }
+  for (const c of [
+    vars + n(5000).map(() => "git status").join("; "),
+    vars + n(5000).map(() => "( : )").join("; "),
+    vars + n(5000).map((i) => "{ e" + i + "; }").join("; "),
+    vars + n(5000).map((i) => "bash -c 'e" + i + "'").join("; "),
+    vars + n(5000).map((i) => "EDITOR=e" + i + " crontab -e").join("; "),
+    vars + n(5000).map((i) => "echo $(e" + i + ")").join("; "),
+    n(5000).map((i) => "make -n d" + i).join("; "),
+  ]) {
+    const t0 = performance.now();
+    judge(c, deny);
+    expect([c.slice(-30), performance.now() - t0 < 1500]).toEqual([c.slice(-30), true]);
+  }
+});
+
+test("a command illi can't read saves each command in it by its family, its leading assignments and shell words off, never every command; nested deeper than it reads, it asks", () => {
+  const wrong = (save: string[]) => save.filter((s) => s === "*" || /^(?:[A-Za-z_]\w*\+?=|(?:!|time|do|then|\{)(?:\s|$))/.test(s));
+  for (const [c, family] of [
+    ["x=(a); X=1 make deploy", "make deploy *"],
+    ["for o in a b; do eval \"ls $o\"; done", "eval *"],
+    ["case x in x) X=1 rm -rf y;; esac", "rm *"],
+    ["x=(a); X=1 Y=2 git push", "git push *"],
+    ["x=(a); ! ls", "ls *"],
+    ["x=(a); time ls", "ls *"],
+    ["x=(a); { ls; }", "ls *"],
+  ]) {
+    const save = Access.shell(WHERE, c).find((r) => r.action === "shell")!.save;
+    expect([c, save.includes(family), wrong(save)]).toEqual([c, true, []]);
+  }
+  const ev = "eval ".repeat(70);
+  for (const c of ["x=(a); " + ev + "git push", "case x in x) " + ev + "git push;; esac", "EDITOR='x=(a); " + ev + "git push' crontab -e", "x=(a); " + "watch ".repeat(70) + "git push", "x=(a); trap '" + ev + "git push' EXIT"]) {
+    expect([c.slice(0, 20), Access.shell(WHERE, c).at(-1)!.failed]).toEqual([c.slice(0, 20), expect.any(String)]);
+  }
+});
+
+test("a word known only as it runs among a program's options asks, but for an option with its value glued in it (a short one's blank value taking the next word, read so too); a variable's blank value is no word at all", () => {
+  const deny = [rule("shell", "git push *", "deny")];
+  for (const c of ["git --git-dir=$D $O alias.x=push x", "git -C$D $O alias.x=push x", "git -$O alias.x=push x", "git -${X:-c} alias.x=push x", 'git "-$X" alias.x=push x']) {
+    expect([c, Access.shell(WHERE, c).at(-1)!.failed]).toEqual([c, expect.any(String)]);
+  }
+  for (const c of ['git -C"$DIR" status', 'git --git-dir="$D" log', "make -j$(nproc) all", "cargo --manifest-path=$M build", "kubectl --context=$CTX get pods", "git -C$D status"]) {
+    expect([c, Access.shell(WHERE, c).at(-1)!.failed]).toEqual([c, undefined]);
+  }
+  for (const c of ["git -C$D x -c alias.y=push y", "for o in '' x; do git $o push; done", "o=; git $o push", "O=''; git $O push"]) {
+    expect([c, judge(c, deny).includes("deny")]).toEqual([c, true]);
+  }
+});
+
 test("Claude Code's tools that ask in illi's calls, as illi's like ones: its web fetch and search theirs, one of its MCP servers' by its name; illi's own none", () => {
   expect(Access.hosted("WebFetch", { url: "https://x.dev" })[0]).toMatchObject({ action: "webfetch", resources: ["https://x.dev"] });
   expect(Access.hosted("WebSearch", { query: "bun ffi" })[0]).toMatchObject({ action: "websearch", resources: ["bun ffi"] });

@@ -42,9 +42,10 @@
 //                       finds most of what is in it. One left partly
 //                       unread (past a check's work, Shell Work;
 //                       unreadable scripts nested ROUGH deep; scripts
-//                       nested past Shell's NEST; a word whose use illi
-//                       can't tell) asks whatever the rules allow
-//                       (Request failed), and saves nothing
+//                       nested past Shell's NEST; a word or a variable
+//                       too long to know, or whose use illi can't tell)
+//                       asks whatever the rules allow (Request failed),
+//                       and saves nothing
 //   spawn, skill, ask   subagent (its agent's name), skill (its name),
 //                       question
 //   an MCP tool, any    its own name, on *
@@ -119,8 +120,9 @@ type Target = { absolute: string; place: string; resource: string; real?: string
 // a command's piece as written, and where it is; what "don't ask again"
 // saves for it, where not its family's (Access.family); odd: it saves
 // itself alone (Access readings: a dry run, a word blank or holding * or
-// ?, one short of what it does)
-type Piece = { text: string; span: Span; save?: string[]; odd?: boolean };
+// ?, one short of what it does); crude: a piece of a command illi can't
+// read (rough), its family taken crudely (Access family)
+type Piece = { text: string; span: Span; save?: string[]; odd?: boolean; crude?: boolean };
 
 // what a command's reading met: its pieces to meet the rules, the
 // folders outside it touches, and whether some of it was left unread
@@ -160,7 +162,7 @@ const BARE = 16;
 const ROUGH = 4;
 
 // why a command left partly unread asks (Request failed)
-const UNREAD = "it runs more scripts, or nests them deeper, than illi reads, or holds a word whose use illi can't tell";
+const UNREAD = "it runs more scripts, or nests them deeper, than illi reads, or holds a word too long to read, or whose use illi can't tell";
 
 // the git commands whose -n is a dry run (dry)
 const GIT_DRY = new Set(["push", "add", "mv", "rm", "clean", "prune"]);
@@ -244,8 +246,10 @@ export namespace Access {
   // its simple commands at its top as written: tops; one it can't read,
   // in crude pieces, each read on its own too: rough), all its readings
   // sharing one check's work (Shell Work). One left partly unread asks
-  // (Request failed: past that work, or unreadable scripts nested ROUGH
-  // deep), what was read still meeting the rules that deny
+  // (Request failed: past that work, unreadable scripts nested ROUGH
+  // deep, scripts or the command itself nested past Shell's NEST, a word
+  // or a variable too long to know, a word whose use illi can't tell:
+  // Shell DEEP, SPENT), what was read still meeting the rules that deny
   export function shell(where: Where, command: string): Request[] {
     const check: Check = { work: Shell.work(), rough: new Set() };
     const parts = Shell.parse(command, where.cwd, 0, true, check.work);
@@ -258,8 +262,8 @@ export namespace Access {
     }
     const pieces = typeof parts === "string" ? met.pieces : [...met.pieces, ...tops(command, met.pieces)];
     const runs = commands(pieces);
-    const shell: Request = { action: "shell", resources: runs.map((r) => r.text), save: [...new Set(runs.flatMap((r) => r.save ?? [Access.family(r.text)]))].filter((x) => x !== ""), spots: runs.map((r) => r.span) };
-    if (met.unread || parts === Shell.DEEP) {
+    const shell: Request = { action: "shell", resources: runs.map((r) => r.text), save: [...new Set(runs.flatMap((r) => r.save ?? [Access.family(r.text, r.crude)]))].filter((x) => x !== ""), spots: runs.map((r) => r.span) };
+    if (met.unread || parts === Shell.DEEP || parts === Shell.SPENT) {
       return [...external(met.found), { ...shell, ...(runs.length === 0 ? { resources: [command], spots: [null] } : {}), failed: UNREAD }];
     }
     return [...external(met.found), ...(runs.length === 0 ? [] : [shell])];
@@ -440,11 +444,14 @@ function external(found: Array<{ target: Target; span: Span | null }>): Request[
 // =====
 
 // the commands of a shell command's pieces, as matched: each its leading
-// assignments and shell words (do, then, !) left off (its saves too), a
-// loop's or case's head and a cd dropped, each once (what it saves as
-// the first that says)
+// assignments and shell words (do, then, !) left off (its saves too, so
+// a family is taken from what it runs: x=(a); X=1 make deploy saves make
+// deploy *, never *), a loop's or case's head and a cd dropped, each once
+// (what it saves as the first that says; crude where any piece of that
+// text was)
 function commands(pieces: Piece[]): Piece[] {
   const out: Piece[] = [];
+  const by = new Map<string, Piece>();
   for (const p of pieces) {
     const ws = tokens(p.text);
     let k = 0;
@@ -457,11 +464,14 @@ function commands(pieces: Piece[]): Piece[] {
     const text = p.text.slice(ws[k].at).trim();
     const lead = p.text.slice(0, ws[k].at);
     const save = p.save?.map((x) => (x.startsWith(lead) ? x.slice(lead.length).trim() : x));
-    const known = out.find((o) => o.text === text);
+    const known = by.get(text);
     if (known !== undefined) {
       known.save ??= save;
+      known.crude ||= p.crude;
     } else if (text !== "") {
-      out.push({ text, span: p.span, ...(save === undefined ? {} : { save }) });
+      const one: Piece = { text, span: p.span, ...(save === undefined ? {} : { save }), ...(p.crude === true ? { crude: true } : {}) };
+      by.set(text, one);
+      out.push(one);
     }
   }
   return out;
@@ -696,10 +706,12 @@ function add<T>(to: T[], items: T[]): void {
 // -rf y' as /bin/rm -rf y, so as rm -rf y too); a whole command isn't,
 // as it was just read so. A script Shell.ts left unread past that work
 // (Part rough "spent") isn't read so, nor one ROUGH deep: left unread
-// (Met), so the check asks
+// (Met), so the check asks; so too where a piece nests deeper than Shell.ts
+// reads (Shell DEEP: x=(a); eval eval ... git push, its crude pieces
+// never meeting what runs at its end)
 function rough(where: Where, text: string, from: string, span: Span | null, depth: number, check: Check, own = false): Met {
   const split = [...outer(text), ...crude(text)];
-  const pieces = split.map((p) => ({ ...p, ...(span === null ? {} : { span }), save: [Access.family(p.text, true)].filter((x) => x !== "") }));
+  const pieces: Piece[] = split.map((p) => ({ ...p, ...(span === null ? {} : { span }), crude: true }));
   const found: Array<{ target: Target; span: Span | null }> = [];
   for (const m of text.matchAll(/(^|[\s=('"<>|;&`]|(?<=\s)-[A-Za-z])((?:~[\w.-]*|\.\.)?\/[^\s'"`;|&<>()$]*|\.\.(?=$|[\s'"`;|&<>)]))/g)) {
     if (m[1].startsWith("-") && m[2] === "/") {
@@ -726,6 +738,7 @@ function rough(where: Where, text: string, from: string, span: Span | null, dept
       add(found, met.found.map((f) => (span === null ? f : { ...f, span })));
       unread ||= met.unread;
     }
+    unread ||= parts === Shell.DEEP || parts === Shell.SPENT;
   }
   return { pieces, found, unread };
 }
@@ -811,18 +824,22 @@ function dry_words(argv: Word[]): string[] {
 // name if a system one (/bin/rm as rm): so a rule on rm -rf /* meets
 // 'rm' -rf "/" too. A word of several values (a brace's, a loop's
 // variable's) gives a command for each (past BARE, its values in a row),
-// so a rule on rm -rf /var/* meets for d in /tmp /var; do rm -rf $d; done
+// so a rule on rm -rf /var/* meets for d in /tmp /var; do rm -rf $d; done.
+// A variable's value bash splits into words is put so (Shell spread), and
+// a blank one is no word at all: for o in '' x; do git $o push meets git
+// push *
 function bare(argv: Word[]): string[] {
   const [head, ...rest] = argv;
   if (head === undefined) {
     return [];
   }
   let out = [Shell.program(head) || (head.dynamic ? head.raw : head.alts.join(" "))];
+  const put = (o: string, v: string | null) => (v === null ? o : o + " " + v);
   for (const w of rest) {
-    const values = w.dynamic ? [w.raw] : w.alts;
-    out = out.length * values.length > BARE ? out.map((o) => o + " " + values.join(" ")) : out.flatMap((o) => values.map((v) => o + " " + v));
+    const values = w.dynamic ? [w.raw] : Shell.spread(w);
+    out = out.length * values.length > BARE ? out.map((o) => put(o, values.filter((v) => v !== null).join(" "))) : out.flatMap((o) => values.map((v) => put(o, v)));
   }
-  return out.map((o) => o.trim());
+  return [...new Set(out.map((o) => o.trim()))];
 }
 
 // a path's ~ as the home it names (Shell.home; a user the system's
