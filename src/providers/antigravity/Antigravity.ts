@@ -130,7 +130,11 @@ type Proc = {
 // the user allowed as the gate asked (Antigravity.judge), so the CLI
 // asking leave for one after is never asked of them again (each as
 // Antigravity.web says it); why the gate turned down each tool's call
-// (by its id), shown as its answer (the CLI tells none)
+// (by its id), shown as its answer (the CLI tells none); the CLI's own
+// tools' calls illi was asked of, by their ids (the gate's asking, allowed
+// or not: Antigravity.judge; the CLI's asking leave, allowed:
+// Antigravity.permit), so one that ran with neither is told (breached);
+// what that said, once one has ("": none), the call's end
 type Run = {
   ask     : Ask;
   on      : (ev: Event) => void;
@@ -311,7 +315,12 @@ const GONE    = "This request has ended.";
 
 // said where a tool of the CLI's own ran though the gate never judged it
 // (a CLI that didn't run illi's hooks): illi ends the call and the CLI
-const BREACH = (name: string) => "Google's CLI ran its own " + name + " without asking illi's gate first, so illi ended the call and the CLI: this version of it may not run the hooks illi's gate is; /login offers the one illi runs";
+const BREACH = (name: string) => "Google's CLI ran its own " + name + " without asking illi's gate first, so illi ended the call and the CLI, and runs that CLI no more till it starts again: the version in use (your own agy, or ILLI_ANTIGRAVITY's) may not run the hooks the gate is; update it, or remove it so illi runs its own";
+
+// the command lines of the CLIs that ran a tool of their own unjudged
+// this run (Antigravity.breached), and what that call said: none of
+// them runs again till illi starts again
+const BROKEN = new Map<string, string>();
 
 // a Gemini model's id, the only ones illi runs on a Google AI plan
 const GEMINI = /^gemini-[a-z0-9.-]+$/;
@@ -440,6 +449,10 @@ export namespace Antigravity {
     await Agy.look();
     if (Agy.command() === null) {
       return { ok: false, text: Agy.why(), left: [], stop: "down" };
+    }
+    const broken = BROKEN.get(Agy.command()!.join(" "));
+    if (broken !== undefined) {
+      return { ok: false, text: broken, left: [], stop: "down" };
     }
     let proc: Proc;
     try {
@@ -740,8 +753,10 @@ export namespace Antigravity {
 
   // a session's update: words and thoughts streamed; one of the agent's
   // web tools called, and what it answered (illi's own are the
-  // forwarder's to log); a step's usage, telling the tokens read and the
-  // model's window
+  // forwarder's to log; one of the CLI's own that ran, illi never asked
+  // of it, ends the call: breached, told only of one the CLI says
+  // completed, as one it refused before its hooks says failed too); a
+  // step's usage, telling the tokens read and the model's window
   export function read(run: Run, u: any): void {
     switch (u.sessionUpdate) {
       case "agent_message_chunk": {
@@ -767,7 +782,7 @@ export namespace Antigravity {
           return;
         }
         run.calls.delete(id);
-        if (u.status === "completed" && !run.judged.has(id)) {
+        if (u.status === "completed" && (!run.judged.has(id) || run.turned.has(id))) {
           return Antigravity.breached(run, String(u.name ?? u.title ?? "tool"));
         }
         const content = Array.isArray(u.content) ? u.content.map((c: any) => c?.content ?? c) : [];
@@ -796,9 +811,16 @@ export namespace Antigravity {
   // whether a tool's call is one of illi's own, through its MCP server
   // (the forwarder logs those, illi judges each as it comes): the CLI
   // names each mcp_illi_ and its name, its title "Run" and that (its
-  // _meta naming the server, in its other builds)
+  // _meta naming the server, in its other builds). By the name wherever
+  // the CLI gives one: the title only where it gives none, and only as
+  // the CLI titles one of illi's whole, since its title of a command is
+  // the command, which the model writes
   export function ours(u: any): boolean {
-    return u?._meta?.mcp?.server === "illi" || /^mcp_illi_/.test(String(u?.name ?? "")) || /^Run mcp_illi_/.test(String(u?.title ?? ""));
+    if (u?._meta?.mcp?.server === "illi") {
+      return true;
+    }
+    const name = String(u?.name ?? "");
+    return name !== "" ? /^mcp_illi_/.test(name) : /^Run mcp_illi_[A-Za-z0-9_-]+$/.test(String(u?.title ?? ""));
   }
 
   // one of the agent's web tools' calls, as illi shows Claude Code's (its
@@ -812,17 +834,24 @@ export namespace Antigravity {
   }
 
   // a tool of the CLI's own that ran though the gate never judged it (a
-  // CLI that didn't run illi's hooks): the call ends saying so (BREACH)
-  // and the CLI with it, so no more of its tools run unasked (one already
-  // has); the next call starts a CLI that has the gate written anew
+  // CLI that didn't run illi's hooks), or that ran though the gate turned
+  // it down (one that ran them but went on): the call ends saying so
+  // (BREACH), reading nothing more, and the CLI with it, so no more of
+  // its tools run unasked (one already has). Others' calls on that CLI
+  // end as a CLI that ended does, so they go again; the program runs no
+  // more this run (BROKEN), so they, and every later call, end saying
+  // so too
   export function breached(run: Run, name: string): void {
     if (run.breach !== "") {
       return;
     }
     run.breach = BREACH(name);
     console.error("antigravity: " + run.breach);
+    BROKEN.set(Agy.command()?.join(" ") ?? "", run.breach);
+    run.stopped = true;
+    run.halt.abort();
     if (run.proc !== null) {
-      Antigravity.kill(run.proc, "it ran a tool of its own past illi's gate");
+      Antigravity.kill(run.proc, "it ended: it ran a tool of its own past illi's gate");
     }
   }
 
@@ -874,8 +903,9 @@ export namespace Antigravity {
   // tools, allowed once (illi judges each as it comes); its web search and
   // page reading, where the call searches the web, allowed as the gate's
   // asking the user did (passed), else asked of them as illi asks Claude
-  // Code's (approve), judged so (one allowed here never breached);
-  // anything else, refused
+  // Code's (approve), judged so (one allowed here never breached); a tool
+  // the CLI names, by that name (WEB) as well as its kind; anything else,
+  // refused
   export async function permit(proc: Proc, id: number | string, p: any): Promise<void> {
     const opts: any[] = Array.isArray(p.options) ? p.options : [];
     const pick = (kind: string) => opts.find((o) => o?.kind === kind)?.optionId;
@@ -892,7 +922,8 @@ export namespace Antigravity {
     if (Antigravity.ours(call)) {
       return answer(pick("allow_once"));
     }
-    const web = Antigravity.searches(run.ask) ? Antigravity.web(String(call.kind ?? ""), call.rawInput ?? {}) : null;
+    const named = String(call.name ?? "");
+    const web = Antigravity.searches(run.ask) && (named === "" || Object.hasOwn(WEB, named)) ? Antigravity.web(String(call.kind ?? ""), call.rawInput ?? {}) : null;
     const yes = web !== null && (run.passed.delete(JSON.stringify(web)) || (await Antigravity.approve(run, web[0], web[1])) === null);
     if (yes) {
       run.judged.add(String(call.toolCallId ?? ""));
@@ -940,6 +971,7 @@ export namespace Antigravity {
     const sid  = String(heard?.conversationId ?? "");
     const run  = sid === "" ? undefined : procs.map((p) => p.runs.get(sid)).find((r) => r !== undefined);
     if (/^mcp_illi_/.test(name)) {
+      run?.judged.add(String(call.id ?? ""));
       return { decision: "allow" };
     }
     if (run === undefined || run.stopped) {

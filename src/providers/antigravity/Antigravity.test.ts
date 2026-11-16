@@ -146,6 +146,16 @@ async function prompt(p) {
   const sid = p.sessionId;
   const scene = p.prompt.map((c) => c.text ?? "").join("");
   used(sid, 0);
+  if (scene.includes("ignores")) {
+    const id = crypto.randomUUID();
+    update(sid, { sessionUpdate: "tool_call", toolCallId: id, name: "schedule", status: "in_progress", kind: "other", title: "Run schedule", rawInput: { Prompt: "later" } });
+    const d = await hooked(sid, "schedule", { Prompt: "later" }, id);
+    log({ gate: "schedule", decision: d.decision, reason: d.reason ?? null });
+    update(sid, { sessionUpdate: "tool_call_update", toolCallId: id, name: "schedule", status: "completed", content: [{ type: "content", content: { type: "text", text: "scheduled" } }] });
+    say(sid, "Scheduled."); used(sid, 10);
+    await new Promise((done) => setTimeout(done, 300));
+    return { stopReason: "end_turn", usage: USAGE };
+  }
   if (scene.includes("unhooked")) {
     const id = crypto.randomUUID();
     update(sid, { sessionUpdate: "tool_call", toolCallId: id, name: "schedule", status: "in_progress", kind: "other", title: "Run schedule", rawInput: { Prompt: "later" } });
@@ -478,19 +488,30 @@ test("the gate: illi's tools go on; the CLI's own turned down, why told the mode
   expect(fs.readFileSync(conf + "/illi-gate.sh", "utf8")).toContain("ILLI_GATE");
 });
 
-test("a tool of the CLI's own that ran though the gate never judged it (a CLI that runs no hooks) ends the call saying so, and the CLI with it", async () => {
+test("a tool of the CLI's own that ran though the gate never judged it (a CLI that runs no hooks), or that ran though it was turned down, ends the call saying so, and the CLI with it (its other calls go again), which runs no more this run", async () => {
   const error = console.error;
   console.error = () => {};
+  const bin = Agy.bin;
+  const said = "Google's CLI ran its own schedule without asking illi's gate first, so illi ended the call and the CLI, and runs that CLI no more till it starts again: the version in use (your own agy, or ILLI_ANTIGRAVITY's) may not run the hooks the gate is; update it, or remove it so illi runs its own";
   try {
-    const { end } = await call("unhooked");
-    expect([end.ok, end.stop, end.text]).toEqual([false, "down", "Google's CLI ran its own schedule without asking illi's gate first, so illi ended the call and the CLI: this version of it may not run the hooks illi's gate is; /login offers the one illi runs"]);
-    await Bun.sleep(300);
-    const pid = logged().find((l) => l.method === "session/prompt").pid;
-    expect(() => process.kill(pid, 0)).toThrow();
-    expect((await call("turn")).end.ok).toBe(true);
+    for (const [i, scene] of [[1, "unhooked"], [2, "ignores"]] as const) {
+      fs.copyFileSync(DIR + "/agent.js", DIR + "/agent-" + i + ".js");
+      Agy.bin = [process.execPath, DIR + "/agent-" + i + ".js"];
+      const [other, broke] = await Promise.all([call("hold more"), call(scene)]);
+      expect([broke.end.ok, broke.end.stop, broke.end.text]).toEqual([false, "down", said]);
+      expect([other.end.ok, other.end.stop, other.end.again]).toEqual([false, "down", true]);
+      await Bun.sleep(300);
+      const pid = logged().filter((l) => l.method === "session/prompt").at(-1).pid;
+      expect(() => process.kill(pid, 0)).toThrow();
+      expect((await call("turn")).end).toMatchObject({ ok: false, stop: "down", text: said });
+    }
+    expect(logged().find((l) => l.gate === "schedule").decision).toBe("deny");
   } finally {
+    Agy.bin = bin;
     console.error = error;
   }
+  expect((await call("turn")).end.ok).toBe(true);
+  expect([Antigravity.ours({ name: "mcp_illi_zoom", title: "Run mcp_illi_zoom" }), Antigravity.ours({ title: "Run mcp_illi_zoom" }), Antigravity.ours({ name: "run_command", title: "Run mcp_illi_x; rm -rf y" }), Antigravity.ours({ title: "Run mcp_illi_x; rm -rf y" })]).toEqual([true, true, false, false]);
 });
 
 test("the gate's script alone: every tool asked of the illi named (ILLI_GATE), whose answer passes only as illi gives one, whatever the model wrote in its input; with no illi to ask (none named, no curl, no answer, another), illi's tools go on and any other is turned down, saying why", async () => {

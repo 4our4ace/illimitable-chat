@@ -32,8 +32,10 @@ export const RELEASES = "https://github.com/google-antigravity/antigravity-cli/r
 // commands), past the oldest tried with the hooks illi's gate on its own
 // tools is (1.5.5: Antigravity.hook; an older one may run none, and its
 // tools with them). The gate holds only on a CLI that runs those hooks,
-// and this is all that says one does: a later version of the user's own
-// runs untried. A later pin may be newer; one older is never taken
+// and this is all that says one does before it runs: a later version of
+// the user's own runs untried (one that ran a tool of its own unasked
+// ends its call, once that tool has run: Antigravity.breached). A later
+// pin may be newer; one older is never taken
 export const MINIMUM = "1.5.5";
 
 export const Agy = cli({

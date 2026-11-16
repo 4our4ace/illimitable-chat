@@ -361,8 +361,10 @@ accounts on its own.
   illi's go on, its web search is asked as above, and anything else is
   turned down, telling the model why, so it goes on with illi's tools.
   Should one of the CLI's own tools run without the hook asking (a
-  version of the CLI that doesn't run it), illi ends the turn and the
-  CLI, saying so. The hook asks illi through `curl`: without it, illi's
+  version of the CLI that doesn't run it), or run though the hook turned
+  it down, illi ends the turn and the CLI, saying so, and runs that CLI
+  no more till illi starts again: update it, or remove your own so illi
+  runs its build. The hook asks illi through `curl`: without it, illi's
   tools still go on, and the web search is turned down, the model told
   it needs `curl`. Each CLI asks the illi that started it, so two illis
   on one account don't answer for each other; an older illi, from
