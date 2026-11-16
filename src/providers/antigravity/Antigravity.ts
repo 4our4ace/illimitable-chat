@@ -156,6 +156,8 @@ type Run = {
   sent    : number;
   passed  : Set<string>;
   turned  : Map<string, string>;
+  judged  : Set<string>;
+  breach  : string;
 };
 
 // Constants
@@ -237,49 +239,64 @@ const ON = "[it goes on in the message]";
 // a call too long for the window
 const TOO_LONG = "the request was too long for the model's window";
 
-// the agent's web tools, where a call searches the web
-const WEB = ["search_web", "read_url_content"];
+// the agent's web tools, where a call searches the web, by their names,
+// each with its kind (as the CLI tells and asks leave for it:
+// Antigravity.web)
+const WEB: Record<string, string> = { search_web: "search", read_url_content: "fetch" };
 
 // the gate: a hook the CLI runs before each tool the model calls (one of
 // its own hooks, global: in its own folder's config, so an account's,
 // each CLI there running it; rewritten as a CLI starts: Antigravity.hook),
 // its script beside it, and the most it waits on illi (s: as long as the
 // user may take to say whether a web search runs; the CLI kills it past
-// that, which turns the tool down)
+// that, which turns the tool down; the script's own asking gives up ten
+// seconds sooner, so it's the script that answers, turning it down)
 const HOOKS = "hooks.json";
 const GATE  = "illi-gate.sh";
 const WAIT  = 3600;
 
 // the gate's script, run by the CLI with what the model called on its
-// input (JSON, on a line): illi's own tools go on at once, so a CLI an
-// older illi started (or one that ended) still runs them; any other is
-// asked of the illi that started the CLI (ILLI_GATE: its forwarder's
-// gate, Antigravity.judge), whose answer passes only as one of the two
-// it gives; else, or with no answer (no curl, no illi there, no time
-// left), the tool is turned down. It says something whatever happens: a
-// hook that says nothing lets the tool run. The name is the last of the
-// line's id and name pairs, the tool call's (the CLI's keys come in
-// order: what the model gave as its input before, the CLI's own paths
-// after; a quote in what the model wrote can't end a string)
+// input (JSON, on a line): every tool asked of the illi that started the
+// CLI (ILLI_GATE: its forwarder's gate, Antigravity.judge, which reads
+// the call as JSON), whose answer passes only as one of the two it gives.
+// With no illi to ask (a CLI an older illi started, no curl, no illi
+// there, no answer in time), illi's own go on and any other is turned
+// down, saying why. It says something whatever happens: a hook that says
+// nothing lets the tool run. There the name is the last of the line's id
+// and name pairs, the tool call's (the CLI's keys come in order: what the
+// model gave as its input before, the CLI's own paths after; a quote in
+// what the model wrote can't end a string), which holds only while the
+// CLI writes the call as the builds tried do (1.5.5, 1.5.9): were its own
+// pair not to fit (a key after the name, a name of other characters), the
+// last pair that fits would be read, which may be one the model wrote
+// inside its input, so it's read only when illi can't be asked. No shell
+// reads the input: it's only ever printed to curl and sed
 const SCRIPT = `# illi's gate on the tools of Google's Antigravity CLI, written by illi
 # (written again as it starts the CLI here: a change made here won't
 # last). The CLI runs it before each tool the model calls (hooks.json):
-# illi's own go on, illi judges each; any other is asked of the illi that
-# started the CLI, else turned down. It always answers: a hook that
-# answers nothing lets the tool run.
+# each is asked of the illi that started the CLI, which lets its own go
+# on and turns the rest down, but its web search, asked of the user. With
+# no illi to ask, illi's own go on and the rest are turned down. It always
+# answers: a hook that answers nothing lets the tool run.
 in=$(cat)
+why="Only illi's tools, named mcp_illi_ and the tool, run here."
+if [ -n "$ILLI_GATE" ]; then
+  if command -v curl >/dev/null 2>&1; then
+    said=$(printf '%s' "$in" | curl -q -sf --noproxy '*' --connect-timeout 5 --max-time ${WAIT - 10} -H 'content-type: application/json' --data-binary @- "$ILLI_GATE" 2>/dev/null)
+    case "$said" in
+      '{"decision":"allow"}'|'{"decision":"deny","reason":"'*'"}') printf '%s\\n' "$said"; exit 0 ;;
+    esac
+    why="illi gave no answer for it in time, so it doesn't run."
+  else
+    why="Only illi's tools, named mcp_illi_ and the tool, run here: Antigravity's own web search needs curl, which isn't on this machine."
+  fi
+fi
 s='[[:space:]]*'
 name=$(printf '%s\\n' "$in" | sed -n "s/.*\\"id\\"$s:$s\\"[^\\"]*\\"$s,$s\\"name\\"$s:$s\\"\\([A-Za-z0-9_.-]*\\)\\"$s}.*/\\1/p")
 case "$name" in
   mcp_illi_*) echo '{"decision":"allow"}'; exit 0 ;;
 esac
-if [ -n "$ILLI_GATE" ]; then
-  said=$(printf '%s' "$in" | curl -q -sf --noproxy '*' --connect-timeout 5 --max-time ${WAIT - 10} -H 'content-type: application/json' --data-binary @- "$ILLI_GATE" 2>/dev/null)
-  case "$said" in
-    '{"decision":"allow"}'|'{"decision":"deny","reason":"'*'"}') printf '%s\\n' "$said"; exit 0 ;;
-  esac
-fi
-echo '{"decision":"deny","reason":"Only illi'"'"'s tools, named mcp_illi_ and the tool, run here."}'
+printf '{"decision":"deny","reason":"%s"}\\n' "$why"
 `;
 
 // what the gate tells the model of a tool turned down: one of the CLI's
@@ -291,6 +308,10 @@ const NO_WEB  = "Web search is off for this request: go on without it.";
 const NOT_YES = "The user didn't allow it.";
 const CHANGED = "A hook of the user's changed what it would do, which this tool can't take: ask the user.";
 const GONE    = "This request has ended.";
+
+// said where a tool of the CLI's own ran though the gate never judged it
+// (a CLI that didn't run illi's hooks): illi ends the call and the CLI
+const BREACH = (name: string) => "Google's CLI ran its own " + name + " without asking illi's gate first, so illi ended the call and the CLI: this version of it may not run the hooks illi's gate is; /login offers the one illi runs";
 
 // a Gemini model's id, the only ones illi runs on a Google AI plan
 const GEMINI = /^gemini-[a-z0-9.-]+$/;
@@ -347,7 +368,11 @@ let watcher = () => {};
 
 // the forwarder of illi's tools, and the calls it serves, by their path;
 // the path of the gate's questions there (Antigravity.judge), this run's
-// secret
+// secret: each illi's own, given to the CLIs it starts alone (ILLI_GATE),
+// so a CLI asks the illi that started it, and another illi at that port
+// later answers it 404, which the gate takes as no answer (the path is
+// all that tells illis apart: whatever else answered there with illi's
+// own line would be taken)
 let forwarder: ReturnType<typeof Bun.serve> | null = null;
 const RUNS = new Map<string, Run>();
 const KEY = "gate/" + crypto.randomUUID();
@@ -380,7 +405,7 @@ export namespace Antigravity {
     }
     let give = () => {};
     const gave = new Promise<null>((done) => (give = () => done(null)));
-    const run: Run = { ask, on, beat, proc: null, sid: "", token: crypto.randomUUID(), text: "", mind: "", last: "", fresh: false, reply: "", said: false, first: null, grew: false, steps: false, calls: new Set(), n: 0, stopped: false, halt: new AbortController(), gave, give, sent: 0, passed: new Set(), turned: new Map() };
+    const run: Run = { ask, on, beat, proc: null, sid: "", token: crypto.randomUUID(), text: "", mind: "", last: "", fresh: false, reply: "", said: false, first: null, grew: false, steps: false, calls: new Set(), n: 0, stopped: false, halt: new AbortController(), gave, give, sent: 0, passed: new Set(), turned: new Map(), judged: new Set(), breach: "" };
     const stop = () => {
       if (run.stopped) {
         return;
@@ -445,8 +470,11 @@ export namespace Antigravity {
       }
       run.sent = Date.now();
       const result = await Promise.race([Acp.call(proc.conn, "session/prompt", { sessionId: run.sid, prompt: Antigravity.prompt(run.ask) }), run.gave]);
-      return result === null ? Antigravity.lost(run) : Antigravity.end(run, result);
+      return run.breach !== "" ? { ok: false, text: run.breach, left: [], stop: "down", cut: run.said } : result === null ? Antigravity.lost(run) : Antigravity.end(run, result);
     } catch (err: any) {
+      if (run.breach !== "") {
+        return { ok: false, text: run.breach, left: [], stop: "down", cut: run.said };
+      }
       if (run.stopped) {
         return Antigravity.lost(run);
       }
@@ -481,7 +509,7 @@ export namespace Antigravity {
   export function session(run: Run, folder: string): unknown {
     const tools = run.ask.server !== "" && !run.ask.once;
     const mcp   = tools ? [{ type: "http", name: "illi", url: Antigravity.forward() + "/" + run.token, headers: [] }] : [];
-    return { cwd: Antigravity.work(folder), mcpServers: mcp, _meta: { antigravity: { enabledTools: Antigravity.searches(run.ask) ? WEB : [], eagerMcpServers: tools ? ["illi"] : [], mcpMaxOutputBytes: OUTPUT, systemPrompt: { append: Antigravity.split(run.ask).append } } } };
+    return { cwd: Antigravity.work(folder), mcpServers: mcp, _meta: { antigravity: { enabledTools: Antigravity.searches(run.ask) ? Object.keys(WEB) : [], eagerMcpServers: tools ? ["illi"] : [], mcpMaxOutputBytes: OUTPUT, systemPrompt: { append: Antigravity.split(run.ask).append } } } };
   }
 
   // whether a call has the agent's web tools: one with illi's tools that
@@ -739,6 +767,9 @@ export namespace Antigravity {
           return;
         }
         run.calls.delete(id);
+        if (u.status === "completed" && !run.judged.has(id)) {
+          return Antigravity.breached(run, String(u.name ?? u.title ?? "tool"));
+        }
         const content = Array.isArray(u.content) ? u.content.map((c: any) => c?.content ?? c) : [];
         const text = AskAI.show(content) || (typeof u.rawOutput === "string" ? u.rawOutput : "") || (run.turned.get(id) ?? "");
         run.turned.delete(id);
@@ -772,22 +803,40 @@ export namespace Antigravity {
 
   // one of the agent's web tools' calls, as illi shows Claude Code's (its
   // web search by the query, its page reading by the URL), any other by
-  // its title
+  // its name (its title, where it has none: the CLI's title of a command
+  // is the command, which reads as one of illi's)
   export function called(u: any): string {
     const input = u.rawInput ?? {};
     const web   = Antigravity.web(String(u.kind ?? ""), input);
-    return web !== null ? web[0] + " " + JSON.stringify(web[1]) : String(u.title ?? "tool") + " " + JSON.stringify(input);
+    return web !== null ? web[0] + " " + JSON.stringify(web[1]) : String(u.name ?? u.title ?? "tool") + " " + JSON.stringify(input);
+  }
+
+  // a tool of the CLI's own that ran though the gate never judged it (a
+  // CLI that didn't run illi's hooks): the call ends saying so (BREACH)
+  // and the CLI with it, so no more of its tools run unasked (one already
+  // has); the next call starts a CLI that has the gate written anew
+  export function breached(run: Run, name: string): void {
+    if (run.breach !== "") {
+      return;
+    }
+    run.breach = BREACH(name);
+    console.error("antigravity: " + run.breach);
+    if (run.proc !== null) {
+      Antigravity.kill(run.proc, "it ran a tool of its own past illi's gate");
+    }
   }
 
   // one of the agent's web tools' calls as illi's own asks and shows it,
-  // by its kind (as the CLI tells and asks leave for it) or its name (as
-  // the gate's hook tells it): its search as WebSearch by the query, its
-  // page reading as WebFetch by the URL; null: not one
+  // by its kind (as the CLI tells and asks leave for it; the gate's by its
+  // name: WEB): its search as WebSearch by the query, its page reading as
+  // WebFetch by the URL; null: not one. A kind is the protocol's, not one
+  // tool's (the CLI may say "search" of another tool of its own), which
+  // matters little while the gate turns every other tool down first
   export function web(kind: string, input: any): [string, unknown] | null {
-    if (kind === "search" || kind === "search_web") {
+    if (kind === "search") {
       return ["WebSearch", { query: String(input?.query ?? "") }];
     }
-    if (kind === "fetch" || kind === "read_url_content") {
+    if (kind === "fetch") {
       return ["WebFetch", { url: String(input?.Url ?? input?.url ?? "") }];
     }
     return null;
@@ -825,7 +874,8 @@ export namespace Antigravity {
   // tools, allowed once (illi judges each as it comes); its web search and
   // page reading, where the call searches the web, allowed as the gate's
   // asking the user did (passed), else asked of them as illi asks Claude
-  // Code's (approve); anything else, refused
+  // Code's (approve), judged so (one allowed here never breached);
+  // anything else, refused
   export async function permit(proc: Proc, id: number | string, p: any): Promise<void> {
     const opts: any[] = Array.isArray(p.options) ? p.options : [];
     const pick = (kind: string) => opts.find((o) => o?.kind === kind)?.optionId;
@@ -844,6 +894,9 @@ export namespace Antigravity {
     }
     const web = Antigravity.searches(run.ask) ? Antigravity.web(String(call.kind ?? ""), call.rawInput ?? {}) : null;
     const yes = web !== null && (run.passed.delete(JSON.stringify(web)) || (await Antigravity.approve(run, web[0], web[1])) === null);
+    if (yes) {
+      run.judged.add(String(call.toolCallId ?? ""));
+    }
     answer(pick(yes ? "allow_once" : "reject_once"));
   }
 
@@ -870,12 +923,17 @@ export namespace Antigravity {
 
   // a tool the model called, as the gate (the CLI's hook: Antigravity.hook)
   // asks illi of it, judged till `signal` stops (the hook gone): illi's
-  // own go on (illi judges each as it comes); the CLI's web search and
+  // own go on (illi judges each as it comes; the CLI's own judged, so one
+  // that ran unjudged is told: breached); the CLI's web search and
   // page reading, where the call searches the web, asked of the user as
   // Claude Code's are (approve: a yes kept, passed, so the CLI asking
-  // leave for it after isn't asked again); any other, or one of a call
-  // gone, turned down, saying why, which the model reads and goes on (and
-  // the chat shows as the call's answer: turned)
+  // leave for it after isn't asked again; a CLI that never asks, as
+  // 1.5.9 doesn't of its web search, leaves it kept till the call ends,
+  // where it covers only the same search again); any other, or one of a
+  // call gone (its session not one of this illi's CLIs', or stopped),
+  // turned down, saying why, which the model reads and goes on (and the
+  // chat shows as the call's answer: turned). A stop, or the hook gone,
+  // while the user is asked ends the asking: turned down
   export async function judge(heard: any, signal: AbortSignal): Promise<{ decision: "allow" } | { decision: "deny"; reason: string }> {
     const call = heard?.toolCall ?? {};
     const name = String(call.name ?? "");
@@ -887,11 +945,12 @@ export namespace Antigravity {
     if (run === undefined || run.stopped) {
       return { decision: "deny", reason: GONE };
     }
+    run.judged.add(String(call.id ?? ""));
     const deny = (reason: string) => {
       run.turned.set(String(call.id ?? ""), reason);
       return { decision: "deny" as const, reason };
     };
-    const web = Antigravity.web(name, call.args ?? {});
+    const web = Object.hasOwn(WEB, name) ? Antigravity.web(WEB[name], call.args ?? {}) : null;
     if (web === null) {
       return deny(THEIRS(name || "That tool"));
     }
@@ -915,10 +974,13 @@ export namespace Antigravity {
     return "http://127.0.0.1:" + forwarder.port;
   }
 
-  // a request of the agent's to illi's tools, passed on to the call's
-  // tools URL as it came (stopped as the agent drops it, or the call
-  // stops); a tool's call logged as it goes, with what it answered as that
-  // comes back
+  // a request to the forwarder: the gate's question of a tool (at the
+  // gate's path, KEY: Antigravity.judge, its answer the one line the
+  // gate's script passes on); else one of the agent's to illi's tools,
+  // passed on to the call's tools URL as it came (stopped as the agent
+  // drops it, or the call stops), a tool's call logged as it goes, with
+  // what it answered as that comes back. Any other path: 404, which the
+  // gate takes as no answer
   export async function relay(req: Request): Promise<Response> {
     const at = new URL(req.url).pathname.slice(1);
     if (at === KEY && req.method === "POST") {
@@ -1259,8 +1321,13 @@ export namespace Antigravity {
   // hooks (its own folder's config): the script (SCRIPT), then the hooks
   // naming it (HOOKS: before every tool, the script run where it is, for
   // WAIT at most), each written only as it differs (another illi may run
-  // CLIs there: whole, a file put in place at once). Thrown: it can't be
-  // written, so no CLI starts without it
+  // CLIs there: whole, a file put in place at once). The files name no
+  // illi: each CLI asks the one that started it (ILLI_GATE, in its
+  // environment), so illis sharing an account share them; a CLI started
+  // by an illi older than the gate has no illi to ask, so only illi's
+  // tools run in it. Written as a CLI starts only; a tool of the CLI's own
+  // that ran unjudged ends the call and the CLI (breached). Thrown:
+  // it can't be written, so no CLI starts without it
   export function hook(folder: string): void {
     const dir = path.join(Antigravity.home(folder, ""), "config");
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -1273,8 +1340,12 @@ export namespace Antigravity {
         }
       } catch {}
       const temp = at + "." + process.pid + "." + crypto.randomUUID().slice(0, 8);
-      fs.writeFileSync(temp, text, { mode: 0o600 });
-      fs.renameSync(temp, at);
+      try {
+        fs.writeFileSync(temp, text, { mode: 0o600 });
+        fs.renameSync(temp, at);
+      } finally {
+        fs.rmSync(temp, { force: true });
+      }
     }
   }
 

@@ -4,7 +4,8 @@
 // antigravity/Agy.ts; GitHub's Copilot CLI: github-copilot/CopilotCli.ts):
 // where it is, and its download, each CLI by its Spec. A command line of
 // the user's own named by the spec's variable (ILLI_ANTIGRAVITY,
-// ILLI_COPILOT), split at spaces, runs whatever its version (keeping it
+// ILLI_COPILOT), split at spaces, runs without its version asked first
+// (one too old may be refused as it starts: Antigravity.known; keeping it
 // current is the user's). Else the user's own program on PATH (its
 // absolute folders alone: a relative one is the project's, which), once
 // it is the spec's minimum or later (look: its version asked once in the

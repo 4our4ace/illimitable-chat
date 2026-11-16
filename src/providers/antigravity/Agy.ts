@@ -4,7 +4,9 @@
 // illi runs, unmodified: where it is, and its download, as every CLI
 // illi runs is found and downloaded (Cli.ts). ILLI_ANTIGRAVITY names a
 // command line of the user's own that starts its ACP server (`agy acp`,
-// say), run whatever its version. Else the user's own `agy` on PATH, once
+// say), its version not asked first: one that says a version older than
+// MINIMUM as it starts is refused then (Antigravity.known; one that says
+// none, or not in numbers, runs). Else the user's own `agy` on PATH, once
 // it is MINIMUM or later (its version asked once in the background, as
 // `agy --version` takes a second or more, its own update not started by
 // it, and kept in agy.json beside the builds). Else illi runs the one
@@ -29,7 +31,9 @@ export const RELEASES = "https://github.com/google-antigravity/antigravity-cli/r
 // account offers to every client; 1.5.2 shows a session its own agent's
 // commands), past the oldest tried with the hooks illi's gate on its own
 // tools is (1.5.5: Antigravity.hook; an older one may run none, and its
-// tools with them). A later pin may be newer; one older is never taken
+// tools with them). The gate holds only on a CLI that runs those hooks,
+// and this is all that says one does: a later version of the user's own
+// runs untried. A later pin may be newer; one older is never taken
 export const MINIMUM = "1.5.5";
 
 export const Agy = cli({

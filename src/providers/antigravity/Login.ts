@@ -11,7 +11,7 @@
 // ends without it kept. An account whose sign-in ran out (or that Google's
 // old agent signed in, before illi ran the CLI) signs in again in its own
 // folder, from a row under the accounts. The CLI is the user's own `agy`
-// (1.5.2 or later), else the build this illi is pinned to (Agy.ts): with
+// (1.5.5 or later), else the build this illi is pinned to (Agy.ts): with
 // none here, adding an account first offers to download it, saying how
 // big it is (Esc stops the download too); with another version here (an
 // older illi's), the page says it needs an update, and a row under the

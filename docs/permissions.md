@@ -316,7 +316,8 @@ search as `websearch` (the query), a page as `webfetch` (its URL).
 Every other tool of the CLI's is turned down before it runs, by a hook
 illi gives the CLI (the model is told why and goes on), and so is a
 web search one of your hooks gave other input, as the CLI can't take
-it.
+it. The hook asks illi through `curl`; without it, the web search is
+turned down too.
 
 On `github-copilot` it is the same
 ([Providers](providers.md#github-copilot-plan)): illi runs its own

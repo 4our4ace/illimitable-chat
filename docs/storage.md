@@ -1242,7 +1242,9 @@ Accounts
   Claude Code's, else `claude/<id>` in illi's root, run with
   `CLAUDE_CONFIG_DIR`; on `antigravity` each `antigravity/<id>` in
   illi's root (`g1`, `g2`…), the home of Google's Antigravity CLI run
-  for it (its sign-in there, in `.gemini/`, the CLI's own folder; no
+  for it (its sign-in there, in `.gemini/`, the CLI's own folder, whose
+  `config/` holds the hook illi writes as it starts the CLI there,
+  `hooks.json` and `illi-gate.sh`; no
   email, which the CLI doesn't tell; `.illi-signed` once the CLI signed
   it in, `.illi-stamp` telling it apart from a folder made anew), beside
   `antigravity/agent/<version>/`, the CLI `/login` downloaded (the

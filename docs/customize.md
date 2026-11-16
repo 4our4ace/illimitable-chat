@@ -356,8 +356,9 @@ over. What differs:
   tools (`Write|Edit`, `Agent`, `TodoWrite`…) never runs, as illi runs
   its own on every provider, but a `PreToolUse` one naming its
   `WebFetch` or `WebSearch`, which runs on `claude-code` as Claude Code
-  asks leave for one (and on `antigravity`, as Google's CLI asks for
-  its web search or page reading, named so, and on `github-copilot`,
+  asks leave for one (and on `antigravity`, as illi's hook in Google's
+  CLI asks of its web search or page reading, named so, before it runs,
+  and on `github-copilot`,
   as Copilot's CLI asks for its web fetch); each is said at the
   start.
 - Its own MCP servers' tools are `mcp__<server>__<tool>`: Claude Code's

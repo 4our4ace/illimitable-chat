@@ -357,11 +357,17 @@ accounts on its own.
   tools anyway (files, commands, timers, agents of its own), so illi
   writes a hook of the CLI's own in the account's folder
   (`.gemini/config/hooks.json` and `illi-gate.sh`, written again as a
-  CLI starts there) that runs before every tool the model calls: illi's
-  go on, its web search is asked of illi, and anything else is turned
-  down, telling the model why, so it goes on with illi's tools. The hook
-  needs `curl` to ask illi of the web search: without it, the search is
-  turned down too. It runs in an empty folder, so no
+  CLI starts there) that asks illi of every tool the model calls:
+  illi's go on, its web search is asked as above, and anything else is
+  turned down, telling the model why, so it goes on with illi's tools.
+  Should one of the CLI's own tools run without the hook asking (a
+  version of the CLI that doesn't run it), illi ends the turn and the
+  CLI, saying so. The hook asks illi through `curl`: without it, illi's
+  tools still go on, and the web search is turned down, the model told
+  it needs `curl`. Each CLI asks the illi that started it, so two illis
+  on one account don't answer for each other; an older illi, from
+  before this hook, running beside this one there has the web search of
+  each CLI it starts turned down. The CLI runs in an empty folder, so no
   project's rules load twice (illi reads them itself); no Gemini,
   Google or Antigravity key or setting of your environment reaches it,
   nor its own updates or telemetry.

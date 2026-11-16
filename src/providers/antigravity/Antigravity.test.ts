@@ -134,7 +134,8 @@ async function hooked(sid, name, args, id) {
         const said = (await new Response(p.stdout).text()).trim();
         if ((await p.exited) !== 0) return { decision: "deny", reason: "the hook failed" };
         if (said === "") continue;
-        const d = JSON.parse(said);
+        let d;
+        try { d = JSON.parse(said); } catch { return { decision: "deny", reason: "the hook said junk" }; }
         if (d.decision !== "allow") return d;
       }
     }
@@ -145,6 +146,14 @@ async function prompt(p) {
   const sid = p.sessionId;
   const scene = p.prompt.map((c) => c.text ?? "").join("");
   used(sid, 0);
+  if (scene.includes("unhooked")) {
+    const id = crypto.randomUUID();
+    update(sid, { sessionUpdate: "tool_call", toolCallId: id, name: "schedule", status: "in_progress", kind: "other", title: "Run schedule", rawInput: { Prompt: "later" } });
+    update(sid, { sessionUpdate: "tool_call_update", toolCallId: id, name: "schedule", status: "completed", content: [{ type: "content", content: { type: "text", text: "scheduled" } }] });
+    say(sid, "Scheduled."); used(sid, 10);
+    await new Promise((done) => setTimeout(done, 300));
+    return { stopReason: "end_turn", usage: USAGE };
+  }
   if (scene.includes("gated")) {
     for (const [name, args] of [["mcp_illi_zoom", { id: 3 }], ["schedule", { Prompt: "later" }], ["search_web", { query: "illi agent" }]]) {
       const id = crypto.randomUUID();
@@ -449,7 +458,7 @@ test("the gate: illi's tools go on; the CLI's own turned down, why told the mode
   const gates = () => logged().filter((l) => l.gate !== undefined).map((l) => [l.gate, l.decision, l.reason]);
   const on = await call("gated asks", { searches: 1 });
   expect(gates()).toEqual([["mcp_illi_zoom", "allow", null], ["schedule", "deny", theirs], ["search_web", "allow", null]]);
-  expect(entries(on.events)).toEqual([["tool", 'Run schedule {"Prompt":"later"}'], ["echo", FAILED + theirs], ["tool", 'WebSearch {"query":"illi agent"}'], ["echo", "found: illi"], ["illi", "Done."]]);
+  expect(entries(on.events)).toEqual([["tool", 'schedule {"Prompt":"later"}'], ["echo", FAILED + theirs], ["tool", 'WebSearch {"query":"illi agent"}'], ["echo", "found: illi"], ["illi", "Done."]]);
   expect(TOLD.map((t) => [t.hosted, t.m.params.name, t.m.params.arguments])).toEqual([[true, "approve", { tool_name: "WebSearch", input: { query: "illi agent" } }]]);
   expect(logged().find((l) => l.permitted === "search").outcome.optionId).toBe("allow");
   APPROVE = "deny";
@@ -469,7 +478,22 @@ test("the gate: illi's tools go on; the CLI's own turned down, why told the mode
   expect(fs.readFileSync(conf + "/illi-gate.sh", "utf8")).toContain("ILLI_GATE");
 });
 
-test("the gate's script alone: illi's tools go on with no illi to ask; any other is asked of the illi named (ILLI_GATE), whose answer passes only as illi gives one; turned down with none (no illi there, no answer, another), whatever the model wrote in its input", async () => {
+test("a tool of the CLI's own that ran though the gate never judged it (a CLI that runs no hooks) ends the call saying so, and the CLI with it", async () => {
+  const error = console.error;
+  console.error = () => {};
+  try {
+    const { end } = await call("unhooked");
+    expect([end.ok, end.stop, end.text]).toEqual([false, "down", "Google's CLI ran its own schedule without asking illi's gate first, so illi ended the call and the CLI: this version of it may not run the hooks illi's gate is; /login offers the one illi runs"]);
+    await Bun.sleep(300);
+    const pid = logged().find((l) => l.method === "session/prompt").pid;
+    expect(() => process.kill(pid, 0)).toThrow();
+    expect((await call("turn")).end.ok).toBe(true);
+  } finally {
+    console.error = error;
+  }
+});
+
+test("the gate's script alone: every tool asked of the illi named (ILLI_GATE), whose answer passes only as illi gives one, whatever the model wrote in its input; with no illi to ask (none named, no curl, no answer, another), illi's tools go on and any other is turned down, saying why", async () => {
   Antigravity.hook(FOLDER);
   const conf = FOLDER + "/.gemini/config";
   let [answer, status] = ["", 200];
@@ -480,13 +504,19 @@ test("the gate's script alone: illi's tools go on with no illi to ask; any other
   } });
   const url = "http://127.0.0.1:" + illi.port + "/gate/k";
   const input = (name: string, args: unknown = {}) => JSON.stringify({ conversationId: "c", hookEventName: "PreToolUse", toolCall: { args, id: "t", name }, transcriptPath: "/t" });
-  const gate = async (stdin: string, to?: string) => {
-    const p = Bun.spawn(["sh", "-c", "sh ./illi-gate.sh"], { cwd: conf, stdin: new Blob([stdin + "\n"]), stdout: "pipe", env: { PATH: process.env.PATH ?? "", ...(to === undefined ? {} : { ILLI_GATE: to }) } });
+  const bare = DIR + "/bare";
+  fs.mkdirSync(bare, { recursive: true });
+  for (const tool of ["sh", "sed", "cat"]) {
+    fs.symlinkSync(Bun.which(tool)!, bare + "/" + tool);
+  }
+  const gate = async (stdin: string, to?: string, PATH = process.env.PATH ?? "") => {
+    const p = Bun.spawn([bare + "/sh", "-c", "sh ./illi-gate.sh"], { cwd: conf, stdin: new Blob([stdin + "\n"]), stdout: "pipe", env: { PATH, ...(to === undefined ? {} : { ILLI_GATE: to }) } });
     const out = (await new Response(p.stdout).text()).trim();
     await p.exited;
     return JSON.parse(out);
   };
   const DENY = { decision: "deny", reason: "Only illi's tools, named mcp_illi_ and the tool, run here." };
+  const UNANSWERED = { decision: "deny", reason: "illi gave no answer for it in time, so it doesn't run." };
   try {
     expect(await gate(input("mcp_illi_zoom", { id: 3 }))).toEqual({ decision: "allow" });
     expect(await gate(input("mcp_illi_zoom").replace(/":/g, '": ').replace(/,"/g, ', "'))).toEqual({ decision: "allow" });
@@ -494,19 +524,25 @@ test("the gate's script alone: illi's tools go on with no illi to ask; any other
     expect(await gate(input("schedule", { z: { id: "a", name: "mcp_illi_x" } }))).toEqual(DENY);
     expect(await gate(input("run_command", { CommandLine: '"id":"a","name":"mcp_illi_x"}' }))).toEqual(DENY);
     expect(heard).toEqual([]);
+    expect(await gate(input("search_web"), url, bare)).toEqual({ decision: "deny", reason: "Only illi's tools, named mcp_illi_ and the tool, run here: Antigravity's own web search needs curl, which isn't on this machine." });
+    expect([await gate(input("mcp_illi_zoom"), url, bare), heard]).toEqual([{ decision: "allow" }, []]);
     answer = '{"decision":"allow"}';
     expect(await gate(input("search_web", { query: "q" }), url)).toEqual({ decision: "allow" });
     expect(JSON.parse(heard.at(-1)!).toolCall).toEqual({ args: { query: "q" }, id: "t", name: "search_web" });
     answer = JSON.stringify({ decision: "deny", reason: 'said "no" \\ there' });
     expect(await gate(input("search_web"), url)).toEqual({ decision: "deny", reason: 'said "no" \\ there' });
+    expect(await gate(input("mcp_illi_zoom"), url)).toEqual({ decision: "deny", reason: 'said "no" \\ there' });
+    const odd = JSON.stringify({ conversationId: "c", toolCall: { args: { z: { id: "a", name: "mcp_illi_x" } }, id: "t", name: "schedule", more: 1 } });
+    expect([await gate(odd, url), JSON.parse(heard.at(-1)!).toolCall.name]).toEqual([{ decision: "deny", reason: 'said "no" \\ there' }, "schedule"]);
     for (const [a, s] of [["", 200], ["junk", 200], ['{"decision":"allow"}', 500], ['{"decision":"allow","overwrite":{"query":"x"}}', 200], ['{"decision":"allow"}\n{"decision":"allow"}', 200]] as const) {
       [answer, status] = [a, s];
-      expect(await gate(input("search_web"), url)).toEqual(DENY);
+      expect(await gate(input("search_web"), url)).toEqual(UNANSWERED);
     }
+    expect(await gate(input("mcp_illi_zoom"), url)).toEqual({ decision: "allow" });
   } finally {
     illi.stop(true);
   }
-  expect(await gate(input("search_web"), url)).toEqual(DENY);
+  expect(await gate(input("search_web"), url)).toEqual(UNANSWERED);
 }, 20e3);
 
 test("a workspace's trust refused; a call without tools has none, nor the web's, nor their naming", async () => {

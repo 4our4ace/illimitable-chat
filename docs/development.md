@@ -152,8 +152,11 @@ stand-in for Google's services, no model asked nor account signed in,
 nothing sent to Google (the build downloaded once into the folder
 named, kept for the next trial; it checks the CLI says it's the pinned
 version and tries a turn, tools, a picture, thoughts, a stop, a full
-window, two calls at once and the CLI's web search, and that it leaves
-nothing behind); then test and commit:
+window, two calls at once, and illi's gate on the CLI's own tools (its
+web search asked of illi, a timer and a command of its own turned down
+with why: the hook illi writes, which a new version may run otherwise,
+so this is where that shows), and that it leaves nothing behind); then
+test and commit:
 
     bun src/providers/antigravity/pin.ts [version]
     ILLI_AGY_LIVE=~/.cache/illi-agy-live bun test --isolate src/providers/antigravity/Live.test.ts
