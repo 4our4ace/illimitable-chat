@@ -6,8 +6,8 @@ The libraries compiled into illi (`package.json`'s dependencies, pinned in
 pelext's character width table, generated from Unicode's data, under the
 Unicode License v3); Bun's runtime, which each release file holds, under
 the licenses Bun lists for it, the LGPL among them; the search model
-illi downloads; and the color schemes illi's palettes are drawn from (at
-the end).
+illi downloads; the two vendors' CLIs it downloads; and the color
+schemes illi's palettes are drawn from (at the end).
 
 ## Pele
 
@@ -273,6 +273,26 @@ card puts it under the MIT License. illi reads it with its own code,
 which follows the method of MinishLab's
 [model2vec](https://github.com/MinishLab/model2vec) (MIT License,
 Copyright (c) 2024 Thomas van Dongen) and holds none of its code.
+
+## Google's Antigravity CLI and GitHub's Copilot CLI
+
+Neither is in illi's files: illi runs each as a program of its own and
+talks to it over its input and output
+(`src/providers/antigravity/Acp.ts`,
+`src/providers/github-copilot/Rpc.ts`). For the Google AI plan and the
+GitHub Copilot plan, where you have no `agy` or `copilot` of your own
+that will do, `/login` offers to download the maker's own build (and an
+illi updated to a newer one downloads it by itself, with `autoupdate`
+on and that account connected), unchanged, from the maker's own
+releases on GitHub
+([google-antigravity/antigravity-cli](https://github.com/google-antigravity/antigravity-cli/releases),
+[github/copilot-cli](https://github.com/github/copilot-cli/releases)),
+at the one version illi names for each system
+(`src/providers/antigravity/Pinned.ts`,
+`src/providers/github-copilot/Pinned.ts`), checked against the SHA-256
+there, into `~/.illi/antigravity` and `~/.illi/copilot`. Each is its
+maker's program, under its maker's own terms, not illi's license; these
+notices don't restate them.
 
 ## Color schemes
 

@@ -27,10 +27,13 @@
 // "notify" only tells, "off" never looks. An illi whose file was replaced
 // since it started (by it, another, a new install) looks no more: the
 // next start runs the new one and looks from there. What it did is one
-// note; a failure (offline, a timeout, a download that stalls, a file
-// missing or not matching its sum) is logged (illi.log), never told, but
-// for a folder it can't write: that is told once a release (before any
-// download), so the person knows to upgrade with rights. `illi upgrade`
+// note; a look that fails (offline, a timeout) is logged (illi.log),
+// never told. An install that fails (a download that stalls, a file
+// missing or not matching its sum, a build that won't run here) is told
+// once a release, with why, and tried again only past a wait that grows
+// with its tries (AGAIN); a folder it can't write is told once a release
+// too (before any download), so the person knows to upgrade with rights;
+// one that gave way to another illi's (Elsewhere) is neither. `illi upgrade`
 // runs the same in the foreground (upgrade), saying each step. It reads no setting
 // itself (Config.ts stops on one that won't do, and an upgrade must work
 // whatever they say): its caller gives the root and the mode.

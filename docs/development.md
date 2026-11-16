@@ -19,11 +19,13 @@ Development
                    (Logs.ts), /export and /tree (Export.ts), projects (Projects.ts)
                    and their searches' threads (Seeker.ts), the radar's search of
                    past topics (Radar.ts) and its strong lines given to the model
-                   (Recall.ts), a second terminal's view (Remote.ts), times as
+                   (Recall.ts), the small model search by meaning runs
+                   (Embed.ts), a second terminal's view (Remote.ts), times as
                    people say them (When.ts), the disk
     src/ai/        the agent loop, picks, token usage
     src/providers/ the providers, a folder each (its facts, its code, its
-                   /login page) and their lists (new-provider.md)
+                   /login page) and their lists (new-provider.md); a
+                   vendor's own CLI found, downloaded and kept (Cli.ts)
     src/tools/     shell and files, MCP servers, the prompts; the permissions:
                    what each call asks leave for (Access.ts; bash read as bash
                    reads it, Shell.ts), the rules and what "don't ask again"
@@ -31,7 +33,8 @@ Development
     src/config/    settings, profiles, your agents, commands and skills (Custom.ts),
                    plugins (Plugins.ts; a plugin's folder read: Bundle.ts), hooks
                    (Hooks.ts) and the commands they and the status line run
-                   (Run.ts), a project's files as last seen (Seen.ts), updates,
+                   (Run.ts), a project's files as last seen (Seen.ts), updates
+                   (Update.ts), illi uninstall (Uninstall.ts),
                    the folders you trust (Trusted.ts), the accounts /login
                    connected (Accounts.ts; a change's lock, Flock.ts)
     src/skills/    the skills built into illi (customize-illi)
@@ -114,6 +117,33 @@ before it: `illi upgrade` must leave the new one, the chat started on a
 terminal (a pty, no key pressed) must install it by itself, and a fresh
 `install.sh` must too. It also runs by hand (Actions, upgrade, Run
 workflow), trying the latest release against the one before.
+
+To make a release, in this order:
+
+1. Set `package.json`'s `version` in a commit of its own (`illi X.Y.Z`),
+   and push it to `main`. The tag must be on that commit or one after
+   it: the workflow stops a tag that doesn't name the version.
+2. If `install.sh` or `upgrade.yml` changed since the last release, run
+   `upgrade.yml` by hand first. It takes both from `main`, so it tries
+   the new ones on all four systems (macOS's bash 3.2 among them)
+   against the releases already out. It never runs `release.yml`: only
+   a tag does (a prerelease's too, below).
+3. Tag that commit `vX.Y.Z` and push the tag.
+4. Watch both workflows. `upgrade.yml` starts once `release.yml` ends
+   well.
+
+A run that fails before its last job publishes nothing, and no illi
+sees it: the release job needs every system's build, so one that
+won't build or run on its system stops them all. Fix it, and tag the
+next patch version: a tag pushed once
+isn't moved, and a version is never built twice. If `upgrade.yml`
+fails, the release is already out and every illi takes it at its next
+start, so put the fix out as the next patch at once. An illi that can't
+run the new file keeps the one it has (its `--version` check), and
+`install.sh` does the same. To try the workflows without reaching
+anyone, tag a prerelease (`vX.Y.Z-rc1`, with that version in
+`package.json`): `install.sh`, every illi's look and `upgrade.yml`
+leave prereleases out.
 
 The libraries illi uses are three, each pinned to one version in
 `package.json` (`bun.lock` holds the exact commit or file hash) and

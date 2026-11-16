@@ -122,6 +122,12 @@ What else illi keeps in `~/.illi`:
 | `project-profiles.json` | the profile used last in each project: illi opens a project in it |
 | `profiles/`     | the other profiles, a folder each ([Profiles](profiles.md)); in each, `created` keeps when it was made, a line: `/profile` lists them in that order |
 | `seen.json`     | what of each project runs as you work (its `hooks.json`, `mcp.json` and plugins), as illi last saw it (each one's hash), so one new or changed is said at the start |
+| `plugin-data/`  | each plugin's own folder (`CLAUDE_PLUGIN_DATA`), kept across its updates; a profile's plugins' in the profile's folder ([Plugins](customize.md#plugins)) |
+| `trust.json`    | the folders you trust illi in (a repo's top covers the repo, a plain folder the folders in it but a repo), every profile's: the question at the start asks only for others; edit or delete it to trust less |
+| `update.json`   | when illi last looked for a new release (`autoupdate`), the release it found (the trust question shows it where it's newer), the one it last said it couldn't install, and the install that failed last (`failed`: its release, why, how many tries, when), by which the next try waits |
+| `locks/`        | a lock per project, held while its chat is open (by the system: a crash never leaves one held), the socket a second terminal joins it by, and the chat's state for the other terminals' side panel |
+| `illi.log`      | what went wrong (each profile's own)                  |
+| `.made-by-illi` | in a folder `ILLI_DIR` names, that illi made it (it wasn't there before): `illi uninstall` removes such a folder whole, never one without it |
 
 illi writes each of these files whole: to a file beside it, synced, then
 renamed over it, so a crash or a full disk leaves the old file, never
@@ -151,12 +157,6 @@ file bind-mounted into a container from outside it is replaced outside
 the container only, so write it from the side that mounted it. An
 `edit` across files whose later file won't write puts the earlier ones
 back.
-| `plugin-data/`  | each plugin's own folder (`CLAUDE_PLUGIN_DATA`), kept across its updates; a profile's plugins' in the profile's folder ([Plugins](customize.md#plugins)) |
-| `trust.json`    | the folders you trust illi in (a repo's top covers the repo, a plain folder the folders in it but a repo), every profile's: the question at the start asks only for others; edit or delete it to trust less |
-| `update.json`   | when illi last looked for a new release (`autoupdate`), the release it found (the trust question shows it where it's newer), the one it last said it couldn't install, and the install that failed last (`failed`: its release, why, how many tries, when), by which the next try waits |
-| `locks/`        | a lock per project, held while its chat is open (by the system: a crash never leaves one held), the socket a second terminal joins it by, and the chat's state for the other terminals' side panel |
-| `illi.log`      | what went wrong (each profile's own)                  |
-| `.made-by-illi` | in a folder `ILLI_DIR` names, that illi made it (it wasn't there before): `illi uninstall` removes such a folder whole, never one without it |
 
 `/export` writes `./illi-memory.json`, `/tree` `./illi-tree.html`.
 
@@ -254,6 +254,17 @@ Troubleshooting
   model"): the download of the model for `meaning` failed (the reason
   is in `illi.log`). illi tries again after an hour, then six hours,
   then a day; a start in a terminal past that wait tries at once.
+- "Can't save the chat: disk full" (or "disk quota used up", "read-only
+  disk", "no permission"), with the chat's folder: illi couldn't write
+  the chat's file. What was running is stopped, as illi can't keep what
+  it does. Make room (or fix the folder), then send a message to go on
+  ([Storage](storage.md#who-opens-them)).
+- "The chat's file was deleted as illi ran: written back": the
+  project's file in `~/.illi/chat/projects/` was removed while illi had
+  it open. illi wrote the whole chat back from what it held and goes on
+  in it; nothing is lost. "The chat's file was replaced as illi ran":
+  another file was put at its path instead, which illi leaves as it is.
+  Quit and start illi again, as what it logs from then on isn't kept.
 - "chat: <name>.sqlite won't open": that project's file in
   `~/.illi/chat/projects/` is damaged or isn't illi's. Move it away (the
   project then starts fresh), or restore it from a backup.

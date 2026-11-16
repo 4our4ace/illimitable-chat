@@ -351,7 +351,7 @@ user's yes first.
   FILE).
 - Keep secrets out of these files.
 - Leave illi's own state alone: login.json, accounts.json, claude/,
-  antigravity/, copilot/, claude-code.json, models.json, update.json, profile,
+  antigravity/, copilot/, models/, claude-code.json, models.json, update.json, profile,
   project-profiles.json, chat/, profiles/.
 - Say when it applies: agents, commands, skills (a plugin's too) and the
   rules file's text at the next message; config.json, theme.json,
