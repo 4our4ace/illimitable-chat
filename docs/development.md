@@ -105,7 +105,11 @@ file to disk before the rename, and makes the rename only if the file
 is still the one it started from (its inode and last write,
 `Update.stamp`), so one `install.sh` or a newer illi put there
 meanwhile is kept. `install.sh` takes no lock: it finds the release
-once, takes the binary and its `SHA256SUMS` from it, copies the new
+once, where GitHub's latest page redirects (a tag `v` and a digit of
+this repo, or the releases' page when there's no release yet, which
+builds `main` from the source; any other redirect, or a tag with a
+character outside `A-Za-z0-9._-`, stops it, `ILLI_SOURCE=1` or not),
+takes the binary and its `SHA256SUMS` from it, copies the new
 file beside where it goes, runs it there (`--version`), then moves it
 in. `bun
 run build`'s `./illi` is such a file and updates itself too

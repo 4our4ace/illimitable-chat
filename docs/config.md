@@ -69,7 +69,7 @@ Other variables:
 | `ILLI_COPILOT` | the command line that starts GitHub's Copilot CLI for the `github-copilot` vendor, split at spaces, in place of your own `copilot` on `PATH` or the one `/login` downloads; run if it speaks the protocol illi does (3), so keeping it current is yours |
 | `ILLI_COPILOT_GATEWAY` | an OpenAI-compatible API of your own the `github-copilot` vendor's CLI asks its models of, in place of GitHub's, as its bring-your-own-key provider (tests use a stand-in) |
 | `BROWSER`      | what opens `/login`'s page: programs `:`-separated, tried in turn (`%s` is the link, else it goes last), before the system's; `none`: never open one |
-| `ILLI_INSTALL`, `ILLI_SOURCE` | where the installer puts illi; `1`: build from the source |
+| `ILLI_INSTALL`, `ILLI_SOURCE` | where the installer puts illi (`~/.local/bin` if unset); `1`: build the latest release from its source in place of downloading its binary (GitHub is still asked which release that is, and the newest source is built if there's none yet) |
 
 Your chats
 ----------

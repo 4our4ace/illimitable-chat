@@ -6,11 +6,13 @@
 # the source with Bun 1.4.3 or later (installed first if missing), the
 # release's tag if there is one, its libraries as bun.lock pins them. A
 # download that fails (offline, a rate limit, one stalled for a minute)
-# stops it. The new file is put beside where it goes and run there
-# (--version) before it takes the old one's place, whole. Run again, it
-# replaces the one there; illi updates itself from then on (`illi
-# upgrade` at once). All of it is one function, run on the last line, so
-# a download of this script cut short runs nothing.
+# stops it, and so does a latest page GitHub sends anywhere but a tag
+# of this repo or its releases' page. The new file is put beside where
+# it goes and run there (--version) before it takes the old one's
+# place, whole. Run again, it replaces the one there; illi updates
+# itself from then on (`illi upgrade` at once). All of it is one
+# function, run on the last line, so a download of this script cut
+# short runs nothing.
 #
 #   curl -fsSL https://raw.githubusercontent.com/4our4ace/illimitable-chat/main/install.sh | bash
 
@@ -42,8 +44,11 @@ main() {
   # the releases' page: no release yet), so the binary and its sums come
   # from one release; any other answer (a rate limit, an error, a
   # redirect elsewhere: a moved repo, a sign-in page) stops it, never
-  # building what no release holds
-  local got where
+  # building what no release holds, and so does a tag with a character
+  # that a version's name has no use for (it goes into a URL and git's
+  # --branch). ILLI_SOURCE is read after this, so a build from the
+  # source asks the same and stops the same
+  local got where pre="https://github.com/$REPO/releases/tag/"
   got="$(curl -sS --connect-timeout 15 --max-time 60 -o /dev/null -w '%{http_code} %{redirect_url}' "https://github.com/$REPO/releases/latest")" || die "can't reach GitHub (offline?): try again later"
   case "${got%% *}" in
     301 | 302 | 303 | 307 | 308) ;;
@@ -51,14 +56,16 @@ main() {
   esac
   where="${got#* }"
   case "$where" in
-    "https://github.com/$REPO/releases/tag/v"[0-9]*)
-      tag="${where##*/releases/tag/}"
+    "${pre}v"[0-9]*)
+      # all past the prefix (its length: the case matched it), so a
+      # slash in what's left is refused below with the rest
+      tag="${where:${#pre}}"
       case "$tag" in
         *[!A-Za-z0-9._-]*) die "GitHub named the latest release oddly ($tag): try again later" ;;
       esac
       ;;
-    "https://github.com/$REPO/releases") tag="" ;;
-    *) die "GitHub sent the latest release's page elsewhere (${where:-nowhere}): try again later, or build from the source with ILLI_SOURCE=1" ;;
+    "https://github.com/$REPO/releases" | "https://github.com/$REPO/releases/") tag="" ;;
+    *) die "GitHub's latest release page led to ${where:-nowhere}, not a release of illi: try again later" ;;
   esac
 
   asset="illi-$os-$arch"
@@ -154,8 +161,10 @@ fetch() {
 # ", musl: not supported" on a system whose C library is musl (Alpine
 # and the like: illi's builds are for glibc's); its ldd says so on its
 # --version and fails, so the words are read whole, no pipe's status
-# (pipefail) in the way; no ldd (macOS) says nothing
+# (pipefail) in the way; no ldd (macOS) says nothing, the shell's own
+# "not found" (which names the script's path) never read
 musl() {
+  command -v ldd >/dev/null 2>&1 || return 0
   case "$(ldd --version 2>&1 || true)" in
     *[Mm][Uu][Ss][Ll]*) echo ", musl: not supported" ;;
   esac
