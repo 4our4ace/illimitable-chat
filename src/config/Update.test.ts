@@ -142,7 +142,7 @@ test("a file that doesn't match its sum, won't say its version, or isn't built f
   const cases: Array<[Partial<typeof SERVED>, string]> = [
     [{ sums: "0".repeat(64) + "  " + Update.asset() + "\n" }, Update.asset() + " doesn't match the release's SHA256SUMS"],
     [{ says: "illi 0.1.9" }, "the new illi won't run here (illi 0.1.9)"],
-    [{ sums: "0".repeat(64) + "  illi-plan9-mips\n" }, "illi 0.2.0 has no build for " + Update.asset().slice(5) + " (install.sh builds one from the source)"],
+    [{ sums: "0".repeat(64) + "  illi-plan9-mips\n" }, "illi 0.2.0 has no build for " + Update.asset().slice(5) + " (install.sh builds one from the source, with ILLI_SOURCE=1)"],
   ];
   for (const [served, why] of cases) {
     Object.assign(release, SERVED, served);

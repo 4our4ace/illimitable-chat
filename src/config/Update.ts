@@ -333,7 +333,7 @@ export namespace Update {
         return hash.toLowerCase();
       }
     }
-    throw new Error("illi " + version + " has no build for " + asset.replace(/^illi-/, "") + " (install.sh builds one from the source)");
+    throw new Error("illi " + version + " has no build for " + asset.replace(/^illi-/, "") + " (install.sh builds one from the source, with ILLI_SOURCE=1)");
   }
 
   // whether an error is a folder illi can't write (no permission, a

@@ -40,18 +40,25 @@ main() {
 
   # the latest release's tag, where GitHub's latest page redirects (to
   # the releases' page: no release yet), so the binary and its sums come
-  # from one release; any other answer (a rate limit, an error) stops it
-  local got
+  # from one release; any other answer (a rate limit, an error, a
+  # redirect elsewhere: a moved repo, a sign-in page) stops it, never
+  # building what no release holds
+  local got where
   got="$(curl -sS --connect-timeout 15 --max-time 60 -o /dev/null -w '%{http_code} %{redirect_url}' "https://github.com/$REPO/releases/latest")" || die "can't reach GitHub (offline?): try again later"
   case "${got%% *}" in
     301 | 302 | 303 | 307 | 308) ;;
     *) die "GitHub won't say which release is the latest now (HTTP ${got%% *}): try again later" ;;
   esac
-  tag="${got#* }"
-  tag="${tag##*/releases/tag/}"
-  case "$tag" in
-    v[0-9]*) ;;
-    *)       tag="" ;;
+  where="${got#* }"
+  case "$where" in
+    "https://github.com/$REPO/releases/tag/v"[0-9]*)
+      tag="${where##*/releases/tag/}"
+      case "$tag" in
+        *[!A-Za-z0-9._-]*) die "GitHub named the latest release oddly ($tag): try again later" ;;
+      esac
+      ;;
+    "https://github.com/$REPO/releases") tag="" ;;
+    *) die "GitHub sent the latest release's page elsewhere (${where:-nowhere}): try again later, or build from the source with ILLI_SOURCE=1" ;;
   esac
 
   asset="illi-$os-$arch"
@@ -106,7 +113,7 @@ main() {
   mkdir -p "$BIN"
   cp "$tmp/illi" "$new"
   chmod 755 "$new"
-  version="$("$new" --version)" || die "the new illi won't run here ($(uname -s) $(uname -m)$(ldd --version 2>&1 | grep -qi musl && echo ', musl: not supported'))"
+  version="$("$new" --version)" || die "the new illi won't run here ($(uname -s) $(uname -m)$(musl))"
   mv -f "$new" "$BIN/illi"
   say "Installed $version in $BIN/illi"
 
@@ -142,6 +149,16 @@ fetch() {
   local bar=(-sS)
   [ "${2:-}" = progress ] && [ -t 2 ] && bar=(--progress-bar)
   curl "${bar[@]}" -L --retry 2 --connect-timeout 15 --speed-limit 1024 --speed-time 60 -o "$tmp/$1" -w '%{http_code}' "$release/$1" || die "can't download $1 from GitHub (offline, or it stalled): try again later"
+}
+
+# ", musl: not supported" on a system whose C library is musl (Alpine
+# and the like: illi's builds are for glibc's); its ldd says so on its
+# --version and fails, so the words are read whole, no pipe's status
+# (pipefail) in the way; no ldd (macOS) says nothing
+musl() {
+  case "$(ldd --version 2>&1 || true)" in
+    *[Mm][Uu][Ss][Ll]*) echo ", musl: not supported" ;;
+  esac
 }
 
 # a file's SHA-256
