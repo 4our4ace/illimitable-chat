@@ -71,10 +71,16 @@ jobs:
         run: codesign --force --sign - illi-${{ matrix.target }}
       - name: the file runs here, saying its version
         run: test "$(./illi-${{ matrix.target }} --version)" = "illi ${GITHUB_REF_NAME#v}"
+      # only handed to the release job, which publishes the same file, so
+      # kept a day, not GitHub's 90 (~150 MB a release, counted as the
+      # account's Actions storage); a release job re-run a day later finds
+      # none: re-run the whole workflow, or tag the next patch (see
+      # docs/development.md)
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: illi-${{ matrix.target }}
           path: illi-${{ matrix.target }}
+          retention-days: 1
 
   release:
     needs: build
