@@ -140,7 +140,16 @@ A run that fails before its last job publishes nothing, and no illi
 sees it: the release job needs every system's build, so one that
 won't build or run on its system stops them all. Fix it, and tag the
 next patch version: a tag pushed once
-isn't moved, and a version is never built twice. If `upgrade.yml`
+isn't moved, and a version is never built twice. The one case to
+run again is the release job failing alone by a fault not the
+repo's (GitHub's, say), every build good and nothing out yet: that
+job by itself within a day, while the built files are still kept for
+it (`retention-days` in `release.yml`: they are only the builds'
+hand-off, and count as Actions storage). After a day they are gone
+and that job finds none: run the whole workflow again, the one time
+an unpublished version is built anew, or tag the next patch. A
+re-run takes the workflow as the tag has it, so a fault in the
+workflow itself is fixed only by the next patch. If `upgrade.yml`
 fails, the release is already out and every illi takes it at its next
 start, so put the fix out as the next patch at once. An illi that can't
 run the new file keeps the one it has (its `--version` check), and
